@@ -1,23 +1,32 @@
 #!/usr/bin/env node
-// Http1Connection's per-request cost, an old std/net/http1-server.ts against
-// the working tree's.
+// Http1Connection's per-request cost, an old std/net/ against the working tree's.
 //
-//   node bench/http1-conn/run.mjs [--rounds N] [--requests N] [--connections N]
-//                                 [--base <rev>] [--compiler path]
+//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|all] [--rounds N]
+//                                 [--requests N] [--connections N]
+//                                 [--base <rev>] [--compiler path] [--rss N]
 //
 // Builds bench/http1-conn/main.ts twice at `--profile speed` with `--compiler`
-// (default: build/nish, else the seed in build/seed): `old` beside
-// http1-server.ts as `--base` has it (default: 96a38347484f, the commit
-// before the hot-field layout), `new` beside the working tree's. It links a
-// byte-identical copy of `old` as `old′`: the baseline timed against itself in
-// the same interleaved rounds is the noise band. Each round runs every binary on both
-// shapes, rotating which goes first: `hot`, `--requests` requests on one
-// connection (default 200000), and `cold`, as many spread round-robin over
-// `--connections` connections of one pool (default 50000). It reports the
-// median and the min–max of ns per request over `--rounds` rounds (default
-// 15) and the CPU it ran on. Every run is pinned to core 1 with `taskset`
-// when there is one, and the header says whether it was. A checksum that
-// differs between binaries fails the run.
+// (default: build/nish, else the seed in build/seed): `old` against std/ as
+// `--base` has it (default: 96a38347484f, the commit before the hot-field
+// layout), `new` against the working tree's. It links a byte-identical copy of
+// `old` as `old′`: the baseline timed against itself in the same interleaved
+// rounds is the noise band. Each round runs every binary on each shape
+// `--shape` names (a comma list, default all), rotating which goes first:
+// `hot`, `--requests` requests on one connection (default 200000); `cold`, as
+// many spread round-robin over `--connections` connections of one pool
+// (default 50000); and `idle`, the same spread over an `Http1Server`-shaped
+// pool with `Http1Config.idleInput` on, read through the server's scratch
+// buffer, a GET and a POST with a JSON body in turn. It reports the median and
+// the min–max of ns per request over `--rounds` rounds (default 15) and the
+// CPU it ran on. Every run is pinned to core 1 with `taskset` when there is
+// one, and the header says whether it was. A checksum that differs between
+// binaries fails the run.
+//
+// With `--rss N` (default 5 when the idle shape runs, 0 to skip) it also runs
+// the idle pool's `rss` mode N times per build, at `--connections` and at 0
+// connections, each printing its own peak RSS (VmHWM), and reports the
+// difference divided by the connections: the peak memory one idle keep-alive
+// connection costs.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -53,24 +62,37 @@ const run = (cmd, args) => {
 // The baseline is a fixed commit, not the merge base with origin/main: on main
 // that is HEAD, and the bench would time the module against itself.
 const base = flag("--base", "96a38347484f")
-const server = "std/net/http1-server.ts"
-const sources = {
-  old: run("git", ["show", `${base}:${server}`]),
-  new: fs.readFileSync(path.join(root, server), "utf8"),
+const shapeFlag = flag("--shape", "all")
+// Two std/ trees cannot share one program, so `old` is built by a copy of the
+// compiler inside a package directory holding the base's std/, scripts/ and
+// runtime/: the compiler reads `nish/<module>` from the package it sits in.
+const oldPackage = path.join(out, "old-package")
+fs.rmSync(oldPackage, { recursive: true, force: true })
+fs.mkdirSync(path.join(oldPackage, "bin"), { recursive: true })
+const archive = spawnSync("git", ["archive", base, "std", "scripts", "runtime"], {
+  cwd: root,
+  maxBuffer: 1 << 30,
+})
+if (archive.status !== 0) {
+  process.stderr.write(`git archive ${base}\n${archive.stderr}`)
+  process.exit(1)
 }
-// Two copies of the module cannot share one program, so each build gets its
-// own directory with main.ts importing the copy beside it.
-const main = fs
-  .readFileSync(path.join(here, "main.ts"), "utf8")
-  .replace('from "nish/net/http1-server"', 'from "./http1-server"')
+const untar = spawnSync("tar", ["-x", "-C", oldPackage], { input: archive.stdout })
+if (untar.status !== 0) {
+  process.stderr.write(`tar -x\n${untar.stderr}`)
+  process.exit(1)
+}
+const oldCompiler = path.join(oldPackage, "bin", "nish")
+fs.copyFileSync(compiler, oldCompiler)
+fs.chmodSync(oldCompiler, 0o755)
+const compilers = { old: oldCompiler, new: compiler }
 const binaries = []
-for (const [label, source] of Object.entries(sources)) {
+for (const [label, nish] of Object.entries(compilers)) {
   const dir = path.join(out, label)
   fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(path.join(dir, "main.ts"), main)
-  fs.writeFileSync(path.join(dir, "http1-server.ts"), source)
+  fs.copyFileSync(path.join(here, "main.ts"), path.join(dir, "main.ts"))
   const exe = path.join(dir, "conn")
-  run(compiler, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
+  run(nish, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
   binaries.push({ label, exe })
 }
 const copy = path.join(out, "old-copy")
@@ -81,7 +103,12 @@ binaries.splice(1, 0, { label: "old′", exe: copy })
 const shapes = [
   ["hot", [requests, "1", batches]],
   ["cold", [requests, connections, batches]],
-]
+  ["idle", [requests, connections, batches]],
+].filter(([s]) => shapeFlag === "all" || shapeFlag.split(",").includes(s))
+if (shapes.length === 0) {
+  process.stderr.write(`bench/http1-conn: no shape called ${shapeFlag}\n`)
+  process.exit(1)
+}
 const pin = spawnSync("taskset", ["-c", "1", "true"]).status === 0
 /** Runs one bench binary, under `taskset -c 1` when it is there. */
 const bench = (exe, args) => (pin ? run("taskset", ["-c", "1", exe, ...args]) : run(exe, args))
@@ -110,6 +137,23 @@ for (let r = 0; r < rounds; r++) {
   }
 }
 
+// The peak RSS of one `rss` run in KiB, which it prints where a time goes.
+const peak = (exe, count) =>
+  Number(
+    bench(exe, ["rss", "0", String(count), "0"])
+      .trim()
+      .split(" ")[1]
+  )
+const rssRuns = Number(flag("--rss", shapes.some(([s]) => s === "idle") ? "5" : "0"))
+// label -> bytes per idle connection, one per run
+const rss = new Map()
+for (let r = 0; r < rssRuns; r++) {
+  for (const { label, exe } of binaries) {
+    const per = ((peak(exe, Number(connections)) - peak(exe, 0)) * 1024) / Number(connections)
+    rss.set(label, [...(rss.get(label) ?? []), per])
+  }
+}
+
 const sorted = (xs) => [...xs].sort((a, b) => a - b)
 const median = (xs) => sorted(xs)[Math.floor(xs.length / 2)]
 const cpu = (fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : "")
@@ -118,10 +162,10 @@ const cpu = (fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "
 console.log(
   `CPU: ${cpu ? cpu.split(":")[1].trim() : (os.cpus()[0]?.model ?? "unknown")}, ${os.cpus().length} cores`
 )
-console.log(`old: ${server} at ${base.slice(0, 12)}; new: the working tree`)
+console.log(`old: std/ at ${base.slice(0, 12)}; new: the working tree`)
 console.log(
   `${rounds} rounds, each the fastest of ${batches} batches of ${requests} requests` +
-    `${pin ? " pinned to core 1" : " unpinned (no taskset)"}; cold spreads them over ${connections} connections`
+    `${pin ? " pinned to core 1" : " unpinned (no taskset)"}; cold and idle spread them over ${connections} connections`
 )
 console.log("ns per request: median (min–max), ratio of medians to old\n")
 console.log(`| shape | ${binaries.map((b) => b.label).join(" | ")} |`)
@@ -134,4 +178,16 @@ for (const [shape] of shapes) {
     return `${m.toFixed(1)} (${xs[0].toFixed(1)}–${xs[xs.length - 1].toFixed(1)}) ${(m / first).toFixed(3)}`
   })
   console.log(`| ${shape} | ${cells.join(" | ")} |`)
+}
+if (rssRuns > 0) {
+  console.log(
+    `\npeak RSS per idle connection, bytes: median (min–max) of ${rssRuns} runs at ${connections} less 0`
+  )
+  console.log(`| | ${binaries.map((b) => b.label).join(" | ")} |`)
+  console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
+  const cells = binaries.map((b) => {
+    const xs = sorted(rss.get(b.label))
+    return `${median(xs).toFixed(0)} (${xs[0].toFixed(0)}–${xs[xs.length - 1].toFixed(0)})`
+  })
+  console.log(`| rss | ${cells.join(" | ")} |`)
 }
