@@ -2846,7 +2846,9 @@ or `PG_LOST` to `fail(run)` (on a spent handle these do nothing and count in
 `stray`), and after each call `next(run)` until
 `PG_BATCH_NONE`: `PG_BATCH_ROW` (the connection's row answers request `tag`),
 then one of `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED` per
-request. It reads no clock: when to take is the loop's choice, or a `PgBatchClock`'s (`PgBatchClockConfig`: `minCount`, `factor` × the moving average of batch sizes, `maxWaitUs`, the idle bypass `lightCount`; defaults are a fixed window), which `takeDue(conn, clock, nowUs, pool.inFlight())` consults after `clock.arrived(nowUs)` per add; `PgBatchTurns` wakes one collecting connection only when its batch is due. (No block;
+request. `sorted = false` drops `q.ord` from the statement's `order by` (and
+its Sort node, with `orderBy` empty): rows route as they come, and every last
+event waits for `end`. It reads no clock: when to take is the loop's choice, or a `PgBatchClock`'s (`PgBatchClockConfig`: `minCount`, `factor` × the moving average of batch sizes, `maxWaitUs`, the idle bypass `lightCount`; defaults are a fixed window), which `takeDue(conn, clock, nowUs, pool.inFlight())` consults after `clock.arrived(nowUs)` per add; `PgBatchTurns` wakes one collecting connection only when its batch is due. (No block;
 `tests/postgres/live`'s `batch` scenario runs it against a server, and the user
 guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
