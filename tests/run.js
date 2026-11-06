@@ -5367,7 +5367,7 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
 // tests/emit-ts/<group>/ with a `.out` is an entry: it is written out, the
 // `entry.ts` run under Node and the program run natively, and both must print
 // the `.out` and exit 0 — or, where a `<name>.err` sits beside it, write that
-// to stderr and exit 1. Beside it, `<name>.files` lists every path the output holds, and
+// to stderr and exit 1, or exit with the status a `<name>.code` holds. Beside it, `<name>.files` lists every path the output holds, and
 // `<name>.expected.ts` (and `<name>.entry.expected.ts`, where there is one) is
 // the module as written; in `identity/` there is no `.expected.ts`, because a
 // class-A module's golden is its own source, byte for byte. `UPDATE_GOLDENS=1`
@@ -5436,10 +5436,12 @@ if (dealtHere("emitTs")) {
         )
       }
       const want = fs.readFileSync(path.join(dir, `${name}.out`), "utf8")
-      // A fixture with a `.err` panics: that stderr, exit 1, on both sides.
+      // A fixture with a `.err` panics: that stderr, exit 1, on both sides. A
+      // `.code` holds the exit status `main` answers, where it is not 0.
       const errFile = path.join(dir, `${name}.err`)
       const wantErr = fs.existsSync(errFile) ? fs.readFileSync(errFile, "utf8") : null
-      const wantStatus = wantErr === null ? 0 : 1
+      const codeFile = path.join(dir, `${name}.code`)
+      const wantStatus = fs.existsSync(codeFile) ? Number(fs.readFileSync(codeFile, "utf8")) : wantErr === null ? 0 : 1
       const ends = (r) => r.status === wantStatus && r.stdout === want && (wantErr === null || r.stderr === wantErr)
       const node = spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
       check(
