@@ -254,5 +254,5 @@ unconfined by the time it refuses.
 - **WebAssembly** targets accept it and add nothing: the host already decides
   what a module may import.
 - `--emit-ast`, `--emit-checked`, `--emit-ts`, `--fix`, `--emit-napi` and
-  `--emit-napi-async` refuse it, and so does a program with no `main`: there
-  is nothing to confine.
+  `--emit-napi-async` refuse it, and so does a program with neither a `main`
+  nor top-level code that runs as one: there is nothing to confine.

@@ -144,7 +144,7 @@ tagged classes and interfaces, `eval`, `Function`, `Proxy`,
 `Reflect`, `Symbol`, `globalThis`, `arguments`, `with`, `delete`, `typeof`,
 `instanceof`, `in`, `for...in`, `==`/`!=`, comma expressions, `void expr`,
 `var`, `try`/`catch`/`finally` and `throw` (a failure is a `Result<T, E>`,
-WP16), a label on anything but a loop, a block or a `switch`, generators and `yield`, `async`/`await` (WP24),
+WP16), a label on anything but a loop, a block or a `switch`, generators and `yield`, `async` on a method, a field or a constructor (a top-level `async` function or arrow compiles, WP49),
 decorators, enum members that are not numeric literals, namespaces and
 `declare global`, computed property names, object spread, prototype access,
 `Object.assign` and its relatives, string-keyed element access, `?.` outside a
@@ -185,7 +185,7 @@ table with each message and the idiom to write instead.
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | **Decided:** arena + escape-analysed `alloca` (WP6), with `using a = arena()` as the explicit bracket (#420). Reference counting is not built. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |
-| SIMD surface | runtime kernels behind `std` functions / a `nish:simd` module of 128-bit vector types / target intrinsics / auto-vectorisation with an opt-in CPU level | **Decided ([wp38](wp38-simd.md) §8): kernels first, chosen at run time; the default target stays the baseline CPU; `nish:simd` only once it clears a measured bar; no target intrinsics.** The first kernel and `indexOfAny` are built; the opt-in CPU level met its bar on a re-measurement and is decided with `x86-64-v3` only, planned and unbuilt (§7, Q7). |
+| SIMD surface | runtime kernels behind `std` functions / a `nish:simd` module of 128-bit vector types / target intrinsics / auto-vectorisation with an opt-in CPU level | **Decided ([wp38](wp38-simd.md) §8): kernels first, chosen at run time; the default target stays the baseline CPU; `nish:simd` only once it clears a measured bar; no target intrinsics.** `nish:simd` cleared it and is built (S3, #1171). The first kernel and `indexOfAny` are built; the opt-in CPU level met its bar on a re-measurement and is decided with `x86-64-v3` only, planned and unbuilt (§7, Q7). |
 
 ## 4. What exists today
 
@@ -251,12 +251,12 @@ is its plan. [README.md](README.md) indexes them.
 | 21 | Packages | S1, S2 and half of S3 landed; the rest open | [wp21](wp21-packages.md) |
 | 22 | Arrow functions as the declaration form | A and B landed, C done but for the test corpus; stage D is an open question | [wp22](wp22-arrow-functions.md) |
 | 23 | The language surface a corpus review asked for | settled row by row | [wp23](wp23-language-surface.md) |
-| 24 | `async`/`await` | declined; `--emit-napi-async` built | [wp24](wp24-async.md) |
+| 24 | `async`/`await` | declined, then reversed by WP49 for a restricted `async`; `--emit-napi-async` built | [wp24](wp24-async.md) |
 | 25 | Remove inheritance, widen `implements` | landed | [wp25](wp25-inheritance.md) |
 | 26 | The standard library | landed, and growing | [wp26](wp26-stdlib.md) |
 | 27 | Calling C | S1 and S2 built; S3 planned | [wp27](wp27-ffi.md) |
 | 28 | Compatibility mode | proposed | [wp28](wp28-compatibility-mode.md) |
-| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks (*2026-10-30:* an arrow passed to a function parameter may now read the caller's `const` locals, as extra arguments; closure values stay declined), wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await; deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values | [wp29](wp29-thread-surface.md) |
+| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks (*2026-10-30:* an arrow passed to a function parameter may now read the caller's `const` locals, as extra arguments; closure values stay declined), wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await (a restricted `async` later landed under WP49); deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values | [wp29](wp29-thread-surface.md) |
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
 | 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
 | 32 | `Map` and `Set` | landed in 0.11.0 and 0.12.0; a `Map` read in a parallel body (§9.3) is still open | [wp32](wp32-map.md) |
@@ -265,16 +265,16 @@ is its plan. [README.md](README.md) indexes them.
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
 | 37 | The OS sandbox | stages 1 and 2 built (`--sandbox`, `fs.read=<dir>` and `fs.write=<dir>` scopes); manifest scopes not built | [wp37](wp37-os-sandbox.md) |
-| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S3a and S2's flag planned | [wp38](wp38-simd.md) |
+| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3a landed and S3 built (`nish:simd`, its bar met), S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S2's flag planned | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
 | 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; stage 1, the router, built | [wp43](wp43-http-app-layer.md) |
 | 44 | Streaming file reads: a descriptor, a positional read, a size and a close | proposed; design only, open questions for the owner | [wp44](wp44-streaming-files.md) |
 | 45 | Name resolution for `nish:net`: a DNS stub resolver | built: `nish/net/dns` on the caller's loop, `resolveHost` for start-up | [wp45](wp45-name-resolution.md) |
-| 46 | Memory for programs that do not exit: regions | proposed | [wp46](wp46-long-running-memory.md) |
+| 46 | Memory for programs that do not exit: regions | stages 1 and 2 built: regions in the runtime and `nish:region` in the language | [wp46](wp46-long-running-memory.md) |
 | 47 | Shared work across cores: regions, atomics and rings | built: `nish/sync/shm`, `nish/sync/ring` and `examples/prefork-jobs.ts` | [wp47](wp47-shared-memory.md) |
 | 48 | Compressed 32-bit references: a whole-program mode against `i32` handles, measured | proposed; neither built, the lean node layout recommended | [wp48](wp48-compressed-references.md) |
-| 49 | `async`/`await` on the server, and the TechEmpower top | proposed, D1 accepted: reverses WP24 for a restricted `async`; waits for WP46 stages 1–2 | [wp49](wp49-async-server.md) |
+| 49 | `async`/`await` on the server, and the TechEmpower top | D1 accepted (reverses WP24 for a restricted `async`); stages 1 to 4 built — the renames, `nish/net/upstream` and the Postgres carrier, every TFB test type, and the language: `async`, `await`, `spawn`, `awaitAll` lowered to frames, tasks on an in-process queue; stage 5's executor over `pollWait` and stage 6 open | [wp49](wp49-async-server.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -493,9 +493,9 @@ major. Whether it happens at all is still wp22 §10's open question.
   Q7), and it is planned in `.claude/plans/wp38-s3a-cpu-flag.plan.md`.
   The lexer on `indexOfAny` (S4) is declined for now: the lexer is about 1% of
   the front end, too little to make `bootstrap --verify` measurably faster
-  (§7). A `nish:simd` module of 128-bit vector types (S3) is unbuilt, and is
-  decided on S3a, its bar kernels measured without a surface, which is planned
-  beside S2 (§7, Q8). S7, crediting an offset index from the test that bounds
+  (§7). A `nish:simd` module of 128-bit vector types (S3) was decided on S3a, its
+  bar kernels measured without a surface, and is built with its bar met
+  (§7, Q8; #1171). S7, crediting an offset index from the test that bounds
   it, was to come first and was already built by #561 (§7, Q9). S6b,
   Eisel–Lemire in `numberF64`, met its bar: canada.json tokenizes 2.78x
   faster, bit-for-bit `parseFloat`'s. Every
@@ -504,9 +504,11 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Settled, with the note that settles it
 
-- **`async`/`await` is refused** ([wp24-async.md](wp24-async.md)): there is
-  nothing in either runtime to wait for. The one item it recommended,
-  `--emit-napi-async`, is built.
+- **`async`/`await` was refused** ([wp24-async.md](wp24-async.md)), because
+  there was nothing in either runtime to wait for, and is admitted in a
+  restricted form — no promise values, every call awaited where it is made —
+  by [wp49-async-server.md](wp49-async-server.md). The one item WP24
+  recommended, `--emit-napi-async`, is built.
 - **Inheritance is removed** and `implements` is a field prefix
   ([wp25-inheritance.md](wp25-inheritance.md)).
 - **The rest of the surface a corpus review asked for** is answered row by row

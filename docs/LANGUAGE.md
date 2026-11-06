@@ -1139,8 +1139,10 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try`, destructuring and an arrow that captures a local are refused by Nish
-on their own, so no loop that compiles holds them. A loop that holds a
+`try` and destructuring are refused by Nish on their own, and an arrow may
+read a local it captures but never assign it (NL2586,
+[Function parameters](#function-parameters)), so no loop that compiles stores
+through any of them. A loop that holds a
 labelled statement or a labelled `break` or `continue` anywhere in its body,
 or whose `switch` has a clause that falls into the next, is one the pass
 gives up on: it keeps the checker's widened state.
@@ -1520,8 +1522,9 @@ console.log(total)              // 10
   top-level code, and neither has an entry that declares `main` in either
   spelling (`reject_top_level_stmt`, `reject_const_top_level_let`). An entry
   of nothing but constants is a module, not a script.
-- There is no top-level `await`: the language has no `async`
-  ([Forbidden constructs](#forbidden-constructs-phase-0-validator)).
+- There is no top-level `await`: `await` is written only inside an `async`
+  function (NL2641, [Async functions](#async-functions-async-and-await)), so a
+  script that waits declares `export async function main` instead.
 - `--emit-ts` writes the code back where it stands, and its `entry.ts`
   imports the module rather than calling `main`.
 
@@ -5906,7 +5909,9 @@ loop body that is a single statement rather than a block is accepted
 - Declaring a `void`-typed variable is `Cannot declare a variable of type void`
   *(CLI only)*. Destructuring is not supported: `const [a, b] = xs` is
   `Destructuring is not supported` in a body and in a `for...of` head
-  (`reject_destructure_local`), and `Destructured constants are not supported`
+  (`reject_destructure_local`), but for the answers of
+  `const [a, b] = await awaitAll(f(x), g(y))`
+  ([Async functions](#async-functions-async-and-await)), and `Destructured constants are not supported`
   at the top level (`reject_const_destructured`). `var` is forbidden
   (`tests/cases/reject_var_keyword`, `reject_var_in_for`).
 - `const` freezes the binding, not the contents: `xs[0] = 1` and
@@ -8015,7 +8020,7 @@ element type: an `i32[]` is an array but not a command line
 truncates one.
 
 `spawnSyncTo` is a second builtin rather than two more parameters on the first
-because there are no optional parameters — and the alternative shape, answering
+because the language had no default parameters when it was added — and the alternative shape, answering
 the output as a string, was refused for two reasons: the runtime would have to
 buffer a child that can print more than memory holds, and a harness comparing
 output against a golden wants the bytes on disk anyway, to diff and to keep
@@ -8272,8 +8277,9 @@ and reads and writes bytes, a client connects, or either binds and trades
 datagrams, and every socket is
 **non-blocking**, so a call that
 would wait answers "would block" instead, and the program decides what to do
-next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
-the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
+next. There is no callback, and an [`async` function](#async-functions-async-and-await)
+cannot wait on a socket yet (its tasks run on an in-process queue): the program
+is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
 so a child that `spawnSync` starts inherits none of them. All twenty-six functions
 are C in
@@ -10409,7 +10415,8 @@ entry:
   (`tests/cases/sandbox_hello`). `--emit-ast`, `--emit-checked`, `--emit-ts`,
   `--fix`, `--emit-napi` and `--emit-napi-async` refuse it, exit 2, since none
   writes a program with a `main` to confine, and so does an entry module that
-  declares no `main`. `--sandbox` and `--sandbox=best-effort` on one command
+  declares no `main` and holds no [top-level code](#top-level-code) to run
+  as one (`--sandbox` on a script confines the `main` its code becomes). `--sandbox` and `--sandbox=best-effort` on one command
   line are refused, exit 2; the same one twice is one.
 - **The call.** The first operand is `main`'s capability mask, numbered as
   `--emit-capabilities` numbers the bits (`clock` 0 … `tty` 10, `unsafe` 11), the
@@ -12026,7 +12033,7 @@ messages are exact for the cases cited; other rows quote the checker
 | missing return type, a function's or a method's, in a template nothing instantiates too | `` Function `f` needs an explicit return type annotation `` / `` Method `m` of class `Box` needs an explicit return type annotation `` | `reject_missing_return_type`, `reject_arrow_return_type`, `reject_method_return_template`, `reject_method_return_generic` |
 | a function with no body (an overload signature) | `Functions must have a body` | `nl2204_function_without_body` |
 | `export default function ()` | `Functions must be named` | `reject_fn_anonymous` |
-| a destructuring pattern | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
+| a destructuring pattern, but for `const [a, b] = await awaitAll(…)` | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
 | an optional parameter; a default or rest outside a function, method, constructor or `const` arrow; a spread argument | `Optional parameters are not supported` / `Optional/default parameters are not supported here` / `Rest parameters are not supported here` / `Spread arguments are not supported` | `reject_param_optional`, `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest`, `reject_param_spread_call` |
 | an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
 | a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
