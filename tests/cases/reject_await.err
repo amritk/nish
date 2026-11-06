@@ -1,1 +1,1 @@
-`await` is forbidden in Nish (no event loop or promises)
+`await` is only written inside an `async` function

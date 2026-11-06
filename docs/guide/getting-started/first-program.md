@@ -51,7 +51,7 @@ stand:
 
 This one breaks the second rule, and the compiler says which variable and why:
 
-```ts nish:err NL2639
+```ts nish:err NL2656
 let count = 0
 const bump = (): void => {
   count += 1

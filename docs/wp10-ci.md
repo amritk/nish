@@ -36,7 +36,7 @@ them for review.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest, shard <i>/4)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard <i>/4` ([shards](#shards-and-time-limits)), then, in shard 1 only, the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
+| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
@@ -94,16 +94,17 @@ way.
 
 Three jobs took longer than 15 minutes unsplit, so each is split:
 
-- **`test`**, four ways. `node tests/run.js --shard <i>/<n>` splits the suite.
+- **`test`**, eight ways. `node tests/run.js --shard <i>/<n>` splits the suite.
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the two sections there that are dealt (`term-io` and
-  `--emit-ts`), about two minutes. Shard 1 runs every section after them but
-  the dealt ones, together with the link programs whose output a later check
-  reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
+  `--emit-ts`), about two minutes. Shard 1 runs every section after them
+  that is not dealt, together with the link programs whose output a later
+  check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
   `tests/run.js`: term-io, `--emit-ts`, WP14 self-hosting, crypto-bench, the
   sanitizer and fuzz replays, the Nish runner's `pop` run, WP9 bench, the
-  runtime cache, SQLite linking and the WP13 differential) and the remaining
-  link programs are dealt by cost: `tests/shard-costs.json` holds the seconds
+  runtime cache, SQLite linking, the WP13 differential, and eleven `tail`
+  groups of the sections after the link programs) and the remaining link
+  programs are dealt by cost: `tests/shard-costs.json` holds the seconds
   each took in a CI shard, and `linkShard` in `tests/run.js` gives each,
   largest first, to the shard with the least so far, shard 1 starting from its
   own sections' cost. A link program costs at least half a second (a rejection
@@ -147,9 +148,28 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   each there. Dealt again on the regenerated table, with the floor, every
   shard carries 570 s after its pre-link sections.
 
-  The shard-1 steps after the suite that require a `PASS` line (`simd`, the
-  AES kernels, `cpu-level`) grep the Test step's log for it rather than
-  running their section again, so those sections stay in shard 1.
+  That left shard 1 the longest by six to ten minutes again as its own
+  sections grew: in
+  [run 41882940444](https://github.com/amritk/nish/actions/runs/41882940444)
+  (`46f3dad`) its job took 20.6 minutes against 14.4, 11.6 and 14.3, twelve
+  of them the 706 s of sections after the link programs. Eleven blocks of
+  those sections, 550 s together, moved whole to before the point where the
+  other shards stop, each with every name it declares and every directory it
+  writes, and are dealt as `tail` groups; `shardOne` is the 156 s left plus
+  shard 1's 62 s of steps after the suite, 218 s. The link costs and the
+  groups' costs are read from that run's four logs. With 946 link programs
+  now, the job is split eight ways: about 390 s of the table each, after
+  about 200 s of setup, stage1 and pre-link sections that every shard runs.
+  A filtered run sends every `tail` group to shard 1, as it sent all of
+  that, and counts none of them in its deal.
+
+  The steps after the suite that require a `PASS` line or a driver the suite
+  built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
+  rather than running their section again, so those sections stay in shard
+  1. The `simd` group's seven (the AVX2, AES-NI, SHA-NI, ChaCha20 and CRC-32
+  paths, the lowered AES kernels, SHA-256 throughput) run in shard 2, where
+  `DEALT_SECTIONS.simd.pinned` keeps that group, 173 s with those steps; a
+  check in `tests/run.js` holds their `if:` to it.
 - **`runner`**, three ways, and one process per core in each.
   `build/nish-runner --shard <i>/<n>` starts itself `--jobs` times (the core
   count up to 8 by default), each on a slice it deals round-robin, so job `i`

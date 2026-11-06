@@ -385,7 +385,7 @@ export const FLAG_FOR_IN: i32 = 2048
 // rather than `as`, each the TypeScript construct NL2256 names.
 export const FLAG_ANGLE: i32 = 4096
 export const FLAG_SATISFIES: i32 = 8192
-// `flags` on N_FUNCTION, N_METHOD and N_ARROW: bit 14 is `async` (NL1015) and
+// `flags` on N_FUNCTION, N_METHOD and N_ARROW: bit 14 is `async` (WP49) and
 // bit 15 the `*` of a generator (NL1044). `async` is a member modifier, so a
 // field or a constructor that writes it carries the bit too.
 export const FLAG_ASYNC: i32 = 16384

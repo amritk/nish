@@ -228,11 +228,13 @@ struct Parser (class) size=112 align=8 exported
   field aheadValue: string index=12 offset=64
   field hasAhead: boolean index=13 offset=72
   field noIn: boolean index=14 offset=73
-  field nodeCount: i32 index=15 offset=76
-  field labels: string[] index=16 offset=80
-  field labelLoops: boolean[] index=17 offset=88
-  field outerLabels: string[] index=18 offset=96
-  field closingBraces: StringMap index=19 offset=104
+  field asyncBody: boolean index=15 offset=74
+  field asyncNext: boolean index=16 offset=75
+  field nodeCount: i32 index=17 offset=76
+  field labels: string[] index=18 offset=80
+  field labelLoops: boolean[] index=19 offset=88
+  field outerLabels: string[] index=20 offset=96
+  field closingBraces: StringMap index=21 offset=104
   constructor -> @Parser.constructor
   method advance -> @Parser.advance
   method peek -> @Parser.peek
@@ -310,6 +312,7 @@ struct Parser (class) size=112 align=8 exported
   method parseParameter -> @Parser.parseParameter
   method parameterModifierAhead -> @Parser.parameterModifierAhead
   method parseBindingName -> @Parser.parseBindingName
+  method parseNamePattern -> @Parser.parseNamePattern
   method parseReturnType -> @Parser.parseReturnType
   method parseTypeAnnotation -> @Parser.parseTypeAnnotation
   method parseClass -> @Parser.parseClass
@@ -431,7 +434,7 @@ function Parser.constructor(this: Parser, file: SourceFile): void -> @Parser.con
   stackSites=0 stackLocals=0
   callee +0:18 new Lexer -> @Lexer.constructor
   callee +6:26 new StringMap -> @StringMap.constructor
-  callee +19:5 Parser.advance -> @Parser.advance
+  callee +21:5 Parser.advance -> @Parser.advance
 function Parser.advance(this: Parser): void -> @Parser.advance [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -561,111 +564,111 @@ function Parser.parseDeclaration(this: Parser): Node -> @Parser.parseDeclaration
   calls: Parser.advance Parser.aheadOnSameLine Parser.at Parser.beginForm Parser.declaredNamespaceAhead Parser.declaredTypeAhead Parser.endForm Parser.exportTypeListAhead Parser.exportable Parser.fail Parser.flagged Parser.importDeclarationAhead Parser.importMetaAhead Parser.namespaceAhead Parser.parseArrowFunction Parser.parseClass Parser.parseDeclaredType Parser.parseDecorated Parser.parseEnum Parser.parseExportAssignment Parser.parseExportDeclaration Parser.parseExportDefault Parser.parseForeignFunction Parser.parseFunction Parser.parseImport Parser.parseInterface Parser.parseMalformedImport Parser.parseModuleConst Parser.parseNamespace Parser.parseNamespaceExport Parser.parseStatement Parser.parseTypeAlias Parser.peek Parser.scanAfterAhead Parser.startsArrowDeclaration Parser.startsConstEnum Parser.startsTopLevelStatement Parser.varAhead nish_str_concat nish_str_eq tokenName
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.at#0 Parser.advance#0 Parser.at#0 Parser.parseDecorated#0 Parser.at#0 Parser.parseExportDefault#0 Parser.at#0 Parser.beginForm#0 Parser.endForm#0 Parser.parseExportAssignment#0 Parser.at#0 Parser.at#0 Parser.exportTypeListAhead#0 Parser.beginForm#0 Parser.endForm#0 Parser.parseExportDeclaration#0 Parser.at#0 Parser.beginForm#0 Parser.endForm#0 Parser.parseNamespaceExport#0 Parser.at#0 Parser.peek#0 Parser.importMetaAhead#0 Parser.importDeclarationAhead#0 Parser.beginForm#0 Parser.exportable#0 Parser.endForm#0 Parser.parseImport#0 Parser.fail#0 Parser.parseMalformedImport#0 Parser.at#0 Parser.exportable#0 Parser.parseFunction#0 Parser.at#0 Parser.peek#0 Parser.aheadOnSameLine#0 Parser.advance#0 Parser.parseFunction#0 Parser.exportable#0 Parser.at#0 Parser.exportable#0 Parser.parseClass#0 Parser.at#0 Parser.peek#0 Parser.aheadOnSameLine#0 Parser.advance#0 Parser.exportable#0 Parser.flagged#0 Parser.parseClass#0 Parser.at#0 Parser.exportable#0 Parser.parseInterface#0 Parser.at#0 Parser.startsArrowDeclaration#0 Parser.exportable#0 Parser.parseArrowFunction#0 Parser.at#0 Parser.startsConstEnum#0 Parser.advance#0 Parser.parseEnum#0 Parser.exportable#0 Parser.at#0 Parser.at#0 Parser.varAhead#0 Parser.exportable#0 Parser.parseModuleConst#0 Parser.at#0 Parser.peek#0 Parser.advance#0 Parser.parseForeignFunction#0 Parser.exportable#0 Parser.declaredTypeAhead#0 Parser.exportable#0 Parser.parseDeclaredType#0 Parser.namespaceAhead#0 Parser.exportable#0 Parser.parseNamespace#0 Parser.at#0 Parser.aheadOnSameLine#0 Parser.peek#0 Parser.scanAfterAhead#0 Parser.declaredNamespaceAhead#0 Parser.advance#0 Parser.exportable#0 Parser.parseNamespace#0 Parser.at#0 Parser.exportable#0 Parser.parseTypeAlias#0 Parser.at#0 Parser.exportable#0 Parser.parseEnum#0 Parser.startsTopLevelStatement#0 Parser.parseStatement#0 Parser.fail#0
   stackSites=0 stackLocals=0
-  local -54:11 start: i32 (const)
-  local -53:9 exported: boolean (let)
-  callee -52:9 Parser.at -> @Parser.at
-  callee -50:7 Parser.advance -> @Parser.advance
-  callee -46:9 Parser.at -> @Parser.at
-  callee -45:14 Parser.parseDecorated -> @Parser.parseDecorated
-  callee -39:21 Parser.at -> @Parser.at
-  callee -38:14 Parser.parseExportDefault -> @Parser.parseExportDefault
-  callee -36:21 Parser.at -> @Parser.at
-  local -35:13 previous: i32 (const)
-  callee -35:24 Parser.beginForm -> @Parser.beginForm
-  callee -34:14 Parser.endForm -> @Parser.endForm
-  callee -34:27 Parser.parseExportAssignment -> @Parser.parseExportAssignment
-  callee -32:22 Parser.at -> @Parser.at
-  callee -32:45 Parser.at -> @Parser.at
-  callee -32:66 Parser.exportTypeListAhead -> @Parser.exportTypeListAhead
-  local -31:13 previous: i32 (const)
-  callee -31:24 Parser.beginForm -> @Parser.beginForm
-  callee -30:14 Parser.endForm -> @Parser.endForm
-  callee -30:27 Parser.parseExportDeclaration -> @Parser.parseExportDeclaration
-  callee -28:21 Parser.at -> @Parser.at
-  local -27:13 previous: i32 (const)
-  callee -27:24 Parser.beginForm -> @Parser.beginForm
-  callee -26:14 Parser.endForm -> @Parser.endForm
-  callee -26:27 Parser.parseNamespaceExport -> @Parser.parseNamespaceExport
-  callee -24:9 Parser.at -> @Parser.at
-  callee -24:32 Parser.peek -> @Parser.peek
-  callee -24:76 Parser.importMetaAhead -> @Parser.importMetaAhead
-  callee -23:11 Parser.importDeclarationAhead -> @Parser.importDeclarationAhead
-  local -22:15 previous: i32 (const)
-  callee -22:26 Parser.beginForm -> @Parser.beginForm
-  callee -21:16 Parser.exportable -> @Parser.exportable
-  callee -21:32 Parser.endForm -> @Parser.endForm
-  callee -21:45 Parser.parseImport -> @Parser.parseImport
-  callee -17:16 Parser.fail -> @Parser.fail
-  callee -15:14 Parser.parseMalformedImport -> @Parser.parseMalformedImport
-  callee -13:9 Parser.at -> @Parser.at
-  callee -12:14 Parser.exportable -> @Parser.exportable
-  callee -12:30 Parser.parseFunction -> @Parser.parseFunction
-  callee -7:7 Parser.at -> @Parser.at
-  callee -5:7 Parser.peek -> @Parser.peek
-  callee -4:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  callee -2:7 Parser.advance -> @Parser.advance
-  local -1:13 declaration: Node (const)
-  callee -1:27 Parser.parseFunction -> @Parser.parseFunction
-  callee +1:14 Parser.exportable -> @Parser.exportable
-  callee +3:9 Parser.at -> @Parser.at
-  callee +4:14 Parser.exportable -> @Parser.exportable
-  callee +4:30 Parser.parseClass -> @Parser.parseClass
-  callee +9:7 Parser.at -> @Parser.at
-  callee +11:7 Parser.peek -> @Parser.peek
-  callee +12:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  callee +14:7 Parser.advance -> @Parser.advance
-  callee +15:14 Parser.exportable -> @Parser.exportable
-  callee +15:30 Parser.flagged -> @Parser.flagged
-  callee +15:43 Parser.parseClass -> @Parser.parseClass
-  callee +17:9 Parser.at -> @Parser.at
-  callee +18:14 Parser.exportable -> @Parser.exportable
-  callee +18:30 Parser.parseInterface -> @Parser.parseInterface
-  callee +20:9 Parser.at -> @Parser.at
-  callee +20:31 Parser.startsArrowDeclaration -> @Parser.startsArrowDeclaration
-  callee +21:14 Parser.exportable -> @Parser.exportable
-  callee +21:30 Parser.parseArrowFunction -> @Parser.parseArrowFunction
-  callee +26:9 Parser.at -> @Parser.at
-  callee +26:31 Parser.startsConstEnum -> @Parser.startsConstEnum
-  callee +27:7 Parser.advance -> @Parser.advance
-  local +28:13 declaration: Node (const)
-  callee +28:27 Parser.parseEnum -> @Parser.parseEnum
-  callee +30:14 Parser.exportable -> @Parser.exportable
-  callee +32:9 Parser.at -> @Parser.at
-  callee +32:31 Parser.at -> @Parser.at
-  callee +32:51 Parser.varAhead -> @Parser.varAhead
-  callee +33:14 Parser.exportable -> @Parser.exportable
-  callee +33:30 Parser.parseModuleConst -> @Parser.parseModuleConst
-  callee +43:9 Parser.at -> @Parser.at
-  callee +43:59 Parser.peek -> @Parser.peek
-  callee +44:7 Parser.advance -> @Parser.advance
-  local +45:13 foreign: Node (const)
-  callee +45:23 Parser.parseForeignFunction -> @Parser.parseForeignFunction
-  callee +46:14 Parser.exportable -> @Parser.exportable
-  callee +48:9 Parser.declaredTypeAhead -> @Parser.declaredTypeAhead
-  callee +49:14 Parser.exportable -> @Parser.exportable
-  callee +49:30 Parser.parseDeclaredType -> @Parser.parseDeclaredType
-  callee +51:9 Parser.namespaceAhead -> @Parser.namespaceAhead
-  callee +52:14 Parser.exportable -> @Parser.exportable
-  callee +52:30 Parser.parseNamespace -> @Parser.parseNamespace
-  callee +55:7 Parser.at -> @Parser.at
-  callee +57:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  callee +58:7 Parser.peek -> @Parser.peek
-  local +60:13 scan: Lexer (const)
-  callee +60:20 Parser.scanAfterAhead -> @Parser.scanAfterAhead
-  callee +61:11 Parser.declaredNamespaceAhead -> @Parser.declaredNamespaceAhead
-  callee +62:9 Parser.advance -> @Parser.advance
-  callee +63:16 Parser.exportable -> @Parser.exportable
-  callee +63:32 Parser.parseNamespace -> @Parser.parseNamespace
-  callee +66:9 Parser.at -> @Parser.at
-  callee +67:14 Parser.exportable -> @Parser.exportable
-  callee +67:30 Parser.parseTypeAlias -> @Parser.parseTypeAlias
-  callee +69:9 Parser.at -> @Parser.at
-  callee +70:14 Parser.exportable -> @Parser.exportable
-  callee +70:30 Parser.parseEnum -> @Parser.parseEnum
-  callee +74:22 Parser.startsTopLevelStatement -> @Parser.startsTopLevelStatement
-  callee +75:14 Parser.parseStatement -> @Parser.parseStatement
-  callee +77:12 Parser.fail -> @Parser.fail
-  callee +78:124 tokenName -> @tokenName
+  local -53:11 start: i32 (const)
+  local -52:9 exported: boolean (let)
+  callee -51:9 Parser.at -> @Parser.at
+  callee -49:7 Parser.advance -> @Parser.advance
+  callee -45:9 Parser.at -> @Parser.at
+  callee -44:14 Parser.parseDecorated -> @Parser.parseDecorated
+  callee -38:21 Parser.at -> @Parser.at
+  callee -37:14 Parser.parseExportDefault -> @Parser.parseExportDefault
+  callee -35:21 Parser.at -> @Parser.at
+  local -34:13 previous: i32 (const)
+  callee -34:24 Parser.beginForm -> @Parser.beginForm
+  callee -33:14 Parser.endForm -> @Parser.endForm
+  callee -33:27 Parser.parseExportAssignment -> @Parser.parseExportAssignment
+  callee -31:22 Parser.at -> @Parser.at
+  callee -31:45 Parser.at -> @Parser.at
+  callee -31:66 Parser.exportTypeListAhead -> @Parser.exportTypeListAhead
+  local -30:13 previous: i32 (const)
+  callee -30:24 Parser.beginForm -> @Parser.beginForm
+  callee -29:14 Parser.endForm -> @Parser.endForm
+  callee -29:27 Parser.parseExportDeclaration -> @Parser.parseExportDeclaration
+  callee -27:21 Parser.at -> @Parser.at
+  local -26:13 previous: i32 (const)
+  callee -26:24 Parser.beginForm -> @Parser.beginForm
+  callee -25:14 Parser.endForm -> @Parser.endForm
+  callee -25:27 Parser.parseNamespaceExport -> @Parser.parseNamespaceExport
+  callee -23:9 Parser.at -> @Parser.at
+  callee -23:32 Parser.peek -> @Parser.peek
+  callee -23:76 Parser.importMetaAhead -> @Parser.importMetaAhead
+  callee -22:11 Parser.importDeclarationAhead -> @Parser.importDeclarationAhead
+  local -21:15 previous: i32 (const)
+  callee -21:26 Parser.beginForm -> @Parser.beginForm
+  callee -20:16 Parser.exportable -> @Parser.exportable
+  callee -20:32 Parser.endForm -> @Parser.endForm
+  callee -20:45 Parser.parseImport -> @Parser.parseImport
+  callee -16:16 Parser.fail -> @Parser.fail
+  callee -14:14 Parser.parseMalformedImport -> @Parser.parseMalformedImport
+  callee -12:9 Parser.at -> @Parser.at
+  callee -11:14 Parser.exportable -> @Parser.exportable
+  callee -11:30 Parser.parseFunction -> @Parser.parseFunction
+  callee -6:7 Parser.at -> @Parser.at
+  callee -4:7 Parser.peek -> @Parser.peek
+  callee -3:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee -1:7 Parser.advance -> @Parser.advance
+  local +1:13 declaration: Node (const)
+  callee +1:27 Parser.parseFunction -> @Parser.parseFunction
+  callee +3:14 Parser.exportable -> @Parser.exportable
+  callee +5:9 Parser.at -> @Parser.at
+  callee +6:14 Parser.exportable -> @Parser.exportable
+  callee +6:30 Parser.parseClass -> @Parser.parseClass
+  callee +11:7 Parser.at -> @Parser.at
+  callee +13:7 Parser.peek -> @Parser.peek
+  callee +14:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee +16:7 Parser.advance -> @Parser.advance
+  callee +17:14 Parser.exportable -> @Parser.exportable
+  callee +17:30 Parser.flagged -> @Parser.flagged
+  callee +17:43 Parser.parseClass -> @Parser.parseClass
+  callee +19:9 Parser.at -> @Parser.at
+  callee +20:14 Parser.exportable -> @Parser.exportable
+  callee +20:30 Parser.parseInterface -> @Parser.parseInterface
+  callee +22:9 Parser.at -> @Parser.at
+  callee +22:31 Parser.startsArrowDeclaration -> @Parser.startsArrowDeclaration
+  callee +23:14 Parser.exportable -> @Parser.exportable
+  callee +23:30 Parser.parseArrowFunction -> @Parser.parseArrowFunction
+  callee +28:9 Parser.at -> @Parser.at
+  callee +28:31 Parser.startsConstEnum -> @Parser.startsConstEnum
+  callee +29:7 Parser.advance -> @Parser.advance
+  local +30:13 declaration: Node (const)
+  callee +30:27 Parser.parseEnum -> @Parser.parseEnum
+  callee +32:14 Parser.exportable -> @Parser.exportable
+  callee +34:9 Parser.at -> @Parser.at
+  callee +34:31 Parser.at -> @Parser.at
+  callee +34:51 Parser.varAhead -> @Parser.varAhead
+  callee +35:14 Parser.exportable -> @Parser.exportable
+  callee +35:30 Parser.parseModuleConst -> @Parser.parseModuleConst
+  callee +45:9 Parser.at -> @Parser.at
+  callee +45:59 Parser.peek -> @Parser.peek
+  callee +46:7 Parser.advance -> @Parser.advance
+  local +47:13 foreign: Node (const)
+  callee +47:23 Parser.parseForeignFunction -> @Parser.parseForeignFunction
+  callee +48:14 Parser.exportable -> @Parser.exportable
+  callee +50:9 Parser.declaredTypeAhead -> @Parser.declaredTypeAhead
+  callee +51:14 Parser.exportable -> @Parser.exportable
+  callee +51:30 Parser.parseDeclaredType -> @Parser.parseDeclaredType
+  callee +53:9 Parser.namespaceAhead -> @Parser.namespaceAhead
+  callee +54:14 Parser.exportable -> @Parser.exportable
+  callee +54:30 Parser.parseNamespace -> @Parser.parseNamespace
+  callee +57:7 Parser.at -> @Parser.at
+  callee +59:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee +60:7 Parser.peek -> @Parser.peek
+  local +62:13 scan: Lexer (const)
+  callee +62:20 Parser.scanAfterAhead -> @Parser.scanAfterAhead
+  callee +63:11 Parser.declaredNamespaceAhead -> @Parser.declaredNamespaceAhead
+  callee +64:9 Parser.advance -> @Parser.advance
+  callee +65:16 Parser.exportable -> @Parser.exportable
+  callee +65:32 Parser.parseNamespace -> @Parser.parseNamespace
+  callee +68:9 Parser.at -> @Parser.at
+  callee +69:14 Parser.exportable -> @Parser.exportable
+  callee +69:30 Parser.parseTypeAlias -> @Parser.parseTypeAlias
+  callee +71:9 Parser.at -> @Parser.at
+  callee +72:14 Parser.exportable -> @Parser.exportable
+  callee +72:30 Parser.parseEnum -> @Parser.parseEnum
+  callee +76:22 Parser.startsTopLevelStatement -> @Parser.startsTopLevelStatement
+  callee +77:14 Parser.parseStatement -> @Parser.parseStatement
+  callee +79:12 Parser.fail -> @Parser.fail
+  callee +80:124 tokenName -> @tokenName
 function Parser.startsTopLevelStatement(this: Parser): boolean -> @Parser.startsTopLevelStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
@@ -927,44 +930,44 @@ function Parser.parseDecorated(this: Parser, start: i32, flags: i32): Node -> @P
   local -4:9 declaration: Node (let)
 function Parser.parseExportDefault(this: Parser, start: i32): Node -> @Parser.parseExportDefault [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: via Parser.peek
+  sharedWrite: +0:7
   escaping: start
   calls: Parser.advance Parser.aheadOnSameLine Parser.anonymousFunctionAhead Parser.at Parser.beginForm Parser.defaultAbstractClassAhead Parser.endForm Parser.finishExportAssignment Parser.flagged Parser.parseClass Parser.parseDecorated Parser.parseFunction Parser.parseInterface Parser.peek nish_str_eq
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.peek#0 Parser.anonymousFunctionAhead#0 Parser.advance#0 Parser.flagged#0 Parser.parseFunction#0 Parser.defaultAbstractClassAhead#0 Parser.advance#0 Parser.at#0 Parser.advance#0 Parser.flagged#0 Parser.parseClass#0 Parser.advance#0 Parser.flagged#0 Parser.parseInterface#0 Parser.advance#0 Parser.parseDecorated#0 Parser.advance#0 Parser.at#0 Parser.peek#0 Parser.aheadOnSameLine#0 Parser.anonymousFunctionAhead#0 Parser.advance#0 Parser.flagged#0 Parser.parseFunction#0 Parser.beginForm#0 Parser.endForm#0 Parser.finishExportAssignment#0
   stackSites=0 stackLocals=0
-  local +0:11 next: i32 (const)
-  callee +0:18 Parser.peek -> @Parser.peek
-  local +1:11 flags: i32 (const)
-  local +3:13 anonymous: boolean (const)
-  callee +3:25 Parser.anonymousFunctionAhead -> @Parser.anonymousFunctionAhead
-  callee +4:7 Parser.advance -> @Parser.advance
-  callee +5:14 Parser.flagged -> @Parser.flagged
-  callee +5:27 Parser.parseFunction -> @Parser.parseFunction
-  callee +7:31 Parser.defaultAbstractClassAhead -> @Parser.defaultAbstractClassAhead
-  callee +8:7 Parser.advance -> @Parser.advance
-  local +9:11 classFlags: i32 (let)
-  callee +10:11 Parser.at -> @Parser.at
-  callee +11:9 Parser.advance -> @Parser.advance
-  callee +14:14 Parser.flagged -> @Parser.flagged
-  callee +14:27 Parser.parseClass -> @Parser.parseClass
-  callee +17:7 Parser.advance -> @Parser.advance
-  callee +18:14 Parser.flagged -> @Parser.flagged
-  callee +18:27 Parser.parseInterface -> @Parser.parseInterface
-  callee +21:7 Parser.advance -> @Parser.advance
-  callee +22:14 Parser.parseDecorated -> @Parser.parseDecorated
-  callee +24:5 Parser.advance -> @Parser.advance
-  callee +26:7 Parser.at -> @Parser.at
-  callee +28:7 Parser.peek -> @Parser.peek
-  callee +29:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  local +31:13 anonymous: boolean (const)
-  callee +31:25 Parser.anonymousFunctionAhead -> @Parser.anonymousFunctionAhead
-  callee +32:7 Parser.advance -> @Parser.advance
-  callee +33:14 Parser.flagged -> @Parser.flagged
-  callee +33:27 Parser.parseFunction -> @Parser.parseFunction
-  local +35:11 previous: i32 (const)
-  callee +35:22 Parser.beginForm -> @Parser.beginForm
-  callee +36:12 Parser.endForm -> @Parser.endForm
-  callee +36:25 Parser.finishExportAssignment -> @Parser.finishExportAssignment
+  local -33:11 next: i32 (const)
+  callee -33:18 Parser.peek -> @Parser.peek
+  local -32:11 flags: i32 (const)
+  local -30:13 anonymous: boolean (const)
+  callee -30:25 Parser.anonymousFunctionAhead -> @Parser.anonymousFunctionAhead
+  callee -29:7 Parser.advance -> @Parser.advance
+  callee -28:14 Parser.flagged -> @Parser.flagged
+  callee -28:27 Parser.parseFunction -> @Parser.parseFunction
+  callee -26:31 Parser.defaultAbstractClassAhead -> @Parser.defaultAbstractClassAhead
+  callee -25:7 Parser.advance -> @Parser.advance
+  local -24:11 classFlags: i32 (let)
+  callee -23:11 Parser.at -> @Parser.at
+  callee -22:9 Parser.advance -> @Parser.advance
+  callee -19:14 Parser.flagged -> @Parser.flagged
+  callee -19:27 Parser.parseClass -> @Parser.parseClass
+  callee -16:7 Parser.advance -> @Parser.advance
+  callee -15:14 Parser.flagged -> @Parser.flagged
+  callee -15:27 Parser.parseInterface -> @Parser.parseInterface
+  callee -12:7 Parser.advance -> @Parser.advance
+  callee -11:14 Parser.parseDecorated -> @Parser.parseDecorated
+  callee -9:5 Parser.advance -> @Parser.advance
+  callee -7:7 Parser.at -> @Parser.at
+  callee -5:7 Parser.peek -> @Parser.peek
+  callee -4:7 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  local -2:13 anonymous: boolean (const)
+  callee -2:25 Parser.anonymousFunctionAhead -> @Parser.anonymousFunctionAhead
+  callee -1:7 Parser.advance -> @Parser.advance
+  callee +1:14 Parser.flagged -> @Parser.flagged
+  callee +1:27 Parser.parseFunction -> @Parser.parseFunction
+  local +3:11 previous: i32 (const)
+  callee +3:22 Parser.beginForm -> @Parser.beginForm
+  callee +4:12 Parser.endForm -> @Parser.endForm
+  callee +4:25 Parser.finishExportAssignment -> @Parser.finishExportAssignment
 function Parser.defaultAbstractClassAhead(this: Parser): boolean -> @Parser.defaultAbstractClassAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
@@ -1368,26 +1371,28 @@ function Parser.finish(this: Parser, node: Node, list: Node): Node -> @Parser.fi
   stackSites=0 stackLocals=0
 function Parser.parseFunction(this: Parser, start: i32, anonymous: boolean): Node -> @Parser.parseFunction [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: +0:7
+  sharedWrite: +0:5
   escaping: start
   calls: Parser.advance Parser.at Parser.bodiless Parser.eat Parser.empty Parser.expectSemicolon Parser.node Parser.parseFunctionBlock Parser.parseIdentifier Parser.parseParameters Parser.parseReturnType Parser.parseTypeParameters nish_array_grow nish_panic_index
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.eat#0 Parser.empty#0 Parser.parseIdentifier#0 Parser.parseTypeParameters#0 Parser.parseParameters#0 Parser.parseReturnType#0 Parser.at#0 Parser.parseFunctionBlock#0 Parser.empty#0 Parser.expectSemicolon#0 Parser.bodiless#0
   stackSites=0 stackLocals=0
-  callee -5:5 Parser.advance -> @Parser.advance
-  local -4:11 node: Node (const)
-  callee -4:18 Parser.node -> @Parser.node
-  callee -1:9 Parser.eat -> @Parser.eat
-  callee +4:36 Parser.empty -> @Parser.empty
-  callee +4:51 Parser.parseIdentifier -> @Parser.parseIdentifier
-  local +9:11 typeParams: Node (const)
-  callee +9:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
-  callee +10:24 Parser.parseParameters -> @Parser.parseParameters
-  callee +11:24 Parser.parseReturnType -> @Parser.parseReturnType
-  callee +16:9 Parser.at -> @Parser.at
-  callee +17:26 Parser.parseFunctionBlock -> @Parser.parseFunctionBlock
-  callee +19:26 Parser.empty -> @Parser.empty
-  callee +20:7 Parser.expectSemicolon -> @Parser.expectSemicolon
-  callee +21:7 Parser.bodiless -> @Parser.bodiless
+  local -1:11 isAsync: boolean (const)
+  callee +1:5 Parser.advance -> @Parser.advance
+  local +2:11 node: Node (const)
+  callee +2:18 Parser.node -> @Parser.node
+  callee +5:9 Parser.eat -> @Parser.eat
+  callee +10:36 Parser.empty -> @Parser.empty
+  callee +10:51 Parser.parseIdentifier -> @Parser.parseIdentifier
+  local +15:11 typeParams: Node (const)
+  callee +15:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
+  callee +16:24 Parser.parseParameters -> @Parser.parseParameters
+  callee +17:24 Parser.parseReturnType -> @Parser.parseReturnType
+  callee +22:9 Parser.at -> @Parser.at
+  local +23:13 outerAsync: boolean (const)
+  callee +25:26 Parser.parseFunctionBlock -> @Parser.parseFunctionBlock
+  callee +28:26 Parser.empty -> @Parser.empty
+  callee +29:7 Parser.expectSemicolon -> @Parser.expectSemicolon
+  callee +30:7 Parser.bodiless -> @Parser.bodiless
 function Parser.parseForeignFunction(this: Parser, start: i32): Node -> @Parser.parseForeignFunction [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
@@ -1461,19 +1466,21 @@ function Parser.parseArrowFunction(this: Parser, start: i32): Node -> @Parser.pa
   callee -1:18 Parser.node -> @Parser.node
   callee +0:24 Parser.parseIdentifier -> @Parser.parseIdentifier
   callee +1:5 Parser.expect -> @Parser.expect
-  callee +3:9 Parser.at -> @Parser.at
-  callee +4:7 Parser.advance -> @Parser.advance
-  local +7:11 typeParams: Node (const)
-  callee +7:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
-  callee +8:24 Parser.parseParameters -> @Parser.parseParameters
-  callee +9:24 Parser.parseReturnType -> @Parser.parseReturnType
-  callee +10:5 Parser.expect -> @Parser.expect
-  callee +11:24 Parser.at -> @Parser.at
-  callee +11:46 Parser.parseFunctionBlock -> @Parser.parseFunctionBlock
-  callee +11:74 Parser.parseExpression -> @Parser.parseExpression
-  callee +15:9 Parser.eat -> @Parser.eat
-  callee +16:26 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
-  callee +18:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  local +3:9 isAsync: boolean (let)
+  callee +4:9 Parser.at -> @Parser.at
+  callee +5:7 Parser.advance -> @Parser.advance
+  local +9:11 typeParams: Node (const)
+  callee +9:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
+  callee +10:24 Parser.parseParameters -> @Parser.parseParameters
+  callee +11:24 Parser.parseReturnType -> @Parser.parseReturnType
+  callee +12:5 Parser.expect -> @Parser.expect
+  local +13:11 outerAsync: boolean (const)
+  callee +15:24 Parser.at -> @Parser.at
+  callee +15:46 Parser.parseFunctionBlock -> @Parser.parseFunctionBlock
+  callee +15:74 Parser.parseExpression -> @Parser.parseExpression
+  callee +20:9 Parser.eat -> @Parser.eat
+  callee +21:26 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
+  callee +23:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.parseParameters(this: Parser, typed: boolean, signature: boolean): Node -> @Parser.parseParameters [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:9
@@ -1540,15 +1547,41 @@ function Parser.parameterModifierAhead(this: Parser): boolean -> @Parser.paramet
 function Parser.parseBindingName(this: Parser): Node -> @Parser.parseBindingName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
-  calls: Parser.at Parser.node Parser.parseIdentifier Parser.skipBindingPattern
-  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.parseIdentifier#0 Parser.node#0 Parser.skipBindingPattern#0
+  calls: Parser.at Parser.node Parser.parseIdentifier Parser.parseNamePattern Parser.skipBindingPattern
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.parseIdentifier#0 Parser.node#0 Parser.at#0 Parser.parseNamePattern#0 Parser.skipBindingPattern#0
   stackSites=0 stackLocals=0
-  callee -5:10 Parser.at -> @Parser.at
-  callee -5:34 Parser.at -> @Parser.at
-  callee -4:14 Parser.parseIdentifier -> @Parser.parseIdentifier
-  local -2:11 pattern: Node (const)
-  callee -2:21 Parser.node -> @Parser.node
-  callee -1:5 Parser.skipBindingPattern -> @Parser.skipBindingPattern
+  callee -9:10 Parser.at -> @Parser.at
+  callee -9:34 Parser.at -> @Parser.at
+  callee -8:14 Parser.parseIdentifier -> @Parser.parseIdentifier
+  local -6:11 pattern: Node (const)
+  callee -6:21 Parser.node -> @Parser.node
+  callee -5:9 Parser.at -> @Parser.at
+  callee -4:7 Parser.parseNamePattern -> @Parser.parseNamePattern
+  callee -2:7 Parser.skipBindingPattern -> @Parser.skipBindingPattern
+function Parser.parseNamePattern(this: Parser, pattern: Node): void -> @Parser.parseNamePattern [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: Parser.advance Parser.at Parser.eat Parser.node nish_array_grow nish_panic_overflow
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.at#0 Parser.node#0 Parser.advance#0 Parser.eat#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0
+  pointer pattern: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee -4:5 Parser.advance -> @Parser.advance
+  local -3:9 flat: boolean (let)
+  callee -2:20 Parser.at -> @Parser.at
+  local -1:13 name: Node (const)
+  callee -1:20 Parser.node -> @Parser.node
+  callee +2:7 Parser.advance -> @Parser.advance
+  callee +3:12 Parser.eat -> @Parser.eat
+  callee +4:16 Parser.at -> @Parser.at
+  callee +8:17 Parser.at -> @Parser.at
+  callee +9:7 Parser.advance -> @Parser.advance
+  local +13:9 depth: i32 (let)
+  callee +14:13 Parser.at -> @Parser.at
+  callee +15:11 Parser.at -> @Parser.at
+  callee +15:34 Parser.at -> @Parser.at
+  callee +17:18 Parser.at -> @Parser.at
+  callee +17:41 Parser.at -> @Parser.at
+  callee +20:7 Parser.advance -> @Parser.advance
 function Parser.parseReturnType(this: Parser): Node -> @Parser.parseReturnType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via Parser.eat
@@ -2280,52 +2313,52 @@ function Parser.parseBlock(this: Parser): Node -> @Parser.parseBlock [exported m
   callee +12:5 Parser.expect -> @Parser.expect
 function Parser.parseStatement(this: Parser): Node -> @Parser.parseStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: +0:9
+  sharedWrite: +0:11
   calls: Parser.advance Parser.aheadOnSameLine Parser.beginForm Parser.endForm Parser.expectSemicolon Parser.fail Parser.flagged Parser.importDeclarationAhead Parser.node Parser.parseBlock Parser.parseDo Parser.parseExpressionStatement Parser.parseFor Parser.parseFunction Parser.parseIf Parser.parseImport Parser.parseJump Parser.parseLabeled Parser.parseReturn Parser.parseSwitch Parser.parseThrow Parser.parseTry Parser.parseVariableStatement Parser.parseWhile Parser.parseWith Parser.peek Parser.tryStatementAhead Parser.usingAhead Parser.varAhead Parser.withStatementAhead nish_array_grow nish_str_concat nish_str_eq tokenName
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.parseBlock#0 Parser.parseVariableStatement#0 Parser.usingAhead#0 Parser.varAhead#0 Parser.parseVariableStatement#0 Parser.peek#0 Parser.aheadOnSameLine#0 Parser.advance#0 Parser.flagged#0 Parser.parseFunction#0 Parser.tryStatementAhead#0 Parser.parseTry#0 Parser.withStatementAhead#0 Parser.parseWith#0 Parser.peek#0 Parser.parseLabeled#0 Parser.parseExpressionStatement#0 Parser.parseIf#0 Parser.parseWhile#0 Parser.parseDo#0 Parser.parseFor#0 Parser.parseSwitch#0 Parser.parseReturn#0 Parser.parseThrow#0 Parser.parseJump#0 Parser.parseJump#0 Parser.advance#0 Parser.node#0 Parser.parseFunction#0 Parser.importDeclarationAhead#0 Parser.beginForm#0 Parser.endForm#0 Parser.parseImport#0 Parser.parseExpressionStatement#0 Parser.node#0 Parser.fail#0 Parser.expectSemicolon#0 Parser.parseExpressionStatement#0
   stackSites=0 stackLocals=0
-  local -65:11 start: i32 (const)
-  callee -62:16 Parser.parseBlock -> @Parser.parseBlock
-  callee -59:16 Parser.parseVariableStatement -> @Parser.parseVariableStatement
-  callee -57:13 Parser.usingAhead -> @Parser.usingAhead
-  callee -57:34 Parser.varAhead -> @Parser.varAhead
-  callee -56:18 Parser.parseVariableStatement -> @Parser.parseVariableStatement
-  callee -52:39 Parser.peek -> @Parser.peek
-  callee -52:71 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  callee -51:11 Parser.advance -> @Parser.advance
-  callee -50:18 Parser.flagged -> @Parser.flagged
-  callee -50:31 Parser.parseFunction -> @Parser.parseFunction
-  callee -48:13 Parser.tryStatementAhead -> @Parser.tryStatementAhead
-  callee -47:18 Parser.parseTry -> @Parser.parseTry
-  callee -45:13 Parser.withStatementAhead -> @Parser.withStatementAhead
-  callee -44:18 Parser.parseWith -> @Parser.parseWith
-  callee -42:13 Parser.peek -> @Parser.peek
-  callee -41:18 Parser.parseLabeled -> @Parser.parseLabeled
-  callee -39:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
-  callee -37:16 Parser.parseIf -> @Parser.parseIf
-  callee -35:16 Parser.parseWhile -> @Parser.parseWhile
-  callee -33:16 Parser.parseDo -> @Parser.parseDo
-  callee -31:16 Parser.parseFor -> @Parser.parseFor
-  callee -29:16 Parser.parseSwitch -> @Parser.parseSwitch
-  callee -27:16 Parser.parseReturn -> @Parser.parseReturn
-  callee -25:16 Parser.parseThrow -> @Parser.parseThrow
-  callee -23:16 Parser.parseJump -> @Parser.parseJump
-  callee -21:16 Parser.parseJump -> @Parser.parseJump
-  callee -19:9 Parser.advance -> @Parser.advance
-  callee -18:16 Parser.node -> @Parser.node
-  callee -12:16 Parser.parseFunction -> @Parser.parseFunction
-  callee -10:13 Parser.importDeclarationAhead -> @Parser.importDeclarationAhead
-  local -9:17 previous: i32 (const)
-  callee -9:28 Parser.beginForm -> @Parser.beginForm
-  callee -8:18 Parser.endForm -> @Parser.endForm
-  callee -8:31 Parser.parseImport -> @Parser.parseImport
-  callee -6:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
-  local -1:15 node: Node (const)
-  callee -1:22 Parser.node -> @Parser.node
-  callee +0:28 Parser.fail -> @Parser.fail
-  callee +0:73 tokenName -> @tokenName
-  callee +1:9 Parser.expectSemicolon -> @Parser.expectSemicolon
-  callee +6:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
+  local -15:11 start: i32 (const)
+  callee -12:16 Parser.parseBlock -> @Parser.parseBlock
+  callee -9:16 Parser.parseVariableStatement -> @Parser.parseVariableStatement
+  callee -7:13 Parser.usingAhead -> @Parser.usingAhead
+  callee -7:34 Parser.varAhead -> @Parser.varAhead
+  callee -6:18 Parser.parseVariableStatement -> @Parser.parseVariableStatement
+  callee -2:39 Parser.peek -> @Parser.peek
+  callee -2:71 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee -1:11 Parser.advance -> @Parser.advance
+  callee +1:18 Parser.flagged -> @Parser.flagged
+  callee +1:31 Parser.parseFunction -> @Parser.parseFunction
+  callee +3:13 Parser.tryStatementAhead -> @Parser.tryStatementAhead
+  callee +4:18 Parser.parseTry -> @Parser.parseTry
+  callee +6:13 Parser.withStatementAhead -> @Parser.withStatementAhead
+  callee +7:18 Parser.parseWith -> @Parser.parseWith
+  callee +9:13 Parser.peek -> @Parser.peek
+  callee +10:18 Parser.parseLabeled -> @Parser.parseLabeled
+  callee +12:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
+  callee +14:16 Parser.parseIf -> @Parser.parseIf
+  callee +16:16 Parser.parseWhile -> @Parser.parseWhile
+  callee +18:16 Parser.parseDo -> @Parser.parseDo
+  callee +20:16 Parser.parseFor -> @Parser.parseFor
+  callee +22:16 Parser.parseSwitch -> @Parser.parseSwitch
+  callee +24:16 Parser.parseReturn -> @Parser.parseReturn
+  callee +26:16 Parser.parseThrow -> @Parser.parseThrow
+  callee +28:16 Parser.parseJump -> @Parser.parseJump
+  callee +30:16 Parser.parseJump -> @Parser.parseJump
+  callee +32:9 Parser.advance -> @Parser.advance
+  callee +33:16 Parser.node -> @Parser.node
+  callee +39:16 Parser.parseFunction -> @Parser.parseFunction
+  callee +41:13 Parser.importDeclarationAhead -> @Parser.importDeclarationAhead
+  local +42:17 previous: i32 (const)
+  callee +42:28 Parser.beginForm -> @Parser.beginForm
+  callee +43:18 Parser.endForm -> @Parser.endForm
+  callee +43:31 Parser.parseImport -> @Parser.parseImport
+  callee +45:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
+  local +50:15 node: Node (const)
+  callee +50:22 Parser.node -> @Parser.node
+  callee +51:28 Parser.fail -> @Parser.fail
+  callee +51:73 tokenName -> @tokenName
+  callee +52:9 Parser.expectSemicolon -> @Parser.expectSemicolon
+  callee +57:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
 function Parser.usingAhead(this: Parser): boolean -> @Parser.usingAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
@@ -2817,13 +2850,14 @@ function Parser.operandAhead(this: Parser): boolean -> @Parser.operandAhead [exp
 function Parser.parseUnary(this: Parser): Node -> @Parser.parseUnary [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:7
-  calls: Parser.advance Parser.at Parser.expectTypeArgumentEnd Parser.node Parser.operandAhead Parser.parsePostfix Parser.parseType Parser.parseUnary isPrefixWord nish_array_grow tokenName
-  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.at#0 Parser.operandAhead#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseType#0 Parser.expectTypeArgumentEnd#0 Parser.parseUnary#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.parsePostfix#0
+  calls: Parser.advance Parser.at Parser.expectTypeArgumentEnd Parser.node Parser.operandAhead Parser.parsePostfix Parser.parseType Parser.parseUnary Parser.peek isPrefixWord nish_array_grow nish_str_eq tokenName
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.at#0 Parser.operandAhead#0 Parser.peek#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseType#0 Parser.expectTypeArgumentEnd#0 Parser.parseUnary#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.parsePostfix#0
   stackSites=0 stackLocals=0
-  local -8:11 start: i32 (const)
-  callee -4:9 Parser.at -> @Parser.at
-  callee -4:31 isPrefixWord -> @isPrefixWord
-  callee -4:59 Parser.operandAhead -> @Parser.operandAhead
+  local -13:11 start: i32 (const)
+  callee -7:7 Parser.at -> @Parser.at
+  callee -6:7 isPrefixWord -> @isPrefixWord
+  callee -5:8 Parser.operandAhead -> @Parser.operandAhead
+  callee -5:76 Parser.peek -> @Parser.peek
   local -3:13 operator: string (const)
   callee -2:7 Parser.advance -> @Parser.advance
   local -1:13 node: Node (const)
@@ -2955,60 +2989,60 @@ function Parser.parsePrimary(this: Parser): Node -> @Parser.parsePrimary [export
   calls: Parser.advance Parser.allowIn Parser.asyncArrowAhead Parser.expect Parser.fail Parser.importMetaAhead Parser.node Parser.parseArrayLiteral Parser.parseArrowExpression Parser.parseClass Parser.parseNew Parser.parseObjectLiteral Parser.parseRegex Parser.parseSequence Parser.parseTemplate Parser.peek Parser.startsArrowExpression nish_array_grow nish_str_concat tokenName withoutSeparators
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.peek#0 Parser.parseArrowExpression#0 Parser.asyncArrowAhead#0 Parser.advance#0 Parser.parseArrowExpression#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.parseTemplate#0 Parser.parseArrayLiteral#0 Parser.parseObjectLiteral#0 Parser.startsArrowExpression#0 Parser.parseArrowExpression#0 Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.parseSequence#0 Parser.expect#0 Parser.parseNew#0 Parser.parseClass#0 Parser.parseRegex#0 Parser.peek#0 Parser.importMetaAhead#0 Parser.fail#0 Parser.node#0 Parser.advance#0 Parser.fail#0
   stackSites=0 stackLocals=0
-  local -11:11 start: i32 (const)
-  callee -7:13 Parser.peek -> @Parser.peek
-  callee -6:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
-  callee -3:13 Parser.asyncArrowAhead -> @Parser.asyncArrowAhead
-  callee -2:11 Parser.advance -> @Parser.advance
-  local -1:17 arrow: Node (const)
-  callee -1:25 Parser.parseArrowExpression -> @Parser.parseArrowExpression
-  local +3:15 node: Node (const)
-  callee +3:22 Parser.node -> @Parser.node
-  callee +5:9 Parser.advance -> @Parser.advance
-  local +9:15 node: Node (const)
-  callee +9:22 Parser.node -> @Parser.node
-  callee +10:21 withoutSeparators -> @withoutSeparators
-  callee +11:9 Parser.advance -> @Parser.advance
-  local +15:15 node: Node (const)
-  callee +15:22 Parser.node -> @Parser.node
-  callee +17:9 Parser.advance -> @Parser.advance
-  local +21:15 node: Node (const)
-  callee +21:22 Parser.node -> @Parser.node
-  callee +23:9 Parser.advance -> @Parser.advance
-  callee +27:9 Parser.advance -> @Parser.advance
-  callee +28:16 Parser.node -> @Parser.node
-  callee +30:9 Parser.advance -> @Parser.advance
-  callee +31:16 Parser.node -> @Parser.node
-  callee +33:9 Parser.advance -> @Parser.advance
-  callee +34:16 Parser.node -> @Parser.node
-  callee +36:9 Parser.advance -> @Parser.advance
-  callee +37:16 Parser.node -> @Parser.node
-  callee +39:9 Parser.advance -> @Parser.advance
-  callee +40:16 Parser.node -> @Parser.node
-  callee +43:16 Parser.parseTemplate -> @Parser.parseTemplate
-  callee +45:16 Parser.parseArrayLiteral -> @Parser.parseArrayLiteral
-  callee +47:16 Parser.parseObjectLiteral -> @Parser.parseObjectLiteral
-  callee +49:13 Parser.startsArrowExpression -> @Parser.startsArrowExpression
-  callee +50:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
-  callee +52:9 Parser.advance -> @Parser.advance
-  local +53:15 node: Node (const)
-  callee +53:22 Parser.node -> @Parser.node
-  local +54:15 outerNoIn: boolean (const)
-  callee +54:27 Parser.allowIn -> @Parser.allowIn
-  callee +55:28 Parser.parseSequence -> @Parser.parseSequence
-  callee +57:9 Parser.expect -> @Parser.expect
-  callee +62:16 Parser.parseNew -> @Parser.parseNew
-  callee +66:16 Parser.parseClass -> @Parser.parseClass
-  callee +69:16 Parser.parseRegex -> @Parser.parseRegex
-  callee +74:13 Parser.peek -> @Parser.peek
-  callee +74:44 Parser.importMetaAhead -> @Parser.importMetaAhead
-  callee +75:18 Parser.fail -> @Parser.fail
-  callee +75:63 tokenName -> @tokenName
-  local +77:15 node: Node (const)
-  callee +77:22 Parser.node -> @Parser.node
-  callee +79:9 Parser.advance -> @Parser.advance
-  callee +83:16 Parser.fail -> @Parser.fail
-  callee +83:61 tokenName -> @tokenName
+  local -10:11 start: i32 (const)
+  callee -6:13 Parser.peek -> @Parser.peek
+  callee -5:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
+  callee -2:13 Parser.asyncArrowAhead -> @Parser.asyncArrowAhead
+  callee -1:11 Parser.advance -> @Parser.advance
+  local +1:17 arrow: Node (const)
+  callee +1:25 Parser.parseArrowExpression -> @Parser.parseArrowExpression
+  local +5:15 node: Node (const)
+  callee +5:22 Parser.node -> @Parser.node
+  callee +7:9 Parser.advance -> @Parser.advance
+  local +11:15 node: Node (const)
+  callee +11:22 Parser.node -> @Parser.node
+  callee +12:21 withoutSeparators -> @withoutSeparators
+  callee +13:9 Parser.advance -> @Parser.advance
+  local +17:15 node: Node (const)
+  callee +17:22 Parser.node -> @Parser.node
+  callee +19:9 Parser.advance -> @Parser.advance
+  local +23:15 node: Node (const)
+  callee +23:22 Parser.node -> @Parser.node
+  callee +25:9 Parser.advance -> @Parser.advance
+  callee +29:9 Parser.advance -> @Parser.advance
+  callee +30:16 Parser.node -> @Parser.node
+  callee +32:9 Parser.advance -> @Parser.advance
+  callee +33:16 Parser.node -> @Parser.node
+  callee +35:9 Parser.advance -> @Parser.advance
+  callee +36:16 Parser.node -> @Parser.node
+  callee +38:9 Parser.advance -> @Parser.advance
+  callee +39:16 Parser.node -> @Parser.node
+  callee +41:9 Parser.advance -> @Parser.advance
+  callee +42:16 Parser.node -> @Parser.node
+  callee +45:16 Parser.parseTemplate -> @Parser.parseTemplate
+  callee +47:16 Parser.parseArrayLiteral -> @Parser.parseArrayLiteral
+  callee +49:16 Parser.parseObjectLiteral -> @Parser.parseObjectLiteral
+  callee +51:13 Parser.startsArrowExpression -> @Parser.startsArrowExpression
+  callee +52:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
+  callee +54:9 Parser.advance -> @Parser.advance
+  local +55:15 node: Node (const)
+  callee +55:22 Parser.node -> @Parser.node
+  local +56:15 outerNoIn: boolean (const)
+  callee +56:27 Parser.allowIn -> @Parser.allowIn
+  callee +57:28 Parser.parseSequence -> @Parser.parseSequence
+  callee +59:9 Parser.expect -> @Parser.expect
+  callee +64:16 Parser.parseNew -> @Parser.parseNew
+  callee +68:16 Parser.parseClass -> @Parser.parseClass
+  callee +71:16 Parser.parseRegex -> @Parser.parseRegex
+  callee +76:13 Parser.peek -> @Parser.peek
+  callee +76:44 Parser.importMetaAhead -> @Parser.importMetaAhead
+  callee +77:18 Parser.fail -> @Parser.fail
+  callee +77:63 tokenName -> @tokenName
+  local +79:15 node: Node (const)
+  callee +79:22 Parser.node -> @Parser.node
+  callee +81:9 Parser.advance -> @Parser.advance
+  callee +85:16 Parser.fail -> @Parser.fail
+  callee +85:61 tokenName -> @tokenName
 function Parser.startsArrowExpression(this: Parser): boolean -> @Parser.startsArrowExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
@@ -3052,26 +3086,28 @@ function Parser.parseArrowExpression(this: Parser, start: i32): Node -> @Parser.
   calls: Parser.at Parser.closeList Parser.eat Parser.empty Parser.expect Parser.list Parser.node Parser.parseExpression Parser.parseFunctionBlock Parser.parseIdentifier Parser.parseParameters Parser.parseType nish_array_grow
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.node#0 Parser.empty#0 Parser.list#0 Parser.at#0 Parser.node#0 Parser.parseIdentifier#0 Parser.empty#0 Parser.closeList#0 Parser.parseParameters#0 Parser.eat#0 Parser.parseType#0 Parser.empty#0 Parser.expect#0 Parser.at#0 Parser.parseFunctionBlock#0 Parser.parseExpression#0 Parser.list#0
   stackSites=0 stackLocals=0
-  local -1:11 node: Node (const)
-  callee -1:18 Parser.node -> @Parser.node
-  callee +0:24 Parser.empty -> @Parser.empty
-  local +1:11 params: Node (const)
-  callee +1:20 Parser.list -> @Parser.list
-  callee +2:9 Parser.at -> @Parser.at
-  local +3:13 param: Node (const)
-  callee +3:21 Parser.node -> @Parser.node
-  callee +4:27 Parser.parseIdentifier -> @Parser.parseIdentifier
-  callee +5:27 Parser.empty -> @Parser.empty
-  callee +8:26 Parser.closeList -> @Parser.closeList
-  callee +10:26 Parser.parseParameters -> @Parser.parseParameters
-  callee +12:24 Parser.eat -> @Parser.eat
-  callee +12:46 Parser.parseType -> @Parser.parseType
-  callee +12:65 Parser.empty -> @Parser.empty
-  callee +13:5 Parser.expect -> @Parser.expect
-  callee +14:24 Parser.at -> @Parser.at
-  callee +14:46 Parser.parseFunctionBlock -> @Parser.parseFunctionBlock
-  callee +14:74 Parser.parseExpression -> @Parser.parseExpression
-  callee +15:24 Parser.list -> @Parser.list
+  local -1:11 isAsync: boolean (const)
+  local +1:11 node: Node (const)
+  callee +1:18 Parser.node -> @Parser.node
+  callee +2:24 Parser.empty -> @Parser.empty
+  local +3:11 params: Node (const)
+  callee +3:20 Parser.list -> @Parser.list
+  callee +4:9 Parser.at -> @Parser.at
+  local +5:13 param: Node (const)
+  callee +5:21 Parser.node -> @Parser.node
+  callee +6:27 Parser.parseIdentifier -> @Parser.parseIdentifier
+  callee +7:27 Parser.empty -> @Parser.empty
+  callee +10:26 Parser.closeList -> @Parser.closeList
+  callee +12:26 Parser.parseParameters -> @Parser.parseParameters
+  callee +14:24 Parser.eat -> @Parser.eat
+  callee +14:46 Parser.parseType -> @Parser.parseType
+  callee +14:65 Parser.empty -> @Parser.empty
+  callee +15:5 Parser.expect -> @Parser.expect
+  local +16:11 outerAsync: boolean (const)
+  callee +18:24 Parser.at -> @Parser.at
+  callee +18:46 Parser.parseFunctionBlock -> @Parser.parseFunctionBlock
+  callee +18:74 Parser.parseExpression -> @Parser.parseExpression
+  callee +20:24 Parser.list -> @Parser.list
 function Parser.parseTemplate(this: Parser, start: i32): Node -> @Parser.parseTemplate [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5

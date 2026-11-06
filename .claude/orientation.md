@@ -92,7 +92,7 @@ npm ci                      # install (typescript and biome are dev dependencies
 bash scripts/fetch-seed.sh  # the last release into build/seed/ (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the whole suite; builds its own stage1 from the seed (CI runs it in four shards)
+npm test                    # the whole suite; builds its own stage1 from the seed (CI runs it in eight shards)
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
 npm run test:update         # write missing .ll goldens (the whole suite)

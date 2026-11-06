@@ -186,6 +186,16 @@ export const simdSuffix = (name: string, prefix: string): string => {
   return first === 70 ? `f${rest}` : ""
 }
 
+/**
+ * `nish:async` (WP49, docs/LANGUAGE.md, "Async functions"): `spawn`, which
+ * starts an async call and keeps no answer, and `awaitAll`, which awaits
+ * several at once. Neither is a function a value could reach: each takes
+ * direct calls to async functions, and the checker holds them to that
+ * (`src/async-check.ts`). They are dotted under `async` so that `spawn` is
+ * not `nish:process`'s, which the global name already is.
+ */
+const ASYNC_SPECIFIER: string = "nish:async"
+
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
@@ -194,12 +204,13 @@ export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}net` ||
   specifier === `${BUILTIN_SCHEME}term` ||
   specifier === SIMD_SPECIFIER ||
+  specifier === ASYNC_SPECIFIER ||
   specifier === unsafeModule() ||
   isNishSourceModule(specifier)
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${BUILTIN_SCHEME}region, ${SIMD_SPECIFIER}, ${unsafeModule()}`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${BUILTIN_SCHEME}region, ${SIMD_SPECIFIER}, ${ASYNC_SPECIFIER}, ${unsafeModule()}`
 
 /**
  * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
@@ -248,6 +259,9 @@ export const nishModuleExports = (specifier: string): string => {
   }
   if (specifier === SIMD_SPECIFIER) {
     return `${SIMD_TYPE_NAMES}, splatU8x16, splatU16x8, splatI32x4, splatU32x4, splatF32x4, splatF64x2, loadU8x16, loadU16x8, loadI32x4, loadU32x4, loadF32x4, loadF64x2, store, extract, replace, ${SIMD_MASK_NAMES}, ${SIMD_OP_NAMES}`
+  }
+  if (specifier === ASYNC_SPECIFIER) {
+    return "spawn, awaitAll"
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
@@ -534,6 +548,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
   }
   if (specifier === SIMD_SPECIFIER) {
     return isSimdExport(name) ? new BuiltinExport("", name, false) : null
+  }
+  if (specifier === ASYNC_SPECIFIER) {
+    return name === "spawn" || name === "awaitAll" ? new BuiltinExport("async", name, false) : null
   }
   if (specifier === unsafeModule()) {
     return isUnsafeExport(name) ? new BuiltinExport("", name, false) : null

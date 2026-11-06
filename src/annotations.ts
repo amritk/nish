@@ -282,6 +282,28 @@ const resolveReadonly = (node: Node, ctx: CheckContext): i32 => {
   return ctx.table.readonlyArrayOf(ctx.table.refOf(inner))
 }
 
+/**
+ * WP49: a `Promise<T>` is never a value, so the type is spelled in exactly
+ * two places — an `async` function's return and the return of a
+ * function-typed parameter an async arrow is passed to — and each unwraps it
+ * to `T` before resolving. Anywhere else it reaches here and is refused.
+ */
+const PROMISE_HERE_MESSAGE: string =
+  "`Promise<T>` is only an `async` function's return type: a promise is never a value, so it cannot be held, passed or stored — `await` the call where it is made"
+
+/** An `async` function or arrow whose return annotation is not a `Promise<T>`. */
+export const ASYNC_RETURN_MESSAGE: string =
+  "An `async` function's return type is `Promise<T>`: write the answer `T` inside it, `Promise<void>` for none"
+
+/** `T` of a `Promise<T>` annotation, or null when the annotation is not one. */
+export const promiseArgument = (annotation: Node): Node | null => {
+  if (annotation.kind !== N_TYPE_REF || annotation.text !== "Promise") {
+    return null
+  }
+  const args = annotation.children[0]
+  return args.kind === N_LIST && args.children.length === 1 ? args.children[0] : null
+}
+
 /** A named type, with or without type arguments. */
 const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   const name = node.text
@@ -361,6 +383,9 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     const imported = ctx.program.importNamed(name)
     if (imported !== null) {
       return deferInstantiation(ctx, imported, args, node)
+    }
+    if (name === "Promise") {
+      return ctx.errorType(node, PROMISE_HERE_MESSAGE)
     }
     return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`)
   }
@@ -445,6 +470,10 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
 
   if (simdLaneType(name) !== T_ERROR || simdMaskWidth(name) > 0) {
     return ctx.errorType(node, simdImportMessage(name))
+  }
+
+  if (name === "Promise") {
+    return ctx.errorType(node, PROMISE_HERE_MESSAGE)
   }
 
   return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`)

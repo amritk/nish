@@ -6,6 +6,7 @@ const SIMD_SPECIFIER: string = "nish:simd" [exported]
 const SIMD_TYPE_NAMES: string = "u8x16, u16x8, i32x4, u32x4, f32x4, f64x2"
 const SIMD_MASK_NAMES: string = "mask8x16, mask16x8, mask32x4, mask64x2"
 const SIMD_OP_NAMES: string = "add, sub, mul, div, neg, abs, sqrt, addWrapping, subWrapping, mulWrapping, and, or, xor, not, min, max, eq, ne, lt, le, gt, ge, select, any, all, bitmask, sum, sumWrapping, shuffle, shl, shr, rotl, rotr, asU8x16, asU16x8, asI32x4, asU32x4, asF32x4, asF64x2"
+const ASYNC_SPECIFIER: string = "nish:async"
 const SECRET_SPECIFIER: string = "nish:secret" [exported]
 const REGION_SPECIFIER: string = "nish:region" [exported]
 const NET_INT: i32 = 105 [exported]
@@ -80,7 +81,7 @@ function nishModuleNames(): string -> @nishModuleNames [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat unsafeModule
   stackSites=0 stackLocals=0
-  callee +0:188 unsafeModule -> @unsafeModule
+  callee +0:208 unsafeModule -> @unsafeModule
 function isNishSourceModule(specifier: string): boolean -> @isNishSourceModule [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -162,6 +163,7 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   callee +47:33 new BuiltinExport -> @BuiltinExport.constructor
   callee +50:12 isSimdExport -> @isSimdExport
   callee +50:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +52:21 unsafeModule -> @unsafeModule
-  callee +53:12 isUnsafeExport -> @isUnsafeExport
-  callee +53:35 new BuiltinExport -> @BuiltinExport.constructor
+  callee +53:54 new BuiltinExport -> @BuiltinExport.constructor
+  callee +55:21 unsafeModule -> @unsafeModule
+  callee +56:12 isUnsafeExport -> @isUnsafeExport
+  callee +56:35 new BuiltinExport -> @BuiltinExport.constructor

@@ -396,7 +396,7 @@ skips against a compiler that has no hook.
 
 ```bash
 node tests/run.js locals            # only cases whose name contains "locals"
-node tests/run.js --shard 2/4       # one of CI's four shards (docs/wp10-ci.md)
+node tests/run.js --shard 2/8       # one of CI's eight shards (docs/wp10-ci.md)
 npm run test:update                 # write missing .ll goldens and tests/self/goldens/
 npm run test:diff                   # the full differential set
 node tests/differential/fuzz.js --stage1 --count 200
@@ -406,7 +406,7 @@ npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
 A filter is what a session runs before pushing: one for every section or
-program the change touches. The unfiltered suite is CI's four `test` shards,
+program the change touches. The unfiltered suite is CI's eight `test` shards,
 read per [`CLAUDE.md`](../CLAUDE.md#definition-of-done); run it locally only for
 a change to the suite itself or a fork PR.
 
