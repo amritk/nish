@@ -164,7 +164,9 @@ export const liftScript = (parser: Parser, file: Node): void => {
   while (i < file.children.length) {
     const stmt = file.children[i]
     const moves =
-      isTopLevelStatement(stmt) || isTopLevelLet(stmt) || (isLocalCandidate(stmt) && i < stays.length && !stays[i])
+      isTopLevelStatement(stmt) ||
+      isTopLevelLet(stmt) ||
+      (isLocalCandidate(stmt) && i < stays.length && !stays[i])
     if (moves) {
       if (body.children.length === 0) {
         body.start = stmt.start

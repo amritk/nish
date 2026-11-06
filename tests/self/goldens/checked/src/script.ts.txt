@@ -76,35 +76,35 @@ function liftScript(parser: Parser, file: Node): void -> @liftScript [exported]
   pointer parser: size=112 writesThrough=true captured=false passedTo=Parser.node#0 Parser.node#0 Parser.node#0 Parser.list#0 Parser.node#0 Parser.list#0 Parser.list#0
   pointer file: size=40 writesThrough=true captured=false passedTo=declaresMain#0
   stackSites=2 stackLocals=2
-  callee -48:7 declaresMain -> @declaresMain
-  local -45:7 code: boolean (let)
-  local -44:14 stmt: Node (const)
-  callee -43:9 isTopLevelStatement -> @isTopLevelStatement
-  callee -43:38 isTopLevelLet -> @isTopLevelLet
-  local -34:9 named: StringSet (const)
-  callee -34:17 new StringSet -> @StringSet.constructor
-  local -33:14 stmt: Node (const)
-  callee -32:10 isTopLevelStatement -> @isTopLevelStatement
-  callee -31:7 collectSpelledNames -> @collectSpelledNames
-  local -28:9 stays: boolean[] (const)
-  local -27:14 stmt: Node (const)
-  callee -26:17 isLocalCandidate -> @isLocalCandidate
-  local -24:7 changed: boolean (let)
-  local -21:9 i: i32 (let)
-  local -19:13 stmt: Node (const)
-  callee -18:44 bindsAny -> @bindsAny
-  callee -16:9 collectSpelledNames -> @collectSpelledNames
-  local -10:9 body: Node (const)
-  callee -10:16 Parser.node -> @Parser.node
-  local -9:9 main: Node (const)
-  callee -9:16 Parser.node -> @Parser.node
-  local -8:9 kept: Node[] (const)
-  local -7:7 i: i32 (let)
-  local -5:11 stmt: Node (const)
-  local -4:11 moves: boolean (const)
-  callee -3:7 isTopLevelStatement -> @isTopLevelStatement
-  callee -3:36 isTopLevelLet -> @isTopLevelLet
-  callee -3:60 isLocalCandidate -> @isLocalCandidate
+  callee -50:7 declaresMain -> @declaresMain
+  local -47:7 code: boolean (let)
+  local -46:14 stmt: Node (const)
+  callee -45:9 isTopLevelStatement -> @isTopLevelStatement
+  callee -45:38 isTopLevelLet -> @isTopLevelLet
+  local -36:9 named: StringSet (const)
+  callee -36:17 new StringSet -> @StringSet.constructor
+  local -35:14 stmt: Node (const)
+  callee -34:10 isTopLevelStatement -> @isTopLevelStatement
+  callee -33:7 collectSpelledNames -> @collectSpelledNames
+  local -30:9 stays: boolean[] (const)
+  local -29:14 stmt: Node (const)
+  callee -28:17 isLocalCandidate -> @isLocalCandidate
+  local -26:7 changed: boolean (let)
+  local -23:9 i: i32 (let)
+  local -21:13 stmt: Node (const)
+  callee -20:44 bindsAny -> @bindsAny
+  callee -18:9 collectSpelledNames -> @collectSpelledNames
+  local -12:9 body: Node (const)
+  callee -12:16 Parser.node -> @Parser.node
+  local -11:9 main: Node (const)
+  callee -11:16 Parser.node -> @Parser.node
+  local -10:9 kept: Node[] (const)
+  local -9:7 i: i32 (let)
+  local -7:11 stmt: Node (const)
+  local -6:11 moves: boolean (const)
+  callee -5:7 isTopLevelStatement -> @isTopLevelStatement
+  callee -4:7 isTopLevelLet -> @isTopLevelLet
+  callee -3:8 isLocalCandidate -> @isLocalCandidate
   local +18:9 name: Node (const)
   callee +18:16 Parser.node -> @Parser.node
   callee +21:22 Parser.list -> @Parser.list
