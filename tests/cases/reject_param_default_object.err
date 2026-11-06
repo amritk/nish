@@ -1,0 +1,1 @@
+Parameter `p` is `Point | null`, and the one default a `T | null` parameter may have is `null`

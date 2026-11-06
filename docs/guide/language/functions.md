@@ -78,8 +78,31 @@ export const main = (): i32 => {
 };
 ```
 
-The call fills both in, so a function with a default costs nothing when it is
-given every argument. Methods and constructors take them too. A function
+A parameter that may be `null` (`T | null`) may default to `null`, and to
+nothing else. That is how an options argument is written: the call that leaves
+it out passes `null`, exactly as if it had written it:
+
+```ts nish:ok
+class Options {
+  loud: boolean = true;
+}
+
+const greet = (name: string, opts: Options | null = null): string => {
+  if (opts !== null && opts.loud) {
+    return `${name}!`;
+  }
+  return name;
+};
+
+export const main = (): i32 => {
+  console.log(`${greet("a")} ${greet("b", new Options())}`);  // a b!
+  return 0;
+};
+```
+
+The call site fills in a default, a `null` default and a rest array alike, so
+a function with any of them costs nothing when it is given every argument.
+Methods and constructors take them too. A function
 has a default or a rest parameter, not both.
 
 A rest parameter of records copies each record into its array, as `[p, q]`

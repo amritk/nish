@@ -122,9 +122,11 @@ export class FunctionSig {
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
   /**
-   * WP49: the async functions this one's body awaits, spawns or awaits all
-   * of, each beside the call that does it — the await graph, which may not
-   * have a cycle (`src/async-check.ts`, `rejectAwaitCycles`).
+   * WP49: the async functions this one's body awaits or awaits all of, each
+   * beside the call that does it — the await graph, which may not have a
+   * cycle (`src/async-check.ts`, `rejectAwaitCycles`). A `spawn` is not an
+   * edge: the spawner does not wait for the task, so it cannot close a cycle,
+   * and the lowering does not make the spawner suspend.
    */
   awaits: AwaitEdge[]
   /** WP49: the cycle walk's colour: 0 unvisited, 1 on the path, 2 done. */
@@ -166,10 +168,11 @@ export class FunctionSig {
   /**
    * Per parameter, parallel to `paramNames` (`this` included for a member),
    * the default a call that omits the argument passes, or `null`; empty when
-   * no parameter has one. A default is a literal or an enum member, kept as
-   * a field initializer is so that the caller's emitter writes it as the same
-   * constant (`initializerConstant` in `src/emit-classes.ts`), or the name of
-   * an earlier parameter of the same scalar type, whose position is the
+   * no parameter has one. A default is a literal, an enum member or the
+   * `null` of a `T | null` parameter, kept as a field initializer is so that
+   * the caller's emitter writes it as the same constant
+   * (`initializerConstant` in `src/emit-classes.ts`), or the name of an
+   * earlier parameter of the same scalar type, whose position is the
    * entry's `index`. Every parameter after the first with a default has one.
    */
   defaults: (FieldInfo | null)[]
@@ -263,6 +266,16 @@ export class FunctionSig {
    */
   isAsync(): boolean {
     return (this.decl.flags & FLAG_ASYNC) !== 0
+  }
+
+  /**
+   * WP49: an async function whose body awaits. It is lowered to a frame and
+   * `<name>.resume` (`src/emit-async.ts`) rather than a plain call, and its
+   * resume writes that frame and may answer "not yet", so its facts say it
+   * writes and is not sure to return.
+   */
+  suspends(): boolean {
+    return this.isAsync() && this.awaits.length > 0
   }
 
   /**

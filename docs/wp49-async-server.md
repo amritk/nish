@@ -358,6 +358,7 @@ so this moves the minor version. 35 files under `std/`, `src/`, `examples/`,
 | **D4** | The renames of §8 | **Yes**, in one PR of their own, before `fetch` becomes async |
 | **D5** | Build §7's explicit `Upstream` and the Postgres pool before §2 | **Yes.** They are the TFB database tests' critical path, and §4's `async` versions are thin wrappers over them |
 | **D6** | Submit to TFB, and when | WP39 D1 stands: after every test type passes the verifier and has numbers from a separate client machine. A public number is the owner's call each time |
+| **D7** | How `fetch` takes its options without `undefined` | A nullable parameter may default to `null`, so `fetch(url)` and `fetch(url, init)` are one function; optional parameters stay refused. **Accepted**; the checker allows `init: RequestInit \| null = null` ([LANGUAGE.md](LANGUAGE.md#default-and-rest-parameters)) |
 
 ## 10. Stages
 
@@ -380,9 +381,10 @@ freeze), and the compiler has no reason to.
 
 ## Stage 4, part 1: the checker's codes and decisions
 
-Part 1 checks the language of §2 and refuses a program that keeps an `async`
-function (NL2653), so a program with no `async` compiles byte for byte as
-before. The lowering of §3 and the emitted TypeScript are part 2.
+Part 1 checked the language of §2 and refused a program that kept an `async`
+function (NL2653, retired by part 2), so a program with no `async` compiled
+byte for byte as before. The lowering of §3 is part 2, below; the emitted
+TypeScript follows it.
 
 | Code | Refuses | Test |
 | --- | --- | --- |
@@ -403,7 +405,7 @@ before. The lowering of §3 and the emitted TypeScript are part 2.
 | NL2650 | `.then`, `.catch`, `.finally` | `reject_async_then` |
 | NL2651 | `await(f(x))` outside an `async` function, a call to a function named `await` | `reject_async_await_parenthesised` |
 | NL2652 | `async` in a wasm build, `--target wasm32` or `--profile wasi` | `reject_async_wasm`, `reject_async_wasi_profile` |
-| NL2653 | an `async` function in a program that passes every rule: not yet lowered | `reject_async_not_lowered` |
+| NL2653 | retired by part 2: an `async` function in a program that passes every rule, not yet lowered | `async_lowered` (the case, renamed, now compiles) |
 
 NL2133 (`for await`) keeps its code with a new message. NL1015 (`async`
 refused outright), NL2173 and NL2174 (`Promise` and `.then` unknown) are
@@ -427,6 +429,63 @@ Decisions taken in part 1:
 - **The cycle check runs over the whole program** once every module is
   checked, and reports at the `await` that closes the cycle, in the module
   that wrote it.
+
+## Stage 4, part 2: the lowering
+
+Part 2 compiles what part 1 checks, as §3 lays it out (`src/emit-async.ts`).
+NL2653 is retired; NL2652 (wasm) stays. A program with no `async` function
+writes the same IR as before, byte for byte, over every positive case.
+
+- **A frame and a resume function per function that awaits.** `f` becomes
+  `i1 @f.resume(i8* frame)`, answering true when it finished. The frame is
+  `{ i32 state, parameters, answer, rest }`; `rest` holds the callees' frames
+  (`kids`, sized for the largest single `await` or `awaitAll`), every
+  `alloca` of the body and every value live across an `await`. The function
+  is first emitted as an ordinary one and then rewritten, so every other
+  lowering is untouched.
+- **A function that awaits nothing is a plain function**, and awaiting it is
+  a plain call; it keeps every attribute it had. One that awaits loses
+  `willreturn` and `readonly` (§3, "Attributes"; `async_attributes`).
+- **Frame sizes are a whole-program fact.** A callee's frame may live in
+  another module, so `kids` and the `spawn` node's size are written as marks
+  and replaced once every module is emitted.
+- **The driver is in-process.** `spawn(f(x))` puts `f`'s frame in a
+  `malloc`ed node, resumes it once and queues it if it pends;
+  `@nish.async.step` and `@nish.async.drain` resume queued tasks through a
+  `switch` on the task's kind, one case per spawned function, never a function
+  pointer. An `async` `main` is resumed from the C entry until it finishes,
+  then the queue is drained. In this stage nothing pends on the outside world,
+  so a task runs until it finishes when it is first resumed, and a queue
+  that still holds tasks but makes no progress traps.
+- **The declared resume-order difference this adds**: `spawn` runs its task
+  at once, up to its first real wait, where Node runs it only to its first
+  `await` and the rest after the spawning task yields (`async_spawn`,
+  `docs/LANGUAGE.md`, "Where it is not Node").
+- **`--emit-ts` refuses an `async` function for now** (NL4016,
+  `reject_emit_ts_async`): the runtime the output imports does not answer the
+  resume order, `awaitAll` or `spawn` yet. Writing it is the follow-up to
+  this part.
+
+Stage 5 replaces the driver, and nothing in the frame layout: the `malloc` per
+spawn with a slab per spawned kind, the queue with the executor of §4 in
+`runtime-async.c` (an `epoll`/`kqueue` loop, timers, wake-ups), the trap on a
+stuck queue with a wait on the kernel, and adds what pends for real —
+`nish:async`'s loop, `serve`, async `fetch` and the async Postgres pool.
+
+Three things are sound in this stage only because nothing pends, and stage 5
+owes each of them before a task may wait on the kernel:
+
+- **The arena is a stack.** A suspending function marks and releases the
+  arena as a plain one does, so two tasks interleaving at a real wait would
+  release each other's allocations. Each task needs its own arena, or the
+  frame must hold what it allocated across an `await`.
+- **A spawned task's arguments must outlive the spawner.** `spawn` copies the
+  argument values into the node, not what they point to; a string or array
+  built in the spawner's arena dies when the spawner returns while the task
+  still waits.
+- **A synchronous `main` drains its tasks only at exit.** Today every task
+  has finished before `spawn` returns; once one can pend, the C entry must
+  run the loop after a plain `main` too, not just after an `async` one.
 
 ## Not in this work package
 

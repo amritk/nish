@@ -33,6 +33,7 @@ import {
   N_EMPTY,
   N_IDENT,
   N_LIST,
+  N_NULL,
   N_UNARY,
   Node,
 } from "./nodes"
@@ -193,7 +194,24 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
     )
     return
   }
-  if (!isScalarDefault(ctx, type) && type !== T_STRING) {
+  // `null` is the one default of a `T | null`: a constant pointer, so the
+  // call passes it as it passes a number, and nothing is built per call.
+  const isNull = init.kind === N_NULL
+  if (isNull && !ctx.table.isNullable(type)) {
+    ctx.error(
+      init,
+      `Parameter \`${name}\` is \`${spellingOf(ctx, param.children[1])}\`, which has no \`null\`, so \`null\` cannot be its default: only a \`T | null\` parameter defaults to \`null\``
+    )
+    return
+  }
+  if (!isNull && ctx.table.isNullable(type)) {
+    ctx.error(
+      init,
+      `Parameter \`${name}\` is \`${spellingOf(ctx, param.children[1])}\`, and the one default a \`T | null\` parameter may have is \`null\`, which each call that leaves the argument out passes as a constant; any other value would be built by every such call`
+    )
+    return
+  }
+  if (!isNull && !isScalarDefault(ctx, type) && type !== T_STRING) {
     ctx.error(
       init,
       `Parameter \`${name}\` is \`${spellingOf(ctx, param.children[1])}\` and cannot have a default in this version: a default is a number, a \`boolean\`, a \`string\` or an enum member`
