@@ -14,6 +14,17 @@ stages:
       - id: probe-chain
         content: List the instance chain capturesOf walks from host to arrow for fnarg_capture_forward and a parallel-forwarded arrow — see Probe
         status: completed
+  - id: element-fact
+    title: The arrow decides its capture parameters' elements
+    goal: A lifted ordinary arrow's string[] capture parameter carries a decided elementsFree, and no host rule that walks only its own references accepts a captured array
+    verification: The probe-3 pair reads elementsFree false for the keeping arrow and true for the reading one, and node tests/run.js mem_join_parts is green
+    todos:
+      - id: element-decide
+        content: Run decideElementParams over a capturesForCall arrow's capture parameters only, its written ones unchanged — see Probe result
+        status: in_progress
+      - id: element-carrier
+        content: storedIntoReturnedArray refuses a carrier any arrow captures, since isCarrierUse never sees the arrow's uses — see Probe result
+        status: pending
   - id: attributes
     title: Attributes pass reads the arrow
     goal: A captured parameter of the host inherits the arrow's facts for its capture parameter through the existing passedTo fixpoint
