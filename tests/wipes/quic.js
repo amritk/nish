@@ -49,7 +49,10 @@ export const wipeChecks = [
   // `wipeAll`. `runClocks` 188: `wipeAll` at the idle timeout and again at
   // the end of the closing or draining period, each copy counted, and
   // `prepareNextReadKeys` once a key update's previous keys have had their
-  // probe timeout. `afterTls` 151: `keysFrom` at five call sites, 65 (the
+  // probe timeout, 188, and `drawChallenge` once a path's PATH_CHALLENGE is
+  // due again, 26: 214. It was 188 before path validation. `drawChallenge`
+  // 26: `deriveConnectionId`, 25, and the wipe of the scratch the
+  // challenge's eight bytes are copied out of. `afterTls` 151: `keysFrom` at five call sites, 65 (the
   // Handshake level's read and write keys, and the 1-RTT keys, where `opt`
   // keeps the write keys' call in each width's arm and sinks the read keys'
   // two into one); `prepareNextReadKeys`, 12; once the handshake is
@@ -99,7 +102,8 @@ export const wipeChecks = [
       ["nish.QuicConnection.discard", 23],
       ["nish.QuicConnection.wipeAll", 88],
       ["nish.QuicConnection.release", 88],
-      ["nish.QuicConnection.runClocks", 188],
+      ["nish.QuicConnection.runClocks", 214],
+      ["nish.QuicConnection.drawChallenge", 26],
       ["nish.QuicConnection.afterTls", 177],
       ["nish.QuicConnection.applyPhase", 22],
       ["nish.quicStatelessResetToken", 14],

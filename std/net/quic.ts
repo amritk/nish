@@ -138,6 +138,32 @@
  * token from the configuration's static key (RFC 9000 §10.3.2), and every
  * ACK says a delay of zero. So a recorded exchange replays byte for byte.
  *
+ * **Paths** (RFC 9000 §8.2, §9). `receiveWindowFrom` takes the 18-byte
+ * `nish:net` address each datagram came from, and `sendAddress()` says where
+ * the connection's datagrams go: the first Initial's address, validated by
+ * the handshake, until the client's address changes. Before the handshake
+ * is confirmed a datagram from any other address is dropped unread, so no
+ * forged source moves a handshake or takes its flight. After it, a datagram
+ * from a new address whose newest non-probing packet authenticates moves
+ * the connection there (§9.3) — a later one from the old address, with a
+ * lower packet number, does not move it back — and a PATH_CHALLENGE, eight
+ * bytes from the ID seed's HMAC, padded to 1,200 bytes, validates the new
+ * path. Until a PATH_RESPONSE with any of the last three challenges'
+ * data arrives, on any path, the server sends there at most three times
+ * what came from it (§9.3.1); a lost challenge is drawn again, fresh, a
+ * probe timeout later; past max(3 PTO, 6 kInitialRtt) validation has failed
+ * and the connection goes back to the last validated address, where the
+ * client — or, for a forged source, the real client's next packet — finds
+ * it. Validated, a new address starts congestion control and the RTT
+ * estimate again, a port-only change keeps them (§9.4), and ECN is tested
+ * again (§13.4.2). A packet that carries only probing frames moves
+ * nothing: its PATH_CHALLENGE is answered on its own path, alone in a
+ * datagram `takeProbeInto` writes for `probeAddress`, under that path's own
+ * 3x limit. The client's connection ID is kept across a move (§9.5): a NAT
+ * rebinding gives the client no reason to change it, and this server never
+ * migrates itself. Every address, challenge and counter is a field made by
+ * the constructor and cleared by `reset`.
+ *
  * **What a peer cannot do.** Nothing it sends makes this module panic. A
  * datagram that does not parse, a packet that does not authenticate, a
  * duplicate packet number, a packet for keys already discarded and a 1-RTT
@@ -231,6 +257,7 @@ import {
   QUIC_FRAME_MAX_STREAMS_UNI,
   QUIC_FRAME_NEW_CONNECTION_ID,
   QUIC_FRAME_NEW_TOKEN,
+  QUIC_FRAME_PADDING,
   QUIC_FRAME_PATH_CHALLENGE,
   QUIC_FRAME_PATH_RESPONSE,
   QUIC_FRAME_PING,
@@ -406,6 +433,24 @@ export const QUIC_CONN_SKIP_SPREAD: i64 = 897
  * both without either telling anything about the other.
  */
 const QUIC_CONN_SKIP_SEQUENCE: i64 = QUIC_MAX_VARINT + 1
+/**
+ * The HMAC counter PATH_CHALLENGE data is drawn under: past every connection
+ * ID's sequence and every skip's (`QUIC_CONN_SKIP_SEQUENCE` plus fewer than
+ * 2^61 draws), so no challenge repeats an ID or a skip distance.
+ */
+const QUIC_CONN_CHALLENGE_SEQUENCE: i64 = QUIC_CONN_SKIP_SEQUENCE + QUIC_CONN_SKIP_SEQUENCE / 2
+/** A `nish:net` address: sixteen bytes of IPv6 (IPv4 mapped), then the port, big-endian. */
+export const QUIC_CONN_ADDRESS_SIZE: i32 = 18
+/** PATH_CHALLENGE data kept to match a PATH_RESPONSE against: the latest and the two sent before it. */
+const QUIC_CONN_CHALLENGES: i32 = 3
+/**
+ * The smallest datagram sent on a path being validated: below it, what the
+ * path's 3x limit leaves is not worth a packet, and the server waits for the
+ * client to send more (RFC 9000 §8.1, §9.3.1).
+ */
+const QUIC_CONN_PATH_MIN: i64 = 64
+/** RFC 9000 §8.2.4's floor on path validation: six times the initial RTT, in milliseconds. */
+const QUIC_CONN_VALIDATION_FLOOR: i64 = 1998
 /**
  * How many ack-eliciting datagrams a probe timeout sends in the Initial and
  * Handshake spaces (RFC 9002 §6.2.4 allows up to two). The server's first
@@ -1080,6 +1125,44 @@ const quicConnRefill = (to: u8[], from: u8[], at: i32, length: i32): void => {
   }
 }
 
+/** Copies `length` bytes from `from[fromAt]` to `to[toAt]`, as far as both arrays reach. */
+const quicConnCopyAt = (to: u8[], toAt: i32, from: u8[], fromAt: i32, length: i32): void => {
+  for (let k: i32 = 0; k < length; k += 1) {
+    const i: i32 = toAt + k
+    const j: i32 = fromAt + k
+    if (i >= 0 && i < toI32(to.length) && j >= 0 && j < toI32(from.length)) {
+      to[i] = from[j]
+    }
+  }
+}
+
+/** Sets every byte of `bytes` to 0. */
+const quicConnZeroAt = (bytes: u8[]): void => {
+  for (let k: i32 = 0; k < toI32(bytes.length); k += 1) {
+    bytes[k] = 0
+  }
+}
+
+/** Whether `a` and `b` hold the same `nish:net` address; `portOnly` compares the sixteen address bytes alone. */
+const quicConnSameAddress = (a: u8[], b: u8[], portOnly: boolean): boolean => {
+  const n: i32 = portOnly ? QUIC_CONN_ADDRESS_SIZE - 2 : QUIC_CONN_ADDRESS_SIZE
+  if (toI32(a.length) < n || toI32(b.length) < n) {
+    return false
+  }
+  let same: boolean = true
+  for (let k: i32 = 0; k < n && k < toI32(a.length) && k < toI32(b.length); k += 1) {
+    same = same && a[k] === b[k]
+  }
+  return same
+}
+
+/** Whether a frame of `type` is a probing frame (RFC 9000 §9.1), which a packet may carry without moving the connection. */
+const quicConnProbing = (type: i32): boolean =>
+  type === QUIC_FRAME_PATH_CHALLENGE ||
+  type === QUIC_FRAME_PATH_RESPONSE ||
+  type === QUIC_FRAME_NEW_CONNECTION_ID ||
+  type === QUIC_FRAME_PADDING
+
 /** Zeroes the bytes a `Secret` field holds, for `exposeWith` to run outside the connection's `wipe()`; answers `answer`. */
 const quicConnZeroHeld = (held: u8[], answer: i32): i32 => {
   wipe(held)
@@ -1202,6 +1285,41 @@ export class QuicConnection {
   cryptoIn: QuicConnReassembly
   /** PATH_CHALLENGE data to answer: a ring of four, eight bytes each, `pathCount` from `pathHead`. */
   pathData: u8[]
+  /**
+   * The client's address (RFC 9000 §9), each in `nish:net`'s 18-byte form,
+   * for a carrier that passes one to `receiveWindowFrom`: `pathCurrent` is
+   * where this connection's datagrams go now (`sendAddress`), and
+   * `pathValidated` the last address the client proved it receives at — the
+   * handshake's, or one a PATH_RESPONSE answered. `pathArrival` is the
+   * datagram being read's. Made once and overwritten in place.
+   */
+  pathCurrent: u8[]
+  pathValidated: u8[]
+  pathArrival: u8[]
+  /**
+   * A PATH_CHALLENGE that came from another address in a datagram that
+   * moved nothing (§9.1): answered there by `takeProbeInto`, from
+   * `probeData`, within `probeBudget` bytes, three times what came from
+   * `probeAddress` (§8.1). Only the latest such challenge is kept.
+   */
+  probeAddress: u8[]
+  probeData: u8[]
+  /**
+   * The last `QUIC_CONN_CHALLENGES` PATH_CHALLENGE data sent on the path
+   * being validated, eight bytes each, `challengeCount` of them, the latest
+   * at `(challengesDrawn - 1) % QUIC_CONN_CHALLENGES`: each drawn from the
+   * ID seed's HMAC under `QUIC_CONN_CHALLENGE_SEQUENCE`, so unguessable.
+   */
+  challengeData: u8[]
+  /** Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). */
+  pathReceived: i64 = 0
+  pathSent: i64 = 0
+  probeBudget: i64 = 0
+  /** When the PATH_CHALLENGE goes again with fresh data, and when validation gives up (§8.2.4); -1 when not validating. */
+  challengeResendAt: i64 = -1
+  challengeUntil: i64 = -1
+  challengesDrawn: i64 = 0
+  challengeCount: i32 = 0
   frame: QuicFrame
   /** The header and the packet numbers of the packet being read, reused for every one. */
   header: QuicHeader
@@ -1316,6 +1434,21 @@ export class QuicConnection {
   /** Whether the packet just read brought CRYPTO bytes for TLS, or retired an ID that wants replacing. */
   cryptoArrived: boolean = false
   topUpOwed: boolean = false
+  /** Whether `pathCurrent` holds the client's address: the carrier passes addresses, and a first Initial gave one. */
+  pathKnown: boolean = false
+  /** Whether the datagram being read came from an address other than `pathCurrent`. */
+  arrivalOther: boolean = false
+  /** Whether `pathCurrent` is not validated yet: a PATH_CHALLENGE is out on it. */
+  pathValidating: boolean = false
+  /** Whether a PATH_CHALLENGE is due in the next datagram, and whether the one being built carries a PATH_CHALLENGE or PATH_RESPONSE. */
+  challengeOwed: boolean = false
+  pathFrameStaged: boolean = false
+  /** Whether a PATH_RESPONSE is owed on `probeAddress`, and whether the datagram being read carried a challenge for it. */
+  probeOwed: boolean = false
+  probeStaged: boolean = false
+  /** Whether the packet being read carries a non-probing frame (§9.1), and whether a packet of the datagram moves the connection (§9.3). */
+  nonProbing: boolean = false
+  migrateOwed: boolean = false
 
   /**
    * A connection under `config`, with `entropy` its `QUIC_CONN_ENTROPY_SIZE`
@@ -1362,6 +1495,12 @@ export class QuicConnection {
     )
     this.cryptoIn = new QuicConnReassembly(QUIC_CONN_CRYPTO_WINDOW)
     this.pathData = new Array<u8>(QUIC_PATH_DATA_SIZE * 4)
+    this.pathCurrent = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
+    this.pathValidated = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
+    this.pathArrival = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
+    this.probeAddress = new Array<u8>(QUIC_CONN_ADDRESS_SIZE)
+    this.probeData = new Array<u8>(QUIC_PATH_DATA_SIZE)
+    this.challengeData = new Array<u8>(QUIC_PATH_DATA_SIZE * QUIC_CONN_CHALLENGES)
     this.frame = new QuicFrame()
     this.header = new QuicHeader()
     this.packet = new QuicPacket()
@@ -1445,6 +1584,7 @@ export class QuicConnection {
     this.peerScidLength = 0
     this.pathHead = 0
     this.pathCount = 0
+    this.forgetPath()
     this.state = QUIC_STATE_WAIT_INITIAL
     this.dropped = 0
     this.keyUpdates = 0
@@ -1631,6 +1771,16 @@ export class QuicConnection {
    * datagram is ignored.
    */
   receiveWindow(buf: u8[], off: i32, len: i32, now: i64): i64 {
+    return this.receiveWindowFrom(buf, off, len, this.none, now)
+  }
+
+  /**
+   * `receiveWindow` of a datagram that came from `address`, an 18-byte
+   * `nish:net` address: the connection follows the client from one address
+   * to another (RFC 9000 §9) — see "Paths" in the module header. An
+   * address of any other length is no address, as `receiveWindow` gives.
+   */
+  receiveWindowFrom(buf: u8[], off: i32, len: i32, address: u8[], now: i64): i64 {
     this.runClocks(now)
     if (this.closed()) {
       return this.error
@@ -1641,6 +1791,10 @@ export class QuicConnection {
     }
     // §14.1: a client's first Initial comes in a datagram of at least 1200 bytes.
     if (this.state === QUIC_STATE_WAIT_INITIAL && len < QUIC_CONN_DATAGRAM_SIZE) {
+      this.drop()
+      return 0
+    }
+    if (!this.notePath(address)) {
       this.drop()
       return 0
     }
@@ -1664,6 +1818,9 @@ export class QuicConnection {
     // proves it is this connection's (RFC 9000 §8.1).
     if (counted) {
       this.bytesReceived = this.bytesReceived + toI64(len)
+    }
+    if (!this.closed()) {
+      this.afterPath(counted, len)
     }
     // Loss recovery's timer runs after the datagram, so an acknowledgement
     // it carries settles what it acknowledges before a probe is owed.
@@ -1783,8 +1940,9 @@ export class QuicConnection {
     params.initialMaxStreamDataUni = this.config.maxStreamsUni > 0 ? this.config.maxStreamData : 0
     params.maxDatagramFrameSize = this.config.maxDatagramFrameSize
     params.activeConnectionIdLimit = this.config.activeConnectionIdLimit
-    // The server never migrates and asks the client not to (§9): path
-    // validation beyond answering PATH_CHALLENGE is not here.
+    // The server never migrates and asks the client not to (§9). A client
+    // whose address changes all the same, as a NAT rebinding changes it, is
+    // followed with path validation (`migrate`), as §9 allows.
     params.disableActiveMigration = true
     quicEncodeTransportParametersInto(params, this.localEncoded)
     // One `TlsServer` a slot, made by its first handshake (so its flight is
@@ -1837,6 +1995,7 @@ export class QuicConnection {
     this.initial.reset()
     this.originalDcidLength = 0
     this.peerScidLength = 0
+    this.pathKnown = false
   }
 
   /**
@@ -1957,9 +2116,16 @@ export class QuicConnection {
     if (type === QUIC_PACKET_SHORT && !this.notePhase(pn, other)) {
       return true
     }
+    const largest: i64 = space.received.largest
+    this.nonProbing = false
     const eliciting: boolean = this.receiveFrames(space, type, payload, buf, header)
     if (this.closed()) {
       return true
+    }
+    // RFC 9000 §9.3: the client's newest non-probing packet, from another
+    // address, moves the connection there; an older one, or a probe, does not.
+    if (type === QUIC_PACKET_SHORT && this.arrivalOther && this.nonProbing && pn > largest) {
+      this.migrateOwed = true
     }
     // RFC 9002 §6.2.3: a client that sends an ack-eliciting Handshake packet
     // while the server's Handshake data is in flight may not have it all.
@@ -2202,6 +2368,7 @@ export class QuicConnection {
         return eliciting
       }
       eliciting = eliciting || quicFrameAckEliciting(frame.type)
+      this.nonProbing = this.nonProbing || !quicConnProbing(frame.type)
       this.receiveFrame(space, frame, payload, at, buf, header)
       if (this.closed() || frame.end <= at) {
         return eliciting
@@ -2302,12 +2469,17 @@ export class QuicConnection {
         break
       }
       case QUIC_FRAME_PATH_CHALLENGE:
-        this.receivePathChallenge(frame, payload)
+        if (this.arrivalOther) {
+          this.stageProbe(frame, payload)
+        } else {
+          this.receivePathChallenge(frame, payload)
+        }
         break
-      // A PATH_RESPONSE answers no PATH_CHALLENGE, since the server sends none
-      // (§19.18); NEW_TOKEN and HANDSHAKE_DONE go only to a client (§19.7,
-      // §19.20). Each is a PROTOCOL_VIOLATION here.
       case QUIC_FRAME_PATH_RESPONSE:
+        this.receivePathResponse(frame, payload)
+        break
+      // NEW_TOKEN and HANDSHAKE_DONE go only to a client (§19.7, §19.20): a
+      // PROTOCOL_VIOLATION here.
       case QUIC_FRAME_NEW_TOKEN:
       case QUIC_FRAME_HANDSHAKE_DONE:
         this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, type)
@@ -2631,27 +2803,66 @@ export class QuicConnection {
   }
 
   /**
-   * A PATH_CHALLENGE (§8.2.2): answered with the same eight bytes. Only the
-   * latest four are kept, so a burst of challenges cannot grow anything.
+   * A PATH_CHALLENGE (§8.2.2) on the current path: answered with the same
+   * eight bytes. Only the latest four are kept, so a burst of challenges
+   * cannot grow anything.
    */
   receivePathChallenge(frame: QuicFrame, payload: u8[]): void {
+    this.queuePathResponse(payload, frame.dataStart)
+  }
+
+  /** Queues a PATH_RESPONSE of the eight bytes at `data[from]` on the current path. */
+  queuePathResponse(data: u8[], from: i32): void {
     if (this.pathCount >= 4) {
       this.pathHead = 0
       this.pathCount = 0
     }
     const base: i32 = ((this.pathHead + this.pathCount) % 4) * QUIC_PATH_DATA_SIZE
     for (let k: i32 = 0; k < QUIC_PATH_DATA_SIZE; k += 1) {
-      const from: i32 = frame.dataStart + k
-      if (
-        base + k >= 0 &&
-        base + k < toI32(this.pathData.length) &&
-        from >= 0 &&
-        from < toI32(payload.length)
-      ) {
-        this.pathData[base + k] = payload[from]
+      const at: i32 = from + k
+      if (base + k >= 0 && base + k < toI32(this.pathData.length) && at >= 0 && at < toI32(data.length)) {
+        this.pathData[base + k] = data[at]
       }
     }
     this.pathCount = this.pathCount + 1
+  }
+
+  /**
+   * A PATH_CHALLENGE from another address: kept for `afterPath`, which
+   * answers it on the current path when the datagram moved the connection
+   * there, and on its own path (`takeProbeInto`) otherwise (§8.2.2, §9.1).
+   */
+  stageProbe(frame: QuicFrame, payload: u8[]): void {
+    quicConnCopyAt(this.probeData, 0, payload, frame.dataStart, QUIC_PATH_DATA_SIZE)
+    this.probeStaged = true
+  }
+
+  /**
+   * A PATH_RESPONSE (§8.2.3): one matching a PATH_CHALLENGE still out
+   * validates the path, whichever path it came on. Once the server has sent
+   * a challenge, one matching none — late, or for a path given up — is
+   * ignored; before that, none can be expected, and it is a
+   * PROTOCOL_VIOLATION (§19.18).
+   */
+  receivePathResponse(frame: QuicFrame, payload: u8[]): void {
+    if (this.challengesDrawn === 0) {
+      this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(QUIC_FRAME_PATH_RESPONSE))
+      return
+    }
+    if (!this.pathValidating) {
+      return
+    }
+    let matched: boolean = false
+    for (let m: i32 = 0; m < this.challengeCount; m += 1) {
+      const slot: i32 = toI32((this.challengesDrawn - 1 - toI64(m)) % toI64(QUIC_CONN_CHALLENGES))
+      // Not secret once sent, but compared without branching on the bytes all the same.
+      matched =
+        timingSafeEqualAt(payload, frame.dataStart, this.challengeData, slot * QUIC_PATH_DATA_SIZE, QUIC_PATH_DATA_SIZE) ||
+        matched
+    }
+    if (matched) {
+      this.pathConfirmed()
+    }
   }
 
   /**
@@ -2963,6 +3174,12 @@ export class QuicConnection {
     if (recovery >= 0 && (due < 0 || recovery < due)) {
       due = recovery
     }
+    if (this.pathValidating) {
+      const path: i64 = this.challengeResendAt < this.challengeUntil ? this.challengeResendAt : this.challengeUntil
+      if (due < 0 || path < due) {
+        due = path
+      }
+    }
     return due
   }
 
@@ -2972,7 +3189,19 @@ export class QuicConnection {
    * sent leaves no room for a whole datagram.
    */
   amplificationBlocked(): boolean {
-    return !this.addressValidated && this.bytesReceived * 3 - this.bytesSent < toI64(QUIC_CONN_DATAGRAM_SIZE)
+    return (
+      (!this.addressValidated && this.bytesReceived * 3 - this.bytesSent < toI64(QUIC_CONN_DATAGRAM_SIZE)) ||
+      this.pathBudget() < QUIC_CONN_PATH_MIN
+    )
+  }
+
+  /**
+   * What the path being validated still lets the server send: three times
+   * what came from it since the connection moved there, less what went
+   * (RFC 9000 §9.3.1, §8.1). Unlimited, as `QUIC_MAX_VARINT`, on a validated path.
+   */
+  pathBudget(): i64 {
+    return this.pathValidating ? this.pathReceived * 3 - this.pathSent : QUIC_MAX_VARINT
   }
 
   /**
@@ -3022,9 +3251,257 @@ export class QuicConnection {
       this.wipeAll()
       return
     }
+    this.runPathClock()
     if (this.keyRetainUntil >= 0 && this.now >= this.keyRetainUntil) {
       this.prepareNextReadKeys()
     }
+  }
+
+  /**
+   * The path being validated's timers (RFC 9000 §8.2.4, §9.3.2): past
+   * `challengeUntil`, max(3 PTO, 6 kInitialRtt) after the move, validation
+   * has failed and the connection goes back to the last validated address;
+   * past `challengeResendAt`, a probe timeout after the last challenge, a
+   * fresh one is drawn and sent. A server's handshake validates the
+   * client's address and the handshake confirms the connection before any
+   * move, so there is always an address to go back to: the case where
+   * there is none, which RFC 9000 §9.3.2 closes silently, cannot arise.
+   */
+  runPathClock(): void {
+    if (!this.pathValidating) {
+      return
+    }
+    if (this.now >= this.challengeUntil) {
+      quicConnCopyAt(this.pathCurrent, 0, this.pathValidated, 0, QUIC_CONN_ADDRESS_SIZE)
+      this.endValidation()
+      return
+    }
+    if (this.now >= this.challengeResendAt) {
+      this.drawChallenge()
+    }
+  }
+
+  /**
+   * Notes where the datagram about to be read came from, before any of it
+   * is: answers false for one to drop unread. The first Initial's address
+   * is the connection's, and validated by the handshake. Until the handshake
+   * is confirmed the client may not move (RFC 9000 §9), and a datagram from
+   * another address is dropped — so a forged Initial or Handshake packet
+   * from elsewhere cannot move the connection, nor take the server's
+   * flight. A carrier that passes no address leaves every path rule off.
+   */
+  notePath(address: u8[]): boolean {
+    this.arrivalOther = false
+    this.migrateOwed = false
+    this.probeStaged = false
+    if (toI32(address.length) !== QUIC_CONN_ADDRESS_SIZE) {
+      return true
+    }
+    if (this.state === QUIC_STATE_WAIT_INITIAL) {
+      quicConnCopyAt(this.pathCurrent, 0, address, 0, QUIC_CONN_ADDRESS_SIZE)
+      quicConnCopyAt(this.pathValidated, 0, address, 0, QUIC_CONN_ADDRESS_SIZE)
+      this.pathKnown = true
+      return true
+    }
+    if (!this.pathKnown || quicConnSameAddress(address, this.pathCurrent, false)) {
+      return true
+    }
+    if (!this.handshakeComplete) {
+      return false
+    }
+    quicConnCopyAt(this.pathArrival, 0, address, 0, QUIC_CONN_ADDRESS_SIZE)
+    this.arrivalOther = true
+    return true
+  }
+
+  /**
+   * What a datagram of `len` bytes, now read, does to the paths: one from
+   * another address whose newest non-probing packet moved the connection
+   * moves it (§9.3), and a challenge it carried is answered on the new
+   * path; one that moved nothing has its challenge answered on its own path
+   * (`takeProbeInto`). A datagram that authenticated nothing does neither.
+   * What came from the path being validated adds to its limit.
+   */
+  afterPath(counted: boolean, len: i32): void {
+    if (!counted) {
+      return
+    }
+    if (this.arrivalOther) {
+      if (!this.migrateOwed) {
+        if (this.probeStaged) {
+          quicConnCopyAt(this.probeAddress, 0, this.pathArrival, 0, QUIC_CONN_ADDRESS_SIZE)
+          this.probeBudget = toI64(len) * 3
+          this.probeOwed = true
+        }
+        return
+      }
+      this.migrate(this.pathArrival)
+      if (this.probeStaged) {
+        this.queuePathResponse(this.probeData, toI32(0))
+      }
+    }
+    if (this.pathValidating) {
+      this.pathReceived = this.pathReceived + toI64(len)
+    }
+  }
+
+  /**
+   * Moves the connection to `address` (RFC 9000 §9.3): its datagrams go
+   * there from now. Back to the last validated address, nothing more is
+   * needed, and a validation under way stops — which is how a forged
+   * source, a copy of the client's packet sent on from elsewhere, loses the
+   * connection to the client's next packet (§9.3.3). Anywhere else, the
+   * path is validated with a PATH_CHALLENGE, and until it is the server
+   * sends there only three times what it received from it (§9.3.1). The
+   * peer's connection ID is kept: the client chose not to change it, and a
+   * NAT rebinding never does (§9.5).
+   */
+  migrate(address: u8[]): void {
+    quicConnCopyAt(this.pathCurrent, 0, address, 0, QUIC_CONN_ADDRESS_SIZE)
+    if (quicConnSameAddress(address, this.pathValidated, false)) {
+      this.endValidation()
+      return
+    }
+    this.endValidation()
+    this.pathValidating = true
+    const span: i64 = this.recovery.probeTimeout() * 3
+    this.challengeUntil = this.now + (span > QUIC_CONN_VALIDATION_FLOOR ? span : QUIC_CONN_VALIDATION_FLOOR)
+    this.drawChallenge()
+  }
+
+  /**
+   * Draws the next PATH_CHALLENGE's eight bytes from the ID seed's HMAC
+   * under `QUIC_CONN_CHALLENGE_SEQUENCE` (§8.2.1: unpredictable), keeps
+   * them with the two before, and owes the challenge; its resend is due a
+   * probe timeout later.
+   */
+  drawChallenge(): void {
+    this.deriveConnectionId(QUIC_CONN_CHALLENGE_SEQUENCE + this.challengesDrawn)
+    const slot: i32 = toI32(this.challengesDrawn % toI64(QUIC_CONN_CHALLENGES))
+    quicConnCopyAt(this.challengeData, slot * QUIC_PATH_DATA_SIZE, this.cidScratch, 0, QUIC_PATH_DATA_SIZE)
+    secureZero(this.cidScratch)
+    this.challengesDrawn = this.challengesDrawn + 1
+    if (this.challengeCount < QUIC_CONN_CHALLENGES) {
+      this.challengeCount = this.challengeCount + 1
+    }
+    this.challengeOwed = true
+    this.challengeResendAt = this.now + this.recovery.probeTimeout()
+  }
+
+  /**
+   * The path being validated answered (§8.2.3): it is the validated
+   * address now. Congestion control and the RTT estimate start again on a
+   * new address, but not when only the port changed, which is the same
+   * network path behind a rebinding NAT (§9.4); ECN is tested again either
+   * way (§13.4.2).
+   */
+  pathConfirmed(): void {
+    const portOnly: boolean = quicConnSameAddress(this.pathCurrent, this.pathValidated, true)
+    quicConnCopyAt(this.pathValidated, 0, this.pathCurrent, 0, QUIC_CONN_ADDRESS_SIZE)
+    this.endValidation()
+    if (!portOnly) {
+      this.recovery.resetPath()
+    }
+    this.recovery.restartEcn()
+  }
+
+  /** Stops validating a path: no challenge is owed, kept or timed. */
+  endValidation(): void {
+    this.pathValidating = false
+    this.challengeOwed = false
+    this.challengeCount = 0
+    this.challengeResendAt = -1
+    this.challengeUntil = -1
+    this.pathReceived = 0
+    this.pathSent = 0
+  }
+
+  /** Adds `n` bytes sent to the path being validated's count. */
+  notePathSent(n: i32): void {
+    if (this.pathValidating) {
+      this.pathSent = this.pathSent + toI64(n)
+    }
+  }
+
+  /** Clears every path field for a new connection, in the arrays the slot keeps. */
+  forgetPath(): void {
+    quicConnZeroAt(this.pathCurrent)
+    quicConnZeroAt(this.pathValidated)
+    quicConnZeroAt(this.pathArrival)
+    quicConnZeroAt(this.probeAddress)
+    quicConnZeroAt(this.probeData)
+    quicConnZeroAt(this.challengeData)
+    this.endValidation()
+    this.probeBudget = 0
+    this.challengesDrawn = 0
+    this.pathKnown = false
+    this.arrivalOther = false
+    this.pathFrameStaged = false
+    this.probeOwed = false
+    this.probeStaged = false
+    this.nonProbing = false
+    this.migrateOwed = false
+  }
+
+  /**
+   * Where this connection's datagrams go now: the 18-byte `nish:net`
+   * address `receiveWindowFrom` last moved it to, or the first Initial's.
+   * A carrier sends every datagram of `takeDatagramInto` here; it is empty
+   * (all zero) for a connection fed by `receiveWindow` alone.
+   */
+  sendAddress(): u8[] {
+    return this.pathCurrent
+  }
+
+  /**
+   * Writes the PATH_RESPONSE owed on another path (§8.2.2, §9.1) into `out`
+   * at `at`, which needs `QUIC_CONN_DATAGRAM_SIZE` bytes of room, and
+   * answers its length, or 0 when none is owed: a 1-RTT packet with that
+   * frame alone, padded to 1200 bytes or to three times what came from the
+   * path (§8.1), whichever is less. The carrier sends it to
+   * `probeAddress`, before `takeDatagramInto`'s datagrams. It is answered
+   * once and never sent again (§13.3).
+   */
+  takeProbeInto(out: u8[], at: i32, now: i64): i32 {
+    this.handleTimer(now)
+    if (
+      !this.probeOwed ||
+      this.closed() ||
+      !this.handshakeComplete ||
+      at < 0 ||
+      at > toI32(out.length) - QUIC_CONN_DATAGRAM_SIZE
+    ) {
+      return 0
+    }
+    this.probeOwed = false
+    const size: i32 =
+      this.probeBudget < toI64(QUIC_CONN_DATAGRAM_SIZE) ? toI32(this.probeBudget) : QUIC_CONN_DATAGRAM_SIZE
+    this.beforeDatagram()
+    this.datagramEcn = 0
+    let n: i32 = 0
+    {
+      using _scope = arena()
+      n = this.buildProbe(out, at, size)
+    }
+    this.probeBudget = this.probeBudget - toI64(n)
+    return n
+  }
+
+  /** `takeProbeInto`'s packet, of `size` bytes at `out[at]`, built and sealed; 0 when it does not fit. */
+  buildProbe(out: u8[], at: i32, size: i32): i32 {
+    const space: QuicConnSpace = this.application
+    const overhead: i32 = this.overhead(space)
+    if (overhead === 0 || size < overhead + 1 + QUIC_PATH_DATA_SIZE) {
+      return 0
+    }
+    space.clearStaged()
+    const payloadStart: i32 = at + overhead - QUIC_AEAD_TAG_SIZE
+    const payloadEnd: i32 = at + size - QUIC_AEAD_TAG_SIZE
+    const next: i32 = quicPutPathData(out, payloadStart, payloadEnd, QUIC_FRAME_PATH_RESPONSE, this.probeData, 0)
+    if (next < 0) {
+      return 0
+    }
+    return this.sealAt(space, out, at, quicPutPadding(out, next, payloadEnd - next))
   }
 
   /** Loss recovery's timer, if it is due (RFC 9002 §6.2, A.9). */
@@ -3386,6 +3863,13 @@ export class QuicConnection {
    */
   buildDatagram(out: u8[], at: i32): i32 {
     let remaining: i32 = QUIC_CONN_DATAGRAM_SIZE
+    // A path being validated has its own 3x limit (§9.3.1), which the
+    // datagram may not pass; `amplificationBlocked` kept it above the floor.
+    const budget: i64 = this.pathBudget()
+    if (budget < toI64(remaining)) {
+      remaining = toI32(budget)
+    }
+    this.pathFrameStaged = false
     let position: i32 = at
     let paddedInitial: boolean = false
     let eliciting: boolean = false
@@ -3440,7 +3924,10 @@ export class QuicConnection {
     if (last < 0) {
       return 0
     }
-    if (paddedInitial && remaining > 0) {
+    // RFC 9000 §14.1: a datagram with an ack-eliciting Initial is padded;
+    // §8.2.1, §8.2.2: so is one with a PATH_CHALLENGE or PATH_RESPONSE, as
+    // far as the path's limit lets it, which shows the path carries 1200.
+    if ((paddedInitial || this.pathFrameStaged) && remaining > 0) {
       const padded: QuicConnSpace = this.spaceAt(last)
       padded.builtEnd = quicPutPadding(out, padded.builtEnd, remaining)
     }
@@ -3464,6 +3951,7 @@ export class QuicConnection {
       return 0
     }
     this.bytesSent = this.bytesSent + toI64(total)
+    this.notePathSent(total)
     return total
   }
 
@@ -3640,6 +4128,26 @@ export class QuicConnection {
       this.pathCount = this.pathCount - 1
       // Ack-eliciting, but never sent again (RFC 9000 §13.3).
       space.stagedEliciting = true
+      this.pathFrameStaged = true
+    }
+    // The PATH_CHALLENGE on a path being validated; one lost is not sent
+    // again, but `runPathClock` draws fresh data a probe timeout later.
+    if (this.challengeOwed && this.challengesDrawn > 0 && end - at >= 9) {
+      const slot: i32 = toI32((this.challengesDrawn - 1) % toI64(QUIC_CONN_CHALLENGES))
+      const next: i32 = quicPutPathData(
+        out,
+        at,
+        end,
+        QUIC_FRAME_PATH_CHALLENGE,
+        this.challengeData,
+        slot * QUIC_PATH_DATA_SIZE
+      )
+      if (next >= 0) {
+        at = next
+        this.challengeOwed = false
+        space.stagedEliciting = true
+        this.pathFrameStaged = true
+      }
     }
     const streams: QuicStreams = this.streams
     while (space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
@@ -3851,6 +4359,7 @@ export class QuicConnection {
       position = position + this.sealAt(space, out, position, payloadEnd)
     }
     this.bytesSent = this.bytesSent + toI64(position - at)
+    this.notePathSent(position - at)
     return position - at
   }
 

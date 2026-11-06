@@ -436,29 +436,45 @@ export class QuicRecovery {
     for (const sp of this.spaces) {
       sp.reset()
     }
-    this.latestRtt = 0
-    this.smoothedRtt = QUIC_RECOVERY_INITIAL_RTT
-    this.rttVar = QUIC_RECOVERY_INITIAL_RTT / 2
-    this.minRtt = 0
-    this.firstSampleTime = -1
+    this.resetPath()
     this.maxAckDelay = QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY
-    this.congestionWindow = QUIC_RECOVERY_INITIAL_WINDOW
-    this.ssthresh = QUIC_MAX_VARINT
-    this.recoveryStart = -1
-    this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
-    this.pacerTime = -1
-    this.pacerRtt = QUIC_RECOVERY_INITIAL_RTT * QUIC_RECOVERY_MICROS
     this.micros = -1
     this.ptoCount = 0
     this.timeoutSpace = -1
     this.congestionEvents = 0
     this.persistentCongestions = 0
     this.ecnCongestionEvents = 0
+    this.restartEcn()
+    this.handshakeConfirmed = false
+  }
+
+  /**
+   * Starts the RTT estimate, the congestion window and the pacer again from
+   * their initial values, for a connection whose peer moved to a new
+   * address it has proved it holds (RFC 9000 §9.4): what was learnt of the
+   * old path says nothing about the new one. The packets in flight, the
+   * peer's `max_ack_delay` and the counters are kept.
+   */
+  resetPath(): void {
+    this.latestRtt = 0
+    this.smoothedRtt = QUIC_RECOVERY_INITIAL_RTT
+    this.rttVar = QUIC_RECOVERY_INITIAL_RTT / 2
+    this.minRtt = 0
+    this.firstSampleTime = -1
+    this.congestionWindow = QUIC_RECOVERY_INITIAL_WINDOW
+    this.ssthresh = QUIC_MAX_VARINT
+    this.recoveryStart = -1
+    this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
+    this.pacerTime = -1
+    this.pacerRtt = QUIC_RECOVERY_INITIAL_RTT * QUIC_RECOVERY_MICROS
+  }
+
+  /** Tests ECN again from the start, as on a new path (RFC 9000 §13.4.2). */
+  restartEcn(): void {
     this.ecnState = QUIC_RECOVERY_ECN_TESTING
     this.ecnTestSent = 0
     this.ecnTestRecorded = 0
     this.ecnTestLost = 0
-    this.handshakeConfirmed = false
   }
 
   /** Space `space`'s packets, or `null` for an index that names no space. */

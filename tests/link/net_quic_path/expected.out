@@ -1,0 +1,57 @@
+PASS  the handshake's address is where the connection sends
+PASS  validated by the handshake, so nothing is being validated
+PASS  a packet from the same address moves nothing and challenges nothing
+PASS  a connection fed by receiveWindow knows no address, and follows none
+PASS  after the client's port changes, the server sends to the new port
+PASS  and validates it
+PASS  with a PATH_CHALLENGE of eight bytes
+PASS  in a datagram padded to 1200 bytes (§8.2.1)
+PASS  the last validated address is still the first
+PASS  the PATH_RESPONSE validates the new port
+PASS  a port-only change keeps the congestion window and the RTT estimate (§9.4)
+PASS  but tests ECN again (§13.4.2)
+PASS  and the connection carries on there
+PASS  a new address is followed and challenged
+PASS  nothing is reset before the path is validated
+PASS  validated, a new address
+PASS  starts the congestion window and the RTT estimate again (§9.4)
+PASS  and ECN's test
+PASS  stream data still flows, to the new address
+PASS  a PATH_RESPONSE with other data validates nothing
+PASS  and closes nothing: it may be late (§8.2.3)
+PASS  the right one is accepted on any path, here the old one
+PASS  and arriving there, probing only, moves nothing back
+PASS  a probe timeout later the challenge goes again
+PASS  with fresh data (§8.2.1)
+PASS  an answer to the earlier one still validates the path
+PASS  four challenges fit in the validation period
+PASS  past the last three, an answer to the first validates nothing
+PASS  an answer to the newest does
+PASS  a copy of the client's packet from a forged source moves the connection there
+PASS  but sends there at most three times what came from it (§9.3.1)
+PASS  and no stream data written then goes past the limit
+PASS  the path's count agrees
+PASS  the real packet, arriving second, is a duplicate and moves nothing
+PASS  the client's next packet takes the connection back at once (§9.3.3)
+PASS  so the stream data held back goes out, to the client
+PASS  a validation lasts at least max(3 PTO, 6 kInitialRtt) (§8.2.4)
+PASS  just before it ends, the new path is still being validated
+PASS  unanswered, it fails, and the connection goes back to the last validated address
+PASS  still connected
+PASS  a replay of a packet already read, from elsewhere, is dropped and moves nothing
+PASS  a late packet from the old address, numbered below the newest, does not move it back
+PASS  a newer one does, and is validated again
+PASS  a client Finished from another address mid-handshake is dropped unread
+PASS  and moves nothing
+PASS  from the handshake's address it completes the handshake
+PASS  a probing packet from another address moves nothing
+PASS  its challenge is owed on its own path
+PASS  answered alone in a datagram padded to 1200 bytes
+PASS  with a PATH_RESPONSE of the same eight bytes
+PASS  and once (§13.3)
+PASS  a small probe's answer stays within three times its size (§8.1)
+PASS  a challenge in a packet that moved the connection is answered on the new path
+PASS  with its data
+PASS  fifty rebinds, each challenged and answered, keep no arena memory
+PASS  and the connection follows the last
+quic paths: 56 passed, 0 failed, 0 skipped
