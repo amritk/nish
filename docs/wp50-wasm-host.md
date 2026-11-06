@@ -1,9 +1,11 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: proposed, design only.** Nothing here is built, and nothing should be
-until the owner has answered §12. The anchors below are at `39a87b3b`.
+**Status: accepted, 2026-11-06; nothing built.** The owner accepted every
+recommendation in §13, with Q1 revised: the functions a page supplies are an
+`import` from the page's own TypeScript module (§3), not a `declare function`.
+Stage 1 (§14) is the next to build. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
-proposals, and `npm test` compiles none of them.
+the accepted design, and `npm test` compiles none of them yet.
 
 cs, a browser arena shooter, is moving the bulk of its client into Nish
 compiled to WebAssembly: the fixed-step simulation (the same source the native
@@ -18,9 +20,14 @@ browser owns.
 This note is the Nish half of that boundary. It is
 [wp34](wp34-hosting-cs.md) §8's **N8** (host imports on wasm) and the
 host-driven half of **N9**, which [wp46](wp46-long-running-memory.md) left
-open. It is the WebAssembly reading of [wp27](wp27-ffi.md) and
-[wp40](wp40-ffi-buffers-handles.md), not a second foreign-function dialect:
-`declare function` stays the one way a program names code it does not define.
+open. It keeps [wp27](wp27-ffi.md) and [wp40](wp40-ffi-buffers-handles.md)'s
+rules (buffers lent for the call, write-through, typed handles), and it changes
+their spelling for the page. A C function stays a `declare function`, and a
+function the page supplies is imported from the page's own TypeScript, where
+it is written (§3). The aim is that the module and the page read as one
+TypeScript program. The boundary is implicit wherever crossing it is free, and
+refused, with the explicit form named, wherever it would copy or allocate in
+secret.
 
 ## 1. What is there today
 
@@ -63,7 +70,7 @@ Two more facts the design leans on:
  keydown/pointer ── writes ─▶ ┌──────────────── module storage (§5) ─────────┐
                               │ input ring · world · instances · out ring    │
  writeBuffer(view) ◀─ reads ──└──────────────────────────────────────────────┘
- imports: gpu, audio,  ◀───── host calls ────── declare function (§3)
+ imports: gpu, audio,  ◀───── host calls ────── import from host.ts (§3)
  transport, log, panic        handles (§4), (view, at, n) buffers,
                               strings decoded once (§7)
 ```
@@ -79,15 +86,27 @@ build**: `isWasmBuild` (`src/visibility.ts`), which is `--target wasm32-*` or
 wasm-host`, so that `--profile wasm` and every module built with it today stay
 byte-identical (Q5).
 
-## 3. W1. Imports: `declare function` in a wasm build
+## 3. W1. Imports: an `import` from the page's own TypeScript
 
-**Proposal.** In a wasm build, a `declare function` is a function the host
-supplies. The symbol is still the identifier. The import module is `host`, and
-the import name is the identifier:
+**Decided by the owner, 2026-11-06** (Q1 as revised). The functions the page
+supplies are written once, in an ordinary TypeScript module the page owns, and
+the Nish module imports them the way any TypeScript module would:
 
 ```ts
-declare function hostLog(level: u32, code: i32): void;
-declare function nowMs(): f64;
+// web/host.ts: the page's file, compiled by tsc and bundled by Vite
+import type { f64, i32, u32 } from "nish";
+export type GpuBuffer = HostHandle<"gpu-buffer">;
+
+export function hostLog(level: u32, code: i32): void { console.warn(level, code); }
+export function nowMs(): f64 { return performance.now(); }
+export function gpuWrite(b: GpuBuffer, offset: u32, data: Float32Array, at: u32, n: u32): void {
+  device.queue.writeBuffer(buffers[b], offset, data, at, n);
+}
+```
+
+```ts
+// client.ts: the Nish module
+import { type GpuBuffer, gpuWrite, hostLog, nowMs } from "../web/host.ts";
 ```
 
 ```llvm
@@ -97,57 +116,78 @@ attributes #2 = { "wasm-import-module"="host" "wasm-import-name"="hostLog" }
 attributes #3 = { "wasm-import-module"="host" "wasm-import-name"="nowMs" }
 ```
 
-Checked by hand on this container's toolchain: wasm-ld turns such a
-declaration into an import, `{"module":"host","name":"drawCount","kind":"function"}`,
-with no `--allow-undefined` (an 88-byte module). And if a C file the link is
-given **defines** the symbol, the definition wins and the import disappears.
-That is why Q1 asks to withdraw the C route on freestanding wasm (LANGUAGE.md:
-"the freestanding `--profile wasm` link resolves the declaration against the
-C the link is given", which wp40 records as untested). If a declaration could
-be either, `--emit-dts` could not say which functions the page owes.
+- **A host module is named, not guessed.** `"nish": { "host": ["web/host.ts"] }`
+  in the root `package.json`, or `--host web/host.ts` on the command line, makes
+  that file a host module. An import from any other file is an ordinary Nish
+  import, as today. The compiler reads only a host module's exported
+  signatures: each `export function`'s parameter and result types, and each
+  exported `type` alias of a `HostHandle`. It skips each function body
+  unparsed, as a balanced run of tokens, so the body may use the DOM, closures,
+  promises and anything else TypeScript has. If the lexer cannot read a token
+  in a body, such as a regex literal, it refuses the file with a message to
+  move that code into a module the host file imports. Stage 2 checks the lexer
+  against the Vite templates' TypeScript before relying on it.
+- **The signature is the one source.** `tsc` checks the page's
+  implementation, and Nish checks every call against the same text, so
+  nothing is generated or kept in step by hand. Nish's own names (`u32`,
+  `i32`, `f32`, `f64`) are type aliases of `number`, declared in
+  `runtime/nish.d.ts`. The npm package exports the same declarations as
+  `import type { ... } from "nish"`, so the page's `tsc` reads them
+  unchanged. A bare
+  `number` means the program's number mode. In a host signature,
+  `Float32Array` is `f32[]`, as everywhere in Nish. `Uint8Array`,
+  `Uint16Array` and `Uint32Array`, which are not Nish spellings, are read as
+  `u8[]`, `u16[]` and `u32[]` there and only there.
+- **In the wasm reading** each imported function is a wasm import from module
+  `host` under its own name (IR above). Checked by hand on this container's
+  toolchain: wasm-ld turns such a declaration into an import,
+  `{"module":"host","name":"drawCount","kind":"function"}`, with no
+  `--allow-undefined` (an 88-byte module). The generated loader takes the host
+  module itself, `import * as host from "./host.ts"`, and passes each function
+  straight through when every parameter and the result are `i32`, `f32` or
+  `f64`, so the import costs a plain wasm-to-JS call. An import that needs
+  adapting (an unsigned or `boolean` result, a buffer, a string) gets one
+  closure, built once at `load`. Calling it allocates nothing, except a
+  `string`'s decode (§7). With the Vite plugin (§8) the page never passes
+  `host` itself.
+- **In the TypeScript reading the import is already TypeScript.** `--emit-ts`
+  keeps the `import` line as written, where it refused a foreign declaration
+  before (NL4010), so the TS reading calls the very function the wasm import
+  table names.
+- **`declare function` stays C's.** In a wasm build it is refused, with a
+  message that names the host-module form. A function the page supplies has
+  one spelling, and a C definition can no longer silently replace an import:
+  wasm-ld lets a C definition win over a declared import, which was checked.
+  "The freestanding `--profile wasm` link resolves the declaration against the
+  C the link is given" (LANGUAGE.md, untested per wp40) is withdrawn. A C
+  library on wasm stays a `--profile wasi` program. A host module imported in a
+  native build is refused too, because there is no page there. The simulation
+  that both builds compile imports no host module.
+- **What crosses, and what is refused.** The rule is that a crossing is
+  implicit where it is free and refused where it would copy or allocate in
+  secret. Each refusal names the explicit form:
 
-- **What crosses.**
-  - **In both directions:** `i32`, `u8`, `u16`, `u32`, `f32`, `f64`,
-    `boolean`, a ranged integer, an enum, and a host handle (§4).
-  - **`i64` and `u64`** cross as a `bigint`. V8 allocates a `BigInt` for
-    each one, so `--emit-dts` marks those imports "allocates per call".
-  - **Parameters only:** a buffer (§5.3) and a `string` (§7).
-  - **Refused, each with its own code:**
-    - a `string` result. The page cannot write into module memory without
-      calling back into the module, so a string comes in through a buffer
-      instead (§7);
-    - `CPtr` in either position. A page has no addresses to give;
-    - a buffer whose count is a `u64`.
-- **`--emit-dts` types the imports.** The `.d.ts` gains
-  `export interface Imports { host: { hostLog(level: number, code: number): void; nowMs(): number } }`,
-  and `load(source, imports: Imports)` requires it. A page that forgets one
-  fails `tsc --strict`, not the first frame. `tsc --strict` also checks the
-  Nish source itself as it does today, against `runtime/nish.d.ts`, where
-  `declare function` is TypeScript's own ambient declaration.
-- **The loader passes the page's function straight through** when every
-  parameter and the result are `i32`, `f32` or `f64`, so the import costs a
-  plain wasm-to-JS call. An import that needs adapting (an unsigned or
-  `boolean` result, a buffer, a string) gets one closure, built once at
-  `load`. Calling it allocates nothing, except a `string`'s decode (§7).
-- **Its TypeScript reading calls the same function.** `--emit-ts` of a
-  module with host imports (today NL4010) writes them as one import from the
-  page's module, `import { hostLog, nowMs } from "./host.js"`. The specifier
-  is set by `--host-module <specifier>`, default `./host.js`. The page passes
-  that same module object to `load`: `import * as host from "./host.js";
-  load(bytes, { host })`. Each reading calls the same JavaScript function.
-  Only the window form of a buffer (§5.3) differs between the two readings,
-  and the import's own signature is the same in both.
-- **Capability: `ffi`** (Q2). A call to a host import is a call to code the
-  program cannot see, which is exactly what `ffi` already means: `--deny ffi`
-  refuses it, `--emit-capabilities` names the import, and a program that calls
-  one is not `deterministic`. A new `host` label would put two words on one
-  property and make every policy name both.
+  | In a host signature | Crosses as |
+  | --- | --- |
+  | `i32`, `u8`, `u16`, `u32`, `f32`, `f64`, `boolean`, a ranged integer, an enum, a `HostHandle` (§4) | itself, in both directions |
+  | `i64`, `u64` | a `bigint`, in both directions. V8 allocates one per call, so `--emit-dts` marks the function "allocates per call" |
+  | a typed array followed by `at` and `n` (§5.3) | a window into module memory: the view, an element index and a count |
+  | `string`, as a parameter | its UTF-8 bytes, decoded once by the loader (§7) |
+  | `string` as a result | refused: `return the text by writing it into a module-storage u8[] the module names, and return its length` |
+  | an object, a class, an array of objects, a function, a `Promise`, `unknown` or `any` | refused: `write it into module storage and pass its index`, or for a promise, `await it in the page and call an export with the result` |
+- **`--emit-dts` types what the page owes.** The `.d.ts` gains
+  `Imports = { host: typeof import("./host.ts") }`. A host module that loses
+  an export the Nish module calls fails `tsc`, not the first frame.
+- **Capability: `ffi`** (Q2, accepted). A call to a host import is a call to
+  code the program cannot see, which is exactly what `ffi` already means:
+  `--deny ffi` refuses it, `--emit-capabilities` names the import, and a
+  program that calls one is not `deterministic`.
 - **Attributes.** None on the declaration, and its callers lose `readnone` and
   `willreturn` exactly as for C (LANGUAGE.md "The declaration carries no LLVM
   attributes").
-- **Cost to a program that does not use it: zero.** The attributes are
-  written only on a `declare function`, in a wasm build. Native IR and every
-  golden are unchanged.
+- **Cost to a program that does not use it: zero.** A program with no host
+  module emits no import and no attribute. Native IR and every golden are
+  unchanged.
 
 ## 4. W4. Host handles: `HostHandle<"kind">`
 
@@ -156,12 +196,16 @@ be either, `--emit-dts` could not say which functions the page owes.
 nominal type:
 
 ```ts
-type GpuBuffer = HostHandle<"gpu-buffer">;
-type GpuTexture = HostHandle<"gpu-texture">;
+// web/host.ts
+export type GpuBuffer = HostHandle<"gpu-buffer">;
+export type GpuTexture = HostHandle<"gpu-texture">;
 
-declare function gpuCreateBuffer(bytes: u32, usage: u32): GpuBuffer;
-declare function gpuDestroyBuffer(b: GpuBuffer): void;
-declare function gpuBindTexture(slot: u32, t: GpuTexture): void;
+const buffers = new HostTable<GPUBuffer>(); // nish/page, the page-side helper (§11)
+export function gpuCreateBuffer(bytes: u32, usage: u32): GpuBuffer {
+  return buffers.add(device.createBuffer({ size: bytes, usage }));
+}
+export function gpuDestroyBuffer(b: GpuBuffer): void { buffers.take(b).destroy(); }
+export function gpuBindTexture(slot: u32, t: GpuTexture): void { ... }
 ```
 
 - **The type.** `HostHandle<K>` takes a string-literal type argument, and
@@ -295,44 +339,48 @@ Q5 records the alternative, a counter word in memory.
 
 ### 5.3 A buffer argument to an import: a window `(view, at, n)`
 
-WP40's buffer rule, read for the host:
+LANGUAGE.md already says that "a window into a buffer is `(buf, offset, length)`
+by convention", and that convention is the host signature:
 
 ```ts
-declare function sendDatagram(w: DatagramWriter, bytes: readonly u8[], n: u32): void;
-declare function gpuWrite(b: GpuBuffer, offset: u32, data: readonly f32[], n: u32): void;
+// web/host.ts
+export function sendDatagram(w: DatagramWriter, bytes: Uint8Array, at: u32, n: u32): void { ... }
+export function gpuWrite(b: GpuBuffer, offset: u32, data: Float32Array, at: u32, n: u32): void { ... }
+```
+
+```ts
+// client.ts: the same three arguments, in both readings
+gpuWrite(instanceBuffer, 0, instanceFloats, 0, count * 6);
 ```
 
 ```llvm
-declare void @gpuWrite(i32, i32, i8*, i32) #4
+declare void @gpuWrite(i32, i32, i8*, i32, i32) #4
 ```
 
-- **The element types.** A host import takes `u8[]`, `u16[]`, `u32[]`, `i32[]`,
-  `f32[]` and `f64[]`, and the `readonly` form of each. WP40's C rule takes only
-  `u8[]`, because C would need an element size the declaration does not carry.
-  The page does not: its typed array carries one.
-- **The count.** A run of buffers is followed by exactly one count, as in
-  WP40, but the count is a `u32` and it counts **elements**, which is what
-  `writeBuffer`, `subarray` and `bufferSubData` count for a typed array. A
-  `u64` would cross as a `bigint` (an allocation per call) and is refused with
-  a message that names `u32`. The count is checked against every buffer of the
-  run before the call (the `ffi-length` panic site), and `toU32(b.length)` of
-  the buffer itself is proved, as `toU64(b.length)` is for C.
-- **What the page receives.** The page receives the view, the element index
-  and the count, `gpuWrite(b, offset, F32, at, n)`. `F32` is the
-  `Float32Array` over the whole memory that the loader made once, and `at` is
-  the data pointer divided by four. The adapter is one shift and one call:
-  `(b, o, p, n) => host.gpuWrite(b, o, F32, p >>> 2, n)`. It needs no
-  `subarray` and no copy, and the call allocates nothing. The page hands the
-  view straight to `queue.writeBuffer(gpuBuf, o, data, at, n)`, whose
-  `dataOffset` and `size` are element counts for a typed array.
-- **Its TypeScript reading.** `--emit-ts` writes the call as
-  `gpuWrite(b, offset, data, 0, n)`. `data` is the array's own typed array,
-  so the page's function has one signature in both readings:
-  `(b, offset, data: Float32Array, at: number, n: number)`. Module storage is
-  a typed-array view in the TS reading (§5.4). Whether a local `f32[]` is a
-  `Float32Array` there today is a fact stage 3 checks. If it is not, the TS
-  reading converts at the call and pays an allocation the wasm reading does
-  not.
+- **The element types.** A host import takes `u8[]`, `u16[]`, `u32[]`,
+  `i32[]`, `f32[]` and `f64[]` (and the `readonly` form of each), each
+  followed by an element index `at` and an element count `n`, both `u32`.
+  WP40's C rule takes only `u8[]` with one `u64` byte count, because C would
+  need an element size the declaration does not carry. The page does not: its
+  typed array carries one. A `u64` index or count would cross as a `bigint`,
+  an allocation per call, so it is refused with a message that names `u32`.
+- **The check.** `at + n <= data.length` is checked before the call (the
+  `ffi-length` panic site). `0, toU32(data.length)` of the buffer itself is
+  proved, as `toU64(b.length)` is for C.
+- **What the page receives** is the same three arguments in both readings,
+  so the page's function has one signature. In the wasm reading the view is
+  the `Float32Array` over the whole memory that the loader made once. Its
+  index is the data pointer divided by four, plus `at`. The adapter is one
+  shift, one add and one call:
+  `(b, o, p, at, n) => host.gpuWrite(b, o, F32, (p >>> 2) + at, n)`. It needs
+  no `subarray` and no copy, and the call allocates nothing. In the TS reading
+  the view is the array's own typed array and the index is `at` itself. Either
+  way the page hands it straight to `queue.writeBuffer(gpuBuf, o, data, at, n)`,
+  whose `dataOffset` and `size` are element counts for a typed array. Module
+  storage is a typed-array view in the TS reading (§5.4). Whether a local
+  `f32[]` is a `Float32Array` there today is a fact stage 3 checks. If it is
+  not, the TS reading converts at the call and pays an allocation the wasm
+  reading does not.
 - **Write-through: WP40's rule unchanged.** A `u8[]` argument may be written
   by the host during the call, and the compiler records the call as a store.
   A `readonly` one may not. The rule is the declaration's word, as in C. The
@@ -502,6 +550,26 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   no `new URL(..., import.meta.url)` and no top-level `await`, so Vite bundles
   it as it stands. A test reads the generated text and fails on any of those
   four.
+- **The page imports the module as TypeScript.** `nish/vite`, a Vite plugin
+  in the npm package, takes the root `package.json`'s Nish entries (or
+  `nish({ entries: ["src/client.ts"] })`). The page writes:
+
+  ```ts
+  import { init, frame } from "./client.ts";      // the module's exports, typed from its source
+  import { memory, layout } from "./client.nish"; // its memory and layout (§5.2), from the .d.ts
+  ```
+
+  In a build the plugin compiles the entry with `--emit-dts`, links it under
+  `--profile wasm-host`, inlines the bytes, and resolves both specifiers to
+  one generated module. That module instantiates with `loadSync` and the host
+  modules the entry imports, so the page needs no `await`, no `load` call and
+  no import object. Under `vite dev` the plugin can serve the TS reading
+  instead, from `--emit-ts`, for fast reloads. It resolves `./client.nish` to
+  that reading's heap and the same layout, so the page's code is the same.
+  `tsc` checks the page's calls against the Nish source itself, because the
+  source is TypeScript. A build needs the compiler and LLVM where Vite runs,
+  as any `--profile wasm` build does. `vite dev` with the TS reading needs only
+  the compiler.
 - **`load(source, imports)`** takes a `BufferSource` or a compiled
   `WebAssembly.Module`. **`loadSync(source, imports)`** uses
   `new WebAssembly.Module` and `new WebAssembly.Instance`, so a page can
@@ -647,11 +715,56 @@ container has no `brotli` command.
     the same input for the same number of ticks and prints its own hash, and
     the two must be equal.
 
-## 11. The cost to a program that does not use it
+## 11. Not wasm-bindgen; what goes in `std`
+
+**Why not use wasm-bindgen.** Rust's wasm-bindgen solves the same problem, and
+this design takes its best idea, an import from the page's own JavaScript
+module (`#[wasm_bindgen(module = "/host.js")] extern`), which §3 is. Using the
+tool itself does not work for four reasons:
+
+- **It reads Rust's descriptors, not types.** The bindgen command line
+  rewrites a module from descriptors its Rust macro compiled in, and the
+  command line and the crate must be the same version. Nish would have to emit
+  an internal, unversioned format for a tool that does not promise it.
+- **Its defaults copy and allocate.** Passing a string in calls the module's
+  `__wbindgen_malloc` and `TextEncoder.encodeInto` on every call, and a `Vec`
+  is copied in and out. That is convenient, and it is the per-frame
+  allocation W2 exists to rule out.
+- **It holds JavaScript objects in a heap table the module indexes.** That is
+  §4's `HostHandle`, except that bindgen's handles are untyped at the boundary
+  and Nish's are typed per kind.
+- **The compiler already knows more than bindgen is told.** `--emit-dts` and
+  its loader are generated from the checked program (wp8). They see every
+  type, range and layout directly, and §3, §5 and §7 are additions to that
+  generator, not a second one.
+
+The WebAssembly Component Model (WIT, run in a browser through `jco`) was
+weighed too. Its canonical ABI copies every string and list into and out of
+the module by design, browsers do not run components without that
+transpiling step, and it adds a second interface language beside TypeScript.
+
+**What the standard library holds, and what it cannot.** The mechanism has to
+be the compiler's: an import attribute, storage reserved at link time, a layout
+in the `.d.ts`, and the generated loader are things no library can add. Every
+helper above the mechanism is a library, in Nish or in the npm package's
+JavaScript:
+
+| Module | Side | What it is |
+| --- | --- | --- |
+| `nish/host/ring` | the module, in Nish | a single-producer ring over module storage, for the input ring and the outbound datagram ring: `push` from one side, `drain` once per tick on the other, with a head and a tail the page and the module each advance. There are no atomics, because one thread runs both sides. Its page half is below |
+| `nish/host/text` | the module, in Nish | a UTF-8 writer into a module-storage `u8[]` (the shader text, a log line), and a reader of text the page encoded into an inbox, for §7's strings in without a string runtime |
+| `nish/page` (JS) | the page | `HostTable<T>`, the typed handle table of §4 (`add`, `get`, `take`, with slot 0 never handed out); the ring's page half over a view made once; and `onPanic`'s default reporter |
+| `nish/vite` (JS) | the build | §8's plugin |
+
+These ship in stages 3 and 6 (§14), each with its own test like any `std/`
+module, and `--gc-sections` drops whatever a program does not use.
+
+## 12. The cost to a program that does not use it
 
 | Piece | What a program without it sees |
 | --- | --- |
-| Imports (§3) | nothing: the attributes go only on a `declare function` in a wasm build |
+| Imports (§3) | nothing: an import attribute is written only for a function imported from a host module |
+| `std` helpers (§11) | nothing: a module a program does not import is not compiled |
 | `HostHandle` (§4) | nothing: a new type |
 | Module storage (§5) | nothing: a new construct, with no global unless one is declared |
 | Panic sites (§6) | nothing natively. In a wasm build, one `i32` argument per panic call, and the `nish.panic` import only under `--profile wasm-host` |
@@ -659,11 +772,11 @@ container has no `brotli` command.
 | `--deterministic` (§9) | nothing without the flag, apart from Q7's fix of a link that fails today |
 | `--profile wasm-host` (§2, §10) | nothing: `--profile wasm` is unchanged, byte for byte |
 
-## 12. Questions for the owner
+## 13. Questions for the owner, answered 2026-11-06
 
-| | Question | Recommendation |
+| | Question | Recommendation, accepted unless the row says otherwise |
 | --- | --- | --- |
-| **Q1** | In a wasm build, is every `declare function` a host import? That would withdraw "the freestanding link resolves the declaration against the C it is given", which wp40 records as untested. The other way, a C definition silently replaces the import (checked), and `--emit-dts` cannot know which functions the page owes | **Yes.** `build.sh --profile wasm-host` refuses a C input that defines a declared import. A C library on wasm stays a `--profile wasi` program |
+| **Q1** | How does a module name a function the page supplies? First asked as "is every `declare function` in a wasm build a host import?" | **Revised and accepted:** an `import` from a host module, the page's own TypeScript, named in `package.json` or by `--host` (§3). `declare function` stays C's and is refused in a wasm build, and the untested freestanding C route is withdrawn |
 | **Q2** | The capability: `ffi`, or a new `host`? | **`ffi`.** Both are code the program cannot see, and both break `deterministic`. One label keeps every policy, lockfile and dependency grant as it is |
 | **Q3** | Module storage as §5.1 has it: top-level fixed-length arrays of pointer-free elements, zero-filled, no initialiser, and no top-level `let`. Scalars live in a length-one record | **Yes.** A scalar `let` would add a second kind of global for a convenience the record already gives |
 | **Q4** | Refuse binding or passing an element of a module-storage record array (`const p = instances[i]`), so that the TS reading can lay module storage out in one `ArrayBuffer` that the page views identically in both readings | **Yes.** The alternative is a page with two code paths, one per reading |
@@ -675,17 +788,17 @@ container has no `brotli` command.
 | **Q10** | Inline bytes: the decimal array literal (smallest of the inline forms after compression, +25% over the separate file under brotli), opt-in through `--inline` | **Yes**, opt-in. cs decides per build whether a separate fetch is worth the bytes |
 | **Q11** | The ten-minute soak runs in the `interop` workflow beside the QUIC and TLS jobs, not in `npm test` | **Yes.** It needs a browser and ten minutes, and `npm test`'s shards should not wait on either |
 
-## 13. Stages
+## 14. Stages
 
 Each stage is one PR, built only once the questions it depends on are
 answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 
 | Stage | What | Depends on | Size effect |
 | --- | --- | --- | --- |
-| 1 | **Link and load (W6, W8).** `--profile wasm-host`: explicit exports, `--memory`, a fixed stack, `wasm-opt` when present, `--inline`. Loader `load(source, imports)` and `loadSync`. The Vite-readiness test of the loader's text. The `wasm-size` guard with today's figures | Q5, Q10 | shrinks: −214 B on the hello world, −736 B on `arrays.ts` (raw) |
-| 2 | **Imports and handles (W1, W4).** Import attributes on `declare function` in a wasm build. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. `--emit-ts` of imports through `--host-module` (lifting NL4010 for them). The refusals: a `string` result, `CPtr`, a C definition of an import | Q1, Q2, Q6 | about 20 B per import declared; nothing without one |
-| 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | the panic import and its site arguments: measured and stated by the stage |
-| 4 | **Strings (W3).** The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | the unit's size, measured before it lands; nothing to a program with no strings |
+| 1 | **Link and load (W6, W8).** `--profile wasm-host`: explicit exports, `--memory`, a fixed stack, `wasm-opt` when present, `--inline`. Loader `load(source, imports)` and `loadSync`. The `nish/vite` plugin for exports (the page imports the module as TypeScript). The Vite-readiness test of the loader's text. The `wasm-size` guard with today's figures | Q5, Q10 | shrinks: −214 B on the hello world, −736 B on `arrays.ts` (raw) |
+| 2 | **Imports and handles (W1, W4).** Host modules (`--host`, `package.json`), reading their signatures and skipping bodies. Import attributes. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. The TS reading keeps the `import`. The refusals: a `string` result, an object, a function, a `Promise`, `declare function` in a wasm build, a host module in a native build. The plugin gains host modules | Q1, Q2, Q6 | about 20 B per imported function; nothing without one |
+| 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | the panic import and its site arguments: measured and stated by the stage |
+| 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | the unit's size, measured before it lands; nothing to a program with no strings |
 | 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured |
 | 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |
 
@@ -709,6 +822,11 @@ Each would be its own note, on its own measurement:
   already share one memory.
 - **JavaScript Promise Integration (JSPI).**
 - **Closures**, and so callbacks from the page into anything but an export.
-- **`async` on wasm.** NL2652 stays.
+- **`async` on wasm.** NL2652 stays, and nothing here waits for it. Every
+  promise cs has (a fetch, a datagram read, adapter set-up) is awaited by the
+  page, which then calls an export with the result. Later, WP49's lowering of
+  an `async` function to a fixed-size state machine could run on wasm with the
+  page as its executor: it resolves the promise and calls a resume export.
+  That would let module code write `await gpuReady()`. It is its own note.
 - **Regions on freestanding wasm.** §6 shows the driven module does not need
   them.
