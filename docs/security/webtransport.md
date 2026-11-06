@@ -84,9 +84,10 @@ connection with H3_NO_ERROR. Chrome through Playwright is S2's interop job.
 Out of scope: HTTP/3 and QPACK ([http3.md](http3.md)), QUIC and its datagram
 rings ([quic.md](quic.md)), TLS ([tls.md](tls.md)). WebTransport over HTTP/2,
 the later drafts' flow control (WT_MAX_STREAMS, WT_MAX_DATA) and their
-`wt-available-protocols` header are not implemented. The QUIC server does not
-follow NAT rebinding, so `Http3Server` keeps a client's address from accept
-time; that is A1's to record, not this lane's.
+`wt-available-protocols` header are not implemented. A client's NAT
+rebinding is followed by the QUIC server with path validation, and a session
+carries on at the new address; that is recorded in [quic.md](quic.md)
+(QUIC-11), not this lane.
 
 ## Threat model
 
