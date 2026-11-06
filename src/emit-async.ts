@@ -34,6 +34,7 @@ import { unpackReturnedResult } from "./emit-result"
 import { unwrapParens } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRParam, paramValue } from "./ir"
+import { isDigit } from "./lexer"
 import { StringMap } from "./map"
 import { N_UNARY, Node } from "./nodes"
 import { FunctionSig } from "./program"
@@ -495,8 +496,6 @@ const isNameByte = (c: i32): boolean =>
   c === 36 ||
   c === 45
 
-const isAsyncDigit = (c: i32): boolean => c >= 48 && c <= 57
-
 /** The end of the `%name` or `@name` token whose sigil is at `at`. */
 const irNameEnd = (text: string, at: i32): i32 => {
   let i = at + 1
@@ -508,12 +507,12 @@ const irNameEnd = (text: string, at: i32): i32 => {
 
 /** The decimal number at the start of `text`, or -1. */
 const leadingNumber = (text: string): i32 => {
-  if (text.length === 0 || !isAsyncDigit(text.charCodeAt(0))) {
+  if (text.length === 0 || !isDigit(text.charCodeAt(0))) {
     return -1
   }
   let value = 0
   let i = 0
-  while (i < text.length && isAsyncDigit(text.charCodeAt(i))) {
+  while (i < text.length && isDigit(text.charCodeAt(i))) {
     value = value * 10 + (text.charCodeAt(i) - 48)
     i = i + 1
   }
@@ -684,6 +683,31 @@ const CAST_OPS: string =
 
 // ---- Layout ---------------------------------------------------------------
 
+/** The least power of two at least `n` (1 for `n` <= 1). */
+const pow2Ceil = (n: i32): i32 => {
+  let p = 1
+  while (p < n) {
+    p = p * 2
+  }
+  return p
+}
+
+/** Where each `%name = type ` line's body starts in `text`, one scan for every lookup. */
+const indexTypes = (text: string): StringMap => {
+  const out = new StringMap()
+  let at = text.indexOf("\n%")
+  while (at >= 0) {
+    const end = text.indexOf("\n", at + 1)
+    const line = end < 0 ? text.substring(at + 1) : text.substring(at + 1, end)
+    const eq = line.indexOf(" = type ")
+    if (eq > 0) {
+      out.set(line.substring(0, eq), at + 1 + eq + 8)
+    }
+    at = end < 0 ? -1 : text.indexOf("\n%", end)
+  }
+  return out
+}
+
 /**
  * Sizes and alignments of LLVM types on x86-64, the target the async
  * lowering runs on (wasm32 refuses async with NL2652). Named types are read
@@ -691,14 +715,17 @@ const CAST_OPS: string =
  */
 class TypeSizer {
   text: string
+  /** Each named type's body offset in `text` (`indexTypes`). */
+  bodies: StringMap
   layout: AsyncLayout | null
   soft: boolean
   json: boolean
   size: i32
   align: i32
 
-  constructor(text: string, layout: AsyncLayout | null, soft: boolean, json: boolean) {
+  constructor(text: string, bodies: StringMap, layout: AsyncLayout | null, soft: boolean, json: boolean) {
     this.text = text
+    this.bodies = bodies
     this.layout = layout
     this.soft = soft
     this.json = json
@@ -716,12 +743,10 @@ class TypeSizer {
 
   /** The body of the named type `name`, or "". */
   body(name: string): string {
-    const key = `\n${name} = type `
-    const at = this.text.indexOf(key)
-    if (at < 0) {
+    const from = this.bodies.get(name, -1)
+    if (from < 0) {
       return ""
     }
-    const from = at + key.length
     let to = this.text.indexOf("\n", from)
     if (to < 0) {
       to = this.text.length
@@ -730,21 +755,14 @@ class TypeSizer {
   }
 
   /** Set `size` and `align` for `type`; -1 for both when soft and unknown. */
-  measure(type: string): void {
-    const t = type
+  measure(t: string): void {
     if (t.endsWith("*") || t === "ptr" || t.endsWith(")*")) {
       this.size = 8
       this.align = 8
       return
     }
-    if (t.length > 1 && t.charCodeAt(0) === 105 && isAsyncDigit(t.charCodeAt(1))) {
-      const bits = leadingNumber(t.substring(1))
-      let bytes = 1
-      while (bytes * 8 < bits) {
-        bytes = bytes * 2
-      }
-      this.size = bytes
-      this.align = bytes > 16 ? 16 : bytes
+    if (t.length > 1 && t.charCodeAt(0) === 105 && isDigit(t.charCodeAt(1))) {
+      this.vector(pow2Ceil((leadingNumber(t.substring(1)) + 7) >> 3))
       return
     }
     if (t === "half" || t === "bfloat") {
@@ -803,12 +821,7 @@ class TypeSizer {
       }
       const element = inner.substring(x + 3)
       if (t.startsWith("<") && element === "i1") {
-        let bytes = 1
-        while (bytes * 8 < count) {
-          bytes = bytes * 2
-        }
-        this.size = bytes
-        this.align = bytes > 16 ? 16 : bytes
+        this.vector(pow2Ceil((count + 7) >> 3))
         return
       }
       this.measure(element)
@@ -819,15 +832,16 @@ class TypeSizer {
         this.size = this.size * count
         return
       }
-      let bytes = 1
-      while (bytes < this.size * count) {
-        bytes = bytes * 2
-      }
-      this.size = bytes
-      this.align = bytes > 16 ? 16 : bytes
+      this.vector(pow2Ceil(this.size * count))
       return
     }
     this.unknown(t)
+  }
+
+  /** A scalar or vector of `bytes` (a power of two): aligned to itself, at most 16. */
+  vector(bytes: i32): void {
+    this.size = bytes
+    this.align = bytes > 16 ? 16 : bytes
   }
 
   measureStruct(fields: string, packed: boolean): void {
@@ -875,6 +889,8 @@ class Demoter {
   defBlock: StringMap
   defIndex: StringMap
   defTexts: string[]
+  /** Each def's index in `defTexts`. */
+  defSlots: StringMap
   spilled: StringMap
   spillTypes: string[]
   /** Pass two: the reloads to put ahead of the instruction being rewritten, and at the end of each predecessor. */
@@ -897,6 +913,7 @@ class Demoter {
     this.defBlock = new StringMap()
     this.defIndex = new StringMap()
     this.defTexts = []
+    this.defSlots = new StringMap()
     this.spilled = new StringMap()
     this.spillTypes = []
     this.pending = []
@@ -1053,6 +1070,7 @@ class Demoter {
         if (def.length > 0) {
           this.defBlock.set(def, b)
           this.defIndex.set(def, i)
+          this.defSlots.set(def, this.defTexts.length)
           this.defTexts.push(withoutMetadata(instrs[i]).substring(def.length + 4))
         }
         i = i + 1
@@ -1156,7 +1174,7 @@ class Demoter {
     if (k < 0) {
       k = this.spillTypes.length
       this.spilled.set(name, k)
-      this.spillTypes.push(this.typeOfDef(this.defTexts[this.defOrdinal(name)], name))
+      this.spillTypes.push(this.typeOfDef(this.defTexts[this.defSlots.get(name, 0)], name))
     }
     if (!this.rewriting) {
       return name
@@ -1170,30 +1188,6 @@ class Demoter {
       this.pending.push(line)
     }
     return reload
-  }
-
-  defOrdinal(name: string): i32 {
-    // Defs were recorded in block order, instruction order; recount to find this one.
-    const block = this.defBlock.get(name, 0)
-    const index = this.defIndex.get(name, 0)
-    let ordinal = 0
-    let b = 0
-    while (b < block) {
-      for (const instr of this.blocks[b].instructions) {
-        if (this.defName(instr).length > 0) {
-          ordinal = ordinal + 1
-        }
-      }
-      b = b + 1
-    }
-    let i = 0
-    while (i < index) {
-      if (this.defName(this.blocks[block].instructions[i]).length > 0) {
-        ordinal = ordinal + 1
-      }
-      i = i + 1
-    }
-    return ordinal
   }
 
   /** `instr` with every non-dominated use from `from` on rewritten; the use is at instruction `i` of block `b`. */
@@ -1386,7 +1380,8 @@ export const transformAsync = (emitter: Emitter, sig: FunctionSig): void => {
   }
 
   // The allocas become fields of the frame, aligned as they asked.
-  const sizer = new TypeSizer(`\n${emitter.module.typeDecls.join("\n")}\n`, null, true, emitter.opts.json)
+  const typeText = `\n${emitter.module.typeDecls.join("\n")}\n`
+  const sizer = new TypeSizer(typeText, indexTypes(typeText), null, true, emitter.opts.json)
   const restFields: string[] = [`[${KIDS_MARK}${id}@@ x <2 x i64>]`]
   const slotLines: string[] = []
   for (const line of fn.entryPrelude) {
@@ -1496,12 +1491,21 @@ class AsyncLayout {
   texts: string[]
   kidsMemo: i32[]
   unitsMemo: i32[]
+  /** Each module's `indexTypes`, built on its first frame. */
+  typeIndexes: StringMap[]
+  typeIndexed: boolean[]
 
   constructor(registry: AsyncRegistry, texts: string[]) {
     this.registry = registry
     this.texts = texts
     this.kidsMemo = []
     this.unitsMemo = []
+    this.typeIndexes = []
+    this.typeIndexed = []
+    for (const _ of texts) {
+      this.typeIndexes.push(new StringMap())
+      this.typeIndexed.push(false)
+    }
     for (const _ of registry.frameNames) {
       this.kidsMemo.push(-1)
       this.unitsMemo.push(-1)
@@ -1548,7 +1552,11 @@ class AsyncLayout {
     if (module < 0 || module >= this.texts.length) {
       this.asyncFail(`the frame of \`${this.registry.frameNames[id]}\` was not emitted`)
     }
-    const sizer = new TypeSizer(this.texts[module], this, false, this.registry.json)
+    if (!this.typeIndexed[module]) {
+      this.typeIndexes[module] = indexTypes(this.texts[module])
+      this.typeIndexed[module] = true
+    }
+    const sizer = new TypeSizer(this.texts[module], this.typeIndexes[module], this, false, this.registry.json)
     sizer.measure(`%frame.${this.registry.frameNames[id]}`)
     const units = (sizer.size + 15) >> 4
     this.unitsMemo[id] = units
