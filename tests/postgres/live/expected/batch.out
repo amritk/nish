@@ -32,4 +32,16 @@ tags_by_article 1: a,b
 tags_by_article 1: engines
 tags_by_article 1 done
 tags_by_article 2 missing
+users_unsorted take, 0 waiting
+users_unsorted 1: ada
+users_unsorted 5: ada
+users_unsorted 4: brendan
+users_unsorted 0: grace
+users_unsorted 2: grace
+users_unsorted 0 done
+users_unsorted 2 done
+users_unsorted 1 done
+users_unsorted 5 done
+users_unsorted 3 missing
+users_unsorted 4 done
 exit 0

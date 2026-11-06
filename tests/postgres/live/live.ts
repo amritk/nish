@@ -25,7 +25,9 @@
 //   unix        over a socket, with a wrong password the server never asks
 //               for (peer or trust): the user, `select 1`, and 100 rows
 //   batch       keyed reads through PgBatcher: users by id, articles by slug,
-//               tags by article; duplicate and missing keys, two takes
+//               tags by article; duplicate and missing keys, two takes; users
+//               by id again under `sorted` false
+//   explain     each batcher's plan, sorted and not: whether it has a Sort
 //   batchscale  PgBatcher takes of 1, 1024, 1025, 4096 and 65536 requests,
 //               each one execution: duplicate, missing and multi-row keys;
 //               keys that collide in its table; a failed and an empty run
@@ -1262,13 +1264,17 @@ const conduit = (target: PgTarget): i32 => {
 }
 
 /** A batcher of `keyType` named `name`, `select` its query for one key `q.key`, taking at most `most` requests at once. */
-const batcher = (name: string, keyType: i32, select: string, orderBy: string, most: i32): PgBatcher => {
+const batcher = (name: string, keyType: i32, select: string, orderBy: string, most: i32): PgBatcher => sortedBatcher(name, keyType, select, orderBy, most, true)
+
+/** `batcher`, its statement ordered by ordinal only if `sorted`. */
+const sortedBatcher = (name: string, keyType: i32, select: string, orderBy: string, most: i32, sorted: boolean): PgBatcher => {
   const config = new PgBatchConfig()
   config.name = name
   config.keyType = keyType
   config.select = select
   config.orderBy = orderBy
   config.maxRequests = most
+  config.sorted = sorted
   return new PgBatcher(config)
 }
 
@@ -1297,8 +1303,9 @@ const routeBatch = (b: PgBatcher, r: i32, conn: PgConnection, log: string): stri
 /**
  * `batch`: keyed reads through three `PgBatcher`s on one pooled connection,
  * each take one group. Users by id, four requests a take, so six take two;
- * articles by slug; and tags by article, several rows a key in name order.
- * Each has a duplicate key and a key with no row. A take's line and its
+ * articles by slug; and tags by article, several rows a key in name order;
+ * then users by id unsorted, every request's last event after the execution's
+ * end. Each has a duplicate key and a key with no row. A take's line and its
  * events are logged under its request and printed batcher by batcher at the
  * end, so the output does not depend on when the server's answers arrive;
  * the take line leaves out its run handle, which does (a second take may come
@@ -1315,6 +1322,7 @@ const batch = (target: PgTarget): i32 => {
       "t.name",
       toI32(32)
     ),
+    sortedBatcher("users_unsorted", PG_BATCH_INT, "select u.username from users u where u.id = q.key", "", toI32(32), false),
   ]
   const pool = makePool(toI32(1), toI32(8), "")
   for (const b of batchers) {
@@ -1323,6 +1331,7 @@ const batch = (target: PgTarget): i32 => {
   const userIds: i64[] = [toI64(3), toI64(1), toI64(3), toI64(9), toI64(2), toI64(1)]
   for (let t: i32 = 0; t < toI32(userIds.length); t++) {
     batchers[0].addInt(userIds[t], t)
+    batchers[3].addInt(userIds[t], t)
   }
   const slugs: string[] = ["quotes-2", "nope", "notes-1", "quotes-2"]
   for (let t: i32 = 0; t < toI32(slugs.length); t++) {
@@ -1625,6 +1634,106 @@ const rows = (target: PgTarget, sql: string): string => {
   return ok ? `${count} rows, summing ${sum}` : ""
 }
 
+/** The first column of each row of `sql`, on a connection of its own, a line each; "" if it failed. */
+const lines = (target: PgTarget, sql: string): string => {
+  const pool = makePool(toI32(1), toI32(1), "")
+  const d = new Driver(pool, target)
+  pool.request()
+  let out: string = ""
+  let ok: boolean = false
+  let over: boolean = false
+  while (!over) {
+    const slot: i32 = pool.dispatch()
+    if (slot >= 0) {
+      const conn = pool.connection(slot)
+      adhoc(conn, sql, noTypes())
+      conn.bindEnd()
+      pool.send()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      over = true
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      if (event === PG_ROW) {
+        out = logLine(out, conn.columnText(toI32(0)))
+      } else if (event === PG_ERROR) {
+        console.log(failed(pool.ticket, conn))
+      } else if (event === PG_GROUP_DONE) {
+        ok = true
+        over = true
+      } else if (event === PG_FAILED) {
+        over = true
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  return ok ? out : ""
+}
+
+/** Whether plan `plan` has a Sort or Incremental Sort node: a line that names one and is not a key. */
+const hasSort = (plan: string): boolean => {
+  let from: i32 = 0
+  while (from < toI32(plan.length)) {
+    let to: i32 = plan.indexOf("\n", from)
+    if (to < 0) {
+      to = toI32(plan.length)
+    }
+    const line: string = plan.substring(from, to)
+    if (line.indexOf("Sort") >= 0 && line.indexOf("Sort Key") < 0 && line.indexOf("Presorted Key") < 0) {
+      return true
+    }
+    from = to + 1
+  }
+  return false
+}
+
+/** `explain`'s line for batcher `b` over `keys`, an array literal for its one parameter: whether its plan sorts. */
+const explainOne = (target: PgTarget, b: PgBatcher, keys: string): string => {
+  const at: i32 = b.sql.indexOf("$1")
+  if (at < 0) {
+    return `${b.name}: no parameter`
+  }
+  const plan: string = lines(target, `explain (costs off) ${b.sql.substring(0, at)}'${keys}'${b.sql.substring(at + 2)}`)
+  if (plan === "") {
+    return `${b.name}: no plan`
+  }
+  return `${b.name}: ${hasSort(plan) ? "Sort" : "no Sort"}`
+}
+
+/**
+ * `explain`: the plan of each `batch` statement, sorted and unsorted, over a
+ * literal key array. Unsorted with no `orderBy`, the plan has no Sort node;
+ * with one, the Sort it asks for stays. Only that verdict is printed, as a
+ * plan's shape differs between server versions.
+ */
+const explain = (target: PgTarget): i32 => {
+  const users: string = "select u.username from users u where u.id = q.key"
+  const slugs: string = "select a.title from articles a where a.slug = q.key"
+  const tags: string = "select tg.name from article_tags at join tags tg on tg.id = at.tag_id where at.article_id = q.key"
+  const ints: string = "{3,1,9,2}"
+  const texts: string = "{quotes-2,nope,notes-1}"
+  const cases: string[] = [
+    explainOne(target, sortedBatcher("users sorted", PG_BATCH_INT, users, "", toI32(32), true), ints),
+    explainOne(target, sortedBatcher("users unsorted", PG_BATCH_INT, users, "", toI32(32), false), ints),
+    explainOne(target, sortedBatcher("slugs sorted", PG_BATCH_TEXT, slugs, "", toI32(32), true), texts),
+    explainOne(target, sortedBatcher("slugs unsorted", PG_BATCH_TEXT, slugs, "", toI32(32), false), texts),
+    explainOne(target, sortedBatcher("tags by name sorted", PG_BATCH_INT, tags, "t.name", toI32(32), true), ints),
+    explainOne(target, sortedBatcher("tags by name unsorted", PG_BATCH_INT, tags, "t.name", toI32(32), false), ints),
+  ]
+  let code: i32 = 0
+  for (const line of cases) {
+    console.log(line)
+    if (line.endsWith("no plan") || line.endsWith("no parameter")) {
+      code = 1
+    }
+  }
+  return code
+}
+
 /** `unix`: a socket the server trusts, or maps by peer credentials, so a wrong password still logs in; then reads over it. */
 const unix = (target: PgTarget): i32 => {
   if (!target.unix) {
@@ -1670,6 +1779,8 @@ export const main = (): i32 => {
     return conduit(target)
   } else if (scenario === "batch") {
     return batch(target)
+  } else if (scenario === "explain") {
+    return explain(target)
   } else if (scenario === "batchscale") {
     return batchscale(target)
   } else if (scenario === "unix") {
