@@ -807,7 +807,7 @@ Not measured by `bench/run.mjs`, which carries this section over unchanged. `nod
 
 Under `--cpu x86-64-v3`: −18.6%, −17.1%, −24.1% (bands ±2.6%, ±0.4%, ±6.4%). The steps, in instructions a head (loadgen GET / POST / browser GET), each kept because it moved all three: the line scan jumps to the first control byte of a 16-byte block instead of finishing it a byte at a time (5,617/7,761/16,335 → 5,399/7,422/15,757); a branch-free token check against a 128-bit set (→ 5,182/7,098/14,962); a kept field name lowercased while it is scanned in `head` rather than in a second pass (→ 5,113/6,987/14,627); CRLF taken in one step (→ 4,776/6,492/13,685). Results are checked identical to main's parser by `tests/link/net_http1_parse_diff`.
 <!-- http-parse:end -->
-<!-- http1-conn:begin -->
+<!-- http-conn:begin -->
 ## Http1Connection per request, hot, cold and idle
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/http1-conn/run.mjs` times `Http1Connection` and the codec under it per request, with no socket, against `main`'s `std/` (`old`) and a byte-identical copy of that build (`old′`, the noise band); [bench/http1-conn/README.md](../bench/http1-conn/README.md) describes the three shapes and the RSS mode.
@@ -828,7 +828,7 @@ Not measured by `bench/run.mjs`, which carries this section over unchanged. `nod
 | peak RSS per idle connection, bytes | 1026 (1025–1026) | 1025 (1025–1026) | 1026 (1025–1026) |
 
 ns per request, median (min–max) and ratio of medians to `old`. Under cachegrind (the difference between 100,000 and 0 idle requests over 10,000 connections, over 100,000) an idle request misses D1 10.95 times on `main` and 9.00 on this layout, from 2,392.5 to 2,387.5 data references.
-<!-- http1-conn:end -->
+<!-- http-conn:end -->
 
 <!-- sha-block:begin -->
 ## SHA-256's block function
