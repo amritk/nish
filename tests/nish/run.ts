@@ -277,9 +277,11 @@ const stripHeader = (ir: string): string[] => {
   return splitLines(trim(kept.join("\n")));
 };
 
-/** Whether the program declares its own entry, in either spelling (WP22). */
+/** Whether the program declares its own entry: either spelling (WP22), or an `async` one (WP49). */
 const hasEntry = (source: string): boolean =>
-  source.indexOf("export const main") >= 0 || source.indexOf("export function main") >= 0;
+  source.indexOf("export const main") >= 0 ||
+  source.indexOf("export function main") >= 0 ||
+  source.indexOf("export async function main") >= 0;
 
 /** Every `<name>.ts` in `tests/cases`, sorted, with the extension removed. */
 const caseNames = (): string[] => {
