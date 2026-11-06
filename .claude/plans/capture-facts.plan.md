@@ -68,13 +68,13 @@ stages:
         status: completed
       - id: docs-rules
         content: Rewrite LANGUAGE.md's capture paragraph, ARCHITECTURE.md's capture row and IR_COOKBOOK.md's capture note — see Docs
-        status: in_progress
+        status: completed
       - id: security-record
         content: Add a CG row to docs/security/codegen.md and a Properties verified row — see Docs
-        status: pending
+        status: completed
       - id: goldens-pr
         content: Regenerate tests/self/goldens, read the diff, open the perf(codegen) PR — see Verification
-        status: pending
+        status: in_progress
 ---
 
 # Facts for arrow captures
