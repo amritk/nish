@@ -1510,7 +1510,8 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
     emitter.declareType(ARRAY_TYPE)
   }
   // Every triple, in argument order: `netWrite2` has two.
-  for (let at = 0; at < values.length && values.length === params.length; at++) {
+  // The loop bound `at + 2 < values.length` proves all three reads in range.
+  for (let at = 0; at + 2 < values.length && values.length === params.length; at++) {
     if (isNetRangeBuffer(name, at)) {
       const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
       const field = fn.emitValue(
