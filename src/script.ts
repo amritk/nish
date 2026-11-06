@@ -149,7 +149,7 @@ export const liftScript = (parser: Parser, file: Node): void => {
     let i = 0
     while (i < file.children.length) {
       const stmt = file.children[i]
-      if (!stays[i] && bindsAny(stmt, named)) {
+      if (i < stays.length && !stays[i] && bindsAny(stmt, named)) {
         stays[i] = true
         collectSpelledNames(stmt, named)
         changed = true
@@ -163,7 +163,8 @@ export const liftScript = (parser: Parser, file: Node): void => {
   let i = 0
   while (i < file.children.length) {
     const stmt = file.children[i]
-    const moves = isTopLevelStatement(stmt) || isTopLevelLet(stmt) || (isLocalCandidate(stmt) && !stays[i])
+    const moves =
+      isTopLevelStatement(stmt) || isTopLevelLet(stmt) || (isLocalCandidate(stmt) && i < stays.length && !stays[i])
     if (moves) {
       if (body.children.length === 0) {
         body.start = stmt.start
