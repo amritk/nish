@@ -441,6 +441,11 @@ export const isGatheredRest = (node: Node): boolean =>
 // N_SPREAD: a call's argument, `f(...xs)`, which the checker refuses with
 // its own message rather than the array literal's.
 export const FLAG_SPREAD_ARGUMENT: i32 = 67108864
+// N_FUNCTION: bit 27 marks the `main` `src/script.ts` builds around an entry
+// module's top-level code. Nobody wrote it, so the TypeScript the program is
+// written back out as (`src/emit-ts-edits.ts`) moves the statements rather
+// than the function, and the checker's rules about that code read it here.
+export const FLAG_SCRIPT: i32 = 134217728
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored

@@ -105,6 +105,7 @@ import {
   Node,
 } from "./nodes"
 import { CheckedProgram, Instantiation, STRUCT_INTERFACE } from "./program"
+import { sourceOrder } from "./script"
 import { StringBuilder } from "./strings"
 import { isInteger, TypeTable } from "./types"
 
@@ -1245,7 +1246,9 @@ const propertyImports = (walk: Walk, stmt: Node, edits: Edit[]): string => {
  */
 export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
   collectNames(walk, file)
-  for (const stmt of file.children) {
+  // An entry's top-level code is written back where it stands
+  // (`src/script.ts`), so the `main` built around it is not written at all.
+  for (const stmt of sourceOrder(file)) {
     if (stmt.kind === N_IMPORT) {
       if (
         stmt.children.length > 0 &&

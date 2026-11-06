@@ -81,7 +81,8 @@ const program = (name, entry, argsFile, kind) => ({
 })
 
 /**
- * Every `tests/cases/*.ts` with an exported `main` in either spelling (WP22) and no `.err`, and
+ * Every `tests/cases/*.ts` with an exported `main` in either spelling (WP22), or named
+ * `script_*` and written as top-level code (`src/script.ts`), and no `.err`, and
  * every corpus program: `tests/differential/corpus/<name>.ts` (+ `<name>.args`)
  * or `tests/differential/corpus/<name>/main.ts` (+ `args`) for multi-module ones.
  */
@@ -98,6 +99,7 @@ const discoverPrograms = ({ cases = true, corpus = true } = {}) => {
         continue
       }
       if (
+        !name.startsWith("script_") &&
         !/\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
       ) {
         continue

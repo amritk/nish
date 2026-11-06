@@ -82,6 +82,7 @@ import {
   FLAG_CONST,
   FLAG_OPTIONAL,
   FLAG_SATISFIES,
+  FLAG_SCRIPT,
   N_ARRAY,
   N_ARROW,
   N_AS,
@@ -146,6 +147,19 @@ import {
   T_VOID,
   R_UNKNOWN,
 } from "./types"
+
+/**
+ * The message for a name nothing binds. A variable of the entry module's
+ * top-level code is a local of the `main` `src/script.ts` builds, so a function
+ * that names one is told why it cannot see it.
+ */
+const unknownIdentifier = (ctx: CheckContext, name: string): string => {
+  const current = ctx.current
+  if (current !== null && (current.decl.flags & FLAG_SCRIPT) === 0 && ctx.program.scriptLocals.has(name)) {
+    return `\`${name}\` is a variable of the entry module's top-level code, which runs as \`main\`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module \`const\` above the code`
+  }
+  return `Unknown identifier \`${name}\``
+}
 
 /**
  * WP33 R1: one node of the pass 1 sweep (`refuseUnsupportedForms`), refusing
@@ -1001,7 +1015,7 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (expr.text === "Date" || expr.text === "crypto") {
     return ctx.errorType(expr, expr.text === "Date" ? dateRefusal("Date") : cryptoRefusal("crypto"))
   }
-  return ctx.errorType(expr, `Unknown identifier \`${expr.text}\``)
+  return ctx.errorType(expr, unknownIdentifier(ctx, expr.text))
 }
 
 /** WP29: whether `local` is a capture the arrow being checked has already made (`captureOuter`). */
@@ -3089,7 +3103,7 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     if (ctx.program.constant(target.text) !== null) {
       return ctx.errorType(target, `Cannot assign to \`${target.text}\` because it is a module constant`)
     }
-    return ctx.errorType(target, `Unknown identifier \`${target.text}\``)
+    return ctx.errorType(target, unknownIdentifier(ctx, target.text))
   }
   if (!local.mutable) {
     const what = local.storage === STORAGE_PARAM ? "parameter" : "const"

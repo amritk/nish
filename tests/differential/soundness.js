@@ -178,6 +178,7 @@ const GATES = ["--deny-panics", "--deny-retention"]
 const readsArena = (file) => /\bArena\.used\(/.test(fs.readFileSync(file, "utf8"))
 
 const hasMain = (file) =>
+  path.basename(file).startsWith("script_") ||
   /\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(file, "utf8"))
 
 const words = (file) =>

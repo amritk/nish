@@ -53,6 +53,7 @@ import { handleFindings } from "./handles"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
+import { liftScript } from "./script"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
@@ -749,6 +750,9 @@ export class Compilation {
     const isEntry = this.modules.length === 0
     if (isEntry) {
       this.rootPackageDir = packageDirOf(name)
+      // Before anything numbers the tree by its size: the `main` it builds
+      // takes its ids from the same parser.
+      liftScript(parser, file)
     }
     const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name)
     const checker = new Checker(

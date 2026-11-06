@@ -277,8 +277,14 @@ const stripHeader = (ir: string): string[] => {
   return splitLines(trim(kept.join("\n")));
 };
 
-/** Whether the program declares its own entry: either spelling (WP22), or an `async` one (WP49). */
-const hasEntry = (source: string): boolean =>
+/**
+ * Whether the program is whole, with an entry of its own: it declares `main`
+ * in either spelling (WP22) or as an `async` one (WP49), or it is a `script_*`
+ * case, whose top-level code becomes `main` (src/script.ts) and so links
+ * without the driver.
+ */
+const hasEntry = (name: string, source: string): boolean =>
+  name.startsWith("script_") ||
   source.indexOf("export const main") >= 0 ||
   source.indexOf("export function main") >= 0 ||
   source.indexOf("export async function main") >= 0;
@@ -506,7 +512,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     link.push("-pthread");
   }
   link.push(irPath);
-  if (!hasEntry(source)) {
+  if (!hasEntry(name, source)) {
     // `<name>.c` is the case's own driver when it has one, and `tests/driver.c`
     // — which prints `test()` as an `int` — otherwise. A case compiled with
     // `--number-mode f64` needs its own, because `test()` returns a double

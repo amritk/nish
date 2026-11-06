@@ -1410,6 +1410,12 @@ export class CheckedProgram {
   file: Node
   isEntry: boolean
   /**
+   * The variables an entry module's top-level code declares (`src/script.ts`),
+   * so that a function naming one is told why it cannot, rather than that the
+   * name is unknown.
+   */
+  scriptLocals: StringSet
+  /**
    * A call checked in this module gathered a rest parameter's arguments into
    * a new array node (`gatherRest` in `src/declarations.ts`), so the
    * module's parent links are taken again after checking.
@@ -1746,6 +1752,7 @@ export class CheckedProgram {
     this.source = source
     this.file = file
     this.isEntry = isEntry
+    this.scriptLocals = new StringSet()
     this.packageName = packageName
     this.symbolPrefix = packageSymbolPrefix(packageName)
     this.functions = []
