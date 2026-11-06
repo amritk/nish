@@ -3284,8 +3284,10 @@ export class Compilation {
       texts.push(module.ir)
     }
     const finished = finalizeAsync(registry, texts)
+    // `finalizeAsync` answers one text per module it was given, so the
+    // second test only says so to the bounds prover.
     let k = 0
-    while (k < out.length) {
+    while (k < out.length && k < finished.length) {
       out[k].ir = finished[k]
       k = k + 1
     }

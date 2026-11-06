@@ -33,13 +33,14 @@ import { Emitter } from "./emit"
 import { unpackReturnedResult } from "./emit-result"
 import { unwrapParens } from "./emit-util"
 import { internalErrorFor } from "./ice"
-import { IRBlock, IRFunction, IRParam, paramValue } from "./ir"
+import { IRBlock, IRFunction, IRParam, paramSuffix } from "./ir"
 import { isDigit } from "./lexer"
 import { StringMap } from "./map"
 import { N_UNARY, Node } from "./nodes"
 import { FunctionSig } from "./program"
 import { StringBuilder } from "./strings"
 import { roundUpTo } from "./structs"
+import { Local } from "./symbols"
 import { HARDENING_ATTRS } from "./target"
 
 /** How `emitCall` lowers a call to a suspending function: awaited, spawned, or one of an `awaitAll`. */
@@ -165,10 +166,15 @@ const storeHead = (
   const frame = fn.emitValue(`bitcast i8* ${base} to ${head}*`)
   const state = fn.emitValue(`getelementptr inbounds ${head}, ${head}* ${frame}, i32 0, i32 0`)
   fn.emit(`store i32 0, i32* ${state}`)
+  // The caller pushes a type and a value per operand, so the two lengths are
+  // equal and the second test only says so to the bounds prover.
   let k = 0
-  while (k < operandTypes.length) {
+  while (k < operandTypes.length && k < operandValues.length) {
+    // Both read before the calls, which end the length facts.
+    const type = operandTypes[k]
+    const value = operandValues[k]
     const at = fn.emitValue(`getelementptr inbounds ${head}, ${head}* ${frame}, i32 0, i32 ${k + 1}`)
-    fn.emit(`store ${operandTypes[k]} ${operandValues[k]}, ${operandTypes[k]}* ${at}`)
+    fn.emit(`store ${type} ${value}, ${type}* ${at}`)
     k = k + 1
   }
 }
@@ -207,8 +213,10 @@ const emitPoll = (emitter: Emitter, group: i32, names: string[]): void => {
   let done = ""
   let j = 0
   while (j < names.length) {
+    // Read before the call, which ends the length facts.
+    const name = names[j]
     const base = kidBase(emitter, group, j)
-    const finished = fn.emitValue(`call i1 @${names[j]}.resume(i8* ${base})`)
+    const finished = fn.emitValue(`call i1 @${name}.resume(i8* ${base})`)
     done = j === 0 ? finished : fn.emitValue(`and i1 ${done}, ${finished}`)
     j = j + 1
   }
@@ -415,13 +423,15 @@ export const emitAwaitAll = (emitter: Emitter, decl: Node): void => {
     emitPoll(emitter, group, memberNames)
   }
   const names = decl.children[0].children
-  const fn = emitter.fn
   member = 0
+  // `values` holds one value per call, so its test only says so to the
+  // bounds prover; all three are read before the calls end the length facts.
   let i = 0
-  while (i < calls.length && i < names.length) {
+  while (i < calls.length && i < names.length && i < values.length) {
     const call = calls[i]
-    const callee = emitter.program.nodeCallees[call.id]
+    const name = names[i]
     let value = values[i]
+    const callee = emitter.program.nodeCallees[call.id]
     if (callee !== null && suspends(callee)) {
       const base = kidBase(emitter, group, member)
       value = loadAnswer(
@@ -435,20 +445,32 @@ export const emitAwaitAll = (emitter: Emitter, decl: Node): void => {
       )
       member = member + 1
     }
-    const local = emitter.program.nodeLocals[names[i].id]
+    const local = emitter.program.nodeLocals[name.id]
     if (local === null || emitter.table.isMaybe(local.type)) {
       asyncFail(emitter, "an `awaitAll` name with no plain local")
       return
     }
-    const ty = emitter.llvm(local.type)
-    const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(local.type))
-    emitter.setSlot(local, slot)
-    fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(local.type)}`)
-    const debug = emitter.debug
-    if (debug !== null) {
-      debug.declareLocal(fn, local, slot, names[i])
-    }
+    bindAwaitAllName(emitter, local, value, name)
     i = i + 1
+  }
+}
+
+/**
+ * The slot of one `awaitAll` name, holding `value`: what
+ * `emitVariableDeclaration` writes for a `const`, with the value already
+ * computed. A function of its own because its pass stores the slot, so the
+ * loop above can release nothing per name, and the type strings made here
+ * would be arena memory each pass left behind (NL9011).
+ */
+const bindAwaitAllName = (emitter: Emitter, local: Local, value: string, name: Node): void => {
+  const fn = emitter.fn
+  const ty = emitter.llvm(local.type)
+  const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(local.type))
+  emitter.setSlot(local, slot)
+  fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(local.type)}`)
+  const debug = emitter.debug
+  if (debug !== null) {
+    debug.declareLocal(fn, local, slot, name)
   }
 }
 
@@ -521,6 +543,24 @@ const irNameEnd = (text: string, at: i32): i32 => {
   return i
 }
 
+/**
+ * What a `ret` of a suspending function becomes, pushed onto `out`: the
+ * answer and the finished state stored, and true answered. A function of its
+ * own because the loop over a block's instructions keeps every line it makes,
+ * so it can release nothing per `ret`, and the pieces of `instr` read here
+ * would be arena memory each pass left behind (NL9011).
+ */
+const finishRet = (instr: string, out: string[]): void => {
+  const meta = metadataOf(instr)
+  const plain = withoutMetadata(instr)
+  if (plain !== "ret void") {
+    const type = typeAt(plain, 4)
+    out.push(`store ${type} ${plain.substring(4 + type.length + 1)}, ${type}* %async.answer${meta}`)
+  }
+  out.push(`store i32 -1, i32* %async.state${meta}`)
+  out.push(`ret i1 true${meta}`)
+}
+
 /** The decimal number at the start of `text`, or -1. */
 const leadingNumber = (text: string): i32 => {
   if (text.length === 0 || !isDigit(text.charCodeAt(0))) {
@@ -533,6 +573,12 @@ const leadingNumber = (text: string): i32 => {
     i = i + 1
   }
   return value
+}
+
+/** Where `instr`'s metadata attachments start (its `, !`), or its length when it has none. */
+const metadataStart = (instr: string): i32 => {
+  const at = instr.indexOf(", !")
+  return at < 0 ? instr.length : at
 }
 
 /** An instruction without its trailing `, !dbg !N` (or other) metadata. */
@@ -606,8 +652,10 @@ const typeAt = (text: string, start: i32): string => text.substring(start, typeE
 
 /** The word at `at` (up to a space), for skipping flags. */
 const wordAt = (text: string, at: i32): string => {
+  // Every caller starts at 0 or past a word it read, never below 0; the test
+  // says so to the bounds prover, which drops the read's check.
   let i = at
-  while (i < text.length && text.charCodeAt(i) !== 32) {
+  while (i >= 0 && i < text.length && text.charCodeAt(i) !== 32) {
     i = i + 1
   }
   return text.substring(at, i)
@@ -650,8 +698,10 @@ const skipFlags = (text: string, at: i32): i32 => {
 /** The index of the first top-level `, ` in `text` from `at`, or -1. */
 const topComma = (text: string, at: i32): i32 => {
   let depth = 0
+  // Every caller starts at 0 or past a word it read, never below 0; the test
+  // says so to the bounds prover, which drops the read's check.
   let i = at
-  while (i < text.length) {
+  while (i >= 0 && i < text.length) {
     const c = text.charCodeAt(i)
     if (c === 91 || c === 60 || c === 123 || c === 40) {
       depth = depth + 1
@@ -672,6 +722,12 @@ const splitTop = (text: string): string[] => {
   while (at <= text.length) {
     const comma = topComma(text, at)
     const end = comma < 0 ? text.length : comma
+    // `at` starts at 0 and steps past a comma, and `topComma` answers -1 or
+    // an index of `text`, so both always hold. Saying so is what proves the
+    // reads below in range and drops the `substring` clamps.
+    if (at < 0 || end > text.length) {
+      break
+    }
     let from = at
     while (from < end && text.charCodeAt(from) === 32) {
       from = from + 1
@@ -680,8 +736,10 @@ const splitTop = (text: string): string[] => {
     while (to > from && text.charCodeAt(to - 1) === 32) {
       to = to - 1
     }
+    // `from` rose from `at` and `to` fell from `end`, so the range is in
+    // order and inside `text`: `slice`, which has no clamp.
     if (to > from) {
-      parts.push(text.substring(from, to))
+      parts.push(text.slice(from, to))
     }
     if (comma < 0) {
       break
@@ -714,9 +772,16 @@ const indexTypes = (text: string): StringMap => {
   let at = text.indexOf("\n%")
   while (at >= 0) {
     const end = text.indexOf("\n", at + 1)
+    // `indexOf` answers -1 or an index of `text`, so this never breaks; it is
+    // what drops the clamp of the `substring` below.
+    if (end > text.length) {
+      break
+    }
     const line = end < 0 ? text.substring(at + 1) : text.substring(at + 1, end)
     const eq = line.indexOf(" = type ")
-    if (eq > 0) {
+    // `indexOf` answers an index of `line`, so the upper test always holds;
+    // it is what drops the clamp of the `substring` below.
+    if (eq > 0 && eq <= line.length) {
       out.set(line.substring(0, eq), at + 1 + eq + 8)
     }
     at = end < 0 ? -1 : text.indexOf("\n%", end)
@@ -948,10 +1013,21 @@ class Demoter {
     while (b < n) {
       const instrs = this.blocks[b].instructions
       if (instrs.length > 0) {
-        const last = withoutMetadata(instrs[instrs.length - 1])
+        // The terminator's targets are read in place, up to its metadata: a
+        // copy without it would be a string per block that this loop, which
+        // stores what it reads, could never release (NL9011). A `label %`
+        // cannot straddle the `, !` that starts the metadata, nor a name run
+        // past it.
+        const last = instrs[instrs.length - 1]
+        const cut = metadataStart(last)
         let at = last.indexOf("label %")
-        while (at >= 0) {
+        while (at >= 0 && at + 7 <= cut) {
           const end = irNameEnd(last, at + 6)
+          // A name ends past its sigil and at `cut` or before it, so this
+          // never breaks; it is what drops the clamp of the `substring` below.
+          if (end < 0 || end > last.length) {
+            break
+          }
           const target = this.labels.get(last.substring(at + 7, end), -1)
           if (target >= 0) {
             this.edge(b, target)
@@ -997,7 +1073,9 @@ class Demoter {
       if (k < this.succs[top].length) {
         next[next.length - 1] = k + 1
         const s = this.succs[top][k]
-        if (!visited[s]) {
+        // A successor is a block or the virtual entry, each with its entry in
+        // `visited`, so the range test always holds; it drops both checks.
+        if (s >= 0 && s < visited.length && !visited[s]) {
           visited[s] = true
           stack.push(s)
           next.push(0)
@@ -1009,10 +1087,13 @@ class Demoter {
       }
     }
     const order: i32[] = []
+    // Counting down from the last index, `i` stays below the length; the
+    // test says so to the bounds prover.
     let i = post.length - 1
-    while (i >= 0) {
-      this.rpoNum[post[i]] = order.length
-      order.push(post[i])
+    while (i >= 0 && i < post.length) {
+      const node = post[i]
+      this.rpoNum[node] = order.length
+      order.push(node)
       i = i - 1
     }
     this.idom[n] = n
@@ -1076,12 +1157,18 @@ class Demoter {
       const instrs = this.blocks[b].instructions
       let i = 0
       while (i < instrs.length) {
-        const def = this.defName(instrs[i])
+        // Read before the calls, which end the length facts.
+        const instr = instrs[i]
+        const def = this.defName(instr)
         if (def.length > 0) {
           this.defBlock.set(def, b)
           this.defIndex.set(def, i)
           this.defSlots.set(def, this.defTexts.length)
-          this.defTexts.push(withoutMetadata(instrs[i]).substring(def.length + 4))
+          // What follows `%def = `, up to the metadata, copied once: no `, !`
+          // can come before it, since a name holds no comma. A copy without
+          // the metadata first would be a string per definition that this
+          // loop, whose keys are stored, could never release (NL9011).
+          this.defTexts.push(instr.slice(def.length + 4, metadataStart(instr)))
         }
         i = i + 1
       }
@@ -1161,7 +1248,7 @@ class Demoter {
         const last = instrs[instrs.length - 1]
         const out: string[] = []
         let i = 0
-        while (i < instrs.length - 1) {
+        while (i + 1 < instrs.length) {
           out.push(instrs[i])
           i = i + 1
         }
@@ -1206,19 +1293,28 @@ class Demoter {
     out.add(instr.substring(0, from))
     let at = from
     let copied = from
-    while (at < instr.length) {
+    // `at` only rises from `from`, which is past a `%def = ` (or 4 where
+    // there is none), so the lower test always holds; it is what drops the
+    // read's check.
+    while (at >= 0 && at < instr.length) {
       if (instr.charCodeAt(at) !== 37) {
         at = at + 1
         continue
       }
       const end = irNameEnd(instr, at)
+      // A name ends past its sigil and at the end of `instr` or before it,
+      // so this never breaks; it is what drops the checks and clamps below.
+      if (end < 0 || end > instr.length) {
+        break
+      }
       const name = instr.substring(at + 1, end)
       const isLabel = at >= 6 && instr.substring(at - 6, at) === "label "
       if (!isLabel && this.defBlock.has(name)) {
         const db = this.defBlock.get(name, 0)
         const dominated = db === b ? this.defIndex.get(name, 0) < i : this.dominates(db, b)
         const use = this.reach(name, dominated, -1)
-        out.add(instr.substring(copied, at + 1))
+        // `copied` is never past `at`, which is inside `instr`: `slice`, which has no clamp.
+        out.add(instr.slice(copied, at + 1))
         out.add(use)
         copied = end
       }
@@ -1235,14 +1331,25 @@ class Demoter {
     let open = instr.indexOf("[ ", from)
     while (open >= 0) {
       const close = instr.indexOf(" ]", open)
+      // Every incoming pair the emitter writes is `[ <value>, %<label> ]`,
+      // so the `]` and the `, %` are always found; the tests are what prove
+      // the `substring` bounds and drop their clamps.
+      if (close < 0 || close > instr.length) {
+        break
+      }
       const pair = instr.substring(open + 2, close)
       const comma = lastIndexIn(pair, ", %")
+      if (comma < 0 || comma > pair.length) {
+        break
+      }
       const pred = this.labels.get(pair.substring(comma + 3), -1)
       const value = pair.substring(0, comma)
       if (value.startsWith("%") && this.defBlock.has(value.substring(1)) && pred >= 0) {
         const name = value.substring(1)
         const use = this.reach(name, this.dominates(this.defBlock.get(name, 0), pred), pred)
-        out.add(instr.substring(copied, open + 2))
+        // The last pair copied ended before this one opened, so the range
+        // is in order and inside `instr`: `slice`, which has no clamp.
+        out.add(instr.slice(copied, open + 2))
         out.add(`%${use}`)
         copied = open + 2 + comma
       }
@@ -1373,18 +1480,11 @@ export const transformAsync = (emitter: Emitter, sig: FunctionSig): void => {
   for (const block of fn.blocks) {
     const out: string[] = []
     for (const instr of block.instructions) {
-      if (!instr.startsWith("ret ")) {
+      if (instr.startsWith("ret ")) {
+        finishRet(instr, out)
+      } else {
         out.push(instr)
-        continue
       }
-      const meta = metadataOf(instr)
-      const plain = withoutMetadata(instr)
-      if (plain !== "ret void") {
-        const type = typeAt(plain, 4)
-        out.push(`store ${type} ${plain.substring(4 + type.length + 1)}, ${type}* %async.answer${meta}`)
-      }
-      out.push(`store i32 -1, i32* %async.state${meta}`)
-      out.push(`ret i1 true${meta}`)
     }
     block.instructions = out
   }
@@ -1396,6 +1496,12 @@ export const transformAsync = (emitter: Emitter, sig: FunctionSig): void => {
   const slotLines: string[] = []
   for (const line of fn.entryPrelude) {
     const eq = line.indexOf(" = alloca ")
+    // Every prelude line is an `emitAlloca`, so `eq` is always an index of
+    // `line`; the test is what drops the clamp of the `substring` below.
+    if (eq < 0 || eq > line.length) {
+      asyncFail(emitter, `\`${line}\` is not an alloca`)
+      continue
+    }
     const slot = line.substring(0, eq)
     const typeFrom = eq + 10
     const type = typeAt(line, typeFrom)
@@ -1448,7 +1554,8 @@ export const transformAsync = (emitter: Emitter, sig: FunctionSig): void => {
   let p = 0
   while (p < fn.params.length) {
     const param = fn.params[p]
-    const value = paramValue(param.name)
+    // `paramValue`'s spelling, written inline: a call there is one more arena string per parameter (NL9011).
+    const value = `%${param.name}${paramSuffix(param.name)}`
     e.push(`${value}.at = getelementptr inbounds ${frame}, ${frame}* %async.frame, i32 0, i32 ${p + 1}`)
     e.push(`${value} = load ${param.type}, ${param.type}* ${value}.at`)
     p = p + 1
@@ -1614,6 +1721,13 @@ class AsyncLayout {
         continue
       }
       const end = text.indexOf(MARK_END, at + 1)
+      // A placeholder is written whole and after the one copied last, so
+      // these tests always hold; they are what drop the clamps of the
+      // `substring`s below.
+      if (end < 0 || end > text.length || at > text.length || copied < 0 || copied > text.length) {
+        this.asyncFail("a placeholder with no end")
+        return text
+      }
       const mark = text.substring(at, end)
       let value = 0
       if (mark.startsWith(KIDS_MARK)) {
