@@ -9,7 +9,9 @@
 #         tests/link/net_interop_server — shared with every job below.
 # quic-interop-runner: the runner's server role against quic-go and ngtcp2:
 #         handshake, transfer, retry, chacha20, multiplexing, keyupdate,
-#         handshakeloss (L1), transferloss (L2), blackhole (B) and http3.
+#         handshakeloss (L1), transferloss (L2), blackhole (B), http3, and
+#         rebind-port (BP) and rebind-addr (BA), the client's NAT rebinding
+#         mid-transfer, each new path validated before it is trusted.
 # h2spec: every h2spec case against the HTTP/2 server.
 # curl:   curl --http3 and --http2, a GET of a 1 MB file and a POST with a
 #         body each; and curl --http2 resuming a TLS 1.3 session on a second
@@ -87,7 +89,7 @@ env:
   QUIC_GO: martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88
   NGTCP2: ghcr.io/ngtcp2/ngtcp2-interop@sha256:bd635531dbe210e5d7138a08dc61c2da2d702670ff718e440b961860f5e18235
   # The runner's cases, by the names its --json file gives them.
-  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3
+  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3,rebind-port,rebind-addr
   # h2spec 2.6.0's release tarball and its SHA-256.
   H2SPEC_URL: https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
   H2SPEC_SHA256: 157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318

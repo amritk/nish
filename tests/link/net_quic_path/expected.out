@@ -11,6 +11,9 @@ PASS  the PATH_RESPONSE validates the new port
 PASS  a port-only change keeps the congestion window and the RTT estimate (§9.4)
 PASS  but tests ECN again (§13.4.2)
 PASS  and the connection carries on there
+PASS  a closed congestion window still lets the move's datagram go
+PASS  and the first packet on the new path carries the PATH_CHALLENGE
+PASS  which the client's answer validates, the window still closed
 PASS  a new address is followed and challenged
 PASS  nothing is reset before the path is validated
 PASS  validated, a new address
@@ -54,4 +57,4 @@ PASS  a challenge in a packet that moved the connection is answered on the new p
 PASS  with its data
 PASS  fifty rebinds, each challenged and answered, keep no arena memory
 PASS  and the connection follows the last
-quic paths: 56 passed, 0 failed, 0 skipped
+quic paths: 59 passed, 0 failed, 0 skipped

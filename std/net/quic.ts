@@ -3899,7 +3899,8 @@ export class QuicConnection {
         out,
         payloadStart,
         payloadStart + remaining - overhead,
-        elicit
+        elicit,
+        !sent.full()
       )
       if (payloadEnd <= payloadStart) {
         continue
@@ -3983,14 +3984,15 @@ export class QuicConnection {
    * The frames of one packet of `space`, written into `out[start .. end)`:
    * an ACK when one is due, and, when `elicit` allows frames that elicit an
    * acknowledgement, CRYPTO data (lost bytes first), at the application
-   * level HANDSHAKE_DONE, RETIRE_CONNECTION_ID, NEW_CONNECTION_ID,
-   * PATH_RESPONSE, the streams' control frames, DATAGRAMs and stream data,
-   * and for a probe with nothing else to carry a PING. Answers the offset
+   * level HANDSHAKE_DONE, RETIRE_CONNECTION_ID, NEW_CONNECTION_ID, the path
+   * frames, the streams' control frames, DATAGRAMs and stream data, and for
+   * a probe with nothing else to carry a PING. Without `elicit`, the path
+   * frames still go when `pathFrames` says the packet can be recorded. Answers the offset
    * past the last frame, `start` when nothing is due. What it carries is
    * written to the space's staging row, and `stagedEliciting` says whether
    * anything elicits an acknowledgement.
    */
-  buildPayloadInto(space: QuicConnSpace, out: u8[], start: i32, end: i32, elicit: boolean): i32 {
+  buildPayloadInto(space: QuicConnSpace, out: u8[], start: i32, end: i32, elicit: boolean, pathFrames: boolean): i32 {
     let at: i32 = start
     space.clearStaged()
     if (space.received.ackPending) {
@@ -4001,6 +4003,9 @@ export class QuicConnection {
       }
     }
     if (!elicit) {
+      if (pathFrames && space.level === TLS_LEVEL_APPLICATION) {
+        at = this.buildPathFrames(space, out, at, end)
+      }
       return at
     }
     at = this.buildCrypto(space, out, at, end)
@@ -4068,49 +4073,15 @@ export class QuicConnection {
   }
 
   /**
-   * The 1-RTT frames beyond ACK, as many as fit in `out[at .. end)` and in
-   * the packet's record: `QUIC_CONN_PACKET_CONTROL` control frames and
-   * `QUIC_CONN_PACKET_STREAMS` STREAM frames, and every DATAGRAM that fits.
+   * The path frames of a 1-RTT packet into `out[at .. end)`: every
+   * PATH_RESPONSE owed and the PATH_CHALLENGE on a path being validated.
+   * They go even when the congestion window holds everything else back
+   * (`buildPayloadInto`), so the first packet on a new path validates it
+   * (RFC 9000 §9.3); the path's own 3x limit still bounds them, and a
+   * challenge is drawn at most once a probe timeout.
    */
-  buildApplication(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
+  buildPathFrames(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
     let at: i32 = start
-    if (this.handshakeDonePending && at < end) {
-      at = quicPutTypeOnly(out, at, end, QUIC_FRAME_HANDSHAKE_DONE)
-      this.handshakeDonePending = false
-      space.setFlags(space.staging, QUIC_CONN_SENT_HANDSHAKE_DONE)
-      space.stagedEliciting = true
-    }
-    // RETIRE_CONNECTION_ID is at most 9 bytes, NEW_CONNECTION_ID with an
-    // 8-byte ID at most 42, PATH_RESPONSE 9.
-    while (
-      this.cids.retireCount > 0 &&
-      end - at >= 9 &&
-      space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
-    ) {
-      const sequence: i64 = this.cids.takeRetire()
-      at = quicPutValue(out, at, end, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence)
-      space.stageControl(QUIC_CONN_CONTROL_RETIRE, sequence)
-    }
-    let entry: QuicCidEntry | null = this.cids.nextUnannounced()
-    while (entry !== null && end - at >= 42 && space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
-      const next: i32 = quicPutNewConnectionId(
-        out,
-        at,
-        end,
-        entry.sequence,
-        QUIC_CONN_NONE,
-        entry.cid,
-        entry.length,
-        entry.resetToken
-      )
-      if (next < 0) {
-        break
-      }
-      at = next
-      entry.announced = true
-      space.stageControl(QUIC_CONN_CONTROL_NEW_CID, entry.sequence)
-      entry = this.cids.nextUnannounced()
-    }
     while (this.pathCount > 0 && end - at >= 9) {
       const next: i32 = quicPutPathData(
         out,
@@ -4149,6 +4120,54 @@ export class QuicConnection {
         this.pathFrameStaged = true
       }
     }
+    return at
+  }
+
+  /**
+   * The 1-RTT frames beyond ACK, as many as fit in `out[at .. end)` and in
+   * the packet's record: `QUIC_CONN_PACKET_CONTROL` control frames and
+   * `QUIC_CONN_PACKET_STREAMS` STREAM frames, and every DATAGRAM that fits.
+   */
+  buildApplication(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
+    let at: i32 = start
+    if (this.handshakeDonePending && at < end) {
+      at = quicPutTypeOnly(out, at, end, QUIC_FRAME_HANDSHAKE_DONE)
+      this.handshakeDonePending = false
+      space.setFlags(space.staging, QUIC_CONN_SENT_HANDSHAKE_DONE)
+      space.stagedEliciting = true
+    }
+    // RETIRE_CONNECTION_ID is at most 9 bytes, NEW_CONNECTION_ID with an
+    // 8-byte ID at most 42.
+    while (
+      this.cids.retireCount > 0 &&
+      end - at >= 9 &&
+      space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
+    ) {
+      const sequence: i64 = this.cids.takeRetire()
+      at = quicPutValue(out, at, end, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence)
+      space.stageControl(QUIC_CONN_CONTROL_RETIRE, sequence)
+    }
+    let entry: QuicCidEntry | null = this.cids.nextUnannounced()
+    while (entry !== null && end - at >= 42 && space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
+      const next: i32 = quicPutNewConnectionId(
+        out,
+        at,
+        end,
+        entry.sequence,
+        QUIC_CONN_NONE,
+        entry.cid,
+        entry.length,
+        entry.resetToken
+      )
+      if (next < 0) {
+        break
+      }
+      at = next
+      entry.announced = true
+      space.stageControl(QUIC_CONN_CONTROL_NEW_CID, entry.sequence)
+      entry = this.cids.nextUnannounced()
+    }
+    at = this.buildPathFrames(space, out, at, end)
     const streams: QuicStreams = this.streams
     while (space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
       const next: i32 = streams.putNextControl(out, at, end)

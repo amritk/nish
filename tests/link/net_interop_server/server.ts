@@ -100,11 +100,11 @@ const randomBytes = (n: i32): u8[] => {
 
 /**
  * The quic-interop-runner test cases this server takes, by the `TESTCASE` a
- * server is handed (the runner's `keyupdate`, `multiplexing`, `transferloss`
- * and `blackhole` reach a server as `transfer`, and `handshakeloss` as
- * `multiconnect`), and "" outside the runner. Every other case — resumption,
- * 0-RTT, migration, rebinding, v2, ECN — is out of scope, and the runner is
- * told so by exit 127.
+ * server is handed (the runner's `keyupdate`, `multiplexing`, `transferloss`,
+ * `blackhole`, `rebind-port` and `rebind-addr` reach a server as `transfer`,
+ * and `handshakeloss` as `multiconnect`), and "" outside the runner. Every
+ * other case — resumption, 0-RTT, server-preferred-address migration, v2,
+ * ECN — is out of scope, and the runner is told so by exit 127.
  */
 export const supportedTestcase = (name: string): boolean =>
   name === "" ||

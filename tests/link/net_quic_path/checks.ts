@@ -398,11 +398,30 @@ const arenaChecks = (t: Suite): void => {
   t.ok("and the connection follows the last", pSendsTo(p.conn, pAddr(n32(3), n32(1059))));
 };
 
+/**
+ * A window full when the client moves: the first datagram to the new path
+ * still carries the PATH_CHALLENGE, as the interop runner's rebinding cases
+ * ask, where before it was an ACK alone.
+ */
+const windowChecks = (t: Suite): void => {
+  const p: PPair = pPair();
+  p.conn.recovery.congestionWindow = 0;
+  const from: i32 = toI32(p.c.appPayloads.length);
+  const rebound: u8[] = pAddr(n32(1), n32(50001));
+  pFrom(p, rebound, pPing(p.c));
+  t.ok("a closed congestion window still lets the move's datagram go", toI32(p.c.appPayloads.length) > from);
+  const first: QcFound = qcFind([p.c.appPayloads[from]], QUIC_FRAME_PATH_CHALLENGE);
+  t.ok("and the first packet on the new path carries the PATH_CHALLENGE", first.found && pSendsTo(p.conn, rebound));
+  pAnswer(p, rebound);
+  t.ok("which the client's answer validates, the window still closed", !p.conn.pathValidating && toHex(p.conn.pathValidated) === toHex(rebound));
+};
+
 /** Runs every check and answers the exit code. */
 export const quicPathChecks = (): i32 => {
   const t = new Suite("quic paths");
   homeChecks(t);
   portChecks(t);
+  windowChecks(t);
   addressChecks(t);
   responseChecks(t);
   forgedChecks(t);
