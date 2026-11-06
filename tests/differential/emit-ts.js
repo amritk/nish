@@ -115,7 +115,7 @@ const scratchRoot = (work, side) => {
  * their stages land: R4b's numbers, R4c's strings, R4d's records, R4e's
  * control flow; `libm` is the 1-ulp row that stays; `ffi` a program whose C
  * functions cannot be written (NL4010); `refused` one `--emit-ts` refuses for
- * now (NL4011 to NL4015); `host` a program reading what Node cannot express
+ * now (NL4011 to NL4016); `host` a program reading what Node cannot express
  * (`HOST`); `range` a ranged integer leaving its range, a native panic Node
  * does not check (§3.3, class B).
  */
@@ -342,7 +342,7 @@ export const compare = async (prog, compiler, workRoot = WORK) => {
   // native process.
   const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg) && !NATIVE_ONLY.includes(arg))
   const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
-  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL401[0-5])"/)
+  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL401[0-6])"/)
   // The native build is read first, so a program that is both refused and
   // broken natively is an error rather than a listed refusal. The exception is
   // an NL4010 refusal: a module that declares C functions may need C this

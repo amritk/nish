@@ -1059,6 +1059,58 @@ declare module "nish:region" {
   export function free<T>(r: Region<T>): void;
 }
 
+// `nish:async` (WP49, docs/LANGUAGE.md -> Async functions). `tsc` sees ordinary
+// promises; what `nish` adds is that each argument is a direct call to an
+// `async` function, written where it is made, which the checker holds it to
+// (`src/async-check.ts`), and that `awaitAll` takes two to eight of them.
+declare module "nish:async" {
+  /** Start `task` and go on without its answer; it runs until it first waits. */
+  export function spawn(task: Promise<void>): void;
+  /** Await every call at once; the answers come in the order the calls are written. */
+  export function awaitAll<A, B>(a: Promise<A>, b: Promise<B>): Promise<[A, B]>;
+  export function awaitAll<A, B, C>(a: Promise<A>, b: Promise<B>, c: Promise<C>): Promise<[A, B, C]>;
+  export function awaitAll<A, B, C, D>(
+    a: Promise<A>,
+    b: Promise<B>,
+    c: Promise<C>,
+    d: Promise<D>,
+  ): Promise<[A, B, C, D]>;
+  export function awaitAll<A, B, C, D, E>(
+    a: Promise<A>,
+    b: Promise<B>,
+    c: Promise<C>,
+    d: Promise<D>,
+    e: Promise<E>,
+  ): Promise<[A, B, C, D, E]>;
+  export function awaitAll<A, B, C, D, E, F>(
+    a: Promise<A>,
+    b: Promise<B>,
+    c: Promise<C>,
+    d: Promise<D>,
+    e: Promise<E>,
+    f: Promise<F>,
+  ): Promise<[A, B, C, D, E, F]>;
+  export function awaitAll<A, B, C, D, E, F, G>(
+    a: Promise<A>,
+    b: Promise<B>,
+    c: Promise<C>,
+    d: Promise<D>,
+    e: Promise<E>,
+    f: Promise<F>,
+    g: Promise<G>,
+  ): Promise<[A, B, C, D, E, F, G]>;
+  export function awaitAll<A, B, C, D, E, F, G, H>(
+    a: Promise<A>,
+    b: Promise<B>,
+    c: Promise<C>,
+    d: Promise<D>,
+    e: Promise<E>,
+    f: Promise<F>,
+    g: Promise<G>,
+    h: Promise<H>,
+  ): Promise<[A, B, C, D, E, F, G, H]>;
+}
+
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 
 declare const Arena: {

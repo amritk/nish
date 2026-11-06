@@ -108,7 +108,8 @@ the difference is a row of [the user guide's table](guide/using-nish/to-typescri
 or a bug in `nish` worth reporting. A program on `nish:net`, the signal
 descriptor or a C declaration (NL4010, NL4011), a compound assignment whose
 index would run twice (NL4012) or a generic whose element type decides its
-code (NL4013, NL4014) is refused and has no TypeScript to run.
+code (NL4013, NL4014) or an `async` function (NL4016) is refused and has no
+TypeScript to run.
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
@@ -179,7 +180,7 @@ rejects. This table is the highest-value part of the page.
 | `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
 | `<T>(p: T) => p.x` (a member of a type parameter) | `` Cannot read `x` of `T`: an unconstrained type parameter has no members `` | `<T extends Point>(p: T) => p.x`, where `Point` is a class or interface that declares `x` |
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
-| a promise in a variable, `.then`, `Promise.all` | forbidden: a promise is never a value | `await` each call where it is made; see [Async functions](#async-functions-checked-not-yet-compiled) |
+| a promise in a variable, `.then`, `Promise.all` | forbidden: a promise is never a value | `await` each call where it is made; see [Async functions](#async-functions) |
 | `namespace N { }`, `declare global { }`, `@decorator` | forbidden | one module per file; a plain function in place of a decorator |
 | `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
@@ -877,12 +878,15 @@ export const main = (): i32 => {
 };
 ```
 
-### Async functions: checked, not yet compiled
+### Async functions
 
-`async` is checked by this release and refused at the end with `NL2653`
-(`` `async` function `run` is checked, but not yet compiled ``); a program
-without it is untouched. Write it to these rules now and it compiles once the
-lowering ships:
+`async` compiles natively: a function that awaits becomes a frame and a resume
+switch, one that awaits nothing a plain function, and `export async function
+main` runs to its end, then finishes every task it spawned. Nothing waits on
+sockets or timers in this release, so every task runs to completion.
+`--emit-ts` refuses it for now (`NL4016`); keep such a program native. A call
+that can fail answers `Promise<Result<T, E>>`: test the `Result` after the
+`await`. The rules:
 
 - `async` goes on a top-level `function` or an arrow, never a method
   (`NL1063`). Its return type is `Promise<T>` (`NL2655`), and `Promise<T>`
@@ -903,6 +907,9 @@ lowering ships:
 - An `async` arrow goes only to a parameter whose function type answers
   `Promise<T>` (`NL2639`), and only an `async` one goes there (`NL2640`).
 - No `async` under a wasm target or `--profile wasi` (`NL2652`).
+- `spawn(f(x))` runs `f` at once, until it first waits on the outside world,
+  before it returns; Node runs `f` only to its first `await` and the rest
+  after the spawning task yields. Do not rely on either order.
 
 ```ts nish:err NL2642
 async function load(id: i32): Promise<i32> {

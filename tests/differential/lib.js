@@ -100,7 +100,7 @@ const discoverPrograms = ({ cases = true, corpus = true } = {}) => {
       }
       if (
         !name.startsWith("script_") &&
-        !/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
+        !/\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
       ) {
         continue
       }

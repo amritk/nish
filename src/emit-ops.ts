@@ -459,6 +459,10 @@ export const emitUnary = (emitter: Emitter, expr: Node): string => {
     return emitIncDec(emitter, expr)
   }
   const operand = expr.children[0]
+  // WP49: the awaited call itself polls (`emitAsyncCall`), so `await` adds nothing.
+  if (op === "await") {
+    return emitter.emitExpression(operand)
+  }
   if (op === "-") {
     const type = emitter.typeOf(operand)
     const literal = unwrapParens(operand)

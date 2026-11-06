@@ -279,13 +279,15 @@ const stripHeader = (ir: string): string[] => {
 
 /**
  * Whether the program is whole, with an entry of its own: it declares `main`
- * in either spelling (WP22), or it is a `script_*` case, whose top-level code
- * becomes `main` (src/script.ts) and so links without the driver.
+ * in either spelling (WP22) or as an `async` one (WP49), or it is a `script_*`
+ * case, whose top-level code becomes `main` (src/script.ts) and so links
+ * without the driver.
  */
 const hasEntry = (name: string, source: string): boolean =>
   name.startsWith("script_") ||
   source.indexOf("export const main") >= 0 ||
-  source.indexOf("export function main") >= 0;
+  source.indexOf("export function main") >= 0 ||
+  source.indexOf("export async function main") >= 0;
 
 /** Every `<name>.ts` in `tests/cases`, sorted, with the extension removed. */
 const caseNames = (): string[] => {
