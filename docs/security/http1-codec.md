@@ -414,11 +414,12 @@ window and scan state, the flags, then the request's numbers, the caps and,
 last, what only a `keepText` parser or a response reads), and it makes its
 `spans` before its other arrays, so a request on a cold slot touches fewer
 lines; `Http1Connection` makes its parser before its `HttpDate`. Its size
-stays 200 bytes and no slot holds a new buffer. `unpark` now finds a parked
-buffer by comparing it with the slot's `noOutput`, which `park` put in its
-place, before it falls back to the length test it ran before, so an empty
-buffer that is not `noOutput` is still swapped for a lent one. What the parser
-accepts or refuses does not change. Tests: `a slot that lent its buffers holds
+stays 200 bytes and no slot holds a new buffer. `unpark` first compares a
+buffer with the slot's `noOutput`, which `park` put in its place, and only
+then runs the length test it ran before. The comparison is a speed-up and has
+no behaviour of its own: `noOutput` is empty, so the length test alone takes
+the same branch, and an empty buffer that is not `noOutput` is still swapped
+for a lent one. What the parser accepts or refuses does not change. Tests: `a slot that lent its buffers holds
 its noOutput in their place`, `the first part of a request split across reads
 takes a lent buffer back`, `and the rest of it is answered, the buffer lent
 again after`, `a request that grows past the lent input buffer is answered, and
