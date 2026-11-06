@@ -1648,7 +1648,8 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
 
 - **A default is a constant or an earlier parameter**: a numeric literal (a
   negative one too), `true`/`false`, a string literal, an enum member, or the
-  name of a parameter written before it. Anything else is refused
+  name of a parameter written before it, or `null` for a `T | null`
+  parameter (next rule). Anything else is refused
   (`reject_param_default_expression`, `reject_param_default_later`,
   `reject_param_default_array`, `reject_param_default_fraction`).
 - **A `T | null` parameter defaults to `null`, and only to `null`**:
@@ -1664,7 +1665,8 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
   default (`reject_param_default_null_generic`).
 - **A default's parameter is annotated**, `n: i32 = 1`, never `n = 1`
   (`reject_param_default_untyped`), and its type is a number, `boolean`,
-  `string` or enum (`reject_param_default_parameter_type`), not a type
+  `string`, enum or a `T | null` defaulting to `null`
+  (`reject_param_default_parameter_type`), not a type
   parameter (`reject_param_default_generic`). Every parameter after one with a
   default has one too (`reject_param_default_order`).
 - **A rest parameter is last, has an array type and no default**

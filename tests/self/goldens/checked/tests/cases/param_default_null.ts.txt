@@ -25,6 +25,13 @@ function suffix(base: string, end: string | null): string -> @suffix
   escaping: base
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function repeat(word: string, n: i32, opts: Options | null): string -> @repeat
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  pointer opts: size=1 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 out: string (let)
+  local +1:12 i: i32 (let)
 function Box.constructor(this: Box, label: string | null): void -> @Box.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: label
@@ -40,8 +47,8 @@ function Box.tag(this: Box, opts: Options | null): string -> @Box.tag [method]
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Box.constructor Box.tag greet nish_arena_mark nish_arena_release nish_print nish_str_from_i32 suffix total
-  stackSites=6 stackLocals=1
+  calls: Box.constructor Box.tag greet nish_arena_mark nish_arena_release nish_print nish_str_from_i32 repeat suffix total
+  stackSites=7 stackLocals=1
   callee +0:15 greet -> @greet
   callee +1:15 greet -> @greet
   callee +2:15 greet -> @greet
@@ -51,7 +58,10 @@ function main(): void -> @nish_main [exported entry]
   callee +6:15 suffix -> @suffix
   callee +7:15 new Box -> @Box.constructor
   callee +8:15 new Box -> @Box.constructor
-  local +9:9 b: Box (const)
-  callee +9:13 new Box -> @Box.constructor
-  callee +10:15 Box.tag -> @Box.tag
-  callee +11:15 Box.tag -> @Box.tag
+  callee +9:15 repeat -> @repeat
+  callee +10:15 repeat -> @repeat
+  callee +11:15 repeat -> @repeat
+  local +12:9 b: Box (const)
+  callee +12:13 new Box -> @Box.constructor
+  callee +13:15 Box.tag -> @Box.tag
+  callee +14:15 Box.tag -> @Box.tag

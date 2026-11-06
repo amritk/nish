@@ -22,6 +22,14 @@ function suffix(base: string, end: string | null = null): string {
   return end !== null ? `${base}${end}` : base
 }
 
+function repeat(word: string, n: i32 = 2, opts: Options | null = null): string {
+  let out = ""
+  for (let i = 0; i < n; i++) {
+    out = `${out}${word}`
+  }
+  return opts !== null && opts.loud ? `${out}!` : out
+}
+
 class Box {
   label: string
   constructor(label: string | null = null) {
@@ -42,6 +50,9 @@ export function main(): void {
   console.log(suffix("x", "y"))
   console.log(new Box().label)
   console.log(new Box("lid").label)
+  console.log(repeat("ab"))
+  console.log(repeat("ab", 3))
+  console.log(repeat("ab", 1, new Options()))
   const b = new Box("top")
   console.log(b.tag())
   console.log(b.tag(new Options()))

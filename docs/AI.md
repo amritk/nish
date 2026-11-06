@@ -2901,9 +2901,9 @@ export const main = (): i32 => {
 **Optional parameters** — write a default instead: `(n: i32 = 1)`. A default
 is a literal, an enum member or an earlier parameter, and the call site fills
 it in. An options argument is `(opts: Options | null = null)`: `null` is the
-one default of a `T | null` parameter. `x?: T` is refused. A variable count of one type is a rest parameter,
-`(...ns: i32[])`, last in the list; a call never spreads (`f(...xs)`), it passes
-`xs` to an array parameter.
+one default of a `T | null` parameter. `x?: T` is refused. A variable count
+of one type is a rest parameter, `(...ns: i32[])`, last in the list; a call
+never spreads (`f(...xs)`), it passes `xs` to an array parameter.
 
 **A calendar, regex, JSON, threads of your own** — not in the language (the
 wall clock is `Date.now()`, and that is all of `Date`). Say so rather than

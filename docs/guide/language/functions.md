@@ -100,8 +100,9 @@ export const main = (): i32 => {
 };
 ```
 
-The call fills both in, so a function with a default costs nothing when it is
-given every argument. Methods and constructors take them too. A function
+The call site fills in a default, a `null` default and a rest array alike, so
+a function with any of them costs nothing when it is given every argument.
+Methods and constructors take them too. A function
 has a default or a rest parameter, not both.
 
 A rest parameter of records copies each record into its array, as `[p, q]`
