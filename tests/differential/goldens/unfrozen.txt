@@ -394,6 +394,7 @@ cases/panics_pop added after R6: no rewriter to freeze it with
 cases/panics_range added after R6: no rewriter to freeze it with
 cases/panics_slice added after R6: no rewriter to freeze it with
 cases/param_default added after R6: no rewriter to freeze it with
+cases/param_default_null added after R6: no rewriter to freeze it with
 cases/param_eval_order added after R6: no rewriter to freeze it with
 cases/param_f64 added after R6: no rewriter to freeze it with
 cases/param_generic added after R6: no rewriter to freeze it with

@@ -1,4 +1,4 @@
-import { Color, first, join, paint } from "./lib"
+import { Color, Style, first, join, paint, shout } from "./lib"
 
 function ratio(a: number, b: number = 5): number {
   return a * b
@@ -45,4 +45,7 @@ export function main(): void {
   console.log(c.addAll(1, 2))
   const d = new Counter(5, 2)
   console.log(d.bump())
+  console.log(shout("h"))
+  console.log(shout("h", new Style()))
+  console.log(shout("h", null, "?"))
 }
