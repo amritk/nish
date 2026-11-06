@@ -3690,6 +3690,19 @@ class FactCollector {
     // looking like no call at all, and the function would keep a `willreturn`
     // it has not earned.
     const imported = this.unit.program.nodeBuiltins[node.id]
+    // WP49: `spawn` and `awaitAll` are operators on the direct call they are
+    // given, whose facts are that call's; they carry no capability row
+    // (tests/capabilities.js). `spawn` allocates its task's frame and files
+    // it on the driver's queue, a write no caller may drop, and a task that
+    // pends runs on later, so the call is neither pure nor sure to return.
+    if (imported === "async.spawn") {
+      this.facts.effect = EFFECT_WRITE
+      this.facts.willReturn = false
+      return
+    }
+    if (imported === "async.awaitAll") {
+      return
+    }
     this.noteBuiltinSite(node, imported.length > 0 ? imported : node.children[0].text)
     if (this.known !== null) {
       this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)
@@ -3976,6 +3989,13 @@ const collectFacts = (
     facts.effect = EFFECT_WRITE
   }
   facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn
+  // WP49: a function that awaits is called through its resume, which stores
+  // its state and answers into the frame and may leave it pending, so a
+  // caller's facts may not treat it as pure or as sure to return.
+  if (sig.suspends()) {
+    facts.effect = EFFECT_WRITE
+    facts.willReturn = false
+  }
   return facts
 }
 

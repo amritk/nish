@@ -35,6 +35,17 @@ import { SECRET_WIPE, secretRoleOf } from "./secret"
 import { emitRegionBody } from "./emit-region"
 import { isRegionIntrinsic, regionRoleIn } from "./region-check"
 import { emitJsonParts, emitJsonRoute, JsonPart } from "./emit-json"
+import {
+  ASYNC_AWAIT,
+  AsyncRegistry,
+  emitAsyncCall,
+  emitAsyncMain,
+  emitAwaitAll,
+  emitSpawn,
+  isAwaitAllDeclaration,
+  suspends,
+  transformAsync,
+} from "./emit-async"
 import { jsonRouteOf } from "./json-typed"
 import {
   functionAttributes,
@@ -372,6 +383,19 @@ export class Emitter {
   jsonPartNames: StringSet
   /** The functions `@llvm.global_ctors` runs before `main`, in the order the module first asked for them (`addConstructor`). */
   constructors: string[]
+  /** WP49: what the modules know of each other's async frames (`src/emit-async.ts`). */
+  asyncRegistry: AsyncRegistry
+  /** How the next call to a suspending function lowers: `ASYNC_AWAIT`, `ASYNC_SPAWN` or `ASYNC_ALL`. */
+  asyncMode: i32
+  /** Under `ASYNC_ALL`, the group and the member the call takes its place in. */
+  asyncGroup: i32
+  asyncMember: i32
+  /** Under `ASYNC_ALL`, each member's frame head, operand count and ABI, for the answers. */
+  asyncHeads: string[]
+  asyncCounts: i32[]
+  asyncPrivates: boolean[]
+  /** The poll block of each await of the function being emitted, in state order. */
+  asyncPolls: string[]
 
   constructor(
     unit: AnalysisUnit,
@@ -392,6 +416,14 @@ export class Emitter {
     this.fn = new IRFunction("", noParams, "void")
     this.current = new FunctionFacts(noNames, 0)
     this.currentSig = null
+    this.asyncRegistry = new AsyncRegistry()
+    this.asyncMode = ASYNC_AWAIT
+    this.asyncGroup = 0
+    this.asyncMember = 0
+    this.asyncHeads = []
+    this.asyncCounts = []
+    this.asyncPrivates = []
+    this.asyncPolls = []
     this.tailCallId = -1
     this.uncopied = -1
     this.loops = []
@@ -524,6 +556,7 @@ export class Emitter {
 
   emitFunction(sig: FunctionSig): IRFunction {
     const facts = this.factsFor(sig)
+    this.asyncPolls = []
     this.declareSignatureTypes(sig)
     const optimize = this.opts.optimizeAttributes
     const params: IRParam[] = []
@@ -665,6 +698,9 @@ export class Emitter {
       this.emitScopeExit()
       this.fn.emit("ret void")
     }
+    if (suspends(sig)) {
+      transformAsync(this, sig)
+    }
     return this.fn
   }
 
@@ -711,6 +747,10 @@ export class Emitter {
    */
   planTailCall(value: Node): boolean {
     this.tailCallId = -1
+    // WP49: a suspending function's `ret` is rewritten into a store to its frame.
+    if (suspends(this.currentSig)) {
+      return false
+    }
     let inner = value
     while (inner.kind === N_PAREN) {
       inner = inner.children[0]
@@ -856,7 +896,9 @@ export class Emitter {
       fn.emit(`call void ${this.useRuntime("nish_argv_init")}(i32 %argc, i8** %argv)`)
     }
     let code = "0"
-    if (userMain.returnType === T_VOID) {
+    if (userMain.isAsync()) {
+      code = emitAsyncMain(this, fn, userMain)
+    } else if (userMain.returnType === T_VOID) {
       fn.emit(`call void @${userMain.name}()`)
     } else {
       code = fn.emitValue(`call i32 @${userMain.name}()`)
@@ -996,6 +1038,10 @@ export class Emitter {
       // WP32: a library function is never linked against. The ones this module
       // reaches are defined in it, and the rest are not called.
       if (this.isLibraryCopy(sig)) {
+        continue
+      }
+      // WP49: a suspending function is defined as `@F.resume`, declared where it is awaited.
+      if (suspends(sig)) {
         continue
       }
       if (seen.add(sig.name)) {
@@ -1395,6 +1441,10 @@ export class Emitter {
   }
 
   emitVariableDeclaration(decl: Node): void {
+    if (isAwaitAllDeclaration(this, decl)) {
+      emitAwaitAll(this, decl)
+      return
+    }
     const local = this.program.nodeLocals[decl.id]
     if (local === null) {
       process.exit(internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json))
@@ -1627,6 +1677,9 @@ export class Emitter {
   }
 
   emitCall(expr: Node): string {
+    // WP49: the mode `spawn` or `awaitAll` set is this call's alone, never its arguments'.
+    const asyncMode = this.asyncMode
+    this.asyncMode = ASYNC_AWAIT
     const callee = expr.children[0]
     if (callee.kind === N_MEMBER && !receiverIsValue(this.program, callee.children[0])) {
       // `Math.atan2`, `Math.tan` and `Math.hypot` are calls into `std/math.ts`
@@ -1652,6 +1705,9 @@ export class Emitter {
     // the emitter for dotted callees: the import is what let the program call
     // it without writing the dot.
     const imported = this.program.nodeBuiltins[expr.id]
+    if (imported === "async.spawn") {
+      return emitSpawn(this, expr)
+    }
     if (imported.length > 0) {
       // A dotted canonical name (`process.exit`) belongs to the emitter for
       // dotted callees; the import is what let the program call it without
@@ -1722,6 +1778,10 @@ export class Emitter {
       operands.push(`${type} ${value}`)
       operandTypes.push(type)
       operandValues.push(value)
+    }
+    // WP49: a call to a function that awaits starts its frame (`src/emit-async.ts`).
+    if (suspends(sig)) {
+      return emitAsyncCall(this, expr, sig, operandTypes, operandValues, calleePrivate, asyncMode)
     }
     // WP32: `hashKey` and `sameKey` are lowered in place, per key type.
     if (mapIntrinsicOf(sig) !== MAP_NONE) {
@@ -2061,8 +2121,10 @@ export const emitProgram = (
   opts: Options,
   runtime: RuntimeTable,
   facts: FactsTable,
-  libraries: AnalysisUnit[]
+  libraries: AnalysisUnit[],
+  registry: AsyncRegistry
 ): string => {
   const emitter = new Emitter(unit, table, opts, runtime, facts, libraries)
+  emitter.asyncRegistry = registry
   return emitter.emitModule()
 }

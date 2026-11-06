@@ -1020,11 +1020,12 @@ const runCase = async (name) => {
   if (fs.existsSync(side("out"))) {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
-    // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
-    // A `script_*` case is one too: its top-level code becomes `main` (src/script.ts).
+    // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`,
+    // and `export async function main` (WP49). A `script_*` case is one too: its top-level code
+    // becomes `main` (src/script.ts).
     const hasEntry =
       name.startsWith("script_") ||
-      /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
+      /\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
     const exe = path.join(buildDir, name)
     // WP20 T0: a case compiled with `--threads` references `@nish_arena` as a
     // thread-local global, so runtime.c has to define it as one. The macro is
@@ -11200,10 +11201,14 @@ if (dealtHere("cryptoChecks")) {
       return `<${generics.join(", ")}>(${fn.parameters.map(paramText).join(", ")}): ${typeText(fn.type)}`
     }
     // Every function declaration in a file, at the top or in a `declare module`,
-    // by name: the set of its overloads' signatures.
+    // by name: the set of its overloads' signatures. `nish:async` is not the
+    // runtime's: the compiler lowers `spawn` and `awaitAll` itself (WP49), and
+    // its `spawn` is not `nish:process`'s, which the core does export.
+    const COMPILER_MODULES = new Set(["nish:async"])
     const functionsOf = (file, text) => {
       const found = new Map()
       const visit = (node) => {
+        if (ts.isModuleDeclaration(node) && COMPILER_MODULES.has(node.name.text)) return
         if (ts.isFunctionDeclaration(node) && node.name) {
           if (!found.has(node.name.text)) found.set(node.name.text, new Set())
           found.get(node.name.text).add(signature(node))

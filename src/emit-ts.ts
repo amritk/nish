@@ -26,12 +26,19 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
+import {
+  applyModuleEdits,
+  ASYNC_REFUSAL,
+  emitModule,
+  REGION_REFUSAL,
+  SIGNAL_REFUSAL,
+  Walk,
+} from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { scriptMain } from "./script"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
-import { N_IMPORT } from "./nodes"
+import { FLAG_ASYNC, N_IMPORT, Node } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
 import { StringBuilder } from "./strings"
@@ -226,6 +233,20 @@ const launcher = (entryOut: string, script: boolean): string => {
   return sb.toText()
 }
 
+/** The first function, method or arrow under `node` declared `async`, in source order, or null. */
+const firstAsync = (node: Node): Node | null => {
+  if ((node.flags & FLAG_ASYNC) !== 0) {
+    return node
+  }
+  for (const child of node.children) {
+    const found = firstAsync(child)
+    if (found !== null) {
+      return found
+    }
+  }
+  return null
+}
+
 /**
  * The program written out as TypeScript: every root-package module, every
  * standard-library module it reaches, and `entry.ts`. A refusal is reported
@@ -269,6 +290,12 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
+    // WP49: one refusal per module, at its first async function. Read from the
+    // tree, not `program.functions`, which holds no generic nothing instantiates.
+    const asyncDecl = firstAsync(unit.file)
+    if (asyncDecl !== null) {
+      walk.refuse(asyncDecl, ASYNC_REFUSAL)
+    }
     for (const stmt of unit.file.children) {
       if (stmt.kind !== N_IMPORT) {
         continue

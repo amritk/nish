@@ -1,0 +1,1 @@
+`main` must return void or an i32 number (the process exit code), not string

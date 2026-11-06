@@ -58,6 +58,7 @@ import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
+import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
 import { spellCSymbolsApart } from "./generics"
 import { StringMap, StringSet } from "./map"
@@ -2548,8 +2549,7 @@ export class Compilation {
    * every await edge is known — no recursion through `await` (a cycle is
    * reported at the await that closes it, in the module that wrote it), and
    * no `async` in a wasm build, whose module has no event loop to resume a
-   * task. The lowering of an async function is not in this release, so a
-   * program that keeps one is refused here too.
+   * task.
    */
   rejectAsync(): void {
     const functions: FunctionSig[] = []
@@ -2570,13 +2570,13 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return
     }
-    const fn = functions[0]
-    this.unitOf(fn).checker.ctx.error(
-      fn.decl,
-      isWasmBuild(this.opts)
-        ? `\`async\` function \`${fn.sourceName}\` cannot be built for wasm: a task is resumed by the native event loop, which a wasm module does not have`
-        : `\`async\` function \`${fn.sourceName}\` is checked, but not yet compiled: the lowering of \`async\` is not in this release`
-    )
+    if (isWasmBuild(this.opts)) {
+      const fn = functions[0]
+      this.unitOf(fn).checker.ctx.error(
+        fn.decl,
+        `\`async\` function \`${fn.sourceName}\` cannot be built for wasm: a task is resumed by the native event loop, which a wasm module does not have`
+      )
+    }
   }
 
   /** The module `fn` is checked in: the one whose source it came from, or the entry. */
@@ -3257,6 +3257,10 @@ export class Compilation {
     const stems = this.outputStems()
     const copies: AnalysisUnit[] = this.libraryUnits(units)
     const out: EmittedModule[] = []
+    // WP49: frames and the task driver span modules, so their sizes and the
+    // driver are written once every module is emitted (`finalizeAsync`).
+    const registry = new AsyncRegistry()
+    registry.json = this.opts.json
     let i = 0
     while (i < this.modules.length && i < units.length && i < stems.length) {
       // Read before the calls, which end the length facts.
@@ -3264,15 +3268,28 @@ export class Compilation {
       const analysed = units[i]
       const stem = stems[i]
       if (this.writesOutput(unit)) {
+        registry.module = out.length
         out.push(
           new EmittedModule(
             stem,
-            emitProgram(analysed, this.table, this.opts, this.runtime, facts, copies),
+            emitProgram(analysed, this.table, this.opts, this.runtime, facts, copies, registry),
             unit.name
           )
         )
       }
       i = i + 1
+    }
+    const texts: string[] = []
+    for (const module of out) {
+      texts.push(module.ir)
+    }
+    const finished = finalizeAsync(registry, texts)
+    // `finalizeAsync` answers one text per module it was given, so the
+    // second test only says so to the bounds prover.
+    let k = 0
+    while (k < out.length && k < finished.length) {
+      out[k].ir = finished[k]
+      k = k + 1
     }
     return out
   }
