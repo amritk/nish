@@ -51,7 +51,8 @@ const NODE_HEADER: i32 = 16
 
 /**
  * A placeholder opens and closes with a byte `irEscape` always writes as `\01`,
- * so no string constant, name or path of the program can spell one.
+ * so no string constant or name of the program can spell one; the lines that
+ * spell its paths unescaped are skipped (`writtenFromPaths`).
  */
 const MARK_END: string = "\x01"
 const MARK_START: string = "\x01async."
@@ -1495,6 +1496,20 @@ export const transformAsync = (emitter: Emitter, sig: FunctionSig): void => {
 
 // ---- The whole program ----------------------------------------------------
 
+/**
+ * Whether the line holding `at` is metadata, a comment or `source_filename`,
+ * which spell the program's file paths without `irEscape` and never hold a
+ * placeholder, so a path that happens to look like one is left as written.
+ */
+const writtenFromPaths = (text: string, at: i32): boolean => {
+  let start = at
+  while (start > 0 && text.charCodeAt(start - 1) !== 10) {
+    start = start - 1
+  }
+  const head = text.charCodeAt(start)
+  return head === 33 || head === 59 || text.substring(start, start + 15) === "source_filename"
+}
+
 /** The frame sizes, once every module is emitted. */
 class AsyncLayout {
   registry: AsyncRegistry
@@ -1590,6 +1605,11 @@ class AsyncLayout {
     let copied = 0
     let at = text.indexOf(MARK_START)
     while (at >= 0) {
+      if (writtenFromPaths(text, at)) {
+        const lineEnd = text.indexOf("\n", at)
+        at = lineEnd < 0 ? -1 : text.indexOf(MARK_START, lineEnd)
+        continue
+      }
       const end = text.indexOf(MARK_END, at + 1)
       const mark = text.substring(at, end)
       let value = 0

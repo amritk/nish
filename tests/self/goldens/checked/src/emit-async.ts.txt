@@ -1012,6 +1012,13 @@ function transformAsync(emitter: Emitter, sig: FunctionSig): void -> @transformA
   callee +131:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
   callee +134:3 IRModule.addTypeDecl -> @IRModule.addTypeDecl
   callee +135:3 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+function writtenFromPaths(text: string, at: i32): boolean -> @writtenFromPaths
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_eq nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:7 start: i32 (let)
+  local +4:9 head: i32 (const)
 function AsyncLayout.constructor(this: AsyncLayout, registry: AsyncRegistry, texts: string[]): void -> @AsyncLayout.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: registry texts
@@ -1070,29 +1077,32 @@ function AsyncLayout.offset(this: AsyncLayout, group: i32, member: i32): i32 -> 
 function AsyncLayout.resolve(this: AsyncLayout, text: string): string -> @AsyncLayout.resolve [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via AsyncLayout.kids
-  calls: AsyncLayout.kids AsyncLayout.offset AsyncLayout.units StringBuilder.add StringBuilder.constructor StringBuilder.toText leadingNumber nish_panic_overflow nish_str_at nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
+  escaping: text
+  calls: AsyncLayout.kids AsyncLayout.offset AsyncLayout.units StringBuilder.add StringBuilder.constructor StringBuilder.toText leadingNumber nish_panic_overflow nish_str_at nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new writtenFromPaths
   pointer this: size=48 writesThrough=true captured=true passedTo=AsyncLayout.kids#0 AsyncLayout.units#0 AsyncLayout.offset#0
   stackSites=1 stackLocals=1
   local +0:11 out: StringBuilder (const)
   callee +0:17 new StringBuilder -> @StringBuilder.constructor
   local +1:9 copied: i32 (let)
   local +2:9 at: i32 (let)
-  local +4:13 end: i32 (const)
-  local +5:13 mark: string (const)
-  local +6:11 value: i32 (let)
-  callee +8:17 AsyncLayout.kids -> @AsyncLayout.kids
-  callee +8:27 leadingNumber -> @leadingNumber
-  callee +10:36 AsyncLayout.units -> @AsyncLayout.units
-  callee +10:47 leadingNumber -> @leadingNumber
-  local +12:15 pair: string (const)
-  local +13:15 dot: i32 (const)
-  callee +14:17 AsyncLayout.offset -> @AsyncLayout.offset
-  callee +14:29 leadingNumber -> @leadingNumber
-  callee +14:50 leadingNumber -> @leadingNumber
-  callee +16:7 StringBuilder.add -> @StringBuilder.add
-  callee +17:7 StringBuilder.add -> @StringBuilder.add
-  callee +21:5 StringBuilder.add -> @StringBuilder.add
-  callee +22:12 StringBuilder.toText -> @StringBuilder.toText
+  callee +4:11 writtenFromPaths -> @writtenFromPaths
+  local +5:15 lineEnd: i32 (const)
+  local +9:13 end: i32 (const)
+  local +10:13 mark: string (const)
+  local +11:11 value: i32 (let)
+  callee +13:17 AsyncLayout.kids -> @AsyncLayout.kids
+  callee +13:27 leadingNumber -> @leadingNumber
+  callee +15:36 AsyncLayout.units -> @AsyncLayout.units
+  callee +15:47 leadingNumber -> @leadingNumber
+  local +17:15 pair: string (const)
+  local +18:15 dot: i32 (const)
+  callee +19:17 AsyncLayout.offset -> @AsyncLayout.offset
+  callee +19:29 leadingNumber -> @leadingNumber
+  callee +19:50 leadingNumber -> @leadingNumber
+  callee +21:7 StringBuilder.add -> @StringBuilder.add
+  callee +22:7 StringBuilder.add -> @StringBuilder.add
+  callee +26:5 StringBuilder.add -> @StringBuilder.add
+  callee +27:12 StringBuilder.toText -> @StringBuilder.toText
 function removeLine(text: string, line: string): string -> @removeLine
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
