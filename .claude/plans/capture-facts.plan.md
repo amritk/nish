@@ -6,13 +6,14 @@ stages:
     title: Probe the arrow's own facts
     goal: Prove the lifted arrow already has sound facts for its capture parameters before anything reads them
     verification: A scratch build of the three probe programs shows each capture parameter's pointer facts, escaping bit and element hand-out as the Probe section expects
+    status: completed
     todos:
       - id: probe-arrow-facts
         content: Dump the arrow's FunctionFacts for its capture params on three probes (read, push, element kept) — see Probe
-        status: pending
+        status: completed
       - id: probe-chain
         content: List the instance chain capturesOf walks from host to arrow for fnarg_capture_forward and a parallel-forwarded arrow — see Probe
-        status: pending
+        status: completed
   - id: attributes
     title: Attributes pass reads the arrow
     goal: A captured parameter of the host inherits the arrow's facts for its capture parameter through the existing passedTo fixpoint
@@ -98,6 +99,56 @@ Before writing code, confirm what the arrow's own facts say. Build three scratch
 3. `atLast(n, (i) => { log.last = parts[i] })` (the CG-12 shape): `parts` must read as handing out elements, through whatever `useOutcome` uses (`handsOutElements` on the arrow's side). **If the arrow's facts do not record this, stop**: the element rule needs its own fact first, and that becomes stage 1 of this plan.
 
 Also print the chain `collectCaptures` walks for `tests/link/fnarg_capture_forward` and for an arrow `each` passes to `parallelMap`, to pin what `captureTarget` must refuse.
+
+### Probe result (2026-11-06): stopped at step 3
+
+Built against `66f9806c` with a temporary print of `pointerParamAt(writtenArity() + k)` on both fact rounds (reverted).
+
+| Probe | Capture param | writesThrough | captured | outlives | elementsFree | As expected? |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 `t.n = t.n + x` | `t` | true | false | false | false | yes |
+| 2 `keep.push(b)` | `b` | true | true | true | false | yes (`escaping` set too) |
+| 2 | `keep` | true | false | false | false | yes |
+| 3 `log.last = parts[i]` (CG-12) | `parts` | false | false | false | false | **no fact behind it** |
+| 3, control: arrow only reads `parts[i].length` over a `returnsFreshElements` listing | `parts` | false | false | false | false | same answer as the keeping arrow |
+
+Step 3 reads as "hands out elements", but the arrow's facts do not record that.
+`analyzeEscapes` runs `decideElementParams` only when `!sig.lifted`
+(`src/escape.ts`, end of `analyzeEscapes`), so a lifted arrow's
+`elementsFree` is never decided. It is `false` for every arrow: a read-only
+arrow and one that keeps an element get the same answer. An ordinary function
+in the same program (`plain(log, parts)`, a read) does get the decision. So the
+element rule has no fact of its own for an arrow parameter, which is the
+plan's stop condition.
+
+What also has to change is the host side, and the stop matters there. Two host rules
+decide an element question by walking `refsOf(v)`. `visit` returns at
+`N_ARROW`, so that walk never sees a use inside the arrow:
+
+- `storedIntoReturnedArray` / `isCarrierUse`. A `string[]` the host fills,
+  captures and returns would pass as a carrier once `localOutcome` stops
+  answering `FLOW_LEAKS` for a capture. The pushed strings would then take the
+  array's outcome while the arrow keeps `xs[0]` in an older object, which is
+  `mem_capture_element_keep`'s use-after-free.
+- `isJoinedParts`. It already refuses a captured `parts` explicitly, and the
+  plan keeps that refusal.
+
+Today the `isCaptured` short-circuit in `localOutcome` is the only thing
+that keeps a captured array out of the carrier rule. Removing it (stage
+`escape`) is sound only once the arrow's element hand-out is a decided fact
+and the carrier rule reads it (or refuses a captured carrier outright).
+
+Chains `collectCaptures` / the instances walk (step 4), all of which `captureTarget` must refuse:
+
+- `fnarg_capture_forward`, arrow0: `nish_main` → `each$fn.16.nish_main$arrow0(%xs, %cap.0)` (ordinary) → `nish.parallelMap$…$arrow0(%src, %cap.0)` (parallel entry) → `parallelMapInto$…(%src, %dst, %cap.0)` → `$chunk(…, i8* %ctx)` / `mapRange$…(…, %cap.0)` → `nish_main$arrow0(%x, %k)`.
+- `fnarg_capture_forward`, arrow1: `nish_main` → `run$fn.16.nish_main$arrow1(%x, %cap.0)` (ordinary) → `nish.ThreadScope.spawn$…$arrow1(…, %cap.0)` (spawn entry) → `$run(i8* %p)` / `$finish` → `runTask$…(…, %cap.0)` → the arrow.
+- `each` → `parallelMap`: `host` → `each$fn.11.host$arrow0(%xs, %cap.0)` → `nish.parallelMap$…` → `parallelMapInto$…` → `$chunk(i8* %ctx)` / `mapRange$…` → `host$arrow0`.
+
+Past a parallel or spawn entry, a capture travels inside an `i8*` context
+struct as well as `%cap.N`. So "every instance only forwards it" holds only
+up to the first non-ordinary instance, as `captureTarget` assumes.
+
+**Proposed new stage 1 (`element-fact`)**: decide `elementsFree` for a lifted arrow's capture parameters (lift the `!sig.lifted` guard for them, or a capture-only variant of `decideElementParams`), pin it with a probe-3 pair (keep → false, read → true), and make `storedIntoReturnedArray` refuse a carrier that any capture target does not prove `elementsFree`. Then stages `attributes` through `ship` as written.
 
 ## The capture target
 
