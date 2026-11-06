@@ -21613,6 +21613,9 @@ if (dealtHere("releaseChecks")) {
         "runtime/core/numbers.d.ts",
         "runtime/core/result.d.ts",
         "runtime/core/strings.d.ts",
+        // `nish:async` under Node, which `--emit-ts` imports by its path.
+        "runtime/async.mjs",
+        "runtime/async.d.mts",
         "scripts/build.sh",
         // The standard library is source, so shipping it *is* shipping the library
         // (wp21 §2). A tarball without it would install a compiler whose `std/`

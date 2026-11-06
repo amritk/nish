@@ -1,6 +1,5 @@
-// --emit-ts refuses an async function (NL4016): the native build runs it as a
-// frame state machine whose resume order the TypeScript runtime does not answer
-// yet, so nothing is written.
+// An async chain is written as the TypeScript it is: `async`, `Promise<T>` and
+// each `await` pass through, and the launcher awaits the async `main`.
 async function double(x: i32): Promise<i32> {
   return x * 2
 }

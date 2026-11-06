@@ -3366,6 +3366,19 @@ the resume order is not Node's, and these are declared differences:
 A program whose output does not depend on how its tasks interleave prints the
 same under both.
 
+**Under `--emit-ts`.** An `async` function, `Promise<T>`, `await`, an `async`
+`main`, `spawn(f(x))` and `const [a, b] = await awaitAll(f(), g())` are
+written as the TypeScript they already are, so the output runs on Node's own
+async/await and resumes in Node's order, the left column above
+(`tests/emit-ts/async/`). `nish:async` is `nish/runtime/async.mjs`: `awaitAll`
+is `Promise.all` over its two to eight calls, and `spawn` starts its task
+without awaiting it and keeps it. The launcher of a program that declares an
+`async` function awaits `main`, then `settleTasks()`, which waits for every
+task `spawn` started, those tasks' own included, before it exits, as the
+native driver drains its queue. A program whose spawned tasks print in an
+interleaving prints the same lines in another order (`async_spawn`, the
+`order` row of `tests/differential/emit-ts-known.txt`).
+
 ### Data parallelism: `nish/threads`
 
 `parallelMapInto`, `parallelMap`, `parallelFrom` and `parallelReduce` run a
@@ -11535,7 +11548,9 @@ by the caller.
   `nish:` specifier becomes `nish/runtime`, the one package the output names,
   `nish:secret` included (its `std/secret.ts` is not written: the runtime's
   `wipe` answers it, a zero-fill that cannot reach a copy the engine made, so
-  erasure is the native build's alone: `docs/security/secret.md`, SECRET-6); a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
+  erasure is the native build's alone: `docs/security/secret.md`, SECRET-6),
+  save `nish:async`, which becomes `nish/runtime/async.mjs` because
+  `nish:process` has a `spawn` of its own in `nish/runtime`; a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
   imported name that is only a type (an interface, a generic interface, an
   alias) is written `type X`, because Node's type stripping does not know
   which names are types. A module that needs none of that and none of the rows
@@ -11580,11 +11595,7 @@ by the caller.
   without a warning, and the program is written. The sixth is a module that
   imports `nish:region`, whose regions the runtime the output imports
   (`nish/runtime`) does not answer yet, though a program run under Node as it
-  is written does (NL4015, `reject_emit_ts_region`); keep it native. The
-  seventh is a module that declares an `async` function, refused at the first
-  one, whose resume order (see "Async functions: `async` and `await`") the
-  runtime the output imports does not answer yet (NL4016,
-  `reject_emit_ts_async`); keep it native.
+  is written does (NL4015, `reject_emit_ts_region`); keep it native.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

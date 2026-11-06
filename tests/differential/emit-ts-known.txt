@@ -3,25 +3,17 @@
 # Every program the --emit-ts differential does not yet see agree with its
 # native build, one "<program> <row>" line each, where the row is the wp33 §3
 # ledger row that explains it (numbers, strings, records, control, libm, ffi,
-# refused, host, range); the comment is the evidence, and a host line names
-# the API Node cannot express in brackets. A stage that fixes a program
+# refused, host, range, order); the comment is the evidence, and a host line
+# names the API Node cannot express in brackets. A stage that fixes a program
 # regenerates this list, and the program leaves it. tests/run.js accepts only
-# the libm, ffi, refused, host and range rows here, and a host line only for
-# an API in emit-ts.js's HOST.
+# the libm, ffi, refused, host, range and order rows here, and a host line
+# only for an API in emit-ts.js's HOST.
 #
 # The run fails on a program that does not agree and is not listed, on a
 # listed one that agrees, on one whose row has moved, and on a listed name
 # the corpus no longer has. A build, emit or timeout failure is never listed.
 
-cases/async_attributes refused  # refused: NL4016 under --emit-ts
-cases/async_await_all refused  # refused: NL4016 under --emit-ts
-cases/async_await_chain refused  # refused: NL4016 under --emit-ts
-cases/async_await_single refused  # refused: NL4016 under --emit-ts
-cases/async_lowered refused  # refused: NL4016 under --emit-ts
-cases/async_main refused  # refused: NL4016 under --emit-ts
-cases/async_mark_text refused  # refused: NL4016 under --emit-ts
-cases/async_result refused  # refused: NL4016 under --emit-ts
-cases/async_spawn refused  # refused: NL4016 under --emit-ts
+cases/async_spawn order  # differ: stdout line 1 differs
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
