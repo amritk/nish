@@ -907,12 +907,6 @@ function arrowCallee(program: CheckedProgram, parents: ParentTable, arrow: Node)
   callee +4:14 ParentTable.parentOf -> @ParentTable.parentOf
   local +9:9 call: Node | null (const)
   callee +9:16 ParentTable.parentOf -> @ParentTable.parentOf
-function captureIndexOf(arrow: FunctionSig, local: Local): i32 -> @captureIndexOf [exported]
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer arrow: size=176 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:7 k: i32 (let)
 function letCaptureMessage(name: string): string -> @letCaptureMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

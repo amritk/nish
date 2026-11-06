@@ -1335,18 +1335,6 @@ export const arrowCallee = (
   return program.nodeCallees[call.id]
 }
 
-/** The index of the capture `local` is in `arrow`, or -1. */
-export const captureIndexOf = (arrow: FunctionSig, local: Local): i32 => {
-  let k = 0
-  while (k < arrow.captures.length) {
-    if (arrow.captures[k] === local) {
-      return k
-    }
-    k = k + 1
-  }
-  return -1
-}
-
 /** The refusal for a `let` an arrow reads. */
 export const letCaptureMessage = (name: string): string =>
   `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a data-parallel body may read only ` +
