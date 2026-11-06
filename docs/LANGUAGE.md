@@ -1459,7 +1459,10 @@ declarations (a `const` bound to an arrow, or the legacy `function` keyword),
 ([Type aliases](#type-aliases)), numeric `enum` declarations
 ([Enums](#enums)), `declare function` declarations
 ([Calling C](#calling-c)), `import` statements, and `export` modifiers on
-those declarations. Any other top-level statement is rejected with
+those declarations. The entry module may instead hold
+[top-level code](#top-level-code), which runs as its `main`. In any other
+module, and in an entry that declares `main`, any other top-level statement
+is rejected with
 `Only top-level function declarations are supported in Phase 1 (found <Kind>)`,
 where `<Kind>` is TypeScript's name for the statement, `ExpressionStatement`
 or `IfStatement` (`tests/cases/reject_top_level_stmt`); a top-level `let`
@@ -1469,6 +1472,58 @@ top-level code, so only `const` is available ``,
 ([Forbidden constructs](#forbidden-constructs-phase-0-validator)). Modules have no top-level code, so there is no
 initialisation order to worry about — which is exactly why a top-level `const`
 must be a value the compiler can compute for itself.
+
+### Top-level code
+
+An entry module that declares no `main` may hold statements at the top level,
+the way a script does. They run as the program's `main`: the compiler moves
+them, in order, into an exported `main(): void` before anything else reads
+the tree, so the native program is the one a hand-written `main` gives and
+exits 0 unless the code calls `process.exit` (`tests/cases/script_basic`,
+`script_exit`).
+
+```ts
+const LIMIT: i32 = 4
+
+const capped = (n: i32): i32 => (n > LIMIT ? LIMIT : n)
+
+const start = 1
+let total = start
+for (let i = 0; i < 3; i++) {
+  total += capped(i + 2)
+}
+console.log(total)              // 10
+```
+
+- **What moves:** every top-level statement (an expression, `if`, a loop,
+  `switch`, a block, a labelled statement, `throw`, `try`), every top-level
+  `let`, and every top-level `const` that is not exported and that no
+  declaration names. `return`, `break` and `continue` stay refused.
+- **What stays:** functions, classes, interfaces, enums, types, imports, and
+  a `const` that a function, a class or another staying constant names. That
+  `const` is a [module constant](#module-constants) with all its rules, since a
+  function cannot read a local of `main`; `LIMIT` above is one. A variable of
+  the code that a function names is refused with
+  `` `count` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it ``
+  (`reject_script_local_in_function`).
+- **Declare before the code reaches it.** Under Node a top-level statement runs
+  where it stands, before the declarations below it exist; natively they all
+  exist first. So a statement that reaches a function, class, enum or
+  constant, by naming it or through a function that does, must stand below
+  it: `` `twice` is declared below the top-level code on line 5 that reaches it ``
+  (`reject_script_declared_below`).
+- **One scope.** Under Node the code's variables share the module scope with
+  its declarations, so a variable may not take a name the module declares or
+  imports: `` `go` is a variable of the top-level code and also a name the module declares or imports ``
+  (`reject_script_name_collision`).
+- **Only the entry, and only without `main`.** An imported module has no
+  top-level code, and neither has an entry that declares `main` in either
+  spelling (`reject_top_level_stmt`, `reject_const_top_level_let`). An entry
+  of nothing but constants is a module, not a script.
+- There is no top-level `await`: the language has no `async`
+  ([Forbidden constructs](#forbidden-constructs-phase-0-validator)).
+- `--emit-ts` writes the code back where it stands, and its `entry.ts`
+  imports the module rather than calling `main`.
 
 ### Functions
 
@@ -2472,7 +2527,8 @@ export const main = (): number => {   // or `: void`; `: i32` in f64 mode
 
 - Only the entry module (the first file on the command line) may declare
   `export const main` (`Only the entry module may declare`,
-  `tests/link/main_in_import`); `--link` requires it (`tests/link/no_main`).
+  `tests/link/main_in_import`); `--link` requires it (`tests/link/no_main`),
+  unless the entry holds [top-level code](#top-level-code), which becomes it.
 - It takes no parameters (`` `main` cannot take parameters ``,
   `tests/cases/reject_main_params`; the command line is
   [`process.argv`](#process)) and
@@ -11891,7 +11947,10 @@ messages are exact for the cases cited; other rows quote the checker
 
 | Situation | Message | Test |
 | --- | --- | --- |
-| top-level statement other than function/class/interface/const/type/enum/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| top-level statement other than function/class/interface/const/type/enum/import, outside an entry without `main` | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| a function naming a variable of the entry's top-level code | `` `count` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code `` | `reject_script_local_in_function` |
+| a declaration below top-level code that reaches it | `` `twice` is declared below the top-level code on line 5 that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line `` | `reject_script_declared_below` |
+| a variable of top-level code named like a declaration or import | `` `go` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one `` | `reject_script_name_collision` |
 | type alias cycle | `` Type alias `Feet` is defined in terms of itself `` | `reject_type_alias_cycle` |
 | a member of an unconstrained type parameter | `` Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>` `` | `reject_generic_member_unconstrained` |
 | a member the constraint does not declare | `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares `` | `reject_generic_member_not_in_constraint` |
@@ -11920,7 +11979,7 @@ messages are exact for the cases cited; other rows quote the checker
 | enum member that is not an integer | `` Enum member `Kind.Half` must be an integer literal `` | `reject_enum_float` |
 | enum member outside `i32` | `` Enum member `Kind.Big` does not fit in i32 `` | `reject_enum_overflow` |
 | name that is not a member of the enum | `` Enum `Kind` has no member `Nope` `` | `reject_enum_unknown_member` |
-| top-level `let` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
+| top-level `let`, outside an entry without `main` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
 | `for await`, in any body, a template nothing instantiates included | `` `for await` is not supported `` | `nl2133_for_await`, `reject_for_await_template` |
 | `for (x of a)`, assigning rather than declaring | `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` `` | `reject_arr_forof_expression`, `reject_arr_forof_expression_template`, `nl2135_for_of_without_declaration` |
 | `a ** b`, in any body, a template nothing instantiates included | `` Unsupported binary operator `**` `` | `reject_op_exponent`, `reject_op_exponent_template`, `nl2254_unsupported_binary` |

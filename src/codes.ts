@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 802
+export const RULE_COUNT: i32 = 805
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -189,6 +189,8 @@ const diagnosticRules = (): string[] => [
   "NL2421",
   ", and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)",
   "NL2422",
+  "` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code",
+  "NL2656",
   ">` is not key material: a `Secret` holds an array of integers (`u8[]`, `u32[]`, ...) or a record whose every field is an integer, because `wipe` has to reach every byte of it with one store",
   "NL2428",
   "; a constructor or method is named after its class, so two classes that share a name within one package cannot both declare it, whether or not either is exported; rename one of the classes",
@@ -335,6 +337,8 @@ const diagnosticRules = (): string[] => [
   "NL3045",
   "`, so it declares `wipe(): void`, taking no parameters: a holder's key ends in that method, which wipes every `Secret` field it holds, `wipe(this.",
   "NL2540",
+  "` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one",
+  "NL2658",
   "` optional, and the field has no initializer: a missing optional key sets its field to the field's initializer, so an optional field declares one",
   "NL2498",
   "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block",
@@ -343,6 +347,8 @@ const diagnosticRules = (): string[] => [
   "NL2375",
   " mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`",
   "NL2622",
+  " that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line",
+  "NL2657",
   "`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`",
   "NL1062",
   "` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it",

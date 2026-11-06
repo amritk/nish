@@ -8,7 +8,9 @@
 // initialiser rather than the pattern in its second; `order` the optional
 // parameter rather than the `keyof` in the parameter after it; `signature`
 // its missing return type rather than its missing body; `two` the `**` before
-// its second name; and `counter` its `let` rather than its pattern.
+// its second name; and `counter` its `let` rather than its pattern. The module
+// declares a `main`, so its top-level `let` is refused rather than lifted into
+// one (src/script.ts).
 interface Point {
   x: i32
 }
@@ -26,3 +28,5 @@ function signature(p: Point);
 const two = (): i32 => 2 ** 3, three = 3
 
 let { counter } = { counter: 0 }
+
+export const main = (): void => {}

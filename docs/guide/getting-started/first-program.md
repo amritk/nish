@@ -24,6 +24,45 @@ explains why. A `main` with nothing to report can return `void` instead, and
 then exits with 0. The rules for `main` are in the reference's
 [`main`](../../LANGUAGE.md#main) section.
 
+### Without `main`
+
+A short program can leave `main` out and write its statements at the top
+level, the way a script does:
+
+```ts nish:ok
+const square = (n: i32): i32 => n * n
+
+const sides = [3, 4, 5]
+for (const side of sides) {
+  console.log(square(side))
+}
+```
+
+The compiler gathers the statements into a `main` that returns `void`, so the
+binary is the same one you would get by writing `main` yourself, and it exits
+with 0 unless the code calls `process.exit`. Two rules keep the file meaning
+the same thing natively and under Node, where the statements run where they
+stand:
+
+- Declare each function above the first statement that uses it.
+- A function cannot read a variable of the top-level code. Pass it the value
+  as a parameter, or make it an annotated constant above the code, such as
+  `const LIMIT: i32 = 4`.
+
+This one breaks the second rule, and the compiler says which variable and why:
+
+```ts nish:err NL2656
+let count = 0
+const bump = (): void => {
+  count += 1
+}
+bump()
+```
+
+Only the file you compile may do this, and only when it declares no `main`.
+The details are in the reference's
+[Top-level code](../../LANGUAGE.md#top-level-code) section.
+
 ## Run it
 
 ```bash

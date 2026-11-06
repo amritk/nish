@@ -73,9 +73,10 @@ const programs = () => {
       if (!fs.existsSync(source)) {
         continue
       }
-      // Either spelling declares the entry (WP22).
+      // Either spelling declares the entry (WP22); a `script_*` case's top-level
+      // code is its entry (src/script.ts).
       const text = fs.readFileSync(source, "utf8")
-      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(text)) {
+      if (!name.startsWith("script_") && !/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(text)) {
         continue
       }
       found.push({ name, source })
@@ -106,7 +107,8 @@ const native = ({ name, source }, compiler) => {
  * `export function main` a syntax error before type stripping ever ran.)
  */
 const unmodified = ({ source }) => {
-  const entry = `const m = await import(${JSON.stringify(source)}); process.exit(m.main());`
+  // An entry written as top-level code has no `main`: importing it runs it.
+  const entry = `const m = await import(${JSON.stringify(source)}); process.exit(typeof m.main === "function" ? m.main() : 0);`
   const ran = spawnSync(
     "node",
     ["--experimental-strip-types", "--no-warnings", "--import", prelude, "-e", entry],
