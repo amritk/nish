@@ -11201,10 +11201,14 @@ if (dealtHere("cryptoChecks")) {
       return `<${generics.join(", ")}>(${fn.parameters.map(paramText).join(", ")}): ${typeText(fn.type)}`
     }
     // Every function declaration in a file, at the top or in a `declare module`,
-    // by name: the set of its overloads' signatures.
+    // by name: the set of its overloads' signatures. `nish:async` is not the
+    // runtime's: the compiler lowers `spawn` and `awaitAll` itself (WP49), and
+    // its `spawn` is not `nish:process`'s, which the core does export.
+    const COMPILER_MODULES = new Set(["nish:async"])
     const functionsOf = (file, text) => {
       const found = new Map()
       const visit = (node) => {
+        if (ts.isModuleDeclaration(node) && COMPILER_MODULES.has(node.name.text)) return
         if (ts.isFunctionDeclaration(node) && node.name) {
           if (!found.has(node.name.text)) found.set(node.name.text, new Set())
           found.get(node.name.text).add(signature(node))
