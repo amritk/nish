@@ -57,3 +57,38 @@ and prints `shape ns requests checksum` for its fastest batch; the idle and
 rss shapes add how many input, head and output buffers the pools made, which
 with the lending LIFO stays at one each however many connections there are.
 The rss shape prints its peak in KiB where the others print nanoseconds.
+
+## Measured: a hot-first parser layout (2026-11-06)
+
+`std/net/http1-codec.ts`'s `Http1Parser` puts the fields a request reads
+first (its buffers, the window and scan state, the flags), makes its `spans`
+before its other arrays, `Http1Connection` makes its parser before its
+`HttpDate`, and `unpark` finds a lent buffer by comparing it with `noOutput`.
+Against `main` at `98c4f9a7`, Intel(R) Xeon(R) Processor @ 2.10GHz, pinned to
+core 1, `node bench/http1-conn/run.mjs --shape idle,hot,cold --connections 10000 --rounds 15 --base origin/main`:
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot | 460.4 (458.3–476.7) | 460.0 (458.1–481.0) 0.999 | 455.3 (452.0–493.3) 0.989 |
+| cold | 460.6 (457.3–496.7) | 460.5 (457.2–474.2) 1.000 | 453.9 (451.6–508.2) 0.985 |
+| idle | 577.5 (574.4–588.0) | 576.8 (572.6–592.9) 0.999 | 574.7 (569.0–594.4) 0.995 |
+| RSS per idle connection, bytes | 1026 (1025–1026) | 1025 (1025–1026) | 1026 (1025–1026) |
+
+The medians move by more than the `old′` gap; the min–max ranges overlap.
+Cachegrind counts the cause: D1 misses per idle request go from 10.95 to
+9.00 (reorder and spans first 10.06, the identity `unpark` 9.32, the parser
+before the date 9.00). To count them, build `main.ts` with `-g` at
+`--profile speed` and run `valgrind --tool=cachegrind --cache-sim=yes` on
+`idle 0 10000 1` and `idle 100000 10000 1`; the difference over 100,000 is
+one request.
+
+Not taken:
+
+- **The spans inline in the parser.** About one miss per request (the spans'
+  array header), but `std/net/websocket.ts` reads `p.spans` as an `i32[]`,
+  so it waits for a change that may touch that module.
+- **Reading straight into `parser.buf`.** The scratch-to-buffer copy is one
+  `memcpy` of the request onto lines the parse reads next. Skipping it would
+  change `Http1Server`'s read path for every carrier, a larger change than
+  this layout; its share of the misses was not measured apart, so it is left
+  for a stage that measures it.
