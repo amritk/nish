@@ -33,6 +33,7 @@ PASS  a second CommandComplete is stray
 PASS  a row after CommandComplete is stray
 PASS  an error after CommandComplete is stray
 PASS  a connection lost after CommandComplete
+PASS  a connection lost after a row, before CommandComplete
 PASS  a row after an error is stray
 PASS  a run whose keys both had rows
 PASS  the one run is taken again under a new handle
@@ -40,4 +41,4 @@ PASS  a row on the spent handle answers false
 PASS  and next on it answers nothing
 PASS  each counted stray
 PASS  the reused run sees none of the old run's rows
-postgres batch unsorted: 42 passed, 0 failed, 0 skipped
+postgres batch unsorted: 43 passed, 0 failed, 0 skipped

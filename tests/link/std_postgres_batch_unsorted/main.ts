@@ -433,6 +433,7 @@ const strays = (t: Suite): void => {
   t.eqStr("a row after CommandComplete is stray", pooled(cat(cat(cat(bind, tag), row("a", "1")), ready), false), "1?,2?,no,group stray 1 refused 0");
   t.eqStr("an error after CommandComplete is stray", pooled(cat(cat(cat(bind, tag), error), ready), false), "1?,2?,group stray 1 refused 0");
   t.eqStr("a connection lost after CommandComplete", pooled(cat(bind, tag), true), "1?,2?;failed stray 1 refused 0");
+  t.eqStr("a connection lost after a row, before CommandComplete", pooled(cat(bind, row("a", "2")), true), "2=a;1!,2!,failed stray 0 refused 0");
   t.eqStr("a row after an error is stray", pooled(cat(cat(cat(bind, error), row("a", "1")), ready), false), "1!,2!,no,group stray 1 refused 0");
 
   const c = unsorted();
