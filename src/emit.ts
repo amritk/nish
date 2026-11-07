@@ -1080,7 +1080,37 @@ export class Emitter {
       )
       i = i + 1
     }
-    return `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`
+    const declared = `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`
+    const origin = sig.origin
+    return origin !== null && origin.host ? this.hostDeclarationFor(sig) : declared
+  }
+
+  /**
+   * A host module's export (WP50 S2, `docs/wp50-wasm-host.md` §4): the same
+   * empty-attribute declaration, imported from the page's `host` namespace by
+   * its own name, so `wasm-ld` leaves it an import and needs no
+   * `--allow-undefined`. A value narrower than i32 is `zeroext`: wasm passes it
+   * as an i32, and the page reads and writes the whole word.
+   */
+  hostDeclarationFor(sig: FunctionSig): string {
+    const params: string[] = []
+    let i = 0
+    while (i < sig.paramNames.length) {
+      params.push(this.hostAbi(sig.paramTypes[i]))
+      i = i + 1
+    }
+    const group = this.module.attrGroupFor([
+      `"wasm-import-module"="host"`,
+      `"wasm-import-name"="${sig.name}"`,
+    ])
+    const result = this.llvmAbi(sig.returnType, false)
+    const extended = isNarrowAbi(result) ? `zeroext ${result}` : result
+    return `declare ${extended} @${sig.name}(${params.join(", ")}) ${group}`
+  }
+
+  hostAbi(type: i32): string {
+    const abi = this.llvmAbi(type, false)
+    return isNarrowAbi(abi) ? `${abi} zeroext` : abi
   }
 
   declarationFor(sig: FunctionSig): string {
@@ -2179,3 +2209,6 @@ export const emitProgram = (
   emitter.asyncRegistry = registry
   return emitter.emitModule()
 }
+
+/** An integer narrower than wasm's i32, which crosses to the page zero-extended. */
+const isNarrowAbi = (abi: string): boolean => abi === "i1" || abi === "i8" || abi === "i16"

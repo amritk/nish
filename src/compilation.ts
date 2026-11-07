@@ -3199,9 +3199,13 @@ export class Compilation {
     return out
   }
 
-  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts`, `std/map.ts`, `std/math.ts` and `std/secret.ts`. */
+  /**
+   * Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts`,
+   * `std/map.ts`, `std/math.ts`, `std/secret.ts` and a host module, whose
+   * functions the page defines and each importer declares (WP50 S2).
+   */
   writesOutput(unit: ModuleUnit): boolean {
-    return !unit.checker.program.writesNoOutput()
+    return !unit.source.host && !unit.checker.program.writesNoOutput()
   }
 
   /**
