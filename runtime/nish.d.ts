@@ -614,9 +614,6 @@ declare var crypto: {
 //
 // `docs/LANGUAGE.md` -> Builtins -> Builtin modules is the normative list.
 
-// Every negative errno a file call answers is the platform's own, untranslated:
-// the numbers shown here are Linux's (-2 ENOENT, -17 EEXIST, -18 EXDEV, -22
-// EINVAL, -40 ELOOP), and Darwin's differ (ELOOP is -62 there).
 /**
  * Files and directories: read, write, rename, remove and list paths on the
  * host's file system.
@@ -855,8 +852,8 @@ declare module "nish:fs" {
    * kept.
    *
    * @param path The path to `stat`.
-   * @returns The modification time, or NaN when the path cannot be stat'd,
-   *   which `m !== m` tests.
+   * @returns The modification time, or NaN when the path cannot be stat'd
+   *   (missing, or a parent that cannot be searched), which `m !== m` tests.
    */
   export function statMtimeSync(path: string): f64;
 }
@@ -882,8 +879,8 @@ declare module "nish:fs" {
  *
  * A `wasm32` target has no processes and no host to ask, so the checker
  * refuses `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`,
- * `totalMemory`, the scheduling calls, `signalFd`, `readSignal` and
- * `monotonicNanos` there; a WASI build answers `-1` from `spawnSync`,
+ * `totalMemory`, the scheduling calls, `signalFd` and `readSignal` there;
+ * a WASI build answers `-1` from `spawnSync`,
  * `spawnSyncTo` and `spawnPiped`. `spawn`, `kill`, `waitPid` and the scheduling
  * calls write state outside the program, so a scope's task or a parallel body
  * that calls one is refused as any shared write is.
@@ -996,7 +993,7 @@ declare module "nish:process" {
    * may list a descriptor that is already its own target (`[3]`), another
    * entry's target (`[4, 3]`), or the same one twice. The child shares each
    * descriptor's open file, its offset and its status flags, `O_NONBLOCK`
-   * among them. Reap the pid with `waitPid`.
+   * among them, and this process keeps its own. Reap the pid with `waitPid`.
    *
    * @param argv The program and its arguments.
    * @param fds The descriptors the child receives from 3 onward; an empty
@@ -1332,7 +1329,8 @@ declare module "nish:net" {
   /**
    * A new TCP socket, non-blocking and close-on-exec, that starts connecting
    * to `addr` and is answered at once, while the connection is still being
-   * made: the `EINPROGRESS` of a non-blocking `connect` is not a failure.
+   * made: the `EINPROGRESS` (`-115`) of a non-blocking `connect` is not a
+   * failure.
    * Watch the descriptor for writability, then ask `connectResult`. It holds
    * `TCP_NODELAY`, so a small write is sent at once. It does not wait and does
    * not allocate.
@@ -1496,6 +1494,12 @@ declare module "nish:net" {
    * and on Darwin. It never panics. The answer moves as the path does, so
    * read it when it is needed rather than once.
    *
+   *     // A batch of whole segments, or the caller's own size where there is no MSS.
+   *     export const batch = (conn: i32, fallback: i32): i32 => {
+   *       const mss = netMss(conn);
+   *       return mss > 0 ? mss * 8 : fallback;
+   *     };
+   *
    * @param fd A connected TCP socket.
    * @returns The size, or a plain `-1`, never an errno, for anything else: a
    *   descriptor that is not open, a socket with no peer (a listener, or one
@@ -1511,6 +1515,9 @@ declare module "nish:net" {
    * `TCP_QUICKACK`, option id 2 (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
    * delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
    * so a server that wants a mode sets it again after every response.
+   *
+   *     // After each response: Linux may have left quick-ACK mode.
+   *     export const answered = (conn: i32): i32 => netSetOption(conn, NET_TCP_QUICKACK, 1);
    */
   export const NET_TCP_QUICKACK: i32;
   /** `SO_KEEPALIVE`, option id 3: `value` 1 probes an idle connection, 0 does not. */
@@ -1758,9 +1765,6 @@ declare module "nish:unsafe" {
   export function readCString(p: CPtr): string;
 }
 
-// `nish:simd` (docs/LANGUAGE.md -> Vectors): the six sixteen-byte vector
-// types and the calls that make, load, store and take one apart. Under Node,
-// `runtime/nish.mjs` answers the import with `runtime/core.mjs`'s names.
 /**
  * Sixteen-byte vectors of one lane type, and the lane-wise operations on them,
  * each lowered to target-independent LLVM vector IR.
@@ -1947,9 +1951,9 @@ declare module "nish:simd" {
    */
   export function u16x8(a0: u16, a1: u16, a2: u16, a3: u16, a4: u16, a5: u16, a6: u16, a7: u16): u16x8;
   /**
-   * A `i32x4` of 4 lanes, one argument per lane, lane 0 first.
+   * An `i32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, a `i32`; `a1` to `a3` are lanes 1 to 3 in order.
+   * @param a0 Lane 0, an `i32`; `a1` to `a3` are lanes 1 to 3 in order.
    * @returns The vector.
    */
   export function i32x4(a0: i32, a1: i32, a2: i32, a3: i32): i32x4;
@@ -1961,16 +1965,16 @@ declare module "nish:simd" {
    */
   export function u32x4(a0: u32, a1: u32, a2: u32, a3: u32): u32x4;
   /**
-   * A `f32x4` of 4 lanes, one argument per lane, lane 0 first.
+   * An `f32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, a `f32`; `a1` to `a3` are lanes 1 to 3 in order.
+   * @param a0 Lane 0, an `f32`; `a1` to `a3` are lanes 1 to 3 in order.
    * @returns The vector.
    */
   export function f32x4(a0: f32, a1: f32, a2: f32, a3: f32): f32x4;
   /**
-   * A `f64x2` of 2 lanes, one argument per lane, lane 0 first.
+   * An `f64x2` of 2 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, a `f64`; `a1` to `a1` are lanes 1 to 1 in order.
+   * @param a0 Lane 0, an `f64`; `a1` is lane 1.
    * @returns The vector.
    */
   export function f64x2(a0: f64, a1: f64): f64x2;
@@ -1994,7 +1998,7 @@ declare module "nish:simd" {
    * `x` in all 4 lanes: one `insertelement` and a `shufflevector` with a
    * `zeroinitializer` mask.
    *
-   * @param x The lane value, a `i32`.
+   * @param x The lane value, an `i32`.
    * @returns The vector.
    */
   export function splatI32x4(x: i32): i32x4;
@@ -2010,7 +2014,7 @@ declare module "nish:simd" {
    * `x` in all 4 lanes: one `insertelement` and a `shufflevector` with a
    * `zeroinitializer` mask.
    *
-   * @param x The lane value, a `f32`.
+   * @param x The lane value, an `f32`.
    * @returns The vector.
    */
   export function splatF32x4(x: f32): f32x4;
@@ -2018,7 +2022,7 @@ declare module "nish:simd" {
    * `x` in all 2 lanes: one `insertelement` and a `shufflevector` with a
    * `zeroinitializer` mask.
    *
-   * @param x The lane value, a `f64`.
+   * @param x The lane value, an `f64`.
    * @returns The vector.
    */
   export function splatF64x2(x: f64): f64x2;
@@ -2052,7 +2056,7 @@ declare module "nish:simd" {
    * naming a lane past the end (the first when it is out of range, else the
    * last) and the length, as `xs[i]` does.
    *
-   * @param xs A `i32[]`, exactly the lane type (NL2579 otherwise); a
+   * @param xs An `i32[]`, exactly the lane type (NL2579 otherwise); a
    *   `readonly` array may be loaded from.
    * @param i The index of lane 0, an `i32`.
    * @returns The vector.
@@ -2076,7 +2080,7 @@ declare module "nish:simd" {
    * naming a lane past the end (the first when it is out of range, else the
    * last) and the length, as `xs[i]` does.
    *
-   * @param xs A `f32[]`, exactly the lane type (NL2579 otherwise); a
+   * @param xs An `f32[]`, exactly the lane type (NL2579 otherwise); a
    *   `readonly` array may be loaded from.
    * @param i The index of lane 0, an `i32`.
    * @returns The vector.
@@ -2088,7 +2092,7 @@ declare module "nish:simd" {
    * naming a lane past the end (the first when it is out of range, else the
    * last) and the length, as `xs[i]` does.
    *
-   * @param xs A `f64[]`, exactly the lane type (NL2579 otherwise); a
+   * @param xs An `f64[]`, exactly the lane type (NL2579 otherwise); a
    *   `readonly` array may be loaded from.
    * @param i The index of lane 0, an `i32`.
    * @returns The vector.
@@ -2449,7 +2453,7 @@ declare module "nish:simd" {
    */
   export function asU16x8(v: SimdVector): u16x8;
   /**
-   * The same sixteen bytes read as a `i32x4`, one `bitcast`.
+   * The same sixteen bytes read as an `i32x4`, one `bitcast`.
    *
    * @param v Any vector.
    * @returns The bytes as 4 `i32` lanes.
@@ -2463,14 +2467,14 @@ declare module "nish:simd" {
    */
   export function asU32x4(v: SimdVector): u32x4;
   /**
-   * The same sixteen bytes read as a `f32x4`, one `bitcast`.
+   * The same sixteen bytes read as an `f32x4`, one `bitcast`.
    *
    * @param v Any vector.
    * @returns The bytes as 4 `f32` lanes.
    */
   export function asF32x4(v: SimdVector): f32x4;
   /**
-   * The same sixteen bytes read as a `f64x2`, one `bitcast`.
+   * The same sixteen bytes read as an `f64x2`, one `bitcast`.
    *
    * @param v Any vector.
    * @returns The bytes as 2 `f64` lanes.
