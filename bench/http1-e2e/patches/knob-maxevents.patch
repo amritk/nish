@@ -1,0 +1,12 @@
+diff -ru a/runtime/runtime-net.c b/runtime/runtime-net.c
+--- a/runtime/runtime-net.c	2026-11-07 21:40:48.364888043 +0000
++++ b/runtime/runtime-net.c	2026-11-07 21:40:48.400268761 +0000
+@@ -641,7 +641,7 @@
+    given. Nothing allocates: the kernel's records for one wait are on the
+    stack, at most `NISH_POLL_CHUNK` of them, and whatever did not fit is still
+    ready at the next wait. */
+-#define NISH_POLL_CHUNK 64
++#define NISH_POLL_CHUNK 512 /* knob-maxevents (bench/http1-e2e): was 64 */
+ #if defined(__linux__)
+ #define NISH_POLL_ADD EPOLL_CTL_ADD
+ #define NISH_POLL_MODIFY EPOLL_CTL_MOD

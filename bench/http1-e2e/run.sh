@@ -78,6 +78,10 @@ cmd_build() {
   rm -rf "$dir"
   cp -r "$WORK/challenge/$SUB" "$dir"
   case "$arm" in C) patch -d "$dir" -p1 < "$HERE/patches/arm-c-sendbody.patch" ;; esac
+  # build.sh reads x86's `flags` line from /proc/cpuinfo under pipefail; an
+  # aarch64 cpuinfo has none, so the grep fails and build.sh exits there
+  # silently. Let it find nothing, and build baseline, as it means to.
+  sed -i "s|cut -d: -f2) \"|cut -d: -f2 \|\| true) \"|" "$dir/build.sh"
   # Every arm is built with -g, so perf and cachegrind name its functions:
   # build.sh's own flags plus -g, which keeps the symbols the link would strip.
   # (build.sh stops at x86-64-v3, so valgrind 3.22, which cannot run AVX-512,

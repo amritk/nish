@@ -1,0 +1,15 @@
+diff -ru a/runtime/runtime-net.c b/runtime/runtime-net.c
+--- a/runtime/runtime-net.c	2026-11-07 21:40:48.364888043 +0000
++++ b/runtime/runtime-net.c	2026-11-07 21:40:48.423357210 +0000
+@@ -344,6 +344,11 @@
+   int c = nish_net_setup(accept(fd, &s.sa, &n));
+ #endif
+   if (c < 0) return nish_net_fail();
++  /* knob-rcvlowat (bench/http1-e2e): no readiness until a request's worth of
++     bytes is queued, so a head split across segments is one wakeup. Every
++     request in the workload is longer than this. */
++  int lowat = 64;
++  setsockopt(c, SOL_SOCKET, SO_RCVLOWAT, &lowat, sizeof lowat);
+   int nodelay = 0;
+   socklen_t size = sizeof nodelay;
+   if (getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, &size) == 0 && nodelay != 0 &&
