@@ -139,7 +139,8 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
 `scripts/typedoc-nish-widths.mjs` keeps each type as the source spells it
 (`i32`, not `number`).
 
-- **Pages.** `std/<path>.ts`, imported as `nish/<path>`, is
+- **Pages.** A page's title is its module specifier as a code span
+  (`` `nish/json` ``, `` `nish:secret` ``). `std/<path>.ts`, imported as `nish/<path>`, is
   `docs/reference/<path>.md`; the builtin module `nish:<name>` is
   `docs/reference/nish-<name>.md`; the globals `runtime/nish.d.ts` declares are
   `docs/reference/builtins.md`; `index.md` lists them all. `language.md` is
@@ -152,11 +153,19 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
   A global that merges with a TypeScript lib declaration (`Array`,
   `String`, `Symbol`) shows only the members `runtime/nish.d.ts` declares.
 
-- **Constants.** A constant whose name has a `MAX` or `MIN` word
-  (`REGEX_MAX_DEPTH`, `BCRYPT_MIN_COST`) is a limit, listed under
-  `## Limits`; every other constant is under `## Constants`. A limit is
-  named for what it bounds, so the name is the rule; a constant that bounds
-  something under another name is renamed, not special-cased here.
+- **Constants.** A constant is a limit, listed under `## Limits`, when the
+  first sentence of its doc comment states a bound: it opens with "The
+  most", "The fewest" (or another superlative), "At most", "At least" or
+  "How deep", or with "How many", "How much", "How long" or "How far" and
+  says what is kept, held or refused. Every other constant, a protocol
+  identifier named `MAX` (`QUIC_TP_MAX_DATA`) included, is under
+  `## Constants`. A constant's card is titled with its value as written,
+  decimal digits grouped (`1,048,576`, `0x0e`, `"h3"`); only a constant with
+  no literal value, a `runtime/nish.d.ts` declaration or one computed from
+  others (`DNS_MAX_ANSWERS * 2`), is titled with its name.
+- **Overloads.** Each signature of an overloaded function is shown whole, in
+  source order: its own description (or the first's, when it has none), its
+  signature, parameters and return.
 - **Links.** A `{@link}` that names nothing fails the run, `--check`
   included.
 
@@ -171,7 +180,7 @@ instead.
    title says it, and the first letter left is capitalised. Its first
    sentence is the module's line in `index.md`.
 2. **The usage example** is the first code block (lines indented two spaces
-   or more, not a list) that imports from `"nish/`, together with any code
+   or more, not a list) that imports from `"nish/` or `"nish:`, together with any code
    blocks right after it. It is shown after the import line.
 3. A list or code block belongs to the paragraph before it.
 4. **A warning** starts at any sentence that opens with bold text saying
@@ -179,14 +188,18 @@ instead.
    at the start of a paragraph or within one, and runs to the end of that
    paragraph and its lists and code blocks. It is a warning callout, split
    from the text before it, so a limit is never folded away. Rules 5 and 6
-   apply to what precedes it.
+   apply to what precedes it. The rule reads the bold title only, not the
+   sentence after it, so a hazard titled otherwise (bcrypt's **The cost comes
+   from the hash.**) is a detail: a source that wants a hazard shown as a
+   warning says so in its title.
 5. **The paragraph after the lead** is the summary, shown as an info
    callout, unless it opens with a bold title (`**Title.** Body` or
    `**Title**: body`); then the page has no summary and the paragraph
    follows rule 6. A bold phrase that runs on into its sentence
    (`**The syntax is JavaScript's**, with …`) is not a title.
 6. **A later paragraph opening with bold text** is a collapsible detail
-   titled with that text. `**Title.** Body` or `**Title**: body` uses the
+   titled with that text, code spans kept as written (a title attribute
+   holds no Markdown). `**Title.** Body` or `**Title**: body` uses the
    rest as the body; otherwise the whole paragraph is the body.
 7. Every other paragraph is shown as written.
 

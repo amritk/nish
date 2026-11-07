@@ -626,7 +626,7 @@ without a red squiggle.
 
 </scalar-callout>
 
-<scalar-detail title="nish is still the authority">
+<scalar-detail title="`nish` is still the authority">
 
 TypeScript's structural checker is
 weaker than this compiler's in the places where Nish is deliberately
@@ -646,7 +646,7 @@ So a program that `tsc` accepts may still be rejected by `nish`; the
 reverse should never happen, and a case where it does is a bug in this file.
 `docs/LANGUAGE.md` is the normative description.
 
-<scalar-detail title="Map and Set are not declared here">
+<scalar-detail title="`Map` and `Set` are not declared here">
 
 **`Map` and `Set` are not declared here**, although `nish` has them as
 globals: the `"lib": ["ES2022"]` a program is checked against already
@@ -685,7 +685,6 @@ The success value. Its `Result` type comes from the context, as `null`'s does.
 
 ```ts
 function Ok<T, E>(value: T): Result<T, E>
-function Ok<E>(): Result<void, E>
 ```
 
 #### Parameters
@@ -697,6 +696,12 @@ function Ok<E>(): Result<void, E>
 
 <scalar-field name="returns" type="Result&lt;T, E&gt;">
 </scalar-field>
+
+The success value. Its `Result` type comes from the context, as `null`'s does.
+
+```ts
+function Ok<E>(): Result<void, E>
+```
 
 #### Returns
 

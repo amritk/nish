@@ -125,13 +125,18 @@ Zero the value's whole storage, with a store the optimiser may not remove.
 
 ```ts
 function wipe<T>(target: Secret<T>): void
-function wipe(target: object): void
 ```
 
 #### Parameters
 
 <scalar-field name="target" type="Secret&lt;T&gt;" required>
 </scalar-field>
+
+Zero an array or record of integers that `expose`'s function holds, likewise.
+
+```ts
+function wipe(target: object): void
+```
 
 #### Parameters
 

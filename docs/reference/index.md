@@ -8,7 +8,7 @@ Every module a Nish program can import, one page each, generated from the doc co
 
 | Module | |
 | --- | --- |
-| [`Globals`](builtins.md) | Ambient declarations for the Nish global surface. |
+| [Globals](builtins.md) | Ambient declarations for the Nish global surface. |
 | [`nish:async`](nish-async.md) | The `nish:async` builtin module: the globals of the same names, importable. |
 | [`nish:fs`](nish-fs.md) | The `nish:fs` builtin module: the globals of the same names, importable. |
 | [`nish:io`](nish-io.md) | The `nish:io` builtin module: the globals of the same names, importable. |

@@ -36,51 +36,6 @@ function awaitAll<A, B>(
   a: Promise<A>,
   b: Promise<B>,
 ): Promise<[A, B]>
-function awaitAll<A, B, C>(
-  a: Promise<A>,
-  b: Promise<B>,
-  c: Promise<C>,
-): Promise<[A, B, C]>
-function awaitAll<A, B, C, D>(
-  a: Promise<A>,
-  b: Promise<B>,
-  c: Promise<C>,
-  d: Promise<D>,
-): Promise<[A, B, C, D]>
-function awaitAll<A, B, C, D, E>(
-  a: Promise<A>,
-  b: Promise<B>,
-  c: Promise<C>,
-  d: Promise<D>,
-  e: Promise<E>,
-): Promise<[A, B, C, D, E]>
-function awaitAll<A, B, C, D, E, F>(
-  a: Promise<A>,
-  b: Promise<B>,
-  c: Promise<C>,
-  d: Promise<D>,
-  e: Promise<E>,
-  f: Promise<F>,
-): Promise<[A, B, C, D, E, F]>
-function awaitAll<A, B, C, D, E, F, G>(
-  a: Promise<A>,
-  b: Promise<B>,
-  c: Promise<C>,
-  d: Promise<D>,
-  e: Promise<E>,
-  f: Promise<F>,
-  g: Promise<G>,
-): Promise<[A, B, C, D, E, F, G]>
-function awaitAll<A, B, C, D, E, F, G, H>(
-  a: Promise<A>,
-  b: Promise<B>,
-  c: Promise<C>,
-  d: Promise<D>,
-  e: Promise<E>,
-  f: Promise<F>,
-  g: Promise<G>,
-  h: Promise<H>,
-): Promise<[A, B, C, D, E, F, G, H]>
 ```
 
 #### Parameters
@@ -95,6 +50,16 @@ function awaitAll<A, B, C, D, E, F, G, H>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B]&gt;">
 </scalar-field>
+
+Await every call at once; the answers come in the order the calls are written.
+
+```ts
+function awaitAll<A, B, C>(
+  a: Promise<A>,
+  b: Promise<B>,
+  c: Promise<C>,
+): Promise<[A, B, C]>
+```
 
 #### Parameters
 
@@ -111,6 +76,17 @@ function awaitAll<A, B, C, D, E, F, G, H>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C]&gt;">
 </scalar-field>
+
+Await every call at once; the answers come in the order the calls are written.
+
+```ts
+function awaitAll<A, B, C, D>(
+  a: Promise<A>,
+  b: Promise<B>,
+  c: Promise<C>,
+  d: Promise<D>,
+): Promise<[A, B, C, D]>
+```
 
 #### Parameters
 
@@ -130,6 +106,18 @@ function awaitAll<A, B, C, D, E, F, G, H>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D]&gt;">
 </scalar-field>
+
+Await every call at once; the answers come in the order the calls are written.
+
+```ts
+function awaitAll<A, B, C, D, E>(
+  a: Promise<A>,
+  b: Promise<B>,
+  c: Promise<C>,
+  d: Promise<D>,
+  e: Promise<E>,
+): Promise<[A, B, C, D, E]>
+```
 
 #### Parameters
 
@@ -152,6 +140,19 @@ function awaitAll<A, B, C, D, E, F, G, H>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E]&gt;">
 </scalar-field>
+
+Await every call at once; the answers come in the order the calls are written.
+
+```ts
+function awaitAll<A, B, C, D, E, F>(
+  a: Promise<A>,
+  b: Promise<B>,
+  c: Promise<C>,
+  d: Promise<D>,
+  e: Promise<E>,
+  f: Promise<F>,
+): Promise<[A, B, C, D, E, F]>
+```
 
 #### Parameters
 
@@ -177,6 +178,20 @@ function awaitAll<A, B, C, D, E, F, G, H>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E, F]&gt;">
 </scalar-field>
+
+Await every call at once; the answers come in the order the calls are written.
+
+```ts
+function awaitAll<A, B, C, D, E, F, G>(
+  a: Promise<A>,
+  b: Promise<B>,
+  c: Promise<C>,
+  d: Promise<D>,
+  e: Promise<E>,
+  f: Promise<F>,
+  g: Promise<G>,
+): Promise<[A, B, C, D, E, F, G]>
+```
 
 #### Parameters
 
@@ -205,6 +220,21 @@ function awaitAll<A, B, C, D, E, F, G, H>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E, F, G]&gt;">
 </scalar-field>
+
+Await every call at once; the answers come in the order the calls are written.
+
+```ts
+function awaitAll<A, B, C, D, E, F, G, H>(
+  a: Promise<A>,
+  b: Promise<B>,
+  c: Promise<C>,
+  d: Promise<D>,
+  e: Promise<E>,
+  f: Promise<F>,
+  g: Promise<G>,
+  h: Promise<H>,
+): Promise<[A, B, C, D, E, F, G, H]>
+```
 
 #### Parameters
 

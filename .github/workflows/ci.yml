@@ -39,8 +39,9 @@
 # sha256-macos: runtime/runtime-sha256.c's Apple detection, on its ARMv8
 #       kernel, natively on a macOS runner, under both NISH_SHA256 pins.
 # lint: package-lock.json against package.json with no registry involved,
-#       `npm run lint` when package.json defines it (no-op otherwise), then
-#       docs/check-links.mjs over every Markdown file.
+#       `npm run lint` when package.json defines it (no-op otherwise),
+#       docs/check-links.mjs over every Markdown file, then
+#       `scripts/gen-reference.mjs --check` (docs/reference/ is not stale).
 #
 # Also reusable via `workflow_call`: release.yml runs it before packing a tag.
 # Runs on `merge_group` too, for the merge queue on main (see `on:` below).

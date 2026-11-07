@@ -55,7 +55,8 @@ const Kind = {
 const readProject = async () => {
   const app = await Application.bootstrapWithPlugins(
     {
-      entryPoints: ["std/**/*.ts", "runtime/nish.d.ts"],
+      // Against the checkout, wherever the script is run from.
+      entryPoints: ["std/**/*.ts", "runtime/nish.d.ts"].map((p) => path.join(root, p)),
       plugin: [path.join(root, "scripts/typedoc-nish-widths.mjs")],
       excludePrivate: true,
       excludeInternal: true,
@@ -78,7 +79,7 @@ const readProject = async () => {
         lib: ["es2022"],
         types: [],
         moduleDetection: "force",
-        paths: { "nish/*": ["./std/*"] },
+        paths: { "nish/*": [path.join(root, "std/*")] },
       },
     },
     []
@@ -470,7 +471,7 @@ const dedent = (lines) => {
 /**
  * A module comment as Markdown, by the convention docs/README.md states: the
  * lead paragraph, the usage example (the first indented block that imports
- * from `nish/`), and the rest as callouts, details and paragraphs.
+ * from `nish/` or `nish:`), and the rest as callouts, details and paragraphs.
  */
 const moduleProse = (comment, prose) => {
   const blocks = comment
@@ -487,7 +488,9 @@ const moduleProse = (comment, prose) => {
     .trim()
     // "nish/regex — regular expressions ..." leads with a lowercase word once the name is gone.
     .replace(/^[a-z]/, (c) => c.toUpperCase())
-  const usageAt = blocks.findIndex((b) => isCode(b) && /^\s*import\b[\s\S]*from\s+"nish\//.test(b.join("\n")))
+  const usageAt = blocks.findIndex(
+    (b) => isCode(b) && /^\s*import\b[\s\S]*from\s+"nish[/:]/.test(b.join("\n"))
+  )
   // The usage example, with the indented blocks that directly follow it.
   let usage = ""
   if (usageAt >= 0) {
@@ -527,7 +530,8 @@ const moduleProse = (comment, prose) => {
       const text = unit.map(prose).join("\n\n")
       return [i === 0 ? tag("scalar-callout", 'type="info"', text) : text]
     }
-    const title = bold[1].replace(/`/g, "").replace(/[.:]$/, "")
+    // The title keeps its code spans as written: an attribute cannot hold Markdown.
+    const title = bold[1].replace(/[.:]$/, "")
     const head = titled ? unit[0].slice(bold[0].length).replace(/^[.:]/, "").trim() : unit[0]
     const body = [head, ...unit.slice(1)].map(prose).join("\n\n").trim()
     return [tag("scalar-detail", `title="${attr(title)}"`, body)]
@@ -571,10 +575,14 @@ const header = (source) =>
 const byText = (a, b) => Number(a > b) - Number(a < b)
 const sortByName = (xs) => [...xs].sort((a, b) => byText(a.name, b.name))
 
-/** An integer literal with its digits grouped in threes (`100,000`), exact past 2^53; null for anything else. */
-const formatNumber = (v) => {
+/**
+ * A constant's value as its card's title: a decimal integer with its digits
+ * grouped in threes (`100,000`, exact past 2^53), anything else as written
+ * (`0x01`, `"h3"`, `DNS_QUERY_MAX_BYTES + 2`).
+ */
+const valueTitle = (v) => {
   const m = /^(-?)(\d+)$/.exec(v)
-  return m ? `${m[1]}${m[2].replace(/\B(?=(\d{3})+$)/g, ",")}` : null
+  return m ? `${m[1]}${m[2].replace(/\B(?=(\d{3})+$)/g, ",")}` : v.replace(/\s+/g, " ")
 }
 
 /** A member's name; TypeDoc names a well-known-symbol key `[dispose]`, the source `[Symbol.dispose]`. */
@@ -596,25 +604,39 @@ const memberRow = (m, owner, ctx) => {
   } else {
     rows.push([`${stat}${ro}${memberName(m.name)}${m.flags?.isOptional ? "?" : ""}: ${typeText(m.type)}`, m])
   }
-  return rows.map(([sig, c]) => `| \`${sig.replace(/\|/g, "\\|")}\` | ${cell(summary(c.comment, ctx))} |`)
+  return rows.map(
+    ([sig, c]) =>
+      `| \`${sig.replace(/\s+/g, " ").replace(/\|/g, "\\|")}\` | ${cell(summary(c.comment, ctx))} |`
+  )
 }
 
+/**
+ * A function's section. Each overload is shown whole, in source order: its own
+ * description (or the first's, when it has none), signature, parameters and
+ * return. A builtin module's undocumented re-declaration takes the global's.
+ */
 const renderFunction = (f, ctx, fallback) => {
   const out = [`## ${f.name}`]
   const sigs = f.signatures ?? []
-  const doc = (sig) => (sig.comment ? sig : (fallback?.signatures?.[0] ?? sig))
-  const desc = summary(doc(sigs[0]).comment, ctx)
-  if (desc) {
-    out.push(desc)
+  const doc = (sig, i) => {
+    if (sig.comment) {
+      return sig
+    }
+    return fallback?.signatures?.[i] ?? fallback?.signatures?.[0] ?? (sigs[0].comment ? sigs[0] : sig)
   }
-  out.push(`\`\`\`ts\n${sigs.map((s) => signatureText(`function ${f.name}`, s)).join("\n")}\n\`\`\``)
-  for (const sig of sigs) {
-    const c = doc(sig)
+  for (const [i, sig] of sigs.entries()) {
+    const c = doc(sig, i)
+    const desc = summary(c.comment, ctx)
+    // An overload that repeats the first one's description shows it once.
+    if (desc && (i === 0 || c !== doc(sigs[0], 0))) {
+      out.push(desc)
+    }
+    out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``)
     if (sig.parameters?.length) {
       out.push("#### Parameters")
-      for (const [i, p] of sig.parameters.entries()) {
+      for (const [j, p] of sig.parameters.entries()) {
         const req = p.flags?.isOptional || p.defaultValue !== undefined ? "" : " required"
-        const pc = c.parameters?.[i]?.comment ?? p.comment
+        const pc = c.parameters?.[j]?.comment ?? p.comment
         out.push(
           tag(
             "scalar-field",
@@ -674,12 +696,30 @@ const renderObject = (o, ctx) => {
   return out.join("\n\n")
 }
 
-/** A constant whose name has a `MAX` or `MIN` word (`REGEX_MAX_DEPTH`) is a limit, listed under `## Limits`. */
-const isLimit = (v) => v.name.split("_").some((w) => w === "MAX" || w === "MIN")
+/**
+ * A constant is a limit, listed under `## Limits`, by its doc's first
+ * sentence: one that opens with a bound ("The most …", "The longest …",
+ * "At most …", "How deeply …"), or with "How many/much/long/far …" and says
+ * what is bounded ("may", "kept", "holds", "refuses"). Its name does not
+ * decide: `QUIC_TP_MAX_DATA` is a protocol identifier.
+ */
+const isLimit = (v) => {
+  const first = firstSentence(
+    (v.comment?.summary ?? [])
+      .map((p) => p.text)
+      .join("")
+      .trim()
+  )
+  const bound =
+    /^(?:the\s+(?:most|fewest|least|longest|shortest|largest|smallest|deepest|highest|lowest)|at\s+(?:most|least)|how\s+deep(?:ly)?)\b/i
+  const amount = /^how\s+(?:many|much|long|far)\b/i
+  return bound.test(first) || (amount.test(first) && /\b(?:may|kept|keeps?|holds?|refus\w*)\b/i.test(first))
+}
 
 const renderConstants = (heading, vars, ctx) => {
   const cards = vars.map((v) => {
-    const value = v.defaultValue === undefined ? null : formatNumber(v.defaultValue)
+    // TypeDoc writes "..." for an initialiser it does not print (`A * 2`), which is no value to show.
+    const value = v.defaultValue === undefined || v.defaultValue === "..." ? null : valueTitle(v.defaultValue)
     const desc = summary(v.comment, ctx)
     const body = [`\`${v.name}: ${typeText(v.type)}\``, desc].filter(Boolean).join("\n\n")
     return tag("scalar-card", `title="${attr(value ?? v.name)}" icon="phosphor/regular/hash"`, body)
@@ -705,8 +745,9 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }
   const objects = of(Kind.variable).filter((v) => v.type?.type === "reflection")
   const vars = of(Kind.variable).filter((v) => v.type?.type !== "reflection")
   const { lead, usage, body } = moduleProse(comment, prose)
-  // Scalar cuts a heading at a bare colon (`# nish:fs` renders as "nish"); a code span keeps it whole.
-  const out = [header(source), title.includes(":") ? `# \`${title}\`` : `# ${title}`]
+  // A module's name is code, and Scalar cuts a heading at a bare colon
+  // (`# nish:fs` renders as "nish"); a code span keeps it whole.
+  const out = [header(source), spec === null ? `# ${title}` : `# \`${title}\``]
   if (lead || intro) {
     out.push(lead || intro)
   }
@@ -781,7 +822,8 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }
 
 /** The overview page: every module, linked, with its lead sentence. */
 const renderIndex = (pages) => {
-  const row = (p) => `| [\`${p.title}\`](${path.posix.relative(outDir, p.page)}) | ${cell(p.first)} |`
+  const row = (p) =>
+    `| [${p.spec ? `\`${p.title}\`` : p.title}](${path.posix.relative(outDir, p.page)}) | ${cell(p.first)} |`
   const builtin = pages.filter((p) => !p.spec || p.spec.startsWith("nish:"))
   const std = pages.filter((p) => p.spec?.startsWith("nish/"))
   return `${[
@@ -801,6 +843,9 @@ const renderIndex = (pages) => {
 const collectPages = (project) => {
   const pages = []
   const runtime = project.children.find((m) => m.name === "runtime/nish")
+  if (!runtime) {
+    throw new Error("gen-reference: TypeDoc read no runtime/nish module, so no builtin page can be made")
+  }
   // A global nish.d.ts merges into one of TypeScript's own (`Array`,
   // `StringConstructor`) keeps only what nish.d.ts declares; one it does not
   // declare at all (`Array`'s constructor variable) is left out.
@@ -820,7 +865,7 @@ const collectPages = (project) => {
       .map((c) => (c.signatures ? { ...c, signatures: c.signatures.filter(own) } : c))
       .filter((c) => !c.signatures || c.signatures.length > 0),
   })
-  const globalList = (runtime?.children ?? []).filter((c) => c.kind !== Kind.module && own(c)).map(ownOnly)
+  const globalList = runtime.children.filter((c) => c.kind !== Kind.module && own(c)).map(ownOnly)
   const globals = new Map(globalList.filter((c) => c.kind === Kind.func).map((c) => [c.name, c]))
   pages.push({
     mod: { children: globalList },
