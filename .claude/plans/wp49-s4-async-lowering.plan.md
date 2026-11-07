@@ -36,17 +36,17 @@ stages:
     title: "feat(interop): emit async functions as TypeScript async/await (WP49 stage 4, part 2b)"
     goal: An async program's --emit-ts output runs under Node with async/await and prints the same as native for every async tests/cases program whose output does not depend on interleaving.
     verification: npm run check && npm run lint && node tests/run.js emit-ts && node tests/run.js async && node tests/run.js await && node tests/differential/run.js (async cases agree with native)
-    status: pending
+    status: completed
     todos:
       - id: emit-async
         content: Emit async functions, await, spawn, awaitAll and an async main as TypeScript async/await in src/emit-ts-*.ts, reading types only through walk.typeAt and treating a null binding table under walk.untyped as unknown via walk.missType()
-        status: pending
+        status: completed
       - id: emit-tests
         content: Take the async tests/cases out of the emit-ts known list (regenerate tests/differential/emit-ts-known.txt only under CI's pinned Node), add differential coverage, regenerate goldens
-        status: pending
+        status: completed
       - id: emit-docs
         content: Record in docs/LANGUAGE.md and the guide async page that --emit-ts output uses Node's async/await and where its resume order differs from native (§2 "Where it is not Node")
-        status: pending
+        status: completed
 ---
 
 # WP49 stage 4, part 2 — compile `async` functions

@@ -25,6 +25,7 @@ declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
 define internal void @greet(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i8* noundef noalias readonly align 8 %name, i8* noundef nonnull noalias readonly align 8 nocapture %bang) #0 {
 entry:
   %tag.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = icmp ne i8* %name, null
   br i1 %0, label %if.then, label %if.end
 
@@ -44,6 +45,7 @@ if.end:
   %7 = call i32 @twice$i32$fn.12.greet$arrow2(i32 2, i8* %6)
   %8 = call i8* @nish_str_from_i32(i32 %7)
   call void @nish_print(i8* %8)
+  call void @nish_arena_release(i64 %arena.mark)
   ret void
 }
 
@@ -53,7 +55,6 @@ entry:
   %arr.data = alloca [2 x i8*], align 8
   %arr.hdr.1 = alloca %struct.nish_array, align 8
   %arr.data.1 = alloca [1 x i8*], align 8
-  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 2, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
@@ -78,7 +79,6 @@ entry:
   %12 = getelementptr inbounds i8*, i8** %11, i64 0
   store i8* bitcast ({ i64, [8 x i8] }* @.str.5 to i8*), i8** %12, align 8, !alias.scope !4, !noalias !3, !tbaa !14
   call void @greet(%struct.nish_array* %arr.hdr.1, i8* null, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
-  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
@@ -130,7 +130,7 @@ ovf.fail:
   unreachable
 }
 
-define internal void @each$fn.12.greet$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i8* noundef %cap.0) #0 {
+define internal void @each$fn.12.greet$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i8* noundef nonnull noalias readonly align 8 nocapture %cap.0) #0 {
 entry:
   %x.addr = alloca i8*, align 8
   %forof.idx = alloca i64, align 8
@@ -165,7 +165,7 @@ forof.end:
   ret void
 }
 
-define internal noundef nonnull align 8 i8* @twice$str$fn.12.greet$arrow1(i8* noundef nonnull noalias readonly align 8 %x, i8* noundef %cap.0) #0 {
+define internal noundef nonnull align 8 i8* @twice$str$fn.12.greet$arrow1(i8* noundef nonnull noalias readonly align 8 %x, i8* noundef nonnull noalias readonly align 8 nocapture %cap.0) #0 {
 entry:
   %0 = call i64 @nish_arena_mark()
   %1 = call i8* @greet$arrow1(i8* %x, i8* %cap.0)
@@ -176,7 +176,7 @@ entry:
   ret i8* %5
 }
 
-define internal noundef i32 @twice$i32$fn.12.greet$arrow2(i32 noundef %x, i8* noundef %cap.0) #0 {
+define internal noundef i32 @twice$i32$fn.12.greet$arrow2(i32 noundef %x, i8* noundef nonnull noalias readonly align 8 nocapture %cap.0) #0 {
 entry:
   %0 = call i32 @greet$arrow2(i32 %x, i8* %cap.0)
   %1 = call i32 @greet$arrow2(i32 %0, i8* %cap.0)
