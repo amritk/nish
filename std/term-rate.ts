@@ -1,5 +1,5 @@
 /**
- * `std/term-rate` — how fast the link to the terminal is, measured from frames
+ * `nish/term-rate` — how fast the link to the terminal is, measured from frames
  * sent and acknowledged, and the frame rate and drawing detail a program keeps
  * to under it.
  *
@@ -9,6 +9,17 @@
  * and asks it whether a frame may be drawn now and in what shape
  * (`RateDecision`). Every time is an `f64` count of milliseconds on the
  * caller's clock, as `FixedStep`'s is in `nish/term`.
+ *
+ *     import { RateController, RateOptions } from "nish/term-rate"
+ *
+ *     const rate = new RateController(new RateOptions())
+ *     // each turn of the loop, at nowMs:
+ *     rate.tick(nowMs)
+ *     if (rate.mayDraw(nowMs)) {
+ *       // draw as rate.decision() says, then write the frame and `CSI 5 n`
+ *       rate.frameSent(bytes, costNs, nowMs)
+ *     }
+ *     // for each `CSI 0 n` read back: rate.ackReceived(nowMs)
  *
  * **The acknowledgement.** A frame is acknowledged when the terminal answers a
  * status query sent right after it: the terminal answers in order, so the
@@ -325,84 +336,113 @@ export class TermStats {
  */
 export class RateController {
   /** The tiers allowed, fastest first, ending at 5. */
-  tiers: i32[]
-  /** Paces frames at `tier`. */
+  private tiers: i32[]
+  /**
+   * Paces frames at `tier`.
+   * @internal Used by `termIoWait` in term-io.ts.
+   */
   pacer: FixedStep
   /** When the tier or step last changed. */
-  changedMs: f64
+  private changedMs: f64
   /** When the loads went over budget and stayed, or -1. */
-  overSinceMs: f64
+  private overSinceMs: f64
   /** When the next step up came within its margin and stayed, or -1. */
-  underSinceMs: f64
+  private underSinceMs: f64
   /** The send times of the unacknowledged frames, oldest at `head`. */
   sentMs: f64[]
   /** Their byte counts. */
-  sentBytes: i32[]
+  private sentBytes: i32[]
   /** When the last acknowledgement arrived, or -1. */
-  lastAckMs: f64
-  /** The smoothed round trip, in milliseconds. */
+  private lastAckMs: f64
+  /**
+   * The smoothed round trip, in milliseconds.
+   * @internal Used by `Terminal` in term-io.ts.
+   */
   rttMs: f64
-  /** The link's latency without bytes: the least, over the kept trips, of the round trip less the bytes' time. */
+  /**
+   * The link's latency without bytes: the least, over the kept trips, of the round trip less the bytes' time.
+   */
   baseRttMs: f64
   /** The latency as last worked out while the bandwidth was known, held once its samples age out. */
-  heldLatencyMs: f64
-  /** The round trips of the probe and of the latest frames sent onto an idle link, `rateTripCount` at most. */
+  private heldLatencyMs: f64
+  /**
+   * The round trips of the probe and of the latest frames sent onto an idle link, `rateTripCount` at most.
+   */
   tripMs: f64[]
   /** Their byte counts, 0 for the probe. */
-  tripBytes: f64[]
+  private tripBytes: f64[]
   /** The bytes a second each of the latest answers proves at least, its bytes over its round trip. */
-  floorPerSec: f64[]
+  private floorPerSec: f64[]
   /** The smoothed bytes of an answered frame, for the bandwidth. */
-  ackBytes: f64
+  private ackBytes: f64
   /** The smoothed time the link spent on an answered frame, in milliseconds, for the bandwidth. */
-  ackBusyMs: f64
+  private ackBusyMs: f64
   /**
    * The bytes a second delivered: `ackBytes` over `ackBusyMs`, at least the most of `floorPerSec`, which alone is a lower
    * bound. Samples older than `rateFreshMs` still count here while trips agree with them, but no decision uses them.
    */
   bytesPerSec: f64
   /** When the bandwidth was last sampled, by a frame that waited behind another or by two trips. */
-  rateAtMs: f64
+  private rateAtMs: f64
   /** The quickest kept trip, or the round trip with none kept, when the bandwidth was last sampled: at least the latency then. */
-  rateQuickMs: f64
+  private rateQuickMs: f64
   /** When frames were last given up on, while `stale` waits for their late answers. */
-  staleSinceMs: f64
+  private staleSinceMs: f64
   /** The smoothed frame cost, in milliseconds. */
-  costMs: f64
+  private costMs: f64
   /** The smoothed bytes per frame. */
-  frameBytes: f64
-  current: RateDecision
-  measured: TermStats
-  /** The least tier detail is cut to keep: the floor tier under `RATE_FIRST`, 5 under `DETAIL_FIRST`. */
+  private frameBytes: f64
+  private current: RateDecision
+  private measured: TermStats
+  /**
+   * The least tier detail is cut to keep: the floor tier under `RATE_FIRST`, 5 under `DETAIL_FIRST`.
+   */
   floorFps: i32
-  /** The least tier above which `RATE_FIRST` keeps full detail. */
+  /**
+   * The least tier above which `RATE_FIRST` keeps full detail.
+   * @internal Nothing reads it.
+   */
   minTier: i32
+  /**
+   * What gives way first, `RATE_FIRST` or `DETAIL_FIRST`, from the options.
+   */
   prefer: i32
+  /**
+   * How many frames may await their acknowledgement at once: 1 or 2.
+   */
   maxUnacked: i32
-  /** The fixed frame rate, or 0 when the controller chooses. */
+  /**
+   * The fixed frame rate, or 0 when the controller chooses.
+   * @internal Used by `Terminal` in term-io.ts.
+   */
   fixedFps: i32
   /** The frame rate in force. */
-  tier: i32
+  private tier: i32
   /** The detail step in force, 0 (full detail) to `rateMaxLevel`. */
-  level: i32
+  private level: i32
   /** The oldest unacknowledged frame's index in `sentMs`. */
-  head: i32
-  dropped: i32
-  lost: i32
-  /** Frames given up on whose answers may still come: the next answers are theirs, and no frame is drawn meanwhile. */
+  private head: i32
+  private dropped: i32
+  private lost: i32
+  /**
+   * Frames given up on whose answers may still come: the next answers are theirs, and no frame is drawn meanwhile.
+   * @internal Used by `Terminal` in term-io.ts.
+   */
   stale: i32
   /** Where the next trip goes in `tripMs` once it is full. */
-  tripNext: i32
+  private tripNext: i32
   /** How many trips in a row have contradicted the aged bandwidth sample. */
-  contradicted: i32
+  private contradicted: i32
   /** Where the next goes in `floorPerSec` once it is full. */
-  floorNext: i32
+  private floorNext: i32
   /** Whether a frame has been asked for, so the pacer's clock runs. */
-  paced: boolean
-  /** Whether a round trip, from the probe or an answer, is known. */
+  private paced: boolean
+  /**
+   * Whether a round trip, from the probe or an answer, is known.
+   */
   haveRtt: boolean
   /** Whether a frame has been acknowledged, so decisions can start. */
-  haveAck: boolean
+  private haveAck: boolean
   /**
    * Whether the bandwidth is known, so decisions may use it: sampled by a
    * frame that waited behind another or two trips of different sizes, within
@@ -411,9 +451,13 @@ export class RateController {
    */
   haveRate: boolean
   /** Whether a frame has been sent, so cost and size are known. */
-  haveFrame: boolean
+  private haveFrame: boolean
 
-  /** A controller for `options`, read once. */
+  /**
+   * A controller for `options`, read once.
+   *
+   * @param options The rate limits, preference and hints to run with; changing it later changes nothing.
+   */
   constructor(options: RateOptions) {
     this.prefer = options.prefer === DETAIL_FIRST ? DETAIL_FIRST : RATE_FIRST
     this.maxUnacked = options.maxUnacked >= 2 ? 2 : 1
@@ -497,7 +541,11 @@ export class RateController {
     this.publish()
   }
 
-  /** Frames sent and not yet acknowledged. */
+  /**
+   * Frames sent and not yet acknowledged.
+   *
+   * @returns How many frames await their acknowledgement, from 0.
+   */
   unacked(): i32 {
     return toI32(this.sentMs.length) - this.head
   }
@@ -509,6 +557,9 @@ export class RateController {
    * limit, or while the answers to frames given up on may still come, is
    * counted as dropped, and the next waits for the next step. A time that is
    * not a finite number is refused.
+   *
+   * @param nowMs The time now, in milliseconds on the clock every call uses.
+   * @returns True when the program should draw and send a frame now.
    */
   mayDraw(nowMs: f64): boolean {
     if (!rateFinite(nowMs)) {
@@ -536,6 +587,10 @@ export class RateController {
    * sent at `nowMs`. A call whose time is not a finite number is ignored; a
    * cost that is not a finite number or is negative is not measured, and
    * negative bytes count as none.
+   *
+   * @param bytes The frame's size in bytes as written.
+   * @param costNs How long the frame took to build, in nanoseconds.
+   * @param nowMs When it was sent, in milliseconds on the clock every call uses.
    */
   frameSent(bytes: i32, costNs: f64, nowMs: f64): void {
     if (!rateFinite(nowMs)) {
@@ -571,6 +626,8 @@ export class RateController {
    * since the terminal answers in order. One with no frame waiting (a stray
    * answer) is ignored, and one whose time is not a finite number answers its
    * frame and measures nothing.
+   *
+   * @param nowMs When the acknowledgement was read, in milliseconds on the clock every call uses.
    */
   ackReceived(nowMs: f64): void {
     if (this.stale > 0) {
@@ -641,7 +698,7 @@ export class RateController {
    * one size measure nothing here, so small frames cannot drag the bandwidth
    * down to their round trip.
    */
-  measureTrip(rtt: f64, bytes: f64): void {
+  private measureTrip(rtt: f64, bytes: f64): void {
     let quickest: i32 = -1
     for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
       if (quickest < 0 || this.tripMs[i] < this.tripMs[quickest]) {
@@ -670,7 +727,7 @@ export class RateController {
   }
 
   /** The link spent `busyMs` on `bytes`: one sample of the bandwidth. */
-  measureRate(bytes: f64, busyMs: f64): void {
+  private measureRate(bytes: f64, busyMs: f64): void {
     // A sample after the last aged out starts afresh, so a link that narrowed meanwhile is not averaged with its old rate.
     const first: boolean = this.ackBusyMs <= 0.0 || !this.haveRate
     this.rateAtMs = this.lastAckMs
@@ -694,7 +751,7 @@ export class RateController {
    * bytes over its whole round trip count the latency as bytes' time, and on
    * a far link that reads the bandwidth several times too low.
    */
-  updateRate(): void {
+  private updateRate(): void {
     let rate: f64 = this.ackBusyMs > 0.0 ? (this.ackBytes * 1000.0) / this.ackBusyMs : 0.0
     this.haveRate = rate > 0.0 && this.lastAckMs - this.rateAtMs <= rateFreshMs
     for (let i: i32 = 0; i < toI32(this.floorPerSec.length); i++) {
@@ -709,7 +766,7 @@ export class RateController {
    * Stop deciding on the bandwidth once no sample is newer than `rateFreshMs`
    * at `nowMs`. The figure stays in `bytesPerSec` until a sample replaces it or a trip contradicts it.
    */
-  ageRate(nowMs: f64): void {
+  private ageRate(nowMs: f64): void {
     if (this.haveRate && nowMs - this.rateAtMs > rateFreshMs) {
       this.heldLatencyMs = this.baseRttMs
       this.haveRate = false
@@ -727,7 +784,7 @@ export class RateController {
    * every frame sent before the answer ahead of it would look waited. The bandwidth never comes from the latency on an idle link, so
    * neither can drag the other down.
    */
-  leastLatency(): f64 {
+  private leastLatency(): f64 {
     let least: f64 = -1.0
     for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
       const bytes: f64 = this.tripBytes[i]
@@ -754,7 +811,7 @@ export class RateController {
    * there; more lengthens all of it, so detail is not restored on a link that
    * may not carry it.
    */
-  fixedPart(rtt: f64, scale: f64): f64 {
+  private fixedPart(rtt: f64, scale: f64): f64 {
     if (!this.haveRate) {
       if (scale >= 1.0) {
         return 0.0
@@ -777,7 +834,7 @@ export class RateController {
    * `nowMs` lets a frame long unanswered count as a round trip at least that
    * long. A load not yet measured counts as 0.
    */
-  load(fps: i32, level: i32, nowMs: f64): f64 {
+  private load(fps: i32, level: i32, nowMs: f64): f64 {
     const scale: f64 = rateLevelScale(this.level, level)
     const rate: f64 = toF64(fps)
     let worst: f64 = 0.0
@@ -802,7 +859,7 @@ export class RateController {
   }
 
   /** The fastest allowed tier slower than `fps` and no slower than `least`, or `least`. */
-  slowerTier(fps: i32, least: i32): i32 {
+  private slowerTier(fps: i32, least: i32): i32 {
     for (const t of this.tiers) {
       if (t < fps && t >= least) {
         return t
@@ -812,7 +869,7 @@ export class RateController {
   }
 
   /** The slowest allowed tier faster than `fps`, or `fps` at the top. */
-  fasterTier(fps: i32): i32 {
+  private fasterTier(fps: i32): i32 {
     let faster: i32 = fps
     for (const t of this.tiers) {
       if (t > fps) {
@@ -823,7 +880,7 @@ export class RateController {
   }
 
   /** Move to `fps` at detail step `level` at `nowMs`, rescaling the frame averages to the step. */
-  moveTo(fps: i32, level: i32, nowMs: f64): void {
+  private moveTo(fps: i32, level: i32, nowMs: f64): void {
     if (level !== this.level) {
       const scale: f64 = rateLevelScale(this.level, level)
       this.costMs = this.costMs * scale
@@ -842,7 +899,7 @@ export class RateController {
   }
 
   /** One step down the path at `nowMs`, when over budget: fewer frames, or less detail. */
-  stepDown(nowMs: f64): void {
+  private stepDown(nowMs: f64): void {
     const least: i32 = this.tiers[this.tiers.length - 1]
     if (this.tier > this.floorFps) {
       // Straight to the fastest tier down to the floor that fits.
@@ -872,7 +929,7 @@ export class RateController {
    * the descent backwards: tiers below the floor first, then detail, then
    * tiers above it.
    */
-  stepUp(): i32 {
+  private stepUp(): i32 {
     if (this.tier < this.floorFps || (this.level === 0 && this.tier < this.tiers[0])) {
       return this.fasterTier(this.tier) * 8 + this.level
     }
@@ -887,6 +944,8 @@ export class RateController {
    * detail, restore it or rise, at most one change, with the hysteresis the
    * module header describes. Nothing is decided before the first
    * acknowledgement, nor at a fixed rate.
+   *
+   * @param nowMs The time now, in milliseconds on the clock every call uses.
    */
   tick(nowMs: f64): void {
     if (!rateFinite(nowMs)) {
@@ -912,7 +971,7 @@ export class RateController {
   }
 
   /** `tick`'s choosing, past its guards. */
-  decide(nowMs: f64): void {
+  private decide(nowMs: f64): void {
     const settled: boolean = nowMs - this.changedMs >= rateSettleMs
     if (this.load(this.tier, this.level, nowMs) > 1.0) {
       this.underSinceMs = -1.0
@@ -939,7 +998,7 @@ export class RateController {
   }
 
   /** Copy the state into `current` and `measured`. */
-  publish(): void {
+  private publish(): void {
     const d: RateDecision = this.current
     d.fps = this.tier
     d.resolutionDivisor = this.level >= 2 ? 4 : this.level + 1
@@ -956,12 +1015,20 @@ export class RateController {
     s.lost = this.lost
   }
 
-  /** How to draw the next frame, as of the last `tick`. */
+  /**
+   * How to draw the next frame, as of the last `tick`.
+   *
+   * @returns The frame rate, resolution divisor, richest backend and palette to draw with.
+   */
   decision(): RateDecision {
     return this.current
   }
 
-  /** What has been measured, as of the last `tick`. */
+  /**
+   * What has been measured, as of the last `tick`.
+   *
+   * @returns The rate, round trip, throughput, frame cost and frames dropped, unacknowledged and lost.
+   */
   stats(): TermStats {
     return this.measured
   }
@@ -991,6 +1058,10 @@ const rateBackendName = (cap: i32): string => {
  * Write `stats` as two short lines, inverse, into `corner` (a `CORNER_*`) of
  * `screen`: the rate, round trip and kilobytes a second, then the frame cost,
  * the frames dropped and the backend cap. A screen too small clips them.
+ *
+ * @param screen The screen to draw on, before it is flushed.
+ * @param stats What to show, such as `RateController.stats()`.
+ * @param corner Which corner, one of the `CORNER_` constants.
  */
 export const drawStatsOverlay = (screen: Screen, stats: TermStats, corner: i32): void => {
   const top: string = `${stats.tier}fps ${rateWhole(stats.rttMs)}ms ${rateWhole(stats.bytesPerSec / 1000.0)}kB/s`

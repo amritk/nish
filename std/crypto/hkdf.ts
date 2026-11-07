@@ -136,10 +136,24 @@ const hkdfAppend = (out: u8[], at: i32, block: u8[]): i32 => {
   return at + k
 }
 
-/** HKDF-Extract with HMAC-SHA-256 (RFC 5869 §2.2): the 32-byte PRK. */
+/**
+ * HKDF-Extract with HMAC-SHA-256 (RFC 5869 §2.2): the 32-byte PRK.
+ *
+ * @param salt The public salt; an empty one stands for HashLen zero bytes
+ *   (§2.2).
+ * @param ikm The input keying material; it is read, not kept.
+ * @returns A fresh 32-byte PRK, which the caller owns and wipes.
+ */
 export const hkdfExtractSha256 = (salt: u8[], ikm: u8[]): u8[] => hmacSha256(hkdfSalt(salt, SHA256_SIZE), ikm)
 
-/** HKDF-Extract with HMAC-SHA-384 (RFC 5869 §2.2): the 48-byte PRK. */
+/**
+ * HKDF-Extract with HMAC-SHA-384 (RFC 5869 §2.2): the 48-byte PRK.
+ *
+ * @param salt The public salt; an empty one stands for HashLen zero bytes
+ *   (§2.2).
+ * @param ikm The input keying material; it is read, not kept.
+ * @returns A fresh 48-byte PRK, which the caller owns and wipes.
+ */
 export const hkdfExtractSha384 = (salt: u8[], ikm: u8[]): u8[] => hmacSha384(hkdfSalt(salt, SHA384_SIZE), ikm)
 
 /**
@@ -147,6 +161,12 @@ export const hkdfExtractSha384 = (salt: u8[], ikm: u8[]): u8[] => hmacSha384(hkd
  * keying material from `prk` and `info`, or `null` when `length` is negative
  * or past 255 × 32, when `info` is longer than 2^31 - 1 bytes, or when `prk`
  * is shorter than 32 bytes.
+ *
+ * @param prk The pseudorandom key, at least 32 bytes; it is read, not kept.
+ * @param info The public context the output is bound to; may be empty.
+ * @param length How many bytes to derive, 0 to 8160.
+ * @returns A fresh array of `length` bytes, which the caller owns and wipes, or
+ *   `null` for bad input.
  */
 export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | null => {
   if (
@@ -184,6 +204,12 @@ export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | nul
  * keying material from `prk` and `info`, or `null` when `length` is negative
  * or past 255 × 48, when `info` is longer than 2^31 - 1 bytes, or when `prk`
  * is shorter than 48 bytes.
+ *
+ * @param prk The pseudorandom key, at least 48 bytes; it is read, not kept.
+ * @param info The public context the output is bound to; may be empty.
+ * @param length How many bytes to derive, 0 to 12240.
+ * @returns A fresh array of `length` bytes, which the caller owns and wipes, or
+ *   `null` for bad input.
  */
 export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | null => {
   if (
@@ -247,21 +273,43 @@ const hkdfExpandSha256Exposed = (prk: u8[], request: HkdfExpandRequest): u8[] | 
 const hkdfExpandSha384Exposed = (prk: u8[], request: HkdfExpandRequest): u8[] | null =>
   hkdfExpandSha384(prk, request.info, request.length)
 
-/** `hkdfExtractSha256` on input keying material held as a `Secret`: the 32-byte PRK, held as one. */
+/**
+ * `hkdfExtractSha256` on input keying material held as a `Secret`.
+ *
+ * @param salt The public salt; an empty one stands for HashLen zero bytes
+ *   (§2.2).
+ * @param ikm The input keying material, read only inside `exposeWith`; the
+ *   caller still owns and wipes it.
+ * @returns The 32-byte PRK, held as a `Secret` the caller wipes.
+ */
 export const hkdfExtractSha256Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> => {
   const prk: u8[] = exposeWith(ikm, salt, hkdfExtractSha256Exposed)
   return secret(prk)
 }
 
-/** `hkdfExtractSha384` on input keying material held as a `Secret`: the 48-byte PRK, held as one. */
+/**
+ * `hkdfExtractSha384` on input keying material held as a `Secret`.
+ *
+ * @param salt The public salt; an empty one stands for HashLen zero bytes
+ *   (§2.2).
+ * @param ikm The input keying material, read only inside `exposeWith`; the
+ *   caller still owns and wipes it.
+ * @returns The 48-byte PRK, held as a `Secret` the caller wipes.
+ */
 export const hkdfExtractSha384Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> => {
   const prk: u8[] = exposeWith(ikm, salt, hkdfExtractSha384Exposed)
   return secret(prk)
 }
 
 /**
- * `hkdfExpandSha256` on a PRK held as a `Secret`: the output keying material,
- * held as one, or `null` where `hkdfExpandSha256` answers `null`.
+ * `hkdfExpandSha256` on a PRK held as a `Secret`.
+ *
+ * @param prk The pseudorandom key, at least 32 bytes, read only inside
+ *   `exposeWith`.
+ * @param info The public context the output is bound to; may be empty.
+ * @param length How many bytes to derive, 0 to 8160.
+ * @returns The `length` bytes, held as a `Secret` the caller wipes, or `null`
+ *   for bad input.
  */
 export const hkdfExpandSha256Secret = (prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null => {
   const request: HkdfExpandRequest = { info: info, length: length }
@@ -273,8 +321,14 @@ export const hkdfExpandSha256Secret = (prk: Secret<u8[]>, info: u8[], length: i3
 }
 
 /**
- * `hkdfExpandSha384` on a PRK held as a `Secret`: the output keying material,
- * held as one, or `null` where `hkdfExpandSha384` answers `null`.
+ * `hkdfExpandSha384` on a PRK held as a `Secret`.
+ *
+ * @param prk The pseudorandom key, at least 48 bytes, read only inside
+ *   `exposeWith`.
+ * @param info The public context the output is bound to; may be empty.
+ * @param length How many bytes to derive, 0 to 12240.
+ * @returns The `length` bytes, held as a `Secret` the caller wipes, or `null`
+ *   for bad input.
  */
 export const hkdfExpandSha384Secret = (prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null => {
   const request: HkdfExpandRequest = { info: info, length: length }
@@ -289,6 +343,15 @@ export const hkdfExpandSha384Secret = (prk: Secret<u8[]>, info: u8[], length: i3
  * HKDF with HMAC-SHA-256, both steps (RFC 5869 §2): `length` bytes from `salt`,
  * the `Secret` input keying material and `info`, held as a `Secret`, or `null`
  * where `hkdfExpandSha256` answers `null`. The PRK is wiped before it returns.
+ *
+ * @param salt The public salt; an empty one stands for HashLen zero bytes
+ *   (§2.2).
+ * @param ikm The input keying material, read only inside `exposeWith`; the
+ *   caller still owns and wipes it.
+ * @param info The public context the output is bound to; may be empty.
+ * @param length How many bytes to derive, 0 to 8160.
+ * @returns The `length` bytes, held as a `Secret` the caller wipes, or `null`
+ *   for bad input.
  */
 export const hkdfSha256Secret = (
   salt: u8[],
@@ -302,7 +365,19 @@ export const hkdfSha256Secret = (
   return okm
 }
 
-/** `hkdfSha256Secret` with HMAC-SHA-384: the PRK is 48 bytes, and wiped before it returns. */
+/**
+ * `hkdfSha256Secret` with HMAC-SHA-384: the PRK is 48 bytes, and wiped before
+ * it returns.
+ *
+ * @param salt The public salt; an empty one stands for HashLen zero bytes
+ *   (§2.2).
+ * @param ikm The input keying material, read only inside `exposeWith`; the
+ *   caller still owns and wipes it.
+ * @param info The public context the output is bound to; may be empty.
+ * @param length How many bytes to derive, 0 to 12240.
+ * @returns The `length` bytes, held as a `Secret` the caller wipes, or `null`
+ *   for bad input.
+ */
 export const hkdfSha384Secret = (
   salt: u8[],
   ikm: Secret<u8[]>,
@@ -359,6 +434,13 @@ const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u
  * HKDF-Expand-Label with HMAC-SHA-256 (RFC 8446 §7.1): `length` bytes from
  * `prk` (RFC 8446's Secret), `"tls13 " + label` and `context`. Panics on an argument out of the
  * range the module docs give, a secret shorter than 32 bytes among them.
+ *
+ * @param prk RFC 8446's Secret, at least 32 bytes; it is read, not kept.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The public context, often a transcript hash; at most 255
+ *   bytes.
+ * @param length How many bytes to derive, 0 to 255.
+ * @returns A fresh array of `length` bytes, which the caller owns.
  */
 export const hkdfExpandLabelSha256 = (prk: u8[], label: string, context: u8[], length: i32): u8[] => {
   const okm: u8[] | null = hkdfExpandSha256(
@@ -376,6 +458,13 @@ export const hkdfExpandLabelSha256 = (prk: u8[], label: string, context: u8[], l
  * HKDF-Expand-Label with HMAC-SHA-384 (RFC 8446 §7.1): `length` bytes from
  * `prk` (RFC 8446's Secret), `"tls13 " + label` and `context`. Panics on an argument out of the
  * range the module docs give, a secret shorter than 48 bytes among them.
+ *
+ * @param prk RFC 8446's Secret, at least 48 bytes; it is read, not kept.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The public context, often a transcript hash; at most 255
+ *   bytes.
+ * @param length How many bytes to derive, 0 to 255.
+ * @returns A fresh array of `length` bytes, which the caller owns.
  */
 export const hkdfExpandLabelSha384 = (prk: u8[], label: string, context: u8[], length: i32): u8[] => {
   const okm: u8[] | null = hkdfExpandSha384(
@@ -394,6 +483,14 @@ export const hkdfExpandLabelSha384 = (prk: u8[], label: string, context: u8[], l
  * held as one. The label is built outside `expose`, since the label and the
  * context are not secret, and the PRK is read only inside it. Panics as
  * `hkdfExpandLabelSha256` does.
+ *
+ * @param prk RFC 8446's Secret, at least 32 bytes, read only inside
+ *   `exposeWith`.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The public context, often a transcript hash; at most 255
+ *   bytes.
+ * @param length How many bytes to derive, 0 to 255.
+ * @returns The `length` bytes, held as a `Secret` the caller wipes.
  */
 export const hkdfExpandLabelSha256Secret = (
   prk: Secret<u8[]>,
@@ -412,7 +509,18 @@ export const hkdfExpandLabelSha256Secret = (
   return okm
 }
 
-/** `hkdfExpandLabelSha256Secret` with HMAC-SHA-384: panics as `hkdfExpandLabelSha384` does. */
+/**
+ * `hkdfExpandLabelSha256Secret` with HMAC-SHA-384: panics as
+ * `hkdfExpandLabelSha384` does.
+ *
+ * @param prk RFC 8446's Secret, at least 48 bytes, read only inside
+ *   `exposeWith`.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The public context, often a transcript hash; at most 255
+ *   bytes.
+ * @param length How many bytes to derive, 0 to 255.
+ * @returns The `length` bytes, held as a `Secret` the caller wipes.
+ */
 export const hkdfExpandLabelSha384Secret = (
   prk: Secret<u8[]>,
   label: string,
@@ -442,15 +550,35 @@ const HKDF_LABEL_MAX: i32 = 514
  * hand it to every derivation; it carries nothing from one call to the next.
  */
 export class HkdfScratch {
+  /**
+   * The HMAC the `*Into` functions run when `hashLength` is 32; wiped before
+   * a call that ran it returns.
+   */
   sha256: HmacSha256Scratch
+  /**
+   * The HMAC the `*Into` functions run when `hashLength` is 48; wiped before
+   * a call that ran it returns.
+   */
   sha384: HmacSha384Scratch
   /** T(i - 1), HashLen bytes of it; wiped before every function returns. */
   previous: u8[]
-  /** The one-byte block counter `i`. */
+  /**
+   * The one-byte block counter `i`.
+   *
+   * @internal Written by this module's `*Into` functions.
+   */
   counter: u8[]
-  /** HKDF-Expand-Label's `info`, built here: public, so it is not wiped. */
+  /**
+   * HKDF-Expand-Label's `info`, built here: public, so it is not wiped.
+   *
+   * @internal Written by this module's `*Into` functions.
+   */
   label: u8[]
 
+  /**
+   * Allocates the HMAC scratch for both hashes and the buffers every derivation
+   * reuses.
+   */
   constructor() {
     this.sha256 = new HmacSha256Scratch()
     this.sha384 = new HmacSha384Scratch()
@@ -524,6 +652,14 @@ const hkdfMacFinish = (s: HkdfScratch, hashLength: i32, out: u8[], at: i32): voi
  * which HMAC pads to the block with zeros, exactly as the HashLen zeros §2.2
  * asks for would be. An `ikm` longer than 2^31 - 1 bytes panics, as
  * `hmacSha256` does.
+ *
+ * @param s The scratch to compute in; what the call leaves in it is wiped.
+ * @param hashLength 32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+ * @param salt The public salt; an empty one stands for HashLen zero bytes
+ *   (§2.2).
+ * @param ikm The input keying material; it is read, not kept.
+ * @param out The caller's array the PRK is written into.
+ * @param at Where the `hashLength` PRK bytes start in `out`.
  */
 export const hkdfExtractInto = (
   s: HkdfScratch,
@@ -586,6 +722,18 @@ const hkdfExpandWindow = (
  * where `hkdfExpandSha256` answers `null`: a `length` negative or past
  * 255 × HashLen, an `info` longer than 2^31 - 1 bytes, or a `prk` shorter than
  * HashLen.
+ *
+ * @param s The scratch to compute in; what the call leaves in it is wiped.
+ * @param hashLength 32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+ * @param prk The pseudorandom key, at least `hashLength` bytes; it is read, not
+ *   kept.
+ * @param info The public context the output is bound to; may be empty.
+ * @param out The caller's array the output is written into.
+ * @param at Where the output starts in `out`.
+ * @param length How many bytes to derive, 0 to 255 × `hashLength`.
+ * @returns `true` once the bytes are written; `false`, with `out` untouched,
+ *   for bad input. A `hashLength` other than 32 or 48, or an output window
+ *   outside `out`, panics instead, before anything is written.
  */
 export const hkdfExpandInto = (
   s: HkdfScratch,
@@ -617,6 +765,18 @@ export const hkdfExpandInto = (
  * panics where `hkdfExpandLabelSha256` does — a length outside 0 to 255, a
  * label empty or past 249 bytes, a context past 255, a secret shorter than
  * HashLen — and on a context window outside its array.
+ *
+ * @param s The scratch to compute in; what the call leaves in it is wiped.
+ * @param hashLength 32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+ * @param prk RFC 8446's Secret, at least `hashLength` bytes; it is read, not
+ *   kept.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The buffer holding the context.
+ * @param contextOff Where the context starts in `context`.
+ * @param contextLen The context's length, at most 255 bytes.
+ * @param out The caller's array the output is written into.
+ * @param at Where the output starts in `out`.
+ * @param length How many bytes to derive, 0 to 255.
  */
 export const hkdfExpandLabelInto = (
   s: HkdfScratch,
@@ -743,6 +903,13 @@ const hkdfHeld = (
  * derived from `prk`, the label and `context` and written over `dst`'s in
  * place. `dst` may be `prk` itself, since the output is whole before it is
  * copied: that is a ratchet. Panics as `hkdfExpandLabelSha256` does.
+ *
+ * @param dst The `Secret` to overwrite; its length is the length derived. It
+ *   may be `prk`.
+ * @param prk RFC 8446's Secret, read only inside `exposeWith`.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The public context, often a transcript hash; at most 255
+ *   bytes.
  */
 export const hkdfExpandLabelSha256Held = (
   dst: Secret<u8[]>,
@@ -753,7 +920,17 @@ export const hkdfExpandLabelSha256Held = (
   hkdfHeld("hkdfExpandLabelSha256Held", SHA256_SIZE, dst, prk, label, context)
 }
 
-/** `hkdfExpandLabelSha256Held` with HMAC-SHA-384: panics as `hkdfExpandLabelSha384` does. */
+/**
+ * `hkdfExpandLabelSha256Held` with HMAC-SHA-384: panics as
+ * `hkdfExpandLabelSha384` does.
+ *
+ * @param dst The `Secret` to overwrite; its length is the length derived. It
+ *   may be `prk`.
+ * @param prk RFC 8446's Secret, read only inside `exposeWith`.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The public context, often a transcript hash; at most 255
+ *   bytes.
+ */
 export const hkdfExpandLabelSha384Held = (
   dst: Secret<u8[]>,
   prk: Secret<u8[]>,
@@ -768,6 +945,14 @@ export const hkdfExpandLabelSha384Held = (
  * plain array: `length` bytes written at `out[at]`. This is for output that is
  * kept plain by design, a record layer's AEAD key and IV, say, which live in
  * the arrays the cipher reads. Panics as `hkdfExpandLabelInto` does.
+ *
+ * @param hashLength 32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+ * @param prk RFC 8446's Secret, read only inside `exposeWith`.
+ * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
+ * @param context The public context, at most 255 bytes.
+ * @param out The caller's plain array the output is written into.
+ * @param at Where the output starts in `out`.
+ * @param length How many bytes to derive, 0 to 255.
  */
 export const hkdfExpandLabelHeldInto = (
   hashLength: i32,

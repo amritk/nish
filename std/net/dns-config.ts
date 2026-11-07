@@ -9,14 +9,26 @@
  * and counts what did not fit rather than growing:
  *
  *     import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseHosts, dnsParseResolvConf } from "nish/net/dns-config"
- *     import { DNS_TYPE_A } from "nish/net/dns-message"
+ *     import { DNS_ADDRESS_BYTES, DNS_TYPE_A } from "nish/net/dns-message"
+ *     import { readFileBytesSync } from "nish:fs"
  *
  *     const config: DnsConfig = new DnsConfig()
- *     dnsParseResolvConf(resolvBytes, 0, resolvLen, config)
+ *     const resolv: u8[] | null = readFileBytesSync("/etc/resolv.conf")
+ *     if (resolv !== null) {
+ *       dnsParseResolvConf(resolv, 0, toI32(resolv.length), config)
+ *     } else {
+ *       // An empty file still gives the defaults; a fresh DnsConfig has no servers.
+ *       dnsParseResolvConf(new Array<u8>(0), 0, 0, config)
+ *     }
  *     // config.servers[i * 18, +18) for i < config.serverCount, on port 53
  *     const hosts: DnsHosts = new DnsHosts()
- *     dnsParseHosts(hostsBytes, 0, hostsLen, hosts)
+ *     const file: u8[] | null = readFileBytesSync("/etc/hosts")
+ *     if (file !== null) {
+ *       dnsParseHosts(file, 0, toI32(file.length), hosts)
+ *     }
+ *     const out: u8[] = new Array<u8>(8 * DNS_ADDRESS_BYTES)
  *     const found: i32 = dnsHostsFind(hosts, "localhost", DNS_TYPE_A, 80, out, 8)
+ *     // out[0, found * 18): the A addresses /etc/hosts gives localhost, on port 80
  *
  * **resolv.conf** is read as glibc reads it, minus what a stub resolver does
  * not use. `nameserver` takes one IPv4 or IPv6 literal (no zone), and the first
@@ -24,8 +36,8 @@
  * so the last one wins, and it holds at most `DNS_MAX_SEARCH` (6) domains and
  * `DNS_MAX_SEARCH_BYTES` (256) bytes; `options` reads `ndots:n` (clamped to 0
  * to 15), `timeout:n` (1 to 30 seconds) and `attempts:n` (1 to 5) and ignores
- * every other option. With no nameserver line, the servers are 127.0.0.1 and
- * ::1, as glibc's are.
+ * every other option. With no nameserver line that holds an address, the
+ * servers are 127.0.0.1 and ::1, as glibc's are.
  *
  * **hosts** is an address and then its names, one entry a line. At most
  * `DNS_HOSTS_MAX_ENTRIES` entries and `DNS_HOSTS_MAX_NAMES` names are kept,
@@ -62,20 +74,20 @@ export const DNS_PORT: i32 = 53
 export const DNS_DEFAULT_NDOTS: i32 = 1
 /** The highest `ndots:n` kept; a higher one is clamped to it, as glibc clamps. */
 export const DNS_MAX_NDOTS: i32 = 15
-/** The `timeout` without an option, in seconds. */
+/** The `timeout` without an option, in seconds: how long one server's reply is waited for. */
 export const DNS_DEFAULT_TIMEOUT: i32 = 5
 /** The highest `timeout:n` kept, in seconds; the lowest is 1. */
 export const DNS_MAX_TIMEOUT: i32 = 30
-/** The `attempts` without an option. */
+/** The `attempts` without an option: rounds through the server list before a lookup gives up. */
 export const DNS_DEFAULT_ATTEMPTS: i32 = 2
 /** The highest `attempts:n` kept; the lowest is 1. */
 export const DNS_MAX_ATTEMPTS: i32 = 5
 
-/** How many hosts lines are kept. */
+/** How many hosts lines, each an address with its names, are kept. */
 export const DNS_HOSTS_MAX_ENTRIES: i32 = 256
 /** How many names all hosts entries may hold together. */
 export const DNS_HOSTS_MAX_NAMES: i32 = 1024
-/** How many bytes those names may take together. */
+/** How many bytes those names may take together, 16 KiB. */
 export const DNS_HOSTS_MAX_NAME_BYTES: i32 = 16384
 /** The longest hosts name kept, the longest a DNS name can be. */
 export const DNS_HOSTS_MAX_NAME: i32 = 253
@@ -93,8 +105,12 @@ const DNS_SEMICOLON: i32 = 59
 export class DnsConfig {
   /** `serverCount` addresses of `DNS_ADDRESS_BYTES` each, on `DNS_PORT`. */
   servers: u8[]
-  /** Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing. */
+  /**
+   * Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing.
+   * @internal Used by `dnsResolvLine` in this module.
+   */
   scratch: u8[]
+  /** How many addresses `servers` holds, 1 to `DNS_MAX_SERVERS` once a file is read. */
   serverCount: i32 = 0
   /** Nameserver lines past `DNS_MAX_SERVERS`, read and not kept. */
   droppedServers: i32 = 0
@@ -102,15 +118,20 @@ export class DnsConfig {
   search: u8[]
   /** Where each of the `searchCount` domains starts in `search`, and its length. */
   searchStart: i32[]
+  /** Each search domain's length in bytes, by the same index as `searchStart`. */
   searchLength: i32[]
+  /** How many search domains are kept, 0 to `DNS_MAX_SEARCH`. */
   searchCount: i32 = 0
-  /** Search domains past `DNS_MAX_SEARCH` or `DNS_MAX_SEARCH_BYTES`, read and not kept. */
+  /**
+   * Search domains past `DNS_MAX_SEARCH` or `DNS_MAX_SEARCH_BYTES`, or empty (a bare `.`),
+   * read and not kept.
+   */
   droppedSearch: i32 = 0
-  /** Dots a name needs to be tried as it stands before the search list. */
+  /** Dots a name needs to be tried as it stands before the search list, 0 to `DNS_MAX_NDOTS`. */
   ndots: i32
-  /** Seconds to wait for one server's reply. */
+  /** Seconds to wait for one server's reply, 1 to `DNS_MAX_TIMEOUT`. */
   timeout: i32
-  /** Rounds through the servers before giving up. */
+  /** Rounds through the servers before giving up, 1 to `DNS_MAX_ATTEMPTS`. */
   attempts: i32
   /** Lines longer than `DNS_CONFIG_MAX_LINE`, skipped whole. */
   skippedLines: i32 = 0
@@ -129,20 +150,40 @@ export class DnsConfig {
 
 /** One hosts file, read by `dnsParseHosts`, made once and reusable. */
 export class DnsHosts {
-  /** `entryCount` addresses of `DNS_ADDRESS_BYTES` each, port 0. */
+  /**
+   * `entryCount` addresses of `DNS_ADDRESS_BYTES` each, port 0.
+   * @internal Used by `dnsHostsLine` and `dnsHostsFind` in this module.
+   */
   addresses: u8[]
-  /** Every kept name, back to back, lowercase, without a trailing dot. */
+  /**
+   * Every kept name, back to back, lowercase, without a trailing dot.
+   * @internal Used by `dnsAddHostName` and `dnsHostNameIs` in this module.
+   */
   names: u8[]
-  /** Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing. */
+  /**
+   * Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing.
+   * @internal Used by `dnsHostsLine` in this module.
+   */
   scratch: u8[]
-  /** Where each of the `nameCount` names starts in `names`, its length, and its entry. */
+  /**
+   * Where each of the `nameCount` names starts in `names`, its length, and its entry.
+   * @internal Used by `dnsAddHostName` and `dnsHostNameIs` in this module.
+   */
   nameStart: i32[]
+  /** @internal Used by `dnsAddHostName` and `dnsHostNameIs` in this module. */
   nameLength: i32[]
+  /** @internal Used by `dnsAddHostName` and `dnsHostsFind` in this module. */
   nameEntry: i32[]
+  /** How many entries, each an address and its names, are kept, 0 to `DNS_HOSTS_MAX_ENTRIES`. */
   entryCount: i32 = 0
+  /** How many names all the entries hold together, 0 to `DNS_HOSTS_MAX_NAMES`. */
   nameCount: i32 = 0
+  /** How many bytes those names take together, 0 to `DNS_HOSTS_MAX_NAME_BYTES`. */
   nameBytes: i32 = 0
-  /** Lines with an address past `DNS_HOSTS_MAX_ENTRIES`, read and not kept. */
+  /**
+   * Lines with an address word and a name past the first `DNS_HOSTS_MAX_ENTRIES` entries,
+   * read and not kept; their address is not parsed.
+   */
   droppedEntries: i32 = 0
   /** Names past a cap, or longer than `DNS_HOSTS_MAX_NAME`, read and not kept. */
   droppedNames: i32 = 0
@@ -302,10 +343,20 @@ const dnsParseIpv6 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean 
  * Writes the IPv4 or IPv6 literal `b[off, off + len)` at `out[at, at + 18)`,
  * IPv4 as `::ffff:a.b.c.d`, with `port` big-endian after it, and answers
  * whether it was one. `out` is written only when it was. A zone (`%eth0`),
- * brackets and a port are not part of a literal.
+ * brackets and a port are not part of a literal, so a window holding one is
+ * refused; so is an IPv4 part with a leading zero, never read as octal.
  *
  * Each call allocates the sixteen bytes it parses into, released when it
  * returns; the two file parsers reuse a buffer of their own instead.
+ *
+ * @param b The bytes the literal is in.
+ * @param off Where the literal starts in `b`.
+ * @param len The literal's length in bytes; the whole window must be the literal, with no blank.
+ *   A window outside `b` panics.
+ * @param out Where the 18-byte address goes.
+ * @param at Where in `out` it starts; `out[at, at + 18)` must lie inside `out`, or this panics.
+ * @param port The port written after the address, 0 to 65535; any other value panics.
+ * @returns True when the window was an IPv4 or IPv6 literal and `out` now holds it.
  */
 export const dnsParseAddress = (b: u8[], off: i32, len: i32, out: u8[], at: i32, port: i32): boolean =>
   dnsParseAddressVia(b, off, len, out, at, port, new Array<u8>(16))
@@ -540,7 +591,13 @@ const dnsResolvLine = (b: u8[], from: i32, to: i32, config: DnsConfig): void => 
 /**
  * Reads the resolv.conf `b[off, off + len)` into `config`, which starts over
  * from the defaults, and gives it 127.0.0.1 and ::1 on port 53 when no
- * nameserver line held an address.
+ * nameserver line held an address. It allocates nothing, and nothing in the
+ * bytes makes it panic or fail: what it cannot use is ignored or counted.
+ *
+ * @param b The file's bytes, read by the caller.
+ * @param off Where the file starts in `b`.
+ * @param len The file's length in bytes; a window outside `b` panics.
+ * @param config The table to fill; its counts and options are reset first, so one can be reused.
  */
 export const dnsParseResolvConf = (b: u8[], off: i32, len: i32, config: DnsConfig): void => {
   dnsConfigCheckWindow(b, off, len, "dnsParseResolvConf")
@@ -642,7 +699,16 @@ const dnsHostsLine = (b: u8[], from: i32, to: i32, hosts: DnsHosts): void => {
   }
 }
 
-/** Reads the hosts file `b[off, off + len)` into `hosts`, which starts over empty. */
+/**
+ * Reads the hosts file `b[off, off + len)` into `hosts`, which starts over
+ * empty. It allocates nothing; a line whose address is not a literal, or
+ * that names nothing, is ignored, and what does not fit is counted.
+ *
+ * @param b The file's bytes, read by the caller.
+ * @param off Where the file starts in `b`.
+ * @param len The file's length in bytes; a window outside `b` panics.
+ * @param hosts The table to fill; it is emptied first, so one can be reused.
+ */
 export const dnsParseHosts = (b: u8[], off: i32, len: i32, hosts: DnsHosts): void => {
   dnsConfigCheckWindow(b, off, len, "dnsParseHosts")
   hosts.entryCount = 0
@@ -685,7 +751,18 @@ const dnsHostNameIs = (hosts: DnsHosts, index: i32, name: string, n: i32): boole
  * Writes the addresses `hosts` gives `name`, of `qtype` (`DNS_TYPE_A` or
  * `DNS_TYPE_AAAA`), into `out` from offset 0 with `port`, in file order and at
  * most `max` of them, and answers how many it wrote. An entry that names
- * `name` twice is written once.
+ * `name` twice is written once; two entries with the same address are each
+ * written. It allocates nothing.
+ *
+ * @param hosts The table `dnsParseHosts` filled.
+ * @param name The name to find, without case, one trailing `.` ignored.
+ * @param qtype `DNS_TYPE_A` for the IPv4 entries or `DNS_TYPE_AAAA` for the IPv6 ones; any
+ *   other type panics.
+ * @param port The port written into each address, 0 to 65535; any other value panics.
+ * @param out Where the 18-byte addresses go, back to back from offset 0.
+ * @param max The most addresses to write, 0 or more; `out` must have room for `max` of them,
+ *   or this panics.
+ * @returns How many addresses were written, 0 when `hosts` does not name `name`.
  */
 export const dnsHostsFind = (
   hosts: DnsHosts,

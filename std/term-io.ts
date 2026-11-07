@@ -1,11 +1,9 @@
 /**
- * `std/term-io` — opening a terminal, drawing frames, reading events and
+ * `nish/term-io` — opening a terminal, drawing frames, reading events and
  * leaving it as it was: the one entry point that uses the other term modules
  * and does the I/O.
  *
- * ```ts
- * import { defaultTerminalOptions, runTerminal, TermInput, Frame } from "nish/term-io";
- * ```
+ *     import { defaultTerminalOptions, runTerminal, TermInput, Frame } from "nish/term-io"
  *
  * - `runTerminal(options, state, update, render)` is the whole program loop:
  *   it opens the terminal, runs `update(state, input)` at
@@ -143,8 +141,9 @@ export class TerminalOptions {
   quitOnCtrlC: boolean
   /** How long after a held key's last repeat it counts as released, without the kitty protocol (100). */
   releaseGapMs: f64
-  /** The framebuffer's size in pixels, or 0 by 0 for none (0 by 0). */
+  /** The framebuffer's width in pixels, or 0 for none (0). Either side 0 means no framebuffer. */
   framebufferWidth: i32
+  /** The framebuffer's height in pixels, or 0 for none (0). */
   framebufferHeight: i32
   /** The corner (`CORNER_*` from `nish/term-rate`) to draw the stats overlay in, or -1 for none (-1). */
   overlay: i32
@@ -156,6 +155,7 @@ export class TerminalOptions {
    */
   graphics: string
 
+  /** The defaults each field's comment gives in brackets. */
   constructor() {
     this.stepsPerSecond = 60
     this.minFps = 10
@@ -176,7 +176,11 @@ export class TerminalOptions {
   }
 }
 
-/** The options every field's comment gives the default of. */
+/**
+ * The options a program starts from and changes what it needs in.
+ *
+ * @returns A fresh `TerminalOptions` holding the default each field's comment gives.
+ */
 export const defaultTerminalOptions = (): TerminalOptions => new TerminalOptions()
 
 /** The monotonic clock in milliseconds. */
@@ -258,68 +262,91 @@ const termIoParam = (e: TermEvent, i: i32): i32 => (i < toI32(e.params.length) ?
  * Made by `openTerminal`.
  */
 export class Terminal {
+  /** The options it was opened with. */
   options: TerminalOptions
+  /** What the probe found the terminal can do. */
   caps: TermCaps
   /** The cell grid the program draws into, the terminal's size. */
   screen: Screen
+  /** Half-block pixels drawn on `screen`, two to a cell. */
   canvas: Canvas
   /** The pixels the program draws into, `options.framebufferWidth × framebufferHeight`. */
   framebuffer: Framebuffer
   /** The framebuffer shrunk by the controller's resolution divisor. */
   scaled: Framebuffer
+  /** The buffer a kitty or sixel frame is encoded into before it is written. */
   pixels: PixelBytes
+  /** Turns the bytes read from stdin into events. */
   decoder: KeyDecoder
+  /** Which keys are down, and the releases made up from silence without the kitty protocol. */
   keys: KeyState
+  /** Paces the frames and chooses their detail from how fast the terminal acknowledges them. */
   rate: RateController
   /** The events read during the probe, handed to the program first. */
-  held: TermEvent[]
+  private held: TermEvent[]
   /** The send times of the frames not yet acknowledged, a ring of `TERM_IO_ACKS`. */
-  ackSent: f64[]
-  ackHead: i32
+  private ackSent: f64[]
+  private ackHead: i32
+  /** The frames sent whose acknowledgement has not come back, up to the most the ring holds. */
   ackCount: i32
-  readBuf: u8[]
+  private readBuf: u8[]
   /** Where the framebuffer is drawn, for `rectCols × rectRows` cells and `rectBackend`. */
-  rect: PixelRect
+  private rect: PixelRect
   /** When the last frame acknowledgement arrived, or -1. */
-  lastAckMs: f64
+  private lastAckMs: f64
   /** The last acknowledged frame's own round trip, in milliseconds, which the controller's smoothed one trails. */
-  lastRttMs: f64
-  /** The program's work toward the next frame (its `update` and `render`), in nanoseconds, which `present` adds to the frame's cost. */
+  private lastRttMs: f64
+  /**
+   * The program's work toward the next frame (its `update` and `render`), in nanoseconds, which `present` adds to the frame's cost.
+   * @internal Used by `runTerminal`.
+   */
   workNs: f64
   /** When the last frame's write began, on the monotonic clock. */
-  sendStartNs: i64
+  private sendStartNs: i64
   /** The cells, backend and framebuffer size `rect` was fitted to. */
-  rectCols: i32
-  rectRows: i32
-  rectBackend: i32
-  rectWidth: i32
-  rectHeight: i32
+  private rectCols: i32
+  private rectRows: i32
+  private rectBackend: i32
+  private rectWidth: i32
+  private rectHeight: i32
   /** The best backend the terminal has, a `GRAPHICS_*`. */
   graphics: i32
   /** The backend the last frame used. */
   backend: i32
+  /** A cell's width in pixels as the terminal reported it, at most 256; 0 when it did not say. */
   cellWidthPx: i32
+  /** A cell's height in pixels as the terminal reported it, at most 256; 0 when it did not say. */
   cellHeightPx: i32
   /** The size `terminalSize` last answered. */
-  sizeCols: i32
-  sizeRows: i32
+  private sizeCols: i32
+  private sizeRows: i32
   /** The size last given to the `Screen`, before it clamped it, which `checkResize` compares. */
-  shownCols: i32
-  shownRows: i32
+  private shownCols: i32
+  private shownRows: i32
   /** The mouse mode turned on, or 0. */
-  mouseMode: i32
-  open: boolean
-  kittyKeyboardOn: boolean
-  pixelMouseOn: boolean
-  pasteOn: boolean
-  focusOn: boolean
+  private mouseMode: i32
+  private open: boolean
+  private kittyKeyboardOn: boolean
+  private pixelMouseOn: boolean
+  private pasteOn: boolean
+  private focusOn: boolean
   /** Whether a kitty image may be on the screen, so closing deletes it. */
-  kittyImage: boolean
+  private kittyImage: boolean
   /** Whether the last frame sent pixels, so a framebuffer emptied since takes them off the screen. */
-  pixelsShown: boolean
+  private pixelsShown: boolean
   /** Whether `screen` was drawn in 256 colours last frame. */
   palette256: boolean
 
+  /**
+   * A terminal already in raw mode and probed, before anything is turned on;
+   * `openTerminal` makes one and turns on what the options ask for.
+   *
+   * @param options The program's options.
+   * @param caps What the probe found.
+   * @param cols The terminal's columns.
+   * @param rows The terminal's rows.
+   * @param held The events that arrived during the probe, which `readEvents` hands over first.
+   */
   constructor(options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[]) {
     this.options = options
     this.caps = caps
@@ -388,7 +415,7 @@ export class Terminal {
   }
 
   /** The bytes that undo everything turned on: what `close` writes and the runtime writes on a panic or signal. */
-  restoreString(): string {
+  private restoreString(): string {
     let s: string = "\x18\x1b[?2026l"
     if (this.kittyImage) {
       s = s + kittyDelete(TERM_IO_IMAGE_ID)
@@ -409,12 +436,15 @@ export class Terminal {
   }
 
   /** Set the runtime's restore string to `restoreString()`, then write `bytes`, which turn something on. */
-  turnOn(bytes: string): void {
+  private turnOn(bytes: string): void {
     setTerminalRestore(this.restoreString())
     write(bytes)
   }
 
-  /** Turn on what the options ask for and the terminal has, the restore string kept ahead of each. */
+  /**
+   * Turn on what the options ask for and the terminal has, the restore string kept ahead of each.
+   * @internal Called by `openTerminal`.
+   */
   enable(): void {
     const o: TerminalOptions = this.options
     if (o.kittyKeyboard && this.caps.kittyKeyboard) {
@@ -468,7 +498,7 @@ export class Terminal {
    * round trip's bound passes. Before any answer the probe's round trip is
    * the one known.
    */
-  drainAcks(): void {
+  private drainAcks(): void {
     let owed: i32 = this.rate.unacked() + this.rate.stale
     let rtt: f64 = this.rate.rttMs > this.lastRttMs ? this.rate.rttMs : this.lastRttMs
     rtt = rtt > this.caps.probeRttMs ? rtt : this.caps.probeRttMs
@@ -500,7 +530,13 @@ export class Terminal {
     }
   }
 
-  /** What the controller measured, with the backend the last frame actually used. */
+  /**
+   * What the controller measured, with the backend the last frame actually
+   * used.
+   *
+   * @returns The controller's own stats object, updated in place on every tick, not a copy: a
+   *   caller who keeps it past the next tick copies the fields it needs.
+   */
   stats(): TermStats {
     const s: TermStats = this.rate.stats()
     s.backend = this.backend
@@ -508,7 +544,7 @@ export class Terminal {
   }
 
   /** Read `terminalSize` into `sizeCols` and `sizeRows`; its array dies here. */
-  readSize(): void {
+  private readSize(): void {
     const size: i32[] = terminalSize()
     if (toI32(size.length) >= 2 && size[0] > 0 && size[1] > 0) {
       this.sizeCols = size[0]
@@ -517,10 +553,12 @@ export class Terminal {
   }
 
   /**
-   * Whether the terminal changed size since the last call; if it did, the
-   * `Screen` takes the new size and the framebuffer is fitted again. It
-   * compares the size the terminal answers, not the `Screen`'s, which clamps
-   * a huge one, so a huge terminal is not resized every frame.
+   * Take a new terminal size, if there is one: the `Screen` takes it and the
+   * framebuffer is fitted again. It compares the size the terminal answers, not
+   * the `Screen`'s, which clamps a huge one, so a huge terminal is not resized
+   * every frame.
+   *
+   * @returns True when the size changed since the last call.
    */
   checkResize(): boolean {
     this.readSize()
@@ -537,7 +575,7 @@ export class Terminal {
   }
 
   /** Forget the send times of the frames the controller gave up on, oldest first, so the ring holds only frames it still waits for. */
-  dropLost(): void {
+  private dropLost(): void {
     while (this.ackCount > this.rate.unacked()) {
       this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
       this.ackCount = this.ackCount - 1
@@ -545,7 +583,7 @@ export class Terminal {
   }
 
   /** Remember that a frame acknowledgement was asked for at `nowMs`. */
-  ackPush(nowMs: f64): void {
+  private ackPush(nowMs: f64): void {
     if (this.ackCount === TERM_IO_ACKS) {
       this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
       this.ackCount = this.ackCount - 1
@@ -559,7 +597,7 @@ export class Terminal {
    * and, unless it is the late answer of a frame the controller gave up on,
    * marks its frame's send time delivered.
    */
-  acked(count: i32, nowMs: f64): void {
+  private acked(count: i32, nowMs: f64): void {
     for (let k: i32 = 0; k < count; k++) {
       this.dropLost()
       if (this.rate.stale === 0 && this.ackCount > 0) {
@@ -576,7 +614,7 @@ export class Terminal {
   }
 
   /** A reply other than an acknowledgement, which came after the probe: learn the cell size from it if the probe did not. */
-  lateReply(e: TermEvent): void {
+  private lateReply(e: TermEvent): void {
     if (
       this.cellWidthPx > 0 ||
       e.introducer !== 91 ||
@@ -617,7 +655,7 @@ export class Terminal {
    * `KeyState` into `out`, then the acknowledgements count. Every reply is
    * the terminal's and is taken here, a late cell size learned.
    */
-  take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void {
+  private take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void {
     let replies: i32 = 0
     for (const e of events) {
       if (e.type === EVENT_REPLY) {
@@ -645,11 +683,13 @@ export class Terminal {
   }
 
   /**
-   * Wait up to `waitMs` milliseconds (a negative wait has no limit) for input,
-   * and append what it means for the program to `out`: keys, mouse, paste and
-   * focus events, the releases made up from silence, `EVENT_QUIT` for Ctrl-C.
-   * Frame acknowledgements are taken here and never appended. Answers false
-   * once stdin has ended.
+   * Wait for input and append what it means for the program: keys, mouse, paste
+   * and focus events, the releases made up from silence, `EVENT_QUIT` for
+   * Ctrl-C. Frame acknowledgements are taken here and never appended.
+   *
+   * @param waitMs The longest wait in milliseconds; a negative wait has no limit.
+   * @param out Where the events go, after what it holds.
+   * @returns False once stdin has ended.
    */
   readEvents(waitMs: i32, out: TermEvent[]): boolean {
     if (toI32(this.held.length) > 0) {
@@ -693,7 +733,7 @@ export class Terminal {
   }
 
   /** Fit the framebuffer to the screen for `backend`, unless the sizes and backend are those of the last fit. */
-  fit(backend: i32): void {
+  private fit(backend: i32): void {
     const fb: Framebuffer = this.framebuffer
     if (
       this.rectCols === this.screen.width &&
@@ -727,7 +767,7 @@ export class Terminal {
    * began in `sendStartNs` and answers the bytes written. Its strings die
    * here, so a frame loop does not keep them.
    */
-  send(withPixels: boolean): i32 {
+  private send(withPixels: boolean): i32 {
     const body: string = this.screen.flush()
     const image: string = withPixels ? this.pixels.text() : ""
     const frame: string = this.caps.sync
@@ -819,8 +859,11 @@ const termIoRefusal = (): string => {
 /**
  * Open the terminal: refuse a pipe, enter raw mode and the alternate screen,
  * hide the cursor, probe what the terminal can do and turn on what `options`
- * asks for and it has. The restore string undoes all of it should the
- * program panic or be signalled before `close`.
+ * asks for and it has. The restore string undoes all of it should the program
+ * panic or be signalled before `close`.
+ *
+ * @param options What to turn on, and how to pace frames.
+ * @returns The open terminal, or an `Err` saying why not: stdin or stdout is not a terminal, or raw mode was refused.
  */
 export const openTerminal = (options: TerminalOptions): Result<Terminal, string> => {
   const refused: string = termIoRefusal()
@@ -868,15 +911,29 @@ export const openTerminal = (options: TerminalOptions): Result<Terminal, string>
 
 /** What one `update` step gets: the events since the last step and which keys are down. */
 export class TermInput {
+  /** The events since the last step, in the order they arrived. */
   events: TermEvent[]
+  /** Which keys are down, for `isDown`. */
   keys: KeyState
 
+  /**
+   * An input with no events yet.
+   *
+   * @param keys The terminal's key state, which `isDown` reads.
+   */
   constructor(keys: KeyState) {
     this.events = []
     this.keys = keys
   }
 
-  /** Whether the key of kind `key` (a `KEY_*`; `code` for `KEY_CHAR`) is down. */
+  /**
+   * Whether a key is down.
+   *
+   * @param key The key's `KEY_` kind.
+   * @param code The code point for `KEY_CHAR`; it tells `KEY_CONTROL` and `KEY_UNKNOWN` keys apart
+   *   too, and is ignored for the other kinds.
+   * @returns True from the key's press until its release, real or synthetic, or a loss of focus.
+   */
   isDown(key: i32, code: i32): boolean {
     return this.keys.isDown(key, code)
   }
@@ -884,13 +941,25 @@ export class TermInput {
 
 /** What `render` draws into: the cells, the pixels, how far into the next step the clock is, and the stats. */
 export class Frame {
+  /** The cell grid, the terminal's size. */
   screen: Screen
+  /** The pixels, `options.framebufferWidth × framebufferHeight`; 0 by 0 when the options ask for none. */
   framebuffer: Framebuffer
   /** From 0 up to 1: how far past the last `update` step this frame is, to interpolate with. */
   alpha: f64
+  /**
+   * What the controller measured: its live stats object, which the next tick
+   * updates in place, so copy a field to keep it past this frame.
+   */
   stats: TermStats
+  /** What the probe found the terminal can do. */
   caps: TermCaps
 
+  /**
+   * A frame drawing into `term`'s screen and framebuffer, at `alpha` 0.
+   *
+   * @param term The open terminal.
+   */
   constructor(term: Terminal) {
     this.screen = term.screen
     this.framebuffer = term.framebuffer
@@ -939,14 +1008,18 @@ const termIoWait = (term: Terminal, step: FixedStep, nowMs: f64): i32 => {
 }
 
 /**
- * Open the terminal and run the program: `update(state, input)` once per
- * fixed step (`options.stepsPerSecond`), the events since the last step in
- * `input.events`, and `render(state, frame)` whenever the controller allows a
+ * Open the terminal and run the program: `update` once per fixed step
+ * (`options.stepsPerSecond`) and `render` whenever the controller allows a
  * frame, which is then presented. A resize is an `EVENT_RESIZE` (`x` the new
- * columns, `y` the rows) with the `Screen` already resized. The loop ends when
- * `update` answers false or the user quits (`EVENT_QUIT`), answering `Ok(0)`,
- * and the terminal is closed however it ends. An `Err` is a terminal that
- * could not be opened, or stdin ending.
+ * columns, `y` the rows) with the `Screen` already resized. The terminal is
+ * closed however the loop ends.
+ *
+ * @param options What to turn on, and how to pace steps and frames.
+ * @param state The program's state, handed to every call.
+ * @param update Runs one step on the events since the last in `input.events`; answers false to stop.
+ * @param render Draws `state` into `frame`.
+ * @returns `Ok(0)` once `update` answers false or the user quits (`EVENT_QUIT`); an `Err` for a
+ *   terminal that could not be opened, or stdin ending.
  */
 export const runTerminal = <G>(
   options: TerminalOptions,

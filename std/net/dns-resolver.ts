@@ -4,17 +4,48 @@
  * and answers each lookup's addresses, while the program's own loop owns the
  * sockets and the clock.
  *
- *     const resolver = new DnsResolver(config, hosts, 4);
- *     const lookup = resolver.start("example.com", 443, now);
- *     // in the loop: send what nextOutgoing gives, feed replies to receive,
- *     // call tick(now) when nextDeadlineNanos() passes, then read result.
+ *     import {
+ *       DNS_OUTGOING_MAX_BYTES, DNS_RESOLVE_MAX_ADDRESSES, DnsResolver,
+ *     } from "nish/net/dns-resolver"
+ *     import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
+ *     import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config"
+ *     import { readFileBytesSync } from "nish:fs"
+ *     import { monotonicNanos } from "nish:process"
  *
- * `nish/net/dns` drives it over `nish:net` sockets and adds a blocking
- * `resolveHost`; this module never imports `nish:net`, never reads a clock
- * and never reads a file, so it compiles for `wasm32` and a test drives it
- * with scripted packets.
+ *     const config = new DnsConfig()
+ *     const resolv: u8[] = readFileBytesSync("/etc/resolv.conf") ?? new Array<u8>(0)
+ *     dnsParseResolvConf(resolv, 0, toI32(resolv.length), config)
+ *     const resolver = new DnsResolver(config, null, 4)
+ *     const lookup: i32 = resolver.start("example.com", 443, monotonicNanos())
+ *     // lookup < 0: DNS_RESOLVE_BUSY, or the DNS_ERR_* code of a name that is not one
+ *     const out: u8[] = new Array<u8>(DNS_OUTGOING_MAX_BYTES)
+ *     const to: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
+ *     const meta: i32[] = new Array<i32>(2)
+ *     const idBytes: u8[] = new Array<u8>(2)
+ *     crypto.getRandomValues(idBytes)                      // a fresh, random 16-bit ID per send
+ *     let q: i32 = resolver.nextOutgoing(out, to, meta, (toI32(idBytes[0]) << 8) | toI32(idBytes[1]))
+ *     while (q >= 0) {
+ *       // meta[0] DNS_SEND_UDP or DNS_SEND_TCP: close q's old socket, send out[0, meta[1]) to `to`
+ *       // meta[0] DNS_CLOSE: close q's socket
+ *       crypto.getRandomValues(idBytes)
+ *       q = resolver.nextOutgoing(out, to, meta, (toI32(idBytes[0]) << 8) | toI32(idBytes[1]))
+ *     }
+ *     // a datagram for q:  resolver.receive(q, buf, len, from, now)
+ *     // TCP bytes for q:   resolver.receiveStream(q, buf, len, now)
+ *     // q's socket failed: resolver.fail(q, now)
+ *     // now >= resolver.nextDeadlineNanos() (when it is not -1): resolver.tick(now)
+ *     const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
+ *     const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
+ *     const status: i32 = resolver.result(lookup, addresses, ttls)
+ *     // DNS_RESOLVE_PENDING, an address count, or a negative DNS_RESOLVE_* code
  *
- * A lookup asks A and AAAA at once, one query each. Each query tries the
+ * **It never touches the outside world.** `nish/net/dns` drives it over
+ * `nish:net` sockets and adds a blocking `resolveHost`; this module never
+ * imports `nish:net`, never reads a clock and never reads a file, so it
+ * compiles for `wasm32` and a test drives it with scripted packets. Every time
+ * it takes is `nowNanos` on the caller's monotonic clock, in nanoseconds.
+ *
+ * **A lookup asks A and AAAA at once**, one query each. Each query tries the
  * servers of its `DnsConfig` in turn, `attempts` rounds of `timeout` seconds
  * a try, follows a CNAME the reply leaves unanswered with a query of its own,
  * at most `DNS_RESOLVER_MAX_CNAME_HOPS` of them, and asks again over TCP when
@@ -22,20 +53,27 @@
  * resolv.conf(5) describes. `localhost`, an address literal and a hosts entry
  * answer at once with no packet.
  *
- * A reply from any address or port but the server's, or with another ID or
- * question, is dropped and counted, and the query keeps waiting for the true
- * one: a spoofer can lose a race, never end a lookup. The ID of each send is
- * the caller's, given to `nextOutgoing`: `nish/net/dns` draws it from
+ * **A spoofer can lose a race, never end a lookup.** A reply from any address
+ * or port but the server's, or with another ID or question, is dropped and
+ * counted, and the query keeps waiting for the true one. The ID of each send
+ * is the caller's, given to `nextOutgoing`: `nish/net/dns` draws it from
  * `crypto.getRandomValues`, which a `wasm32` build cannot reach, so this
  * module asks for none and a test can script its IDs.
  *
- * Every buffer is made in the constructor; a lookup allocates only the
+ * **Every buffer is made in the constructor**; a lookup allocates only the
  * sixteen transient bytes `dnsParseAddress` takes to test a name for an
- * address literal.
+ * address literal. The resolver keeps the `DnsConfig` and `DnsHosts` it was
+ * given, not a copy, and reads them while lookups run: parse new bytes into
+ * them between lookups, not during one.
+ *
+ * **Misuse panics; a server's bytes do not.** A query or lookup number the
+ * resolver did not give out, a buffer too short, a port or ID that is not 16
+ * bits all panic, while anything a server sends is dropped, counted or fails
+ * that server. Every counter stops at the i32 maximum rather than wrapping.
+ *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
-
 import {
   DNS_ADDRESS_BYTES,
   DNS_ERR_ID,
@@ -58,7 +96,12 @@ import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseAddress } from "nish/net/dns
 
 /** `result` for a lookup that has not finished. */
 export const DNS_RESOLVE_PENDING: i32 = -40
-/** The name does not exist, or has no address: NXDOMAIN or NODATA from every candidate. */
+/**
+ * The name has no address: NXDOMAIN for every candidate of the search list,
+ * or NODATA for one (which ends the search, as the name exists). Also the
+ * answer, with no packet sent, when `start` finds no usable candidate (every
+ * suffixed name too long or not a name).
+ */
 export const DNS_RESOLVE_NOT_FOUND: i32 = -41
 /** No server gave an answer: each timed out, failed or was refused, `attempts` rounds over. */
 export const DNS_RESOLVE_NO_ANSWER: i32 = -42
@@ -75,7 +118,10 @@ export const DNS_RESOLVE_TIMEOUT: i32 = -45
 
 /** The most queries a CNAME chain may add to one query before it is `DNS_RESOLVE_CNAME`. */
 export const DNS_RESOLVER_MAX_CNAME_HOPS: i32 = 8
-/** The longest reply read over TCP; a longer length prefix fails the server. */
+/**
+ * The longest reply read over TCP, in bytes; a length prefix over it, or under
+ * the 12-byte header, fails the server.
+ */
 export const DNS_TCP_MAX_REPLY: i32 = 16384
 /** The most addresses one lookup answers: `DNS_MAX_ANSWERS` A and as many AAAA. */
 export const DNS_RESOLVE_MAX_ADDRESSES: i32 = 2 * DNS_MAX_ANSWERS
@@ -87,7 +133,7 @@ export const DNS_SEND_UDP: i32 = 1
 export const DNS_SEND_TCP: i32 = 2
 /** `nextOutgoing`'s `meta[0]`: close the socket the query held, if any. */
 export const DNS_CLOSE: i32 = 3
-/** The room `nextOutgoing` needs in `out`: a query and TCP's two-byte length. */
+/** The room `nextOutgoing` needs in `out`, in bytes: a query and TCP's two-byte length. */
 export const DNS_OUTGOING_MAX_BYTES: i32 = DNS_QUERY_MAX_BYTES + 2
 
 // A query's state. A lookup's: free, running, or finished with its result held.
@@ -105,56 +151,111 @@ const DNS_L_DONE: i32 = 2
  * `q / 2`, and asks A when `q` is even and AAAA when it is odd.
  */
 export class DnsResolver {
+  /** @internal Used by `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverSend` and `dnsResolverServerFailed` in this module. */
   config: DnsConfig
-  hosts: DnsHosts | null
-  /** Each query's bytes, from offset 0: the header, the name and the question's type and class. */
+  private hosts: DnsHosts | null
+  /**
+   * Each query's bytes, from offset 0: the header, the name and the question's type and class.
+   * @internal Used by `dnsResolverAsk` in this module.
+   */
   queries: u8[][]
-  /** Each query's name in wire form, labels and root, as asked; and that name lowercased, the start of its chain. */
+  /**
+   * Each query's name in wire form, labels and root, as asked; and that name lowercased, the start of its chain.
+   * @internal Used by `dnsResolverNextCandidate`, `dnsResolverBegin`, `dnsResolverAsk` and `dnsResolverAnswer` in this module.
+   */
   names: u8[][]
+  /** @internal Used by `dnsResolverBegin` and `dnsResolverAnswer` in this module. */
   starts: u8[][]
   /** Each query's TCP reply as it arrives, without its two-byte length. */
-  streams: u8[][]
-  /** Each query's addresses and their TTLs, once it has its answer. */
+  private streams: u8[][]
+  /**
+   * Each query's addresses and their TTLs, once it has its answer.
+   * @internal Used by `dnsResolverGather` and `dnsResolverAnswer` in this module.
+   */
   answers: u8[][]
+  /** @internal Used by `dnsResolverGather` and `dnsResolverAnswer` in this module. */
   answerTtls: i32[][]
-  /** Each lookup's name in wire form, without its root byte, as `start` gave it. */
+  /**
+   * Each lookup's name in wire form, without its root byte, as `start` gave it.
+   * @internal Used by `dnsResolverCandidate` in this module.
+   */
   bases: u8[][]
-  /** Each lookup's answer, A first. */
+  /**
+   * Each lookup's answer, A first.
+   * @internal Used by `dnsResolverGather` in this module.
+   */
   lookupAddresses: u8[][]
+  /** @internal Used by `dnsResolverGather` in this module. */
   lookupTtls: i32[][]
+  /** @internal Used by `dnsResolverAnswer` in this module. */
   reply: DnsReply
-  scratch: u8[]
+  private scratch: u8[]
+  /** @internal Used by `dnsResolverAsk` in this module. */
   queryLength: i32[]
+  /** @internal Used by `dnsResolverBegin`, `dnsResolverAsk` and `dnsResolverAnswer` in this module. */
   nameLength: i32[]
+  /** @internal Used by `dnsResolverStop`, `dnsResolverSend` and `dnsResolverDone` in this module. */
   state: i32[]
-  /** The outcome of a finished query: its address count, or `DNS_RESOLVE_*`. */
+  /**
+   * The outcome of a finished query: its address count, or `DNS_RESOLVE_*`.
+   * @internal Used by `dnsResolverDone` in this module.
+   */
   outcome: i32[]
-  /** The action `nextOutgoing` owes the driver for a query: 0 or a `DNS_SEND_*`/`DNS_CLOSE`. */
+  /**
+   * The action `nextOutgoing` owes the driver for a query: 0 or a `DNS_SEND_*`/`DNS_CLOSE`.
+   * @internal Used by `dnsResolverStop`, `dnsResolverSend` and `dnsResolverDone` in this module.
+   */
   pending: i32[]
+  /** @internal Used by `dnsResolverAsk` and `dnsResolverServerFailed` in this module. */
   server: i32[]
+  /** @internal Used by `dnsResolverAsk` and `dnsResolverServerFailed` in this module. */
   round: i32[]
+  /** @internal Used by `dnsResolverBegin` and `dnsResolverAnswer` in this module. */
   hops: i32[]
+  /** @internal Used by `dnsResolverSend` in this module. */
   deadline: i64[]
-  /** Bytes of the TCP reply read so far, its two-byte length included, and that length once read. */
+  /**
+   * Bytes of the TCP reply read so far, its two-byte length included, and that length once read.
+   * @internal Used by `dnsResolverSend` in this module.
+   */
   streamHave: i32[]
+  /** @internal Used by `dnsResolverSend` in this module. */
   streamWant: i32[]
+  /** @internal Used by `dnsResolverCandidate` in this module. */
   baseLength: i32[]
-  /** Whether a finished query's name was NXDOMAIN, which moves the search on, rather than NODATA, which ends it. */
+  /**
+   * Whether a finished query's name was NXDOMAIN, which moves the search on, rather than NODATA, which ends it.
+   * @internal Used by `dnsResolverAsk`, `dnsResolverAnswer` and `dnsResolverDone` in this module.
+   */
   nxdomain: boolean[]
-  /** Whether a lookup's name ended in a dot, so no search suffix applies. */
+  /**
+   * Whether a lookup's name ended in a dot, so no search suffix applies.
+   * @internal Used by `dnsResolverNextCandidate` in this module.
+   */
   absolute: boolean[]
-  /** The candidate a lookup is asking, by `dnsResolverCandidate`'s order, and how many it has. */
+  /**
+   * The candidate a lookup is asking, by `dnsResolverCandidate`'s order, and how many it has.
+   * @internal Used by `dnsResolverNextCandidate` and `dnsResolverDone` in this module.
+   */
   candidate: i32[]
+  /** @internal Used by `dnsResolverNextCandidate` in this module. */
   candidates: i32[]
-  /** The error a lookup ends with if no later candidate answers: a family that reached no server while the other was NXDOMAIN, or 0. */
+  /**
+   * The error a lookup ends with if no later candidate answers: a family that reached no server while the other was NXDOMAIN, or 0.
+   * @internal Used by `dnsResolverDone` in this module.
+   */
   fallback: i32[]
+  /** @internal Used by `dnsResolverNextCandidate` in this module. */
   dots: i32[]
+  /** @internal Used by `dnsResolverFinishNow` and `dnsResolverFinish` in this module. */
   lookupState: i32[]
+  /** @internal Used by `dnsResolverFinishNow` and `dnsResolverFinish` in this module. */
   lookupResult: i32[]
-  lookupPort: i32[]
+  private lookupPort: i32[]
+  /** @internal Used by `dnsResolverCheckQuery` in this module; DnsClient's constructor and `DnsClient.tokens` in std/net/dns.ts. */
   maxLookups: i32 = 0
   /** Where `nextOutgoing` looks first, so no query waits behind another forever. */
-  cursor: i32 = 0
+  private cursor: i32 = 0
   /** Datagrams dropped for coming from another address or port than the server's. */
   droppedSource: i32 = 0
   /** Replies dropped for another ID. */
@@ -165,7 +266,10 @@ export class DnsResolver {
   droppedMalformed: i32 = 0
   /** Tries that timed out. */
   timeouts: i32 = 0
-  /** Tries that ended in SERVFAIL, REFUSED, a bad TCP reply or a socket failure. */
+  /**
+   * Tries that failed, for any reason: a timeout (also counted in `timeouts`),
+   * SERVFAIL, REFUSED, FORMERR, NOTIMP, a bad TCP reply or a socket failure.
+   */
   serverFailures: i32 = 0
   /** Truncated replies asked again over TCP. */
   tcpRetries: i32 = 0
@@ -177,8 +281,18 @@ export class DnsResolver {
   /**
    * A resolver with room for `maxLookups` lookups at once, every buffer made
    * now. Panics unless `maxLookups` is 1 to `DNS_RESOLVER_MAX_LOOKUPS`.
-   * `config` and `hosts` are read at each `start`, so a program may parse
-   * them again between lookups.
+   * `config` and `hosts` are kept, not copied: `start` reads both, and a
+   * running query reads `config`'s servers, search list, `searchCount`,
+   * `ndots`, `timeout` and `attempts`, so a program may parse them again
+   * between lookups but not while one runs.
+   *
+   * @param config The servers, search list, `ndots`, `timeout` (seconds) and
+   *   `attempts`, as `dnsParseResolvConf` read them.
+   * @param hosts The hosts table answered before any packet is sent, or `null`
+   *   for none.
+   * @param maxLookups How many lookups may run at once, 1 to
+   *   `DNS_RESOLVER_MAX_LOOKUPS` (64). Each holds the buffers of two queries,
+   *   among them a `DNS_TCP_MAX_REPLY` (16 KiB) TCP reply buffer apiece.
    */
   constructor(config: DnsConfig, hosts: DnsHosts | null, maxLookups: i32) {
     if (maxLookups < 1 || maxLookups > DNS_RESOLVER_MAX_LOOKUPS) {
@@ -247,8 +361,18 @@ export class DnsResolver {
    *
    * `localhost` and any name under it answer 127.0.0.1 and ::1 (RFC 6761
    * §6.3), an address literal answers itself, and a name in `hosts` answers
-   * its entries, each at once and with no packet: `result` has them now.
-   * Panics when `port` is not 16 bits.
+   * its entries, each at once and with no packet: `result` has them now,
+   * with TTL 0. Panics when `port` is not 16 bits.
+   *
+   * @param name The name to look up: a host name, relative or with a trailing
+   *   dot, or an IPv4 or IPv6 literal.
+   * @param port The port, 0 to 0xFFFF, written into every address `result`
+   *   gives.
+   * @param nowNanos The caller's monotonic clock now, in nanoseconds; the first
+   *   tries' deadlines are `timeout` seconds after it.
+   * @returns The lookup's slot, 0 to `maxLookups - 1`, to pass to `result` or
+   *   `cancel`; or `DNS_RESOLVE_BUSY`, or a negative `DNS_ERR_*` code from
+   *   `dnsBuildQuery`, when no lookup was started.
    */
   start(name: string, port: i32, nowNanos: i64): i32 {
     if (port < 0 || port > 0xffff) {
@@ -331,6 +455,22 @@ export class DnsResolver {
    * socket the query held, so the driver closes that one first. Panics when
    * `out` is shorter than `DNS_OUTGOING_MAX_BYTES`, `to` shorter than 18
    * bytes or `meta` than 2, or when `id` is not 16 bits.
+   *
+   * Queries take turns, so a query that always has work does not starve the
+   * rest. Call it until it answers -1 after every `start`, `receive`,
+   * `receiveStream`, `fail`, `tick` and `cancel`.
+   *
+   * @param out Where a send's bytes go, from offset 0; at least
+   *   `DNS_OUTGOING_MAX_BYTES` long.
+   * @param to Where the server's 18-byte address (IPv6 form and port) goes for
+   *   a send; left as it was for a close.
+   * @param meta Two slots: `meta[0]` gets the action, `meta[1]` the number of
+   *   bytes of `out` to send (0 for `DNS_CLOSE`); not written when the call
+   *   answers -1.
+   * @param id The ID for this send, 0 to 0xFFFF: fresh and random each call.
+   *   A close or no action does not use it.
+   * @returns The query the action is for, 0 to `2 * maxLookups - 1` (its
+   *   lookup is the query divided by 2), or -1 when nothing is owed.
    */
   nextOutgoing(out: u8[], to: u8[], meta: i32[], id: i32): i32 {
     if (id < 0 || id > 0xffff) {
@@ -388,8 +528,18 @@ export class DnsResolver {
    * `q`'s socket at `nowNanos`. One from another address or port than the
    * server's, with another ID or question, or malformed, is dropped and
    * counted, and the query keeps waiting. One that answers the query with an
-   * RCODE the resolver does not read, FORMERR or NOTIMP, fails the server. Panics when `q` is not a query or
-   * `len` is outside `buf`.
+   * RCODE the resolver does not read, FORMERR or NOTIMP, or with SERVFAIL or
+   * REFUSED, fails the server. A truncated reply asks again over TCP. Panics
+   * when `q` is not a query, `len` is outside `buf` or `from` is shorter than
+   * 18 bytes. `buf` is read only during the call.
+   *
+   * @param q The query whose socket the datagram arrived on, as `nextOutgoing`
+   *   answered it.
+   * @param buf The datagram, from offset 0.
+   * @param len How many bytes of `buf` the datagram is.
+   * @param from The sender's 18-byte address, IPv6 form and port, compared with
+   *   the server's.
+   * @param nowNanos The caller's monotonic clock now, in nanoseconds.
    */
   receive(q: i32, buf: u8[], len: i32, from: u8[], nowNanos: i64): void {
     dnsResolverCheckQuery(this, q, "receive")
@@ -437,8 +587,16 @@ export class DnsResolver {
    * `len` bytes from `buf[0]` read from query `q`'s TCP socket at
    * `nowNanos`. A length over `DNS_TCP_MAX_REPLY`, a reply that is malformed
    * or answers another question, or one still truncated fails the server,
-   * since a stream cannot carry a second, true reply after it. Panics as
-   * `receive` does.
+   * since a stream cannot carry a second, true reply after it. So does a
+   * length under the 12-byte header. Bytes for a query not waiting on TCP, or
+   * past the reply's length, are ignored. Panics when `q` is not a query or
+   * `len` is outside `buf`. The bytes are copied, so `buf` may be reused.
+   *
+   * @param q The query whose TCP socket the bytes came from.
+   * @param buf The bytes read, from offset 0, in any slicing of the stream:
+   *   the two-byte length and the reply may arrive a byte at a time.
+   * @param len How many bytes of `buf` were read.
+   * @param nowNanos The caller's monotonic clock now, in nanoseconds.
    */
   receiveStream(q: i32, buf: u8[], len: i32, nowNanos: i64): void {
     dnsResolverCheckQuery(this, q, "receiveStream")
@@ -486,8 +644,13 @@ export class DnsResolver {
   /**
    * The driver's word that query `q`'s socket failed at `nowNanos`: it could
    * not be opened or written, the connection was refused, or the stream
-   * ended before the reply did. The query moves to the next server. Panics
-   * when `q` is not a query.
+   * ended before the reply did. The query moves to the next server, or after
+   * `attempts` rounds this query ends as `DNS_RESOLVE_NO_ANSWER` (its lookup
+   * moves to the next candidate when its other query was NXDOMAIN). A query
+   * not waiting on a socket ignores it. Panics when `q` is not a query.
+   *
+   * @param q The query whose socket failed.
+   * @param nowNanos The caller's monotonic clock now, in nanoseconds.
    */
   fail(q: i32, nowNanos: i64): void {
     dnsResolverCheckQuery(this, q, "fail")
@@ -496,7 +659,13 @@ export class DnsResolver {
     }
   }
 
-  /** Moves every query whose try has run past its deadline at `nowNanos` to the next server. */
+  /**
+   * Moves every query whose try has reached its deadline at `nowNanos` to the
+   * next server, counting each in `timeouts`; a query past its last round
+   * ends as `DNS_RESOLVE_NO_ANSWER`. Calling it early does no harm.
+   *
+   * @param nowNanos The caller's monotonic clock now, in nanoseconds.
+   */
   tick(nowNanos: i64): void {
     const n: i32 = this.maxLookups * 2
     let q: i32 = 0
@@ -509,7 +678,13 @@ export class DnsResolver {
     }
   }
 
-  /** The earliest deadline of any try in flight, on the caller's clock, or -1 when none is. */
+  /**
+   * The earliest deadline of any try in flight, so the driver knows how long
+   * it may wait before calling `tick`.
+   *
+   * @returns That deadline in nanoseconds on the caller's monotonic clock, or
+   *   -1 when no try is in flight.
+   */
   nextDeadlineNanos(): i64 {
     const n: i32 = this.maxLookups * 2
     let soonest: i64 = -1
@@ -532,8 +707,18 @@ export class DnsResolver {
    * (A first, then AAAA, 18 bytes each, with the port `start` was given) and
    * their TTLs in seconds to `ttls`, or a negative `DNS_RESOLVE_*` code. A
    * finished lookup's slot is free again once this has answered it. Panics
-   * when `lookup` is not a slot that `start` gave out, or when `out` or
-   * `ttls` has no room for `DNS_RESOLVE_MAX_ADDRESSES`.
+   * when `lookup` is not a lookup in progress (never started, cancelled, or
+   * its answer already read), or when `out` or `ttls` has no room for
+   * `DNS_RESOLVE_MAX_ADDRESSES`.
+   *
+   * @param lookup The slot `start` answered.
+   * @param out Where the addresses go, from offset 0: at least
+   *   `DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES` bytes.
+   * @param ttls Where each address's TTL goes, in seconds, 0 for one that
+   *   needed no packet: at least `DNS_RESOLVE_MAX_ADDRESSES` long.
+   * @returns `DNS_RESOLVE_PENDING` while the lookup runs; then the address
+   *   count, 1 to `DNS_RESOLVE_MAX_ADDRESSES`, or `DNS_RESOLVE_NOT_FOUND`,
+   *   `DNS_RESOLVE_NO_ANSWER` or `DNS_RESOLVE_CNAME`.
    */
   result(lookup: i32, out: u8[], ttls: i32[]): i32 {
     if (lookup < 0 || lookup >= this.maxLookups || this.lookupState[lookup] === DNS_L_FREE) {
@@ -565,7 +750,11 @@ export class DnsResolver {
 
   /**
    * Ends `lookup` now, whether or not it has finished, and frees its slot;
-   * the sockets of its queries are owed a `DNS_CLOSE`. Panics as `result`.
+   * each of its queries that may hold a socket is owed a `DNS_CLOSE`, which
+   * `nextOutgoing` hands out in its turn. Panics when `lookup` is not a lookup in
+   * progress, as `result` does.
+   *
+   * @param lookup The slot `start` answered.
    */
   cancel(lookup: i32): void {
     if (lookup < 0 || lookup >= this.maxLookups || this.lookupState[lookup] === DNS_L_FREE) {
@@ -576,7 +765,12 @@ export class DnsResolver {
     this.lookupState[lookup] = DNS_L_FREE
   }
 
-  /** How many lookups are in progress or hold an answer not yet read. */
+  /**
+   * How many slots are taken.
+   *
+   * @returns How many lookups are in progress or hold an answer not yet read,
+   *   0 to `maxLookups`.
+   */
   active(): i32 {
     let count: i32 = 0
     let l: i32 = 0

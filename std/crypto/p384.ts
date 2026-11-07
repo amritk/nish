@@ -4,8 +4,11 @@
  *
  *     import { p384Verify, p384VerifySha384 } from "nish/crypto/p384";
  *
- *     const ok: boolean = p384VerifySha384(pub, message, sig);   // pub: 97 bytes, sig: 96
- *     const same: boolean = p384Verify(pub, sha256(message), sig); // a digest from any hash
+ *     // `pub` is a 97-byte key and `sig` a 96-byte `r || s`, a certificate's, say
+ *     const signedBy = (pub: u8[], message: u8[], sig: u8[]): boolean =>
+ *       p384VerifySha384(pub, message, sig)
+ *     const signedDigest = (pub: u8[], digest: u8[], sig: u8[]): boolean =>
+ *       p384Verify(pub, digest, sig)                          // a digest from any hash
  *
  * A public key is the uncompressed SEC1 encoding of SEC 1 §2.3.3, 0x04 then X
  * and Y as 48 big-endian bytes each; a signature is `r` and `s` as 48
@@ -5708,8 +5711,11 @@ const p384ScalarInvert = (out: u32[], a: u32[]): void => {
  * Z = 0 is the identity, which the complete formulas take like any other point.
  */
 class P384ProjectivePoint {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   x: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   y: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z: u32[]
 
   /** The identity, (0 : 1 : 0). */
@@ -5727,12 +5733,19 @@ class P384ProjectivePoint {
  * formulas multiply by.
  */
 class P384PointScratch {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t0: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t1: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t2: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t3: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t4: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   sum: P384ProjectivePoint
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   b: u32[]
 
   constructor() {
@@ -5995,6 +6008,11 @@ const p384DigestScalar = (out: u32[], digest: u8[]): void => {
  * verifies too, as FIPS 186-4 and SEC 1 have it. Nothing here asks for the
  * lower `s`, so a protocol that needs one signature per message and key has to
  * refuse the upper half itself.
+ *
+ * @param pub The signer's 97-byte uncompressed public key.
+ * @param digest The message's hash; only its leftmost 384 bits count.
+ * @param sig The 96-byte signature `r || s`.
+ * @returns `true` when the signature is valid, `false` for anything else.
  */
 export const p384Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   if (toI32(sig.length) !== 96) {
@@ -6039,6 +6057,13 @@ export const p384Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   return timingSafeEqual(v, rBytes)
 }
 
-/** `p384Verify` of the SHA-384 of `msg`: ECDSA with SHA-384 over the whole message. */
+/**
+ * `p384Verify` of the SHA-384 of `msg`: ECDSA with SHA-384 over the whole message.
+ *
+ * @param pub The signer's 97-byte uncompressed public key.
+ * @param msg The whole message, hashed here.
+ * @param sig The 96-byte signature `r || s`.
+ * @returns `true` when the signature is valid, `false` for anything else.
+ */
 export const p384VerifySha384 = (pub: u8[], msg: u8[], sig: u8[]): boolean =>
   p384Verify(pub, sha384(msg), sig)

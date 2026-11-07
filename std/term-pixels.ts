@@ -4,10 +4,20 @@
  * half-block cells or ASCII.
  *
  * A program draws `0xRRGGBB` pixels into a `Framebuffer` and never thinks about
- * the terminal; `std/term-io` picks the backend and calls one encoder per frame.
+ * the terminal; `nish/term-io` picks the backend and calls one encoder per frame.
  * Everything here is pure: no capability, no I/O, and the bytes are the same
  * natively and under Node, because the kitty and Sixel output is ASCII and the
  * cell drawers go through `Screen`, which already is.
+ *
+ *     import { Framebuffer, fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes } from "nish/term-pixels"
+ *
+ *     const fb = new Framebuffer(160, 90)
+ *     fb.fill(0x000020)
+ *     fb.set(80, 45, 0xffcc00)
+ *     const rect = fitFramebuffer(fb.width, fb.height, 80, 24, 0, 0, GRAPHICS_KITTY)
+ *     const out = new PixelBytes(1 << 16)
+ *     kittyFrame(fb, rect, 1, out)
+ *     // out.text() is the frame's bytes, for one write
  *
  * - `Framebuffer(width, height)` holds the pixels, with `set`, `get`, `fill`,
  *   `clear` and `resize`. `scaleFramebuffer(src, divisor, dst)` shrinks one by
@@ -159,7 +169,12 @@ export class Framebuffer {
   /** One colour per pixel, `y * width + x`. */
   pixels: i32[]
 
-  /** A black framebuffer of `width × height`; a negative size, or more than 2^31 - 1 pixels, panics. */
+  /**
+   * A black framebuffer of `width × height`; a negative size, or more than 2^31 - 1 pixels, panics.
+   *
+   * @param width Pixels across.
+   * @param height Pixels down.
+   */
   constructor(width: i32, height: i32) {
     pixelsCheckSize("Framebuffer", width, height)
     this.width = width
@@ -168,7 +183,12 @@ export class Framebuffer {
     this.pixels.fill(0)
   }
 
-  /** Make the framebuffer `width × height` and black; the array is replaced only when the size changes. */
+  /**
+   * Make the framebuffer `width × height` and black; the array is replaced only when the size changes.
+   *
+   * @param width The new pixels across; negative panics, as in the constructor.
+   * @param height The new pixels down; negative panics, as in the constructor.
+   */
   resize(width: i32, height: i32): void {
     pixelsCheckSize("Framebuffer.resize", width, height)
     if (width !== this.width || height !== this.height) {
@@ -179,7 +199,13 @@ export class Framebuffer {
     this.pixels.fill(0)
   }
 
-  /** Set the pixel at `x`, `y` to `colour`'s low 24 bits; a pixel off the framebuffer is not drawn. */
+  /**
+   * Set the pixel at `x`, `y` to `colour`'s low 24 bits; a pixel off the framebuffer is not drawn.
+   *
+   * @param x The pixel column, from 0 at the left.
+   * @param y The pixel row, from 0 at the top.
+   * @param colour An `0xRRGGBB` colour; the bits above it are dropped.
+   */
   set(x: i32, y: i32, colour: i32): void {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return
@@ -187,7 +213,13 @@ export class Framebuffer {
     this.pixels[y * this.width + x] = colour & 0xffffff
   }
 
-  /** The colour of the pixel at `x`, `y`, or black off the framebuffer. */
+  /**
+   * The colour of the pixel at `x`, `y`, or black off the framebuffer.
+   *
+   * @param x The pixel column, from 0 at the left.
+   * @param y The pixel row, from 0 at the top.
+   * @returns The colour as `0xRRGGBB`; 0, black, off the framebuffer.
+   */
   get(x: i32, y: i32): i32 {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return 0
@@ -195,7 +227,11 @@ export class Framebuffer {
     return this.pixels[y * this.width + x]
   }
 
-  /** Set every pixel to `colour`'s low 24 bits. */
+  /**
+   * Set every pixel to `colour`'s low 24 bits.
+   *
+   * @param colour An `0xRRGGBB` colour; the bits above it are dropped.
+   */
   fill(colour: i32): void {
     this.pixels.fill(colour & 0xffffff)
   }
@@ -213,6 +249,10 @@ export class Framebuffer {
  * frame costs a quarter or a sixteenth of the bytes at divisor 2 or 4. A
  * divisor below 1 panics; 1 copies. `dst` must be another framebuffer than
  * `src`, which resizing it would blank.
+ *
+ * @param src The full-size framebuffer, read only.
+ * @param divisor How many pixels across and down become one, 1 or more; 2 or 4 for the controller's steps.
+ * @param dst Where the shrunk frame goes; resized to fit.
  */
 export const scaleFramebuffer = (src: Framebuffer, divisor: i32, dst: Framebuffer): void => {
   if (divisor < 1) {
@@ -251,7 +291,17 @@ export class PixelRect {
   /** The backend's pixels per framebuffer pixel across; ASCII's rows are half that down. */
   scale: f64
 
-  /** A rect of the given cells and size; `fitFramebuffer` is how one is usually made. */
+  /**
+   * A rect of the given cells and size; `fitFramebuffer` is how one is usually made.
+   *
+   * @param col The first column covered, from 0.
+   * @param row The first row covered, from 0.
+   * @param cols The columns covered.
+   * @param rows The rows covered.
+   * @param width The image's width in the backend's pixels.
+   * @param height The image's height in the backend's pixels.
+   * @param scale The backend's pixels per framebuffer pixel across.
+   */
   constructor(col: i32, row: i32, cols: i32, rows: i32, width: i32, height: i32, scale: f64) {
     this.col = col
     this.row = row
@@ -278,6 +328,15 @@ const pixelsCeilDiv = (a: i32, b: i32): i32 => (a === 0 ? 0 : (((a - 1) / b) | 0
  * and ASCII take a cell as one pixel wide and two tall, the shape of a usual
  * terminal font, so a square framebuffer stays square. An empty framebuffer or
  * area answers an empty rect at 0, 0.
+ *
+ * @param fbW The framebuffer's width in pixels.
+ * @param fbH The framebuffer's height in pixels.
+ * @param cols The area's width in cells.
+ * @param rows The area's height in cells.
+ * @param cellW A cell's width in pixels as the terminal reported it, or 0 or less when it did not say.
+ * @param cellH A cell's height in pixels likewise; with either at 0 or less, kitty and Sixel take the cell as 8×16.
+ * @param backend The `GRAPHICS_` backend that will draw it, which decides what a pixel of the rect is.
+ * @returns Where to draw, in the area's cells and the backend's pixels.
  */
 export const fitFramebuffer = (
   fbW: i32,
@@ -342,22 +401,46 @@ export class PixelBytes {
   bytes: u8[]
   /** How many bytes are written. */
   length: i32
-  /** One kitty chunk's RGB bytes. */
+  /**
+   * One kitty chunk's RGB bytes.
+   * @internal Used by `kittyFrame`.
+   */
   kittyRaw: u8[]
-  /** The framebuffer column and row each destination pixel samples. */
+  /**
+   * The framebuffer column and row each destination pixel samples.
+   * @internal Used by `sixelFrame`.
+   */
   sampleXs: i32[]
+  /** @internal Used by `sixelFrame`. */
   sampleYs: i32[]
-  /** Every destination pixel's Sixel register, row by row. */
+  /**
+   * Every destination pixel's Sixel register, row by row.
+   * @internal Used by `sixelFrame`.
+   */
   sixelReg: i32[]
-  /** Which registers a Sixel frame uses, 1 or 0. */
+  /**
+   * Which registers a Sixel frame uses, 1 or 0.
+   * @internal Used by `sixelFrame`.
+   */
   sixelUsed: u8[]
-  /** The first and last column of a band each register covers, -1 for none. */
+  /**
+   * The first and last column of a band each register covers, -1 for none.
+   * @internal Used by `sixelFrame`.
+   */
   sixelFirst: i32[]
+  /** @internal Used by `sixelFrame`. */
   sixelLast: i32[]
-  /** Each register's sixels across a band, all zero between bands. */
+  /**
+   * Each register's sixels across a band, all zero between bands.
+   * @internal Used by `sixelFrame`.
+   */
   sixelBits: i32[]
 
-  /** An empty buffer with room for `capacity` bytes before it grows. */
+  /**
+   * An empty buffer with room for `capacity` bytes before it grows.
+   *
+   * @param capacity The bytes to make room for at the start; a frame's worth saves growing.
+   */
   constructor(capacity: i32) {
     this.bytes = new Array<u8>(Math.max(capacity, 16))
     this.bytes.fill(0)
@@ -381,7 +464,11 @@ export class PixelBytes {
     this.length = 0
   }
 
-  /** Make room for `n` more bytes, doubling the array as often as that takes. */
+  /**
+   * Make room for `n` more bytes, doubling the array as often as that takes.
+   *
+   * @param n How many bytes the caller is about to `put`.
+   */
   reserve(n: i32): void {
     const need: i32 = this.length + n
     if (need <= toI32(this.bytes.length)) {
@@ -398,14 +485,22 @@ export class PixelBytes {
     this.bytes = grown
   }
 
-  /** Append the byte `b`. */
+  /**
+   * Append the byte `b`.
+   *
+   * @param b A byte value, 0–255; only the low 8 bits are kept.
+   */
   put(b: i32): void {
     this.reserve(PIXELS_ONE)
     this.bytes[this.length] = toU8(b)
     this.length = this.length + 1
   }
 
-  /** Append `s`, which is ASCII. */
+  /**
+   * Append `s`, which is ASCII.
+   *
+   * @param s Text of ASCII characters only, such as a command's keys.
+   */
   putText(s: string): void {
     const n: i32 = toI32(s.length)
     this.reserve(n)
@@ -415,7 +510,11 @@ export class PixelBytes {
     this.length = this.length + n
   }
 
-  /** Append `v`, at least 0, in decimal. */
+  /**
+   * Append `v`, at least 0, in decimal.
+   *
+   * @param v A count or size, 0 or more.
+   */
   putDecimal(v: i32): void {
     if (v >= 10) {
       this.putDecimal((v / 10) | 0)
@@ -423,7 +522,11 @@ export class PixelBytes {
     this.put(PIXELS_DIGIT_0 + (v % 10))
   }
 
-  /** What was written, as one string. */
+  /**
+   * What was written, as one string.
+   *
+   * @returns The bytes appended since it was made or last `reset`, to `write`.
+   */
   text(): string {
     return String.fromBytes(this.bytes, 0, this.length)
   }
@@ -513,6 +616,11 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  *
  * `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
  * else panics. An empty framebuffer or rect writes nothing.
+ *
+ * @param fb The frame's pixels, at its own size.
+ * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_KITTY`.
+ * @param imageId The image's id, 1 or more (below 1 panics), the same for every frame of one program.
+ * @param out Where the command bytes are appended.
  */
 export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBytes): void => {
   pixelsCheckImageId("kittyFrame", imageId)
@@ -572,6 +680,9 @@ const pixelsCheckImageId = (who: string, imageId: i32): void => {
  * terminal does not answer. A program writes it when it stops drawing, and
  * puts it in its terminal restore string, so the last frame does not stay
  * behind. Panics, like `kittyFrame`, on an id below 1.
+ *
+ * @param imageId The id `kittyFrame` drew with.
+ * @returns The command, to `write`.
  */
 export const kittyDelete = (imageId: i32): string => {
   pixelsCheckImageId("kittyDelete", imageId)
@@ -636,6 +747,11 @@ const pixelsSixelRun = (out: PixelBytes, bits: i32, count: i32): void => {
  * matrix's threshold before they are quantised (ordered dithering), so a
  * gradient becomes a fine, stable pattern rather than steps. An empty rect
  * writes nothing.
+ *
+ * @param fb The frame's pixels; shrunk or grown to the rect by nearest neighbour.
+ * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_SIXEL`.
+ * @param dither Whether to dither gradients instead of banding them.
+ * @param out Where the Sixel bytes are appended.
  */
 export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, out: PixelBytes): void => {
   const w: i32 = rect.width
@@ -785,6 +901,10 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
  * not reach is set to `COLOR_DEFAULT`. Each covered cell is repainted once,
  * and `Screen.flush` sends only the cells whose glyph or colours changed, so
  * a frame that barely moves costs almost nothing.
+ *
+ * @param fb The frame's pixels.
+ * @param canvas The half-block canvas of the screen to draw on.
+ * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_HALFBLOCK`.
  */
 export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect): void => {
   if (rect.width <= 0 || rect.height <= 0 || fb.width <= 0 || fb.height <= 0) {
@@ -851,6 +971,11 @@ const pixelsNearestAnsi16 = (colour: i32): i32 => {
  * nearest of xterm's 16 standard colours. `Screen` sends colours as 24-bit or
  * 256-palette SGR only, and a console that reduces those to its 16 itself then
  * lands on the colour chosen here, not on a neighbour of it.
+ *
+ * @param fb The frame's pixels.
+ * @param screen The screen to draw on.
+ * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_ASCII`.
+ * @param colors How many colours the terminal shows: 16 for the Linux console, anything else for more.
  */
 export const drawAscii = (fb: Framebuffer, screen: Screen, rect: PixelRect, colors: i32): void => {
   if (rect.width <= 0 || rect.height <= 0 || fb.width <= 0 || fb.height <= 0) {

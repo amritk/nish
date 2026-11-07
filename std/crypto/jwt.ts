@@ -4,17 +4,26 @@
  * RFC 7518 (the HS, RS and ES algorithms), RFC 8037 (EdDSA) and the RFC 8725
  * best current practice.
  *
- *     import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt";
+ *     import { Secret } from "nish:secret";
+ *     import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtKey, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt";
  *
- *     const key = jwtHmacKey(JWT_ALG_HS256, secretKey);       // once; null for a short key
- *     const v = new JwtVerifier(JWT_MAX_TOKEN);               // once, per thread
- *     v.issuer = "https://issuer.example";
- *     v.audience = "api";
- *     v.leeway = toI64(30);
- *     if (key !== null && v.verifyString(key, token, now) === JWT_OK) {
- *       // v.claims[0 .. v.claimsLen) is the payload's JSON; v.exp, v.nbf, v.iat are read
- *     }
- *     const minted: string | null = key === null ? null : jwtSignString(key, "{\"sub\":\"ana\"}");
+ *     // secretKey: at least 32 random bytes, still the caller's to wipe; now: seconds since 1970
+ *     const roundTrip = (secretKey: Secret<u8[]>, token: string, now: i64): string | null => {
+ *       const key: JwtKey | null = jwtHmacKey(JWT_ALG_HS256, secretKey); // make once; null for a short key
+ *       if (key === null) {
+ *         return null;
+ *       }
+ *       const v = new JwtVerifier(JWT_MAX_TOKEN); // make once per thread
+ *       v.issuer = "https://issuer.example";
+ *       v.audience = "api";
+ *       v.leeway = toI64(30);
+ *       if (v.verifyString(key, token, now) === JWT_OK) {
+ *         // v.claims[0 .. v.claimsLen) is the payload's JSON; v.exp, v.nbf, v.iat are read
+ *       }
+ *       const minted: string | null = jwtSignString(key, "{\"sub\":\"ana\"}");
+ *       key.wipe();
+ *       return minted;
+ *     };
  *
  * **The key decides the algorithm, never the token.** A `JwtKey` is made for
  * one algorithm, and a token verifies only when its header's `alg` is that
@@ -167,7 +176,12 @@ const JWT_MAX_LEEWAY: i64 = 2147483647
 const JWT_MAX_NOW: i64 = 1073741824 * 1073741824 * 4
 const JWT_DOT: i32 = 46
 
-/** The `alg` header value for `alg`, `""` for no algorithm this module knows. */
+/**
+ * The `alg` header value for `alg`, `""` for no algorithm this module knows.
+ *
+ * @param alg A `JWT_ALG_` constant.
+ * @returns The name RFC 7518 or RFC 8037 spells it with, such as `"HS256"`.
+ */
 export const jwtAlgName = (alg: i32): string => {
   if (alg === JWT_ALG_HS256) {
     return "HS256"
@@ -236,21 +250,35 @@ const jwtLength = (a: u8[]): i32 => toI32(a.length)
  * each worker its own.
  */
 export class JwtKey {
-  /** An HS key's pads, keyed once; `null` for any other. */
+  /** @internal An HS key's pads, keyed once; `null` for any other. */
   readonly hmac: HmacKey | null
-  /** An RS key; `null` for any other. */
+  /** @internal An RS key; `null` for any other. */
   readonly rsa: RsaPublicKey | null
-  /** An ES key's uncompressed point or an EdDSA key's 32 bytes; empty for HS and RS. */
+  /** @internal An ES key's uncompressed point or an EdDSA key's 32 bytes; empty for HS and RS. */
   readonly pub: u8[]
-  /** An ES256 or EdDSA signing key's private scalar or seed; empty for any other. */
+  /** @internal An ES256 or EdDSA signing key's private scalar or seed; empty for any other. */
   readonly priv: Secret<u8[]>
-  /** The one algorithm this key verifies, `JWT_ALG_*`. */
+  /** @internal The one algorithm this key verifies, `JWT_ALG_*`. */
   readonly alg: i32
-  /** Whether `jwtSign` signs with this key. */
+  /** @internal Whether `jwtSign` signs with this key. */
   readonly canSign: boolean
-  /** Whether the key is in use: `wipe()` clears it, and a wiped key signs and verifies nothing. */
+  /** @internal Whether the key is in use: `wipe()` clears it, and a wiped key signs and verifies nothing. */
   live: boolean
 
+  /**
+   * A key from its parts, checked for nothing: the `jwt…Key` functions are
+   * the way to make one, and this exists for them and for tests that build a
+   * key no function would. `hmac`, `rsa` and `pub` are kept as given; `priv`
+   * is copied, and stays the caller's to wipe.
+   *
+   * @param alg The one algorithm the key verifies, a `JWT_ALG_` constant.
+   * @param hmac An HS key's keyed pads, or `null`.
+   * @param rsa An RS key, or `null`.
+   * @param pub An ES key's uncompressed point or an EdDSA key's 32 bytes;
+   *   empty for any other.
+   * @param priv An ES256 private scalar or an EdDSA seed; empty for any other.
+   * @param canSign Whether `jwtSign` signs with the key.
+   */
   constructor(
     alg: i32,
     hmac: HmacKey | null,
@@ -301,6 +329,10 @@ const jwtPublicKey = (
  * a key at least as long as the hash, so a shorter one answers `null`, as does
  * an `alg` that is not HS. The pads are keyed once, here; `key` stays the
  * caller's to wipe.
+ *
+ * @param alg `JWT_ALG_HS256`, `JWT_ALG_HS384` or `JWT_ALG_HS512`.
+ * @param key The shared secret: at least 32, 48 or 64 bytes for the three.
+ * @returns A new key that verifies and signs, or `null`.
  */
 export const jwtHmacKey = (alg: i32, key: Secret<u8[]>): JwtKey | null => {
   let hash: i32 = 0
@@ -327,6 +359,10 @@ export const jwtHmacKey = (alg: i32, key: Secret<u8[]>): JwtKey | null => {
  * An RS256, RS384 or RS512 key from the DER of a PKCS#1 `RSAPublicKey`
  * (`rsaParsePublicKey`'s input). A key that does not parse, a modulus below
  * 2048 bits (RFC 7518 §3.3) or an `alg` that is not RS answers `null`.
+ *
+ * @param alg `JWT_ALG_RS256`, `JWT_ALG_RS384` or `JWT_ALG_RS512`.
+ * @param der The public key's DER, nothing before it and nothing after it.
+ * @returns A new key that verifies only, or `null`.
  */
 export const jwtRsaKey = (alg: i32, der: u8[]): JwtKey | null => {
   if (alg !== JWT_ALG_RS256 && alg !== JWT_ALG_RS384 && alg !== JWT_ALG_RS512) {
@@ -378,6 +414,11 @@ const jwtDerInteger = (out: u8[], v: u8[]): void => {
  * An RS key from its big-endian modulus and exponent, as a JWK's `n` and `e`
  * spell them once base64url-decoded (RFC 7518 §6.3.1). The same checks as
  * `jwtRsaKey`; parts too long for any key this module takes answer `null`.
+ *
+ * @param alg `JWT_ALG_RS256`, `JWT_ALG_RS384` or `JWT_ALG_RS512`.
+ * @param n The modulus, big-endian; leading zero bytes are dropped.
+ * @param e The public exponent, big-endian; leading zero bytes are dropped.
+ * @returns A new key that verifies only, or `null`.
  */
 export const jwtRsaKeyParts = (alg: i32, n: u8[], e: u8[]): JwtKey | null => {
   if (toI32(n.length) > 2048 || toI32(e.length) > 8 || toI32(n.length) === 0 || toI32(e.length) === 0) {
@@ -398,6 +439,10 @@ export const jwtRsaKeyParts = (alg: i32, n: u8[], e: u8[]): JwtKey | null => {
  * An ES256 or ES384 verifying key from its uncompressed point, `04 ‖ x ‖ y`
  * (65 or 97 bytes). A point of the wrong length or form answers `null`; one
  * off the curve makes every verification fail.
+ *
+ * @param alg `JWT_ALG_ES256` or `JWT_ALG_ES384`.
+ * @param point The public point, copied into the key.
+ * @returns A new key that verifies only, or `null`.
  */
 export const jwtEcKey = (alg: i32, point: u8[]): JwtKey | null => {
   let size: i32 = 0
@@ -412,7 +457,13 @@ export const jwtEcKey = (alg: i32, point: u8[]): JwtKey | null => {
   return jwtPublicKey(alg, null, null, jwtCopy(point), false)
 }
 
-/** An EdDSA (Ed25519) verifying key from its 32 bytes (RFC 8037 §2's `x`); another length answers `null`. */
+/**
+ * An EdDSA (Ed25519) verifying key from its 32 bytes (RFC 8037 §2's `x`);
+ * another length answers `null`.
+ *
+ * @param pub The public key, copied into the key.
+ * @returns A new key that verifies only, or `null`.
+ */
 export const jwtEd25519Key = (pub: u8[]): JwtKey | null => {
   if (toI32(pub.length) !== 32) {
     return null
@@ -424,6 +475,9 @@ export const jwtEd25519Key = (pub: u8[]): JwtKey | null => {
  * An ES256 key that signs and verifies, from its 32-byte private scalar. A
  * scalar `p256PublicKey` refuses answers `null`. The key keeps a copy;
  * `priv` stays the caller's to wipe.
+ *
+ * @param priv The private scalar, big-endian.
+ * @returns A new key that signs and verifies, or `null`.
  */
 export const jwtEs256SigningKey = (priv: Secret<u8[]>): JwtKey | null => {
   const pub: u8[] | null = p256PublicKey(priv)
@@ -437,6 +491,9 @@ export const jwtEs256SigningKey = (priv: Secret<u8[]>): JwtKey | null => {
  * An EdDSA key that signs and verifies, from its 32-byte seed (RFC 8037 §2's
  * `d`). A seed of another length answers `null`. The key keeps a copy; `seed`
  * stays the caller's to wipe.
+ *
+ * @param seed The private seed.
+ * @returns A new key that signs and verifies, or `null`.
  */
 export const jwtEd25519SigningKey = (seed: Secret<u8[]>): JwtKey | null => {
   const pub: u8[] | null = ed25519PublicKey(seed)
@@ -612,22 +669,22 @@ const jwtUtf8Byte = (cp: i32, width: i32, k: i32): i32 => {
  */
 class JwtJson {
   /** The current integer's value, negated, when `integral` holds. */
-  value: i64
-  src: u8[]
-  readonly stack: u8[]
-  pos: i32
-  end: i32
-  depth: i32
-  want: i32
-  kind: i32
-  failed: i32
+  private value: i64
+  private src: u8[]
+  private readonly stack: u8[]
+  private pos: i32
+  private end: i32
+  private depth: i32
+  private want: i32
+  private kind: i32
+  private failed: i32
   /** The current token's bytes, `src[tokStart, tokEnd)`; a string's and a key's include their quotes. */
-  tokStart: i32
-  tokEnd: i32
+  private tokStart: i32
+  private tokEnd: i32
   /** The current key's or string's length once decoded. */
-  textBytes: i32
+  private textBytes: i32
   /** Whether the current number has no fraction or exponent and fits an `i64`. */
-  integral: boolean
+  private integral: boolean
 
   /** A reader for values nested at most `maxDepth` containers deep; `reset` gives it a window. */
   constructor(src: u8[], maxDepth: i32) {
@@ -646,7 +703,7 @@ class JwtJson {
     this.integral = false
   }
 
-  /** Starts over on `src[off, off + len)`; a window outside `src` fails the first `next()`. */
+  /** @internal Starts over on `src[off, off + len)`; a window outside `src` fails the first `next()`. */
   reset(src: u8[], off: i32, len: i32): void {
     this.src = src
     this.pos = off
@@ -659,19 +716,19 @@ class JwtJson {
   }
 
   /** The byte at `i`, or `-1` past the window. */
-  at(i: i32): i32 {
+  private at(i: i32): i32 {
     return i >= 0 && i < this.end && i < toI32(this.src.length) ? toI32(this.src[i]) : -1
   }
 
   /** Fails the reader for good. */
-  fail(): i32 {
+  private fail(): i32 {
     this.failed = JWT_JSON_ERR
     this.kind = JWT_JSON_ERR
     return JWT_JSON_ERR
   }
 
   /** Steps over the four blanks RFC 8259 §2 allows. */
-  skipBlanks(): void {
+  private skipBlanks(): void {
     let b: i32 = this.at(this.pos)
     while (b === JWT_CH_SPACE || b === JWT_CH_TAB || b === JWT_CH_NEWLINE || b === JWT_CH_RETURN) {
       this.pos += 1
@@ -679,7 +736,7 @@ class JwtJson {
     }
   }
 
-  /** The token after the current one, or `JWT_JSON_ERR`, answered again on every later call. */
+  /** @internal The token after the current one, or `JWT_JSON_ERR`, answered again on every later call. */
   next(): i32 {
     if (this.failed !== 0) {
       return this.failed
@@ -715,7 +772,7 @@ class JwtJson {
   }
 
   /** `b`, the closer of the innermost container, popped. */
-  readClose(b: i32): i32 {
+  private readClose(b: i32): i32 {
     if (this.depth === 0) {
       return this.fail()
     }
@@ -733,12 +790,12 @@ class JwtJson {
   }
 
   /** What follows a complete value: nothing at the top, else a comma or a closer. */
-  afterValue(): void {
+  private afterValue(): void {
     this.want = this.depth === 0 ? JWT_JSON_WANT_NOTHING : JWT_JSON_WANT_COMMA_OR_CLOSE
   }
 
   /** A member's name, its blanks and its colon. */
-  readKey(): i32 {
+  private readKey(): i32 {
     if (this.at(this.pos) !== JWT_CH_QUOTE || !this.scanString()) {
       return this.fail()
     }
@@ -753,7 +810,7 @@ class JwtJson {
   }
 
   /** A value at the cursor: an opener, a string, a number or a literal. */
-  readValue(): i32 {
+  private readValue(): i32 {
     const b: i32 = this.at(this.pos)
     if (b === JWT_CH_OPEN_BRACE || b === JWT_CH_OPEN_BRACKET) {
       if (this.depth >= toI32(this.stack.length)) {
@@ -786,7 +843,7 @@ class JwtJson {
   }
 
   /** Whether `word` is at the cursor, stepped over if so. */
-  scanWord(word: string): boolean {
+  private scanWord(word: string): boolean {
     const n: i32 = toI32(word.length)
     for (let i: i32 = 0; i < n; i += 1) {
       if (this.at(this.pos + i) !== toI32(word.charCodeAt(i))) {
@@ -800,7 +857,7 @@ class JwtJson {
   }
 
   /** The digits at the cursor, accumulated negated into `value`; how many, and `integral` cleared on overflow. */
-  scanDigits(bound: i64): i32 {
+  private scanDigits(bound: i64): i32 {
     const ten: i64 = toI64(10)
     let n: i32 = 0
     let b: i32 = this.at(this.pos)
@@ -826,7 +883,7 @@ class JwtJson {
    * `i64` for its sign; accumulating negated reaches -2^63, where a positive
    * number stops at 2^63 - 1.
    */
-  scanNumber(): boolean {
+  private scanNumber(): boolean {
     this.tokStart = this.pos
     const negative: boolean = this.at(this.pos) === JWT_CH_MINUS
     if (negative) {
@@ -871,7 +928,7 @@ class JwtJson {
    * The code point of the escape at `i` (a backslash), a surrogate pair
    * joined, or `-1` for one RFC 8259 §7 refuses or a lone surrogate.
    */
-  escapeCodePoint(i: i32): i32 {
+  private escapeCodePoint(i: i32): i32 {
     const c: i32 = this.at(i + 1)
     if (c === JWT_CH_QUOTE || c === JWT_CH_BACKSLASH || c === 47) {
       return c
@@ -913,7 +970,7 @@ class JwtJson {
   }
 
   /** The four hex digits at `i` as a number, or `-1`. */
-  hex4(i: i32): i32 {
+  private hex4(i: i32): i32 {
     let v: i32 = 0
     for (let k: i32 = 0; k < 4; k += 1) {
       const d: i32 = jwtHexValue(this.at(i + k))
@@ -926,7 +983,7 @@ class JwtJson {
   }
 
   /** How many bytes the escape at `i` takes, given the code point it decodes to. */
-  escapeLength(i: i32, cp: i32): i32 {
+  private escapeLength(i: i32, cp: i32): i32 {
     if (this.at(i + 1) !== 117) {
       return 2
     }
@@ -938,7 +995,7 @@ class JwtJson {
    * RFC 3629 §4 (no overlong form, no surrogate, nothing past U+10FFFF), or
    * `-1`.
    */
-  utf8Tail(i: i32): i32 {
+  private utf8Tail(i: i32): i32 {
     const b: i32 = this.at(i)
     let n: i32 = 0
     let lo: i32 = 0x80
@@ -970,7 +1027,7 @@ class JwtJson {
   }
 
   /** The string at the cursor, checked, stepped over, its decoded length in `textBytes`. */
-  scanString(): boolean {
+  private scanString(): boolean {
     this.tokStart = this.pos
     let i: i32 = this.pos + 1
     let decoded: i32 = 0
@@ -1009,11 +1066,11 @@ class JwtJson {
   }
 
   /** Whether the current token is a key or a string. */
-  isText(): boolean {
+  private isText(): boolean {
     return this.kind === JWT_JSON_KEY || this.kind === JWT_JSON_STRING
   }
 
-  /** The current key's or string's length once decoded, or `-1`. */
+  /** @internal The current key's or string's length once decoded, or `-1`. */
   stringLength(): i32 {
     return this.isText() ? this.textBytes : -1
   }
@@ -1023,6 +1080,7 @@ class JwtJson {
    * `false` when the token is neither. Under Node, `charCodeAt` is a UTF-16
    * code unit, so only an ASCII name answers as it does natively, as with
    * `nish/json-tokenizer`'s `keyEquals`.
+   * @internal
    */
   keyEquals(name: string): boolean {
     const n: i32 = toI32(name.length)
@@ -1059,6 +1117,7 @@ class JwtJson {
    * Writes the current key's or string's decoded bytes to `out` from `at` and
    * answers how many; `-1`, writing nothing, when the token is neither or
    * `out` has too little room.
+   * @internal
    */
   stringInto(out: u8[], at: i32): i32 {
     if (!this.isText() || at < 0 || at > toI32(out.length) - this.textBytes) {
@@ -1090,12 +1149,12 @@ class JwtJson {
     return o - at
   }
 
-  /** Whether the current token is a number without fraction or exponent that fits an `i64`. */
+  /** @internal Whether the current token is a number without fraction or exponent that fits an `i64`. */
   isInteger(): boolean {
     return this.kind === JWT_JSON_NUMBER && this.integral
   }
 
-  /** The current number as an `i64` when `isInteger()` holds, else `0`. */
+  /** @internal The current number as an `i64` when `isInteger()` holds, else `0`. */
   numberI64(): i64 {
     if (!this.isInteger()) {
       return toI64(0)
@@ -1107,6 +1166,7 @@ class JwtJson {
    * Steps over the value the current token starts: after a key, its value;
    * after an opener, everything through its closer; after a scalar or a
    * closer, nothing. Answers the kind of the last token read, or `JWT_JSON_ERR`.
+   * @internal
    */
   skipValue(): i32 {
     if (this.failed !== 0) {
@@ -1188,6 +1248,8 @@ const jwtVerifyPublic = (key: JwtKey, src: u8[], off: i32, len: i32, sig: u8[], 
  * fields, read on every `verify`. After `JWT_OK`, `claims[0 .. claimsLen)`
  * is the payload's JSON for the caller's own claims, and `exp`, `nbf` and
  * `iat` hold the time claims when `hasExp`, `hasNbf` and `hasIat` say so.
+ * `claims` and `sig` are the verifier's own buffers, not copies: the next
+ * `verify` overwrites them.
  */
 export class JwtVerifier {
   /** Seconds of clock skew allowed to `exp`, `nbf` and `iat`; held to `[0, 2^31 - 1]`. */
@@ -1202,23 +1264,46 @@ export class JwtVerifier {
   typ: string | null
   /** The decoded payload of the last token, `claimsLen` bytes of it valid after `JWT_OK`. */
   readonly claims: u8[]
+  /** The last token's `exp`, in seconds since 1970; meaningful only when `hasExp`. */
   exp: i64
+  /** The last token's `nbf`, in seconds since 1970; meaningful only when `hasNbf`. */
   nbf: i64
+  /** The last token's `iat`, in seconds since 1970; meaningful only when `hasIat`. */
   iat: i64
-  readonly part: u8[]
+  private readonly part: u8[]
+  /**
+   * The last token's signature, decoded, at the front; `JWT_MAX_SIGNATURE`
+   * bytes long, whatever the signature's own length. It is written only once
+   * the header passes, so after a refusal before that it still holds an
+   * earlier token's bytes.
+   */
   readonly sig: u8[]
-  readonly text: u8[]
-  readonly tok: JwtJson
+  private readonly text: u8[]
+  private readonly tok: JwtJson
   /** The largest token taken, in bytes. */
   readonly maxToken: i32
+  /** How many bytes of `claims` are the payload: its length after `JWT_OK`, 0 after any refusal. */
   claimsLen: i32
   /** Whether a token without `exp` is refused; on by default. */
   requireExp: boolean
+  /**
+   * Whether the last token's payload carried `exp`. Cleared at the start of
+   * each `verify` and set as the claims are read, so a token refused for its
+   * claims may leave it set.
+   */
   hasExp: boolean
+  /** Whether the last token's payload carried `nbf`, as `hasExp`. */
   hasNbf: boolean
+  /** Whether the last token's payload carried `iat`, as `hasExp`. */
   hasIat: boolean
 
-  /** A verifier for tokens of up to `maxToken` bytes; outside `[16, JWT_MAX_TOKEN_LIMIT]` panics. */
+  /**
+   * A verifier for tokens of up to `maxToken` bytes; outside
+   * `[16, JWT_MAX_TOKEN_LIMIT]` panics. Every buffer is allocated here, once.
+   *
+   * @param maxToken The longest token taken, in bytes; `JWT_MAX_TOKEN` is the
+   *   usual choice.
+   */
   constructor(maxToken: i32) {
     if (maxToken < 16 || maxToken > JWT_MAX_TOKEN_LIMIT) {
       panic("JwtVerifier: maxToken outside [16, JWT_MAX_TOKEN_LIMIT]")
@@ -1247,8 +1332,13 @@ export class JwtVerifier {
 
   /**
    * `verify` on the bytes of `token`, copied into the verifier's own buffer
-   * first (a string's UTF-8 bytes); a token longer than `maxToken` is refused
-   * before the copy.
+   * first; a token longer than `maxToken` is refused before the copy.
+   *
+   * @param key The key to verify with; it alone decides the algorithm.
+   * @param token The compact token; a character above U+007F answers
+   *   `JWT_ERR_FORMAT`.
+   * @param now The current time, in seconds since 1970.
+   * @returns `JWT_OK`, or the reason the token was refused, as `verify`.
    */
   verifyString(key: JwtKey, token: string, now: i64): i32 {
     if (toI32(token.length) > this.maxToken) {
@@ -1271,7 +1361,25 @@ export class JwtVerifier {
   /**
    * Verifies the token `src[off .. off + len)` under `key` and checks its
    * claims at `now` (seconds since 1970): `JWT_OK`, or the first
-   * `JWT_ERR_*` that applies, in the order the module comment lists.
+   * `JWT_ERR_*` that applies, in this order: the window (`JWT_ERR_SIZE`);
+   * the three parts and the header's base64url (`JWT_ERR_FORMAT`); the
+   * header's members in the order written (`JWT_ERR_HEADER`, `JWT_ERR_ALG`),
+   * then a missing `alg` and, when the verifier names a `typ`, a missing or
+   * other one; signature text too long for any signature
+   * (`JWT_ERR_SIGNATURE`); the signature's base64url (`JWT_ERR_FORMAT`); its
+   * length, the key's fit and the signature itself (`JWT_ERR_SIGNATURE`); the
+   * payload's base64url (`JWT_ERR_FORMAT`); the payload's members in the
+   * order written and, while `requireExp` is set (the default), a missing
+   * `exp` (`JWT_ERR_CLAIMS`); and then `exp`,
+   * `nbf`, `iat`, `iss`, `aud` and `sub`, in that order.
+   *
+   * @param key The key to verify with; it alone decides the algorithm, and a
+   *   wiped one verifies nothing.
+   * @param src The bytes that hold the token; they are read, not kept.
+   * @param off Where the token starts in `src`.
+   * @param len The token's length in bytes.
+   * @param now The current time, in seconds since 1970; held to `[0, 2^62]`.
+   * @returns `JWT_OK`, or the reason the token was refused.
    */
   verify(key: JwtKey, src: u8[], off: i32, len: i32, now: i64): i32 {
     this.claimsLen = 0
@@ -1340,7 +1448,7 @@ export class JwtVerifier {
   }
 
   /** The header in `part[0 .. len)` checked against `key`'s algorithm and the verifier's `typ`. */
-  checkHeader(key: JwtKey, len: i32): i32 {
+  private checkHeader(key: JwtKey, len: i32): i32 {
     const tok: JwtJson = this.tok
     tok.reset(this.part, toI32(0), len)
     if (tok.next() !== JWT_JSON_OBJECT_BEGIN) {
@@ -1401,7 +1509,7 @@ export class JwtVerifier {
   }
 
   /** The payload in `claims[0 .. len)` parsed and checked at `now`. */
-  checkClaims(len: i32, now: i64): i32 {
+  private checkClaims(len: i32, now: i64): i32 {
     const tok: JwtJson = this.tok
     tok.reset(this.claims, toI32(0), len)
     if (tok.next() !== JWT_JSON_OBJECT_BEGIN) {
@@ -1523,6 +1631,12 @@ export class JwtVerifier {
    * or its `kid` does not fit `out`. This reads the header **before** any
    * signature is checked, so it only chooses which key to verify with; the
    * `kid` proves nothing until `verify` answers `JWT_OK` under that key.
+   *
+   * @param src The bytes that hold the token.
+   * @param off Where the token starts in `src`.
+   * @param len The token's length in bytes.
+   * @param out Where the `kid` is written, unescaped.
+   * @returns The `kid`'s length in bytes, or -1.
    */
   peekKid(src: u8[], off: i32, len: i32, out: u8[]): i32 {
     if (len < 0 || len > this.maxToken || off < 0 || off > toI32(src.length) - len) {
@@ -1617,6 +1731,11 @@ const jwtBytesOf = (text: string): u8[] => {
  * object, or when `kid` is empty, longer than 256 bytes, or holds a byte that
  * would need a JSON escape. The claims are signed as given: this function
  * neither adds nor checks any claim.
+ *
+ * @param key The key to sign with; a wiped one answers `null`.
+ * @param kid The key id to name in the header, or `null` for none.
+ * @param claims The payload: one JSON object, in bytes.
+ * @returns The token, a new string, or `null`.
  */
 export const jwtSignKid = (key: JwtKey, kid: string | null, claims: u8[]): string | null => {
   if (!key.canSign || !key.live || !jwtIsObject(claims)) {
@@ -1649,13 +1768,23 @@ export const jwtSignKid = (key: JwtKey, kid: string | null, claims: u8[]): strin
   return input + "." + base64urlEncode(sig)
 }
 
-/** `jwtSignKid` with no `kid`. */
+/**
+ * `jwtSignKid` with no `kid`.
+ *
+ * @param key The key to sign with.
+ * @param claims The payload: one JSON object, in bytes.
+ * @returns The token, or `null` as `jwtSignKid` answers it.
+ */
 export const jwtSign = (key: JwtKey, claims: u8[]): string | null => jwtSignKid(key, null, claims)
 
 /**
  * `jwtSign` over the bytes of the string `claims`. Answers `null` for claims
  * outside ASCII, as `verifyString` refuses them: escape such text (`\u00e9`)
  * or pass its UTF-8 bytes to `jwtSign`.
+ *
+ * @param key The key to sign with.
+ * @param claims The payload: one JSON object, ASCII.
+ * @returns The token, or `null` as `jwtSignKid` answers it.
  */
 export const jwtSignString = (key: JwtKey, claims: string): string | null =>
   jwtIsAscii(claims) ? jwtSignKid(key, null, jwtBytesOf(claims)) : null

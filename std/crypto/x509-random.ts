@@ -29,6 +29,8 @@ import { X509_MAX_SERIAL, x509MintSelfSigned } from "nish/crypto/x509"
  * so every key is equally likely; a draw is refused with odds below 2^-32. A
  * refused draw is wiped before the next, and the caller wipes the one
  * returned.
+ *
+ * @returns The 32-byte scalar, big-endian, in a new `Secret` the caller owns and wipes.
  */
 export const x509DrawP256Key = (): Secret<u8[]> => {
   while (true) {
@@ -48,6 +50,8 @@ export const x509DrawP256Key = (): Secret<u8[]> => {
  * so the INTEGER is positive, never zero, and always twenty octets long — 158
  * random bits, past the 64 the CA/Browser Forum asks of a serial. A serial is
  * public, written into the certificate, so it is a plain array.
+ *
+ * @returns The 20 serial octets, big-endian, in a fresh array.
  */
 export const x509DrawSerial = (): u8[] => {
   const serial: u8[] = new Array<u8>(X509_MAX_SERIAL)
@@ -62,6 +66,12 @@ export const x509DrawSerial = (): u8[] => {
  * the mint answers `null` for. The key stays the caller's, since the server
  * that presents the certificate signs its handshakes with it; draw one with
  * `x509DrawP256Key`.
+ *
+ * @param priv The 32-byte P-256 private scalar; read, and left for the caller to wipe.
+ * @param commonName The subject's and issuer's common name, 1 to 64 bytes of UTF-8 without a NUL.
+ * @param notBeforeMs When validity starts, in milliseconds since 1970-01-01 UTC.
+ * @param days How long it is valid, 1 to `X509_MAX_DAYS`.
+ * @returns The certificate's DER, a fresh array, or `null`.
  */
 export const x509MintSelfSignedDrawn = (
   priv: Secret<u8[]>,

@@ -8,9 +8,14 @@
  * record five bytes long. This module reads a reply against the query it
  * answers and refuses each of those with its own code:
  *
- *     import { DnsReply, DNS_NOERROR, DNS_QUERY_MAX_BYTES, DNS_TYPE_A, dnsBuildQuery, dnsParseReply } from "nish/net/dns-message"
+ *     import {
+ *       DnsReply, DNS_ADDRESS_BYTES, DNS_NOERROR, DNS_QUERY_MAX_BYTES, DNS_TYPE_A,
+ *       dnsBuildQuery, dnsParseReply,
+ *     } from "nish/net/dns-message"
  *
  *     const query: u8[] = new Array<u8>(DNS_QUERY_MAX_BYTES)
+ *     // A sketch: `id` is a fresh random 16-bit number for each query, and
+ *     // `msg` a u8[] the program reads `mlen` bytes of reply into.
  *     const qlen: i32 = dnsBuildQuery(query, id, "example.com", DNS_TYPE_A)   // < 0: a DNS_ERR_* code
  *     // ... send query[0, qlen), read the datagram into msg[0, mlen) ...
  *     const reply: DnsReply = new DnsReply()
@@ -145,15 +150,27 @@ export class DnsReply {
   count: i32 = 0
   /** How many addresses past `DNS_MAX_ANSWERS` were read and not kept. */
   dropped: i32 = 0
-  /** The reply's RCODE, once its header was read. */
+  /**
+   * The reply's RCODE (0 to 15), once the reply was found to answer the query;
+   * 0 when it was refused before that.
+   */
   rcode: i32 = 0
   /** The TC bit: the reply was cut to fit a datagram, and no record of it was read. */
   truncated: boolean = false
-  /** The last record's owner name, lowercase, in wire form. */
+  /**
+   * The last record's owner name, lowercase, in wire form.
+   * @internal Used by `dnsParseReply` in this module.
+   */
   owner: u8[]
-  /** The end of the alias chain, lowercase, in wire form: the question's name until a CNAME moves it. */
+  /**
+   * The end of the alias chain, lowercase, in wire form: the question's name until a CNAME moves it.
+   * @internal Used by `dnsParseReply` in this module; `dnsResolverAnswer` in std/net/dns-resolver.ts.
+   */
   chain: u8[]
-  /** The question's name as the query asked it, lowercase, in wire form. */
+  /**
+   * The question's name as the query asked it, lowercase, in wire form.
+   * @internal Used by `dnsParseReply` in this module; `dnsResolverAnswer` in std/net/dns-resolver.ts.
+   */
   asked: u8[]
 
   constructor() {
@@ -183,6 +200,19 @@ const dnsLower = (b: i32): i32 => (b >= 65 && b <= 90 ? b + 32 : b)
  * `name` is ASCII, its labels split on `.`, and one trailing `.` is read as the
  * root it names. `id` is the caller's: a resolver draws it at random, so that a
  * spoofed reply must guess it, and passes the same query to `dnsParseReply`.
+ * Nothing is allocated, and nothing is written past `out.length`.
+ *
+ * @param out Where the query goes, from offset 0; `DNS_QUERY_MAX_BYTES` (271)
+ *   bytes always have room for any name that is one.
+ * @param id The query ID, 0 to 0xFFFF; any other value panics.
+ * @param name The name to ask, such as `"example.com"` or `"example.com."`:
+ *   bytes 33 to 126 (printable ASCII without the space), labels of 1 to 63
+ *   bytes, at most 253 bytes without the trailing dot.
+ * @param qtype `DNS_TYPE_A` or `DNS_TYPE_AAAA`; any other is `DNS_ERR_QTYPE`.
+ * @returns The query's length in bytes, written to `out[0, length)`, or a
+ *   negative `DNS_ERR_*` code: `DNS_ERR_QTYPE`, `DNS_ERR_EMPTY_LABEL`,
+ *   `DNS_ERR_LABEL_LONG`, `DNS_ERR_NAME_LONG`, `DNS_ERR_NAME_BYTE` or
+ *   `DNS_ERR_SPACE`.
  */
 export const dnsBuildQuery = (out: u8[], id: i32, name: string, qtype: i32): i32 => {
   if (id < 0 || id > 0xffff) {
@@ -393,8 +423,29 @@ const dnsKeepAddress = (msg: u8[], at: i32, size: i32, port: i32, ttl: i32, repl
  * malformed or answers another. The answer records are read only under
  * NOERROR and with TC clear; with TC set, `reply.truncated` says so,
  * `reply.count` is 0 whatever the counts claim, and the caller asks again
- * over TCP. The authority and
- * additional sections are counted against the bytes left and never read.
+ * over TCP. The authority and additional sections are counted against the
+ * bytes left and never read. `reply` is reset first and written in place, so
+ * nothing is allocated; it holds this reply's answer until the next call.
+ *
+ * @param msg The datagram (or TCP message, without its length) that came back.
+ * @param len How many bytes of `msg`, from offset 0, are the reply; a length
+ *   outside `msg` panics.
+ * @param query The query this reply should answer, as `dnsBuildQuery` wrote
+ *   it: the reply's ID and question are compared with its bytes. A query under
+ *   12 bytes, or with another ID, answers `DNS_ERR_ID`; once the reply passes
+ *   the ID, QR, opcode and QDCOUNT checks, a query whose question cannot be
+ *   read back panics.
+ * @param queryLen The query's length, as `dnsBuildQuery` answered it; a length
+ *   outside `query` panics.
+ * @param port The port, 0 to 0xFFFF, written big-endian into the last two bytes
+ *   of every kept address; any other value panics.
+ * @param reply The caller's reused `DnsReply`, reset and filled in.
+ * @returns The reply's RCODE when it answers the query (`DNS_NOERROR`,
+ *   `DNS_NXDOMAIN`, `DNS_SERVFAIL` or `DNS_REFUSED`), with the addresses in
+ *   `reply` only under `DNS_NOERROR` with `reply.truncated` clear; or a
+ *   negative `DNS_ERR_*` code: `DNS_ERR_RCODE` for a reply to this query
+ *   with any other RCODE (FORMERR, NOTIMP or one undefined), and the others
+ *   for a reply that is malformed or answers another query.
  */
 export const dnsParseReply = (
   msg: u8[],
