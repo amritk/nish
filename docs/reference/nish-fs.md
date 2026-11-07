@@ -2,7 +2,7 @@
 
 # `nish:fs`
 
-The `nish:fs` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+Files and directories: read, write, rename, remove and list paths on the host's file system.
 
 ```ts
 import {
@@ -25,109 +25,159 @@ import {
 } from "nish:fs";
 ```
 
+```ts
+import { readFileSyncOrNull, writeFileSyncMode, renameSync } from "nish:fs";
+
+const text = readFileSyncOrNull("config.json");
+if (text !== null) {
+  if (writeFileSyncMode("token.tmp", text, 0o600) >= 0) renameSync("token.tmp", "token");
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="appendFileSync" icon="phosphor/regular/function" href="#appendfilesync">
 
-Refuses a symbolic link as the last component of the path, as the global does.
+Create the file or append to it, and write `data`; a statement, not a value.
 
 </scalar-card>
 
 <scalar-card title="createFileExclusiveSync" icon="phosphor/regular/function" href="#createfileexclusivesync">
 
-As `writeFileSyncMode`, but -17 when anything is at `path`: one racer wins; a failed write removes the file.
+`O_CREAT|O_EXCL`: create `path` at exactly `mode`, set as for `writeFileSyncMode`, and write `data`.
 
 </scalar-card>
 
 <scalar-card title="isDirectorySync" icon="phosphor/regular/function" href="#isdirectorysync">
 
-Whether a directory is at `path` right now.
+One `stat` of `path`.
 
 </scalar-card>
 
 <scalar-card title="mkdirSync" icon="phosphor/regular/function" href="#mkdirsync">
 
-`true` when the directory was created, `false` when it already existed.
+Create one directory at mode `0777 & ~umask`.
 
 </scalar-card>
 
 <scalar-card title="mkdirSyncMode" icon="phosphor/regular/function" href="#mkdirsyncmode">
 
-0, or a negative errno: -17 for a path already there, whose mode is left alone.
+`mkdir(2)` of one level at `mode`.
 
 </scalar-card>
 
 <scalar-card title="readFileBytesSync" icon="phosphor/regular/function" href="#readfilebytessync">
 
-The file's bytes as they are on disk — nothing assumes UTF-8, so a zero byte, a byte of 0x80 or above and an invalid sequence all come back unchanged, and `length` is the file's size — or `null` for exactly the paths `readFileSyncOrNull` answers `null` for: missing, a directory, a parent that cannot be searched.
+The file's bytes, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged.
 
 </scalar-card>
 
 <scalar-card title="readFileSync" icon="phosphor/regular/function" href="#readfilesync">
 
-The whole file as one string; a path that cannot be read as one — missing, a directory, a parent that cannot be searched — prints `nish: cannot read <path>` to stderr and exits 1.
+Read the whole file as one arena string.
 
 </scalar-card>
 
 <scalar-card title="readFileSyncOrNull" icon="phosphor/regular/function" href="#readfilesyncornull">
 
-The same read, answering `null` for every path the other exits over: a missing path, a directory, a parent that cannot be searched, a pipe with no length to ask for.
+The same read as `readFileSync`, answering `null` where that call exits, so a program can report the missing file itself and carry on.
 
 </scalar-card>
 
 <scalar-card title="readdirSync" icon="phosphor/regular/function" href="#readdirsync">
 
-The directory's entries, sorted ascending by bytes and without `.` or `..`, or `null` when it cannot be read.
+The directory's entries, sorted ascending by bytes, without `.` and `..`; every other dotfile is an entry.
 
 </scalar-card>
 
 <scalar-card title="realpathSync" icon="phosphor/regular/function" href="#realpathsync">
 
-`path` with every symbolic link resolved and every `.`, `..` and repeated separator removed, as an absolute path — or `null` when it does not resolve, a path that does not exist included.
+`path` with every symbolic link resolved and every `.`, `..` and repeated separator removed.
 
 </scalar-card>
 
 <scalar-card title="renameSync" icon="phosphor/regular/function" href="#renamesync">
 
-0, or a negative errno: -18 across file systems.
+`rename(2)`: `from` takes the name `to`, replacing a file already there in one step, so a reader sees the old file or the new one and never neither.
 
 </scalar-card>
 
 <scalar-card title="statMtimeSync" icon="phosphor/regular/function" href="#statmtimesync">
 
-Node's `mtimeMs` for the path, or NaN when it cannot be stat'd.
+The path's modification time, following symbolic links, as Node's `mtimeMs`: milliseconds since the epoch with the sub-millisecond fraction kept.
 
 </scalar-card>
 
 <scalar-card title="unlinkSync" icon="phosphor/regular/function" href="#unlinksync">
 
-0, or a negative errno: a directory is refused, not removed.
+`unlink(2)`: remove the name, and a symbolic link itself rather than what it names.
 
 </scalar-card>
 
 <scalar-card title="writeFileBytesSync" icon="phosphor/regular/function" href="#writefilebytessync">
 
-The byte count, or a negative errno; refuses a symbolic link as `writeFileSync` does.
+Create or truncate the file at mode `0644` and write the array's bytes as they are: `readFileBytesSync`'s other half.
 
 </scalar-card>
 
 <scalar-card title="writeFileSync" icon="phosphor/regular/function" href="#writefilesync">
 
-Refuses a symbolic link as the last component of the path, as the global does.
+Create or truncate the file at mode `0644` and write `data`; a statement, not a value.
 
 </scalar-card>
 
 <scalar-card title="writeFileSyncMode" icon="phosphor/regular/function" href="#writefilesyncmode">
 
-The byte count, or a negative errno; the file is exactly `mode` (0..0o777) before it holds a byte, a link refused, written in place.
+Create or truncate the file and write `data`, as `writeFileSync` does, with the file left at exactly `mode` (`0o600` for a secret).
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+Each export is the global of the same name, renamed: the compiler emits the
+same IR for either spelling. Paths are relative to the working directory.
+The calls that answer an `i32` answer the same numbers under Node, where
+`runtime/nish.mjs` turns the error Node throws into `-errno` from its `code`
+(`ERR_INVALID_ARG_VALUE`, Node's refusal of a NUL in a path, is `-22`).
+
+</scalar-callout>
+
+A `wasm32` build has none of these, and a WASI build answers `-ENOSYS` from
+the three that take a mode. Every negative errno is the platform's own,
+untranslated: the numbers shown here are Linux's, and another kernel's differ
+(`ELOOP` is `-62` on Darwin), so compare against a negative result. A file
+longer than 2^31 - 1 bytes is one the read calls cannot read, in both number
+modes. A path that holds a NUL byte is refused as a missing path is.
+
+<scalar-detail title="Bytes and strings">
+
+A native string is never validated as UTF-8, so
+`writeFileSync` and `appendFileSync` send its bytes as they are; under the
+prelude and under `--emit-ts` a string is UTF-16 and a byte above 127 does
+not survive. `readFileBytesSync` and `writeFileBytesSync` move a `u8[]`
+unchanged on every host and are the route for bytes that are not text.
+
+</scalar-detail>
+
+<scalar-detail title="Atomic replacement">
+
+Write a temporary beside the target, then
+`renameSync` it over: a reader sees the old file or the new one and never
+neither. `writeFileSyncMode` writes in place, so a secret that replaces
+another goes through the same temporary and rename.
+
+</scalar-detail>
+
+The rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#file-io
+and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#directories-and-subprocesses
+
 ## appendFileSync
 
-Refuses a symbolic link as the last component of the path, as the global does.
+Create the file or append to it, and write `data`; a statement, not a
+value. A symbolic link as the last component of `path` is refused, as for
+`writeFileSync`.
 
 ```ts
 function appendFileSync(
@@ -139,14 +189,25 @@ function appendFileSync(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The file to append to.
+
 </scalar-field>
 
 <scalar-field name="data" type="string" required>
+
+The bytes of the string, sent as they are.
+
 </scalar-field>
 
 ## createFileExclusiveSync
 
-As `writeFileSyncMode`, but -17 when anything is at `path`: one racer wins; a failed write removes the file.
+`O_CREAT|O_EXCL`: create `path` at exactly `mode`, set as for
+`writeFileSyncMode`, and write `data`. Exactly one of any number of
+processes racing for one path wins, so it is a lock file: create it, and
+`unlinkSync` it to release. A winner whose write then fails removes the
+file before it answers, so a failed create never leaves a half-written lock
+behind. Never a panic.
 
 ```ts
 function createFileExclusiveSync(
@@ -159,26 +220,39 @@ function createFileExclusiveSync(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The file to create.
+
 </scalar-field>
 
 <scalar-field name="data" type="string" required>
+
+The bytes of the string, sent as they are.
+
 </scalar-field>
 
 <scalar-field name="mode" type="i32" required>
+
+The file's mode, `0..0o777`, as for `writeFileSyncMode`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The length written, `-17` EEXIST when any name is already at
+  `path` (a dangling symbolic link included, which is never followed), or
+  another negative errno as for `writeFileSyncMode`.
+
 </scalar-field>
 
 ## isDirectorySync
 
-Whether a directory is at `path` right now. One `stat`, and never an exit.
-The answer is a fact about the file system as the call runs and can be stale
-by the time the caller acts on it: `mkdirSync` is still the call that decides
-whether a directory was made, and `readFileSyncOrNull` is still the way to
-read a file without racing a check against it. Capability: fs.read.
+One `stat` of `path`. The answer can be stale by the time the caller acts
+on it: `mkdirSync` is still the call that decides whether a directory was
+made, and `readFileSyncOrNull` the way to read a file without racing a
+check against it.
 
 ```ts
 function isDirectorySync(path: string): boolean
@@ -188,7 +262,7 @@ function isDirectorySync(path: string): boolean
 
 <scalar-field name="path" type="string" required>
 
-the path to ask about.
+The path to ask about.
 
 </scalar-field>
 
@@ -196,14 +270,17 @@ the path to ask about.
 
 <scalar-field name="returns" type="boolean">
 
-`true` for a directory; `false` for everything else — a missing
-  path, a plain file, a device node, a parent that cannot be searched.
+`true` when a directory exists at `path` as the call runs; `false`
+  for everything else, including a missing path, a plain file, a device
+  node and a parent that cannot be searched.
 
 </scalar-field>
 
 ## mkdirSync
 
-`true` when the directory was created, `false` when it already existed.
+Create one directory at mode `0777 & ~umask`. It is not recursive, exactly
+like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a
+failure and not a reason to create it.
 
 ```ts
 function mkdirSync(path: string): boolean
@@ -212,16 +289,27 @@ function mkdirSync(path: string): boolean
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The directory to create.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when a directory exists at `path` once the call returns,
+  whether this call created it or it was already there; `false` for every
+  other outcome, a plain file at `path` included.
+
 </scalar-field>
 
 ## mkdirSyncMode
 
-0, or a negative errno: -17 for a path already there, whose mode is left alone.
+`mkdir(2)` of one level at `mode`. The kernel applies the process umask to
+`mode`: a `0o700` directory stays `0o700` under any umask that leaves the
+owner's bits, and a wider mode may come out narrower. An existing name
+keeps its mode, never changed. Never a panic.
 
 ```ts
 function mkdirSyncMode(
@@ -233,27 +321,35 @@ function mkdirSyncMode(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The directory to create; its parent must exist.
+
 </scalar-field>
 
 <scalar-field name="mode" type="i32" required>
+
+The directory's mode, `0..0o777`; the sticky, setuid and
+  setgid bits are refused.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or a negative errno: `-17` EEXIST for a name already there,
+  `-2` ENOENT for a missing parent, `-22` EINVAL for a mode outside
+  `0..0o777` or a NUL in `path`.
+
 </scalar-field>
 
 ## readFileBytesSync
 
-The file's bytes as they are on disk — nothing assumes UTF-8, so a zero byte,
-a byte of 0x80 or above and an invalid sequence all come back unchanged, and
-`length` is the file's size — or `null` for exactly the paths
-`readFileSyncOrNull` answers `null` for: missing, a directory, a parent that
-cannot be searched. There is no exiting twin. The array is an ordinary arena
-`u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A file
-longer than 2^31 - 1 bytes is one it cannot read. A `wasm32` build has no file
-I/O and so no `readFileBytesSync`. Under Node the answer is
-`Array.from(fs.readFileSync(path))` or `null`. Capability: fs.read.
+The file's bytes, as they are on disk: nothing assumes UTF-8, so a zero
+byte, a byte of `0x80` or above and an invalid sequence all come back
+unchanged. The array is an ordinary arena `u8[]` whose `length` is the
+file's size and equals its capacity. There is no exiting twin. Under Node
+the answer is `Array.from(fs.readFileSync(path))` or `null`.
 
 ```ts
 function readFileBytesSync(
@@ -265,7 +361,7 @@ function readFileBytesSync(
 
 <scalar-field name="path" type="string" required>
 
-the file to read.
+The file to read.
 
 </scalar-field>
 
@@ -273,19 +369,16 @@ the file to read.
 
 <scalar-field name="returns" type="u8[] | null">
 
-its bytes, or `null`.
+The bytes, or `null` for exactly the paths `readFileSyncOrNull`
+  answers `null` for.
 
 </scalar-field>
 
 ## readFileSync
 
-The whole file as one string; a path that cannot be read as one — missing, a
-directory, a parent that cannot be searched — prints `nish: cannot read
-<path>` to stderr and exits 1. A file longer than 2^31 - 1 bytes is one it
-cannot read, in both number modes, as in Node. Paths are relative to the
-working directory, and a NUL byte in `path` is refused as a missing path is.
-A `wasm32` build has no file I/O and so no `readFileSync`.
-Capability: fs.read.
+Read the whole file as one arena string. A failure prints
+`nish: cannot read <path>` to stderr and exits 1; `readFileSyncOrNull` is
+the call that answers instead.
 
 ```ts
 function readFileSync(path: string): string
@@ -295,7 +388,7 @@ function readFileSync(path: string): string
 
 <scalar-field name="path" type="string" required>
 
-the file to read.
+The file to read.
 
 </scalar-field>
 
@@ -303,19 +396,19 @@ the file to read.
 
 <scalar-field name="returns" type="string">
 
-its contents.
+The file's contents.
 
 </scalar-field>
 
 ## readFileSyncOrNull
 
-The same read, answering `null` for every path the other exits over: a
-missing path, a directory, a parent that cannot be searched, a pipe with no
-length to ask for. A program can therefore report the missing file itself and
-carry on; the call subsumes an `existsSync` and has no time-of-check race.
-The result is narrowed with `if (text !== null)` like any other nullable.
-The 2^31 - 1 byte limit and the NUL rule of `readFileSync` apply.
-Capability: fs.read.
+The same read as `readFileSync`, answering `null` where that call exits,
+so a program can report the missing file itself and carry on. `null` when
+the path cannot be read as a file: missing, a directory, a parent that
+cannot be searched, a pipe with no length to ask for. It subsumes an
+`existsSync` and has no time-of-check race; narrow the result with
+`if (text !== null)`. It answers `null` for exactly the paths
+`readFileSync` prints "cannot read" for.
 
 ```ts
 function readFileSyncOrNull(
@@ -327,7 +420,7 @@ function readFileSyncOrNull(
 
 <scalar-field name="path" type="string" required>
 
-the file to read.
+The file to read.
 
 </scalar-field>
 
@@ -335,14 +428,16 @@ the file to read.
 
 <scalar-field name="returns" type="string | null">
 
-its contents, or `null`.
+The file's contents, or `null` when it cannot be read as a file.
 
 </scalar-field>
 
 ## readdirSync
 
-The directory's entries, sorted ascending by bytes and without `.` or
-`..`, or `null` when it cannot be read.
+The directory's entries, sorted ascending by bytes, without `.` and `..`;
+every other dotfile is an entry. The sort makes a listing the same on
+every machine; it agrees with Node's `.sort()` for ASCII names and can
+differ for names that are not.
 
 ```ts
 function readdirSync(
@@ -353,22 +448,28 @@ function readdirSync(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The directory to list.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string[] | null">
+
+The sorted entries, an empty array for an empty directory, or
+  `null` when the directory cannot be read at all (a missing path, a plain
+  file, a parent that cannot be searched). A WASI build always answers
+  `null`.
+
 </scalar-field>
 
 ## realpathSync
 
 `path` with every symbolic link resolved and every `.`, `..` and repeated
-separator removed, as an absolute path — or `null` when it does not resolve,
-a path that does not exist included. Every component but the last must exist
-for POSIX `realpath` to answer at all, so "does not resolve" is one answer
-rather than several. The bytes are copied into the arena, so the result is an
-ordinary string, narrowed with `if (p !== null)` like any other nullable.
-Capability: fs.read.
+separator removed. Every component but the last must exist for POSIX
+`realpath` to answer at all. The bytes are copied into the arena, so the
+result is an ordinary string; narrow it with `if (p !== null)`.
 
 ```ts
 function realpathSync(path: string): string | null
@@ -378,7 +479,7 @@ function realpathSync(path: string): string | null
 
 <scalar-field name="path" type="string" required>
 
-the path to resolve.
+The path to resolve.
 
 </scalar-field>
 
@@ -386,13 +487,17 @@ the path to resolve.
 
 <scalar-field name="returns" type="string | null">
 
-the resolved path, or `null`.
+The absolute resolved path, or `null` when it does not resolve,
+  which a path that does not exist is.
 
 </scalar-field>
 
 ## renameSync
 
-0, or a negative errno: -18 across file systems.
+`rename(2)`: `from` takes the name `to`, replacing a file already there in
+one step, so a reader sees the old file or the new one and never neither.
+Nothing is copied across file systems: write the temporary in the target's
+directory. Never a panic.
 
 ```ts
 function renameSync(from: string, to: string): i32
@@ -401,19 +506,33 @@ function renameSync(from: string, to: string): i32
 #### Parameters
 
 <scalar-field name="from" type="string" required>
+
+The current name.
+
 </scalar-field>
 
 <scalar-field name="to" type="string" required>
+
+The new name.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or a negative errno: `-2` ENOENT for a missing `from`, `-18`
+  EXDEV when the two are on different file systems, `-21` EISDIR or `-20`
+  ENOTDIR for a file against a directory, `-22` EINVAL for a NUL in either
+  path.
+
 </scalar-field>
 
 ## statMtimeSync
 
-Node's `mtimeMs` for the path, or NaN when it cannot be stat'd.
+The path's modification time, following symbolic links, as Node's
+`mtimeMs`: milliseconds since the epoch with the sub-millisecond fraction
+kept.
 
 ```ts
 function statMtimeSync(path: string): f64
@@ -422,16 +541,25 @@ function statMtimeSync(path: string): f64
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The path to `stat`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64">
+
+The modification time, or NaN when the path cannot be stat'd
+  (missing, or a parent that cannot be searched), which `m !== m` tests.
+
 </scalar-field>
 
 ## unlinkSync
 
-0, or a negative errno: a directory is refused, not removed.
+`unlink(2)`: remove the name, and a symbolic link itself rather than what
+it names. A directory is refused, not removed: there is no fallback to
+`rmdir`. Never a panic.
 
 ```ts
 function unlinkSync(path: string): i32
@@ -440,16 +568,27 @@ function unlinkSync(path: string): i32
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The name to remove.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or a negative errno: `-2` ENOENT for a missing path, `-21`
+  EISDIR for a directory on Linux or `-1` EPERM where the kernel answers
+  so, `-22` EINVAL for a NUL in `path`.
+
 </scalar-field>
 
 ## writeFileBytesSync
 
-The byte count, or a negative errno; refuses a symbolic link as `writeFileSync` does.
+Create or truncate the file at mode `0644` and write the array's bytes as
+they are: `readFileBytesSync`'s other half. A symbolic link as the last
+component is refused, as for `writeFileSync`. Where `writeFileSync` exits,
+this answers, and it never panics.
 
 ```ts
 function writeFileBytesSync(
@@ -461,19 +600,32 @@ function writeFileBytesSync(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The file to write.
+
 </scalar-field>
 
 <scalar-field name="bytes" type="readonly u8[]" required>
+
+The bytes to write.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`bytes.length`, or a negative errno: `-2` ENOENT for a missing
+  directory, `-13` EACCES, `-21` EISDIR, `-40` ELOOP for the refused link,
+  `-22` EINVAL for a NUL in `path`.
+
 </scalar-field>
 
 ## writeFileSync
 
-Refuses a symbolic link as the last component of the path, as the global does.
+Create or truncate the file at mode `0644` and write `data`; a statement,
+not a value. A symbolic link as the last component of `path` is refused
+with `nish: cannot write <path>`, where Node follows it.
 
 ```ts
 function writeFileSync(
@@ -485,14 +637,33 @@ function writeFileSync(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The file to write.
+
 </scalar-field>
 
 <scalar-field name="data" type="string" required>
+
+The bytes of the string, sent as they are.
+
 </scalar-field>
 
 ## writeFileSyncMode
 
-The byte count, or a negative errno; the file is exactly `mode` (0..0o777) before it holds a byte, a link refused, written in place.
+Create or truncate the file and write `data`, as `writeFileSync` does,
+with the file left at exactly `mode` (`0o600` for a secret). The open
+passes `mode` and an `fchmod(2)` sets it before the first byte is written,
+so the umask cannot widen it, a file that already existed at `0644` is
+narrowed before it holds the new contents, and no reader that opens it
+afterwards finds the secret under the old mode. A descriptor opened before,
+while the file was wider, is not revoked and still reads what is written.
+
+The file is truncated and written in place, not through a temporary: a
+crash or a failed write leaves it empty or partial, and a file this process
+may write but does not own is emptied before the mode change answers `-1`
+EPERM. To replace a secret, write it to a temporary beside the target and
+`renameSync` it over. A symbolic link as the last component is refused
+with `-40` ELOOP, its target untouched. Never a panic.
 
 ```ts
 function writeFileSyncMode(
@@ -505,15 +676,31 @@ function writeFileSyncMode(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The file to write.
+
 </scalar-field>
 
 <scalar-field name="data" type="string" required>
+
+The bytes of the string, sent as they are.
+
 </scalar-field>
 
 <scalar-field name="mode" type="i32" required>
+
+The file's mode, `0..0o777`; the setuid, setgid and sticky
+  bits are refused, not applied.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The length written, or a negative errno: `-22` EINVAL for a mode
+  outside `0..0o777` or a NUL in `path`, `-2` ENOENT for a missing
+  directory, `-13` EACCES, `-40` ELOOP for the refused link, `-1` EPERM as
+  above.
+
 </scalar-field>

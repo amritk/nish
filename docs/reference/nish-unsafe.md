@@ -2,7 +2,7 @@
 
 # `nish:unsafe`
 
-The `nish:unsafe` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves.
 
 ```ts
 import {
@@ -15,49 +15,97 @@ import {
 } from "nish:unsafe";
 ```
 
+```ts
+import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
+
+export const mix = (h: i32[], i: i32, x: i32): void => {
+  uncheckedSet(h, i, wrappingAdd(uncheckedGet(h, i), x));
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="readCString" icon="phosphor/regular/function" href="#readcstring">
 
-The `NUL`-terminated bytes at `p`, copied into a string: undefined behaviour unless `p` is a live C string.
+The `NUL`-terminated bytes at `p`, copied into a new string by `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses.
 
 </scalar-card>
 
 <scalar-card title="uncheckedGet" icon="phosphor/regular/function" href="#uncheckedget">
 
-`xs[i]` with no bounds check: undefined behaviour when `i` is out of range.
+`xs[i]` with no bounds check: the same GEP and load, with no `len` load, no compare and no branch to the bounds panic.
 
 </scalar-card>
 
 <scalar-card title="uncheckedSet" icon="phosphor/regular/function" href="#uncheckedset">
 
-`xs[i] = v` with no bounds check: undefined behaviour when `i` is out of range.
+`xs[i] = v` with no bounds check; a statement.
 
 </scalar-card>
 
 <scalar-card title="wrappingAdd" icon="phosphor/regular/function" href="#wrappingadd">
 
-`a + b` wrapped to the operands' width, `i32` or `i64`.
+`a + b` as `add` with no `nsw` and no check: the two's-complement wrap, defined for every pair (`wrappingAdd(2147483647, 1)` is `-2147483648`).
 
 </scalar-card>
 
 <scalar-card title="wrappingMul" icon="phosphor/regular/function" href="#wrappingmul">
 
-`a * b` wrapped to the operands' width.
+`a * b` as `mul` with no `nsw` and no check, wrapping (`wrappingMul(INT64_MAX, 2)` is `-2`).
 
 </scalar-card>
 
 <scalar-card title="wrappingSub" icon="phosphor/regular/function" href="#wrappingsub">
 
-`a - b` wrapped to the operands' width.
+`a - b` as `sub` with no `nsw` and no check, wrapping.
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+Each function gives up one check the language otherwise always makes, at
+one site. A program reaches them only through an import, so every module
+that gives up a check or defines a wrap says so at its top, and every site
+is a call a reader can find. `--emit-checked` prints an `unsafe import` line
+for each name imported and an `unsafe call` line for each site.
+
+</scalar-callout>
+
+The global spelling is refused (NL2456): the six are called only through an
+import of `nish:unsafe`. An index outside `[0, xs.length)` is undefined
+behaviour, which is the whole of the trade. There is no flag that turns the
+checks off: `--unchecked-indexing` and `--wrapping` are gone, and the CLI
+refuses each with exit 2. `readCString` has no Node form, because its
+`CPtr` comes only from a `declare function`, which Node cannot call.
+
+<scalar-detail title="Under Node">
+
+`runtime/nish.mjs` answers the import: the get and set are
+`xs[i]` and `xs[i] = v`, the wrapping three are `(a + b) | 0`,
+`(a - b) | 0` and `Math.imul` on an `i32` and `BigInt.asIntN(64, …)` on an
+`i64`. A program that stays in range prints the same as natively.
+
+</scalar-detail>
+
+<scalar-detail title="The no-panic scope">
+
+Under `--deny-panics` or `"nish".noPanic`,
+`uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
+sites, because the import has already said that an index out of range is
+the author's to rule out. The wrapping three are not sites at all: they
+are defined for every pair.
+
+</scalar-detail>
+
+Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
+
 ## readCString
 
-The `NUL`-terminated bytes at `p`, copied into a string: undefined behaviour unless `p` is a live C string.
+The `NUL`-terminated bytes at `p`, copied into a new string by
+`@nish.ffi.str`, the scan-and-copy a `string` result of a
+`declare function` uses. It reads and allocates, and is native only.
 
 ```ts
 function readCString(p: CPtr): string
@@ -66,16 +114,26 @@ function readCString(p: CPtr): string
 #### Parameters
 
 <scalar-field name="p" type="CPtr" required>
+
+A pointer from a `declare function`. Undefined behaviour unless
+  it points at a live C string.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+A copy of the bytes before the `NUL`; C keeps its buffer.
+
 </scalar-field>
 
 ## uncheckedGet
 
-`xs[i]` with no bounds check: undefined behaviour when `i` is out of range.
+`xs[i]` with no bounds check: the same GEP and load, with no `len` load,
+no compare and no branch to the bounds panic. A call moves no length, so
+an index proven before it stays proven after; it records no passed check
+of its own.
 
 ```ts
 function uncheckedGet<T extends number>(
@@ -87,19 +145,32 @@ function uncheckedGet<T extends number>(
 #### Parameters
 
 <scalar-field name="xs" type="readonly T[]" required>
+
+An array of numbers: `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
+  `f32` or `f64` elements (NL2455 otherwise). A `readonly` array may be
+  read.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index, an `i32`. Undefined behaviour outside
+  `[0, xs.length)`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="T">
+
+The element at `i`.
+
 </scalar-field>
 
 ## uncheckedSet
 
-`xs[i] = v` with no bounds check: undefined behaviour when `i` is out of range.
+`xs[i] = v` with no bounds check; a statement. It is a write of `xs` for
+every rule that asks, the parallel-body rule included.
 
 ```ts
 function uncheckedSet<T extends number>(
@@ -112,17 +183,31 @@ function uncheckedSet<T extends number>(
 #### Parameters
 
 <scalar-field name="xs" type="T[]" required>
+
+An array of numbers, as `uncheckedGet` takes, and not
+  `readonly`. An array field handed in is a value and is not stored
+  inline.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index, an `i32`. Undefined behaviour outside
+  `[0, xs.length)`.
+
 </scalar-field>
 
 <scalar-field name="v" type="T" required>
+
+The value to store, of the element type.
+
 </scalar-field>
 
 ## wrappingAdd
 
-`a + b` wrapped to the operands' width, `i32` or `i64`.
+`a + b` as `add` with no `nsw` and no check: the two's-complement wrap,
+defined for every pair (`wrappingAdd(2147483647, 1)` is `-2147483648`).
+In a module constant's initialiser the call folds, wrapping.
 
 ```ts
 function wrappingAdd<T extends i32 | i64>(
@@ -134,19 +219,31 @@ function wrappingAdd<T extends i32 | i64>(
 #### Parameters
 
 <scalar-field name="a" type="T" required>
+
+An `i32` or `i64` (NL2454 otherwise; an unsigned operator
+  already wraps).
+
 </scalar-field>
 
 <scalar-field name="b" type="T" required>
+
+The same type as `a` (NL2400 otherwise). A bare literal takes
+  the other operand's type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="T">
+
+The sum, wrapped to the operands' width.
+
 </scalar-field>
 
 ## wrappingMul
 
-`a * b` wrapped to the operands' width.
+`a * b` as `mul` with no `nsw` and no check, wrapping
+(`wrappingMul(INT64_MAX, 2)` is `-2`).
 
 ```ts
 function wrappingMul<T extends i32 | i64>(
@@ -158,19 +255,28 @@ function wrappingMul<T extends i32 | i64>(
 #### Parameters
 
 <scalar-field name="a" type="T" required>
+
+An `i32` or `i64`.
+
 </scalar-field>
 
 <scalar-field name="b" type="T" required>
+
+The same type as `a`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="T">
+
+The product, wrapped to the operands' width.
+
 </scalar-field>
 
 ## wrappingSub
 
-`a - b` wrapped to the operands' width.
+`a - b` as `sub` with no `nsw` and no check, wrapping.
 
 ```ts
 function wrappingSub<T extends i32 | i64>(
@@ -182,12 +288,21 @@ function wrappingSub<T extends i32 | i64>(
 #### Parameters
 
 <scalar-field name="a" type="T" required>
+
+An `i32` or `i64`.
+
 </scalar-field>
 
 <scalar-field name="b" type="T" required>
+
+The same type as `a`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="T">
+
+The difference, wrapped to the operands' width.
+
 </scalar-field>

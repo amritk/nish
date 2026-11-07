@@ -9,16 +9,16 @@ Every module a Nish program can import, one page each, generated from the doc co
 | Module | |
 | --- | --- |
 | [Globals](builtins.md) | Ambient declarations for the Nish global surface. |
-| [`nish:async`](nish-async.md) | The `nish:async` builtin module: the globals of the same names, importable. |
-| [`nish:fs`](nish-fs.md) | The `nish:fs` builtin module: the globals of the same names, importable. |
-| [`nish:io`](nish-io.md) | The `nish:io` builtin module: the globals of the same names, importable. |
-| [`nish:net`](nish-net.md) | The `nish:net` builtin module: the globals of the same names, importable. |
-| [`nish:process`](nish-process.md) | The `nish:process` builtin module: the globals of the same names, importable. |
+| [`nish:async`](nish-async.md) | Tasks for `async` functions: start one and go on, or await two to eight at once. |
+| [`nish:fs`](nish-fs.md) | Files and directories: read, write, rename, remove and list paths on the host's file system. |
+| [`nish:io`](nish-io.md) | Text and bytes to stdout and stderr with nothing added, and the panic that ends a program on an unmet invariant. |
+| [`nish:net`](nish-net.md) | Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain sockets, and a level-triggered readiness loop to wait on them. |
+| [`nish:process`](nish-process.md) | The process and its host: exit, the environment, children, signals, the clocks, scheduling, and the size of the machine. |
 | [`nish:region`](nish-region.md) | Memory a program frees when it says so (docs/LANGUAGE.md, "Regions"). |
 | [`nish:secret`](nish-secret.md) | Key material, and the rules that keep it in (docs/LANGUAGE.md, "Secrets"). |
-| [`nish:simd`](nish-simd.md) | The `nish:simd` builtin module: the globals of the same names, importable. |
-| [`nish:term`](nish-term.md) | The `nish:term` builtin module: the globals of the same names, importable. |
-| [`nish:unsafe`](nish-unsafe.md) | The `nish:unsafe` builtin module: the globals of the same names, importable. |
+| [`nish:simd`](nish-simd.md) | Sixteen-byte vectors of one lane type, and the lane-wise operations on them, each lowered to target-independent LLVM vector IR. |
+| [`nish:term`](nish-term.md) | Terminal input for a full-screen program: read a key the moment it is pressed, wait for one with a timeout that doubles as a frame clock, and ask the terminal whether it is one, how big it is, and to stop echoing. |
+| [`nish:unsafe`](nish-unsafe.md) | Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves. |
 
 ## Standard library
 

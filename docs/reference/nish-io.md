@@ -2,7 +2,7 @@
 
 # `nish:io`
 
-The `nish:io` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+Text and bytes to stdout and stderr with nothing added, and the panic that ends a program on an unmet invariant.
 
 ```ts
 import {
@@ -13,37 +13,78 @@ import {
 } from "nish:io";
 ```
 
+```ts
+import { write, writeError, writeBytes, panic } from "nish:io";
+
+write("progress: ");
+write("done\n");
+const bytes: u8[] = [0x89, 0x50, 0x4e, 0x47];
+if (writeBytes(bytes, 0, bytes.length) < 0) {
+  panic("stdout refused the bytes");
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="panic" icon="phosphor/regular/function" href="#panic">
 
-`message` to stderr, then exit 1.
+`message` and a newline to stderr, then exit 1: the same ending an out-of-range index has.
 
 </scalar-card>
 
 <scalar-card title="write" icon="phosphor/regular/function" href="#write">
 
-`s` to stdout with no trailing newline and no conversion.
+`s` to stdout with no trailing newline and no conversion; a statement.
 
 </scalar-card>
 
 <scalar-card title="writeBytes" icon="phosphor/regular/function" href="#writebytes">
 
-`bytes[off .. off + len)` to stdout, every byte as it is: the count, or a negative errno.
+`bytes[off .. off + len)` to stdout, every byte as it is: the one way to send bytes that are not text, a byte of `0x80` or above or a zero byte included.
 
 </scalar-card>
 
 <scalar-card title="writeError" icon="phosphor/regular/function" href="#writeerror">
 
-The same, on stderr.
+`s` to stderr with no trailing newline and no conversion; a statement.
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+Each export is the global of the same name, renamed: the call checks through
+the same rule and emits the same IR as the global spelling, and an imported
+name cannot be shadowed by a user function. None needs a capability; each
+has the `write` effect.
+
+</scalar-callout>
+
+A `wasm32` build has no stdout to reach and refuses `writeBytes`. A
+`writeBytes` range outside `bytes` panics, as `dst.set` does, rather than
+answering an error.
+
+<scalar-detail title="Bytes out, and the string route">
+
+A native string is `{len, bytes}`,
+never validated as UTF-8, and `write` and `writeError` send its `len` bytes
+as they are. That route is native only: under the prelude a byte above 127
+that `String.fromBytes` made becomes two. `writeBytes` sends a `u8[]` as it
+is on every host, and is the route for bytes that are not text.
+
+</scalar-detail>
+
+Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtin-modules-nish
+and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#console
+
 ## panic
 
-`message` to stderr, then exit 1. A terminator, as `process.exit` is.
+`message` and a newline to stderr, then exit 1: the same ending an
+out-of-range index has. A statement and a terminator, as `process.exit`
+is, so a non-`void` function may end with it; `never` is how `tsc` spells
+that. It is how a program ends on an unmet invariant, since there is no
+`throw`.
 
 ```ts
 function panic(message: string): never
@@ -52,16 +93,22 @@ function panic(message: string): never
 #### Parameters
 
 <scalar-field name="message" type="string" required>
+
+The text written before the program exits.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="never">
+
+Never: the program has ended.
+
 </scalar-field>
 
 ## write
 
-`s` to stdout with no trailing newline and no conversion.
+`s` to stdout with no trailing newline and no conversion; a statement.
 
 ```ts
 function write(s: string): void
@@ -70,12 +117,19 @@ function write(s: string): void
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+The text, a `string` only, sent as its bytes.
+
 </scalar-field>
 
 ## writeBytes
 
-`bytes[off .. off + len)` to stdout, every byte as it is: the count, or a
-negative errno. A range outside `bytes` panics, as `dst.set` does.
+`bytes[off .. off + len)` to stdout, every byte as it is: the one way to
+send bytes that are not text, a byte of `0x80` or above or a zero byte
+included. A loop of `write(2)` sends them all, retried on an interrupted
+call. A pipe whose reader has gone raises SIGPIPE natively, as it does for
+`write`, where Node answers `-32` (EPIPE). The shape is `netWrite`'s with
+the descriptor fixed at 1; under Node the bytes go to `fs.writeSync(1, …)`.
 
 ```ts
 function writeBytes(
@@ -88,22 +142,39 @@ function writeBytes(
 #### Parameters
 
 <scalar-field name="bytes" type="readonly u8[]" required>
+
+The bytes, a `u8[]` (NL2268 otherwise), `readonly` or not.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The first byte to send. The range is checked once after the
+  arguments are evaluated: `0 <= off`, `0 <= len` and
+  `off + len <= bytes.length`, else it panics with
+  `slice out of range: [off, off+len) of length n` and exits 1 (a `slice`
+  site).
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes to send.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`len`, or a negative errno when the stream refuses them (`-9`,
+  EBADF, on a closed descriptor); never a panic for a refused write.
+
 </scalar-field>
 
 ## writeError
 
-The same, on stderr.
+`s` to stderr with no trailing newline and no conversion; a statement.
 
 ```ts
 function writeError(s: string): void
@@ -112,4 +183,7 @@ function writeError(s: string): void
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+The text, a `string` only, sent as its bytes.
+
 </scalar-field>

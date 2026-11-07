@@ -2,7 +2,7 @@
 
 # `nish:net`
 
-The `nish:net` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain sockets, and a level-triggered readiness loop to wait on them.
 
 ```ts
 import {
@@ -47,17 +47,29 @@ import {
 } from "nish:net";
 ```
 
+```ts
+import { netAddress, tcpListen, tcpAccept, netRead, netWrite, pollCreate, pollAdd, pollWait } from "nish:net";
+
+const server = tcpListen("::", 8080, 128);
+const loop = pollCreate();
+pollAdd(loop, server, 1, 1);
+const ready: i32[] = new Array<i32>(32);
+const peer: u8[] = new Array<u8>(18);
+const n = pollWait(loop, ready, -1);
+const conn = tcpAccept(server, peer);  // -11 when none is waiting
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="connectResult" icon="phosphor/regular/function" href="#connectresult">
 
-Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused).
+How a connection `tcpConnect` started went, asked once `fd` is writable.
 
 </scalar-card>
 
 <scalar-card title="netAddress" icon="phosphor/regular/function" href="#netaddress">
 
-The address form of a numeric `host` and `port` in `out`'s first 18 bytes: 0, or -22.
+Write the address form of a numeric host and a port.
 
 </scalar-card>
 
@@ -69,67 +81,67 @@ Close the descriptor.
 
 <scalar-card title="netLocalPort" icon="phosphor/regular/function" href="#netlocalport">
 
-The port the socket is bound to.
+The port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose.
 
 </scalar-card>
 
 <scalar-card title="netMss" icon="phosphor/regular/function" href="#netmss">
 
-A connected TCP socket's send MSS, the payload bytes one segment carries; -1, never an errno, for anything else, and always on wasm.
+The maximum segment size a connected TCP socket sends, the payload bytes one segment carries, so that one write can fill whole segments: Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above `0` and on Darwin.
 
 </scalar-card>
 
 <scalar-card title="netRead" icon="phosphor/regular/function" href="#netread">
 
-Up to `len` bytes into `buf` from `off`: the count, 0 at end of stream, or -11.
+Read at most `len` bytes into `buf[off, off + len)`.
 
 </scalar-card>
 
 <scalar-card title="netSetOption" icon="phosphor/regular/function" href="#netsetoption">
 
-Set one socket option from a whitelist: `option` is one of the `NET_*` ids below, and any other is -22; there is no raw level and option number. 0, or a negative errno (-9 a closed descriptor, -88 not a socket).
+Set one socket option from a whitelist.
 
 </scalar-card>
 
 <scalar-card title="netShutdown" icon="phosphor/regular/function" href="#netshutdown">
 
-Shut the read side (0), the write side (1) or both (2).
+Shut one side of a connection, or both.
 
 </scalar-card>
 
 <scalar-card title="netWrite" icon="phosphor/regular/function" href="#netwrite">
 
-Up to `len` bytes of `buf` from `off`: the count; a gone peer is -32, never SIGPIPE.
+Write at most `len` bytes of `buf[off, off + len)`.
 
 </scalar-card>
 
 <scalar-card title="netWrite2" icon="phosphor/regular/function" href="#netwrite2">
 
-`netWrite` of `a`'s range then `b`'s, in one system call: the count of both, at most `aLen + bLen`.
+Write `a[aOff, aOff + aLen)` and then `b[bOff, bOff + bLen)` in one system call (`sendmsg` with two `iovec`s), so a header and a body leave together with no copy into one buffer.
 
 </scalar-card>
 
 <scalar-card title="peerCredentials" icon="phosphor/regular/function" href="#peercredentials">
 
-The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid and gid, and the answer is 0; the pid is -1 where Darwin has no `LOCAL_PEERPID`.
+The process at the other end of a connected Unix socket, as the kernel recorded it when the connection was made (the `connect`, or the `socketpair`), not who holds the other end now: a peer that has changed its uid since, passed the socket on, or closed, still reads as it was.
 
 </scalar-card>
 
 <scalar-card title="pollAdd" icon="phosphor/regular/function" href="#polladd">
 
-Watch `fd` for `events` (1 readable, 2 writable) under `token`.
+Watch `fd` and report it under `token`.
 
 </scalar-card>
 
 <scalar-card title="pollCreate" icon="phosphor/regular/function" href="#pollcreate">
 
-A readiness loop, level-triggered: epoll on Linux, kqueue on Darwin.
+A readiness loop: a descriptor, close-on-exec, that watches others, level-triggered.
 
 </scalar-card>
 
 <scalar-card title="pollModify" icon="phosphor/regular/function" href="#pollmodify">
 
-New events or a new token for a watched `fd`.
+New events or a new token for a descriptor the loop watches.
 
 </scalar-card>
 
@@ -141,99 +153,152 @@ Stop watching `fd`.
 
 <scalar-card title="pollWait" icon="phosphor/regular/function" href="#pollwait">
 
-Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error).
+Wait until a watched descriptor is ready or the timeout passes, and write one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]` its events, `1` readable and `2` writable, with `4` added for a hang-up or an error.
 
 </scalar-card>
 
 <scalar-card title="recvFd" icon="phosphor/regular/function" href="#recvfd">
 
-Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and the first descriptor that came with them into `fd[0]`, or -1: the bytes read, or a negative errno.
+Read at most `len` bytes into `buf[off, off + len)` from the Unix socket `sock`, with the first descriptor that came with them.
 
 </scalar-card>
 
 <scalar-card title="sendFd" icon="phosphor/regular/function" href="#sendfd">
 
-Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a zero `len` or a negative `fd`, -9 a closed `sock` or `fd`, -88 a `sock` that is not a socket, -95 one that is not Unix.
+Send `buf[off, off + len)` over the Unix socket `sock`, with one copy of the descriptor `fd` riding on them (`SCM_RIGHTS`).
 
 </scalar-card>
 
 <scalar-card title="tcpAccept" icon="phosphor/regular/function" href="#tcpaccept">
 
-The next connection's descriptor, its address in `peer`; -11 when none waits.
+The next waiting connection, as a descriptor of its own, non-blocking and close-on-exec.
 
 </scalar-card>
 
 <scalar-card title="tcpConnect" icon="phosphor/regular/function" href="#tcpconnect">
 
-A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed.
+A new TCP socket, non-blocking and close-on-exec, that starts connecting to `addr` and is answered at once, while the connection is still being made: the `EINPROGRESS` (`-115`) of a non-blocking `connect` is not a failure.
 
 </scalar-card>
 
 <scalar-card title="tcpListen" icon="phosphor/regular/function" href="#tcplisten">
 
-A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6.
+A listening TCP socket on a numeric host, with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`.
 
 </scalar-card>
 
 <scalar-card title="tcpListenFlags" icon="phosphor/regular/function" href="#tcplistenflags">
 
-`tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket for flag 2.
+`tcpListen`'s socket, with flags.
 
 </scalar-card>
 
 <scalar-card title="udpBind" icon="phosphor/regular/function" href="#udpbind">
 
-A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read.
+A datagram socket, non-blocking and close-on-exec, bound to a numeric host and port as `tcpListen`'s is, `"::"` and its IPv4 fallback included.
 
 </scalar-card>
 
 <scalar-card title="udpRecvFrom" icon="phosphor/regular/function" href="#udprecvfrom">
 
-One datagram, or several GRO coalesced, into `buf[off, off + len)`; the sender in `from`, `meta` [segment size, ECN].
+Receive the next datagram into `buf[off, off + len)`, cut to `len` if it is longer, in one `recvmsg`.
 
 </scalar-card>
 
 <scalar-card title="udpSendTo" icon="phosphor/regular/function" href="#udpsendto">
 
-`buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`.
+Send `buf[off, off + len)` to `to` in one `sendmsg`.
 
 </scalar-card>
 
 <scalar-card title="unixAccept" icon="phosphor/regular/function" href="#unixaccept">
 
-The next connection on a Unix listener, non-blocking; -11 when none is waiting.
+The next waiting connection on a Unix listener, non-blocking and close-on-exec.
 
 </scalar-card>
 
 <scalar-card title="unixConnect" icon="phosphor/regular/function" href="#unixconnect">
 
-A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening.
+A new socket, non-blocking and close-on-exec, connected to the listener at `path`.
 
 </scalar-card>
 
 <scalar-card title="unixListen" icon="phosphor/regular/function" href="#unixlisten">
 
-A listening Unix stream socket at `path` (`@name`: Linux's abstract namespace), its file mode 0600.
+A listening Unix-domain stream socket at `path`, whose file is `0600`, so only its owner may connect.
 
 </scalar-card>
 
 <scalar-card title="unixListenMode" icon="phosphor/regular/function" href="#unixlistenmode">
 
-`unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`.
+`unixListen`'s socket with the file's mode chosen, set between the bind and the listen, so no connect gets in under a wider one.
 
 </scalar-card>
 
 <scalar-card title="unixSocketPair" icon="phosphor/regular/function" href="#unixsocketpair">
 
-Two connected sockets into `fds[0]` and `fds[1]`, and 0: `kind` is `NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin); -22 another kind or an `fds` shorter than 2.
+Two sockets already connected to each other, non-blocking and close-on-exec: a channel without a name, for a child process or for one side of a program.
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+Every socket is non-blocking and close-on-exec, so a call that would wait
+answers `-11` and a child that `spawnSync` starts inherits none of them.
+Each export is the global of the same name, renamed. Every call answers an
+`i32`: `>= 0` is success and a negative number is the failure's errno,
+negated, with Linux's numbers on every platform for the codes a loop
+branches on (`-11` would block, `-95` unsupported, `-32` the peer has gone,
+`-104` reset, `-98` in use, `-111` refused, `-110` timed out, `-88` not a
+socket, `-22` a bad argument); any other failure is the host's `-errno`. No
+call touches the arena.
+
+</scalar-callout>
+
+A `wasm32` target and the `wasi` profile have no sockets, so the checker
+refuses every call there with NL2404, except `netMss`, which compiles to
+`-1`. No call may be made in a `scope()` task or a parallel body. Under Node
+every call throws, because a socket is ready only to Node's event loop,
+which a program that owns its loop never returns to; the option ids and the
+`NET_UNIX_` constants still read as numbers. No call resolves a name:
+`nish/net/dns` does that on the program's own loop.
+
+<scalar-detail title="The address form">
+
+An address is 18 bytes of a `u8[]`: the 16 bytes of
+an IPv6 address, with IPv4 written as the mapped `::ffff:a.b.c.d`, then the
+port, big-endian. One form for both families, in memory the caller owns, so
+a server that accepts a million connections allocates nothing to learn who
+they are from. An array longer than 18 bytes is fine; the rest is not
+touched. An address array shorter than 18 bytes is `-22`, not a panic.
+
+</scalar-detail>
+
+<scalar-detail title="Bounds">
+
+Every `off`/`len` range is checked in the compiled code before
+the call, as `dst.set(src, at)` checks its range, and a range outside the
+array panics with `slice out of range`, exit 1.
+
+</scalar-detail>
+
+<scalar-detail title="Level-triggered">
+
+A descriptor still ready when the program waits again
+is reported again, so a loop that handles one ready pair of several, or
+leaves a datagram unread, loses nothing.
+
+</scalar-detail>
+
+The rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop
+
 ## connectResult
 
-Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused).
+How a connection `tcpConnect` started went, asked once `fd` is writable.
+The kernel clears the failure as it is read, so a second call answers
+`0`; close the descriptor with `netClose` either way.
 
 ```ts
 function connectResult(fd: i32): i32
@@ -242,16 +307,25 @@ function connectResult(fd: i32): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+The descriptor `tcpConnect` answered.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0` when the connection is made, or its failure from `SO_ERROR`,
+  such as `-111` for a port nobody listens on and `-110` for one that
+  never answered.
+
 </scalar-field>
 
 ## netAddress
 
-The address form of a numeric `host` and `port` in `out`'s first 18 bytes: 0, or -22.
+Write the address form of a numeric host and a port. No call looks a name
+up; `nish/net/dns` resolves one first.
 
 ```ts
 function netAddress(
@@ -264,25 +338,39 @@ function netAddress(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array the 18 bytes are written into; one shorter than 18
+  bytes is left as it was.
+
 </scalar-field>
 
 <scalar-field name="host" type="string" required>
+
+An IPv4 dotted quad or an IPv6 literal.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port, `0..65535`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or `-22` for a name, a string with a NUL inside it, a port
+  outside `0..65535`, or an `out` shorter than 18 bytes.
+
 </scalar-field>
 
 ## netClose
 
-Close the descriptor. The descriptor is gone whatever the answer, as `close(2)` promises on
-Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait. Not
-callable in a `scope()` task or a parallel body. Refused at compile time on wasm32 and the WASI
-profile (NL2404). Capability: net.
+Close the descriptor. It is gone after the call whatever the answer, as
+`close(2)` promises on Linux. Closing a descriptor also stops a loop
+watching it. Not `willreturn`, because a socket the program inherited
+with a linger time can wait.
 
 ```ts
 function netClose(fd: i32): i32
@@ -292,7 +380,7 @@ function netClose(fd: i32): i32
 
 <scalar-field name="fd" type="i32" required>
 
-the descriptor closed.
+The descriptor.
 
 </scalar-field>
 
@@ -300,13 +388,14 @@ the descriptor closed.
 
 <scalar-field name="returns" type="i32">
 
-0, or the failure.
+`0`, or the failure.
 
 </scalar-field>
 
 ## netLocalPort
 
-The port the socket is bound to.
+The port the socket is bound to, which is how a program that listened on
+port `0` learns the one the kernel chose.
 
 ```ts
 function netLocalPort(fd: i32): i32
@@ -315,17 +404,34 @@ function netLocalPort(fd: i32): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A bound socket.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The port, or the failure.
+
 </scalar-field>
 
 ## netMss
 
-A connected TCP socket's send MSS, the payload bytes one segment carries;
--1, never an errno, for anything else, and always on wasm.
+The maximum segment size a connected TCP socket sends, the payload bytes
+one segment carries, so that one write can fill whole segments: Linux's
+`TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above `0`
+and on Darwin. It never panics. The answer moves as the path does, so
+read it when it is needed rather than once.
+
+```ts
+// A batch of whole segments, or the caller's own size where there is no MSS.
+export const batch = (conn: i32, fallback: i32): i32 => {
+  const mss = netMss(conn);
+  return mss > 0 ? mss * 8 : fallback;
+};
+```
 
 ```ts
 function netMss(fd: i32): i32
@@ -334,16 +440,27 @@ function netMss(fd: i32): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A connected TCP socket.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The size, or a plain `-1`, never an errno, for anything else: a
+  descriptor that is not open, a socket with no peer (a listener, or one
+  never connected, though the kernel answers its default `536` for
+  those), a socket that is not TCP, and every call on wasm, where it
+  compiles to the constant with the descriptor still evaluated. It throws
+  under Node.
+
 </scalar-field>
 
 ## netRead
 
-Up to `len` bytes into `buf` from `off`: the count, 0 at end of stream, or -11.
+Read at most `len` bytes into `buf[off, off + len)`. The range is checked.
 
 ```ts
 function netRead(
@@ -357,27 +474,44 @@ function netRead(
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A connected socket.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array the bytes are written into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The first index written.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The most bytes read; a `len` of `0` answers `0`, so ask for at
+  least one byte.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count, `0` at the end of the stream, `-11` when nothing is
+  waiting, or the failure.
+
 </scalar-field>
 
 ## netSetOption
 
-Set one socket option from a whitelist: `option` is one of the `NET_*` ids
-below, and any other is -22; there is no raw level and option number. 0, or
-a negative errno (-9 a closed descriptor, -88 not a socket).
+Set one socket option from a whitelist. There is no way to pass a raw
+level and option number, because that would be an untyped call into the
+kernel. Refused at compile time on wasm, and it throws under Node.
 
 ```ts
 function netSetOption(
@@ -390,22 +524,37 @@ function netSetOption(
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A socket.
+
 </scalar-field>
 
 <scalar-field name="option" type="i32" required>
+
+One of the `NET_*` option ids.
+
 </scalar-field>
 
 <scalar-field name="value" type="i32" required>
+
+`0` or `1` for the switches, a byte count for the buffer
+  sizes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or the failure: `-9` for a closed descriptor, `-88` for one
+  that is not a socket, `-22` for any other `option`, and `-95` for
+  `NET_TCP_QUICKACK` off Linux.
+
 </scalar-field>
 
 ## netShutdown
 
-Shut the read side (0), the write side (1) or both (2).
+Shut one side of a connection, or both.
 
 ```ts
 function netShutdown(fd: i32, how: i32): i32
@@ -414,19 +563,30 @@ function netShutdown(fd: i32, how: i32): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A connected socket.
+
 </scalar-field>
 
 <scalar-field name="how" type="i32" required>
+
+`0` the read side, `1` the write side, `2` both.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, `-22` for any other `how`, or the failure.
+
 </scalar-field>
 
 ## netWrite
 
-Up to `len` bytes of `buf` from `off`: the count; a gone peer is -32, never SIGPIPE.
+Write at most `len` bytes of `buf[off, off + len)`. The range is checked.
+A peer that has gone is `-32`, never SIGPIPE, so a closed connection
+cannot end the process.
 
 ```ts
 function netWrite(
@@ -440,25 +600,45 @@ function netWrite(
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A connected socket.
+
 </scalar-field>
 
 <scalar-field name="buf" type="readonly u8[]" required>
+
+The bytes; it may be `readonly`.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The first index sent.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The most bytes sent.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count, which may be fewer than `len`, `-11` when the send
+  buffer is full, `-32` for a gone peer, or the failure.
+
 </scalar-field>
 
 ## netWrite2
 
-`netWrite` of `a`'s range then `b`'s, in one system call: the count of both, at most `aLen + bLen`.
+Write `a[aOff, aOff + aLen)` and then `b[bOff, bOff + bLen)` in one system
+call (`sendmsg` with two `iovec`s), so a header and a body leave together
+with no copy into one buffer. The program sends the rest of a short
+write, as after `netWrite`. Both ranges are checked, `a`'s first, and
+either may be empty. A gone peer is `-32`, never SIGPIPE.
 
 ```ts
 function netWrite2(
@@ -475,39 +655,63 @@ function netWrite2(
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A connected socket.
+
 </scalar-field>
 
 <scalar-field name="a" type="readonly u8[]" required>
+
+The first bytes; it may be `readonly`.
+
 </scalar-field>
 
 <scalar-field name="aOff" type="i32" required>
+
+The first index of `a` sent.
+
 </scalar-field>
 
 <scalar-field name="aLen" type="i32" required>
+
+The bytes of `a` sent.
+
 </scalar-field>
 
 <scalar-field name="b" type="readonly u8[]" required>
+
+The second bytes; it may be `readonly`.
+
 </scalar-field>
 
 <scalar-field name="bOff" type="i32" required>
+
+The first index of `b` sent.
+
 </scalar-field>
 
 <scalar-field name="bLen" type="i32" required>
+
+The bytes of `b` sent.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count of bytes taken, which may be fewer than `aLen + bLen`
+  and may end inside `a`, `-11` when the send buffer is full, `-32` for a
+  gone peer, or the failure.
+
 </scalar-field>
 
 ## peerCredentials
 
-The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid
-and gid, and the answer is 0; the pid is -1 where Darwin has no
-`LOCAL_PEERPID`. A uid or gid of 2^31 or above wraps (-2 is uid
-4294967294). -22 an `out` shorter than 3, -9 a closed `fd`, -88 not a
-socket, -95 not Unix, -107 a socket with no peer (a listener, or one never
-connected).
+The process at the other end of a connected Unix socket, as the kernel
+recorded it when the connection was made (the `connect`, or the
+`socketpair`), not who holds the other end now: a peer that has changed
+its uid since, passed the socket on, or closed, still reads as it was.
 
 ```ts
 function peerCredentials(fd: i32, out: i32[]): i32
@@ -516,19 +720,33 @@ function peerCredentials(fd: i32, out: i32[]): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A connected Unix socket, refused as `sendFd`'s `sock` is.
+
 </scalar-field>
 
 <scalar-field name="out" type="i32[]" required>
+
+`out[0]`, `out[1]`, `out[2]` are written with the pid, uid and
+  gid. A uid or gid of 2^31 or above wraps into the `i32` (`-2` is uid
+  4294967294). On Darwin the pid is `-1` where the SDK has no
+  `LOCAL_PEERPID` or the kernel refuses it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, `-107` on every platform for a socket with no peer (a
+  listener, or one never connected), `-22` for an `out` shorter than 3
+  before anything is asked, or the failure.
+
 </scalar-field>
 
 ## pollAdd
 
-Watch `fd` for `events` (1 readable, 2 writable) under `token`.
+Watch `fd` and report it under `token`.
 
 ```ts
 function pollAdd(
@@ -542,25 +760,44 @@ function pollAdd(
 #### Parameters
 
 <scalar-field name="loop" type="i32" required>
+
+The loop.
+
 </scalar-field>
 
 <scalar-field name="fd" type="i32" required>
+
+The descriptor to watch.
+
 </scalar-field>
 
 <scalar-field name="events" type="i32" required>
+
+`1` readable, `2` writable, `3` both, `0` neither.
+
 </scalar-field>
 
 <scalar-field name="token" type="i32" required>
+
+An `i32` of the program's choosing that comes back as it went
+  in.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, `-17` for a descriptor the loop already watches (on Darwin
+  it is left under the new token), or `-22` for an event bit past `2`.
+
 </scalar-field>
 
 ## pollCreate
 
-A readiness loop, level-triggered: epoll on Linux, kqueue on Darwin.
+A readiness loop: a descriptor, close-on-exec, that watches others,
+level-triggered. Epoll on Linux; kqueue on Darwin, from whose filters the
+runtime builds epoll's answers.
 
 ```ts
 function pollCreate(): i32
@@ -569,11 +806,14 @@ function pollCreate(): i32
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The loop's descriptor, or the failure.
+
 </scalar-field>
 
 ## pollModify
 
-New events or a new token for a watched `fd`.
+New events or a new token for a descriptor the loop watches.
 
 ```ts
 function pollModify(
@@ -587,25 +827,40 @@ function pollModify(
 #### Parameters
 
 <scalar-field name="loop" type="i32" required>
+
+The loop.
+
 </scalar-field>
 
 <scalar-field name="fd" type="i32" required>
+
+The watched descriptor.
+
 </scalar-field>
 
 <scalar-field name="events" type="i32" required>
+
+`1` readable, `2` writable, `3` both, `0` neither.
+
 </scalar-field>
 
 <scalar-field name="token" type="i32" required>
+
+The token it is reported under from now on.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or `-2` for a descriptor the loop does not watch.
+
 </scalar-field>
 
 ## pollRemove
 
-Stop watching `fd`.
+Stop watching `fd`. Closing a descriptor stops the watching too.
 
 ```ts
 function pollRemove(loop: i32, fd: i32): i32
@@ -614,19 +869,33 @@ function pollRemove(loop: i32, fd: i32): i32
 #### Parameters
 
 <scalar-field name="loop" type="i32" required>
+
+The loop.
+
 </scalar-field>
 
 <scalar-field name="fd" type="i32" required>
+
+The watched descriptor.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or `-2` for a descriptor the loop does not watch.
+
 </scalar-field>
 
 ## pollWait
 
-Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error).
+Wait until a watched descriptor is ready or the timeout passes, and write
+one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]`
+its events, `1` readable and `2` writable, with `4` added for a hang-up or
+an error. A signal that interrupts the wait answers `0`, as a timeout
+does. Not `willreturn`, because it can wait forever. Nothing allocates,
+and `ready` is never written past its length.
 
 ```ts
 function pollWait(
@@ -639,27 +908,44 @@ function pollWait(
 #### Parameters
 
 <scalar-field name="loop" type="i32" required>
+
+The loop.
+
 </scalar-field>
 
 <scalar-field name="ready" type="i32[]" required>
+
+The array the pairs are written into.
+
 </scalar-field>
 
 <scalar-field name="timeoutMs" type="i32" required>
+
+The most milliseconds to wait; any negative number waits
+  forever.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count of pairs, at most `ready.length / 2` and at most 64
+  (the rest are still ready at the next wait), `0` on a timeout, or `-22`
+  for a `ready` shorter than 2.
+
 </scalar-field>
 
 ## recvFd
 
-Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and
-the first descriptor that came with them into `fd[0]`, or -1: the bytes read,
-or a negative errno. Every other descriptor in the message is closed; the
-one kept is close-on-exec and keeps the sender's blocking mode. -22 a zero
-`len` or an empty `fd`, -9 a closed `sock`, -88 not a socket, -95 not
-Unix.
+Read at most `len` bytes into `buf[off, off + len)` from the Unix socket
+`sock`, with the first descriptor that came with them. Every further
+descriptor in the message is closed before the answer, and room is made
+for 8, so the kernel drops the rest of a message that carries more and
+the bytes are still answered. The descriptor kept is close-on-exec and is
+not made non-blocking: its status flags are the open file's, which the
+sender shares, so set what the program needs before it joins a loop. The
+range is checked.
 
 ```ts
 function recvFd(
@@ -674,33 +960,55 @@ function recvFd(
 #### Parameters
 
 <scalar-field name="sock" type="i32" required>
+
+A connected Unix socket, refused as `sendFd`'s is.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array the bytes are written into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The first index written.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The most bytes read.
+
 </scalar-field>
 
 <scalar-field name="fd" type="i32[]" required>
+
+`fd[0]` is written with the descriptor, or `-1` when the message
+  carried none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count, `0` at the end of the stream, `-11` when nothing is
+  waiting, `-22` for a `len` of `0` or an empty `fd` before anything is
+  read, or the failure.
+
 </scalar-field>
 
 ## sendFd
 
-Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
-descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a
-zero `len` or a negative `fd`, -9 a closed `sock` or `fd`, -88 a `sock`
-that is not a socket, -95 one that is not Unix. A stream socket can send
-short: the descriptor travels with the first bytes, so send the rest with
-`netWrite`.
+Send `buf[off, off + len)` over the Unix socket `sock`, with one copy of
+the descriptor `fd` riding on them (`SCM_RIGHTS`). The receiver's
+`recvFd` gets a new descriptor for the same open file, offset and status
+flags shared, as `dup` gives; `fd` stays open here. On a stream socket
+the count can be short of `len`: the descriptor has travelled with the
+first bytes, so send the rest with `netWrite`, not `sendFd`, or the
+receiver gets a second copy. The range is checked.
 
 ```ts
 function sendFd(
@@ -715,28 +1023,52 @@ function sendFd(
 #### Parameters
 
 <scalar-field name="sock" type="i32" required>
+
+A connected Unix socket.
+
 </scalar-field>
 
 <scalar-field name="fd" type="i32" required>
+
+The descriptor to send.
+
 </scalar-field>
 
 <scalar-field name="buf" type="readonly u8[]" required>
+
+The bytes the descriptor rides on; it may be `readonly`.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The first index sent.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The bytes sent; at least one, because a descriptor travels
+  with data.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The bytes sent, or the failure: `-22` for a `len` of `0` or a
+  negative `fd`; `-9` for an `fd` that is not open or a closed `sock`;
+  `-88` for a `sock` that is not a socket; `-95` for a socket of another
+  family; `-32` for a gone peer, never SIGPIPE.
+
 </scalar-field>
 
 ## tcpAccept
 
-The next connection's descriptor, its address in `peer`; -11 when none waits.
+The next waiting connection, as a descriptor of its own, non-blocking and
+close-on-exec. Not `willreturn`: on a blocking socket the program
+inherited, it waits.
 
 ```ts
 function tcpAccept(fd: i32, peer: u8[]): i32
@@ -745,19 +1077,36 @@ function tcpAccept(fd: i32, peer: u8[]): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+The listener.
+
 </scalar-field>
 
 <scalar-field name="peer" type="u8[]" required>
+
+The array the peer's address form is written into.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The connection's descriptor, `-11` when none is waiting, `-22`
+  for a `peer` shorter than 18 bytes before anything is accepted (so no
+  connection is taken and lost), or `-95` for a datagram socket.
+
 </scalar-field>
 
 ## tcpConnect
 
-A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. It holds `TCP_NODELAY`, so a small write is sent at once.
+A new TCP socket, non-blocking and close-on-exec, that starts connecting
+to `addr` and is answered at once, while the connection is still being
+made: the `EINPROGRESS` (`-115`) of a non-blocking `connect` is not a
+failure.
+Watch the descriptor for writability, then ask `connectResult`. It holds
+`TCP_NODELAY`, so a small write is sent at once. It does not wait and does
+not allocate.
 
 ```ts
 function tcpConnect(addr: readonly u8[]): i32
@@ -766,16 +1115,29 @@ function tcpConnect(addr: readonly u8[]): i32
 #### Parameters
 
 <scalar-field name="addr" type="readonly u8[]" required>
+
+The address form; an IPv4 address connects from an IPv4
+  socket, any other from an IPv6 one. It may be `readonly`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The descriptor; any other failure closes the socket and is
+  answered instead, and an `addr` shorter than 18 bytes is `-22` before
+  any socket exists.
+
 </scalar-field>
 
 ## tcpListen
 
-A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6.
+A listening TCP socket on a numeric host, with `SO_REUSEADDR`, so a
+restarted server rebinds a port its old connections still hold in
+`TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with
+`IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without
+IPv6 `"::"` is IPv4's `0.0.0.0`.
 
 ```ts
 function tcpListen(
@@ -788,26 +1150,54 @@ function tcpListen(
 #### Parameters
 
 <scalar-field name="host" type="string" required>
+
+A numeric host.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port; `0` lets the kernel choose (read it with
+  `netLocalPort`).
+
 </scalar-field>
 
 <scalar-field name="backlog" type="i32" required>
+
+The length of the accept queue.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The listener's descriptor, `-98` when the port is in use, or
+  `-22` for a host that is not a literal.
+
 </scalar-field>
 
 ## tcpListenFlags
 
-`tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on
-each accepted socket for flag 2. Flag 4, with flag 1, steers by CPU: a new
-connection goes to the group's listener whose bind order is the index of the
-CPU that received it (Linux; -95 elsewhere). Any other bit, or 4 without 1,
-is -22.
+`tcpListen`'s socket, with flags.
+
+Flag 1 sets `SO_REUSEPORT` before the bind, so several listeners that all
+ask for it share one port, each with its own accept queue, in one process
+or several. On Linux they each get new connections, spread by a hash of
+the 4-tuple, and only listeners of one user may share; on Darwin one of
+them takes the connections, which buys a restart without a gap rather
+than a spread. A port held by a listener without flag 1 is `-98` to one
+that asks for it, and the other way round.
+
+Flag 2 sets `TCP_NODELAY` on every connection `tcpAccept` takes from the
+listener, on every platform: the runtime sets it on each accepted socket
+rather than trusting the kernel to copy it, and a connection on which it
+cannot be set is closed and its failure answered.
+
+Flag 4, with flag 1 and on Linux only, attaches a classic BPF program
+(`SO_ATTACH_REUSEPORT_CBPF`) that hands each connection to the listener at
+the index of the CPU that received it, in the order the group's listeners
+were bound; a CPU past the group's size falls back to the hash.
 
 ```ts
 function tcpListenFlags(
@@ -821,25 +1211,45 @@ function tcpListenFlags(
 #### Parameters
 
 <scalar-field name="host" type="string" required>
+
+A numeric host, as for `tcpListen`.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port.
+
 </scalar-field>
 
 <scalar-field name="backlog" type="i32" required>
+
+The length of the accept queue.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+The sum of the flags: `3` is both, `5` and `7` steer, and `0`
+  is `tcpListen` exactly.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The listener's descriptor or the failure: `-22` for any other
+  bit, a negative `flags`, or flag 4 without 1, before a socket is made;
+  `-95` for flag 4 off Linux.
+
 </scalar-field>
 
 ## udpBind
 
-A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read.
+A datagram socket, non-blocking and close-on-exec, bound to a numeric
+host and port as `tcpListen`'s is, `"::"` and its IPv4 fallback included.
+The ECN bits of every datagram are always read.
 
 ```ts
 function udpBind(
@@ -852,22 +1262,40 @@ function udpBind(
 #### Parameters
 
 <scalar-field name="host" type="string" required>
+
+A numeric host.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`1` is `SO_REUSEPORT`, so several sockets that all ask for it
+  share a port and the kernel spreads the datagrams across them; `2` is
+  `UDP_GRO`, so the kernel may coalesce a flow's datagrams that arrive
+  after the bind into one receive (`-95` on Darwin).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The descriptor, `-22` for any other bit, `-98` for a port in use
+  without flag 1, or the failure.
+
 </scalar-field>
 
 ## udpRecvFrom
 
-One datagram, or several GRO coalesced, into `buf[off, off + len)`; the sender in `from`, `meta` [segment size, ECN].
+Receive the next datagram into `buf[off, off + len)`, cut to `len` if it
+is longer, in one `recvmsg`. The range is checked. An empty datagram is a
+datagram and answers `0`. Not `willreturn`, as `udpSendTo`.
 
 ```ts
 function udpRecvFrom(
@@ -883,31 +1311,61 @@ function udpRecvFrom(
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A datagram socket.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array the payload is written into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The first index written.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The most bytes taken.
+
 </scalar-field>
 
 <scalar-field name="from" type="u8[]" required>
+
+The array the sender's address form is written into, ready to
+  pass to `udpSendTo` as a reply's `to`.
+
 </scalar-field>
 
 <scalar-field name="meta" type="i32[]" required>
+
+Two numbers written: `meta[0]` the GRO segment size, the size
+  of each datagram the kernel coalesced into this one (`0` when it
+  coalesced none; walk the buffer in steps of it, the last possibly
+  shorter), and `meta[1]` the ECN bits the datagram arrived with. Always
+  `0, 0` on Darwin, where a `meta[1]` of `0` cannot say ECN is unsupported.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The datagram's length, `-11` when none is waiting, or `-22` for
+  a `from` shorter than 18 bytes or a `meta` shorter than 2, before
+  anything is taken.
+
 </scalar-field>
 
 ## udpSendTo
 
-`buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`.
+Send `buf[off, off + len)` to `to` in one `sendmsg`. The range is checked.
+Not `willreturn`: on a blocking socket the program inherited, it waits.
+An IPv4 socket sends to a mapped `::ffff:a.b.c.d` address as IPv4.
 
 ```ts
 function udpSendTo(
@@ -924,34 +1382,66 @@ function udpSendTo(
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+A datagram socket.
+
 </scalar-field>
 
 <scalar-field name="buf" type="readonly u8[]" required>
+
+The payload; it may be `readonly`.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The first index sent.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The payload's length.
+
 </scalar-field>
 
 <scalar-field name="to" type="readonly u8[]" required>
+
+The address form of the receiver; it may be `readonly`.
+
 </scalar-field>
 
 <scalar-field name="segment" type="i32" required>
+
+Above `0`, GSO: the kernel cuts the payload into datagrams
+  of `segment` bytes, the last one shorter, so one call sends many; `0`
+  sends one datagram. `0..65535`; above `0` is `-95` on Darwin.
+
 </scalar-field>
 
 <scalar-field name="ecn" type="i32" required>
+
+The two ECN bits of the IP header: `0` not ECN-capable, `1`
+  ECT(1), `2` ECT(0), `3` CE. Above `0` is `-95` on Darwin.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The bytes sent, `-11` when the send buffer is full, or `-22` for
+  a `to` shorter than 18 bytes, a `segment` outside `0..65535`, an `ecn`
+  outside `0..3`, or a payload the kernel will not cut (more segments than
+  it takes in one call, or a segment the route cannot carry).
+
 </scalar-field>
 
 ## unixAccept
 
-The next connection on a Unix listener, non-blocking; -11 when none is waiting.
+The next waiting connection on a Unix listener, non-blocking and
+close-on-exec. No peer address is written: a Unix client is seldom
+bound.
 
 ```ts
 function unixAccept(fd: i32): i32
@@ -960,16 +1450,25 @@ function unixAccept(fd: i32): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+The listener.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The connection's descriptor, `-11` when none is waiting, or the
+  failure.
+
 </scalar-field>
 
 ## unixConnect
 
-A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening.
+A new socket, non-blocking and close-on-exec, connected to the listener
+at `path`. A connect needs write permission on the file and search
+permission on every directory above it.
 
 ```ts
 function unixConnect(path: string): i32
@@ -978,18 +1477,29 @@ function unixConnect(path: string): i32
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+As for `unixListen`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The descriptor; `-111` when nothing listens there; `-2` when
+  there is no such file; `-11` on Linux and `-111` on Darwin when the
+  listener's backlog is full (the socket is closed; try again later); or
+  the path refusals `unixListen` has.
+
 </scalar-field>
 
 ## unixListen
 
-A listening Unix stream socket at `path` (`@name`: Linux's abstract
-namespace), its file mode 0600. A path that exists is -98, unless `flags`
-holds `NET_UNIX_UNLINK_STALE`; -36 a path too long, -22 an empty one.
+A listening Unix-domain stream socket at `path`, whose file is `0600`, so
+only its owner may connect. A bind never replaces a file. Closing the
+listener does not unlink its file: `unlinkSync` it when the server stops,
+or let the next start's `NET_UNIX_UNLINK_STALE` clear it. A call that
+fails after its bind closes the socket and unlinks the file it made.
 
 ```ts
 function unixListen(
@@ -1002,22 +1512,42 @@ function unixListen(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+Bytes up to the first NUL, at most 107 bytes on Linux and 103
+  on Darwin, relative to the working directory. A leading `@` names
+  Linux's abstract namespace, which leaves no file (`-95` on Darwin).
+
 </scalar-field>
 
 <scalar-field name="backlog" type="i32" required>
+
+The length of the accept queue.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`0`, or `NET_UNIX_UNLINK_STALE` to clear a socket file
+  nothing listens on, found by a probe connect, and bind again.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The listener's descriptor or the failure: `-98` when the path
+  exists (a live listener stays `-98`); `-17` when the flag finds
+  something that is not a socket; `-95` on Darwin when the flag finds a
+  socket file, which it cannot probe; `-36` for a path too long; `-22` for
+  an empty path, a bare `@`, a NUL inside, or any other flag bit.
+
 </scalar-field>
 
 ## unixListenMode
 
-`unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`.
+`unixListen`'s socket with the file's mode chosen, set between the bind
+and the listen, so no connect gets in under a wider one.
 
 ```ts
 function unixListenMode(
@@ -1031,27 +1561,44 @@ function unixListenMode(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+As for `unixListen`.
+
 </scalar-field>
 
 <scalar-field name="backlog" type="i32" required>
+
+The length of the accept queue.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+As for `unixListen`.
+
 </scalar-field>
 
 <scalar-field name="mode" type="i32" required>
+
+`0` to `0o777`, and no other bits.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The listener's descriptor, `unixListen`'s failures, or `-22` for
+  a mode outside that range or an abstract name, which has no file to
+  give a mode to.
+
 </scalar-field>
 
 ## unixSocketPair
 
-Two connected sockets into `fds[0]` and `fds[1]`, and 0: `kind` is
-`NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin); -22 another kind
-or an `fds` shorter than 2.
+Two sockets already connected to each other, non-blocking and
+close-on-exec: a channel without a name, for a child process or for one
+side of a program.
 
 ```ts
 function unixSocketPair(
@@ -1063,14 +1610,27 @@ function unixSocketPair(
 #### Parameters
 
 <scalar-field name="kind" type="i32" required>
+
+`NET_UNIX_STREAM` (`1`), a byte stream, or
+  `NET_UNIX_SEQPACKET` (`2`), where each write is one message and a read
+  returns one message, never two run together; `2` is `-95` on Darwin.
+
 </scalar-field>
 
 <scalar-field name="fds" type="i32[]" required>
+
+The array the two descriptors are written into, as `fds[0]`
+  and `fds[1]`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or `-22` for any other kind or an `fds` shorter than 2,
+  before a socket exists.
+
 </scalar-field>
 
 ## Constants
@@ -1081,7 +1641,7 @@ function unixSocketPair(
 
 `NET_SO_KEEPALIVE: i32`
 
-`SO_KEEPALIVE`: `value` 1 probes an idle connection, 0 does not.
+`SO_KEEPALIVE`, option id 3: `value` 1 probes an idle connection, 0 does not.
 
 </scalar-card>
 
@@ -1089,7 +1649,7 @@ function unixSocketPair(
 
 `NET_SO_RCVBUF: i32`
 
-`SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores.
+`SO_RCVBUF`, option id 5: the receive buffer, `value` in bytes; Linux doubles the value it stores.
 
 </scalar-card>
 
@@ -1097,7 +1657,7 @@ function unixSocketPair(
 
 `NET_SO_SNDBUF: i32`
 
-`SO_SNDBUF`: the send buffer, `value` in bytes; Linux doubles the value it stores.
+`SO_SNDBUF`, option id 4: the send buffer, `value` in bytes; Linux doubles the value it stores.
 
 </scalar-card>
 
@@ -1105,7 +1665,7 @@ function unixSocketPair(
 
 `NET_TCP_NODELAY: i32`
 
-`TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it.
+`TCP_NODELAY`, option id 1: `value` 1 sends a small write at once, 0 lets Nagle batch it.
 
 </scalar-card>
 
@@ -1113,9 +1673,14 @@ function unixSocketPair(
 
 `NET_TCP_QUICKACK: i32`
 
-`TCP_QUICKACK` (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
+`TCP_QUICKACK`, option id 2 (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
 delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
 so a server that wants a mode sets it again after every response.
+
+```ts
+// After each response: Linux may have left quick-ACK mode.
+export const answered = (conn: i32): i32 => netSetOption(conn, NET_TCP_QUICKACK, 1);
+```
 
 </scalar-card>
 
@@ -1139,7 +1704,7 @@ so a server that wants a mode sets it again after every response.
 
 `NET_UNIX_UNLINK_STALE: i32`
 
-`unixListen` flag: unlink a socket file nothing listens on, then bind.
+`unixListen` flag 1: unlink a socket file nothing listens on, then bind.
 
 </scalar-card>
 
