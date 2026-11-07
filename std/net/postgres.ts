@@ -3684,7 +3684,8 @@ export class PgPool {
 
   /**
    * Whether every byte of the pool's copy of the password is zero, as
-   * `PgConnection.passwordWiped()` reads its own.
+   * `PgConnection.passwordWiped()` reads its own: true once it is wiped, and
+   * for an empty password before any wipe.
    *
    * @returns True once the pool's copy is wiped; the connections' copies are not read.
    */

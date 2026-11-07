@@ -418,7 +418,8 @@ export class Statement {
    *
    * @param i The parameter's index, from 1.
    * @param text The value.
-   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`, or
+   *   `SQLITE_TOOBIG` or `SQLITE_NOMEM` from SQLite.
    */
   bindText(i: i32, text: string): Result<void, i32> {
     return done(nishsqlite_bind_text(this.handle, i, text))
@@ -433,7 +434,8 @@ export class Statement {
    * @param buf The bytes to read from.
    * @param off Where the text starts in `buf`, in bytes.
    * @param len The text's length in bytes.
-   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`, or
+   *   `SQLITE_TOOBIG` or `SQLITE_NOMEM` from SQLite.
    */
   bindTextBytes(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32> {
     return done(nishsqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 0))
@@ -447,7 +449,8 @@ export class Statement {
    * @param buf The bytes to read from.
    * @param off Where the blob starts in `buf`, in bytes.
    * @param len The blob's length in bytes.
-   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`, or
+   *   `SQLITE_TOOBIG` or `SQLITE_NOMEM` from SQLite.
    */
   bindBlob(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32> {
     return done(nishsqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 1))

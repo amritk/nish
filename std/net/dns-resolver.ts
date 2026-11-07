@@ -98,7 +98,9 @@ import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseAddress } from "nish/net/dns
 export const DNS_RESOLVE_PENDING: i32 = -40
 /**
  * The name has no address: NXDOMAIN for every candidate of the search list,
- * or NODATA for one (which ends the search, as the name exists).
+ * or NODATA for one (which ends the search, as the name exists). Also the
+ * answer, with no packet sent, when `start` finds no usable candidate (every
+ * suffixed name too long or not a name).
  */
 export const DNS_RESOLVE_NOT_FOUND: i32 = -41
 /** No server gave an answer: each timed out, failed or was refused, `attempts` rounds over. */
@@ -463,7 +465,8 @@ export class DnsResolver {
    * @param to Where the server's 18-byte address (IPv6 form and port) goes for
    *   a send; left as it was for a close.
    * @param meta Two slots: `meta[0]` gets the action, `meta[1]` the number of
-   *   bytes of `out` to send (0 for `DNS_CLOSE`).
+   *   bytes of `out` to send (0 for `DNS_CLOSE`); not written when the call
+   *   answers -1.
    * @param id The ID for this send, 0 to 0xFFFF: fresh and random each call.
    *   A close or no action does not use it.
    * @returns The query the action is for, 0 to `2 * maxLookups - 1` (its
@@ -641,9 +644,10 @@ export class DnsResolver {
   /**
    * The driver's word that query `q`'s socket failed at `nowNanos`: it could
    * not be opened or written, the connection was refused, or the stream
-   * ended before the reply did. The query moves to the next server, or ends
-   * as `DNS_RESOLVE_NO_ANSWER` after `attempts` rounds. A query not waiting
-   * on a socket ignores it. Panics when `q` is not a query.
+   * ended before the reply did. The query moves to the next server, or after
+   * `attempts` rounds this query ends as `DNS_RESOLVE_NO_ANSWER` (its lookup
+   * moves to the next candidate when its other query was NXDOMAIN). A query
+   * not waiting on a socket ignores it. Panics when `q` is not a query.
    *
    * @param q The query whose socket failed.
    * @param nowNanos The caller's monotonic clock now, in nanoseconds.

@@ -443,8 +443,9 @@ const dnsKeepAddress = (msg: u8[], at: i32, size: i32, port: i32, ttl: i32, repl
  * @returns The reply's RCODE when it answers the query (`DNS_NOERROR`,
  *   `DNS_NXDOMAIN`, `DNS_SERVFAIL` or `DNS_REFUSED`), with the addresses in
  *   `reply` only under `DNS_NOERROR` with `reply.truncated` clear; or a
- *   negative `DNS_ERR_*` code for a reply that is malformed or answers
- *   another query.
+ *   negative `DNS_ERR_*` code: `DNS_ERR_RCODE` for a reply to this query
+ *   with any other RCODE (FORMERR, NOTIMP or one undefined), and the others
+ *   for a reply that is malformed or answers another query.
  */
 export const dnsParseReply = (
   msg: u8[],
