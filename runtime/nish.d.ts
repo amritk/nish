@@ -1014,9 +1014,9 @@ declare module "nish:process" {
    * @param pid The process, above 0.
    * @param sig 0, 2, 9 or 15.
    * @returns `0`, or a negative errno: `-22` for any other `sig` or a `pid` of
-   *   0 or below (which `kill(2)` reads as a group), `-3` ESRCH when no process
-   *   has the pid (a child already reaped included), `-1` EPERM when it is
-   *   another user's.
+   *   0 or below (which `kill(2)` reads as a process group or every
+   *   process), `-3` ESRCH when no process has the pid (a child already reaped
+   *   included), `-1` EPERM when it is another user's.
    */
   export function kill(pid: i32, sig: i32): i32;
   /**
@@ -2258,7 +2258,7 @@ declare module "nish:simd" {
    */
   export function not<V extends IntegerVector | SimdMask>(a: V): V;
   /**
-   * Whether each lane of `a` is equal the lane of `b`: `icmp`, unsigned on a
+   * Whether each lane of `a` is equal to the lane of `b`: `icmp`, unsigned on a
    * `u*` lane, or on float lanes `fcmp oeq`.
    *
    * @param a Any vector (NL2638 for a scalar).
@@ -2268,8 +2268,9 @@ declare module "nish:simd" {
    */
   export function eq<V extends SimdVector>(a: V, b: V): V["__mask"];
   /**
-   * Whether each lane of `a` is not equal the lane of `b`: `icmp`, unsigned on a
-   * `u*` lane, or on float lanes `fcmp une`, unordered, so a NaN lane is not equal.
+   * Whether each lane of `a` is not equal to the lane of `b`: `icmp`, unsigned
+   * on a `u*` lane, or on float lanes `fcmp une`, unordered, so a NaN lane is
+   * not equal.
    *
    * @param a Any vector (NL2638 for a scalar).
    * @param b A vector of `a`'s type.
@@ -2632,9 +2633,10 @@ declare module "nish:term" {
   /**
    * Wait until stdin is readable or the time passes. Readable includes its end
    * and an error, so the read after it answers at once, with `0` or a negative
-   * errno that is not `-11`. A Ctrl-Z and `fg` after `setRawMode(true)` does
-   * not end the wait early: it goes on for what is left of the timeout. Before
-   * raw mode Linux goes on and Darwin ends the wait. Not `willreturn`.
+   * errno that is not `-11`, which a loop treats as the end. A Ctrl-Z and
+   * `fg` after `setRawMode(true)` does not end the wait early: it goes on for
+   * what is left of the timeout. Before raw mode Linux goes on and Darwin ends
+   * the wait. Not `willreturn`.
    *
    * @param timeoutMs The most milliseconds to wait; negative waits for ever.
    *   Under WASI a wait is at least 10 ms.
@@ -2836,7 +2838,7 @@ declare module "nish:secret" {
  * through a handle, so that what lives and dies together goes back with one
  * `free` where the thread's arena would hold it until the program ends.
  *
- *     import { Region, enterWith, free, regionWith } from "nish:region";
+ *     import { Region, enter, enterWith, free, region, regionWith } from "nish:region";
  *
  *     class Session {
  *       hits: i32 = 0;
@@ -2872,8 +2874,9 @@ declare module "nish:secret" {
  * memory NL2610. Outer storage may not grow inside `f` (NL2615), threads may
  * not start there (NL2612), a value holding a `Region` may not cross to
  * another thread (NL2613), and `Arena.mark` and `Arena.used` are refused there
- * (NL2617). None of the five runs in a parallel body or a spawned function
- * (NL2351), and `using` does not take a region (NL2387).
+ * (NL2617). None of the five (`region`, `regionWith`, `enter`, `enterWith`,
+ * `free`) runs in a parallel body or a spawned function (NL2351), and `using`
+ * does not take a region (NL2387).
  *
  * **Every call checks its handle at run time.** `enter`, `enterWith` and
  * `free` stop the program on a handle that is 0, freed already or another

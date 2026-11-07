@@ -7482,7 +7482,6 @@ optimiser may remove, before the function that made it lets go of it.
 
 Reference: [`nish:secret`](reference/nish-secret.md).
 
-
 | Export | Meaning | Test |
 | --- | --- | --- |
 | `Secret<T>` | an opaque class holding an array or record of integers | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
@@ -7823,7 +7822,6 @@ region and gives the whole of it back with one `free`, where the thread's arena
 would hold it until the program ends.
 
 Reference: [`nish:region`](reference/nish-region.md).
-
 
 | Export | Meaning |
 | --- | --- |
