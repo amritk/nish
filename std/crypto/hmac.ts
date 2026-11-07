@@ -254,6 +254,9 @@ export class HmacSha256 {
   /**
    * Keys the computation. A key longer than 64 bytes is replaced by its
    * SHA-256 (RFC 2104 §2), which is wiped once used (`hmacKeySha256`).
+   *
+   * @param key The secret key; it is read, not kept, and the caller still
+   *   wipes it.
    */
   constructor(key: u8[]) {
     this.inner = new Sha256()
@@ -261,12 +264,24 @@ export class HmacSha256 {
     hmacKeySha256(this.inner, this.outer, key)
   }
 
-  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. */
+  /**
+   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
+   * `Sha256.update`.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
+   */
   update(data: u8[], off: i32, len: i32): void {
     this.inner.update(data, off, len)
   }
 
-  /** The 32-byte tag, in a fresh array. Ends the computation, and wipes both hashers. */
+  /**
+   * The 32-byte tag, in a fresh array. Ends the computation, and wipes both
+   * hashers.
+   *
+   * @returns A fresh 32-byte tag, which the caller owns.
+   */
   digest(): u8[] {
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA256_SIZE)
@@ -288,19 +303,37 @@ export class HmacSha384 {
   /** H(K XOR opad, …), fed the key block in the constructor and the inner digest last. */
   outer: Sha384
 
-  /** Keys the computation. A key longer than 128 bytes is replaced by its SHA-384 (RFC 2104 §2). */
+  /**
+   * Keys the computation. A key longer than 128 bytes is replaced by its
+   * SHA-384 (RFC 2104 §2).
+   *
+   * @param key The secret key; it is read, not kept, and the caller still
+   *   wipes it.
+   */
   constructor(key: u8[]) {
     this.inner = new Sha384()
     this.outer = new Sha384()
     hmacKeySha384(this.inner, this.outer, key)
   }
 
-  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha384.update`. */
+  /**
+   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
+   * `Sha384.update`.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
+   */
   update(data: u8[], off: i32, len: i32): void {
     this.inner.update(data, off, len)
   }
 
-  /** The 48-byte tag, in a fresh array. Ends the computation, and wipes both hashers. */
+  /**
+   * The 48-byte tag, in a fresh array. Ends the computation, and wipes both
+   * hashers.
+   *
+   * @returns A fresh 48-byte tag, which the caller owns.
+   */
   digest(): u8[] {
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA384_SIZE)
@@ -322,19 +355,37 @@ export class HmacSha512 {
   /** H(K XOR opad, …), fed the key block in the constructor and the inner digest last. */
   outer: Sha512
 
-  /** Keys the computation. A key longer than 128 bytes is replaced by its SHA-512 (RFC 2104 §2). */
+  /**
+   * Keys the computation. A key longer than 128 bytes is replaced by its
+   * SHA-512 (RFC 2104 §2).
+   *
+   * @param key The secret key; it is read, not kept, and the caller still
+   *   wipes it.
+   */
   constructor(key: u8[]) {
     this.inner = new Sha512()
     this.outer = new Sha512()
     hmacKeySha512(this.inner, this.outer, key)
   }
 
-  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha512.update`. */
+  /**
+   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
+   * `Sha512.update`.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
+   */
   update(data: u8[], off: i32, len: i32): void {
     this.inner.update(data, off, len)
   }
 
-  /** The 64-byte tag, in a fresh array. Ends the computation, and wipes both hashers. */
+  /**
+   * The 64-byte tag, in a fresh array. Ends the computation, and wipes both
+   * hashers.
+   *
+   * @returns A fresh 64-byte tag, which the caller owns.
+   */
   digest(): u8[] {
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA512_SIZE)
@@ -353,6 +404,10 @@ export class HmacSha512 {
  * reason: under `--number-mode f64` the tag would be of a prefix, and a tag
  * that verifies every message sharing that prefix is a forgery. A key that
  * long panics in the constructor for the same reason.
+ *
+ * @param key The secret key; it is read, not kept.
+ * @param data The whole message.
+ * @returns A fresh 32-byte tag, which the caller owns.
  */
 export const hmacSha256 = (key: u8[], data: u8[]): u8[] => {
   if (data.length > 2147483647) {
@@ -366,6 +421,10 @@ export const hmacSha256 = (key: u8[], data: u8[]): u8[] => {
 /**
  * The HMAC-SHA-384 of all of `data` under `key`, as a fresh 48-byte array.
  * `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+ *
+ * @param key The secret key; it is read, not kept.
+ * @param data The whole message.
+ * @returns A fresh 48-byte tag, which the caller owns.
  */
 export const hmacSha384 = (key: u8[], data: u8[]): u8[] => {
   if (data.length > 2147483647) {
@@ -379,6 +438,10 @@ export const hmacSha384 = (key: u8[], data: u8[]): u8[] => {
 /**
  * The HMAC-SHA-512 of all of `data` under `key`, as a fresh 64-byte array.
  * `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+ *
+ * @param key The secret key; it is read, not kept.
+ * @param data The whole message.
+ * @returns A fresh 64-byte tag, which the caller owns.
  */
 export const hmacSha512 = (key: u8[], data: u8[]): u8[] => {
   if (data.length > 2147483647) {
@@ -392,13 +455,29 @@ export const hmacSha512 = (key: u8[], data: u8[]): u8[] => {
 /**
  * `hmacSha256` under a key held as a `Secret`, read only inside `exposeWith`.
  * The tag is public, so it is answered plain; the caller still wipes the key.
+ *
+ * @param key The secret key; the caller still owns and wipes it.
+ * @param data The whole message.
+ * @returns A fresh 32-byte tag, plain because a tag is public.
  */
 export const hmacSha256Secret = (key: Secret<u8[]>, data: u8[]): u8[] => exposeWith(key, data, hmacSha256)
 
-/** `hmacSha384` under a key held as a `Secret`, as `hmacSha256Secret` is. */
+/**
+ * `hmacSha384` under a key held as a `Secret`, as `hmacSha256Secret` is.
+ *
+ * @param key The secret key; the caller still owns and wipes it.
+ * @param data The whole message.
+ * @returns A fresh 48-byte tag, plain because a tag is public.
+ */
 export const hmacSha384Secret = (key: Secret<u8[]>, data: u8[]): u8[] => exposeWith(key, data, hmacSha384)
 
-/** `hmacSha512` under a key held as a `Secret`, as `hmacSha256Secret` is. */
+/**
+ * `hmacSha512` under a key held as a `Secret`, as `hmacSha256Secret` is.
+ *
+ * @param key The secret key; the caller still owns and wipes it.
+ * @param data The whole message.
+ * @returns A fresh 64-byte tag, plain because a tag is public.
+ */
 export const hmacSha512Secret = (key: Secret<u8[]>, data: u8[]): u8[] => exposeWith(key, data, hmacSha512)
 
 /**
@@ -406,15 +485,36 @@ export const hmacSha512Secret = (key: Secret<u8[]>, data: u8[]): u8[] => exposeW
  * `timingSafeEqual`. A tag that is not 32 bytes answers `false` without a
  * byte compare, since its length is public; one that is is compared in full,
  * so the time taken does not say how many leading bytes were right.
+ *
+ * @param key The secret key.
+ * @param data The whole message the tag claims to cover.
+ * @param tag The tag to check, as received.
+ * @returns `true` only if `tag` is the full, correct tag.
  */
 export const hmacSha256Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
   timingSafeEqual(hmacSha256(key, data), tag)
 
-/** Whether `tag` is the HMAC-SHA-384 of `data` under `key`, compared as `hmacSha256Verify` does. */
+/**
+ * Whether `tag` is the HMAC-SHA-384 of `data` under `key`, compared as
+ * `hmacSha256Verify` does.
+ *
+ * @param key The secret key.
+ * @param data The whole message the tag claims to cover.
+ * @param tag The tag to check, as received.
+ * @returns `true` only if `tag` is the full, correct tag.
+ */
 export const hmacSha384Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
   timingSafeEqual(hmacSha384(key, data), tag)
 
-/** Whether `tag` is the HMAC-SHA-512 of `data` under `key`, compared as `hmacSha256Verify` does. */
+/**
+ * Whether `tag` is the HMAC-SHA-512 of `data` under `key`, compared as
+ * `hmacSha256Verify` does.
+ *
+ * @param key The secret key.
+ * @param data The whole message the tag claims to cover.
+ * @param tag The tag to check, as received.
+ * @returns `true` only if `tag` is the full, correct tag.
+ */
 export const hmacSha512Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
   timingSafeEqual(hmacSha512(key, data), tag)
 
@@ -437,6 +537,9 @@ export const hmacSha512Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
  * nothing is allocated. Copying from a hasher nothing has been fed starts `to`
  * again. It is here rather than beside `Sha256` because the scratch below and
  * the TLS transcript are what need it, and HMAC is the module both sit on.
+ *
+ * @param from The hasher to copy; it is not changed.
+ * @param to The hasher overwritten with `from`'s position.
  */
 export const hmacCopySha256 = (from: Sha256, to: Sha256): void => {
   const fromState: u32[] = from.state
@@ -454,7 +557,12 @@ export const hmacCopySha256 = (from: Sha256, to: Sha256): void => {
   to.finished = from.finished
 }
 
-/** `hmacCopySha256` for SHA-384: `to` made the hasher `from` is, in place. */
+/**
+ * `hmacCopySha256` for SHA-384: `to` made the hasher `from` is, in place.
+ *
+ * @param from The hasher to copy; it is not changed.
+ * @param to The hasher overwritten with `from`'s position.
+ */
 export const hmacCopySha384 = (from: Sha384, to: Sha384): void => {
   const fromState: u64[] = from.engine.state
   const toState: u64[] = to.engine.state
@@ -506,6 +614,9 @@ export class HmacSha256Scratch {
   /** The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with instead; wiped once used. */
   private keyHash: u8[]
 
+  /**
+   * Allocates the hashers and buffers every tag reuses; `begin` keys them.
+   */
   constructor() {
     this.inner = new Sha256()
     this.outer = new Sha256()
@@ -514,7 +625,14 @@ export class HmacSha256Scratch {
     this.keyHash = new Array<u8>(SHA256_SIZE)
   }
 
-  /** Keys a new computation with `key[off .. off + len)`, a key longer than 64 bytes by its SHA-256 (RFC 2104 §2). */
+  /**
+   * Keys a new computation with `key[off .. off + len)`, a key longer than 64
+   * bytes by its SHA-256 (RFC 2104 §2).
+   *
+   * @param key The buffer holding the key; it is read, not kept.
+   * @param off Where the key starts in `key`.
+   * @param len The key's length in bytes.
+   */
   begin(key: u8[], off: i32, len: i32): void {
     if (!hmacWindowFits(toI32(key.length), off, len)) {
       panic("HmacSha256Scratch: the key window is outside its array")
@@ -555,12 +673,25 @@ export class HmacSha256Scratch {
     secureZero(this.pad)
   }
 
-  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. */
+  /**
+   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
+   * `Sha256.update`.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
+   */
   update(data: u8[], off: i32, len: i32): void {
     this.inner.update(data, off, len)
   }
 
-  /** Writes the 32-byte tag at `out[at]` and ends the computation; a window outside `out` panics. */
+  /**
+   * Writes the 32-byte tag at `out[at]` and ends the computation; a window
+   * outside `out` panics.
+   *
+   * @param out The caller's array the tag is written into.
+   * @param at Where the 32 tag bytes start in `out`.
+   */
   finishInto(out: u8[], at: i32): void {
     if (!hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
       panic("HmacSha256Scratch: the tag window is outside its array")
@@ -598,6 +729,9 @@ export class HmacSha384Scratch {
   /** The SHA-384 of a key longer than a block; wiped once used. */
   private keyHash: u8[]
 
+  /**
+   * Allocates the hashers and buffers every tag reuses; `begin` keys them.
+   */
   constructor() {
     this.inner = new Sha384()
     this.outer = new Sha384()
@@ -606,7 +740,14 @@ export class HmacSha384Scratch {
     this.keyHash = new Array<u8>(SHA384_SIZE)
   }
 
-  /** Keys a new computation with `key[off .. off + len)`, a key longer than 128 bytes by its SHA-384 (RFC 2104 §2). */
+  /**
+   * Keys a new computation with `key[off .. off + len)`, a key longer than 128
+   * bytes by its SHA-384 (RFC 2104 §2).
+   *
+   * @param key The buffer holding the key; it is read, not kept.
+   * @param off Where the key starts in `key`.
+   * @param len The key's length in bytes.
+   */
   begin(key: u8[], off: i32, len: i32): void {
     if (!hmacWindowFits(toI32(key.length), off, len)) {
       panic("HmacSha384Scratch: the key window is outside its array")
@@ -647,12 +788,25 @@ export class HmacSha384Scratch {
     secureZero(this.pad)
   }
 
-  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in the hasher. */
+  /**
+   * Absorbs `data[off .. off + len)`; a window outside `data` panics in the
+   * hasher.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
+   */
   update(data: u8[], off: i32, len: i32): void {
     this.inner.update(data, off, len)
   }
 
-  /** Writes the 48-byte tag at `out[at]` and ends the computation; a window outside `out` panics. */
+  /**
+   * Writes the 48-byte tag at `out[at]` and ends the computation; a window
+   * outside `out` panics.
+   *
+   * @param out The caller's array the tag is written into.
+   * @param at Where the 48 tag bytes start in `out`.
+   */
   finishInto(out: u8[], at: i32): void {
     if (!hmacWindowFits(toI32(out.length), at, SHA384_SIZE)) {
       panic("HmacSha384Scratch: the tag window is outside its array")
@@ -790,6 +944,14 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
  * is linear in `iterations` and nothing here bounds it, so a caller that takes
  * the count from an untrusted peer (a SCRAM server's `i=`) must cap it first:
  * 2^31 - 1 rounds is about 2^32 compressions.
+ *
+ * @param password The password P, read only inside `exposeWith`; the caller
+ *   still owns and wipes it.
+ * @param salt The salt S, public.
+ * @param iterations The round count `c`; below 1 answers `null`.
+ * @param length The derived key's length `dkLen` in bytes; below 1 answers
+ *   `null`.
+ * @returns The derived key, which the caller wipes, or `null` for bad input.
  */
 export const pbkdf2HmacSha256 = (
   password: Secret<u8[]>,
@@ -962,6 +1124,14 @@ export class HmacKey {
    */
   live: boolean
 
+  /**
+   * Absorbs `key`'s two pad blocks for `hash` and keeps the chaining values. An
+   * unknown `hash` panics.
+   *
+   * @param hash Which HMAC: `HMAC_SHA256`, `HMAC_SHA384` or `HMAC_SHA512`.
+   * @param key The key, read only inside `exposeWith`; the caller still owns
+   *   and wipes it.
+   */
   constructor(hash: i32, key: Secret<u8[]>) {
     if (hmacTagSize(hash) === 0) {
       panic("HmacKey: an unknown hash")
@@ -979,7 +1149,11 @@ export class HmacKey {
     this.live = true
   }
 
-  /** The tag length in bytes: 32, 48 or 64. */
+  /**
+   * The tag length in bytes: 32, 48 or 64.
+   *
+   * @returns 32 for `HMAC_SHA256`, 48 for `HMAC_SHA384`, 64 for `HMAC_SHA512`.
+   */
   size(): i32 {
     return hmacTagSize(this.hash)
   }
@@ -1070,6 +1244,13 @@ const hmacKeyedTag = (key: HmacKey, data: u8[], off: i32, len: i32): u8[] => {
  * `out[at .. at + key.size())`. A window outside its array panics before
  * anything is read. It runs in an arena block of its own and stores nothing,
  * so a tag leaves the arena where it was.
+ *
+ * @param key The absorbed key; a wiped one panics.
+ * @param data The buffer holding the message.
+ * @param off Where the message starts in `data`.
+ * @param len The message's length in bytes.
+ * @param out The caller's array the tag is written into.
+ * @param at Where the tag starts in `out`.
  */
 export const hmacKeyedInto = (key: HmacKey, data: u8[], off: i32, len: i32, out: u8[], at: i32): void => {
   const size: i32 = key.size()
@@ -1096,6 +1277,14 @@ export const hmacKeyedInto = (key: HmacKey, data: u8[], off: i32, len: i32, out:
  * computed tag wiped, since it is the one tag a forger needs. A tag window
  * that does not fit answers `false`; a message window outside its array
  * panics. It runs in an arena block of its own and stores nothing.
+ *
+ * @param key The absorbed key; a wiped one answers `false`.
+ * @param data The buffer holding the message.
+ * @param off Where the message starts in `data`.
+ * @param len The message's length in bytes.
+ * @param tag The buffer holding the tag to check.
+ * @param tagAt Where the tag starts in `tag`.
+ * @returns `true` only if the tag window holds the correct tag.
  */
 export const hmacKeyedVerify = (
   key: HmacKey,

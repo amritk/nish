@@ -829,6 +829,13 @@ const bcryptSameWiped = (rebuilt: u8[], hash: string): boolean => {
  * 60 characters, `$2b$`, the two-digit cost, `$`, the salt and the digest in
  * bcrypt's base64. The salt must come from a CSPRNG and be fresh for each
  * hash. An `Err` for a salt of another length or a cost outside 4–31.
+ *
+ * @param password The password, read only inside `exposeWith`; the caller still
+ *   owns and wipes it.
+ * @param salt 16 fresh random bytes.
+ * @param cost The log2 of the round count, 4 to 31.
+ * @returns The 60-character hash, which is public, or an `Err` naming the bad
+ *   salt or cost.
  */
 export const bcryptHash = (password: Secret<u8[]>, salt: u8[], cost: i32): Result<string, string> => {
   if (salt.length !== 16) {
@@ -848,6 +855,13 @@ export const bcryptHash = (password: Secret<u8[]>, salt: u8[], cost: i32): Resul
  * constant-time compare of all 60 characters with the hash rebuilt from the
  * password and `hash`'s own prefix, salt and cost. `$2a$`, `$2b$` and `$2y$`
  * are read; an `Err` names what makes `hash` not a bcrypt hash.
+ *
+ * @param password The password, read only inside `exposeWith`; the caller still
+ *   owns and wipes it.
+ * @param hash A stored hash; its cost sets the work, so it must be one you
+ *   stored.
+ * @returns `Ok(true)` only for this password's hash, `Ok(false)` for another's,
+ *   or an `Err` for a malformed hash.
  */
 export const bcryptVerify = (password: Secret<u8[]>, hash: string): Result<boolean, string> => {
   const parsed: Result<BcryptParsed, string> = bcryptParseHash(hash)
@@ -1805,6 +1819,18 @@ const bcryptSlotsOf = (mask: i32): i32[] => {
  * `bcryptHash`. Which w is fastest per hash depends on the core
  * (`bcryptCalibrate` measures it). An `Err` for `salts` of another length
  * than 96 or a cost outside 4–31.
+ *
+ * @param p0 Lane 0's password, always hashed; read only inside `exposeWith`,
+ *   and the caller still owns and wipes it.
+ * @param p1 Lane 1's password, or `null` to skip the lane.
+ * @param p2 Lane 2's password, or `null` to skip the lane.
+ * @param p3 Lane 3's password, or `null` to skip the lane.
+ * @param p4 Lane 4's password, or `null` to skip the lane.
+ * @param p5 Lane 5's password, or `null` to skip the lane.
+ * @param salts 96 fresh random bytes, lane k's salt at 16k.
+ * @param cost The log2 of the round count, 4 to 31.
+ * @returns Six hash strings, "" for a lane not given, or an `Err` for bad salts
+ *   or cost.
  */
 export const bcryptHashN = (
   p0: Secret<u8[]>,
@@ -1860,6 +1886,16 @@ export const bcryptHashN = (
  * `bcryptHashN` for up to four passwords, `salts` 64 bytes: the same hashes,
  * four strings. An `Err` for `salts` of another length than 64 or a cost
  * outside 4–31.
+ *
+ * @param p0 Lane 0's password, always hashed; read only inside `exposeWith`,
+ *   and the caller still owns and wipes it.
+ * @param p1 Lane 1's password, or `null` to skip the lane.
+ * @param p2 Lane 2's password, or `null` to skip the lane.
+ * @param p3 Lane 3's password, or `null` to skip the lane.
+ * @param salts 64 fresh random bytes, lane k's salt at 16k.
+ * @param cost The log2 of the round count, 4 to 31.
+ * @returns Four hash strings, "" for a lane not given, or an `Err` for bad
+ *   salts or cost.
  */
 export const bcryptHash4 = (
   p0: Secret<u8[]>,
@@ -1928,6 +1964,18 @@ const bcryptJoin = (out: u8[], at: i32, prefix: u8[], digests: u8[], k: i32): vo
  * runs as `bcryptVerify`. A malformed hash in any given lane makes the whole
  * call an `Err` naming the lane ("bcrypt: lane 2: …") before any hashing, so
  * one bad row in a batch cannot be read as a wrong password.
+ *
+ * @param p0 Lane 0's password, always hashed; read only inside `exposeWith`,
+ *   and the caller still owns and wipes it.
+ * @param p1 Lane 1's password, or `null` to skip the lane.
+ * @param p2 Lane 2's password, or `null` to skip the lane.
+ * @param p3 Lane 3's password, or `null` to skip the lane.
+ * @param p4 Lane 4's password, or `null` to skip the lane.
+ * @param p5 Lane 5's password, or `null` to skip the lane.
+ * @param hashes Six strings, lane k's stored hash at k; a skipped lane's is not
+ *   read.
+ * @returns Six answers, `false` for a skipped lane, or an `Err` naming a
+ *   malformed lane or a count that is not six.
  */
 export const bcryptVerifyN = (
   p0: Secret<u8[]>,
@@ -1990,6 +2038,16 @@ export const bcryptVerifyN = (
 /**
  * `bcryptVerifyN` for up to four passwords and four hashes: the same
  * answers, four of them, and the same lane errors.
+ *
+ * @param p0 Lane 0's password, always hashed; read only inside `exposeWith`,
+ *   and the caller still owns and wipes it.
+ * @param p1 Lane 1's password, or `null` to skip the lane.
+ * @param p2 Lane 2's password, or `null` to skip the lane.
+ * @param p3 Lane 3's password, or `null` to skip the lane.
+ * @param hashes Four strings, lane k's stored hash at k; a skipped lane's is
+ *   not read.
+ * @returns Four answers, `false` for a skipped lane, or an `Err` naming a
+ *   malformed lane or a count that is not four.
  */
 export const bcryptVerify4 = (
   p0: Secret<u8[]>,
@@ -2167,6 +2225,8 @@ const bcryptCalibrateTime = (width: i32): i64 => {
  * width turns on the core's load ports, its registers and what else is
  * running, and it keeps nothing between calls, so call it once, at startup,
  * and keep the answer. A few tens of milliseconds of one core.
+ *
+ * @returns How many passwords, 1 to 6, to give each batch call.
  */
 export const bcryptCalibrate = (): i32 => {
   let best: i32 = 1

@@ -117,6 +117,14 @@ export class BcryptAnswer {
   /** "" unless the request is an `Err`, as `bcryptVerify` or `bcryptHash` words it. */
   error: string
 
+  /**
+   * Holds one answer as given; `run` makes these.
+   *
+   * @param ticket The ticket of the request answered.
+   * @param ok The answer: the password matched, or the hash was made.
+   * @param hash The `$2b$` hash a hash request made, or "".
+   * @param error The `Err`'s text, or "" for none.
+   */
   constructor(ticket: i32, ok: boolean, hash: string, error: string) {
     this.ticket = ticket
     this.ok = ok
@@ -464,6 +472,12 @@ export class BcryptBatcher {
   /** The next ticket. */
   private next: i32
 
+  /**
+   * Takes `config` as it is and starts an empty queue. `bcryptBatcher` checks
+   * the config first; make batchers with it.
+   *
+   * @param config The policy; its fields are kept, not checked.
+   */
   constructor(config: BcryptBatchConfig) {
     this.width = config.width
     this.holdNanos = config.holdNanos
@@ -480,7 +494,11 @@ export class BcryptBatcher {
     this.next = 0
   }
 
-  /** How many requests are queued or answered and not yet handed out by `run`. */
+  /**
+   * How many requests are queued or answered and not yet handed out by `run`.
+   *
+   * @returns The count of requests not yet answered by `run`.
+   */
   pending(): i32 {
     return toI32(this.kinds.length) - this.head + toI32(this.early.length)
   }
@@ -490,6 +508,13 @@ export class BcryptBatcher {
    * (`monotonicNanos()`), and answers its ticket. The batcher queues a copy
    * of `password` and wipes the copy once the verify has run; the caller
    * wipes its own.
+   *
+   * @param password The password to check; the batcher copies it, and the
+   *   caller still owns and wipes it.
+   * @param hash The stored hash; its cost sets the work, so it must be one you
+   *   stored.
+   * @param now The time of the call, from `monotonicNanos()`.
+   * @returns The ticket its `BcryptAnswer` will carry.
    */
   verify(password: Secret<u8[]>, hash: string, now: i64): i32 {
     const ticket: i32 = this.next
@@ -504,6 +529,12 @@ export class BcryptBatcher {
    * and answers its ticket. The batcher queues a copy of `password` and
    * wipes the copy once the hash is made; a salt of another length is
    * answered with its `Err` by the next `run`, and no copy is made.
+   *
+   * @param password The password to hash; the batcher copies it unless the salt
+   *   is bad, and the caller still owns and wipes it.
+   * @param salt 16 fresh random bytes; it is copied.
+   * @param now The time of the call, from `monotonicNanos()`.
+   * @returns The ticket its `BcryptAnswer` will carry.
    */
   hash(password: Secret<u8[]>, salt: u8[], now: i64): i32 {
     const ticket: i32 = this.next
@@ -532,6 +563,10 @@ export class BcryptBatcher {
    * Nanoseconds from `now` until a `run` is due: 0 when it is due now (a full
    * batch is queued, the oldest request has waited `holdNanos`, or an answer
    * is waiting), -1 when nothing is queued.
+   *
+   * @param now The time of the call, from `monotonicNanos()`.
+   * @returns How many nanoseconds the loop may wait before the next `run`: 0
+   *   for now, -1 for no work.
    */
   waitNanos(now: i64): i64 {
     if (toI32(this.early.length) > 0) {
@@ -554,6 +589,10 @@ export class BcryptBatcher {
    * oldest requests, spread evenly over up to `cores` tasks, each running
    * its share as batches of up to `width`. Returns once every task has
    * finished, with the copy of each password it ran wiped.
+   *
+   * @param now The time of the call, from `monotonicNanos()`.
+   * @returns A fresh array of the answers this call made, possibly empty, in
+   *   the order their requests were taken.
    */
   run(now: i64): BcryptAnswer[] {
     const answers: BcryptAnswer[] = []
@@ -706,6 +745,9 @@ export class BcryptBatcher {
  * A new batcher for `config`, or an `Err` naming the field out of range: a
  * width outside 1 to 6, a negative hold, fewer than one core, or a cost
  * outside 4 to 31.
+ *
+ * @param config The policy: width, hold, cores and cost.
+ * @returns A new, empty batcher, or an `Err` naming the field out of range.
  */
 export const bcryptBatcher = (config: BcryptBatchConfig): Result<BcryptBatcher, string> => {
   if (config.width < 1 || config.width > BCRYPT_BATCH_MAX_WIDTH) {

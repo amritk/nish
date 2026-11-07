@@ -458,6 +458,10 @@ export class Sha256 {
   /** @internal Set by `nish/crypto/hmac` and `nish/net/postgres` when they wipe, copy or restart a hasher. */
   finished: boolean = false
 
+  /**
+   * A hasher at the start of an empty message (FIPS 180-4 §5.3.3's initial hash
+   * value).
+   */
   constructor() {
     // H^(0) of FIPS 180-4 §5.3.3: the first 32 bits of the fractional parts
     // of the square roots of the first eight primes.
@@ -479,6 +483,10 @@ export class Sha256 {
    * Absorbs `data[off .. off + len)`. A window outside `data` panics rather
    * than hashing a short read, since a digest over the wrong bytes looks
    * exactly like a digest over the right ones.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
    */
   update(data: u8[], off: i32, len: i32): void {
     if (this.finished) {
@@ -520,6 +528,9 @@ export class Sha256 {
    * An independent hasher at the same point in the same message: updating or
    * digesting either one leaves the other as it was. This is how a caller
    * takes the hash of a prefix and keeps going.
+   *
+   * @returns A new hasher with its own state, block and schedule; it shares no
+   *   array with this one.
    */
   copy(): Sha256 {
     if (this.finished) {
@@ -546,6 +557,8 @@ export class Sha256 {
   /**
    * The 32-byte message digest (FIPS 180-4 §6.2.2, the final H^(N) in
    * big-endian order), in a fresh array. Ends the computation.
+   *
+   * @returns A fresh 32-byte digest, which the caller owns.
    */
   digest(): u8[] {
     if (this.finished) {
@@ -597,6 +610,9 @@ export class Sha256 {
  * hashing `toI32(data.length)` bytes would answer the digest of a prefix: one
  * digest for every message that shares its first 2^31 - 1 bytes. The length
  * is compared as the `number` it is, before any `toI32`.
+ *
+ * @param data The whole message; it is read, not changed.
+ * @returns A fresh 32-byte digest.
  */
 export const sha256 = (data: u8[]): u8[] => {
   if (data.length > 2147483647) {
