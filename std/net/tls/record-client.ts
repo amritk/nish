@@ -211,7 +211,7 @@ export class TlsRecordClient {
   state: i32 = 0
   alert: i32 = 0
   peerAlert: i32 = -1
-  private padding: i32 = 0
+  padding: i32 = 0
   /** The `TLS_LEVEL_*` the server's records are read at. */
   private readLevel: i32 = 0
   /** The `TLS_LEVEL_*` the client's records are written at. */
@@ -248,8 +248,8 @@ export class TlsRecordClient {
    * ClientHello cannot be written, fails this connection with its alert
    * queued in the clear.
    *
-   * @param tls The handshake to carry, built and not yet started; the connection keeps it as `tls` and
-   *   wipes it in `wipe`.
+   * @param tls The handshake to carry, normally built and not yet started (a started one is carried from
+   *   where it is); the connection keeps it as `tls` and wipes it in `wipe`.
    */
   constructor(tls: TlsClient) {
     this.tls = tls
@@ -1164,7 +1164,8 @@ export class TlsRecordClient {
    * `internal_error`.
    *
    * @param ok True when the caller accepts the server's certificate chain and CertificateVerify.
-   * @returns 0 when the handshake goes on, or the alert the connection failed with.
+   * @returns 0 when the handshake goes on, or the alert the connection failed with; `internal_error`,
+   *   without failing it, on a connection already open or closed.
    */
   authenticate(ok: boolean): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {

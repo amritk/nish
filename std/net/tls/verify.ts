@@ -100,7 +100,11 @@ const TLS_VERIFY_P384_WIDTH: i32 = 48
  * made with them.
  */
 export class TlsClientTrust {
-  /** The roots, as `pkiVerifyServer` looks them up. @internal Read by the free functions of this module. */
+  /**
+   * The roots, as `pkiVerifyServer` looks them up.
+   *
+   * @internal Read by the free functions of this module.
+   */
   store: PkiTrustStore
 
   /**

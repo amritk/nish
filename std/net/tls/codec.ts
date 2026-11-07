@@ -71,6 +71,10 @@
 
 // ---- Handshake message types (RFC 8446 §4) --------------------------------
 
+/**
+ * `client_hello` (§4.1.2): the first message of a handshake, and the client's second after a
+ * HelloRetryRequest.
+ */
 export const TLS_HANDSHAKE_CLIENT_HELLO: i32 = 1
 /** `server_hello` (§4.1.3), which a HelloRetryRequest shares, told apart by its `random`. */
 export const TLS_HANDSHAKE_SERVER_HELLO: i32 = 2

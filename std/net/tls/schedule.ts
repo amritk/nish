@@ -137,7 +137,8 @@ export const tlsSuiteKeyLength = (suite: i32): i32 => {
 /**
  * HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
  * bytes from `prk` (RFC 8446's Secret), the label (without its `"tls13 "`
- * prefix, which is added) and `context`, held as a `Secret`.
+ * prefix, which is added) and `context`, held as a `Secret`. It panics as
+ * `hkdfExpandLabelSha256Secret` (or its SHA-384 twin) does.
  *
  * @param hashLength 48 for SHA-384; any other value runs SHA-256.
  * @param prk The secret to expand. It stays the caller's: this function does not wipe it.

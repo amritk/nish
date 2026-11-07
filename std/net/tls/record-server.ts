@@ -169,9 +169,10 @@ const TLS_RECORD_PLAIN_SIZE: i32 = 2 * TLS_MAX_PLAINTEXT
 /** Where a record's content is opened to before it is handed on: the most content a record carries. */
 const TLS_RECORD_SCRATCH_SIZE: i32 = TLS_MAX_PLAINTEXT
 /**
- * The four pools a connection's record buffers are borrowed from: `output`,
- * `plain` and `scratch` for `TlsRecordServer`'s fields of those names, and
- * `reader` for its `TlsRecordReader`. A carrier with many slots makes one set
+ * The four pools a connection's record buffers are borrowed from: `output`
+ * and `plain` for `TlsRecordServer`'s fields of those names, `scratch` for the
+ * buffer it opens a record's content into, and `reader` for its record
+ * reader's buffer. A carrier with many slots makes one set
  * with a ceiling of its slot count and points every slot at it with
  * `TlsRecordServer.borrowFrom`, so a full server holds what preallocating
  * every slot would have held and an idle one holds only what earlier
@@ -1279,7 +1280,8 @@ export class TlsRecordServer {
    * traffic keys and secrets as well as what `TlsServer` holds.
    *
    * @param alert The `TLS_ALERT_*` description to send, such as `TLS_ALERT_INTERNAL_ERROR`. It is not sent
-   *     when the server has already sent its `close_notify`, and a second call does nothing.
+   *     once the connection is `TLS_RECORD_STATE_CLOSED` (set when `close` is called, before its
+   *     `close_notify` is sealed), and a second call does nothing.
    */
   fail(alert: i32): void {
     if (this.state === TLS_RECORD_STATE_FAILED) {
@@ -1462,8 +1464,9 @@ export class TlsRecordServer {
   /**
    * What the CertificateVerify signs, while `interest` says `TLS_RECORD_SIGN`; `null` otherwise.
    *
-   * @returns The bytes to sign, as `TlsServer.signatureInput` answers them; `null` when the connection is
-   *     not in its handshake.
+   * @returns The bytes to sign, the handshake's own array (read it, do not keep it), as
+   *     `TlsServer.signatureInput` answers them; `null` whenever the handshake is not in
+   *     `TLS_STATE_WAIT_SIGNATURE`, the connection being out of its handshake included.
    */
   signatureInput(): u8[] | null {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
@@ -1479,7 +1482,8 @@ export class TlsRecordServer {
    * signature is due.
    *
    * @param signature The signature over `signatureInput()`, made with the certificate's private key.
-   * @returns 0 when the flight is sealed, or the `TLS_ALERT_*` value the connection failed with.
+   * @returns 0 when the flight is sealed, or the `TLS_ALERT_*` value the connection failed with;
+   *     `internal_error`, without failing it, on a connection already open or closed.
    */
   sign(signature: u8[]): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
@@ -1509,7 +1513,8 @@ export class TlsRecordServer {
    * @param previousInfo What the carrier knows of `previous`.
    * @param strikes The carrier's record of tickets already resumed, where the one resumed now is recorded.
    * @param now The time now, in `monotonicNanos()`.
-   * @returns 0 when the answering flight is sealed, or the `TLS_ALERT_*` value the connection failed with.
+   * @returns 0 when the answering flight is sealed, or the `TLS_ALERT_*` value the connection failed with;
+   *     `internal_error`, without failing it, on a connection already open or closed.
    */
   resume(
     current: Secret<u8[]>,

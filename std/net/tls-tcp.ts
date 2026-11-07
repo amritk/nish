@@ -187,7 +187,7 @@ export class TlsTcpServer {
   /**
    * The connections built so far, slot `k`'s at `k`: one per slot ever
    * accepted into. `connection` never adds to it; a slot never built reads
-   * `vacant` instead.
+   * one shared vacant connection instead.
    */
   connections: TlsRecordServer[]
   /**
@@ -211,7 +211,7 @@ export class TlsTcpServer {
   /** Where the socket is read into before a connection takes the bytes: the largest record. */
   private scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
-  private peer: u8[]
+  peer: u8[]
   /** Signs every slot's CertificateVerify in `signP256`, one for the pool, keeping nothing per signature. */
   private signer: TlsP256Signer
   /**
@@ -279,6 +279,8 @@ export class TlsTcpServer {
    * real randomness, and every later connection reuses its state.
    *
    * @returns The new slot's connection, failed until `accept` restarts it, already pushed onto `connections`.
+   *
+   * @internal Read by `tests/link/net_tls_record_tcp`.
    */
   build(): TlsRecordServer {
     const random: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
@@ -353,8 +355,8 @@ export class TlsTcpServer {
   /**
    * The connection in `slot`: its state, its handshake (`tls`: suite, ALPN,
    * server name) and the alerts sent and received. A free slot answers the
-   * last connection it held. A slot never accepted into answers `vacant`,
-   * failed, as a free slot does, and builds no slot; a slot out of range
+   * last connection it held. A slot never accepted into answers one shared
+   * vacant connection, failed, as a free slot does, and builds no slot; a slot out of range
    * names slot 0's.
    *
    * @param slot A slot number, as `accept` answered it.
@@ -441,7 +443,8 @@ export class TlsTcpServer {
    * The socket of `slot` is readable: reads it until it would block or the
    * connection has no room, handing each read to the connection, then sends
    * what that produced. Answers the connection's `interest`, or, while the
-   * slot lingers, what `drain` answers; a free slot answers `TLS_RECORD_DONE`.
+   * slot lingers (`lingering`), `TLS_RECORD_WANT_READ` until its linger is
+   * over and then `TLS_RECORD_DONE`; a free slot answers `TLS_RECORD_DONE`.
    *
    * @param slot The slot whose socket `pollWait` reported readable.
    * @returns The slot's interest: `TLS_RECORD_*` bits saying what to wait for next.
@@ -491,11 +494,12 @@ export class TlsTcpServer {
   /**
    * Writes the connection's output until the socket would block or it is all
    * sent, and answers its `interest`; once the connection is over and the
-   * program has read what the client sent, the slot lingers (`linger`). A
+   * program has read what the client sent, the slot lingers (`lingering`). A
    * free slot answers `TLS_RECORD_DONE`.
    *
    * @param slot The slot whose output to send.
-   * @returns The slot's interest, or what `linger` or `drain` answers once the connection is over.
+   * @returns The slot's interest; once the connection is over, `TLS_RECORD_WANT_READ` while the slot
+   *   lingers and `TLS_RECORD_DONE` after.
    */
   flush(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -784,7 +788,7 @@ export class TlsTcpServer {
    * Closes the server's side of `slot`'s connection (§6.1): a `close_notify`
    * after whatever is already written, sent as the socket takes it. The slot
    * stays the program's until its interest says `TLS_RECORD_DONE` — every
-   * byte is sent and, once the slot lingers (`linger`), the client has hung
+   * byte is sent and, once the slot lingers (`lingering`), the client has hung
    * up — and the program calls `close`. Meanwhile the interest asks for the
    * socket to be read. Answers the interest.
    *
@@ -858,7 +862,7 @@ export class TlsTcpServer {
  * The socket is still connecting when the constructor returns, so the first
  * interest is writable alone; the first event on it, writable or a hang-up,
  * says how the connection went (`connectResult`), and a socket that did not
- * connect leaves the client done, its failure in `connectError`.
+ * connect leaves the client done, its failure in `failure()`.
  */
 export class TlsTcpClient {
   conn: TlsRecordClient
@@ -885,7 +889,7 @@ export class TlsTcpClient {
    * from `addr`. The ClientHello is sealed here and waits for the socket.
    *
    * @param addr The server's address and port in `nish:net`'s 18-byte form; a shorter array fails the
-   *   client with `connectError` -22 and nothing dialled.
+   *   client with `failure()` -22 and nothing dialled.
    * @param config The server name, ALPN protocols and the rest of the ClientHello; a config `TlsClient`
    *   refuses leaves the client failed before any socket is made.
    * @param trust The roots and policy the server's certificate chain is checked against.
@@ -936,7 +940,7 @@ export class TlsTcpClient {
   }
 
   /**
-   * Why a failed connection failed: `connectError` when TCP did not connect, else the alert
+   * Why a failed connection failed: the TCP failure when TCP did not connect, else the alert
    * (`TlsRecordClient.failure`).
    *
    * @returns A negative `nish:net` failure or `TLS_TCP_TIMED_OUT` when the trouble was below TLS,

@@ -554,18 +554,18 @@ class TlsExchangeWords {
    * it: the `TLS_DERIVED_SALT_*` constant on a full handshake, the salt
    * derived from the PSK early secret on a resumed one.
    *
-   * @internal Read by the free functions of this module.
+   * @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it.
    */
   salt0: u64 = 0
-  /** @internal Read by the free functions of this module. */
+  /** @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it. */
   salt1: u64 = 0
-  /** @internal Read by the free functions of this module. */
+  /** @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it. */
   salt2: u64 = 0
-  /** @internal Read by the free functions of this module. */
+  /** @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it. */
   salt3: u64 = 0
-  /** @internal Read by the free functions of this module. */
+  /** @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it. */
   salt4: u64 = 0
-  /** @internal Read by the free functions of this module. */
+  /** @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it. */
   salt5: u64 = 0
   /** 32 or 48: which handshake secret to extract. */
   hashLength: i32 = 0
@@ -769,7 +769,7 @@ export class TlsSecretPool {
   /**
    * Wipes the one secret `index` names (`TLS_SECRET_*`), leaving the rest; any other index wipes nothing.
    *
-   * @internal Read by `net/tls/client.ts`.
+   * @internal Read by `net/tls/client.ts` and `TlsServer`.
    */
   zero(index: i32): void {
     if (index === TLS_SECRET_HANDSHAKE) {
@@ -799,7 +799,11 @@ export class TlsSecretPool {
     }
   }
 
-  /** Wipes every secret in the pool. @internal Read by `net/tls/client.ts`. */
+  /**
+   * Wipes every secret in the pool.
+   *
+   * @internal Read by `net/tls/client.ts` and `TlsServer`.
+   */
   wipe(): void {
     wipe(this.handshake)
     wipe(this.clientHandshake)
@@ -1012,7 +1016,7 @@ export class TlsServer {
    * `1 << TLS_SECRET_*` for each. A secret wiped by `wipeSecret` keeps its
    * bit, since its place is still the one it was derived into.
    */
-  private held: i32 = 0
+  held: i32 = 0
   state: i32 = 0
   /** The alert the server failed with, or 0. */
   alert: i32 = 0
@@ -1042,7 +1046,11 @@ export class TlsServer {
    * @internal Read by `net/tls/record-server.ts`.
    */
   ticketWanted: boolean = false
-  /** Whether `issue` has run for this connection. @internal Read by `net/tls/record-server.ts`. */
+  /**
+   * Whether `issue` has run for this connection.
+   *
+   * @internal Read by `net/tls/record-server.ts`.
+   */
   issued: boolean = false
   /** Whether this connection resumed a ticket (row 1 of the record's table). */
   resumed: boolean = false
@@ -1155,8 +1163,6 @@ export class TlsServer {
    * Wipes the resumption master secret, which `sign` derives ahead of the
    * client's Finished. `issue` calls it once the ticket is sealed, and the
    * carrier when a connection ends, closed or failed, without one (TLS-1).
-   *
-   * @internal Read by `net/tls/record-server.ts`.
    */
   wipeResumption(): void {
     this.secrets().zero(TLS_SECRET_RESUMPTION)
@@ -1222,8 +1228,6 @@ export class TlsServer {
 
   /**
    * Zeroes the ephemeral key, which the record layer does once the ServerHello is written: not while a hello that offers a ticket waits for `resume`, whose exchange still needs it.
-   *
-   * @internal Read by `net/tls/record-server.ts`.
    */
   wipeEphemeral(): void {
     exposeWith(this.ephemeral, TLS_FROM, tlsZeroHeld)
@@ -1313,7 +1317,8 @@ export class TlsServer {
    * @param level The `TLS_LEVEL_*` level the bytes arrived at.
    * @param data The array holding the bytes; only read, and copied into the server's own buffer.
    * @param off Where in `data` the bytes start.
-   * @param len How many bytes, from `off`, to take; 0 does nothing and answers 0.
+   * @param len How many bytes, from `off`, to take; 0 takes nothing and answers 0, once the window is
+   *   checked and unless the server has already failed.
    * @returns 0, or the `TLS_ALERT_*` the server failed with (the same one again on every later call).
    */
   receive(level: i32, data: u8[], off: i32, len: i32): i32 {
@@ -1794,8 +1799,9 @@ export class TlsServer {
    * @param previousInfo The previous key's record.
    * @param strikes The register a resumed ticket's id is recorded in, so that it resumes only once.
    * @param now The time to judge the tickets at, in `monotonicNanos()`.
-   * @returns 0 when the hello was answered, resumed or not, or the `TLS_ALERT_*` the server failed with;
-   *   `internal_error` outside `TLS_STATE_WAIT_TICKET`.
+   * @returns 0 when the hello was answered, resumed or not, or the `TLS_ALERT_*` the server failed with:
+   *   the recorded alert in `TLS_STATE_FAILED`, `internal_error` in any other state but
+   *   `TLS_STATE_WAIT_TICKET`.
    */
   resume(
     current: Secret<u8[]>,
@@ -2289,7 +2295,8 @@ export class TlsServer {
    * array, and forgets them. Bytes are only ever written at a level whose
    * secrets are already known, so a carrier that installs keys as they appear
    * can always protect what this answers. A carrier that reads the output
-   * buffers in place calls `clearOutput` instead, and allocates nothing.
+   * buffers in place (the record server and QUIC, inside the standard
+   * library) forgets them with `clearOutput` instead, and allocates nothing.
    *
    * @param level The `TLS_LEVEL_*` level to take the bytes of.
    * @returns The pending bytes, owned by the caller; empty when there are none or `level` is not a level.

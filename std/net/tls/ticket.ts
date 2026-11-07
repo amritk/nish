@@ -7,6 +7,9 @@
  *       TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketState, TlsTicketStrikes,
  *       tlsTicketKeyDraw, tlsTicketKeyDue, tlsTicketOpen, tlsTicketSeal, tlsTicketSize,
  *     } from "nish/net/tls/ticket";
+ *     import { monotonicNanos } from "nish:process";
+ *     import { wipe } from "nish:secret";
+ *     // secureZero is a builtin and needs no import
  *
  *     const info = new TlsTicketKeyInfo()
  *     const key = tlsTicketKeyDraw(info, monotonicNanos())
@@ -344,7 +347,8 @@ const tlsTicketSealExposed = (key: u8[], input: u8[]): u8[] => {
  *
  * @param key The ticket key, lent: it is read only inside `exposeWith`, and stays the caller's to wipe.
  * @param info The key's record: its id heads the ticket and its count goes up by one on a seal.
- * @param state What the ticket carries; its `issuedAt` is overwritten with `now`.
+ * @param state What the ticket carries; its `issuedAt` is overwritten with `now`, unless the key
+ *   cannot seal at `now`, the state does not fit a ticket or `out` is too short.
  * @param now The issue time, in `monotonicNanos()`.
  * @param out Where the ticket is written, from index 0; at least `tlsTicketSize(state)` bytes.
  * @returns How many bytes of `out` hold the ticket, or 0 when nothing was sealed.
@@ -547,11 +551,19 @@ export class TlsTicketStrikes {
    * @internal Read by `net/tls.ts`.
    */
   expires: i64[]
-  /** 1 for a slot that has ever held an id. @internal Read by `net/tls.ts`. */
+  /**
+   * 1 for a slot that has ever held an id.
+   *
+   * @internal Read by `net/tls.ts`.
+   */
   used: u8[]
   /** How many `take`s were refused because no entry was free. */
   refusedFull: i64
-  /** How many ids the register holds. @internal Read by `net/tls.ts`. */
+  /**
+   * How many ids the register holds.
+   *
+   * @internal Read by `net/tls.ts`.
+   */
   capacity: i32
   /** How many ids are held or were held and expired: slots ever used. */
   filled: i32
@@ -590,7 +602,11 @@ export class TlsTicketStrikes {
     return toI32(hash % toI64(this.capacity))
   }
 
-  /** True when slot `slot` holds `id`. @internal Read by `net/tls.ts`. */
+  /**
+   * True when slot `slot` holds `id`.
+   *
+   * @internal Read by `net/tls.ts`.
+   */
   holds(slot: i32, id: u8[]): boolean {
     const at: i32 = slot * TLS_TICKET_NONCE_SIZE
     for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE && k < toI32(id.length); k++) {
