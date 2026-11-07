@@ -938,18 +938,21 @@ function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emi
   callee +27:5 Emitter.declareType -> @Emitter.declareType
   local +31:12 at: i32 (let)
   callee +32:9 isNetRangeBuffer -> @isNetRangeBuffer
-  local +33:13 end: string (const)
-  callee +33:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +34:13 field: string (const)
-  callee +34:21 IRFunction.emitValue -> @IRFunction.emitValue
-  local +37:13 size: string (const)
-  callee +37:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +37:59 Emitter.align8 -> @Emitter.align8
-  callee +38:7 emitSliceCheck -> @emitSliceCheck
-  callee +43:28 isWasmBuild -> @isWasmBuild
-  callee +46:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +46:35 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +46:54 netSymbol -> @netSymbol
+  local +34:13 buffer: string (const)
+  local +35:13 offset: string (const)
+  local +36:13 length: string (const)
+  local +37:13 end: string (const)
+  callee +37:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local +38:13 field: string (const)
+  callee +38:21 IRFunction.emitValue -> @IRFunction.emitValue
+  local +41:13 size: string (const)
+  callee +41:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +41:59 Emitter.align8 -> @Emitter.align8
+  callee +42:7 emitSliceCheck -> @emitSliceCheck
+  callee +47:28 isWasmBuild -> @isWasmBuild
+  callee +50:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +50:35 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +50:54 netSymbol -> @netSymbol
 function emitNamespaceProperty(emitter: Emitter, name: string): string -> @emitNamespaceProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType

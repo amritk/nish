@@ -1513,12 +1513,16 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   // The loop bound `at + 2 < values.length` proves all three reads in range.
   for (let at = 0; at + 2 < values.length && values.length === params.length; at++) {
     if (isNetRangeBuffer(name, at)) {
-      const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
+      // All three are read before the first emit, which the proof does not cross.
+      const buffer = values[at]
+      const offset = values[at + 1]
+      const length = values[at + 2]
+      const end = fn.emitValue(`add i64 ${offset}, ${length}`)
       const field = fn.emitValue(
-        `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[at]}, i64 0, i32 0`
+        `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${buffer}, i64 0, i32 0`
       )
       const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
-      emitSliceCheck(emitter, values[at + 1], end, size, true, "net")
+      emitSliceCheck(emitter, offset, end, size, true, "net")
     }
   }
   // A wasm build has no socket to ask, so its answer is the "no MSS" `-1`,
