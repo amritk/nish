@@ -390,8 +390,11 @@ export class TlsRecordProtection {
   contentType: i32 = 0
   /** The arrays `key` and `aes` point into: AES-128's and ChaCha20's or AES-256's. */
   key16: u8[]
+  /** The 32-byte key array `key` points into for ChaCha20-Poly1305 and AES-256-GCM; `clear` zeroes it. */
   key32: u8[]
+  /** The expanded AES-128 key schedule `aes` points to under AES-128-GCM, 10 rounds; `clear` wipes it. */
   aes128: AesKey
+  /** The expanded AES-256 key schedule `aes` points to under AES-256-GCM, 14 rounds; `clear` wipes it. */
   aes256: AesKey
   /** Where `advance` derives the next traffic secret: HashLen bytes of it. */
   next: u8[]
