@@ -497,7 +497,7 @@ export class BcryptBatcher {
   /**
    * How many requests are queued or answered and not yet handed out by `run`.
    *
-   * @returns The count of requests not yet answered by `run`.
+   * @returns The count; 0 once `run` has handed out every answer.
    */
   pending(): i32 {
     return toI32(this.kinds.length) - this.head + toI32(this.early.length)
@@ -532,7 +532,7 @@ export class BcryptBatcher {
    *
    * @param password The password to hash; the batcher copies it unless the salt
    *   is bad, and the caller still owns and wipes it.
-   * @param salt 16 fresh random bytes; it is copied.
+   * @param salt 16 fresh random bytes; read, not kept.
    * @param now The time of the call, from `monotonicNanos()`.
    * @returns The ticket its `BcryptAnswer` will carry.
    */

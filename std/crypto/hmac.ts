@@ -277,8 +277,7 @@ export class HmacSha256 {
   }
 
   /**
-   * The 32-byte tag, in a fresh array. Ends the computation, and wipes both
-   * hashers.
+   * Ends the computation and wipes both hashers.
    *
    * @returns A fresh 32-byte tag, which the caller owns.
    */
@@ -329,8 +328,7 @@ export class HmacSha384 {
   }
 
   /**
-   * The 48-byte tag, in a fresh array. Ends the computation, and wipes both
-   * hashers.
+   * Ends the computation and wipes both hashers.
    *
    * @returns A fresh 48-byte tag, which the caller owns.
    */
@@ -381,8 +379,7 @@ export class HmacSha512 {
   }
 
   /**
-   * The 64-byte tag, in a fresh array. Ends the computation, and wipes both
-   * hashers.
+   * Ends the computation and wipes both hashers.
    *
    * @returns A fresh 64-byte tag, which the caller owns.
    */
@@ -1150,7 +1147,7 @@ export class HmacKey {
   }
 
   /**
-   * The tag length in bytes: 32, 48 or 64.
+   * The tag length in bytes.
    *
    * @returns 32 for `HMAC_SHA256`, 48 for `HMAC_SHA384`, 64 for `HMAC_SHA512`.
    */

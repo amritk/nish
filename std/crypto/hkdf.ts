@@ -274,8 +274,7 @@ const hkdfExpandSha384Exposed = (prk: u8[], request: HkdfExpandRequest): u8[] | 
   hkdfExpandSha384(prk, request.info, request.length)
 
 /**
- * `hkdfExtractSha256` on input keying material held as a `Secret`: the 32-byte
- * PRK, held as one.
+ * `hkdfExtractSha256` on input keying material held as a `Secret`.
  *
  * @param salt The public salt; an empty one stands for HashLen zero bytes
  *   (§2.2).
@@ -289,8 +288,7 @@ export const hkdfExtractSha256Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u
 }
 
 /**
- * `hkdfExtractSha384` on input keying material held as a `Secret`: the 48-byte
- * PRK, held as one.
+ * `hkdfExtractSha384` on input keying material held as a `Secret`.
  *
  * @param salt The public salt; an empty one stands for HashLen zero bytes
  *   (§2.2).
@@ -304,8 +302,7 @@ export const hkdfExtractSha384Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u
 }
 
 /**
- * `hkdfExpandSha256` on a PRK held as a `Secret`: the output keying material,
- * held as one, or `null` where `hkdfExpandSha256` answers `null`.
+ * `hkdfExpandSha256` on a PRK held as a `Secret`.
  *
  * @param prk The pseudorandom key, at least 32 bytes, read only inside
  *   `exposeWith`.
@@ -324,8 +321,7 @@ export const hkdfExpandSha256Secret = (prk: Secret<u8[]>, info: u8[], length: i3
 }
 
 /**
- * `hkdfExpandSha384` on a PRK held as a `Secret`: the output keying material,
- * held as one, or `null` where `hkdfExpandSha384` answers `null`.
+ * `hkdfExpandSha384` on a PRK held as a `Secret`.
  *
  * @param prk The pseudorandom key, at least 48 bytes, read only inside
  *   `exposeWith`.
