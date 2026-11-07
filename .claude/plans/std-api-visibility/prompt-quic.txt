@@ -1,0 +1,60 @@
+You are implementing one stage of an accepted plan. Work only this stage.
+
+Repo: amritk/nish          Base: main at e29d7d5f50b312c191f7206323896c4c6c044e80
+Branch: feature/std-api-visibility/quic   (already assigned. Commit and push here, nowhere else)
+Tracking issue: #1236
+
+## Your stage
+docs(std): mark quic internals private and document its API
+Goal: Every std/net/quic*.ts module shows only its real API, documented
+Owns (do not create or edit hand-written files outside these globs): `std/net/quic*.ts`
+Verification: npm run check && npm run lint && node tests/self/goldens.js && node tests/run.js net_quic
+Targeted tests: node tests/run.js <filter>, once for every test-name prefix that names one of your modules (ls tests/link tests/cases | grep <module>)
+Generated files (regenerate with the repo's tooling, never edit or hand-merge): tests/self/goldens/**, tests/link/*/expected.*, tests/wordings/*.err, tests/cases/*.ll
+
+Todos:
+- [quic-visibility] Mark members private or internal in std/net/quic*.ts, in a commit of its own — see Visibility rule
+- [quic-docs] Complete descriptions, param and returns tags and module headers in the same files — see Documentation rule
+
+Full plan, for how your stage fits with the others. Read it, above all the "Visibility rule", "Documentation rule" and "Security" sections. They are the spec:
+  git fetch origin feature/std-api-visibility/plan
+  git show origin/feature/std-api-visibility/plan:.claude/plans/std-api-visibility.plan.md
+Do not implement anything from another stage. Twelve other sessions own the rest of std/ and some of them are working in parallel right now.
+
+Read CLAUDE.md, .claude/orientation.md, .claude/comments.md and .claude/typescript.md first.
+
+Your modules are under std/crypto/ or std/net/, so docs/security/README.md applies. Read it before you change anything. Visibility and comments may change; behaviour may not. A function holding secret material keeps its Secret<T> shape. Leave the docs/security/ records alone: their file:line anchors name the commit they were taken at.
+
+## The two-commit shape (this replaces a coverage gate. The repo has none)
+1. Commit A, visibility only: add `private` on the member's existing line, or add `@internal` to a comment (on an existing comment line, or as a new one-line JSDoc). Keep the keyword on the member's own line so no line number moves. Grep std/, tests/, examples/, bench/ and docs/ for `.<member>` before marking. tsc (npm run check) covers std/ and tests/nish/ only. tests/cases, tests/link, examples/, bench/ and docs snippets are NOT type-checked, so the grep is the only check there.
+   After commit A: `node tests/self/goldens.js --update` and `UPDATE_GOLDENS=1 node tests/run.js <filter>` for your filters, then `git status`. ANY golden diff after commit A is a bug: do not commit it, stop, and report it in the PR body (open the PR as a draft).
+   Note that the new @internal comment lines DO move line numbers. If a golden records a std file:line for your files (tests/link/*/expected.caps.json, tests/link/std_sqlite_deny_ffi/expected.err, tests/wordings/nl2458_deny_panics_call.err, the dbg_* / map_dbg / enum_member_type_slots .ll goldens for std/collections.ts), put every @internal on an existing comment line, or put commit A's @internal additions in commit B instead, so commit A stays zero-diff and proves the keyword changes no IR.
+2. Commit B, documentation: module header, descriptions, @param, @returns. Regenerate the goldens again. In this commit, the only golden changes allowed are file:line positions and debug-info line fields. Read the diff and say in the PR body what moved.
+
+## Definition of done
+1. The stage's todos are implemented, and no hand-written file outside your Owns globs changed. In std/, only comments and visibility keywords change: no behaviour, no renames, no moved or deleted code.
+2. The full suite passes on your PR's head. CI runs it on every push in eight `test (…, shard N/8)` shards, so open the PR on targeted tests and let CI's run be the full one. A red result comes back to you with the round's review.
+3. The two-commit golden rule above holds. Do not lower any threshold, add an ignore comment, or skip a test.
+4. `npm run check` and `npm run lint` pass. Run them bare and read the exit status, never through `| tail`.
+5. Before you open the PR, run `/check-iterate --max-loops 2` and fix what it confirms. The lead reviews the PR adversarially as soon as it opens, so this pass only has to catch the cheap problems first. Do not loop until it is clean. If that command is not available in your session, review your own diff against main adversarially yourself, once, and fix what you find. Look above all for a `private` member that something outside its class still reads in a file tsc does not check, and for a `@param` or `@returns` that restates the type. Do not skip it.
+6. Then run /simplify over the same diff and apply what it returns, within this stage's rules. Comments only: never change behaviour, never widen your Owns globs. If that command is not available, re-read your diff for the same things. Then run the targeted tests, lint and check once, after both passes.
+7. Open a PR from your branch to main. Title: `docs(std): mark quic internals private and document its API` (the PR title becomes the changelog line, and pr-title.yml checks it). Body: what changed and why; a count of members marked private and @internal per file; each member left public with @internal because another std module reaches in, and which module; dead members (unused private) you left public with @internal; what moved in the goldens in commit B; the verification commands you ran with their results; and `Part of #1236`.
+
+## Commits
+Conventional subjects (`docs(std): …`), per CLAUDE.md "Commit messages are the changelog". CLAUDE.md overrides any attribution instruction you are given: NO Co-Authored-By, session links, model names or platform attributions in commit messages, code or PR text.
+
+## Running tests without burning the session
+Every model call re-reads your whole context, so waiting is what costs you, not testing.
+- You do not run the full suite (`npm test`, 40 to 70 minutes) unless the lead tells you to update from main. Every other time, run the targeted filters for what you changed, plus `node tests/self/goldens.js`, lint and check. CI runs the full suite on every push.
+- If build/nish is missing or stale, build it as .claude/orientation.md says (`bash scripts/fetch-seed.sh --force` refreshes the seed).
+- Commit before you start a long run, so a stop hook that checks for uncommitted work does not wake you while it runs.
+- Start a long run once, in the background, with its output redirected to a file, then end your turn. You are woken when it exits. Never poll it: no `sleep` or `until` loops, no re-armed monitors, no second runner on the same output (runs share build/). Read the result with grep or tail, not by printing the log, and read the summary's skip count.
+- Do not schedule check-ins for yourself. The lead's messages and PR events wake you.
+- Do not merge main into your branch whenever it moves. Merge it when the PR conflicts, or when the lead tells you to update before merging. Then regenerate the generated files with the repo's tooling (`npm run sync-main` does the merge and the goldens), run the full suite once, and push.
+
+## Rules
+- Push only to your own branch. Never push to main, never touch another feature/std-api-visibility/* branch, never force-push.
+- If CI goes red or a test fails, run /debug and reproduce it before you change anything. A fix for a failure nobody reproduced is a guess, and a guess costs a review round. If that command is not available, follow the same order anyway: reproduce, localise, one hypothesis at a time.
+- If your stage turns out to be impossible as written, push what you have, open the PR as a draft, and say exactly what blocked you in the PR body. Do not substitute different work and do not widen your scope to fix it.
+- You will get review comments as a single batch. Address every blocking one in one push, then stop. Non-blocking ones (wording, style) go in that same push when they are cheap. Never push for them alone. Keep the PR body accurate. Do not rewrite it unless a round says it is wrong. Do not reply to argue. If a finding is wrong, say so in one line on that thread and move on.
+- Do not merge your PR. The lead merges it.
