@@ -890,7 +890,9 @@ const preforkDiscard = (buf: u8[], _index: i32, fd: i32, _events: i32): void => 
  * dropped; `preforkSupervise` hands them to the program.
  *
  * @param args the process's arguments, `process.argv`
- * @param config the supervisor's settings; a worker reads only `pin`
+ * @param config the supervisor's settings, every field checked (a bad one
+ *   panics) in the supervisor and each worker alike; past that check a
+ *   worker reads only `pin`
  * @returns in a worker, its index at once; in the supervisor, once it is done,
  *   `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or `PREFORK_SPAWN_FAILED`
  */
@@ -915,7 +917,9 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
  * `PREFORK_SPAWN_FAILED` before any worker starts.
  *
  * @param args the process's arguments, `process.argv`
- * @param config the supervisor's settings; a worker reads only `pin`
+ * @param config the supervisor's settings, every field checked (a bad one
+ *   panics) in the supervisor and each worker alike; past that check a
+ *   worker reads only `pin`
  * @param state the program's own value, passed to every `onChannel` call
  * @param onChannel what the supervisor runs when worker `index`'s channel
  *   `fd` wakes it, with `pollWait`'s `events`

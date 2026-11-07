@@ -2673,8 +2673,8 @@ import GzipCompressor from "nish/compress/gzip" -> struct GzipCompressor
 import GzipFixedCompressor from "nish/compress/gzip" -> struct GzipFixedCompressor
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 74:10 wrappingAdd from "nish:unsafe"
-unsafe call 519:26 wrappingAdd (node 1792)
-unsafe call 559:24 wrappingAdd (node 1947)
+unsafe call 520:26 wrappingAdd (node 1792)
+unsafe call 560:24 wrappingAdd (node 1947)
 const HTTP_CODING_IDENTITY: i32 = 0 [exported]
 const HTTP_CODING_GZIP: i32 = 1 [exported]
 const HTTP_CODING_DEFLATE: i32 = 2 [exported]

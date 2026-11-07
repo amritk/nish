@@ -447,7 +447,8 @@ export class HttpCompressor {
    * `minLength` to `maxLength` bytes. A level outside 0 to 9, a negative
    * `minLength` or a `maxLength` below it panics.
    *
-   * @param level the deflate level for bodies past `fixedLimit`, 0 to 9
+   * @param level the deflate level, 0 to 9, for bodies past `fixedLimit`, and
+   *   for every body when `encoder` is `HTTP_ENCODER_LEVEL`
    * @param minLength the shortest body worth compressing, in bytes
    * @param maxLength the longest body it will compress, in bytes; `output` is
    *   sized for it once, here

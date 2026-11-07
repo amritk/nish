@@ -163,8 +163,8 @@ export class HandlerLimits {
   /** The most connections at once. */
   slots: i32 = 256
   /**
-   * The JSON scratch buffer's size: the largest body `json` and `problem` can write.
-   * @internal Read by `HttpHandler`'s constructor in this module to size the buffer it owns.
+   * Bytes in the JSON scratch buffer: the largest body `json` and `problem`
+   * can write. A value past it makes `sendJson` answer 500. At least 256.
    */
   jsonBytes: i32 = 65536
   /** The most readiness events one `wait` takes. */
@@ -279,7 +279,6 @@ export class HttpRequest {
 
   /**
    * Whether the method is exactly `method` (methods are case-sensitive, RFC 9110 §9.1).
-   * @internal Called by `HttpHandler` in this module to route a HEAD as GET when only GET has the path; programs usually dispatch on `route`.
    * @param method the method name to compare with, such as `"GET"`
    * @returns true when the request's method is byte for byte `method`
    */
@@ -529,7 +528,10 @@ export class HttpHandler {
    * (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of
    * `nish/net/prefork`), routing through `router`, whose routes are added
    * before the first `wait`.
-   * @param limits the caps and timeouts, read once here; changing them later has no effect
+   * @param limits the caps and timeouts. `slots`, `jsonBytes`, `maxEvents`
+   *   and `bodyTimeout` are read once here, so changing them later has no
+   *   effect; `http` is kept by the carrier, which reads its timeouts and
+   *   caps live
    * @param listener the listening socket's descriptor, still the program's to close
    * @param router the routes, which the handler keeps and consults at each request head
    */

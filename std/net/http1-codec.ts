@@ -187,7 +187,11 @@ export class Http1Parser {
   // the struct is the 200 bytes its fields sum to, rounded to 8.
 
   // --- the request's buffers -------------------------------------------------
-  /** The bytes fed and not yet consumed are `buf[start .. end)`. */
+  /**
+   * The bytes fed and not yet consumed are `buf[start .. end)`.
+   * @internal Filled by `feed` in this module, and swapped for a pooled buffer
+   * by std/net/http1-server.ts when it parks or resumes the input.
+   */
   buf: u8[]
   /**
    * The request line and the kept field lines of the request, copied out of
@@ -209,6 +213,11 @@ export class Http1Parser {
    * hand the bytes after an upgrade to the WebSocket reader.
    */
   start: i32 = 0
+  /**
+   * Where the unconsumed input ends in `buf`.
+   * @internal Moved by `feed` in this module, and reset by
+   * std/net/http1-server.ts when it parks the input buffer.
+   */
   end: i32 = 0
   /**
    * Where the search for the next LF resumes, so a line fed a byte at a time is scanned once.

@@ -2175,7 +2175,9 @@ export class Http1Server {
    *
    * @param slot the slot `accept` answered
    * @param wants the interest bits a serve call answered; only `H1_WANT_READ` and `H1_WANT_WRITE` count
-   * @returns true when the interest changed and the program should call `pollModify`; false when it is already armed so
+   * @returns true when the interest changed and the program should call
+   *   `pollModify`; false when `slot` is already armed for it, or is free or
+   *   out of range
    */
   rearm(slot: i32, wants: i32): boolean {
     const interest: i32 = wants & (H1_WANT_READ | H1_WANT_WRITE)
