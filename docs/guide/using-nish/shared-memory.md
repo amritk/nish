@@ -228,6 +228,9 @@ export const main = (): i32 => {
 - **Neither blocks.** With no room for `n` bytes now, `reserve` answers an
   empty window and lends nothing; try again later, as with `tryPush`. `n` is
   from 1 to half the ring less 4, so an empty ring always has room for one.
+  That makes a ring of 8 bytes unable to reserve at all (`reserve` stops the
+  program with `an SPSC ring of 8 bytes cannot reserve`), and a ring of 16
+  allows 4 bytes; use `tryPush` there, or a bigger ring.
 - **`abandon()` publishes nothing.** It ends a reservation you do not want.
 - **An empty `peek` may still have a record.** Besides an empty ring, it
   answers empty for a record of length 0 and for one `tryPush` wrote across
@@ -237,11 +240,18 @@ export const main = (): i32 => {
 - **After `commit`, `abandon` or `release` the window is empty**, and the
   next index stops the program, as after `giveBack`. Each end keeps one
   window and points it at the next record, so the busy path allocates
-  nothing; do not keep a window past the call that ends it.
+  nothing; do not keep a window past the call that ends it. A reference you
+  do keep is re-pointed by the next `reserve` or `peek`, and then aliases that
+  record: writes through it land in it, and reads see it.
+- **The reserved bytes are not zeroed.** They hold whatever the ring last held
+  there; `commit` only what you wrote.
 - **One at a time.** A second `reserve` before `commit` or `abandon`, a
-  `tryPush` while a reservation is open, or a `peek`, `tryPop` or `popBatch`
-  while a record is lent stops the program and names the call. So do
-  `commit` of more bytes than were reserved, and a `push` onto the window.
+  `tryPush` while a reservation is open, or a `peek`, `tryPop`, `popBatch` or
+  `popWait` while a record is lent stops the program and names the call (for
+  `popWait`, `tryPop`, which it calls). So does `commit` of more bytes than
+  were reserved. A `push` onto the window is not noticed at once: the program
+  stops later, at `commit` or `abandon` (or `release`, for a peeked window),
+  with `window of length 9 is no longer the region's bytes: a push moved it`.
 - **A peeked record is not a snapshot.** Its bytes are the ring's, so a
   broken producer can change them while you read. Check a field once, or
   copy the record into a buffer of your own first (or take it with `tryPop`) when
@@ -251,6 +261,9 @@ export const main = (): i32 => {
   `tryPush`, `reserve`, `tryPop`, `popBatch`, `popWait` and `peek` mix freely
   on one ring. Both ends must be built from a Nish that has `reserve`: an
   older consumer stops at the marker with `the ring is corrupt`.
+- **A peek consumer on a doorbell ring polls.** `popWait` takes records, not
+  windows, and there is no wait call for `peek` yet: loop on `peek` (and
+  `tryPop` when it answers empty) instead.
 
 ## Sleeping until there is work
 

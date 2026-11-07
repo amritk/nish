@@ -214,6 +214,10 @@ const child = (name: string, what: string): i32 => {
     } else {
       ring.popBatch(buf, new Array<i32>(2))
     }
+  } else if (what === "popwait-peeked") {
+    ring.tryPush(buf, 0, 4)
+    ring.peek()
+    ring.popWait(buf, 0, 0)
   } else if (what === "release-none") {
     ring.release()
   } else if (what === "lone-marker") {
@@ -221,6 +225,28 @@ const child = (name: string, what: string): i32 => {
     ring.tryPush(buf, 0, 4)
     region.storeI32(SMALL_AT + 256, -1, RELAXED)
     ring.tryPop(buf, 0)
+  } else if (what === "forged-pop" || what === "forged-batch" || what === "forged-peek") {
+    // A marker in the middle of a lap (the data starts at SMALL_AT + 256, so
+    // +8 is the second record): the record after it would be at the
+    // next lap, 64, which is past the published tail. The word there is a
+    // plausible length (4), so only the tail check can refuse it.
+    ring.tryPush(buf, 0, 4)
+    ring.tryPush(buf, 0, 4)
+    ring.tryPop(buf, 0)
+    region.storeI32(SMALL_AT + 256 + 8, -1, RELAXED)
+    if (what === "forged-pop") {
+      ring.tryPop(buf, 0)
+    } else if (what === "forged-batch") {
+      ring.popBatch(buf, new Array<i32>(2))
+    } else {
+      ring.peek()
+    }
+  } else if (what === "tiny") {
+    const eight = initSpscRing(region, SMALL_AT, 8, false)
+    eight.reserve(1)
+  } else if (what === "sixteen") {
+    const sixteen = initSpscRing(region, SMALL_AT, 16, false)
+    sixteen.reserve(5)
   } else if (what === "loop-commit" || what === "loop-release") {
     let w: readonly u8[] = ring.reserve(16)
     if (what === "loop-release") {
@@ -326,6 +352,15 @@ const alone = (t: Suite, region: SharedRegion): void => {
   t.eqI32("peek answers empty for a record of length 0", toI32(back.peek().length), 0)
   t.eqI32("which tryPop takes", back.tryPop(dst, 0), 0)
   t.eqI32("leaving none", back.tryPop(dst, 0), RING_EMPTY)
+
+  // A ring of 16 allows a reservation of 4 and no more; one of 8 none.
+  const sixteen = initSpscRing(region, SMALL_AT, 16, false)
+  const four: u8[] = sixteen.reserve(4)
+  t.eqI32("a ring of 16 reserves 4 bytes", toI32(four.length), 4)
+  fill(four, 0, 4, 9)
+  sixteen.commit(4)
+  t.eqI32("and commits them", sixteen.tryPop(dst, 0), 4)
+  t.ok("whole", filled(dst, 0, 4, 9))
 }
 
 /** tryPush and reserve in turn, over many laps of a ring of 256. */
@@ -456,6 +491,13 @@ export const main = (): i32 => {
   panics(t, name, "batch-peeked", `${ring} popBatch ${lent}`)
   panics(t, name, "release-none", `${ring} release without a record peek lent`)
   panics(t, name, "lone-marker", `${ring} a record of length -1 at position 64: the ring is corrupt`)
+  const forged = `${ring} a record of length 4 at position 64: the ring is corrupt`
+  panics(t, name, "forged-pop", forged)
+  panics(t, name, "forged-batch", forged)
+  panics(t, name, "forged-peek", forged)
+  panics(t, name, "tiny", `${ring} an SPSC ring of 8 bytes cannot reserve`)
+  panics(t, name, "sixteen", `${ring} a reservation of 5 bytes is not from 1 to 4`)
+  panics(t, name, "popwait-peeked", `${ring} tryPop ${lent}`)
   panics(t, name, "loop-commit", "index out of range: 2 >= 0")
   panics(t, name, "loop-release", "index out of range: 2 >= 0")
   t.ok("unlink the region", unlinkRegion(name).isOk())
