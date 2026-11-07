@@ -818,6 +818,7 @@ case "$profile" in
           exports+=("-Wl,--export=$name")
         done
       fi
+      # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
       memory=(-Wl,-z,stack-size=65536)
       if [ -n "$memory_mib" ]; then
         bytes=$((memory_mib * 1048576))
