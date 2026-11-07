@@ -61,7 +61,7 @@ const OUTBOUND_V4_AT: i32 = 12
  */
 export class OutboundPolicy {
   // Declared widest first, so no byte of a policy is padding.
-  /** The names a URL may carry, lower-cased; empty for any. See `allowHost`. */
+  /** The names a URL may carry, lower-cased; empty for any. See `allowHost`. @internal */
   allowHosts: string[]
   /** `OUTBOUND_PERMIT_BYTES` per prefix `permit` let through. */
   permitted: u8[]

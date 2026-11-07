@@ -131,8 +131,11 @@ const WS_S_ERROR: i32 = 2
  * Table 3-7), so that a sequence cut between two fragments is checked whole.
  */
 class WsUtf8 {
+  /** @internal Validator state `websocketUtf8Run` reads and writes. */
   need: i32 = 0
+  /** @internal Validator state `websocketUtf8Run` reads and writes. */
   lo: i32 = 0x80
+  /** @internal Validator state `websocketUtf8Run` reads and writes. */
   hi: i32 = 0xbf
 }
 
@@ -226,13 +229,13 @@ export class WsDecoder {
   data: u8[]
   /** The peer's close reason after `WS_CLOSE`, or what was wrong after `WS_ERROR`. */
   closeReason: string = ""
-  /** The bytes fed and not yet consumed are `buf[start .. end)`. */
+  /** The bytes fed and not yet consumed are `buf[start .. end)`. @internal */
   buf: u8[]
-  /** The message being assembled; its first `messageLen` bytes are live. */
+  /** The message being assembled; its first `messageLen` bytes are live. @internal */
   message: u8[]
-  /** A control frame's payload, kept apart so a ping cannot disturb a message in progress. */
+  /** A control frame's payload, kept apart so a ping cannot disturb a message in progress. @internal */
   control: u8[]
-  /** The UTF-8 check of the text message being assembled. */
+  /** The UTF-8 check of the text message being assembled. @internal */
   utf8: WsUtf8
 
   maxMessage: i32 = 0
@@ -241,11 +244,15 @@ export class WsDecoder {
   opcode: i32 = 0
   /** The peer's status code after `WS_CLOSE` (`WS_CLOSE_NO_STATUS` when it sent none), or the one to send after `WS_ERROR`. */
   closeCode: i32 = 0
+  /** @internal The unread bytes are `buf[start .. end)`; `nish/net/http1-server` reads them to size its input. */
   start: i32 = 0
+  /** @internal The end of the unread bytes; `nish/net/http1-server` reads it with `start`. */
   end: i32 = 0
+  /** @internal Decoder state the module's `websocket` helpers read and write. */
   state: i32 = 0
-  /** The opcode of the message whose fragments are arriving, or 0 between messages. */
+  /** The opcode of the message whose fragments are arriving, or 0 between messages. @internal */
   messageOpcode: i32 = 0
+  /** @internal Decoder state the module's `websocket` helpers read and write. */
   messageLen: i32 = 0
 
   expectMasked: boolean = false

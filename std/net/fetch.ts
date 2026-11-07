@@ -294,7 +294,7 @@ export class HttpResponse {
  */
 export class HttpBodyReader {
   client: FetchSyncClient
-  generation: i32
+  private generation: i32
 
   constructor(client: FetchSyncClient, generation: i32) {
     this.client = client
@@ -376,47 +376,47 @@ export class FetchSyncClient {
   options: HttpOptions
   errorText: string = ""
   /** The proxy settings in use; "" for none. `setProxies` replaces them. */
-  httpProxy: string = ""
-  httpsProxy: string = ""
-  noProxy: string = ""
+  private httpProxy: string = ""
+  private httpsProxy: string = ""
+  private noProxy: string = ""
   /** Where `fd` leads: an origin, or the proxy an http request went through. */
-  route: string = ""
+  private route: string = ""
   /** The outbound policy `fd` was dialled under; a connection is reused only under the same one. */
-  routePolicy: OutboundPolicy | null = null
-  parser: Http1ResponseParser
+  private routePolicy: OutboundPolicy | null = null
+  private parser: Http1ResponseParser
   /** The TLS connection over `fd` to an https origin; null over plain http. */
-  tls: TlsRecordClient | null = null
+  private tls: TlsRecordClient | null = null
   /** The roots an https server's chain must end at, read on the client's first https fetch. */
-  trust: TlsClientTrust | null = null
-  ready: i32[]
-  rbuf: u8[]
+  private trust: TlsClientTrust | null = null
+  private ready: i32[]
+  private rbuf: u8[]
   /** Where TLS application data is read before the parser takes it; empty until the first https connection. */
-  plain: u8[]
+  private plain: u8[]
   /** The fetch's end in monotonic nanoseconds; `HTTP_CLIENT_NEVER` for none. */
-  deadline: i64 = 0
+  private deadline: i64 = 0
   /** The last failure's `HTTP_E_*` code; `HTTP_E_NONE` after a fetch that answered. */
   error: i32 = 0
-  fd: i32 = -1
+  private fd: i32 = -1
   /** The fd registered in `loop`, and for what. */
-  loop: i32 = -1
-  watched: i32 = -1
-  watchedEvents: i32 = 0
+  private loop: i32 = -1
+  private watched: i32 = -1
+  private watchedEvents: i32 = 0
   /** Counts responses; a reader reads only while its own is the open one. */
-  generation: i32 = 0
+  private generation: i32 = 0
   /** How the latest response's body failed, `HTTP_E_NONE` while it has not; its reader answers it again. */
-  bodyError: i32 = 0
+  private bodyError: i32 = 0
   /** Where the latest response's unread body bytes start in `parser`, and how many. */
-  pendOff: i32 = 0
-  pendLen: i32 = 0
+  private pendOff: i32 = 0
+  private pendLen: i32 = 0
   /** Whether `fd` has carried a response before the one in flight. */
   reused: boolean = false
   /** Whether any byte of the response in flight has arrived. */
-  gotByte: boolean = false
+  private gotByte: boolean = false
   /** Whether the failure in hand was the connection going away, which a retry may cure. */
-  lost: boolean = false
+  private lost: boolean = false
   /** Whether the latest response's body is unread. */
-  bodyOpen: boolean = false
-  /** Whether this is `fetchSync`'s client, closed whole once its one body is done with. */
+  private bodyOpen: boolean = false
+  /** Whether this is `fetchSync`'s client, closed whole once its one body is done with. @internal */
   once: boolean = false
 
   constructor(options: HttpOptions) {
@@ -540,7 +540,7 @@ export class FetchSyncClient {
   }
 
   /** Why the outbound policy refuses to let a URL name `url`'s host; "" when there is no policy or it allows the host. */
-  hostRefusal(url: Url): string {
+  private hostRefusal(url: Url): string {
     const policy: OutboundPolicy | null = this.options.outbound
     if (policy === null || outboundHostAllowed(policy, url.host)) {
       return ""
@@ -562,7 +562,7 @@ export class FetchSyncClient {
    * leads to the same place, once more on a fresh one when a kept connection
    * turns out to be gone (see the module comment).
    */
-  exchange(
+  private exchange(
     url: Url,
     method: string,
     names: string[],
@@ -593,7 +593,7 @@ export class FetchSyncClient {
    * there, else a new one, through a proxy when the settings say so. False on
    * a failure, with the error set.
    */
-  open(url: Url): boolean {
+  private open(url: Url): boolean {
     const port: i32 = url.port >= 0 ? url.port : urlDefaultPort(url.scheme)
     // A proxy would look the name up itself, past the policy's address check.
     const proxyText: string =
@@ -668,7 +668,7 @@ export class FetchSyncClient {
    * the PEM file `rootsPemPath` names, else the system's. False, with the
    * error set, when none could be read, since no server could then be trusted.
    */
-  loadTrust(): boolean {
+  private loadTrust(): boolean {
     if (this.trust !== null) {
       return true
     }
@@ -690,7 +690,7 @@ export class FetchSyncClient {
    * clock's time before its Finished is read. True once the connection is
    * open and the client's last flight sent; false with the error set.
    */
-  secure(host: string, early: u8[]): boolean {
+  private secure(host: string, early: u8[]): boolean {
     const trust: TlsClientTrust | null = this.trust
     if (trust === null) {
       this.fail(HTTP_E_CERTIFICATE, "no trusted root certificates are loaded")
@@ -744,7 +744,7 @@ export class FetchSyncClient {
    * Asks `proxy`, on the fresh `fd`, for a tunnel to `host:port`. True once
    * the proxy answers 2xx, every byte after its head belonging to the tunnel.
    */
-  tunnel(host: string, port: i32, proxy: Url): boolean {
+  private tunnel(host: string, port: i32, proxy: Url): boolean {
     const authority: string = `${httpClientHostText(host)}:${port}`
     const names: string[] = ["Host"]
     const values: string[] = [authority]
@@ -785,7 +785,13 @@ export class FetchSyncClient {
   }
 
   /** Writes the request on `fd` and reads its response's head. */
-  send(url: Url, method: string, names: string[], values: string[], body: u8[] | null): HttpResponse | null {
+  private send(
+    url: Url,
+    method: string,
+    names: string[],
+    values: string[],
+    body: u8[] | null
+  ): HttpResponse | null {
     const viaProxy: boolean = this.route.startsWith("proxy ")
     const sendNames: string[] = []
     const sendValues: string[] = []
@@ -871,7 +877,7 @@ export class FetchSyncClient {
   }
 
   /** Reads up to the final response's head: `HTTP1_HEAD`, `HTTP1_UPGRADE`, or -1 with the error set. */
-  head(): i32 {
+  private head(): i32 {
     let event: i32 = this.pump()
     while (event === HTTP1_INFORMATIONAL) {
       event = this.pump()
@@ -884,7 +890,7 @@ export class FetchSyncClient {
   }
 
   /** The parser's next event, reading from the socket as it needs; -1 with the error set. */
-  pump(): i32 {
+  private pump(): i32 {
     let event: i32 = this.parser.next()
     while (event === HTTP1_NEED_MORE) {
       if (!this.fill()) {
@@ -920,7 +926,7 @@ export class FetchSyncClient {
   }
 
   /** One read of the response into the parser, waiting up to `readTimeoutMs`; false with the error set. */
-  fill(): boolean {
+  private fill(): boolean {
     if (this.overdue()) {
       return false
     }
@@ -962,7 +968,7 @@ export class FetchSyncClient {
    * `readTimeoutMs`: the count, 0 at the end of the stream, or -1 with the
    * error set.
    */
-  readRaw(want: i32): i32 {
+  private readRaw(want: i32): i32 {
     const until: i64 = this.readDeadline()
     let n: i32 = netRead(this.fd, this.rbuf, 0, want)
     while (n === HTTP_CLIENT_WOULD_BLOCK) {
@@ -982,7 +988,7 @@ export class FetchSyncClient {
   }
 
   /** One read of the socket into the TLS connection `conn`, waiting up to `readTimeoutMs`; false with the error set. */
-  receiveTls(conn: TlsRecordClient): boolean {
+  private receiveTls(conn: TlsRecordClient): boolean {
     const room: i32 = conn.space()
     const want: i32 = room < HTTP_CLIENT_READ_BYTES ? room : HTTP_CLIENT_READ_BYTES
     if (want <= 0) {
@@ -1004,7 +1010,7 @@ export class FetchSyncClient {
   }
 
   /** Sends everything `conn` has sealed, waiting as `writeRaw` does; false with the error set. */
-  flushTls(conn: TlsRecordClient): boolean {
+  private flushTls(conn: TlsRecordClient): boolean {
     while (conn.outputEnd > conn.outputStart) {
       const len: i32 = conn.outputEnd - conn.outputStart
       if (!this.writeRaw(conn.output, conn.outputStart, len)) {
@@ -1017,7 +1023,7 @@ export class FetchSyncClient {
   }
 
   /** Sets the error for the failed TLS connection `conn`, saying how it failed. */
-  failTls(conn: TlsRecordClient): void {
+  private failTls(conn: TlsRecordClient): void {
     if (conn.ended && !conn.peerClosed) {
       this.fail(HTTP_E_TLS, "the server closed the connection without a TLS close_notify")
     } else if (conn.peerAlert > 0) {
@@ -1028,7 +1034,7 @@ export class FetchSyncClient {
   }
 
   /** Writes `bytes[off, off + len)` on the connection, through TLS for an https origin; false with the error set. */
-  writeAll(bytes: u8[], off: i32, len: i32): boolean {
+  private writeAll(bytes: u8[], off: i32, len: i32): boolean {
     const conn: TlsRecordClient | null = this.tls
     if (conn === null) {
       return this.writeRaw(bytes, off, len)
@@ -1052,7 +1058,7 @@ export class FetchSyncClient {
   }
 
   /** Writes `bytes[off, off + len)` to `fd`, waiting up to `readTimeoutMs` each time it is full. */
-  writeRaw(bytes: u8[], off: i32, len: i32): boolean {
+  private writeRaw(bytes: u8[], off: i32, len: i32): boolean {
     let at: i32 = off
     const end: i32 = off + len
     while (at < end) {
@@ -1081,7 +1087,7 @@ export class FetchSyncClient {
    * Looks `host` up and connects to its addresses in turn, every step within
    * `connectTimeoutMs` together: the connected fd, or -1 with the error set.
    */
-  dial(host: string, port: i32): i32 {
+  private dial(host: string, port: i32): i32 {
     const start: i64 = monotonicNanos()
     const budget: i32 = this.options.connectTimeoutMs
     let until: i64 = budget > 0 ? start + toI64(budget) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
@@ -1161,7 +1167,7 @@ export class FetchSyncClient {
    * `HTTP_E_TOTAL_TIMEOUT` for whichever deadline passed, `HTTP_E_IO` when
    * the poll loop cannot be made.
    */
-  wait(fd: i32, events: i32, until: i64, code: i32): i32 {
+  private wait(fd: i32, events: i32, until: i64, code: i32): i32 {
     if (!this.watch(fd, events)) {
       return HTTP_E_IO
     }
@@ -1190,7 +1196,7 @@ export class FetchSyncClient {
   }
 
   /** Puts `fd` in the poll loop, waiting for `events`: false when the loop cannot be made. */
-  watch(fd: i32, events: i32): boolean {
+  private watch(fd: i32, events: i32): boolean {
     if (this.loop < 0) {
       this.loop = pollCreate()
       if (this.loop < 0) {
@@ -1220,7 +1226,7 @@ export class FetchSyncClient {
    * server that spoke while idle answered nothing yet asked, and is closing
    * or out of step, so the connection is not reused.
    */
-  quiet(): boolean {
+  private quiet(): boolean {
     return (
       !this.leftover() &&
       this.watch(this.fd, HTTP_CLIENT_READABLE) &&
@@ -1229,7 +1235,7 @@ export class FetchSyncClient {
   }
 
   /** Whether bytes past the last response are held, in the parser or the TLS layer. */
-  leftover(): boolean {
+  private leftover(): boolean {
     const conn: TlsRecordClient | null = this.tls
     if (conn !== null && (conn.plainEnd > conn.plainStart || conn.reader.end > conn.reader.start)) {
       return true
@@ -1238,7 +1244,7 @@ export class FetchSyncClient {
   }
 
   /** Takes `fd` out of the poll loop before it is closed. */
-  unwatch(fd: i32): void {
+  private unwatch(fd: i32): void {
     if (this.watched === fd && this.watched >= 0) {
       pollRemove(this.loop, fd)
       this.watched = -1
@@ -1246,13 +1252,13 @@ export class FetchSyncClient {
   }
 
   /** When the wait for the server's next byte ends: `readTimeoutMs` from now. */
-  readDeadline(): i64 {
+  private readDeadline(): i64 {
     const ms: i32 = this.options.readTimeoutMs
     return ms > 0 ? monotonicNanos() + toI64(ms) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
   }
 
   /** Closes the connection, if any, and forgets the open body. */
-  drop(): void {
+  private drop(): void {
     const conn: TlsRecordClient | null = this.tls
     if (conn !== null) {
       conn.close()
@@ -1282,7 +1288,7 @@ export class FetchSyncClient {
    * Reads past a redirect's body so the connection can carry the next
    * request; a body too long to be worth reading, or any failure, closes it.
    */
-  drain(): void {
+  private drain(): void {
     const sink: u8[] = new Array<u8>(HTTP_CLIENT_DRAIN_CHUNK)
     let left: i32 = HTTP_CLIENT_DRAIN_BYTES
     while (this.bodyOpen && left > 0) {
@@ -1299,7 +1305,7 @@ export class FetchSyncClient {
     this.errorText = ""
   }
 
-  /** `HttpBodyReader.read` for the response numbered `generation`. */
+  /** `HttpBodyReader.read` for the response numbered `generation`. @internal */
   readBody(generation: i32, buf: u8[], off: i32, n: i32): i32 {
     if (generation !== this.generation) {
       // The client's error is the later fetch's; a stale reader leaves it be.
@@ -1337,7 +1343,7 @@ export class FetchSyncClient {
   }
 
   /** Closes the connection a body is done with, and `fetchSync`'s whole client with it. */
-  release(): void {
+  private release(): void {
     if (this.once) {
       this.close()
     } else {
@@ -1345,7 +1351,7 @@ export class FetchSyncClient {
     }
   }
 
-  /** `readAll`'s refusal: the body passed the caller's limit. */
+  /** `readAll`'s refusal: the body passed the caller's limit. @internal */
   refuseBody(limit: i32): void {
     this.release()
     this.fail(HTTP_E_BODY_TOO_LARGE, `the body is larger than the ${limit} bytes asked for`)
@@ -1356,7 +1362,7 @@ export class FetchSyncClient {
    * Fails with `HTTP_E_TOTAL_TIMEOUT` once the fetch's deadline has passed:
    * a server that always has the next byte ready never lets a wait see it.
    */
-  overdue(): boolean {
+  private overdue(): boolean {
     if (this.deadline < HTTP_CLIENT_NEVER && monotonicNanos() >= this.deadline) {
       this.failWait(HTTP_E_TOTAL_TIMEOUT, "")
       return true
@@ -1365,7 +1371,7 @@ export class FetchSyncClient {
   }
 
   /** Sets the error for a wait that ended with `code`, `text` saying what timed out. */
-  failWait(code: i32, text: string): void {
+  private failWait(code: i32, text: string): void {
     if (code === HTTP_E_TOTAL_TIMEOUT) {
       this.fail(code, `the fetch ran past ${httpClientTotalMs(this.options)} ms`)
     } else if (code === HTTP_E_IO) {
@@ -1376,13 +1382,13 @@ export class FetchSyncClient {
   }
 
   /** Refuses a redirect: closes the connection, whose response is left unread, and fails. */
-  refuse(code: i32, text: string): HttpResponse | null {
+  private refuse(code: i32, text: string): HttpResponse | null {
     this.drop()
     this.fail(code, text)
     return null
   }
 
-  fail(code: i32, text: string): void {
+  private fail(code: i32, text: string): void {
     this.error = code
     this.errorText = `${httpErrorName(code)}: ${text}`
   }

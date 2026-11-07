@@ -179,22 +179,24 @@ export class UpstreamResponse {
   req: HttpRequest
   /** The body, in `body[0 .. length)`; the buffer is reused, so read `length`, not `body.length`. */
   body: u8[]
-  /** The request head, written by `get`. */
+  /** The request head, written by `get`. @internal */
   head: u8[]
-  /** When the call fails `UPSTREAM_E_TIMEOUT`, on `monotonicNanos`'s clock. */
+  /** When the call fails `UPSTREAM_E_TIMEOUT`, on `monotonicNanos`'s clock. @internal */
   deadline: i64 = 0
   /** The final status code, once the response's head has arrived. */
   status: i32 = 0
   /** `UPSTREAM_E_NONE`, an `HTTP1_E_` refusal of the codec, or an `UPSTREAM_E_` code. */
   error: i32 = 0
   length: i32 = 0
+  /** @internal Call bookkeeping that `Upstream` reads and writes. */
   headLength: i32 = 0
+  /** @internal Call bookkeeping that `Upstream` reads and writes. */
   index: i32 = 0
   /** Whether the response was read to its end; `error` says why not. */
   ok: boolean = false
-  /** Taken by the program and not yet released. */
+  /** Taken by the program and not yet released. @internal */
   taken: boolean = false
-  /** Made once more already, after a reused connection dropped it unanswered. */
+  /** Made once more already, after a reused connection dropped it unanswered. @internal */
   retried: boolean = false
 
   constructor(index: i32, headRoom: i32, placeholder: HttpRequest) {
@@ -207,21 +209,25 @@ export class UpstreamResponse {
 
 /** One connection of the pool. */
 class UpstreamConnection {
+  /** @internal Connection state that `Upstream` reads and writes. */
   parser: Http1ResponseParser
+  /** @internal Connection state that `Upstream` reads and writes. */
   input: u8[]
+  /** @internal Connection state that `Upstream` reads and writes. */
   fd: i32 = -1
-  /** Its handler watch id. */
+  /** Its handler watch id. @internal */
   id: i32 = 0
+  /** @internal Connection state that `Upstream` reads and writes. */
   state: i32 = 0
-  /** The slot of the call it carries, or -1. */
+  /** The slot of the call it carries, or -1. @internal */
   call: i32 = -1
-  /** How much of the call's head has been written. */
+  /** How much of the call's head has been written. @internal */
   sent: i32 = 0
-  /** The poll interest it is registered with, 0 for none. */
+  /** The poll interest it is registered with, 0 for none. @internal */
   events: i32 = 0
-  /** Whether the call it carries went out on a connection kept alive from an earlier call. */
+  /** Whether the call it carries went out on a connection kept alive from an earlier call. @internal */
   reused: boolean = false
-  /** Whether any byte of the call's response has arrived. */
+  /** Whether any byte of the call's response has arrived. @internal */
   answered: boolean = false
 
   constructor(id: i32, parser: Http1ResponseParser) {
@@ -233,30 +239,30 @@ class UpstreamConnection {
 
 /** A keep-alive pool to one origin, on an `HttpHandler`'s loop. */
 export class Upstream {
-  h: HttpHandler
-  limits: UpstreamLimits
+  private h: HttpHandler
+  private limits: UpstreamLimits
   /** The one address the pool connects to, checked against the policy if there is one. */
-  address: u8[]
-  hostNames: string[]
-  hostValues: string[]
-  connections: UpstreamConnection[]
-  calls: UpstreamResponse[]
-  free: i32[]
+  private address: u8[]
+  private hostNames: string[]
+  private hostValues: string[]
+  private connections: UpstreamConnection[]
+  private calls: UpstreamResponse[]
+  private free: i32[]
   /** Calls written into their slot and waiting for a connection, oldest first. */
-  waiting: i32[]
+  private waiting: i32[]
   /** Calls ended and not yet taken, in the order they ended. */
-  done: i32[]
+  private done: i32[]
   /** Why the origin is unusable; empty when it is not. For a log. */
   errorText: string = ""
   /** The handler turn `pump` last read. */
-  turn: i64 = -1
+  private turn: i64 = -1
   /** Not `UPSTREAM_E_NONE` when the origin is unusable: every call then fails with it. */
   error: i32 = 0
-  freeCount: i32 = 0
-  waitingStart: i32 = 0
-  waitingCount: i32 = 0
-  doneStart: i32 = 0
-  doneCount: i32 = 0
+  private freeCount: i32 = 0
+  private waitingStart: i32 = 0
+  private waitingCount: i32 = 0
+  private doneStart: i32 = 0
+  private doneCount: i32 = 0
 
   /**
    * Parses `origin`, looks its host up once (this blocks for at most
@@ -302,7 +308,7 @@ export class Upstream {
   }
 
   /** Settles the origin: its `Host` value and the one address, or `error`. */
-  settle(origin: string): void {
+  private settle(origin: string): void {
     const url: Url | null = urlParse(origin)
     if (
       url === null ||
@@ -351,7 +357,7 @@ export class Upstream {
     copyBytes(this.address, 0, addresses, 0, DNS_ADDRESS_BYTES)
   }
 
-  fail(code: i32, text: string): void {
+  private fail(code: i32, text: string): void {
     this.error = code
     this.errorText = text
   }
@@ -459,7 +465,7 @@ export class Upstream {
   // ---- The loop ---------------------------------------------------------------
 
   /** Once per handler turn: reads and writes the connections that fired, then fails what is past its deadline. */
-  pump(): void {
+  private pump(): void {
     if (this.h.turnAt === this.turn) {
       return
     }
@@ -488,7 +494,7 @@ export class Upstream {
   }
 
   /** Puts waiting calls on connections: a kept-alive one first, then a new one. */
-  dispatch(): void {
+  private dispatch(): void {
     while (this.waitingCount > 0) {
       const c: UpstreamConnection | null = this.idle()
       if (c === null) {
@@ -516,7 +522,7 @@ export class Upstream {
    * is, else closed, else null. An idle connection the origin has closed or
    * sent bytes on is closed here, before a call is put on it.
    */
-  idle(): UpstreamConnection | null {
+  private idle(): UpstreamConnection | null {
     let closed: UpstreamConnection | null = null
     for (let k: i32 = 0; k < toI32(this.connections.length); k += 1) {
       const c: UpstreamConnection = this.connections[k]
@@ -535,7 +541,7 @@ export class Upstream {
    * of stream or an error means the origin has given it up, and bytes no call
    * asked for would be read as the next call's response.
    */
-  usable(c: UpstreamConnection): boolean {
+  private usable(c: UpstreamConnection): boolean {
     const start: i32 = 0
     if (netRead(c.fd, c.input, start, toI32(c.input.length)) === UPSTREAM_WOULD_BLOCK) {
       return true
@@ -545,7 +551,7 @@ export class Upstream {
   }
 
   /** Starts a connection for the call `c` holds; a failure ends the call. */
-  connect(c: UpstreamConnection): void {
+  private connect(c: UpstreamConnection): void {
     const fd: i32 = tcpConnect(this.address)
     if (fd < 0) {
       this.finish(c, UPSTREAM_E_CONNECT)
@@ -565,7 +571,7 @@ export class Upstream {
   }
 
   /** What a connection's turn found ready. */
-  service(c: UpstreamConnection): void {
+  private service(c: UpstreamConnection): void {
     if (c.state === UPSTREAM_C_CONNECTING) {
       if (connectResult(c.fd) !== 0) {
         this.finish(c, UPSTREAM_E_CONNECT)
@@ -581,7 +587,7 @@ export class Upstream {
   }
 
   /** Writes what the socket takes of the call's head, then waits to read. */
-  send(c: UpstreamConnection): void {
+  private send(c: UpstreamConnection): void {
     const r: UpstreamResponse = this.calls[c.call]
     while (c.sent < r.headLength) {
       const n: i32 = netWrite(c.fd, r.head, c.sent, r.headLength - c.sent)
@@ -599,7 +605,7 @@ export class Upstream {
   }
 
   /** Reads what arrived and runs the codec over it. */
-  receive(c: UpstreamConnection): void {
+  private receive(c: UpstreamConnection): void {
     while (c.fd >= 0) {
       const start: i32 = 0
       const n: i32 = netRead(c.fd, c.input, start, toI32(c.input.length))
@@ -630,7 +636,7 @@ export class Upstream {
   }
 
   /** Takes every event the codec has for the call `c` carries. */
-  parse(c: UpstreamConnection): void {
+  private parse(c: UpstreamConnection): void {
     const p: Http1ResponseParser = c.parser
     while (c.call >= 0) {
       const event: i32 = p.next()
@@ -671,7 +677,7 @@ export class Upstream {
    * origin closed the connection as the request crossed it, and a `GET` is
    * safe to send again. Past its deadline it is not.
    */
-  finish(c: UpstreamConnection, code: i32): void {
+  private finish(c: UpstreamConnection, code: i32): void {
     if (c.call >= 0) {
       const r: UpstreamResponse = this.calls[c.call]
       c.call = -1
@@ -691,7 +697,7 @@ export class Upstream {
   }
 
   /** Hands `r` to `ready` with `code`. */
-  end(r: UpstreamResponse, code: i32): void {
+  private end(r: UpstreamResponse, code: i32): void {
     r.error = code
     r.ok = code === UPSTREAM_E_NONE
     if (!r.ok) {
@@ -703,14 +709,14 @@ export class Upstream {
   }
 
   /** Watches `c` for `events` alone. */
-  interest(c: UpstreamConnection, events: i32): void {
+  private interest(c: UpstreamConnection, events: i32): void {
     if (c.events !== events) {
       pollModify(this.h.loop, c.fd, events, -2 - c.id)
       c.events = events
     }
   }
 
-  close(c: UpstreamConnection): void {
+  private close(c: UpstreamConnection): void {
     if (c.fd >= 0) {
       pollRemove(this.h.loop, c.fd)
       netClose(c.fd)

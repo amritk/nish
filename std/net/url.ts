@@ -270,9 +270,9 @@ export class UrlPathSegments {
   start: i32 = 0
   /** The current segment's length in raw bytes. */
   length: i32 = 0
-  pos: i32 = 0
-  end: i32 = 0
-  done: boolean = true
+  private pos: i32 = 0
+  private end: i32 = 0
+  private done: boolean = true
 
   /** An iterator over nothing until `reset`. */
   constructor() {
@@ -333,6 +333,7 @@ export class UrlQueryLimits {
  * with `percentDecode` and `URL_DECODE_FORM`.
  */
 export class UrlQuery {
+  /** @internal Read by `urlQueryFind`. */
   bytes: u8[]
   keyStart: i32 = 0
   keyLength: i32 = 0
@@ -340,10 +341,10 @@ export class UrlQuery {
   valueLength: i32 = 0
   /** 0, or the `URL_QUERY_ERR_*` code every later `next()` answers. */
   failed: i32 = 0
-  maxPairs: i32
-  pos: i32 = 0
-  end: i32 = 0
-  count: i32 = 0
+  private maxPairs: i32
+  private pos: i32 = 0
+  private end: i32 = 0
+  private count: i32 = 0
   /** False for a pair written without `=` (`a`), true for `a=` with `valueLength` 0. */
   hasValue: boolean = false
 

@@ -551,27 +551,33 @@ export class Http1ResponseParser {
    * reasonEnd)` is the reason, and field `i` is `head[spans[4i] ..
    * spans[4i + 1])`, its name in lowercase, then `head[spans[4i + 2] ..
    * spans[4i + 3])`, its value. Both arrays are reused from response to response.
+   * @internal
    */
   head: u8[]
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   spans: i32[]
   /** The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. */
   body: u8[]
   /** What was wrong, once `next()` said `HTTP1_ERROR`; for a log. */
   errorText: string = ""
-  /** The bytes fed and not yet consumed are `buf[start .. end)`. */
+  /** The bytes fed and not yet consumed are `buf[start .. end)`. @internal */
   buf: u8[]
 
   // --- limits, the caller's --------------------------------------------------
   maxBody: i64 = 0
   /** The declared body length, or -1 when the response has none or is chunked or read until close. */
   contentLength: i64 = -1
-  /** Bytes left in a length-delimited body or in the current chunk. */
+  /** Bytes left in a length-delimited body or in the current chunk. @internal */
   left: i64 = 0
   /** De-chunked body bytes so far, against `maxBody`. */
   bodyTotal: i64 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   maxStatusLine: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   maxHeaderBytes: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   maxHeaders: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   maxTrailerBytes: i32 = 0
 
   /** The status code of the response last read. */
@@ -584,22 +590,27 @@ export class Http1ResponseParser {
   error: i32 = 0
 
   // --- internal --------------------------------------------------------------
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   start: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   end: i32 = 0
-  /** Where the search for the next LF resumes, so a line fed a byte at a time is scanned once. */
+  /** Where the search for the next LF resumes, so a line fed a byte at a time is scanned once. @internal */
   scan: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   state: i32 = 0
-  /** Bytes of the header or trailer section so far, against its limit. */
+  /** Bytes of the header or trailer section so far, against its limit. @internal */
   sectionBytes: i32 = 0
-  /** Field lines of the response so far, its trailers included, against `maxHeaders`. */
+  /** Field lines of the response so far, its trailers included, against `maxHeaders`. @internal */
   fieldCount: i32 = 0
-  /** Interim responses before this request's final one, against `HTTP1_MAX_INFORMATIONAL`. */
+  /** Interim responses before this request's final one, against `HTTP1_MAX_INFORMATIONAL`. @internal */
   informational: i32 = 0
-  /** The line `http1ClientTakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped. */
+  /** The line `http1ClientTakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped. @internal */
   lineStart: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   lineEnd: i32 = 0
 
   chunked: boolean = false
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   persistent: boolean = false
   /** What `expect` said of the request this response answers. */
   wasHead: boolean = false
@@ -610,10 +621,13 @@ export class Http1ResponseParser {
   closed: boolean = false
   /** Whether `names`, `values` and `reason` are filled; `fieldsAsSpans()` clears it. */
   keepStrings: boolean = true
-  /** Bytes of `head` in use, and the fields recorded in `spans`. */
+  /** Bytes of `head` in use, and the fields recorded in `spans`. @internal */
   headUsed: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   spanCount: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   reasonStart: i32 = 0
+  /** @internal Parser state the module's `http1Client` helpers read and write. */
   reasonEnd: i32 = 0
 
   /**
