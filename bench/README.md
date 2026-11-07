@@ -1559,6 +1559,32 @@ median over the rounds, with the lowest and highest beside it. When `strace`
 is installed, one more run of `stream` and `idle` under `strace -f -c` counts
 the system calls a message costs: a busy ring's target is 0.
 
+## Ring in place
+
+`ring-inplace/run.mjs` compares JSON records of 1, 4 and 10 KB sent from a
+[`nish/sync/ring`](../std/sync/ring.ts) `SpscRing` through an
+`Http1Connection` either copied (`tryPush`, `tryPop`, `write`) or in place
+(`reserve`, `commit`, `peek`, `sendBody`, `release`). A producer process
+renders the records with `JsonWriter`, the parent serves them, and a reader
+process drains the socket. The three are pinned to three cores. It is
+[wp47](../docs/wp47-shared-memory.md)'s measure, and §7 there records its
+figures. It is not in this suite's tables. Linux only (it uses `taskset`).
+
+```bash
+npm run build
+node bench/ring-inplace/run.mjs                         # 5 rounds, CPUs 0, 1 and 2
+node bench/ring-inplace/run.mjs --quick                 # 3,000 messages a run
+node bench/ring-inplace/run.mjs --rounds 9 --cpus 1,2,3
+```
+
+Each round runs every size and mode twice in a seeded shuffled order. The
+table gives the consumer's p50 and p99 per message (its wait for the
+producer left out), the pipeline's ns a message, and the body bytes copied
+a message. A figure is the median over the runs, with the lowest and
+highest. The noise band is the median gap between the two runs of a mode:
+a difference between the modes inside it is not one. A run fails if the
+reader did not hear every byte sent.
+
 ## SQLite
 
 `sqlite/run.mjs` measures what [`nish/sqlite`](../docs/guide/using-nish/sqlite.md)

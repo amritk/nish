@@ -392,6 +392,70 @@ node bench/ring-latency/run.mjs              # 5 rounds, CPUs 0 and 1
 node bench/ring-latency/run.mjs --rounds 9 --cpus 2,3
 ```
 
+### Records copied or in place
+
+`bench/ring-inplace/` answers keep-alive HTTP/1.1 requests with JSON records
+of 1, 4 and 10 KB. A producer process renders each record with
+`nish/json`'s `JsonWriter` into a 16 MB `SpscRing`, an `Http1Connection` in
+the parent answers with it, and a third process drains the socket. Two
+paths are compared:
+
+- **copied**: the producer renders into its own buffer and calls `tryPush`,
+  the consumer calls `tryPop` into its own and then `write`s the body;
+- **in place**: the producer `reserve`s a window, renders into it and
+  `commit`s; the consumer `peek`s the record, passes the window to
+  `sendBody` and `release`s it once the body is sent.
+
+The consumer runs on CPU 0, the producer on CPU 1 and the reader on CPU 2.
+The consumer times each message from the record being there to the response
+being flushed, into a 10 ns histogram after a warm-up of a tenth. Its wait
+for the producer is left out. The pipeline figure is wall time over
+messages. Bytes copied counts every copy of a body byte on the way: the
+producer's push, the consumer's pop and what `write` or `sendBody` puts in
+the connection's output. Each round runs every size and mode twice, in a
+seeded shuffled order, with 50,000 messages a run. A figure is the median
+over 5 rounds × 2 runs, with the lowest and highest in brackets. The noise
+band is the median gap between the two runs of one mode in a round. The
+machine was the 4-core cloud VM above, Linux 6.18, on 2026-11-07.
+
+| record | mode | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | noise band p50 |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 KB | copied | 885 (820 to 1,020) | 5,585 (5,430 to 7,090) | 2,017 (1,751 to 2,281) | 2,921 | ±8.6% |
+| 1 KB | in place | 1,030 (950 to 1,120) | 6,175 (5,260 to 7,410) | 2,348 (1,852 to 2,601) | 0 | ±11.5% |
+| 4 KB | copied | 1,665 (1,500 to 2,040) | 9,350 (6,600 to 13,200) | 7,955 (6,596 to 8,471) | 12,137 | ±6.8% |
+| 4 KB | in place | 1,595 (1,330 to 1,680) | 8,570 (7,130 to 26,430) | 8,004 (6,618 to 8,515) | 0 | ±4.4% |
+| 10 KB | copied | 3,165 (2,780 to 3,370) | 13,540 (11,220 to 36,410) | 18,879 (15,301 to 20,497) | 30,569 | ±5.5% |
+| 10 KB | in place | 2,625 (2,410 to 2,960) | 12,460 (10,340 to 25,660) | 18,062 (15,195 to 20,605) | 0 | ±12.2% |
+
+| record | in place vs copied: consumer p50 | p99 | pipeline | noise band p50 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 KB | +16.4% | +10.6% | +16.4% | ±11.5% |
+| 4 KB | -4.2% | -8.3% | +0.6% | ±6.8% |
+| 10 KB | -17.1% | -8.0% | -4.3% | ±12.2% |
+
+What this says:
+
+- **In place copies nothing.** The copied path moves each body three
+  times: about 3 bytes for every byte of body (2,921 for a 973-byte body).
+  When the socket takes a whole body, `sendBody` writes straight from the
+  ring, and here it nearly always did (under one byte a message on average).
+- **Only at 10 KB is the consumer measurably faster**: 17 % at the median,
+  outside the ±12 % band. At 4 KB the gap (-4 %) is inside the band. At
+  1 KB in place is 16 % slower, at the edge of its ±11.5 % band. The likely
+  cause is that below a few KB, sending the body on its own costs more than a
+  memcpy into the output that one write sends with the head.
+- **The pipeline does not move** (-4 % to +16 %, all inside or at the
+  edge of the band). Rendering the JSON in the producer, about 2 to 19 µs
+  a record, sets the rate, not the consumer's 1 to 3 µs.
+
+To reproduce:
+
+```sh
+npm run build
+node bench/ring-inplace/run.mjs              # 5 rounds, CPUs 0, 1 and 2
+node bench/ring-inplace/run.mjs --quick      # 3,000 messages a run, seconds
+```
+
 ## 8. The example
 
 `examples/prefork-jobs.ts` starts five prefork workers. Worker 0 owns a table
