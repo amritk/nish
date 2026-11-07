@@ -878,30 +878,30 @@ class Http1Parser
 | --- | --- |
 | `new Http1Parser(maxTarget: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i32)` | Each limit is clamped into 0 to 2^30, so that the sums the parser makes of them (a request line is the method, the target and ten bytes more) cannot overflow an `i32`. |
 | `body: u8[]` | The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. |
-| `bodyLen: i32` |  |
-| `bodyOff: i32` |  |
-| `chunked: boolean` |  |
+| `bodyLen: i32` | How many bytes the last `HTTP1_BODY` handed over, from `body[bodyOff]`; 0 before the first. |
+| `bodyOff: i32` | Where the bytes the last `HTTP1_BODY` handed over start in `body`. |
+| `chunked: boolean` | Whether the request's body is chunked (`Transfer-Encoding: chunked`), so it has no `contentLength`. |
 | `contentLength: i32` | The declared body length, or -1 when the request has none or is chunked. |
 | `head: u8[]` | The request line and the kept field lines of the request, copied out of `buf` as each is read, names in lowercase: what the spans below index. Kept from one request to the next, so a slot that has seen its largest head allocates nothing for the next one. |
 | `headerCount: i32` | How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. |
 | `headLength: i32` | How much of `head` the request uses. |
-| `keepAlive: boolean` |  |
+| `keepAlive: boolean` | Whether the connection stays open after this request: HTTP/1.1 unless it sent `Connection: close`, HTTP/1.0 only when it sent `keep-alive`. A server closes after its response when this is false. |
 | `keepText: boolean` | Whether `method`, `target`, `names`, `values` and `upgrade` are filled as strings. A server that must allocate nothing per request turns it off and reads the head through `head`, the spans and the `...Is` methods. |
 | `maxChunk: i32` | The most body bytes one `HTTP1_BODY` hands over; a caller's number, 2^30 unless set. |
-| `method: string` |  |
-| `methodEnd: i32` |  |
+| `method: string` | The request's method as text when `keepText` is on, else empty. |
+| `methodEnd: i32` | Where the method ends in `head`, one past its last byte. |
 | `methodStart: i32` | The method is `head[methodStart .. methodEnd)` and the target `head[targetStart .. targetEnd)`. |
 | `minor: i32` | The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. |
 | `names: string[]` | The field names, in lowercase, in the order they arrived; `values` beside them. |
 | `reason: string` | What was wrong, once `next()` said `HTTP1_ERROR`; for a log, not for the response. |
 | `spans: i32[]` | Four entries per field, into `head`: name start and end, value start and end (OWS trimmed). |
 | `status: i32` | The status code to answer once `next()` said `HTTP1_ERROR`. |
-| `target: string` |  |
-| `targetEnd: i32` |  |
-| `targetStart: i32` |  |
+| `target: string` | The request target (path and query) as text when `keepText` is on, else empty. |
+| `targetEnd: i32` | Where the request target ends in `head`, one past its last byte. |
+| `targetStart: i32` | Where the request target starts in `head`. |
 | `upgrade: string` | The `Upgrade` field when `Connection` asked for it, else empty. |
 | `upgrading: boolean` | Whether the request asked to switch protocols (`upgrade` is its value when `keepText`). |
-| `values: string[]` |  |
+| `values: string[]` | The field values, in the order they arrived, each at its name's index in `names`; filled only when `keepText`. |
 | `buffered(): i32` | How many bytes were fed and not consumed yet: what a caller bounds its reads by. |
 | `declineUpgrade(): void` | After `HTTP1_UPGRADE`: the server answered without switching, so the bytes that follow are the next HTTP request. Anywhere else it does nothing. |
 | `feed(data: u8[], off: i32, len: i32): void` | Appends `data[off .. off + len)` to the input. A window outside `data` panics, as the crypto modules' `update` does. Once the parser has closed or refused, the input is dropped; once it has upgraded, it is kept for `upgradeBytes()`. |

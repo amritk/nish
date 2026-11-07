@@ -863,6 +863,7 @@ export class TlsTcpServer {
  * connect leaves the client done, its failure in `failure()`.
  */
 export class TlsTcpClient {
+  /** The TLS record layer over the socket: its `tls` is the handshake, read for the negotiated suite and `alpnChosen`. */
   conn: TlsRecordClient
   private trust: TlsClientTrust
   /** The socket, -1 once `close` has run or when `tcpConnect` refused at once. */

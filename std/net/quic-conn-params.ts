@@ -131,31 +131,55 @@ const QUIC_PARAMS_MAX_STREAMS: i64 = 1073741824 * 1073741824
  * frame).
  */
 export class QuicTransportParameters {
+  /** What the last parse answered: `QUIC_ERROR_NO_ERROR`, or `QUIC_ERROR_TRANSPORT_PARAMETER` with `errorParameter` set. */
   error: i64 = 0
+  /** `max_idle_timeout`, in milliseconds; 0, the default, for no idle timeout. */
   maxIdleTimeout: i64 = 0
+  /** `max_udp_payload_size`: the largest UDP payload the sender takes, at least 1200 bytes; 65527 by default. */
   maxUdpPayloadSize: i64 = 65527
+  /** `initial_max_data`: the connection's first receive credit, in bytes, across every stream. */
   initialMaxData: i64 = 0
+  /** `initial_max_stream_data_bidi_local`: the first credit, in bytes, on a bidirectional stream the sender opens. */
   initialMaxStreamDataBidiLocal: i64 = 0
+  /** `initial_max_stream_data_bidi_remote`: the first credit, in bytes, on a bidirectional stream its peer opens. */
   initialMaxStreamDataBidiRemote: i64 = 0
+  /** `initial_max_stream_data_uni`: the first credit, in bytes, on a unidirectional stream its peer opens. */
   initialMaxStreamDataUni: i64 = 0
+  /** `initial_max_streams_bidi`: how many bidirectional streams the peer may open at first, at most 2^60. */
   initialMaxStreamsBidi: i64 = 0
+  /** `initial_max_streams_uni`: how many unidirectional streams the peer may open at first, at most 2^60. */
   initialMaxStreamsUni: i64 = 0
+  /** `ack_delay_exponent`: the power of two an ACK frame's delay is scaled by, at most 20; 3 by default. */
   ackDelayExponent: i64 = 3
+  /** `max_ack_delay`, in milliseconds: how long the sender may hold an acknowledgement, below 2^14; 25 by default. */
   maxAckDelay: i64 = 25
+  /** `active_connection_id_limit`: how many of its peer's connection IDs the sender keeps, at least 2. */
   activeConnectionIdLimit: i64 = 2
   /** RFC 9221's `max_datagram_frame_size`: 0, the default, for no DATAGRAM frames. */
   maxDatagramFrameSize: i64 = 0
+  /** The ID of the parameter a failed parse is about, or -1 when the bytes did not frame; read beside `error`. */
   errorParameter: i64 = 0
+  /** `original_destination_connection_id`: the client's first Destination Connection ID; server only. */
   originalDcid: u8[]
+  /** `stateless_reset_token`: 16 bytes that end a stateless reset for the server's connection ID; server only. */
   statelessResetToken: u8[]
+  /** `preferred_address`, kept as the bytes the server sent, since this side never acts on it; server only. */
   preferredAddress: u8[]
+  /** `initial_source_connection_id`: the Source Connection ID of the sender's first Initial packet. */
   initialScid: u8[]
+  /** `retry_source_connection_id`: the Source Connection ID of the server's Retry; server only. */
   retryScid: u8[]
+  /** Whether `originalDcid` was set or read; an empty ID is a value, so its length cannot say. */
   hasOriginalDcid: boolean = false
+  /** Whether `statelessResetToken` was set or read. */
   hasStatelessResetToken: boolean = false
+  /** Whether `preferredAddress` was set or read. */
   hasPreferredAddress: boolean = false
+  /** Whether `initialScid` was set or read; an empty ID is a value, so its length cannot say. */
   hasInitialScid: boolean = false
+  /** Whether `retryScid` was set or read; an empty ID is a value, so its length cannot say. */
   hasRetryScid: boolean = false
+  /** `disable_active_migration`: the sender does not support active connection migration (RFC 9000 §9) from the address the handshake used. */
   disableActiveMigration: boolean = false
 
   /**

@@ -1973,28 +1973,28 @@ class QuicFrame
 | Member | |
 | --- | --- |
 | `new QuicFrame()` | Makes an empty frame with room for `QUIC_FRAME_MAX_ACK_RANGES` ACK ranges, for `quicParseFrame` to fill. |
-| `ackDelay: i64` |  |
-| `ackRangeCount: i32` |  |
-| `ackRanges: i64[]` |  |
-| `ackRangeTotal: i64` |  |
-| `ce: i64` |  |
-| `connectionIdLength: i32` |  |
-| `connectionIdStart: i32` |  |
-| `dataLength: i32` |  |
-| `dataStart: i32` |  |
-| `ect0: i64` |  |
-| `ect1: i64` |  |
+| `ackDelay: i64` | An ACK's delay as sent, not yet scaled by the peer's `ack_delay_exponent`. |
+| `ackRangeCount: i32` | How many `[smallest, largest]` pairs of `ackRanges` hold an ACK range, at most `QUIC_FRAME_MAX_ACK_RANGES`. |
+| `ackRanges: i64[]` | An ACK's ranges as `[smallest, largest]` packet-number pairs, highest first. Only the first `ackRangeCount` pairs are meaningful; the array keeps its `QUIC_FRAME_MAX_ACK_RANGES * 2` length. |
+| `ackRangeTotal: i64` | How many ranges the ACK carried, which can exceed `ackRangeCount` when ranges past the stored cap were read and dropped. |
+| `ce: i64` | An ACK_ECN's cumulative count of packets received marked ECN-CE (congestion experienced). |
+| `connectionIdLength: i32` | A NEW_CONNECTION_ID's connection ID length in bytes, 1 to 20. |
+| `connectionIdStart: i32` | Where a NEW_CONNECTION_ID's connection ID starts in the payload. |
+| `dataLength: i32` | How many bytes of data start at `dataStart`. |
+| `dataStart: i32` | Where the frame's data (stream or CRYPTO bytes, token, path data, datagram or reason phrase) starts in the payload. |
+| `ect0: i64` | An ACK_ECN's cumulative count of packets received marked ECT(0). |
+| `ect1: i64` | An ACK_ECN's cumulative count of packets received marked ECT(1). |
 | `end: i32` | One past the frame's last byte, where the next frame starts. |
-| `errorCode: i64` |  |
-| `fin: boolean` |  |
-| `frameType: i64` |  |
-| `largest: i64` |  |
-| `offset: i64` |  |
-| `resetTokenStart: i32` |  |
-| `retirePriorTo: i64` |  |
-| `streamId: i64` |  |
+| `errorCode: i64` | The application or transport error code of a RESET_STREAM, STOP_SENDING or CONNECTION_CLOSE. |
+| `fin: boolean` | A STREAM frame's FIN bit (the stream ends with this data), or a DATAGRAM that carried a Length. |
+| `frameType: i64` | The frame type a transport CONNECTION_CLOSE (0x1c) blames; 0 for the application form. |
+| `largest: i64` | The largest packet number an ACK acknowledges. |
+| `offset: i64` | The byte offset in the stream (STREAM) or the handshake stream (CRYPTO) where the data starts. |
+| `resetTokenStart: i32` | Where a NEW_CONNECTION_ID's 16-byte stateless reset token starts in the payload. |
+| `retirePriorTo: i64` | A NEW_CONNECTION_ID's Retire Prior To: every peer ID with a lower sequence number is to be retired. |
+| `streamId: i64` | The stream a STREAM, RESET_STREAM, STOP_SENDING, MAX_STREAM_DATA or STREAM_DATA_BLOCKED frame names. |
 | `type: i32` | The frame type, with every STREAM type answered as `QUIC_FRAME_STREAM`. |
-| `value: i64` |  |
+| `value: i64` | The frame's one number: a limit, a final size or a sequence number, as the list above gives per type. |
 
 ## Limits
 

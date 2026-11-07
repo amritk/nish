@@ -508,6 +508,7 @@ const http1ServerReserved = (name: u8[]): boolean =>
  */
 export class Http1OutputPool {
   // Widest first, so the layout packs without padding.
+  /** The buffers given back and not yet taken again; `made - free.length` is how many are out. */
   free: u8[][]
   private size: i32 = 0
   /** How many buffers the pool has made. */
@@ -579,6 +580,7 @@ export class Http1Connection {
   pool: Http1OutputPool | null
   /** Where the parser's input and head buffers go while the slot rests, with `Http1Config.idleInput`; null otherwise. */
   inputs: Http1OutputPool | null
+  /** Where the parser's head buffer goes while the slot rests, beside `inputs`; null otherwise. */
   heads: Http1OutputPool | null
   /**
    * The `Date` every final response carries. The connection makes its own;
@@ -606,7 +608,9 @@ export class Http1Connection {
    * @internal Read by `std/net/handler.ts` to know how much of a sized body is still to write.
    */
   responseLeft: i32 = 0
+  /** Where the unsent bytes start in `output`; a carrier sends from here and calls `consume` with what it sent. */
   outputStart: i32 = 0
+  /** Where the unsent bytes end in `output`, one past the last; equal to `outputStart` when nothing waits. */
   outputEnd: i32 = 0
   /**
    * `output.length`, kept beside the offsets so that `acquire` and `release`
@@ -634,7 +638,9 @@ export class Http1Connection {
   private inputEnded: boolean = false
   /** A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. */
   headTimed: boolean = false
+  /** Where the bytes `H1_BODY` or `H1_WS_MESSAGE` handed over start in `data`. */
   dataStart: i32 = 0
+  /** How many bytes `H1_BODY` or `H1_WS_MESSAGE` handed over, from `data[dataStart]`. */
   dataLength: i32 = 0
   /** `H1_WS_MESSAGE`'s opcode: text or binary. */
   opcode: i32 = 0
@@ -1859,6 +1865,7 @@ export class Http1Server {
   outputs: Http1OutputPool
   /** The input and head buffers resting slots lend, with `Http1Config.idleInput`. */
   inputs: Http1OutputPool
+  /** The head buffers resting slots lend, beside `inputs`; `made` counts how many the slots ever needed. */
   heads: Http1OutputPool
   /**
    * The slots closed since they were used, a stack whose top `accept` takes
@@ -2248,6 +2255,7 @@ export class Http1Server {
  */
 export class Http1TlsServer {
   private config: Http1Config
+  /** The TLS 1.3 pool underneath, one slot beside each connection; read it for a slot's TLS connection. */
   tls: TlsTcpServer
   /**
    * The connections built so far, slot `k`'s at `k`: one per slot ever

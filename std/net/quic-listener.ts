@@ -223,10 +223,15 @@ export const QUIC_LISTENER_ANSWER_SIZE: i32 = QUIC_CONN_DATAGRAM_SIZE
  * with exactly the room its reply takes.
  */
 export class QuicListenerAnswer {
+  /** The datagram to send back to the peer's address; empty when the answer sends nothing. */
   reply: u8[]
+  /** After a Retry, the DCID of the client's first Initial, which `QuicConnection.acceptRetry` checks. */
   originalDcid: u8[]
+  /** After a Retry, the SCID the Retry chose, which `QuicConnection.acceptRetry` checks. */
   retryScid: u8[]
+  /** What to do with the datagram: a `QUIC_LISTEN_*`, `QUIC_LISTEN_DROP` after `wipe`. */
   kind: i32 = 0
+  /** Whether an accepted Initial carried a valid Retry token, so `originalDcid` and `retryScid` are set. */
   retried: boolean = false
   private room: i32 = 0
 
@@ -342,6 +347,7 @@ const quicListenerWindowFits = (length: i32, at: i32, len: i32): boolean =>
  */
 export class QuicListener {
   private config: QuicServerConfig
+  /** The 32 bytes of entropy every unpredictable byte is made from; `release` wipes it. */
   seed: u8[]
   /** Unpredictable bytes not yet used, from `poolHead`, and the counter the next block is made from. */
   pool: u8[]
@@ -357,8 +363,11 @@ export class QuicListener {
   private lengths: u8[]
   /** The Initial secrets of an INVALID_TOKEN close, and its keys, both directions. */
   initialClient: u8[]
+  /** The server's Initial secret of an INVALID_TOKEN close; `initialClient` is the client's. */
   initialServer: u8[]
+  /** The INVALID_TOKEN close's keys for reading the client's Initial. */
   readSlot: QuicKeysSlot
+  /** The INVALID_TOKEN close's keys for sealing the server's Initial. */
   writeSlot: QuicKeysSlot
   private packet: QuicPacket
   /** The client's SCID and the DCID it sent to, copied out for `quicPutLongHeader`, which reads IDs from 0. */
@@ -376,9 +385,11 @@ export class QuicListener {
   /** When the reset budget was last topped up (-1: never yet), and the stateless resets that may go now. */
   private resetRefilled: i64 = -1
   private resetBudget: i32 = 0
+  /** Where the unused bytes of `pool` start: `QUIC_LISTENER_POOL` when it is spent. */
   poolHead: i32 = 0
   /** Stateless resets sent, and ones the rate limit held back. */
   resetsSent: i32 = 0
+  /** Stateless resets the rate limit held back, which a log or test reads to see the limit working. */
   resetsLimited: i32 = 0
   /** Whether the configuration and entropy were usable. */
   private usable: boolean = false

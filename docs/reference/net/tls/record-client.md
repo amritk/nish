@@ -113,18 +113,18 @@ class TlsRecordClient
 | Member | |
 | --- | --- |
 | `new TlsRecordClient(tls: TlsClient)` | Wraps `tls`, which should be fresh, and starts it: the ClientHello is sealed into `output` at once. A `tls` that has already failed, or whose ClientHello cannot be written, fails this connection with its alert queued in the clear. |
-| `alert: i32` |  |
-| `keyUpdates: i32` |  |
+| `alert: i32` | The alert this client sent, or 0. |
+| `keyUpdates: i32` | How many KeyUpdates from the server this client has taken, up to `TLS_RECORD_MAX_KEY_UPDATES`. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`. |
-| `outputEnd: i32` |  |
-| `outputStart: i32` |  |
-| `padding: i32` |  |
-| `peerAlert: i32` |  |
-| `peerClosed: boolean` |  |
-| `readProtection: TlsRecordProtection` |  |
-| `state: i32` |  |
-| `tls: TlsClient` |  |
-| `writeProtection: TlsRecordProtection` |  |
+| `outputEnd: i32` | One past the last byte still to send in `output`; `outputStart` when nothing is pending. |
+| `outputStart: i32` | The index in `output` of the first byte still to send; `consume(sent)` moves it on. |
+| `padding: i32` | How many zero bytes each protected record the client writes carries after its content type (§5.4). |
+| `peerAlert: i32` | The error alert the server sent, or -1 when it sent none. |
+| `peerClosed: boolean` | True once the server's `close_notify` has arrived. |
+| `readProtection: TlsRecordProtection` | Opens the server's records; its sequence number counts the records read at the current keys. |
+| `state: i32` | Where the connection stands: one of the `TLS_RECORD_STATE_*` constants. |
+| `tls: TlsClient` | The handshake underneath: read it for the suite, ALPN, the server's certificates and the exporter secret. |
+| `writeProtection: TlsRecordProtection` | Seals the client's records; its sequence number counts the records written at the current keys. |
 | `abort(): void` | The socket failed under the connection: it ends with nothing more sent, and every key it holds wiped. |
 | `authenticate(ok: boolean): i32` | The caller's verdict on the server's certificate chain and CertificateVerify, while `interest` says `TLS_RECORD_AUTH` (`TlsClient.authenticate`): `true` reads on to the server's Finished and seals the client's; `false` fails the connection with `bad_certificate` sent. Answers 0, or a non-zero alert once the connection has failed (`failure`) — a verdict given before one is due answers `internal_error`. |
 | `close(): void` | Closes the client's side (§6.1): a `close_notify`, after which `write` answers `TLS_RECORD_PIPE`. Application data already written stays ahead of the alert; the write keys are wiped once it is sealed. Closed before the handshake is done — before the client's Finished is sealed — the client reads nothing more, and the read keys and everything `TlsClient` holds are wiped at once. Nothing happens once the connection has failed or closed. |

@@ -76,7 +76,7 @@ class QuicAckRanges
 | --- | --- |
 | `new QuicAckRanges()` | Makes an empty set, nothing received yet, with room for `QUIC_ACK_MAX_RANGES` ranges. |
 | `ackPending: boolean` | Whether an ack-eliciting packet arrived since the last `pushAck`. |
-| `count: i32` |  |
+| `count: i32` | How many disjoint ranges are held, at most `QUIC_ACK_MAX_RANGES`. |
 | `floor: i64` | Every packet number at or below this is answered as already received; -1 until a range is dropped. |
 | `largest: i64` | The largest packet number received, or -1. |
 | `clear(): void` | Forgets every packet number, for a connection slot reused for another peer. |
