@@ -312,7 +312,9 @@ export class SpscRing {
     }
     const most: i32 = this.capacity / 2 - 4
     if (most < 1) {
-      panic(`nish/sync/ring: an SPSC ring of ${this.capacity} bytes cannot reserve; a reservation is at most half the ring less 4`)
+      panic(
+        `nish/sync/ring: an SPSC ring of ${this.capacity} bytes cannot reserve; a reservation is at most half the ring less 4`
+      )
     }
     if (n < 1 || n > most) {
       panic(`nish/sync/ring: a reservation of ${n} bytes is not from 1 to ${most}, half the ring less 4`)
