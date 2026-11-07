@@ -348,7 +348,7 @@ for (const m of machines) {
           ),
         ),
       ])
-      .filter(([, v]) => v >= 20)
+      .filter(([c, v]) => v >= 20 || c === "epoll_ctl" || c === "writev")
       .sort((a, b) => b[1] - a[1])
       .map(([c]) => c);
     const head = [
