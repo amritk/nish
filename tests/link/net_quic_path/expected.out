@@ -66,6 +66,8 @@ PASS  within its three times (§8.1), with its data
 PASS  a challenge in the packet that moved it is answered on the new path
 PASS  and the old address's own challenge on the probe route, to it
 PASS  packets marked on the old path lose their mark when ECN is tested again
+PASS  old-path packets never acknowledged are still in flight when the new path validates
+PASS  and their loss, declared after the restart, does not count toward the new path's ECN test
 PASS  fifty rebinds, each challenged and answered, keep no arena memory
 PASS  and the connection follows the last
-quic paths: 70 passed, 0 failed, 0 skipped
+quic paths: 72 passed, 0 failed, 0 skipped

@@ -1790,8 +1790,8 @@ function QuicConnection.receiveWindowFrom(this: QuicConnection, buf: u8[], off: 
   callee -8:11 QuicConnection.closed -> @nish.QuicConnection.closed
   callee +2:10 QuicConnection.closed -> @nish.QuicConnection.closed
   callee +3:7 QuicConnection.afterPath -> @nish.QuicConnection.afterPath
-  callee +7:5 QuicConnection.runRecoveryTimer -> @nish.QuicConnection.runRecoveryTimer
-  callee +8:12 QuicConnection.closed -> @nish.QuicConnection.closed
+  callee +9:5 QuicConnection.runRecoveryTimer -> @nish.QuicConnection.runRecoveryTimer
+  callee +10:12 QuicConnection.closed -> @nish.QuicConnection.closed
 function QuicConnection.start(this: QuicConnection, buf: u8[], header: QuicHeader): boolean -> @nish.QuicConnection.start [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -2538,12 +2538,12 @@ function QuicConnection.sendResponsesBack(this: QuicConnection): boolean -> @nis
   calls: nish.quicConnCopyAt nish_panic_index nish_panic_overflow
   pointer this: size=696 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -4:11 base: i32 (const)
-  local -3:11 swapped: boolean (const)
-  local -2:14 k: i32 (let)
-  local -1:13 kept: u8 (const)
-  callee +5:5 quicConnCopyAt -> @nish.quicConnCopyAt
-  local +9:13 left: i64 (const)
+  local +3:11 base: i32 (const)
+  local +4:11 swapped: boolean (const)
+  local +5:14 k: i32 (let)
+  local +6:13 kept: u8 (const)
+  callee +12:5 quicConnCopyAt -> @nish.quicConnCopyAt
+  local +16:13 left: i64 (const)
 function QuicConnection.drawChallenge(this: QuicConnection): void -> @nish.QuicConnection.drawChallenge [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

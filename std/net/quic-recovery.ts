@@ -471,9 +471,11 @@ export class QuicRecovery {
 
   /**
    * Tests ECN again from the start, as on a new path (RFC 9000 §13.4.2).
-   * The packets still in flight were sent on the old path, so they lose
-   * their mark: their loss, or an ACK of them, says nothing of the new one,
-   * and only packets marked from here on count toward the new test.
+   * Every packet still in flight loses its mark: those sent on the old
+   * path, and those sent to the new one before it was validated, which
+   * went out under the old test. Their loss, or an ACK of them, says
+   * nothing of the new test, and only packets marked from here on count
+   * toward it.
    */
   restartEcn(): void {
     for (const sp of this.spaces) {

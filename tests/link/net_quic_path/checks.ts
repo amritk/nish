@@ -8,7 +8,7 @@ import { Suite } from "nish/testing";
 import { QUIC_FRAME_PATH_CHALLENGE, QUIC_FRAME_PATH_RESPONSE, QUIC_FRAME_PING, quicPushPathData } from "nish/net/quic-frame";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
-import { QUIC_RECOVERY_ECN_FAILED, QUIC_RECOVERY_ECN_TESTING, QUIC_RECOVERY_INITIAL_RTT, QUIC_RECOVERY_INITIAL_WINDOW } from "nish/net/quic-recovery";
+import { QUIC_RECOVERY_ECN_FAILED, QUIC_RECOVERY_ECN_TESTING, QUIC_RECOVERY_ECN_UNKNOWN, QUIC_RECOVERY_INITIAL_RTT, QUIC_RECOVERY_INITIAL_WINDOW } from "nish/net/quic-recovery";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
@@ -490,6 +490,32 @@ const pMarked = (conn: QuicConnection): i32 => {
   return n;
 };
 
+/** How many packets are in flight. */
+const pInFlight = (conn: QuicConnection): i32 => {
+  let n: i32 = 0;
+  for (const sp of conn.recovery.spaces) {
+    for (let s: i32 = 0; s < toI32(sp.state.length); s++) {
+      if (sp.inFlightAt(s)) {
+        n++;
+      }
+    }
+  }
+  return n;
+};
+
+/** When the oldest packet still in flight was sent, or -1 with none. */
+const pOldestInFlight = (conn: QuicConnection): i64 => {
+  let oldest: i64 = n64(-1);
+  for (const sp of conn.recovery.spaces) {
+    for (let s: i32 = 0; s < toI32(sp.state.length); s++) {
+      if (sp.inFlightAt(s) && (oldest < n64(0) || sp.timeSent[s] < oldest)) {
+        oldest = sp.timeSent[s];
+      }
+    }
+  }
+  return oldest;
+};
+
 /** A new path tests ECN on its own packets alone (§13.4.2). */
 const ecnChecks = (t: Suite): void => {
   const p: PPair = pPair();
@@ -503,6 +529,35 @@ const ecnChecks = (t: Suite): void => {
   t.ok(
     "packets marked on the old path lose their mark when ECN is tested again",
     before > 0 && pMarked(p.conn) === n32(0) && p.conn.recovery.ecnState === QUIC_RECOVERY_ECN_TESTING,
+  );
+  const q: PPair = pPair();
+  q.conn.ecnMarking = true;
+  q.conn.writeStream(n64(0), new Array<u8>(3000), false);
+  let out: u8[] | null = q.conn.takeDatagram(q.c.now);
+  while (out !== null) {
+    out = q.conn.takeDatagram(q.c.now);
+  }
+  const marked: i32 = pMarked(q.conn);
+  const moved: u8[] = pAddr(n32(1), n32(50003));
+  pFrom(q, moved, pPadded(pBarePing(), n32(1171)));
+  pAnswer(q, moved);
+  const held: i32 = pInFlight(q.conn);
+  const restarted: i64 = q.c.now;
+  t.ok("old-path packets never acknowledged are still in flight when the new path validates", marked > 0 && held >= marked && !q.conn.pathValidating);
+  // The new path's testing packets went out, one is recorded and still in
+  // flight, and the carrier marks no more: the old ones' loss is all that
+  // could fail the test.
+  q.conn.ecnMarking = false;
+  q.conn.recovery.ecnState = QUIC_RECOVERY_ECN_UNKNOWN;
+  q.conn.recovery.ecnTestRecorded = n32(1);
+  q.c.now = q.c.now + n64(100);
+  q.conn.writeStream(n64(0), new Array<u8>(4000), false);
+  pFrom(q, moved, pPing(q.c));
+  q.c.now = q.c.now + n64(100);
+  pFrom(q, moved, pPing(q.c));
+  t.ok(
+    "and their loss, declared after the restart, does not count toward the new path's ECN test",
+    q.conn.state === QUIC_STATE_CONNECTED && pOldestInFlight(q.conn) > restarted && q.conn.recovery.ecnTestLost === n32(0) && q.conn.recovery.ecnState !== QUIC_RECOVERY_ECN_FAILED,
   );
 };
 

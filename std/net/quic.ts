@@ -1828,6 +1828,8 @@ export class QuicConnection {
     if (!this.closed()) {
       this.afterPath(counted, len)
     }
+    // A challenge staged from another address belongs to this datagram only.
+    this.probeStaged = false
     // Loss recovery's timer runs after the datagram, so an acknowledgement
     // it carries settles what it acknowledges before a probe is owed.
     this.runRecoveryTimer()
@@ -2837,9 +2839,13 @@ export class QuicConnection {
    * A PATH_CHALLENGE from another address: kept for `afterPath`, which
    * answers it on the current path when the datagram moved the connection
    * there, and on its own path (`takeProbeInto`) otherwise (§8.2.2, §9.1).
+   * Only the latest such challenge is kept, so a response still owed on
+   * `probeAddress` is dropped, as a response may be: its data is about to
+   * be overwritten.
    */
   stageProbe(frame: QuicFrame, payload: u8[]): void {
     quicConnCopyAt(this.probeData, 0, payload, frame.dataStart, QUIC_PATH_DATA_SIZE)
+    this.probeOwed = false
     this.probeStaged = true
   }
 
@@ -3395,10 +3401,15 @@ export class QuicConnection {
    * once validated, else its own 3x (§8.1). The others are dropped, as a
    * response may be. A challenge staged in `probeData` by the datagram
    * being read swaps into the ring in its place, owed on the new address,
-   * and the answer is true; otherwise false.
+   * and the answer is true; otherwise false. A response still owed on the
+   * probe route is never overwritten: the ring's are dropped instead.
    */
   sendResponsesBack(): boolean {
     if (this.pathCount <= 0) {
+      return false
+    }
+    if (this.probeOwed) {
+      this.pathCount = 0
       return false
     }
     const base: i32 = ((this.pathHead + this.pathCount - 1) % 4) * QUIC_PATH_DATA_SIZE

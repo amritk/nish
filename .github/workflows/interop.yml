@@ -24,12 +24,12 @@
 #
 # Every tool is pinned: actions by commit, images by digest, the runner by
 # commit, h2spec by release and SHA-256, Python packages by hash
-# (tests/interop/*-requirements.txt), tshark by package version and its PPA's
-# key by fingerprint. The simulator's run.sh is patched
-# (tests/interop/simulator.dockerfile) so its pcaps keep the packets of the
-# case's last fraction of a second. Nothing here turns a failure green: the
-# one retry, a quic-interop-runner case run once more after it fails, passes
-# only if that second run succeeds, and the verdict prints both.
+# (tests/interop/*-requirements.txt), tshark by its .debs' SHA-256. The
+# simulator's run.sh is patched (tests/interop/simulator.dockerfile) so its
+# pcaps keep the packets of the case's last fraction of a second. Nothing
+# here turns a failure green: the one retry, a quic-interop-runner case run
+# once more after it fails, passes only if that second run succeeds, and the
+# verdict prints both.
 #
 # The image's seed is the newest published release (server.dockerfile).
 # release.yml also calls this workflow, from its `interop` job, once `release`
@@ -197,31 +197,52 @@ jobs:
       # reads as "Unknown QUIC connection" and rebind-port and rebind-addr fail
       # whatever the server sent. 4.6 attaches the connection to the new tuple
       # once the client's packet there matches its DCID. So tshark comes from
-      # the Wireshark developers' stable PPA, its signing key pinned by
-      # fingerprint and the package by version.
-      - name: Add the Wireshark stable PPA, its key pinned by fingerprint
-        timeout-minutes: 2
-        env:
-          WIRESHARK_KEY: A2E402B85A4B70CD78D8A3D9D875551314ECA0F0
+      # the Wireshark developers' stable PPA, as the exact .debs of its 4.6.9
+      # build: fetched from the Launchpad librarian, which keeps a file for
+      # good once the PPA moves on and drops it from its index, and each
+      # checked against the SHA-256 that index's signed Packages file gave it
+      # when it was pinned. apt then installs them, and fetches what they need
+      # from Ubuntu, through the cache action.
+      - name: Restore tshark's .debs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/tshark-download
+          key: tshark-4.6.9-1-ubuntu24.04.0-ppa1-amd64
+
+      - name: Fetch tshark's .debs and check their SHA-256
+        timeout-minutes: 5
         run: |
-          key="$RUNNER_TEMP/wireshark-dev.gpg"
-          curl -sSf --retry 3 --max-time 30 \
-            "https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0x$WIRESHARK_KEY" |
-            gpg --dearmor > "$key"
-          got="$(gpg --show-keys --with-colons "$key" | awk -F: '$1 == "fpr" { print $10; exit }')"
-          if [ "$got" != "$WIRESHARK_KEY" ]; then
-            echo "::error::the keyserver returned key $got, not $WIRESHARK_KEY"
-            exit 1
-          fi
-          sudo install -D -m 644 "$key" /etc/apt/keyrings/wireshark-dev.gpg
-          echo "deb [signed-by=/etc/apt/keyrings/wireshark-dev.gpg] https://ppa.launchpadcontent.net/wireshark-dev/stable/ubuntu noble main" |
-            sudo tee /etc/apt/sources.list.d/wireshark-dev.list > /dev/null
+          dir="$RUNNER_TEMP/tshark-download"
+          mkdir -p "$dir" "$RUNNER_TEMP/tshark"
+          while read -r sum id name; do
+            if [ ! -f "$dir/$name" ]; then
+              curl -fsSL --retry 3 --connect-timeout 30 --max-time 120 -o "$dir/$name" "https://launchpadlibrarian.net/$id/$name"
+            fi
+            cp "$dir/$name" "$RUNNER_TEMP/tshark/$name"
+            echo "$sum  $RUNNER_TEMP/tshark/$name" | sha256sum -c -
+          done <<'EOF'
+          a97f88f43f1f2a32605491f6b46517ae2fada7a82df13d63c38412eead10c1a3 883202570 libwsutil17_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          e5648ea04631ba9414ab0b12f8e9384d987c00268763b123ccedf0874d2f0af6 883202568 libwiretap16_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          187cf9ac5753f4a91f3980948ed3fbb2feef0f4ac5a13895cb0b62df61681118 883202548 libwireshark-data_4.6.9-1~ubuntu24.04.0~ppa1_all.deb
+          21794bd0e73c57baa67f664235d4b23d5feb5fcf2f774a2892744a9a4b5b3492 883202566 libwireshark19_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          4fc6794928720b333261f14c3861401383a5dac732129b362d3022e8d0b0d8f1 883202573 wireshark-common_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          d03542b43901e69792b1b85d4ee0770bfdc425f9eda3635ef33afe25cf1f9718 883202572 tshark_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          EOF
 
       - name: Install tshark, which the runner reads the traces with
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
-          packages: tshark=4.6.9-1~ubuntu24.04.0~ppa1
+          packages: >-
+            ${{ runner.temp }}/tshark/libwsutil17_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/libwiretap16_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/libwireshark-data_4.6.9-1~ubuntu24.04.0~ppa1_all.deb
+            ${{ runner.temp }}/tshark/libwireshark19_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/wireshark-common_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/tshark_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+
+      - name: Check the tshark installed
+        run: tshark --version | grep -F 'TShark (Wireshark) 4.6.9 '
 
       - name: Fetch the runner at its pinned commit
         timeout-minutes: 5
