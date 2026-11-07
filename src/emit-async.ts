@@ -1827,7 +1827,7 @@ const driverText = (registry: AsyncRegistry, text: string): string => {
     "declare i8* @nish_async_enter(i8* nonnull)",
     "declare void @nish_async_leave(i8* nonnull, i8*)",
     "declare void @nish_async_done(i8* nonnull)",
-    "declare void @llvm.trap()"
+    "declare void @llvm.trap()",
   ]
   for (const line of runtime) {
     // A module that names one has declared it.
