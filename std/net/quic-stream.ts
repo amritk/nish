@@ -276,10 +276,13 @@ const quicStreamMin = (a: i64, b: i64): i64 => (a < b ? a : b)
  * there until the next `prime` or `drain`.
  */
 export class QuicStreamPools {
+  /** The pool of stream buffers, `bufferSize` bytes each, that the send and receive sides borrow. */
   data: BufferPool
+  /** The pool of bitmaps beside them, a bit per buffer byte: which bytes are unread or acknowledged. */
   bits: BufferPool
   /** The reserve: `ready` buffers and their bitmaps, taken from the pools and not lent to a stream; the rest of each list is `none`. */
   readyData: u8[][]
+  /** The reserve's bitmaps, one beside each `readyData` buffer at the same index. */
   readyBits: u8[][]
   /** The empty array a free reserve entry holds. */
   private none: u8[]
@@ -460,6 +463,7 @@ export const quicStreamGrowFree = (free: u8[][], target: i32, none: u8[]): void 
  * it asked this side to stop — and written only by `QuicStreams`.
  */
 export class QuicStream {
+  /** The stream ID (RFC 9000 §2.1), or -1 while the slot is free. */
   id: i64 = -1
   /**
    * The receive buffer: byte `o` of the stream at `o % size`, its bit in
@@ -467,6 +471,7 @@ export class QuicStream {
    * first byte arrives and after the side is done, and borrowed in between.
    */
   recvBuf: u8[]
+  /** The bitmap beside `recvBuf`: a bit per buffer byte, set while that byte has arrived and is unread. */
   recvHave: u8[]
   /**
    * How far the application has read.
@@ -495,6 +500,7 @@ export class QuicStream {
    * packet is sent again from it.
    */
   sendBuf: u8[]
+  /** The bitmap beside `sendBuf`: a bit per buffer byte, set once acknowledged and not yet released. */
   sendAcked: u8[]
   /** Every byte below this was acknowledged, and its room released. */
   sendBase: i64 = 0
@@ -509,6 +515,7 @@ export class QuicStream {
   sendLimit: i64 = 0
   /** Bytes a lost packet carried, `[resendLow, resendHigh)`, or -1; `resendFin` when the FIN was among them. */
   resendLow: i64 = -1
+  /** One past the last byte to send again, or -1 when nothing is owed; see `resendLow`. */
   resendHigh: i64 = -1
   /**
    * The error code of this side's RESET_STREAM, and its final size.
@@ -529,7 +536,9 @@ export class QuicStream {
    * @internal Read in quic-stream.ts outside the class.
    */
   size: i32 = 0
+  /** The send side's state (RFC 9000 §3.1), a `QUIC_SEND_*` constant. */
   sendState: i32 = 0
+  /** The receive side's state (RFC 9000 §3.2), a `QUIC_RECV_*` constant. */
   recvState: i32 = 0
   /**
    * Whether the application wrote the FIN, a frame carried it, and the peer acknowledged it.
@@ -715,6 +724,7 @@ export class QuicStream {
  * counters are readable for a test or a log.
  */
 export class QuicStreams {
+  /** The stream slots, a fixed count set at construction; a free one has `id` -1. */
   slots: QuicStream[]
   /** Open addressing by ID: `index[h]` is a slot plus one, 0 for empty. */
   private index: i32[]
@@ -747,10 +757,15 @@ export class QuicStreams {
   localStreams: i64 = 0
   /** How many of each type the client opened, the limit advertised, and how many of them finished. */
   peerBidiOpened: i64 = 0
+  /** How many unidirectional streams the client opened. */
   peerUniOpened: i64 = 0
+  /** The bidirectional stream limit this side last advertised to the client (MAX_STREAMS). */
   peerBidiLimit: i64 = 0
+  /** The unidirectional stream limit this side last advertised to the client (MAX_STREAMS). */
   peerUniLimit: i64 = 0
+  /** How many of the client's bidirectional streams finished, which is what lets the limit rise. */
   peerBidiClosed: i64 = 0
+  /** How many of the client's unidirectional streams finished, which is what lets the limit rise. */
   peerUniClosed: i64 = 0
   /** How many of each type this side opened, the client's limits, and how many of this side's are open. */
   private localBidiOpened: i64 = 0
@@ -764,12 +779,15 @@ export class QuicStreams {
   private peerUniCredit: i64 = 0
   /** The connection's receive credit: what was advertised, its window, what arrived, and what was read. */
   recvMaxData: i64 = 0
+  /** The connection's receive window in bytes: how far past what was read the credit is raised. */
   windowData: i64 = 0
+  /** Bytes the connection received, counted at each stream's highest offset, against `recvMaxData`. */
   recvTotal: i64 = 0
   private recvConsumed: i64 = 0
   /** The connection's send credit from the peer, what was sent against it, and what is written but not sent. */
   sendMaxData: i64 = 0
   private sendTotal: i64 = 0
+  /** Bytes the application wrote to every stream, sent or not; a write may not take it past `sendMaxData`. */
   writtenTotal: i64 = 0
   /** The transport error `locate` answered -2 for. */
   private locateError: i64 = 0
@@ -780,11 +798,15 @@ export class QuicStreams {
   private streamsBlockedUniAt: i64 = -1
   /** What the last `putNextChunk` or `putNextControl` wrote, for the packet's record. */
   lastId: i64 = 0
+  /** The stream offset of the last chunk `putNextChunk` wrote. */
   lastOffset: i64 = 0
+  /** The stream the last control frame `putNextControl` wrote names, or 0 for a connection-level one. */
   lastValue: i64 = 0
   /** The bytes of each stream's buffer, each way. */
   bufferSize: i32 = 0
+  /** The bytes of the last chunk `putNextChunk` wrote. */
   lastLength: i32 = 0
+  /** Which control frame `putNextControl` last wrote, a `QUIC_STREAM_CONTROL_*` constant. */
   lastKind: i32 = 0
   private eventHead: i32 = 0
   private eventCount: i32 = 0
