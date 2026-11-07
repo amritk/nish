@@ -72,7 +72,11 @@ merges, regenerates the goldens and stages them without committing. Sync after
 any `src/` or `std/` change lands on `main`, even with no textual conflict. A
 new positive `tests/cases/*` is registered with
 `node tests/differential/goldens.js --update` in the same commit. Details:
-`.claude/selfhost.md` → "The goldens".
+`.claude/selfhost.md` → "The goldens". `docs/reference/` (and its routes in
+`scalar.config.json`) moves with any change to `std/`, `runtime/nish.d.ts` or
+`docs/LANGUAGE.md`: rewrite it with `node scripts/gen-reference.mjs`; CI's
+`--check` fails on a stale, extra or hand-edited page
+([`docs/README.md`](docs/README.md#the-library-reference)).
 
 **The emit-ts known list is Node-version-specific.** Regenerate
 `tests/differential/emit-ts-known.txt` only under the Node that
