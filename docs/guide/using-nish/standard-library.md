@@ -2497,7 +2497,13 @@ that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
 its interest changed, so a keep-alive request costs one `recv` and one `send`
 and no `pollModify`. A slot borrows its output buffer only while it writes, so
-an idle connection costs a few KiB, not `outputSize`. Set
+an idle connection costs a few KiB, not `outputSize`. Over plain TCP,
+`Http1Connection.sendBody(buf, off, len)` sends a `Content-Length` body
+straight from your array, in one `sendmsg` with whatever output is queued
+before it, and copies only what the socket did not take; it answers as `write`
+does and keeps no hold on `buf`, so the array is yours again once it returns.
+A chunked or compressed response, an `Http1TlsServer` slot, and a write still
+held back are copied as `write` copies them. Set
 `Http1Config.idleInput` and a slot lends its input and head buffers back too,
 whenever it has answered a request and holds no byte of the next: a server
 holding tens of thousands of keep-alive connections that each send a request
