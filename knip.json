@@ -32,7 +32,11 @@
     "tests/lexer/**",
     "tests/layout/**",
     "tests/differential/corpus/**",
-    "tests/differential/arrow-parity/**"
+    "tests/differential/arrow-parity/**",
+    "tests/host-window/**",
+    "tests/module-storage/**",
+    "tests/page/**",
+    "tests/panic/**"
   ],
   "ignoreDependencies": ["cookbook-pkg", "elysia", "hono"],
   "ignoreBinaries": ["clang", "ld.lld", "llc", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "openssl", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load", "script"],
