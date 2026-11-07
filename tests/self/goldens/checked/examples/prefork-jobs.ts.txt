@@ -891,7 +891,7 @@ function SpscRing.reserve(this: SpscRing, n: i32): u8[] -> @nish.SpscRing.reserv
   calls: nish.SharedRegion.lend nish.SharedRegion.loadI64 nish.SpscRing.emptyWindow nish.ringRecordBytes nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.emptyWindow#0
   stackSites=0 stackLocals=0
-  local -13:11 most: i32 (const)
+  local -15:11 most: i32 (const)
   local -6:11 need: i32 (const)
   callee -6:23 ringRecordBytes -> @nish.ringRecordBytes
   local -5:11 at: i32 (const)
