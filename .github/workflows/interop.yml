@@ -242,7 +242,14 @@ jobs:
             ${{ runner.temp }}/tshark/tshark_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
 
       - name: Check the tshark installed
-        run: tshark --version | grep -F 'TShark (Wireshark) 4.6.9 '
+        run: |
+          # The first line reads "TShark (Wireshark) 4.6.9." for this build.
+          v="$(tshark --version | head -n1)"
+          echo "$v"
+          case "$v" in
+            "TShark (Wireshark) 4.6.9."*|"TShark (Wireshark) 4.6.9 "*) ;;
+            *) echo "expected tshark 4.6.9" >&2; exit 1 ;;
+          esac
 
       - name: Fetch the runner at its pinned commit
         timeout-minutes: 5
