@@ -146,8 +146,16 @@ export const QUIC_RECOVERY_ECT0: i32 = 2
 export const QUIC_RECOVERY_ECN_TESTING_PACKETS: i32 = 10
 /** ECN's states (RFC 9000 A.4): testing, marking the first packets; unknown, those sent and none validated yet; capable; and failed, for the connection's life. */
 export const QUIC_RECOVERY_ECN_TESTING: i32 = 0
+/**
+ * ECN is unknown: the testing packets are sent, none is validated yet, and nothing more is marked
+ * until one is.
+ */
 export const QUIC_RECOVERY_ECN_UNKNOWN: i32 = 1
+/** The path is ECN-capable: a marked packet's counts validated, and every packet is marked from here on. */
 export const QUIC_RECOVERY_ECN_CAPABLE: i32 = 2
+/**
+ * Validation failed: nothing is marked again for the connection's life, unless `restartEcn` tests a new path.
+ */
 export const QUIC_RECOVERY_ECN_FAILED: i32 = 3
 
 /** Microseconds in a millisecond: the pacer's clock against the caller's `now`. */
@@ -207,6 +215,12 @@ export class QuicSentPackets {
   ect1: i64 = 0
   ce: i64 = 0
 
+  /**
+   * An empty ring; `QuicRecovery` makes one for each space.
+   *
+   * @param capacity How many packets the space can keep in flight at once, fixed for the ring's life:
+   *   `QUIC_RECOVERY_HANDSHAKE_CAPACITY` or `QUIC_RECOVERY_APPLICATION_CAPACITY`.
+   */
   constructor(capacity: i32) {
     this.capacity = capacity
     this.pn = new Array<i64>(capacity)
@@ -226,7 +240,12 @@ export class QuicSentPackets {
     return (this.head + k) % this.capacity
   }
 
-  /** The state of slot `s`, or free for a slot outside the ring. */
+  /**
+   * The state of slot `s`, or free for a slot outside the ring.
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns The slot's state without its ECT(0) mark: free, in flight, acknowledged or lost.
+   */
   stateAt(s: i32): i32 {
     if (s < 0 || s >= toI32(this.state.length)) {
       return QUIC_RECOVERY_FREE
@@ -244,27 +263,53 @@ export class QuicSentPackets {
     }
   }
 
-  /** The packet number in slot `s`, or -1. */
+  /**
+   * The packet number in slot `s`, or -1.
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns The packet number recorded there, or -1 for an index outside the ring.
+   */
   pnAt(s: i32): i64 {
     return s >= 0 && s < toI32(this.pn.length) ? this.pn[s] : -1
   }
 
-  /** When the packet in slot `s` was sent, or -1. */
+  /**
+   * When the packet in slot `s` was sent, or -1.
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns The `now` it was recorded at, in the caller's milliseconds, or -1 for an index outside the ring.
+   */
   timeAt(s: i32): i64 {
     return s >= 0 && s < toI32(this.timeSent.length) ? this.timeSent[s] : -1
   }
 
-  /** When the packet in slot `s` was sent on the pacer's clock, in microseconds, or -1. */
+  /**
+   * When the packet in slot `s` was sent on the pacer's clock, in microseconds, or -1.
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns The send time in microseconds (`now × 1000` when `micros` was not current), or -1 for an
+   *   index outside the ring.
+   */
   fineAt(s: i32): i64 {
     return s >= 0 && s < toI32(this.fineSent.length) ? this.fineSent[s] : -1
   }
 
-  /** The size of the packet in slot `s`, or 0. */
+  /**
+   * The size of the packet in slot `s`, or 0.
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns Its size on the wire in bytes, or 0 for an index outside the ring.
+   */
   sizeAt(s: i32): i32 {
     return s >= 0 && s < toI32(this.size.length) ? this.size[s] : 0
   }
 
-  /** Whether the packet in slot `s` was sent marked ECT(0). */
+  /**
+   * Whether the packet in slot `s` was sent marked ECT(0).
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns True when `onEctSent` marked it; false for an index outside the ring.
+   */
   markedAt(s: i32): boolean {
     return s >= 0 && s < toI32(this.state.length) && (toI32(this.state[s]) & QUIC_RECOVERY_MARKED) !== 0
   }
@@ -279,22 +324,42 @@ export class QuicSentPackets {
     }
   }
 
-  /** The `k`-th slot the last call acknowledged, or -1. */
+  /**
+   * The `k`-th slot the last call acknowledged, or -1.
+   *
+   * @param k The position in `acked`, from 0 to `ackedCount - 1`, oldest first.
+   * @returns The slot, valid until the next `onAck` or `onTimeout`, or -1 for `k` out of range.
+   */
   ackedSlot(k: i32): i32 {
     return k >= 0 && k < this.ackedCount && k < toI32(this.acked.length) ? this.acked[k] : -1
   }
 
-  /** The `k`-th slot the last call declared lost, or -1. */
+  /**
+   * The `k`-th slot the last call declared lost, or -1.
+   *
+   * @param k The position in `lost`, from 0 to `lostCount - 1`, oldest first.
+   * @returns The slot, valid until the next `onAck` or `onTimeout`, or -1 for `k` out of range.
+   */
   lostSlot(k: i32): i32 {
     return k >= 0 && k < this.lostCount && k < toI32(this.lost.length) ? this.lost[k] : -1
   }
 
-  /** Whether slot `s` holds a packet still in flight. */
+  /**
+   * Whether slot `s` holds a packet still in flight.
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns True for a packet neither acknowledged nor lost; false for an index outside the ring.
+   */
   inFlightAt(s: i32): boolean {
     return this.stateAt(s) === QUIC_RECOVERY_SENT
   }
 
-  /** Whether every slot is taken, so nothing more can be recorded until a packet is settled. */
+  /**
+   * Whether every slot is taken, so nothing more can be recorded until a packet is settled.
+   *
+   * @returns True when `onPacketSent` would refuse a packet for want of room. Settled slots at the oldest
+   *   end are freed first, so asking can change `count`.
+   */
   full(): boolean {
     this.compact()
     return this.count >= this.capacity
@@ -518,7 +583,13 @@ export class QuicRecovery {
     this.ecnTestLost = 0
   }
 
-  /** Space `space`'s packets, or `null` for an index that names no space. */
+  /**
+   * Space `space`'s packets, or `null` for an index that names no space.
+   *
+   * @param space A space's index: `QUIC_RECOVERY_INITIAL`, `QUIC_RECOVERY_HANDSHAKE` or
+   *   `QUIC_RECOVERY_APPLICATION`.
+   * @returns The space's own ring, not a copy, or `null` for any other index.
+   */
   space(space: i32): QuicSentPackets | null {
     if (space < 0 || space >= toI32(this.spaces.length)) {
       return null
@@ -526,7 +597,11 @@ export class QuicRecovery {
     return this.spaces[space]
   }
 
-  /** bytes_in_flight (B.2): every space's packets in flight. */
+  /**
+   * bytes_in_flight (B.2): every space's packets in flight.
+   *
+   * @returns The bytes of every packet in flight, summed over the three spaces.
+   */
   bytesInFlight(): i64 {
     let total: i64 = 0
     for (const sp of this.spaces) {
@@ -538,6 +613,8 @@ export class QuicRecovery {
   /**
    * Whether the window has room for another full-sized datagram (B.4). The
    * caller sends nothing ack-eliciting while it has not, except a probe.
+   *
+   * @returns True when the bytes in flight plus 1200 bytes fit the congestion window.
    */
   canSend(): boolean {
     return this.bytesInFlight() + QUIC_RECOVERY_DATAGRAM_SIZE <= this.congestionWindow
@@ -549,6 +626,12 @@ export class QuicRecovery {
    * the caller keeps what it carried, or -1, recording nothing, for a space
    * that does not exist, a size that is not positive, a packet number that is
    * not above the last one recorded, or a ring that is full.
+   *
+   * @param space The space's index, `QUIC_RECOVERY_INITIAL` to `QUIC_RECOVERY_APPLICATION`.
+   * @param pn The packet's number: above the last one recorded and at most 2^62 − 1.
+   * @param size The packet's size on the wire in bytes; must be positive.
+   * @param now The send time, in the caller's milliseconds.
+   * @returns The ring slot the packet is recorded in, or -1 when nothing was recorded.
    */
   onPacketSent(space: i32, pn: i64, size: i32, now: i64): i32 {
     const sp: QuicSentPackets | null = this.space(space)
@@ -584,6 +667,8 @@ export class QuicRecovery {
    * for the first `QUIC_RECOVERY_ECN_TESTING_PACKETS` and, once the path is
    * capable, for every one; 0, Not-ECT, while the testing packets wait to be
    * validated and once validation failed.
+   *
+   * @returns `QUIC_RECOVERY_ECT0` (2) to mark with, or 0 for Not-ECT.
    */
   ecnCodepoint(): i32 {
     const testing: boolean =
@@ -596,6 +681,9 @@ export class QuicRecovery {
    * `onPacketSent` answered for it, or -1 for a packet that elicits no
    * acknowledgement and so was not recorded. Every packet of a datagram
    * marked counts, whatever `ecnCodepoint()` answers by the last of them.
+   *
+   * @param space The space's index, `QUIC_RECOVERY_INITIAL` to `QUIC_RECOVERY_APPLICATION`.
+   * @param slot The slot `onPacketSent` answered for the packet, or -1 when it was not recorded.
    */
   onEctSent(space: i32, slot: i32): void {
     const sp: QuicSentPackets | null = this.space(space)
@@ -630,6 +718,14 @@ export class QuicRecovery {
    * exist or there is no range. A packet number the space never sent is the
    * caller's to refuse (RFC 9000 §13.1): only it knows the packets that
    * elicit no acknowledgement, which are not recorded here.
+   *
+   * @param space The space's index, `QUIC_RECOVERY_INITIAL` to `QUIC_RECOVERY_APPLICATION`.
+   * @param ranges The acknowledged packet numbers, as `[smallest, largest]` pairs, highest first; only read.
+   * @param count How many pairs of `ranges` to read; past the array's length the rest are ignored.
+   * @param ackDelay The peer's ACK Delay, already scaled, in milliseconds.
+   * @param now The time the ACK arrived, in the caller's milliseconds.
+   * @returns How many recorded packets were newly acknowledged, or -1 when the space or the ranges are
+   *   missing.
    */
   onAck(space: i32, ranges: i64[], count: i32, ackDelay: i64, now: i64): i32 {
     const none: i64 = -1
@@ -642,6 +738,17 @@ export class QuicRecovery {
    * carries none. The counts are validated (RFC 9000 §13.4.2.1) and a rise
    * in ECN-CE is a congestion event (§7.1, B.7) before loss is detected, as
    * A.7 orders it.
+   *
+   * @param space The space's index, `QUIC_RECOVERY_INITIAL` to `QUIC_RECOVERY_APPLICATION`.
+   * @param ranges The acknowledged packet numbers, as `[smallest, largest]` pairs, highest first; only read.
+   * @param count How many pairs of `ranges` to read; past the array's length the rest are ignored.
+   * @param ackDelay The peer's ACK Delay, already scaled, in milliseconds.
+   * @param now The time the ACK arrived, in the caller's milliseconds.
+   * @param ect0 The frame's ECT(0) count, or -1 for an ACK without counts.
+   * @param ect1 The frame's ECT(1) count, or -1 for an ACK without counts.
+   * @param ce The frame's ECN-CE count, or -1 for an ACK without counts.
+   * @returns How many recorded packets were newly acknowledged, or -1 when the space or the ranges are
+   *   missing.
    */
   onAckEcn(
     space: i32,
@@ -816,6 +923,9 @@ export class QuicRecovery {
   /**
    * `now` on the pacer's clock: `micros` when it falls inside the
    * millisecond `now` names, and `now × 1000` otherwise.
+   *
+   * @param now The caller's time in milliseconds.
+   * @returns The same instant in microseconds.
    */
   fineNow(now: i64): i64 {
     const coarse: i64 = now * QUIC_RECOVERY_MICROS
@@ -857,7 +967,11 @@ export class QuicRecovery {
     this.pacerRtt = (7 * this.pacerRtt + adjusted) / 8
   }
 
-  /** The loss delay (§6.1.2): 9/8 of the larger of the latest and the smoothed RTT, at least the granularity. */
+  /**
+   * The loss delay (§6.1.2): 9/8 of the larger of the latest and the smoothed RTT, at least the granularity.
+   *
+   * @returns How long after a packet was sent it is lost by the time threshold, in milliseconds, at least 1.
+   */
   lossDelay(): i64 {
     const delay: i64 = (9 * quicRecoveryMax(this.latestRtt, this.smoothedRtt)) / 8
     return quicRecoveryMax(delay, QUIC_RECOVERY_GRANULARITY)
@@ -1005,6 +1119,8 @@ export class QuicRecovery {
    * max(4 × rttvar, kGranularity), plus the peer's max_ack_delay once the
    * handshake is confirmed. It is also what a key update's old keys are kept
    * for and what the idle timeout is at least three of.
+   *
+   * @returns The period in milliseconds, at least 1.
    */
   probeTimeout(): i64 {
     const base: i64 = this.ptoBase()
@@ -1022,6 +1138,8 @@ export class QuicRecovery {
    * applied; the Application Data space counts only once the handshake is
    * confirmed. Answers -1 with nothing in flight. `ptoSpace()` names the
    * space it chose.
+   *
+   * @returns The time the probe timeout fires, in the caller's milliseconds, or -1 when no space has one.
    */
   ptoTime(): i64 {
     const space: i32 = this.ptoSpace()
@@ -1082,6 +1200,9 @@ export class QuicRecovery {
    * time-threshold loss, else the probe timeout — or -1 for none. With
    * `amplificationBlocked`, when the server may send nothing until the client
    * does (RFC 9000 §8.1), there is no probe timeout (§6.2.2.1).
+   *
+   * @param amplificationBlocked Whether the anti-amplification limit stops the server sending anything now.
+   * @returns The time `onTimeout` is next due, in the caller's milliseconds, or -1 when no timer is set.
    */
   deadline(amplificationBlocked: boolean): i64 {
     const loss: i32 = this.lossSpace()
@@ -1101,6 +1222,11 @@ export class QuicRecovery {
    * timeout is due, the backoff doubles and the caller is to send a probe in
    * `timeoutSpace`: `QUIC_RECOVERY_TIMEOUT_PTO`. Before either is due, or
    * when nothing is timed, `QUIC_RECOVERY_TIMEOUT_NONE`.
+   *
+   * @param now The caller's time in milliseconds.
+   * @param amplificationBlocked Whether the anti-amplification limit stops the server sending anything now.
+   * @returns One of `QUIC_RECOVERY_TIMEOUT_NONE`, `QUIC_RECOVERY_TIMEOUT_LOSS` or
+   *   `QUIC_RECOVERY_TIMEOUT_PTO`.
    */
   onTimeout(now: i64, amplificationBlocked: boolean): i32 {
     for (const sp of this.spaces) {
@@ -1133,6 +1259,9 @@ export class QuicRecovery {
    * when the ring is full. The caller has already queued what the space had
    * in flight again, which is what a probe sends. Answers the slot, or -1
    * when nothing is in flight there.
+   *
+   * @param space The space's index, `QUIC_RECOVERY_INITIAL` to `QUIC_RECOVERY_APPLICATION`.
+   * @returns The slot of the packet given up, now settled as lost, or -1 when nothing is in flight there.
    */
   evictOldest(space: i32): i32 {
     const sp: QuicSentPackets | null = this.space(space)
@@ -1153,6 +1282,8 @@ export class QuicRecovery {
   /**
    * OnPacketNumberSpaceDiscarded (A.11): the space's keys are gone, so its
    * packets leave flight uncounted, its timers stop, and the backoff resets.
+   *
+   * @param space The space's index, `QUIC_RECOVERY_INITIAL` to `QUIC_RECOVERY_APPLICATION`.
    */
   discardSpace(space: i32): void {
     const sp: QuicSentPackets | null = this.space(space)
@@ -1200,6 +1331,10 @@ export class QuicRecovery {
    * bytes go: 0 when it may go now, else its wait in microseconds rounded
    * up to whole milliseconds, so at least 1. The rate is 5/4 of the window per `pacerRtt`
    * (§7.7's N of 1.25).
+   *
+   * @param now The caller's time in milliseconds; the pacer reads `micros` too when it is current.
+   * @param size The datagram's size in bytes.
+   * @returns The wait in whole milliseconds: 0 to send now, else at least 1.
    */
   pacerDelay(now: i64, size: i32): i64 {
     this.pacerRefill(now)
@@ -1219,6 +1354,10 @@ export class QuicRecovery {
    * pacer that earns by the microsecond would otherwise let a fast
    * connection out a datagram at a time, one send each; one that earns
    * slowly still lets a datagram go as soon as it has the credit for it.
+   *
+   * @param least The smallest quantum, in bytes, such as one full datagram.
+   * @param most The largest quantum, in bytes, such as `QUIC_LISTENER_FLIGHT_QUANTUM`.
+   * @returns The bytes the pacer earns in a millisecond, held to `least` and `most`.
    */
   pacerQuantum(least: i32, most: i32): i32 {
     const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
@@ -1229,7 +1368,12 @@ export class QuicRecovery {
     return milli > toI64(most) ? most : toI32(milli)
   }
 
-  /** Charges the pacer for a datagram of `size` bytes sent at `now`. */
+  /**
+   * Charges the pacer for a datagram of `size` bytes sent at `now`.
+   *
+   * @param now The send time in the caller's milliseconds; the pacer is topped up to it first.
+   * @param size The datagram's size in bytes, which may take the credit below 0.
+   */
   onPaced(now: i64, size: i32): void {
     this.pacerRefill(now)
     this.pacerBudget = this.pacerBudget - toI64(size)

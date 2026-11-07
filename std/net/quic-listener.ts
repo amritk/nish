@@ -8,6 +8,7 @@
  * the RFC means: nothing it answers depends on any connection.
  *
  *     import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT, QUIC_LISTENER_ANSWER_SIZE } from "nish/net/quic-listener";
+ *     import { QuicConnection } from "nish/net/quic";
  *
  *     const listener = new QuicListener(config, entropy);      // entropy: QUIC_LISTENER_ENTROPY_SIZE random bytes
  *     const answer = new QuicListenerAnswer(QUIC_LISTENER_ANSWER_SIZE);  // once, beside the listener
@@ -229,6 +230,12 @@ export class QuicListenerAnswer {
   retried: boolean = false
   private room: i32 = 0
 
+  /**
+   * An empty answer with room for a reply of `room` bytes.
+   *
+   * @param room The bytes reserved for `reply`, usually `QUIC_LISTENER_ANSWER_SIZE`; 0 or less reserves
+   *   none. `originalDcid` and `retryScid` get `QUIC_MAX_CID_LENGTH` (20) bytes each whatever it is.
+   */
   constructor(room: i32) {
     this.room = room > 0 ? room : 0
     this.reply = quicListenerRoom(this.room)
@@ -375,7 +382,16 @@ export class QuicListener {
   /** Whether the configuration and entropy were usable. */
   private usable: boolean = false
 
-  /** A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. */
+  /**
+   * A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in
+   * the caller's array.
+   *
+   * @param config The server's configuration, kept by reference: its static keys and Retry token lifetime.
+   *   Keys of the wrong size, or a lifetime outside 1 to `QUIC_LISTENER_MAX_TOKEN_LIFETIME` ms, make a
+   *   listener that drops every datagram.
+   * @param entropy `QUIC_LISTENER_ENTROPY_SIZE` (32) random bytes, the seed of every unpredictable byte
+   *   the listener sends. Zeroed on return; any other length makes a listener that drops every datagram.
+   */
   constructor(config: QuicServerConfig, entropy: u8[]) {
     this.config = config
     this.seed = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE)
@@ -482,6 +498,16 @@ export class QuicListener {
    * the module header for the rules; nothing a peer sends makes it panic,
    * and nothing it does keeps arena memory. A window outside `datagram` is
    * the caller's mistake, and panics.
+   *
+   * @param datagram The array the datagram lies in; read, not kept.
+   * @param at The index in `datagram` of its first byte.
+   * @param len The datagram's length in bytes.
+   * @param address The client's address and port, as bytes; bound into a Retry token.
+   * @param now The caller's monotonic time in milliseconds; an earlier time than the last is taken as the
+   *   last.
+   * @param answer Where the answer goes, overwritten each call and owned by the caller.
+   * @returns `answer.kind`: `QUIC_LISTEN_DROP`, `QUIC_LISTEN_ACCEPT`, `QUIC_LISTEN_VERSION_NEGOTIATION`,
+   *   `QUIC_LISTEN_RETRY`, `QUIC_LISTEN_INVALID_TOKEN` or `QUIC_LISTEN_STATELESS_RESET`.
    */
   handleWindow(datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer): i32 {
     if (!quicListenerWindowFits(toI32(datagram.length), at, len)) {
@@ -552,6 +578,11 @@ export class QuicListener {
    * made with exactly the room its reply takes: for a caller that keeps each
    * answer, at the cost of one `QuicListenerAnswer` a datagram. A carrier
    * makes one answer and calls `handleWindow`.
+   *
+   * @param datagram The whole datagram; read, not kept.
+   * @param address The client's address and port, as bytes.
+   * @param now The caller's monotonic time in milliseconds.
+   * @returns A new answer, the caller's to keep and, once done with, to wipe.
    */
   handle(datagram: u8[], address: u8[], now: i64): QuicListenerAnswer {
     const spare: QuicListenerAnswer = this.spare
@@ -896,6 +927,10 @@ export class QuicListener {
  * but only when the connection's pacer has the credit for a full datagram
  * (RFC 9002 §7.7); `null` when it has not, or when nothing is due. The
  * datagram is charged to the pacer at its real size.
+ *
+ * @param conn The connection to send for.
+ * @param now The caller's time in milliseconds.
+ * @returns A new datagram to send, the caller's; or `null` when the pacer holds it back or nothing is due.
  */
 export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | null => {
   if (conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE) > 0) {
@@ -911,6 +946,10 @@ export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | nu
 /**
  * When `quicListenerTakePaced` next lets `conn` send a full datagram, in the
  * caller's milliseconds: `now` when it may already.
+ *
+ * @param conn The connection to ask about.
+ * @param now The caller's time in milliseconds.
+ * @returns A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
  */
 export const quicListenerPaceTime = (conn: QuicConnection, now: i64): i64 =>
   now + conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE)
@@ -929,6 +968,10 @@ const quicListenerQuantum = (conn: QuicConnection): i32 =>
 /**
  * When `quicListenerTakeFlight` next lets `conn` start a flight, in the
  * caller's milliseconds: `now` when it may already.
+ *
+ * @param conn The connection to ask about.
+ * @param now The caller's time in milliseconds.
+ * @returns A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
  */
 export const quicListenerFlightTime = (conn: QuicConnection, now: i64): i64 =>
   now + conn.recovery.pacerDelay(now, quicListenerQuantum(conn))
@@ -959,6 +1002,15 @@ export class QuicFlight {
  * `QUIC_CONN_DATAGRAM_SIZE`, which can only be the last of a segmented send,
  * at `QUIC_LISTENER_FLIGHT_MAX` datagrams, when `cap` has no room for
  * another, and before a datagram whose ECN codepoint would not be the first's.
+ *
+ * @param conn The connection to send for.
+ * @param now The caller's time in milliseconds.
+ * @param buf Where the flight is written.
+ * @param at The index in `buf` of the flight's first byte.
+ * @param cap The bytes of `buf` from `at` the flight may use; under `QUIC_CONN_DATAGRAM_SIZE` sends nothing.
+ * @param flight Overwritten with the flight's datagram count, segment size and ECN codepoint; all 0
+ *   when nothing was written.
+ * @returns The flight's length in bytes, or 0 when the pacer holds it back or nothing is due.
  */
 export const quicListenerTakeFlight = (
   conn: QuicConnection,
@@ -1008,6 +1060,15 @@ export const quicListenerTakeFlight = (
  * `now`: one datagram when `segment` is 0, else a GRO receive cut every
  * `segment` bytes (the last may be shorter). Each is read in place. Answers
  * how many it handed over.
+ *
+ * @param conn The connection the datagrams belong to.
+ * @param buf The receive buffer; read, not kept.
+ * @param off The index in `buf` of the first byte received.
+ * @param len The bytes received.
+ * @param segment The GRO segment size in bytes, or 0 (or less) for a single datagram.
+ * @param now The caller's time in milliseconds.
+ * @returns How many datagrams were handed over: 1 for a single datagram, else one per `segment` bytes,
+ *   rounded up, and 0 when `len` is 0 or less.
  */
 export const quicListenerReceiveSegments = (
   conn: QuicConnection,
