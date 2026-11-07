@@ -15,11 +15,43 @@ import {
 ```
 
 ```ts
-const client = new DnsClient(new DnsResolver(config, hosts, 4), loop, 1000);
-const lookup = client.start("example.com", 443, monotonicNanos());
-// in the loop: pollWait(loop, ready, client.timeoutMs(now, own)); hand
-// each token client.owns to client.ready, call client.tick(now), and
-// read client.result(lookup, out, ttls) until it is not PENDING.
+import { DnsClient, resolveHost } from "nish/net/dns"
+import { DNS_RESOLVE_MAX_ADDRESSES, DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver"
+import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config"
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
+import { readFileBytesSync } from "nish:fs"
+import { pollCreate, pollWait } from "nish:net"
+import { monotonicNanos } from "nish:process"
+
+const out: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
+const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
+
+// A command-line tool: block for at most two seconds.
+const count: i32 = resolveHost("example.com", 2000, 443, out, ttls)
+
+// A server: the lookup rides the loop it already runs.
+const config: DnsConfig = new DnsConfig()
+const resolv: u8[] = readFileBytesSync("/etc/resolv.conf") ?? new Array<u8>(0)
+dnsParseResolvConf(resolv, 0, toI32(resolv.length), config)
+const loop: i32 = pollCreate()
+const client: DnsClient = new DnsClient(new DnsResolver(config, null, 4), loop, 1000)
+const lookup: i32 = client.start("example.com", 443, monotonicNanos())
+if (lookup >= 0) {
+  const ready: i32[] = new Array<i32>(16)
+  let status: i32 = client.result(lookup, out, ttls)
+  while (status === DNS_RESOLVE_PENDING) {
+    const n: i32 = pollWait(loop, ready, client.timeoutMs(monotonicNanos(), -1))
+    const now: i64 = monotonicNanos()
+    for (let k: i32 = 0; k < n; k++) {
+      if (client.owns(ready[2 * k])) {
+        client.ready(ready[2 * k], ready[2 * k + 1], now)
+      }
+    }
+    client.tick(now)
+    status = client.result(lookup, out, ttls)
+  }
+  // status: the address count, 18 bytes each in out, or a DNS_RESOLVE_* code
+}
 ```
 
 <scalar-grid cols="2">
@@ -32,7 +64,7 @@ const lookup = client.start("example.com", 443, monotonicNanos());
 
 <scalar-card title="resolveHost" icon="phosphor/regular/function" href="#resolvehost">
 
-The addresses of `name`, looked up as `/etc/resolv.conf` and `/etc/hosts` say (either missing means the defaults), each 18 bytes with `port` into `out` and its TTL in seconds into `ttls`: the count, or a negative `DNS_RESOLVE_*` code, `DNS_RESOLVE_TIMEOUT` once `timeoutMs` has passed, or the negative errno of a poll loop that cannot be made or waited on.
+The addresses of `name`, looked up as `/etc/resolv.conf` and `/etc/hosts` say (a missing resolv.conf means the defaults, a missing hosts file no entries), each 18 bytes with `port` into `out` and its TTL in seconds into `ttls`.
 
 </scalar-card>
 
@@ -44,16 +76,46 @@ A `DnsResolver` driven on the caller's loop.
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="`DnsClient` is for a program with a loop">
 
-`DnsClient` opens a fresh UDP socket on a kernel-chosen port for every UDP
-try and a TCP connection for every TCP one, watches each under a token of
-the range it was given, and closes it when the try ends. It never waits,
-never reads the clock and never reads a file: the caller's loop owns all
-three, so a lookup costs a server nothing while it waits. Each send's
-query ID is drawn from `crypto.getRandomValues`.
+It opens a fresh UDP socket
+on a kernel-chosen port for every UDP try and a TCP connection for every
+TCP one, watches each under a token of the range it was given, and closes
+it when the try ends. It never waits, never reads the clock and never
+reads a file: the caller's loop owns all three, so a lookup costs a server
+nothing while it waits. Each send's query ID is drawn from
+`crypto.getRandomValues`, and every buffer it uses is made in its
+constructor.
 
-</scalar-callout>
+</scalar-detail>
+
+<scalar-detail title="`resolveHost` and `dnsLookupWith` block the thread">
+
+**`resolveHost` and `dnsLookupWith` block the thread**, on a poll loop of
+their own, so they are for a command-line tool or a program's start-up.
+
+</scalar-detail>
+
+<scalar-detail title="The caller owns `out` and `ttls`">
+
+Both need room for
+`DNS_RESOLVE_MAX_ADDRESSES` entries (18 bytes each in `out`), or the call
+that reads the answer panics; they are written only when it answers a
+count. Reading a finished lookup's answer frees its slot, so read it once.
+
+</scalar-detail>
+
+<scalar-detail title="Errors are negative numbers">
+
+`start` answers `DNS_RESOLVE_BUSY` when
+every slot is in use or the `DNS_ERR_*` code of a name that is not one; a
+finished lookup answers `DNS_RESOLVE_NOT_FOUND`, `DNS_RESOLVE_NO_ANSWER` or
+`DNS_RESOLVE_CNAME`. A socket that cannot be opened, written or connected
+fails that one try, counted in `socketFailures`, and the query moves to
+the next server. A token outside the client's range, a negative token base
+and an `out` or `ttls` that is too short are bugs in the caller and panic.
+
+</scalar-detail>
 
 Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -62,7 +124,8 @@ Private helpers share the importing program's flat symbol namespace
 
 `resolveHost` with the configuration given rather than read: one lookup
 of `name` on a loop of its own, for at most `timeoutMs`. Blocks as
-`resolveHost` does.
+`resolveHost` does, and reads no file. `config` and `hosts` are only read,
+so one pair can serve many calls.
 
 ```ts
 function dnsLookupWith(
@@ -79,45 +142,73 @@ function dnsLookupWith(
 #### Parameters
 
 <scalar-field name="config" type="DnsConfig" required>
+
+The resolv.conf to use, as `dnsParseResolvConf` filled it.
+
 </scalar-field>
 
 <scalar-field name="hosts" type="DnsHosts | null" required>
+
+The hosts file to consult first, as `dnsParseHosts` filled it, or null for none.
+
 </scalar-field>
 
 <scalar-field name="name" type="string" required>
+
+The name to look up.
+
 </scalar-field>
 
 <scalar-field name="timeoutMs" type="i32" required>
+
+The most the whole lookup may take, in milliseconds, on the monotonic clock.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port, 0 to 65535, written into every address; any other value panics.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the addresses go, from offset 0, A first; at least
+  `DNS_RESOLVE_MAX_ADDRESSES * 18` bytes, or this panics.
+
 </scalar-field>
 
 <scalar-field name="ttls" type="i32[]" required>
+
+Where each address's TTL goes, in seconds; at least `DNS_RESOLVE_MAX_ADDRESSES`,
+  or this panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+What `resolveHost` answers: the address count, or a negative `DNS_RESOLVE_*`,
+  `DNS_ERR_*` or errno code.
+
 </scalar-field>
 
 ## resolveHost
 
 The addresses of `name`, looked up as `/etc/resolv.conf` and `/etc/hosts`
-say (either missing means the defaults), each 18 bytes with `port` into
-`out` and its TTL in seconds into `ttls`: the count, or a negative
-`DNS_RESOLVE_*` code, `DNS_RESOLVE_TIMEOUT` once `timeoutMs` has passed,
-or the negative errno of a poll loop that cannot be made or waited on.
-It waits for both the A and the AAAA answer, so a family that answered is
-not returned on its own once `timeoutMs` passes: it is `DNS_RESOLVE_TIMEOUT`.
+say (a missing resolv.conf means the defaults, a missing hosts file no
+entries), each 18 bytes with `port` into `out` and its TTL in seconds into
+`ttls`. It waits for both the A and the AAAA answer, so a family that
+answered is not returned on its own once `timeoutMs` passes: it is
+`DNS_RESOLVE_TIMEOUT`.
 
 **It blocks the thread** until the lookup ends, on a loop of its own, so
 it is for a CLI or a program's start-up; a server resolves with a
 `DnsClient` on its own loop. `out` and `ttls` need room for
-`DNS_RESOLVE_MAX_ADDRESSES`, or it panics.
+`DNS_RESOLVE_MAX_ADDRESSES`, or it panics. Each call reads both files and
+makes its own configuration, resolver and loop, closing the loop before
+it returns.
 
 ```ts
 function resolveHost(
@@ -132,23 +223,46 @@ function resolveHost(
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+The name to look up; `localhost`, an address literal and a hosts entry answer
+  without a packet, even with a `timeoutMs` of 0.
+
 </scalar-field>
 
 <scalar-field name="timeoutMs" type="i32" required>
+
+The most the whole lookup may take, in milliseconds, on the monotonic clock.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port, 0 to 65535, written into every address; any other value panics.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the addresses go, from offset 0, A first; at least
+  `DNS_RESOLVE_MAX_ADDRESSES * 18` bytes.
+
 </scalar-field>
 
 <scalar-field name="ttls" type="i32[]" required>
+
+Where each address's TTL goes, in seconds; at least `DNS_RESOLVE_MAX_ADDRESSES`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count of addresses written; or a negative code: `DNS_RESOLVE_TIMEOUT` once
+  `timeoutMs` has passed, `DNS_RESOLVE_NOT_FOUND`, `DNS_RESOLVE_NO_ANSWER` or
+  `DNS_RESOLVE_CNAME` from the lookup, the `DNS_ERR_*` code of a name that is not one, or
+  the negative errno of a poll loop that cannot be made or waited on.
+
 </scalar-field>
 
 ## DnsClient
@@ -163,35 +277,19 @@ class DnsClient
 
 | Member | |
 | --- | --- |
-| `new DnsClient(resolver: DnsResolver, loop: i32, tokenBase: i32)` | A client for `resolver` whose sockets join the loop `loop` under tokens from `tokenBase`. Panics when `tokenBase` is negative. |
-| `buf: u8[]` |  |
-| `fds: i32[]` | Each query's socket, or -1. |
-| `fdState: i32[]` | What each query's socket is doing, a `DNS_FD_*`. |
-| `from: u8[]` |  |
-| `idBytes: u8[]` |  |
-| `idFresh: boolean` | Whether `idBytes` holds an ID no send has used yet. |
-| `loop: i32` |  |
-| `meta: i32[]` |  |
-| `out: u8[]` | Scratch for `nextOutgoing`, a read, a sender's address and the ID. |
-| `outputLength: i32[]` |  |
-| `outputs: u8[][]` | Each query's TCP bytes, length prefix first, kept until they are all written. |
-| `outputSent: i32[]` |  |
-| `recvMeta: i32[]` |  |
+| `new DnsClient(resolver: DnsResolver, loop: i32, tokenBase: i32)` | A client for `resolver` whose sockets join the loop `loop` under tokens from `tokenBase`. Every buffer the client uses is made here, one TCP output buffer per query among them. Panics when `tokenBase` is negative. |
 | `resolver: DnsResolver` | The core; `start`, `result` and `cancel` go through the client so its sockets follow. |
 | `socketFailures: i32` | Sockets that could not be opened, written or connected, each a failed try. |
 | `socketsOpened: i32` | Sockets opened, UDP and TCP, one per try. |
-| `to: u8[]` |  |
-| `tokenBase: i32` |  |
-| `cancel(lookup: i32, nowNanos: i64): void` | `DnsResolver.cancel`, closing the lookup's sockets. |
-| `nextOutgoing(): i32` | The core's next piece of work, with a random ID no send has used: one is drawn only after the last went out, so an empty call or a close costs no `getRandomValues`. |
-| `owns(token: i32): boolean` | Whether `token` is one of the client's. |
-| `pump(nowNanos: i64): void` | Carries out everything the core has queued: opens, sends and closes sockets. |
-| `ready(token: i32, events: i32, nowNanos: i64): void` | The pair `token`, `events` that `pollWait` reported at `nowNanos`, for a token `owns` answers true for: reads the datagrams (at most `DNS_CLIENT_MAX_DATAGRAMS`) or stream bytes that are waiting, finishes a connection or a write, and sends whatever the core asks next. Panics for a token that is not the client's. |
-| `result(lookup: i32, out: u8[], ttls: i32[]): i32` | `DnsResolver.result`; a finished lookup's sockets are already closed. |
-| `start(name: string, port: i32, nowNanos: i64): i32` | `DnsResolver.start`, with its first packets sent: the lookup, or a negative error. |
-| `tick(nowNanos: i64): void` | `DnsResolver.tick`, then whatever it asks to send. |
+| `tokenBase: i32` | The first of the client's tokens; its sockets use `tokenBase` to `tokenBase + tokens() - 1`. |
+| `cancel(lookup: i32, nowNanos: i64): void` | `DnsResolver.cancel`, closing the lookup's sockets now and freeing its slot, whether or not it had finished. Panics for an id that is not a lookup in progress, as `result` does. |
+| `owns(token: i32): boolean` | Whether `token` is one of the client's, so the caller knows which ready pairs from `pollWait` to hand to `ready`. |
+| `ready(token: i32, events: i32, nowNanos: i64): void` | The pair `token`, `events` that `pollWait` reported at `nowNanos`, for a token `owns` answers true for: reads the datagrams (at most `DNS_CLIENT_MAX_DATAGRAMS`) or stream bytes that are waiting, finishes a connection or a write, and sends whatever the core asks next. Panics for a token that is not the client's. A token whose try has already ended is ignored. |
+| `result(lookup: i32, out: u8[], ttls: i32[]): i32` | `DnsResolver.result`; a finished lookup's sockets are already closed. Answering a finished lookup frees its slot, so a second call for it, or one for an id `start` did not give out, panics. |
+| `start(name: string, port: i32, nowNanos: i64): i32` | `DnsResolver.start`, with its first packets sent. `localhost`, an address literal and a hosts entry finish at once, so `result` has their answer straight away. |
+| `tick(nowNanos: i64): void` | `DnsResolver.tick`, then whatever it asks to send: every try past its deadline moves to the next server. Call it after each wake of the loop. |
 | `timeoutMs(nowNanos: i64, ownMs: i32): i32` | The `pollWait` timeout for a caller who would otherwise wait `ownMs` (negative for ever): the smaller of it and the milliseconds, rounded up, to the core's next deadline after `nowNanos`. |
-| `tokens(): i32` | How many tokens, from `tokenBase`, the client's sockets use. |
+| `tokens(): i32` | How many tokens, from `tokenBase`, the client's sockets use: two per lookup slot, one for the A query and one for the AAAA query. |
 
 ## Limits
 
@@ -211,7 +309,8 @@ the port cannot hold the caller's loop inside the client.
 
 `DNS_UDP_MAX_REPLY: i32`
 
-The longest datagram a UDP try reads; a longer one is cut, fails to parse and is dropped.
+The longest datagram a UDP try reads, in bytes; a longer one is cut, fails
+to parse and is dropped. A TCP try reads its stream in chunks of this size.
 
 </scalar-card>
 

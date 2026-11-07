@@ -22,6 +22,18 @@ import {
 } from "nish/crypto/aes";
 ```
 
+```ts
+import { aesKey, aesGcmSeal, aesGcmOpen, aesKeyWipe } from "nish/crypto/aes";
+
+const key = aesKey(keyBytes); // 16 or 32 bytes, else null
+if (key !== null) {
+  // never seal two messages under one key with the same IV
+  const sealed: u8[] | null = aesGcmSeal(key, iv, aad, plaintext);
+  const opened: u8[] | null = sealed === null ? null : aesGcmOpen(key, iv, aad, sealed);
+  aesKeyWipe(key);
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="aesBitslicedRound" icon="phosphor/regular/function" href="#aesbitslicedround">
@@ -224,17 +236,27 @@ function aesBitslicedRound(
 #### Parameters
 
 <scalar-field name="q" type="u64[]" required>
+
+The bitsliced state of four blocks, eight words, updated in place.
+
 </scalar-field>
 
 <scalar-field name="rk" type="u64[]" required>
+
+The bitsliced round keys.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where this round's eight words start in `rk`.
+
 </scalar-field>
 
 ## aesEncryptBlock
 
-One block encrypted (FIPS 197 §5.1, ECB): 16 bytes in, 16 fresh bytes out, or `null` for another length.
+One block encrypted (FIPS 197 §5.1, ECB): 16 bytes in, 16 fresh bytes out, or
+`null` for another length.
 
 ```ts
 function aesEncryptBlock(
@@ -246,14 +268,24 @@ function aesEncryptBlock(
 #### Parameters
 
 <scalar-field name="key" type="AesKey" required>
+
+The expanded key.
+
 </scalar-field>
 
 <scalar-field name="block" type="u8[]" required>
+
+The 16 bytes to encrypt; it is read, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh 16-byte block, or `null` for another length or a key
+  `aesKey` would not make.
+
 </scalar-field>
 
 ## aesGcmOpen
@@ -277,20 +309,36 @@ function aesGcmOpen(
 #### Parameters
 
 <scalar-field name="key" type="AesKey" required>
+
+The expanded key.
+
 </scalar-field>
 
 <scalar-field name="iv" type="u8[]" required>
+
+The nonce the message was sealed with.
+
 </scalar-field>
 
 <scalar-field name="aad" type="u8[]" required>
+
+The data authenticated with it; must match what was sealed.
+
 </scalar-field>
 
 <scalar-field name="sealed" type="u8[]" required>
+
+The ciphertext followed by its 16-byte tag.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array holding the plaintext, or `null` if the tag fails or
+  the input is bad.
+
 </scalar-field>
 
 ## aesGcmSeal
@@ -313,20 +361,36 @@ function aesGcmSeal(
 #### Parameters
 
 <scalar-field name="key" type="AesKey" required>
+
+The expanded key.
+
 </scalar-field>
 
 <scalar-field name="iv" type="u8[]" required>
+
+The nonce, any non-zero length; it must never repeat under one key.
+
 </scalar-field>
 
 <scalar-field name="aad" type="u8[]" required>
+
+Data authenticated but not encrypted; may be empty.
+
 </scalar-field>
 
 <scalar-field name="plaintext" type="u8[]" required>
+
+The message to encrypt; it is read, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of ciphertext then tag, `plaintext.length + 16` bytes,
+  or `null` for bad input.
+
 </scalar-field>
 
 ## aesGcmTagMask
@@ -349,20 +413,35 @@ function aesGcmTagMask(
 #### Parameters
 
 <scalar-field name="tagHi" type="u64" required>
+
+The high half of the expected tag.
+
 </scalar-field>
 
 <scalar-field name="tagLo" type="u64" required>
+
+The low half of the expected tag.
+
 </scalar-field>
 
 <scalar-field name="gotHi" type="u64" required>
+
+The high half of the received tag.
+
 </scalar-field>
 
 <scalar-field name="gotLo" type="u64" required>
+
+The low half of the received tag.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u64">
+
+All-ones if the tags match, zero if they do not.
+
 </scalar-field>
 
 ## aesHeaderMask
@@ -381,14 +460,24 @@ function aesHeaderMask(
 #### Parameters
 
 <scalar-field name="key" type="AesKey" required>
+
+The header-protection key.
+
 </scalar-field>
 
 <scalar-field name="sample" type="u8[]" required>
+
+The 16 bytes sampled from the packet's ciphertext.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh 5-byte mask, or `null` for another sample length or a key
+  `aesKey` would not make.
+
 </scalar-field>
 
 ## aesKey
@@ -404,11 +493,19 @@ function aesKey(key: u8[]): AesKey | null
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The raw key, 16 or 32 bytes; it is read, not kept, and the caller
+  still wipes it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="AesKey | null">
+
+A fresh key, which the caller hands to `aesKeyWipe` when done, or
+  `null` for another length.
+
 </scalar-field>
 
 ## aesKeyInto
@@ -446,14 +543,24 @@ function aesKeyInto(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The raw key, 16 or 32 bytes; it is read, not kept, and the caller
+  still wipes it.
+
 </scalar-field>
 
 <scalar-field name="out" type="AesKey" required>
+
+The key to overwrite, its `roundKeys` sized for this key length.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` if `out` now holds the key; `false` if it was left as it was.
+
 </scalar-field>
 
 ## aesKeyWipe
@@ -472,6 +579,9 @@ function aesKeyWipe(key: AesKey): void
 #### Parameters
 
 <scalar-field name="key" type="AesKey" required>
+
+The key to wipe; it stays usable as an `aesKeyInto` target.
+
 </scalar-field>
 
 ## ghashMultiply
@@ -504,12 +614,21 @@ function ghashMultiply(
 #### Parameters
 
 <scalar-field name="y" type="u64[]" required>
+
+The running GHASH value, two words, multiplied in place.
+
 </scalar-field>
 
 <scalar-field name="hHi" type="u64" required>
+
+The high half of H.
+
 </scalar-field>
 
 <scalar-field name="hLo" type="u64" required>
+
+The low half of H.
+
 </scalar-field>
 
 ## AesKey
@@ -518,14 +637,14 @@ An AES key, expanded: the round keys already bitsliced, and GCM's hash key
 H = E(K, 0^128), so a key used for many messages is expanded once.
 
 Make one with `aesKey`. The constructor and the fields are public only
-because the language has no private ones, and a key built or edited by hand
-is not trusted: one whose shape is not what `aesKey` makes answers `null`
-everywhere (`aesKeyUsable`), and one whose H is zero opens nothing
-(`aesGcmOpen`). On the runtime kernels' path GHASH takes H and its powers
-from `roundKeys`, while `ghashLengths` and a non-12-byte IV's J0 take it
-from `h`; `aesKey` writes both from one schedule, so they agree. A key
-edited so that they disagree is outside the contract, and what it seals
-then depends on which path the process runs.
+because tests build keys by hand and read their words, and a key built or
+edited by hand is not trusted: one whose shape is not what `aesKey` makes
+answers `null` everywhere (`aesKeyUsable`), and one whose H is zero opens
+nothing (`aesGcmOpen`). On the runtime kernels' path GHASH takes H and its
+powers from `roundKeys`, while `ghashLengths` and a non-12-byte IV's J0 take
+it from `h`; `aesKey` writes both from one schedule, so they agree. A key
+edited so that they disagree is outside the contract, and what it seals then
+depends on which path the process runs.
 
 Both are secret. A holder done with a key hands it to `aesKeyWipe`, whose
 volatile stores zero all of `roundKeys` (the kernels' tail of H's powers
@@ -537,7 +656,7 @@ class AesKey
 
 | Member | |
 | --- | --- |
-| `new AesKey(rounds: i32, roundKeys: u64[])` |  |
+| `new AesKey(rounds: i32, roundKeys: u64[])` | Wraps a schedule array and allocates `h`; neither is filled. `aesKey` calls this and then fills both, and a caller makes keys with `aesKey`. |
 | `h: u64[]` | H as a big-endian 128-bit number, two words: `h[0]` the high half and `h[1]` the low. An array rather than two scalar fields, so that `aesKeyWipe`'s volatile wipe reaches it. |
 | `roundKeys: u64[]` | Round key `i` in the bitsliced layout, replicated into all four block lanes, as eight words from `8 * i`: `8 * (rounds + 1)` words in all. In a native process that runs the runtime's AES kernels (the seams, above), the same words hold the kernels' layout instead, `runtime/runtime-aes.c`'s. |
 | `rounds: i32` | Nr: 10 for AES-128, 14 for AES-256. |

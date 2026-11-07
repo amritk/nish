@@ -129,8 +129,9 @@ is not one makes `bcryptVerifyN` an `Err` for the whole batch; the share
 then verifies each of that batch's lanes alone, so only the damaged row
 answers the `Err` and the rest answer as they would have. A `hash` whose
 salt is not 16 bytes is answered with its `Err` at the next `run`, without
-being batched. The answers of a run come back in the order their requests
-were taken; match them to requests by `ticket`.
+being batched. A run does not answer in arrival order: bad-salt answers
+come first, then verifies grouped by cost, then hashes, so match answers to
+requests by `ticket`.
 
 </scalar-detail>
 
@@ -153,11 +154,17 @@ function bcryptBatcher(
 #### Parameters
 
 <scalar-field name="config" type="BcryptBatchConfig" required>
+
+The policy: width, hold, cores and cost.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;BcryptBatcher, string&gt;">
+
+A new, empty batcher, or an `Err` naming the field out of range.
+
 </scalar-field>
 
 ## BcryptAnswer
@@ -170,7 +177,7 @@ class BcryptAnswer
 
 | Member | |
 | --- | --- |
-| `new BcryptAnswer(ticket: i32, ok: boolean, hash: string, error: string)` |  |
+| `new BcryptAnswer(ticket: i32, ok: boolean, hash: string, error: string)` | Holds one answer as given; `run` makes these. |
 | `error: string` | "" unless the request is an `Err`, as `bcryptVerify` or `bcryptHash` words it. |
 | `hash: string` | A hash request's `$2b$` hash; "" for a verify and for an error. |
 | `ok: boolean` | A verify: whether the password is the hash's. A hash: whether it was made. False with an error. |
@@ -203,24 +210,8 @@ class BcryptBatcher
 
 | Member | |
 | --- | --- |
-| `new BcryptBatcher(config: BcryptBatchConfig)` |  |
-| `arrived: i64[]` |  |
-| `cores: i32` |  |
-| `cost: i32` |  |
-| `early: BcryptAnswer[]` | Answers made without a batch (a salt of the wrong length), handed out by the next `run`. |
-| `hashes: string[]` |  |
-| `head: i32` |  |
-| `holdNanos: i64` |  |
-| `kinds: i32[]` |  |
-| `next: i32` | The next ticket. |
-| `passwords: BcryptBatchKey[]` | The queue, from `head`: each request's copy of its password, kind, stored hash, salt (16 bytes each), ticket and arrival. |
-| `salts: u8[]` |  |
-| `tickets: i32[]` |  |
-| `width: i32` |  |
-| `compact(): void` | Drops the requests before `head` once they are most of the queue, so a long-lived batcher's arrays stay small. |
-| `enqueue(password: Secret<u8[]>, kind: i32, hash: string, salt: u8[], ticket: i32, now: i64): void` | Appends one request to the queue. |
+| `new BcryptBatcher(config: BcryptBatchConfig)` | Takes `config` as it is and starts an empty queue. `bcryptBatcher` checks the config first; make batchers with it. |
 | `hash(password: Secret<u8[]>, salt: u8[], now: i64): i32` | Queues a new hash of `password` under `salt` (16 bytes, fresh from `crypto.getRandomValues`) at the batcher's cost, which arrived at `now`, and answers its ticket. The batcher queues a copy of `password` and wipes the copy once the hash is made; a salt of another length is answered with its `Err` by the next `run`, and no copy is made. |
-| `orderOf(taken: i32): i32[]` | The queue indices of the `taken` oldest requests, verifies by the cost their hash names and then hashes, each group in arrival order. |
 | `pending(): i32` | How many requests are queued or answered and not yet handed out by `run`. |
 | `run(now: i64): BcryptAnswer[]` | Sends what is due and answers it: nothing (bar answers made without a batch) until `waitNanos(now)` is 0, then up to `width × cores` of the oldest requests, spread evenly over up to `cores` tasks, each running its share as batches of up to `width`. Returns once every task has finished, with the copy of each password it ran wiped. |
 | `verify(password: Secret<u8[]>, hash: string, now: i64): i32` | Queues a verify of `password` against `hash`, which arrived at `now` (`monotonicNanos()`), and answers its ticket. The batcher queues a copy of `password` and wipes the copy once the verify has run; the caller wipes its own. |

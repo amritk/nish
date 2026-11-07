@@ -127,17 +127,30 @@ function tlsClientAuthenticate(
 #### Parameters
 
 <scalar-field name="client" type="TlsRecordClient" required>
+
+The record-layer client, whose interest says `TLS_RECORD_AUTH`.
+
 </scalar-field>
 
 <scalar-field name="trust" type="TlsClientTrust" required>
+
+The roots the server's chain must lead to.
+
 </scalar-field>
 
 <scalar-field name="nowMs" type="i64" required>
+
+The instant to judge validity at, in milliseconds since 1970-01-01 UTC.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0 when the server was accepted and the handshake went on, else the alert the connection failed
+  with: the verdict's, or one `client.authenticate(true)` reports.
+
 </scalar-field>
 
 ## tlsClientChain
@@ -158,25 +171,42 @@ function tlsClientChain(
 #### Parameters
 
 <scalar-field name="chain" type="u8[][]" required>
+
+Each certificate's DER as the server sent it, the leaf first.
+
 </scalar-field>
 
 <scalar-field name="serverName" type="string" required>
+
+The name or address dialled, ASCII (an internationalised name in its A-label form).
+
 </scalar-field>
 
 <scalar-field name="nowMs" type="i64" required>
+
+The instant to judge validity at, in milliseconds since 1970-01-01 UTC.
+
 </scalar-field>
 
 <scalar-field name="trust" type="TlsClientTrust" required>
+
+The roots the chain must lead to.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0 when the chain is accepted, else `TLS_ALERT_CERTIFICATE_EXPIRED` (also for a certificate not
+  yet valid), `TLS_ALERT_UNKNOWN_CA`, or `TLS_ALERT_BAD_CERTIFICATE` for every other refusal.
+
 </scalar-field>
 
 ## tlsClientSystemTrust
 
 The trust of the system's roots (`pkiLoadSystemRoots`): what a client trusts unless it is given a store.
+It reads the roots from disk each time it is called, so a program makes it once and shares it.
 
 ```ts
 function tlsClientSystemTrust(): TlsClientTrust
@@ -185,6 +215,9 @@ function tlsClientSystemTrust(): TlsClientTrust
 #### Returns
 
 <scalar-field name="returns" type="TlsClientTrust">
+
+A trust over the roots `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system bundle's.
+
 </scalar-field>
 
 ## tlsClientTrust
@@ -200,11 +233,17 @@ function tlsClientTrust(
 #### Parameters
 
 <scalar-field name="roots" type="PkiRoots" required>
+
+The roots a loader such as `pkiLoadSystemRoots` read; only their parsed certificates are kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="TlsClientTrust">
+
+A trust to hand to `tlsClientAuthenticate`, `tlsClientVerdict` or `tlsClientChain`.
+
 </scalar-field>
 
 ## tlsClientVerdict
@@ -225,17 +264,31 @@ function tlsClientVerdict(
 #### Parameters
 
 <scalar-field name="tls" type="TlsClient" required>
+
+The client, stopped at `TLS_CLIENT_STATE_WAIT_AUTH`; it is only read, not advanced.
+
 </scalar-field>
 
 <scalar-field name="trust" type="TlsClientTrust" required>
+
+The roots the server's chain must lead to.
+
 </scalar-field>
 
 <scalar-field name="nowMs" type="i64" required>
+
+The instant to judge validity at, in milliseconds since 1970-01-01 UTC.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0 when the server is authenticated; `TLS_ALERT_BAD_CERTIFICATE` for an empty chain, a leaf that
+  does not parse or whose key is unusable; `TLS_ALERT_DECRYPT_ERROR` when the signature does not verify;
+  else `tlsClientChain`'s answer.
+
 </scalar-field>
 
 ## tlsVerifyCertificateVerify
@@ -257,20 +310,35 @@ function tlsVerifyCertificateVerify(
 #### Parameters
 
 <scalar-field name="leaf" type="X509Certificate" required>
+
+The server's leaf certificate, whose public key the signature must verify under.
+
 </scalar-field>
 
 <scalar-field name="scheme" type="i32" required>
+
+The `TLS_SIGNATURE_*` code point the CertificateVerify names.
+
 </scalar-field>
 
 <scalar-field name="content" type="u8[]" required>
+
+The bytes the server signed, as RFC 8446 §4.4.3 builds them from the transcript hash.
+
 </scalar-field>
 
 <scalar-field name="signature" type="u8[]" required>
+
+The signature as sent: DER for ECDSA, the raw modulus-sized value for RSA-PSS.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True only when the signature verifies under `leaf`'s key with `scheme`.
+
 </scalar-field>
 
 ## TlsClientTrust
@@ -284,8 +352,7 @@ class TlsClientTrust
 
 | Member | |
 | --- | --- |
-| `new TlsClientTrust(roots: X509Certificate[])` |  |
-| `store: PkiTrustStore` | The roots, as `pkiVerifyServer` looks them up. |
+| `new TlsClientTrust(roots: X509Certificate[])` | Indexes `roots` once, so every connection made with this trust looks its issuers up in the same store rather than scanning the list again. |
 
 ## Limits
 

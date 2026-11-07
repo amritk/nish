@@ -2,7 +2,7 @@
 
 # `nish/net/http3-frame`
 
-The frames and stream types of HTTP/3 (RFC 9114 §6.2, §7): frame headers, SETTINGS, the one-identifier frames (GOAWAY, MAX_PUSH_ID, CANCEL_PUSH), and which types are HTTP/2's reserved ones or unknown. Sans-IO: every reader takes a byte window `(buf, off, len)` and reads it in place, and every writer writes into the caller's buffer at an offset, before an end, and answers the offset past what it wrote, or -1 with nothing written. Nothing here allocates.
+The frames and stream types of HTTP/3 (RFC 9114 §6.2, §7): frame headers, SETTINGS, the one-identifier frames (GOAWAY, MAX_PUSH_ID, CANCEL_PUSH), and which types are HTTP/2's reserved ones or unknown. Sans-IO: every reader takes a byte window `(buf, off, len)` and reads it in place, and every writer writes into the caller's buffer at an offset, before an end, and answers the offset past what it wrote, or -1 when it does not fit (the frame writers may have written their header by then). Nothing here allocates.
 
 ```ts
 import {
@@ -68,12 +68,17 @@ import {
 ```
 
 ```ts
-import { Http3FrameHeader, h3ReadFrameHeader, h3PutFrameHeader, H3_FRAME_DATA } from "nish/net/http3-frame";
+import {
+  Http3FrameHeader, h3ReadFrameHeader, h3PutFrameHeader, H3_FRAME_DATA, H3_FRAME_HEADER_MAX,
+} from "nish/net/http3-frame";
 
+const buf: u8[] = [0x00, 0x03, 0x61, 0x62, 0x63];         // bytes a stream delivered: DATA, 3 bytes
 const h = new Http3FrameHeader();
-const size: i32 = h3ReadFrameHeader(h, buf, off, len);   // 0: the window ends inside the header
+const size: i32 = h3ReadFrameHeader(h, buf, 0, toI32(buf.length));   // 2; 0 if the header is cut off
 // h.type, h.length; the payload is the next h.length bytes of the stream
-const at: i32 = h3PutFrameHeader(out, 0, toI32(out.length), H3_FRAME_DATA, toI64(n));
+const out: u8[] = new Array<u8>(H3_FRAME_HEADER_MAX);
+const n: i32 = 3;
+const at: i32 = h3PutFrameHeader(out, 0, toI32(out.length), H3_FRAME_DATA, toI64(n));   // 2
 ```
 
 <scalar-grid cols="2">
@@ -92,7 +97,7 @@ Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer 
 
 <scalar-card title="h3FrameHeaderSize" icon="phosphor/regular/function" href="#h3frameheadersize">
 
-How many bytes a frame header of `type` and `length` takes, or 0 when either is no varint.
+How many bytes a frame header of `type` and `length` takes.
 
 </scalar-card>
 
@@ -104,7 +109,7 @@ Whether `value` is one of the `0x1f * N + 0x21` values reserved to exercise the 
 
 <scalar-card title="h3PutFrameHeader" icon="phosphor/regular/function" href="#h3putframeheader">
 
-Writes a frame header of `type` and `length` at `buf[at]`, before `end`; answers the offset past it, or -1.
+Writes a frame header of `type` and `length` at `buf[at]`, before `end`.
 
 </scalar-card>
 
@@ -116,7 +121,7 @@ Writes a frame whose payload is one identifier — GOAWAY, MAX_PUSH_ID or CANCEL
 
 <scalar-card title="h3PutSettings" icon="phosphor/regular/function" href="#h3putsettings">
 
-Writes a whole SETTINGS frame of the pairs `ids[k]`, `values[k]` at `buf[at]`, before `end`, and answers the offset past it, or -1 when it does not fit, the lists differ in length, or a value is no varint.
+Writes a whole SETTINGS frame of the pairs `ids[k]`, `values[k]` at `buf[at]`, before `end`, and answers the offset past it, or -1 when it does not fit, the lists differ in length, or an identifier or a value is no varint.
 
 </scalar-card>
 
@@ -158,7 +163,7 @@ Whether `type` is one HTTP/2 used that HTTP/3 reserves, whose receipt is H3_FRAM
 
 <scalar-card title="h3VarintLength" icon="phosphor/regular/function" href="#h3varintlength">
 
-The length of the varint whose first byte is `buf[at]`: 1, 2, 4 or 8, or 0 outside `buf`.
+The length of the varint whose first byte is `buf[at]`.
 
 </scalar-card>
 
@@ -255,15 +260,27 @@ function h3CheckWindow(
 #### Parameters
 
 <scalar-field name="what" type="string" required>
+
+The caller's name, which starts the panic message.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer the window is meant to lie in.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The window's first byte offset; negative panics.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The window's length in bytes; negative panics, and so does an end past `buf.length`.
+
 </scalar-field>
 
 ## h3Count
@@ -277,16 +294,22 @@ function h3Count(count: i32): i32
 #### Parameters
 
 <scalar-field name="count" type="i32" required>
+
+The counter's current value.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`count + 1`, or `count` unchanged once it is 2^31 - 1.
+
 </scalar-field>
 
 ## h3FrameHeaderSize
 
-How many bytes a frame header of `type` and `length` takes, or 0 when either is no varint.
+How many bytes a frame header of `type` and `length` takes.
 
 ```ts
 function h3FrameHeaderSize(
@@ -298,19 +321,29 @@ function h3FrameHeaderSize(
 #### Parameters
 
 <scalar-field name="type" type="i64" required>
+
+The frame type.
+
 </scalar-field>
 
 <scalar-field name="length" type="i64" required>
+
+The payload's length in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+2 to 16 bytes, or 0 when `type` or `length` is negative or above 2^62 - 1.
+
 </scalar-field>
 
 ## h3Greased
 
-Whether `value` is one of the `0x1f * N + 0x21` values reserved to exercise the rule that unknowns are ignored (§7.2.8, §7.2.4.1, §6.2.3).
+Whether `value` is one of the `0x1f * N + 0x21` values reserved to exercise the rule that unknowns are
+ignored (§7.2.8, §7.2.4.1, §6.2.3).
 
 ```ts
 function h3Greased(value: i64): boolean
@@ -319,16 +352,23 @@ function h3Greased(value: i64): boolean
 #### Parameters
 
 <scalar-field name="value" type="i64" required>
+
+A frame type, setting identifier or stream type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when `value` is 0x21 or above and 0x21 more than a multiple of 0x1f; false otherwise,
+  negatives included.
+
 </scalar-field>
 
 ## h3PutFrameHeader
 
-Writes a frame header of `type` and `length` at `buf[at]`, before `end`; answers the offset past it, or -1.
+Writes a frame header of `type` and `length` at `buf[at]`, before `end`.
 
 ```ts
 function h3PutFrameHeader(
@@ -343,23 +383,42 @@ function h3PutFrameHeader(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset to write the header at.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+The offset the header must end at or before; at most `buf.length`.
+
 </scalar-field>
 
 <scalar-field name="type" type="i64" required>
+
+The frame type, 0 to 2^62 - 1, written as given.
+
 </scalar-field>
 
 <scalar-field name="length" type="i64" required>
+
+The payload's length in bytes, 0 to 2^62 - 1; the payload is the caller's to write.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the 2 to 16 bytes written, or -1 with nothing written when `type` or `length` is
+  no varint, `[at, end)` is not a window inside `buf`, or the header does not fit before `end`.
+
 </scalar-field>
 
 ## h3PutIdFrame
@@ -381,30 +440,51 @@ function h3PutIdFrame(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset to write the frame at.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+The offset the frame must end at or before; at most `buf.length`.
+
 </scalar-field>
 
 <scalar-field name="type" type="i64" required>
+
+The frame type, written as given: `H3_FRAME_GOAWAY`, `H3_FRAME_MAX_PUSH_ID` or
+  `H3_FRAME_CANCEL_PUSH`, which this does not check.
+
 </scalar-field>
 
 <scalar-field name="id" type="i64" required>
+
+The stream ID or push ID the payload carries, 0 to 2^62 - 1.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame written, or -1 when `type` or `id` is no varint, `[at, end)` is not a
+  window inside `buf`, or the frame does not fit before `end`; when only the identifier does not fit, the
+  header may already be in `buf[at ..]`.
+
 </scalar-field>
 
 ## h3PutSettings
 
 Writes a whole SETTINGS frame of the pairs `ids[k]`, `values[k]` at
 `buf[at]`, before `end`, and answers the offset past it, or -1 when it does
-not fit, the lists differ in length, or a value is no varint. It writes
+not fit, the lists differ in length, or an identifier or a value is no varint. It writes
 what it is given: refusing a reserved identifier is the reader's job.
 
 ```ts
@@ -420,23 +500,44 @@ function h3PutSettings(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset to write the frame at.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+The offset the frame must end at or before; at most `buf.length`.
+
 </scalar-field>
 
 <scalar-field name="ids" type="i64[]" required>
+
+The setting identifiers, in the order they are written; read, not kept.
+
 </scalar-field>
 
 <scalar-field name="values" type="i64[]" required>
+
+The values, one per identifier at the same index; read, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame written, header and payload, or -1 when the lists differ in length,
+  an identifier or a value is negative or above 2^62 - 1, `[at, end)` is not a window inside `buf`, or
+  the frame does not fit before `end`. Nothing is written for the first three; when only the payload
+  does not fit, the header may already be in `buf[at ..]`.
+
 </scalar-field>
 
 ## h3PutVarint
@@ -457,20 +558,37 @@ function h3PutVarint(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset to write the first byte at.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+The offset the integer must end at or before; at most `buf.length`.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+The value to encode, 0 to 2^62 - 1.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the 1, 2, 4 or 8 bytes written, or -1 with nothing written when `value` is
+  negative or above 2^62 - 1, `[at, end)` is not a window inside `buf`, or the integer does not fit before
+  `end`.
+
 </scalar-field>
 
 ## h3ReadFrameHeader
@@ -492,20 +610,35 @@ function h3ReadFrameHeader(
 #### Parameters
 
 <scalar-field name="h" type="Http3FrameHeader" required>
+
+The header to fill; set only when the answer is above 0.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes the stream delivered.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The window's first byte offset, where the header starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The window's length in bytes; the window must lie inside `buf`, or this panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
+
 </scalar-field>
 
 ## h3ReadIdPayload
@@ -525,17 +658,31 @@ function h3ReadIdPayload(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes holding the payload.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The payload's first byte offset.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The payload's length in bytes, the frame header's `length`; the window must lie inside `buf`,
+  or this panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The identifier, 0 to 2^62 - 1, or -1 when the payload is empty, ends inside the varint, or has
+  bytes after it.
+
 </scalar-field>
 
 ## h3ReadSettings
@@ -557,20 +704,39 @@ function h3ReadSettings(
 #### Parameters
 
 <scalar-field name="s" type="Http3Settings" required>
+
+The settings to fill; reset first, and after an error answer its contents are not meaningful.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes holding the payload.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The payload's first byte offset.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The payload's length in bytes, the frame header's `length`; the window must lie inside `buf`,
+  or this panics. An empty payload is read as the defaults.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+`H3_SETTINGS_OK` when every pair was read; H3_FRAME_ERROR when the payload ends inside an
+  identifier or a value; H3_SETTINGS_ERROR for an identifier HTTP/2 defined (0x00, 0x02 to 0x05) or a
+  repeat of an identifier understood, of an extension one, or of a kept unknown one. It stops at the first
+  error.
+
 </scalar-field>
 
 ## h3ReadVarint
@@ -589,17 +755,30 @@ function h3ReadVarint(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes holding the integer.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset of the integer's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+The offset the integer must end at or before; past `buf.length` reads nothing.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The value, 0 to 2^62 - 1, or -1 when `at` is outside `buf`, `end` is past `buf.length`, or the
+  integer's bytes run past `end`.
+
 </scalar-field>
 
 ## h3ReservedHttp2Frame
@@ -613,16 +792,22 @@ function h3ReservedHttp2Frame(type: i64): boolean
 #### Parameters
 
 <scalar-field name="type" type="i64" required>
+
+A frame type as read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True for 0x02, 0x06, 0x08 and 0x09; false for every other type.
+
 </scalar-field>
 
 ## h3VarintLength
 
-The length of the varint whose first byte is `buf[at]`: 1, 2, 4 or 8, or 0 outside `buf`.
+The length of the varint whose first byte is `buf[at]`.
 
 ```ts
 function h3VarintLength(buf: u8[], at: i32): i32
@@ -631,14 +816,24 @@ function h3VarintLength(buf: u8[], at: i32): i32
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes holding the integer.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset of the integer's first byte.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+1, 2, 4 or 8 bytes, read from the first byte's two-bit prefix alone (the rest need not be in
+  `buf`), or 0 when `at` is outside `buf`.
+
 </scalar-field>
 
 ## Http3FrameHeader
@@ -652,8 +847,8 @@ class Http3FrameHeader
 | Member | |
 | --- | --- |
 | `new Http3FrameHeader()` |  |
-| `length: i64` |  |
-| `type: i64` |  |
+| `length: i64` | The payload's length in bytes, 0 to 2^62 - 1, set with `type`; the payload itself is not read here. |
+| `type: i64` | The frame type, 0 to 2^62 - 1, any value: set by each `h3ReadFrameHeader` that answers above 0. |
 
 ## Http3Settings
 
@@ -669,22 +864,18 @@ class Http3Settings
 
 | Member | |
 | --- | --- |
-| `new Http3Settings()` |  |
-| `blockedStreams: i64` |  |
+| `new Http3Settings()` | Settings at their defaults, with room for `H3_SETTINGS_KEEP` unknown identifiers made once. |
+| `blockedStreams: i64` | SETTINGS_QPACK_BLOCKED_STREAMS, a count of streams, as the peer sent it, unchecked; 0 by default. |
 | `dropped: i32` | How many more there were, saturating at 2^31 - 1. |
 | `enableConnectProtocol: i64` | The extension settings WebTransport reads, -1 when the frame did not carry them: SETTINGS_ENABLE_CONNECT_PROTOCOL, SETTINGS_H3_DATAGRAM, SETTINGS_ENABLE_WEBTRANSPORT and SETTINGS_WEBTRANSPORT_MAX_SESSIONS. Each is recorded here, where a peer cannot push it out of reach, and also kept as an unknown identifier while there is room, so `unknown` still finds it. |
-| `enableWebtransport: i64` |  |
-| `h3Datagram: i64` |  |
-| `maxFieldSectionSize: i64` |  |
-| `maxTableCapacity: i64` |  |
+| `enableWebtransport: i64` | SETTINGS_ENABLE_WEBTRANSPORT's value as the peer sent it, or -1 when the frame did not carry it. |
+| `h3Datagram: i64` | SETTINGS_H3_DATAGRAM's value as the peer sent it, or -1 when the frame did not carry it. |
+| `maxFieldSectionSize: i64` | SETTINGS_MAX_FIELD_SECTION_SIZE as the peer sent it: the largest field section it takes, as §4.2.2 counts it; -1, unlimited, by default. |
+| `maxTableCapacity: i64` | SETTINGS_QPACK_MAX_TABLE_CAPACITY in bytes as the peer sent it, unchecked; 0 by default. |
 | `seen: i32` | The bits of the identifiers understood that the frame set. |
 | `unknownCount: i32` | How many unknown identifiers are kept. |
-| `unknownIds: i64[]` |  |
-| `unknownValues: i64[]` |  |
-| `webtransportMaxSessions: i64` |  |
-| `reset(): void` | Back to the defaults, for the next connection. |
-| `take(id: i64, value: i64): i64` | Records one pair; answers `H3_SETTINGS_OK` or H3_SETTINGS_ERROR for a reserved or repeated identifier. |
-| `unknown(id: i64): i64` | The value of an identifier this module does not understand, or -1 when the frame did not carry it (or carried it past the kept ones). |
+| `webtransportMaxSessions: i64` | SETTINGS_WEBTRANSPORT_MAX_SESSIONS's value as the peer sent it, or -1 when the frame lacked it. |
+| `unknown(id: i64): i64` | The value of an identifier this module does not understand. |
 
 ## Limits
 
@@ -716,11 +907,15 @@ How many identifiers `Http3Settings` keeps that it does not understand.
 
 `H3_CLOSED_CRITICAL_STREAM: i64`
 
+H3_CLOSED_CRITICAL_STREAM (0x0104): a stream the connection needs was closed or reset (§8.1).
+
 </scalar-card>
 
 <scalar-card title="0x010f" icon="phosphor/regular/hash">
 
 `H3_CONNECT_ERROR: i64`
+
+H3_CONNECT_ERROR (0x010f): a CONNECT request's TCP connection was reset or closed abnormally (§8.1).
 
 </scalar-card>
 
@@ -735,6 +930,8 @@ H3_DATAGRAM_ERROR (RFC 9297 §5.2): an HTTP datagram or a capsule that does not 
 <scalar-card title="0x0107" icon="phosphor/regular/hash">
 
 `H3_EXCESSIVE_LOAD: i64`
+
+H3_EXCESSIVE_LOAD (0x0107): the peer behaves in a way that may cause excessive load (§8.1).
 
 </scalar-card>
 
@@ -757,6 +954,8 @@ DATA (§7.2.1): a piece of a message's content.
 <scalar-card title="0x0106" icon="phosphor/regular/hash">
 
 `H3_FRAME_ERROR: i64`
+
+H3_FRAME_ERROR (0x0106): a frame whose layout or size is wrong (§8.1).
 
 </scalar-card>
 
@@ -804,6 +1003,8 @@ SETTINGS (§7.2.4): identifier and value pairs, first on a control stream.
 
 `H3_FRAME_UNEXPECTED: i64`
 
+H3_FRAME_UNEXPECTED (0x0105): a frame not allowed in the current state or on its stream (§8.1).
+
 </scalar-card>
 
 <scalar-card title="0x41" icon="phosphor/regular/hash">
@@ -820,11 +1021,15 @@ session's bytes. It is not a frame: no length follows it.
 
 `H3_GENERAL_PROTOCOL_ERROR: i64`
 
+H3_GENERAL_PROTOCOL_ERROR (0x0101): a protocol violation no more specific code names (§8.1).
+
 </scalar-card>
 
 <scalar-card title="0x0108" icon="phosphor/regular/hash">
 
 `H3_ID_ERROR: i64`
+
+H3_ID_ERROR (0x0108): a stream ID or push ID used wrongly, such as past a limit or reused (§8.1).
 
 </scalar-card>
 
@@ -832,11 +1037,15 @@ session's bytes. It is not a frame: no length follows it.
 
 `H3_INTERNAL_ERROR: i64`
 
+H3_INTERNAL_ERROR (0x0102): an internal error in the HTTP stack (§8.1).
+
 </scalar-card>
 
 <scalar-card title="0x010e" icon="phosphor/regular/hash">
 
 `H3_MESSAGE_ERROR: i64`
+
+H3_MESSAGE_ERROR (0x010e): a malformed HTTP message (§8.1, §4.1.2).
 
 </scalar-card>
 
@@ -844,11 +1053,15 @@ session's bytes. It is not a frame: no length follows it.
 
 `H3_MISSING_SETTINGS: i64`
 
+H3_MISSING_SETTINGS (0x010a): the control stream did not start with SETTINGS (§8.1, §6.2.1).
+
 </scalar-card>
 
 <scalar-card title="0x0100" icon="phosphor/regular/hash">
 
 `H3_NO_ERROR: i64`
+
+H3_NO_ERROR (0x0100): no error, for closing a connection or stream with nothing to signal (§8.1).
 
 </scalar-card>
 
@@ -856,17 +1069,23 @@ session's bytes. It is not a frame: no length follows it.
 
 `H3_REQUEST_CANCELLED: i64`
 
+H3_REQUEST_CANCELLED (0x010c): a request or its response is cancelled (§8.1).
+
 </scalar-card>
 
 <scalar-card title="0x010d" icon="phosphor/regular/hash">
 
 `H3_REQUEST_INCOMPLETE: i64`
 
+H3_REQUEST_INCOMPLETE (0x010d): the client's stream ended without a whole request (§8.1).
+
 </scalar-card>
 
 <scalar-card title="0x010b" icon="phosphor/regular/hash">
 
 `H3_REQUEST_REJECTED: i64`
+
+H3_REQUEST_REJECTED (0x010b): the server refused a request before any processing of it (§8.1).
 
 </scalar-card>
 
@@ -889,6 +1108,8 @@ SETTINGS_ENABLE_WEBTRANSPORT of draft-ietf-webtrans-http3-02 §3.1, which Chrome
 <scalar-card title="0x0109" icon="phosphor/regular/hash">
 
 `H3_SETTINGS_ERROR: i64`
+
+H3_SETTINGS_ERROR (0x0109): an error in a SETTINGS payload (§8.1, §7.2.4).
 
 </scalar-card>
 
@@ -952,6 +1173,8 @@ The control stream: SETTINGS first, then the connection's control frames.
 
 `H3_STREAM_CREATION_ERROR: i64`
 
+H3_STREAM_CREATION_ERROR (0x0103): the peer created a stream this endpoint will not accept (§8.1).
+
 </scalar-card>
 
 <scalar-card title="0x01" icon="phosphor/regular/hash">
@@ -990,6 +1213,8 @@ the type, then the session ID, then the session's bytes.
 <scalar-card title="0x0110" icon="phosphor/regular/hash">
 
 `H3_VERSION_FALLBACK: i64`
+
+H3_VERSION_FALLBACK (0x0110): the request cannot be served over HTTP/3; retry it over HTTP/1.1 (§8.1).
 
 </scalar-card>
 

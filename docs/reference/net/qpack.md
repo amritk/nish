@@ -39,6 +39,9 @@ import {
 ```ts
 import { QpackDecoder, QpackEncoder, QPACK_OK } from "nish/net/qpack";
 
+const name: u8[] = [58, 112, 97, 116, 104];   // ":path"
+const value: u8[] = [47];                     // "/"
+
 const enc = new QpackEncoder();                     // one per connection
 const section: u8[] = [];
 enc.beginSection(section);
@@ -161,9 +164,16 @@ function qpackPushStreamCancellation(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the instruction goes, appended after what it holds: one byte for a stream ID under 63,
+  else one plus its continuation bytes.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i64" required>
+
+The ID of the request stream whose section the peer's encoder may forget, 0 to 2^62 - 1.
+
 </scalar-field>
 
 ## QpackDecoder
@@ -174,7 +184,7 @@ encoder sends on request streams, and the peer's encoder stream.
 `decode` answers a section's fields as windows into `bytes`: field `i`'s
 name is `bytes[nameStart[i], + nameLength[i])`, its value likewise, and
 `neverIndexed[i]` is its N bit, which an intermediary forwarding it must
-keep (§4.5.4). All of them are replaced by every call.
+keep (§4.5.4). All of them are replaced by every `decode`.
 
 ```ts
 class QpackDecoder
@@ -182,31 +192,19 @@ class QpackDecoder
 
 | Member | |
 | --- | --- |
-| `new QpackDecoder(maxFieldSectionSize: i32)` |  |
-| `at: i32` | Where the next read of the section being decoded starts, and where it ends. |
-| `bytes: u8[]` |  |
+| `new QpackDecoder(maxFieldSectionSize: i32)` | Makes a decoder with no fields, no connection error and no capacity instructions counted. |
+| `bytes: u8[]` | Every name and value of the last section `decode` answered, back to back; emptied by every `decode` call, including one that refuses, and valid until the next. |
 | `capacityInstructions: i32` | How many Set Dynamic Table Capacity 0 instructions the encoder stream carried, saturating at 2^31 - 1. |
 | `count: i32` | How many fields the last `decode` answered. |
-| `end: i32` |  |
-| `failed: i64` | The connection error a call met, which every later call answers; `QPACK_OK` until then. |
-| `huffman: HpackHuffman` |  |
 | `maxFieldSectionSize: i32` | SETTINGS_MAX_FIELD_SECTION_SIZE as RFC 9114 §4.2.2 counts it. |
-| `nameLength: i32[]` |  |
-| `nameStart: i32[]` |  |
-| `neverIndexed: boolean[]` |  |
-| `reason: i32` | Which rule `failed` broke, a `QPACK_REASON_*`. |
-| `room: i64` | What the section being decoded may still add to `bytes` and its fields' overhead before it is past `maxFieldSectionSize`: every append is checked against it first, so a section past the limit never grows `bytes`. |
-| `valueLength: i32[]` |  |
-| `valueStart: i32[]` |  |
-| `addField(nameStart: i32, valueStart: i32, neverIndexed: boolean): void` | Records a field whose name and value end where `bytes` ends now. |
-| `clear(): void` | Empties the fields, keeping the arrays' storage for the next section. |
+| `nameLength: i32[]` | How many bytes field `i`'s name has in `bytes`. |
+| `nameStart: i32[]` | Where field `i`'s name starts in `bytes`, for `i` below `count`. |
+| `neverIndexed: boolean[]` | Field `i`'s N bit (§4.5.4): true when the peer marked it never to be indexed; always false for an Indexed Field Line, which has no such bit. |
+| `reason: i32` | Which rule the connection error broke, a `QPACK_REASON_*`; `QPACK_REASON_NONE` until a call answers QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR. Reset by `http3.ts`'s `restart`. |
+| `valueLength: i32[]` | How many bytes field `i`'s value has in `bytes`. |
+| `valueStart: i32[]` | Where field `i`'s value starts in `bytes`, for `i` below `count`. |
 | `decode(section: u8[], off: i32, len: i32): i64` | Decodes one whole field section, `section[off, off + len)`, and answers `QPACK_OK`, `QPACK_SECTION_TOO_LARGE` or QPACK_DECOMPRESSION_FAILED; the module comment lists what each means. A decoder whose encoder stream was refused answers QPACK_ENCODER_STREAM_ERROR again instead, since the connection is closing. Anything but `QPACK_OK` leaves no fields. |
-| `decodeLines(src: u8[]): i64` | The body of `decode`: the prefix, then one pass over the field lines, each told apart by its first byte's pattern (§4.5.2 to §4.5.6). |
 | `receiveEncoderStream(buf: u8[], off: i32, len: i32): i64` | Reads the encoder stream's next bytes, `buf[off, off + len)`, and answers `QPACK_OK` or QPACK_ENCODER_STREAM_ERROR (or, once a section was refused, QPACK_DECOMPRESSION_FAILED again). At capacity 0 the one instruction a peer may send is Set Dynamic Table Capacity 0, the single byte `0x20`, so every other first byte is refused on sight: its top bits already say which instruction it begins, and none of them can be valid. |
-| `refuse(reason: i32): i64` | Records `reason` and answers QPACK_DECOMPRESSION_FAILED. |
-| `refuseInteger(status: i64): i64` | The refusal for a negative `qpackReadInteger` answer. |
-| `stringResult(status: i32): i64` | The answer for a string read: `QPACK_OK`, past the limit, or the refusal `status` names. |
-| `take(cost: i64): boolean` | Takes `cost` from what the section has room for and answers true, or answers false and takes nothing when the section would pass its limit. |
 
 ## QpackEncoder
 
@@ -223,19 +221,13 @@ class QpackEncoder
 
 | Member | |
 | --- | --- |
-| `new QpackEncoder()` |  |
-| `cancellations: i32` | How many Stream Cancellations the decoder stream carried, saturating at 2^31 - 1, and the last one's stream. |
-| `failed: i64` | The connection error the decoder stream met, which every later call answers. |
-| `huffman: HpackHuffman` |  |
-| `lastCancelled: i64` |  |
-| `pendingId: i64` | The stream ID of a Stream Cancellation still being read, and its next shift; -1 between instructions. |
-| `pendingShift: i32` |  |
-| `reason: i32` | Which rule `failed` broke, a `QPACK_REASON_*`. |
+| `new QpackEncoder()` | Makes an encoder whose decoder stream has carried nothing yet. |
+| `cancellations: i32` | How many Stream Cancellations the decoder stream carried, saturating at 2^31 - 1. |
+| `lastCancelled: i64` | The stream ID the last Stream Cancellation named; -1 until one arrives. |
+| `reason: i32` | Which rule the decoder stream broke, a `QPACK_REASON_*`; `QPACK_REASON_NONE` until `receiveDecoderStream` answers QPACK_DECODER_STREAM_ERROR. Reset by `http3.ts`'s `restart`. |
 | `beginSection(out: u8[]): void` | Appends the prefix every field section of this encoder begins with: a Required Insert Count of 0 and a Base of 0, the bytes `00 00`. |
-| `cancelled(streamId: i64): void` | Counts a Stream Cancellation for `streamId`. |
-| `encodeField(out: u8[], name: u8[], nameOff: i32, nameLen: i32, value: u8[], valueOff: i32, valueLen: i32, neverIndexed: boolean, huffman: boolean): void` | Appends one field line, `name[nameOff, + nameLen)` and `value[valueOff, + valueLen)`, to the section in `out`. A field the static table holds whole is one Indexed Field Line; otherwise it is a literal, with its name by static index when the table has the name, the lowest index first, and each of its strings Huffman-coded when `huffman` is true and the code is the shorter spelling.<br><br>A field marked `neverIndexed` is always a literal with the N bit set, even when the static table holds it, so that an intermediary re-encoding it keeps it out of every dynamic table downstream (§4.5.4, §7.1.3). |
+| `encodeField(out: u8[], name: u8[], nameOff: i32, nameLen: i32, value: u8[], valueOff: i32, valueLen: i32, neverIndexed: boolean, huffman: boolean): void` | Appends one field line, `name[nameOff, + nameLen)` and `value[valueOff, + valueLen)`, to the section in `out`. A field the static table holds whole is one Indexed Field Line; otherwise it is a literal, with its name by static index when the table has the name, the lowest index first, and each of its strings Huffman-coded when `huffman` is true and the code is the shorter spelling.<br><br>A field marked `neverIndexed` is always a literal with the N bit set, even when the static table holds it, so that an intermediary re-encoding it keeps it out of every dynamic table downstream (§4.5.4, §7.1.3).<br><br>A window outside its buffer panics. |
 | `receiveDecoderStream(buf: u8[], off: i32, len: i32): i64` | Reads the decoder stream's next bytes, `buf[off, off + len)`, and answers `QPACK_OK` or QPACK_DECODER_STREAM_ERROR. A Stream Cancellation is accepted and counted, its stream ID read across calls when the bytes split it. A Section Acknowledgment and an Insert Count Increment are refused on their first byte: this encoder sent no section that needs acknowledging and inserted nothing to count. |
-| `refuse(reason: i32): i64` | Records `reason` and answers QPACK_DECODER_STREAM_ERROR, which sticks. |
 
 ## Constants
 

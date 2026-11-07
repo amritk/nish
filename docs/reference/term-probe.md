@@ -14,6 +14,17 @@ import {
 } from "nish/term-probe";
 ```
 
+```ts
+import { TermEnv, TermProbe, probeQueries } from "nish/term-probe"
+
+const env: TermEnv = new TermEnv()
+env.term = "xterm-256color"
+const probe: TermProbe = new TermProbe(env, 80, 24, 0.0)
+const queries: string = probeQueries(env) // write these to the terminal
+// …feed each read: probe.feed(bytes, count, nowMs), until probe.done() or probe.timedOut(nowMs)
+console.log(`${probe.result().colors}`)
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="probeQueries" icon="phosphor/regular/function" href="#probequeries">
@@ -51,19 +62,6 @@ The module is pure: the environment comes in as a `TermEnv`, times are the
 caller's milliseconds as `f64` from any origin, and nothing here reads,
 writes or waits.
 
-</scalar-callout>
-
-```ts
-import { TermEnv, TermProbe, probeQueries } from "nish/term-probe";
-
-const env: TermEnv = new TermEnv();
-env.term = "xterm-256color";
-const probe: TermProbe = new TermProbe(env, 80, 24, 0.0);
-const queries: string = probeQueries(env); // write these to the terminal
-// …feed each read: probe.feed(bytes, count, nowMs), until probe.done() or probe.timedOut(nowMs)
-console.log(`${probe.result().colors}`);
-```
-
 - `TermEnv` — the environment variables the probe reads, each "" when
   unset, one field each in camelCase: `term` (`TERM`), `colorterm`
   (`COLORTERM`), `termProgram` (`TERM_PROGRAM`), `tmux` (`TMUX`), `sty`
@@ -93,8 +91,8 @@ console.log(`${probe.result().colors}`);
   (`nish/term`), keeping the replies and holding back every other event (a
   key typed while the probe ran) for `heldEvents()`, in order. `done()` is
   true once DA1 is answered; `timedOut(nowMs)` once `timeoutMs` (250 by
-  default) has passed since the send with no answer to DA1. Either way
-  the program then calls `finish(nowMs)` once: it gives up whatever the
+  default) has passed since the send with no answer to DA1. `timedOut`
+  calls `finish(nowMs)` itself; after `done()` the program calls it once: it gives up whatever the
   decoder still holds (a key cut off at the end of the read with DA1, say)
   and returns `heldEvents()` complete, and later reads go to the program's
   own decoder. `rttMs()` is the time from the
@@ -107,6 +105,8 @@ console.log(`${probe.result().colors}`);
   `answered`, `probeRttMs`, `graphics` ("kitty", "sixel", "halfblock" or
   "ascii"), `name` and `overrides`; each field's comment says where it
   comes from.
+
+</scalar-callout>
 
 The environment decides where the terminal cannot answer, and where the
 user says so: `COLORTERM=truecolor` or `24bit` means true colour, as does
@@ -141,11 +141,19 @@ function probeQueries(env: TermEnv): string
 #### Parameters
 
 <scalar-field name="env" type="TermEnv" required>
+
+The environment, which picks the queries: under a multiplexer some are wrapped to
+  reach the terminal outside it, and under `screen` or the Linux console the kitty graphics and
+  DECRQSS queries, which answer in strings, are left out.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The queries, ending in DA1, to `write` at once.
+
 </scalar-field>
 
 ## TermCaps
@@ -213,22 +221,18 @@ class TermProbe
 | Member | |
 | --- | --- |
 | `new TermProbe(env: TermEnv, cols: i32, rows: i32, sentAtMs: f64)` | A probe whose queries were written at `sentAtMs` to a window of `cols` by `rows` cells. |
-| `answeredAtMs: f64` | When DA1 was answered; -1 before. |
 | `cols: i32` | The window's width in cells, to turn `CSI 14 t` into a cell width. |
-| `decoder: KeyDecoder` | The decoder the terminal's bytes go through. |
 | `env: TermEnv` | The environment the queries were made for. |
-| `held: TermEvent[]` | Every other event so far, in order: what the user typed during the probe. |
 | `replies: TermEvent[]` | The replies so far, in order. |
 | `rows: i32` | The window's height in cells, to turn `CSI 14 t` into a cell height. |
 | `sentAtMs: f64` | When the queries were written. |
 | `timeoutMs: f64` | How long to wait for the answer to DA1 (`TERM_PROBE_TIMEOUT_MS` by default). |
 | `done(): boolean` | Whether DA1 has been answered, so every reply is in. |
 | `feed(bytes: u8[], count: i32, nowMs: f64): void` | Decode `bytes[0, count)`, read at `nowMs`. |
-| `finish(nowMs: f64): TermEvent[]` | End the probe at `nowMs`: what the decoder still holds — an ESC or the start of a key that came in the read with DA1, or an unfinished reply on a timeout — is given up (the ESC as a key, the reply as nothing) and `heldEvents` returned complete. Call it once, when `done()` or `timedOut` ends the probe, and hand every later read to the program's own decoder. |
+| `finish(nowMs: f64): TermEvent[]` | End the probe at `nowMs`: what the decoder still holds — an ESC or the start of a key that came in the read with DA1, or an unfinished reply on a timeout — is given up (the ESC as a key, the reply as nothing) and `heldEvents` returned complete. Call it once when `done()` ends the probe (`timedOut` calls it itself), and hand every later read to the program's own decoder. |
 | `heldEvents(): TermEvent[]` | The events that were not replies — keys typed, a paste — in the order they came, for the program to handle. |
 | `result(): TermCaps` | What the terminal can do, from the replies so far and the environment. |
 | `rttMs(): f64` | The time from the send to the answer to DA1, in milliseconds; -1 before it. |
-| `take(events: TermEvent[], nowMs: f64): void` | Take in `events`: replies kept, DA1 marking the probe done, the rest held. |
 | `timedOut(nowMs: f64): boolean` | Whether `timeoutMs` has passed since the send with DA1 unanswered. Once it has, it calls `finish(nowMs)`, so `heldEvents` is complete. |
 
 ## Constants

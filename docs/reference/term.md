@@ -138,13 +138,13 @@ Leave the alternate screen and show what was there before `enterAltScreen`.
 
 <scalar-card title="moveCursor" icon="phosphor/regular/function" href="#movecursor">
 
-Move the cursor to column `x`, row `y`, both from 0.
+Move the cursor to a cell.
 
 </scalar-card>
 
 <scalar-card title="paletteIndex" icon="phosphor/regular/function" href="#paletteindex">
 
-The 256-colour palette index nearest `colour`: one of the 6×6×6 cube (16–231) or of the 24 greys (232–255), whichever is closer in RGB.
+The 256-colour palette entry nearest a colour: one of the 6×6×6 cube (16–231) or of the 24 greys (232–255), whichever is closer in RGB.
 
 </scalar-card>
 
@@ -156,7 +156,7 @@ Reset colour and attributes to the terminal's defaults: SGR 0.
 
 <scalar-card title="rgb" icon="phosphor/regular/function" href="#rgb">
 
-The colour with red, green and blue each in 0–255, as `0xRRGGBB`; a component outside is clamped.
+A colour from its red, green and blue.
 
 </scalar-card>
 
@@ -360,11 +360,15 @@ function beginSync(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## clearScreen
 
-Move the cursor home and erase the whole screen; a `Screen` that was drawn on wants `invalidate` after it.
+Move the cursor home and erase the whole screen; a `Screen` that was drawn on
+wants `invalidate` after it.
 
 ```ts
 function clearScreen(): string
@@ -373,6 +377,9 @@ function clearScreen(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequences, to `write`.
+
 </scalar-field>
 
 ## endSync
@@ -386,11 +393,15 @@ function endSync(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## enterAltScreen
 
-Switch to the alternate screen, which the terminal restores the old contents from on leaving.
+Switch to the alternate screen, which the terminal restores the old contents
+from on leaving.
 
 ```ts
 function enterAltScreen(): string
@@ -399,6 +410,9 @@ function enterAltScreen(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## hideCursor
@@ -412,6 +426,9 @@ function hideCursor(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## leaveAltScreen
@@ -425,11 +442,14 @@ function leaveAltScreen(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## moveCursor
 
-Move the cursor to column `x`, row `y`, both from 0.
+Move the cursor to a cell.
 
 ```ts
 function moveCursor(x: i32, y: i32): string
@@ -438,21 +458,29 @@ function moveCursor(x: i32, y: i32): string
 #### Parameters
 
 <scalar-field name="x" type="i32" required>
+
+The column, from 0 at the left.
+
 </scalar-field>
 
 <scalar-field name="y" type="i32" required>
+
+The row, from 0 at the top.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## paletteIndex
 
-The 256-colour palette index nearest `colour`: one of the 6×6×6 cube
-(16–231) or of the 24 greys (232–255), whichever is closer in RGB.
-`COLOR_DEFAULT` stays itself.
+The 256-colour palette entry nearest a colour: one of the 6×6×6 cube (16–231)
+or of the 24 greys (232–255), whichever is closer in RGB.
 
 ```ts
 function paletteIndex(colour: i32): i32
@@ -461,11 +489,17 @@ function paletteIndex(colour: i32): i32
 #### Parameters
 
 <scalar-field name="colour" type="i32" required>
+
+An `0xRRGGBB` colour, or `COLOR_DEFAULT`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The palette index; `COLOR_DEFAULT` stays itself.
+
 </scalar-field>
 
 ## resetStyle
@@ -479,11 +513,14 @@ function resetStyle(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## rgb
 
-The colour with red, green and blue each in 0–255, as `0xRRGGBB`; a component outside is clamped.
+A colour from its red, green and blue.
 
 ```ts
 function rgb(r: i32, g: i32, b: i32): i32
@@ -492,17 +529,29 @@ function rgb(r: i32, g: i32, b: i32): i32
 #### Parameters
 
 <scalar-field name="r" type="i32" required>
+
+Red, 0–255; a value outside is clamped.
+
 </scalar-field>
 
 <scalar-field name="g" type="i32" required>
+
+Green, 0–255; a value outside is clamped.
+
 </scalar-field>
 
 <scalar-field name="b" type="i32" required>
+
+Blue, 0–255; a value outside is clamped.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The colour as `0xRRGGBB`, for any `fg`, `bg` or pixel.
+
 </scalar-field>
 
 ## showCursor
@@ -516,6 +565,9 @@ function showCursor(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The escape sequence, to `write`.
+
 </scalar-field>
 
 ## Canvas
@@ -537,13 +589,12 @@ class Canvas
 | `pixels: i32[]` | One colour per pixel, row by row. |
 | `screen: Screen` | The screen the pixels are drawn on. |
 | `width: i32` | Pixels across: the screen's width. |
-| `clear(colour: i32): void` | Set every pixel to `colour`. |
-| `fillRect(x: i32, y: i32, w: i32, h: i32, colour: i32): void` | Fill the `w × h` rectangle whose top-left pixel is `x`, `y`, clipped to the canvas. |
-| `line(x0: i32, y0: i32, x1: i32, y1: i32, colour: i32): void` | Draw a line from `x0`, `y0` to `x1`, `y1`, both ends included (Bresenham's). Any `i32` ends will do: the walk stops once it leaves the canvas for good, though one that starts far outside steps all the way in. |
-| `paintCell(col: i32, row: i32): void` | Redraw the screen cell at `col`, `row` from its two pixels. |
-| `pixel(x: i32, y: i32): i32` | The colour of the pixel at `x`, `y`, or `COLOR_DEFAULT` off the canvas. |
-| `setPixel(x: i32, y: i32, colour: i32): void` | Set the pixel at `x`, `y` to `colour`; a pixel off the canvas is not drawn. |
-| `text(col: i32, row: i32, s: string, fg: i32): i32` | Draw `s` in cells from column `col` of cell row `row` in `fg`, each character on the colour of the pixels behind it (the top one, or the bottom one where the top is unset), and answer the column after it. |
+| `clear(colour: i32): void` | Set every pixel to one colour. |
+| `fillRect(x: i32, y: i32, w: i32, h: i32, colour: i32): void` | Fill a rectangle, clipped to the canvas. |
+| `line(x0: i32, y0: i32, x1: i32, y1: i32, colour: i32): void` | Draw a line, both ends included (Bresenham's). Any `i32` ends will do: the walk stops once it leaves the canvas for good, though one that starts far outside steps all the way in. |
+| `pixel(x: i32, y: i32): i32` | What colour a pixel is. |
+| `setPixel(x: i32, y: i32, colour: i32): void` | Set one pixel; a pixel off the canvas is not drawn. |
+| `text(col: i32, row: i32, s: string, fg: i32): i32` | Draw a string in screen cells over the pixels, each character on the colour of the pixels behind it (the top one, or the bottom one where the top is unset). |
 
 ## FixedStep
 
@@ -563,14 +614,11 @@ class FixedStep
 
 | Member | |
 | --- | --- |
-| `new FixedStep(stepsPerSecond: i32, maxSteps: i32)` | A clock of `stepsPerSecond` steps a second (1 at least), running at most `maxSteps` (1 at least) per `advance`. |
-| `carry: f64` | The time since the last step, in milliseconds, under one step after each `advance`. |
-| `lastMs: f64` | The time the last `advance` was given. |
+| `new FixedStep(stepsPerSecond: i32, maxSteps: i32)` | A clock for a simulation that steps at a fixed rate whatever the frame rate. |
 | `maxSteps: i32` | The most steps one `advance` answers. |
-| `started: boolean` | Whether `advance` has been called, so `lastMs` is a time. |
 | `stepMs: f64` | The length of one step, in milliseconds. |
-| `advance(nowMs: f64): i32` | The steps to run for the time between the last call and `nowMs`. The first call only starts the clock and answers 0, as does a time earlier than the last one. |
-| `alpha(): f64` | How far into the next step the clock is, from 0 up to but not including 1. |
+| `advance(nowMs: f64): i32` | The steps to run for the time between the last call and now. The first call only starts the clock and answers 0, as does a time earlier than the last one. |
+| `alpha(): f64` | How far into the next step the clock is, for drawing between two steps. |
 
 ## KeyDecoder
 
@@ -597,22 +645,16 @@ class KeyDecoder
 
 | Member | |
 | --- | --- |
-| `new KeyDecoder(escapeTimeoutMs: f64)` | A decoder that gives up on an unfinished sequence after `escapeTimeoutMs` (25–50 is usual). |
+| `new KeyDecoder(escapeTimeoutMs: f64)` | A decoder with nothing held. |
 | `cellHeightPx: i32` | A cell's height in pixels, to turn a 1016 report into a row; 0 while unknown. |
 | `cellWidthPx: i32` | A cell's width in pixels, to turn a 1016 report into a column; 0 while unknown. |
 | `cprOutstanding: i32` | How many cursor position reports (`ESC [ 6 n`) are awaited. `ESC [ r ; c R` is both the report and F3 with modifiers; while this is above 0 it is the report, and takes one off. Whoever writes the request adds one. |
 | `escapeTimeoutMs: f64` | How long a held ESC waits for the rest of a sequence, in milliseconds. |
-| `pasteBytes: u8[]` | The bytes of the paste so far. |
-| `pasting: boolean` | Whether a bracketed paste has begun and not ended. |
-| `pending: u8[]` | The bytes of an unfinished sequence, carried to the next call. |
-| `pendingSince: f64` | When the first held byte arrived (`feed`), or the last (`feedEvents`). |
 | `pixelMouse: boolean` | Whether SGR mouse reports are in pixels (mode 1016), so `px` and `py` are set and `x`, `y` derived. |
-| `feed(bytes: u8[], count: i32, nowMs: f64): KeyEvent[]` | The keys in `bytes[0, count)`, read at time `nowMs`, after whatever was held: held bytes older than the timeout are given up first, as keys of their own, and the rest continue into these. |
-| `feedEvents(bytes: u8[], count: i32, nowMs: f64): TermEvent[]` | The events in `bytes[0, count)`, read at time `nowMs`, after whatever was held, as `feed` takes them. The timeout counts from the last byte that arrived, so a reply split across reads is not given up halfway. |
-| `keep(work: u8[], used: i32, restart: boolean, nowMs: f64): void` | Hold `work` from `used` on; when `restart` is set, the held bytes count as arriving at `nowMs`. |
-| `merged(bytes: u8[], count: i32): u8[]` | The held bytes followed by `bytes[0, count)`. |
-| `poll(nowMs: f64): KeyEvent[]` | The keys held bytes become once `escapeTimeoutMs` has passed since they arrived: none before then. |
-| `pollEvents(nowMs: f64): TermEvent[]` | The events held bytes become once `escapeTimeoutMs` has passed: an ESC as `KEY_ESCAPE`, an unterminated DCS, APC or OSC as nothing. A paste waits for its end however long it takes. |
+| `feed(bytes: u8[], count: i32, nowMs: f64): KeyEvent[]` | Decode what was read, after whatever was held: held bytes older than the timeout are given up first, as keys of their own, and the rest continue into these. |
+| `feedEvents(bytes: u8[], count: i32, nowMs: f64): TermEvent[]` | Decode what was read into events of every kind, after whatever was held, as `feed` takes them. The timeout counts from the last byte that arrived, so a reply split across reads is not given up halfway. |
+| `poll(nowMs: f64): KeyEvent[]` | Give up held bytes once the timeout has passed since they arrived. |
+| `pollEvents(nowMs: f64): TermEvent[]` | Give up held bytes once the timeout has passed: an ESC as `KEY_ESCAPE`, an unterminated DCS, APC or OSC as nothing. A paste waits for its end however long it takes. |
 | `waiting(): boolean` | Whether bytes are held, so the caller should `poll` once the timeout has passed. |
 
 ## KeyEvent
@@ -625,7 +667,7 @@ class KeyEvent
 
 | Member | |
 | --- | --- |
-| `new KeyEvent(kind: i32, code: i32)` | The event of kind `kind` with code `code`. |
+| `new KeyEvent(kind: i32, code: i32)` | A key event. |
 | `code: i32` | The character's code point, the control byte, or the escape sequence's final byte. |
 | `kind: i32` | One of the `KEY_` constants. |
 
@@ -656,27 +698,17 @@ class KeyState
 | Member | |
 | --- | --- |
 | `new KeyState()` | No key down, releases synthesized, Ctrl-C a quit. |
-| `downCodes: i32[]` | The code each key down last came with, which its synthesized release carries. |
-| `downKeys: i32[]` | The keys down, each as `termKeyId` names it. |
-| `downMods: i32[]` | The `MOD_` bits each key down last came with, which its synthesized release carries. |
-| `downRepeated: boolean[]` | Whether each key down has repeated. |
-| `downSince: f64[]` | When each key down last pressed or repeated. |
 | `firstRepeatMs: f64` | How long the system waits before a held key's first repeat, at most, in milliseconds (700 by default, above X11's 660). |
 | `quitOnCtrlC: boolean` | Whether Ctrl-C (byte 3, or kitty `ESC [ 99 ; 5 u`) becomes `EVENT_QUIT` (true by default). |
 | `releaseGapMs: f64` | How long after its last repeat a key is let go, in milliseconds (100 by default). |
 | `releasesAreSynthetic: boolean` | Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on. |
 | `watermarked: boolean` | Whether silence is measured against `watermarkMs` rather than the clock; set by `delivered`, which the caller may clear when answers stop. |
 | `watermarkMs: f64` | The latest send time of an answered query that `delivered` was given: everything the terminal generated before it has arrived. |
-| `apply(events: TermEvent[], nowMs: f64): TermEvent[]` | Take `events`, which arrived at `nowMs`, and answer what the program should see: first the releases `tick` makes for the keys `events` does not mention (a held key's repeats can wait in a read longer than the gap), then each event, with Ctrl-C as `EVENT_QUIT` (its repeats and release dropped) and a press of a key already down marked `ACTION_REPEAT` while releases are synthetic. A real release of a key not down is dropped: it was let go already, made up from silence or by losing focus. Losing focus lets every key go, since its release goes elsewhere. A non-finite `nowMs` releases nothing; a key it presses keeps its last time, and a new one is timed from the watermark (0 without one). |
-| `delivered(sentAtMs: f64): void` | Everything the terminal generated before `sentAtMs`, on the caller's clock, has arrived: the answer to an in-order query sent then has come back. From now on silence is measured against the latest such time. A non-finite `sentAtMs` is ignored. |
-| `deliveredAgoMs(nowMs: f64): f64` | How long before `nowMs` the latest answered query was sent, or -1 with no watermark: the caller clears `watermarked` once this passes its bound. |
-| `find(id: i32): i32` | Where key `id` is in `downKeys`, or -1. |
-| `isDown(key: i32, code: i32): boolean` | Whether the key of kind `key` is down. `code` tells a `KEY_CHAR`, `KEY_CONTROL` or `KEY_UNKNOWN` apart and is ignored for the rest; a letter is the same key in either case, since Shift changes the code a terminal sends. |
-| `press(e: TermEvent, nowMs: f64): boolean` | Record key event `e` at `nowMs`; false for a release of a key not down, which `apply` drops. |
-| `release(at: i32, out: TermEvent[]): void` | Let key `at` go, appending its release to `out`. |
-| `releaseDue(nowMs: f64, batch: TermEvent[]): TermEvent[]` | The releases due by `nowMs`, as `tick` makes them, for the keys no key event in `batch` names. |
-| `remove(at: i32): void` | Drop key `at`, keeping the others in order. |
-| `tick(nowMs: f64): TermEvent[]` | The releases due by `nowMs` while releases are synthetic: each key whose gap has passed, let go. |
+| `apply(events: TermEvent[], nowMs: f64): TermEvent[]` | Take the events of one read and answer what the program should see: first the releases `tick` makes for the keys the events do not mention (a held key's repeats can wait in a read longer than the gap), then each event, with Ctrl-C as `EVENT_QUIT` (its repeats and release dropped) and a press of a key already down marked `ACTION_REPEAT` while releases are synthetic.<br><br>A real release of a key not down is dropped: it was let go already, made up from silence or by losing focus. Losing focus lets every key go, since its release goes elsewhere. |
+| `delivered(sentAtMs: f64): void` | Note that everything the terminal generated before a time has arrived: the answer to an in-order query sent then has come back. From now on silence is measured against the latest such time. |
+| `deliveredAgoMs(nowMs: f64): f64` | How long ago the latest answered query was sent; the caller clears `watermarked` once this passes its bound. |
+| `isDown(key: i32, code: i32): boolean` | Whether a key is down. A letter is the same key in either case, since Shift changes the code a terminal sends. |
+| `tick(nowMs: f64): TermEvent[]` | The releases due while releases are synthetic: each key whose gap has passed, let go. |
 
 ## Screen
 
@@ -688,34 +720,22 @@ class Screen
 
 | Member | |
 | --- | --- |
-| `new Screen(width: i32, height: i32, palette256: boolean)` | A `width × height` screen of blank cells in the terminal's colours, none of them sent yet, so the first `flush` draws them all. With `palette256` set, every colour is sent as its nearest 256-colour index (`paletteIndex`). |
+| `new Screen(width: i32, height: i32, palette256: boolean)` | A screen of blank cells in the terminal's colours, none of them sent yet, so the first `flush` draws them all. |
 | `attrs: i32[]` | The frame's attributes, laid out as `glyphs`: `ATTR_BOLD` and `ATTR_INVERSE`, or'd. |
 | `bgs: i32[]` | The frame's backgrounds, laid out as `glyphs`. |
 | `fgs: i32[]` | The frame's foregrounds, laid out as `glyphs`: a colour or `COLOR_DEFAULT`. |
 | `glyphs: i32[]` | The frame being drawn, one code point per cell, row by row. |
 | `height: i32` | Rows. |
-| `out: u8[]` | The bytes `flush` builds, sized by `resize` and reused from frame to frame. |
-| `outLen: i32` | How many of `out` the flush in progress has written. |
 | `palette256: boolean` | Whether colours go out as 256-colour palette indices rather than 24-bit RGB. |
-| `sentAttrs: i32[]` | The attributes the terminal was last sent. |
-| `sentBgs: i32[]` | The backgrounds the terminal was last sent. |
-| `sentFgs: i32[]` | The foregrounds the terminal was last sent. |
-| `sentGlyphs: i32[]` | The code points the terminal was last sent; -1 is a cell not yet sent. |
 | `sync: boolean` | Whether a `flush` that changes anything is wrapped in `beginSync` and `endSync`; off until set. |
 | `width: i32` | Columns. |
-| `clear(background: i32): void` | Blank every cell of the frame being drawn: a space on `background`, default foreground, no attributes. |
-| `colourKey(colour: i32): i32` | The value a colour is sent as and compared by: itself, or its palette index under `palette256`. |
-| `flush(): string` | The escapes and glyphs that turn the frame last sent into the frame drawn, and the drawn frame becomes the sent one. Write the answer with `write`; an empty string means nothing changed.<br><br>Changed cells are visited row by row. The cursor is moved only when it is not already at the cell — `ESC [ n C` along the row, `ESC [ row ; col H` otherwise — and a gap of up to three unchanged ASCII cells in the current style is rewritten instead, which is shorter than the move. A style is sent only when it differs from the previous cell's, and only the parts that differ, from a reset when an attribute has to be turned off. A flush that leaves the terminal in a style other than the default ends with `ESC [ 0 m`, so what the caller writes next starts plain. With `sync` set, a flush that changes anything is wrapped in `beginSync` and `endSync`, in the same string, so the terminal paints the frame whole. |
-| `glyphAt(x: i32, y: i32): i32` | The code point drawn at column `x`, row `y` of the frame being drawn, or -1 off the screen. |
+| `clear(background: i32): void` | Blank every cell of the frame being drawn. |
+| `flush(): string` | Turn the frame last sent into the frame drawn, and make the drawn frame the sent one.<br><br>Changed cells are visited row by row. The cursor is moved only when it is not already at the cell — `ESC [ n C` along the row, `ESC [ row ; col H` otherwise — and a gap of up to three unchanged ASCII cells in the current style is rewritten instead, which is shorter than the move. A style is sent only when it differs from the previous cell's, and only the parts that differ, from a reset when an attribute has to be turned off. A flush that leaves the terminal in a style other than the default ends with `ESC [ 0 m`, so what the caller writes next starts plain. With `sync` set, a flush that changes anything is wrapped in `beginSync` and `endSync`, in the same string, so the terminal paints the frame whole. |
+| `glyphAt(x: i32, y: i32): i32` | What the frame being drawn holds in a cell. |
 | `invalidate(): void` | Forget what the terminal shows, so the next `flush` sends every cell: after a `clearScreen`, say. |
-| `put(b: i32): void` | Append one byte to the flush in progress; `flush` has reserved the room. |
-| `putColour(base: i32, key: i32): void` | Append the SGR parameters for colour `key` (an RGB or a palette index) on base 30 (foreground) or 40. |
-| `putDecimal(v: i32): void` | Append `v`, at least 0, in decimal: the three digits a colour channel has without recursing. |
-| `putGlyph(cp: i32): void` | Append code point `cp` as UTF-8. One that would not draw a character in place, or is not a scalar value — a C0 or C1 control, DEL, a surrogate, a negative number — goes as U+FFFD, so a cell cannot move the cursor, open an escape or send bytes that are not UTF-8. |
-| `putSyncMode(final: i32): void` | Append `ESC [ ? 2026` and `final`, which sets or resets synchronized output. |
-| `resize(width: i32, height: i32): void` | Make the screen `width × height`, blank and unsent: a terminal that changed size is redrawn in full. Each side is at most 4,096 cells and the screen at most 1,048,576, rows dropped to fit, so no size a terminal reports makes it overflow or run out of memory. |
-| `set(x: i32, y: i32, glyph: i32, fg: i32, bg: i32, attrs: i32): void` | Draw code point `glyph` at column `x`, row `y`; a cell off the screen is not drawn. Bits of `attrs` other than `ATTR_BOLD` and `ATTR_INVERSE` are dropped, so `flush` never has an attribute it cannot write. |
-| `text(x: i32, y: i32, s: string, fg: i32, bg: i32, attrs: i32): i32` | Draw `s` from column `x` of row `y`, one cell per character, clipped at the edges, and answer the column after its last character. |
+| `resize(width: i32, height: i32): void` | Make the screen a new size, blank and unsent: a terminal that changed size is redrawn in full. Each side is at most 4,096 cells and the screen at most 1,048,576, rows dropped to fit, so no size a terminal reports makes it overflow or run out of memory. |
+| `set(x: i32, y: i32, glyph: i32, fg: i32, bg: i32, attrs: i32): void` | Draw one character in a cell; a cell off the screen is not drawn. |
+| `text(x: i32, y: i32, s: string, fg: i32, bg: i32, attrs: i32): i32` | Draw a string along a row, one cell per character, clipped at the edges. |
 
 ## TermEvent
 
@@ -730,7 +750,7 @@ class TermEvent
 
 | Member | |
 | --- | --- |
-| `new TermEvent(type: i32)` | An event of type `type` with every other field at its default. |
+| `new TermEvent(type: i32)` | An event with every field but its type at its default. |
 | `action: i32` | An `ACTION_` constant: whether a key or button went down, repeated, came up or (the mouse) moved. |
 | `button: i32` | The mouse's `MOUSE_` button. |
 | `code: i32` | A key's code: the code point for `KEY_CHAR`, the byte for a control, the kitty key number or the final byte for `KEY_UNKNOWN`. |

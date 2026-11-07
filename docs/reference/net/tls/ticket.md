@@ -28,6 +28,33 @@ import {
 } from "nish/net/tls/ticket";
 ```
 
+```ts
+import {
+  TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketState, TlsTicketStrikes,
+  tlsTicketKeyDraw, tlsTicketKeyDue, tlsTicketOpen, tlsTicketSeal, tlsTicketSize,
+} from "nish/net/tls/ticket";
+import { monotonicNanos } from "nish:process";
+import { wipe } from "nish:secret";
+// secureZero is a builtin and needs no import
+
+const info = new TlsTicketKeyInfo()
+const key = tlsTicketKeyDraw(info, monotonicNanos())
+const strikes = new TlsTicketStrikes(TLS_TICKET_STRIKES_DEFAULT)
+
+// Issuing: `state` is a TlsTicketState the server filled from a finished handshake.
+const ticket: u8[] = new Array<u8>(tlsTicketSize(state))
+const written = tlsTicketSeal(key, info, state, monotonicNanos(), ticket)  // 0: send no ticket
+
+// Resuming (`TlsServer.resume` does this for a server): `offered` is a ticket the client sent.
+const now = monotonicNanos()
+const opened = new TlsTicketState()
+const fresh = tlsTicketOpen(key, info, offered, now, opened)
+if (fresh && strikes.take(opened.id, opened.expiresAt(), now)) {
+  // resume with opened.psk[0 .. opened.pskLength), then secureZero(opened.psk)
+}
+// when tlsTicketKeyDue(info, now), rotate as "Keys" below says; wipe(key) before it goes
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="tlsTicketKeyDraw" icon="phosphor/regular/function" href="#tlsticketkeydraw">
@@ -80,7 +107,7 @@ The strike register (§8.1): the ids of the tickets this process has accepted, e
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="The ticket">
 
 A ticket is the key id (16 bytes, public, the additional data) ‖ a fresh
 random nonce (12) ‖ the ChaCha20-Poly1305 ciphertext of the state ‖ its tag
@@ -91,38 +118,61 @@ suite (2 bytes), the issue time (8), the lifetime in seconds (4), the chain
 start (8), the server name with a one-byte length, and the PSK with a
 one-byte length, every integer big-endian.
 
-</scalar-callout>
+</scalar-detail>
+
+<scalar-detail title="Time">
 
 Every time is `monotonicNanos()`, read by the caller outside `expose` and
 handed in as `now`: keys never leave the process, so neither does a ticket,
 and a clock that cannot step keeps the strike register honest.
 
-- **Keys.** A ticket key is a `Secret<u8[]>` of 32 random bytes, which no
-  class may hold (NL2430): the program keeps its current and previous keys
-  in locals and lends them to `tlsTicketSeal` and `tlsTicketOpen`, which
-  read them only inside `exposeWith`. Beside each key it keeps a
-  `TlsTicketKeyInfo` — the id, the time it was drawn, how many tickets it has
-  sealed, and its seal cap. `tlsTicketKeyDraw` draws a key into a record and
-  `tlsTicketKeyDue` says when to replace it. The rotation turn is the
-  program's, because a function hands back one `Secret` and may not reassign
-  a borrowed one: `wipe(previous)`, `previous = current`,
-  `previousInfo.copyFrom(currentInfo)`, `current = tlsTicketKeyDraw(currentInfo, now)`.
-- **What the module enforces from the record.** A key seals for 12 hours of
-  awake time after its draw and until its seal cap (2^30 tickets), and opens
-  for 14 hours, inclusive; a ticket opens while `now` is no earlier than its
-  issue time, no later than issue time plus lifetime, and no later than 24
-  hours after its chain started, and only when its sealed lifetime is at
-  most 7200 s and its chain start is no later than its issue time.
-- **Wiping.** The plaintext of a seal or an open is a plain `u8[]` made in
-  a `using a = arena()` block, wiped with `secureZero` once, at the point
-  every path reaches; a failed open also wipes the state's PSK array. The
-  seal's exposed function wipes the copy of the plaintext it hands the
-  AEAD, and what the AEAD makes from the key is wiped by the AEAD
-  (`nish/crypto/chacha20poly1305`).
-- **`TlsTicketStrikes`** records each ticket's id (its nonce) until the
-  ticket expires or 7200 s after the recording, whichever is sooner, in a
-  table made once at its capacity. It never grows and fails closed when
-  full.
+</scalar-detail>
+
+<scalar-detail title="Keys">
+
+A ticket key is a `Secret<u8[]>` of 32 random bytes, which no
+class may hold (NL2430): the program keeps its current and previous keys
+in locals and lends them to `tlsTicketSeal` and `tlsTicketOpen`, which
+read them only inside `exposeWith`. Beside each key it keeps a
+`TlsTicketKeyInfo` — the id, the time it was drawn, how many tickets it has
+sealed, and its seal cap. `tlsTicketKeyDraw` draws a key into a record and
+`tlsTicketKeyDue` says when to replace it. The rotation turn is the
+program's, because a function hands back one `Secret` and may not reassign
+a borrowed one: `wipe(previous)`, `previous = current`,
+`previousInfo.copyFrom(currentInfo)`, `current = tlsTicketKeyDraw(currentInfo, now)`.
+
+</scalar-detail>
+
+<scalar-detail title="What the module enforces from the record">
+
+A key seals for 12 hours of
+awake time after its draw and until its seal cap (2^30 tickets), and opens
+for 14 hours, inclusive; a ticket opens while `now` is no earlier than its
+issue time, no later than issue time plus lifetime, and no later than 24
+hours after its chain started, and only when its sealed lifetime is at
+most 7200 s and its chain start is no later than its issue time.
+
+</scalar-detail>
+
+<scalar-detail title="Wiping">
+
+The plaintext of a seal or an open is a plain `u8[]` made in
+a `using a = arena()` block, wiped with `secureZero` once, at the point
+every path reaches; a failed open also wipes the state's PSK array. The
+seal's exposed function wipes the copy of the plaintext it hands the
+AEAD, and what the AEAD makes from the key is wiped by the AEAD
+(`nish/crypto/chacha20poly1305`).
+
+</scalar-detail>
+
+<scalar-detail title="`TlsTicketStrikes`">
+
+**`TlsTicketStrikes`** records each ticket's id (its nonce) until the
+ticket expires or 7200 s after the recording, whichever is sooner, in a
+table made once at its capacity. It never grows and fails closed when
+full.
+
+</scalar-detail>
 
 Written from the RFC and the design record, not ported from another
 implementation. Private names carry the `tlsTicket` prefix because a `std/`
@@ -145,14 +195,23 @@ function tlsTicketKeyDraw(
 #### Parameters
 
 <scalar-field name="info" type="TlsTicketKeyInfo" required>
+
+The record to fill for the new key; its old id, time and count are overwritten.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The draw time, in `monotonicNanos()`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+The new key, owned by the caller, who keeps it in a local and wipes it when it is replaced.
+
 </scalar-field>
 
 ## tlsTicketKeyDue
@@ -169,14 +228,23 @@ function tlsTicketKeyDue(
 #### Parameters
 
 <scalar-field name="info" type="TlsTicketKeyInfo" required>
+
+The current key's record.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The time to judge at, in `monotonicNanos()`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the program should rotate now; the key still opens tickets for a while after.
+
 </scalar-field>
 
 ## tlsTicketOpen
@@ -204,23 +272,42 @@ function tlsTicketOpen(
 #### Parameters
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
+
+The ticket key, lent: it is read only inside `exposeWith`, and stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="info" type="TlsTicketKeyInfo" required>
+
+The key's record, whose id the ticket must name.
+
 </scalar-field>
 
 <scalar-field name="ticket" type="u8[]" required>
+
+The ticket as the client sent it: key id, nonce, ciphertext and tag.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The time to judge the key and the ticket at, in `monotonicNanos()`.
+
 </scalar-field>
 
 <scalar-field name="out" type="TlsTicketState" required>
+
+The state to fill; its PSK array holds secret bytes on true, which the caller wipes once used.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the ticket opened and is within its bounds; it is not yet checked against the strike
+  register, which `TlsTicketStrikes.take` does.
+
 </scalar-field>
 
 ## tlsTicketSeal
@@ -247,23 +334,42 @@ function tlsTicketSeal(
 #### Parameters
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
+
+The ticket key, lent: it is read only inside `exposeWith`, and stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="info" type="TlsTicketKeyInfo" required>
+
+The key's record: its id heads the ticket and its count goes up by one on a seal.
+
 </scalar-field>
 
 <scalar-field name="state" type="TlsTicketState" required>
+
+What the ticket carries; its `issuedAt` is overwritten with `now`, unless the key
+  cannot seal at `now`, the state does not fit a ticket or `out` is too short.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The issue time, in `monotonicNanos()`.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the ticket is written, from index 0; at least `tlsTicketSize(state)` bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many bytes of `out` hold the ticket, or 0 when nothing was sealed.
+
 </scalar-field>
 
 ## tlsTicketSize
@@ -279,11 +385,17 @@ function tlsTicketSize(state: TlsTicketState): i32
 #### Parameters
 
 <scalar-field name="state" type="TlsTicketState" required>
+
+The state to be sealed, with its suite, server name and PSK lengths set.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The ticket's length in bytes, the least `out` that `tlsTicketSeal` accepts, or 0.
+
 </scalar-field>
 
 ## TlsTicketKeyInfo
@@ -303,7 +415,7 @@ class TlsTicketKeyInfo
 | `id: u8[]` | The key id, the ticket's additional data. |
 | `sealCap: i64` | How many it may seal: `TLS_TICKET_SEAL_CAP` unless the program lowers it. |
 | `sealed: i64` | How many tickets the key has sealed. |
-| `copyFrom(other: TlsTicketKeyInfo): void` | Copies `other` into this record, as the rotation turn does from the current key's to the previous one's. |
+| `copyFrom(other: TlsTicketKeyInfo): void` | Copies `other` into this record, as the rotation turn does from the current key's to the previous one's. The id is copied byte by byte into this record's own array, so the two records share nothing. |
 
 ## TlsTicketState
 
@@ -348,16 +460,11 @@ class TlsTicketStrikes
 
 | Member | |
 | --- | --- |
-| `new TlsTicketStrikes(capacity: i32)` |  |
-| `capacity: i32` | How many ids the register holds. |
-| `expires: i64[]` | Each slot's expiry: the entry is held through it, inclusive, and free strictly after. |
+| `new TlsTicketStrikes(capacity: i32)` | Makes the whole table now, so that no `take` ever allocates; it panics on a capacity below 1. |
 | `filled: i32` | How many ids are held or were held and expired: slots ever used. |
-| `ids: u8[]` | The ids, `TLS_TICKET_NONCE_SIZE` bytes a slot. |
-| `longest: i32` | The farthest from its home slot any id has been recorded: no entry of an id lies further along its chain. |
+| `longest: i32` | The farthest from its home slot any id has been recorded: no entry of an id lies further along its chain. `net/tls.ts` reads it to stop a probe. |
 | `refusedFull: i64` | How many `take`s were refused because no entry was free. |
-| `used: u8[]` | 1 for a slot that has ever held an id. |
-| `count(id: u8[]): i32` | How many entries hold `id` at `now`, live or expired: what the tests read to see one id recorded once. |
-| `holds(slot: i32, id: u8[]): boolean` | True when slot `slot` holds `id`. |
+| `count(id: u8[]): i32` | How many entries hold `id`, live or expired: what the tests read to see one id recorded once. It walks the whole table, so it is for tests and diagnostics, not for the handshake. |
 | `home(id: u8[]): i32` | The slot an id's probe chain starts at: FNV-1a over its bytes. |
 | `live(now: i64): i32` | How many entries are held at `now`. |
 | `take(id: u8[], expiresAt: i64, now: i64): boolean` | Records `id` until `min(expiresAt, now + 7200 s)` and answers true; false when `id` is still held, or when no entry is free, which is counted in `refusedFull`. The probe chain is scanned for a live entry of `id` as far as `longest`, the farthest any id has been recorded from its home, before an expired slot on it is reused, so an expired entry ahead of the id's live one cannot let it be recorded twice. Past that bound the scan only looks for a free slot and stops at the first, so a `take` costs the longest probe so far, not the capacity. An id of another length than a nonce is refused, uncounted. |

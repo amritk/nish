@@ -45,13 +45,22 @@ import {
 import { pkiLoadSystemRoots } from "nish/crypto/pki-roots";
 import { PKI_OK, PkiResult, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki";
 
-const store: PkiTrustStore = pkiTrustStore(pkiLoadSystemRoots().roots);
-// chain: each certificate's DER as the server sent it, its own first
-const r: PkiResult = pkiVerifyServer(chain, "example.com", toI64(Date.now()), store);
-if (r.code !== PKI_OK) {
-  console.log(pkiReason(r.code));
-}
-// r.path, when PKI_OK: the leaf first, the trusted root last
+// chain: each certificate's DER as the server sent it, the leaf first
+const check = (chain: u8[][], host: string, store: PkiTrustStore): boolean => {
+  const r: PkiResult = pkiVerifyServer(chain, host, toI64(Date.now()), store);
+  if (r.code !== PKI_OK) {
+    console.log(pkiReason(r.code));
+    return false;
+  }
+  // r.path: the leaf first, the trusted root last
+  return true;
+};
+
+export const main = (): i32 => {
+  const store: PkiTrustStore = pkiTrustStore(pkiLoadSystemRoots().roots);
+  const chain: u8[][] = [];
+  return check(chain, "example.com", store) ? 0 : 1;
+};
 ```
 
 <scalar-grid cols="2">
@@ -148,7 +157,7 @@ subjectAltName iPAddresses, octet for octet; any other name, ASCII and
 compared without case after one trailing dot is stripped from each side,
 against the dNSNames, a wildcard only as a whole leftmost label. The
 subject's common name is never read, so a certificate without a
-subjectAltName names no host.
+subjectAltName names no host. Nothing but the names is checked.
 
 ```ts
 function pkiMatchHostname(
@@ -160,14 +169,24 @@ function pkiMatchHostname(
 #### Parameters
 
 <scalar-field name="leaf" type="X509Certificate" required>
+
+The certificate the server presented as its own.
+
 </scalar-field>
 
 <scalar-field name="hostname" type="string" required>
+
+The name or address dialled: a DNS name, ASCII, or an IPv4
+  or IPv6 address, the IPv6 one bare or in brackets.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when one of `leaf`'s names matches `hostname`.
+
 </scalar-field>
 
 ## pkiReason
@@ -181,16 +200,24 @@ function pkiReason(code: i32): string
 #### Parameters
 
 <scalar-field name="code" type="i32" required>
+
+`PKI_OK` or a `PKI_ERR_` constant.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+What the code means, or "unknown reason" for any other number.
+
 </scalar-field>
 
 ## pkiTrustStore
 
-A store of `roots`, indexed by subject; a root whose DER is one already given is kept once.
+A store of `roots`, indexed by subject; a root whose DER is one already
+given is kept once. Nothing about a root is checked here: its validity and
+extensions are checked when a path reaches it.
 
 ```ts
 function pkiTrustStore(
@@ -201,11 +228,18 @@ function pkiTrustStore(
 #### Parameters
 
 <scalar-field name="roots" type="X509Certificate[]" required>
+
+The certificates to trust, as `x509ParseCertificate` gave them.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="PkiTrustStore">
+
+A new store, whose lists hold the given certificates themselves,
+  not copies; `roots` itself is not kept.
+
 </scalar-field>
 
 ## pkiVerifyServer
@@ -215,7 +249,19 @@ server sent it, the leaf first; `hostname` is the name or address dialled,
 ASCII (an internationalised name in its A-label form); `nowMs` is the
 instant to judge validity at, milliseconds since 1970-01-01 UTC; `store`
 holds the roots trusted. `PKI_OK` with the path, or the reason it was
-refused — see the module's header for which reason when several apply.
+refused.
+
+When several reasons apply, the first in this order is given: an empty
+chain is `PKI_ERR_MALFORMED`; more than `PKI_MAX_CHAIN_CERTS` certificates
+or `PKI_MAX_CHAIN_BYTES` bytes is `PKI_ERR_CHAIN_TOO_LONG`; then, certificate
+by certificate in the order sent, one that does not parse is
+`PKI_ERR_MALFORMED` and one with more than `PKI_MAX_NAMES` names or
+`PKI_MAX_SUBTREES` subtrees is `PKI_ERR_BUDGET`; then the leaf's own checks,
+in turn its validity, an unknown critical extension, being a CA, its key
+usage, its extended key usage and the host name; then the path search,
+whose reason the module's header ranks, or `PKI_ERR_BUDGET` when it ran out
+of signatures or name comparisons; and last, once a path is found, the
+leaf's profile.
 
 ```ts
 function pkiVerifyServer(
@@ -229,20 +275,37 @@ function pkiVerifyServer(
 #### Parameters
 
 <scalar-field name="chain" type="u8[][]" required>
+
+Each certificate's DER as the server sent it, the leaf first.
+
 </scalar-field>
 
 <scalar-field name="hostname" type="string" required>
+
+The name or address dialled.
+
 </scalar-field>
 
 <scalar-field name="nowMs" type="i64" required>
+
+The instant to judge validity at, in milliseconds since
+  1970-01-01 UTC.
+
 </scalar-field>
 
 <scalar-field name="store" type="PkiTrustStore" required>
+
+The roots trusted.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="PkiResult">
+
+A new result: `PKI_OK` with a fresh path, or a reason with an
+  empty one.
+
 </scalar-field>
 
 ## pkiVerifySignature
@@ -262,14 +325,24 @@ function pkiVerifySignature(
 #### Parameters
 
 <scalar-field name="cert" type="X509Certificate" required>
+
+The certificate whose signature is checked.
+
 </scalar-field>
 
 <scalar-field name="issuer" type="X509Certificate" required>
+
+The certificate whose subject public key is to have made it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when the signature verifies; `false` for a bad signature, a
+  weak or unparsable key, or an algorithm not listed here.
+
 </scalar-field>
 
 ## PkiResult
@@ -282,7 +355,7 @@ class PkiResult
 
 | Member | |
 | --- | --- |
-| `new PkiResult(code: i32, path: X509Certificate[])` |  |
+| `new PkiResult(code: i32, path: X509Certificate[])` | One verification's answer, as `pkiVerifyServer` gives it. |
 | `code: i32` | `PKI_OK` or a `PKI_ERR_` constant. |
 | `path: X509Certificate[]` | When `PKI_OK`, the path: the leaf first, the root last; otherwise empty. |
 
@@ -296,8 +369,7 @@ class PkiTrustStore
 
 | Member | |
 | --- | --- |
-| `new PkiTrustStore()` |  |
-| `bySubject: Map<string, X509Certificate[]>` | The roots under each subject, keyed by the subject's DER in hex. |
+| `new PkiTrustStore()` | An empty store; `pkiTrustStore` builds a filled one. |
 | `roots: X509Certificate[]` | Every root, in the order given, no two with the same DER. |
 
 ## Limits

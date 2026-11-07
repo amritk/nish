@@ -2,7 +2,7 @@
 
 # `nish/sqlite`
 
-SQLite, the database in a file, from a Nish program.
+`nish/sqlite` (the file `std/sqlite.ts`) — SQLite, the database in a file, from a Nish program.
 
 ```ts
 import {
@@ -56,6 +56,15 @@ const insert = db.prepare("INSERT INTO t (name) VALUES (?1)").expect("prepare")
 insert.bindText(1, "ada").expect("bind")
 insert.step().expect("insert")
 insert.reset().expect("reset")
+
+const rows = db.prepare("SELECT id, name FROM t ORDER BY id").expect("prepare")
+const buf = new Array<u8>(64)
+while (rows.step().expect("step")) {
+  const n = rows.columnInto(1, buf, 0).expect("name")
+  // n > buf.length means nothing was copied: grow buf and read again
+  console.log(`${rows.columnI64(0)} ${String.fromBytes(buf, 0, n)}`)
+}
+db.close().expect("close")  // finalizes `insert` and `rows` too
 ```
 
 <scalar-grid cols="2">
@@ -68,7 +77,7 @@ Opens the database at `path`.
 
 <scalar-card title="sqliteVersion" icon="phosphor/regular/function" href="#sqliteversion">
 
-The SQLite version linked in, such as `3.50.4`.
+The version of the SQLite library linked into this program.
 
 </scalar-card>
 
@@ -106,9 +115,9 @@ and a `Statement` are an `i32` each, and a handle used after `close` or
 <scalar-detail title="The loop allocates nothing">
 
 Every call a row makes — bind, `step`,
-`reset`, `columnI64`, `columnF64`, `columnInto` — answers a `Result` of two
-scalars, which travels as one machine word, and copies nothing but what it
-is asked for: `columnInto` copies a text or blob column into the caller's
+`reset`, `columnI64`, `columnF64`, `columnInto` — answers a bare scalar or a
+`Result` of two scalars, which travels as one machine word, and copies
+nothing but what it is asked for: `columnInto` copies a text or blob column into the caller's
 `u8[]` with one `memcpy`. `columnText` is the convenience that allocates a
 string. Building a `SqliteError` allocates, which is why the hot calls answer
 the bare result code and `error(code)` builds the message only for the
@@ -121,7 +130,10 @@ caller who wants it.
 **Results are SQLite's own codes**, extended (`SQLITE_CONSTRAINT_UNIQUE`
 rather than `SQLITE_CONSTRAINT`), so a program can compare them with the
 constants below or with SQLite's documentation. `SqliteError.code` is the
-primary code, the low byte.
+primary code, the low byte. `openDatabase` and `prepare` answer a built
+`SqliteError`, since they run once and the caller nearly always wants the
+message; every other call answers `Err` with the bare extended code, and
+`Database.error` or `Statement.error` turns it into a `SqliteError`.
 
 </scalar-detail>
 
@@ -145,7 +157,7 @@ Opens the database at `path`. `flags` holds one of `OPEN_READONLY`,
 `OPEN_READWRITE` or `OPEN_READWRITE | OPEN_CREATE`, with any of `OPEN_URI`,
 `OPEN_MEMORY` and `OPEN_NOFOLLOW`; anything else is `SQLITE_MISUSE`. The
 path `:memory:` is a database of its own that lives as long as the
-connection.
+connection. A failed open leaves nothing open behind it.
 
 ```ts
 function openDatabase(
@@ -157,19 +169,29 @@ function openDatabase(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+The file to open, a `file:` URI under `OPEN_URI`, or `:memory:`.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+The `OPEN_*` bits, combined with `|`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;Database, SqliteError&gt;">
+
+The connection, or a `SqliteError` with SQLite's code and message,
+  such as `SQLITE_CANTOPEN` for a file that cannot be opened.
+
 </scalar-field>
 
 ## sqliteVersion
 
-The SQLite version linked in, such as `3.50.4`.
+The version of the SQLite library linked into this program.
 
 ```ts
 function sqliteVersion(): string
@@ -178,6 +200,9 @@ function sqliteVersion(): string
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The version string, such as `3.50.4`.
+
 </scalar-field>
 
 ## Database
@@ -190,17 +215,16 @@ class Database
 
 | Member | |
 | --- | --- |
-| `new Database(handle: i32)` |  |
-| `handle: i32` | The adapter's handle; 0 names nothing. |
-| `begin(): Result<void, i32>` | `exec("BEGIN")`. |
-| `changes(): i64` | The rows the last INSERT, UPDATE or DELETE changed. |
-| `close(): Result<void, i32>` | Finalizes every statement of this connection and closes it; the handles name nothing after. |
-| `commit(): Result<void, i32>` | `exec("COMMIT")`. |
-| `error(code: i32): SqliteError` | The error for `code`, which this connection's last call answered. Ask before the next call. |
-| `exec(sql: string): Result<void, i32>` | Runs every statement of `sql` in turn, discarding any rows. |
-| `lastInsertRowid(): i64` | The rowid of the last row an INSERT on this connection made, 0 before any. |
-| `prepare(sql: string): Result<Statement, SqliteError>` | Compiles the first statement of `sql`, to be bound, stepped and reset as often as wanted; text after it is ignored. Text with no statement in it is `SQLITE_MISUSE`. |
-| `rollback(): Result<void, i32>` | `exec("ROLLBACK")`. |
+| `new Database(handle: i32)` | Wraps an adapter handle. A program gets a `Database` from `openDatabase` rather than building one. With a handle that names no connection, a call that can fail fails with `SQLITE_MISUSE`; `lastInsertRowid` and `changes` answer 0, and `error` answers a message. |
+| `begin(): Result<void, i32>` | Starts a transaction: `exec("BEGIN")`. |
+| `changes(): i64` | How many rows the last INSERT, UPDATE or DELETE on this connection changed. |
+| `close(): Result<void, i32>` | Finalizes every statement of this connection and closes it; the handles name nothing after. A close that fails has still finalized the statements, but leaves the connection open, its message readable through `error`. |
+| `commit(): Result<void, i32>` | Commits the open transaction: `exec("COMMIT")`. |
+| `error(code: i32): SqliteError` | The error for `code`, which this connection's last call answered. Ask before the next call, since the next call replaces the connection's message. Allocates the `SqliteError`. |
+| `exec(sql: string): Result<void, i32>` | Runs every statement of `sql` in turn, discarding any rows. It stops at the first statement that fails, so the ones before it have run. |
+| `lastInsertRowid(): i64` | The rowid of the last row an INSERT on this connection made. |
+| `prepare(sql: string): Result<Statement, SqliteError>` | Compiles the first statement of `sql`, to be bound, stepped and reset as often as wanted; text after it is ignored. Text with no statement in it is `SQLITE_MISUSE`. The statement belongs to this connection, and `close` finalizes it. |
+| `rollback(): Result<void, i32>` | Undoes the open transaction: `exec("ROLLBACK")`. |
 
 ## SqliteError
 
@@ -212,7 +236,7 @@ class SqliteError
 
 | Member | |
 | --- | --- |
-| `new SqliteError(extendedCode: i32, message: string)` |  |
+| `new SqliteError(extendedCode: i32, message: string)` | Builds the error from an extended code, keeping its low byte as `code`. |
 | `code: i32` | The primary result code, such as `SQLITE_CONSTRAINT`. |
 | `extendedCode: i32` | The extended code, such as `SQLITE_CONSTRAINT_UNIQUE` (2067). |
 | `message: string` | SQLite's message, such as `UNIQUE constraint failed: t.id`. |
@@ -228,26 +252,25 @@ class Statement
 
 | Member | |
 | --- | --- |
-| `new Statement(handle: i32)` |  |
-| `handle: i32` | The adapter's handle. |
-| `bindBlob(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32>` | Binds `buf[off, off + len)` as a blob, copied; a window outside `buf` is `SQLITE_MISUSE`. |
+| `new Statement(handle: i32)` | Wraps an adapter handle. A program gets a `Statement` from `Database.prepare` rather than building one. With a handle that names no statement, a call that can fail fails with `SQLITE_MISUSE`, and the other column readers answer as for a column that is not there: 0, `SQLITE_NULL`, or `null`. |
+| `bindBlob(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32>` | Binds `buf[off, off + len)` as a blob, copied, so `buf` may change after the call; a window outside `buf` is `SQLITE_MISUSE`. |
 | `bindF64(i: i32, v: f64): Result<void, i32>` | Binds a floating-point value to parameter `i`. |
 | `bindI64(i: i32, v: i64): Result<void, i32>` | Binds an integer to parameter `i`. |
 | `bindNull(i: i32): Result<void, i32>` | Binds SQL NULL to parameter `i`. |
-| `bindText(i: i32, text: string): Result<void, i32>` | Binds `text` to parameter `i`; SQLite copies it. |
-| `bindTextBytes(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32>` | Binds `buf[off, off + len)` as text, copied; a window outside `buf` is `SQLITE_MISUSE`. |
-| `clearBindings(): Result<void, i32>` | Clears every parameter back to NULL. |
-| `columnBytes(c: i32): i32` | The bytes `columnInto` would copy for column `c`. |
-| `columnCount(): i32` | The number of columns a row has. |
-| `columnF64(c: i32): f64` | Column `c` as a floating-point value; 0 for NULL or a column that is not there. |
-| `columnI64(c: i32): i64` | Column `c` as an integer, converted as SQLite converts; 0 for NULL or a column that is not there. |
+| `bindText(i: i32, text: string): Result<void, i32>` | Binds `text` to parameter `i`; SQLite copies it, so the string need not outlive the call. The text ends at its first NUL. |
+| `bindTextBytes(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32>` | Binds `buf[off, off + len)` as text, copied, so `buf` may change after the call; a window outside `buf` is `SQLITE_MISUSE`. The bytes should be UTF-8 and may hold a NUL. |
+| `clearBindings(): Result<void, i32>` | Clears every parameter back to NULL. `reset` keeps the bindings, so this is the call for a run that must not see the last one's values. |
+| `columnBytes(c: i32): i32` | How many bytes `columnInto` would copy for column `c`: a blob's length, or anything else's length as text. Ask it to size a buffer before the copy. |
+| `columnCount(): i32` | The number of columns a row of this statement has, known from `prepare` on, before the first `step`. |
+| `columnF64(c: i32): f64` | Column `c` of the current row as a floating-point value, converted as SQLite converts. |
+| `columnI64(c: i32): i64` | Column `c` of the current row as an integer, converted as SQLite converts (text `"12abc"` is 12, a float is truncated). |
 | `columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32>` | Copies column `c` — a blob's bytes, anything else as text — into `buf` at `at`, and answers its length. It copies only when all of it fits, so a length larger than `buf.length - at` means nothing was written and says how much room is needed. `SQLITE_RANGE` for a column that is not there, `SQLITE_MISUSE` for an `at` outside `0..buf.length`. |
-| `columnText(c: i32): string \| null` | Column `c` as a new string, cut at its first NUL; `null` for NULL or a column that is not there. Allocates. |
-| `columnType(c: i32): i32` | The type of column `c` in this row, `SQLITE_INTEGER` to `SQLITE_NULL`; `SQLITE_NULL` for a column that is not there. |
-| `error(code: i32): SqliteError` | The error for `code`, which this statement's last call answered. Ask before the next call. |
-| `finalize(): Result<void, i32>` | Frees the statement; its handle names nothing after. |
-| `reset(): Result<void, i32>` | Rewinds the statement to run again, keeping its bindings. |
-| `step(): Result<boolean, i32>` | Runs the statement to its next row: `true` with a row to read, `false` when it has finished. |
+| `columnText(c: i32): string \| null` | Column `c` of the current row as a new string, cut at its first NUL. Allocates on every call; `columnInto` is the call for a hot loop. |
+| `columnType(c: i32): i32` | The type of column `c` in the current row. |
+| `error(code: i32): SqliteError` | The error for `code`, which this statement's last call answered. Ask before the next call, since the next call on the connection replaces its message. Allocates the `SqliteError`. |
+| `finalize(): Result<void, i32>` | Frees the statement early; its handle names nothing after. Without this, `Database.close` frees it. |
+| `reset(): Result<void, i32>` | Rewinds the statement to run again, keeping its bindings. A failure of the last `step` is not answered again here: `step` already answered it. |
+| `step(): Result<boolean, i32>` | Runs the statement to its next row. Call `reset` to run it again from the start, with the same bindings. |
 
 ## Constants
 

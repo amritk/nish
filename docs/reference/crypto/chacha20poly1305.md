@@ -176,20 +176,36 @@ function chacha20(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The 32-byte key; it is read, not kept, and the caller still wipes
+  it.
+
 </scalar-field>
 
 <scalar-field name="counter" type="u32" required>
+
+The block number the keystream starts at.
+
 </scalar-field>
 
 <scalar-field name="nonce" type="u8[]" required>
+
+The 12-byte nonce.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The bytes to encrypt or decrypt; it is read, not changed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of `data.length` bytes, or `null` for bad input.
+
 </scalar-field>
 
 ## chacha20Block
@@ -209,17 +225,31 @@ function chacha20Block(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The 32-byte key; it is read, not kept, and the caller still wipes
+  it.
+
 </scalar-field>
 
 <scalar-field name="counter" type="u32" required>
+
+The block number.
+
 </scalar-field>
 
 <scalar-field name="nonce" type="u8[]" required>
+
+The 12-byte nonce.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+64 fresh bytes of keystream, secret like the key, or `null` for a
+  bad key or nonce length.
+
 </scalar-field>
 
 ## chacha20HeaderMask
@@ -240,14 +270,23 @@ function chacha20HeaderMask(
 #### Parameters
 
 <scalar-field name="hpKey" type="u8[]" required>
+
+The 32-byte header-protection key; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="sample" type="u8[]" required>
+
+The 16 bytes sampled from the packet's ciphertext.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh 5-byte mask, or `null` for a bad key or sample length.
+
 </scalar-field>
 
 ## chacha20Poly1305Open
@@ -272,20 +311,37 @@ function chacha20Poly1305Open(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The 32-byte key; it is read, not kept, and the caller still wipes
+  it.
+
 </scalar-field>
 
 <scalar-field name="nonce" type="u8[]" required>
+
+The 12-byte nonce the message was sealed with.
+
 </scalar-field>
 
 <scalar-field name="aad" type="u8[]" required>
+
+The data authenticated with it; must match what was sealed.
+
 </scalar-field>
 
 <scalar-field name="sealed" type="u8[]" required>
+
+The ciphertext followed by its 16-byte tag.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array holding the plaintext, or `null` if the tag fails or
+  the input is bad.
+
 </scalar-field>
 
 ## chacha20Poly1305Seal
@@ -308,20 +364,37 @@ function chacha20Poly1305Seal(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The 32-byte key; it is read, not kept, and the caller still wipes
+  it.
+
 </scalar-field>
 
 <scalar-field name="nonce" type="u8[]" required>
+
+The 12-byte nonce; it must never repeat under one key.
+
 </scalar-field>
 
 <scalar-field name="aad" type="u8[]" required>
+
+Data authenticated but not encrypted; may be empty.
+
 </scalar-field>
 
 <scalar-field name="plaintext" type="u8[]" required>
+
+The message to encrypt; it is read, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of ciphertext then tag, `plaintext.length + 16` bytes,
+  or `null` for bad input.
+
 </scalar-field>
 
 ## chacha20QuarterRound
@@ -344,23 +417,42 @@ function chacha20QuarterRound(
 #### Parameters
 
 <scalar-field name="state" type="u32[]" required>
+
+The words to start from; it is read, not changed.
+
 </scalar-field>
 
 <scalar-field name="a" type="i32" required>
+
+The first word position.
+
 </scalar-field>
 
 <scalar-field name="b" type="i32" required>
+
+The second word position.
+
 </scalar-field>
 
 <scalar-field name="c" type="i32" required>
+
+The third word position.
+
 </scalar-field>
 
 <scalar-field name="d" type="i32" required>
+
+The fourth word position.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32[] | null">
+
+A fresh copy of `state` with the quarter round applied, or `null`
+  for a position outside it.
+
 </scalar-field>
 
 ## poly1305
@@ -380,14 +472,24 @@ function poly1305(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The 32-byte one-time key, `r` then `s`; it is read, not kept, and
+  the caller still wipes it.
+
 </scalar-field>
 
 <scalar-field name="msg" type="u8[]" required>
+
+The message to authenticate.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh 16-byte tag, or `null` for a bad key length.
+
 </scalar-field>
 
 ## poly1305KeyGen
@@ -407,14 +509,25 @@ function poly1305KeyGen(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The 32-byte key; it is read, not kept, and the caller still wipes
+  it.
+
 </scalar-field>
 
 <scalar-field name="nonce" type="u8[]" required>
+
+The 12-byte nonce.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh 32-byte one-time key, which the caller wipes, or `null` for
+  a bad key or nonce length.
+
 </scalar-field>
 
 ## Constants

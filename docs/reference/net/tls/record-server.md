@@ -41,7 +41,7 @@ const got: i32 = conn.read(buf, 0, buf.length);   // application data
 
 <scalar-card title="TlsRecordPools" icon="phosphor/regular/cube" href="#tlsrecordpools">
 
-The four pools a connection's record buffers are borrowed from: `output`, `plain` and `scratch` for `TlsRecordServer`'s fields of those names, and `reader` for its `TlsRecordReader`.
+The four pools a connection's record buffers are borrowed from: `output` and `plain` for `TlsRecordServer`'s fields of those names, `scratch` for the buffer it opens a record's content into, and `reader` for its record reader's buffer.
 
 </scalar-card>
 
@@ -127,9 +127,10 @@ and §D.4, not ported from another implementation.
 
 ## TlsRecordPools
 
-The four pools a connection's record buffers are borrowed from: `output`,
-`plain` and `scratch` for `TlsRecordServer`'s fields of those names, and
-`reader` for its `TlsRecordReader`. A carrier with many slots makes one set
+The four pools a connection's record buffers are borrowed from: `output`
+and `plain` for `TlsRecordServer`'s fields of those names, `scratch` for the
+buffer it opens a record's content into, and `reader` for its record
+reader's buffer. A carrier with many slots makes one set
 with a ceiling of its slot count and points every slot at it with
 `TlsRecordServer.borrowFrom`, so a full server holds what preallocating
 every slot would have held and an idle one holds only what earlier
@@ -170,42 +171,23 @@ class TlsRecordServer
 
 | Member | |
 | --- | --- |
-| `new TlsRecordServer(tls: TlsServer)` |  |
+| `new TlsRecordServer(tls: TlsServer)` | Makes a slot for `tls` with a pool set of its own, one buffer of each kind, and starts the connection as `start` does. A carrier that shares its pools calls `borrowFrom` right after. |
 | `alert: i32` |  |
-| `ccsDue: boolean` | The compatibility `change_cipher_spec` is owed, after the first handshake message (§D.4). |
 | `closeDue: boolean` | The server has closed and its `close_notify` waits for room in `output`. |
-| `empty: u8[]` | The zero-length array a buffer field is while it holds no borrowed buffer. |
-| `ended: boolean` | The client's TCP stream ended. Without a `close_notify` before it, that is truncation and the connection failed. |
-| `firstMessageSeen: boolean` | Whether the server's first handshake message has been seen, which decides the compatibility record. |
-| `flightReady: boolean` | The server's flight is signed and finished, so its Handshake-level output may be sealed. |
-| `idleRecords: i32` | Records in a row that carried nothing for the caller, against `TLS_RECORD_IDLE_LIMIT`. |
-| `keyUpdateDue: boolean` | The server owes a KeyUpdate before its next application data (§4.6.3). |
 | `keyUpdates: i32` | KeyUpdates taken from the client, against `TLS_RECORD_MAX_KEY_UPDATES`. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`; `empty` until a record is sealed. |
 | `outputEnd: i32` |  |
 | `outputStart: i32` |  |
-| `outputUsed: i32` | How far into `output` this borrowing has written, which says whether its give-back zeroes. |
 | `padding: i32` |  |
 | `peerAlert: i32` |  |
 | `peerClosed: boolean` |  |
-| `pendingApplicationAt: i32` | How much of `TlsServer`'s Application-level output, a NewSessionTicket, is already in records. |
-| `pendingHandshakeAt: i32` | How much of `TlsServer`'s Handshake-level output is already in records. |
-| `pendingInitialAt: i32` | How much of `TlsServer`'s Initial-level output is already in records. |
 | `plain: u8[]` | Application data the caller has not read is `plain[plainStart .. plainEnd)`; `empty` until a record brings some. |
 | `plainEnd: i32` |  |
 | `plainStart: i32` |  |
-| `plainUsed: i32` | How far into `plain` this borrowing has written. |
-| `pools: TlsRecordPools` | Where `output`, `plain`, `scratch` and the reader's buffer are borrowed from. |
-| `postHandshake: u8[]` | A post-handshake message the client has sent part of. |
-| `postHandshakeLength: i32` |  |
-| `reader: TlsRecordReader` |  |
 | `readHash: i32` |  |
-| `readLevel: i32` | The `TLS_LEVEL_*` the client's records are read at: Initial in the clear, then Handshake, then Application. |
 | `readProtection: TlsRecordProtection` |  |
 | `readonly readTraffic256: Secret<u8[]>` | The client's and the server's current application traffic secrets, for KeyUpdate, each held at both hash lengths: `readHash` and `writeHash` say which of a pair holds the secret, and are 0 before it is known. |
 | `readonly readTraffic384: Secret<u8[]>` |  |
-| `scratch: u8[]` | Where a record is opened to; `empty` until the first protected record. |
-| `started: boolean` | The client's first handshake byte has arrived, which opens the window its `change_cipher_spec` may come in. |
 | `state: i32` |  |
 | `tls: TlsServer` |  |
 | `writeHash: i32` |  |
@@ -214,58 +196,26 @@ class TlsRecordServer
 | `readonly writeTraffic256: Secret<u8[]>` |  |
 | `readonly writeTraffic384: Secret<u8[]>` |  |
 | `abort(): void` | The socket failed under the connection: it ends with nothing more sent, and every key it holds wiped. |
-| `advance(): void` | Picks up what `TlsServer` did with the last bytes or the signature: its ServerHello or HelloRetryRequest, the read keys of each level as they appear, the signed flight, and the end of the handshake. The secrets it hands over are copied or installed and then wiped in `TlsServer`, so that only this connection holds them. |
 | `borrowFrom(pools: TlsRecordPools): void` | Borrows the record buffers from `pools` from now on, a carrier's set its slots share. Whatever is held from the old pools is given back first, zeroed, and dropped with it, so call it on a slot with nothing in flight: the carrier does, right after the constructor. |
-| `checkTruncation(): void` | Once the client's stream has ended and every whole record it held is handled, an end without `close_notify` is truncation: the connection fails, with nothing more sent, though what is already on `output` may still go out. Records still waiting for the caller to read, or for the signature, are handled first, so a `close_notify` among them counts. Every key the connection holds is wiped, as `fail` wipes them. |
 | `close(): void` | Closes the server's side (§6.1): a `close_notify`, after which `write` answers `TLS_RECORD_PIPE` and nothing more is sent. What was still owed of the handshake is dropped; application data already written stays ahead of the alert, which waits for room in `output` when there is none. The resumption master secret is wiped, since nothing issues a ticket from it, and the write keys once the `close_notify` is sealed (`sealClose`). Nothing happens once the connection has failed or closed. |
 | `consume(n: i32): void` | Lets the first `n` bytes of `output` go, once the socket has taken them, and seals what was waiting for the room. |
-| `dropOutput(): void` | Forgets everything waiting to be sent. |
-| `dropPending(): void` | Forgets what is owed but not yet sealed: the handshake queues, a NewSessionTicket, the compatibility record, a KeyUpdate and a close. |
-| `dropPlain(): void` | Forgets the application data the caller has not read. |
 | `end(): void` | The client's TCP stream ended. After its `close_notify` that is the orderly end; before it, the stream was cut short — truncation, which an attacker on the path can cause — and the connection fails with nothing sent, since there is nobody left to read it. |
 | `fail(alert: i32): void` | Fails the connection with `alert`, sent as a fatal alert under whatever the server writes with now, in the clear before its first keys. What was still owed is dropped: the alert is the last thing the server sends, so once it is sealed every key the connection holds is wiped, the traffic keys and secrets as well as what `TlsServer` holds. |
-| `giveBackIdle(): void` | Gives back each record buffer that holds nothing still needed, as a connection ends: `output` once everything in it is sent, `plain` once the caller has read it all, and `scratch`. Zeroed with `giveSecret`: every one held plaintext or handshake bytes, and the next connection to borrow it reads zeros. Not called between records, since `giveSecret` zeroes the whole buffer however little of it a record used. |
-| `handleAlert(length: i32): i32` | An alert, `scratch[0 .. length)` (§6): two bytes, or `decode_error`. The level is not read, as §6 allows. `close_notify` ends the client's stream, `user_canceled` is passed over, and any other description — one this module does not know included (§6.2) — ends the connection with nothing more sent. |
-| `handleApplicationRecord(length: i32): i32` | A record under the client's application keys, its `length` bytes of content opened into `scratch`. Application data goes to the caller's buffer, which `process` made room in; an alert and a post-handshake message are handled here; and a post-handshake message the client has sent part of may not be interrupted by anything else (§5.1). |
-| `handleChangeCipherSpec(buf: u8[], off: i32, length: i32): i32` | The compatibility record (§5, §D.4): one byte of 1, in the clear, from the client's first ClientHello until its Finished, and not between the records of one handshake message. It is dropped; anything else is `unexpected_message`. |
-| `handleHandshake(length: i32): i32` | Handshake bytes, `scratch[0 .. length)`, for `TlsServer` at the level they were read at. An empty fragment is `unexpected_message` (§5.1 forbids sending one); `TlsServer`'s own answer otherwise. |
-| `handlePostHandshake(length: i32): i32` | Post-handshake handshake bytes, `scratch[0 .. length)`. The only message a client sends this server after its Finished is KeyUpdate (no certificate was requested, so no post-handshake authentication): another type is `unexpected_message`, a length other than 1 `decode_error`, a `request_update` other than 0 or 1 `illegal_parameter` (§4.6.3), and a KeyUpdate that does not end its record `unexpected_message`, since the keys change after it (§5.1). The message may start in an earlier record. |
-| `handleRecord(buf: u8[], off: i32, n: i32): i32` | One whole record, `buf[off .. off + n)`. A `change_cipher_spec` is judged on its own; anything else is opened under the read protection into `scratch`, and its content goes to `handleApplicationRecord` once the handshake is done, to the handshake before. Answers 0 or the alert. |
-| `idle(): i32` | Counts a record that carried nothing for the caller: 0, or `unexpected_message` once there are too many in a row. |
 | `interest(): i32` | What the connection wants next, as `TLS_RECORD_*` bits: read the socket (there is room, and the stream has not ended), write it (`output` holds bytes), `read` (application data, or the end of the client's stream), sign, handle a ticket, or nothing more ever (`TLS_RECORD_DONE`: failed or closed, and everything is sent). |
 | `issue(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean` | While `interest` says `TLS_RECORD_TICKET` on an open connection: seals a ticket under `key` (`TlsServer.issue`) and queues its NewSessionTicket. Whether one was queued; either way the resumption master secret is wiped, and no second ticket is issued. |
-| `keepRead(): boolean` | Copies the client's application traffic secret out of `TlsServer` into the field of its hash's length, wipes the server's copy, and installs the read keys from it. False when the secret is not known or the keys do not install. |
-| `keepWrite(): boolean` | `keepRead` for the server's application traffic secret and the write keys. |
 | `keyUpdate(requestPeer: boolean): i32` | Sends a KeyUpdate now, asking the client to update too when `requestPeer` (§4.6.3). Answers 0, `TLS_RECORD_AGAIN` while the handshake is under way or `output` is full, `TLS_RECORD_PIPE` once the server has closed or the connection failed, or `TLS_RECORD_RESET` when the next keys do not install and the connection fails on it. |
-| `maxChunk(): i32` | The most content one record may carry under the write protection as it stands: 2^14 bytes, less the padding each protected record carries, since the content, its type and the padding together may not pass 2^14 + 1 (§5.4). Below 1 when the padding leaves no room at all. |
-| `outputHasRoom(need: i32): boolean` | Whether `need` more bytes fit in `output`, moving what is unsent to the front first. Borrows `output` when none is held, since a record is about to be sealed into it. |
-| `plainHasRoom(): boolean` | Whether a whole record's content fits beside what the caller has not read, moving that to the front when it would then fit and only then, so a caller reading a byte at a time does not move the buffer each time. |
-| `process(): void` | Handles every whole record the reader holds, as far as the application data buffer has room for. While the server waits for its signature the records stay where they are, and `sign` comes back for them: a client has nothing to send then but a `change_cipher_spec`, and holding the rest means bytes mean the same thing however the stream was cut. |
-| `pump(): void` | Moves what is owed onto `output` as far as it fits, in the order the client must read it: the Initial-level messages in the clear, the compatibility record, the flight under the handshake keys, and then the switch to the application keys, with the server's handshake and application secrets wiped in `TlsServer` once they are installed here. A KeyUpdate owed to the client goes last. |
 | `read(buf: u8[], off: i32, len: i32): i32` | Application data from the client, into `buf[off .. off + len)`: the count, as a socket read answers; 0 at the end of its stream (its `close_notify`) or for a `len` of 0; `TLS_RECORD_AGAIN` when nothing is waiting; `TLS_RECORD_RESET` once the connection has failed; and `TLS_RECORD_INVALID` for a window outside `buf`. Reading makes room, so records the buffer was full for are handled before it answers. |
 | `receive(data: u8[], off: i32, len: i32): i32` | Takes bytes of the client's stream, `data[off .. off + len)`, and handles every record they complete. Answers how many it took, which is fewer than `len` only when its buffers are full (read `interest` before reading the socket again), or `TLS_RECORD_INVALID` for a window outside `data`. Once the connection has failed, or the client has sent `close_notify`, bytes are taken and dropped (§6.1). |
-| `recordRoom(len: i32): i32` | The room a record of `len` content bytes takes in `output` under the write protection as it stands. |
 | `release(): void` | Gives back every record buffer this slot holds, zeroed, and drops what was in them: unsent output, unread application data and a partial record. The carrier calls it when it closes the slot, after the last flush and `wipeKeys`, so a free slot holds no buffer of the pools'. |
 | `resume(current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32` | While `interest` says `TLS_RECORD_TICKET` in the handshake: reads the ClientHello's tickets under the keys the carrier lends (`TlsServer.resume`) and seals the flight that answers it, resumed or in full. Answers 0, or the alert the connection failed with — `internal_error` when no ticket waits. |
-| `sealClose(): void` | Seals the `close_notify` `close` owes, once `output` has room for it. It is the last record the server writes (§6.1), so the write keys and the server's traffic secret are wiped as soon as it is sealed. The read keys stay: the client may still send until its own `close_notify`. |
-| `sealQueue(queue: u8[], at: i32, length: i32): i32` | Seals as much of `queue[at .. length)` as fits, in records of at most `maxChunk()` bytes, and answers where it stopped. A padding that leaves no room for content fails the connection with `internal_error`. |
 | `sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean` | Seals one record of `type` from `data[off .. off + len)` onto `output` under the write protection, padded when it is protected. False, writing nothing, when it does not fit; a refusal from `seal` itself, which only a mistake here could cause, fails the connection. |
-| `sendAlert(level: i32, description: i32): boolean` | Seals an alert record of `level` and `description`; false, sending nothing, when `output` has no room for it. |
-| `sendKeyUpdate(request: boolean): boolean` | Seals a KeyUpdate under the current write keys and moves the write side to the next secret (§4.6.3, §7.2), the old one wiped. False, sending nothing, when it does not fit in `output` yet. |
 | `sign(signature: u8[]): i32` | Takes the signature over `signatureInput()` (DER for ECDSA, as `tlsSignEcdsaP256` answers it) and seals the rest of the flight. Answers 0, or the alert the connection failed with — `internal_error` when no signature is due. |
 | `signatureInput(): u8[] \| null` | What the CertificateVerify signs, while `interest` says `TLS_RECORD_SIGN`; `null` otherwise. |
 | `space(): i32` | How many bytes `receive` would take now: what the socket should read at most. |
 | `start(tls: TlsServer): void` | Starts a new connection in this slot with `tls`, which should be fresh or just restarted (`TlsServer.restart`, which reuses its buffers): every buffer is emptied and given back, zeroed, and the keys of the last connection are wiped; nothing is allocated. A `tls` that has already failed — a configuration or randomness `TlsServer` refused — fails this connection at once, with its alert queued in the clear. |
-| `updateReadKeys(requested: boolean): i32` | The client's KeyUpdate: its next records are under the next secret (§7.2), the old one wiped. When it asked for an update the server owes one of its own before its next application data, which `pump` sends. Answers 0, or `internal_error` when no read secret is kept (`readHash` 0) or the keys do not install. |
 | `wipe(): void` | Wipes everything this slot holds, which is what `wipeKeys` does: both traffic secrets at both hash lengths, both directions' keys, and everything `TlsServer` holds. The record buffers that hold nothing still needed go back too; a failure's alert waiting in `output` stays until it is sent or `release` drops it. |
 | `wipeKeys(): void` | Wipes every key this connection holds: the two application traffic secrets it keeps for KeyUpdate, both directions' keys, and what is left in `TlsServer` (`TlsServer.wipe`). The carrier calls it when a slot is closed, so a free slot holds no key. |
-| `wipeRead(): void` | Wipes the client's application traffic secret and the read keys. |
-| `wipeReadSecret(): void` | Zeroes both of the client's traffic secret fields. |
-| `wipeTraffic(): void` | Wipes the two application traffic secrets and both directions' keys. |
-| `wipeWrite(): void` | Wipes the server's application traffic secret and its write keys. |
-| `wipeWriteSecret(): void` | Zeroes both of the server's traffic secret fields. |
 | `write(data: u8[], off: i32, len: i32): i32` | Application data for the client, `data[off .. off + len)`: seals as much as fits, in records of at most 2^14 bytes, and answers how much that was, as a socket write does. A KeyUpdate goes first when the key has protected `recordLimit` records, or the client asked for one. `TLS_RECORD_AGAIN` while the handshake is under way or nothing fits, `TLS_RECORD_PIPE` once the server has closed or the connection failed, and `TLS_RECORD_INVALID` for a window outside `data`. |
-| `writePadding(): i32` | The padding the next record carries: `padding` once records are protected, none in the clear. |
 
 ## Limits
 

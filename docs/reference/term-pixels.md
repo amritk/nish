@@ -25,6 +25,18 @@ import {
 } from "nish/term-pixels";
 ```
 
+```ts
+import { Framebuffer, fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes } from "nish/term-pixels"
+
+const fb = new Framebuffer(160, 90)
+fb.fill(0x000020)
+fb.set(80, 45, 0xffcc00)
+const rect = fitFramebuffer(fb.width, fb.height, 80, 24, 0, 0, GRAPHICS_KITTY)
+const out = new PixelBytes(1 << 16)
+kittyFrame(fb, rect, 1, out)
+// out.text() is the frame's bytes, for one write
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="drawAscii" icon="phosphor/regular/function" href="#drawascii">
@@ -92,7 +104,7 @@ Where a framebuffer is drawn: the cells it covers and its size in the backend's 
 <scalar-callout type="info">
 
 A program draws `0xRRGGBB` pixels into a `Framebuffer` and never thinks about
-the terminal; `std/term-io` picks the backend and calls one encoder per frame.
+the terminal; `nish/term-io` picks the backend and calls one encoder per frame.
 Everything here is pure: no capability, no I/O, and the bytes are the same
 natively and under Node, because the kitty and Sixel output is ASCII and the
 cell drawers go through `Screen`, which already is.
@@ -157,15 +169,27 @@ function drawAscii(
 #### Parameters
 
 <scalar-field name="fb" type="Framebuffer" required>
+
+The frame's pixels.
+
 </scalar-field>
 
 <scalar-field name="screen" type="Screen" required>
+
+The screen to draw on.
+
 </scalar-field>
 
 <scalar-field name="rect" type="PixelRect" required>
+
+Where to draw it, from `fitFramebuffer` with `GRAPHICS_ASCII`.
+
 </scalar-field>
 
 <scalar-field name="colors" type="i32" required>
+
+How many colours the terminal shows: 16 for the Linux console, anything else for more.
+
 </scalar-field>
 
 ## drawHalfBlocks
@@ -188,12 +212,21 @@ function drawHalfBlocks(
 #### Parameters
 
 <scalar-field name="fb" type="Framebuffer" required>
+
+The frame's pixels.
+
 </scalar-field>
 
 <scalar-field name="canvas" type="Canvas" required>
+
+The half-block canvas of the screen to draw on.
+
 </scalar-field>
 
 <scalar-field name="rect" type="PixelRect" required>
+
+Where to draw it, from `fitFramebuffer` with `GRAPHICS_HALFBLOCK`.
+
 </scalar-field>
 
 ## fitFramebuffer
@@ -225,29 +258,53 @@ function fitFramebuffer(
 #### Parameters
 
 <scalar-field name="fbW" type="i32" required>
+
+The framebuffer's width in pixels.
+
 </scalar-field>
 
 <scalar-field name="fbH" type="i32" required>
+
+The framebuffer's height in pixels.
+
 </scalar-field>
 
 <scalar-field name="cols" type="i32" required>
+
+The area's width in cells.
+
 </scalar-field>
 
 <scalar-field name="rows" type="i32" required>
+
+The area's height in cells.
+
 </scalar-field>
 
 <scalar-field name="cellW" type="i32" required>
+
+A cell's width in pixels as the terminal reported it, or 0 or less when it did not say.
+
 </scalar-field>
 
 <scalar-field name="cellH" type="i32" required>
+
+A cell's height in pixels likewise; with either at 0 or less, kitty and Sixel take the cell as 8×16.
+
 </scalar-field>
 
 <scalar-field name="backend" type="i32" required>
+
+The `GRAPHICS_` backend that will draw it, which decides what a pixel of the rect is.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="PixelRect">
+
+Where to draw, in the area's cells and the backend's pixels.
+
 </scalar-field>
 
 ## kittyDelete
@@ -265,11 +322,17 @@ function kittyDelete(imageId: i32): string
 #### Parameters
 
 <scalar-field name="imageId" type="i32" required>
+
+The id `kittyFrame` drew with.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The command, to `write`.
+
 </scalar-field>
 
 ## kittyFrame
@@ -313,15 +376,27 @@ function kittyFrame(
 #### Parameters
 
 <scalar-field name="fb" type="Framebuffer" required>
+
+The frame's pixels, at its own size.
+
 </scalar-field>
 
 <scalar-field name="rect" type="PixelRect" required>
+
+Where to draw it, from `fitFramebuffer` with `GRAPHICS_KITTY`.
+
 </scalar-field>
 
 <scalar-field name="imageId" type="i32" required>
+
+The image's id, 1 or more (below 1 panics), the same for every frame of one program.
+
 </scalar-field>
 
 <scalar-field name="out" type="PixelBytes" required>
+
+Where the command bytes are appended.
+
 </scalar-field>
 
 ## scaleFramebuffer
@@ -344,12 +419,21 @@ function scaleFramebuffer(
 #### Parameters
 
 <scalar-field name="src" type="Framebuffer" required>
+
+The full-size framebuffer, read only.
+
 </scalar-field>
 
 <scalar-field name="divisor" type="i32" required>
+
+How many pixels across and down become one, 1 or more; 2 or 4 for the controller's steps.
+
 </scalar-field>
 
 <scalar-field name="dst" type="Framebuffer" required>
+
+Where the shrunk frame goes; resized to fit.
+
 </scalar-field>
 
 ## sixelFrame
@@ -390,15 +474,27 @@ function sixelFrame(
 #### Parameters
 
 <scalar-field name="fb" type="Framebuffer" required>
+
+The frame's pixels; shrunk or grown to the rect by nearest neighbour.
+
 </scalar-field>
 
 <scalar-field name="rect" type="PixelRect" required>
+
+Where to draw it, from `fitFramebuffer` with `GRAPHICS_SIXEL`.
+
 </scalar-field>
 
 <scalar-field name="dither" type="boolean" required>
+
+Whether to dither gradients instead of banding them.
+
 </scalar-field>
 
 <scalar-field name="out" type="PixelBytes" required>
+
+Where the Sixel bytes are appended.
+
 </scalar-field>
 
 ## Framebuffer
@@ -442,15 +538,7 @@ class PixelBytes
 | --- | --- |
 | `new PixelBytes(capacity: i32)` | An empty buffer with room for `capacity` bytes before it grows. |
 | `bytes: u8[]` | The bytes, of which the first `length` are written. |
-| `kittyRaw: u8[]` | One kitty chunk's RGB bytes. |
 | `length: i32` | How many bytes are written. |
-| `sampleXs: i32[]` | The framebuffer column and row each destination pixel samples. |
-| `sampleYs: i32[]` |  |
-| `sixelBits: i32[]` | Each register's sixels across a band, all zero between bands. |
-| `sixelFirst: i32[]` | The first and last column of a band each register covers, -1 for none. |
-| `sixelLast: i32[]` |  |
-| `sixelReg: i32[]` | Every destination pixel's Sixel register, row by row. |
-| `sixelUsed: u8[]` | Which registers a Sixel frame uses, 1 or 0. |
 | `put(b: i32): void` | Append the byte `b`. |
 | `putDecimal(v: i32): void` | Append `v`, at least 0, in decimal. |
 | `putText(s: string): void` | Append `s`, which is ASCII. |

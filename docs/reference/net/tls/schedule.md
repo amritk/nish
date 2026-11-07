@@ -150,7 +150,7 @@ The handshake secret: HKDF-Extract of the ECDHE secret under `Derive-Secret(earl
 
 <scalar-card title="tlsMasterSecret" icon="phosphor/regular/function" href="#tlsmastersecret">
 
-The master secret: HKDF-Extract of HashLen zeros under `Derive-Secret(handshake, "derived", "")`, which is wiped before it returns.
+The master secret: HKDF-Extract of HashLen zeros under `Derive-Secret(handshake, "derived", "")`, which is wiped before it returns, as the zeros are.
 
 </scalar-card>
 
@@ -322,19 +322,29 @@ function tlsBinderKey(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="earlySecret" type="Secret&lt;u8[]&gt;" required>
+
+The early secret from `tlsPskEarlySecret`. It stays the caller's: this does not wipe it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the binder key, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsBinderKeyInto
 
-`tlsBinderKey` in place: `Derive-Secret(early, "res binder", "")`, written at `out[0]`.
+`tlsBinderKey` in place: `Derive-Secret(early, "res binder", "")`, written at `out[0]`. The scratch is
+wiped before it returns.
 
 ```ts
 function tlsBinderKeyInto(
@@ -348,15 +358,27 @@ function tlsBinderKeyInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are written.
+
 </scalar-field>
 
 <scalar-field name="earlySecret" type="u8[]" required>
+
+The early secret, plain. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the binder key is written, from index 0; the caller owns and wipes it.
+
 </scalar-field>
 
 ## tlsBinderVerify
@@ -388,37 +410,65 @@ function tlsBinderVerify(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="binderKey" type="u8[]" required>
+
+The binder key from `tlsBinderKeyInto`, plain. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="truncatedHash" type="u8[]" required>
+
+The array that holds the hash of the ClientHello up to its binders list.
+
 </scalar-field>
 
 <scalar-field name="hashOff" type="i32" required>
+
+Where in `truncatedHash` the `hashLength` bytes of that hash start.
+
 </scalar-field>
 
 <scalar-field name="binder" type="u8[]" required>
+
+The array that holds the binder the client sent, usually the received ClientHello.
+
 </scalar-field>
 
 <scalar-field name="binderOff" type="i32" required>
+
+Where in `binder` the client's binder starts.
+
 </scalar-field>
 
 <scalar-field name="binderLength" type="i32" required>
+
+How many bytes the client's binder is.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when the client's binder matches the one the server computed, so the client holds the PSK.
+
 </scalar-field>
 
 ## tlsDeriveSecret
 
-Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcript hash, HashLen bytes held as a `Secret`.
+Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcript hash, HashLen bytes
+held as a `Secret`.
 
 ```ts
 function tlsDeriveSecret(
@@ -432,20 +482,35 @@ function tlsDeriveSecret(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are derived.
+
 </scalar-field>
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+The stage of the schedule to derive from. It stays the caller's: this function does not wipe it.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without its `"tls13 "` prefix, such as `"s hs traffic"`.
+
 </scalar-field>
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The transcript hash the secret is bound to, all of it used as the context.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the HashLen derived bytes, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsDeriveSecretHeld
@@ -470,28 +535,48 @@ function tlsDeriveSecretHeld(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+The held stage of the schedule to derive from. It is only overwritten when it is also `dst`.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without its `"tls13 "` prefix, such as `"c ap traffic"`.
+
 </scalar-field>
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The array that holds the transcript hash, which is public.
+
 </scalar-field>
 
 <scalar-field name="hashOff" type="i32" required>
+
+Where in `transcriptHash` the `hashLength` bytes of the hash start.
+
 </scalar-field>
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
+
+The held secret whose bytes the result overwrites. The caller still owns and wipes it.
+
 </scalar-field>
 
 ## tlsDeriveSecretInto
 
 `tlsDeriveSecret` in place: Derive-Secret (RFC 8446 §7.1) of `prk` with
 `label` and the transcript hash `transcriptHash[hashOff .. hashOff +
-hashLength)`, its HashLen bytes written at `out[0]`.
+hashLength)`, its HashLen bytes written at `out[0]`. The scratch is wiped
+before it returns. It panics as `hkdfExpandLabelInto` does, a window outside
+its array included.
 
 ```ts
 function tlsDeriveSecretInto(
@@ -508,29 +593,51 @@ function tlsDeriveSecretInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are written.
+
 </scalar-field>
 
 <scalar-field name="prk" type="u8[]" required>
+
+The stage of the schedule to derive from, plain. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without its `"tls13 "` prefix, such as `"s hs traffic"`.
+
 </scalar-field>
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The array that holds the transcript hash.
+
 </scalar-field>
 
 <scalar-field name="hashOff" type="i32" required>
+
+Where in `transcriptHash` the `hashLength` bytes of the hash start.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the derived secret is written, from index 0; the caller owns and wipes it.
+
 </scalar-field>
 
 ## tlsEarlySecret
 
-The early secret with no PSK: HKDF-Extract of HashLen zeros under a zero salt (RFC 8446 §7.1).
+The early secret with no PSK: HKDF-Extract of HashLen zeros under a zero salt (RFC 8446 §7.1). The zero
+salt and the zero input are wiped before it returns.
 
 ```ts
 function tlsEarlySecret(
@@ -541,11 +648,17 @@ function tlsEarlySecret(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the early secret, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsEmptyHash
@@ -559,18 +672,25 @@ function tlsEmptyHash(hashLength: i32): u8[]
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+48 for SHA-384; any other value runs SHA-256.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The digest of no bytes, in a fresh array. It is public, so it is plain.
+
 </scalar-field>
 
 ## tlsExpandLabel
 
 HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
 bytes from `prk` (RFC 8446's Secret), the label (without its `"tls13 "`
-prefix, which is added) and `context`, held as a `Secret`.
+prefix, which is added) and `context`, held as a `Secret`. It panics as
+`hkdfExpandLabelSha256Secret` (or its SHA-384 twin) does.
 
 ```ts
 function tlsExpandLabel(
@@ -585,23 +705,41 @@ function tlsExpandLabel(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+48 for SHA-384; any other value runs SHA-256.
+
 </scalar-field>
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+The secret to expand. It stays the caller's: this function does not wipe it.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without its `"tls13 "` prefix, such as `"key"` or `"c hs traffic"`.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context bytes, usually a transcript hash; empty for none.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the `length` derived bytes, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsExtract
@@ -622,17 +760,29 @@ function tlsExtract(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+48 for SHA-384; any other value runs SHA-256.
+
 </scalar-field>
 
 <scalar-field name="salt" type="Secret&lt;u8[]&gt;" required>
+
+The HMAC key. It stays the caller's: this function does not wipe it.
+
 </scalar-field>
 
 <scalar-field name="ikm" type="Secret&lt;u8[]&gt;" required>
+
+The input keying material. It stays the caller's as well.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the HashLen-byte PRK, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsFinishedVerifyData
@@ -654,17 +804,29 @@ function tlsFinishedVerifyData(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="baseKey" type="Secret&lt;u8[]&gt;" required>
+
+The sender's handshake traffic secret. It stays the caller's: this does not wipe it.
+
 </scalar-field>
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The transcript hash up to, and not including, the Finished message.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The HashLen bytes of `verify_data`, plain, in a fresh array.
+
 </scalar-field>
 
 ## tlsFinishedVerifyDataHeld
@@ -673,7 +835,8 @@ function tlsFinishedVerifyData(
 the HMAC of `transcriptHash[hashOff .. hashOff + hashLength)` under
 `finished_key = Expand-Label(baseKey, "finished", "", HashLen)` (RFC 8446
 §4.4.4). The finished key is held and wiped before it returns;
-`verify_data` goes on the wire, so it is plain.
+`verify_data` goes on the wire, so it is plain. Panics unless `hashLength`
+is 32 or 48 and `baseKey` holds HashLen bytes.
 
 ```ts
 function tlsFinishedVerifyDataHeld(
@@ -687,20 +850,35 @@ function tlsFinishedVerifyDataHeld(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="baseKey" type="Secret&lt;u8[]&gt;" required>
+
+The sender's held handshake traffic secret. It stays the caller's: this does not wipe it.
+
 </scalar-field>
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The array that holds the transcript hash up to the Finished message.
+
 </scalar-field>
 
 <scalar-field name="hashOff" type="i32" required>
+
+Where in `transcriptHash` the `hashLength` bytes of the hash start.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The HashLen bytes of `verify_data`, plain, in a fresh array.
+
 </scalar-field>
 
 ## tlsFinishedVerifyDataInto
@@ -725,24 +903,45 @@ function tlsFinishedVerifyDataInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are written.
+
 </scalar-field>
 
 <scalar-field name="baseKey" type="u8[]" required>
+
+The sender's handshake traffic secret, plain. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The array that holds the transcript hash up to the Finished message.
+
 </scalar-field>
 
 <scalar-field name="hashOff" type="i32" required>
+
+Where in `transcriptHash` the `hashLength` bytes of the hash start.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where `verify_data` is written. It goes on the wire, so it is plain.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` the HashLen bytes of `verify_data` start.
+
 </scalar-field>
 
 ## tlsHandshakeSalt
@@ -761,21 +960,31 @@ function tlsHandshakeSalt(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="earlySecret" type="Secret&lt;u8[]&gt;" required>
+
+The early secret. It stays the caller's: this function does not wipe it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the salt, which the caller owns and wipes once the extract is done.
+
 </scalar-field>
 
 ## tlsHandshakeSaltInto
 
 `tlsHandshakeSalt` in place: `Derive-Secret(early, "derived", "")`, the
 salt a resumed handshake extracts its handshake secret under, written at
-`out[0]`. The caller wipes it once the extract is done.
+`out[0]`. The caller wipes it once the extract is done. The scratch is wiped
+before it returns.
 
 ```ts
 function tlsHandshakeSaltInto(
@@ -789,15 +998,27 @@ function tlsHandshakeSaltInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are written.
+
 </scalar-field>
 
 <scalar-field name="earlySecret" type="u8[]" required>
+
+The early secret, plain. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the salt is written, from index 0.
+
 </scalar-field>
 
 ## tlsHandshakeSecret
@@ -816,24 +1037,38 @@ function tlsHandshakeSecret(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="earlySecret" type="Secret&lt;u8[]&gt;" required>
+
+The early secret. It stays the caller's: this function does not wipe it.
+
 </scalar-field>
 
 <scalar-field name="ecdhe" type="Secret&lt;u8[]&gt;" required>
+
+The shared secret of the key exchange. It stays the caller's to wipe as well.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the handshake secret, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsHandshakeSecretHeld
 
 `tlsHandshakeSecret` into a held `Secret`: HKDF-Extract of `ecdhe` under
 `Derive-Secret(early, "derived", "")`, written over `dst`'s HashLen bytes.
-The salt is wiped before it returns; `dst` may be `earlySecret`.
+The salt is wiped before it returns; `dst` may be `earlySecret`. Panics
+unless `hashLength` is 32 or 48 and `earlySecret` and `dst` hold HashLen
+bytes.
 
 ```ts
 function tlsHandshakeSecretHeld(
@@ -847,21 +1082,34 @@ function tlsHandshakeSecretHeld(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="earlySecret" type="Secret&lt;u8[]&gt;" required>
+
+The held early secret. It is only overwritten when it is also `dst`.
+
 </scalar-field>
 
 <scalar-field name="ecdhe" type="Secret&lt;u8[]&gt;" required>
+
+The held shared secret of the key exchange. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
+
+The held secret whose bytes the handshake secret overwrites. The caller still owns and wipes it.
+
 </scalar-field>
 
 ## tlsMasterSecret
 
 The master secret: HKDF-Extract of HashLen zeros under
-`Derive-Secret(handshake, "derived", "")`, which is wiped before it returns.
+`Derive-Secret(handshake, "derived", "")`, which is wiped before it returns,
+as the zeros are.
 
 ```ts
 function tlsMasterSecret(
@@ -873,14 +1121,23 @@ function tlsMasterSecret(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="handshakeSecret" type="Secret&lt;u8[]&gt;" required>
+
+The handshake secret. It stays the caller's: this function does not wipe it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the master secret, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsMasterSecretHeld
@@ -888,7 +1145,8 @@ function tlsMasterSecret(
 `tlsMasterSecret` into a held `Secret`: HKDF-Extract of HashLen zeros under
 `Derive-Secret(handshake, "derived", "")`, written over `dst`'s HashLen
 bytes. The salt and the zeros are wiped before it returns; `dst` may be
-`handshakeSecret`.
+`handshakeSecret`. Panics unless `hashLength` is 32 or 48 and both hold
+HashLen bytes.
 
 ```ts
 function tlsMasterSecretHeld(
@@ -901,19 +1159,28 @@ function tlsMasterSecretHeld(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="handshakeSecret" type="Secret&lt;u8[]&gt;" required>
+
+The held handshake secret. It is only overwritten when it is also `dst`.
+
 </scalar-field>
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
+
+The held secret whose bytes the master secret overwrites. The caller still owns and wipes it.
+
 </scalar-field>
 
 ## tlsMasterSecretInto
 
 `tlsMasterSecret` in place: HKDF-Extract of HashLen zeros under
 `Derive-Secret(handshake, "derived", "")`, written at `out[0]`. The salt is
-wiped before it returns.
+wiped before it returns, and so is the scratch.
 
 ```ts
 function tlsMasterSecretInto(
@@ -927,15 +1194,27 @@ function tlsMasterSecretInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are written.
+
 </scalar-field>
 
 <scalar-field name="handshakeSecret" type="u8[]" required>
+
+The handshake secret, plain. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the master secret is written, from index 0; the caller owns and wipes it.
+
 </scalar-field>
 
 ## tlsPskEarlySecret
@@ -954,14 +1233,23 @@ function tlsPskEarlySecret(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48.
+
 </scalar-field>
 
 <scalar-field name="psk" type="Secret&lt;u8[]&gt;" required>
+
+The pre-shared key the ticket stands for. It stays the caller's to wipe.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the early secret, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsPskEarlySecretInto
@@ -982,15 +1270,27 @@ function tlsPskEarlySecretInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are written.
+
 </scalar-field>
 
 <scalar-field name="psk" type="u8[]" required>
+
+The pre-shared key, plain. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the early secret is written, from index 0; the caller owns and wipes it.
+
 </scalar-field>
 
 ## tlsResumptionPsk
@@ -1009,24 +1309,38 @@ function tlsResumptionPsk(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are derived.
+
 </scalar-field>
 
 <scalar-field name="resumptionMasterSecret" type="Secret&lt;u8[]&gt;" required>
+
+The connection's resumption master secret. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="ticketNonce" type="u8[]" required>
+
+The `ticket_nonce` of the NewSessionTicket, all of it used as the context. It is public.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the PSK, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsResumptionPskInto
 
 `tlsResumptionPsk` in place: `HKDF-Expand-Label(resumption_master_secret,
 "resumption", ticketNonce[nonceOff .. nonceOff + nonceLength), HashLen)`
-(RFC 8446 §4.6.1), written at `out[0]`.
+(RFC 8446 §4.6.1), written at `out[0]`. The scratch is wiped before it
+returns. A nonce window outside `ticketNonce`, or longer than 255 bytes,
+panics, as `hkdfExpandLabelInto` does.
 
 ```ts
 function tlsResumptionPskInto(
@@ -1043,24 +1357,45 @@ function tlsResumptionPskInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length, 32 or 48, which is also how many bytes are written.
+
 </scalar-field>
 
 <scalar-field name="resumptionMasterSecret" type="u8[]" required>
+
+The connection's resumption master secret, plain. It stays the caller's.
+
 </scalar-field>
 
 <scalar-field name="ticketNonce" type="u8[]" required>
+
+The array that holds the ticket's `ticket_nonce`, which is public.
+
 </scalar-field>
 
 <scalar-field name="nonceOff" type="i32" required>
+
+Where in `ticketNonce` the nonce starts.
+
 </scalar-field>
 
 <scalar-field name="nonceLength" type="i32" required>
+
+How many bytes the nonce is.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the PSK is written, from index 0; the caller owns and wipes it.
+
 </scalar-field>
 
 ## tlsSuiteHashLength
@@ -1076,11 +1411,17 @@ function tlsSuiteHashLength(suite: i32): i32
 #### Parameters
 
 <scalar-field name="suite" type="i32" required>
+
+A cipher suite code point, such as `TLS_AES_128_GCM_SHA256`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The suite's hash length in bytes (32 or 48), or 0 for a suite this module does not negotiate.
+
 </scalar-field>
 
 ## tlsSuiteKeyLength
@@ -1094,11 +1435,17 @@ function tlsSuiteKeyLength(suite: i32): i32
 #### Parameters
 
 <scalar-field name="suite" type="i32" required>
+
+A cipher suite code point, such as `TLS_AES_128_GCM_SHA256`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The suite's AEAD key length in bytes (16 or 32), or 0 for a suite this module does not negotiate.
+
 </scalar-field>
 
 ## tlsTrafficIv
@@ -1116,14 +1463,24 @@ function tlsTrafficIv(
 #### Parameters
 
 <scalar-field name="suite" type="i32" required>
+
+The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+
 </scalar-field>
 
 <scalar-field name="trafficSecret" type="Secret&lt;u8[]&gt;" required>
+
+The traffic secret the IV comes from. It stays the caller's to wipe.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the 12-byte IV, or an empty one for an unknown suite. The caller owns
+    and wipes it.
+
 </scalar-field>
 
 ## tlsTrafficKey
@@ -1141,14 +1498,24 @@ function tlsTrafficKey(
 #### Parameters
 
 <scalar-field name="suite" type="i32" required>
+
+The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+
 </scalar-field>
 
 <scalar-field name="trafficSecret" type="Secret&lt;u8[]&gt;" required>
+
+The traffic secret the key comes from. It stays the caller's to wipe.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the suite's key (16 or 32 bytes), or an empty one for an unknown suite.
+    The caller owns and wipes it.
+
 </scalar-field>
 
 ## tlsTrafficKeysFromHeld
@@ -1172,20 +1539,35 @@ function tlsTrafficKeysFromHeld(
 #### Parameters
 
 <scalar-field name="suite" type="i32" required>
+
+The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+
 </scalar-field>
 
 <scalar-field name="trafficSecret" type="Secret&lt;u8[]&gt;" required>
+
+The held traffic secret, of the suite's hash length. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="key" type="u8[]" required>
+
+Where the AEAD key is written: an array of exactly the suite's key length (16 or 32 bytes).
+
 </scalar-field>
 
 <scalar-field name="iv" type="u8[]" required>
+
+Where the IV is written: an array of exactly 12 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when the key and IV were written; `false`, with nothing written, for a bad suite or length.
+
 </scalar-field>
 
 ## tlsTrafficKeysInto
@@ -1194,7 +1576,8 @@ function tlsTrafficKeysFromHeld(
 gives `suite` (RFC 8446 §7.3) written into `key`, which must be the suite's
 key length, and its 12-byte IV into `iv`. `false`, writing nothing, for a
 suite this module does not negotiate, a secret that is not its hash's
-length, or a key or IV array of the wrong length.
+length, or a key or IV array of the wrong length. When it derives, the
+scratch is wiped before it returns.
 
 ```ts
 function tlsTrafficKeysInto(
@@ -1209,23 +1592,41 @@ function tlsTrafficKeysInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, which this computes in and wipes.
+
 </scalar-field>
 
 <scalar-field name="suite" type="i32" required>
+
+The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+
 </scalar-field>
 
 <scalar-field name="trafficSecret" type="u8[]" required>
+
+The traffic secret, plain, of the suite's hash length. It stays the caller's to wipe.
+
 </scalar-field>
 
 <scalar-field name="key" type="u8[]" required>
+
+Where the AEAD key is written: an array of exactly the suite's key length (16 or 32 bytes).
+
 </scalar-field>
 
 <scalar-field name="iv" type="u8[]" required>
+
+Where the IV is written: an array of exactly 12 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when the key and IV were written; `false`, with nothing written, for a bad suite or length.
+
 </scalar-field>
 
 ## TlsTranscript
@@ -1251,17 +1652,8 @@ class TlsTranscript
 
 | Member | |
 | --- | --- |
-| `new TlsTranscript(hashLength: i32)` |  |
-| `fresh256: Sha256` | Never fed: the initial hash values `reset` copies from. |
-| `fresh384: Sha384` |  |
-| `hashLength: i32` | 32 for SHA-256, 48 for SHA-384. |
-| `sha256: Sha256` |  |
-| `sha384: Sha384` |  |
-| `twin256: Sha256` | Where `hashInto` finishes a copy of the running hash, so that the transcript goes on. |
-| `twin384: Sha384` |  |
+| `new TlsTranscript(hashLength: i32)` | Makes an empty transcript and all six of its hashers, once, so that `reset` can reuse them. |
 | `hash(): u8[]` | The transcript hash of everything absorbed so far, in a fresh array; the transcript goes on. |
-| `hashInto(out: u8[], at: i32): void` | Writes the transcript hash of everything absorbed so far, `hashLength` bytes, at `out[at]`; the transcript goes on. What the digest allocates dies with the call. A window outside `out` writes what fits. |
-| `reset(hashLength: i32): void` | Starts an empty transcript over the hash `hashLength` names, in the hashers it already has. |
 | `restartWithMessageHash(): void` | Replaces the transcript so far, which must be exactly the first ClientHello, by `message_hash` (type 254, a 24-bit length of HashLen, then Hash(ClientHello1)), as RFC 8446 §4.4.1 has a server do before it absorbs its HelloRetryRequest. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`, a whole handshake message or part of one. |
 

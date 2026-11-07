@@ -16,11 +16,15 @@ import {
 } from "nish/term-io";
 ```
 
+```ts
+import { defaultTerminalOptions, runTerminal, TermInput, Frame } from "nish/term-io"
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="defaultTerminalOptions" icon="phosphor/regular/function" href="#defaultterminaloptions">
 
-The options every field's comment gives the default of.
+The options a program starts from and changes what it needs in.
 
 </scalar-card>
 
@@ -32,7 +36,7 @@ Open the terminal: refuse a pipe, enter raw mode and the alternate screen, hide 
 
 <scalar-card title="runTerminal" icon="phosphor/regular/function" href="#runterminal">
 
-Open the terminal and run the program: `update(state, input)` once per fixed step (`options.stepsPerSecond`), the events since the last step in `input.events`, and `render(state, frame)` whenever the controller allows a frame, which is then presented.
+Open the terminal and run the program: `update` once per fixed step (`options.stepsPerSecond`) and `render` whenever the controller allows a frame, which is then presented.
 
 </scalar-card>
 
@@ -63,10 +67,6 @@ What `openTerminal` and `runTerminal` turn on, and how the frame loop runs.
 </scalar-grid>
 
 <scalar-callout type="info">
-
-```ts
-import { defaultTerminalOptions, runTerminal, TermInput, Frame } from "nish/term-io";
-```
 
 - `runTerminal(options, state, update, render)` is the whole program loop:
   it opens the terminal, runs `update(state, input)` at
@@ -120,7 +120,7 @@ Private helpers share the importing program's flat symbol namespace
 
 ## defaultTerminalOptions
 
-The options every field's comment gives the default of.
+The options a program starts from and changes what it needs in.
 
 ```ts
 function defaultTerminalOptions(): TerminalOptions
@@ -129,14 +129,17 @@ function defaultTerminalOptions(): TerminalOptions
 #### Returns
 
 <scalar-field name="returns" type="TerminalOptions">
+
+A fresh `TerminalOptions` holding the default each field's comment gives.
+
 </scalar-field>
 
 ## openTerminal
 
 Open the terminal: refuse a pipe, enter raw mode and the alternate screen,
 hide the cursor, probe what the terminal can do and turn on what `options`
-asks for and it has. The restore string undoes all of it should the
-program panic or be signalled before `close`.
+asks for and it has. The restore string undoes all of it should the program
+panic or be signalled before `close`.
 
 ```ts
 function openTerminal(
@@ -147,23 +150,26 @@ function openTerminal(
 #### Parameters
 
 <scalar-field name="options" type="TerminalOptions" required>
+
+What to turn on, and how to pace frames.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;Terminal, string&gt;">
+
+The open terminal, or an `Err` saying why not: stdin or stdout is not a terminal, or raw mode was refused.
+
 </scalar-field>
 
 ## runTerminal
 
-Open the terminal and run the program: `update(state, input)` once per
-fixed step (`options.stepsPerSecond`), the events since the last step in
-`input.events`, and `render(state, frame)` whenever the controller allows a
+Open the terminal and run the program: `update` once per fixed step
+(`options.stepsPerSecond`) and `render` whenever the controller allows a
 frame, which is then presented. A resize is an `EVENT_RESIZE` (`x` the new
-columns, `y` the rows) with the `Screen` already resized. The loop ends when
-`update` answers false or the user quits (`EVENT_QUIT`), answering `Ok(0)`,
-and the terminal is closed however it ends. An `Err` is a terminal that
-could not be opened, or stdin ending.
+columns, `y` the rows) with the `Screen` already resized. The terminal is
+closed however the loop ends.
 
 ```ts
 function runTerminal<G>(
@@ -177,20 +183,36 @@ function runTerminal<G>(
 #### Parameters
 
 <scalar-field name="options" type="TerminalOptions" required>
+
+What to turn on, and how to pace steps and frames.
+
 </scalar-field>
 
 <scalar-field name="state" type="G" required>
+
+The program's state, handed to every call.
+
 </scalar-field>
 
 <scalar-field name="update" type="(g: G, input: TermInput) =&gt; boolean" required>
+
+Runs one step on the events since the last in `input.events`; answers false to stop.
+
 </scalar-field>
 
 <scalar-field name="render" type="(g: G, frame: Frame) =&gt; void" required>
+
+Draws `state` into `frame`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;i32, string&gt;">
+
+`Ok(0)` once `update` answers false or the user quits (`EVENT_QUIT`); an `Err` for a
+  terminal that could not be opened, or stdin ending.
+
 </scalar-field>
 
 ## Frame
@@ -203,12 +225,12 @@ class Frame
 
 | Member | |
 | --- | --- |
-| `new Frame(term: Terminal)` |  |
+| `new Frame(term: Terminal)` | A frame drawing into `term`'s screen and framebuffer, at `alpha` 0. |
 | `alpha: f64` | From 0 up to 1: how far past the last `update` step this frame is, to interpolate with. |
-| `caps: TermCaps` |  |
-| `framebuffer: Framebuffer` |  |
-| `screen: Screen` |  |
-| `stats: TermStats` |  |
+| `caps: TermCaps` | What the probe found the terminal can do. |
+| `framebuffer: Framebuffer` | The pixels, `options.framebufferWidth × framebufferHeight`; 0 by 0 when the options ask for none. |
+| `screen: Screen` | The cell grid, the terminal's size. |
+| `stats: TermStats` | What the controller measured: its live stats object, which the next tick updates in place, so copy a field to keep it past this frame. |
 
 ## TermInput
 
@@ -220,10 +242,10 @@ class TermInput
 
 | Member | |
 | --- | --- |
-| `new TermInput(keys: KeyState)` |  |
-| `events: TermEvent[]` |  |
-| `keys: KeyState` |  |
-| `isDown(key: i32, code: i32): boolean` | Whether the key of kind `key` (a `KEY_*`; `code` for `KEY_CHAR`) is down. |
+| `new TermInput(keys: KeyState)` | An input with no events yet. |
+| `events: TermEvent[]` | The events since the last step, in the order they arrived. |
+| `keys: KeyState` | Which keys are down, for `isDown`. |
+| `isDown(key: i32, code: i32): boolean` | Whether a key is down. |
 
 ## Terminal
 
@@ -237,66 +259,28 @@ class Terminal
 
 | Member | |
 | --- | --- |
-| `new Terminal(options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[])` |  |
-| `ackCount: i32` |  |
-| `ackHead: i32` |  |
-| `ackSent: f64[]` | The send times of the frames not yet acknowledged, a ring of `TERM_IO_ACKS`. |
+| `new Terminal(options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[])` | A terminal already in raw mode and probed, before anything is turned on; `openTerminal` makes one and turns on what the options ask for. |
+| `ackCount: i32` | The frames sent whose acknowledgement has not come back, up to the most the ring holds. |
 | `backend: i32` | The backend the last frame used. |
-| `canvas: Canvas` |  |
-| `caps: TermCaps` |  |
-| `cellHeightPx: i32` |  |
-| `cellWidthPx: i32` |  |
-| `decoder: KeyDecoder` |  |
-| `focusOn: boolean` |  |
+| `canvas: Canvas` | Half-block pixels drawn on `screen`, two to a cell. |
+| `caps: TermCaps` | What the probe found the terminal can do. |
+| `cellHeightPx: i32` | A cell's height in pixels as the terminal reported it, at most 256; 0 when it did not say. |
+| `cellWidthPx: i32` | A cell's width in pixels as the terminal reported it, at most 256; 0 when it did not say. |
+| `decoder: KeyDecoder` | Turns the bytes read from stdin into events. |
 | `framebuffer: Framebuffer` | The pixels the program draws into, `options.framebufferWidth × framebufferHeight`. |
 | `graphics: i32` | The best backend the terminal has, a `GRAPHICS_*`. |
-| `held: TermEvent[]` | The events read during the probe, handed to the program first. |
-| `keys: KeyState` |  |
-| `kittyImage: boolean` | Whether a kitty image may be on the screen, so closing deletes it. |
-| `kittyKeyboardOn: boolean` |  |
-| `lastAckMs: f64` | When the last frame acknowledgement arrived, or -1. |
-| `lastRttMs: f64` | The last acknowledged frame's own round trip, in milliseconds, which the controller's smoothed one trails. |
-| `mouseMode: i32` | The mouse mode turned on, or 0. |
-| `open: boolean` |  |
-| `options: TerminalOptions` |  |
+| `keys: KeyState` | Which keys are down, and the releases made up from silence without the kitty protocol. |
+| `options: TerminalOptions` | The options it was opened with. |
 | `palette256: boolean` | Whether `screen` was drawn in 256 colours last frame. |
-| `pasteOn: boolean` |  |
-| `pixelMouseOn: boolean` |  |
-| `pixels: PixelBytes` |  |
-| `pixelsShown: boolean` | Whether the last frame sent pixels, so a framebuffer emptied since takes them off the screen. |
-| `rate: RateController` |  |
-| `readBuf: u8[]` |  |
-| `rect: PixelRect` | Where the framebuffer is drawn, for `rectCols × rectRows` cells and `rectBackend`. |
-| `rectBackend: i32` |  |
-| `rectCols: i32` | The cells, backend and framebuffer size `rect` was fitted to. |
-| `rectHeight: i32` |  |
-| `rectRows: i32` |  |
-| `rectWidth: i32` |  |
+| `pixels: PixelBytes` | The buffer a kitty or sixel frame is encoded into before it is written. |
+| `rate: RateController` | Paces the frames and chooses their detail from how fast the terminal acknowledges them. |
 | `scaled: Framebuffer` | The framebuffer shrunk by the controller's resolution divisor. |
 | `screen: Screen` | The cell grid the program draws into, the terminal's size. |
-| `sendStartNs: i64` | When the last frame's write began, on the monotonic clock. |
-| `shownCols: i32` | The size last given to the `Screen`, before it clamped it, which `checkResize` compares. |
-| `shownRows: i32` |  |
-| `sizeCols: i32` | The size `terminalSize` last answered. |
-| `sizeRows: i32` |  |
-| `workNs: f64` | The program's work toward the next frame (its `update` and `render`), in nanoseconds, which `present` adds to the frame's cost. |
-| `acked(count: i32, nowMs: f64): void` | `count` acknowledgements arrived at `nowMs`: each answers the controller and, unless it is the late answer of a frame the controller gave up on, marks its frame's send time delivered. |
-| `ackPush(nowMs: f64): void` | Remember that a frame acknowledgement was asked for at `nowMs`. |
-| `checkResize(): boolean` | Whether the terminal changed size since the last call; if it did, the `Screen` takes the new size and the framebuffer is fitted again. It compares the size the terminal answers, not the `Screen`'s, which clamps a huge one, so a huge terminal is not resized every frame. |
+| `checkResize(): boolean` | Take a new terminal size, if there is one: the `Screen` takes it and the framebuffer is fitted again. It compares the size the terminal answers, not the `Screen`'s, which clamps a huge one, so a huge terminal is not resized every frame. |
 | `close(): void` | Undo everything `openTerminal` did and leave raw mode. The acknowledgements still in flight are read first, for twice the round trip (the controller's or the last frame's, whichever is longer; 50 to 500 ms), so the terminal's answers are not echoed after the program. A second call does nothing. |
-| `drainAcks(): void` | Read and drop input until every frame sent is answered, stdin ends or the round trip's bound passes. Before any answer the probe's round trip is the one known. |
-| `dropLost(): void` | Forget the send times of the frames the controller gave up on, oldest first, so the ring holds only frames it still waits for. |
-| `enable(): void` | Turn on what the options ask for and the terminal has, the restore string kept ahead of each. |
-| `fit(backend: i32): void` | Fit the framebuffer to the screen for `backend`, unless the sizes and backend are those of the last fit. |
-| `lateReply(e: TermEvent): void` | A reply other than an acknowledgement, which came after the probe: learn the cell size from it if the probe did not. |
 | `present(): void` | Send a frame: the framebuffer, if any, drawn with the backend the terminal and the controller allow, the stats overlay if the options ask for it, and the screen's changes, as one write followed by the query that acknowledges it. Its cost to the controller is `workNs` and the encoding, and its send time is when the write began. A closed terminal is not written to. |
-| `readEvents(waitMs: i32, out: TermEvent[]): boolean` | Wait up to `waitMs` milliseconds (a negative wait has no limit) for input, and append what it means for the program to `out`: keys, mouse, paste and focus events, the releases made up from silence, `EVENT_QUIT` for Ctrl-C. Frame acknowledgements are taken here and never appended. Answers false once stdin has ended. |
-| `readSize(): void` | Read `terminalSize` into `sizeCols` and `sizeRows`; its array dies here. |
-| `restoreString(): string` | The bytes that undo everything turned on: what `close` writes and the runtime writes on a panic or signal. |
-| `send(withPixels: boolean): i32` | Write one frame as a single write: the screen's changes, then the pixels' bytes when `withPixels`, wrapped in synchronized output when the terminal has it, then the DSR 5 query that acknowledges it. Records when the write began in `sendStartNs` and answers the bytes written. Its strings die here, so a frame loop does not keep them. |
+| `readEvents(waitMs: i32, out: TermEvent[]): boolean` | Wait for input and append what it means for the program: keys, mouse, paste and focus events, the releases made up from silence, `EVENT_QUIT` for Ctrl-C. Frame acknowledgements are taken here and never appended. |
 | `stats(): TermStats` | What the controller measured, with the backend the last frame actually used. |
-| `take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void` | Take decoded `events`, read at `nowMs`: the program's go through `KeyState` into `out`, then the acknowledgements count. Every reply is the terminal's and is taken here, a late cell size learned. |
-| `turnOn(bytes: string): void` | Set the runtime's restore string to `restoreString()`, then write `bytes`, which turn something on. |
 
 ## TerminalOptions
 
@@ -308,12 +292,12 @@ class TerminalOptions
 
 | Member | |
 | --- | --- |
-| `new TerminalOptions()` |  |
+| `new TerminalOptions()` | The defaults each field's comment gives in brackets. |
 | `allow120: boolean` | Whether 120 frames a second may be chosen (false). |
 | `fixedFps: i32` | A fixed frame rate, or 0 to let the controller choose (0). |
 | `focus: boolean` | Focus reports, `EVENT_FOCUS` (false). |
-| `framebufferHeight: i32` |  |
-| `framebufferWidth: i32` | The framebuffer's size in pixels, or 0 by 0 for none (0 by 0). |
+| `framebufferHeight: i32` | The framebuffer's height in pixels, or 0 for none (0). |
+| `framebufferWidth: i32` | The framebuffer's width in pixels, or 0 for none (0). Either side 0 means no framebuffer. |
 | `graphics: string` | The backend to use, as `NISH_TERM_GRAPHICS` names one ("kitty", "sixel", "halfblock" or "ascii"), or "" to take the best the terminal has (""). The variable, when it is set, wins; the probe refuses a backend the terminal did not answer for, as it does the variable's. |
 | `kittyKeyboard: boolean` | The kitty keyboard protocol where the terminal has it: real releases, Ctrl-C as a key (true). |
 | `maxFps: i32` | The most frames a second (60). |

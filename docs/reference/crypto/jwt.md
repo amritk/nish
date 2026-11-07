@@ -48,17 +48,26 @@ import {
 ```
 
 ```ts
-import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt";
+import { Secret } from "nish:secret";
+import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtKey, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt";
 
-const key = jwtHmacKey(JWT_ALG_HS256, secretKey);       // once; null for a short key
-const v = new JwtVerifier(JWT_MAX_TOKEN);               // once, per thread
-v.issuer = "https://issuer.example";
-v.audience = "api";
-v.leeway = toI64(30);
-if (key !== null && v.verifyString(key, token, now) === JWT_OK) {
-  // v.claims[0 .. v.claimsLen) is the payload's JSON; v.exp, v.nbf, v.iat are read
-}
-const minted: string | null = key === null ? null : jwtSignString(key, "{\"sub\":\"ana\"}");
+// secretKey: at least 32 random bytes, still the caller's to wipe; now: seconds since 1970
+const roundTrip = (secretKey: Secret<u8[]>, token: string, now: i64): string | null => {
+  const key: JwtKey | null = jwtHmacKey(JWT_ALG_HS256, secretKey); // make once; null for a short key
+  if (key === null) {
+    return null;
+  }
+  const v = new JwtVerifier(JWT_MAX_TOKEN); // make once per thread
+  v.issuer = "https://issuer.example";
+  v.audience = "api";
+  v.leeway = toI64(30);
+  if (v.verifyString(key, token, now) === JWT_OK) {
+    // v.claims[0 .. v.claimsLen) is the payload's JSON; v.exp, v.nbf, v.iat are read
+  }
+  const minted: string | null = jwtSignString(key, "{\"sub\":\"ana\"}");
+  key.wipe();
+  return minted;
+};
 ```
 
 <scalar-grid cols="2">
@@ -238,11 +247,17 @@ function jwtAlgName(alg: i32): string
 #### Parameters
 
 <scalar-field name="alg" type="i32" required>
+
+A `JWT_ALG_` constant.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The name RFC 7518 or RFC 8037 spells it with, such as `"HS256"`.
+
 </scalar-field>
 
 ## jwtEcKey
@@ -261,19 +276,29 @@ function jwtEcKey(
 #### Parameters
 
 <scalar-field name="alg" type="i32" required>
+
+`JWT_ALG_ES256` or `JWT_ALG_ES384`.
+
 </scalar-field>
 
 <scalar-field name="point" type="u8[]" required>
+
+The public point, copied into the key.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="JwtKey | null">
+
+A new key that verifies only, or `null`.
+
 </scalar-field>
 
 ## jwtEd25519Key
 
-An EdDSA (Ed25519) verifying key from its 32 bytes (RFC 8037 §2's `x`); another length answers `null`.
+An EdDSA (Ed25519) verifying key from its 32 bytes (RFC 8037 §2's `x`);
+another length answers `null`.
 
 ```ts
 function jwtEd25519Key(pub: u8[]): JwtKey | null
@@ -282,11 +307,17 @@ function jwtEd25519Key(pub: u8[]): JwtKey | null
 #### Parameters
 
 <scalar-field name="pub" type="u8[]" required>
+
+The public key, copied into the key.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="JwtKey | null">
+
+A new key that verifies only, or `null`.
+
 </scalar-field>
 
 ## jwtEd25519SigningKey
@@ -304,11 +335,17 @@ function jwtEd25519SigningKey(
 #### Parameters
 
 <scalar-field name="seed" type="Secret&lt;u8[]&gt;" required>
+
+The private seed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="JwtKey | null">
+
+A new key that signs and verifies, or `null`.
+
 </scalar-field>
 
 ## jwtEs256SigningKey
@@ -326,11 +363,17 @@ function jwtEs256SigningKey(
 #### Parameters
 
 <scalar-field name="priv" type="Secret&lt;u8[]&gt;" required>
+
+The private scalar, big-endian.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="JwtKey | null">
+
+A new key that signs and verifies, or `null`.
+
 </scalar-field>
 
 ## jwtHmacKey
@@ -350,14 +393,23 @@ function jwtHmacKey(
 #### Parameters
 
 <scalar-field name="alg" type="i32" required>
+
+`JWT_ALG_HS256`, `JWT_ALG_HS384` or `JWT_ALG_HS512`.
+
 </scalar-field>
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
+
+The shared secret: at least 32, 48 or 64 bytes for the three.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="JwtKey | null">
+
+A new key that verifies and signs, or `null`.
+
 </scalar-field>
 
 ## jwtRsaKey
@@ -376,14 +428,23 @@ function jwtRsaKey(
 #### Parameters
 
 <scalar-field name="alg" type="i32" required>
+
+`JWT_ALG_RS256`, `JWT_ALG_RS384` or `JWT_ALG_RS512`.
+
 </scalar-field>
 
 <scalar-field name="der" type="u8[]" required>
+
+The public key's DER, nothing before it and nothing after it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="JwtKey | null">
+
+A new key that verifies only, or `null`.
+
 </scalar-field>
 
 ## jwtRsaKeyParts
@@ -403,17 +464,29 @@ function jwtRsaKeyParts(
 #### Parameters
 
 <scalar-field name="alg" type="i32" required>
+
+`JWT_ALG_RS256`, `JWT_ALG_RS384` or `JWT_ALG_RS512`.
+
 </scalar-field>
 
 <scalar-field name="n" type="u8[]" required>
+
+The modulus, big-endian; leading zero bytes are dropped.
+
 </scalar-field>
 
 <scalar-field name="e" type="u8[]" required>
+
+The public exponent, big-endian; leading zero bytes are dropped.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="JwtKey | null">
+
+A new key that verifies only, or `null`.
+
 </scalar-field>
 
 ## jwtSign
@@ -430,14 +503,23 @@ function jwtSign(
 #### Parameters
 
 <scalar-field name="key" type="JwtKey" required>
+
+The key to sign with.
+
 </scalar-field>
 
 <scalar-field name="claims" type="u8[]" required>
+
+The payload: one JSON object, in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The token, or `null` as `jwtSignKid` answers it.
+
 </scalar-field>
 
 ## jwtSignKid
@@ -460,17 +542,29 @@ function jwtSignKid(
 #### Parameters
 
 <scalar-field name="key" type="JwtKey" required>
+
+The key to sign with; a wiped one answers `null`.
+
 </scalar-field>
 
 <scalar-field name="kid" type="string | null" required>
+
+The key id to name in the header, or `null` for none.
+
 </scalar-field>
 
 <scalar-field name="claims" type="u8[]" required>
+
+The payload: one JSON object, in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The token, a new string, or `null`.
+
 </scalar-field>
 
 ## jwtSignString
@@ -489,14 +583,23 @@ function jwtSignString(
 #### Parameters
 
 <scalar-field name="key" type="JwtKey" required>
+
+The key to sign with.
+
 </scalar-field>
 
 <scalar-field name="claims" type="string" required>
+
+The payload: one JSON object, ASCII.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The token, or `null` as `jwtSignKid` answers it.
+
 </scalar-field>
 
 ## JwtKey
@@ -514,14 +617,7 @@ class JwtKey
 
 | Member | |
 | --- | --- |
-| `new JwtKey(alg: i32, hmac: HmacKey \| null, rsa: RsaPublicKey \| null, pub: u8[], priv: Secret<u8[]>, canSign: boolean)` |  |
-| `readonly alg: i32` | The one algorithm this key verifies, `JWT_ALG_*`. |
-| `readonly canSign: boolean` | Whether `jwtSign` signs with this key. |
-| `readonly hmac: HmacKey \| null` | An HS key's pads, keyed once; `null` for any other. |
-| `live: boolean` | Whether the key is in use: `wipe()` clears it, and a wiped key signs and verifies nothing. |
-| `readonly priv: Secret<u8[]>` | An ES256 or EdDSA signing key's private scalar or seed; empty for any other. |
-| `readonly pub: u8[]` | An ES key's uncompressed point or an EdDSA key's 32 bytes; empty for HS and RS. |
-| `readonly rsa: RsaPublicKey \| null` | An RS key; `null` for any other. |
+| `new JwtKey(alg: i32, hmac: HmacKey \| null, rsa: RsaPublicKey \| null, pub: u8[], priv: Secret<u8[]>, canSign: boolean)` | A key from its parts, checked for nothing: the `jwt…Key` functions are the way to make one, and this exists for them and for tests that build a key no function would. `hmac`, `rsa` and `pub` are kept as given; `priv` is copied, and stays the caller's to wipe. |
 | `wipe(): void` | Zero the key's private copy and its HMAC pads. It neither signs nor verifies after: its zeroed secret is one anyone could hold. |
 
 ## JwtVerifier
@@ -531,6 +627,8 @@ make one per thread and call `verify` per token. The settings are public
 fields, read on every `verify`. After `JWT_OK`, `claims[0 .. claimsLen)`
 is the payload's JSON for the caller's own claims, and `exp`, `nbf` and
 `iat` hold the time claims when `hasExp`, `hasNbf` and `hasIat` say so.
+`claims` and `sig` are the verifier's own buffers, not copies: the next
+`verify` overwrites them.
 
 ```ts
 class JwtVerifier
@@ -538,31 +636,26 @@ class JwtVerifier
 
 | Member | |
 | --- | --- |
-| `new JwtVerifier(maxToken: i32)` | A verifier for tokens of up to `maxToken` bytes; outside `[16, JWT_MAX_TOKEN_LIMIT]` panics. |
+| `new JwtVerifier(maxToken: i32)` | A verifier for tokens of up to `maxToken` bytes; outside `[16, JWT_MAX_TOKEN_LIMIT]` panics. Every buffer is allocated here, once. |
 | `audience: string \| null` | The audience a token's `aud` must name, or `null` to refuse a token with any `aud`. |
 | `readonly claims: u8[]` | The decoded payload of the last token, `claimsLen` bytes of it valid after `JWT_OK`. |
-| `claimsLen: i32` |  |
-| `exp: i64` |  |
-| `hasExp: boolean` |  |
-| `hasIat: boolean` |  |
-| `hasNbf: boolean` |  |
-| `iat: i64` |  |
+| `claimsLen: i32` | How many bytes of `claims` are the payload: its length after `JWT_OK`, 0 after any refusal. |
+| `exp: i64` | The last token's `exp`, in seconds since 1970; meaningful only when `hasExp`. |
+| `hasExp: boolean` | Whether the last token's payload carried `exp`. Cleared at the start of each `verify` and set as the claims are read, so a token refused for its claims may leave it set. |
+| `hasIat: boolean` | Whether the last token's payload carried `iat`, as `hasExp`. |
+| `hasNbf: boolean` | Whether the last token's payload carried `nbf`, as `hasExp`. |
+| `iat: i64` | The last token's `iat`, in seconds since 1970; meaningful only when `hasIat`. |
 | `issuer: string \| null` | The `iss` a token must carry, or `null` for any. |
 | `leeway: i64` | Seconds of clock skew allowed to `exp`, `nbf` and `iat`; held to `[0, 2^31 - 1]`. |
 | `readonly maxToken: i32` | The largest token taken, in bytes. |
-| `nbf: i64` |  |
-| `readonly part: u8[]` |  |
+| `nbf: i64` | The last token's `nbf`, in seconds since 1970; meaningful only when `hasNbf`. |
 | `requireExp: boolean` | Whether a token without `exp` is refused; on by default. |
-| `readonly sig: u8[]` |  |
+| `readonly sig: u8[]` | The last token's signature, decoded, at the front; `JWT_MAX_SIGNATURE` bytes long, whatever the signature's own length. It is written only once the header passes, so after a refusal before that it still holds an earlier token's bytes. |
 | `subject: string \| null` | The `sub` a token must carry, or `null` for any. |
-| `readonly text: u8[]` |  |
-| `readonly tok: JwtJson` |  |
 | `typ: string \| null` | The header `typ` a token must carry (RFC 8725 §3.11), or `null` for any. |
-| `checkClaims(len: i32, now: i64): i32` | The payload in `claims[0 .. len)` parsed and checked at `now`. |
-| `checkHeader(key: JwtKey, len: i32): i32` | The header in `part[0 .. len)` checked against `key`'s algorithm and the verifier's `typ`. |
 | `peekKid(src: u8[], off: i32, len: i32, out: u8[]): i32` | The header's `kid` of the token `src[off .. off + len)`, written at `out[0 ..)`: its length, or -1 when the token is malformed, has no `kid` or its `kid` does not fit `out`. This reads the header **before** any signature is checked, so it only chooses which key to verify with; the `kid` proves nothing until `verify` answers `JWT_OK` under that key. |
-| `verify(key: JwtKey, src: u8[], off: i32, len: i32, now: i64): i32` | Verifies the token `src[off .. off + len)` under `key` and checks its claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*` that applies, in the order the module comment lists. |
-| `verifyString(key: JwtKey, token: string, now: i64): i32` | `verify` on the bytes of `token`, copied into the verifier's own buffer first (a string's UTF-8 bytes); a token longer than `maxToken` is refused before the copy. |
+| `verify(key: JwtKey, src: u8[], off: i32, len: i32, now: i64): i32` | Verifies the token `src[off .. off + len)` under `key` and checks its claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*` that applies, in this order: the window (`JWT_ERR_SIZE`); the three parts and the header's base64url (`JWT_ERR_FORMAT`); the header's members in the order written (`JWT_ERR_HEADER`, `JWT_ERR_ALG`), then a missing `alg` and, when the verifier names a `typ`, a missing or other one; signature text too long for any signature (`JWT_ERR_SIGNATURE`); the signature's base64url (`JWT_ERR_FORMAT`); its length, the key's fit and the signature itself (`JWT_ERR_SIGNATURE`); the payload's base64url (`JWT_ERR_FORMAT`); the payload's members in the order written and, while `requireExp` is set (the default), a missing `exp` (`JWT_ERR_CLAIMS`); and then `exp`, `nbf`, `iat`, `iss`, `aud` and `sub`, in that order. |
+| `verifyString(key: JwtKey, token: string, now: i64): i32` | `verify` on the bytes of `token`, copied into the verifier's own buffer first; a token longer than `maxToken` is refused before the copy. |
 
 ## Limits
 

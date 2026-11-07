@@ -41,6 +41,9 @@ Whether `name` is an IP literal, which RFC 6066 §3 keeps out of `server_name`: 
 </scalar-card>
 
 <scalar-card title="TlsClient" icon="phosphor/regular/cube" href="#tlsclient">
+
+The client side of one TLS 1.3 handshake, sans-IO: it takes the server's handshake messages through `receive`, writes its own for `takeOutput`, and derives each secret into `secrets()` as it becomes known.
+
 </scalar-card>
 
 <scalar-card title="TlsClientConfig" icon="phosphor/regular/cube" href="#tlsclientconfig">
@@ -144,14 +147,27 @@ function tlsClientIsIpLiteral(
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+A host name as the caller gave it, such as `TlsClientConfig.serverName`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when `name` is non-empty and all digits and dots, or holds a colon anywhere; such a
+  name is not sent as `server_name`.
+
 </scalar-field>
 
 ## TlsClient
+
+The client side of one TLS 1.3 handshake, sans-IO: it takes the server's handshake messages through
+`receive`, writes its own for `takeOutput`, and derives each secret into `secrets()` as it becomes
+known. It never judges the server's certificate itself: at `TLS_CLIENT_STATE_WAIT_AUTH` it waits for
+the caller's `authenticate` or `reject`. One instance serves one connection; once it fails or is
+wiped it stays failed.
 
 ```ts
 class TlsClient
@@ -162,73 +178,25 @@ class TlsClient
 | `new TlsClient(config: TlsClientConfig, clientRandom: u8[], x25519Private: u8[], p256Private: u8[])` | A client for one connection under `config`, with the 32-byte client random and the 32-byte x25519 and P-256 private keys drawn for it; both keys are copied in and the caller's arrays zeroed. A random or key of another length, or a configuration it cannot offer, leaves the client failed with `internal_error` before it writes anything. |
 | `alert: i32` | The alert the client failed with, or 0. |
 | `alpnChosen: string` | The ALPN protocol the server chose, one of the configuration's, or empty. |
-| `certificates: u8[][]` | The server's DER certificates, leaf first, once its Certificate is read. |
-| `clientRandom: u8[]` |  |
-| `config: TlsClientConfig` |  |
-| `content: u8[]` | What the server's CertificateVerify signs (§4.4.3), once its Certificate is read. |
-| `cookie: u8[]` | The HelloRetryRequest's cookie, echoed in the second ClientHello; empty if it sent none. |
-| `firstHello: u8[]` | The first ClientHello, kept plain until the ServerHello names the hash: the transcript feeds one hash only, so it starts from this copy. |
-| `hashes: u8[]` | A transcript hash on its way into the schedule: HashLen bytes of it. |
-| `hashLength: i32` |  |
-| `held: i32` | Which of the negotiated pool's secrets are known: bit `1 << TLS_SECRET_*` for each, as `TlsServer.held`. |
-| `input: u8[]` | The bytes received at the current level and not yet read: `input[0 .. inputLength)`, whole messages and the start of the next. |
-| `inputLength: i32` |  |
-| `outputHandshake: u8[]` | What the client has written at the Handshake level and not handed on: its Finished. |
-| `outputHandshakeLength: i32` |  |
-| `outputInitial: u8[]` | What the client has written at the Initial level and not handed on. |
-| `outputInitialLength: i32` |  |
-| `readonly p256Key: Secret<u8[]>` | The P-256 private key, held the same way. |
 | `retried: boolean` | Whether a HelloRetryRequest was read, so a second is fatal. |
 | `scheme: i32` | The CertificateVerify scheme. |
-| `secrets256: TlsSecretPool` |  |
-| `secrets384: TlsSecretPool` |  |
 | `sentServerName: boolean` | Whether `server_name` was sent, so that only then may the server acknowledge it. |
 | `sessionId: u8[]` | The legacy_session_id sent, which the ServerHello must echo. |
 | `shareGroup: i32` | The group of the key share the last ClientHello carried. |
-| `signature: u8[]` | The CertificateVerify signature, as it came on the wire. |
 | `state: i32` |  |
 | `suite: i32` | The negotiated cipher suite, or 0 before the ServerHello (or HelloRetryRequest) is read. |
-| `transcript: TlsTranscript` |  |
-| `view: TlsServerFlightView` | The server message last read, as windows into `input`. |
-| `readonly x25519Key: Secret<u8[]>` | The x25519 private key, copied in by the constructor; wiped once the server picks a group, unless it picked x25519, then once the exchange is done. |
 | `alpn(): string` | The ALPN protocol the server chose, or empty when it chose none. |
 | `authenticate(ok: boolean): i32` | The caller's verdict on the server's chain and signature, at `TLS_CLIENT_STATE_WAIT_AUTH`: `true` goes on to the server's Finished, reading what was held meanwhile; `false` is `reject(bad_certificate)`. Answers 0 or the alert; in any other state the client fails with `internal_error`. |
-| `checkHello(view: TlsServerFlightView): i32` | The checks a ServerHello and a HelloRetryRequest share, in the order that names a TLS 1.2 server for its version: the structure, then `supported_versions` and the downgrade sentinel (§4.1.3), then the extensions, the echoed session id, null compression and an offered suite. Answers 0 or the alert. |
-| `clearOutput(level: i32): void` | Forgets the handshake bytes written at `level`, which a carrier has read out of the buffer itself. |
-| `consume(count: i32): void` | Drops the first `count` bytes of `input`, moving the rest to its front. |
-| `drain(): i32` | Reads every whole message at the front of `input`, dropping each once read, until a partial one is left or the state waits on the caller. Answers 0 or the alert. |
-| `exchangeKeys(): i32` | The ECDHE exchange with the server's share, `input[view.shareAt ..)`, and the handshake secret from it. Both private keys are wiped on every path, and the shared and early secrets before it returns. An all-zero x25519 secret is `illegal_parameter` (RFC 7748 §6.1, RFC 8446 §7.4.2), and so is a secp256r1 share that is not an uncompressed point on the curve (§4.2.8.2); its shared secret is the product's x, which may be zero. |
-| `expectedLevel(): i32` | The level the server's next bytes must arrive at, or -1 when the state expects none. |
-| `fail(alert: i32): i32` | Fails the handshake with `alert` and answers it, wiping every secret the client holds. |
-| `handleCertificate(length: i32): i32` | The server's Certificate (§4.4.2): its request context must be empty. The chain is copied out, and what CertificateVerify signs computed. |
-| `handleCertificateVerify(length: i32): i32` | CertificateVerify (§4.4.3): a scheme the client offered. The signature is kept, unchecked, for the caller; the client then waits on it. |
-| `handleEncryptedExtensions(length: i32): i32` | EncryptedExtensions (§4.3.1): ALPN, if any, must be one the client offered, and `server_name` acknowledged only if sent. |
-| `handleFinished(length: i32): i32` | The server's Finished (§4.4.4), checked with `timingSafeEqualAt` against the one its handshake secret gives (`decrypt_error` if it differs). Then the master secret, the application and exporter secrets, and the client's Finished at the Handshake level; the handshake secret is wiped. |
-| `handleMessage(type: i32, length: i32): i32` | Dispatches one whole message, `input[0 .. 4 + length)`, of type `type`, by state. |
-| `handleRetry(length: i32): i32` | A HelloRetryRequest (§4.1.4), checked by `checkHello` already: it must name a group the client offered and did not send a share for, or carry a cookie, and changes the hello. The transcript restarts from `message_hash` (§4.4.1), and the second ClientHello carries a share of the new group and echoes the cookie. The key of the group not picked is wiped now. |
-| `handleServerHello(length: i32): i32` | A ServerHello or HelloRetryRequest, `input[0 .. 4 + length)`. |
-| `handleTicket(length: i32): i32` | A NewSessionTicket (§4.6.1) once connected: checked for its structure and dropped, since this client does not resume. |
-| `known(index: i32): boolean` | Whether the handshake has derived secret `index` (`TLS_SECRET_*`). |
 | `peerCertificates(): u8[][]` | The server's DER certificates, leaf first; empty before its Certificate is read. |
-| `readKnown(level: i32): boolean` | Whether the secret the client *reads* `level` under — the server's, `serverHandshake` or `serverApplication` — is known yet. |
 | `receive(level: i32, data: u8[], off: i32, len: i32): i32` | Takes the handshake bytes `data[off .. off + len)` the server sent at `level`, a whole message, part of one or several, and reads every message they complete. Answers 0, or the alert the client fails with.<br><br>A level other than the one the state expects is `unexpected_message`, as is a byte left over once a message ends the server's flight at its level (a ServerHello, a HelloRetryRequest or a Finished): RFC 8446 §5.1 forbids a message to straddle a key change. A window outside `data` is `internal_error`. At `TLS_CLIENT_STATE_WAIT_AUTH` the bytes are held until `authenticate`. Once connected, the Application level takes NewSessionTickets, which are checked and dropped; anything else there is `unexpected_message`, KeyUpdate being the record layer's. |
 | `reject(alert: i32): i32` | Refuses the server at `TLS_CLIENT_STATE_WAIT_AUTH` with `alert`, the caller's reason (`bad_certificate`, `certificate_expired`, `unknown_ca`, `decrypt_error`…): the client fails with it and answers it. An alert outside 1 to 255 is taken as `bad_certificate`. In any other state the client fails with `internal_error`. |
-| `reserveInput(need: i32): void` | Makes `input` hold at least `need` bytes, keeping the ones it holds; it doubles, and never grows past one largest message. |
-| `reserveOutput(need: i32): void` | Makes the Initial output hold at least `need` bytes, keeping the ones it holds. |
 | `secrets(): TlsSecretPool` | The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise. |
-| `sent(level: i32, at: i32, end: i32): void` | A message the client wrote at `level`, `output[at .. end)`, goes into the transcript once its hash is known and stays on the output. |
 | `start(): i32` | Writes the first ClientHello at the Initial level. Answers 0, or the alert the client failed with; a second call is `internal_error`. |
-| `startTranscript(suite: i32): void` | Starts the transcript over `suite`'s hash, from the first ClientHello. |
 | `takeOutput(level: i32): u8[]` | The handshake bytes written at `level` since the last call, in a fresh array, and forgets them. |
 | `verifyContent(): u8[]` | What the CertificateVerify signature is over (§4.4.3): 64 spaces, the server's context string, a zero byte and the transcript hash. |
 | `verifyScheme(): i32` | The CertificateVerify scheme (`TLS_SIGNATURE_*`); 0 before it is read. |
 | `verifySignature(): u8[]` | The CertificateVerify signature as sent: DER for ECDSA, raw for RSA-PSS. |
 | `wipe(): void` | Wipes every secret the client holds, both private keys and both pools, and fails it: a wiped client has nothing left to go on with. `fail` calls it, and the carriers when a connection ends; wiped without a failure, it answers `internal_error` from then on. |
-| `wipeKeys(): void` | Zeroes both private keys, once the exchange is done or cannot be. |
-| `wipeSecret(index: i32): void` | Zeroes secret `index` of `secrets()` once a carrier has taken what it needs from it; it stays known. |
-| `wipeUnpicked(): void` | Zeroes the private key of the group the client's share is not of. |
-| `writeHello(): i32` | Writes a ClientHello with a share of `shareGroup` and the cookie, if any, after what the Initial output holds, and answers where it ends; -1 when the key for the share gives no public key, or when the extensions would pass the 65,535 bytes their length can say (a HelloRetryRequest's cookie near that size). |
-| `writeKnown(level: i32): boolean` | Whether the secret the client *writes* `level` under — `clientHandshake` or `clientApplication` — is known yet. |
 
 ## TlsClientConfig
 
@@ -242,7 +210,7 @@ class TlsClientConfig
 
 | Member | |
 | --- | --- |
-| `new TlsClientConfig(serverName: string, alpn: string[])` |  |
+| `new TlsClientConfig(serverName: string, alpn: string[])` | A configuration for `serverName` offering `alpn`, with every suite this tree negotiates and an x25519 share. Nothing is checked here: `TlsClient`'s constructor checks the whole configuration. |
 | `alpn: string[]` | The ALPN protocols offered, most preferred first; empty sends no ALPN. Each is 1 to 255 bytes. |
 | `groups: i32[]` | The groups offered in `supported_groups`: a non-empty subset of x25519 and secp256r1. |
 | `serverName: string` | The host the client means to reach: sent as `server_name` unless it is an IP literal, and the name the caller authenticates. |
@@ -264,6 +232,8 @@ Both Finished are done and the application secrets known.
 <scalar-card title="8" icon="phosphor/regular/hash">
 
 `TLS_CLIENT_STATE_FAILED: i32`
+
+The handshake failed or was wiped: every secret is zeroed, and `alert` says why. No state follows it.
 
 </scalar-card>
 
@@ -289,11 +259,16 @@ not read.
 
 `TLS_CLIENT_STATE_WAIT_CERTIFICATE: i32`
 
+EncryptedExtensions is read; the server's Certificate comes next, at the Handshake level. A
+CertificateRequest here is `unexpected_message`: this client does not authenticate itself.
+
 </scalar-card>
 
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `TLS_CLIENT_STATE_WAIT_CERTIFICATE_VERIFY: i32`
+
+The server's chain is read; its CertificateVerify comes next, at the Handshake level.
 
 </scalar-card>
 

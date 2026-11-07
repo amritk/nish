@@ -65,11 +65,17 @@ function sha1(data: u8[]): u8[]
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message; it is read, not changed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 20-byte digest.
+
 </scalar-field>
 
 ## Constants

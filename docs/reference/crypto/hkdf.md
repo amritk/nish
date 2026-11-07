@@ -101,7 +101,7 @@ HKDF-Expand with HMAC-SHA-256 (RFC 5869 §2.3): `length` bytes of output keying 
 
 <scalar-card title="hkdfExpandSha256Secret" icon="phosphor/regular/function" href="#hkdfexpandsha256secret">
 
-`hkdfExpandSha256` on a PRK held as a `Secret`: the output keying material, held as one, or `null` where `hkdfExpandSha256` answers `null`.
+`hkdfExpandSha256` on a PRK held as a `Secret`.
 
 </scalar-card>
 
@@ -113,7 +113,7 @@ HKDF-Expand with HMAC-SHA-384 (RFC 5869 §2.3): `length` bytes of output keying 
 
 <scalar-card title="hkdfExpandSha384Secret" icon="phosphor/regular/function" href="#hkdfexpandsha384secret">
 
-`hkdfExpandSha384` on a PRK held as a `Secret`: the output keying material, held as one, or `null` where `hkdfExpandSha384` answers `null`.
+`hkdfExpandSha384` on a PRK held as a `Secret`.
 
 </scalar-card>
 
@@ -131,7 +131,7 @@ HKDF-Extract with HMAC-SHA-256 (RFC 5869 §2.2): the 32-byte PRK.
 
 <scalar-card title="hkdfExtractSha256Secret" icon="phosphor/regular/function" href="#hkdfextractsha256secret">
 
-`hkdfExtractSha256` on input keying material held as a `Secret`: the 32-byte PRK, held as one.
+`hkdfExtractSha256` on input keying material held as a `Secret`.
 
 </scalar-card>
 
@@ -143,7 +143,7 @@ HKDF-Extract with HMAC-SHA-384 (RFC 5869 §2.2): the 48-byte PRK.
 
 <scalar-card title="hkdfExtractSha384Secret" icon="phosphor/regular/function" href="#hkdfextractsha384secret">
 
-`hkdfExtractSha384` on input keying material held as a `Secret`: the 48-byte PRK, held as one.
+`hkdfExtractSha384` on input keying material held as a `Secret`.
 
 </scalar-card>
 
@@ -298,29 +298,56 @@ function hkdfExpandInto(
 #### Parameters
 
 <scalar-field name="s" type="HkdfScratch" required>
+
+The scratch to compute in; what the call leaves in it is wiped.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+
 </scalar-field>
 
 <scalar-field name="prk" type="u8[]" required>
+
+The pseudorandom key, at least `hashLength` bytes; it is read, not
+  kept.
+
 </scalar-field>
 
 <scalar-field name="info" type="u8[]" required>
+
+The public context the output is bound to; may be empty.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the output is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the output starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 255 × `hashLength`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` once the bytes are written; `false`, with `out` untouched,
+  for bad input. A `hashLength` other than 32 or 48, or an output window
+  outside `out`, panics instead, before anything is written.
+
 </scalar-field>
 
 ## hkdfExpandLabelHeldInto
@@ -345,24 +372,45 @@ function hkdfExpandLabelHeldInto(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+
 </scalar-field>
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+RFC 8446's Secret, read only inside `exposeWith`.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context, at most 255 bytes.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's plain array the output is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the output starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 255.
+
 </scalar-field>
 
 ## hkdfExpandLabelInto
@@ -392,33 +440,64 @@ function hkdfExpandLabelInto(
 #### Parameters
 
 <scalar-field name="s" type="HkdfScratch" required>
+
+The scratch to compute in; what the call leaves in it is wiped.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+
 </scalar-field>
 
 <scalar-field name="prk" type="u8[]" required>
+
+RFC 8446's Secret, at least `hashLength` bytes; it is read, not
+  kept.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The buffer holding the context.
+
 </scalar-field>
 
 <scalar-field name="contextOff" type="i32" required>
+
+Where the context starts in `context`.
+
 </scalar-field>
 
 <scalar-field name="contextLen" type="i32" required>
+
+The context's length, at most 255 bytes.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the output is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the output starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 255.
+
 </scalar-field>
 
 ## hkdfExpandLabelSha256
@@ -439,20 +518,36 @@ function hkdfExpandLabelSha256(
 #### Parameters
 
 <scalar-field name="prk" type="u8[]" required>
+
+RFC 8446's Secret, at least 32 bytes; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context, often a transcript hash; at most 255
+  bytes.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 255.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh array of `length` bytes, which the caller owns.
+
 </scalar-field>
 
 ## hkdfExpandLabelSha256Held
@@ -474,15 +569,29 @@ function hkdfExpandLabelSha256Held(
 #### Parameters
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
+
+The `Secret` to overwrite; its length is the length derived. It
+  may be `prk`.
+
 </scalar-field>
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+RFC 8446's Secret, read only inside `exposeWith`.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context, often a transcript hash; at most 255
+  bytes.
+
 </scalar-field>
 
 ## hkdfExpandLabelSha256Secret
@@ -504,20 +613,37 @@ function hkdfExpandLabelSha256Secret(
 #### Parameters
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+RFC 8446's Secret, at least 32 bytes, read only inside
+  `exposeWith`.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context, often a transcript hash; at most 255
+  bytes.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 255.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+The `length` bytes, held as a `Secret` the caller wipes.
+
 </scalar-field>
 
 ## hkdfExpandLabelSha384
@@ -538,25 +664,42 @@ function hkdfExpandLabelSha384(
 #### Parameters
 
 <scalar-field name="prk" type="u8[]" required>
+
+RFC 8446's Secret, at least 48 bytes; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context, often a transcript hash; at most 255
+  bytes.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 255.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh array of `length` bytes, which the caller owns.
+
 </scalar-field>
 
 ## hkdfExpandLabelSha384Held
 
-`hkdfExpandLabelSha256Held` with HMAC-SHA-384: panics as `hkdfExpandLabelSha384` does.
+`hkdfExpandLabelSha256Held` with HMAC-SHA-384: panics as
+`hkdfExpandLabelSha384` does.
 
 ```ts
 function hkdfExpandLabelSha384Held(
@@ -570,20 +713,35 @@ function hkdfExpandLabelSha384Held(
 #### Parameters
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
+
+The `Secret` to overwrite; its length is the length derived. It
+  may be `prk`.
+
 </scalar-field>
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+RFC 8446's Secret, read only inside `exposeWith`.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context, often a transcript hash; at most 255
+  bytes.
+
 </scalar-field>
 
 ## hkdfExpandLabelSha384Secret
 
-`hkdfExpandLabelSha256Secret` with HMAC-SHA-384: panics as `hkdfExpandLabelSha384` does.
+`hkdfExpandLabelSha256Secret` with HMAC-SHA-384: panics as
+`hkdfExpandLabelSha384` does.
 
 ```ts
 function hkdfExpandLabelSha384Secret(
@@ -597,20 +755,37 @@ function hkdfExpandLabelSha384Secret(
 #### Parameters
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+RFC 8446's Secret, at least 48 bytes, read only inside
+  `exposeWith`.
+
 </scalar-field>
 
 <scalar-field name="label" type="string" required>
+
+The label without the `"tls13 "` prefix, 1 to 249 bytes.
+
 </scalar-field>
 
 <scalar-field name="context" type="u8[]" required>
+
+The public context, often a transcript hash; at most 255
+  bytes.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 255.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+The `length` bytes, held as a `Secret` the caller wipes.
+
 </scalar-field>
 
 ## hkdfExpandSha256
@@ -631,23 +806,35 @@ function hkdfExpandSha256(
 #### Parameters
 
 <scalar-field name="prk" type="u8[]" required>
+
+The pseudorandom key, at least 32 bytes; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="info" type="u8[]" required>
+
+The public context the output is bound to; may be empty.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 8160.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of `length` bytes, which the caller owns and wipes, or
+  `null` for bad input.
+
 </scalar-field>
 
 ## hkdfExpandSha256Secret
 
-`hkdfExpandSha256` on a PRK held as a `Secret`: the output keying material,
-held as one, or `null` where `hkdfExpandSha256` answers `null`.
+`hkdfExpandSha256` on a PRK held as a `Secret`.
 
 ```ts
 function hkdfExpandSha256Secret(
@@ -660,17 +847,31 @@ function hkdfExpandSha256Secret(
 #### Parameters
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+The pseudorandom key, at least 32 bytes, read only inside
+  `exposeWith`.
+
 </scalar-field>
 
 <scalar-field name="info" type="u8[]" required>
+
+The public context the output is bound to; may be empty.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 8160.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt; | null">
+
+The `length` bytes, held as a `Secret` the caller wipes, or `null`
+  for bad input.
+
 </scalar-field>
 
 ## hkdfExpandSha384
@@ -691,23 +892,35 @@ function hkdfExpandSha384(
 #### Parameters
 
 <scalar-field name="prk" type="u8[]" required>
+
+The pseudorandom key, at least 48 bytes; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="info" type="u8[]" required>
+
+The public context the output is bound to; may be empty.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 12240.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of `length` bytes, which the caller owns and wipes, or
+  `null` for bad input.
+
 </scalar-field>
 
 ## hkdfExpandSha384Secret
 
-`hkdfExpandSha384` on a PRK held as a `Secret`: the output keying material,
-held as one, or `null` where `hkdfExpandSha384` answers `null`.
+`hkdfExpandSha384` on a PRK held as a `Secret`.
 
 ```ts
 function hkdfExpandSha384Secret(
@@ -720,17 +933,31 @@ function hkdfExpandSha384Secret(
 #### Parameters
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
+
+The pseudorandom key, at least 48 bytes, read only inside
+  `exposeWith`.
+
 </scalar-field>
 
 <scalar-field name="info" type="u8[]" required>
+
+The public context the output is bound to; may be empty.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 12240.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt; | null">
+
+The `length` bytes, held as a `Secret` the caller wipes, or `null`
+  for bad input.
+
 </scalar-field>
 
 ## hkdfExtractInto
@@ -755,21 +982,40 @@ function hkdfExtractInto(
 #### Parameters
 
 <scalar-field name="s" type="HkdfScratch" required>
+
+The scratch to compute in; what the call leaves in it is wiped.
+
 </scalar-field>
 
 <scalar-field name="hashLength" type="i32" required>
+
+32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
+
 </scalar-field>
 
 <scalar-field name="salt" type="u8[]" required>
+
+The public salt; an empty one stands for HashLen zero bytes
+  (§2.2).
+
 </scalar-field>
 
 <scalar-field name="ikm" type="u8[]" required>
+
+The input keying material; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the PRK is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the `hashLength` PRK bytes start in `out`.
+
 </scalar-field>
 
 ## hkdfExtractSha256
@@ -786,19 +1032,29 @@ function hkdfExtractSha256(
 #### Parameters
 
 <scalar-field name="salt" type="u8[]" required>
+
+The public salt; an empty one stands for HashLen zero bytes
+  (§2.2).
+
 </scalar-field>
 
 <scalar-field name="ikm" type="u8[]" required>
+
+The input keying material; it is read, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 32-byte PRK, which the caller owns and wipes.
+
 </scalar-field>
 
 ## hkdfExtractSha256Secret
 
-`hkdfExtractSha256` on input keying material held as a `Secret`: the 32-byte PRK, held as one.
+`hkdfExtractSha256` on input keying material held as a `Secret`.
 
 ```ts
 function hkdfExtractSha256Secret(
@@ -810,14 +1066,25 @@ function hkdfExtractSha256Secret(
 #### Parameters
 
 <scalar-field name="salt" type="u8[]" required>
+
+The public salt; an empty one stands for HashLen zero bytes
+  (§2.2).
+
 </scalar-field>
 
 <scalar-field name="ikm" type="Secret&lt;u8[]&gt;" required>
+
+The input keying material, read only inside `exposeWith`; the
+  caller still owns and wipes it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+The 32-byte PRK, held as a `Secret` the caller wipes.
+
 </scalar-field>
 
 ## hkdfExtractSha384
@@ -834,19 +1101,29 @@ function hkdfExtractSha384(
 #### Parameters
 
 <scalar-field name="salt" type="u8[]" required>
+
+The public salt; an empty one stands for HashLen zero bytes
+  (§2.2).
+
 </scalar-field>
 
 <scalar-field name="ikm" type="u8[]" required>
+
+The input keying material; it is read, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 48-byte PRK, which the caller owns and wipes.
+
 </scalar-field>
 
 ## hkdfExtractSha384Secret
 
-`hkdfExtractSha384` on input keying material held as a `Secret`: the 48-byte PRK, held as one.
+`hkdfExtractSha384` on input keying material held as a `Secret`.
 
 ```ts
 function hkdfExtractSha384Secret(
@@ -858,14 +1135,25 @@ function hkdfExtractSha384Secret(
 #### Parameters
 
 <scalar-field name="salt" type="u8[]" required>
+
+The public salt; an empty one stands for HashLen zero bytes
+  (§2.2).
+
 </scalar-field>
 
 <scalar-field name="ikm" type="Secret&lt;u8[]&gt;" required>
+
+The input keying material, read only inside `exposeWith`; the
+  caller still owns and wipes it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+The 48-byte PRK, held as a `Secret` the caller wipes.
+
 </scalar-field>
 
 ## hkdfSha256Secret
@@ -886,25 +1174,44 @@ function hkdfSha256Secret(
 #### Parameters
 
 <scalar-field name="salt" type="u8[]" required>
+
+The public salt; an empty one stands for HashLen zero bytes
+  (§2.2).
+
 </scalar-field>
 
 <scalar-field name="ikm" type="Secret&lt;u8[]&gt;" required>
+
+The input keying material, read only inside `exposeWith`; the
+  caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="info" type="u8[]" required>
+
+The public context the output is bound to; may be empty.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 8160.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt; | null">
+
+The `length` bytes, held as a `Secret` the caller wipes, or `null`
+  for bad input.
+
 </scalar-field>
 
 ## hkdfSha384Secret
 
-`hkdfSha256Secret` with HMAC-SHA-384: the PRK is 48 bytes, and wiped before it returns.
+`hkdfSha256Secret` with HMAC-SHA-384: the PRK is 48 bytes, and wiped before
+it returns.
 
 ```ts
 function hkdfSha384Secret(
@@ -918,20 +1225,38 @@ function hkdfSha384Secret(
 #### Parameters
 
 <scalar-field name="salt" type="u8[]" required>
+
+The public salt; an empty one stands for HashLen zero bytes
+  (§2.2).
+
 </scalar-field>
 
 <scalar-field name="ikm" type="Secret&lt;u8[]&gt;" required>
+
+The input keying material, read only inside `exposeWith`; the
+  caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="info" type="u8[]" required>
+
+The public context the output is bound to; may be empty.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to derive, 0 to 12240.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt; | null">
+
+The `length` bytes, held as a `Secret` the caller wipes, or `null`
+  for bad input.
+
 </scalar-field>
 
 ## HkdfScratch
@@ -947,10 +1272,8 @@ class HkdfScratch
 
 | Member | |
 | --- | --- |
-| `new HkdfScratch()` |  |
-| `counter: u8[]` | The one-byte block counter `i`. |
-| `label: u8[]` | HKDF-Expand-Label's `info`, built here: public, so it is not wiped. |
+| `new HkdfScratch()` | Allocates the HMAC scratch for both hashes and the buffers every derivation reuses. |
 | `previous: u8[]` | T(i - 1), HashLen bytes of it; wiped before every function returns. |
-| `sha256: HmacSha256Scratch` |  |
-| `sha384: HmacSha384Scratch` |  |
+| `sha256: HmacSha256Scratch` | The HMAC the `*Into` functions run when `hashLength` is 32; wiped before a call that ran it returns. |
+| `sha384: HmacSha384Scratch` | The HMAC the `*Into` functions run when `hashLength` is 48; wiped before a call that ran it returns. |
 | `wipe(): void` | Zeroes the key material the last derivation left: T(i - 1) and both keyed hashers. |

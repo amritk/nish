@@ -155,14 +155,23 @@ function tlsNextTrafficSecret(
 #### Parameters
 
 <scalar-field name="hashLength" type="i32" required>
+
+The hash length of the connection's suite, 32 or 48, and so how many bytes are derived.
+
 </scalar-field>
 
 <scalar-field name="trafficSecret" type="Secret&lt;u8[]&gt;" required>
+
+The direction's current traffic secret. This function does not wipe it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+A fresh `Secret` holding the next traffic secret, which the caller owns and wipes.
+
 </scalar-field>
 
 ## tlsRecordLength
@@ -184,22 +193,37 @@ function tlsRecordLength(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array that holds the bytes received so far.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `buf` the record's header starts.
+
 </scalar-field>
 
 <scalar-field name="avail" type="i32" required>
+
+How many bytes, from `off`, have arrived.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The whole record's length in bytes, header included; 0 while the header is not all in;
+    `-TLS_ALERT_UNEXPECTED_MESSAGE` or `-TLS_ALERT_RECORD_OVERFLOW` for a header this layer refuses;
+    `-TLS_ALERT_INTERNAL_ERROR` when `buf[off .. off + avail)` is not inside `buf`.
+
 </scalar-field>
 
 ## tlsRecordWindowFits
 
 Whether `[off, off + len)` is a window inside an array of `length` elements: every caller's range check.
+It is written as `off <= length - len`, not `off + len <= length`, so a large `off` cannot overflow.
 
 ```ts
 function tlsRecordWindowFits(
@@ -212,17 +236,29 @@ function tlsRecordWindowFits(
 #### Parameters
 
 <scalar-field name="length" type="i32" required>
+
+How many elements the array has.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the window starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many elements the window spans.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when `off` and `len` are not negative and the window ends at or before `length`.
+
 </scalar-field>
 
 ## TlsRecordProtection
@@ -244,31 +280,25 @@ class TlsRecordProtection
 
 | Member | |
 | --- | --- |
-| `new TlsRecordProtection()` |  |
+| `new TlsRecordProtection()` | Makes a cleartext direction and every array it will fill, so that no install allocates. The record limit starts at `TLS_KEY_UPDATE_RECORDS`. |
 | `aes: AesKey \| null` | The AES key schedule for the two AES-GCM suites, the one of the installed key's size. |
 | `aes128: AesKey` |  |
 | `aes256: AesKey` |  |
 | `contentType: i32` | The real content type of the last record `open` answered. |
 | `iv: u8[]` | The 12-byte traffic IV (§7.3), zeroed while the direction is cleartext. |
-| `kdf: HkdfScratch` | Where the keys are derived. |
 | `key: u8[]` | The AEAD key (§7.3): the suite's key length, zeroed while the direction is cleartext. |
 | `key16: u8[]` | The arrays `key` and `aes` point into: AES-128's and ChaCha20's or AES-256's. |
 | `key32: u8[]` |  |
 | `next: u8[]` | Where `advance` derives the next traffic secret: HashLen bytes of it. |
 | `recordLimit: i64` | The sequence number at which a writer moves to the next key. Readable and writable, so a test can bring the key update forward; a reader ignores it. |
 | `sequence: i64` | The next record's sequence number (§5.3). |
-| `suite: i32` | The negotiated suite, or 0 while the direction is cleartext. |
 | `advance(secret: u8[]): boolean` | Moves this direction to the next traffic secret (§7.2), the KeyUpdate step: `secret`, the current one, is overwritten in place by the next, and the keys are installed from it; the next secret's own copy is wiped. The next secret is derived in place inside an arena block, as `derive`'s keys are. False, as `install` answers, when the keys do not install. |
 | `advanceHeld(secret: Secret<u8[]>): boolean` | `advance` on a traffic secret the caller holds as a `Secret`: the next traffic secret (§7.2) is written over `secret`'s bytes in place, a ratchet that leaves no copy of either, and the keys are installed from it with `installHeld`. False, as `advance` answers, when the keys do not install; a secret that is not its hash's length is left as it was. |
-| `aesForSuite(): AesKey \| null` | The AES key schedule when the suite is an AES-GCM one, `null` for ChaCha20: a protection that carried AES keeps its schedule for the next AES key, and must not use it for ChaCha20. |
-| `clear(): void` | Back to cleartext, with the sequence number at 0 and both keys, the IV and both AES key schedules wiped: the keys and IV with `secureZero`, and each schedule with `aesKeyWipe`, its whole `roundKeys` and its H, which the next `install` fills again (TLS-2). |
-| `derive(suite: i32, secret: u8[]): void` | Fills the key, the IV and the AES key schedule from `secret`, into the arrays `reserve` chose: the key and IV derived straight into place in the direction's own HKDF scratch, which is wiped after, and the schedule expanded into this direction's `AesKey` by `aesKeyInto`. All of it runs inside an arena block, so a key install leaves the arena where it was. ChaCha20 has no schedule. |
 | `install(suite: i32, secret: u8[]): boolean` | Protects this direction under `secret` from the next record on: the suite's key and IV (§7.3), the sequence number back to 0, and what this replaces zeroed by `clear`. `false`, leaving the direction cleartext, for a suite `nish/net/tls/schedule` does not know or a secret that is not its hash's length.<br><br>The key, the IV and the AES key schedule are written into the arrays this direction made when it was constructed, so an install allocates nothing that outlives it (TLS-3). |
 | `installHeld(suite: i32, secret: Secret<u8[]>): boolean` | `install` from a traffic secret the caller holds as a `Secret`: the key and IV are derived from it straight into this direction's arrays, the plain output of each derivation wiped, and the AES key schedule expanded into place inside an arena block, as `derive`'s is. `false`, leaving the direction cleartext, where `install` answers it. |
 | `isProtected(): boolean` | Whether records in this direction are protected. |
 | `nonceInto(nonce: u8[]): void` | The per-record nonce (§5.3): the IV with the sequence number XORed into its last eight bytes, big-endian. |
-| `open(record: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Reads the whole record `record[off .. off + len)`, header included, and writes its content at `out[at]`: answers the content's length and sets `contentType`. Cleartext, the content is the body and the type the header's: `application_data` is `unexpected_message`, since it is never sent in the clear, and a body over 2^14 bytes is `record_overflow`. Protected, the header's type must be `application_data` (`unexpected_message` otherwise), the body must authenticate under this record's nonce with the header as additional data (`bad_record_mac`), the decrypted record may be no longer than 2^14 + 1 bytes (`record_overflow`), and its last non-zero byte is the real type — one that is all zeros is `unexpected_message` (§5.4). Every refusal is the alert negated; a window outside `record`, a `len` that is not the header's, or too little room at `out[at]` is `-TLS_ALERT_INTERNAL_ERROR`. |
-| `reserve(suite: i32): void` | Points `key`, and for AES `aes`, at the arrays of the size `suite` needs. |
+| `open(record: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Reads the whole record `record[off .. off + len)`, header included, and writes its content at `out[at]`: answers the content's length and sets `contentType`. Cleartext, the content is the body and the type the header's: `application_data` is `unexpected_message`, since it is never sent in the clear, and a body over 2^14 bytes is `record_overflow`. Protected, the header's type must be `application_data` (`unexpected_message` otherwise), the body must authenticate under this record's nonce with the header as additional data (`bad_record_mac`), the decrypted record may be no longer than 2^14 + 1 bytes (`record_overflow`), and its last non-zero byte is the real type — one that is all zeros is `unexpected_message` (§5.4). Every refusal is the alert negated; a window outside `record`, a `len` that is not the header's, or too little room at `out[at]` is `-TLS_ALERT_INTERNAL_ERROR`.<br><br>A protected record that fails to authenticate leaves the sequence number where it was; one that authenticates spends its number even when its content is then refused. |
 | `seal(type: i32, data: u8[], off: i32, len: i32, padding: i32, out: u8[], at: i32): i32` | Writes one record of content type `type` holding `data[off .. off + len)` at `out[at]` and answers its length, header included. Cleartext, it is a TLSPlaintext, `padding` must be 0 and `type` may not be `application_data`; protected, it is a TLSCiphertext whose inner plaintext carries `type` and then `padding` zero bytes (§5.4), and the sequence number moves on. `-TLS_ALERT_INTERNAL_ERROR`, with nothing written, for content over 2^14 bytes, a padding that would take the inner plaintext past 2^14 + 1, a window outside `data`, too little room at `out[at]`, or a sequence number that would wrap. |
 
 ## TlsRecordReader
@@ -290,15 +320,11 @@ class TlsRecordReader
 
 | Member | |
 | --- | --- |
-| `new TlsRecordReader()` |  |
+| `new TlsRecordReader()` | Makes an empty reader with a pool of its own, one buffer deep. No buffer is taken until the first `push` brings a byte. |
 | `buffer: u8[]` | The bytes held, or `empty` while the reader holds none. |
-| `empty: u8[]` | The zero-length array `buffer` is while no buffer is borrowed. |
 | `end: i32` | One past the last byte pushed. |
-| `pool: BufferPool` | Where `buffer` comes from and goes back to. |
 | `start: i32` | The first byte not yet consumed. |
-| `borrowFrom(pool: BufferPool): void` | Borrows from `pool` from now on, giving back first, zeroed, any buffer held from the old one. Every byte held is forgotten, as `reset` does. |
 | `consume(n: i32): void` | Lets the first `n` held bytes go: the record `next` answered, once it is handled. When none are left the next record starts at the front; the buffer stays until `reset`. |
-| `giveBack(): void` | Gives the buffer back, zeroed, if one is held. |
 | `next(): i32` | The length of the whole record at `start`, header included, once every byte of it is in; 0 before; or the alert negated for a header this layer refuses, as `tlsRecordLength` says. |
 | `push(data: u8[], off: i32, len: i32): i32` | Copies as many of `data[off .. off + len)` as fit and answers how many, after moving what is held to the front. A window outside `data` is `-TLS_ALERT_INTERNAL_ERROR`, and nothing is copied. |
 | `reset(): void` | Forgets every byte, for a connection that starts again in the same slot, and gives the buffer back. |

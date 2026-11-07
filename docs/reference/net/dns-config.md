@@ -32,14 +32,26 @@ import {
 
 ```ts
 import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseHosts, dnsParseResolvConf } from "nish/net/dns-config"
-import { DNS_TYPE_A } from "nish/net/dns-message"
+import { DNS_ADDRESS_BYTES, DNS_TYPE_A } from "nish/net/dns-message"
+import { readFileBytesSync } from "nish:fs"
 
 const config: DnsConfig = new DnsConfig()
-dnsParseResolvConf(resolvBytes, 0, resolvLen, config)
+const resolv: u8[] | null = readFileBytesSync("/etc/resolv.conf")
+if (resolv !== null) {
+  dnsParseResolvConf(resolv, 0, toI32(resolv.length), config)
+} else {
+  // An empty file still gives the defaults; a fresh DnsConfig has no servers.
+  dnsParseResolvConf(new Array<u8>(0), 0, 0, config)
+}
 // config.servers[i * 18, +18) for i < config.serverCount, on port 53
 const hosts: DnsHosts = new DnsHosts()
-dnsParseHosts(hostsBytes, 0, hostsLen, hosts)
+const file: u8[] | null = readFileBytesSync("/etc/hosts")
+if (file !== null) {
+  dnsParseHosts(file, 0, toI32(file.length), hosts)
+}
+const out: u8[] = new Array<u8>(8 * DNS_ADDRESS_BYTES)
 const found: i32 = dnsHostsFind(hosts, "localhost", DNS_TYPE_A, 80, out, 8)
+// out[0, found * 18): the A addresses /etc/hosts gives localhost, on port 80
 ```
 
 <scalar-grid cols="2">
@@ -100,8 +112,8 @@ not use. `nameserver` takes one IPv4 or IPv6 literal (no zone), and the first
 so the last one wins, and it holds at most `DNS_MAX_SEARCH` (6) domains and
 `DNS_MAX_SEARCH_BYTES` (256) bytes; `options` reads `ndots:n` (clamped to 0
 to 15), `timeout:n` (1 to 30 seconds) and `attempts:n` (1 to 5) and ignores
-every other option. With no nameserver line, the servers are 127.0.0.1 and
-::1, as glibc's are.
+every other option. With no nameserver line that holds an address, the
+servers are 127.0.0.1 and ::1, as glibc's are.
 
 </scalar-detail>
 
@@ -136,7 +148,8 @@ refuses and why is `docs/security/dns.md`.
 Writes the addresses `hosts` gives `name`, of `qtype` (`DNS_TYPE_A` or
 `DNS_TYPE_AAAA`), into `out` from offset 0 with `port`, in file order and at
 most `max` of them, and answers how many it wrote. An entry that names
-`name` twice is written once.
+`name` twice is written once; two entries with the same address are each
+written. It allocates nothing.
 
 ```ts
 function dnsHostsFind(
@@ -152,26 +165,49 @@ function dnsHostsFind(
 #### Parameters
 
 <scalar-field name="hosts" type="DnsHosts" required>
+
+The table `dnsParseHosts` filled.
+
 </scalar-field>
 
 <scalar-field name="name" type="string" required>
+
+The name to find, without case, one trailing `.` ignored.
+
 </scalar-field>
 
 <scalar-field name="qtype" type="i32" required>
+
+`DNS_TYPE_A` for the IPv4 entries or `DNS_TYPE_AAAA` for the IPv6 ones; any
+  other type panics.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port written into each address, 0 to 65535; any other value panics.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the 18-byte addresses go, back to back from offset 0.
+
 </scalar-field>
 
 <scalar-field name="max" type="i32" required>
+
+The most addresses to write, 0 or more; `out` must have room for `max` of them,
+  or this panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many addresses were written, 0 when `hosts` does not name `name`.
+
 </scalar-field>
 
 ## dnsParseAddress
@@ -179,7 +215,8 @@ function dnsHostsFind(
 Writes the IPv4 or IPv6 literal `b[off, off + len)` at `out[at, at + 18)`,
 IPv4 as `::ffff:a.b.c.d`, with `port` big-endian after it, and answers
 whether it was one. `out` is written only when it was. A zone (`%eth0`),
-brackets and a port are not part of a literal.
+brackets and a port are not part of a literal, so a window holding one is
+refused; so is an IPv4 part with a leading zero, never read as octal.
 
 Each call allocates the sixteen bytes it parses into, released when it
 returns; the two file parsers reuse a buffer of their own instead.
@@ -198,31 +235,55 @@ function dnsParseAddress(
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the literal is in.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the literal starts in `b`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The literal's length in bytes; the whole window must be the literal, with no blank.
+  A window outside `b` panics.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the 18-byte address goes.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` it starts; `out[at, at + 18)` must lie inside `out`, or this panics.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port written after the address, 0 to 65535; any other value panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the window was an IPv4 or IPv6 literal and `out` now holds it.
+
 </scalar-field>
 
 ## dnsParseHosts
 
-Reads the hosts file `b[off, off + len)` into `hosts`, which starts over empty.
+Reads the hosts file `b[off, off + len)` into `hosts`, which starts over
+empty. It allocates nothing; a line whose address is not a literal, or
+that names nothing, is ignored, and what does not fit is counted.
 
 ```ts
 function dnsParseHosts(
@@ -236,22 +297,35 @@ function dnsParseHosts(
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The file's bytes, read by the caller.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the file starts in `b`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The file's length in bytes; a window outside `b` panics.
+
 </scalar-field>
 
 <scalar-field name="hosts" type="DnsHosts" required>
+
+The table to fill; it is emptied first, so one can be reused.
+
 </scalar-field>
 
 ## dnsParseResolvConf
 
 Reads the resolv.conf `b[off, off + len)` into `config`, which starts over
 from the defaults, and gives it 127.0.0.1 and ::1 on port 53 when no
-nameserver line held an address.
+nameserver line held an address. It allocates nothing, and nothing in the
+bytes makes it panic or fail: what it cannot use is ignored or counted.
 
 ```ts
 function dnsParseResolvConf(
@@ -265,15 +339,27 @@ function dnsParseResolvConf(
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The file's bytes, read by the caller.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the file starts in `b`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The file's length in bytes; a window outside `b` panics.
+
 </scalar-field>
 
 <scalar-field name="config" type="DnsConfig" required>
+
+The table to fill; its counts and options are reset first, so one can be reused.
+
 </scalar-field>
 
 ## DnsConfig
@@ -287,19 +373,18 @@ class DnsConfig
 | Member | |
 | --- | --- |
 | `new DnsConfig()` |  |
-| `attempts: i32` | Rounds through the servers before giving up. |
-| `droppedSearch: i32` | Search domains past `DNS_MAX_SEARCH` or `DNS_MAX_SEARCH_BYTES`, read and not kept. |
+| `attempts: i32` | Rounds through the servers before giving up, 1 to `DNS_MAX_ATTEMPTS`. |
+| `droppedSearch: i32` | Search domains past `DNS_MAX_SEARCH` or `DNS_MAX_SEARCH_BYTES`, or empty (a bare `.`), read and not kept. |
 | `droppedServers: i32` | Nameserver lines past `DNS_MAX_SERVERS`, read and not kept. |
-| `ndots: i32` | Dots a name needs to be tried as it stands before the search list. |
-| `scratch: u8[]` | Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing. |
+| `ndots: i32` | Dots a name needs to be tried as it stands before the search list, 0 to `DNS_MAX_NDOTS`. |
 | `search: u8[]` | The search domains, back to back, lowercase, without a trailing dot. |
-| `searchCount: i32` |  |
-| `searchLength: i32[]` |  |
+| `searchCount: i32` | How many search domains are kept, 0 to `DNS_MAX_SEARCH`. |
+| `searchLength: i32[]` | Each search domain's length in bytes, by the same index as `searchStart`. |
 | `searchStart: i32[]` | Where each of the `searchCount` domains starts in `search`, and its length. |
-| `serverCount: i32` |  |
+| `serverCount: i32` | How many addresses `servers` holds, 1 to `DNS_MAX_SERVERS` once a file is read. |
 | `servers: u8[]` | `serverCount` addresses of `DNS_ADDRESS_BYTES` each, on `DNS_PORT`. |
 | `skippedLines: i32` | Lines longer than `DNS_CONFIG_MAX_LINE`, skipped whole. |
-| `timeout: i32` | Seconds to wait for one server's reply. |
+| `timeout: i32` | Seconds to wait for one server's reply, 1 to `DNS_MAX_TIMEOUT`. |
 
 ## DnsHosts
 
@@ -312,17 +397,11 @@ class DnsHosts
 | Member | |
 | --- | --- |
 | `new DnsHosts()` |  |
-| `addresses: u8[]` | `entryCount` addresses of `DNS_ADDRESS_BYTES` each, port 0. |
-| `droppedEntries: i32` | Lines with an address past `DNS_HOSTS_MAX_ENTRIES`, read and not kept. |
+| `droppedEntries: i32` | Lines with an address word and a name past the first `DNS_HOSTS_MAX_ENTRIES` entries, read and not kept; their address is not parsed. |
 | `droppedNames: i32` | Names past a cap, or longer than `DNS_HOSTS_MAX_NAME`, read and not kept. |
-| `entryCount: i32` |  |
-| `nameBytes: i32` |  |
-| `nameCount: i32` |  |
-| `nameEntry: i32[]` |  |
-| `nameLength: i32[]` |  |
-| `names: u8[]` | Every kept name, back to back, lowercase, without a trailing dot. |
-| `nameStart: i32[]` | Where each of the `nameCount` names starts in `names`, its length, and its entry. |
-| `scratch: u8[]` | Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing. |
+| `entryCount: i32` | How many entries, each an address and its names, are kept, 0 to `DNS_HOSTS_MAX_ENTRIES`. |
+| `nameBytes: i32` | How many bytes those names take together, 0 to `DNS_HOSTS_MAX_NAME_BYTES`. |
+| `nameCount: i32` | How many names all the entries hold together, 0 to `DNS_HOSTS_MAX_NAMES`. |
 | `skippedLines: i32` | Lines longer than `DNS_CONFIG_MAX_LINE`, skipped whole. |
 
 ## Limits
@@ -341,7 +420,7 @@ The longest line either parser reads; a longer one is skipped whole.
 
 `DNS_HOSTS_MAX_ENTRIES: i32`
 
-How many hosts lines are kept.
+How many hosts lines, each an address with its names, are kept.
 
 </scalar-card>
 
@@ -365,7 +444,7 @@ How many names all hosts entries may hold together.
 
 `DNS_HOSTS_MAX_NAME_BYTES: i32`
 
-How many bytes those names may take together.
+How many bytes those names may take together, 16 KiB.
 
 </scalar-card>
 
@@ -427,7 +506,7 @@ The highest `timeout:n` kept, in seconds; the lowest is 1.
 
 `DNS_DEFAULT_ATTEMPTS: i32`
 
-The `attempts` without an option.
+The `attempts` without an option: rounds through the server list before a lookup gives up.
 
 </scalar-card>
 
@@ -443,7 +522,7 @@ The `ndots` without an option: a name with a dot is tried as it stands first.
 
 `DNS_DEFAULT_TIMEOUT: i32`
 
-The `timeout` without an option, in seconds.
+The `timeout` without an option, in seconds: how long one server's reply is waited for.
 
 </scalar-card>
 

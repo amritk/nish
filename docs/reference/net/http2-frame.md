@@ -71,17 +71,24 @@ import {
 ```
 
 ```ts
-import { Http2Frame, http2ReadHeader, http2ParseFrame, http2WriteData } from "nish/net/http2-frame";
+import {
+  H2_FLAG_END_STREAM, Http2Frame, http2ReadHeader, http2ParseFrame, http2WriteData,
+} from "nish/net/http2-frame";
 
-const frame = new Http2Frame();
-if (http2ReadHeader(frame, buf, off, len) && len >= 9 + frame.length) {
-  const error: i32 = http2ParseFrame(frame, buf, off, maxFrameSize);
-  // 0, or the connection error to close with; frame.streamError, the
-  // stream error to reset the stream with; then buf[frame.contentStart ..
-  // frame.contentStart + frame.contentLength) is the DATA, the header
-  // block fragment or the GOAWAY debug data.
-}
-const end: i32 = http2WriteData(out, at, streamId, body, 0, n, H2_FLAG_END_STREAM, -1);
+// `buf[off, off + len)` is what the peer sent; `maxFrameSize` is this side's SETTINGS_MAX_FRAME_SIZE.
+const read = (frame: Http2Frame, buf: u8[], off: i32, len: i32, maxFrameSize: i32): void => {
+  if (http2ReadHeader(frame, buf, off, len) && len >= 9 + frame.length) {
+    const error: i32 = http2ParseFrame(frame, buf, off, maxFrameSize);
+    // 0, or the connection error to close with; frame.streamError, the
+    // stream error to reset the stream with; then buf[frame.contentStart ..
+    // frame.contentStart + frame.contentLength) is the DATA, the header
+    // block fragment or the GOAWAY debug data.
+  }
+};
+// `body[0, n)` goes into `out` at `at` as the last DATA of `streamId`; `end` is the offset after it.
+const send = (out: u8[], at: i32, streamId: i32, body: u8[], n: i32): void => {
+  const end: i32 = http2WriteData(out, at, streamId, body, 0, n, H2_FLAG_END_STREAM, -1);
+};
 ```
 
 <scalar-grid cols="2">
@@ -118,7 +125,7 @@ The identifier of setting `k` of the SETTINGS frame in `buf`.
 
 <scalar-card title="http2SettingValue" icon="phosphor/regular/function" href="#http2settingvalue">
 
-The value of setting `k` of the SETTINGS frame in `buf`, a 32-bit value.
+The value of setting `k` of the SETTINGS frame in `buf`.
 
 </scalar-card>
 
@@ -243,8 +250,10 @@ INITIAL_WINDOW_SIZE past 2^31 − 1 is FLOW_CONTROL_ERROR.
 **The writers** answer the offset after the frame, or -1 when it would not
 fit in the buffer, which is then unchanged; a window outside its source
 buffer, a stream identifier outside 0 to 2^31 − 1 and padding past 255 are
-the program's mistakes and panic. They write any frame the reader accepts
-and none it refuses, so a program cannot send what its peer must close for.
+the program's mistakes and panic. The writers of a frame type write none
+the reader refuses, so a program cannot send what its peer must close for,
+save a payload past the peer's SETTINGS_MAX_FRAME_SIZE, which they cannot
+know: they stop at 2^24 − 1. `http2WriteHeader` checks no type's rules.
 
 </scalar-detail>
 
@@ -273,20 +282,39 @@ function http2ParseFrame(
 #### Parameters
 
 <scalar-field name="frame" type="Http2Frame" required>
+
+The frame `http2ReadHeader` filled from the same `buf` and `off`; its content window,
+  padding, priority fields, `streamError` and the parsed type's own fields are set.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes received; the content window points into it, so it must stay as it is while the
+  content is read. `[off, off + 9 + frame.length)` outside `buf` panics.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the frame's header starts in `buf`.
+
 </scalar-field>
 
 <scalar-field name="maxFrameSize" type="i32" required>
+
+This side's SETTINGS_MAX_FRAME_SIZE in bytes; a longer payload is refused.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0 (`H2_NO_ERROR`) when the frame is accepted, `streamError` then holding 0 or the stream error
+  to reset with (`H2_FRAME_SIZE_ERROR` or `H2_PROTOCOL_ERROR`); otherwise the connection error to close
+  with, `H2_FRAME_SIZE_ERROR` or `H2_PROTOCOL_ERROR`.
+
 </scalar-field>
 
 ## http2ReadHeader
@@ -308,20 +336,37 @@ function http2ReadHeader(
 #### Parameters
 
 <scalar-field name="frame" type="Http2Frame" required>
+
+The frame its length, type, flags and stream identifier are written into; left as it was
+  when the header is not all there.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes received, read and not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the header starts in `buf`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes from `off` have arrived; `[off, off + len)` outside `buf` panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when nine bytes were there and the header was read; false when fewer were, with `frame`
+  untouched, so the reader waits for more.
+
 </scalar-field>
 
 ## http2SettingCount
@@ -335,11 +380,17 @@ function http2SettingCount(frame: Http2Frame): i32
 #### Parameters
 
 <scalar-field name="frame" type="Http2Frame" required>
+
+The SETTINGS frame just parsed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The payload's length over six: 0 for an ACK or an empty SETTINGS.
+
 </scalar-field>
 
 ## http2SettingError
@@ -358,14 +409,25 @@ function http2SettingError(
 #### Parameters
 
 <scalar-field name="id" type="i32" required>
+
+The setting's identifier, as `http2SettingId` reads it.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+The setting's value, as `http2SettingValue` reads it, 0 to 2^32 − 1.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`H2_PROTOCOL_ERROR` for an ENABLE_PUSH or ENABLE_CONNECT_PROTOCOL above 1 or a MAX_FRAME_SIZE
+  outside 2^14 to 2^24 − 1; `H2_FLOW_CONTROL_ERROR` for an INITIAL_WINDOW_SIZE above 2^31 − 1;
+  otherwise 0, every other identifier included.
+
 </scalar-field>
 
 ## http2SettingId
@@ -383,22 +445,34 @@ function http2SettingId(
 #### Parameters
 
 <scalar-field name="frame" type="Http2Frame" required>
+
+The SETTINGS frame `http2ParseFrame` accepted.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer that frame was read from, unchanged since.
+
 </scalar-field>
 
 <scalar-field name="k" type="i32" required>
+
+Which setting, 0 to `http2SettingCount(frame)` − 1; nothing here checks the bound.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The 16-bit identifier, 0 to 65,535: an `H2_SETTINGS_*`, or one this module does not know.
+
 </scalar-field>
 
 ## http2SettingValue
 
-The value of setting `k` of the SETTINGS frame in `buf`, a 32-bit value.
+The value of setting `k` of the SETTINGS frame in `buf`.
 
 ```ts
 function http2SettingValue(
@@ -411,22 +485,35 @@ function http2SettingValue(
 #### Parameters
 
 <scalar-field name="frame" type="Http2Frame" required>
+
+The SETTINGS frame `http2ParseFrame` accepted.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer that frame was read from, unchanged since.
+
 </scalar-field>
 
 <scalar-field name="k" type="i32" required>
+
+Which setting, 0 to `http2SettingCount(frame)` − 1; nothing here checks the bound.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The value as sent, 0 to 2^32 − 1, not yet checked: `http2SettingError` checks it.
+
 </scalar-field>
 
 ## http2WriteContinuation
 
-Writes a CONTINUATION frame of the header block fragment `src[off, off + len)`, with `flags` (END_HEADERS) (§6.10).
+Writes a CONTINUATION frame of the header block fragment `src[off, off + len)`, with `flags`
+(END_HEADERS) (§6.10). It is never padded.
 
 ```ts
 function http2WriteContinuation(
@@ -443,34 +530,61 @@ function http2WriteContinuation(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream whose header block this continues, 1 to 2^31 − 1; 0 or a negative
+  identifier panics.
+
 </scalar-field>
 
 <scalar-field name="src" type="u8[]" required>
+
+The buffer holding the fragment; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the fragment starts in `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The fragment's length in bytes; `[off, off + len)` outside `src` panics, and so does a
+  payload past 2^24 − 1 bytes. Keeping it within the peer's SETTINGS_MAX_FRAME_SIZE is the caller's.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`H2_FLAG_END_HEADERS` or 0; any other bit is dropped.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteData
 
-Writes a DATA frame of `src[off, off + len)` on `streamId`, with `flags` (END_STREAM) and `pad` bytes of padding, -1 for none (§6.1).
+Writes a DATA frame of `src[off, off + len)` on `streamId`, with `flags` (END_STREAM) and `pad` bytes of
+padding, -1 for none (§6.1).
 
 ```ts
 function http2WriteData(
@@ -488,37 +602,67 @@ function http2WriteData(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream the data belongs to, 1 to 2^31 − 1; 0 or a negative identifier panics.
+
 </scalar-field>
 
 <scalar-field name="src" type="u8[]" required>
+
+The buffer holding the data; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the data starts in `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The data's length in bytes; `[off, off + len)` outside `src` panics, and so does a
+  payload past 2^24 − 1 bytes. Keeping it within the peer's SETTINGS_MAX_FRAME_SIZE is the caller's.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`H2_FLAG_END_STREAM` or 0; any other bit is dropped.
+
 </scalar-field>
 
 <scalar-field name="pad" type="i32" required>
+
+Bytes of zero padding, 0 to 255, or -1 (any negative) for none; past 255 panics. PADDED is
+  set from it, never from `flags`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteGoaway
 
-Writes a GOAWAY frame naming `lastStreamId` and `code`, with the debug data `debug[off, off + len)` (§6.8).
+Writes a GOAWAY frame naming `lastStreamId` and `code`, with the debug data `debug[off, off + len)`
+(§6.8).
 
 ```ts
 function http2WriteGoaway(
@@ -535,36 +679,62 @@ function http2WriteGoaway(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="lastStreamId" type="i32" required>
+
+The highest peer-opened stream this side may have processed, 0 to 2^31 − 1; a
+  negative one panics.
+
 </scalar-field>
 
 <scalar-field name="code" type="i64" required>
+
+The error code, an `H2_*` of §7 or another 32-bit value; only its low 32 bits are sent.
+
 </scalar-field>
 
 <scalar-field name="debug" type="u8[]" required>
+
+The buffer holding the debug data; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the debug data starts in `debug`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The debug data's length in bytes, 0 for none; `[off, off + len)` outside `debug` panics,
+  and so does a payload past 2^24 − 1 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteHeader
 
 Writes a frame header at `out[at]` for a payload of `length` bytes, and
 answers where the payload goes, or -1 when the header and the payload would
-not both fit.
+not both fit. It checks no type's rules: the payload is the caller's to write.
 
 ```ts
 function http2WriteHeader(
@@ -580,26 +750,48 @@ function http2WriteHeader(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+The payload's length in bytes, 0 to 2^24 − 1; outside that panics.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+The frame type byte, an `H2_FRAME_*` or another 0 to 255; only its low 8 bits are written.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+The flags byte, unchecked; only its low 8 bits are written.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream identifier, 0 for the connection, to 2^31 − 1; a negative one panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`at + 9`, where the payload goes, or -1 when `out` has no room for the header and `length`
+  bytes after it, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteHeaders
@@ -625,32 +817,63 @@ function http2WriteHeaders(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream the headers open or belong to, 1 to 2^31 − 1; 0 or a negative identifier
+  panics.
+
 </scalar-field>
 
 <scalar-field name="src" type="u8[]" required>
+
+The buffer holding the fragment; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the fragment starts in `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The fragment's length in bytes; `[off, off + len)` outside `src` panics, and so does a
+  payload past 2^24 − 1 bytes. Keeping it within the peer's SETTINGS_MAX_FRAME_SIZE is the caller's.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`H2_FLAG_END_STREAM` and `H2_FLAG_END_HEADERS`, either or both or neither; any other bit
+  is dropped.
+
 </scalar-field>
 
 <scalar-field name="pad" type="i32" required>
+
+Bytes of zero padding, 0 to 255, or -1 (any negative) for none; past 255 panics. PADDED is
+  set from it, never from `flags`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WritePing
@@ -670,28 +893,47 @@ function http2WritePing(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="opaque" type="u8[]" required>
+
+The buffer holding the eight bytes; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the eight bytes start in `opaque`; `[off, off + 8)` outside it panics.
+
 </scalar-field>
 
 <scalar-field name="ack" type="boolean" required>
+
+Whether this answers the peer's PING, its bytes echoed, rather than asking.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WritePriority
 
-Writes a PRIORITY frame: `streamId` depends on `dependency`, exclusively or not, with `weight` 1 to 256 (§6.3).
+Writes a PRIORITY frame: `streamId` depends on `dependency`, exclusively or not, with `weight` 1 to 256
+(§6.3).
 
 ```ts
 function http2WritePriority(
@@ -707,26 +949,47 @@ function http2WritePriority(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream whose priority this sets, 1 to 2^31 − 1; 0 or a negative identifier panics.
+
 </scalar-field>
 
 <scalar-field name="dependency" type="i32" required>
+
+The stream it depends on, 0 to 2^31 − 1; negative, or `streamId` itself, panics.
+
 </scalar-field>
 
 <scalar-field name="exclusive" type="boolean" required>
+
+Whether the dependency is exclusive (§5.3.1).
+
 </scalar-field>
 
 <scalar-field name="weight" type="i32" required>
+
+The weight, 1 to 256, sent as one less; outside that panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WritePushPromise
@@ -752,35 +1015,68 @@ function http2WritePushPromise(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream of the request the promise answers, 1 to 2^31 − 1; 0 or a negative
+  identifier panics.
+
 </scalar-field>
 
 <scalar-field name="promisedId" type="i32" required>
+
+The stream reserved for the push, 1 to 2^31 − 1; 0 or a negative identifier panics.
+
 </scalar-field>
 
 <scalar-field name="src" type="u8[]" required>
+
+The buffer holding the fragment; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the fragment starts in `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The fragment's length in bytes; `[off, off + len)` outside `src` panics, and so does a
+  payload past 2^24 − 1 bytes. Keeping it within the peer's SETTINGS_MAX_FRAME_SIZE is the caller's.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`H2_FLAG_END_HEADERS` or 0; any other bit is dropped.
+
 </scalar-field>
 
 <scalar-field name="pad" type="i32" required>
+
+Bytes of zero padding, 0 to 255, or -1 (any negative) for none; past 255 panics. PADDED is
+  set from it, never from `flags`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteRstStream
@@ -799,20 +1095,35 @@ function http2WriteRstStream(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream to close, 1 to 2^31 − 1; 0 or a negative identifier panics.
+
 </scalar-field>
 
 <scalar-field name="code" type="i64" required>
+
+The error code, an `H2_*` of §7 or another 32-bit value; only its low 32 bits are sent.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteSettings
@@ -833,20 +1144,35 @@ function http2WriteSettings(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="ids" type="i32[]" required>
+
+The settings' identifiers, each 0 to 65,535, in the order sent; read, not kept.
+
 </scalar-field>
 
 <scalar-field name="values" type="i64[]" required>
+
+The settings' values, `values[k]` for `ids[k]`, each 0 to 2^32 − 1; read, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteSettingsAck
@@ -863,19 +1189,29 @@ function http2WriteSettingsAck(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## http2WriteWindowUpdate
 
-Writes a WINDOW_UPDATE frame adding `increment`, 1 to 2^31 − 1, to `streamId`'s window, or the connection's for 0 (§6.9).
+Writes a WINDOW_UPDATE frame adding `increment`, 1 to 2^31 − 1, to `streamId`'s window, or the
+connection's for 0 (§6.9).
 
 ```ts
 function http2WriteWindowUpdate(
@@ -889,26 +1225,46 @@ function http2WriteWindowUpdate(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the frame starts in `out`; a negative offset panics.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i32" required>
+
+The stream whose window widens, or 0 for the connection's; a negative one panics.
+
 </scalar-field>
 
 <scalar-field name="increment" type="i32" required>
+
+The bytes added to the window, 1 to 2^31 − 1; below 1 panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset just past the frame in `out`, or -1 when it would not fit, `out` then unchanged.
+
 </scalar-field>
 
 ## Http2Frame
 
-One frame, as `http2ReadHeader` and `http2ParseFrame` read it. Every field
-is overwritten by the next read, so one frame serves a whole connection.
+One frame, as `http2ReadHeader` and `http2ParseFrame` read it. The next
+header read overwrites the header's fields; the next parse overwrites the
+content window, the padding and priority fields and `streamError`, and a
+type's own fields when it parses that type. A field only another type
+carries (`errorCode`, `lastStreamId`, `increment`, `promisedId`) keeps its
+last value, so a reader reads the fields of the type it parsed. One frame
+serves a whole connection.
 
 ```ts
 class Http2Frame
@@ -917,24 +1273,37 @@ class Http2Frame
 | Member | |
 | --- | --- |
 | `new Http2Frame()` |  |
-| `contentLength: i32` |  |
+| `contentLength: i32` | The content's length in bytes, from `contentStart`. For every type but DATA, HEADERS, PUSH_PROMISE and GOAWAY, the window is the whole payload. |
 | `contentStart: i32` | The frame's content, `[contentStart, contentStart + contentLength)` of the buffer: DATA's data, a header block fragment, PING's eight bytes, GOAWAY's debug data, SETTINGS' settings; padding and fixed fields left out. |
-| `dependency: i32` |  |
+| `dependency: i32` | The stream this one depends on, the exclusive bit dropped; 0 without priority fields. |
 | `errorCode: i64` | RST_STREAM's and GOAWAY's error code, a 32-bit value. |
-| `exclusive: boolean` |  |
-| `flags: i32` |  |
+| `exclusive: boolean` | Whether the stream dependency is exclusive (§5.3.1); false without priority fields. |
+| `flags: i32` | The flags byte from the header, as sent, bits a type does not define included; `has` tests one. |
 | `hasPriority: boolean` | Whether a HEADERS frame carried the PRIORITY fields, as a PRIORITY frame always does. |
 | `increment: i32` | WINDOW_UPDATE's increment. |
 | `lastStreamId: i32` | GOAWAY's last stream identifier. |
 | `length: i32` | The payload's length, from the header. |
 | `padLength: i32` | The Pad Length field, or -1 without PADDED. |
-| `payload: i32` | Where the payload starts in the buffer read. |
 | `promisedId: i32` | PUSH_PROMISE's promised stream identifier. |
 | `streamError: i32` | A stream error the frame is, or 0: the stream is reset and the connection lives. |
 | `streamId: i32` | The stream identifier, the reserved bit dropped. |
-| `type: i32` |  |
+| `type: i32` | The frame type from the header, 0 to 255: an `H2_FRAME_*`, or a type this module does not know. |
 | `weight: i32` | The weight, 1 to 256. |
 | `has(bit: i32): boolean` | Whether the flag `bit` is set. |
+
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="2,147,483,647" icon="phosphor/regular/hash">
+
+`H2_MAX_WINDOW: i32`
+
+The largest a window may reach, and the largest INITIAL_WINDOW_SIZE: 2^31 − 1 bytes (§6.9.1).
+
+</scalar-card>
+
+</scalar-grid>
 
 ## Constants
 
@@ -944,11 +1313,15 @@ class Http2Frame
 
 `H2_CANCEL: i32`
 
+CANCEL (0x8): the stream is no longer needed (§7).
+
 </scalar-card>
 
 <scalar-card title="9" icon="phosphor/regular/hash">
 
 `H2_COMPRESSION_ERROR: i32`
+
+COMPRESSION_ERROR (0x9): the field-compression context cannot be kept (§7).
 
 </scalar-card>
 
@@ -956,13 +1329,15 @@ class Http2Frame
 
 `H2_CONNECT_ERROR: i32`
 
+CONNECT_ERROR (0xa): the connection a CONNECT request made was reset or closed (§7).
+
 </scalar-card>
 
 <scalar-card title="16,384" icon="phosphor/regular/hash">
 
 `H2_DEFAULT_MAX_FRAME: i32`
 
-SETTINGS_MAX_FRAME_SIZE's initial value, which is also its least, and its greatest (§6.5.2).
+SETTINGS_MAX_FRAME_SIZE's initial value, which is also its least: 2^14 bytes (§6.5.2).
 
 </scalar-card>
 
@@ -970,7 +1345,7 @@ SETTINGS_MAX_FRAME_SIZE's initial value, which is also its least, and its greate
 
 `H2_DEFAULT_WINDOW: i32`
 
-A window's initial size, and the largest a window may reach (§6.9.1, §6.9.2).
+A window's initial size, 65,535 bytes, on the connection and on every stream (§6.9.2).
 
 </scalar-card>
 
@@ -978,11 +1353,15 @@ A window's initial size, and the largest a window may reach (§6.9.1, §6.9.2).
 
 `H2_ENHANCE_YOUR_CALM: i32`
 
+ENHANCE_YOUR_CALM (0xb): the peer is generating excessive load (§7).
+
 </scalar-card>
 
 <scalar-card title="1" icon="phosphor/regular/hash">
 
 `H2_FLAG_ACK: i32`
+
+ACK (0x1) on SETTINGS and PING, the same bit as END_STREAM: the frame acknowledges the peer's.
 
 </scalar-card>
 
@@ -998,7 +1377,7 @@ END_HEADERS on HEADERS, PUSH_PROMISE and CONTINUATION.
 
 `H2_FLAG_END_STREAM: i32`
 
-END_STREAM on DATA and HEADERS; ACK on SETTINGS and PING, the same bit.
+END_STREAM (0x1) on DATA and HEADERS: the sender's last frame on the stream.
 
 </scalar-card>
 
@@ -1022,11 +1401,15 @@ PRIORITY on HEADERS.
 
 `H2_FLOW_CONTROL_ERROR: i32`
 
+FLOW_CONTROL_ERROR (0x3): the peer broke flow control (§7).
+
 </scalar-card>
 
 <scalar-card title="9" icon="phosphor/regular/hash">
 
 `H2_FRAME_CONTINUATION: i32`
+
+CONTINUATION (0x9): the next fragment of a header block a HEADERS or PUSH_PROMISE began (§6.10).
 
 </scalar-card>
 
@@ -1034,7 +1417,7 @@ PRIORITY on HEADERS.
 
 `H2_FRAME_DATA: i32`
 
-The frame types of §6.
+The frame types of §6, the header's type byte. DATA (0x0): a stream's body bytes (§6.1).
 
 </scalar-card>
 
@@ -1042,11 +1425,15 @@ The frame types of §6.
 
 `H2_FRAME_GOAWAY: i32`
 
+GOAWAY (0x7): the sender is going away; names the last stream it may have processed (§6.8).
+
 </scalar-card>
 
 <scalar-card title="1" icon="phosphor/regular/hash">
 
 `H2_FRAME_HEADERS: i32`
+
+HEADERS (0x1): opens a stream with a header block fragment, or carries trailers (§6.2).
 
 </scalar-card>
 
@@ -1062,11 +1449,15 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 `H2_FRAME_PING: i32`
 
+PING (0x6): eight opaque bytes the peer echoes back with ACK (§6.7).
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `H2_FRAME_PRIORITY: i32`
+
+PRIORITY (0x2): a stream's dependency and weight, a scheme RFC 9113 deprecates (§6.3, §5.3.2).
 
 </scalar-card>
 
@@ -1074,11 +1465,15 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 `H2_FRAME_PUSH_PROMISE: i32`
 
+PUSH_PROMISE (0x5): reserves a stream for a server push, with its request's header block (§6.6).
+
 </scalar-card>
 
 <scalar-card title="3" icon="phosphor/regular/hash">
 
 `H2_FRAME_RST_STREAM: i32`
+
+RST_STREAM (0x3): ends one stream at once with an error code (§6.4).
 
 </scalar-card>
 
@@ -1086,11 +1481,15 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 `H2_FRAME_SETTINGS: i32`
 
+SETTINGS (0x4): the sender's settings, or with ACK their acknowledgement (§6.5).
+
 </scalar-card>
 
 <scalar-card title="6" icon="phosphor/regular/hash">
 
 `H2_FRAME_SIZE_ERROR: i32`
+
+FRAME_SIZE_ERROR (0x6): a frame had an invalid size (§7).
 
 </scalar-card>
 
@@ -1098,11 +1497,15 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 `H2_FRAME_WINDOW_UPDATE: i32`
 
+WINDOW_UPDATE (0x8): widens a stream's or the connection's flow-control window (§6.9).
+
 </scalar-card>
 
 <scalar-card title="13" icon="phosphor/regular/hash">
 
 `H2_HTTP_1_1_REQUIRED: i32`
+
+HTTP_1_1_REQUIRED (0xd): the endpoint requires HTTP/1.1 instead of HTTP/2 (§7).
 
 </scalar-card>
 
@@ -1110,11 +1513,15 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 `H2_INADEQUATE_SECURITY: i32`
 
+INADEQUATE_SECURITY (0xc): the transport does not meet the minimum security requirements (§7).
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `H2_INTERNAL_ERROR: i32`
+
+INTERNAL_ERROR (0x2): the sender hit an unexpected internal error (§7).
 
 </scalar-card>
 
@@ -1122,11 +1529,7 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 `H2_MAX_FRAME_LIMIT: i32`
 
-</scalar-card>
-
-<scalar-card title="2,147,483,647" icon="phosphor/regular/hash">
-
-`H2_MAX_WINDOW: i32`
+SETTINGS_MAX_FRAME_SIZE's greatest value, 2^24 − 1 bytes; a writer panics past it (§6.5.2).
 
 </scalar-card>
 
@@ -1134,7 +1537,7 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 `H2_NO_ERROR: i32`
 
-The error codes of §7.
+The error codes of §7. NO_ERROR (0x0): not an error, as in a graceful GOAWAY; the parsers' "accepted".
 
 </scalar-card>
 
@@ -1142,11 +1545,15 @@ The error codes of §7.
 
 `H2_PROTOCOL_ERROR: i32`
 
+PROTOCOL_ERROR (0x1): a generic protocol violation (§7).
+
 </scalar-card>
 
 <scalar-card title="7" icon="phosphor/regular/hash">
 
 `H2_REFUSED_STREAM: i32`
+
+REFUSED_STREAM (0x7): the stream was refused before any of it was processed; it may be retried (§7).
 
 </scalar-card>
 
@@ -1154,11 +1561,15 @@ The error codes of §7.
 
 `H2_SETTINGS_ENABLE_CONNECT_PROTOCOL: i32`
 
+SETTINGS_ENABLE_CONNECT_PROTOCOL (0x8): 0 or 1, whether the sender takes extended CONNECT (RFC 8441).
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `H2_SETTINGS_ENABLE_PUSH: i32`
+
+SETTINGS_ENABLE_PUSH (0x2): 0 or 1, whether the sender allows server push.
 
 </scalar-card>
 
@@ -1166,7 +1577,8 @@ The error codes of §7.
 
 `H2_SETTINGS_HEADER_TABLE_SIZE: i32`
 
-The settings of §6.5.2, and RFC 8441's.
+The settings of §6.5.2, and RFC 8441's, by identifier. SETTINGS_HEADER_TABLE_SIZE (0x1): the most
+bytes of HPACK dynamic table the sender lets its peer's encoder use.
 
 </scalar-card>
 
@@ -1174,11 +1586,15 @@ The settings of §6.5.2, and RFC 8441's.
 
 `H2_SETTINGS_INITIAL_WINDOW_SIZE: i32`
 
+SETTINGS_INITIAL_WINDOW_SIZE (0x4): every stream's initial send window, in bytes, 0 to 2^31 − 1.
+
 </scalar-card>
 
 <scalar-card title="3" icon="phosphor/regular/hash">
 
 `H2_SETTINGS_MAX_CONCURRENT_STREAMS: i32`
+
+SETTINGS_MAX_CONCURRENT_STREAMS (0x3): the most streams the sender lets its peer open at once.
 
 </scalar-card>
 
@@ -1186,17 +1602,23 @@ The settings of §6.5.2, and RFC 8441's.
 
 `H2_SETTINGS_MAX_FRAME_SIZE: i32`
 
+SETTINGS_MAX_FRAME_SIZE (0x5): the longest frame payload the sender takes, 2^14 to 2^24 − 1 bytes.
+
 </scalar-card>
 
 <scalar-card title="6" icon="phosphor/regular/hash">
 
 `H2_SETTINGS_MAX_HEADER_LIST_SIZE: i32`
 
+SETTINGS_MAX_HEADER_LIST_SIZE (0x6): advisory, the largest field section the sender takes (§6.5.2).
+
 </scalar-card>
 
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `H2_SETTINGS_TIMEOUT: i32`
+
+SETTINGS_TIMEOUT (0x4): a SETTINGS was not acknowledged in time (§7).
 
 </scalar-card>
 
@@ -1211,6 +1633,8 @@ The size of one setting: a 16-bit identifier and a 32-bit value.
 <scalar-card title="5" icon="phosphor/regular/hash">
 
 `H2_STREAM_CLOSED: i32`
+
+STREAM_CLOSED (0x5): a frame arrived on a stream that was half-closed for it (§7).
 
 </scalar-card>
 

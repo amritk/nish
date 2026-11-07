@@ -47,14 +47,14 @@ past its last byte, has a position too, and a slip below zero reads as the
 start rather than panicking. `column` counts characters: every byte that is
 not a UTF-8 continuation byte, so `é` is one column natively. `byteColumn`
 counts bytes, which is what an editor that indexes lines by byte wants.
-Under Node a string is UTF-16 and each unit counts, which is the same answer
-for ASCII and the JavaScript answer otherwise.
+Under Node a string is UTF-16 and `column` still skips every unit from
+`0x80` to `0xBF`, so `©` or `µ` does not count: the column is exact for
+ASCII everywhere and for any text only natively.
 
 ## YamlLineIndex
 
 Where each line of one text starts, for turning byte offsets into lines and
-columns. Its fields and its "Internal" methods are reachable, as every member
-in Nish is; use the others, and do not change the fields.
+columns. Do not change `text`: the line starts were worked out from it.
 
 ```ts
 class YamlLineIndex
@@ -62,13 +62,10 @@ class YamlLineIndex
 
 | Member | |
 | --- | --- |
-| `new YamlLineIndex(text: string)` |  |
-| `starts: i32[]` | Internal: `starts[n]` is the byte at which line `n + 1` begins; line 1 begins at 0. |
+| `new YamlLineIndex(text: string)` | Records where each line of `text` starts, in one scan. |
 | `text: string` | The text the index was built from. |
-| `byteColumn(offset: i32): i32` | The 1-based column of `offset` on its line, counting bytes. |
-| `clamp(offset: i32): i32` | Internal: `offset` clamped to `[0, text.length]`. |
-| `column(offset: i32): i32` | The 1-based column of `offset` on its line, counting characters. |
-| `line(offset: i32): i32` | The 1-based line `offset` is on, after clamping it to `[0, text.length]`. |
-| `lineCount(): i32` | How many lines the text has: one more than its breaks, so `""` has one. |
-| `lineIndexOf(at: i32): i32` | Internal: the 0-based line holding byte `at`, by binary search over `starts`. |
-| `lineStart(line: i32): i32` | The byte at which 1-based `line` begins; a line outside the text clamps to the first or last. |
+| `byteColumn(offset: i32): i32` | Where an offset is on its line, in bytes. |
+| `column(offset: i32): i32` | Where an offset is on its line, in characters. |
+| `line(offset: i32): i32` | Which line an offset is on. |
+| `lineCount(): i32` | How many lines the text has. |
+| `lineStart(line: i32): i32` | Where a line begins. |

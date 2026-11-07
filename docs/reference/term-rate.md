@@ -24,6 +24,19 @@ import {
 } from "nish/term-rate";
 ```
 
+```ts
+import { RateController, RateOptions } from "nish/term-rate"
+
+const rate = new RateController(new RateOptions())
+// each turn of the loop, at nowMs:
+rate.tick(nowMs)
+if (rate.mayDraw(nowMs)) {
+  // draw as rate.decision() says, then write the frame and `CSI 5 n`
+  rate.frameSent(bytes, costNs, nowMs)
+}
+// for each `CSI 0 n` read back: rate.ackReceived(nowMs)
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="drawStatsOverlay" icon="phosphor/regular/function" href="#drawstatsoverlay">
@@ -205,12 +218,21 @@ function drawStatsOverlay(
 #### Parameters
 
 <scalar-field name="screen" type="Screen" required>
+
+The screen to draw on, before it is flushed.
+
 </scalar-field>
 
 <scalar-field name="stats" type="TermStats" required>
+
+What to show, such as `RateController.stats()`.
+
 </scalar-field>
 
 <scalar-field name="corner" type="i32" required>
+
+Which corner, one of the `CORNER_` constants.
+
 </scalar-field>
 
 ## RateController
@@ -228,70 +250,22 @@ class RateController
 | Member | |
 | --- | --- |
 | `new RateController(options: RateOptions)` | A controller for `options`, read once. |
-| `ackBusyMs: f64` | The smoothed time the link spent on an answered frame, in milliseconds, for the bandwidth. |
-| `ackBytes: f64` | The smoothed bytes of an answered frame, for the bandwidth. |
 | `baseRttMs: f64` | The link's latency without bytes: the least, over the kept trips, of the round trip less the bytes' time. |
 | `bytesPerSec: f64` | The bytes a second delivered: `ackBytes` over `ackBusyMs`, at least the most of `floorPerSec`, which alone is a lower bound. Samples older than `rateFreshMs` still count here while trips agree with them, but no decision uses them. |
-| `changedMs: f64` | When the tier or step last changed. |
-| `contradicted: i32` | How many trips in a row have contradicted the aged bandwidth sample. |
-| `costMs: f64` | The smoothed frame cost, in milliseconds. |
-| `current: RateDecision` |  |
-| `dropped: i32` |  |
-| `fixedFps: i32` | The fixed frame rate, or 0 when the controller chooses. |
 | `floorFps: i32` | The least tier detail is cut to keep: the floor tier under `RATE_FIRST`, 5 under `DETAIL_FIRST`. |
-| `floorNext: i32` | Where the next goes in `floorPerSec` once it is full. |
-| `floorPerSec: f64[]` | The bytes a second each of the latest answers proves at least, its bytes over its round trip. |
-| `frameBytes: f64` | The smoothed bytes per frame. |
-| `haveAck: boolean` | Whether a frame has been acknowledged, so decisions can start. |
-| `haveFrame: boolean` | Whether a frame has been sent, so cost and size are known. |
 | `haveRate: boolean` | Whether the bandwidth is known, so decisions may use it: sampled by a frame that waited behind another or two trips of different sizes, within `rateFreshMs`. The answers' bytes over their round trips are only a lower bound and never make it known. |
 | `haveRtt: boolean` | Whether a round trip, from the probe or an answer, is known. |
-| `head: i32` | The oldest unacknowledged frame's index in `sentMs`. |
-| `heldLatencyMs: f64` | The latency as last worked out while the bandwidth was known, held once its samples age out. |
-| `lastAckMs: f64` | When the last acknowledgement arrived, or -1. |
-| `level: i32` | The detail step in force, 0 (full detail) to `rateMaxLevel`. |
-| `lost: i32` |  |
-| `maxUnacked: i32` |  |
-| `measured: TermStats` |  |
-| `minTier: i32` | The least tier above which `RATE_FIRST` keeps full detail. |
-| `overSinceMs: f64` | When the loads went over budget and stayed, or -1. |
-| `paced: boolean` | Whether a frame has been asked for, so the pacer's clock runs. |
-| `pacer: FixedStep` | Paces frames at `tier`. |
-| `prefer: i32` |  |
-| `rateAtMs: f64` | When the bandwidth was last sampled, by a frame that waited behind another or by two trips. |
-| `rateQuickMs: f64` | The quickest kept trip, or the round trip with none kept, when the bandwidth was last sampled: at least the latency then. |
-| `rttMs: f64` | The smoothed round trip, in milliseconds. |
-| `sentBytes: i32[]` | Their byte counts. |
+| `maxUnacked: i32` | How many frames may await their acknowledgement at once: 1 or 2. |
+| `prefer: i32` | What gives way first, `RATE_FIRST` or `DETAIL_FIRST`, from the options. |
 | `sentMs: f64[]` | The send times of the unacknowledged frames, oldest at `head`. |
-| `stale: i32` | Frames given up on whose answers may still come: the next answers are theirs, and no frame is drawn meanwhile. |
-| `staleSinceMs: f64` | When frames were last given up on, while `stale` waits for their late answers. |
-| `tier: i32` | The frame rate in force. |
-| `tiers: i32[]` | The tiers allowed, fastest first, ending at 5. |
-| `tripBytes: f64[]` | Their byte counts, 0 for the probe. |
 | `tripMs: f64[]` | The round trips of the probe and of the latest frames sent onto an idle link, `rateTripCount` at most. |
-| `tripNext: i32` | Where the next trip goes in `tripMs` once it is full. |
-| `underSinceMs: f64` | When the next step up came within its margin and stayed, or -1. |
 | `ackReceived(nowMs: f64): void` | An acknowledgement arrived at `nowMs`; it answers the oldest frame not yet answered. While frames given up on may still be answered, it is theirs, since the terminal answers in order. One with no frame waiting (a stray answer) is ignored, and one whose time is not a finite number answers its frame and measures nothing. |
-| `ageRate(nowMs: f64): void` | Stop deciding on the bandwidth once no sample is newer than `rateFreshMs` at `nowMs`. The figure stays in `bytesPerSec` until a sample replaces it or a trip contradicts it. |
-| `decide(nowMs: f64): void` | `tick`'s choosing, past its guards. |
 | `decision(): RateDecision` | How to draw the next frame, as of the last `tick`. |
-| `fasterTier(fps: i32): i32` | The slowest allowed tier faster than `fps`, or `fps` at the top. |
-| `fixedPart(rtt: f64, scale: f64): f64` | The part of a round trip of `rtt` that a detail change scaling the bytes by `scale` leaves alone: the latency once the bandwidth is known. While it is not, the guess is the cautious one each way: less detail shortens no more than the round trip's excess over the quickest trip kept, which is at least the latency, so detail is not cut for a gain that may not be there; more lengthens all of it, so detail is not restored on a link that may not carry it. |
 | `frameSent(bytes: i32, costNs: f64, nowMs: f64): void` | A frame of `bytes` bytes, which took `costNs` nanoseconds to build, was sent at `nowMs`. A call whose time is not a finite number is ignored; a cost that is not a finite number or is negative is not measured, and negative bytes count as none. |
-| `leastLatency(): f64` | The latency: the least, over the kept trips, of the round trip less its bytes' time at the measured bandwidth. While the bandwidth is not known only an empty trip, the probe's, says anything; with none it is the latency held from when the bandwidth was last known, or 0 before that: a lower bound, which is what telling a waited frame from a trip needs, and one that a probe trip rolled out of the kept trips does not drop to 0, or every frame sent before the answer ahead of it would look waited. The bandwidth never comes from the latency on an idle link, so neither can drag the other down. |
-| `load(fps: i32, level: i32, nowMs: f64): f64` | The worst of the three loads (cost, bytes, round trip) at `fps` frames a second and detail step `level`, against the 70% budgets: at most 1 fits. A step other than the current one is predicted from the measured frame; `nowMs` lets a frame long unanswered count as a round trip at least that long. A load not yet measured counts as 0. |
 | `mayDraw(nowMs: f64): boolean` | Whether a frame may be drawn at `nowMs`: one is due at the tier's pace and fewer than `maxUnacked` frames await their acknowledgement. The first call starts the pace and answers a frame at once. A due frame refused for the limit, or while the answers to frames given up on may still come, is counted as dropped, and the next waits for the next step. A time that is not a finite number is refused. |
-| `measureRate(bytes: f64, busyMs: f64): void` | The link spent `busyMs` on `bytes`: one sample of the bandwidth. |
-| `measureTrip(rtt: f64, bytes: f64): void` | A frame of `bytes` sent onto an idle link came back in `rtt`: its latency plus its bytes' time, which cannot be told apart alone. Against the quickest trip kept, a frame at least twice the size (or twice as small) whose round trip differs by `rateSplitMs` or more does tell them apart: the extra bytes took the extra time, and the latency drops out. Frames of one size measure nothing here, so small frames cannot drag the bandwidth down to their round trip. |
-| `moveTo(fps: i32, level: i32, nowMs: f64): void` | Move to `fps` at detail step `level` at `nowMs`, rescaling the frame averages to the step. |
-| `publish(): void` | Copy the state into `current` and `measured`. |
-| `slowerTier(fps: i32, least: i32): i32` | The fastest allowed tier slower than `fps` and no slower than `least`, or `least`. |
 | `stats(): TermStats` | What has been measured, as of the last `tick`. |
-| `stepDown(nowMs: f64): void` | One step down the path at `nowMs`, when over budget: fewer frames, or less detail. |
-| `stepUp(): i32` | The next state up the path, as `fps * 8 + level`, or -1 at the top. It is the descent backwards: tiers below the floor first, then detail, then tiers above it. |
 | `tick(nowMs: f64): void` | Re-decide at `nowMs`: give up frames long unanswered, then fall, cut detail, restore it or rise, at most one change, with the hysteresis the module header describes. Nothing is decided before the first acknowledgement, nor at a fixed rate. |
 | `unacked(): i32` | Frames sent and not yet acknowledged. |
-| `updateRate(): void` | The bandwidth: the smoothed samples, but never under what the latest answers prove, so a link that widens, or whose answers are read late, is not taken for a narrow one. Only samples make it known, and only while the latest is within `rateFreshMs` of the latest answer: an answer's bytes over its whole round trip count the latency as bytes' time, and on a far link that reads the bandwidth several times too low. |
 
 ## RateDecision
 

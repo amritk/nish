@@ -13,6 +13,13 @@ import {
 } from "nish/crypto/base64url";
 ```
 
+```ts
+import { base64urlEncode, base64urlDecode } from "nish/crypto/base64url";
+
+const text: string = base64urlEncode(tag); // no `=` padding
+const back: u8[] | null = base64urlDecode(text); // null for any other spelling
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="base64StdPadDecode" icon="phosphor/regular/function" href="#base64stdpaddecode">
@@ -104,11 +111,19 @@ function base64StdPadDecode(
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The padded standard base64 text, with no line breaks or
+  whitespace.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of the decoded bytes, or `null` when `text` is not
+  their canonical padded spelling.
+
 </scalar-field>
 
 ## base64StdPadEncode
@@ -124,11 +139,18 @@ function base64StdPadEncode(data: u8[]): string
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+The bytes to encode; they are read, not changed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The padded standard base64 text, `4 × ceil(n / 3)` characters for
+  `n` bytes, with no line breaks.
+
 </scalar-field>
 
 ## base64urlDecode
@@ -150,11 +172,18 @@ function base64urlDecode(
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The unpadded base64url text, usually from a peer.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of the decoded bytes, or `null` when `text` is not the
+  canonical spelling of any bytes.
+
 </scalar-field>
 
 ## base64urlEncode
@@ -174,9 +203,16 @@ function base64urlEncode(data: u8[]): string
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+The bytes to encode; they are read, not changed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The unpadded base64url text, `ceil(4n / 3)` characters for `n`
+  bytes.
+
 </scalar-field>

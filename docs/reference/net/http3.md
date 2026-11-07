@@ -32,19 +32,31 @@ import {
 ```
 
 ```ts
-import { Http3Config, Http3Connection, H3_NEED_MORE, H3_ERROR, H3_REQUEST, H3_DATA, H3_END } from "nish/net/http3";
+import { Http3Config, Http3Connection, H3_NEED_MORE, H3_ERROR, H3_END } from "nish/net/http3";
+import { httpFieldBytes } from "nish/net/http-fields";
+import { QuicConnection } from "nish/net/quic";
 
-const h3 = new Http3Connection(new Http3Config(), quic);   // once per slot; restart() per connection
-// after quic.receive(...):
-let event: i32 = h3.next();
-while (event !== H3_NEED_MORE && event !== H3_ERROR) {
-  // H3_REQUEST: h3.stream, h3.fields (method, path, get("accept"))
-  // H3_DATA: h3.data[h3.dataStart .. h3.dataStart + h3.dataLength)
-  // H3_END: the request is whole; respond
-  event = h3.next();
+// Once per slot, beside a server QuicConnection; restart() per connection.
+function open(quic: QuicConnection): Http3Connection {
+  return new Http3Connection(new Http3Config(), quic);
 }
-h3.respond(stream, 200, names, values, false);
-h3.writeData(stream, body, 0, n, true);   // answers how much it took
+
+// After each quic.receive(...):
+function serve(h3: Http3Connection): void {
+  const names: u8[][] = [httpFieldBytes("content-type")];
+  const values: u8[][] = [httpFieldBytes("text/plain")];
+  const body: u8[] = httpFieldBytes("hello\n");
+  let event: i32 = h3.next();
+  while (event !== H3_NEED_MORE && event !== H3_ERROR) {
+    // H3_REQUEST: h3.stream, h3.fields (method, path, get("accept"))
+    // H3_DATA: h3.data[h3.dataStart .. h3.dataStart + h3.dataLength)
+    if (event === H3_END) {   // the request is whole: respond
+      h3.respond(h3.stream, 200, names, values, false);
+      h3.writeData(h3.stream, body, 0, toI32(body.length), true);   // answers how much it took
+    }
+    event = h3.next();
+  }
+}
 ```
 
 <scalar-grid cols="2">
@@ -161,7 +173,7 @@ allowed, checked and ignored.
 **Caps are start-up numbers**, all in `Http3Config`. The stream state for
 every QUIC stream slot and the control frame are made by the constructor;
 the body chunk and the field section are borrowed, around one read, from
-pools that a server's connections share (`share`) and that a standalone
+pools that a server's connections share and that a standalone
 connection keeps one buffer each of. A field section's
 names and values are copied into arrays the connection keeps, which grow to
 the largest section seen and are then reused, so a warm connection
@@ -247,145 +259,52 @@ class Http3Connection
 | Member | |
 | --- | --- |
 | `new Http3Connection(config: Http3Config, quic: QuicConnection)` | A connection under `config` over `quic`, whose configuration must let a HEADERS frame of `maxFieldSectionSize` fit half a stream's buffer, and one on every request stream fit half the connection's window, and let the client open the three unidirectional streams it needs and this side open its own three (§6.2). A cap out of range panics. |
-| `active: i64` | The stream `next` is reading, or -1. |
-| `again: i64[]` | Streams `next` steps again before asking QUIC for news, a ring of `againCount` from `againHead`: WebTransport streams the program let go, and requests that waited for the client's SETTINGS. And those waiting, `waitCount` of them. A stream is on each at most once (its flags say), so neither needs more room than there are stream slots. |
-| `againCount: i32` |  |
-| `againHead: i32` |  |
-| `config: Http3Config` |  |
-| `connect: boolean` | Whether extended CONNECT is on, and WebTransport. |
-| `contentLength: i64[]` |  |
-| `control: u8[]` | A control frame's payload, read whole. |
-| `controlFill: i32` | How much of `control` is filled. |
-| `data: u8[]` | H3_DATA's bytes, and where a payload being skipped is read to: a `bodyChunk`-byte buffer borrowed from `dataPool` for the read that needs it and held while an H3_DATA window is live, else `none`. |
-| `dataLeft: i64[]` |  |
-| `dataLength: i32` |  |
-| `dataPool: BufferPool` | Where `data` is borrowed from: the connection's own pool until `share` hands it its server's. |
-| `dataStart: i32` | H3_DATA's window onto `data`. |
-| `dataTotal: i64[]` | DATA bytes received on the request, and its `content-length` or -1. |
-| `dataUsed: i32` | How far into the borrowed `data` reads have written: what its give-back zeroes. |
+| `data: u8[]` | H3_DATA's bytes, and where a payload being skipped is read to: a `bodyChunk`-byte buffer borrowed from `dataPool` for the read that needs it and held while an H3_DATA window is live, else an empty array. Any event but H3_DATA gives the buffer back, zeroed as far as reads wrote. |
+| `dataLength: i32` | H3_DATA's window length in bytes, 1 to `bodyChunk`; valid until the next `next()`. |
+| `dataPool: BufferPool` | Where `data` is borrowed from: the connection's own pool until its server lends it the server's. |
+| `dataStart: i32` | Where H3_DATA's window onto `data` starts. |
 | `date: u8[]` | The `date` every response carries (RFC 9110 §6.6.1), as the 29 bytes of an IMF-fixdate, or empty for none. A bare connection has no clock, so it starts empty; `Http3Server` points it at its `HttpDate`'s bytes, which that rewrites in place once a second. |
-| `dateName: u8[]` | The bytes of `date`, the field's name, made once. |
-| `decoder: QpackDecoder` |  |
-| `encoded: u8[]` | A response's field section, encoded, emptied and reused. |
-| `encoder: QpackEncoder` |  |
-| `errorCode: i64` | H3_RESET's and H3_ERROR's code. |
+| `decoder: QpackDecoder` | The QPACK decoder of the client's field sections, at dynamic table capacity 0; it also reads the client's encoder stream. |
+| `encoder: QpackEncoder` | The QPACK encoder of this side's field sections; it also reads the client's decoder stream. |
+| `errorCode: i64` | H3_RESET's, H3_STOPPED's and H3_ERROR's code. |
 | `fields: HttpFields` | The last request's or trailers' fields, valid until the next of either. |
-| `fillLeft: i64[]` | Bytes still owed on the stream: a filler's payload, and the DATA frame's payload the program is writing. |
-| `flags: i32[]` |  |
-| `frameLeft: i64[]` |  |
-| `frameType: i64[]` | The frame being read: its type, and what is left of its payload (-1 between frames). |
 | `generation: i32` | How many times `restart` ran: a layer above that keeps state per connection compares it to know when to forget its own. |
-| `goawayId: i64` | The ID this side's GOAWAY named, or -1; the client's last GOAWAY push ID, and its MAX_PUSH_ID. |
-| `head: u8[]` |  |
-| `header: Http3FrameHeader` |  |
-| `headLen: i32[]` | A frame header (or a stream type) being read, `headLen[k]` bytes of `head[k * 16 ..]`. |
 | `lastStreamId: i64` | H3_GOAWAY's push ID. |
-| `live: i32` | Requests open: taken and not yet finished both ways. |
-| `maxPushId: i64` |  |
-| `nameList: u8[][]` |  |
-| `none: u8[]` | The empty array `data` and `section` are while they hold nothing borrowed. |
-| `ownControl: i64` | This side's streams, and the client's critical ones; -1 until there. |
-| `ownDecoder: i64` |  |
-| `ownEncoder: i64` |  |
+| `live: i32` | Requests open, taken and not yet finished both ways, plus the bidirectional WebTransport streams held after this side's GOAWAY for a session below it. |
+| `maxPushId: i64` | The client's MAX_PUSH_ID, or -1 until it sends one. It is checked (it may not fall, and bounds CANCEL_PUSH) and otherwise unused, since this side never pushes. |
 | `peer: Http3Settings` | The client's SETTINGS. |
-| `peerControl: i64` |  |
-| `peerDecoder: i64` |  |
-| `peerEncoder: i64` |  |
-| `peerGoaway: i64` |  |
-| `pend: u8[]` |  |
-| `pendAt: i32[]` | Frame-header bytes owed before anything else, `pendLen[k]` of `pend[k * 16 + pendAt[k] ..]`. |
-| `pendLen: i32[]` |  |
-| `phase: i32[]` |  |
-| `pools: u8[][][]` | Copies of the decoded names and values, in arrays by size class (`copyOf`), and the lists handed to `fields`. |
-| `poolUsed: i32[]` |  |
-| `quic: QuicConnection` |  |
-| `rejected: i32` | Counters for a log or a test, each saturating: requests refused after GOAWAY, answered 431, and reset for a rule. |
+| `peerControl: i64` | The ID of the client's control stream, or -1 until its stream type has been read. |
+| `peerDecoder: i64` | The ID of the client's QPACK decoder stream, or -1 until its stream type has been read. |
+| `peerEncoder: i64` | The ID of the client's QPACK encoder stream, or -1 until its stream type has been read. |
+| `quic: QuicConnection` | The QUIC connection this one runs on, given to the constructor and kept for its life. |
+| `rejected: i32` | Counters for a log or a test, each saturating and zeroed by `restart`. This one: request streams refused because their ID is at or past the one this side's GOAWAY named, and WebTransport streams dropped because their session's is. |
 | `resetByPeer: boolean` | Whether H3_RESET came from the client. |
-| `scratch: u8[]` | Frame headers, SETTINGS and GOAWAY on their way out. |
-| `section: u8[]` | A HEADERS payload read whole, for the decoder: a buffer borrowed from `sectionPool` around one read and decode, else `none`. |
-| `sectionPool: BufferPool` | Where `section` is borrowed from, likewise. |
+| `sectionPool: BufferPool` | Where the buffer a HEADERS payload is read into whole, for the decoder, is borrowed from around one read and decode: the connection's own pool until its server lends it the server's. |
 | `session: i64` | H3_STREAM's session ID. |
-| `settingIds: i64[]` | The SETTINGS this side sends. |
+| `settingIds: i64[]` | The identifiers of the SETTINGS this side sends, in the order sent; fixed by the constructor. |
 | `settingsSeen: boolean` | Whether the client's SETTINGS have arrived. |
-| `settingValues: i64[]` |  |
-| `slot: i32` | The QUIC stream slot of the last event's stream: still right when the read that made the event freed it. |
-| `slotId: i64[]` | Per QUIC stream slot: the stream the state is for, or -1. |
-| `state: i32` |  |
-| `statusName: u8[]` |  |
-| `statusValue: u8[]` |  |
+| `state: i32` | 0 while the connection is open; 1 once it failed (H3_ERROR), which only `restart` undoes. |
 | `stream: i64` | The last event's stream. |
-| `streamErrors: i32` |  |
-| `tooLarge: i32` |  |
-| `valueList: u8[][]` |  |
-| `waitCount: i32` |  |
-| `waiting: i64[]` |  |
-| `webtransport: boolean` |  |
-| `zeros: u8[]` | Zeros, the payload of a filler frame. |
-| `abandon(k: i32, id: i64, code: i64): void` | Resets this side's half of request stream `id` with `code`, unless it is done already. |
+| `streamErrors: i32` | Requests reset for breaking a rule (a stream error, §8): a malformed message, a body that disagrees with `content-length`, a stream that ends before its HEADERS, a trailer section too large. |
+| `tooLarge: i32` | Requests whose field section was past `maxFieldSectionSize`: answered with a 431, or reset when the 431 did not fit. |
+| `webtransport: boolean` | Whether WebTransport is on: `webtransportSessions` above 0. Fixed by the constructor. |
 | `acceptStream(id: i64): i32` | Lets a stream H3_STREAM held go: its bytes come as H3_DATA from the next `next()`, and the program may write it. Answers 0, or H3_CLOSED for a stream that is not one held. |
-| `answerTooLarge(k: i32, id: i64): i32` | A request whose field section is past `maxFieldSectionSize`: answered with a 431 and its stream asked to stop with H3_NO_ERROR (§4.2.2, §4.1.2). The program never sees it. A peer whose own SETTINGS_MAX_FIELD_SECTION_SIZE has room for a bare 431 but not for one with the date gets it without the date rather than a reset. |
-| `arm(k: i32, id: i64): void` | A frame of `need` bytes must go whole and the send buffer has less room: the room left is filled with a reserved frame the client skips (§7.2.8), so that QUIC names the stream again once acknowledgements free room. |
 | `awaitsRequest(id: i64): boolean` | Whether request stream `id` has not yet had its field section read: not opened, opened by a later stream's frame (RFC 9000 §3.2), or still waiting for its HEADERS. A WebTransport stream that names it as its session may wait for it. |
-| `borrowData(): u8[]` | `data`, borrowed from `dataPool` first if it is not already. |
-| `borrowSection(): u8[]` | `section`, borrowed from `sectionPool`. |
-| `controlFrame(type: i64): i32` | Acts on a whole control frame of `type` in `control[0 .. controlFill)`. |
-| `controlStep(k: i32, id: i64): i32` | Frames on the client's control stream (§6.2.1, §7.2). |
-| `copyFields(): void` | Copies the decoder's fields into the connection's own arrays and the lists `fields` reads. |
-| `copyOf(d: QpackDecoder, start: i32, length: i32): u8[]` | A copy of the decoder's bytes `[start, start + length)`, in an array of the size class `length` falls in: class `j` holds arrays made with room for 2^j bytes, for strings shorter than that and at least half as long. A section takes the arrays of each class in order and the next takes the same ones again, so a class grows only when one section needs more of its size than any before it, and the total stays bounded by the field-section cap (`docs/security/http3.md`, H3-2). |
-| `discard(k: i32, id: i64): i32` | Reads and drops what is left of stream `id`, slot `k`, to its end or reset. |
 | `discardRequest(id: i64, code: i64): i32` | Stops reading request stream `id`: the client is asked to stop with `code` and what it still sends is dropped unseen, whether or not this side has finished its response — a refused WebTransport session's stream, after its status. Answers 0, or H3_CLOSED for a stream that is not a request here. |
-| `drain(k: i32, id: i64): boolean` | Writes the bytes owed on stream `id` before anything else — the rest of a frame header, a filler's payload — as far as the send buffer takes them. Answers whether none are owed now. |
-| `drop(id: i64): i32` | Reads stream `id` into `data` until nothing more is there; answers 0, or the `QUIC_STREAM_*` that ended it. |
-| `dropped(id: i64): i32` | H3_DROPPED for request stream `id` with WebTransport on, which waits on such a stream; H3_NEED_MORE without. |
-| `ended(k: i32, id: i64, n: i32, resetCode: i64): i32` | The request stream ended, cleanly (`n` is `QUIC_STREAM_END`) or by the client's RESET_STREAM with `resetCode`, at a frame boundary. |
-| `fail(code: i64): i32` | Closes the connection with `code` (a connection error) and answers H3_ERROR. |
-| `fieldSection(k: i32, id: i64, length: i32): i32` | A whole HEADERS payload of `length` bytes is in `section`: the request's field section, or its trailers. Decodes it, copies it into `fields` and checks it there. |
-| `giveBack(): void` | Gives back `data` and `section` if either is borrowed: the connection holds no pooled buffer after it. |
-| `giveData(): void` | Gives `data` back to `dataPool`, zeroed as far as reads wrote, if it is borrowed. |
-| `giveSection(used: i32): void` | Gives `section` back to `sectionPool`, zeroed over `[0, used)`, if it is borrowed. |
 | `goaway(): i32` | Sends GOAWAY (§5.2): the client's requests on streams below the ID it names — every stream the client has opened so far — are processed, and any it opens from there on is refused with H3_REQUEST_REJECTED. A second call never raises the ID, and sends nothing when the ID has not fallen. Answers 0, or H3_AGAIN before this side's control stream is open or while it has no room for the frame. |
-| `held(k: i32, id: i64, session: i64): i32` | Stream `id`, slot `k`, named session `session` in its first bytes: it is held, unread, and the program told with H3_STREAM. A session ID that is not a client-initiated bidirectional stream is H3_ID_ERROR (draft-02 §4). |
 | `isDone(): boolean` | Whether this side sent GOAWAY and every request it took has finished both ways, every byte of each response acknowledged: the carrier may close the connection. |
-| `mark(k: i32, bits: i32): void` | Marks flags on slot `k` and settles it. |
 | `next(): i32` | Reads what the QUIC connection has for the program and answers the next event (see the module comment). Call it after every datagram the QUIC connection takes, until it answers H3_NEED_MORE or H3_ERROR. |
-| `nextEvent(): i32` | `next`'s work: everything but the lending of `data` around it. |
-| `open(k: i32, id: i64): void` | The state of a stream the client just opened in slot `k`. |
 | `openStream(session: i64, bidirectional: boolean): i64` | Opens a WebTransport stream of this side's for `session` (draft-02 §4.1, §4.2): unidirectional with the type 0x54, or bidirectional with the signal 0x41, and the session ID, which go before anything written. Answers its ID, H3_AGAIN while the client's MAX_STREAMS allows no more, or H3_CLOSED with WebTransport off or the connection failed. |
-| `owe(k: i32, buf: u8[], n: i32): void` | Queues `buf[0 .. n)`, a frame header, as the bytes owed first on slot `k`. |
-| `ownStream(k: i32): i32` | One of this side's own streams has news: the client may not stop it (§6.2.1, RFC 9204 §4.2). |
-| `readData(id: i64, want: i32): i32` | Reads up to `want` bytes of stream `id` into the start of `data`, borrowed for it: `streamRead`'s answer. |
-| `readHeader(k: i32, id: i64): i32` | Reads a frame header of stream `id` into slot `k`'s `head`, a varint at a time — its first byte, which says its size, then the rest — so a header split across STREAM frames costs nothing to keep. Answers 1 with `header` filled, 0 when more is needed, or the `QUIC_STREAM_*` answer that ended the read. |
 | `refuseStream(id: i64, code: i64): i32` | Refuses WebTransport stream `id` with `code`: its side here is reset, the client's asked to stop, and what it sent read and dropped. Answers 0, or H3_CLOSED for a stream that is not a WebTransport one. |
-| `reject(k: i32, id: i64): void` | §5.2: a request past the GOAWAY this side sent is refused, both ways, unprocessed. |
-| `release(): void` | Releases the QUIC connection (`QuicConnection.release`) and gives back every pooled buffer this connection holds. |
-| `requestFrame(k: i32, id: i64): i32` | Reads the next frame header of request stream `id` and decides what its payload is (§4.1, §7.2): DATA after HEADERS, HEADERS first or as trailers, and anything else unknown and skipped, or refused where RFC 9114 says so. A stream that ends here ends the request. |
-| `requestStep(k: i32, id: i64): i32` | The next event of request stream `id` in slot `k`. |
 | `reset(id: i64, code: i64): i32` | Resets request stream `id` both ways with `code` — H3_REQUEST_CANCELLED, or H3_REQUEST_REJECTED for one the program did not process (§4.1.1). Answers 0 or H3_CLOSED. |
-| `resetEvent(id: i64, code: i64, byPeer: boolean): i32` | H3_RESET for `id` with `code`. |
-| `resetStream(id: i64, code: i64): i32` | Resets this side of WebTransport stream `id` with `code`; the client's side goes on. Answers 0 or H3_CLOSED. |
+| `resetStream(id: i64, code: i64): i32` | Resets this side of WebTransport stream `id` with `code`; the client's side goes on. |
 | `respond(id: i64, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32` | Sends the response head on request stream `id`: `status` (200 to 599) and the fields `names`/`values` (lowercase names, no pseudo-headers), ending the stream when `endStream`. Answers 0; H3_CLOSED for a stream that is not an open request; H3_INVALID for a second head, a status out of range or a field `httpFieldsCheckOutgoing` refuses; H3_TOO_LARGE for a section past the client's SETTINGS_MAX_FIELD_SECTION_SIZE; or H3_AGAIN. |
 | `restart(): void` | Puts the connection back as the constructor left it, for the QUIC connection's next peer (call it after `quic.reset`): no stream known, QPACK's state and the client's SETTINGS forgotten, and any buffer still borrowed given back. It allocates nothing. |
-| `settle(k: i32): void` | Lets a slot's request count as finished once both of its sides are done. |
-| `share(data: BufferPool, section: BufferPool): void` | Lends this connection its server's pools in place of its own, giving back to the old pools whatever it holds. Panics unless their buffers are `bodyChunk` and `maxFieldSectionSize` bytes long, as this connection's reads need. |
-| `start(): void` | Opens this side's control stream with its type and SETTINGS, and its QPACK encoder and decoder streams with their types (§6.2.1, RFC 9204 §4.2). A stream the client's MAX_STREAMS does not allow yet is opened on a later call. |
-| `step(id: i64): i32` | The next event stream `id` has, or H3_NEED_MORE when it has nothing more to say now. |
-| `stepAgain(k: i32, id: i64): void` | Puts stream `id`, slot `k`, on the `again` ring, unless it is there. |
-| `stopReading(k: i32, id: i64, code: i64): void` | Asks the client to stop stream `id`, slot `k`, with `code`, and drops what it still sends, unless its side is over or being dropped. |
 | `stopStream(id: i64, code: i64): i32` | Asks the client to stop its side of WebTransport stream `id` with `code`, and drops what it still sends; this side's goes on. Answers 0 or H3_CLOSED. |
-| `streamError(k: i32, id: i64, code: i64): i32` | A stream error (§8): the request is reset both ways with `code`, and the program told when it knew the request. |
-| `takeAgain(): i64` | The oldest stream on the `again` ring, taken off it. |
-| `typed(k: i32, id: i64, type: i64): i32` | The client's unidirectional stream `id` turned out to be of `type` (§6.2). |
-| `uniStep(k: i32, id: i64): i32` | The next event of the client's unidirectional stream `id` in slot `k`. |
-| `writable(k: i32, id: i64): i32` | The stream's write side, when a write was held back: owed bytes are written, and once the buffer has room again the program is told with H3_WRITABLE. Answers that, or H3_NEED_MORE. |
-| `writeData(id: i64, buf: u8[], off: i32, len: i32, endStream: boolean): i32` | Writes up to `len` bytes of `buf` from `off` as the response body of stream `id`, in DATA frames of at most `writeChunk`, and ends the stream when `endStream` and every byte was taken. Answers how many bytes it took — fewer than `len` only when the send buffer filled, and H3_WRITABLE then names the stream once it has room — or H3_AGAIN when it took none; H3_CLOSED, or H3_INVALID before the head or when `endStream` would cut short the DATA frame the last call started. |
-| `writeDataWhole(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32` | Writes `buf[off .. off + len)` as one DATA frame on request stream `id`, whole or not at all, with the FIN when `fin`: a capsule (RFC 9297 §3.2) goes this way, so the client never reads half of one. Answers 0; H3_AGAIN while the send buffer lacks room, and H3_WRITABLE then names the stream; or as `writeData` refuses, and H3_TOO_LARGE for a frame past the stream's buffer. |
-| `writeHead(k: i32, id: i64, status: i32, names: u8[][], values: u8[][], fin: boolean, dated: boolean): i32` | Encodes `:status` (unless it is 0, for trailers), the server's `date` for a final status when `dated` unless `names` holds one, and `names`/`values` into a HEADERS frame and writes it whole to stream `id`, with the FIN when `fin`. The date counts against the peer's SETTINGS_MAX_FIELD_SECTION_SIZE as any field does. Answers 0, H3_AGAIN, or H3_TOO_LARGE. |
-| `writeNew(id: i64, buf: u8[], n: i32): boolean` | Writes `buf[0 .. n)` to this side's new stream `id` whole, as its first bytes; answers whether it took them. |
-| `writeSlot(id: i64): i32` | The slot of request stream `id` when the program may write to it, else -1. |
-| `writeStream(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32` | Writes up to `len` bytes of `buf` from `off` to WebTransport stream `id`, as they are, and its FIN when `fin` and every byte was taken. Answers how many it took — fewer only when the send buffer filled, and H3_WRITABLE then names the stream — or H3_AGAIN when it took none, or H3_CLOSED for a stream with no side here to write, finished, reset, held or stopped. |
+| `writeData(id: i64, buf: u8[], off: i32, len: i32, endStream: boolean): i32` | Writes up to `len` bytes of `buf` from `off` as the response body of stream `id`, in DATA frames of at most `writeChunk`, and ends the stream when `endStream` and every byte was taken. Answers how many bytes it took — fewer than `len` only when the send buffer filled, and H3_WRITABLE then names the stream once it has room — or H3_AGAIN when it took none; H3_CLOSED, or H3_INVALID before the head or when `endStream` would cut short the DATA frame the last call started. A window outside `buf` panics. |
+| `writeDataWhole(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32` | Writes `buf[off .. off + len)` as one DATA frame on request stream `id`, whole or not at all, with the FIN when `fin`: a capsule (RFC 9297 §3.2) goes this way, so the client never reads half of one. Answers 0; H3_AGAIN while the send buffer lacks room, and H3_WRITABLE then names the stream; or as `writeData` refuses, and H3_TOO_LARGE for a frame past the stream's buffer. A window outside `buf` panics. |
+| `writeStream(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32` | Writes up to `len` bytes of `buf` from `off` to WebTransport stream `id`, as they are, and its FIN when `fin` and every byte was taken. Answers how many it took — fewer only when the send buffer filled, and H3_WRITABLE then names the stream — or H3_AGAIN when it took none, or H3_CLOSED for a stream with no side here to write, finished, reset, held or stopped. A window outside `buf` panics. |
 | `writeTrailers(id: i64, names: u8[][], values: u8[][]): i32` | Writes a trailer section on request stream `id` after its body, which ends the stream. Answers as `respond` does; H3_INVALID before the head or inside a DATA frame `writeData` has not finished. |
-| `wtSlot(id: i64): i32` | The slot of WebTransport stream `id` when it is known here, else -1. |
-| `wtStep(k: i32, id: i64): i32` | The next event of WebTransport stream `id` in slot `k`: its session ID (a unidirectional stream's), then its bytes as H3_DATA, H3_END at its FIN and H3_RESET at the client's RESET_STREAM; H3_STOPPED once for the client's STOP_SENDING; and H3_WRITABLE. |
 
 ## Limits
 

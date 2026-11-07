@@ -11,6 +11,12 @@ import {
 } from "nish/crypto/ct";
 ```
 
+```ts
+import { timingSafeEqual } from "nish/crypto/ct";
+
+const ok: boolean = timingSafeEqual(expectedTag, receivedTag);
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="timingSafeEqual" icon="phosphor/regular/function" href="#timingsafeequal">
@@ -27,25 +33,35 @@ Whether the `len` bytes of `a` from `aOff` equal the `len` bytes of `b` from `bO
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="Every byte is read">
 
-An `===` loop over two MACs stops at the first differing byte, so the time it
-takes says how many leading bytes an attacker already guessed right, and a
-tag can be recovered one byte at a time. These functions read every byte of
-the window whatever it holds: each pair is XORed, the differences are ORed
-into one accumulator, and that accumulator is tested once, after the loop.
+An `===` loop over two MACs stops at the first
+differing byte, so the time it takes says how many leading bytes an attacker
+already guessed right, and a tag can be recovered one byte at a time. These
+functions read every byte of the window whatever it holds: each pair is
+XORed, the differences are ORed into one accumulator, and that accumulator is
+tested once, after the loop.
 
-</scalar-callout>
+</scalar-detail>
 
-What is *not* secret is checked first and may branch: the two lengths, and
-whether a window lies inside its array. A caller comparing a received tag
-against an expected one already knows both lengths, so refusing a mismatch
-early leaks nothing the attacker did not send.
+<scalar-detail title="Lengths may branch">
 
-The names are `timingSafeEqual*`, after Node's `crypto.timingSafeEqual`,
-rather than `ctEq`: that one is reserved for the builtin WP34 N6 will add,
-together with the disassembly check that proves the loop stays branch-free
-after LLVM has seen it. Until then this is the discipline and not a proof.
+What is *not* secret is checked first and may branch:
+the two lengths, and whether a window lies inside its array. A caller
+comparing a received tag against an expected one already knows both lengths,
+so refusing a mismatch early leaks nothing the attacker did not send.
+
+</scalar-detail>
+
+<scalar-detail title="A discipline, not yet a proof">
+
+The names are `timingSafeEqual*`, after
+Node's `crypto.timingSafeEqual`, rather than `ctEq`: that one is reserved for
+the builtin WP34 N6 will add, together with the disassembly check that proves
+the loop stays branch-free after LLVM has seen it. Until then this is the
+discipline and not a proof.
+
+</scalar-detail>
 
 ## timingSafeEqual
 
@@ -70,14 +86,24 @@ function timingSafeEqual(
 #### Parameters
 
 <scalar-field name="a" type="u8[]" required>
+
+One byte string, such as the tag that was received.
+
 </scalar-field>
 
 <scalar-field name="b" type="u8[]" required>
+
+The other, such as the tag computed for comparison.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only when both lengths match and every byte does; `false` for
+  different lengths or a length past 2^31 - 1.
+
 </scalar-field>
 
 ## timingSafeEqualAt
@@ -104,21 +130,40 @@ function timingSafeEqualAt(
 #### Parameters
 
 <scalar-field name="a" type="u8[]" required>
+
+The array holding the first window.
+
 </scalar-field>
 
 <scalar-field name="aOff" type="i32" required>
+
+Where the first window starts in `a`.
+
 </scalar-field>
 
 <scalar-field name="b" type="u8[]" required>
+
+The array holding the second window.
+
 </scalar-field>
 
 <scalar-field name="bOff" type="i32" required>
+
+Where the second window starts in `b`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes each window covers.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only when both windows lie inside their arrays and every byte
+  matches; `false` for a window out of range.
+
 </scalar-field>

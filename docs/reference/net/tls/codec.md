@@ -92,6 +92,24 @@ import {
 } from "nish/net/tls/codec";
 ```
 
+```ts
+import {
+  TLS_VERSION_13, TlsClientHelloView, tlsCopyWindow, tlsEncodeServerHello,
+  tlsReadClientHello, tlsWindowHasU16
+} from "nish/net/tls/codec";
+
+// `body` is a ClientHello without its four-byte handshake header;
+// `random`, `suite` and `x25519Public` are the server's own.
+const hello = new TlsClientHelloView()
+tlsReadClientHello(hello, body, 0, toI32(body.length))
+if (hello.alert !== 0) {
+  // send hello.alert, such as TLS_ALERT_DECODE_ERROR (50), and close
+} else if (tlsWindowHasU16(hello.data, hello.versionsAt, hello.versionsLength, TLS_VERSION_13)) {
+  const sessionId: u8[] = tlsCopyWindow(hello.data, hello.sessionIdAt, hello.sessionIdLength)
+  const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, x25519Public)
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="tlsCertificateVerifyContent" icon="phosphor/regular/function" href="#tlscertificateverifycontent">
@@ -114,7 +132,7 @@ The DER certificates of the Certificate `tlsReadCertificate` last read into `vie
 
 <scalar-card title="tlsCopyWindow" icon="phosphor/regular/function" href="#tlscopywindow">
 
-A copy of `data[at .. at + length)`.
+A copy of `data[at .. at + length)`, which is how a window of a view becomes an array of its own that outlives the buffer it was read from.
 
 </scalar-card>
 
@@ -198,7 +216,7 @@ Reads a server's Certificate body (§4.4.2) into `view`: the request context's l
 
 <scalar-card title="tlsReadCertificateVerify" icon="phosphor/regular/function" href="#tlsreadcertificateverify">
 
-Reads a CertificateVerify body (§4.4.3) into `view`: the scheme and the signature.
+Reads a CertificateVerify body (§4.4.3) into `view`: the scheme and the signature, neither of them checked here.
 
 </scalar-card>
 
@@ -210,7 +228,7 @@ Reads the ClientHello body `data[off .. off + len)` — the message without its 
 
 <scalar-card title="tlsReadEncryptedExtensions" icon="phosphor/regular/function" href="#tlsreadencryptedextensions">
 
-Reads an EncryptedExtensions body (§4.3.1) into `view`.
+Reads an EncryptedExtensions body (§4.3.1) into `view`: ALPN, an empty `server_name` and `supported_groups` may be there, and any other extension sets `extensionAlert`.
 
 </scalar-card>
 
@@ -240,7 +258,7 @@ Whether the ServerHello in `view` carries a downgrade sentinel in the last 8 byt
 
 <scalar-card title="tlsWindowHasU16" icon="phosphor/regular/function" href="#tlswindowhasu16">
 
-Whether the 16-bit values `data[at .. at + length)` hold `value`.
+Whether the 16-bit values `data[at .. at + length)` hold `value`: how a server asks a `TlsClientHelloView`'s windows what it offers without copying them.
 
 </scalar-card>
 
@@ -330,34 +348,46 @@ One message of the server's flight as a `tlsRead*` function below read it: a Ser
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="One reader and eight writers">
 
-One reader and eight writers. `tlsParseClientHello` reads a ClientHello body
-into a `TlsClientHello`, checking its structure: every length against the
-bytes it claims, every vector against its RFC 8446 bounds, and no extension
-twice (§4.2). A message that breaks one answers the alert a server sends for
-it in the hello's `alert` field (`decode_error` for a malformed or truncated
-one, `illegal_parameter` for a duplicate), never a panic, since every byte
-of it is the peer's. What the fields *mean* — which version, which suite,
-whether a share is missing — is the server's to decide, in `nish/net/tls`.
+`tlsParseClientHello` reads a ClientHello
+body into a `TlsClientHello`, checking its structure: every length against
+the bytes it claims, every vector against its RFC 8446 bounds, and no
+extension twice (§4.2). A message that breaks one answers the alert a server
+sends for it in the hello's `alert` field (`decode_error` for a malformed or
+truncated one, `illegal_parameter` for a duplicate), never a panic, since
+every byte of it is the peer's. What the fields *mean* — which version,
+which suite, whether a share is missing — is the server's to decide, in
+`nish/net/tls`.
 
-</scalar-callout>
+</scalar-detail>
 
-`tlsReadClientHello` is the same reader for a server that keeps its state
-in a slot: it reads into a `TlsClientHelloView` made once, whose fields are
-windows into the message rather than copies of it, so a ClientHello read
-allocates nothing, and `tlsParseClientHello` copies a view's windows out.
+<scalar-detail title="Reading without copying">
 
-The writers each answer one whole handshake message, header included:
-ServerHello, a resumed ServerHello that names the PSK it accepts,
-HelloRetryRequest, EncryptedExtensions, Certificate, CertificateVerify,
-Finished and NewSessionTicket. Their inputs come from the server and the
-caller's configuration rather than from the peer, so they check nothing.
-Each is a `tlsWrite*` function that writes into the caller's array at an
-offset — run over an empty array, it measures — and a `tlsEncode*` one
-that answers the message in a fresh array.
+`tlsReadClientHello` is the same reader for a
+server that keeps its state in a slot: it reads into a `TlsClientHelloView`
+made once, whose fields are windows into the message rather than copies of
+it, so a ClientHello read allocates nothing, and `tlsParseClientHello`
+copies a view's windows out.
 
-The client's side is the mirror: `tlsWriteClientHello` and
+</scalar-detail>
+
+<scalar-detail title="The writers trust their inputs">
+
+Each answers one whole handshake
+message, header included: ServerHello, a resumed ServerHello that names the
+PSK it accepts, HelloRetryRequest, EncryptedExtensions, Certificate,
+CertificateVerify, Finished and NewSessionTicket. Their inputs come from the
+server and the caller's configuration rather than from the peer, so they
+check nothing. Each is a `tlsWrite*` function that writes into the caller's
+array at an offset — run over an empty array, it measures — and a
+`tlsEncode*` one that answers the message in a fresh array.
+
+</scalar-detail>
+
+<scalar-detail title="The client's side is the mirror">
+
+`tlsWriteClientHello` and
 `tlsEncodeClientHello` write the hello `nish/net/tls/client` sends, and five
 readers — `tlsReadServerHello` (a HelloRetryRequest too),
 `tlsReadEncryptedExtensions`, `tlsReadCertificate`,
@@ -367,14 +397,21 @@ the same checks and the same alerts in its `alert` field. A server's bytes
 are the peer's just as a client's are, so these readers never panic either
 (the `tls-server-flight` fuzz target).
 
-The extensions read are `server_name` (RFC 6066 §3), `supported_groups`,
-`signature_algorithms`, `supported_versions` and `key_share` (RFC 8446
-§4.2), `application_layer_protocol_negotiation` (RFC 7301 §3.1) and
-`quic_transport_parameters` (RFC 9001 §8.2), and `pre_shared_key` and
-`psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9), whose identities and
-binders the reader checks against their syntax but does not open: a ticket
-and its binder are the server's to judge. Every other extension is skipped,
-which is what RFC 8446 §4.2 asks of a server that does not know it.
+</scalar-detail>
+
+<scalar-detail title="Extensions">
+
+The ones read are `server_name` (RFC 6066 §3),
+`supported_groups`, `signature_algorithms`, `supported_versions` and
+`key_share` (RFC 8446 §4.2), `application_layer_protocol_negotiation`
+(RFC 7301 §3.1) and `quic_transport_parameters` (RFC 9001 §8.2), and
+`pre_shared_key` and `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
+whose identities and binders the reader checks against their syntax but
+does not open: a ticket and its binder are the server's to judge. Every
+other extension is skipped, which is what RFC 8446 §4.2 asks of a server
+that does not know it.
+
+</scalar-detail>
 
 Written from the RFCs, not ported from another implementation. Private
 names carry the `tls` prefix because a `std/` module's private functions
@@ -383,7 +420,8 @@ share the importing program's flat symbol namespace (`docs/wp26-stdlib.md`
 
 ## tlsCertificateVerifyContent
 
-What a server's CertificateVerify signs (§4.4.3), in a fresh array (`tlsWriteCertificateVerifyContent`).
+What a server's CertificateVerify signs (§4.4.3), in a fresh array
+(`tlsWriteCertificateVerifyContent`).
 
 ```ts
 function tlsCertificateVerifyContent(
@@ -394,16 +432,23 @@ function tlsCertificateVerifyContent(
 #### Parameters
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The whole transcript hash through the server's Certificate.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The content to sign: 98 bytes of prefix, then the hash. It has no handshake header.
+
 </scalar-field>
 
 ## tlsClientOffersScheme
 
-Whether `scheme` is one the client's `signature_algorithms` offers, the only ones a server's CertificateVerify may use (§4.4.3).
+Whether `scheme` is one the client's `signature_algorithms` offers, the
+only ones a server's CertificateVerify may use (§4.4.3).
 
 ```ts
 function tlsClientOffersScheme(
@@ -414,16 +459,23 @@ function tlsClientOffersScheme(
 #### Parameters
 
 <scalar-field name="scheme" type="i32" required>
+
+The scheme a server's CertificateVerify names.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true for ECDSA P-256 or P-384, or RSA-PSS (rsae) with SHA-256, SHA-384 or SHA-512.
+
 </scalar-field>
 
 ## tlsCopyCertificates
 
-The DER certificates of the Certificate `tlsReadCertificate` last read into `view`, leaf first, each a fresh array.
+The DER certificates of the Certificate `tlsReadCertificate` last read into
+`view`, leaf first, each a fresh array.
 
 ```ts
 function tlsCopyCertificates(
@@ -434,16 +486,23 @@ function tlsCopyCertificates(
 #### Parameters
 
 <scalar-field name="view" type="TlsServerFlightView" required>
+
+A view `tlsReadCertificate` has just read into.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[][]">
+
+The chain, copied out of `view.data`; empty if the read failed or another message was read since.
+
 </scalar-field>
 
 ## tlsCopyWindow
 
-A copy of `data[at .. at + length)`.
+A copy of `data[at .. at + length)`, which is how a window of a view becomes
+an array of its own that outlives the buffer it was read from.
 
 ```ts
 function tlsCopyWindow(
@@ -456,17 +515,29 @@ function tlsCopyWindow(
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer the window points into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the window starts in `data`, in bytes.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to copy; a negative one copies none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh array of `length` bytes; nothing from outside `data` is copied into it.
+
 </scalar-field>
 
 ## tlsEncodeCertificate
@@ -480,11 +551,17 @@ function tlsEncodeCertificate(chain: u8[][]): u8[]
 #### Parameters
 
 <scalar-field name="chain" type="u8[][]" required>
+
+The DER certificates, leaf first, each written as it is.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeCertificateVerify
@@ -501,14 +578,23 @@ function tlsEncodeCertificateVerify(
 #### Parameters
 
 <scalar-field name="scheme" type="i32" required>
+
+The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
+
 </scalar-field>
 
 <scalar-field name="signature" type="u8[]" required>
+
+The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeClientHello
@@ -532,35 +618,65 @@ function tlsEncodeClientHello(
 #### Parameters
 
 <scalar-field name="random" type="u8[]" required>
+
+The client's 32-byte `random` (§4.1.2), written as it is.
+
 </scalar-field>
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The `legacy_session_id`, 0 to 32 bytes; the client sends 32 for middlebox compatibility.
+
 </scalar-field>
 
 <scalar-field name="suites" type="i32[]" required>
+
+The cipher suites offered, in order of preference.
+
 </scalar-field>
 
 <scalar-field name="groups" type="i32[]" required>
+
+The groups `supported_groups` offers, in order of preference.
+
 </scalar-field>
 
 <scalar-field name="shareGroup" type="i32" required>
+
+The group of the one key share sent, such as `TLS_GROUP_X25519`.
+
 </scalar-field>
 
 <scalar-field name="sharePublic" type="u8[]" required>
+
+That share's public key, its `key_exchange`.
+
 </scalar-field>
 
 <scalar-field name="serverName" type="string" required>
+
+The host name for `server_name`, ASCII; empty to leave the extension out.
+
 </scalar-field>
 
 <scalar-field name="alpn" type="string[]" required>
+
+The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
+
 </scalar-field>
 
 <scalar-field name="cookie" type="u8[]" required>
+
+A HelloRetryRequest's `cookie` to echo; empty to send none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeEncryptedExtensions
@@ -580,20 +696,35 @@ function tlsEncodeEncryptedExtensions(
 #### Parameters
 
 <scalar-field name="extra" type="u8[]" required>
+
+Whole extensions, type and length included, written first and unchecked; empty for none.
+
 </scalar-field>
 
 <scalar-field name="alpn" type="u8[]" required>
+
+The protocol the server chose, as its bytes, at most 255; empty to send no ALPN.
+
 </scalar-field>
 
 <scalar-field name="acknowledgeServerName" type="boolean" required>
+
+Whether to send the empty `server_name` that says the server used the name.
+
 </scalar-field>
 
 <scalar-field name="quicTransportParameters" type="u8[] | null" required>
+
+The server's QUIC transport parameters, opaque; `null` to send none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeFinished
@@ -607,16 +738,23 @@ function tlsEncodeFinished(verifyData: u8[]): u8[]
 #### Parameters
 
 <scalar-field name="verifyData" type="u8[]" required>
+
+The whole `verify_data`, the HMAC the key schedule computed: 32 or 48 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeHelloRetryRequest
 
-A HelloRetryRequest (§4.1.4) choosing `suite`, echoing `sessionId` and asking for `group`, in a fresh array (`tlsWriteHelloRetryRequest`).
+A HelloRetryRequest (§4.1.4) choosing `suite`, echoing `sessionId` and
+asking for `group`, in a fresh array (`tlsWriteHelloRetryRequest`).
 
 ```ts
 function tlsEncodeHelloRetryRequest(
@@ -629,17 +767,29 @@ function tlsEncodeHelloRetryRequest(
 #### Parameters
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
+
 </scalar-field>
 
 <scalar-field name="suite" type="i32" required>
+
+The cipher suite the server chose, which the second ServerHello must choose again.
+
 </scalar-field>
 
 <scalar-field name="group" type="i32" required>
+
+The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeNewSessionTicket
@@ -659,23 +809,41 @@ function tlsEncodeNewSessionTicket(
 #### Parameters
 
 <scalar-field name="lifetime" type="u32" required>
+
+How long the ticket may be used, in seconds; RFC 8446 §4.6.1 caps it at seven days.
+
 </scalar-field>
 
 <scalar-field name="ageAdd" type="u32" required>
+
+The `ticket_age_add` that obfuscates the ticket age, which §4.6.1 wants fresh and random.
+
 </scalar-field>
 
 <scalar-field name="nonce" type="u8[]" required>
+
+The whole `ticket_nonce`, 0 to 255 bytes.
+
 </scalar-field>
 
 <scalar-field name="ticket" type="u8[]" required>
+
+The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes, not checked here.
+
 </scalar-field>
 
 <scalar-field name="extra" type="u8[]" required>
+
+Whole extensions, type and length included, written unchecked; empty for none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeServerHello
@@ -696,25 +864,41 @@ function tlsEncodeServerHello(
 #### Parameters
 
 <scalar-field name="random" type="u8[]" required>
+
+The server's 32-byte `random` (§4.1.3), written as it is.
+
 </scalar-field>
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
+
 </scalar-field>
 
 <scalar-field name="suite" type="i32" required>
+
+The cipher suite the server chose.
+
 </scalar-field>
 
 <scalar-field name="x25519Public" type="u8[]" required>
+
+The server's x25519 public key, the share's `key_exchange`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsEncodeServerHelloPsk
 
-A resumed handshake's ServerHello naming `selectedIdentity`, in a fresh array (`tlsWriteServerHelloPsk`).
+A resumed handshake's ServerHello naming `selectedIdentity`, in a fresh
+array (`tlsWriteServerHelloPsk`).
 
 ```ts
 function tlsEncodeServerHelloPsk(
@@ -729,23 +913,42 @@ function tlsEncodeServerHelloPsk(
 #### Parameters
 
 <scalar-field name="random" type="u8[]" required>
+
+The server's 32-byte `random` (§4.1.3), written as it is.
+
 </scalar-field>
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
+
 </scalar-field>
 
 <scalar-field name="suite" type="i32" required>
+
+The cipher suite the server chose.
+
 </scalar-field>
 
 <scalar-field name="x25519Public" type="u8[]" required>
+
+The server's x25519 public key, the share's `key_exchange`.
+
 </scalar-field>
 
 <scalar-field name="selectedIdentity" type="i32" required>
+
+The index, from 0, of the client's PSK identity the server accepts; only its low
+  16 bits are written.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The whole message, handshake header included.
+
 </scalar-field>
 
 ## tlsHexInto
@@ -765,17 +968,29 @@ function tlsHexInto(
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+Lowercase hex digits, two a byte; a last odd digit is ignored, and nothing else is checked.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the first byte goes in `out`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`at` plus the number of bytes `text` spells, written or not.
+
 </scalar-field>
 
 ## tlsListHas
@@ -792,14 +1007,23 @@ function tlsListHas(
 #### Parameters
 
 <scalar-field name="list" type="i32[]" required>
+
+The values to look in, such as a `TlsClientHello`'s `cipherSuites` or `groups`.
+
 </scalar-field>
 
 <scalar-field name="value" type="i32" required>
+
+The code point to look for, such as a suite or a group.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `value` is somewhere in `list`.
+
 </scalar-field>
 
 ## tlsParseClientHello
@@ -819,17 +1043,29 @@ function tlsParseClientHello(
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer that holds the message; nothing in the answer points into it.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the body starts in `data`, in bytes, just past the handshake header.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the body is, from `off`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="TlsClientHello">
+
+A fresh hello whose `alert` is 0 when the body parsed, or the alert it earns.
+
 </scalar-field>
 
 ## tlsReadCertificate
@@ -852,20 +1088,33 @@ function tlsReadCertificate(
 #### Parameters
 
 <scalar-field name="view" type="TlsServerFlightView" required>
+
+The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer that holds the message, which the view's windows then point into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the Certificate body starts in `data`, in bytes, just past the handshake header.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the body is, from `off`.
+
 </scalar-field>
 
 ## tlsReadCertificateVerify
 
-Reads a CertificateVerify body (§4.4.3) into `view`: the scheme and the signature.
+Reads a CertificateVerify body (§4.4.3) into `view`: the scheme and the
+signature, neither of them checked here.
 
 ```ts
 function tlsReadCertificateVerify(
@@ -879,15 +1128,27 @@ function tlsReadCertificateVerify(
 #### Parameters
 
 <scalar-field name="view" type="TlsServerFlightView" required>
+
+The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer that holds the message, which the view's windows then point into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the CertificateVerify body starts in `data`, in bytes, just past the handshake header.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the body is, from `off`.
+
 </scalar-field>
 
 ## tlsReadClientHello
@@ -918,20 +1179,34 @@ function tlsReadClientHello(
 #### Parameters
 
 <scalar-field name="hello" type="TlsClientHelloView" required>
+
+The view to read into, cleared first; its `alert` is the verdict.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer that holds the message, which the view's windows then point into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the body starts in `data`, in bytes, just past the handshake header.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the body is, from `off`.
+
 </scalar-field>
 
 ## tlsReadEncryptedExtensions
 
-Reads an EncryptedExtensions body (§4.3.1) into `view`.
+Reads an EncryptedExtensions body (§4.3.1) into `view`: ALPN, an empty
+`server_name` and `supported_groups` may be there, and any other extension
+sets `extensionAlert`.
 
 ```ts
 function tlsReadEncryptedExtensions(
@@ -945,15 +1220,27 @@ function tlsReadEncryptedExtensions(
 #### Parameters
 
 <scalar-field name="view" type="TlsServerFlightView" required>
+
+The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer that holds the message, which the view's windows then point into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the EncryptedExtensions body starts in `data`, in bytes, just past the handshake header.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the body is, from `off`.
+
 </scalar-field>
 
 ## tlsReadNewSessionTicket
@@ -974,15 +1261,27 @@ function tlsReadNewSessionTicket(
 #### Parameters
 
 <scalar-field name="view" type="TlsServerFlightView" required>
+
+The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer that holds the message, which the view's windows then point into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the NewSessionTicket body starts in `data`, in bytes, just past the handshake header.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the body is, from `off`.
+
 </scalar-field>
 
 ## tlsReadServerHello
@@ -1004,15 +1303,27 @@ function tlsReadServerHello(
 #### Parameters
 
 <scalar-field name="view" type="TlsServerFlightView" required>
+
+The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer that holds the message, which the view's windows then point into.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the ServerHello body starts in `data`, in bytes, just past the handshake header.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the body is, from `off`.
+
 </scalar-field>
 
 ## tlsSelectPskIdentity
@@ -1033,14 +1344,23 @@ function tlsSelectPskIdentity(
 #### Parameters
 
 <scalar-field name="hello" type="TlsClientHelloView" required>
+
+A view `tlsReadClientHello` has read into; its PSK windows are cleared first either way.
+
 </scalar-field>
 
 <scalar-field name="index" type="i32" required>
+
+Which identity to choose, from 0, in the client's order.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the identity and its binder were found and the windows point at them.
+
 </scalar-field>
 
 ## tlsServerHelloDowngrade
@@ -1058,16 +1378,25 @@ function tlsServerHelloDowngrade(
 #### Parameters
 
 <scalar-field name="view" type="TlsServerFlightView" required>
+
+A view `tlsReadServerHello` has just read into.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the random ends in the TLS 1.2 or the TLS 1.1 sentinel.
+
 </scalar-field>
 
 ## tlsWindowHasU16
 
-Whether the 16-bit values `data[at .. at + length)` hold `value`.
+Whether the 16-bit values `data[at .. at + length)` hold `value`: how a
+server asks a `TlsClientHelloView`'s windows what it offers without copying
+them. The values are big-endian pairs; a last odd byte, and any part of the
+window outside `data`, is not read.
 
 ```ts
 function tlsWindowHasU16(
@@ -1081,25 +1410,41 @@ function tlsWindowHasU16(
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer the window points into, such as a view's `data`.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the window starts in `data`, in bytes.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes the window holds, two a value.
+
 </scalar-field>
 
 <scalar-field name="value" type="i32" required>
+
+The 16-bit code point to look for, such as `TLS_VERSION_13`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when one of the window's values is `value`.
+
 </scalar-field>
 
 ## tlsWindowString
 
-The bytes of `data[at .. at + length)` as a string of one character a byte: ASCII here, a host name.
+The bytes of `data[at .. at + length)` as a string of one character a byte:
+ASCII here, a host name.
 
 ```ts
 function tlsWindowString(
@@ -1112,17 +1457,29 @@ function tlsWindowString(
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer the window points into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the window starts in `data`, in bytes.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes the window holds; any part outside `data` is left out.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+A fresh string, one character for each byte read.
+
 </scalar-field>
 
 ## tlsWriteCertificate
@@ -1142,22 +1499,35 @@ function tlsWriteCertificate(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="chain" type="u8[][]" required>
+
+The DER certificates, leaf first, each written as it is.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteCertificateVerify
 
-Writes a CertificateVerify (§4.4.3) at `out[at]`: the signature scheme and the signature as it goes on the wire.
+Writes a CertificateVerify (§4.4.3) at `out[at]`: the signature scheme and
+the signature as it goes on the wire.
 
 ```ts
 function tlsWriteCertificateVerify(
@@ -1171,20 +1541,35 @@ function tlsWriteCertificateVerify(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="scheme" type="i32" required>
+
+The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
+
 </scalar-field>
 
 <scalar-field name="signature" type="u8[]" required>
+
+The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteCertificateVerifyContent
@@ -1207,23 +1592,41 @@ function tlsWriteCertificateVerifyContent(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the content starts in `out`. It has no handshake header: it is signed, not sent.
+
 </scalar-field>
 
 <scalar-field name="transcriptHash" type="u8[]" required>
+
+The buffer that holds the transcript hash through the server's Certificate.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the hash starts in `transcriptHash`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the hash is: the suite's hash length.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the content ends in `out`: `at` plus 98 plus `len`, written or not.
+
 </scalar-field>
 
 ## tlsWriteClientHello
@@ -1256,41 +1659,77 @@ function tlsWriteClientHello(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="random" type="u8[]" required>
+
+The client's 32-byte `random` (§4.1.2), written as it is.
+
 </scalar-field>
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The `legacy_session_id`, 0 to 32 bytes; the client sends 32 for middlebox compatibility.
+
 </scalar-field>
 
 <scalar-field name="suites" type="i32[]" required>
+
+The cipher suites offered, in order of preference.
+
 </scalar-field>
 
 <scalar-field name="groups" type="i32[]" required>
+
+The groups `supported_groups` offers, in order of preference.
+
 </scalar-field>
 
 <scalar-field name="shareGroup" type="i32" required>
+
+The group of the one key share sent, such as `TLS_GROUP_X25519`.
+
 </scalar-field>
 
 <scalar-field name="sharePublic" type="u8[]" required>
+
+That share's public key, its `key_exchange`.
+
 </scalar-field>
 
 <scalar-field name="serverName" type="string" required>
+
+The host name for `server_name`, ASCII; empty to leave the extension out.
+
 </scalar-field>
 
 <scalar-field name="alpn" type="string[]" required>
+
+The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
+
 </scalar-field>
 
 <scalar-field name="cookie" type="u8[]" required>
+
+A HelloRetryRequest's `cookie` to echo; empty to send none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteEncryptedExtensions
@@ -1316,26 +1755,47 @@ function tlsWriteEncryptedExtensions(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="extra" type="u8[]" required>
+
+Whole extensions, type and length included, written first and unchecked; empty for none.
+
 </scalar-field>
 
 <scalar-field name="alpn" type="string" required>
+
+The protocol the server chose, one character a byte, at most 255; empty to send no ALPN.
+
 </scalar-field>
 
 <scalar-field name="acknowledgeServerName" type="boolean" required>
+
+Whether to send the empty `server_name` that says the server used the name.
+
 </scalar-field>
 
 <scalar-field name="quicTransportParameters" type="u8[] | null" required>
+
+The server's QUIC transport parameters, opaque; `null` to send none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteFinished
@@ -1355,23 +1815,41 @@ function tlsWriteFinished(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="verifyData" type="u8[]" required>
+
+The buffer that holds the `verify_data`, the HMAC the key schedule computed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the `verify_data` starts in `verifyData`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes it is: the suite's hash length, 32 or 48.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteHelloRetryRequest
@@ -1396,29 +1874,53 @@ function tlsWriteHelloRetryRequest(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The buffer that holds the client's `legacy_session_id`, such as the hello's `data`.
+
 </scalar-field>
 
 <scalar-field name="sessionIdOff" type="i32" required>
+
+Where the session id starts in `sessionId`.
+
 </scalar-field>
 
 <scalar-field name="sessionIdLength" type="i32" required>
+
+How many bytes the session id is, 0 to 32.
+
 </scalar-field>
 
 <scalar-field name="suite" type="i32" required>
+
+The cipher suite the server chose, which the second ServerHello must choose again.
+
 </scalar-field>
 
 <scalar-field name="group" type="i32" required>
+
+The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteNewSessionTicket
@@ -1449,41 +1951,77 @@ function tlsWriteNewSessionTicket(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="lifetime" type="u32" required>
+
+How long the ticket may be used, in seconds; RFC 8446 §4.6.1 caps it at seven days.
+
 </scalar-field>
 
 <scalar-field name="ageAdd" type="u32" required>
+
+The `ticket_age_add` that obfuscates the ticket age, which §4.6.1 wants fresh and random.
+
 </scalar-field>
 
 <scalar-field name="nonce" type="u8[]" required>
+
+The buffer that holds the `ticket_nonce`.
+
 </scalar-field>
 
 <scalar-field name="nonceOff" type="i32" required>
+
+Where the nonce starts in `nonce`.
+
 </scalar-field>
 
 <scalar-field name="nonceLength" type="i32" required>
+
+How many bytes the nonce is, 0 to 255.
+
 </scalar-field>
 
 <scalar-field name="ticket" type="u8[]" required>
+
+The buffer that holds the ticket the client will send back.
+
 </scalar-field>
 
 <scalar-field name="ticketOff" type="i32" required>
+
+Where the ticket starts in `ticket`.
+
 </scalar-field>
 
 <scalar-field name="ticketLength" type="i32" required>
+
+How many bytes the ticket is: §4.6.1 allows 1 to 65535, not checked here.
+
 </scalar-field>
 
 <scalar-field name="extra" type="u8[]" required>
+
+Whole extensions, type and length included, written unchecked; empty for none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteServerHello
@@ -1510,32 +2048,59 @@ function tlsWriteServerHello(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="random" type="u8[]" required>
+
+The server's 32-byte `random` (§4.1.3), written as it is.
+
 </scalar-field>
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The buffer that holds the client's `legacy_session_id`, such as the hello's `data`.
+
 </scalar-field>
 
 <scalar-field name="sessionIdOff" type="i32" required>
+
+Where the session id starts in `sessionId`.
+
 </scalar-field>
 
 <scalar-field name="sessionIdLength" type="i32" required>
+
+How many bytes the session id is, 0 to 32.
+
 </scalar-field>
 
 <scalar-field name="suite" type="i32" required>
+
+The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_128_GCM_SHA256`.
+
 </scalar-field>
 
 <scalar-field name="x25519Public" type="u8[]" required>
+
+The server's x25519 public key, the share's `key_exchange`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## tlsWriteServerHelloPsk
@@ -1563,35 +2128,66 @@ function tlsWriteServerHelloPsk(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the message, handshake header first, starts in `out`.
+
 </scalar-field>
 
 <scalar-field name="random" type="u8[]" required>
+
+The server's 32-byte `random` (§4.1.3), written as it is.
+
 </scalar-field>
 
 <scalar-field name="sessionId" type="u8[]" required>
+
+The buffer that holds the client's `legacy_session_id`, such as the hello's `data`.
+
 </scalar-field>
 
 <scalar-field name="sessionIdOff" type="i32" required>
+
+Where the session id starts in `sessionId`.
+
 </scalar-field>
 
 <scalar-field name="sessionIdLength" type="i32" required>
+
+How many bytes the session id is, 0 to 32.
+
 </scalar-field>
 
 <scalar-field name="suite" type="i32" required>
+
+The cipher suite the server chose.
+
 </scalar-field>
 
 <scalar-field name="x25519Public" type="u8[]" required>
+
+The server's x25519 public key, the share's `key_exchange`.
+
 </scalar-field>
 
 <scalar-field name="selectedIdentity" type="i32" required>
+
+The index, from 0, of the client's PSK identity the server accepts; only its low
+  16 bits are written.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+Where the message ends in `out`: `at` plus its length, written or not.
+
 </scalar-field>
 
 ## TlsClientHello
@@ -1662,9 +2258,7 @@ class TlsClientHelloView
 | `alert: i32` | 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. |
 | `alpnAt: i32` | ALPN's `protocol_name_list`, each name a length byte and its bytes (RFC 7301 §3.1). |
 | `alpnLength: i32` |  |
-| `data: u8[]` | The buffer the windows point into: the one the last hello was read from. |
 | `extensionsAt: i32` | The extensions block, every extension in it. |
-| `extensionSeen: u32[]` | One bit per extension type read, for the duplicate check (§4.2); cleared by each read. |
 | `extensionsLength: i32` |  |
 | `groupsAt: i32` | `supported_groups`, 16-bit values. |
 | `groupsLength: i32` |  |
@@ -1698,7 +2292,6 @@ class TlsClientHelloView
 | `quicAt: i32` | The client's `quic_transport_parameters`, opaque (RFC 9001 §8.2). |
 | `quicLength: i32` |  |
 | `randomAt: i32` |  |
-| `reader: TlsReader` | The reader each read runs, kept so that a read allocates none. |
 | `schemesAt: i32` | `signature_algorithms`, 16-bit values. |
 | `schemesLength: i32` |  |
 | `serverNameAt: i32` | The `host_name` of `server_name`, or empty. |
@@ -1706,7 +2299,6 @@ class TlsClientHelloView
 | `sessionIdAt: i32` | `legacy_session_id`, which a server echoes (§4.1.3). |
 | `sessionIdLength: i32` |  |
 | `sharesAt: i32` | The `client_shares` list of `key_share`, every entry in it. |
-| `shareSeen: u32[]` | One bit per group a share was offered for, for the duplicate check (§4.2.8). |
 | `sharesLength: i32` |  |
 | `suitesAt: i32` | `cipher_suites`, 16-bit values in the client's order. |
 | `suitesLength: i32` |  |
@@ -1714,7 +2306,6 @@ class TlsClientHelloView
 | `versionsLength: i32` |  |
 | `x25519ShareAt: i32` | The x25519 share's key_exchange, as sent; its length is the server's to check. |
 | `x25519ShareLength: i32` |  |
-| `clear(): void` | Forgets the last hello: every window empty, every flag down, both bitmaps clear. |
 
 ## TlsServerFlightView
 
@@ -1751,9 +2342,7 @@ class TlsServerFlightView
 | `contextLength: i32` | Certificate's `certificate_request_context`, which must be empty for a server's (§4.4.2). |
 | `cookieAt: i32` | A HelloRetryRequest's `cookie`, which the second ClientHello echoes (§4.2.2). |
 | `cookieLength: i32` |  |
-| `data: u8[]` | The buffer the windows point into: the one the last message was read from. |
 | `extensionAlert: i32` | 0 when the extensions are ones this message may carry, else `illegal_parameter` or `unsupported_extension`. |
-| `extensionSeen: u32[]` | One bit per extension type read, for the duplicate check (§4.2). |
 | `hasAlpn: boolean` |  |
 | `hasCookie: boolean` |  |
 | `hasKeyShare: boolean` |  |
@@ -1761,7 +2350,6 @@ class TlsServerFlightView
 | `isRetry: boolean` | A ServerHello whose `random` is the HelloRetryRequest value (§4.1.3). |
 | `legacyVersion: i32` |  |
 | `randomAt: i32` |  |
-| `reader: TlsReader` | The reader each read runs, kept so that a read allocates none. |
 | `scheme: i32` | CertificateVerify's scheme and signature (§4.4.3). |
 | `selectedVersion: i32` |  |
 | `serverNameAcknowledged: boolean` | EncryptedExtensions' empty `server_name`, the acknowledgement of RFC 6066 §3. |
@@ -1773,7 +2361,6 @@ class TlsServerFlightView
 | `signatureAt: i32` |  |
 | `signatureLength: i32` |  |
 | `suite: i32` |  |
-| `clear(): void` | Forgets the last message: every window empty, every flag down, the bitmap clear. |
 
 ## Constants
 
@@ -1871,6 +2458,8 @@ An extension in a server message that the client never offered (§4.2).
 
 `TLS_EXT_ALPN: i32`
 
+`application_layer_protocol_negotiation` (RFC 7301 §3.1): the protocols offered, or the one chosen.
+
 </scalar-card>
 
 <scalar-card title="44" icon="phosphor/regular/hash">
@@ -1892,6 +2481,8 @@ An extension in a server message that the client never offered (§4.2).
 <scalar-card title="51" icon="phosphor/regular/hash">
 
 `TLS_EXT_KEY_SHARE: i32`
+
+`key_share` (§4.2.8): the (EC)DHE shares, or a HelloRetryRequest's `selected_group`.
 
 </scalar-card>
 
@@ -1915,11 +2506,15 @@ An extension in a server message that the client never offered (§4.2).
 
 `TLS_EXT_QUIC_TRANSPORT_PARAMETERS: i32`
 
+`quic_transport_parameters` (RFC 9001 §8.2): QUIC's own parameters, opaque to TLS.
+
 </scalar-card>
 
 <scalar-card title="0" icon="phosphor/regular/hash">
 
 `TLS_EXT_SERVER_NAME: i32`
+
+`server_name` (RFC 6066 §3): the host name the client asks for, or the server's empty acknowledgement.
 
 </scalar-card>
 
@@ -1927,17 +2522,23 @@ An extension in a server message that the client never offered (§4.2).
 
 `TLS_EXT_SIGNATURE_ALGORITHMS: i32`
 
+`signature_algorithms` (§4.2.3): the schemes a CertificateVerify may be signed with.
+
 </scalar-card>
 
 <scalar-card title="10" icon="phosphor/regular/hash">
 
 `TLS_EXT_SUPPORTED_GROUPS: i32`
 
+`supported_groups` (§4.2.7): the key-exchange groups the client offers.
+
 </scalar-card>
 
 <scalar-card title="43" icon="phosphor/regular/hash">
 
 `TLS_EXT_SUPPORTED_VERSIONS: i32`
+
+`supported_versions` (§4.2.1): where TLS 1.3 is offered and chosen, since `legacy_version` stays 1.2.
 
 </scalar-card>
 
@@ -1961,11 +2562,15 @@ x25519 (§4.2.7), the one group `nish/net/tls` agrees to.
 
 `TLS_HANDSHAKE_CERTIFICATE: i32`
 
+`certificate` (§4.4.2): the server's chain, leaf first.
+
 </scalar-card>
 
 <scalar-card title="15" icon="phosphor/regular/hash">
 
 `TLS_HANDSHAKE_CERTIFICATE_VERIFY: i32`
+
+`certificate_verify` (§4.4.3): a signature over the transcript under the leaf's key.
 
 </scalar-card>
 
@@ -1973,55 +2578,8 @@ x25519 (§4.2.7), the one group `nish/net/tls` agrees to.
 
 `TLS_HANDSHAKE_CLIENT_HELLO: i32`
 
-`nish/net/tls/codec` — the TLS 1.3 handshake messages a server and a
-client read and write (RFC 8446 §4), as bytes.
-
-One reader and eight writers. `tlsParseClientHello` reads a ClientHello body
-into a `TlsClientHello`, checking its structure: every length against the
-bytes it claims, every vector against its RFC 8446 bounds, and no extension
-twice (§4.2). A message that breaks one answers the alert a server sends for
-it in the hello's `alert` field (`decode_error` for a malformed or truncated
-one, `illegal_parameter` for a duplicate), never a panic, since every byte
-of it is the peer's. What the fields *mean* — which version, which suite,
-whether a share is missing — is the server's to decide, in `nish/net/tls`.
-
-`tlsReadClientHello` is the same reader for a server that keeps its state
-in a slot: it reads into a `TlsClientHelloView` made once, whose fields are
-windows into the message rather than copies of it, so a ClientHello read
-allocates nothing, and `tlsParseClientHello` copies a view's windows out.
-
-The writers each answer one whole handshake message, header included:
-ServerHello, a resumed ServerHello that names the PSK it accepts,
-HelloRetryRequest, EncryptedExtensions, Certificate, CertificateVerify,
-Finished and NewSessionTicket. Their inputs come from the server and the
-caller's configuration rather than from the peer, so they check nothing.
-Each is a `tlsWrite*` function that writes into the caller's array at an
-offset — run over an empty array, it measures — and a `tlsEncode*` one
-that answers the message in a fresh array.
-
-The client's side is the mirror: `tlsWriteClientHello` and
-`tlsEncodeClientHello` write the hello `nish/net/tls/client` sends, and five
-readers — `tlsReadServerHello` (a HelloRetryRequest too),
-`tlsReadEncryptedExtensions`, `tlsReadCertificate`,
-`tlsReadCertificateVerify` and `tlsReadNewSessionTicket` — read the
-server's flight into a `TlsServerFlightView` made once, as windows, with
-the same checks and the same alerts in its `alert` field. A server's bytes
-are the peer's just as a client's are, so these readers never panic either
-(the `tls-server-flight` fuzz target).
-
-The extensions read are `server_name` (RFC 6066 §3), `supported_groups`,
-`signature_algorithms`, `supported_versions` and `key_share` (RFC 8446
-§4.2), `application_layer_protocol_negotiation` (RFC 7301 §3.1) and
-`quic_transport_parameters` (RFC 9001 §8.2), and `pre_shared_key` and
-`psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9), whose identities and
-binders the reader checks against their syntax but does not open: a ticket
-and its binder are the server's to judge. Every other extension is skipped,
-which is what RFC 8446 §4.2 asks of a server that does not know it.
-
-Written from the RFCs, not ported from another implementation. Private
-names carry the `tls` prefix because a `std/` module's private functions
-share the importing program's flat symbol namespace (`docs/wp26-stdlib.md`
-§3e).
+`client_hello` (§4.1.2): the first message of a handshake, and the client's second after a
+HelloRetryRequest.
 
 </scalar-card>
 
@@ -2029,11 +2587,15 @@ share the importing program's flat symbol namespace (`docs/wp26-stdlib.md`
 
 `TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS: i32`
 
+`encrypted_extensions` (§4.3.1): the server's extensions that do not belong in its ServerHello.
+
 </scalar-card>
 
 <scalar-card title="20" icon="phosphor/regular/hash">
 
 `TLS_HANDSHAKE_FINISHED: i32`
+
+`finished` (§4.4.4): the MAC over the transcript that closes a side's flight.
 
 </scalar-card>
 
@@ -2049,11 +2611,15 @@ The synthetic message a HelloRetryRequest puts in the transcript in place of the
 
 `TLS_HANDSHAKE_NEW_SESSION_TICKET: i32`
 
+`new_session_ticket` (§4.6.1): a ticket the server sends after the handshake, for resumption.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `TLS_HANDSHAKE_SERVER_HELLO: i32`
+
+`server_hello` (§4.1.3), which a HelloRetryRequest shares, told apart by its `random`.
 
 </scalar-card>
 

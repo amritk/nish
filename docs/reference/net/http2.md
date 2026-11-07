@@ -26,19 +26,30 @@ import {
 ```
 
 ```ts
-import { Http2Config, Http2Connection, H2_NEED_MORE, H2_REQUEST, H2_DATA } from "nish/net/http2";
+import { H2_ERROR, H2_NEED_MORE, H2_REQUEST, Http2Config, Http2Connection } from "nish/net/http2";
+import { httpFieldBytes } from "nish/net/http-fields";
 
+const names: u8[][] = [httpFieldBytes("content-type")];
+const values: u8[][] = [httpFieldBytes("text/plain")];
+const body: u8[] = httpFieldBytes("hello");
 const conn = new Http2Connection(new Http2Config());
-// send conn.output[conn.outputStart .. conn.outputEnd), then conn.consume(sent)
-conn.feed(received, 0, n);
-let event: i32 = conn.next();
-while (event !== H2_NEED_MORE && event !== H2_ERROR) {
-  // H2_REQUEST: conn.stream, conn.fields (method, path, get("accept")), conn.endStream
-  // H2_DATA: conn.data[conn.dataStart .. conn.dataStart + conn.dataLength), conn.endStream
-  event = conn.next();
-}
-conn.respond(stream, 200, names, values, false);
-conn.writeData(stream, body, 0, n, true);
+
+// Hands the connection `received[0 .. n)`, read from the socket, and answers every request.
+const serve = (received: u8[], n: i32): void => {
+  conn.feed(received, 0, n); // answers how much it took; feed the rest after `next`
+  let event: i32 = conn.next();
+  while (event !== H2_NEED_MORE && event !== H2_ERROR) {
+    // H2_DATA: conn.data[conn.dataStart .. conn.dataStart + conn.dataLength), conn.endStream
+    if (event === H2_REQUEST) {
+      // conn.stream, conn.fields (method, path, get("accept")), conn.endStream
+      conn.respond(conn.stream, 200, names, values, false);
+      conn.writeData(conn.stream, body, 0, toI32(body.length), true);
+    }
+    event = conn.next();
+  }
+  // while conn.wantsWrite(): send conn.output[conn.outputStart .. conn.outputEnd),
+  // then conn.consume(sent)
+};
 ```
 
 <scalar-grid cols="2">
@@ -185,7 +196,7 @@ class Http2Config
 | `new Http2Config()` |  |
 | `connectionWindowSize: i32` | The connection's receive window, raised from 65,535 by a WINDOW_UPDATE at the start. |
 | `enableConnectProtocol: boolean` | SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441): whether `:protocol` is accepted. |
-| `headerTableSize: i32` | SETTINGS_HEADER_TABLE_SIZE: the HPACK decoder's table. |
+| `headerTableSize: i32` | SETTINGS_HEADER_TABLE_SIZE, in bytes: the largest HPACK dynamic table the peer's header blocks may make the decoder keep. It is in force once the peer acknowledges the server's SETTINGS; until then the table is 4,096 bytes, RFC 7541's default. A size update past it is a COMPRESSION_ERROR. |
 | `initialWindowSize: i32` | SETTINGS_INITIAL_WINDOW_SIZE: what each stream may send before the server credits it. |
 | `maxFrameSize: i32` | SETTINGS_MAX_FRAME_SIZE: the largest frame payload read, which sizes the input buffer. |
 | `maxHeaderBlock: i32` | The largest header block, compressed, across HEADERS and CONTINUATION. |
@@ -207,123 +218,45 @@ class Http2Connection
 | --- | --- |
 | `new Http2Connection(config: Http2Config)` | A connection under `config`, owing its SETTINGS — and the WINDOW_UPDATE that raises the connection's window, when `connectionWindowSize` asks for one — since a server's preface is its SETTINGS (§3.4): the first `wantsWrite`, `next` or response writes them into `output`. It holds no buffer until then, so `output` is empty after the constructor and after `restart`: a caller that reads `output` itself calls `wantsWrite` first. A cap outside what RFC 9113 allows panics. |
 | `active: i32` | Streams with a slot. |
-| `block: u8[]` | The header block being gathered across CONTINUATION frames. |
-| `blockEndStream: boolean` |  |
-| `blockError: i32` | A stream error the HEADERS that opened the block carried. |
-| `blockFragments: i32` |  |
-| `blockLength: i32` |  |
-| `blockStream: i32` | The stream the open header block is on, or 0 when none is open. |
-| `blockUsed: i32` |  |
-| `closed: i32[]` | The identifiers of the streams closed most recently, however they closed, a ring. |
-| `closedAt: i32` |  |
-| `config: Http2Config` |  |
 | `data: u8[]` | H2_DATA's bytes: the input buffer, valid until the next `feed`. |
-| `dataLength: i32` |  |
+| `dataLength: i32` | How many bytes of `data`, from `dataStart`, H2_DATA hands the program; 0 for an empty DATA. |
 | `dataStart: i32` | H2_DATA's window onto `data`. |
 | `date: u8[]` | The `date` every final response carries (RFC 9110 §6.6.1), as the 29 bytes of an IMF-fixdate, or empty for none. A bare connection has no clock, so it starts empty; `Http2TlsServer` points it at its `HttpDate`'s bytes, which that rewrites in place once a second. |
-| `dateName: u8[]` | The bytes of `date`, the field's name, made once. |
-| `decoder: HpackDecoder` |  |
-| `empty: u8[]` | One empty array, made once: GOAWAY's debug data, which the server never sends, and `input`, `output` and `block` while the connection holds none. |
-| `encoded: u8[]` | Where a response's header block is encoded, emptied and reused. |
-| `encoder: HpackEncoder` |  |
+| `decoder: HpackDecoder` | The HPACK decoder for the peer's header blocks; `restart` empties its table. |
+| `encoder: HpackEncoder` | The HPACK encoder for responses; every field is a literal without indexing, so its table stays empty. |
 | `endStream: boolean` | Whether the last H2_REQUEST, H2_DATA or H2_TRAILERS ended its stream. |
 | `errorCode: i64` | H2_RESET's, H2_GOAWAY's and H2_ERROR's code. |
 | `fields: HttpFields` | The last request's or trailers' fields, valid until the next header block on the connection, for any stream: that block empties them and reuses their arrays, so a program copies what it keeps (`docs/security/http2.md`, H2-1). |
-| `frame: Http2Frame` |  |
-| `goawayReceived: boolean` |  |
-| `goawaySent: boolean` |  |
+| `goawaySent: boolean` | Whether a GOAWAY from the server is in the output: by `goaway`, `sendGoaway` or a connection error. |
 | `input: u8[]` | Bytes fed and not read yet are `input[inputStart .. inputEnd)`. |
-| `inputEnd: i32` |  |
-| `inputEnded: boolean` | The peer's byte stream has ended (`endInput`). |
-| `inputStart: i32` |  |
-| `inputUsed: i32` | How far into `input`, `output` and `block` the connection has written since it borrowed each: what giving it back zeroes. |
+| `inputEnd: i32` | Where the bytes fed and not read yet end in `input`. |
+| `inputStart: i32` | Where the bytes fed and not read yet start in `input`. |
+| `inputUsed: i32` | How far into `input` the connection has written since it borrowed it: what giving it back zeroes. |
 | `lastPeerStream: i32` | The highest stream identifier the peer has opened. |
 | `lastStreamId: i32` | H2_GOAWAY's last stream identifier. |
-| `localInitialWindow: i64` | The window a new stream starts with on the receiving side. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`. |
-| `outputEnd: i32` |  |
-| `outputStart: i32` |  |
-| `outputUsed: i32` |  |
-| `peerInitialWindow: i64` | The peer's SETTINGS_INITIAL_WINDOW_SIZE. |
+| `outputEnd: i32` | Where the bytes to send end in `output`. |
+| `outputStart: i32` | Where the bytes to send start in `output`; `consume` moves it. |
 | `peerMaxFrameSize: i32` | The peer's SETTINGS_MAX_FRAME_SIZE. |
-| `peerMaxHeaderList: i64` | The peer's SETTINGS_MAX_HEADER_LIST_SIZE, advisory; -1 until it sends one. |
-| `pools: Http2Pools \| null` | Where `input`, `output` and `block` are borrowed from: the server's, or a pool of one of each the connection makes itself when it first needs a buffer. A buffer the connection does not hold is `empty`. |
-| `prefaceOwed: boolean` | The server's SETTINGS are not written yet: the first `holdOutput` writes them. |
-| `recvUnacked: i64` |  |
-| `recvWindow: i64` | The connection's receive window, and what has been handed on since it was last credited. |
-| `resetAt: i32` |  |
+| `pools: Http2Pools \| null` | Where the connection borrows its input, its output and the header block it gathers: the pools `Http2TlsServer` shares among its slots, or, while this is `null` when a buffer is first needed, pools of one of each the connection makes itself. While the connection holds no input or no output buffer, `input` or `output` is an empty array. |
 | `resetByPeer: boolean` | Whether H2_RESET came from the peer's RST_STREAM rather than a rule its stream broke. |
-| `resetCredit: i32` | What is left of `config.resetBudget`. |
-| `resets: i32[]` | The identifiers the server reset most recently, a ring. |
-| `sendBlocked: boolean` | `writeData` was held back by the connection's window. |
-| `sendWindow: i64` | The connection's send window. |
-| `sentLast: i32` | The last stream identifier the server's first GOAWAY named, which no later one may raise (§6.8). |
-| `settingIds: i32[]` | The server's SETTINGS, made once and sent by every `restart`. |
 | `settingsAcked: boolean` | Whether the peer has acknowledged the server's SETTINGS. |
-| `settingValues: i64[]` |  |
-| `state: i32` |  |
-| `statusName: u8[]` | The bytes of `:status` and of a three-digit status, reused for every response. |
-| `statusValue: u8[]` |  |
 | `stream: i32` | The last event's stream. |
-| `streams: Http2Stream[]` |  |
-| `bodyRoom(): i32` | The room DATA and HEADERS may use: all but the control reserve. |
-| `chargeReset(): i32` | Charges one stream the peer had reset to the reset budget, whichever side sent the RST_STREAM: a client that cannot send one itself provokes the server into it (MadeYouReset, CVE-2025-8671). Answers H2_NEED_MORE, or once the budget is spent the connection error ENHANCE_YOUR_CALM (§10.5). |
 | `consume(n: i32): void` | Marks the first `n` bytes of the output sent; once all of it is, the output goes back to its pool. |
-| `credit(s: Http2Stream \| null, n: i32): void` | Hands `n` received bytes back to the connection's window, and to `s`'s when it is still open for receiving, with a WINDOW_UPDATE once half a window is owed. |
-| `discarded(id: i32): boolean` | Whether frames on stream `id`, which has no slot, are dropped without a word: the server reset it and these were in flight (§5.4.2), or it was opened after the server's GOAWAY and so never opened at all (§6.8). |
 | `drop(): void` | Ends the connection where it stands, for a carrier that closes it: every buffer is given back, zeroed, with what was unread or unsent, and the connection answers H2_ERROR until `restart`. `errorCode` is left as it was. |
-| `encodeStatus(status: i32, withDate: boolean): void` | Empties `encoded` and starts a block with `:status`, or with nothing for 0 (trailers), then with `date` when `withDate` and the status is final. Both are literals without indexing, so the dynamic table never moves: `date` is the static table's name 33 and a value of 29 bytes, in Huffman when that is shorter. |
-| `endBlock(): i32` | A whole header block: decoded first, whatever becomes of its stream, because the decoder's table must stay in step with the peer's encoder (§4.3); then a new stream's request, or an open stream's trailers. |
-| `endInput(): void` | The peer's byte stream has ended, so nothing more will be fed: once the requests it already sent are answered, the connection is done. |
-| `fail(code: i32): i32` | A connection error: queues GOAWAY with `code` and answers H2_ERROR. |
 | `feed(buf: u8[], off: i32, len: i32): i32` | Takes as much of `buf[off, off + len)` as the input buffer has room for, and answers how much; the rest is the caller's to feed again once `next` has read what is there. Moves the unread bytes to the front of the buffer, which ends the last H2_DATA's window. Once the connection has failed it takes everything and keeps nothing. |
 | `find(id: i32): Http2Stream \| null` | The slot holding stream `id`, or `null`. |
-| `gather(f: Http2Frame): boolean` | Appends a fragment of a header block; a block past `maxHeaderBlock` or `H2_MAX_FRAGMENTS` ends the connection. |
-| `giveBlock(): void` | Gives `block` back, zeroing what was gathered into it. |
-| `giveInput(): void` | Gives `input` back, zeroing what was written into it; ends the last H2_DATA's window. |
-| `giveOutput(): void` | Gives `output` back, zeroing what was written into it, sent or not. |
 | `goaway(): i32` | Starts a graceful close (§6.8): GOAWAY with NO_ERROR naming the last stream the peer opened. Streams already open finish; newer ones are ignored; `isDone` once the last has closed and everything is sent. Answers 0, also when a GOAWAY was already sent or the connection has failed, or `H2_AGAIN` when the output has no room for the frame yet. |
-| `handleContinuation(f: Http2Frame): i32` | CONTINUATION (§6.10): only inside a header block, which `handleFrame` has checked it continues. |
-| `handleData(f: Http2Frame): i32` | DATA (§6.1): flow control first, on the whole payload, then the stream's state. |
-| `handleFrame(f: Http2Frame): i32` | One frame that parsed: the rules no single frame type owns, then the type's own. |
-| `handleHeaders(f: Http2Frame): i32` | HEADERS (§6.2): starts a header block, and ends it when END_HEADERS says so. |
-| `handlePriority(f: Http2Frame): i32` | PRIORITY (§6.3): checked and otherwise ignored, and it opens nothing. |
-| `handleRstStream(f: Http2Frame): i32` | RST_STREAM (§6.4): the stream is closed; on an idle one it is a connection error. |
-| `handleSettings(f: Http2Frame): i32` | SETTINGS (§6.5): the peer's acknowledgement puts the server's own settings in force; anything else is the peer's, each value checked, then acknowledged. A new SETTINGS_INITIAL_WINDOW_SIZE moves every stream's send window by the difference (§6.9.2), and opening one answers H2_WINDOW. |
-| `handleWindowUpdate(f: Http2Frame): i32` | WINDOW_UPDATE (§6.9): a send window grows, and a write it held back may go on. |
-| `holdBlock(): void` | Borrows `block` unless the connection holds it. |
-| `holdInput(): void` | Borrows `input` unless the connection holds it. |
-| `holdOutput(): void` | Borrows `output` unless the connection holds it, and writes the SETTINGS it owes. |
-| `inputRoom(): i32` | How many bytes `feed` would take now. |
-| `inputTail(): i32` | Moves the unread input to the front of its buffer, which ends the last H2_DATA's window, and answers the room after it: where a carrier may read straight into `input` from `inputEnd`, then `received` what it read. |
 | `isDone(): boolean` | Whether the connection is over: everything is sent, and it failed, or no stream is left after a GOAWAY went either way or after the peer's byte stream ended (`endInput`) with nothing of it left unread. |
-| `isIdle(id: i32): boolean` | Whether `id` names an idle stream: one the peer has not opened yet. |
-| `lender(): Http2Pools` | The pools the connection borrows from, made at ceiling 1 the first time a bare connection asks. |
-| `localEnd(s: Http2Stream): void` | The server ended stream `s`; closes it when the peer had too, and credits the reset budget. |
 | `next(): i32` | Reads frames until one is an event for the program, and answers it. |
-| `open(id: i32): Http2Stream` | Opens stream `id` in a free slot; the caller has checked there is one. |
-| `received(n: i32): void` | Takes `n` bytes a carrier read into `input` at `inputEnd`, after `inputTail` gave it the room. |
-| `recentlyClosed(id: i32): boolean` | Whether stream `id` is one the connection remembers closing. A HEADERS below the highest identifier on a stream it does not remember was never opened, and is the out-of-order identifier §5.1.1 calls PROTOCOL_ERROR rather than a frame on a closed stream (STREAM_CLOSED, §5.1). |
-| `recentlyReset(id: i32): boolean` | Whether the server reset stream `id` recently, so frames still in flight for it are ignored (§5.4.2). |
-| `refuseStream(id: i32, code: i32): i32` | A stream error the peer caused on `id`, which the program never saw: resets it and charges the budget. |
-| `release(s: Http2Stream): void` | Frees the slot of a stream that is closed. |
-| `remoteEnd(s: Http2Stream): void` | The peer ended stream `s`; closes it when the server had too. |
 | `reset(id: i32, code: i32): i32` | Resets stream `id` with `code` (§6.4), from the program's side: CANCEL, say. Answers 0, `H2_AGAIN` when the output has no room for the frame yet (the stream stays open), or `H2_CLOSED`. |
-| `resetStream(id: i32, code: i32): boolean` | Sends RST_STREAM for `id` with `code`, frees its slot if it has one, and remembers it; answers false, changing nothing, when the frame did not fit. |
-| `respond(id: i32, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32` | Answers stream `id` with `status` and the fields `names[k]`: `values[k]`, lowercase and none of them connection-specific; END_STREAM when `endStream`. A 1xx status but 101 may come before the final one and may not end the stream. Answers as `sendHead` does. |
+| `respond(id: i32, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32` | Answers stream `id` with `status` and the fields `names[k]`: `values[k]`, lowercase and none of them connection-specific; END_STREAM when `endStream`. A 1xx status but 101 may come before the final one and may not end the stream. The block is encoded into the output before it answers. |
 | `rest(): void` | Gives back every buffer the connection holds and does not need: the input once all of it is read, which ends the last H2_DATA's window; the output once all of it is sent; the header block while none is open. A carrier calls it once the program is done with the last event, so a connection waiting on its peer holds no buffer. |
 | `restart(): void` | Puts the connection back as the constructor left it, for the next peer: every stream closed, both HPACK tables empty, every buffer given back, and the server's SETTINGS owed again. It allocates nothing, which is what lets a carrier reuse one connection per slot (WP34 N9). |
-| `room(): i32` | The room left at the end of the output, once what was sent is moved out of the way. |
 | `sendGoaway(code: i32): boolean` | Writes GOAWAY with `code`, naming the last stream the peer had opened when the server's first GOAWAY went: no later one may name a higher stream (§6.8). Answers whether it fit. |
-| `sendHead(s: Http2Stream, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32` | Encodes `:status` and `names`/`values` and sends the block as HEADERS and as many CONTINUATION frames as the peer's SETTINGS_MAX_FRAME_SIZE needs, with END_STREAM when `endStream`. Answers 0, `H2_INVALID` for fields `httpFieldsCheckOutgoing` refuses or a status outside 100 to 599, `H2_AGAIN` when the output has no room for it yet, or `H2_CLOSED`. Nothing is encoded until it is sure to be sent, so the HPACK state never moves for a block that was not. |
-| `streamError(s: Http2Stream, code: i32): i32` | A stream error on `s`: resets it, charges the budget, and answers the H2_RESET that tells the program. |
-| `tooLarge(id: i32): void` | A request whose header list passed `maxHeaderListSize`: a 431 with END_STREAM, then a RST_STREAM with NO_ERROR when the peer is still sending (§8.1), so the stream never reaches the program. |
-| `trailers(s: Http2Stream, decoded: i32): i32` | A header block on an open stream: trailers, which must end it (§8.1). |
 | `wantsWrite(): boolean` | Whether the output holds bytes to send; the SETTINGS a fresh connection owes are written first. |
-| `writable(id: i32): Http2Stream \| null` | The stream the program may still send on, or `null`. |
 | `writeData(id: i32, buf: u8[], off: i32, len: i32, endStream: boolean): i32` | Sends as much of `buf[off, off + len)` on stream `id` as the stream's window, the connection's window, and the output allow, in frames no larger than the peer's SETTINGS_MAX_FRAME_SIZE, and answers how much. END_STREAM goes on the last frame when `endStream` and every byte was taken; `len` 0 with `endStream` sends an empty DATA that ends the stream. Answers `H2_AGAIN` when nothing could be taken — after H2_WINDOW for the stream or the connection, or once the output has drained, it may be tried again — and `H2_CLOSED` for a stream with no final response head or that has ended. |
-| `writeTrailers(id: i32, names: u8[][], values: u8[][]): i32` | Ends stream `id` with a trailer section, after its response head (§8.1). Answers as `sendHead` does. |
-| `wrote(end: i32): boolean` | Appends a frame a writer put at the end of the output, when it fit (`end >= 0`), and answers whether it did. |
+| `writeTrailers(id: i32, names: u8[][], values: u8[][]): i32` | Ends stream `id` with a trailer section, after its response head (§8.1). The block carries no `:status` and no `date`, and is encoded into the output before it answers. |
 
 ## Http2Pools
 
@@ -339,7 +272,7 @@ class Http2Pools
 
 | Member | |
 | --- | --- |
-| `new Http2Pools(name: string, config: Http2Config, ceiling: i32)` | Pools of at most `ceiling` buffers each, for connections under `config`; `name` prefixes each pool's own. Allocates no buffer. |
+| `new Http2Pools(name: string, config: Http2Config, ceiling: i32)` | Pools of at most `ceiling` buffers each, for connections under `config`. Allocates no buffer. |
 | `block: BufferPool` | `maxHeaderBlock`. |
 | `input: BufferPool` | `maxFrameSize` and a frame header: the largest frame `next` reads. |
 | `output: BufferPool` | `outputSize`. |
@@ -357,12 +290,10 @@ class Http2Stream
 | Member | |
 | --- | --- |
 | `new Http2Stream()` |  |
-| `blocked: boolean` | `writeData` was held back by this stream's window. |
 | `contentLength: i64` | The request's `content-length`, or -1. |
-| `id: i32` |  |
+| `id: i32` | The stream's identifier, odd since a client opened it, or 0 while the slot is free. |
 | `localEnded: boolean` | The server sent END_STREAM: half-closed (local). |
 | `received: i64` | The body bytes received. |
-| `recvUnacked: i32` | What the program has been handed since the last WINDOW_UPDATE for it. |
 | `recvWindow: i64` | What the peer may still send on it. |
 | `remoteEnded: boolean` | The peer sent END_STREAM: half-closed (remote). |
 | `responded: boolean` | A final (non-1xx) response head was sent. |

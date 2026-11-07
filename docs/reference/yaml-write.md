@@ -30,7 +30,7 @@ stringifyYaml(doc, root)
 
 <scalar-card title="stringifyYaml" icon="phosphor/regular/function" href="#stringifyyaml">
 
-`v` of `doc` as block YAML text that `parseYaml` reads back as the same tree; `""` when `v` names no value or nests deeper than `JSON_WRITER_MAX_DEPTH` collections.
+A value as block YAML text that `parseYaml` reads back as the same tree.
 
 </scalar-card>
 
@@ -81,10 +81,8 @@ build, as it does in `nish/json-value`'s builders.
 
 ## stringifyYaml
 
-`v` of `doc` as block YAML text that `parseYaml` reads back as the same
-tree; `""` when `v` names no value or nests deeper than
-`JSON_WRITER_MAX_DEPTH` collections. See the module comment for the rule
-that quotes a string.
+A value as block YAML text that `parseYaml` reads back as the same tree. See
+the module comment for the rule that quotes a string.
 
 ```ts
 function stringifyYaml(
@@ -96,12 +94,22 @@ function stringifyYaml(
 #### Parameters
 
 <scalar-field name="doc" type="JsonDocument" required>
+
+The document that holds `v`.
+
 </scalar-field>
 
 <scalar-field name="v" type="JsonValue" required>
+
+The value to write, usually the document's root.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The text, ending in a line break; `""` when `v` names no value or nests deeper than
+  `JSON_WRITER_MAX_DEPTH` collections.
+
 </scalar-field>

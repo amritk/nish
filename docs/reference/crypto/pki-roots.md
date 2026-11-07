@@ -23,7 +23,7 @@ import {
 import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots";
 
 const store: PkiRoots = pkiLoadSystemRoots();
-// store.roots: X509Certificate[], parsed, no two with the same DER
+// store.roots: the parsed roots, no two with the same DER
 // store.sources: the files they were read from, in order
 // store.skipped: the PEM blocks and files that were not a root
 ```
@@ -123,17 +123,29 @@ function pkiLoadRoots(
 #### Parameters
 
 <scalar-field name="file" type="string | null" required>
+
+A file to read first, or `null` for none.
+
 </scalar-field>
 
 <scalar-field name="dirs" type="string[]" required>
+
+The directories to read every trust entry of.
+
 </scalar-field>
 
 <scalar-field name="bundles" type="string[]" required>
+
+The candidate bundle files; only the first that reads is used.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="PkiRoots">
+
+A new `PkiRoots` with what was found, empty when nothing was.
+
 </scalar-field>
 
 ## pkiLoadRootsFor
@@ -156,20 +168,38 @@ function pkiLoadRootsFor(
 #### Parameters
 
 <scalar-field name="certFile" type="string | null" required>
+
+The value of `SSL_CERT_FILE`, or `null` when unset.
+
 </scalar-field>
 
 <scalar-field name="certDir" type="string | null" required>
+
+The value of `SSL_CERT_DIR`, a `:`-separated list, or `null`
+  when unset.
+
 </scalar-field>
 
 <scalar-field name="dirs" type="string[]" required>
+
+The directories read when neither variable is set; ignored
+  when either is.
+
 </scalar-field>
 
 <scalar-field name="bundles" type="string[]" required>
+
+The bundle files tried when neither variable is set;
+  ignored when either is.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="PkiRoots">
+
+A new `PkiRoots`, as `pkiLoadRoots` gives it.
+
 </scalar-field>
 
 ## pkiLoadSystemRoots
@@ -185,11 +215,16 @@ function pkiLoadSystemRoots(): PkiRoots
 #### Returns
 
 <scalar-field name="returns" type="PkiRoots">
+
+A new `PkiRoots`, read afresh on every call; empty when nothing
+  was found.
+
 </scalar-field>
 
 ## pkiRootsDirEntry
 
-Whether a directory entry is one a trust directory holds: `*.pem`, `*.crt`, or the hash form `xxxxxxxx.N`.
+Whether a directory entry is one a trust directory holds: `*.pem`, `*.crt`,
+or the hash form `xxxxxxxx.N`.
 
 ```ts
 function pkiRootsDirEntry(name: string): boolean
@@ -198,11 +233,18 @@ function pkiRootsDirEntry(name: string): boolean
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+The entry's name, without its directory.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` for a name ending `.pem` or `.crt` with something before
+  it, or eight lowercase hex digits, a dot and one or more decimal digits.
+
 </scalar-field>
 
 ## pkiSystemBundles
@@ -221,6 +263,9 @@ function pkiSystemBundles(): string[]
 #### Returns
 
 <scalar-field name="returns" type="string[]">
+
+The bundle paths, in a fresh array each call.
+
 </scalar-field>
 
 ## PkiRoots
@@ -233,7 +278,7 @@ class PkiRoots
 
 | Member | |
 | --- | --- |
-| `new PkiRoots()` |  |
+| `new PkiRoots()` | An empty load: no roots, no sources, nothing skipped. |
 | `roots: X509Certificate[]` | The parsed roots, in the order they were read, no two with the same DER. |
 | `skipped: i32` | The PEM blocks that were not a root, and the files too large or past the cap to read. |
 | `sources: string[]` | Every file that was read, in order, whether or not it held a root. |

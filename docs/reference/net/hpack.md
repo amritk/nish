@@ -43,6 +43,9 @@ import {
 ```ts
 import { HpackDecoder, HpackEncoder, HPACK_INDEX_INCREMENTAL, HPACK_OK } from "nish/net/hpack";
 
+const name: u8[] = [58, 112, 97, 116, 104];   // ":path"
+const value: u8[] = [47];                     // "/"
+
 const enc = new HpackEncoder(4096);
 const block: u8[] = [];
 enc.encodeField(block, name, value, HPACK_INDEX_INCREMENTAL, true);
@@ -93,7 +96,7 @@ Appends `src[off, off + len)` Huffman-coded to `out`, padded to a byte with the 
 
 <scalar-card title="hpackHuffmanLength" icon="phosphor/regular/function" href="#hpackhuffmanlength">
 
-The length of `src[off, off + len)` once Huffman-coded, in bytes.
+The length of `src[off, off + len)` once Huffman-coded, in bytes, padding included.
 
 </scalar-card>
 
@@ -226,14 +229,25 @@ function hpackDecodeInteger(
 #### Parameters
 
 <scalar-field name="c" type="HpackCursor" required>
+
+Where to read; its position moves past every byte read, also when the answer is an error.
+
 </scalar-field>
 
 <scalar-field name="prefixBits" type="i32" required>
+
+How many low bits of the first byte hold the prefix, 1 to 8; the bits above are not read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The integer, 0 to 2^31 - 1; `HPACK_ERR_TRUNCATED` when the cursor has no byte left before the
+  integer ends, at the first byte or at a continuation byte; `HPACK_ERR_INTEGER_OVERFLOW` when the value
+  passes 2^31 - 1, or when the fifth continuation byte still has its continuation bit set.
+
 </scalar-field>
 
 ## hpackDecodeString
@@ -253,17 +267,35 @@ function hpackDecodeString(
 #### Parameters
 
 <scalar-field name="h" type="HpackHuffman" required>
+
+The code to decode a Huffman-coded literal with.
+
 </scalar-field>
 
 <scalar-field name="c" type="HpackCursor" required>
+
+Where to read; on `HPACK_OK` its position is just past the literal. On an error it is wherever
+  the read stopped.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the string's octets go, appended after what it holds; on an error it keeps whatever was
+  appended before the error, which a caller discards. The literal's length is bounded only by what the
+  block has left, and a Huffman-coded one decodes to at most 8/5 of its coded length.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`HPACK_OK` when the literal was read whole; `HPACK_ERR_TRUNCATED` when the cursor has no byte
+  left, the length integer ends early, or the length is more than the block has left after it;
+  `HPACK_ERR_INTEGER_OVERFLOW` when the length passes 2^31 - 1 or is padded past five continuation bytes;
+  `HPACK_ERR_HUFFMAN_EOS` or `HPACK_ERR_HUFFMAN_PADDING` from `hpackHuffmanDecode` for a Huffman-coded one.
+
 </scalar-field>
 
 ## hpackEncodeInteger
@@ -285,15 +317,29 @@ function hpackEncodeInteger(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the integer's bytes go, appended after what it holds: one byte when `value` fits the
+  prefix, else the prefix byte and one to five continuation bytes.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+The first byte's bits above the prefix; it must leave the low `prefixBits` bits clear, since
+  they are or-ed with it.
+
 </scalar-field>
 
 <scalar-field name="prefixBits" type="i32" required>
+
+How many low bits of the first byte the integer starts in, 1 to 8.
+
 </scalar-field>
 
 <scalar-field name="value" type="i32" required>
+
+The integer, 0 to 2^31 - 1.
+
 </scalar-field>
 
 ## hpackEncodeString
@@ -314,15 +360,28 @@ function hpackEncodeString(
 #### Parameters
 
 <scalar-field name="h" type="HpackHuffman" required>
+
+The code to encode with when `huffman` is true.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the literal goes, appended after what it holds: its length with a 7-bit prefix and the
+  H bit, then the octets.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The octets to write, all of them; only read.
+
 </scalar-field>
 
 <scalar-field name="huffman" type="boolean" required>
+
+Whether to Huffman-code them, even when that is longer than raw.
+
 </scalar-field>
 
 ## hpackHuffmanDecode
@@ -335,6 +394,7 @@ the last symbol are a code of their length. Because the code is complete,
 thirty bits always are. What is left when the input ends is padding, which
 §5.2 requires to be a prefix of EOS — all ones — and shorter than a byte.
 `out` keeps what was decoded before an error; a caller discards it.
+A window outside `src` panics.
 
 ```ts
 function hpackHuffmanDecode(
@@ -349,23 +409,44 @@ function hpackHuffmanDecode(
 #### Parameters
 
 <scalar-field name="h" type="HpackHuffman" required>
+
+The code to decode with.
+
 </scalar-field>
 
 <scalar-field name="src" type="u8[]" required>
+
+The coded bytes, the peer's; only read.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the window starts, an index into `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes from `off` on to decode; every one is read unless an EOS comes first.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the decoded octets go, appended after what it holds: at most `len * 8 / 5` of them,
+  since every code is at least five bits long.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`HPACK_OK` when the window decoded whole and ended in valid padding; `HPACK_ERR_HUFFMAN_EOS` when
+  a complete code was the EOS symbol, at the point it was read; `HPACK_ERR_HUFFMAN_PADDING` when the bits
+  left after the last symbol are more than seven or not all ones.
+
 </scalar-field>
 
 ## hpackHuffmanEncode
@@ -375,6 +456,7 @@ with the most significant bits of EOS, which are all ones (§5.2).
 
 The accumulator holds fewer than eight waiting bits between symbols, and a
 code is at most 30, so it never needs more than 37 bits.
+A window outside `src` panics.
 
 ```ts
 function hpackHuffmanEncode(
@@ -389,23 +471,39 @@ function hpackHuffmanEncode(
 #### Parameters
 
 <scalar-field name="h" type="HpackHuffman" required>
+
+The code to encode with.
+
 </scalar-field>
 
 <scalar-field name="src" type="u8[]" required>
+
+The octets to encode; only read.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the window starts, an index into `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many octets from `off` on to encode.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the coded bytes go: appended after what it holds, `hpackHuffmanLength` of them.
+
 </scalar-field>
 
 ## hpackHuffmanLength
 
-The length of `src[off, off + len)` once Huffman-coded, in bytes.
+The length of `src[off, off + len)` once Huffman-coded, in bytes, padding included. A window outside
+`src` panics, as does a coded length past 2^31 - 1 bytes.
 
 ```ts
 function hpackHuffmanLength(
@@ -419,20 +517,35 @@ function hpackHuffmanLength(
 #### Parameters
 
 <scalar-field name="h" type="HpackHuffman" required>
+
+The code to measure with.
+
 </scalar-field>
 
 <scalar-field name="src" type="u8[]" required>
+
+The octets to measure; only read.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the window starts, an index into `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many octets from `off` on to measure.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The number of bytes `hpackHuffmanEncode` would append for the same window, 0 for an empty one.
+
 </scalar-field>
 
 ## HpackCursor
@@ -446,11 +559,8 @@ class HpackCursor
 
 | Member | |
 | --- | --- |
-| `new HpackCursor(buf: u8[], off: i32, len: i32)` | A cursor over `buf[off, off + len)`, which must lie inside `buf`. |
-| `buf: u8[]` |  |
-| `end: i32` |  |
-| `pos: i32` |  |
-| `reset(buf: u8[], off: i32, len: i32): void` | Points the cursor at `buf[off, off + len)` instead, which must lie inside `buf`. |
+| `new HpackCursor(buf: u8[], off: i32, len: i32)` | A cursor over `buf[off, off + len)`, which must lie inside `buf`: a window outside it panics. |
+| `pos: i32` | Where the next read starts, as an index into the cursor's buffer. `hpackDecodeInteger` and `hpackDecodeString` move it past what they read; after a negative answer it is wherever the read stopped, which a caller should not rely on. |
 
 ## HpackDecoder
 
@@ -479,29 +589,16 @@ class HpackDecoder
 
 | Member | |
 | --- | --- |
-| `new HpackDecoder(settingsLimit: i32, maxHeaderListSize: i32)` |  |
-| `failed: i32` | The fatal error a decode met, which every later decode answers; 0 until then. |
-| `huffman: HpackHuffman` |  |
-| `maxHeaderListSize: i32` |  |
-| `names: u8[][]` |  |
-| `neverIndexed: boolean[]` |  |
-| `owedUpdate: i32` | The smallest limit set since the last size update, or -1 when none is owed. |
-| `settingsLimit: i32` |  |
-| `table: HpackTable` |  |
-| `tableCopied: i64` | The octets the decoder has moved through its dynamic table, counted where they move: each name or value `appendNameAt` and `appendValueAt` copy out of the table, and each octet `table.add` pushes in. The budget (`HPACK_COPY_FACTOR`) is charged before a literal's copies, from the sizes it will copy; this counts what was copied, so that tests can hold the two equal. It is public so that tests can read it. |
-| `values: u8[][]` |  |
-| `work: HpackWork \| null` | The storage a block is decoded with, made by the first `decode`, so an idle connection holds none. |
-| `appendNameAt(index: i32, out: u8[]): void` | Appends the name at static or dynamic index `index`, which must be in range, to `out`. |
-| `appendValueAt(index: i32, out: u8[]): void` | Appends the value at `index` to `out`, as `appendNameAt` does the name. |
-| `clear(): void` | Empties the fields and gives each one's array back, emptied, to its class's pool, for the next block. |
-| `copyOf(bytes: u8[]): u8[]` | A pooled copy of `bytes`, for the caller. |
+| `new HpackDecoder(settingsLimit: i32, maxHeaderListSize: i32)` | A decoder with an empty table, holding no working storage until the first `decode`. |
+| `maxHeaderListSize: i32` | The header-list limit, in octets counted as RFC 9113 §6.5.2 counts them: the field that takes the block's running total past it, and every one after, is dropped and `decode` answers `HPACK_LIST_TOO_LARGE`. |
+| `names: u8[][]` | The names of the last block's fields, in order: the fields before the list passed its limit, and none after a negative answer. Each array is the decoder's, valid until the next `decode`. |
+| `neverIndexed: boolean[]` | Whether each field of the last block came never indexed (§6.2.3), by the same position as `names`. |
+| `settingsLimit: i32` | The SETTINGS_HEADER_TABLE_SIZE in force, in octets: a size update above it is refused. Set by the constructor and `setSettingsLimit`, and put back to 4096 by `http2.ts`'s `restart`. |
+| `table: HpackTable` | The dynamic table, as the blocks decoded so far have left it. |
+| `tableCopied: i64` | The octets the decoder has moved through its dynamic table, counted where they move: each name or value it copies out of the dynamic table (a static entry's do not count), and each octet `table.add` pushes in. The budget (`HPACK_COPY_FACTOR`) is charged before a literal's copies, from the sizes it will copy; this counts what was copied, so that tests can hold the two equal. It is public so that tests can read it. |
+| `values: u8[][]` | The values of the last block's fields, by the same position as `names`, and valid as long. |
 | `decode(block: u8[], off: i32, len: i32): i32` | Decodes one whole header block, `block[off, off + len)`, and answers `HPACK_OK`, `HPACK_LIST_TOO_LARGE` or a negative `HPACK_ERR_*` code; the module comment lists what each means. After a negative answer the fields are empty and the decoder is spent. |
-| `decodeFields(c: HpackCursor): i32` | The body of `decode`: one pass over the representations.<br><br>A field is counted against the header-list limit before it is copied out, and one past the limit is never copied. That is what keeps a block of one-byte indexes, each naming a large dynamic entry, from copying the entry's size per byte read: past the limit an indexed field costs a lookup and nothing else, and a literal whose name is an index costs its value's octets, which the block holds, and a lookup. The one copy a peer can ask for past the limit is a literal with incremental indexing, which the table must take: its name and value are copied into the table, at most the table's maximum size per field, after its name is copied into the scratch when it is an index, and a block whose copies pass `HPACK_COPY_FACTOR` times the larger of the table's size and its own length ends the connection (`docs/security/http2.md`, H2-1). A literal's strings are read into the two scratch arrays, which the block's own length and the table's size bound, and a field within the limit is copied into the pools, which the limit bounds; nothing is allocated once those have grown to the largest block and list seen. |
-| `hasIndex(index: i32): boolean` | Whether `index` names an entry of either table. |
-| `nameLengthAt(index: i32): i32` | How many octets the name at `index` has. |
 | `setSettingsLimit(limit: i32): void` | Takes a new SETTINGS_HEADER_TABLE_SIZE, once the peer has acknowledged it. A limit below the table's current maximum obliges the peer's encoder to begin its next block with an update to at most the smallest limit set since its last one (§4.2); the decoder holds it to that. |
-| `sizeAt(index: i32): i64` | What the entry at `index` counts towards a header list, without building it. |
-| `working(): HpackWork` | The decoder's working storage, made the first time it is asked for. |
 
 ## HpackEncoder
 
@@ -517,13 +614,9 @@ class HpackEncoder
 
 | Member | |
 | --- | --- |
-| `new HpackEncoder(maxSize: i32)` |  |
-| `huffman: HpackHuffman` |  |
-| `owedMinimum: i32` | The smallest size set since the last block, or -1 when no update is owed. |
-| `table: HpackTable` |  |
+| `new HpackEncoder(maxSize: i32)` | An encoder with an empty table, owing no size update. |
+| `table: HpackTable` | The dynamic table, which `encodeField` adds to and `setMaxTableSize` resizes. |
 | `encodeField(out: u8[], name: u8[], value: u8[], indexing: i32, huffman: boolean): void` | Appends one field to the block in `out`: by index when a table holds it and `indexing` is not `HPACK_INDEX_NEVER`, else as a literal of the kind `indexing` names, its name by index when a table has it and its strings Huffman-coded when `huffman` is true. Any other `indexing` panics. |
-| `findField(name: u8[], value: u8[]): i32` | The index of an entry holding both `name` and `value`, or 0 when neither table has one. The static table is searched first, then the dynamic one from the newest entry. |
-| `findName(name: u8[]): i32` | The lowest index whose entry has `name`, or 0 when neither table has one. |
 | `setMaxTableSize(maxSize: i32): void` | Sets the table's maximum size, which must not pass the peer's SETTINGS_HEADER_TABLE_SIZE; the encoder cannot know that limit, so it is the caller's to keep. Call it between blocks: the next `encodeField` begins with the update, or with two when the size went down and then up again, the smallest first (§4.2). |
 
 ## HpackHuffman
@@ -535,9 +628,10 @@ string; a program may build its own to call `hpackHuffmanEncode` and
 
 Canonical means that the codes of one length are consecutive integers in
 symbol order, and that the first code of a length is one past the last code
-of the length before, shifted left by the difference. So `firstCode[L]` and
-`countAt[L]` say which `L`-bit integers are codes, and `symbols` lists the
-symbols in code order, `baseRank[L]` being where length `L` starts in it.
+of the length before, shifted left by the difference. So the first code of
+each length and how many codes it has say which `L`-bit integers are codes,
+and a list of the symbols in code order, with where each length starts in
+it, turns such a code into its symbol: decoding needs no tree.
 
 ```ts
 class HpackHuffman
@@ -545,13 +639,7 @@ class HpackHuffman
 
 | Member | |
 | --- | --- |
-| `new HpackHuffman()` |  |
-| `baseRank: i32[]` | Where each length's symbols start in `symbols`, by length. |
-| `codes: i32[]` | The code of each symbol, aligned on its least significant bit. |
-| `countAt: i32[]` | How many codes each length has, by length. |
-| `firstCode: i32[]` | The first code of each length, by length (0 to 30). |
-| `lengths: i32[]` | The length of each symbol's code, in bits. |
-| `symbols: i32[]` | The symbols in code order. |
+| `new HpackHuffman()` | Rebuilds the code from Appendix B's 257 code lengths. Build one and reuse it: each build allocates. |
 
 ## HpackTable
 
@@ -559,11 +647,11 @@ The dynamic table (§2.3.2, §4): a FIFO of fields, newest first by index,
 whose size — every entry's name and value plus 32 — never passes `maxSize`.
 
 Every entry's octets live in one store, `bytes`: its name, then its value,
-oldest entry first. `entries` says where each entry sits, two numbers to an
+oldest entry first. An index says where each entry sits, two numbers to an
 entry — where it starts in `bytes` and how long its name is; its value runs
 to where the next one starts — oldest first from entry `first` on, so that
 adding one is two `push`es and evicting one moves `first`. The evicted
-prefix of `entries`, and of `bytes`, is shifted out in place once it is half
+prefix of the index, and of `bytes`, is shifted out in place once it is half
 of either, which keeps both amortised constant time without a ring's index
 arithmetic. Shifting and popping keep an array's storage, and `bytes` never
 holds more than three times `maxSize`, so a table the peer fills and empties
@@ -577,29 +665,17 @@ class HpackTable
 
 | Member | |
 | --- | --- |
-| `new HpackTable(maxSize: i32)` |  |
-| `bytes: u8[]` |  |
-| `entries: i32[]` |  |
-| `first: i32` |  |
-| `maxSize: i32` |  |
-| `size: i32` |  |
+| `new HpackTable(maxSize: i32)` | An empty table. |
+| `bytes: u8[]` | Every entry's octets, its name then its value, oldest first, after any evicted entries' octets not yet shifted out. Any change to the table may move what it holds. |
+| `first: i32` | How many evicted entries the table still records before its oldest live one: eviction moves it up, and shifting the evicted ones out returns it to 0. |
+| `maxSize: i32` | The most `size` may be, in octets (§4.2); set by the constructor and `resize`. |
+| `size: i32` | The table's size as §4.1 counts it, in octets: every entry's name and value plus 32; at most `maxSize`. |
 | `add(name: u8[], value: u8[]): i32` | Adds a field as the newest entry, copying its octets in, evicting first to make room. An entry larger than the whole table empties it and is not added (§4.4): that is not an error. Neither array may be `bytes` itself, since eviction may move what it holds. Returns the octets it pushed into `bytes`: none for an entry it did not add. |
-| `compact(): void` | Shifts the evicted prefix out of `entries`, and out of `bytes`, once it is half of either. |
-| `costOf(k: i32): i32` | What entry `k` of `entries` costs (§4.1); it fits an `i32` because the table holds it. |
 | `count(): i32` | How many entries the table holds. |
-| `endOf(k: i32): i32` | Where entry `k` of `entries` ends in `bytes`: where the next starts, or the end of `bytes`. |
-| `entrySize(i: i32): i32` | What dynamic entry `i` costs (§4.1). |
-| `evictTo(limit: i32): void` | Evicts the oldest entries until the size is at most `limit` (§4.4). |
 | `name(i: i32): u8[]` | A fresh copy of the name of dynamic entry `i`. It allocates; the codec reads the window instead. |
-| `nameLength(i: i32): i32` | How many octets the name of dynamic entry `i` has. |
 | `nameStart(i: i32): i32` | Where the name of dynamic entry `i` starts in `bytes`. |
 | `resize(maxSize: i32): void` | Sets the maximum size, evicting what no longer fits (§4.3). |
-| `slot(i: i32): i32` | Where dynamic entry `i`, 1 being the newest, sits in `entries`; `i` must be in range. |
-| `slots(): i32` | How many entries `entries` describes, evicted ones included. |
-| `startOf(k: i32): i32` | Where entry `k` of `entries` starts in `bytes`. |
 | `value(i: i32): u8[]` | A fresh copy of the value of dynamic entry `i`, as `name` makes the name. |
-| `valueLength(i: i32): i32` | How many octets the value of dynamic entry `i` has. |
-| `valueStart(i: i32): i32` | Where the value of dynamic entry `i` starts in `bytes`, straight after its name. |
 
 ## HpackWork
 
@@ -614,14 +690,7 @@ class HpackWork
 
 | Member | |
 | --- | --- |
-| `new HpackWork()` |  |
-| `cursor: HpackCursor` |  |
-| `nameScratch: u8[]` |  |
-| `pools: u8[][][]` |  |
-| `valueScratch: u8[]` |  |
-| `classOf(length: i32): i32` | The smallest size class with room for `length` octets: the first `j` with 2^j past it, at most the last. |
-| `pool(j: i32): u8[][]` | The pool of class `j`, made the first time a field needs it. |
-| `take(length: i32): u8[]` | An empty array with room for `length` octets: one an earlier block gave back, emptied, to its class's pool, or, once the pool is empty, a new one made with the class's room. |
+| `new HpackWork()` | Empty scratch arrays, a cursor over nothing, and no pools until a field needs one. |
 
 ## Constants
 

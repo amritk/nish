@@ -71,6 +71,9 @@ function x509DrawP256Key(): Secret<u8[]>
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt;">
+
+The 32-byte scalar, big-endian, in a new `Secret` the caller owns and wipes.
+
 </scalar-field>
 
 ## x509DrawSerial
@@ -88,6 +91,9 @@ function x509DrawSerial(): u8[]
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+The 20 serial octets, big-endian, in a fresh array.
+
 </scalar-field>
 
 ## x509MintSelfSignedDrawn
@@ -110,18 +116,33 @@ function x509MintSelfSignedDrawn(
 #### Parameters
 
 <scalar-field name="priv" type="Secret&lt;u8[]&gt;" required>
+
+The 32-byte P-256 private scalar; read, and left for the caller to wipe.
+
 </scalar-field>
 
 <scalar-field name="commonName" type="string" required>
+
+The subject's and issuer's common name, 1 to 64 bytes of UTF-8 without a NUL.
+
 </scalar-field>
 
 <scalar-field name="notBeforeMs" type="i64" required>
+
+When validity starts, in milliseconds since 1970-01-01 UTC.
+
 </scalar-field>
 
 <scalar-field name="days" type="i32" required>
+
+How long it is valid, 1 to `X509_MAX_DAYS`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The certificate's DER, a fresh array, or `null`.
+
 </scalar-field>

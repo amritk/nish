@@ -244,9 +244,15 @@ function hmacCopySha256(
 #### Parameters
 
 <scalar-field name="from" type="Sha256" required>
+
+The hasher to copy; it is not changed.
+
 </scalar-field>
 
 <scalar-field name="to" type="Sha256" required>
+
+The hasher overwritten with `from`'s position.
+
 </scalar-field>
 
 ## hmacCopySha384
@@ -263,9 +269,15 @@ function hmacCopySha384(
 #### Parameters
 
 <scalar-field name="from" type="Sha384" required>
+
+The hasher to copy; it is not changed.
+
 </scalar-field>
 
 <scalar-field name="to" type="Sha384" required>
+
+The hasher overwritten with `from`'s position.
+
 </scalar-field>
 
 ## hmacKeyedInto
@@ -289,21 +301,39 @@ function hmacKeyedInto(
 #### Parameters
 
 <scalar-field name="key" type="HmacKey" required>
+
+The absorbed key; a wiped one panics.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer holding the message.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the message starts in `data`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The message's length in bytes.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the tag is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the tag starts in `out`.
+
 </scalar-field>
 
 ## hmacKeyedVerify
@@ -328,26 +358,47 @@ function hmacKeyedVerify(
 #### Parameters
 
 <scalar-field name="key" type="HmacKey" required>
+
+The absorbed key; a wiped one answers `false`.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The buffer holding the message.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the message starts in `data`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The message's length in bytes.
+
 </scalar-field>
 
 <scalar-field name="tag" type="u8[]" required>
+
+The buffer holding the tag to check.
+
 </scalar-field>
 
 <scalar-field name="tagAt" type="i32" required>
+
+Where the tag starts in `tag`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only if the tag window holds the correct tag.
+
 </scalar-field>
 
 ## hmacSha256
@@ -366,14 +417,23 @@ function hmacSha256(key: u8[], data: u8[]): u8[]
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The secret key; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 32-byte tag, which the caller owns.
+
 </scalar-field>
 
 ## hmacSha256Secret
@@ -391,14 +451,23 @@ function hmacSha256Secret(
 #### Parameters
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
+
+The secret key; the caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 32-byte tag, plain because a tag is public.
+
 </scalar-field>
 
 ## hmacSha256Verify
@@ -419,17 +488,29 @@ function hmacSha256Verify(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The secret key.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message the tag claims to cover.
+
 </scalar-field>
 
 <scalar-field name="tag" type="u8[]" required>
+
+The tag to check, as received.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only if `tag` is the full, correct tag.
+
 </scalar-field>
 
 ## hmacSha384
@@ -444,14 +525,23 @@ function hmacSha384(key: u8[], data: u8[]): u8[]
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The secret key; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 48-byte tag, which the caller owns.
+
 </scalar-field>
 
 ## hmacSha384Secret
@@ -468,19 +558,29 @@ function hmacSha384Secret(
 #### Parameters
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
+
+The secret key; the caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 48-byte tag, plain because a tag is public.
+
 </scalar-field>
 
 ## hmacSha384Verify
 
-Whether `tag` is the HMAC-SHA-384 of `data` under `key`, compared as `hmacSha256Verify` does.
+Whether `tag` is the HMAC-SHA-384 of `data` under `key`, compared as
+`hmacSha256Verify` does.
 
 ```ts
 function hmacSha384Verify(
@@ -493,17 +593,29 @@ function hmacSha384Verify(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The secret key.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message the tag claims to cover.
+
 </scalar-field>
 
 <scalar-field name="tag" type="u8[]" required>
+
+The tag to check, as received.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only if `tag` is the full, correct tag.
+
 </scalar-field>
 
 ## hmacSha512
@@ -518,14 +630,23 @@ function hmacSha512(key: u8[], data: u8[]): u8[]
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The secret key; it is read, not kept.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 64-byte tag, which the caller owns.
+
 </scalar-field>
 
 ## hmacSha512Secret
@@ -542,19 +663,29 @@ function hmacSha512Secret(
 #### Parameters
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
+
+The secret key; the caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 64-byte tag, plain because a tag is public.
+
 </scalar-field>
 
 ## hmacSha512Verify
 
-Whether `tag` is the HMAC-SHA-512 of `data` under `key`, compared as `hmacSha256Verify` does.
+Whether `tag` is the HMAC-SHA-512 of `data` under `key`, compared as
+`hmacSha256Verify` does.
 
 ```ts
 function hmacSha512Verify(
@@ -567,17 +698,29 @@ function hmacSha512Verify(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The secret key.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The whole message the tag claims to cover.
+
 </scalar-field>
 
 <scalar-field name="tag" type="u8[]" required>
+
+The tag to check, as received.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only if `tag` is the full, correct tag.
+
 </scalar-field>
 
 ## pbkdf2HmacSha256
@@ -613,20 +756,37 @@ function pbkdf2HmacSha256(
 #### Parameters
 
 <scalar-field name="password" type="Secret&lt;u8[]&gt;" required>
+
+The password P, read only inside `exposeWith`; the caller
+  still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="salt" type="u8[]" required>
+
+The salt S, public.
+
 </scalar-field>
 
 <scalar-field name="iterations" type="i32" required>
+
+The round count `c`; below 1 answers `null`.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+The derived key's length `dkLen` in bytes; below 1 answers
+  `null`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt; | null">
+
+The derived key, which the caller wipes, or `null` for bad input.
+
 </scalar-field>
 
 ## HmacKey
@@ -658,15 +818,8 @@ class HmacKey
 
 | Member | |
 | --- | --- |
-| `new HmacKey(hash: i32, key: Secret<u8[]>)` |  |
-| `readonly hash: i32` | `HMAC_SHA256`, `HMAC_SHA384` or `HMAC_SHA512`. |
-| `readonly inner256: Sha256` | SHA-256's work hashers; idle and wiped between tags. |
-| `readonly inner512: Sha512` | SHA-384's and SHA-512's work hashers: SHA-384 is SHA-512's compression from another start, cut to 48 bytes, so resumed from a chaining value the two are one hasher and differ only in the digest length taken. |
-| `live: boolean` | Whether the key still MACs: `wipe()` clears it. A wiped key's chaining values are zeros anyone can resume from, so a tag under them proves nothing and none is computed. |
-| `readonly outer256: Sha256` |  |
-| `readonly outer512: Sha512` |  |
-| `readonly pads: Secret<u64[]>` | Words 0 to 7: the keyed inner chaining value; 8 to 15: the keyed outer one. |
-| `size(): i32` | The tag length in bytes: 32, 48 or 64. |
+| `new HmacKey(hash: i32, key: Secret<u8[]>)` | Absorbs `key`'s two pad blocks for `hash` and keeps the chaining values. An unknown `hash` panics. |
+| `size(): i32` | The tag length in bytes. |
 | `wipe(): void` | Zero both keyed chaining values and the work hashers; the key MACs nothing after. |
 
 ## HmacSha256
@@ -684,7 +837,7 @@ class HmacSha256
 | `new HmacSha256(key: u8[])` | Keys the computation. A key longer than 64 bytes is replaced by its SHA-256 (RFC 2104 §2), which is wiped once used (`hmacKeySha256`). |
 | `inner: Sha256` | H(K XOR ipad, …), fed the key block in the constructor and the message after. |
 | `outer: Sha256` | H(K XOR opad, …), fed the key block in the constructor and the inner digest last. |
-| `digest(): u8[]` | The 32-byte tag, in a fresh array. Ends the computation, and wipes both hashers. |
+| `digest(): u8[]` | Ends the computation and wipes both hashers. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. |
 
 ## HmacSha256Scratch
@@ -711,15 +864,11 @@ class HmacSha256Scratch
 
 | Member | |
 | --- | --- |
-| `new HmacSha256Scratch()` |  |
-| `fresh: Sha256` | A hasher nothing is ever fed: the initial hash value `begin` copies from. |
+| `new HmacSha256Scratch()` | Allocates the hashers and buffers every tag reuses; `begin` keys them. |
 | `inner: Sha256` | H(K XOR ipad, …): keyed by `begin`, fed the message by `update`. |
-| `keyHash: u8[]` | The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with instead; wiped once used. |
 | `outer: Sha256` | H(K XOR opad, …): keyed by `begin`, fed the inner digest by `finishInto`. |
-| `pad: u8[]` | One key block XOR a pad, wiped as soon as it is absorbed. |
 | `begin(key: u8[], off: i32, len: i32): void` | Keys a new computation with `key[off .. off + len)`, a key longer than 64 bytes by its SHA-256 (RFC 2104 §2). |
 | `finishInto(out: u8[], at: i32): void` | Writes the 32-byte tag at `out[at]` and ends the computation; a window outside `out` panics. |
-| `keyBlocks(key: u8[], off: i32, len: i32): void` | Absorbs `key[off .. off + len)`, no longer than a block, XOR ipad into the inner hasher and XOR opad into the outer one, each started again, and wipes the block. A method of its own so that `begin` never keeps the caller's key in a local it reassigns, which would make the key look stored to the arena analysis. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. |
 | `wipe(): void` | Zeroes both keyed hashers, for a caller done with the key; `begin` starts again. |
 
@@ -737,7 +886,7 @@ class HmacSha384
 | `new HmacSha384(key: u8[])` | Keys the computation. A key longer than 128 bytes is replaced by its SHA-384 (RFC 2104 §2). |
 | `inner: Sha384` | H(K XOR ipad, …), fed the key block in the constructor and the message after. |
 | `outer: Sha384` | H(K XOR opad, …), fed the key block in the constructor and the inner digest last. |
-| `digest(): u8[]` | The 48-byte tag, in a fresh array. Ends the computation, and wipes both hashers. |
+| `digest(): u8[]` | Ends the computation and wipes both hashers. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha384.update`. |
 
 ## HmacSha384Scratch
@@ -751,15 +900,11 @@ class HmacSha384Scratch
 
 | Member | |
 | --- | --- |
-| `new HmacSha384Scratch()` |  |
-| `fresh: Sha384` | A hasher nothing is ever fed: the initial hash value `begin` copies from. |
+| `new HmacSha384Scratch()` | Allocates the hashers and buffers every tag reuses; `begin` keys them. |
 | `inner: Sha384` | H(K XOR ipad, …): keyed by `begin`, fed the message by `update`. |
-| `keyHash: u8[]` | The SHA-384 of a key longer than a block; wiped once used. |
 | `outer: Sha384` | H(K XOR opad, …): keyed by `begin`, fed the inner digest by `finishInto`. |
-| `pad: u8[]` | One key block XOR a pad, wiped as soon as it is absorbed. |
 | `begin(key: u8[], off: i32, len: i32): void` | Keys a new computation with `key[off .. off + len)`, a key longer than 128 bytes by its SHA-384 (RFC 2104 §2). |
 | `finishInto(out: u8[], at: i32): void` | Writes the 48-byte tag at `out[at]` and ends the computation; a window outside `out` panics. |
-| `keyBlocks(key: u8[], off: i32, len: i32): void` | Absorbs `key[off .. off + len)`, no longer than a block, XOR ipad into the inner hasher and XOR opad into the outer one, each started again, and wipes the block. A method of its own so that `begin` never keeps the caller's key in a local it reassigns, which would make the key look stored to the arena analysis. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in the hasher. |
 | `wipe(): void` | Zeroes both keyed hashers, for a caller done with the key; `begin` starts again. |
 
@@ -777,7 +922,7 @@ class HmacSha512
 | `new HmacSha512(key: u8[])` | Keys the computation. A key longer than 128 bytes is replaced by its SHA-512 (RFC 2104 §2). |
 | `inner: Sha512` | H(K XOR ipad, …), fed the key block in the constructor and the message after. |
 | `outer: Sha512` | H(K XOR opad, …), fed the key block in the constructor and the inner digest last. |
-| `digest(): u8[]` | The 64-byte tag, in a fresh array. Ends the computation, and wipes both hashers. |
+| `digest(): u8[]` | Ends the computation and wipes both hashers. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha512.update`. |
 
 ## Constants

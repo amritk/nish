@@ -83,43 +83,43 @@ if (stream.kind(root) === YAML_MAP) {
 
 <scalar-card title="keyText" icon="phosphor/regular/function" href="#keytext">
 
-The text map key `node` of `stream` is matched by in a path and named by in a diagnostic; see `yamlKeyText`.
+The text a map key is matched by in a path and named by in a diagnostic.
 
 </scalar-card>
 
 <scalar-card title="parseYaml" icon="phosphor/regular/function" href="#parseyaml">
 
-Parses `text` as a YAML stream with the default options.
+Parses a YAML stream with the default options.
 
 </scalar-card>
 
 <scalar-card title="parseYamlWith" icon="phosphor/regular/function" href="#parseyamlwith">
 
-Parses `text` as a YAML stream with `options`.
+Parses a YAML stream with options.
 
 </scalar-card>
 
 <scalar-card title="pathMatch" icon="phosphor/regular/function" href="#pathmatch">
 
-How many steps of `path` match below `root` of `stream` (see `pathNode`): `path.length` when every step matches, an empty value's included.
+How many steps of a path match (see `pathNode`).
 
 </scalar-card>
 
 <scalar-card title="pathNode" icon="phosphor/regular/function" href="#pathnode">
 
-The node `path` names below `root` of `stream`: each step a map key (matched by `keyText`; of duplicate keys, the last) or a sequence index (`"0"`, no leading zero), through aliases.
+The node a path names.
 
 </scalar-card>
 
 <scalar-card title="pathPair" icon="phosphor/regular/function" href="#pathpair">
 
-The last map pair `path` steps through below `root` of `stream` (see `pathNode`), or `-1` for none.
+The last map pair a path steps through (see `pathNode`).
 
 </scalar-card>
 
 <scalar-card title="yamlErrorName" icon="phosphor/regular/function" href="#yamlerrorname">
 
-The name of a `YAML_ERR_*` code, such as `"DUPLICATE_KEY"`, or `""` for one that is not a code.
+The name of a diagnostic code, for a message or a log line.
 
 </scalar-card>
 
@@ -183,7 +183,7 @@ it), and YAML 1.1's booleans (`yes`, `on`) are strings, as 1.2 says.
 
 ## keyText
 
-The text map key `node` of `stream` is matched by in a path and named by in a diagnostic; see `yamlKeyText`.
+The text a map key is matched by in a path and named by in a diagnostic.
 
 ```ts
 function keyText(
@@ -195,19 +195,31 @@ function keyText(
 #### Parameters
 
 <scalar-field name="stream" type="YamlStream" required>
+
+The parsed stream.
+
 </scalar-field>
 
 <scalar-field name="node" type="i32" required>
+
+The key node.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+A scalar's decoded text (its source text for a number or a boolean, `""` for a null), an
+  alias's target's text (`*name` when it names no anchor), or a collection written as one line of
+  flow text, `{ a: 1 }` or `[ a, b ]`, cut to `…` past 4096 bytes at a character's start or
+  past nesting depth 64.
+
 </scalar-field>
 
 ## parseYaml
 
-Parses `text` as a YAML stream with the default options.
+Parses a YAML stream with the default options.
 
 ```ts
 function parseYaml(text: string): YamlStream
@@ -216,16 +228,23 @@ function parseYaml(text: string): YamlStream
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The YAML source.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="YamlStream">
+
+The documents, nodes and diagnostics the parse found.
+
 </scalar-field>
 
 ## parseYamlWith
 
-Parses `text` as a YAML stream with `options`. Panics when `maxDepth` is outside 1 to 1000.
+Parses a YAML stream with options. Panics when `maxDepth` is outside 1 to
+1000.
 
 ```ts
 function parseYamlWith(
@@ -237,20 +256,28 @@ function parseYamlWith(
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The YAML source.
+
 </scalar-field>
 
 <scalar-field name="options" type="YamlOptions" required>
+
+What to keep and check, and how deep collections may nest.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="YamlStream">
+
+The documents, nodes and diagnostics the parse found.
+
 </scalar-field>
 
 ## pathMatch
 
-How many steps of `path` match below `root` of `stream` (see `pathNode`):
-`path.length` when every step matches, an empty value's included.
+How many steps of a path match (see `pathNode`).
 
 ```ts
 function pathMatch(
@@ -263,29 +290,39 @@ function pathMatch(
 #### Parameters
 
 <scalar-field name="stream" type="YamlStream" required>
+
+The parsed stream.
+
 </scalar-field>
 
 <scalar-field name="root" type="i32" required>
+
+The node the path starts at.
+
 </scalar-field>
 
 <scalar-field name="path" type="string[]" required>
+
+The steps, outermost first.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The matching steps, an empty value's included: `path.length` when every step matches.
+
 </scalar-field>
 
 ## pathNode
 
-The node `path` names below `root` of `stream`: each step a map key (matched
-by `keyText`; of duplicate keys, the last) or a sequence index (`"0"`, no
-leading zero), through aliases. While the stream merges (`YamlOptions.merge`),
-a key a map does not hold is looked for in the maps its `<<` keys name, in
-order: the map's own keys win, then the first merged map that has it, and the
-pair found is the one inside that map. When a step does not match, the node
-the last matching step reached; `root` itself for an empty path. A step onto an empty
-value (`a:`) matches and reaches no node, so the answer is then `-1`.
+The node a path names. Each step is a map key (matched by `keyText`; of
+duplicate keys, the last) or a sequence index (`"0"`, no leading zero),
+through aliases. While the stream merges (`YamlOptions.merge`), a key a map
+does not hold is looked for in the maps its `<<` keys name, in order: the
+map's own keys win, then the first merged map that has it, and the pair found
+is the one inside that map.
 
 ```ts
 function pathNode(
@@ -298,22 +335,36 @@ function pathNode(
 #### Parameters
 
 <scalar-field name="stream" type="YamlStream" required>
+
+The parsed stream.
+
 </scalar-field>
 
 <scalar-field name="root" type="i32" required>
+
+The node the path starts at, such as a `documentRoot`.
+
 </scalar-field>
 
 <scalar-field name="path" type="string[]" required>
+
+The steps, outermost first.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The node the last matching step reached, as written (an alias is not followed): `root` itself
+  for an empty path, and `-1` when a step lands on an empty value (`a:`). A chain of more than
+  `YAML_ALIAS_HOPS` (100) aliases stops the walk at its first alias, which is returned, not `-1`.
+
 </scalar-field>
 
 ## pathPair
 
-The last map pair `path` steps through below `root` of `stream` (see `pathNode`), or `-1` for none.
+The last map pair a path steps through (see `pathNode`).
 
 ```ts
 function pathPair(
@@ -326,22 +377,34 @@ function pathPair(
 #### Parameters
 
 <scalar-field name="stream" type="YamlStream" required>
+
+The parsed stream.
+
 </scalar-field>
 
 <scalar-field name="root" type="i32" required>
+
+The node the path starts at.
+
 </scalar-field>
 
 <scalar-field name="path" type="string[]" required>
+
+The steps, outermost first.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The pair, or `-1` for none.
+
 </scalar-field>
 
 ## yamlErrorName
 
-The name of a `YAML_ERR_*` code, such as `"DUPLICATE_KEY"`, or `""` for one that is not a code.
+The name of a diagnostic code, for a message or a log line.
 
 ```ts
 function yamlErrorName(code: i32): string
@@ -350,11 +413,17 @@ function yamlErrorName(code: i32): string
 #### Parameters
 
 <scalar-field name="code" type="i32" required>
+
+A `YAML_ERR_*` code, such as `YAML_ERR_DUPLICATE_KEY`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The code's name without its prefix, such as `"DUPLICATE_KEY"`, or `""` for a number that is not a code.
+
 </scalar-field>
 
 ## YamlOptions
@@ -376,8 +445,9 @@ class YamlOptions
 
 ## YamlStream
 
-Every document, node and diagnostic one parse found. Its fields and its
-"Internal" methods are reachable, as every member in Nish is; use the others.
+Every document, node and diagnostic one parse found. A member marked
+`@internal` is the parser's working state, public only so that the parser
+and the walkers can fill and read it; use the others.
 
 A read never panics: a handle that names no node (`-1`, or one past the
 stream), or a read that does not fit the node's kind (`count` of a scalar,
@@ -390,85 +460,44 @@ class YamlStream
 
 | Member | |
 | --- | --- |
-| `new YamlStream(text: string)` |  |
-| `cap: i32` | How many nodes the arrays have room for, and how many are in use. |
-| `commentEnds: i32[]` |  |
-| `commentStarts: i32[]` | Per comment kept: its range, from the `#`. |
-| `counts: i32[]` |  |
-| `diagCodes: i32[]` | Per diagnostic: its code, range, document and message, and whether it is a warning. |
-| `diagDocuments: i32[]` |  |
-| `diagEnds: i32[]` |  |
-| `diagMessages: string[]` |  |
-| `diagStarts: i32[]` |  |
-| `diagWarnings: boolean[]` |  |
-| `docEnds: i32[]` |  |
-| `docRoots: i32[]` | Per document: its root node and its range. |
-| `docStarts: i32[]` |  |
-| `ends: i32[]` |  |
-| `errors: i32` |  |
-| `extras: i32[]` | Per node: a block scalar's content indent, whether it was written, and its chomping, as `(indent + 1) * 8 + explicit * 4 + chomp`. |
-| `firsts: i32[]` | Per node, by kind: a collection's first child in `kids` and its child count; a pair's key and value; an alias's target and `-1`; a scalar's body (the bytes inside its quotes, or a block scalar's lines). |
-| `kids: i32[]` | Every collection's children, one collection after another. |
-| `kidTop: i32` | How many slots of `kids` are in use. |
-| `kinds: u8[]` | Per node: its `YAML_*` kind, style and core-schema type (`YAML_UNRESOLVED` until read). |
+| `new YamlStream(text: string)` | An empty stream over `text`, for the parser to fill; get a parsed one from `parseYaml`. |
+| `errors: i32` | How many of the diagnostics are errors; the same as `errorCount()`. |
 | `merge: boolean` | Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is. |
-| `mergeStamps: i32[]` | Per node: the path step whose merge search last went through it, as `mergeStep` numbers them; grown to the node count by the first search, so a search marks a map searched in one store. |
-| `mergeStep: i32` | How many path steps have searched merge keys; the stamp of the latest. |
-| `propAnchorEnds: i32[]` |  |
-| `propAnchorStarts: i32[]` | Per property slot: the anchor's name (after `&`), the tag as written, and the anchor table entry. |
-| `propEnds: i32[]` |  |
-| `propEntries: i32[]` |  |
-| `props: i32[]` | Per node: its properties' slot, or `-1`. |
-| `propStarts: i32[]` |  |
-| `propTagEnds: i32[]` |  |
-| `propTags: string[]` | Per property slot: the resolved tag, with `tag:yaml.org,2002:` stripped, or `""`. |
-| `propTagStarts: i32[]` |  |
 | `source: string` | The text the stream was parsed from; every offset is into it. |
-| `starts: i32[]` | Per node: the first byte of its source, and one past its last. |
-| `styles: u8[]` |  |
-| `top: i32` |  |
-| `types: u8[]` |  |
-| `warnings: i32` |  |
-| `anchor(n: i32): string` | Node `n`'s anchor name, without its `&`, or `""`. |
-| `boolValue(n: i32): boolean` | Whether a scalar is the boolean `true`; `false` for anything that is not a `YAML_BOOL`. |
-| `child(n: i32, i: i32): i32` | Child `i` of a map or a seq, or `-1` past its last. |
-| `comment(i: i32): string` | Comment `i`'s text after its `#`, or `""`. |
-| `commentCount(): i32` | How many comments the stream kept: none unless `keepComments`. |
-| `commentEnd(i: i32): i32` | One past comment `i`'s last byte, before its line break, or `-1`. |
-| `commentStart(i: i32): i32` | Comment `i`'s first byte, its `#`, or `-1`. |
-| `count(n: i32): i32` | How many children a map (its pairs) or a seq (its items) has; `0` for any other node. |
-| `diagnosticCode(i: i32): i32` | Diagnostic `i`'s `YAML_ERR_*` code, or `0`. |
+| `warnings: i32` | How many of the diagnostics are warnings; the same as `warningCount()`. |
+| `anchor(n: i32): string` | Node `n`'s anchor name. |
+| `boolValue(n: i32): boolean` | A boolean scalar's value. |
+| `child(n: i32, i: i32): i32` | One child of a map or a seq. |
+| `comment(i: i32): string` | Comment `i`'s text. |
+| `commentCount(): i32` | How many comments the stream kept. |
+| `commentEnd(i: i32): i32` | Where comment `i` ends. |
+| `commentStart(i: i32): i32` | Where comment `i` starts. |
+| `count(n: i32): i32` | How many children node `n` has. |
+| `diagnosticCode(i: i32): i32` | What diagnostic `i` is about. |
 | `diagnosticCount(): i32` | How many diagnostics the parse found, errors and warnings, in order of where they start. |
-| `diagnosticDocument(i: i32): i32` | The document diagnostic `i` was found in, or `-1`. |
-| `diagnosticEnd(i: i32): i32` | One past the last byte diagnostic `i` is about, or `-1`; the same as its start for a point. |
+| `diagnosticDocument(i: i32): i32` | The document diagnostic `i` was found in. |
+| `diagnosticEnd(i: i32): i32` | Where diagnostic `i`'s range ends. |
 | `diagnosticIsWarning(i: i32): boolean` | Whether diagnostic `i` is a warning rather than an error. |
-| `diagnosticMessage(i: i32): string` | Diagnostic `i`'s message, such as `Map key "a" is duplicated` (a capital first, as other YAML tooling spells them), or `""`. |
-| `diagnosticStart(i: i32): i32` | The first byte diagnostic `i` is about, or `-1`. |
-| `documentCount(): i32` | How many documents the stream holds: `0` for an empty text, unless `firstDocumentOnly`. |
-| `documentEnd(d: i32): i32` | One past document `d`'s last byte (through its `...`, if it has one), or `-1`. |
-| `documentRoot(d: i32): i32` | Document `d`'s root node, or `-1` for a document that is not there. |
-| `documentStart(d: i32): i32` | The byte document `d` starts at (its `---`, if it has one), or `-1`. |
-| `end(n: i32): i32` | One past the last byte of node `n`'s source, or `-1`. |
-| `errorCount(): i32` | How many of the diagnostics are errors: `0` for a valid stream. |
-| `floatValue(n: i32): f64` | A `YAML_FLOAT` or `YAML_INT` scalar's value as an `f64`; `0` for anything else. |
-| `grow(): void` | Internal: doubles every node array together. |
-| `intValue(n: i32): i64` | A `YAML_INT` scalar's value; `0` for anything else, and the value wrapped past 64 bits. |
-| `key(pair: i32): i32` | A pair's key node, or `-1` for a node that is not a pair. |
-| `kind(n: i32): i32` | Node `n`'s `YAML_*` kind, or `0` for `-1` and any handle that is not a node. |
-| `moveDiagnostic(from: i32, to: i32): void` | Internal: copies diagnostic `from` over diagnostic `to`. |
-| `newNode(kind: i32, style: i32, start: i32, end: i32): i32` | Internal: a new node of `kind` and `style` over `[start, end)`, its other fields empty. |
-| `newProps(): i32` | Internal: a new, empty property slot. |
-| `pushKid(n: i32): i32` | Internal: appends `n` to `kids`, growing it by doubling; answers its slot. |
-| `report(code: i32, warning: boolean, message: string, start: i32, end: i32, document: i32): void` | Internal: records a diagnostic. |
-| `resolved(n: i32): i32` | Node `n` itself, or the node it names when it is an alias. |
-| `sortDiagnostics(): void` | Internal: sorts the diagnostics by start, keeping the order of those that start together. |
-| `start(n: i32): i32` | The first byte of node `n`'s source, its properties not included, or `-1`. |
-| `style(n: i32): i32` | Node `n`'s style: `YAML_PLAIN`, a quoted or block-scalar style, `YAML_FLOW` or `YAML_BLOCK`. |
-| `tag(n: i32): string` | Node `n`'s tag, resolved: `"int"` for `!!int` (the `tag:yaml.org,2002:` prefix stripped), `"!local"` for `!local`, `"!"` for the non-specific `!`, a `%TAG` handle's prefix joined to its suffix, or `""` for an untagged node. |
-| `target(n: i32): i32` | The node an alias names, or `-1` for an alias with no anchor and any node that is not an alias. |
-| `text(n: i32): string` | A scalar's text, decoded: quotes and escapes undone, lines folded, a block scalar's indentation and chomping applied. An alias answers its target's text, and any other node `""`. A `\u` surrogate pair is one character; a lone surrogate escape is kept as its three bytes, which are not UTF-8. Decoded on every call; keep the result. |
-| `type(n: i32): i32` | A scalar's core-schema type: `YAML_NULL`, `YAML_BOOL`, `YAML_INT`, `YAML_FLOAT` or `YAML_STRING`; through an alias; `-1` for a collection. A quoted or block scalar is a string, and so is any tagged one the core schema does not describe; a `!!str` plain scalar is a string too. |
-| `value(pair: i32): i32` | A pair's value node, or `-1` for an empty value (`a:`, which reads as null) and any node that is not a pair. |
+| `diagnosticMessage(i: i32): string` | Diagnostic `i`'s message, for a person. |
+| `diagnosticStart(i: i32): i32` | Where diagnostic `i`'s range starts. |
+| `documentCount(): i32` | How many documents the stream holds. |
+| `documentEnd(d: i32): i32` | Where document `d` ends. |
+| `documentRoot(d: i32): i32` | Document `d`'s root node. |
+| `documentStart(d: i32): i32` | Where document `d` starts. |
+| `end(n: i32): i32` | Where node `n`'s source ends. |
+| `errorCount(): i32` | How many of the diagnostics are errors. |
+| `floatValue(n: i32): f64` | A number scalar's value. |
+| `intValue(n: i32): i64` | An integer scalar's value. |
+| `key(pair: i32): i32` | A pair's key. |
+| `kind(n: i32): i32` | What node `n` is. |
+| `resolved(n: i32): i32` | Node `n` with an alias followed. |
+| `start(n: i32): i32` | Where node `n`'s source starts, its anchor and tag not included. |
+| `style(n: i32): i32` | How node `n` is written. |
+| `tag(n: i32): string` | Node `n`'s tag, resolved. |
+| `target(n: i32): i32` | The node an alias names. |
+| `text(n: i32): string` | A scalar's text, decoded: quotes and escapes undone, lines folded, a block scalar's indentation and chomping applied. A `\u` surrogate pair is one character; a lone surrogate escape is kept as its three bytes, which are not UTF-8. Decoded on every call; keep the result. |
+| `type(n: i32): i32` | A scalar's core-schema type. Untagged, a plain scalar is typed from its text and a quoted or block scalar is a string. Under a `!!null`, `!!bool` or `!!int` tag it is that type when its text (decoded, for a quoted or block scalar) reads as one, and a string otherwise; under `!!float` an int or float text is a float. Any other tag, `!!str` included, makes it a string. |
+| `value(pair: i32): i32` | A pair's value. |
 | `warningCount(): i32` | How many of the diagnostics are warnings. |
 
 ## Constants
@@ -495,11 +524,15 @@ An indented collection.
 
 `YAML_BOOL: i32`
 
+`true` or `false`.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `YAML_DOUBLE_QUOTED: i32`
+
+A `"..."` scalar, the one style with escapes.
 
 </scalar-card>
 
@@ -507,11 +540,15 @@ An indented collection.
 
 `YAML_ERR_AMBIGUOUS_ANCHOR_NAME: i32`
 
+Warning: an anchor or alias name ends in `:`, which YAML reads as part of the name.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `YAML_ERR_BAD_ANCHOR: i32`
+
+An anchor or alias whose name is empty or runs on into a flow indicator.
 
 </scalar-card>
 
@@ -519,11 +556,15 @@ An indented collection.
 
 `YAML_ERR_BAD_BLOCK_HEADER: i32`
 
+A block scalar header that is not `|` or `>` with at most one indentation digit and one chomping indicator.
+
 </scalar-card>
 
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `YAML_ERR_BAD_COMMENT: i32`
+
+A `#` that no whitespace precedes, so it cannot start a comment.
 
 </scalar-card>
 
@@ -531,11 +572,17 @@ An indented collection.
 
 `YAML_ERR_BAD_DIRECTIVE: i32`
 
+A `%YAML` directive with a bad version or content after it; as a warning, a
+`%TAG` directive missing its handle or prefix.
+
 </scalar-card>
 
 <scalar-card title="6" icon="phosphor/regular/hash">
 
 `YAML_ERR_BAD_ESCAPE: i32`
+
+A double-quoted escape that is not one: an unknown letter, the wrong count of
+hex digits, or a code point past U+10FFFF.
 
 </scalar-card>
 
@@ -543,11 +590,17 @@ An indented collection.
 
 `YAML_ERR_BAD_IMPLICIT_KEY: i32`
 
+An implicit key that does not fit on one line, or runs more than 1024 bytes before its `:`.
+
 </scalar-card>
 
 <scalar-card title="8" icon="phosphor/regular/hash">
 
 `YAML_ERR_BAD_INDENT: i32`
+
+A quoted scalar or flow collection continued on a line not indented deeper
+than its parent, or a block scalar whose leading blank line is indented
+deeper than its first content line.
 
 </scalar-card>
 
@@ -555,11 +608,16 @@ An indented collection.
 
 `YAML_ERR_BAD_MERGE: i32`
 
+A `<<` merge whose value is not a map, an alias to one, or a sequence of those.
+
 </scalar-card>
 
 <scalar-card title="10" icon="phosphor/regular/hash">
 
 `YAML_ERR_BAD_PROPERTY: i32`
+
+A node with two anchors or two tags, an alias with an anchor or tag, or node properties written before a `?`
+explicit key indicator on its line.
 
 </scalar-card>
 
@@ -567,11 +625,15 @@ An indented collection.
 
 `YAML_ERR_BAD_SCALAR_CONTENT: i32`
 
+A plain scalar that holds `: `, which only a key may.
+
 </scalar-card>
 
 <scalar-card title="12" icon="phosphor/regular/hash">
 
 `YAML_ERR_BAD_SCALAR_START: i32`
+
+A plain scalar that starts with an indicator character, or a flow entry that starts with `-`.
 
 </scalar-card>
 
@@ -579,11 +641,17 @@ An indented collection.
 
 `YAML_ERR_BAD_TAG: i32`
 
+A tag that is empty or not well formed.
+
 </scalar-card>
 
 <scalar-card title="14" icon="phosphor/regular/hash">
 
 `YAML_ERR_BAD_TAG_VALUE: i32`
+
+Warning: a `!!` core tag on the wrong kind of node (`!!map` on a scalar, say),
+which only warns, or a scalar whose text its `!!int`, `!!float`, `!!bool` or
+`!!null` tag cannot read, which is kept as a string.
 
 </scalar-card>
 
@@ -591,11 +659,15 @@ An indented collection.
 
 `YAML_ERR_DEPTH_LIMIT: i32`
 
+Collections nested deeper than `maxDepth`; the parse stops there.
+
 </scalar-card>
 
 <scalar-card title="16" icon="phosphor/regular/hash">
 
 `YAML_ERR_DUPLICATE_DIRECTIVE: i32`
+
+A second `%YAML` directive in one document; as a warning, a `%TAG` handle declared twice.
 
 </scalar-card>
 
@@ -603,11 +675,15 @@ An indented collection.
 
 `YAML_ERR_DUPLICATE_KEY: i32`
 
+A map that repeats a key, when `uniqueKeys` asks for the check.
+
 </scalar-card>
 
 <scalar-card title="18" icon="phosphor/regular/hash">
 
 `YAML_ERR_MULTIPLE_DOCUMENTS: i32`
+
+Warning: the stream has more documents than the first, which `firstDocumentOnly` left unread.
 
 </scalar-card>
 
@@ -615,11 +691,15 @@ An indented collection.
 
 `YAML_ERR_RECURSIVE_ALIAS: i32`
 
+An alias inside the node its anchor names.
+
 </scalar-card>
 
 <scalar-card title="20" icon="phosphor/regular/hash">
 
 `YAML_ERR_TAB_INDENT: i32`
+
+A tab used to indent; YAML indents with spaces only.
 
 </scalar-card>
 
@@ -627,11 +707,15 @@ An indented collection.
 
 `YAML_ERR_UNEXPECTED_COMMA: i32`
 
+A `,` in a flow collection with no entry before it.
+
 </scalar-card>
 
 <scalar-card title="22" icon="phosphor/regular/hash">
 
 `YAML_ERR_UNEXPECTED_CONTENT: i32`
+
+Text where no node may start, such as after the end of a node or a document marker inside a flow collection.
 
 </scalar-card>
 
@@ -639,11 +723,15 @@ An indented collection.
 
 `YAML_ERR_UNEXPECTED_DIRECTIVE: i32`
 
+A directive that no `...` precedes or no `---` follows.
+
 </scalar-card>
 
 <scalar-card title="24" icon="phosphor/regular/hash">
 
 `YAML_ERR_UNKNOWN_DIRECTIVE: i32`
+
+Warning: a directive other than `%YAML` and `%TAG`; it is skipped.
 
 </scalar-card>
 
@@ -651,11 +739,15 @@ An indented collection.
 
 `YAML_ERR_UNKNOWN_TAG_HANDLE: i32`
 
+A tag whose handle no `%TAG` directive declared.
+
 </scalar-card>
 
 <scalar-card title="26" icon="phosphor/regular/hash">
 
 `YAML_ERR_UNRESOLVED_ALIAS: i32`
+
+An alias with no anchor of that name before it.
 
 </scalar-card>
 
@@ -663,11 +755,15 @@ An indented collection.
 
 `YAML_ERR_UNSUPPORTED_YAML_VERSION: i32`
 
+Warning: a `%YAML` version other than 1.2; the document is parsed as 1.2.
+
 </scalar-card>
 
 <scalar-card title="28" icon="phosphor/regular/hash">
 
 `YAML_ERR_UNTERMINATED_FLOW: i32`
+
+A flow collection with no closing `]` or `}`.
 
 </scalar-card>
 
@@ -675,11 +771,15 @@ An indented collection.
 
 `YAML_ERR_UNTERMINATED_QUOTE: i32`
 
+A quoted scalar with no closing quote.
+
 </scalar-card>
 
 <scalar-card title="3" icon="phosphor/regular/hash">
 
 `YAML_FLOAT: i32`
+
+A number with a fraction or exponent, an infinity (`.inf`, `-.inf`) or not-a-number (`.nan`).
 
 </scalar-card>
 
@@ -702,6 +802,8 @@ A `>` block scalar.
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `YAML_INT: i32`
+
+An integer: decimal, `0o` octal or `0x` hex.
 
 </scalar-card>
 
@@ -765,11 +867,15 @@ A sequence; its children are its items.
 
 `YAML_SINGLE_QUOTED: i32`
 
+A `'...'` scalar.
+
 </scalar-card>
 
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `YAML_STRING: i32`
+
+Every other scalar; a quoted or block scalar is one unless a `!!` core tag that fits its text says otherwise.
 
 </scalar-card>
 

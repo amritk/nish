@@ -12,24 +12,42 @@ import {
 ```
 
 ```ts
-const listener = tcpListen("0.0.0.0", 8443, 128);
-const server = new Http2TlsServer(tlsConfig, new Http2Config(), listener, 64);
-// tlsConfig.alpn holds "h2"
-// when the listener is readable:
-const slot: i32 = server.accept(serverRandom, ephemeralKey);
-if (slot >= 0) { pollAdd(loop, server.fd(slot), 1, slot); }
-// when a connection's token comes back:
-let wants: i32 = (events & 5) !== 0 ? server.readable(slot) : server.writable(slot);
-if ((wants & TLS_RECORD_SIGN) !== 0) { server.signP256(slot, leafKey); }
-let event: i32 = server.next(slot);
-while (event !== H2_NEED_MORE && event !== H2_ERROR) {
-  const conn: Http2Connection = server.connection(slot);
-  // H2_REQUEST: conn.respond(conn.stream, 200, names, values, false) ...
-  event = server.next(slot);
-}
-wants = server.flush(slot);
-if ((wants & TLS_RECORD_DONE) !== 0) { server.close(slot); }
-else { pollModify(loop, server.fd(slot), wants & 3, slot); }
+import { Secret } from "nish:secret";
+import { pollAdd, pollModify, tcpListen } from "nish:net";
+import { H2_ERROR, H2_NEED_MORE, H2_REQUEST, Http2Config, Http2Connection } from "nish/net/http2";
+import { Http2TlsServer } from "nish/net/http2-tls";
+import { TlsServerConfig } from "nish/net/tls";
+import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server";
+
+// `tlsConfig.alpn` holds `H2_ALPN`; `loop` is the program's, from `pollCreate`.
+const LISTENER: i32 = 64; // past every slot's token
+const start = (loop: i32, tlsConfig: TlsServerConfig): Http2TlsServer => {
+  const listener: i32 = tcpListen("0.0.0.0", 8443, 128);
+  pollAdd(loop, listener, 1, LISTENER);
+  return new Http2TlsServer(tlsConfig, new Http2Config(), listener, 64);
+};
+// When the listener's token comes back:
+const admit = (loop: i32, server: Http2TlsServer, random: u8[], key: u8[]): void => {
+  crypto.getRandomValues(random);
+  crypto.getRandomValues(key);
+  const slot: i32 = server.accept(random, key);
+  if (slot >= 0) { pollAdd(loop, server.fd(slot), 1, slot); }
+};
+// When a slot's token comes back with `events`:
+const serve = (loop: i32, server: Http2TlsServer, slot: i32, events: i32, key: Secret<u8[]>): void => {
+  let wants: i32 = (events & 5) !== 0 ? server.readable(slot) : server.writable(slot);
+  if ((wants & TLS_RECORD_SIGN) !== 0) { wants = server.signP256(slot, key); }
+  const none: u8[][] = [];
+  let event: i32 = server.next(slot);
+  while (event !== H2_NEED_MORE && event !== H2_ERROR) {
+    const conn: Http2Connection = server.connection(slot);
+    if (event === H2_REQUEST) { conn.respond(conn.stream, 200, none, none, true); }
+    event = server.next(slot);
+  }
+  wants = server.flush(slot);
+  if ((wants & TLS_RECORD_DONE) !== 0) { server.close(slot); }
+  else { pollModify(loop, server.fd(slot), wants & 3, slot); }
+};
 ```
 
 <scalar-grid cols="2">
@@ -110,28 +128,24 @@ class Http2TlsServer
 | Member | |
 | --- | --- |
 | `new Http2TlsServer(tlsConfig: TlsServerConfig, config: Http2Config, listener: i32, size: i32)` | A pool of `size` slots, at least one, serving HTTP/2 under `config` over TLS under `tlsConfig` on `listener`. Only slot 0's connection is made here, so a config it refuses panics now, with its words; every other slot's is made by the first `accept` into it and kept. Frame buffers are borrowed from `pools` as a connection needs them. |
-| `config: Http2Config` | The caps every slot's connection is made under. |
 | `connections: Http2Connection[]` | The connections made so far, slot `k`'s at `k`: slot 0's, made by the constructor, and one for each slot accepted into since. |
 | `date: HttpDate` | The `date` every slot's responses carry, formatted once a second for all of them: each slot's `Http2Connection.date` is its bytes, refreshed by `connection` and `next`. `date.pin` fixes its clock. |
 | `readonly pools: Http2Pools` | The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. |
-| `tls: TlsTcpServer` |  |
+| `tls: TlsTcpServer` | The TLS pool under this server, slot for slot, for what this class does not wrap, such as session tickets (`enableTickets`, `issue`, `resume`). Accept through this class's `accept`: a slot accepted on `tls` itself gets no fresh HTTP/2 connection, so `next` and `flush` may treat it as free or run it on the state of the slot's last peer. |
 | `accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32` | Accepts the next waiting connection into a free slot, as `TlsTcpServer.accept` does, and gives it a fresh HTTP/2 connection whose SETTINGS go out once the handshake is done: the slot's own, restarted, or one made now if this is the first accept into it. Answers the slot, or what `TlsTcpServer.accept` answers. |
-| `alpn(slot: i32): string` | The ALPN protocol `slot`'s handshake chose, or empty. |
-| `build(): void` | Makes the next slot's connection, on this pool's buffers and `date`. |
+| `alpn(slot: i32): string` | The ALPN protocol `slot`'s handshake chose. |
 | `busy(): i32` | How many slots hold a connection. |
 | `close(slot: i32): void` | Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does; the connection gives back every buffer it holds. |
 | `connection(slot: i32): Http2Connection` | The HTTP/2 connection of `slot`, its `date` brought up to now. A slot never accepted into, or out of range, names slot 0's, which may be live. |
-| `fd(slot: i32): i32` | The descriptor of `slot`, for `pollAdd`; -1 for a free one. |
-| `flush(slot: i32): i32` | Writes what `slot`'s connection holds into TLS, as far as TLS takes it, and sends it; shuts TLS down once the connection is over, the peer's stream has ended, or ALPN chose another protocol. Answers the interest, with the write bit while the connection still holds bytes. |
+| `fd(slot: i32): i32` | The descriptor of `slot`, for `pollAdd`. |
+| `flush(slot: i32): i32` | Writes what `slot`'s connection holds into TLS, as far as TLS takes it, and sends it; shuts TLS down once the connection is over (everything is sent, and it failed, or no stream is left after a GOAWAY or after the peer's byte stream ended), or ALPN chose another protocol. Answers the interest, with the write bit while the connection still holds bytes. |
 | `holds(slot: i32): boolean` | Whether `slot` holds a connection. |
-| `live(slot: i32): boolean` | Whether `slot` holds a connection and its HTTP/2 side has been made. |
 | `next(slot: i32): i32` | Moves what TLS has decrypted for `slot` into its connection, as far as the connection has room, and answers the connection's next event. A free slot, or one whose ALPN was not `h2`, answers `H2_ERROR`. |
-| `readable(slot: i32): i32` | The socket of `slot` is readable: TLS reads it, and what HTTP/2 has to send goes after. Answers the interest. |
-| `refused(slot: i32): boolean` | Whether `slot`'s handshake is done and chose anything but `h2`. |
+| `readable(slot: i32): i32` | The socket of `slot` is readable: TLS reads it, and what HTTP/2 has to send goes after. |
 | `rest(slot: i32): void` | Gives back the buffers `slot`'s connection holds and has emptied, so an idle slot holds none. |
-| `signP256(slot: i32, key: Secret<u8[]>): i32` | Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does. Answers the interest. |
+| `signP256(slot: i32, key: Secret<u8[]>): i32` | Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does. |
 | `size(): i32` | How many slots the pool has, made or not. |
-| `writable(slot: i32): i32` | The socket of `slot` is writable. Answers the interest. |
+| `writable(slot: i32): i32` | The socket of `slot` is writable: what TLS and HTTP/2 hold goes out. |
 
 ## Constants
 

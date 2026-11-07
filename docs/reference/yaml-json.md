@@ -36,7 +36,7 @@ const root = loader.load(stream, 0, doc)
 
 <scalar-card title="yamlJsonErrorName" icon="phosphor/regular/function" href="#yamljsonerrorname">
 
-A `YAML_JSON_ERR_*` code's name, without the prefix; `""` for any other code.
+A load failure's name, for a message.
 
 </scalar-card>
 
@@ -156,7 +156,7 @@ stream's do.
 
 ## yamlJsonErrorName
 
-A `YAML_JSON_ERR_*` code's name, without the prefix; `""` for any other code.
+A load failure's name, for a message.
 
 ```ts
 function yamlJsonErrorName(code: i32): string
@@ -165,18 +165,24 @@ function yamlJsonErrorName(code: i32): string
 #### Parameters
 
 <scalar-field name="code" type="i32" required>
+
+A `YAML_JSON_ERR_*` code, as `failed` holds it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The code's name without the `YAML_JSON_ERR_` prefix, such as `"DEPTH"`; `""` for any other code.
+
 </scalar-field>
 
 ## YamlJsonLoader
 
-Loads documents of a `YamlStream` into a `JsonDocument`. Keeps its scratch
-from one load to the next. Its fields and its "Internal" methods are
-reachable, as every member in Nish is; use `load` and the result fields.
+Loads documents of a `YamlStream` into a `JsonDocument`. Keeps its scratch,
+in private fields, from one load to the next; use `load` and the result
+fields.
 
 ```ts
 class YamlJsonLoader
@@ -184,52 +190,12 @@ class YamlJsonLoader
 
 | Member | |
 | --- | --- |
-| `new YamlJsonLoader()` |  |
-| `bigAlias: i32` | Internal: the alias with the largest copy, and its size. |
-| `bigSize: i32` |  |
-| `byteCap: i32` |  |
-| `cap: i32` | Internal: the most values the document may hold; a size saturates one past it. |
-| `copying: i32` | Internal: the outermost alias being copied (`-1` for none), and the text the document may store. |
-| `counted: i32[]` | Internal: the nodes the last count set a size on, the first `countedTop` of them: all a count clears. |
-| `countedTop: i32` |  |
-| `doc: JsonDocument` |  |
-| `entryKeys: string[]` | Internal: the members of the maps being built, one map's after another's: each one's key text and pair, and the value node it holds (`-1` for none). |
-| `entryPairs: i32[]` |  |
-| `entryTop: i32` | Internal: where the next map member goes in the `entry` arrays. |
-| `entryValues: i32[]` |  |
-| `errorEnd: i32` |  |
-| `errorStart: i32` | The byte range the error is about, and `-1` until one. |
+| `new YamlJsonLoader()` | A loader that holds collections to `JSON_WRITER_MAX_DEPTH`, so whatever it loads can be written back out. |
+| `errorEnd: i32` | One past the last byte the failure is about; `-1` after a load that succeeds. |
+| `errorStart: i32` | The first byte the failure is about; `-1` after a load that succeeds. |
 | `failed: i32` | The last `load`'s code: `0`, a `YAML_JSON_ERR_*` code or a `JSON_VALUE_ERR_*` code. |
 | `maxDepth: i32` | How deeply collections may nest, counting copies; `JSON_WRITER_MAX_DEPTH` so the result can be written. |
-| `mergeBudget: i32` | Internal: the merged pairs the load may still visit. |
-| `mergeMarks: i32[]` | Internal: per node, the stamp of the last map it was merged into; and that map's stamp. |
-| `mergeStamp: i32` |  |
-| `pending: i32[]` | Internal: the count's own stack of nodes. |
-| `seen: Map<string, i32>` | Internal: a large map's key texts, to their entry. |
-| `sizes: i32[]` | Internal: per node, the values it expands to (`0` not counted yet, `-1` being counted). |
-| `stream: YamlStream` | Internal: the stream and document of the load in progress. |
-| `addEntry(base: i32, pair: i32, own: boolean): i32` | Internal: adds pair `pair` to the entries of the map from `base`. A key already there is skipped for a merged pair; for an own pair it follows the document's `duplicates`, keeping the first key and its place. |
-| `build(n: i32, depth: i32): JsonValue` | Internal: builds node `n`, nested `depth` collections deep, with `n`'s range on the value it answers. |
-| `buildMap(at: i32, depth: i32): JsonValue` | Internal: a map's object. Its members are gathered first, own keys then merged ones, with repeats settled; then each value is built and added. |
-| `buildScalar(at: i32): JsonValue` | Internal: a scalar's value, by its core-schema type. |
-| `buildSeq(at: i32, depth: i32): JsonValue` | Internal: a sequence's array, each entry built in turn. |
-| `count(root: i32, cap: i32): i32` | Internal: how many values node `root` expands to, saturating at `cap + 1`. Each node is counted once and its count kept, on a stack of its own rather than by recursion, because a chain of aliases can be as long as the text. Sets `bigAlias`. Clears only the sizes the last count set, so a stream of many documents is not cleared whole for each. |
-| `fail(code: i32, start: i32, end: i32): i32` | Internal: records a failed load, clearing the document, and answers `code`. |
-| `findEntry(base: i32, key: string): i32` | Internal: the entry from `base` whose key is `key`, or `-1`. The first `YAML_JSON_SCAN_KEYS` are compared one by one; the rest are in `seen`. |
-| `isMergeKey(key: i32): boolean` | Internal: whether `key` is a merge key, as the stream reads one: a plain `<<`, untagged or `!!merge`. Keep in step with `yamlIsMergeKey` in `std/yaml.ts`, which is not exported. |
-| `load(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue` | Clears `doc` and loads document `d` of `stream` into it. Answers the root value, or a negative code, which is also in `failed`, with the range in `errorStart` and `errorEnd`; nothing is kept from a load that fails. |
-| `markMerged(n: i32): boolean` | Internal: marks node `n` as merged into the current map; `false` if it already was. |
-| `mergeInto(base: i32, at: i32, hops: i32): i32` | Internal: adds the merge keys' maps of map `at` to the entries from `base`, each key only if it is not there yet: every map a merge key names, in order, its own keys first and then its merge keys', `hops` deep. |
-| `mergeMap(base: i32, pair: i32, m: i32, hops: i32): i32` | Internal: merges map `m`'s own keys, then its merge keys' maps, for the merge key `pair`; nothing if `m` is merged into this map already, since a second merge would find every key taken. |
-| `newMergeStamp(): void` | Internal: starts a map's merges, so no node is marked as merged into it yet. |
-| `nullAt(at: i32): JsonValue` | Internal: a null with the empty range at `at`. |
-| `partSize(n: i32): i32` | Internal: a counted part's size: `1` for a missing node, too many for one still being counted. |
-| `plus(a: i32, b: i32): i32` | Internal: `a + b`, saturating at `cap + 1`; both are at most that, so the sum fits. |
-| `pushNode(top: i32, n: i32): i32` | Internal: pushes node `n` onto the count's stack unless it is counted; answers the new top. |
-| `pushParts(top: i32, n: i32): i32` | Internal: pushes the nodes node `n`'s count is the sum of. |
-| `ranged(v: JsonValue, start: i32, end: i32): JsonValue` | Internal: `v`, given the range `[start, end)`, or the failure the document answers. |
-| `sizeOf(n: i32): i32` | Internal: node `n`'s count from its parts' counts, all of them kept by now; a part still being counted is a cycle, which counts as too many. |
-| `tooMuchText(n: i32): i32` | Internal: the failure for text past `byteCap`, stored for node `n`. |
+| `load(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue` | Clears `doc` and loads document `d` of `stream` into it. Nothing is kept from a load that fails. |
 
 ## Limits
 

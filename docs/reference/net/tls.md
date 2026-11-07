@@ -69,7 +69,7 @@ A plain copy of a held secret, for a derivation that runs on its bytes inside a 
 
 <scalar-card title="tlsHeldCopyIn" icon="phosphor/regular/function" href="#tlsheldcopyin">
 
-Overwrites the bytes a `Secret` holds with `from`'s, for `exposeWith` to run on the destination; answers 0.
+Overwrites the bytes a `Secret` holds with `from`'s, for `exposeWith` to run on the destination.
 
 </scalar-card>
 
@@ -93,7 +93,7 @@ Signs a CertificateVerify input for `ecdsa_secp256r1_sha256` with the P-256 priv
 
 <scalar-card title="tlsZeroHeld" icon="phosphor/regular/function" href="#tlszeroheld">
 
-Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`; answers `answer`.
+Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`.
 
 </scalar-card>
 
@@ -238,11 +238,17 @@ function tlsEcdsaDerSignature(
 #### Parameters
 
 <scalar-field name="rs" type="u8[]" required>
+
+The signature's `r` then `s`, 32 big-endian bytes each.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array of 8 to 72 bytes holding the DER encoding, or `null`.
+
 </scalar-field>
 
 ## tlsHeldClone
@@ -258,16 +264,23 @@ function tlsHeldClone(held: u8[]): u8[]
 #### Parameters
 
 <scalar-field name="held" type="u8[]" required>
+
+The exposed bytes to copy.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh plain array of the same length, which the caller must wipe.
+
 </scalar-field>
 
 ## tlsHeldCopyIn
 
-Overwrites the bytes a `Secret` holds with `from`'s, for `exposeWith` to run on the destination; answers 0.
+Overwrites the bytes a `Secret` holds with `from`'s, for `exposeWith` to run on the destination.
+Only as many bytes as the shorter of the two holds are copied; the rest of `held` is left as it was.
 
 ```ts
 function tlsHeldCopyIn(
@@ -279,14 +292,23 @@ function tlsHeldCopyIn(
 #### Parameters
 
 <scalar-field name="held" type="u8[]" required>
+
+The destination's exposed bytes, written in place.
+
 </scalar-field>
 
 <scalar-field name="from" type="u8[]" required>
+
+The bytes to copy in, read from index 0.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0.
+
 </scalar-field>
 
 ## tlsHeldCopyOver
@@ -305,14 +327,23 @@ function tlsHeldCopyOver(
 #### Parameters
 
 <scalar-field name="from" type="u8[]" required>
+
+The source's exposed bytes.
+
 </scalar-field>
 
 <scalar-field name="to" type="Secret&lt;u8[]&gt;" required>
+
+The destination secret, borrowed; as many bytes as the shorter of the two holds are overwritten.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0.
+
 </scalar-field>
 
 ## tlsIsZeroSecret
@@ -326,11 +357,17 @@ function tlsIsZeroSecret(shared: u8[]): boolean
 #### Parameters
 
 <scalar-field name="shared" type="u8[]" required>
+
+The exposed shared secret, `X25519_SIZE` bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when every byte is zero (a low-order peer share, RFC 7748 §6.1), which the handshake refuses.
+
 </scalar-field>
 
 ## tlsSignEcdsaP256
@@ -351,19 +388,28 @@ function tlsSignEcdsaP256(
 #### Parameters
 
 <scalar-field name="priv" type="Secret&lt;u8[]&gt;" required>
+
+The server's P-256 private key, borrowed.
+
 </scalar-field>
 
 <scalar-field name="content" type="u8[]" required>
+
+The CertificateVerify input, as `TlsServer.signatureInput` answers it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A fresh array holding the DER signature, or `null` for a malformed key.
+
 </scalar-field>
 
 ## tlsZeroHeld
 
-Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`; answers `answer`.
+Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`.
 
 ```ts
 function tlsZeroHeld(held: u8[], answer: i32): i32
@@ -372,14 +418,23 @@ function tlsZeroHeld(held: u8[], answer: i32): i32
 #### Parameters
 
 <scalar-field name="held" type="u8[]" required>
+
+The exposed bytes, zeroed in place.
+
 </scalar-field>
 
 <scalar-field name="answer" type="i32" required>
+
+The value to hand back, so a caller can wipe and answer in one expression.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`answer`, unchanged.
+
 </scalar-field>
 
 ## TlsP256Signer
@@ -400,9 +455,6 @@ class TlsP256Signer
 | Member | |
 | --- | --- |
 | `new TlsP256Signer()` |  |
-| `ders: u8[][]` | The DER signatures, index `length - TLS_P256_DER_MIN`. |
-| `rs: u8[]` | `r \|\| s` as `p256SignSha256Into` writes it. |
-| `scratch: P256SignScratch` | The P-256 signer's scratch. |
 | `sign(priv: Secret<u8[]>, content: u8[]): u8[] \| null` | `tlsSignEcdsaP256(priv, content)`, byte for byte, in the array of this signer's that has its length; `null` for a malformed key. It keeps nothing: the P-256 signature releases what it allocated, and the DER is written in place. The key is borrowed. |
 
 ## TlsSecretPool
@@ -422,7 +474,7 @@ class TlsSecretPool
 
 | Member | |
 | --- | --- |
-| `new TlsSecretPool(hashLength: i32)` |  |
+| `new TlsSecretPool(hashLength: i32)` | Allocates every array of the pool once, all zero, so a connection never allocates one for a secret. |
 | `readonly binderKey: Secret<u8[]>` | The binder key, from the selected ticket's early secret. |
 | `readonly clientApplication: Secret<u8[]>` |  |
 | `clientFinished: u8[]` | The client Finished's `verify_data`, known once the server's Finished is written. |
@@ -435,8 +487,6 @@ class TlsSecretPool
 | `readonly serverApplication: Secret<u8[]>` |  |
 | `readonly serverHandshake: Secret<u8[]>` |  |
 | `toBeSigned: u8[]` | The CertificateVerify input, 98 bytes longer than the rest. |
-| `wipe(): void` | Wipes every secret in the pool. |
-| `zero(index: i32): void` | Wipes the one secret `index` names (`TLS_SECRET_*`), leaving the rest; any other index wipes nothing. |
 
 ## TlsServer
 
@@ -474,92 +524,41 @@ class TlsServer
 | Member | |
 | --- | --- |
 | `new TlsServer(config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[])` | A server for one connection under `config`, with the 32-byte server random and the 32-byte x25519 private key drawn for it. A random or key of another length, or a configuration `tlsConfigFits` refuses, leaves the server failed with `internal_error` before it reads anything. |
-| `ageAddBytes: u8[]` | The ticket's `ticket_age_add`, drawn fresh for each ticket (§4.6.1). |
 | `alert: i32` | The alert the server failed with, or 0. |
 | `alpn: string` | The ALPN protocol chosen, one of the configuration's, or empty. |
-| `binderHash: u8[]` | The transcript hash through the ClientHello's binders prefix, which a binder covers (§4.2.11.2). |
-| `clientParameters: u8[]` | The array `clientTransportParameters` points at once read, kept across `restart` and refilled in the room it has. |
 | `clientTransportParameters: u8[]` | The client's `quic_transport_parameters`, opaque; empty unless the carrier is QUIC. |
 | `config: TlsServerConfig` |  |
-| `configFits: boolean` | Whether `config` passed `tlsConfigFits`, decided once by the constructor. |
 | `readonly ephemeral: Secret<u8[]>` | The connection's x25519 private key, copied in by `restart` and wiped by the record layer once the ServerHello is written. |
 | `exchange: TlsExchangeWords` | The exchange's words (`tlsExchange`). |
-| `hashes: u8[]` | A transcript hash on its way into the schedule: HashLen bytes of it. |
-| `hashLength: i32` |  |
 | `held: i32` | Which of the negotiated pool's secrets the handshake has derived: bit `1 << TLS_SECRET_*` for each. A secret wiped by `wipeSecret` keeps its bit, since its place is still the one it was derived into. |
-| `hello: TlsClientHelloView` | The ClientHello last read, as windows into `input`. |
 | `input: u8[]` | The bytes received at the current level and not yet a whole message: `input[0 .. inputLength)`. |
-| `inputLength: i32` |  |
-| `issued: boolean` | Whether `issue` has run for this connection. |
 | `issuing: TlsTicketState` | What `issue` seals; its PSK is zeroed once sealed. |
-| `kdf: HkdfScratch` | Where every HKDF and HMAC of the schedule runs. |
-| `lastServerName: string` | The last host name a client of this server sent, kept across `restart` so that the next one naming it reuses the string. |
-| `none: u8[]` | An empty array: what `clientTransportParameters` holds until a client's are read. |
 | `opened: TlsTicketState` | What the ticket `resume` is reading opened to; its PSK is zeroed once read. |
-| `outputApplication: u8[]` | What the server has written at the Application level and not handed on: one NewSessionTicket. |
-| `outputApplicationLength: i32` |  |
-| `outputHandshake: u8[]` | What the server has written at the Handshake level and not handed on: `outputHandshake[0 .. outputHandshakeLength)`. |
-| `outputHandshakeLength: i32` |  |
-| `outputInitial: u8[]` | What the server has written at the Initial level and not handed on: `outputInitial[0 .. outputInitialLength)`. |
-| `outputInitialLength: i32` |  |
 | `resumed: boolean` | Whether this connection resumed a ticket (row 1 of the record's table). |
 | `retried: boolean` | Whether a HelloRetryRequest was sent, so a second miss is fatal. |
 | `salt: u8[]` | The salt the handshake secret is extracted under, HashLen bytes of it: the `TLS_DERIVED_SALT_*` constant on a full handshake, derived from the PSK early secret on a resumed one. `exchangeKeys` reads it into the exchange's words and zeroes it. |
 | `secrets256: TlsSecretPool` | The secrets under each hash (`TlsSecretPool`); `secrets()` answers the negotiated hash's. |
 | `secrets384: TlsSecretPool` |  |
 | `serverName: string` | The client's `host_name`, or empty. |
-| `serverPublic: u8[]` | The server's x25519 public key, unpacked from the exchange's words for the ServerHello. |
-| `serverRandom: u8[]` |  |
 | `state: i32` |  |
 | `suite: i32` | The negotiated cipher suite, or 0 before the first ClientHello is read. |
-| `ticketNonce: u8[]` | The ticket nonce: one ticket a connection, so one byte, the same each time, keeps each PSK distinct (§4.6.1). |
 | `tickets: boolean` | Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. |
-| `ticketScratch: u8[]` | The sealed ticket, sized once for the largest. |
-| `ticketWanted: boolean` | Whether this connection may be issued a ticket: tickets are on, the client listed `psk_dhe_ke`, the only mode this server resumes in, and its server name, if any, fits a ticket. |
-| `transcript: TlsTranscript` |  |
-| `answerHello(index: i32): i32` | Answers the ClientHello once it is known whether it resumes: the ServerHello naming identity `index` and the resumed flight, or, when it does not resume, the checks a certificate needs and the full flight. Answers 0 or the alert. |
-| `bindTicket(): boolean` | The selected ticket's PSK, early secret and binder key, and whether the hello's binder for it verifies (§4.2.11.2). The PSK and binder key are zeroed before it returns; the early secret stays for `saltFromEarly`. |
-| `chooseAlpn(hello: TlsClientHelloView): i32` | ALPN (RFC 7301 §3.2): the first configured protocol the client offers. Answers 0 with `alpn` set, or empty when nothing is negotiated, or `no_application_protocol`. |
-| `chooseSuite(hello: TlsClientHelloView): i32` | The first suite the client lists that this module negotiates, or 0 (§4.1.1: the server picks; following the client's order is the choice RFC 8448's server makes). |
-| `clearOutput(level: i32): void` | Forgets the handshake bytes written at `level`, which a carrier has read out of the buffer itself. |
-| `deriveInto(prk: u8[], label: string, dst: Secret<u8[]>): void` | Derive-Secret(`prk`, `label`, the transcript hash in `hashes`) into the held secret `dst` (RFC 8446 §7.1): derived into a plain array that dies with the caller's arena block, copied in, and zeroed. |
 | `enableTickets(): void` | Turns resumption on: from the next ClientHello, a hello offering a ticket in `psk_dhe_ke` waits in `TLS_STATE_WAIT_TICKET` for `resume`, and a connection whose client lists `psk_dhe_ke` may be issued a ticket by `issue`. Kept across `restart`. A QUIC server never resumes, so on one this does nothing. |
-| `exchangeKeys(): i32` | Runs the x25519 exchange on the caller's ephemeral key and the client's share (`tlsExchange`), outside any arena block since its scope is its own, and unpacks the server's public key and the handshake secret from the words. The words, the ephemeral key's and the handshake secret's among them, are wiped with one `wipe` after the branch on the alert, so that a refused exchange leaves them zero too and `opt` has one wipe to keep rather than two to merge. The ephemeral key is read out of its `Secret` field a word at a time; the record layer wipes it once the ServerHello is written (TLS-1). |
-| `expectedLevel(): i32` | The level the client's next bytes must arrive at, or -1 when the state expects none. |
-| `fail(alert: i32): i32` | Fails the handshake with `alert` and answers it, wiping the resumption master secret `sign` derived ahead and what a ticket being read left: its PSK, early secret and binder key, and the salt. |
-| `handleClientHello(length: i32): i32` | A ClientHello, the first or the second: refuse it, answer it with a HelloRetryRequest, or answer it with ServerHello, EncryptedExtensions and Certificate and wait for the signature. The checks run in the order a reader of RFC 8446 would make them: the structure, then the version, then the suite, the extensions §9.2 requires, the group, the signature scheme, the share itself, and the application protocol. |
-| `handleFinished(length: i32): i32` | The client's Finished (§4.4.4), `input[0 .. 4 + length)`: its `verify_data` is HashLen bytes and must equal the HMAC the server computed, compared in constant time. A wrong length is `decode_error`, a wrong value `decrypt_error`. Once it verifies, the resumption master secret `sign` derived is the connection's, and known. The transcript already holds this Finished: `sign` absorbed the one it expected, and these bytes are equal to it. |
-| `handleMessage(length: i32): i32` | Dispatches one whole message, `input[0 .. 4 + length)`. `receive` admits bytes only in the two states that expect them, so the state is one of those two here. |
 | `issue(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean` | Once the handshake is done, at most once a connection: seals a ticket for it under `key`, which `info` describes, and writes the NewSessionTicket carrying it at the Application level, for the carrier to send under the server's application keys. Answers whether one was written: none is when tickets are off, the client did not list `psk_dhe_ke`, or the key does not seal. On a connected connection's first call the resumption master secret is wiped before it returns, written or not, so a carrier that issues no ticket still calls this, or `wipeResumption`. Before the handshake is done, or on a second call, it answers false and touches nothing: a secret wiped then would leave no ticket to issue, and one wiped already has nothing left to wipe. |
 | `known(index: i32): boolean` | Whether the handshake has derived secret `index` (`TLS_SECRET_*`) for this connection. |
-| `masterSecretStep(pool: TlsSecretPool): void` | Once the server's Finished is written, full handshake or resumed: the master secret, the application and exporter secrets, the client's Finished the server expects, and the resumption master secret, after which the server waits for that Finished. |
 | `readKnown(level: i32): boolean` | Whether the secret the server *reads* `level` under — the client's traffic secret, `clientHandshake` or `clientApplication` of `secrets()` — is known yet. The Initial level has none: it is cleartext in TLS, and QUIC derives its own from the connection id. |
 | `receive(level: i32, data: u8[], off: i32, len: i32): i32` | Takes the handshake bytes `data[off .. off + len)` the client sent at `level`, a whole message, part of one or several, and handles every message they complete. Answers 0, or the alert the server fails with.<br><br>A level other than the one the state expects is `unexpected_message`, as is a byte left over once a message ends the client's flight: each of the three messages a client sends here (two ClientHellos and a Finished) is the last of its flight, and RFC 8446 §5.1 forbids a message to straddle a key change. A window outside `data` is `internal_error`, the caller's fault and not the peer's. Once the handshake is done, any further bytes are `unexpected_message` too: the post-handshake messages a client may send (KeyUpdate) belong to the record layer, which handles them itself. |
-| `reserveInput(need: i32): void` | Makes `input` hold at least `need` bytes, keeping the ones it holds. It doubles, so a slot grows it at most a handful of times however its clients cut their messages, and never past the largest message `receive` takes. |
-| `reserveOutput(level: i32, need: i32): void` | Makes the output of `level` hold at least `need` bytes, keeping the ones it holds. Both are sized by the constructor for what this configuration writes with an ECDSA signature, so only a longer signature grows the Handshake level's, once per slot. |
 | `restart(serverRandom: u8[], ephemeralPrivate: u8[]): void` | Starts the next connection in this server's buffers, with its own 32-byte random and x25519 private key, as a fresh `TlsServer` would: every secret the last connection left is wiped (`wipe`) and none is held. The random is kept, as the constructor keeps it; the key is copied into `ephemeral` and the caller's array zeroed with `secureZero`, so the only copy left is the one the server wipes. A random or key of another length, or a configuration `tlsConfigFits` refused, leaves the server failed with `internal_error`. |
 | `resume(current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32` | In `TLS_STATE_WAIT_TICKET`: reads the hello's tickets under the keys the carrier lends, `current` and `previous` with what each `info` says of them (a program with one key passes it as both), records the one it resumes in `strikes`, and answers the hello, resumed or in full, as the table of "Resumption" in `docs/security/tls.md` says. A selected ticket whose binder fails is `decrypt_error`, with nothing recorded (row 9). Answers 0, or the alert the server fails with. |
-| `resumptionPsk(): void` | The resumption PSK for nonce `ticketNonce`, into `issuing.psk` (§4.6.1). |
-| `saltFromEarly(): void` | The salt a resumed handshake secret is extracted under, `Derive-Secret(early, "derived", "")`, into `salt`. |
 | `secrets(): TlsSecretPool` | The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise. |
-| `selectTicket(current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32` | The first identity whose ticket opens under `current` or `previous`, fits (`ticketFits`) and is not yet recorded in `strikes`, left selected in `hello` with its ticket in `opened`; or -1, with every PSK an identity opened to zeroed. A full register ends the search and is counted with `take`, so that a full register fails closed into a full handshake (row 7). |
-| `sent(level: i32, at: i32, end: i32): void` | A message the server wrote at `level`, `output[at .. end)` of that level's buffer, goes into the transcript and stays on the output. |
 | `sign(signature: u8[]): i32` | Takes the signature over `signatureInput()`, as it goes on the wire (DER for ECDSA), and writes CertificateVerify and the server's Finished, after which the application secrets are known. Answers 0, or `internal_error` when called in another state or with an empty or over-long signature. The signature is not checked here: a wrong one is the caller's bug, and the client's verification is what catches it. |
 | `signatureInput(): u8[] \| null` | What CertificateVerify signs (RFC 8446 §4.4.3), while the state is `TLS_STATE_WAIT_SIGNATURE`; `null` at any other time. |
-| `takeOutput(level: i32): u8[]` | The handshake bytes written at `level` since the last call, in a fresh array, and forgets them. Bytes are only ever written at a level whose secrets are already known, so a carrier that installs keys as they appear can always protect what this answers. A carrier that reads the output buffers in place calls `clearOutput` instead, and allocates nothing. |
-| `takeServerName(hello: TlsClientHelloView): void` | `serverName` for the host name the hello carries: kept as it is when it already spells those bytes, so a slot whose clients name one host makes the string once, and made again only when the name changes. |
-| `ticketFits(): boolean` | Whether the ticket in `opened` may resume this hello: its suite's hash is the negotiated one, its PSK is that long, and it names the server name this hello names, or none when the hello names none (rows 4 and 5). |
+| `takeOutput(level: i32): u8[]` | The handshake bytes written at `level` since the last call, in a fresh array, and forgets them. Bytes are only ever written at a level whose secrets are already known, so a carrier that installs keys as they appear can always protect what this answers. A carrier that reads the output buffers in place (the record server and QUIC, inside the standard library) forgets them with `clearOutput` instead, and allocates nothing. |
 | `wipe(): void` | Wipes every secret the server holds: the ephemeral key and both pools. `restart` calls it, and the carriers when a connection ends. |
 | `wipeEphemeral(): void` | Zeroes the ephemeral key, which the record layer does once the ServerHello is written: not while a hello that offers a ticket waits for `resume`, whose exchange still needs it. |
 | `wipeResumption(): void` | Wipes the resumption master secret, which `sign` derives ahead of the client's Finished. `issue` calls it once the ticket is sealed, and the carrier when a connection ends, closed or failed, without one (TLS-1). |
 | `wipeSecret(index: i32): void` | Zeroes secret `index` of `secrets()` once a carrier has taken what it needs from it; it stays known. |
-| `writeCertificateVerify(signature: u8[]): void` | CertificateVerify, carrying `signature`, at the Handshake level, in the room `sign` reserved. |
 | `writeKnown(level: i32): boolean` | Whether the secret the server *writes* `level` under — `serverHandshake` or `serverApplication` — is known yet. |
-| `writeResumedFlight(index: i32): void` | A resumed flight: the ServerHello selecting identity `index`, the handshake traffic secrets, EncryptedExtensions and the server's Finished, after which the server waits for the client's. |
-| `writeResumedHello(pool: TlsSecretPool, index: i32): void` | The resumed ServerHello, the handshake traffic secrets and EncryptedExtensions, in the room `writeResumedFlight` reserved. |
-| `writeServerFinished(pool: TlsSecretPool): void` | The server's Finished at the Handshake level, in the room reserved for it: its `verify_data`, under the server's handshake traffic secret, goes straight into its place in the flight. |
-| `writeServerFlight(): void` | ServerHello at the Initial level, the handshake traffic secrets, and EncryptedExtensions and Certificate at the Handshake level, then the CertificateVerify input: all in place, inside one arena block. |
-| `writeTicket(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean` | `issue`'s ticket: sealed into `ticketScratch`, its PSK zeroed, and the NewSessionTicket written. |
 
 ## TlsServerConfig
 
@@ -636,17 +635,23 @@ The binder key (§4.2.11.2), held until the binder is compared.
 
 `TLS_SECRET_CLIENT_APPLICATION: i32`
 
+`client_application_traffic_secret_0` (RFC 8446 §7.1): the client's first application keys.
+
 </scalar-card>
 
 <scalar-card title="6" icon="phosphor/regular/hash">
 
 `TLS_SECRET_CLIENT_FINISHED: i32`
 
+The client Finished's expected `verify_data` (RFC 8446 §4.4.4), plain, since the wire carries it.
+
 </scalar-card>
 
 <scalar-card title="1" icon="phosphor/regular/hash">
 
 `TLS_SECRET_CLIENT_HANDSHAKE: i32`
+
+`client_handshake_traffic_secret` (RFC 8446 §7.1): the client's Handshake-level keys.
 
 </scalar-card>
 
@@ -661,6 +666,8 @@ The PSK early secret (RFC 8446 §7.1), held until the handshake secret's salt is
 <scalar-card title="5" icon="phosphor/regular/hash">
 
 `TLS_SECRET_EXPORTER: i32`
+
+`exporter_master_secret` (RFC 8446 §7.5), for a caller's own exporters.
 
 </scalar-card>
 
@@ -686,17 +693,23 @@ The PSK a ticket opened to, held from the binder's check to the early secret's e
 
 `TLS_SECRET_RESUMPTION: i32`
 
+`resumption_master_secret` (RFC 8446 §7.1), what a NewSessionTicket's PSK is derived from.
+
 </scalar-card>
 
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `TLS_SECRET_SERVER_APPLICATION: i32`
 
+`server_application_traffic_secret_0` (RFC 8446 §7.1): the server's first application keys.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `TLS_SECRET_SERVER_HANDSHAKE: i32`
+
+`server_handshake_traffic_secret` (RFC 8446 §7.1): the server's Handshake-level keys.
 
 </scalar-card>
 

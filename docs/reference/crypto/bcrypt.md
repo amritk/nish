@@ -223,6 +223,9 @@ function bcryptCalibrate(): i32
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many passwords, 1 to 6, to give each batch call.
+
 </scalar-field>
 
 ## bcryptHash
@@ -243,17 +246,31 @@ function bcryptHash(
 #### Parameters
 
 <scalar-field name="password" type="Secret&lt;u8[]&gt;" required>
+
+The password, read only inside `exposeWith`; the caller still
+  owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="salt" type="u8[]" required>
+
+16 fresh random bytes.
+
 </scalar-field>
 
 <scalar-field name="cost" type="i32" required>
+
+The log2 of the round count, 4 to 31.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;string, string&gt;">
+
+The 60-character hash, which is public, or an `Err` naming the bad
+  salt or cost.
+
 </scalar-field>
 
 ## bcryptHash4
@@ -276,26 +293,49 @@ function bcryptHash4(
 #### Parameters
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>
+
+Lane 0's password, always hashed; read only inside `exposeWith`,
+  and the caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="p1" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 1's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p2" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 2's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p3" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 3's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="salts" type="u8[]" required>
+
+64 fresh random bytes, lane k's salt at 16k.
+
 </scalar-field>
 
 <scalar-field name="cost" type="i32" required>
+
+The log2 of the round count, 4 to 31.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;string[], string&gt;">
+
+Four hash strings, "" for a lane not given, or an `Err` for bad
+  salts or cost.
+
 </scalar-field>
 
 ## bcryptHashN
@@ -325,32 +365,61 @@ function bcryptHashN(
 #### Parameters
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>
+
+Lane 0's password, always hashed; read only inside `exposeWith`,
+  and the caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="p1" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 1's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p2" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 2's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p3" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 3's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p4" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 4's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p5" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 5's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="salts" type="u8[]" required>
+
+96 fresh random bytes, lane k's salt at 16k.
+
 </scalar-field>
 
 <scalar-field name="cost" type="i32" required>
+
+The log2 of the round count, 4 to 31.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;string[], string&gt;">
+
+Six hash strings, "" for a lane not given, or an `Err` for bad salts
+  or cost.
+
 </scalar-field>
 
 ## bcryptVerify
@@ -370,14 +439,26 @@ function bcryptVerify(
 #### Parameters
 
 <scalar-field name="password" type="Secret&lt;u8[]&gt;" required>
+
+The password, read only inside `exposeWith`; the caller still
+  owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="hash" type="string" required>
+
+A stored hash; its cost sets the work, so it must be one you
+  stored.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;boolean, string&gt;">
+
+`Ok(true)` only for this password's hash, `Ok(false)` for another's,
+  or an `Err` for a malformed hash.
+
 </scalar-field>
 
 ## bcryptVerify4
@@ -398,23 +479,44 @@ function bcryptVerify4(
 #### Parameters
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>
+
+Lane 0's password, always hashed; read only inside `exposeWith`,
+  and the caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="p1" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 1's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p2" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 2's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p3" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 3's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="hashes" type="string[]" required>
+
+Four strings, lane k's stored hash at k; a skipped lane's is
+  not read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;boolean[], string&gt;">
+
+Four answers, `false` for a skipped lane, or an `Err` naming a
+  malformed lane or a count that is not four.
+
 </scalar-field>
 
 ## bcryptVerifyN
@@ -442,29 +544,56 @@ function bcryptVerifyN(
 #### Parameters
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>
+
+Lane 0's password, always hashed; read only inside `exposeWith`,
+  and the caller still owns and wipes it.
+
 </scalar-field>
 
 <scalar-field name="p1" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 1's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p2" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 2's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p3" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 3's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p4" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 4's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="p5" type="Secret&lt;u8[]&gt; | null" required>
+
+Lane 5's password, or `null` to skip the lane.
+
 </scalar-field>
 
 <scalar-field name="hashes" type="string[]" required>
+
+Six strings, lane k's stored hash at k; a skipped lane's is not
+  read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;boolean[], string&gt;">
+
+Six answers, `false` for a skipped lane, or an `Err` naming a
+  malformed lane or a count that is not six.
+
 </scalar-field>
 
 ## Limits

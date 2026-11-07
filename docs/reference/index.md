@@ -118,7 +118,7 @@ Every module a Nish program can import, one page each, generated from the doc co
 | [`nish/random`](random.md) | A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node. |
 | [`nish/regex`](regex.md) | Regular expressions whose search time is linear in the input, whatever the pattern. |
 | [`nish/sort`](sort.md) | `xs.sort(cmp)` on an array, in Nish: a stable merge sort, compiled once per comparator. |
-| [`nish/sqlite`](sqlite.md) | SQLite, the database in a file, from a Nish program. |
+| [`nish/sqlite`](sqlite.md) | `nish/sqlite` (the file `std/sqlite.ts`) — SQLite, the database in a file, from a Nish program. |
 | [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
 | [`nish/sync/shm`](sync/shm.md) | Memory that several processes map at once, and the atomics that order what they write to it. |
 | [`nish/term-io`](term-io.md) | Opening a terminal, drawing frames, reading events and leaving it as it was: the one entry point that uses the other term modules and does the I/O. |

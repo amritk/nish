@@ -21,9 +21,14 @@ import {
 ```ts
 import { RSA_HASH_SHA256, RsaPublicKey, rsaParsePublicKey, rsaVerifyPkcs1v15, rsaVerifyPss } from "nish/crypto/rsa";
 
-const key: RsaPublicKey | null = rsaParsePublicKey(der);   // PKCS#1 RSAPublicKey
-const ok: boolean = key !== null && rsaVerifyPkcs1v15(key, RSA_HASH_SHA256, message, sig);
-const pss: boolean = key !== null && rsaVerifyPss(key, RSA_HASH_SHA256, 32, message, sig);
+// der: a PKCS#1 RSAPublicKey; sig: as long as the modulus
+const verify = (der: u8[], message: u8[], sig: u8[]): boolean => {
+  const key: RsaPublicKey | null = rsaParsePublicKey(der);
+  if (key === null) {
+    return false;
+  }
+  return rsaVerifyPkcs1v15(key, RSA_HASH_SHA256, message, sig) || rsaVerifyPss(key, RSA_HASH_SHA256, 32, message, sig);
+};
 ```
 
 <scalar-grid cols="2">
@@ -134,11 +139,18 @@ function rsaParsePublicKey(
 #### Parameters
 
 <scalar-field name="der" type="u8[]" required>
+
+The key's DER, nothing before it and nothing after it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="RsaPublicKey | null">
+
+A new key whose modulus and exponent are copied out of `der`, or
+  `null`.
+
 </scalar-field>
 
 ## rsaVerifyPkcs1v15
@@ -162,20 +174,35 @@ function rsaVerifyPkcs1v15(
 #### Parameters
 
 <scalar-field name="key" type="RsaPublicKey" required>
+
+The signer's public key.
+
 </scalar-field>
 
 <scalar-field name="hash" type="i32" required>
+
+`RSA_HASH_SHA256`, `RSA_HASH_SHA384` or `RSA_HASH_SHA512`.
+
 </scalar-field>
 
 <scalar-field name="msg" type="u8[]" required>
+
+The message signed, whole; it is hashed here.
+
 </scalar-field>
 
 <scalar-field name="sig" type="u8[]" required>
+
+The signature, big-endian.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only when `sig` is `key`'s signature of `msg`.
+
 </scalar-field>
 
 ## rsaVerifyPss
@@ -202,23 +229,42 @@ function rsaVerifyPss(
 #### Parameters
 
 <scalar-field name="key" type="RsaPublicKey" required>
+
+The signer's public key.
+
 </scalar-field>
 
 <scalar-field name="hash" type="i32" required>
+
+`RSA_HASH_SHA256`, `RSA_HASH_SHA384` or `RSA_HASH_SHA512`.
+
 </scalar-field>
 
 <scalar-field name="saltLen" type="i32" required>
+
+The salt's length in bytes; a signature with any other
+  length is refused.
+
 </scalar-field>
 
 <scalar-field name="msg" type="u8[]" required>
+
+The message signed, whole; it is hashed here.
+
 </scalar-field>
 
 <scalar-field name="sig" type="u8[]" required>
+
+The signature, big-endian.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` only when `sig` is `key`'s signature of `msg`.
+
 </scalar-field>
 
 ## RsaPublicKey
@@ -234,7 +280,7 @@ class RsaPublicKey
 
 | Member | |
 | --- | --- |
-| `new RsaPublicKey(n: u8[], e: u8[], bits: i32)` |  |
+| `new RsaPublicKey(n: u8[], e: u8[], bits: i32)` | Keeps the arrays given, without a copy or a check. |
 | `bits: i32` | The modulus's length in bits: 2048 for a 2048-bit key. |
 | `e: u8[]` | The public exponent, big-endian with no leading zero byte. |
 | `n: u8[]` | The modulus, big-endian with no leading zero byte. |
