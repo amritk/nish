@@ -100,18 +100,38 @@ const TLS_VERIFY_P384_WIDTH: i32 = 48
  * made with them.
  */
 export class TlsClientTrust {
-  /** The roots, as `pkiVerifyServer` looks them up. */
+  /**
+   * The roots, as `pkiVerifyServer` looks them up.
+   *
+   * @internal Read by the free functions of this module.
+   */
   store: PkiTrustStore
 
+  /**
+   * Indexes `roots` once, so every connection made with this trust looks its
+   * issuers up in the same store rather than scanning the list again.
+   *
+   * @param roots The certificates to trust as chain anchors, already parsed.
+   */
   constructor(roots: X509Certificate[]) {
     this.store = pkiTrustStore(roots)
   }
 }
 
-/** The trust of `roots`, as `nish/crypto/pki-roots` read them. */
+/**
+ * The trust of `roots`, as `nish/crypto/pki-roots` read them.
+ *
+ * @param roots The roots a loader such as `pkiLoadSystemRoots` read; only their parsed certificates are kept.
+ * @returns A trust to hand to `tlsClientAuthenticate`, `tlsClientVerdict` or `tlsClientChain`.
+ */
 export const tlsClientTrust = (roots: PkiRoots): TlsClientTrust => new TlsClientTrust(roots.roots)
 
-/** The trust of the system's roots (`pkiLoadSystemRoots`): what a client trusts unless it is given a store. */
+/**
+ * The trust of the system's roots (`pkiLoadSystemRoots`): what a client trusts unless it is given a store.
+ * It reads the roots from disk each time it is called, so a program makes it once and shares it.
+ *
+ * @returns A trust over the roots `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system bundle's.
+ */
 export const tlsClientSystemTrust = (): TlsClientTrust => tlsClientTrust(pkiLoadSystemRoots())
 
 /**
@@ -119,6 +139,12 @@ export const tlsClientSystemTrust = (): TlsClientTrust => tlsClientTrust(pkiLoad
  * verifies over `content` under `leaf`'s key. `false` for a scheme that
  * does not fit the key's kind and for every scheme this client does not
  * offer.
+ *
+ * @param leaf The server's leaf certificate, whose public key the signature must verify under.
+ * @param scheme The `TLS_SIGNATURE_*` code point the CertificateVerify names.
+ * @param content The bytes the server signed, as RFC 8446 §4.4.3 builds them from the transcript hash.
+ * @param signature The signature as sent: DER for ECDSA, the raw modulus-sized value for RSA-PSS.
+ * @returns True only when the signature verifies under `leaf`'s key with `scheme`.
  */
 export const tlsVerifyCertificateVerify = (
   leaf: X509Certificate,
@@ -176,6 +202,13 @@ const tlsVerifyKeyUsable = (leaf: X509Certificate): boolean => {
  * The chain step: 0 when `chain` (DER, leaf first) leads to a root in
  * `trust` and names `serverName` at `nowMs`, else the alert —
  * `certificate_expired`, `unknown_ca` or `bad_certificate`.
+ *
+ * @param chain Each certificate's DER as the server sent it, the leaf first.
+ * @param serverName The name or address dialled, ASCII (an internationalised name in its A-label form).
+ * @param nowMs The instant to judge validity at, in milliseconds since 1970-01-01 UTC.
+ * @param trust The roots the chain must lead to.
+ * @returns 0 when the chain is accepted, else `TLS_ALERT_CERTIFICATE_EXPIRED` (also for a certificate not
+ *   yet valid), `TLS_ALERT_UNKNOWN_CA`, or `TLS_ALERT_BAD_CERTIFICATE` for every other refusal.
  */
 export const tlsClientChain = (chain: u8[][], serverName: string, nowMs: i64, trust: TlsClientTrust): i32 => {
   const result: PkiResult = pkiVerifyServer(chain, serverName, nowMs, trust.store)
@@ -193,6 +226,13 @@ export const tlsClientChain = (chain: u8[][], serverName: string, nowMs: i64, tr
  * CertificateVerify verifies under the leaf's key and the chain leads from
  * that leaf to a root in `trust` for the configured server name at `nowMs`
  * (milliseconds since 1970-01-01 UTC), else the alert to refuse with.
+ *
+ * @param tls The client, stopped at `TLS_CLIENT_STATE_WAIT_AUTH`; it is only read, not advanced.
+ * @param trust The roots the server's chain must lead to.
+ * @param nowMs The instant to judge validity at, in milliseconds since 1970-01-01 UTC.
+ * @returns 0 when the server is authenticated; `TLS_ALERT_BAD_CERTIFICATE` for an empty chain, a leaf that
+ *   does not parse or whose key is unusable; `TLS_ALERT_DECRYPT_ERROR` when the signature does not verify;
+ *   else `tlsClientChain`'s answer.
  */
 export const tlsClientVerdict = (tls: TlsClient, trust: TlsClientTrust, nowMs: i64): i32 => {
   const chain: u8[][] = tls.peerCertificates()
@@ -214,6 +254,12 @@ export const tlsClientVerdict = (tls: TlsClient, trust: TlsClientTrust, nowMs: i
  * `TLS_RECORD_AUTH`: `tlsClientVerdict`, then `client.authenticate(true)` on
  * 0 or `client.reject(alert)` otherwise, which seals the alert. Answers 0
  * or the alert the connection failed with.
+ *
+ * @param client The record-layer client, whose interest says `TLS_RECORD_AUTH`.
+ * @param trust The roots the server's chain must lead to.
+ * @param nowMs The instant to judge validity at, in milliseconds since 1970-01-01 UTC.
+ * @returns 0 when the server was accepted and the handshake went on, else the alert the connection failed
+ *   with: the verdict's, or one `client.authenticate(true)` reports.
  */
 export const tlsClientAuthenticate = (client: TlsRecordClient, trust: TlsClientTrust, nowMs: i64): i32 => {
   const alert: i32 = tlsClientVerdict(client.tls, trust, nowMs)

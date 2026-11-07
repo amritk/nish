@@ -141,7 +141,12 @@ export const TLS_CLIENT_STATE_START: i32 = 0
 export const TLS_CLIENT_STATE_WAIT_SERVER_HELLO: i32 = 1
 /** The handshake secrets are known; EncryptedExtensions comes next, at the Handshake level. */
 export const TLS_CLIENT_STATE_WAIT_ENCRYPTED_EXTENSIONS: i32 = 2
+/**
+ * EncryptedExtensions is read; the server's Certificate comes next, at the Handshake level. A
+ * CertificateRequest here is `unexpected_message`: this client does not authenticate itself.
+ */
 export const TLS_CLIENT_STATE_WAIT_CERTIFICATE: i32 = 3
+/** The server's chain is read; its CertificateVerify comes next, at the Handshake level. */
 export const TLS_CLIENT_STATE_WAIT_CERTIFICATE_VERIFY: i32 = 4
 /**
  * The server's chain and signature are read and wait for the caller's
@@ -153,6 +158,7 @@ export const TLS_CLIENT_STATE_WAIT_AUTH: i32 = 5
 export const TLS_CLIENT_STATE_WAIT_FINISHED: i32 = 6
 /** Both Finished are done and the application secrets known. */
 export const TLS_CLIENT_STATE_CONNECTED: i32 = 7
+/** The handshake failed or was wiped: every secret is zeroed, and `alert` says why. No state follows it. */
 export const TLS_CLIENT_STATE_FAILED: i32 = 8
 
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
@@ -181,6 +187,15 @@ export class TlsClientConfig {
   /** The group of the one key share the first ClientHello carries; one of `groups`. */
   shareGroup: i32
 
+  /**
+   * A configuration for `serverName` offering `alpn`, with every suite this tree negotiates and an x25519
+   * share. Nothing is checked here: `TlsClient`'s constructor checks the whole configuration.
+   *
+   * @param serverName The host to reach: at most 253 ASCII bytes, sent as `server_name` unless it is an
+   *   IP literal, and the name the caller authenticates the certificate against.
+   * @param alpn The ALPN protocols to offer, most preferred first, each 1 to 255 ASCII bytes; empty sends
+   *   no ALPN. The array is kept, not copied.
+   */
   constructor(serverName: string, alpn: string[]) {
     this.serverName = serverName
     this.alpn = alpn
@@ -201,6 +216,10 @@ const tlsClientKnowsGroup = (group: i32): boolean =>
  * Whether `name` is an IP literal, which RFC 6066 §3 keeps out of
  * `server_name`: dotted decimal (digits and dots only), or anything with a
  * colon, which no DNS name has.
+ *
+ * @param name A host name as the caller gave it, such as `TlsClientConfig.serverName`.
+ * @returns True when `name` is non-empty and all digits and dots, or holds a colon anywhere; such a
+ *   name is not sent as `server_name`.
  */
 export const tlsClientIsIpLiteral = (name: string): boolean => {
   let digits: boolean = true
@@ -264,57 +283,77 @@ const tlsClientConfigFits = (config: TlsClientConfig): boolean => {
   return toI32(config.serverName.length) <= TLS_CLIENT_SERVER_NAME_MAX && tlsClientIsAscii(config.serverName)
 }
 
+/**
+ * The client side of one TLS 1.3 handshake, sans-IO: it takes the server's handshake messages through
+ * `receive`, writes its own for `takeOutput`, and derives each secret into `secrets()` as it becomes
+ * known. It never judges the server's certificate itself: at `TLS_CLIENT_STATE_WAIT_AUTH` it waits for
+ * the caller's `authenticate` or `reject`. One instance serves one connection; once it fails or is
+ * wiped it stays failed.
+ */
 export class TlsClient {
+  /** @internal Read by `net/tls/verify.ts`. */
   config: TlsClientConfig
-  clientRandom: u8[]
+  private clientRandom: u8[]
   /** The x25519 private key, copied in by the constructor; wiped once the server picks a group, unless it picked x25519, then once the exchange is done. */
-  readonly x25519Key: Secret<u8[]>
+  private readonly x25519Key: Secret<u8[]>
   /** The P-256 private key, held the same way. */
-  readonly p256Key: Secret<u8[]>
+  private readonly p256Key: Secret<u8[]>
   /** The legacy_session_id sent, which the ServerHello must echo. */
   sessionId: u8[]
-  transcript: TlsTranscript
+  private transcript: TlsTranscript
   /**
    * The first ClientHello, kept plain until the ServerHello names the hash:
    * the transcript feeds one hash only, so it starts from this copy.
    */
-  firstHello: u8[]
+  private firstHello: u8[]
   /** The bytes received at the current level and not yet read: `input[0 .. inputLength)`, whole messages and the start of the next. */
-  input: u8[]
-  /** What the client has written at the Initial level and not handed on. */
+  private input: u8[]
+  /**
+   * What the client has written at the Initial level and not handed on.
+   *
+   * @internal Read by `net/tls/record-client.ts`.
+   */
   outputInitial: u8[]
-  /** What the client has written at the Handshake level and not handed on: its Finished. */
+  /**
+   * What the client has written at the Handshake level and not handed on: its Finished.
+   *
+   * @internal Read by `net/tls/record-client.ts`.
+   */
   outputHandshake: u8[]
-  secrets256: TlsSecretPool
-  secrets384: TlsSecretPool
+  private secrets256: TlsSecretPool
+  private secrets384: TlsSecretPool
   /** The server message last read, as windows into `input`. */
-  view: TlsServerFlightView
+  private view: TlsServerFlightView
   /** The HelloRetryRequest's cookie, echoed in the second ClientHello; empty if it sent none. */
-  cookie: u8[]
+  private cookie: u8[]
   /** The server's DER certificates, leaf first, once its Certificate is read. */
-  certificates: u8[][]
+  private certificates: u8[][]
   /** What the server's CertificateVerify signs (§4.4.3), once its Certificate is read. */
-  content: u8[]
+  private content: u8[]
   /** The CertificateVerify signature, as it came on the wire. */
-  signature: u8[]
+  private signature: u8[]
   /** A transcript hash on its way into the schedule: HashLen bytes of it. */
-  hashes: u8[]
+  private hashes: u8[]
   /** The ALPN protocol the server chose, one of the configuration's, or empty. */
   alpnChosen: string = ""
   /** Which of the negotiated pool's secrets are known: bit `1 << TLS_SECRET_*` for each, as `TlsServer.held`. */
-  held: i32 = 0
+  private held: i32 = 0
   state: i32 = 0
   /** The alert the client failed with, or 0. */
   alert: i32 = 0
   /** The negotiated cipher suite, or 0 before the ServerHello (or HelloRetryRequest) is read. */
   suite: i32 = 0
+  /** @internal Read by `net/tls/record-client.ts`. */
   hashLength: i32 = 0
   /** The group of the key share the last ClientHello carried. */
   shareGroup: i32 = 0
   /** The CertificateVerify scheme. */
   scheme: i32 = 0
+  /** @internal Read by `net/tls/record-client.ts`. */
   inputLength: i32 = 0
+  /** @internal Read by `net/tls/record-client.ts`. */
   outputInitialLength: i32 = 0
+  /** @internal Read by `net/tls/record-client.ts`. */
   outputHandshakeLength: i32 = 0
   /** Whether a HelloRetryRequest was read, so a second is fatal. */
   retried: boolean = false
@@ -327,6 +366,14 @@ export class TlsClient {
    * keys are copied in and the caller's arrays zeroed. A random or key of
    * another length, or a configuration it cannot offer, leaves the client
    * failed with `internal_error` before it writes anything.
+   *
+   * @param config What to offer; kept, not copied, so it must not change while the handshake runs.
+   * @param clientRandom 32 fresh random bytes for the ClientHello's random; copied, so the array is the
+   *   caller's again.
+   * @param x25519Private 32 fresh random bytes for the x25519 key share; copied into the client's own
+   *   `Secret`, and this array zeroed whatever its length.
+   * @param p256Private 32 fresh random bytes for a P-256 key share, used only if the share or a
+   *   HelloRetryRequest names secp256r1; copied and zeroed the same way.
    */
   constructor(config: TlsClientConfig, clientRandom: u8[], x25519Private: u8[], p256Private: u8[]) {
     const x25519Length: i32 = toI32(x25519Private.length)
@@ -369,7 +416,13 @@ export class TlsClient {
     }
   }
 
-  /** Writes the first ClientHello at the Initial level. Answers 0, or the alert the client failed with; a second call is `internal_error`. */
+  /**
+   * Writes the first ClientHello at the Initial level. Answers 0, or the alert the client failed with;
+   * a second call is `internal_error`.
+   *
+   * @returns 0 once the ClientHello waits in `takeOutput(TLS_LEVEL_INITIAL)`, or the TLS alert code
+   *   (1 to 255) the client failed with.
+   */
   start(): i32 {
     if (this.state === TLS_CLIENT_STATE_FAILED) {
       return this.alert
@@ -394,7 +447,7 @@ export class TlsClient {
    * pass the 65,535 bytes their length can say (a HelloRetryRequest's cookie
    * near that size).
    */
-  writeHello(): i32 {
+  private writeHello(): i32 {
     const share: u8[] | null =
       this.shareGroup === TLS_GROUP_X25519 ? x25519Base(this.x25519Key) : p256PublicKey(this.p256Key)
     if (share === null) {
@@ -441,24 +494,33 @@ export class TlsClient {
   }
 
   /** Fails the handshake with `alert` and answers it, wiping every secret the client holds. */
-  fail(alert: i32): i32 {
+  private fail(alert: i32): i32 {
     this.wipe()
     this.state = TLS_CLIENT_STATE_FAILED
     this.alert = alert
     return alert
   }
 
-  /** The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise. */
+  /**
+   * The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise.
+   *
+   * @returns The client's own pool, one named field per secret; only the secrets the handshake has
+   *   reached hold a value. It is the client's own, not a copy, and `wipe` zeroes it.
+   */
   secrets(): TlsSecretPool {
     return this.hashLength === SHA384_SIZE ? this.secrets384 : this.secrets256
   }
 
   /** Whether the handshake has derived secret `index` (`TLS_SECRET_*`). */
-  known(index: i32): boolean {
+  private known(index: i32): boolean {
     return index >= 0 && index < 31 && (this.held & (1 << index)) !== 0
   }
 
-  /** Whether the secret the client *reads* `level` under — the server's, `serverHandshake` or `serverApplication` — is known yet. */
+  /**
+   * Whether the secret the client *reads* `level` under — the server's, `serverHandshake` or `serverApplication` — is known yet.
+   *
+   * @internal Read by `net/tls/record-client.ts`.
+   */
   readKnown(level: i32): boolean {
     if (level === TLS_LEVEL_HANDSHAKE) {
       return this.known(TLS_SECRET_SERVER_HANDSHAKE)
@@ -466,7 +528,11 @@ export class TlsClient {
     return level === TLS_LEVEL_APPLICATION && this.known(TLS_SECRET_SERVER_APPLICATION)
   }
 
-  /** Whether the secret the client *writes* `level` under — `clientHandshake` or `clientApplication` — is known yet. */
+  /**
+   * Whether the secret the client *writes* `level` under — `clientHandshake` or `clientApplication` — is known yet.
+   *
+   * @internal Read by `net/tls/record-client.ts`.
+   */
   writeKnown(level: i32): boolean {
     if (level === TLS_LEVEL_HANDSHAKE) {
       return this.known(TLS_SECRET_CLIENT_HANDSHAKE)
@@ -474,7 +540,11 @@ export class TlsClient {
     return level === TLS_LEVEL_APPLICATION && this.known(TLS_SECRET_CLIENT_APPLICATION)
   }
 
-  /** Zeroes secret `index` of `secrets()` once a carrier has taken what it needs from it; it stays known. */
+  /**
+   * Zeroes secret `index` of `secrets()` once a carrier has taken what it needs from it; it stays known.
+   *
+   * @internal Read by `net/tls/record-client.ts`.
+   */
   wipeSecret(index: i32): void {
     this.secrets().zero(index)
   }
@@ -497,7 +567,7 @@ export class TlsClient {
   }
 
   /** The level the server's next bytes must arrive at, or -1 when the state expects none. */
-  expectedLevel(): i32 {
+  private expectedLevel(): i32 {
     switch (this.state) {
       case TLS_CLIENT_STATE_WAIT_SERVER_HELLO:
         return TLS_LEVEL_INITIAL
@@ -515,7 +585,7 @@ export class TlsClient {
   }
 
   /** Makes `input` hold at least `need` bytes, keeping the ones it holds; it doubles, and never grows past one largest message. */
-  reserveInput(need: i32): void {
+  private reserveInput(need: i32): void {
     const capacity: i32 = toI32(this.input.length)
     if (need <= capacity) {
       return
@@ -533,7 +603,7 @@ export class TlsClient {
   }
 
   /** Makes the Initial output hold at least `need` bytes, keeping the ones it holds. */
-  reserveOutput(need: i32): void {
+  private reserveOutput(need: i32): void {
     const capacity: i32 = toI32(this.outputInitial.length)
     if (need <= capacity) {
       return
@@ -558,6 +628,13 @@ export class TlsClient {
    * until `authenticate`. Once connected, the Application level takes
    * NewSessionTickets, which are checked and dropped; anything else there is
    * `unexpected_message`, KeyUpdate being the record layer's.
+   *
+   * @param level The level the bytes arrived at: `TLS_LEVEL_INITIAL`, `TLS_LEVEL_HANDSHAKE` or
+   *   `TLS_LEVEL_APPLICATION`, from `nish/net/tls`.
+   * @param data The buffer holding the server's handshake bytes; they are copied, not kept.
+   * @param off Where in `data` the bytes start.
+   * @param len How many bytes, from `off`, to take; 0 takes nothing.
+   * @returns 0, or the TLS alert code (1 to 255) the client failed with.
    */
   receive(level: i32, data: u8[], off: i32, len: i32): i32 {
     if (this.state === TLS_CLIENT_STATE_FAILED) {
@@ -608,7 +685,7 @@ export class TlsClient {
    * read, until a partial one is left or the state waits on the caller.
    * Answers 0 or the alert.
    */
-  drain(): i32 {
+  private drain(): i32 {
     while (this.state !== TLS_CLIENT_STATE_WAIT_AUTH && this.inputLength >= 4) {
       const length: i32 = (toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])
       if (length > TLS_MAX_HANDSHAKE_MESSAGE) {
@@ -633,7 +710,7 @@ export class TlsClient {
   }
 
   /** Drops the first `count` bytes of `input`, moving the rest to its front. */
-  consume(count: i32): void {
+  private consume(count: i32): void {
     const rest: i32 = this.inputLength - count
     for (let k: i32 = 0; k < rest && count + k < toI32(this.input.length); k++) {
       this.input[k] = this.input[count + k]
@@ -642,7 +719,7 @@ export class TlsClient {
   }
 
   /** Dispatches one whole message, `input[0 .. 4 + length)`, of type `type`, by state. */
-  handleMessage(type: i32, length: i32): i32 {
+  private handleMessage(type: i32, length: i32): i32 {
     switch (this.state) {
       case TLS_CLIENT_STATE_WAIT_SERVER_HELLO:
         return type === TLS_HANDSHAKE_SERVER_HELLO
@@ -678,7 +755,7 @@ export class TlsClient {
    * extensions, the echoed session id, null compression and an offered
    * suite. Answers 0 or the alert.
    */
-  checkHello(view: TlsServerFlightView): i32 {
+  private checkHello(view: TlsServerFlightView): i32 {
     if (view.alert !== 0) {
       return view.alert
     }
@@ -717,7 +794,7 @@ export class TlsClient {
   }
 
   /** A ServerHello or HelloRetryRequest, `input[0 .. 4 + length)`. */
-  handleServerHello(length: i32): i32 {
+  private handleServerHello(length: i32): i32 {
     const view: TlsServerFlightView = this.view
     tlsReadServerHello(view, this.input, 4, length)
     if (view.isRetry && this.retried) {
@@ -764,7 +841,7 @@ export class TlsClient {
   }
 
   /** Starts the transcript over `suite`'s hash, from the first ClientHello. */
-  startTranscript(suite: i32): void {
+  private startTranscript(suite: i32): void {
     this.suite = suite
     this.hashLength = tlsSuiteHashLength(suite)
     this.transcript.reset(this.hashLength)
@@ -779,7 +856,7 @@ export class TlsClient {
    * the new group and echoes the cookie. The key of the group not picked is
    * wiped now.
    */
-  handleRetry(length: i32): i32 {
+  private handleRetry(length: i32): i32 {
     const view: TlsServerFlightView = this.view
     if (!view.hasKeyShare && !view.hasCookie) {
       return TLS_ALERT_ILLEGAL_PARAMETER
@@ -810,13 +887,13 @@ export class TlsClient {
   }
 
   /** Zeroes both private keys, once the exchange is done or cannot be. */
-  wipeKeys(): void {
+  private wipeKeys(): void {
     exposeWith(this.x25519Key, TLS_CLIENT_FROM, tlsZeroHeld)
     exposeWith(this.p256Key, TLS_CLIENT_FROM, tlsZeroHeld)
   }
 
   /** Zeroes the private key of the group the client's share is not of. */
-  wipeUnpicked(): void {
+  private wipeUnpicked(): void {
     if (this.shareGroup === TLS_GROUP_X25519) {
       exposeWith(this.p256Key, TLS_CLIENT_FROM, tlsZeroHeld)
     } else {
@@ -832,7 +909,7 @@ export class TlsClient {
    * a secp256r1 share that is not an uncompressed point on the curve
    * (§4.2.8.2); its shared secret is the product's x, which may be zero.
    */
-  exchangeKeys(): i32 {
+  private exchangeKeys(): i32 {
     const view: TlsServerFlightView = this.view
     const peer: u8[] = tlsCopyWindow(view.data, view.shareAt, view.shareLength)
     const isX25519: boolean = this.shareGroup === TLS_GROUP_X25519
@@ -854,7 +931,7 @@ export class TlsClient {
   }
 
   /** EncryptedExtensions (§4.3.1): ALPN, if any, must be one the client offered, and `server_name` acknowledged only if sent. */
-  handleEncryptedExtensions(length: i32): i32 {
+  private handleEncryptedExtensions(length: i32): i32 {
     const view: TlsServerFlightView = this.view
     tlsReadEncryptedExtensions(view, this.input, 4, length)
     if (view.alert !== 0) {
@@ -885,7 +962,7 @@ export class TlsClient {
   }
 
   /** The server's Certificate (§4.4.2): its request context must be empty. The chain is copied out, and what CertificateVerify signs computed. */
-  handleCertificate(length: i32): i32 {
+  private handleCertificate(length: i32): i32 {
     const view: TlsServerFlightView = this.view
     tlsReadCertificate(view, this.input, 4, length)
     if (view.alert !== 0) {
@@ -905,7 +982,7 @@ export class TlsClient {
   }
 
   /** CertificateVerify (§4.4.3): a scheme the client offered. The signature is kept, unchecked, for the caller; the client then waits on it. */
-  handleCertificateVerify(length: i32): i32 {
+  private handleCertificateVerify(length: i32): i32 {
     const view: TlsServerFlightView = this.view
     tlsReadCertificateVerify(view, this.input, 4, length)
     if (view.alert !== 0) {
@@ -927,7 +1004,7 @@ export class TlsClient {
    * master secret, the application and exporter secrets, and the client's
    * Finished at the Handshake level; the handshake secret is wiped.
    */
-  handleFinished(length: i32): i32 {
+  private handleFinished(length: i32): i32 {
     const h: i32 = this.hashLength
     if (length !== h) {
       return TLS_ALERT_DECODE_ERROR
@@ -979,32 +1056,53 @@ export class TlsClient {
   }
 
   /** A NewSessionTicket (§4.6.1) once connected: checked for its structure and dropped, since this client does not resume. */
-  handleTicket(length: i32): i32 {
+  private handleTicket(length: i32): i32 {
     tlsReadNewSessionTicket(this.view, this.input, 4, length)
     return this.view.alert
   }
 
-  /** The server's DER certificates, leaf first; empty before its Certificate is read. */
+  /**
+   * The server's DER certificates, leaf first; empty before its Certificate is read.
+   *
+   * @returns The client's own list, not a copy, for the caller to check before `authenticate`.
+   */
   peerCertificates(): u8[][] {
     return this.certificates
   }
 
-  /** The CertificateVerify scheme (`TLS_SIGNATURE_*`); 0 before it is read. */
+  /**
+   * The CertificateVerify scheme (`TLS_SIGNATURE_*`); 0 before it is read.
+   *
+   * @returns The signature scheme code point the server signed with, or 0.
+   */
   verifyScheme(): i32 {
     return this.scheme
   }
 
-  /** What the CertificateVerify signature is over (§4.4.3): 64 spaces, the server's context string, a zero byte and the transcript hash. */
+  /**
+   * What the CertificateVerify signature is over (§4.4.3): 64 spaces, the server's context string, a
+   * zero byte and the transcript hash.
+   *
+   * @returns The client's own bytes, not a copy; empty before the server's Certificate is read.
+   */
   verifyContent(): u8[] {
     return this.content
   }
 
-  /** The CertificateVerify signature as sent: DER for ECDSA, raw for RSA-PSS. */
+  /**
+   * The CertificateVerify signature as sent: DER for ECDSA, raw for RSA-PSS.
+   *
+   * @returns The client's own bytes, not a copy; empty before the CertificateVerify is read.
+   */
   verifySignature(): u8[] {
     return this.signature
   }
 
-  /** The ALPN protocol the server chose, or empty when it chose none. */
+  /**
+   * The ALPN protocol the server chose, or empty when it chose none.
+   *
+   * @returns One of the configuration's `alpn` protocols, or the empty string.
+   */
   alpn(): string {
     return this.alpnChosen
   }
@@ -1015,6 +1113,10 @@ export class TlsClient {
    * reading what was held meanwhile; `false` is `reject(bad_certificate)`.
    * Answers 0 or the alert; in any other state the client fails with
    * `internal_error`.
+   *
+   * @param ok True when the caller has checked the chain against its trust and the signature over
+   *   `verifyContent()`, and accepts the server.
+   * @returns 0, or the TLS alert code the client failed with.
    */
   authenticate(ok: boolean): i32 {
     if (!ok) {
@@ -1040,6 +1142,10 @@ export class TlsClient {
    * `unknown_ca`, `decrypt_error`…): the client fails with it and answers it.
    * An alert outside 1 to 255 is taken as `bad_certificate`. In any other
    * state the client fails with `internal_error`.
+   *
+   * @param alert The TLS alert code to fail with, 1 to 255 (a `TLS_ALERT_*`).
+   * @returns The alert the client failed with: `alert`, `bad_certificate`, `internal_error`, or the
+   *   earlier alert of a client that had already failed.
    */
   reject(alert: i32): i32 {
     if (this.state === TLS_CLIENT_STATE_FAILED) {
@@ -1052,7 +1158,7 @@ export class TlsClient {
   }
 
   /** A message the client wrote at `level`, `output[at .. end)`, goes into the transcript once its hash is known and stays on the output. */
-  sent(level: i32, at: i32, end: i32): void {
+  private sent(level: i32, at: i32, end: i32): void {
     if (level === TLS_LEVEL_INITIAL) {
       if (this.hashLength !== 0) {
         this.transcript.update(this.outputInitial, at, end - at)
@@ -1064,7 +1170,12 @@ export class TlsClient {
     }
   }
 
-  /** The handshake bytes written at `level` since the last call, in a fresh array, and forgets them. */
+  /**
+   * The handshake bytes written at `level` since the last call, in a fresh array, and forgets them.
+   *
+   * @param level `TLS_LEVEL_INITIAL` for ClientHellos or `TLS_LEVEL_HANDSHAKE` for the Finished.
+   * @returns A copy the caller owns, empty when nothing waits or for any other level.
+   */
   takeOutput(level: i32): u8[] {
     const none: u8[] = []
     switch (level) {
@@ -1083,7 +1194,11 @@ export class TlsClient {
     }
   }
 
-  /** Forgets the handshake bytes written at `level`, which a carrier has read out of the buffer itself. */
+  /**
+   * Forgets the handshake bytes written at `level`, which a carrier has read out of the buffer itself.
+   *
+   * @internal Read by `net/tls/record-client.ts`.
+   */
   clearOutput(level: i32): void {
     if (level === TLS_LEVEL_INITIAL) {
       this.outputInitialLength = 0
