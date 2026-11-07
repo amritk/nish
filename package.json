@@ -101,6 +101,7 @@
     "@biomejs/biome": "2.5.12",
     "@types/node": "^22.0.0",
     "knip": "6.38.0",
+    "typedoc": "0.28.20",
     "typescript": "^5.6.0"
   }
 }
