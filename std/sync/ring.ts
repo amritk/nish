@@ -31,6 +31,40 @@
  * multiple of 64 so the header's counters each have a cache line. Several
  * rings may share a region at different bases.
  *
+ * **In place.** An `SpscRing` producer may write a record into the ring
+ * itself instead of copying one in, and a consumer may read one there:
+ *
+ *     const w: u8[] = ring.reserve(n) // empty when there is no room now
+ *     copyBytes(w, 0, body, 0, k)     // any u8[] writer, within w.length
+ *     ring.commit(k)                  // publishes w[0, k) as one record
+ *
+ *     const r: readonly u8[] = ring.peek() // the next record, in the ring
+ *     if (r.length > 0) {
+ *       use(r)
+ *       ring.release()                // frees it for the producer
+ *     } else {
+ *       ring.tryPop(buf, 0)           // none, or one peek cannot lend
+ *     }
+ *
+ * A window is a `SharedRegion.lend` window: the ring keeps one for its
+ * producer and one for its consumer and re-points them on every call, so
+ * neither path allocates or makes a system call. `commit`, `abandon` and
+ * `release` give the window back, which empties it: a reference kept past
+ * them indexes nothing (each index panics) until the next `reserve` or
+ * `peek` re-points it, and then sees that call's record. A reserved record
+ * is always contiguous: when the rest of the lap is too short, `commit`
+ * writes a skip marker there (a length word of -1, "the rest of this lap is
+ * padding") and the record starts at the next lap. Every pop steps over a
+ * marker. A record `tryPush` wrapped across the end cannot be lent, so `peek`
+ * answers an empty window for it and `tryPop` takes it, as it does for a
+ * record of length 0.
+ *
+ * **The format keeps its magic.** A ring no producer `reserve`s into is
+ * byte for byte what it was, and a consumer built before the marker that
+ * meets one panics with "the ring is corrupt", never reads padding as a
+ * record. Both ends of a ring are normally one build, so a new magic would
+ * buy a clearer panic at the cost of every attach of an existing ring.
+ *
  * **Who may call what is not checked.** An `SpscRing` with two producers, or
  * either ring with two consumers, loses or repeats records; it never reads or
  * writes outside its region, because every access is a checked `SharedRegion`
@@ -79,6 +113,8 @@ const RING_MPSC_MAGIC: i32 = 0x6e726d31 // "nrm1"
 // of tens of microseconds. 256 put a ping-pong's p99 at 35 µs; 2048 put it at
 // 1.4 µs, and 8192 bought nothing more (docs/wp47-shared-memory.md).
 const RING_SPINS: i32 = 2048
+// An SPSC length word that says the rest of the lap is padding.
+const RING_SKIP: i32 = -1
 // An MPSC slot: [seq i64][len i32][4 unused][payload].
 const RING_SLOT_HEAD: i32 = 16
 // The consumer's sleep flag at RING_SLEEP_AT.
@@ -175,6 +211,18 @@ export class SpscRing {
   /** The other side's position, as last loaded. */
   seenHead: i64
   seenTail: i64
+  /** `reserve`'s window, re-pointed by each call; null until the first. */
+  wnd: u8[] | null = null
+  /** `peek`'s window, likewise. */
+  view: u8[] | null = null
+  /** The open reservation's bytes, or -1 for none. */
+  reserved: i32 = -1
+  /** The padding the open reservation skips at the tail. */
+  reservedPad: i32 = 0
+  /** The position past the record `peek` lent, or -1 for none. */
+  peekedEnd: i64 = -1
+  /** The position of the record `lengthAt` last read, past any skip marker. */
+  found: i64 = 0
 
   constructor(region: SharedRegion, base: i32) {
     this.region = region
@@ -192,6 +240,9 @@ export class SpscRing {
    * room for it now. A record longer than the ring could ever hold panics.
    */
   tryPush(src: readonly u8[], off: i32, len: i32): boolean {
+    if (this.reserved >= 0) {
+      panic("nish/sync/ring: tryPush while a reservation is open; commit or abandon it first")
+    }
     const need: i32 = ringRecordBytes(len)
     if (len < 0 || need > this.capacity) {
       panic(`nish/sync/ring: a record of ${len} bytes does not fit a ring of ${this.capacity}`)
@@ -213,6 +264,12 @@ export class SpscRing {
     if (first < len) {
       this.region.write(data, src, off + first, len - first)
     }
+    this.publish(end)
+    return true
+  }
+
+  /** Moves the producer's position to `end`, which hands the consumer every byte before it. */
+  private publish(end: i64): void {
     this.tail = end
     if (this.doorbell) {
       this.region.storeI64(this.base + RING_TAIL_AT, end, SEQ_CST)
@@ -220,7 +277,90 @@ export class SpscRing {
     } else {
       this.region.storeI64(this.base + RING_TAIL_AT, end, RELEASE)
     }
-    return true
+  }
+
+  /** `window` re-pointed at no bytes: length 0, no allocation once it exists. */
+  private emptyWindow(window: u8[] | null): u8[] {
+    if (window !== null && window.length === 0) {
+      return window
+    }
+    const w: u8[] = this.region.lend(this.base + RING_DATA_AT, 0, window)
+    this.region.giveBack(w)
+    return w
+  }
+
+  /**
+   * A window of `n` bytes of the ring's own memory to write a record into,
+   * contiguous, without blocking: empty (length 0) when the ring has no room
+   * for it now. Nothing is published until `commit`; `abandon` drops it. `n`
+   * is from 1 (a window of 0 could not be told from no room; `tryPush` takes
+   * an empty record) to `capacity / 2 - 4`, so an empty ring always has room
+   * for one; outside that, or while a reservation is open, it panics.
+   */
+  reserve(n: i32): u8[] {
+    if (this.reserved >= 0) {
+      panic("nish/sync/ring: reserve while a reservation is open; commit or abandon it first")
+    }
+    const most: i32 = this.capacity / 2 - 4
+    if (n < 1 || n > most) {
+      panic(`nish/sync/ring: a reservation of ${n} bytes is not from 1 to ${most}, half the ring less 4`)
+    }
+    const need: i32 = ringRecordBytes(n)
+    const at: i32 = toI32(this.tail & toI64(this.capacity - 1))
+    // The rest of the lap is padding when the record would cross the end.
+    const pad: i32 = need <= this.capacity - at ? 0 : this.capacity - at
+    const end: i64 = this.tail + toI64(pad + need)
+    if (end - this.seenHead > toI64(this.capacity)) {
+      this.seenHead = this.region.loadI64(this.base + RING_HEAD_AT, ACQUIRE)
+      if (end - this.seenHead > toI64(this.capacity)) {
+        const none: u8[] = this.emptyWindow(this.wnd)
+        this.wnd = none
+        return none
+      }
+    }
+    const from: i32 = pad > 0 ? 0 : at
+    const w: u8[] = this.region.lend(this.base + RING_DATA_AT + from + 4, n, this.wnd)
+    this.wnd = w
+    this.reserved = n
+    this.reservedPad = pad
+    return w
+  }
+
+  /** Ends the open reservation, giving its window back; panics without one. */
+  private endReservation(what: string): void {
+    const w: u8[] | null = this.wnd
+    if (this.reserved < 0 || w === null) {
+      panic(`nish/sync/ring: ${what} without a reservation`)
+    }
+    this.region.giveBack(w)
+    this.reserved = -1
+  }
+
+  /**
+   * Publishes the reserved window's first `len` bytes as one record, the
+   * store `tryPush` makes. The window is given back, so it is empty after.
+   * Panics without a reservation, for `len` outside `[0, n]`, or when a
+   * `push` moved the window out of the ring.
+   */
+  commit(len: i32): void {
+    const n: i32 = this.reserved
+    if (n >= 0 && (len < 0 || len > n)) {
+      panic(`nish/sync/ring: commit of ${len} bytes from a reservation of ${n}`)
+    }
+    this.endReservation("commit")
+    const mask: i32 = this.capacity - 1
+    const data: i32 = this.base + RING_DATA_AT
+    const at: i32 = toI32(this.tail & toI64(mask))
+    if (this.reservedPad > 0) {
+      this.region.storeI32(data + at, RING_SKIP, RELAXED)
+    }
+    this.region.storeI32(this.reservedPad > 0 ? data : data + at, len, RELAXED)
+    this.publish(this.tail + toI64(this.reservedPad + ringRecordBytes(len)))
+  }
+
+  /** Drops the open reservation, publishing nothing; panics without one. */
+  abandon(): void {
+    this.endReservation("abandon")
   }
 
   /** Whether a record is queued, loading the producer's position if the cache says none. */
@@ -232,16 +372,34 @@ export class SpscRing {
     return this.head !== this.seenTail
   }
 
-  /** The length of the record at the consumer's position, checked against the ring. */
-  private lengthAt(pos: i64, avail: i64): i32 {
+  /**
+   * The length of the record at `pos`, or at the next lap when a skip marker
+   * is at `pos`, checked against the ring and the producer's position `end`.
+   * `found` is set to where that record is.
+   */
+  private lengthAt(pos: i64, end: i64): i32 {
     const mask: i32 = this.capacity - 1
-    const len: i32 = this.region.loadI32(this.base + RING_DATA_AT + toI32(pos & toI64(mask)), RELAXED)
+    const data: i32 = this.base + RING_DATA_AT
+    let at: i64 = pos
+    let len: i32 = this.region.loadI32(data + toI32(pos & toI64(mask)), RELAXED)
+    if (len === RING_SKIP) {
+      at = pos + toI64(this.capacity - toI32(pos & toI64(mask)))
+      len = this.region.loadI32(data + toI32(at & toI64(mask)), RELAXED)
+    }
     // The capacity first: a length a broken producer wrote near 2^31 would
     // overflow the rounding below and panic with the wrong reason.
-    if (len < 0 || len > this.capacity - 4 || toI64(ringRecordBytes(len)) > avail) {
-      panic(`nish/sync/ring: a record of length ${len} at position ${pos}: the ring is corrupt`)
+    if (len < 0 || len > this.capacity - 4 || toI64(ringRecordBytes(len)) > end - at) {
+      panic(`nish/sync/ring: a record of length ${len} at position ${at}: the ring is corrupt`)
     }
+    this.found = at
     return len
+  }
+
+  /** Panics while `peek` has a record lent, which a pop would take from under it. */
+  private notPeeked(what: string): void {
+    if (this.peekedEnd >= toI64(0)) {
+      panic(`nish/sync/ring: ${what} while peek has a record lent; release it first`)
+    }
   }
 
   /** Copies the record at `pos`, `len` bytes, into `dst` at `off`. */
@@ -262,15 +420,16 @@ export class SpscRing {
    * when it is longer than `dst.length - off`.
    */
   tryPop(dst: u8[], off: i32): i32 {
+    this.notPeeked("tryPop")
     if (!this.ready(ACQUIRE)) {
       return RING_EMPTY
     }
-    const len: i32 = this.lengthAt(this.head, this.seenTail - this.head)
+    const len: i32 = this.lengthAt(this.head, this.seenTail)
     if (len > toI32(dst.length) - off) {
       return RING_TOO_SMALL
     }
-    this.copyOut(this.head, len, dst, off)
-    this.head = this.head + toI64(ringRecordBytes(len))
+    this.copyOut(this.found, len, dst, off)
+    this.head = this.found + toI64(ringRecordBytes(len))
     this.region.storeI64(this.base + RING_HEAD_AT, this.head, RELEASE)
     return len
   }
@@ -282,6 +441,7 @@ export class SpscRing {
    * many records it moves.
    */
   popBatch(dst: u8[], lens: i32[]): i32 {
+    this.notPeeked("popBatch")
     // Always the producer's position now, not the cache: a cache that still
     // holds a record would hide every one pushed since it was loaded.
     this.seenTail = this.region.loadI64(this.base + RING_TAIL_AT, ACQUIRE)
@@ -289,17 +449,17 @@ export class SpscRing {
     let used: i32 = 0
     let pos: i64 = this.head
     while (count < toI32(lens.length) && pos !== this.seenTail) {
-      const len: i32 = this.lengthAt(pos, this.seenTail - pos)
+      const len: i32 = this.lengthAt(pos, this.seenTail)
       if (len > toI32(dst.length) - used) {
         break
       }
-      this.copyOut(pos, len, dst, used)
+      this.copyOut(this.found, len, dst, used)
       if (count >= 0 && count < toI32(lens.length)) {
         lens[count] = len
       }
       count = count + 1
       used = used + len
-      pos = pos + toI64(ringRecordBytes(len))
+      pos = this.found + toI64(ringRecordBytes(len))
     }
     if (count > 0) {
       this.head = pos
@@ -335,6 +495,49 @@ export class SpscRing {
         return SHM_UNSUPPORTED
       }
     }
+  }
+
+  /**
+   * The next record, lent in place as the ring's own bytes, without copying
+   * or blocking; `release` frees it for the producer. Empty (length 0) when
+   * there is none, and also for a record peek cannot lend: one `tryPush`
+   * wrapped across the end of the ring, or one of length 0. On an empty
+   * answer nothing is lent, and `tryPop` takes the record if there is one.
+   * Panics while a record is lent.
+   */
+  peek(): readonly u8[] {
+    this.notPeeked("peek")
+    if (!this.ready(ACQUIRE)) {
+      const none: u8[] = this.emptyWindow(this.view)
+      this.view = none
+      return none
+    }
+    const len: i32 = this.lengthAt(this.head, this.seenTail)
+    const from: i32 = toI32((this.found + toI64(4)) & toI64(this.capacity - 1))
+    if (len === 0 || len > this.capacity - from) {
+      const none: u8[] = this.emptyWindow(this.view)
+      this.view = none
+      return none
+    }
+    const r: u8[] = this.region.lend(this.base + RING_DATA_AT + from, len, this.view)
+    this.view = r
+    this.peekedEnd = this.found + toI64(ringRecordBytes(len))
+    return r
+  }
+
+  /**
+   * Frees the record `peek` lent, the store `tryPop` makes, and gives the
+   * window back, so it is empty after. Panics when no record is lent.
+   */
+  release(): void {
+    const r: u8[] | null = this.view
+    if (this.peekedEnd < toI64(0) || r === null) {
+      panic("nish/sync/ring: release without a record peek lent")
+    }
+    this.region.giveBack(r)
+    this.head = this.peekedEnd
+    this.peekedEnd = -1
+    this.region.storeI64(this.base + RING_HEAD_AT, this.head, RELEASE)
   }
 }
 

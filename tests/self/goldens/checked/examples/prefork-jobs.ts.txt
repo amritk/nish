@@ -721,10 +721,11 @@ const RING_DATA_AT: i32 = 256
 const RING_SPSC_MAGIC: i32 = 1852994353
 const RING_MPSC_MAGIC: i32 = 1852992817
 const RING_SPINS: i32 = 2048
+const RING_SKIP: i32 = -1
 const RING_SLOT_HEAD: i32 = 16
 const RING_AWAKE: i32 = 0
 const RING_ASLEEP: i32 = 1
-struct SpscRing (class) size=56 align=8 exported
+struct SpscRing (class) size=96 align=8 exported
   field region: SharedRegion index=0 offset=0
   field base: i32 index=1 offset=8
   field capacity: i32 index=2 offset=12
@@ -733,14 +734,29 @@ struct SpscRing (class) size=56 align=8 exported
   field head: i64 index=5 offset=32
   field seenHead: i64 index=6 offset=40
   field seenTail: i64 index=7 offset=48
+  field wnd: u8[] | null index=8 offset=56 initialized
+  field view: u8[] | null index=9 offset=64 initialized
+  field reserved: i32 index=10 offset=72 initialized
+  field reservedPad: i32 index=11 offset=76 initialized
+  field peekedEnd: i64 index=12 offset=80 initialized
+  field found: i64 index=13 offset=88 initialized
   constructor -> @nish.SpscRing.constructor
   method tryPush -> @nish.SpscRing.tryPush
+  method publish -> @nish.SpscRing.publish
+  method emptyWindow -> @nish.SpscRing.emptyWindow
+  method reserve -> @nish.SpscRing.reserve
+  method endReservation -> @nish.SpscRing.endReservation
+  method commit -> @nish.SpscRing.commit
+  method abandon -> @nish.SpscRing.abandon
   method ready -> @nish.SpscRing.ready
   method lengthAt -> @nish.SpscRing.lengthAt
+  method notPeeked -> @nish.SpscRing.notPeeked
   method copyOut -> @nish.SpscRing.copyOut
   method tryPop -> @nish.SpscRing.tryPop
   method popBatch -> @nish.SpscRing.popBatch
   method popWait -> @nish.SpscRing.popWait
+  method peek -> @nish.SpscRing.peek
+  method release -> @nish.SpscRing.release
 struct MpscRing (class) size=32 align=8 exported
   field region: SharedRegion index=0 offset=0
   field base: i32 index=1 offset=8
@@ -818,7 +834,7 @@ function SpscRing.constructor(this: SpscRing, region: SharedRegion, base: i32): 
   sharedWrite: via nish.SharedRegion.loadI32
   escaping: base region
   calls: nish.SharedRegion.loadI32 nish.SharedRegion.loadI64 nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false
+  pointer this: size=96 writesThrough=true captured=false
   pointer region: size=4 writesThrough=true captured=true passedTo=nish.SharedRegion.loadI32#0 nish.SharedRegion.loadI32#0 nish.SharedRegion.loadI64#0 nish.SharedRegion.loadI64#0
   stackSites=0 stackLocals=0
   callee +0:21 SharedRegion.loadI32 -> @nish.SharedRegion.loadI32
@@ -829,8 +845,8 @@ function SpscRing.tryPush(this: SpscRing, src: readonly u8[], off: i32, len: i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
-  calls: nish.SharedRegion.loadI64 nish.SharedRegion.storeI32 nish.SharedRegion.storeI64 nish.SharedRegion.write nish.ringRecordBytes nish.ringRing nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer this: size=56 writesThrough=true captured=false
+  calls: nish.SharedRegion.loadI64 nish.SharedRegion.storeI32 nish.SharedRegion.write nish.SpscRing.publish nish.ringRecordBytes nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.publish#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.SharedRegion.write#2 nish.SharedRegion.write#2
   stackSites=0 stackLocals=0
   local -6:11 need: i32 (const)
@@ -845,33 +861,111 @@ function SpscRing.tryPush(this: SpscRing, src: readonly u8[], off: i32, len: i32
   local +10:11 first: i32 (const)
   callee +11:5 SharedRegion.write -> @nish.SharedRegion.write
   callee +13:7 SharedRegion.write -> @nish.SharedRegion.write
-  callee +17:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
-  callee +18:7 ringRing -> @nish.ringRing
-  callee +20:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  callee +15:5 SpscRing.publish -> @nish.SpscRing.publish
+function SpscRing.publish(this: SpscRing, end: i64): void -> @nish.SpscRing.publish [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: end
+  calls: nish.SharedRegion.storeI64 nish.ringRing nish_panic_overflow
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +2:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  callee +3:7 ringRing -> @nish.ringRing
+  callee +5:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+function SpscRing.emptyWindow(this: SpscRing, window: u8[] | null): u8[] -> @nish.SpscRing.emptyWindow [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.SharedRegion.lend
+  escaping: window
+  calls: nish.SharedRegion.giveBack nish.SharedRegion.lend nish_panic_overflow
+  pointer this: size=96 writesThrough=false captured=false
+  pointer window: size=0 writesThrough=true captured=true passedTo=nish.SharedRegion.lend#3
+  stackSites=0 stackLocals=0
+  local +0:11 w: u8[] (const)
+  callee +0:21 SharedRegion.lend -> @nish.SharedRegion.lend
+  callee +1:5 SharedRegion.giveBack -> @nish.SharedRegion.giveBack
+function SpscRing.reserve(this: SpscRing, n: i32): u8[] -> @nish.SpscRing.reserve [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: n
+  calls: nish.SharedRegion.lend nish.SharedRegion.loadI64 nish.SpscRing.emptyWindow nish.ringRecordBytes nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.emptyWindow#0
+  stackSites=0 stackLocals=0
+  local -10:11 most: i32 (const)
+  local -6:11 need: i32 (const)
+  callee -6:23 ringRecordBytes -> @nish.ringRecordBytes
+  local -5:11 at: i32 (const)
+  local -3:11 pad: i32 (const)
+  local -2:11 end: i64 (const)
+  callee +0:23 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
+  local +2:15 none: u8[] (const)
+  callee +2:28 SpscRing.emptyWindow -> @nish.SpscRing.emptyWindow
+  local +7:11 from: i32 (const)
+  local +8:11 w: u8[] (const)
+  callee +8:21 SharedRegion.lend -> @nish.SharedRegion.lend
+function SpscRing.endReservation(this: SpscRing, what: string): void -> @nish.SpscRing.endReservation [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.SharedRegion.giveBack nish_arena_mark nish_arena_release nish_panic nish_str_concat
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:11 w: u8[] | null (const)
+  callee -1:5 SharedRegion.giveBack -> @nish.SharedRegion.giveBack
+function SpscRing.commit(this: SpscRing, len: i32): void -> @nish.SpscRing.commit [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.SpscRing.endReservation
+  escaping: len
+  calls: nish.SharedRegion.storeI32 nish.SpscRing.endReservation nish.SpscRing.publish nish.ringRecordBytes nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.endReservation#0 nish.SpscRing.publish#0
+  stackSites=0 stackLocals=0
+  local +0:11 n: i32 (const)
+  callee +4:5 SpscRing.endReservation -> @nish.SpscRing.endReservation
+  local +5:11 mask: i32 (const)
+  local +6:11 data: i32 (const)
+  local +7:11 at: i32 (const)
+  callee +9:7 SharedRegion.storeI32 -> @nish.SharedRegion.storeI32
+  callee +11:5 SharedRegion.storeI32 -> @nish.SharedRegion.storeI32
+  callee +12:5 SpscRing.publish -> @nish.SpscRing.publish
+  callee +12:55 ringRecordBytes -> @nish.ringRecordBytes
+function SpscRing.abandon(this: SpscRing): void -> @nish.SpscRing.abandon [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.SpscRing.endReservation
+  calls: nish.SpscRing.endReservation
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.endReservation#0
+  stackSites=0 stackLocals=0
+  callee +0:5 SpscRing.endReservation -> @nish.SpscRing.endReservation
 function SpscRing.ready(this: SpscRing, order: i32): boolean -> @nish.SpscRing.ready [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: order
   calls: nish.SharedRegion.loadI64 nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false
+  pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:21 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
-function SpscRing.lengthAt(this: SpscRing, pos: i64, avail: i64): i32 -> @nish.SpscRing.lengthAt [exported method]
+function SpscRing.lengthAt(this: SpscRing, pos: i64, end: i64): i32 -> @nish.SpscRing.lengthAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.SharedRegion.loadI32
+  sharedWrite: +0:5
+  escaping: pos
   calls: nish.SharedRegion.loadI32 nish.ringRecordBytes nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:11 mask: i32 (const)
-  local +1:11 len: i32 (const)
-  callee +1:22 SharedRegion.loadI32 -> @nish.SharedRegion.loadI32
-  callee +4:53 ringRecordBytes -> @nish.ringRecordBytes
+  local -13:11 mask: i32 (const)
+  local -12:11 data: i32 (const)
+  local -11:9 at: i64 (let)
+  local -10:9 len: i32 (let)
+  callee -10:20 SharedRegion.loadI32 -> @nish.SharedRegion.loadI32
+  callee -7:13 SharedRegion.loadI32 -> @nish.SharedRegion.loadI32
+  callee -3:53 ringRecordBytes -> @nish.ringRecordBytes
+function SpscRing.notPeeked(this: SpscRing, what: string): void -> @nish.SpscRing.notPeeked [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
+  pointer this: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function SpscRing.copyOut(this: SpscRing, pos: i64, len: i32, dst: u8[], off: i32): void -> @nish.SpscRing.copyOut [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.SharedRegion.read
   escaping: len off
   calls: nish.SharedRegion.read nish_panic_overflow
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SharedRegion.read#2 nish.SharedRegion.read#2
   stackSites=0 stackLocals=0
   local +0:11 mask: i32 (const)
@@ -884,24 +978,26 @@ function SpscRing.tryPop(this: SpscRing, dst: u8[], off: i32): i32 -> @nish.Spsc
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: off
-  calls: nish.SharedRegion.storeI64 nish.SpscRing.copyOut nish.SpscRing.lengthAt nish.SpscRing.ready nish.ringRecordBytes nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false passedTo=nish.SpscRing.ready#0 nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
+  calls: nish.SharedRegion.storeI64 nish.SpscRing.copyOut nish.SpscRing.lengthAt nish.SpscRing.notPeeked nish.SpscRing.ready nish.ringRecordBytes nish_panic_overflow
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.ready#0 nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.copyOut#3
   stackSites=0 stackLocals=0
+  callee -9:5 SpscRing.notPeeked -> @nish.SpscRing.notPeeked
   callee -8:10 SpscRing.ready -> @nish.SpscRing.ready
   local -5:11 len: i32 (const)
   callee -5:22 SpscRing.lengthAt -> @nish.SpscRing.lengthAt
   callee -1:5 SpscRing.copyOut -> @nish.SpscRing.copyOut
-  callee +0:35 ringRecordBytes -> @nish.ringRecordBytes
+  callee +0:36 ringRecordBytes -> @nish.ringRecordBytes
   callee +1:5 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
 function SpscRing.popBatch(this: SpscRing, dst: u8[], lens: i32[]): i32 -> @nish.SpscRing.popBatch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.SharedRegion.loadI64 nish.SharedRegion.storeI64 nish.SpscRing.copyOut nish.SpscRing.lengthAt nish.ringRecordBytes nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false passedTo=nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
+  calls: nish.SharedRegion.loadI64 nish.SharedRegion.storeI64 nish.SpscRing.copyOut nish.SpscRing.lengthAt nish.SpscRing.notPeeked nish.ringRecordBytes nish_panic_overflow
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.copyOut#3
   pointer lens: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  callee -3:5 SpscRing.notPeeked -> @nish.SpscRing.notPeeked
   callee +0:21 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
   local +1:9 count: i32 (let)
   local +2:9 used: i32 (let)
@@ -909,14 +1005,14 @@ function SpscRing.popBatch(this: SpscRing, dst: u8[], lens: i32[]): i32 -> @nish
   local +5:13 len: i32 (const)
   callee +5:24 SpscRing.lengthAt -> @nish.SpscRing.lengthAt
   callee +9:7 SpscRing.copyOut -> @nish.SpscRing.copyOut
-  callee +15:25 ringRecordBytes -> @nish.ringRecordBytes
+  callee +15:32 ringRecordBytes -> @nish.ringRecordBytes
   callee +19:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
 function SpscRing.popWait(this: SpscRing, dst: u8[], off: i32, timeoutMs: i32): i32 -> @nish.SpscRing.popWait [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ringDeadline
   escaping: off timeoutMs
   calls: nish.SharedRegion.storeI32 nish.SpscRing.ready nish.SpscRing.tryPop nish.ringDeadline nish.ringLeftMs nish.ringSleep nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false passedTo=nish.SpscRing.tryPop#0 nish.SpscRing.ready#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.tryPop#0 nish.SpscRing.ready#0
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.tryPop#1
   stackSites=0 stackLocals=0
   local +0:11 deadline: i64 (const)
@@ -929,8 +1025,35 @@ function SpscRing.popWait(this: SpscRing, dst: u8[], off: i32, timeoutMs: i32): 
   callee +15:7 SharedRegion.storeI32 -> @nish.SharedRegion.storeI32
   callee +16:12 ringSleep -> @nish.ringSleep
   callee +16:46 SpscRing.ready -> @nish.SpscRing.ready
+function SpscRing.peek(this: SpscRing): readonly u8[] -> @nish.SpscRing.peek [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.SharedRegion.lend nish.SpscRing.emptyWindow nish.SpscRing.lengthAt nish.SpscRing.notPeeked nish.SpscRing.ready nish.ringRecordBytes nish_panic_overflow
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.ready#0 nish.SpscRing.emptyWindow#0 nish.SpscRing.lengthAt#0 nish.SpscRing.emptyWindow#0
+  stackSites=0 stackLocals=0
+  callee -3:5 SpscRing.notPeeked -> @nish.SpscRing.notPeeked
+  callee -2:10 SpscRing.ready -> @nish.SpscRing.ready
+  local -1:13 none: u8[] (const)
+  callee -1:26 SpscRing.emptyWindow -> @nish.SpscRing.emptyWindow
+  local +3:11 len: i32 (const)
+  callee +3:22 SpscRing.lengthAt -> @nish.SpscRing.lengthAt
+  local +4:11 from: i32 (const)
+  local +6:13 none: u8[] (const)
+  callee +6:26 SpscRing.emptyWindow -> @nish.SpscRing.emptyWindow
+  local +10:11 r: u8[] (const)
+  callee +10:21 SharedRegion.lend -> @nish.SharedRegion.lend
+  callee +12:41 ringRecordBytes -> @nish.ringRecordBytes
+function SpscRing.release(this: SpscRing): void -> @nish.SpscRing.release [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.SharedRegion.giveBack nish.SharedRegion.storeI64 nish_panic nish_panic_overflow
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:11 r: u8[] | null (const)
+  callee -1:5 SharedRegion.giveBack -> @nish.SharedRegion.giveBack
+  callee +2:5 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
 function initSpscRing(region: SharedRegion, base: i32, capacity: i32, doorbell: boolean): SpscRing -> @nish.initSpscRing [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=56
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=96
   sharedWrite: via nish.ringCheckPlace
   escaping: base capacity
   calls: nish.SharedRegion.storeI32 nish.SharedRegion.storeI64 nish.SpscRing.constructor nish.ringCheckPlace nish.ringIsPowerOfTwo nish.spscRingBytes nish_alloc_struct nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
@@ -1517,7 +1640,7 @@ function takeAnswer(ring: SpscRing, buf: u8[]): i32 -> @takeAnswer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.SpscRing.popWait
   calls: nish.SpscRing.popWait nish.SpscRing.tryPop
-  pointer ring: size=56 writesThrough=true captured=false passedTo=nish.SpscRing.popWait#0 nish.SpscRing.tryPop#0
+  pointer ring: size=96 writesThrough=true captured=false passedTo=nish.SpscRing.popWait#0 nish.SpscRing.tryPop#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.popWait#1 nish.SpscRing.tryPop#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
