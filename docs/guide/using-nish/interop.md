@@ -135,8 +135,9 @@ compiles in the background instead. The loader imports nothing and reads no
 URL, so a bundler can take it as it is.
 
 Two flags work with `wasm-host` only. `--memory <MiB>` fixes the memory size,
-initial and maximum (1 to 4096); an arena that outgrows it traps. Without the
-flag the memory grows on demand. `--inline <file.mjs>` writes the bytes
+initial and maximum (1 to 4096); an allocation that outgrows it is a panic
+of kind `memory` ([below](#when-the-module-panics)). Without the flag the
+memory grows on demand. `--inline <file.mjs>` writes the bytes
 module. Any other profile refuses either flag with exit 2. The stack is a
 fixed 64 KiB. If `wasm-opt` (binaryen) is on `PATH`, `build.sh` runs
 `wasm-opt -Oz` on the module, and the build line says whether it ran.
@@ -214,8 +215,10 @@ of a handle type may only default to `0` (NL2670).
 
 What cannot cross is refused with the explicit form: an object, a class, a
 function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
-`string` result (NL2667), and, for now, a typed array (NL2664) or a `string`
-parameter (NL2665). A host-module body the lexer cannot read, such as a regex
+`string` result (NL2667), and, for now, a `string` parameter (NL2665): write
+the text into [module storage](#sharing-memory-with-the-page) as bytes and
+pass its length. An array crosses only as a
+[buffer window](#lending-an-array-to-the-page). A host-module body the lexer cannot read, such as a regex
 literal or JSX, is refused with a message to move that code into a module the
 host file imports (NL3049). A host module exists only in a freestanding wasm
 build: a native or WASI build that imports one is refused (NL3050), and so is a
@@ -244,6 +247,201 @@ is done, so pass whole buffers and let the loop run on the Nish side.
 profile. The wasi module does not export the function, but the name is
 reserved there too, so a program that builds for wasi also builds as a
 freestanding wasm module.
+
+### Sharing memory with the page
+
+A module keeps its state in [module storage](../language/arrays-and-strings.md#module-storage),
+and under `--profile wasm-host` that storage is memory the page can read and
+write directly, with no call into the module
+([Host modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#host-modules-the-functions-a-page-supplies)).
+The loaded module carries two things for it, and `--emit-dts` types both:
+
+- **`layout`** has one entry per storage, under its name:
+  `{ at, length, stride, fields? }`. `at` is its byte address in `memory`,
+  `stride` the size of one element, and `fields` the byte offset of each
+  field of a record element. In the `.d.ts`, `length`, `stride` and each
+  offset are literal types, so a page that spells one by hand, or reads a
+  field the module no longer has, fails `tsc` when the module changes.
+- **`views()`** answers the whole memory as `buffer` and as each typed array
+  (`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `f32`, `f64`, `i64`, `u64`), plus
+  `storage.<name>`, a typed array over each storage of numbers. It answers
+  the same object until a growing memory replaces `memory.buffer`, so call
+  it again after each call into the module rather than keeping a view.
+
+```ts
+// sim.ts
+interface Body {
+  x: f32;
+  y: f32;
+}
+
+export const bodies = new Array<Body>(256);
+export const scores = new Int32Array(8);
+
+export const step = (): void => {
+  for (let i = 0; i < bodies.length; i++) {
+    bodies[i].y = bodies[i].y + 1;
+  }
+};
+```
+
+```js
+const sim = loadSync(bytes);
+sim.step();
+const v = sim.views();
+const b = sim.layout.bodies;
+const y3 = v.f32[(b.at + 3 * b.stride + b.fields.y) >> 2];   // 1
+v.storage.scores[0] = 42;                                    // the module sees 42
+```
+
+The TypeScript reading behaves the same: `--emit-ts` writes one more file,
+`nish-storage.ts`, holding a buffer laid out as `layout` says, so a page
+written against `memory.buffer` and `layout` runs against either build.
+
+### Lending an array to the page
+
+A host function may take an array as a *buffer window*: the array, then two
+`u32` parameters, `at` and `n`. The page works on elements `[at, at + n)` of
+the program's own array, in place, with no copy:
+
+```ts
+// web/host.ts
+export function scale(xs: Float32Array, at: u32, n: u32): void {
+  for (let i = at; i < at + n; i++) xs[i] *= 2;
+}
+```
+
+```ts
+// the module
+import { scale } from "./web/host.ts";
+
+const DATA = new Float32Array(64);
+export const tick = (): void => {
+  scale(DATA, 16, 8);
+};
+```
+
+- **Six element types lend**: `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` and
+  `f64[]`, their `readonly` forms and their typed-array names (`Uint8Array`,
+  `Float32Array`, …). Any other array is refused (NL2681); so is a window
+  without `at: u32, n: u32` after it (NL2682), or with them of another type
+  (NL2683). Module storage and a local array both lend; a storage of records
+  does not.
+- **The module checks the window before the page runs.** A window that
+  reaches past the end of the array panics, naming your parameters:
+  `` `scale`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs) ``.
+  `at + n` is added in 64 bits, so huge values cannot wrap around the check.
+  Lending `0, toU32(xs.length)` is proven in bounds and costs no check.
+- **The page is handed a view of all of memory and an index**, so its
+  `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
+  past it is the rest of the module's memory
+  ([security record](../../security/wasm-host.md)).
+
+### When the module panics
+
+A native program that panics prints a message and stops. A module in a page
+cannot stop the page, so under `--profile wasm-host` every panic (an index
+out of range, an overflow, a `panic(...)`, an allocation `--memory` cannot
+hold, a `process.exit`) unwinds out of the module and the call that started
+it throws `NishPanic`, exported by the generated loader:
+
+```js
+import { loadSync, NishPanic } from "./sim.mjs";
+
+const sim = loadSync(bytes, { onPanic: (p) => showError(p.message) });
+try {
+  sim.step();
+} catch (e) {
+  if (e instanceof NishPanic) console.log(e.kind);   // "index", "overflow", …
+}
+```
+
+- **`kind`** is one of `panic`, `index`, `slice`, `overflow`, `divide`,
+  `memory` and `exit`.
+- **`onPanic`** is called with `{ message, kind, site }` before the
+  exception is thrown. Without one, the loader writes `nish: <message>` to
+  the console, as `reportPanic` from `nish/page` does.
+- **Where it happened.** `build.sh` writes `<out>.sites.json` beside the
+  module, a list of `{ kind, at }` with `at` a `path:line:col`. Pass the
+  parsed list as `sites` and each message ends with ` at <path:line:col>`;
+  `site` is the index into that list, or -1.
+- **A panicked module is dead.** Its memory is left as it was, for a page
+  that wants to read it, but every later call throws `NishPanic` ("the
+  module is dead: …") before the module runs. Load the bytes again to start
+  over. An exception a host function throws that escapes the module kills it
+  the same way.
+- **One call at a time.** A host function, or `onPanic`, that calls back
+  into the module while a call is still running gets `NishReentry`, and the
+  inner call never runs. Left uncaught, it kills the module too.
+
+### `nish/page` and `nish/host/ring`
+
+`nish/page` is a small plain-JavaScript module for the page side:
+
+- **`HostTable`** keeps the objects a host module hands the program as
+  `HostHandle` values. `add(value)` stores one and answers its handle (never
+  0), `get(handle)` reads it, `take(handle)` removes and answers it, and
+  `size` counts what it holds. A handle that names nothing (0, one already
+  taken, a number `add` never answered) throws a `RangeError` rather than
+  answering `undefined`; thrown inside a host function, that kills the
+  module. A taken slot is reused by a later `add`.
+- **`ringOver(memory, entry)`** is the page's half of a ring the program
+  keeps with `nish/host/ring`.
+- **`reportPanic`** is the default `onPanic`.
+
+```ts
+// web/host.ts
+import { HostTable } from "nish/page";
+import type { HostHandle, u32 } from "nish";
+
+export type Canvas = HostHandle<"canvas">;
+const canvases = new HostTable<HTMLCanvasElement>();
+
+export function openCanvas(id: u32): Canvas {
+  return canvases.add(document.getElementById(`c${id}`) as HTMLCanvasElement);
+}
+export function closeCanvas(c: Canvas): void {
+  canvases.take(c);
+}
+```
+
+Only the exported function signatures are read, so the table, the import
+of `nish/page` and the bodies are the page's own code.
+
+A ring passes a stream of `i32` words between the page and the program
+through module storage, with no call: the program declares an
+`Int32Array(2 + N)` (two counts, then `N` slots) and uses `nish/host/ring`'s
+`ringPush`, `ringShift`, `ringSize`, `ringFree`, `ringCapacity` and
+`ringClear` on it; the page wraps the same storage with `ringOver`, whose
+`push`, `shift`, `size()`, `free()`, `capacity` and `clear()` agree with
+them. `push` answers `false` when the ring is full, and `shift` answers 0
+when it is empty.
+
+```ts
+// game.ts
+import { ringShift, ringSize } from "nish/host/ring";
+import { steer } from "./web/host.ts";
+
+const INPUT = new Int32Array(2 + 64);
+
+export const tick = (): void => {
+  while (ringSize(INPUT) > 0) {
+    steer(ringShift(INPUT));
+  }
+};
+```
+
+```js
+import { ringOver } from "nish/page";
+
+const game = loadSync(bytes);
+const input = ringOver(game.memory, game.layout.INPUT);
+addEventListener("keydown", (e) => input.push(e.key === "ArrowLeft" ? -1 : 1));
+requestAnimationFrame(function frame() {
+  game.tick();
+  requestAnimationFrame(frame);
+});
+```
 
 ## C
 
