@@ -4,24 +4,46 @@
  * it, a `QuicListener` in front for the datagrams no slot owns, for a
  * program that owns its readiness loop.
  *
- *     const fd = udpBind("0.0.0.0", 4433, 0);
- *     const server = new Http3Server(quicConfig, new Http3Config(), fd, 64, listenerEntropy);
- *     // quicConfig.alpn is ["h3"]; pollAdd(loop, fd, 1, 0)
- *     // each time round the loop, with `now` in milliseconds:
- *     pollWait(loop, ready, server.timeout(now));
- *     server.clock(micros);                      // the same instant in microseconds, for the pacer
- *     server.receive(now, key);                  // every datagram waiting; signs handshakes with `key`
- *     server.tick(now);                          // the connections' timers
- *     let slot: i32 = server.ready();
- *     while (slot >= 0) {
- *       const h3: Http3Connection = server.connection(slot);
- *       let event: i32 = h3.next();
- *       while (event !== H3_NEED_MORE && event !== H3_ERROR) { … ; event = h3.next(); }
- *       slot = server.ready();
- *     }
- *     server.flush(now);                         // what every touched slot has to send
- *     // at shutdown:
- *     server.stop();                             // releases every slot, wipes the static keys
+ *     import { pollAdd, pollCreate, pollWait, udpBind } from "nish:net";
+ *     import { monotonicNanos } from "nish:process";
+ *     import { secret, wipe } from "nish:secret";
+ *     import { H3_ERROR, H3_NEED_MORE, Http3Config, Http3Connection } from "nish/net/http3";
+ *     import { Http3Server } from "nish/net/http3-server";
+ *     import { QuicServerConfig } from "nish/net/quic";
+ *     import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
+ *
+ *     // `quicConfig.alpn` is ["h3"]; `privateKey` is the P-256 key of its certificate.
+ *     const run = (quicConfig: QuicServerConfig, privateKey: u8[], rounds: i32): void => {
+ *       const fd: i32 = udpBind("0.0.0.0", 4433, 0);
+ *       const listenerEntropy: u8[] = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE);
+ *       crypto.getRandomValues(listenerEntropy);
+ *       const server = new Http3Server(quicConfig, new Http3Config(), fd, 64, listenerEntropy);
+ *       const loop: i32 = pollCreate();
+ *       pollAdd(loop, fd, 1, 0);
+ *       const ready: i32[] = new Array<i32>(8);
+ *       const key = secret(privateKey);
+ *       for (let round: i32 = 0; round < rounds; round++) {
+ *         pollWait(loop, ready, server.timeout(monotonicNanos() / 1000000));
+ *         const nanos: i64 = monotonicNanos();
+ *         const now: i64 = nanos / 1000000;        // milliseconds
+ *         server.clock(nanos / 1000);              // the same instant in microseconds, for the pacer
+ *         server.receive(now, key);                // every datagram waiting; signs handshakes with `key`
+ *         server.tick(now);                        // the connections' timers
+ *         let slot: i32 = server.ready();
+ *         while (slot >= 0) {
+ *           const h3: Http3Connection = server.connection(slot);
+ *           let event: i32 = h3.next();
+ *           while (event !== H3_NEED_MORE && event !== H3_ERROR) {
+ *             // answer the event here: `h3.stream`, `h3.fields`, `h3.respond`, ...
+ *             event = h3.next();
+ *           }
+ *           slot = server.ready();
+ *         }
+ *         server.flush(now);                       // what every touched slot has to send
+ *       }
+ *       wipe(key);
+ *       server.stop();                             // releases every slot, wipes the static keys
+ *     };
  *
  * **Routing.** A datagram goes to the slot that owns its first packet's
  * Destination Connection ID, found through a hash index of every slot's
@@ -123,8 +145,12 @@ export const H3_SERVER_WHEEL: i32 = 2048
 /** The most datagrams one `receive` reads, so one busy socket cannot hold the loop. */
 export const H3_SERVER_RECEIVE_BURST: i32 = 256
 
-/** The answers to datagrams no slot owns that may go at once, and the milliseconds that earn one more. */
+/**
+ * The answer budget's size: how many datagrams no slot owns that could get a stateless reset or a Version
+ * Negotiation packet may reach the listener at once.
+ */
 export const H3_SERVER_ANSWER_BURST: i32 = 16
+/** The milliseconds that earn the answer budget one more, up to `H3_SERVER_ANSWER_BURST`. */
 export const H3_SERVER_ANSWER_INTERVAL: i64 = 100
 
 /** The address form `nish:net` reads and writes. */
@@ -155,18 +181,26 @@ const H3_SERVER_BUSY: i32 = 1
 const http3ServerBucket = (time: i64): i32 => toI32(time % toI64(H3_SERVER_WHEEL))
 
 /**
- * The connection IDs of every slot, by hash: open addressing over
- * `table`, whose entries are an index into `keys` plus one. Entry `e`
- * belongs to slot `e / H3_SERVER_KEYS`.
+ * The connection IDs of every slot, by hash: an open-addressed table keyed
+ * with `salt`, each ID copied into the entry it was filed as. Each slot has
+ * `QUIC_CONN_LOCAL_CIDS + 1` entries, slot `s`'s from
+ * `s * (QUIC_CONN_LOCAL_CIDS + 1)` up: its local connection IDs, then the
+ * client's original DCID. The table has at least twice as many places as
+ * entries, so it never fills.
  */
 export class Http3CidIndex {
-  table: i32[]
+  private table: i32[]
   /** Entry `e`'s ID is `keys[e * 20 .. e * 20 + lengths[e])`; a length of 0 is no entry. */
-  keys: u8[]
-  lengths: i32[]
+  private keys: u8[]
+  private lengths: i32[]
   /** The hash's key: eight bytes from the listener's entropy. */
   salt: u8[]
 
+  /**
+   * An empty index for `slots` slots.
+   * @param slots How many slots it files IDs for, each `QUIC_CONN_LOCAL_CIDS + 1` entries.
+   * @param salt The hash's key: its first eight bytes are copied (zeros past a shorter one); not kept.
+   */
   constructor(slots: i32, salt: u8[]) {
     const entries: i32 = slots * H3_SERVER_KEYS
     let size: i32 = 8
@@ -183,7 +217,7 @@ export class Http3CidIndex {
   }
 
   /** The bucket the ID `buf[at .. at + length)` starts its probe at. */
-  bucket(buf: u8[], at: i32, length: i32): i32 {
+  private bucket(buf: u8[], at: i32, length: i32): i32 {
     let h: i64 = toI64(length)
     for (let k: i32 = 0; k < length && at + k >= 0 && at + k < toI32(buf.length); k++) {
       const j: i32 = k & 7
@@ -195,7 +229,7 @@ export class Http3CidIndex {
   }
 
   /** Whether entry `e` holds the ID `buf[at .. at + length)`. */
-  holds(e: i32, buf: u8[], at: i32, length: i32): boolean {
+  private holds(e: i32, buf: u8[], at: i32, length: i32): boolean {
     if (e < 0 || e >= toI32(this.lengths.length) || this.lengths[e] !== length) {
       return false
     }
@@ -208,7 +242,13 @@ export class Http3CidIndex {
     return true
   }
 
-  /** The slot owning the ID `buf[at .. at + length)`, or -1. */
+  /**
+   * The slot owning the ID `buf[at .. at + length)`.
+   * @param buf The bytes holding the ID, read in place and not kept.
+   * @param at Where the ID starts in `buf`.
+   * @param length The ID's length in bytes.
+   * @returns The slot whose entry holds exactly this ID, or -1 when none does (always for a length of 0).
+   */
   find(buf: u8[], at: i32, length: i32): i32 {
     const size: i32 = toI32(this.table.length)
     let h: i32 = this.bucket(buf, at, length)
@@ -225,7 +265,15 @@ export class Http3CidIndex {
     return -1
   }
 
-  /** Files entry `e` as the ID `buf[at .. at + length)`; an ID already filed under another entry is left there. */
+  /**
+   * Files entry `e` as the ID `buf[at .. at + length)`; an ID already filed
+   * under any entry is left there, and nothing is filed.
+   * @param e The entry: slot `s`'s `j`th is `s * (QUIC_CONN_LOCAL_CIDS + 1) + j`. It must not be filed
+   *   already (`remove` it first); one out of range files nothing.
+   * @param buf The bytes holding the ID, copied into the entry.
+   * @param at Where the ID starts in `buf`.
+   * @param length The ID's length in bytes, 1 to `QUIC_MAX_CID_LENGTH`; any other files nothing.
+   */
   insert(e: i32, buf: u8[], at: i32, length: i32): void {
     if (length <= 0 || length > QUIC_MAX_CID_LENGTH || e < 0 || e >= toI32(this.lengths.length)) {
       return
@@ -249,7 +297,10 @@ export class Http3CidIndex {
     }
   }
 
-  /** Takes entry `e` out, moving later entries of its probe run back so none is lost. */
+  /**
+   * Takes entry `e` out, moving later entries of its probe run back so none is lost.
+   * @param e The entry, numbered as `insert` numbers it; one out of range or not filed is ignored.
+   */
   remove(e: i32): void {
     if (e < 0 || e >= toI32(this.lengths.length) || this.lengths[e] === 0) {
       return
@@ -294,21 +345,27 @@ export class Http3CidIndex {
 }
 
 /**
- * Slots filed by the millisecond of their next deadline: `head[b]` is a
- * bucket's first slot plus one, `nextOf` and `prevOf` link a bucket's slots,
- * and `bits` marks the buckets that hold any.
+ * Slots filed by the millisecond of their next deadline: `H3_SERVER_WHEEL`
+ * buckets, each a linked list of its slots, and a bitmap of the buckets that
+ * hold any, so `next` passes 64 empty buckets at a time. A slot is filed in
+ * at most one bucket.
  */
 export class Http3Wheel {
-  head: i32[]
-  nextOf: i32[]
-  prevOf: i32[]
-  /** The bucket a slot is filed in, or -1, and the deadline it was filed for. */
-  bucketOf: i32[]
+  private head: i32[]
+  private nextOf: i32[]
+  private prevOf: i32[]
+  /** The bucket a slot is filed in, or -1. */
+  private bucketOf: i32[]
+  /** Per slot, the deadline in milliseconds `file` last filed it for, before any clamp to the horizon. */
   dueAt: i64[]
-  bits: i64[]
+  private bits: i64[]
   /** Every bucket before this time has been run. */
   cursor: i64 = -1
 
+  /**
+   * An empty wheel whose cursor is not started.
+   * @param slots How many slots it files, 0 to `slots - 1`.
+   */
   constructor(slots: i32) {
     this.head = new Array<i32>(H3_SERVER_WHEEL)
     this.nextOf = new Array<i32>(slots)
@@ -320,7 +377,7 @@ export class Http3Wheel {
   }
 
   /** Marks bucket `b` filled or not. */
-  flag(b: i32, on: boolean): void {
+  private flag(b: i32, on: boolean): void {
     const word: i32 = b >> 6
     if (word < 0 || word >= toI32(this.bits.length)) {
       return
@@ -329,7 +386,10 @@ export class Http3Wheel {
     this.bits[word] = on ? this.bits[word] | bit : this.bits[word] & ~bit
   }
 
-  /** Takes `slot` out of its bucket. */
+  /**
+   * Takes `slot` out of its bucket.
+   * @param slot The slot; one out of range or not filed is ignored.
+   */
   unfile(slot: i32): void {
     if (slot < 0 || slot >= toI32(this.bucketOf.length)) {
       return
@@ -354,7 +414,14 @@ export class Http3Wheel {
     this.bucketOf[slot] = -1
   }
 
-  /** Files `slot` under `due`, kept inside the wheel's horizon from `now`; a negative `due` files nothing. */
+  /**
+   * Files `slot` under `due`, taking it out of any bucket it was in first. A
+   * `due` before the cursor is filed at the cursor, one past the horizon
+   * (`H3_SERVER_WHEEL - 1` milliseconds after the cursor) at the horizon.
+   * @param slot The slot; one out of range files nothing.
+   * @param due The deadline in milliseconds, on `now`'s clock; a negative one leaves the slot unfiled.
+   * @param now The current millisecond: it starts the cursor when no file or tick has yet.
+   */
   file(slot: i32, due: i64, now: i64): void {
     this.unfile(slot)
     if (due < 0 || slot < 0 || slot >= toI32(this.bucketOf.length)) {
@@ -384,7 +451,12 @@ export class Http3Wheel {
     this.flag(b, true)
   }
 
-  /** The slot at the head of the bucket for `time`, taken out of it, or -1. */
+  /**
+   * The slot at the head of the bucket for `time`, taken out of it.
+   * @param time A millisecond: its bucket is `time` modulo `H3_SERVER_WHEEL`, which also holds a slot
+   *   filed at the horizon for a later deadline, so the caller compares `dueAt`.
+   * @returns The slot taken, or -1 when the bucket is empty.
+   */
   take(time: i64): i32 {
     const b: i32 = http3ServerBucket(time)
     const slot: i32 = b >= 0 && b < H3_SERVER_WHEEL ? this.head[b] - 1 : -1
@@ -394,7 +466,12 @@ export class Http3Wheel {
     return slot
   }
 
-  /** Milliseconds from `now` to the first filled bucket, at most the horizon, or -1 when none is. */
+  /**
+   * Milliseconds from `now` to the first filled bucket, at most the horizon.
+   * @param now The current millisecond; the search starts at the cursor, or at `now` before it starts.
+   * @returns 0 when that bucket's time is at or before `now`, the milliseconds until it otherwise, or -1
+   *   when every bucket is empty.
+   */
   next(now: i64): i32 {
     // From the cursor: a bucket before it has run, and one at `now` after a
     // tick is the horizon's, a full turn of the wheel away.
@@ -426,14 +503,17 @@ export class Http3Wheel {
  * is the HTTP/3 side of each and `quic(slot)` the QUIC side.
  */
 export class Http3Server {
+  /** The QUIC configuration of the listener and every slot's connection; `stop` wipes its two keys. */
   quicConfig: QuicServerConfig
   /** The HTTP/3 configuration each slot's `Http3Connection` is built with. */
-  config: Http3Config
+  private config: Http3Config
+  /** Answers the datagrams no slot owns, and accepts new connections into free slots; `stop` releases it. */
   listener: QuicListener
   /** What the listener answers into, made once: its reply and IDs are refilled in their own room. */
   answer: QuicListenerAnswer
   /** The slots built so far, 0 up: each built on the first Initial accepted into it, or the first ask for it. */
   quics: QuicConnection[]
+  /** The HTTP/3 side of each slot in `quics`, at the same index: what `connection` answers. */
   conns: Http3Connection[]
   /**
    * The `date` every slot's responses carry, formatted once a second for all
@@ -441,14 +521,16 @@ export class Http3Server {
    * `connection` and `ready`. `date.pin` fixes its clock.
    */
   date: HttpDate
+  /** The connection IDs of every slot holding a connection, which route each datagram to its slot. */
   index: Http3CidIndex
+  /** Each slot's next deadline, filed by `flush` and run by `tick`; `timeout` reads it. */
   wheel: Http3Wheel
   /**
    * Where each slot sends now: its client's address as the first datagram
    * came from, then wherever the connection follows the client to
-   * (`QuicConnection.sendAddress`, copied here by `flushSlot`). Not
-   * validated until `quic(slot).addressValidated` is set (RFC 9000 §8.1): a
-   * Retry token the listener checked, with `retry` on, or a Handshake packet
+   * (`QuicConnection.sendAddress`, copied here by `flush` before each slot's flight once
+   * `quic(slot).pathKnown`). Not validated until `quic(slot).addressValidated` is set (RFC 9000 §8.1): a
+   * Retry token the listener checked, with `quicConfig.retry` on, or a Handshake packet
    * from the client. Before then it is the source of one UDP datagram, which
    * anyone can forge, so a cap or an allow-list keyed on it waits for that.
    * After the handshake it changes when the client's address does (a NAT
@@ -457,46 +539,53 @@ export class Http3Server {
    */
   addresses: u8[][]
   /** What `receive` reads into, and where `flush` writes a flight. */
-  rx: u8[]
-  tx: u8[]
-  from: u8[]
-  meta: i32[]
+  private rx: u8[]
+  private tx: u8[]
+  private from: u8[]
+  private meta: i32[]
+  /**
+   * `QUIC_CONN_ENTROPY_SIZE` bytes of scratch, refilled from `crypto.getRandomValues` for each slot built
+   * and each connection accepted; it holds the last one's until the next, and `stop` zeroes it.
+   */
   entropy: u8[]
-  flight: QuicFlight
+  private flight: QuicFlight
   /** Signs every slot's CertificateVerify in `serve`, one for the server, keeping nothing per signature. */
-  signer: TlsP256Signer
+  private signer: TlsP256Signer
   /** Each slot's connection-ID index signature, so it is refiled only when its IDs changed. */
-  signatures: i64[]
-  state: i32[]
+  private signatures: i64[]
+  private state: i32[]
   /** The slots with datagrams for the program, a ring, and the slots with something to send, a stack. */
-  readyRing: i32[]
-  dirtyStack: i32[]
+  private readyRing: i32[]
+  private dirtyStack: i32[]
   /** Released slots, a stack: a slot never built is taken from `used` instead. */
-  free: i32[]
+  private free: i32[]
   /** Per slot: 1 while on the ready ring, 2 while on the dirty stack. */
-  queued: i32[]
+  private queued: i32[]
   /** When the answer budget was last topped up, -1 before the first answer. */
-  answerRefilled: i64 = -1
+  private answerRefilled: i64 = -1
   /** The caller's clock in microseconds, from `clock`, or -1: what each connection's pacer counts. */
-  micros: i64 = -1
+  private micros: i64 = -1
+  /** The UDP socket every datagram is read from and sent on, as the constructor was given it. */
   fd: i32 = -1
-  readyHead: i32 = 0
-  readyCount: i32 = 0
-  dirtyCount: i32 = 0
-  freeCount: i32 = 0
+  private readyHead: i32 = 0
+  private readyCount: i32 = 0
+  private dirtyCount: i32 = 0
+  private freeCount: i32 = 0
   /** How many slots the pool may hold, which `size` answers. */
-  slots: i32 = 1
+  private slots: i32 = 1
   /** The slots ever accepted into, 0 up: one past it has never held a connection, so is free without being on `free`. */
-  used: i32 = 0
+  private used: i32 = 0
   /** Set by `stop`: a slot built after it is released as it is made, so it holds no keys. */
-  stopped: boolean = false
+  private stopped: boolean = false
   /** What is left of the answer budget (see `answerRefilled`). */
-  answerBudget: i32 = 0
-  /** Counters for a log or a test, saturating: connections accepted, Initials dropped for want of a slot, datagrams past the answer budget, sends that failed. */
+  private answerBudget: i32 = 0
+  /** Connections accepted into a slot, for a log or a test; saturating at 2^31 - 1. */
   accepted: i32 = 0
+  /** Initials dropped because no slot was free, saturating at 2^31 - 1. */
   refused: i32 = 0
+  /** Datagrams no slot owns dropped past the answer budget before the listener read them, saturating. */
   limited: i32 = 0
-  sendErrors: i32 = 0
+  private sendErrors: i32 = 0
   /** Whether the platform sends ECN marks: true until a marked send answers -95, and every slot's `ecnMarking` with it. */
   ecn: boolean = true
   /**
@@ -504,8 +593,8 @@ export class Http3Server {
    * constructor for the stream table `quicConfig` gives every slot: `null`
    * when its streams have none. Each pool makes a buffer only when a stream
    * first needs one, so an idle server holds none (QUIC-3). It is made even
-   * for a configuration `quicConnConfigFits` refuses; `build` shares it only
-   * with a connection whose stream buffers are its size.
+   * for a configuration `quicConnConfigFits` refuses; a slot's connection
+   * shares it only when its stream buffers are the pools' size.
    */
   streamPools: QuicStreamPools | null = null
   /** The `bodyChunk`-byte read buffers every slot's `Http3Connection` borrows, one at most each. */
@@ -522,6 +611,12 @@ export class Http3Server {
    * built on the first Initial accepted into it. From here on
    * `quicConfig`'s `statelessResetKey` and `retryTokenKey` are the server's:
    * `stop` wipes them, so the configuration is this server's alone.
+   * @param quicConfig The QUIC configuration, kept by reference and shared by the listener and every slot.
+   * @param config The HTTP/3 configuration, kept by reference; its `bodyChunk` and `maxFieldSectionSize`
+   *   size the shared buffer pools.
+   * @param fd The bound UDP socket, kept; the server does not close it.
+   * @param size How many slots, 1 to 65536; any other panics.
+   * @param listenerEntropy `QUIC_LISTENER_ENTROPY_SIZE` random bytes, copied and then zeroed in this array.
    */
   constructor(quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[]) {
     if (size < 1 || size > 65536) {
@@ -590,7 +685,7 @@ export class Http3Server {
    * were made for, its HTTP/3 connection on the pool's buffers and `date`,
    * and its address.
    */
-  build(): void {
+  private build(): void {
     crypto.getRandomValues(this.entropy)
     const quic = new QuicConnection(this.quicConfig, this.entropy)
     quic.ecnMarking = this.ecn
@@ -610,7 +705,7 @@ export class Http3Server {
   }
 
   /** `slot` when it is one of the pool's, built with every slot before it if it was not; 0 when it is out of range. */
-  slotAt(slot: i32): i32 {
+  private slotAt(slot: i32): i32 {
     const at: i32 = slot >= 0 && slot < this.slots ? slot : H3_SERVER_ZERO
     while (toI32(this.quics.length) <= at) {
       this.build()
@@ -619,21 +714,31 @@ export class Http3Server {
   }
 
   /** Whether every slot holds a connection: none released, and none left never used. */
-  full(): boolean {
+  private full(): boolean {
     return this.freeCount <= 0 && this.used >= this.slots
   }
 
-  /** How many slots the pool has, built or not. */
+  /**
+   * How many slots the pool has, built or not.
+   * @returns The constructor's `size`, 1 to 65536.
+   */
   size(): i32 {
     return this.slots
   }
 
-  /** How many slots hold a connection. */
+  /**
+   * How many slots hold a connection.
+   * @returns 0 to `size()`.
+   */
   busy(): i32 {
     return this.used - this.freeCount
   }
 
-  /** Whether `slot` holds a connection. */
+  /**
+   * Whether `slot` holds a connection.
+   * @param slot Any number.
+   * @returns True from the accept into it until it is freed; false for a slot out of range.
+   */
   holds(slot: i32): boolean {
     return slot >= 0 && slot < toI32(this.state.length) && this.state[slot] === H3_SERVER_BUSY
   }
@@ -643,18 +748,29 @@ export class Http3Server {
    * of range names the first. A slot not built yet is built here, with every
    * slot before it, so a program that binds something to each slot's
    * connection up front gets the one its slot keeps.
+   * @param slot The slot, 0 to `size() - 1`.
+   * @returns The slot's connection, kept by the pool and reused by every connection the slot holds.
    */
   connection(slot: i32): Http3Connection {
     this.date.current()
     return this.conns[this.slotAt(slot)]
   }
 
-  /** The QUIC connection of `slot`, built as `connection` builds it; a slot out of range names the first. */
+  /**
+   * The QUIC connection of `slot`, built as `connection` builds it; a slot out of range names the first.
+   * @param slot The slot, 0 to `size() - 1`.
+   * @returns The slot's QUIC connection, kept by the pool and reset for each connection the slot holds.
+   */
   quic(slot: i32): QuicConnection {
     return this.quics[this.slotAt(slot)]
   }
 
-  /** Puts `slot` on the ready ring and the dirty stack, unless it is on them. */
+  /**
+   * Marks `slot` as having news for the program, so that `ready` answers it,
+   * and something to send, so that the next `flush` sends it; a slot already
+   * marked is not marked twice.
+   * @param slot The slot; one that holds no connection is ignored.
+   */
   touch(slot: i32): void {
     if (!this.holds(slot)) {
       return
@@ -669,7 +785,7 @@ export class Http3Server {
   }
 
   /** Puts `slot` on the dirty stack, for `flush`. */
-  dirty(slot: i32): void {
+  private dirty(slot: i32): void {
     if ((this.queued[slot] & 2) === 0 && this.dirtyCount < toI32(this.dirtyStack.length)) {
       this.dirtyStack[this.dirtyCount] = slot
       this.dirtyCount = this.dirtyCount + 1
@@ -677,7 +793,11 @@ export class Http3Server {
     }
   }
 
-  /** The next slot with news for the program, or -1: call its connection's `next` until it has none. */
+  /**
+   * The next slot with news for the program: call its connection's `next` until it has none.
+   * @returns A slot holding a connection that a datagram or `touch` marked since `ready` last answered it,
+   *   each such slot once, or -1 when none is left.
+   */
   ready(): i32 {
     this.date.current()
     while (this.readyCount > 0) {
@@ -693,11 +813,15 @@ export class Http3Server {
   }
 
   /**
-   * Reads every datagram waiting on the socket, at most
-   * `H3_SERVER_RECEIVE_BURST`, and hands each to its slot or the listener,
+   * Reads every datagram waiting on the socket, in at most
+   * `H3_SERVER_RECEIVE_BURST` receives, and hands each to its slot or the listener,
    * signing a handshake's CertificateVerify with `key` (ECDSA P-256) when one
    * asks. A GRO receive is cut into its datagrams in place. Answers how many
    * datagrams it read.
+   * @param now The current millisecond on the caller's monotonic clock.
+   * @param key The certificate's private key; read only to sign, and not kept.
+   * @returns How many datagrams it handed on, each GRO segment counted, those then dropped included; it
+   *   stops at the first receive that finds nothing or fails.
    */
   receive(now: i64, key: Secret<u8[]>): i32 {
     let count: i32 = 0
@@ -728,6 +852,14 @@ export class Http3Server {
   /**
    * One datagram, `buf[at .. at + len)`, from `address`: to the slot that
    * owns its first packet's Destination Connection ID, or to the listener.
+   * One too short to carry its DCID, or whose DCID is longer than
+   * `QUIC_MAX_CID_LENGTH`, or a window outside `buf`, is dropped.
+   * @param buf The bytes holding the datagram, read in place.
+   * @param at Where the datagram starts in `buf`.
+   * @param len Its length in bytes.
+   * @param address Where it came from, in `nish:net`'s 18-byte form; copied when it starts a connection.
+   * @param now The current millisecond on the caller's monotonic clock.
+   * @param key The certificate's private key, as `receive` takes it.
    */
   datagram(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
     if (len < 1 || at < 0 || at + len > toI32(buf.length)) {
@@ -759,7 +891,7 @@ export class Http3Server {
    * in `buf` and answering into `answer`, and may make a connection in a
    * free slot, which reads the same window. Nothing is copied (H3-3).
    */
-  unowned(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
+  private unowned(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
     if (!this.worthListening(buf, at, len, now)) {
       return
     }
@@ -812,7 +944,7 @@ export class Http3Server {
    * A stateless reset and a Version Negotiation packet, the answers that do
    * not start a connection, are also held to `takeAnswer`'s budget.
    */
-  worthListening(buf: u8[], at: i32, len: i32, now: i64): boolean {
+  private worthListening(buf: u8[], at: i32, len: i32, now: i64): boolean {
     const first: i32 = toI32(buf[at])
     if ((first & 0x80) === 0) {
       return len > QUIC_LISTENER_MIN_RESET && this.takeAnswer(now)
@@ -844,7 +976,7 @@ export class Http3Server {
    * the datagram is dropped before the listener sees it, so a flood of
    * garbage costs no answer and no MAC past the budget (H3-3); counted in `limited`.
    */
-  takeAnswer(now: i64): boolean {
+  private takeAnswer(now: i64): boolean {
     if (this.answerRefilled < 0 || now < this.answerRefilled) {
       this.answerRefilled = now
       this.answerBudget = H3_SERVER_ANSWER_BURST
@@ -869,6 +1001,8 @@ export class Http3Server {
    * 1000` where `now` is `monotonicNanos() / 1000000`. The pacer counts it;
    * every timer still counts `now`. One that is not inside `now`'s
    * millisecond is not read.
+   * @param micros The instant in microseconds; one outside the millisecond `now` names, such as -1, makes
+   *   the pacer count whole milliseconds.
    */
   clock(micros: i64): void {
     this.micros = micros
@@ -879,6 +1013,13 @@ export class Http3Server {
    * handshake asks, and refiles its IDs and timer. The connection decides
    * from the address whether the client moved (RFC 9000 §9.3); an address
    * that is not 18 bytes long leaves it where it is.
+   * @param slot A slot that holds a connection, as `datagram` finds it; the slot is not checked.
+   * @param buf The bytes holding the datagram, read in place.
+   * @param at Where the datagram starts in `buf`.
+   * @param len Its length in bytes.
+   * @param address Where it came from, in `nish:net`'s 18-byte form.
+   * @param now The current millisecond on the caller's monotonic clock.
+   * @param key The certificate's private key, as `receive` takes it.
    */
   serve(slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
     const quic: QuicConnection = this.quics[slot]
@@ -896,7 +1037,7 @@ export class Http3Server {
   }
 
   /** Files `slot`'s connection IDs in the index again when they changed. */
-  refile(slot: i32): void {
+  private refile(slot: i32): void {
     const quic: QuicConnection = this.quics[slot]
     const signature: i64 =
       (quic.cids.nextLocal << 16) |
@@ -929,7 +1070,7 @@ export class Http3Server {
    * Sends `buf[at .. at + len)` to `to` with the ECN codepoint `ecn`, cut
    * into `segment`-byte datagrams when it is above 0; answers whether it went.
    */
-  send(buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean {
+  private send(buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean {
     const sent: i32 = udpSendTo(this.fd, buf, at, len, to, segment, ecn)
     if (sent >= 0) {
       return true
@@ -980,6 +1121,7 @@ export class Http3Server {
    * slot whose HTTP/3 side is done after GOAWAY, frees a slot whose
    * connection has closed, and files each in the wheel under its next
    * deadline.
+   * @param now The current millisecond on the caller's monotonic clock.
    */
   flush(now: i64): void {
     while (this.dirtyCount > 0) {
@@ -993,7 +1135,7 @@ export class Http3Server {
   }
 
   /** `flush` of one slot. */
-  flushSlot(slot: i32, now: i64): void {
+  private flushSlot(slot: i32, now: i64): void {
     const quic: QuicConnection = this.quics[slot]
     quic.recovery.micros = this.micros
     if (this.conns[slot].isDone() && !quic.closed()) {
@@ -1060,7 +1202,7 @@ export class Http3Server {
   }
 
   /** Takes every one of `slot`'s connection IDs out of the index. */
-  unindex(slot: i32): void {
+  private unindex(slot: i32): void {
     const first: i32 = slot * H3_SERVER_KEYS
     for (let j: i32 = 0; j < H3_SERVER_KEYS; j++) {
       this.index.remove(first + j)
@@ -1068,7 +1210,7 @@ export class Http3Server {
   }
 
   /** Frees `slot`: its IDs leave the index and its timer the wheel. */
-  release(slot: i32): void {
+  private release(slot: i32): void {
     this.unindex(slot)
     this.wheel.unfile(slot)
     this.conns[slot].release()
@@ -1112,7 +1254,10 @@ export class Http3Server {
     this.answer.wipe()
   }
 
-  /** Runs the timers due by `now`, and marks each slot it ran for `flush`. */
+  /**
+   * Runs the timers due by `now`, and marks each slot it ran for `flush`.
+   * @param now The current millisecond on the caller's monotonic clock.
+   */
   tick(now: i64): void {
     const wheel: Http3Wheel = this.wheel
     if (wheel.cursor < 0) {
@@ -1146,7 +1291,12 @@ export class Http3Server {
     }
   }
 
-  /** Milliseconds until `tick` has a timer to run, for `pollWait`; -1 when no slot has one. */
+  /**
+   * Milliseconds until `tick` has a timer to run, for `pollWait`.
+   * @param now The current millisecond on the caller's monotonic clock.
+   * @returns 0 when a timer is due now, the milliseconds until the first otherwise (at most about
+   *   `H3_SERVER_WHEEL`), or -1 when no slot is filed.
+   */
   timeout(now: i64): i32 {
     return this.wheel.next(now)
   }
