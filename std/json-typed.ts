@@ -409,7 +409,7 @@ export class JsonNumber {
    *
    * @returns A new tokenizer whose current token is the number.
    */
-  reader(): JsonTokenizer {
+  private reader(): JsonTokenizer {
     const limits: JsonLimits = new JsonLimits()
     limits.maxDepth = 0
     limits.maxNumberBytes = this.count
@@ -502,7 +502,7 @@ export class JsonNumber {
  */
 export class JsonDecoder {
   /** The tokenizer over the input, under the caller's `JsonLimits`. */
-  tok: JsonTokenizer
+  private tok: JsonTokenizer
   /** `JSON_DECODE_OK`, or the first `JSON_DECODE_*` or `JSON_TOK_ERR_*` code. */
   failed: i32 = 0
   /** The byte offset in the input of the token the error was found at; `-1` until one. */
@@ -522,7 +522,7 @@ export class JsonDecoder {
    * the first token of an array element, read to see whether the array had
    * ended, or a value `takeNull` found was not `null`.
    */
-  held: boolean = false
+  private held: boolean = false
 
   /**
    * A decoder over `src[off, off + len)`, with no error and no map key taken.
@@ -559,14 +559,20 @@ export class JsonDecoder {
    * @param code The `JSON_DECODE_*` or `JSON_TOK_ERR_*` code.
    * @param at The byte offset of the token it was found at.
    */
-  fail(code: i32, at: i32): void {
+  private fail(code: i32, at: i32): void {
     if (this.failed === JSON_DECODE_OK) {
       this.failed = code
       this.errorAt = at
     }
   }
 
-  /** `JSON_DECODE_TYPE` at the current token, unless the read that found it failed already. */
+  /**
+   * `JSON_DECODE_TYPE` at the current token, unless the read that found it
+   * failed already.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   wrongType(): void {
     this.fail(JSON_DECODE_TYPE, this.tok.tokStart)
   }
@@ -577,7 +583,7 @@ export class JsonDecoder {
    *
    * @returns Its `JSON_TOK_*` kind, or the negative code of the error, which it records.
    */
-  take(): i32 {
+  private take(): i32 {
     if (this.failed !== JSON_DECODE_OK) {
       return this.failed
     }
@@ -632,6 +638,9 @@ export class JsonDecoder {
    *
    * @param name The field's name or its key on the wire.
    * @returns `true` when the key's bytes are `name`'s UTF-8.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
    */
   keyIs(name: string): boolean {
     return this.tok.keyEquals(name)
@@ -639,7 +648,7 @@ export class JsonDecoder {
 
   /**
    * The current key's length in bytes once decoded, or `-1` when the current
-   * token is not a key: what the code written for a class switches on before
+   * token is not a key or string: what the code written for a class switches on before
    * it compares a key's bytes with a field's name.
    *
    * @returns The decoded length in bytes, or `-1`.
@@ -651,7 +660,7 @@ export class JsonDecoder {
   /**
    * Byte `at` of the current key when the key has no escape, so that its
    * bytes are the input's, and `-1` otherwise: for a key with an escape, for
-   * an `at` outside it, and when the current token is not a key. A `-1`
+   * an `at` outside it, and when the current token is not a key or string. A `-1`
    * matches no byte of a field's name, and the code written for a class then
    * compares the key with each name of its length through `keyIs`, which
    * decodes the escapes.
@@ -695,7 +704,7 @@ export class JsonDecoder {
   /**
    * The current key, decoded: a `Map` field's key.
    *
-   * @returns A new string, or `""` when the current token is not a key.
+   * @returns A new string, or `""` when the current token is not a key or string.
    */
   key(): string {
     return this.text()
@@ -731,6 +740,9 @@ export class JsonDecoder {
    * Handles a key that names no field: with `ignoreUnknown` set, steps over
    * the key's value, checked but not kept, and otherwise records
    * `JSON_DECODE_UNKNOWN` at the key.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
    */
   unknownField(): void {
     if (this.failed !== JSON_DECODE_OK) {
@@ -746,12 +758,24 @@ export class JsonDecoder {
     }
   }
 
-  /** Records `JSON_DECODE_DUPLICATE` at the current key, which the object already gave. */
+  /**
+   * Records `JSON_DECODE_DUPLICATE` at the current key, which the object
+   * already gave.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   duplicateField(): void {
     this.fail(JSON_DECODE_DUPLICATE, this.tok.tokStart)
   }
 
-  /** Records `JSON_DECODE_MISSING` at the `}` of the object just closed, which left out a required field. */
+  /**
+   * Records `JSON_DECODE_MISSING` at the `}` of the object just closed,
+   * which left out a required field.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   missingField(): void {
     this.fail(JSON_DECODE_MISSING, this.tok.tokStart)
   }
@@ -761,6 +785,9 @@ export class JsonDecoder {
    * follow it, and anything else is `JSON_DECODE_TYPE`.
    *
    * @returns `failed`: `JSON_DECODE_OK`, or the first error's code.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
    */
   finish(): i32 {
     if (this.failed === JSON_DECODE_OK) {
@@ -779,6 +806,9 @@ export class JsonDecoder {
    * follows when it is not.
    *
    * @returns `true` when it was `null`; `false` otherwise and after any error.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
    */
   takeNull(): boolean {
     const k: i32 = this.take()
@@ -842,7 +872,7 @@ export class JsonDecoder {
    *   a number, and with `JSON_DECODE_RANGE` for a fraction, an exponent or
    *   a value out of bounds.
    */
-  integer(lo: i64, hi: i64, bounded: boolean): i64 {
+  private integer(lo: i64, hi: i64, bounded: boolean): i64 {
     const k: i32 = this.take()
     if (k !== JSON_TOK_NUMBER) {
       if (k >= 0) {
@@ -1019,8 +1049,14 @@ export class JsonDecoder {
   /**
    * The next value as an array whose every element is an `i32`, read as `i32()` reads one, into `xs`.
    *
+   * Each element overwrites the slot `xs` already has or is pushed past its
+   * end, and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and leaves `xs`
+   * untouched; a failure inside the array leaves its contents unspecified.
+   *
    * @param xs The array the field holds now, whose slots are reused.
-   * @returns `xs`, holding the input's elements; with an error, the elements read before it, and the rest as they were.
+   * @returns `xs`, holding the input's elements.
    */
   i32Array(xs: i32[]): i32[] {
     if (!this.beginArray()) {
@@ -1045,8 +1081,14 @@ export class JsonDecoder {
   /**
    * The next value as an array whose every element is a `u32`, read as `u32()` reads one, into `xs`.
    *
+   * Each element overwrites the slot `xs` already has or is pushed past its
+   * end, and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and leaves `xs`
+   * untouched; a failure inside the array leaves its contents unspecified.
+   *
    * @param xs The array the field holds now, whose slots are reused.
-   * @returns `xs`, holding the input's elements; with an error, the elements read before it, and the rest as they were.
+   * @returns `xs`, holding the input's elements.
    */
   u32Array(xs: u32[]): u32[] {
     if (!this.beginArray()) {
@@ -1071,8 +1113,14 @@ export class JsonDecoder {
   /**
    * The next value as an array whose every element is an `i64`, read as `i64()` reads one, into `xs`.
    *
+   * Each element overwrites the slot `xs` already has or is pushed past its
+   * end, and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and leaves `xs`
+   * untouched; a failure inside the array leaves its contents unspecified.
+   *
    * @param xs The array the field holds now, whose slots are reused.
-   * @returns `xs`, holding the input's elements; with an error, the elements read before it, and the rest as they were.
+   * @returns `xs`, holding the input's elements.
    */
   i64Array(xs: i64[]): i64[] {
     if (!this.beginArray()) {
@@ -1097,8 +1145,14 @@ export class JsonDecoder {
   /**
    * The next value as an array whose every element is a `u64`, read as `u64()` reads one, into `xs`.
    *
+   * Each element overwrites the slot `xs` already has or is pushed past its
+   * end, and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and leaves `xs`
+   * untouched; a failure inside the array leaves its contents unspecified.
+   *
    * @param xs The array the field holds now, whose slots are reused.
-   * @returns `xs`, holding the input's elements; with an error, the elements read before it, and the rest as they were.
+   * @returns `xs`, holding the input's elements.
    */
   u64Array(xs: u64[]): u64[] {
     if (!this.beginArray()) {
@@ -1123,8 +1177,14 @@ export class JsonDecoder {
   /**
    * The next value as an array whose every element is an `f64`, read as `f64()` reads one, into `xs`.
    *
+   * Each element overwrites the slot `xs` already has or is pushed past its
+   * end, and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and leaves `xs`
+   * untouched; a failure inside the array leaves its contents unspecified.
+   *
    * @param xs The array the field holds now, whose slots are reused.
-   * @returns `xs`, holding the input's elements; with an error, the elements read before it, and the rest as they were.
+   * @returns `xs`, holding the input's elements.
    */
   f64Array(xs: f64[]): f64[] {
     if (!this.beginArray()) {
@@ -1149,8 +1209,14 @@ export class JsonDecoder {
   /**
    * The next value as an array whose every element is a `boolean`, into `xs`.
    *
+   * Each element overwrites the slot `xs` already has or is pushed past its
+   * end, and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and leaves `xs`
+   * untouched; a failure inside the array leaves its contents unspecified.
+   *
    * @param xs The array the field holds now, whose slots are reused.
-   * @returns `xs`, holding the input's elements; with an error, the elements read before it, and the rest as they were.
+   * @returns `xs`, holding the input's elements.
    */
   booleanArray(xs: boolean[]): boolean[] {
     if (!this.beginArray()) {
@@ -1175,8 +1241,15 @@ export class JsonDecoder {
   /**
    * The next value as an array whose every element is a string, read as `string(cur)` reads one, each against the string its slot holds, into `xs`.
    *
+   * Each element overwrites the slot `xs` already has or is pushed past its
+   * end, and the slots left over are popped, so an array no longer than `xs`
+   * grows nothing. Only the container is reused: an element whose text
+   * changed is a new string. A value that is not an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and leaves `xs`
+   * untouched; a failure inside the array leaves its contents unspecified.
+   *
    * @param xs The array the field holds now, whose slots are reused.
-   * @returns `xs`, holding the input's elements; with an error, the elements read before it, and the rest as they were.
+   * @returns `xs`, holding the input's elements.
    */
   stringArray(xs: string[]): string[] {
     if (!this.beginArray()) {
@@ -1376,6 +1449,9 @@ export const jsonEncode = <T>(_w: JsonWriter, _value: T): void => {
  *
  * @param w The writer.
  * @param s The value.
+ *
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
  */
 export const jsonEncodeStringOrNull = (w: JsonWriter, s: string | null): void => {
   if (s === null) {

@@ -83,25 +83,57 @@ const jsonNumberIsDigit = (c: i32): boolean => c >= JSON_NUMBER_DIGIT_0 && c <= 
  * stepping over the point.
  */
 class JsonNumberParts {
-  text: string
-  /** `0` when the text is a number, else a `JSON_NUMBER_ERR_*` code. */
+  private text: string
+  /**
+   * `0` when the text is a number, else a `JSON_NUMBER_ERR_*` code.
+   *
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
   code: i32
+  /**
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
   negative: boolean
-  /** Whether every digit is zero, `-0` and `0.0e5` included. */
+  /**
+   * Whether every digit is zero, `-0` and `0.0e5` included.
+   *
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
   zero: boolean
   /** Where the integer part's digits start, and how many there are. */
-  intStart: i32
-  intLen: i32
+  private intStart: i32
+  private intLen: i32
   /** Where the fraction's digits start, after the point, and how many there are. */
-  fracStart: i32
-  fracLen: i32
+  private fracStart: i32
+  private fracLen: i32
   /** The first significant digit's place among the integer and fraction digits run together. */
-  first: i32
-  /** How many significant digits there are, from the first non-zero one to the last. */
+  private first: i32
+  /**
+   * How many significant digits there are, from the first non-zero one to the
+   * last.
+   *
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
   count: i32
-  /** The decimal exponent of the first significant digit: `3` for `1234`, `-2` for `0.05`. */
+  /**
+   * The decimal exponent of the first significant digit: `3` for `1234`, `-2`
+   * for `0.05`.
+   *
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
   lead: i64
-  /** The decimal exponent of the last significant digit: `0` for `1234`, `2` for `1200`, `-2` for `0.05`. */
+  /**
+   * The decimal exponent of the last significant digit: `0` for `1234`, `2` for
+   * `1200`, `-2` for `0.05`.
+   *
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
   last: i64
 
   constructor(text: string) {
@@ -120,19 +152,24 @@ class JsonNumberParts {
     this.code = this.read()
   }
 
-  /** The k-th significant digit, `0 <= k < count`, as `0` to `9`. */
+  /**
+   * The k-th significant digit, `0 <= k < count`, as `0` to `9`.
+   *
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
   digit(k: i32): i32 {
     return this.placeDigit(this.first + k)
   }
 
   /** The digit at place `p` of the integer and fraction digits run together. */
-  placeDigit(p: i32): i32 {
+  private placeDigit(p: i32): i32 {
     const at: i32 = p < this.intLen ? this.intStart + p : this.fracStart + (p - this.intLen)
     return toI32(this.text.charCodeAt(at)) - JSON_NUMBER_DIGIT_0
   }
 
   /** Reads the text against RFC 8259's number grammar; answers `0` or a code. */
-  read(): i32 {
+  private read(): i32 {
     const s: string = this.text
     const n: i32 = toI32(s.length)
     let i: i32 = 0
@@ -249,6 +286,11 @@ const jsonNumberSign = (p: JsonNumberParts): i32 => {
  * and `-0` equals `0`. A text that is not a number, or whose exponent is past
  * `JSON_NUMBER_MAX_EXPONENT`, is that `JSON_NUMBER_ERR_*` code, `a`'s first.
  * Linear in the two lengths; allocates two small records.
+ *
+ * @param a - the first JSON number text.
+ * @param b - the second JSON number text.
+ * @returns `-1`, `0` or `1` as `a` is below, equal to or above `b`, or a
+ *   negative `JSON_NUMBER_ERR_*` code.
  */
 export const jsonNumberCompare = (a: string, b: string): i32 => {
   const x = new JsonNumberParts(a)
@@ -279,6 +321,9 @@ export const jsonNumberCompare = (a: string, b: string): i32 => {
  * `jsonNumberCompare` calls them equal, which makes it a key for a set or a
  * hash. `""` for a text that is not a number or whose exponent is past
  * `JSON_NUMBER_MAX_EXPONENT`. Allocates the answer.
+ *
+ * @param text - a JSON number text.
+ * @returns the canonical text of its value, or `""` when `text` is refused.
  */
 export const jsonNumberCanonical = (text: string): string => {
   const p = new JsonNumberParts(text)
@@ -391,6 +436,11 @@ const jsonNumberDividesShort = (v: JsonNumberParts, d: JsonNumberParts, total: i
  * `JSON_NUMBER_MAX_STEPS` steps, which is `JSON_NUMBER_ERR_GAP`: the value's
  * digits plus the gap between the two last digits' exponents, times the
  * divisor's digits when it has more than 18.
+ *
+ * @param value - the JSON number text to test.
+ * @param divisor - the JSON number text it should be a multiple of.
+ * @returns `1` for a multiple, `0` for not one, or a negative
+ *   `JSON_NUMBER_ERR_*` code when the question is refused.
  */
 export const jsonNumberMultipleOf = (value: string, divisor: string): i32 => {
   const v = new JsonNumberParts(value)
