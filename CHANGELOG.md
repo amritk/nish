@@ -26,6 +26,47 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-07
+
+### Added
+
+- interop: Link a wasm module for a page and load it without fetch (WP50 stage 1) ([#1243](https://github.com/amritk/nish/pull/1243))
+- interop: Import a wasm module's host functions from the page's TypeScript (WP50 stage 2) ([#1264](https://github.com/amritk/nish/pull/1264))
+
+### Performance
+
+- runtime: Benchmark a consumer-only in-place ring mode ([#1237](https://github.com/amritk/nish/pull/1237))
+
+### Documentation
+
+- std: Mark regex internals private and document its API ([#1240](https://github.com/amritk/nish/pull/1240))
+- std: Mark http client internals private and document its API ([#1246](https://github.com/amritk/nish/pull/1246))
+- std: Mark http server internals private and document its API ([#1248](https://github.com/amritk/nish/pull/1248))
+- runtime: Document the global builtins in nish.d.ts ([#1245](https://github.com/amritk/nish/pull/1245))
+- std: Mark json internals private and document its API ([#1247](https://github.com/amritk/nish/pull/1247))
+- crypto: Recommend one bcrypt batcher per process on several cores ([#1256](https://github.com/amritk/nish/pull/1256))
+- std: Mark quic internals private and document its API ([#1251](https://github.com/amritk/nish/pull/1251))
+- std: Mark tls internals private and document its API ([#1253](https://github.com/amritk/nish/pull/1253))
+- std: Mark postgres, dns and sqlite internals private and document their API ([#1255](https://github.com/amritk/nish/pull/1255))
+- std: Mark elliptic-curve crypto internals private and document their API ([#1258](https://github.com/amritk/nish/pull/1258))
+- std: Mark yaml and term internals private and document their API ([#1260](https://github.com/amritk/nish/pull/1260))
+- std: Mark http2 and http3 internals private and document their API ([#1261](https://github.com/amritk/nish/pull/1261))
+- std: Mark symmetric crypto and hash internals private and document their API ([#1263](https://github.com/amritk/nish/pull/1263))
+- std: Mark pki, x509, rsa and jwt internals private and document their API ([#1262](https://github.com/amritk/nish/pull/1262))
+- Generate the library reference from source ([#1242](https://github.com/amritk/nish/pull/1242))
+- runtime: Document the nish: modules in JSDoc on nish.d.ts ([#1244](https://github.com/amritk/nish/pull/1244))
+- std: Mark core std internals private and document their API ([#1265](https://github.com/amritk/nish/pull/1265))
+- std: Close the std API-visibility acceptance gaps ([#1268](https://github.com/amritk/nish/pull/1268))
+
+### Tests
+
+- runtime: Echo WebTransport streams after the client's address changes ([#1239](https://github.com/amritk/nish/pull/1239))
+
+### Build
+
+- Regenerate package-lock.json for v0.35.0 ([#1241](https://github.com/amritk/nish/pull/1241))
+
+
 ## [0.35.0] - 2026-11-07
 
 ### Added
@@ -1668,3 +1709,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.34.0]: https://github.com/amritk/nish/releases/tag/v0.34.0
 [0.34.1]: https://github.com/amritk/nish/releases/tag/v0.34.1
 [0.35.0]: https://github.com/amritk/nish/releases/tag/v0.35.0
+[0.36.0]: https://github.com/amritk/nish/releases/tag/v0.36.0
