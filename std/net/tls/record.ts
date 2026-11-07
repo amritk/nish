@@ -147,13 +147,25 @@ const TLS_RECORD_FROM: i32 = 0
  * `HKDF-Expand-Label(secret, "traffic upd", "", Hash.length)` over the hash
  * `hashLength` names, held as a `Secret`. The old secret is the caller's to
  * wipe.
+ *
+ * @param hashLength The hash length of the connection's suite, 32 or 48, and so how many bytes are derived.
+ * @param trafficSecret The direction's current traffic secret. This function does not wipe it.
+ * @returns A fresh `Secret` holding the next traffic secret, which the caller owns and wipes.
  */
 export const tlsNextTrafficSecret = (hashLength: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> => {
   const none: u8[] = []
   return tlsExpandLabel(hashLength, trafficSecret, "traffic upd", none, hashLength)
 }
 
-/** Whether `[off, off + len)` is a window inside an array of `length` elements: every caller's range check. */
+/**
+ * Whether `[off, off + len)` is a window inside an array of `length` elements: every caller's range check.
+ * It is written as `off <= length - len`, not `off + len <= length`, so a large `off` cannot overflow.
+ *
+ * @param length How many elements the array has.
+ * @param off Where the window starts.
+ * @param len How many elements the window spans.
+ * @returns `true` when `off` and `len` are not negative and the window ends at or before `length`.
+ */
 export const tlsRecordWindowFits = (length: i32, off: i32, len: i32): boolean =>
   off >= 0 && len >= 0 && off <= length - len
 
@@ -175,6 +187,13 @@ const tlsWriteRecordHeader = (out: u8[], at: i32, type: i32, len: i32): void => 
  * in, or the alert negated when the header announces a type this layer does
  * not know (`unexpected_message`) or a body past 2^14 + 256 bytes
  * (`record_overflow`, §5.2). The legacy version is not read (§5.1).
+ *
+ * @param buf The array that holds the bytes received so far.
+ * @param off Where in `buf` the record's header starts.
+ * @param avail How many bytes, from `off`, have arrived.
+ * @returns The whole record's length in bytes, header included; 0 while the header is not all in;
+ *     `-TLS_ALERT_UNEXPECTED_MESSAGE` or `-TLS_ALERT_RECORD_OVERFLOW` for a header this layer refuses;
+ *     `-TLS_ALERT_INTERNAL_ERROR` when `buf[off .. off + avail)` is not inside `buf`.
  */
 export const tlsRecordLength = (buf: u8[], off: i32, avail: i32): i32 => {
   if (!tlsRecordWindowFits(toI32(buf.length), off, avail)) {
@@ -211,14 +230,18 @@ export class TlsRecordReader {
   /** The bytes held, or `empty` while the reader holds none. */
   buffer: u8[]
   /** The zero-length array `buffer` is while no buffer is borrowed. */
-  empty: u8[]
+  private empty: u8[]
   /** Where `buffer` comes from and goes back to. */
-  pool: BufferPool
+  private pool: BufferPool
   /** The first byte not yet consumed. */
   start: i32 = 0
   /** One past the last byte pushed. */
   end: i32 = 0
 
+  /**
+   * Makes an empty reader with a pool of its own, one buffer deep. No buffer is
+   * taken until the first `push` brings a byte.
+   */
   constructor() {
     this.empty = []
     this.buffer = this.empty
@@ -228,6 +251,8 @@ export class TlsRecordReader {
   /**
    * Borrows from `pool` from now on, giving back first, zeroed, any buffer
    * held from the old one. Every byte held is forgotten, as `reset` does.
+   *
+   * @internal Read by `net/tls/record-server.ts`.
    */
   borrowFrom(pool: BufferPool): void {
     this.reset()
@@ -242,7 +267,7 @@ export class TlsRecordReader {
   }
 
   /** Gives the buffer back, zeroed, if one is held. */
-  giveBack(): void {
+  private giveBack(): void {
     if (this.buffer.length > 0) {
       // Every byte of it may have held a record: zero all of it.
       this.pool.giveSecret(this.buffer, TLS_MAX_RECORD)
@@ -250,7 +275,11 @@ export class TlsRecordReader {
     }
   }
 
-  /** How many bytes `push` would take now. */
+  /**
+   * How many bytes `push` would take now.
+   *
+   * @returns `TLS_MAX_RECORD` less the bytes held and not yet consumed.
+   */
   space(): i32 {
     return TLS_MAX_RECORD - (this.end - this.start)
   }
@@ -259,6 +288,12 @@ export class TlsRecordReader {
    * Copies as many of `data[off .. off + len)` as fit and answers how many,
    * after moving what is held to the front. A window outside `data` is
    * `-TLS_ALERT_INTERNAL_ERROR`, and nothing is copied.
+   *
+   * @param data The array that holds the bytes read from the stream.
+   * @param off Where in `data` the new bytes start.
+   * @param len How many bytes, from `off`, to offer.
+   * @returns How many of the bytes were taken, from 0 (the buffer is full) up to `len`; the caller offers the
+   *     rest again once a record is consumed. `-TLS_ALERT_INTERNAL_ERROR` for a window outside `data`.
    */
   push(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
@@ -292,6 +327,9 @@ export class TlsRecordReader {
    * The length of the whole record at `start`, header included, once every
    * byte of it is in; 0 before; or the alert negated for a header this layer
    * refuses, as `tlsRecordLength` says.
+   *
+   * @returns The record's length in bytes, read at `buffer[start]`; 0 while it is not all in; or a negative
+   *     `TLS_ALERT_*` value, the alert to send.
    */
   next(): i32 {
     const avail: i32 = this.end - this.start
@@ -303,6 +341,8 @@ export class TlsRecordReader {
    * Lets the first `n` held bytes go: the record `next` answered, once it is
    * handled. When none are left the next record starts at the front; the
    * buffer stays until `reset`.
+   *
+   * @param n How many bytes to let go, usually what `next` answered. Clamped to 0 and to the bytes held.
    */
   consume(n: i32): void {
     const held: i32 = this.end - this.start
@@ -345,7 +385,7 @@ export class TlsRecordProtection {
    */
   recordLimit: i64 = 0
   /** The negotiated suite, or 0 while the direction is cleartext. */
-  suite: i32 = 0
+  private suite: i32 = 0
   /** The real content type of the last record `open` answered. */
   contentType: i32 = 0
   /** The arrays `key` and `aes` point into: AES-128's and ChaCha20's or AES-256's. */
@@ -356,8 +396,12 @@ export class TlsRecordProtection {
   /** Where `advance` derives the next traffic secret: HashLen bytes of it. */
   next: u8[]
   /** Where the keys are derived. */
-  kdf: HkdfScratch
+  private kdf: HkdfScratch
 
+  /**
+   * Makes a cleartext direction and every array it will fill, so that no
+   * install allocates. The record limit starts at `TLS_KEY_UPDATE_RECORDS`.
+   */
   constructor() {
     this.key16 = new Array<u8>(16)
     this.key32 = new Array<u8>(32)
@@ -370,7 +414,11 @@ export class TlsRecordProtection {
     this.recordLimit = TLS_KEY_UPDATE_RECORDS
   }
 
-  /** Whether records in this direction are protected. */
+  /**
+   * Whether records in this direction are protected.
+   *
+   * @returns `true` once a suite is installed; `false` while the direction is cleartext.
+   */
   isProtected(): boolean {
     return this.suite !== 0
   }
@@ -380,6 +428,8 @@ export class TlsRecordProtection {
    * and both AES key schedules wiped: the keys and IV with `secureZero`, and
    * each schedule with `aesKeyWipe`, its whole `roundKeys` and its H, which
    * the next `install` fills again (TLS-2).
+   *
+   * @internal Read by `net/tls/record-server.ts` and `net/tls/record-client.ts`.
    */
   clear(): void {
     secureZero(this.key16)
@@ -402,6 +452,11 @@ export class TlsRecordProtection {
    * The key, the IV and the AES key schedule are written into the arrays this
    * direction made when it was constructed, so an install allocates nothing
    * that outlives it (TLS-3).
+   *
+   * @param suite The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+   * @param secret The direction's traffic secret, plain. It is read, not kept, and stays the caller's to
+   *     wipe.
+   * @returns `true` when the direction is now protected; `false` when it was left cleartext.
    */
   install(suite: i32, secret: u8[]): boolean {
     this.clear()
@@ -416,7 +471,7 @@ export class TlsRecordProtection {
   }
 
   /** Points `key`, and for AES `aes`, at the arrays of the size `suite` needs. */
-  reserve(suite: i32): void {
+  private reserve(suite: i32): void {
     this.key = tlsSuiteKeyLength(suite) === 16 ? this.key16 : this.key32
     if (suite !== TLS_CHACHA20_POLY1305_SHA256) {
       this.aes = tlsSuiteKeyLength(suite) === 16 ? this.aes128 : this.aes256
@@ -431,7 +486,7 @@ export class TlsRecordProtection {
    * inside an arena block, so a key install leaves the arena where it was.
    * ChaCha20 has no schedule.
    */
-  derive(suite: i32, secret: u8[]): void {
+  private derive(suite: i32, secret: u8[]): void {
     using _scope = arena()
     tlsTrafficKeysInto(this.kdf, suite, secret, this.key, this.iv)
     const aes: AesKey | null = this.aes
@@ -445,7 +500,7 @@ export class TlsRecordProtection {
    * ChaCha20: a protection that carried AES keeps its schedule for the next
    * AES key, and must not use it for ChaCha20.
    */
-  aesForSuite(): AesKey | null {
+  private aesForSuite(): AesKey | null {
     return this.suite === TLS_CHACHA20_POLY1305_SHA256 ? null : this.aes
   }
 
@@ -455,6 +510,11 @@ export class TlsRecordProtection {
    * and the keys are installed from it; the next secret's own copy is wiped.
    * The next secret is derived in place inside an arena block, as `derive`'s
    * keys are. False, as `install` answers, when the keys do not install.
+   *
+   * @param secret The direction's current traffic secret, plain, which is overwritten with the next one. It
+   *     stays the caller's to wipe. One shorter than the suite's hash length panics in HKDF.
+   * @returns `true` when the next keys are installed; `false` for a cleartext direction, or when the install
+   *     fails and the direction is left cleartext.
    */
   advance(secret: u8[]): boolean {
     const suite: i32 = this.suite
@@ -492,6 +552,10 @@ export class TlsRecordProtection {
    * plain output of each derivation wiped, and the AES key schedule expanded
    * into place inside an arena block, as `derive`'s is. `false`, leaving the
    * direction cleartext, where `install` answers it.
+   *
+   * @param suite The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+   * @param secret The direction's held traffic secret. It is read, not kept, and stays the caller's to wipe.
+   * @returns `true` when the direction is now protected; `false` when it was left cleartext.
    */
   installHeld(suite: i32, secret: Secret<u8[]>): boolean {
     this.clear()
@@ -516,6 +580,11 @@ export class TlsRecordProtection {
    * ratchet that leaves no copy of either, and the keys are installed from
    * it with `installHeld`. False, as `advance` answers, when the keys do not
    * install; a secret that is not its hash's length is left as it was.
+   *
+   * @param secret The direction's held traffic secret, overwritten in place with the next one. It stays the
+   *     caller's to wipe.
+   * @returns `true` when the next keys are installed; `false` for a cleartext direction, or when the install
+   *     fails and the direction is left cleartext.
    */
   advanceHeld(secret: Secret<u8[]>): boolean {
     const suite: i32 = this.suite
@@ -534,7 +603,13 @@ export class TlsRecordProtection {
     return this.installHeld(suite, secret)
   }
 
-  /** The per-record nonce (§5.3): the IV with the sequence number XORed into its last eight bytes, big-endian. */
+  /**
+   * The per-record nonce (§5.3): the IV with the sequence number XORed into its last eight bytes,
+   * big-endian.
+   *
+   * @param nonce Where the nonce is written, from index 0: 12 bytes, or as many as fit. It is as secret as
+   *     the IV, so the caller wipes it after use, as `seal` and `open` do.
+   */
   nonceInto(nonce: u8[]): void {
     for (let k: i32 = 0; k < TLS_IV_SIZE && k < toI32(nonce.length) && k < toI32(this.iv.length); k++) {
       const shift: i32 = (TLS_IV_SIZE - 1 - k) << 3
@@ -553,6 +628,16 @@ export class TlsRecordProtection {
    * with nothing written, for content over 2^14 bytes, a padding that would
    * take the inner plaintext past 2^14 + 1, a window outside `data`, too
    * little room at `out[at]`, or a sequence number that would wrap.
+   *
+   * @param type The content type to send, such as `TLS_CONTENT_HANDSHAKE`.
+   * @param data The array that holds the content.
+   * @param off Where in `data` the content starts.
+   * @param len How many bytes of content, from `off`, to seal: at most 2^14.
+   * @param padding How many zero bytes to add inside the protected record; 0 when cleartext.
+   * @param out Where the record is written.
+   * @param at Where in `out` the record's header starts.
+   * @returns The record's length in bytes, header included (and the tag, when protected), or
+   *     `-TLS_ALERT_INTERNAL_ERROR`.
    */
   seal(type: i32, data: u8[], off: i32, len: i32, padding: i32, out: u8[], at: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len) || len > TLS_MAX_PLAINTEXT || padding < 0) {
@@ -623,6 +708,18 @@ export class TlsRecordProtection {
    * that is all zeros is `unexpected_message` (§5.4). Every refusal is the
    * alert negated; a window outside `record`, a `len` that is not the
    * header's, or too little room at `out[at]` is `-TLS_ALERT_INTERNAL_ERROR`.
+   *
+   * A protected record that fails to authenticate leaves the sequence number
+   * where it was; one that authenticates spends its number even when its
+   * content is then refused.
+   *
+   * @param record The array that holds the record, usually a reader's buffer.
+   * @param off Where in `record` the record's header starts.
+   * @param len The whole record's length in bytes, header included, as `tlsRecordLength` answered it.
+   * @param out Where the content is written.
+   * @param at Where in `out` the content starts.
+   * @returns The content's length in bytes, which may be 0, or a negative `TLS_ALERT_*` value, the alert to
+   *     send.
    */
   open(record: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     if (!tlsRecordWindowFits(toI32(record.length), off, len) || len < TLS_RECORD_HEADER_SIZE) {

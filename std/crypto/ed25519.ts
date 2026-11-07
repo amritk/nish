@@ -1,6 +1,20 @@
 /**
  * `nish/crypto/ed25519` — the Ed25519 signature scheme of RFC 8032 (§5.1).
  *
+ *     import { ED25519_SEED_SIZE, ed25519PublicKey, ed25519Sign, ed25519Verify } from "nish/crypto/ed25519";
+ *     import { Secret, secret, wipe } from "nish:secret";
+ *
+ *     const raw: u8[] = new Array<u8>(ED25519_SEED_SIZE)
+ *     crypto.getRandomValues(raw)                              // any 32 bytes are a seed
+ *     const seed: Secret<u8[]> = secret(raw)
+ *     const message: u8[] = [104, 105]
+ *     const pub: u8[] | null = ed25519PublicKey(seed)          // 32 bytes
+ *     const sig: u8[] | null = ed25519Sign(seed, message)      // 64 bytes, R || S
+ *     wipe(seed)
+ *     if (pub !== null && sig !== null) {
+ *       ed25519Verify(pub, message, sig)                       // true
+ *     }
+ *
  * Written from the specification (RFC 8032 §5.1.1 to §5.1.7), in this
  * module's own structure: nothing here is ported from another implementation.
  * The field is `nish/crypto/x25519`'s GF(2^255 - 19), imported rather than
@@ -152,9 +166,13 @@ const ed25519Order = (): u64[] => [
 
 /** A point (X : Y : Z : T) in extended coordinates. */
 class Ed25519Point {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   x: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   y: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t: i64[]
 
   /** The identity, (0 : 1 : 1 : 0). */
@@ -168,9 +186,13 @@ class Ed25519Point {
 
 /** A point in the form the addition reads: (Y + X, Y - X, 2 d T, 2 Z), each carried. */
 class Ed25519Cached {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   ypx: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   ymx: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t2d: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z2: i64[]
 
   /** The identity, (1, 1, 0, 2). */
@@ -188,16 +210,27 @@ class Ed25519Cached {
  * is built in; and 2 d, which the cached form multiplies by.
  */
 class Ed25519Scratch {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   a: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   b: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   c: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   d: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   e: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   f: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   g: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   h: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   entry: Ed25519Cached
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   sum: Ed25519Point
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   d2: i64[]
 
   constructor() {
@@ -716,6 +749,10 @@ const ed25519Challenge = (r: u8[], pub: u8[], msg: u8[]): u8[] => {
 /**
  * The public key of `seed` (RFC 8032 §5.1.5): the encoding of `a * B`, as 32
  * plain bytes. Answers `null` unless `seed` is `ED25519_SEED_SIZE` bytes.
+ *
+ * @param seed The private key, 32 bytes.
+ * @returns The 32-byte encoded public key, or `null` for a seed of the wrong
+ *   length.
  */
 export const ed25519PublicKey = (seed: Secret<u8[]>): u8[] | null => expose(seed, ed25519PublicKeyExposed)
 
@@ -742,6 +779,11 @@ const ed25519PublicKeyExposed = (seed: u8[]): u8[] | null => {
  * bytes. The public key is derived from the seed again on every call. A
  * message longer than 2^31 - 1 bytes panics, as in `sha512`: its length does
  * not survive `toI32`, and the signature would be of a prefix.
+ *
+ * @param seed The private key, 32 bytes.
+ * @param msg The whole message signed.
+ * @returns The 64-byte signature `R || S`, or `null` for a seed of the wrong
+ *   length.
  */
 export const ed25519Sign = (seed: Secret<u8[]>, msg: u8[]): u8[] | null => {
   if (msg.length > 2147483647) {
@@ -805,6 +847,11 @@ const ed25519SignExposed = (seed: u8[], msg: u8[]): u8[] | null => {
  * bytes panics, as in `ed25519Sign`: a check of a prefix would accept the
  * signature for any longer message that shares it. Every value here is
  * public, so the answer may be reached by branches.
+ *
+ * @param pub The signer's 32-byte encoded public key.
+ * @param msg The whole message.
+ * @param sig The 64-byte signature `R || S`.
+ * @returns `true` when the signature is valid, `false` for anything else.
  */
 export const ed25519Verify = (pub: u8[], msg: u8[], sig: u8[]): boolean => {
   if (msg.length > 2147483647) {

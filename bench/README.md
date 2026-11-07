@@ -1563,41 +1563,126 @@ the system calls a message costs: a busy ring's target is 0.
 
 `ring-inplace/run.mjs` compares JSON records of 1, 4 and 10 KB sent from a
 [`nish/sync/ring`](../std/sync/ring.ts) `SpscRing` through an
-`Http1Connection` either copied (`tryPush`, `tryPop`, `write`) or in place
-(`reserve`, `commit`, `peek`, `sendBody`, `release`). A producer process
-renders the records with `JsonWriter`, the parent serves them, and a reader
-process drains the socket. The three are pinned to three cores. It is
-[wp47](../docs/wp47-shared-memory.md)'s measure, and §7 there records its
-figures. It is not in this suite's tables. Linux only (it uses `taskset`).
+`Http1Connection` three ways: copied (`tryPush`, `tryPop`, `write`), in
+place (`reserve`, `commit`, `peek`, `sendBody`, `release`), and consumer,
+the producer half of copied with the consumer half of in place (`tryPush`,
+then `peek`, `sendBody`, `release`; a record that wrapped across the ring's
+end cannot be lent and is `tryPop`ped, counted as copied and as wrapped). A
+producer process renders the records with `JsonWriter`, the parent serves
+them, and a reader process drains the socket. The three are pinned to three
+cores. It is [wp47](../docs/wp47-shared-memory.md)'s measure, and §7 there
+records its method and findings in full. It is not in this suite's tables.
+Linux only (it uses `taskset`).
 
 ```bash
 npm run build
-node bench/ring-inplace/run.mjs                         # 5 rounds, CPUs 0, 1 and 2
+node bench/ring-inplace/run.mjs                         # 5 rounds, 16 MiB ring, CPUs 0, 1 and 2
+node bench/ring-inplace/run.mjs --ring-bytes 1048576    # a 1 MiB ring
 node bench/ring-inplace/run.mjs --quick                 # 3,000 messages a run
 node bench/ring-inplace/run.mjs --rounds 9 --cpus 1,2,3
 ```
 
-Each round runs every size and mode twice in a seeded shuffled order. The
-table gives the consumer's p50 and p99 per message (its wait for the
-producer left out), the pipeline's ns a message, and the body bytes copied
-in user space a message, to two decimals. In place, that count is only the
-tails `sendBody` keeps when the socket does not take a body whole; the
-table gives how many messages had one. The kernel's copy into the socket,
-the output's compaction and the reader's `netRead` are not counted. A
-figure is the median over the runs, with the lowest and highest. The noise
-bands, for p50, p99 and the pipeline each, are the median gap between the
-two runs of a mode, and each difference between the modes is marked inside
-or outside the wider of the two modes' bands: one inside is not one.
+`--ring-bytes` takes a power of two from 32,768 (twice the largest record
+and 8 more, `reserve`'s limit) to 2^30; the default is 16,777,216. Each
+round runs every size and mode twice in a seeded shuffled order. The table
+gives the consumer's p50 and p99 per message (its wait for the producer
+left out), the pipeline's ns a message, and the body bytes copied in user
+space a message, to two decimals. For `sendBody`, that count is only the
+tails it keeps when the socket does not take a body whole; the table gives
+how many messages had one. The kernel's copy into the socket, the output's
+compaction and the reader's `netRead` are not counted. A figure is the
+median over the runs, with the lowest and highest. The noise bands, for
+p50, p99 and the pipeline each, are the median gap between the two runs of
+a mode, and each difference between two modes is marked inside or outside
+the wider of their bands: one inside is no measured difference.
 
 A run fails if the reader did not hear every byte sent, or if the FNV-1a
 sum over the bodies it parses out of the stream differs from the
-producer's over the records it rendered. It also fails if any wait passes
-its ten-second deadline or a child exits with an error. The sums are one
-byte at a time on the producer's and the reader's cores, so they raise the
-pipeline and p99 figures. On the 2026-11-07 run (wp47 §7), in place was
-faster at the consumer's median only at 10 KB (-13.7 %, band ±6.2 %). It
-made no difference to p99 at any size, and was slower over the pipeline
-at 10 KB (+18.3 %, band ±8.0 %).
+producer's over the records it rendered. Every wait inside the run has a
+ten-second deadline, the producer's wait for room in a full ring, the
+drain of the output and the reader included (the reader's runs from its
+start, then from the last byte it read); the wait for the reader to
+connect has five seconds. The consumer's `waitPid` on each child after the
+run has no deadline of its own: the children's deadlines and `run.mjs`'s
+timeout bound it. A child that exits with an error fails the run.
+`stalls` counts the messages whose response head had to wait for the last
+message's tail to drain, inside the timed window; it was added after the
+full runs and was 0 for every size and mode in the `--quick` runs at both
+ring sizes. Stalls do happen in full runs (the first full default run
+stalled in place at 10 KB, message 25,298); how often there is unmeasured,
+and they could account for part of the in-place pipeline cost. The sums
+are one byte at a time on the producer's and the reader's cores, so they
+raise the pipeline and p99 figures.
+
+On 2026-11-07, 5 rounds × 2 runs × 50,000 messages, on an Intel Xeon
+Processor @ 2.30 GHz (4 cores; 48 KiB L1d and 2 MiB L2 a core, 260 MiB L3
+shared), consumer on CPU 0, producer on 1, reader on 2, Linux 6.18:
+
+**16 MiB ring** (larger than a core's L2, inside the L3):
+
+| record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | messages with a tail | wrapped records popped | noise band p50 / p99 / pipeline |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 KB | copied | 973.67 | 930 (790 to 990) | 5,255 (4,250 to 5,990) | 3,007 (2,786 to 3,558) | 2,921.01 | — | — | ±6.4% / ±23.0% / ±2.6% |
+| 1 KB | in place | 973.67 | 1,050 (880 to 1,110) | 5,645 (4,400 to 6,470) | 3,185 (2,715 to 3,622) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | 0 | ±1.8% / ±8.0% / ±2.7% |
+| 1 KB | consumer | 973.67 | 1,000 (970 to 1,370) | 5,880 (4,640 to 6,720) | 2,933 (2,779 to 3,092) | 973.71 | 0 of 50,000 (at most 0, 0 bytes) | 2 | ±7.7% / ±12.3% / ±5.9% |
+| 4 KB | copied | 4,045.81 | 1,560 (1,330 to 1,690) | 22,635 (18,080 to 26,100) | 11,021 (10,452 to 11,466) | 12,137.43 | — | — | ±3.1% / ±7.5% / ±2.5% |
+| 4 KB | in place | 4,045.81 | 1,485 (1,270 to 1,540) | 23,405 (19,170 to 25,630) | 11,438 (10,887 to 12,451) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | 0 | ±2.3% / ±8.0% / ±1.1% |
+| 4 KB | consumer | 4,045.81 | 1,510 (1,360 to 1,630) | 25,450 (20,060 to 27,060) | 11,113 (10,513 to 11,426) | 4,046.78 | 0 of 50,000 (at most 0, 0 bytes) | 12 | ±9.0% / ±11.6% / ±1.9% |
+| 10 KB | copied | 10,189.77 | 2,970 (2,620 to 3,300) | 31,415 (28,020 to 35,090) | 27,191 (26,036 to 27,705) | 30,569.31 | — | — | ±9.9% / ±7.0% / ±1.9% |
+| 10 KB | in place | 10,189.77 | 2,500 (2,400 to 2,640) | 30,225 (29,080 to 35,470) | 28,887 (26,784 to 29,586) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | 0 | ±3.3% / ±1.8% / ±4.1% |
+| 10 KB | consumer | 10,189.77 | 2,530 (2,330 to 2,750) | 29,885 (28,100 to 33,770) | 27,003 (25,869 to 28,708) | 10,195.88 | 0 of 50,000 (at most 0, 0 bytes) | 30 | ±2.2% / ±10.1% / ±1.1% |
+
+| record | comparison | consumer p50 | consumer p99 | pipeline |
+| ---: | --- | ---: | ---: | ---: |
+| 1 KB | in place vs copied | +12.9% (band ±6.4%, outside) | +7.4% (band ±23.0%, inside) | +5.9% (band ±2.7%, outside) |
+| 1 KB | consumer vs copied | +7.5% (band ±7.7%, inside) | +11.9% (band ±23.0%, inside) | -2.4% (band ±5.9%, inside) |
+| 1 KB | consumer vs in place | -4.8% (band ±7.7%, inside) | +4.2% (band ±12.3%, inside) | -7.9% (band ±5.9%, outside) |
+| 4 KB | in place vs copied | -4.8% (band ±3.1%, outside) | +3.4% (band ±8.0%, inside) | +3.8% (band ±2.5%, outside) |
+| 4 KB | consumer vs copied | -3.2% (band ±9.0%, inside) | +12.4% (band ±11.6%, outside) | +0.8% (band ±2.5%, inside) |
+| 4 KB | consumer vs in place | +1.7% (band ±9.0%, inside) | +8.7% (band ±11.6%, inside) | -2.8% (band ±1.9%, outside) |
+| 10 KB | in place vs copied | -15.8% (band ±9.9%, outside) | -3.8% (band ±7.0%, inside) | +6.2% (band ±4.1%, outside) |
+| 10 KB | consumer vs copied | -14.8% (band ±9.9%, outside) | -4.9% (band ±10.1%, inside) | -0.7% (band ±1.9%, inside) |
+| 10 KB | consumer vs in place | +1.2% (band ±3.3%, inside) | -1.1% (band ±10.1%, inside) | -6.5% (band ±4.1%, outside) |
+
+**1 MiB ring** (`--ring-bytes 1048576`, small enough to fit in one core's 2 MiB L2):
+
+| record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | messages with a tail | wrapped records popped | noise band p50 / p99 / pipeline |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 KB | copied | 973.67 | 885 (790 to 940) | 5,345 (3,920 to 5,960) | 2,771 (2,593 to 3,375) | 2,921.01 | — | — | ±9.2% / ±20.1% / ±5.3% |
+| 1 KB | in place | 973.67 | 940 (930 to 1,030) | 4,780 (3,950 to 5,780) | 2,987 (2,887 to 3,317) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | 0 | ±0.0% / ±18.4% / ±2.7% |
+| 1 KB | consumer | 973.67 | 950 (930 to 1,020) | 5,550 (4,010 to 12,700) | 2,806 (2,710 to 3,207) | 974.55 | 0 of 50,000 (at most 0, 0 bytes) | 45 | ±2.1% / ±12.6% / ±3.4% |
+| 4 KB | copied | 4,045.81 | 1,570 (1,430 to 1,680) | 24,460 (17,550 to 26,270) | 10,677 (10,419 to 11,417) | 12,137.43 | — | — | ±3.7% / ±13.9% / ±2.1% |
+| 4 KB | in place | 4,045.81 | 1,490 (1,370 to 1,570) | 23,630 (20,970 to 26,580) | 10,713 (10,169 to 11,983) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | 0 | ±2.9% / ±6.1% / ±1.9% |
+| 4 KB | consumer | 4,045.81 | 1,455 (1,360 to 1,610) | 25,415 (13,700 to 33,140) | 10,846 (10,092 to 12,003) | 4,061.43 | 0 of 50,000 (at most 0, 0 bytes) | 193 | ±13.5% / ±29.5% / ±3.1% |
+| 10 KB | copied | 10,189.77 | 3,075 (2,550 to 3,210) | 31,395 (27,640 to 37,850) | 26,587 (25,150 to 27,382) | 30,569.31 | — | — | ±4.5% / ±12.9% / ±2.0% |
+| 10 KB | in place | 10,189.77 | 2,235 (2,040 to 2,590) | 28,435 (26,470 to 29,620) | 26,379 (24,691 to 27,533) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | 0 | ±7.5% / ±4.6% / ±1.5% |
+| 10 KB | consumer | 10,189.77 | 2,500 (2,260 to 2,720) | 30,050 (27,430 to 32,770) | 26,642 (25,435 to 27,772) | 10,288.81 | 0 of 50,000 (at most 0, 0 bytes) | 486 | ±4.8% / ±4.0% / ±2.9% |
+
+| record | comparison | consumer p50 | consumer p99 | pipeline |
+| ---: | --- | ---: | ---: | ---: |
+| 1 KB | in place vs copied | +6.2% (band ±9.2%, inside) | -10.6% (band ±20.1%, inside) | +7.8% (band ±5.3%, outside) |
+| 1 KB | consumer vs copied | +7.3% (band ±9.2%, inside) | +3.8% (band ±20.1%, inside) | +1.3% (band ±5.3%, inside) |
+| 1 KB | consumer vs in place | +1.1% (band ±2.1%, inside) | +16.1% (band ±18.4%, inside) | -6.0% (band ±3.4%, outside) |
+| 4 KB | in place vs copied | -5.1% (band ±3.7%, outside) | -3.4% (band ±13.9%, inside) | +0.3% (band ±2.1%, inside) |
+| 4 KB | consumer vs copied | -7.3% (band ±13.5%, inside) | +3.9% (band ±29.5%, inside) | +1.6% (band ±3.1%, inside) |
+| 4 KB | consumer vs in place | -2.3% (band ±13.5%, inside) | +7.6% (band ±29.5%, inside) | +1.2% (band ±3.1%, inside) |
+| 10 KB | in place vs copied | -27.3% (band ±7.5%, outside) | -9.4% (band ±12.9%, inside) | -0.8% (band ±2.0%, inside) |
+| 10 KB | consumer vs copied | -18.7% (band ±4.8%, outside) | -4.3% (band ±12.9%, inside) | +0.2% (band ±2.9%, inside) |
+| 10 KB | consumer vs in place | +11.9% (band ±7.5%, outside) | +5.7% (band ±4.6%, outside) | +1.0% (band ±2.9%, inside) |
+
+The consumer half of the in-place path is worth adopting at 10 KB, where it
+cuts the consumer's median by 14.8 % and 18.7 % with no measured pipeline
+difference, and at 1 and 4 KB makes no measured difference but a 4 KB p99
+12.4 % higher with the 16 MiB ring (band ±11.6 %); the producer half is
+worth adopting at no size measured, being slower over the pipeline at every
+size with the 16 MiB ring (inferred from consumer against in place, which
+differ only in the producer half). With the 1 MiB ring the in-place
+pipeline gap falls inside its band at 4 and 10 KB but not at 1 KB. So the
+cache explanation (the producer renders into ring memory the consumer
+reads) is undecided at 4 and 10 KB (consistent with it, not shown) and not
+supported at 1 KB: no band covers the change between ring sizes, and
+neither run measured cache misses. wp47 §7 has the reasoning and every
+exception.
 
 ## SQLite
 

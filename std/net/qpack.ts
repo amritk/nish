@@ -8,6 +8,9 @@
  *
  *     import { QpackDecoder, QpackEncoder, QPACK_OK } from "nish/net/qpack";
  *
+ *     const name: u8[] = [58, 112, 97, 116, 104];   // ":path"
+ *     const value: u8[] = [47];                     // "/"
+ *
  *     const enc = new QpackEncoder();                     // one per connection
  *     const section: u8[] = [];
  *     enc.beginSection(section);
@@ -598,6 +601,9 @@ const qpackPushString = (
  * Appends a Stream Cancellation for `streamId` (§4.4.2), the one instruction a
  * decoder of capacity 0 may send on its decoder stream, and may also omit.
  * A stream ID outside 0 to 2^62 - 1 panics.
+ * @param out Where the instruction goes, appended after what it holds: one byte for a stream ID under 63,
+ *   else one plus its continuation bytes.
+ * @param streamId The ID of the request stream whose section the peer's encoder may forget, 0 to 2^62 - 1.
  */
 export const qpackPushStreamCancellation = (out: u8[], streamId: i64): void => {
   qpackPushInteger(out, 64, 6, streamId)
@@ -730,21 +736,41 @@ const qpackReadString = (d: QpackDecoder, src: u8[], prefixBits: i32): i32 => {
  * `decode` answers a section's fields as windows into `bytes`: field `i`'s
  * name is `bytes[nameStart[i], + nameLength[i])`, its value likewise, and
  * `neverIndexed[i]` is its N bit, which an intermediary forwarding it must
- * keep (§4.5.4). All of them are replaced by every call.
+ * keep (§4.5.4). All of them are replaced by every `decode`.
  */
 export class QpackDecoder {
+  /** @internal The Huffman decoder's tables, read by this module's `qpackReadString`; not for callers. */
   huffman: HpackHuffman
-  /** The connection error a call met, which every later call answers; `QPACK_OK` until then. */
+  /**
+   * The connection error a call met, which every later call answers; `QPACK_OK` until then.
+   * @internal Reset by `http3.ts`'s `restart`; callers read the answers `decode` and
+   * `receiveEncoderStream` give.
+   */
   failed: i64
+  /**
+   * Every name and value of the last section `decode` answered, back to back; emptied by every
+   * `decode` call, including one that refuses, and valid until the next.
+   */
   bytes: u8[]
+  /** Where field `i`'s name starts in `bytes`, for `i` below `count`. */
   nameStart: i32[]
+  /** How many bytes field `i`'s name has in `bytes`. */
   nameLength: i32[]
+  /** Where field `i`'s value starts in `bytes`, for `i` below `count`. */
   valueStart: i32[]
+  /** How many bytes field `i`'s value has in `bytes`. */
   valueLength: i32[]
+  /**
+   * Field `i`'s N bit (§4.5.4): true when the peer marked it never to be indexed; always false
+   * for an Indexed Field Line, which has no such bit.
+   */
   neverIndexed: boolean[]
   /** SETTINGS_MAX_FIELD_SECTION_SIZE as RFC 9114 §4.2.2 counts it. */
   maxFieldSectionSize: i32
-  /** Which rule `failed` broke, a `QPACK_REASON_*`. */
+  /**
+   * Which rule the connection error broke, a `QPACK_REASON_*`; `QPACK_REASON_NONE` until a call
+   * answers QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR. Reset by `http3.ts`'s `restart`.
+   */
   reason: i32
   /** How many Set Dynamic Table Capacity 0 instructions the encoder stream carried, saturating at 2^31 - 1. */
   capacityInstructions: i32
@@ -754,12 +780,25 @@ export class QpackDecoder {
    * What the section being decoded may still add to `bytes` and its fields'
    * overhead before it is past `maxFieldSectionSize`: every append is checked
    * against it first, so a section past the limit never grows `bytes`.
+   * @internal Read and lowered by this module's `qpackReadString`; not for callers.
    */
   room: i64
-  /** Where the next read of the section being decoded starts, and where it ends. */
+  /**
+   * @internal Where the next read of the section being decoded starts; read and advanced by this
+   * module's `qpackHasByte`, `qpackReadInteger` and `qpackReadString`.
+   */
   at: i32
+  /**
+   * @internal Where the section being decoded ends; read by this module's `qpackHasByte` and
+   * `qpackReadString`.
+   */
   end: i32
 
+  /**
+   * Makes a decoder with no fields, no connection error and no capacity instructions counted.
+   * @param maxFieldSectionSize The largest field section `decode` accepts, as RFC 9114 §4.2.2
+   *   counts it: each field's name and value in bytes plus 32. A negative limit panics.
+   */
   constructor(maxFieldSectionSize: i32) {
     if (maxFieldSectionSize < 0) {
       panic(`QpackDecoder: a field-section limit of ${maxFieldSectionSize}`)
@@ -787,6 +826,13 @@ export class QpackDecoder {
    * module comment lists what each means. A decoder whose encoder stream was
    * refused answers QPACK_ENCODER_STREAM_ERROR again instead, since the
    * connection is closing. Anything but `QPACK_OK` leaves no fields.
+   * @param section The buffer holding the section; only read, and its names and values are
+   *   copied into `bytes`, so it may be reused once the call returns.
+   * @param off Where the section starts in `section`.
+   * @param len How many bytes the section has; a window outside `section` panics.
+   * @returns `QPACK_OK` with `count` fields; `QPACK_SECTION_TOO_LARGE`, which does not stick;
+   *   QPACK_DECOMPRESSION_FAILED, which sticks; or, without reading anything, the
+   *   QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR an earlier call met.
    */
   decode(section: u8[], off: i32, len: i32): i64 {
     qpackCheckWindow("QpackDecoder.decode", section, off, len)
@@ -813,6 +859,12 @@ export class QpackDecoder {
    * instruction a peer may send is Set Dynamic Table Capacity 0, the single
    * byte `0x20`, so every other first byte is refused on sight: its top bits
    * already say which instruction it begins, and none of them can be valid.
+   * @param buf The bytes the encoder stream carried; only read, nothing is kept.
+   * @param off Where they start in `buf`.
+   * @param len How many there are; zero is accepted, and a window outside `buf` panics.
+   * @returns `QPACK_OK` when every byte was a Set Dynamic Table Capacity 0; QPACK_ENCODER_STREAM_ERROR,
+   *   which sticks, at the first byte that is not; or, without reading anything, the
+   *   QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR an earlier call met.
    */
   receiveEncoderStream(buf: u8[], off: i32, len: i32): i64 {
     qpackCheckWindow("QpackDecoder.receiveEncoderStream", buf, off, len)
@@ -842,7 +894,7 @@ export class QpackDecoder {
   }
 
   /** Empties the fields, keeping the arrays' storage for the next section. */
-  clear(): void {
+  private clear(): void {
     while (this.bytes.length > 0) {
       this.bytes.pop()
     }
@@ -868,7 +920,7 @@ export class QpackDecoder {
    * Takes `cost` from what the section has room for and answers true, or
    * answers false and takes nothing when the section would pass its limit.
    */
-  take(cost: i64): boolean {
+  private take(cost: i64): boolean {
     if (cost > this.room) {
       return false
     }
@@ -877,7 +929,7 @@ export class QpackDecoder {
   }
 
   /** The answer for a string read: `QPACK_OK`, past the limit, or the refusal `status` names. */
-  stringResult(status: i32): i64 {
+  private stringResult(status: i32): i64 {
     if (status === QPACK_STRING_PAST_LIMIT) {
       return QPACK_SECTION_TOO_LARGE
     }
@@ -885,18 +937,18 @@ export class QpackDecoder {
   }
 
   /** Records `reason` and answers QPACK_DECOMPRESSION_FAILED. */
-  refuse(reason: i32): i64 {
+  private refuse(reason: i32): i64 {
     this.reason = reason
     return QPACK_DECOMPRESSION_FAILED
   }
 
   /** The refusal for a negative `qpackReadInteger` answer. */
-  refuseInteger(status: i64): i64 {
+  private refuseInteger(status: i64): i64 {
     return this.refuse(qpackIntegerReason(status))
   }
 
   /** Records a field whose name and value end where `bytes` ends now. */
-  addField(nameStart: i32, valueStart: i32, neverIndexed: boolean): void {
+  private addField(nameStart: i32, valueStart: i32, neverIndexed: boolean): void {
     this.nameStart.push(nameStart)
     this.nameLength.push(valueStart - nameStart)
     this.valueStart.push(valueStart)
@@ -909,7 +961,7 @@ export class QpackDecoder {
    * The body of `decode`: the prefix, then one pass over the field lines,
    * each told apart by its first byte's pattern (§4.5.2 to §4.5.6).
    */
-  decodeLines(src: u8[]): i64 {
+  private decodeLines(src: u8[]): i64 {
     const insertCount: i64 = qpackReadInteger(this, src, 8)
     if (insertCount < 0) {
       return this.refuseInteger(insertCount)
@@ -1015,18 +1067,33 @@ export class QpackDecoder {
  * anything on its own encoder stream once the stream type is written.
  */
 export class QpackEncoder {
-  huffman: HpackHuffman
-  /** The connection error the decoder stream met, which every later call answers. */
+  private huffman: HpackHuffman
+  /**
+   * The connection error the decoder stream met, which every later call answers; `QPACK_OK` until then.
+   * @internal Reset by `http3.ts`'s `restart`; callers read the answers `receiveDecoderStream` gives.
+   */
   failed: i64
-  /** Which rule `failed` broke, a `QPACK_REASON_*`. */
+  /**
+   * Which rule the decoder stream broke, a `QPACK_REASON_*`; `QPACK_REASON_NONE` until
+   * `receiveDecoderStream` answers QPACK_DECODER_STREAM_ERROR. Reset by `http3.ts`'s `restart`.
+   */
   reason: i32
-  /** How many Stream Cancellations the decoder stream carried, saturating at 2^31 - 1, and the last one's stream. */
+  /** How many Stream Cancellations the decoder stream carried, saturating at 2^31 - 1. */
   cancellations: i32
+  /** The stream ID the last Stream Cancellation named; -1 until one arrives. */
   lastCancelled: i64
-  /** The stream ID of a Stream Cancellation still being read, and its next shift; -1 between instructions. */
+  /**
+   * The stream ID of a Stream Cancellation still being read.
+   * @internal Reset by `http3.ts`'s `restart`; not for callers.
+   */
   pendingId: i64
+  /**
+   * The shift of the next byte of a Stream Cancellation still being read; -1 between instructions.
+   * @internal Reset by `http3.ts`'s `restart`; not for callers.
+   */
   pendingShift: i32
 
+  /** Makes an encoder whose decoder stream has carried nothing yet. */
   constructor() {
     this.huffman = new HpackHuffman()
     this.failed = QPACK_OK
@@ -1040,6 +1107,7 @@ export class QpackEncoder {
   /**
    * Appends the prefix every field section of this encoder begins with: a
    * Required Insert Count of 0 and a Base of 0, the bytes `00 00`.
+   * @param out The buffer the section is being written to; the two bytes go after what it holds.
    */
   beginSection(out: u8[]): void {
     out.push(0)
@@ -1057,6 +1125,18 @@ export class QpackEncoder {
    * A field marked `neverIndexed` is always a literal with the N bit set, even
    * when the static table holds it, so that an intermediary re-encoding it
    * keeps it out of every dynamic table downstream (§4.5.4, §7.1.3).
+   *
+   * A window outside its buffer panics.
+   * @param out The buffer the section is being written to; the field line goes after what it holds.
+   * @param name The buffer holding the name; only read. It matches a static entry only byte for
+   *   byte, so it should already be lowercase (RFC 9114 §4.2).
+   * @param nameOff Where the name starts in `name`.
+   * @param nameLen How many bytes the name has.
+   * @param value The buffer holding the value; only read.
+   * @param valueOff Where the value starts in `value`.
+   * @param valueLen How many bytes the value has.
+   * @param neverIndexed Whether to send the field as a literal with the N bit set.
+   * @param huffman Whether a string may be Huffman-coded; it is only when that is shorter.
    */
   encodeField(
     out: u8[],
@@ -1104,6 +1184,13 @@ export class QpackEncoder {
    * split it. A Section Acknowledgment and an Insert Count Increment are
    * refused on their first byte: this encoder sent no section that needs
    * acknowledging and inserted nothing to count.
+   * @param buf The bytes the decoder stream carried; only read, nothing is kept.
+   * @param off Where they start in `buf`.
+   * @param len How many there are; zero is accepted, and a window outside `buf` panics.
+   * @returns `QPACK_OK` when every byte belonged to a Stream Cancellation, finished or not;
+   *   QPACK_DECODER_STREAM_ERROR, which sticks, for a Section Acknowledgment, an Insert Count
+   *   Increment, a stream ID past 2^62 - 1, or one whose encoding runs past ten bytes; or that
+   *   same error again, without reading anything, once an earlier call met it.
    */
   receiveDecoderStream(buf: u8[], off: i32, len: i32): i64 {
     qpackCheckWindow("QpackEncoder.receiveDecoderStream", buf, off, len)
@@ -1147,7 +1234,7 @@ export class QpackEncoder {
   }
 
   /** Counts a Stream Cancellation for `streamId`. */
-  cancelled(streamId: i64): void {
+  private cancelled(streamId: i64): void {
     if (this.cancellations < QPACK_COUNT_MAX) {
       this.cancellations += 1
     }
@@ -1155,7 +1242,7 @@ export class QpackEncoder {
   }
 
   /** Records `reason` and answers QPACK_DECODER_STREAM_ERROR, which sticks. */
-  refuse(reason: i32): i64 {
+  private refuse(reason: i32): i64 {
     this.reason = reason
     this.failed = QPACK_DECODER_STREAM_ERROR
     return this.failed

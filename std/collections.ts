@@ -9,6 +9,17 @@
  * one module (§4.1). Under Node, and under `tsc`, `Map` and `Set` are the
  * platform's, so nothing here runs there.
  *
+ *     const counts = new Map<string, i32>()
+ *     const seen = new Set<string>()
+ *     for (const w of ["to", "be", "or", "not", "to", "be"]) {
+ *       counts.set(w, (counts.get(w) ?? 0) + 1)
+ *       seen.add(w)
+ *     }
+ *     for (const w of counts.keys()) {
+ *       console.log(`${w} ${counts.get(w) ?? 0}`)  // "to 2", "be 2", "or 1", ...
+ *     }
+ *     seen.size  // 4, and seen.has("or") is true
+ *
  * **The layout is §2's.** Entries sit in insertion order in parallel arrays,
  * `entryKeys`, `entryValues` and `entryHashes`, and `entryHashes` holds the
  * full 32-bit hash of each. The bucket table `slots` is open addressing with
@@ -274,22 +285,23 @@ export class Map<K, V> {
   /** How many entries are live. The one field a program may read, and it may not write it. */
   size: number = 0
   /** Bucket -> fingerprint and entry index plus one; see the header. */
-  slots: u32[]
+  private slots: u32[]
   /** `slots.length - 1`: the table is a power of two. */
-  mask: i32 = 7
+  private mask: i32 = 7
   /** Live entries, as an `i32` for the load and compaction arithmetic. */
-  live: i32 = 0
-  entryKeys: K[]
-  entryValues: V[]
+  private live: i32 = 0
+  private entryKeys: K[]
+  private entryValues: V[]
   /** The full hash of each entry; 0 once the entry is deleted. */
-  entryHashes: u32[]
+  private entryHashes: u32[]
   /**
    * How many `for...of` loops are walking the table now. While it is above 0
    * a rebuild doubles rather than compacts, and `clear` marks entries dead
    * rather than truncating, so no entry moves under a walk's cursor (§6.2).
    */
-  walks: i32 = 0
+  private walks: i32 = 0
 
+  /** An empty map. */
   constructor() {
     this.slots = new Array<u32>(INITIAL_SLOTS)
     this.entryKeys = []
@@ -297,16 +309,36 @@ export class Map<K, V> {
     this.entryHashes = []
   }
 
-  /** The packed probe result for `key`: see `probeTable`, `foundAt` and `absentAt`. */
+  /**
+   * The packed probe result for `key`: see `probeTable`, `foundAt` and
+   * `absentAt`.
+   *
+   * @internal Called by name by the code the compiler writes for a `Map`,
+   *   src/emit-map.ts.
+   */
   probe(key: K): i64 {
     return probeTable(this.slots, this.mask, this.entryHashes, this.entryKeys, key)
   }
 
+  /**
+   * Whether the map has an entry for `key`.
+   *
+   * @param key - the key to look for, compared by SameValueZero: `===`, except
+   *   that NaN equals NaN.
+   * @returns true when there is an entry.
+   */
   has(key: K): boolean {
     return this.probe(key) >= 0
   }
 
-  /** Set `key` to `value`, in place when it is there and at the end when it is not: one probe. */
+  /**
+   * Set `key` to `value`, in place when it is there and at the end when it is
+   * not: one probe.
+   *
+   * @param key - the entry's key.
+   * @param value - the value to store.
+   * @returns the map itself, so that calls chain.
+   */
   set(key: K, value: V): Map<K, V> {
     const found = this.probe(key)
     if (found >= 0) {
@@ -317,6 +349,12 @@ export class Map<K, V> {
     return this
   }
 
+  /**
+   * Removes the entry for `key`, if there is one; the others keep their order.
+   *
+   * @param key - the key to remove.
+   * @returns true when there was an entry to remove.
+   */
   delete(key: K): boolean {
     const found = this.probe(key)
     if (found < 0) {
@@ -351,20 +389,30 @@ export class Map<K, V> {
    * entered, `walkNext` for the first live entry and after each pass,
    * `keyAt` or `valueAt` for the loop variable, and `walkClose` on every edge
    * that leaves the loop. Two stores a loop, and none per entry.
+   *
+   * @internal Called by name by the code the compiler writes for a `Map`,
+   *   src/emit-map.ts.
    */
   walkOpen(): void {
     this.walks = this.walks + 1
   }
 
+  /** @internal Called by name by the code the compiler writes for a `Map`, src/emit-map.ts. */
   walkNext(from: i32): i32 {
     return nextLive(this.entryHashes, from)
   }
 
+  /** @internal Called by name by the code the compiler writes for a `Map`, src/emit-map.ts. */
   walkClose(): void {
     this.walks = this.walks - 1
   }
 
-  /** The key of entry `index`, which `walkNext` answered. */
+  /**
+   * The key of entry `index`, which `walkNext` answered.
+   *
+   * @internal Called by name by the code the compiler writes for a `Map`,
+   *   src/emit-map.ts.
+   */
   keyAt(index: i32): K {
     if (index < 0 || index >= toI32(this.entryKeys.length)) {
       panic("Map: no entry at this index")
@@ -372,7 +420,12 @@ export class Map<K, V> {
     return this.entryKeys[index]
   }
 
-  /** The value of the entry a probe found, or a walk reached. */
+  /**
+   * The value of the entry a probe found, or a walk reached.
+   *
+   * @internal Called by name by the code the compiler writes for a `Map`,
+   *   src/emit-map.ts.
+   */
   valueAt(index: i32): V {
     if (index < 0 || index >= toI32(this.entryValues.length)) {
       panic("Map: no entry at this index")
@@ -380,14 +433,25 @@ export class Map<K, V> {
     return this.entryValues[index]
   }
 
-  /** Overwrite the value of the entry a probe found; it keeps its place. */
+  /**
+   * Overwrite the value of the entry a probe found; it keeps its place.
+   *
+   * @internal Called by name by the code the compiler writes for a `Map`,
+   *   src/emit-map.ts.
+   */
   setValueAt(index: i32, value: V): void {
     if (index >= 0 && index < toI32(this.entryValues.length)) {
       this.entryValues[index] = value
     }
   }
 
-  /** Append an entry for `key` at the empty bucket an absent probe result names, reusing its hash. */
+  /**
+   * Append an entry for `key` at the empty bucket an absent probe result names,
+   * reusing its hash.
+   *
+   * @internal Called by name by the code the compiler writes for a `Map`,
+   *   src/emit-map.ts.
+   */
   insertAt(absent: i64, key: K, value: V): void {
     const packed = -1 - absent
     let bucket = toI32(packed >> 32)
@@ -421,7 +485,7 @@ export class Map<K, V> {
    * While a loop walks the table it always doubles and moves no entry, and the
    * first rebuild after the walk compacts (§6.2).
    */
-  rebuild(): void {
+  private rebuild(): void {
     const used = toI32(this.entryKeys.length)
     const walking = this.walks > 0
     const slots = rebuiltSlots(this.slots, walking ? used : this.live, used)
@@ -443,6 +507,9 @@ export class Map<K, V> {
    * safe under a walk as the doubling a walk already allows (§6.2). A count
    * that is not positive, or not a number, does nothing, as `reserve` does
    * under Node; one past the entry cap is the cap.
+   *
+   * @internal Called by name by the code the compiler writes for `reserve` from
+   *   `nish/map`, src/emit-map.ts.
    */
   reserveSlots(n: number): void {
     if (!(n > 0)) {
@@ -468,29 +535,43 @@ export class Map<K, V> {
 export class Set<T> {
   /** How many elements are live. The one field a program may read, and it may not write it. */
   size: number = 0
-  slots: u32[]
-  mask: i32 = 7
-  live: i32 = 0
-  entryKeys: T[]
-  entryHashes: u32[]
+  private slots: u32[]
+  private mask: i32 = 7
+  private live: i32 = 0
+  private entryKeys: T[]
+  private entryHashes: u32[]
   /** `Map`'s walk count: how many `for...of` loops are walking the table now. */
-  walks: i32 = 0
+  private walks: i32 = 0
 
+  /** An empty set. */
   constructor() {
     this.slots = new Array<u32>(INITIAL_SLOTS)
     this.entryKeys = []
     this.entryHashes = []
   }
 
+  /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
   probe(key: T): i64 {
     return probeTable(this.slots, this.mask, this.entryHashes, this.entryKeys, key)
   }
 
+  /**
+   * Whether `key` is in the set.
+   *
+   * @param key - the key to look for, compared by SameValueZero: `===`, except
+   *   that NaN equals NaN.
+   * @returns true when it is.
+   */
   has(key: T): boolean {
     return this.probe(key) >= 0
   }
 
-  /** Add `key` at the end when it is not there already: one probe. */
+  /**
+   * Add `key` at the end when it is not there already: one probe.
+   *
+   * @param key - the key to add.
+   * @returns the set itself, so that calls chain.
+   */
   add(key: T): Set<T> {
     const found = this.probe(key)
     if (found < 0) {
@@ -499,6 +580,12 @@ export class Set<T> {
     return this
   }
 
+  /**
+   * Removes `key`, if it is there; the others keep their order.
+   *
+   * @param key - the key to remove.
+   * @returns true when there was a key to remove.
+   */
   delete(key: T): boolean {
     const found = this.probe(key)
     if (found < 0) {
@@ -510,6 +597,7 @@ export class Set<T> {
     return true
   }
 
+  /** Removes every key, keeping the table's memory. */
   clear(): void {
     clearSlots(this.slots)
     if (this.walks > 0) {
@@ -522,19 +610,28 @@ export class Set<T> {
     this.size = 0
   }
 
-  /** `Map`'s walk: `for (const x of s)`, `s.keys()` and `s.values()` are all this one. */
+  /**
+   * `Map`'s walk: `for (const x of s)`, `s.keys()` and `s.values()` are all
+   * this one.
+   *
+   * @internal Called by name by the code the compiler writes for a `Set`,
+   *   src/emit-map.ts.
+   */
   walkOpen(): void {
     this.walks = this.walks + 1
   }
 
+  /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
   walkNext(from: i32): i32 {
     return nextLive(this.entryHashes, from)
   }
 
+  /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
   walkClose(): void {
     this.walks = this.walks - 1
   }
 
+  /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
   keyAt(index: i32): T {
     if (index < 0 || index >= toI32(this.entryKeys.length)) {
       panic("Set: no entry at this index")
@@ -542,6 +639,7 @@ export class Set<T> {
     return this.entryKeys[index]
   }
 
+  /** @internal Called by name by the code the compiler writes for a `Set`, src/emit-map.ts. */
   insertAt(absent: i64, key: T): void {
     const packed = -1 - absent
     let bucket = toI32(packed >> 32)
@@ -567,7 +665,7 @@ export class Set<T> {
     }
   }
 
-  rebuild(): void {
+  private rebuild(): void {
     const used = toI32(this.entryKeys.length)
     const walking = this.walks > 0
     const slots = rebuiltSlots(this.slots, walking ? used : this.live, used)

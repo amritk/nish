@@ -238,14 +238,32 @@ const jfFullTimeFrom = (s: string, at: i32): boolean => {
   return second !== 60 || (hour * 60 + minute - offset + 1440) % 1440 === 1439
 }
 
-/** Whether `s` is an RFC 3339 `date-time`, `1963-06-19T08:30:06.283185Z`. */
+/**
+ * Whether `s` is an RFC 3339 `date-time`, `1963-06-19T08:30:06.283185Z`.
+ *
+ * @param s - the text to check, whole: nothing before or after the date-time is
+ *   allowed.
+ * @returns true when `s` is a date-time, false otherwise.
+ */
 export const isDateTime = (s: string): boolean =>
   jfFullDateAt(s, 0) && jfLower(jfUnitAt(s, 10)) === 116 && jfFullTimeFrom(s, 11)
 
-/** Whether `s` is an RFC 3339 `full-date`, `1963-06-19`. */
+/**
+ * Whether `s` is an RFC 3339 `full-date`, `1963-06-19`.
+ *
+ * @param s - the text to check, whole: nothing before or after the date is
+ *   allowed.
+ * @returns true when `s` is a date, false otherwise.
+ */
 export const isDate = (s: string): boolean => toI32(s.length) === 10 && jfFullDateAt(s, 0)
 
-/** Whether `s` is an RFC 3339 `full-time`, `08:30:06Z` or `08:30:06+01:00`. */
+/**
+ * Whether `s` is an RFC 3339 `full-time`, `08:30:06Z` or `08:30:06+01:00`.
+ *
+ * @param s - the text to check, whole: nothing before or after the time is
+ *   allowed.
+ * @returns true when `s` is a time, false otherwise.
+ */
 export const isTime = (s: string): boolean => jfFullTimeFrom(s, 0)
 
 /** The place of unit `u` in `units`, or -1 if it is not one of them. */
@@ -267,6 +285,10 @@ const jfUnitIndex = (u: i32, units: string): i32 => {
  * 1*DIGIT "Y" [dur-month]`), so the units of each half must be consecutive
  * in `YMD` and `HMS` order: `P1Y1D` and `PT1H1S` are invalid as written,
  * though ISO 8601 allows them.
+ *
+ * @param s - the text to check, whole: nothing before or after the duration is
+ *   allowed.
+ * @returns true when `s` is a duration, false otherwise.
  */
 export const isDuration = (s: string): boolean => {
   const length: i32 = toI32(s.length)
@@ -386,10 +408,22 @@ const jfIpv6Range = (s: string, from: i32, to: i32): boolean => {
   return elided ? groups <= 7 : groups === 8
 }
 
-/** Whether `s` is a dotted-quad IPv4 address, `192.168.0.1`. */
+/**
+ * Whether `s` is a dotted-quad IPv4 address, `192.168.0.1`.
+ *
+ * @param s - the text to check, whole: nothing before or after the IPv4 address
+ *   is allowed.
+ * @returns true when `s` is an IPv4 address, false otherwise.
+ */
 export const isIpv4 = (s: string): boolean => jfIpv4Range(s, 0, toI32(s.length))
 
-/** Whether `s` is an IPv6 address, `::ffff:192.168.0.1`. */
+/**
+ * Whether `s` is an IPv6 address, `::ffff:192.168.0.1`.
+ *
+ * @param s - the text to check, whole: nothing before or after the IPv6 address
+ *   is allowed.
+ * @returns true when `s` is an IPv6 address, false otherwise.
+ */
 export const isIpv6 = (s: string): boolean => jfIpv6Range(s, 0, toI32(s.length))
 
 const jfIsLdh = (c: i32): boolean => jfIsAlpha(c) || jfIsDigit(c) || c === 45
@@ -416,7 +450,13 @@ const jfHostnameRange = (s: string, from: i32, to: i32): boolean => {
   return true
 }
 
-/** Whether `s` is a host name, `www.example.com`. */
+/**
+ * Whether `s` is a host name, `www.example.com`.
+ *
+ * @param s - the text to check, whole: nothing before or after the host name is
+ *   allowed.
+ * @returns true when `s` is a host name, false otherwise.
+ */
 export const isHostname = (s: string): boolean => jfHostnameRange(s, 0, toI32(s.length))
 
 /** Whether `c` is RFC 5322's `atext`: a letter, a digit or one of ``!#$%&'*+-/=?^_`{|}~``. */
@@ -501,7 +541,13 @@ const jfGeneralLiteral = (s: string, from: i32, to: i32): boolean => {
   return true
 }
 
-/** Whether `s` is an RFC 5321 mailbox, `joe.bloggs@example.com`. */
+/**
+ * Whether `s` is an RFC 5321 mailbox, `joe.bloggs@example.com`.
+ *
+ * @param s - the text to check, whole: nothing before or after the mailbox is
+ *   allowed.
+ * @returns true when `s` is a mailbox, false otherwise.
+ */
 export const isEmail = (s: string): boolean => {
   const length: i32 = toI32(s.length)
   const at = jfLocalPartEnd(s)
@@ -533,7 +579,13 @@ export const isEmail = (s: string): boolean => {
   return jfIpv4Range(s, inner, end) || jfGeneralLiteral(s, inner, end)
 }
 
-/** Whether `s` is a UUID, `2eb8aa08-aa98-11ea-b4aa-73b441d16380`. */
+/**
+ * Whether `s` is a UUID, `2eb8aa08-aa98-11ea-b4aa-73b441d16380`.
+ *
+ * @param s - the text to check, whole: nothing before or after the UUID is
+ *   allowed.
+ * @returns true when `s` is a UUID, false otherwise.
+ */
 export const isUuid = (s: string): boolean => {
   if (toI32(s.length) !== 36) {
     return false
@@ -813,16 +865,40 @@ const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
   return true
 }
 
-/** Whether `s` is an absolute URI, `http://example.com/a?b#c`. */
+/**
+ * Whether `s` is an absolute URI, `http://example.com/a?b#c`.
+ *
+ * @param s - the text to check, whole: nothing before or after the URI is
+ *   allowed.
+ * @returns true when `s` is a URI, false otherwise.
+ */
 export const isUri = (s: string): boolean => jfUriCheck(s, false, false)
 
-/** Whether `s` is a URI or a relative reference, `../a?b#c`. */
+/**
+ * Whether `s` is a URI or a relative reference, `../a?b#c`.
+ *
+ * @param s - the text to check, whole: nothing before or after the URI
+ *   reference is allowed.
+ * @returns true when `s` is a URI reference, false otherwise.
+ */
 export const isUriReference = (s: string): boolean => jfUriCheck(s, false, true)
 
-/** Whether `s` is an absolute IRI, `http://ƒøø.ßår/?∂éœ=πîx`. */
+/**
+ * Whether `s` is an absolute IRI, `http://ƒøø.ßår/?∂éœ=πîx`.
+ *
+ * @param s - the text to check, whole: nothing before or after the IRI is
+ *   allowed.
+ * @returns true when `s` is an IRI, false otherwise.
+ */
 export const isIri = (s: string): boolean => jfUriCheck(s, true, false)
 
-/** Whether `s` is an IRI or a relative IRI reference. */
+/**
+ * Whether `s` is an IRI or a relative IRI reference.
+ *
+ * @param s - the text to check, whole: nothing before or after the IRI
+ *   reference is allowed.
+ * @returns true when `s` is an IRI reference, false otherwise.
+ */
 export const isIriReference = (s: string): boolean => jfUriCheck(s, true, true)
 
 /** The code units of RFC 6570's `varchar` at `i` of `s`, `ALPHA / DIGIT / "_" / pct-encoded`, or 0. */
@@ -909,7 +985,14 @@ const jfIsTemplateLiteral = (c: i32): boolean =>
   (c >= 97 && c <= 122) ||
   c === 126
 
-/** Whether `s` is an RFC 6570 URI template, `http://example.com/{term:1}/{term}`. */
+/**
+ * Whether `s` is an RFC 6570 URI template,
+ * `http://example.com/{term:1}/{term}`.
+ *
+ * @param s - the text to check, whole: nothing before or after the URI template
+ *   is allowed.
+ * @returns true when `s` is a URI template, false otherwise.
+ */
 export const isUriTemplate = (s: string): boolean => {
   const length: i32 = toI32(s.length)
   let i: i32 = 0
@@ -945,12 +1028,20 @@ export const isUriTemplate = (s: string): boolean => {
  * Whether `s` is a regular expression `nish/regex` compiles with no flags.
  * Lookaround, backreferences and what the `u` flag refuses are answered
  * false, though ECMA-262 accepts them (see the module header).
+ *
+ * @param s - the pattern source, without slashes or flags.
+ * @returns true when `nish/regex` compiles `s`, false otherwise.
  */
 export const isRegex = (s: string): boolean => regexCompile(s, "").isOk()
 
 /**
  * The id of the format `name` for `jsonFormatCheck`, one of the
  * `JSON_FORMAT_*` ids, or -1 for a format this module does not check.
+ *
+ * @param name - the name a schema's `format` keyword gives, such as
+ *   `"date-time"`.
+ * @returns the format's `JSON_FORMAT_*` id, or -1 when this module does not
+ *   check that format.
  */
 export const jsonFormatId = (name: string): i32 => {
   if (name === "date-time") {
@@ -1052,6 +1143,10 @@ const jfPasses = (id: i32, value: string): boolean => {
  * `value` checked against the format `id` from `jsonFormatId`:
  * `JSON_FORMAT_VALID` or `JSON_FORMAT_INVALID`, or `JSON_FORMAT_UNKNOWN`
  * for an id that names no format, -1 included.
+ *
+ * @param id - a format id from `jsonFormatId`.
+ * @param value - the string instance to check.
+ * @returns `JSON_FORMAT_VALID`, `JSON_FORMAT_INVALID` or `JSON_FORMAT_UNKNOWN`.
  */
 export const jsonFormatCheck = (id: i32, value: string): i32 => {
   if (id < JSON_FORMAT_DATE_TIME || id > JSON_FORMAT_REGEX) {
@@ -1065,6 +1160,10 @@ export const jsonFormatCheck = (id: i32, value: string): i32 => {
  * `JSON_FORMAT_INVALID`, or `JSON_FORMAT_UNKNOWN` for a format this module
  * does not check. A validator that checks many instances against one schema
  * resolves the name once with `jsonFormatId` and calls `jsonFormatCheck`.
+ *
+ * @param name - the name a schema's `format` keyword gives.
+ * @param value - the string instance to check.
+ * @returns `JSON_FORMAT_VALID`, `JSON_FORMAT_INVALID` or `JSON_FORMAT_UNKNOWN`.
  */
 export const jsonFormatValidate = (name: string, value: string): i32 =>
   jsonFormatCheck(jsonFormatId(name), value)

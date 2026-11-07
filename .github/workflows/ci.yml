@@ -39,8 +39,9 @@
 # sha256-macos: runtime/runtime-sha256.c's Apple detection, on its ARMv8
 #       kernel, natively on a macOS runner, under both NISH_SHA256 pins.
 # lint: package-lock.json against package.json with no registry involved,
-#       `npm run lint` when package.json defines it (no-op otherwise), then
-#       docs/check-links.mjs over every Markdown file.
+#       `npm run lint` when package.json defines it (no-op otherwise),
+#       docs/check-links.mjs over every Markdown file, then
+#       `scripts/gen-reference.mjs --check` (docs/reference/ is not stale).
 #
 # Also reusable via `workflow_call`: release.yml runs it before packing a tag.
 # Runs on `merge_group` too, for the merge queue on main (see `on:` below).
@@ -1652,3 +1653,8 @@ jobs:
       # a reader -- human or agent -- to a page that does not exist.
       - name: Docs (links and anchors resolve)
         run: node docs/check-links.mjs
+
+      # docs/reference/** and its routes are generated from std/**, runtime/nish.d.ts
+      # and docs/LANGUAGE.md; a page edited by hand or left behind fails here.
+      - name: Docs (the library reference is regenerated)
+        run: node scripts/gen-reference.mjs --check

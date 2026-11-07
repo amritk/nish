@@ -52,7 +52,12 @@ export PATH="$(brew --prefix llvm@18)/bin:$PATH"   # add to your shell profile
 ```
 
 Xcode's `clang` (`xcode-select --install`) also works for native binaries;
-the Homebrew LLVM is needed for the `wasm` and `wasi` profiles (`wasm-ld`).
+the Homebrew LLVM is needed for the `wasm`, `wasm-host` and `wasi` profiles (`wasm-ld`).
+
+`wasm-opt` (binaryen: `apt-get install binaryen`, `brew install binaryen`) is
+optional. When it is on `PATH`, `scripts/build.sh --profile wasm-host` runs
+`wasm-opt -Oz` on the module, and the build line says whether it ran. Without
+it the module is complete, just not as small.
 
 <a id="wasi-optional-for---profile-wasi" style="scroll-margin-top: 65px"></a>
 

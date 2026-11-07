@@ -164,6 +164,10 @@ const httpFieldsAllTchar = (bytes: u8[], upper: boolean): boolean => {
  * Whether `name` may be sent as a regular field name in HTTP/2 or HTTP/3: a
  * non-empty token in lowercase (RFC 9110 §5.1, RFC 9113 §8.2.1, RFC 9114
  * §4.2). A pseudo-header's name starts with a colon and is not one.
+ *
+ * @param name the field name's octets, as the program would send them
+ * @returns true when the name may go on the wire as it is; false for an empty
+ *   name, a non-token character or an uppercase letter
  */
 export const httpFieldNameValid = (name: u8[]): boolean => httpFieldsAllTchar(name, false)
 
@@ -171,6 +175,10 @@ export const httpFieldNameValid = (name: u8[]): boolean => httpFieldsAllTchar(na
  * Whether `value` may be sent as a field value: no NUL, CR or LF, and no
  * space or tab as its first or last octet (RFC 9113 §8.2.1, RFC 9114 §4.2).
  * Other octets, obs-text included, pass as they are.
+ *
+ * @param value the field value's octets, as the program would send them
+ * @returns true when the value cannot end a line or smuggle whitespace at its
+ *   edges, so it may be sent as it is
  */
 export const httpFieldValueValid = (value: u8[]): boolean => {
   const n: i32 = toI32(value.length)
@@ -188,7 +196,13 @@ export const httpFieldValueValid = (value: u8[]): boolean => {
   return first !== 32 && first !== 9 && last !== 32 && last !== 9
 }
 
-/** Whether the octets of `bytes` spell `text` exactly. */
+/**
+ * Whether the octets of `bytes` spell `text` exactly.
+ *
+ * @param bytes the octets to compare, such as a decoded field name
+ * @param text the expected spelling, one character an octet; case matters
+ * @returns true only when both have the same length and every octet matches
+ */
 export const httpFieldIs = (bytes: u8[], text: string): boolean => {
   const n: i32 = toI32(bytes.length)
   if (n !== toI32(text.length)) {
@@ -202,7 +216,13 @@ export const httpFieldIs = (bytes: u8[], text: string): boolean => {
   return true
 }
 
-/** The octets of `text`, one a character: what a field name or value is sent as. */
+/**
+ * The octets of `text`, one a character: what a field name or value is sent as.
+ *
+ * @param text the name or value to turn into octets; each character's code is
+ *   kept in one octet, so it should be Latin-1
+ * @returns a fresh array the caller owns, one octet per character of `text`
+ */
 export const httpFieldBytes = (text: string): u8[] => {
   const out: u8[] = []
   const n: i32 = toI32(text.length)
@@ -218,6 +238,11 @@ export const httpFieldBytes = (text: string): u8[] => {
  * the fields RFC 9110 §7.6.1 names, `keep-alive`, `proxy-connection`,
  * `transfer-encoding` and `upgrade`, and `te` with any value but
  * `trailers`.
+ *
+ * @param name the field name's octets, in lowercase
+ * @param value the field's value, which matters only for `te`
+ * @returns true when the field belongs to one HTTP/1.1 hop and must not be
+ *   sent or accepted in an HTTP/2 or HTTP/3 message
  */
 export const httpFieldConnectionSpecific = (name: u8[], value: u8[]): boolean => {
   if (httpFieldIs(name, "te")) {
@@ -239,6 +264,9 @@ export const httpFieldConnectionSpecific = (name: u8[], value: u8[]): boolean =>
  * §7.1.3). A table entry can be probed by a peer that controls part of what
  * is compressed beside it, so a secret sent indexed can leak through the
  * compressed length (CRIME's shape).
+ *
+ * @param name the field name's octets, in lowercase
+ * @returns true when the encoder should send this field never-indexed
  */
 export const httpFieldSensitive = (name: u8[]): boolean =>
   httpFieldIs(name, "authorization") ||
@@ -355,6 +383,12 @@ const httpFieldsHasUserinfo = (authority: u8[]): boolean => {
  * connection-specific, and as many values as names. Answers `HTTP_FIELDS_OK`
  * or the first refusal. A version's writer refuses what this refuses, so
  * that a program's string can never reach the wire as a field it was not.
+ *
+ * @param names the regular field names about to be sent, in order
+ * @param values the value for each name, at the same index
+ * @returns `HTTP_FIELDS_OK` when the whole section may be sent, or the
+ *   `HTTP_FIELDS_*` code of the first field that may not (`HTTP_FIELDS_BAD_VALUE`
+ *   too when the two lists differ in length)
  */
 export const httpFieldsCheckOutgoing = (names: u8[][], values: u8[][]): i32 => {
   const n: i32 = toI32(names.length)
@@ -406,8 +440,9 @@ export class HttpFields {
   /** The `content-length`, or `HTTP_FIELDS_NO_LENGTH`. */
   contentLength: i64 = -1
   /** The empty value an absent pseudo-header reads as, made once. */
-  none: u8[]
+  private none: u8[]
 
+  /** Makes an empty section, ready for its first read; no field is set yet. */
   constructor() {
     this.method = []
     this.scheme = []
@@ -436,12 +471,23 @@ export class HttpFields {
     this.contentLength = HTTP_FIELDS_NO_LENGTH
   }
 
-  /** Whether the method is CONNECT, plain (RFC 9113 §8.5) or extended (RFC 8441). */
+  /**
+   * Whether the method is CONNECT, plain (RFC 9113 §8.5) or extended (RFC 8441).
+   *
+   * @returns true when the last read section's `:method` is exactly `CONNECT`
+   */
   isConnect(): boolean {
     return httpFieldIs(this.method, "CONNECT")
   }
 
-  /** The value of the first regular field named `name` (lowercase), or `null`. */
+  /**
+   * The value of the first regular field named `name` (lowercase), or `null`.
+   *
+   * @param name the field name to look for, in lowercase as HTTP/2 and HTTP/3
+   *   send it
+   * @returns the caller's own value array for that field, not a copy, or `null`
+   *   when the section has no such field
+   */
   get(name: string): u8[] | null {
     const n: i32 = toI32(this.names.length)
     for (let k: i32 = 0; k < n && k < toI32(this.names.length) && k < toI32(this.values.length); k++) {
@@ -458,7 +504,7 @@ export class HttpFields {
    * rules — which pseudo-headers are required — are the caller's. Answers
    * the mask of pseudo-headers seen, or a negative refusal.
    */
-  readSection(names: u8[][], values: u8[][], allowed: i32): i32 {
+  private readSection(names: u8[][], values: u8[][], allowed: i32): i32 {
     this.clear()
     const n: i32 = toI32(names.length)
     if (n !== toI32(values.length)) {
@@ -514,7 +560,7 @@ export class HttpFields {
   }
 
   /** Records the pseudo-header `pseudo` as `value`, checking its syntax. */
-  takePseudo(pseudo: i32, value: u8[]): i32 {
+  private takePseudo(pseudo: i32, value: u8[]): i32 {
     switch (pseudo) {
       case HTTP_FIELDS_METHOD:
         this.method = value
@@ -546,6 +592,14 @@ export class HttpFields {
    * all four of the others (RFC 8441 §4). Any other request has `:scheme`
    * and `:path`. A `:path` that does not start with `/` is OPTIONS's `*` or
    * refused, and a `host` field must name `:authority` when both are there.
+   *
+   * @param names the decoded field names, pseudo-headers first, in wire order
+   * @param values the decoded value for each name, at the same index
+   * @param extendedConnect whether this connection sent
+   *   SETTINGS_ENABLE_CONNECT_PROTOCOL, so a `:protocol` is allowed
+   * @returns `HTTP_FIELDS_OK` when the section is a well-formed request and
+   *   this object now describes it, or the `HTTP_FIELDS_*` code of the first
+   *   rule it breaks
    */
   readRequest(names: u8[][], values: u8[][], extendedConnect: boolean): i32 {
     const all: i32 =
@@ -592,7 +646,15 @@ export class HttpFields {
     return HTTP_FIELDS_OK
   }
 
-  /** Reads a response's field section: exactly one `:status`, and no other pseudo-header (RFC 9113 §8.3.2). */
+  /**
+   * Reads a response's field section: exactly one `:status`, and no other pseudo-header (RFC 9113 §8.3.2).
+   *
+   * @param names the decoded field names, `:status` first, in wire order
+   * @param values the decoded value for each name, at the same index
+   * @returns `HTTP_FIELDS_OK` when the section is a well-formed response and
+   *   `status` holds its code, or the `HTTP_FIELDS_*` code of the first rule
+   *   it breaks
+   */
   readResponse(names: u8[][], values: u8[][]): i32 {
     const seen: i32 = this.readSection(names, values, HTTP_FIELDS_STATUS)
     if (seen < 0) {
@@ -601,7 +663,15 @@ export class HttpFields {
     return (seen & HTTP_FIELDS_STATUS) !== 0 ? HTTP_FIELDS_OK : HTTP_FIELDS_PSEUDO_MISSING
   }
 
-  /** Reads a trailer section: regular fields only (RFC 9113 §8.1). */
+  /**
+   * Reads a trailer section: regular fields only (RFC 9113 §8.1).
+   *
+   * @param names the decoded trailer field names, in wire order
+   * @param values the decoded value for each name, at the same index
+   * @returns `HTTP_FIELDS_OK` when every field is a valid regular field, or the
+   *   `HTTP_FIELDS_*` code of the first that is not (a known pseudo-header
+   *   here is `HTTP_FIELDS_PSEUDO_FORBIDDEN`)
+   */
   readTrailers(names: u8[][], values: u8[][]): i32 {
     const seen: i32 = this.readSection(names, values, HTTP_FIELDS_ZERO)
     return seen < 0 ? seen : HTTP_FIELDS_OK
@@ -649,6 +719,12 @@ const httpFieldsPutTwo = (out: u8[], at: i32, n: i32): void => {
  * 146,097 days long. Every step
  * is `i64` arithmetic on numbers that are not negative, so `--number-mode
  * f64` writes the same bytes.
+ *
+ * @param out the buffer to write into; its length is not changed
+ * @param at the index in `out` where the date's first letter goes
+ * @param seconds the instant to name, in whole seconds since 1970 UTC
+ * @returns the index just past the date's last octet (`at + HTTP_DATE_SIZE`),
+ *   or -1 when nothing was written
  */
 export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
   if (

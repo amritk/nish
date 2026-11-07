@@ -5,10 +5,10 @@
 // bytes echoed and a unidirectional one echoed on a stream the server opens,
 // rounds of a datagram and a new stream on the warm session with the arena
 // measured, the client's CLOSE_WEBTRANSPORT_SESSION with its code seen by
-// the server, the client's NAT rebinding to a new port mid-session with
-// datagrams and streams echoed on through it, and the server's own close of
-// a second session seen by the client.
-import { netClose, netLocalPort, udpRecvFrom } from "nish:net";
+// the server, the client's NAT rebinding to a new port and then to a new
+// address mid-session with datagrams and streams echoed on through each, and
+// the server's own close of a second session seen by the client.
+import { netAddress, netClose, netLocalPort, udpRecvFrom } from "nish:net";
 import { Suite } from "nish/testing";
 import { H3_FRAME_DATA, H3_FRAME_WEBTRANSPORT_STREAM, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER, H3_STREAM_WEBTRANSPORT } from "nish/net/http3-frame";
 import { H3_ALPN } from "nish/net/http3";
@@ -99,25 +99,27 @@ const wtWireDrain = (fd: i32): i32 => {
 };
 
 /**
- * The client's NAT rebinds on the warm session from `id` on: rounds of a
- * datagram and a new bidirectional stream from the new port, each echoed
- * there, the server's PATH_CHALLENGE answered on the way, its arena kept
- * flat, and nothing more sent to the old port. Answers the next stream ID.
+ * The client's NAT rebinds on the warm session from `id` on, to a new port
+ * on `host`: rounds of a datagram and a new bidirectional stream from there,
+ * each echoed there, the server's PATH_CHALLENGE answered on the way, the
+ * slot's address moved to it, the arena kept flat, and nothing more sent to
+ * the old socket. `what` names the move, "port" or "address", in the checks.
+ * Answers the next stream ID.
  */
-const wtWireRebind = (t: Suite, lp: UdpLoop, p: WtPeer, s: Http3Server, from: i64): i64 => {
-  // Let the last round's ACKs land, so the old port has nothing in flight.
+const wtWireRebind = (t: Suite, lp: UdpLoop, p: WtPeer, s: Http3Server, from: i64, host: string, what: string): i64 => {
+  // Let the last round's ACKs land, so the old socket has nothing in flight.
   for (let k: i32 = 0; k < 5; k++) {
     lp.step(n32(20));
   }
   const challenges: i32 = lp.client.challenges;
-  const old: i32 = lp.rebind();
+  const old: i32 = lp.rebind(host);
   wtWireDrain(old);
   const rounds = new LbMeter(false);
   lp.meter = rounds;
   let id: i64 = from;
   let intact: i32 = 0;
   for (let k: i32 = 0; k < 8; k++) {
-    const text: string = `rebound ${k}`;
+    const text: string = `rebound ${what} ${k}`;
     const sent: u8[] = wtWireDatagram(bytesOf(text));
     const datagramBack: boolean = sameBytes(lp.datagramRoundTrip(sent), sent);
     lp.sendStream(id, wtWireBidi(bytesOf(text)), true);
@@ -128,12 +130,14 @@ const wtWireRebind = (t: Suite, lp: UdpLoop, p: WtPeer, s: Http3Server, from: i6
     id = id + n64(4);
   }
   lp.meter = null;
-  t.eqI32("webtransport: the client's NAT rebinds to a new port, and eight rounds of a datagram and a bidirectional stream are echoed to it", intact, n32(8));
-  t.ok("webtransport: the server validated the new port with a PATH_CHALLENGE the client answered (RFC 9000 §9.3)", lp.client.challenges > challenges);
-  const port: i32 = toI32(s.addresses[0][16]) * 256 + toI32(s.addresses[0][17]);
-  t.eqI32("webtransport: the slot's address follows the client to its new port", port, netLocalPort(lp.client.fd));
+  t.eqI32(`webtransport: the client's NAT rebinds to a new ${what}, and eight rounds of a datagram and a bidirectional stream are echoed to it`, intact, n32(8));
+  t.ok(`webtransport: the server validated the new ${what} with a PATH_CHALLENGE the client answered (RFC 9000 §9.3)`, lp.client.challenges > challenges);
+  // The slot's whole 18-byte address, its sixteen address bytes and its port.
+  const moved: u8[] = new Array<u8>(18);
+  netAddress(moved, host, netLocalPort(lp.client.fd));
+  t.eqStr(`webtransport: the slot's address follows the client to its new ${what}`, toHex(s.addresses[0]), toHex(moved));
   t.ok(`webtransport: and every server call kept ${rounds.kept} bytes over the rebinding`, rounds.kept === n64(0));
-  t.eqI32("webtransport: nothing after the rebinding went to the old port", wtWireDrain(old), n32(0));
+  t.eqI32(`webtransport: nothing after the rebinding went to the old ${what}`, wtWireDrain(old), n32(0));
   netClose(old);
   return id;
 };
@@ -200,7 +204,10 @@ export const webtransportChecks = (t: Suite): void => {
   t.eqI32("webtransport: fifty rounds on the warm session, each a datagram and a new bidirectional stream echoed", intact, ROUNDS);
   t.ok(`webtransport: and every server call kept ${rounds.kept} bytes over them`, rounds.kept === n64(0));
   t.ok("webtransport: past the server's sixteen streams, the client waited on its MAX_STREAMS", lp.client.maxStreamsBidi > limits.maxStreamsBidi);
-  id = wtWireRebind(t, lp, p, s, id);
+  id = wtWireRebind(t, lp, p, s, id, "127.0.0.1", "port");
+  // Then to another address. Linux routes all of 127.0.0.0/8 to lo; on a mac,
+  // `sudo ifconfig lo0 alias 127.0.0.2 up` first, as CI's mac job does.
+  id = wtWireRebind(t, lp, p, s, id, "127.0.0.2", "address");
 
   const bye: u8[] = wtClosePayload(n64(7), bytesOf("bye"));
   lp.sendStream(n64(0), h3Frame(H3_FRAME_DATA, wtCapsule(WT_CAPSULE_CLOSE, bye)), true);

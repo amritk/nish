@@ -8,6 +8,7 @@
  * the RFC means: nothing it answers depends on any connection.
  *
  *     import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT, QUIC_LISTENER_ANSWER_SIZE } from "nish/net/quic-listener";
+ *     import { QuicConnection } from "nish/net/quic";
  *
  *     const listener = new QuicListener(config, entropy);      // entropy: QUIC_LISTENER_ENTROPY_SIZE random bytes
  *     const answer = new QuicListenerAnswer(QUIC_LISTENER_ANSWER_SIZE);  // once, beside the listener
@@ -34,7 +35,7 @@
  * listener a packet for a connection that is still alive would give that
  * token, which ends the connection, to whoever sent it (RFC 9000 §21.11).
  *
- * **Retry tokens** (§8.1.4) are this server's own format: a marker byte, the
+ * **Retry tokens** (§8.1.4). They are this server's own format: a marker byte, the
  * time the token was issued, and the client's original Destination
  * Connection ID, then 16 bytes of HMAC-SHA256 under the configuration's
  * `retryTokenKey` over all of that, the Retry's Source Connection ID (which
@@ -46,7 +47,7 @@
  * INVALID_TOKEN (§8.1.2); a token without the marker, which some other
  * server issued, is treated as no token at all (§8.1.3).
  *
- * **Stateless resets** (§10.3) end in the token `quicStatelessResetToken`
+ * **Stateless resets** (§10.3). They end in the token `quicStatelessResetToken`
  * derives (computed in place, by `quicConnResetTokenInto`) from the configuration's static key and the packet's connection
  * ID, so a server that restarted with the same key can end the connections
  * it lost. RFC 9000 §10.3 and §10.3.3 bound them, and each bound is held
@@ -59,7 +60,7 @@
  * `QUIC_LISTENER_RESET_INTERVAL` milliseconds. Each reset's other bytes are
  * unpredictable, from the listener's own generator.
  *
- * **Pacing** (RFC 9002 §7.7) is the carrier's send loop, so it is here
+ * **Pacing** (RFC 9002 §7.7). It is the carrier's send loop, so it is here
  * beside the rest of what the carrier calls: `quicListenerTakePaced` takes a
  * connection's next datagram only when its pacer has the credit for it, and
  * `quicListenerPaceTime` says when it will. The pacer earns 5/4 of the
@@ -227,8 +228,15 @@ export class QuicListenerAnswer {
   retryScid: u8[]
   kind: i32 = 0
   retried: boolean = false
-  room: i32 = 0
+  private room: i32 = 0
 
+  /**
+   * An empty answer with room for a reply of `room` bytes.
+   *
+   * @param room The bytes reserved for `reply`, usually `QUIC_LISTENER_ANSWER_SIZE`; 0 or less reserves
+   *   none. `originalDcid` and `retryScid` get room for `QUIC_MAX_CID_LENGTH` (20) bytes each whatever it
+   *   is. That is capacity: all three start empty, their lengths 0 until an answer or `wipe` sets them.
+   */
   constructor(room: i32) {
     this.room = room > 0 ? room : 0
     this.reply = quicListenerRoom(this.room)
@@ -242,7 +250,8 @@ export class QuicListenerAnswer {
    * leave no copy beyond the arrays' lengths either. Each is left that long
    * and all zero, `kind` a drop. An answer whose reply grew past its room
    * keeps what lies beyond the longest length it is wiped at; one made with
-   * `QUIC_LISTENER_ANSWER_SIZE` never grows.
+   * `QUIC_LISTENER_ANSWER_SIZE` never grows. The caller's to call once it
+   * has sent the answer `QuicListener.handle` gave, and before it drops it.
    */
   wipe(): void {
     quicListenerWipeRoom(this.reply, this.room)
@@ -332,49 +341,58 @@ const quicListenerWindowFits = (length: i32, at: i32, len: i32): boolean =>
  * `handleWindow` reads the datagram where it lies and keeps nothing.
  */
 export class QuicListener {
-  config: QuicServerConfig
+  private config: QuicServerConfig
   seed: u8[]
   /** Unpredictable bytes not yet used, from `poolHead`, and the counter the next block is made from. */
   pool: u8[]
   /** The counter's eight bytes, the generator's HMAC message. */
-  block: u8[]
+  private block: u8[]
   /** What `handleWindow` parses a datagram's header into, in place. */
-  header: QuicHeader
+  private header: QuicHeader
   /** Every HMAC and HKDF the listener computes runs here; its `sha256` makes tokens, resets and the generator's blocks. */
   kdf: HkdfScratch
   /** A full HMAC-SHA256 tag, wiped once its 16 bytes are used. */
   tag: u8[]
   /** A Retry token MAC's length fields: the Retry SCID's one byte, the address's four. */
-  lengths: u8[]
+  private lengths: u8[]
   /** The Initial secrets of an INVALID_TOKEN close, and its keys, both directions. */
   initialClient: u8[]
   initialServer: u8[]
   readSlot: QuicKeysSlot
   writeSlot: QuicKeysSlot
-  packet: QuicPacket
+  private packet: QuicPacket
   /** The client's SCID and the DCID it sent to, copied out for `quicPutLongHeader`, which reads IDs from 0. */
-  peerCid: u8[]
-  ownCid: u8[]
+  private peerCid: u8[]
+  private ownCid: u8[]
   /** An empty array: the INVALID_TOKEN close's token and reason. */
-  none: u8[]
+  private none: u8[]
   /** Version 1's fixed Retry key (RFC 9001 §5.8), expanded once. */
-  retryKey: AesKey
+  private retryKey: AesKey
   /** What `handle` answers into before it copies the answer out. */
   spare: QuicListenerAnswer
-  counter: i64 = 0
+  private counter: i64 = 0
   /** The latest time the caller gave, in milliseconds; time never runs backwards here. */
-  now: i64 = 0
+  private now: i64 = 0
   /** When the reset budget was last topped up (-1: never yet), and the stateless resets that may go now. */
-  resetRefilled: i64 = -1
-  resetBudget: i32 = 0
+  private resetRefilled: i64 = -1
+  private resetBudget: i32 = 0
   poolHead: i32 = 0
   /** Stateless resets sent, and ones the rate limit held back. */
   resetsSent: i32 = 0
   resetsLimited: i32 = 0
   /** Whether the configuration and entropy were usable. */
-  usable: boolean = false
+  private usable: boolean = false
 
-  /** A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. */
+  /**
+   * A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in
+   * the caller's array.
+   *
+   * @param config The server's configuration, kept by reference: its static keys and Retry token lifetime.
+   *   Keys of the wrong size, or a lifetime outside 1 to `QUIC_LISTENER_MAX_TOKEN_LIFETIME` ms, make a
+   *   listener that drops every datagram.
+   * @param entropy `QUIC_LISTENER_ENTROPY_SIZE` (32) random bytes, the seed of every unpredictable byte
+   *   the listener sends. Zeroed on return; any other length makes a listener that drops every datagram.
+   */
   constructor(config: QuicServerConfig, entropy: u8[]) {
     this.config = config
     this.seed = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE)
@@ -434,7 +452,7 @@ export class QuicListener {
    * One unpredictable value in 0 to 255: the next byte of HMAC-SHA256 under
    * the seed of a counter, a block at a time, each byte wiped once taken.
    */
-  randomByte(): i32 {
+  private randomByte(): i32 {
     if (this.poolHead >= QUIC_LISTENER_POOL) {
       this.refill()
     }
@@ -448,7 +466,7 @@ export class QuicListener {
   }
 
   /** Writes `count` unpredictable bytes into `out` at `at`. */
-  randomInto(out: u8[], at: i32, count: i32): void {
+  private randomInto(out: u8[], at: i32, count: i32): void {
     for (let k: i32 = 0; k < count; k += 1) {
       const b: i32 = this.randomByte()
       if (at + k >= 0 && at + k < toI32(out.length)) {
@@ -458,7 +476,7 @@ export class QuicListener {
   }
 
   /** The generator's next block, HMAC-SHA256 under the seed of the counter, into `pool`. */
-  refill(): void {
+  private refill(): void {
     quicListenerPutNumber(this.block, 0, this.counter, QUIC_LISTENER_BLOCK)
     this.counter = this.counter + 1
     const mac: HmacSha256Scratch = this.kdf.sha256
@@ -481,6 +499,16 @@ export class QuicListener {
    * the module header for the rules; nothing a peer sends makes it panic,
    * and nothing it does keeps arena memory. A window outside `datagram` is
    * the caller's mistake, and panics.
+   *
+   * @param datagram The array the datagram lies in; read, not kept.
+   * @param at The index in `datagram` of its first byte.
+   * @param len The datagram's length in bytes.
+   * @param address The client's address and port, as bytes; bound into a Retry token.
+   * @param now The caller's monotonic time in milliseconds; an earlier time than the last is taken as the
+   *   last.
+   * @param answer Where the answer goes, overwritten each call and owned by the caller.
+   * @returns `answer.kind`: `QUIC_LISTEN_DROP`, `QUIC_LISTEN_ACCEPT`, `QUIC_LISTEN_VERSION_NEGOTIATION`,
+   *   `QUIC_LISTEN_RETRY`, `QUIC_LISTEN_INVALID_TOKEN` or `QUIC_LISTEN_STATELESS_RESET`.
    */
   handleWindow(datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer): i32 {
     if (!quicListenerWindowFits(toI32(datagram.length), at, len)) {
@@ -551,6 +579,11 @@ export class QuicListener {
    * made with exactly the room its reply takes: for a caller that keeps each
    * answer, at the cost of one `QuicListenerAnswer` a datagram. A carrier
    * makes one answer and calls `handleWindow`.
+   *
+   * @param datagram The whole datagram; read, not kept.
+   * @param address The client's address and port, as bytes.
+   * @param now The caller's monotonic time in milliseconds.
+   * @returns A new answer, the caller's to keep and, once done with, to wipe.
    */
   handle(datagram: u8[], address: u8[], now: i64): QuicListenerAnswer {
     const spare: QuicListenerAnswer = this.spare
@@ -580,7 +613,7 @@ export class QuicListener {
    * TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this
    * belongs beside `quicRetryPacket` there, which this stage may not edit.
    */
-  versionNegotiation(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
+  private versionNegotiation(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
     const unused: i32 = this.randomByte()
     const dcidLength: i32 = header.dcidLength
     const scidLength: i32 = header.scidLength
@@ -605,7 +638,7 @@ export class QuicListener {
    * first `QUIC_LISTENER_TOKEN_MAC_SIZE` bytes are the token's MAC; the
    * caller wipes `tag` once it has used them.
    */
-  tokenMac(
+  private tokenMac(
     head: u8[],
     headAt: i32,
     headLength: i32,
@@ -640,7 +673,7 @@ export class QuicListener {
    * (compared in constant time), and it was issued no later than now and
    * less than `retryTokenLifetime` ago. The token is read in `datagram`.
    */
-  tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean {
+  private tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean {
     const tokenAt: i32 = header.tokenStart
     const length: i32 = header.tokenLength
     if (length < QUIC_LISTENER_TOKEN_HEAD + QUIC_LISTENER_TOKEN_MAC_SIZE) {
@@ -677,7 +710,7 @@ export class QuicListener {
    * marker byte, the time, the DCID, then the MAC — under the integrity tag
    * of RFC 9001 §5.8. Each part is written where it goes in `reply`.
    */
-  retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void {
+  private retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void {
     const scidLength: i32 = header.scidLength
     const odcidLength: i32 = header.dcidLength
     const retryScidAt: i32 = 7 + scidLength
@@ -714,7 +747,7 @@ export class QuicListener {
    * pseudo-packet and the AEAD's temporaries go with the arena block.
    * Answers whether it was made.
    */
-  retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean {
+  private retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean {
     using _scope = arena()
     const pseudo: u8[] = new Array<u8>(1 + odcidLength + tagAt)
     quicListenerPutNumber(pseudo, 0, toI64(odcidLength), 1)
@@ -739,7 +772,7 @@ export class QuicListener {
    * own slots, the Initial is opened in an arena block, and the close is
    * written and sealed in `reply`.
    */
-  invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
+  private invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
     const secrets: boolean = quicInitialSecretsInto(
       this.kdf,
       datagram,
@@ -815,7 +848,7 @@ export class QuicListener {
   }
 
   /** Whether the Initial `header` read in `datagram` opens under `read`; what opening it allocates goes with the arena block. */
-  opens(read: QuicKeys, datagram: u8[], header: QuicHeader): boolean {
+  private opens(read: QuicKeys, datagram: u8[], header: QuicHeader): boolean {
     using _scope = arena()
     const packet: QuicPacket = this.packet
     const clear: u8[] = quicUnprotectHeader(read, datagram, header, -1, packet)
@@ -824,7 +857,7 @@ export class QuicListener {
   }
 
   /** Takes one stateless reset from the rate limit's budget, topping it up first. Answers whether one was there. */
-  takeReset(): boolean {
+  private takeReset(): boolean {
     if (this.resetRefilled < 0) {
       this.resetRefilled = this.now
       this.resetBudget = QUIC_LISTENER_RESET_BURST
@@ -854,7 +887,13 @@ export class QuicListener {
    * shorter; a datagram too short for that to leave 21 bytes, or one past
    * the rate limit, gets nothing.
    */
-  statelessReset(answer: QuicListenerAnswer, n: i32, datagram: u8[], dcidAt: i32, dcidLength: i32): void {
+  private statelessReset(
+    answer: QuicListenerAnswer,
+    n: i32,
+    datagram: u8[],
+    dcidAt: i32,
+    dcidLength: i32
+  ): void {
     if (n <= QUIC_LISTENER_MIN_RESET || !this.takeReset()) {
       return
     }
@@ -889,6 +928,10 @@ export class QuicListener {
  * but only when the connection's pacer has the credit for a full datagram
  * (RFC 9002 §7.7); `null` when it has not, or when nothing is due. The
  * datagram is charged to the pacer at its real size.
+ *
+ * @param conn The connection to send for.
+ * @param now The caller's time in milliseconds.
+ * @returns A new datagram to send, the caller's; or `null` when the pacer holds it back or nothing is due.
  */
 export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | null => {
   if (conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE) > 0) {
@@ -904,6 +947,10 @@ export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | nu
 /**
  * When `quicListenerTakePaced` next lets `conn` send a full datagram, in the
  * caller's milliseconds: `now` when it may already.
+ *
+ * @param conn The connection to ask about.
+ * @param now The caller's time in milliseconds.
+ * @returns A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
  */
 export const quicListenerPaceTime = (conn: QuicConnection, now: i64): i64 =>
   now + conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE)
@@ -922,6 +969,10 @@ const quicListenerQuantum = (conn: QuicConnection): i32 =>
 /**
  * When `quicListenerTakeFlight` next lets `conn` start a flight, in the
  * caller's milliseconds: `now` when it may already.
+ *
+ * @param conn The connection to ask about.
+ * @param now The caller's time in milliseconds.
+ * @returns A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
  */
 export const quicListenerFlightTime = (conn: QuicConnection, now: i64): i64 =>
   now + conn.recovery.pacerDelay(now, quicListenerQuantum(conn))
@@ -952,6 +1003,15 @@ export class QuicFlight {
  * `QUIC_CONN_DATAGRAM_SIZE`, which can only be the last of a segmented send,
  * at `QUIC_LISTENER_FLIGHT_MAX` datagrams, when `cap` has no room for
  * another, and before a datagram whose ECN codepoint would not be the first's.
+ *
+ * @param conn The connection to send for.
+ * @param now The caller's time in milliseconds.
+ * @param buf Where the flight is written.
+ * @param at The index in `buf` of the flight's first byte.
+ * @param cap The bytes of `buf` from `at` the flight may use; under `QUIC_CONN_DATAGRAM_SIZE` sends nothing.
+ * @param flight Overwritten with the flight's datagram count, segment size and ECN codepoint; all 0
+ *   when nothing was written.
+ * @returns The flight's length in bytes, or 0 when the pacer holds it back or nothing is due.
  */
 export const quicListenerTakeFlight = (
   conn: QuicConnection,
@@ -1001,6 +1061,15 @@ export const quicListenerTakeFlight = (
  * `now`: one datagram when `segment` is 0, else a GRO receive cut every
  * `segment` bytes (the last may be shorter). Each is read in place. Answers
  * how many it handed over.
+ *
+ * @param conn The connection the datagrams belong to.
+ * @param buf The receive buffer; read, not kept.
+ * @param off The index in `buf` of the first byte received.
+ * @param len The bytes received.
+ * @param segment The GRO segment size in bytes, or 0 (or less) for a single datagram.
+ * @param now The caller's time in milliseconds.
+ * @returns How many datagrams were handed over: always 1 when `segment` is 0 or less, whatever `len`;
+ *   otherwise one per `segment` bytes of `len`, rounded up, which is 0 when `len` is 0 or less.
  */
 export const quicListenerReceiveSegments = (
   conn: QuicConnection,

@@ -56,6 +56,7 @@ import {
   HTTP3_SERVER_SLOT_BYTES,
   RUNTIME_BUDGETS,
   TLS_TCP_START_BYTES,
+  WASM_HOST_SIZE_BUDGETS,
 } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
@@ -29346,6 +29347,364 @@ if (!only || "range_export".includes(only) || only.startsWith("range_export") ||
     target.checks === 2,
     `found ${target.checks}\n${target.stderr}`
   )
+}
+
+// ---- WP50 stage 1: a wasm module for a page, loaded without fetch ------------------
+// docs/wp50-wasm-host.md. `--profile wasm-host` links the wasm profile's inputs with an
+// explicit export list, `--memory` fixes the memory, `--inline` writes the bytes as an ES
+// module, the loader's `loadSync` instantiates them without awaiting, and `nish/vite`
+// puts the three together for a page. `wasm-host` covers the link and the loader,
+// `vite` the plugin, `wasm-size` the bytes a page ships.
+/** Compile examples/<stem>.ts for wasm32 with its loader into <dir>; the IR's path, or null. */
+const wasmHostCompile = (dir, stem) => {
+  fs.mkdirSync(dir, { recursive: true })
+  const ll = path.join(dir, `${stem}.ll`)
+  const r = spawnSync(
+    NISH,
+    [`examples/${stem}.ts`, "--target", "wasm32", "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", ll],
+    { cwd: root, encoding: "utf8" }
+  )
+  return r.status === 0 ? ll : null
+}
+/** scripts/build.sh on <inputs> with <flags>; the spawn result. */
+const wasmHostLink = (inputs, flags) =>
+  spawnSync("bash", ["scripts/build.sh", ...inputs, ...flags], { cwd: root, encoding: "utf8" })
+/**
+ * What in a loader keeps a bundler from inlining it as it is: a static or dynamic
+ * `import`, `import.meta.url`, `new URL(`, or an `await` outside a function (a line at
+ * the top level, unindented, that awaits). The `imports` parameter is no import.
+ */
+const unbundlable = (text) =>
+  [
+    [/^\s*import[\s{*"']/m, "an import statement"],
+    [/\bimport\s*\(/, "a dynamic import"],
+    [/import\.meta\.url/, "import.meta.url"],
+    [/new URL\(/, "new URL("],
+    [/^(?!\s)[^\n]*\bawait\b/m, "a top-level await"],
+  ]
+    .filter(([pattern]) => pattern.test(text.replace(/^\s*(?:\/\/|\*|\/\*\*).*$/gm, "")))
+    .map(([, what]) => what)
+const wasmHostTools = () => (has("wasm-ld") ? null : "wasm-ld not installed: --profile wasm-host is not linked")
+
+if (!only || "wasm-host".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(why)
+  } else {
+    const dir = path.join(buildDir, "wasm-host")
+    const addLl = wasmHostCompile(dir, "add")
+    const arraysLl = wasmHostCompile(dir, "arrays")
+    check("wasm-host: examples/add.ts and examples/arrays.ts compile with --emit-dts", addLl !== null && arraysLl !== null)
+    if (addLl !== null && arraysLl !== null) {
+      const runtimeWasm = "runtime/runtime-wasm.c"
+      const at = (name) => path.join(dir, name)
+
+      // `--profile wasm` is the link it was before the profile beside it: build.sh's
+      // module and the one clang writes from the flags the profile always passed.
+      for (const [stem, inputs] of [
+        ["add", [addLl]],
+        ["arrays", [arraysLl, runtimeWasm]],
+      ]) {
+        const viaScript = wasmHostLink(inputs, ["-o", at(`${stem}.wasm-profile.wasm`), "--profile", "wasm"])
+        const direct = spawnSync(
+          "clang",
+          [
+            "-Wno-override-module",
+            "--target=wasm32-unknown-unknown",
+            "-Oz",
+            "-nostdlib",
+            "-mbulk-memory",
+            "-Wl,--no-entry",
+            "-Wl,--export-all",
+            "-Wl,--strip-all",
+            "-Wl,--gc-sections",
+            ...inputs,
+            "-o",
+            at(`${stem}.direct.wasm`),
+          ],
+          { cwd: root, encoding: "utf8" }
+        )
+        check(
+          `wasm-host: --profile wasm still links ${stem} byte for byte as --export-all did`,
+          viaScript.status === 0 &&
+            direct.status === 0 &&
+            fs.readFileSync(at(`${stem}.wasm-profile.wasm`)).equals(fs.readFileSync(at(`${stem}.direct.wasm`))),
+          `${shown(viaScript)}\n${shown(direct)}`
+        )
+      }
+
+      const addLink = wasmHostLink([addLl], ["-o", at("add.wasm"), "--profile", "wasm-host", "--inline", at("add.bytes.mjs")])
+      const arraysLink = wasmHostLink([arraysLl, runtimeWasm], [
+        "-o",
+        at("arrays.wasm"),
+        "--profile",
+        "wasm-host",
+        "--inline",
+        at("arrays.bytes.mjs"),
+      ])
+      check(
+        "wasm-host: the build line names the profile and whether wasm-opt ran",
+        addLink.status === 0 &&
+          arraysLink.status === 0 &&
+          /\(wasm-host, (?:wasm-opt -Oz|no wasm-opt)\)\n$/.test(addLink.stdout) &&
+          /\(wasm-host, (?:wasm-opt -Oz|no wasm-opt)\)\n$/.test(arraysLink.stdout),
+        `${shown(addLink)}\n${shown(arraysLink)}`
+      )
+      if (addLink.status === 0 && arraysLink.status === 0) {
+        const exportsOf = (file) =>
+          WebAssembly.Module.exports(new WebAssembly.Module(fs.readFileSync(file)))
+            .map((e) => e.name)
+            .sort()
+        const arraysExports = exportsOf(at("arrays.wasm"))
+        const arraysWanted = [
+          "memory",
+          "sumF64",
+          "sumI32",
+          "scale",
+          "squares",
+          "fill",
+          "widen",
+          "sumI64",
+          "nish_reset_arena",
+          "nish_free_arena",
+          "nish_arena_mark",
+          "nish_arena_release",
+          "nish_alloc_array",
+        ].sort()
+        check(
+          "wasm-host: arrays exports its functions, memory and the five runtime entry points, nothing else",
+          JSON.stringify(arraysExports) === JSON.stringify(arraysWanted),
+          `exports: ${arraysExports.join(", ")}`
+        )
+        const addExports = exportsOf(at("add.wasm"))
+        check(
+          "wasm-host: add, linked without the runtime, exports add and memory alone",
+          JSON.stringify(addExports) === JSON.stringify(["add", "memory"]),
+          `exports: ${addExports.join(", ")}`
+        )
+        const inlined = await import(pathToFileURL(at("arrays.bytes.mjs")).href)
+        check(
+          "wasm-host: --inline writes the module's bytes as `export const bytes`",
+          inlined.bytes instanceof Uint8Array && Buffer.from(inlined.bytes).equals(fs.readFileSync(at("arrays.wasm")))
+        )
+
+        // The loader: `load` with one argument as before, `loadSync` on bytes and on a
+        // compiled module, and one body behind both.
+        const loader = await import(pathToFileURL(at("arrays.mjs")).href)
+        const wasmBytes = fs.readFileSync(at("arrays.wasm"))
+        const sample = (x) => [x.sumF64(new Float64Array([1, 2, 3.5])), [...x.squares(4)].join(",")].join(" ")
+        const viaLoad = sample(await loader.load(wasmBytes))
+        const viaSync = sample(loader.loadSync(inlined.bytes))
+        const viaModule = sample(loader.loadSync(new WebAssembly.Module(wasmBytes), {}))
+        const viaLoadModule = sample(await loader.load(new WebAssembly.Module(wasmBytes), {}))
+        check(
+          "wasm-host: load(bytes) with one argument, loadSync(bytes), loadSync(module) and load(module, {}) agree",
+          [viaLoad, viaSync, viaModule, viaLoadModule].every((s) => s === "6.5 0,1,4,9"),
+          `load: ${viaLoad}; loadSync: ${viaSync}; loadSync(module): ${viaModule}; load(module): ${viaLoadModule}`
+        )
+        for (const stem of ["add", "arrays"]) {
+          for (const file of [`${stem}.mjs`, `${stem}.bytes.mjs`]) {
+            const found = unbundlable(fs.readFileSync(at(file), "utf8"))
+            check(
+              `wasm-host: ${file} imports nothing, reads no URL and awaits nothing at the top level`,
+              found.length === 0,
+              `found ${found.join(", ")}`
+            )
+          }
+        }
+        // The check itself, on the four things it refuses.
+        const refused = [
+          'import { x } from "./y.mjs"\n',
+          'const m = await import("./y.mjs")\n',
+          "const u = new URL('a.wasm', import.meta.url)\n",
+          "export const e = await load(bytes)\n",
+        ].filter((text) => unbundlable(text).length > 0)
+        check("wasm-host: the bundler check refuses an import, a URL and a top-level await", refused.length === 4)
+      }
+
+      // `--memory`: initial and maximum the same, so the buffer never moves.
+      const fixed = wasmHostLink([arraysLl, runtimeWasm], ["-o", at("arrays.16.wasm"), "--profile", "wasm-host", "--memory", "16"])
+      let fixedReading = shown(fixed)
+      let fixedOk = false
+      if (fixed.status === 0) {
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(at("arrays.16.wasm"))), {})
+        const memory = instance.exports.memory
+        let grew = true
+        try {
+          memory.grow(1)
+        } catch (e) {
+          grew = !(e instanceof RangeError)
+        }
+        fixedOk = memory.buffer.byteLength === 16 * 1048576 && !grew
+        fixedReading = `buffer ${memory.buffer.byteLength} bytes, grow ${grew ? "succeeded" : "refused"}`
+      }
+      check("wasm-host: --memory 16 fixes the memory at 16 MiB, initial and maximum", fixedOk, fixedReading)
+
+      // The refusals: both flags take wasm-host alone, and the size is checked.
+      for (const [flags, what] of [
+        [["--profile", "wasm", "--memory", "16"], "--memory on --profile wasm"],
+        [["--profile", "speed", "--memory", "16"], "--memory on --profile speed"],
+        [["--profile", "wasm", "--inline", at("refused.mjs")], "--inline on --profile wasm"],
+        [["--profile", "wasi", "--inline", at("refused.mjs")], "--inline on --profile wasi"],
+        [["--profile", "wasm-host", "--memory", "0"], "--memory 0"],
+        [["--profile", "wasm-host", "--memory", "4097"], "--memory 4097"],
+        [["--profile", "wasm-host", "--memory", "016"], "--memory 016"],
+        [["--profile", "wasm-host", "--memory", "1.5"], "--memory 1.5"],
+      ]) {
+        const r = wasmHostLink([addLl], ["-o", at("refused.wasm"), ...flags])
+        check(
+          `wasm-host: build.sh refuses ${what} with exit 2`,
+          r.status === 2 && /^error: --(memory|inline) /m.test(r.stderr) && !fs.existsSync(at("refused.mjs")),
+          shown(r)
+        )
+      }
+    }
+  }
+}
+
+if (!only || "vite".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(why)
+  } else {
+    // The plugin's hooks driven as Vite would, with no Vite: through the package's own
+    // `nish/vite` export, the compiler under test, and an app directory of one entry.
+    const { default: nish } = await import("nish/vite")
+    const app = path.join(buildDir, "vite-app")
+    fs.rmSync(app, { recursive: true, force: true })
+    fs.mkdirSync(path.join(app, "src"), { recursive: true })
+    fs.copyFileSync(path.join(root, "examples", "arrays.ts"), path.join(app, "src", "arrays.ts"))
+    fs.writeFileSync(
+      path.join(app, "src", "clash.ts"),
+      "export const bytes = (n: number): number => n + 1\nexport const loadSync = (n: number): number => n * 2\n"
+    )
+    const main = path.join(app, "src", "main.ts")
+    const plugin = nish({ compiler: NISH, entries: ["src/arrays.ts", "src/clash.ts"] })
+    check(
+      "vite: nish/vite's default export is the plugin, enforced before Vite's own",
+      typeof nish === "function" && plugin.name === "nish" && plugin.enforce === "pre"
+    )
+    plugin.configResolved({ root: app, command: "serve", cacheDir: path.join(app, ".cache") })
+    const served = await plugin.resolveId("./arrays.ts", main)
+    check("vite: under `vite serve` the entry is left to Vite", served === null, `resolved to ${served}`)
+    plugin.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
+    const relative = await plugin.resolveId("./arrays.ts", main)
+    const fromRoot = await plugin.resolveId("/src/arrays.ts", path.join(app, "index.html"))
+    const other = await plugin.resolveId("./other.ts", main)
+    check(
+      "vite: in a build an entry resolves to the generated module, from the importer or the root, and nothing else does",
+      typeof relative === "string" && relative.startsWith("\0") && fromRoot === relative && other === null,
+      `relative ${JSON.stringify(relative)}, from root ${JSON.stringify(fromRoot)}, other ${JSON.stringify(other)}`
+    )
+    let code = null
+    let failure = ""
+    try {
+      code = typeof relative === "string" ? await plugin.load(relative) : null
+    } catch (e) {
+      failure = String(e.stderr ?? e)
+    }
+    check("vite: load compiles and links the entry", typeof code === "string", failure)
+    if (typeof code === "string") {
+      const found = unbundlable(code.replace(/^import \{ \w+ as \w+ \} from "[^"]+";$/gm, ""))
+      check(
+        "vite: the generated module imports the loader and the bytes and awaits nothing",
+        /^import \{ loadSync as __nishLoadSync \} from /m.test(code) &&
+          /^import \{ bytes as __nishBytes \} from /m.test(code) &&
+          code.includes("__nishLoadSync(__nishBytes, {})") &&
+          found.length === 0,
+        `${found.join(", ")}\n${code}`
+      )
+      const generated = path.join(app, "generated.mjs")
+      fs.writeFileSync(generated, code)
+      const page = await import(pathToFileURL(generated).href)
+      check(
+        "vite: the generated module's named and default exports call the wasm build",
+        page.sumF64(new Float64Array([1, 2, 3.5])) === 6.5 &&
+          [...page.squares(4)].join(",") === "0,1,4,9" &&
+          page.default.memory instanceof WebAssembly.Memory,
+        Object.keys(page).join(", ")
+      )
+    }
+    // An export named like one of the generated module's own bindings is still
+    // exported, and the module still parses.
+    let clash = null
+    let clashFailure = ""
+    try {
+      const id = await plugin.resolveId("./clash.ts", main)
+      clash = typeof id === "string" ? await plugin.load(id) : null
+    } catch (e) {
+      clashFailure = String(e.stderr ?? e)
+    }
+    if (typeof clash === "string") {
+      const generated = path.join(app, "generated-clash.mjs")
+      fs.writeFileSync(generated, clash)
+      try {
+        const page = await import(pathToFileURL(generated).href)
+        check(
+          "vite: an entry exporting `bytes` and `loadSync` gets both, named and on the default export",
+          page.bytes(2) === 3 && page.loadSync(5) === 10 && page.default.bytes(4) === 5,
+          Object.keys(page).join(", ")
+        )
+      } catch (e) {
+        check("vite: an entry exporting `bytes` and `loadSync` gets both, named and on the default export", false, `${e}\n${clash}`)
+      }
+    } else {
+      check("vite: an entry exporting `bytes` and `loadSync` gets both, named and on the default export", false, clashFailure)
+    }
+    check("vite: load leaves every other id to Vite", (await plugin.load(path.join(app, "src", "main.ts"))) === null)
+  }
+}
+
+if (!only || "wasm-size".includes(only)) {
+  // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
+  const host = `${process.platform}-${process.arch}`
+  const why =
+    wasmHostTools() ??
+    (host === "linux-x64"
+      ? null
+      : `wasm-size: measured on linux-x64 and this host is ${host}; a byte-exact ceiling is a fact about one compiler`)
+  if (why !== null) {
+    skip(why)
+  } else {
+    const dir = path.join(buildDir, "wasm-size")
+    const sizes = (file) => {
+      const bytes = fs.readFileSync(file)
+      return [bytes.length, zlib.gzipSync(bytes, { level: 9 }).length, zlib.brotliCompressSync(bytes).length]
+    }
+    for (const { src, runtime, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
+      const stem = path.basename(src, ".ts")
+      const ll = wasmHostCompile(dir, stem)
+      const link =
+        ll === null
+          ? null
+          : wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], [
+              "-o",
+              path.join(dir, `${stem}.wasm`),
+              "--profile",
+              "wasm-host",
+              "--inline",
+              path.join(dir, `${stem}.bytes.mjs`),
+            ])
+      if (link?.status !== 0) {
+        check(`wasm-size: ${src} builds under --profile wasm-host`, false, link === null ? "compile failed" : shown(link))
+        continue
+      }
+      for (const [part, file] of [
+        ["wasm", `${stem}.wasm`],
+        ["loader", `${stem}.mjs`],
+        ["inline", `${stem}.bytes.mjs`],
+      ]) {
+        const measured = sizes(path.join(dir, file))
+        const ceiling = ceilings[part]
+        check(
+          `wasm-size: ${file} is at most ${ceiling.join(" / ")} bytes raw / gzip -9 / brotli`,
+          measured.every((n, i) => n <= ceiling[i]),
+          `measured ${measured.join(" / ")}; shrink it, or raise WASM_HOST_SIZE_BUDGETS in ` +
+            "tests/runtime-budgets.js with the measurement and why"
+        )
+      }
+    }
+  }
 }
 
 // ---- WP7: the runtime .text budgets ------------------------------------------------

@@ -5,9 +5,14 @@
  *
  *     import { RSA_HASH_SHA256, RsaPublicKey, rsaParsePublicKey, rsaVerifyPkcs1v15, rsaVerifyPss } from "nish/crypto/rsa";
  *
- *     const key: RsaPublicKey | null = rsaParsePublicKey(der);   // PKCS#1 RSAPublicKey
- *     const ok: boolean = key !== null && rsaVerifyPkcs1v15(key, RSA_HASH_SHA256, message, sig);
- *     const pss: boolean = key !== null && rsaVerifyPss(key, RSA_HASH_SHA256, 32, message, sig);
+ *     // der: a PKCS#1 RSAPublicKey; sig: as long as the modulus
+ *     const verify = (der: u8[], message: u8[], sig: u8[]): boolean => {
+ *       const key: RsaPublicKey | null = rsaParsePublicKey(der);
+ *       if (key === null) {
+ *         return false;
+ *       }
+ *       return rsaVerifyPkcs1v15(key, RSA_HASH_SHA256, message, sig) || rsaVerifyPss(key, RSA_HASH_SHA256, 32, message, sig);
+ *     };
  *
  * **The key** is the DER of PKCS#1's `RSAPublicKey ::= SEQUENCE { modulus
  * INTEGER, publicExponent INTEGER }` (RFC 8017 §A.1.1), nothing before it and
@@ -87,6 +92,13 @@ export class RsaPublicKey {
   /** The modulus's length in bits: 2048 for a 2048-bit key. */
   bits: i32
 
+  /**
+   * Keeps the arrays given, without a copy or a check.
+   *
+   * @param n The modulus, big-endian with no leading zero byte.
+   * @param e The public exponent, big-endian with no leading zero byte.
+   * @param bits The modulus's length in bits.
+   */
   constructor(n: u8[], e: u8[], bits: i32) {
     this.n = n
     this.e = e
@@ -213,6 +225,10 @@ const rsaBytesBelow = (a: u8[], b: u8[]): boolean => {
  * after it; for a modulus that is even or not `RSA_MIN_BITS` to
  * `RSA_MAX_BITS` bits long; and for an exponent that is even, below 3, or
  * not below 2^32 (which also keeps it below the modulus).
+ *
+ * @param der The key's DER, nothing before it and nothing after it.
+ * @returns A new key whose modulus and exponent are copied out of `der`, or
+ *   `null`.
  */
 export const rsaParsePublicKey = (der: u8[]): RsaPublicKey | null => {
   const total: i32 = toI32(der.length)
@@ -553,6 +569,12 @@ const rsaSameBytes = (a: u8[], b: u8[]): boolean => {
  * §9.2) and compared with what it does open to. `false` for an unknown hash
  * id, a modulus too short for the encoding, a signature that is not exactly
  * as long as the modulus or not below it, and any other bytes.
+ *
+ * @param key The signer's public key.
+ * @param hash `RSA_HASH_SHA256`, `RSA_HASH_SHA384` or `RSA_HASH_SHA512`.
+ * @param msg The message signed, whole; it is hashed here.
+ * @param sig The signature, big-endian.
+ * @returns `true` only when `sig` is `key`'s signature of `msg`.
  */
 export const rsaVerifyPkcs1v15 = (key: RsaPublicKey, hash: i32, msg: u8[], sig: u8[]): boolean => {
   const hashSize: i32 = rsaHashSize(hash)
@@ -613,6 +635,14 @@ const rsaMgf1 = (hash: i32, seed: u8[], length: i32): u8[] => {
  * the salt, and the hash. `false` for any of them, an unknown hash id, a
  * negative `saltLen`, and a signature that is not exactly as long as the
  * modulus or not below it.
+ *
+ * @param key The signer's public key.
+ * @param hash `RSA_HASH_SHA256`, `RSA_HASH_SHA384` or `RSA_HASH_SHA512`.
+ * @param saltLen The salt's length in bytes; a signature with any other
+ *   length is refused.
+ * @param msg The message signed, whole; it is hashed here.
+ * @param sig The signature, big-endian.
+ * @returns `true` only when `sig` is `key`'s signature of `msg`.
  */
 export const rsaVerifyPss = (key: RsaPublicKey, hash: i32, saltLen: i32, msg: u8[], sig: u8[]): boolean => {
   const hashSize: i32 = rsaHashSize(hash)

@@ -265,21 +265,27 @@ export const percentDecodePathSegment = (
  * `percentDecodePathSegment`.
  */
 export class UrlPathSegments {
+  /** The array the path is read from, as `reset` was given it. */
   bytes: u8[]
   /** The current segment's first byte. */
   start: i32 = 0
   /** The current segment's length in raw bytes. */
   length: i32 = 0
-  pos: i32 = 0
-  end: i32 = 0
-  done: boolean = true
+  private pos: i32 = 0
+  private end: i32 = 0
+  private done: boolean = true
 
   /** An iterator over nothing until `reset`. */
   constructor() {
     this.bytes = new Array<u8>(0)
   }
 
-  /** Starts over on the path `bytes[off, off + len)`; panics when the window is outside the array. */
+  /**
+   * Starts over on the path `bytes[off, off + len)`; panics when the window is outside the array.
+   * @param bytes The array that holds the path.
+   * @param off Where the path starts in `bytes`.
+   * @param len How many bytes the path takes.
+   */
   reset(bytes: u8[], off: i32, len: i32): void {
     urlCheckWindow(bytes, off, len, "UrlPathSegments")
     this.bytes = bytes
@@ -293,7 +299,10 @@ export class UrlPathSegments {
     }
   }
 
-  /** Moves to the next segment and answers true, or answers false when the path has no more. */
+  /**
+   * Moves to the next segment, whose bytes `start` and `length` then name.
+   * @returns True for a segment, false when the path has no more.
+   */
   next(): boolean {
     if (this.done) {
       return false
@@ -333,27 +342,40 @@ export class UrlQueryLimits {
  * with `percentDecode` and `URL_DECODE_FORM`.
  */
 export class UrlQuery {
+  /** @internal Read by `urlQueryFind`. */
   bytes: u8[]
+  /** Where the current pair's key starts in `bytes`. */
   keyStart: i32 = 0
+  /** The current pair's key length in raw bytes. */
   keyLength: i32 = 0
+  /** Where the current pair's value starts in `bytes`. */
   valueStart: i32 = 0
+  /** The current pair's value length in raw bytes, 0 when it has none. */
   valueLength: i32 = 0
   /** 0, or the `URL_QUERY_ERR_*` code every later `next()` answers. */
   failed: i32 = 0
-  maxPairs: i32
-  pos: i32 = 0
-  end: i32 = 0
-  count: i32 = 0
+  private maxPairs: i32
+  private pos: i32 = 0
+  private end: i32 = 0
+  private count: i32 = 0
   /** False for a pair written without `=` (`a`), true for `a=` with `valueLength` 0. */
   hasValue: boolean = false
 
-  /** An iterator over nothing until `reset`, with the cap in `limits`. */
+  /**
+   * An iterator over nothing until `reset`, with the cap in `limits`.
+   * @param limits The most pairs one query yields.
+   */
   constructor(limits: UrlQueryLimits) {
     this.bytes = new Array<u8>(0)
     this.maxPairs = limits.maxPairs < 0 ? 0 : limits.maxPairs
   }
 
-  /** Starts over on the query `bytes[off, off + len)`, clearing `failed`; panics when the window is outside the array. */
+  /**
+   * Starts over on the query `bytes[off, off + len)`, clearing `failed`; panics when the window is outside the array.
+   * @param bytes The array that holds the query.
+   * @param off Where the query starts in `bytes`, past its `?`.
+   * @param len How many bytes the query takes.
+   */
   reset(bytes: u8[], off: i32, len: i32): void {
     urlCheckWindow(bytes, off, len, "UrlQuery")
     this.bytes = bytes
@@ -368,7 +390,10 @@ export class UrlQuery {
     this.hasValue = false
   }
 
-  /** `URL_QUERY_PAIR` with the windows set to the next pair, `URL_QUERY_END`, or `failed`. */
+  /**
+   * Moves to the next pair, setting the key and value windows.
+   * @returns `URL_QUERY_PAIR` for a pair, `URL_QUERY_END` when the query has no more, or `failed`.
+   */
   next(): i32 {
     if (this.failed !== 0) {
       return this.failed

@@ -197,6 +197,7 @@ export const H1_POOL_FULL: i32 = -105
 
 /** Interest bits, the same as `nish/net/tls/record-server`'s: the low two are `pollModify`'s events. */
 export const H1_WANT_READ: i32 = 1
+/** The slot has output waiting for the socket: ask the readiness loop for writable. */
 export const H1_WANT_WRITE: i32 = 2
 /** The slot's connection is over and every byte is sent: `close` it. */
 export const H1_DONE: i32 = 16
@@ -286,19 +287,19 @@ const http1ServerCopy = (out: u8[], at: i32, src: readonly u8[], off: i32, n: i3
  */
 export class HttpDate {
   /** The IMF-fixdate of `second`: what `current` answers, made once. */
-  bytes: u8[]
+  private bytes: u8[]
   /** The second `bytes` holds, since 1970; -1 before the first `current`. */
-  second: i64 = -1
+  private second: i64 = -1
   /** The instant `pin` fixed, in milliseconds since 1970, while `pinned`. */
-  pinnedMs: i64 = 0
+  private pinnedMs: i64 = 0
   /** The clock reading `hold` took, in milliseconds since 1970, while `held`. */
-  heldMs: i64 = 0
+  private heldMs: i64 = 0
   /** How many times `bytes` has been rewritten. */
-  rewrites: i64 = 0
+  private rewrites: i64 = 0
   /** How many times the wall clock has been read. */
-  reads: i64 = 0
-  pinned: boolean = false
-  held: boolean = false
+  private reads: i64 = 0
+  private pinned: boolean = false
+  private held: boolean = false
 
   /** A date on the wall clock, with nothing formatted yet. */
   constructor() {
@@ -311,6 +312,8 @@ export class HttpDate {
    * steps back. It allocates nothing, and the array is the same one each time,
    * so a caller copies it out rather than keeping it. A wall clock before 1970
    * or past 9999 answers the nearer of the two ends.
+   *
+   * @returns the object's own 29-byte IMF-fixdate of the current second, to copy before the next call rewrites it
    */
   current(): u8[] {
     let ms: i64 = this.pinnedMs
@@ -335,6 +338,9 @@ export class HttpDate {
    * Makes `current` answer `unixMs`, milliseconds since 1970, until `unpin`.
    * False, and nothing changed, for an instant before 1970-01-01T00:00:00Z or
    * after 9999-12-31T23:59:59.999Z, which an IMF-fixdate cannot name.
+   *
+   * @param unixMs the instant every later `current` names, in milliseconds since 1970
+   * @returns true once the date is pinned; false when the instant is out of the IMF-fixdate's range
    */
   pin(unixMs: i64): boolean {
     if (unixMs < 0 || unixMs / 1000 > HTTP_DATE_LAST_SECOND) {
@@ -368,17 +374,25 @@ export class HttpDate {
   }
 
   /** The wall clock, in milliseconds since 1970. */
-  now(): i64 {
+  private now(): i64 {
     this.reads += 1
     return toI64(Date.now())
   }
 
-  /** How many times the wall clock has been read: once per `hold`, and once per `current` outside one. */
+  /**
+   * How many times the wall clock has been read: once per `hold`, and once per `current` outside one.
+   *
+   * @returns the count of `Date.now()` reads since the date was made, for a test that checks a serve call reads once
+   */
   clockReads(): i64 {
     return this.reads
   }
 
-  /** How many times the bytes have been rewritten: one per second that `current` was asked for, at most. */
+  /**
+   * How many times the bytes have been rewritten: one per second that `current` was asked for, at most.
+   *
+   * @returns the count of IMF-fixdate formats since the date was made, for a test that checks the once-a-second promise
+   */
   formats(): i64 {
     return this.rewrites
   }
@@ -495,16 +509,25 @@ const http1ServerReserved = (name: u8[]): boolean =>
 export class Http1OutputPool {
   // Widest first, so the layout packs without padding.
   free: u8[][]
-  size: i32 = 0
+  private size: i32 = 0
   /** How many buffers the pool has made. */
   made: i32 = 0
 
+  /**
+   * An empty pool: no buffer is made until the first `take`.
+   *
+   * @param size the length in bytes of every buffer the pool makes
+   */
   constructor(size: i32) {
     this.size = size
     this.free = []
   }
 
-  /** A buffer of `size` bytes: the one given back last, or a new one. */
+  /**
+   * A buffer of `size` bytes: the one given back last, or a new one.
+   *
+   * @internal Called by `Http1Connection` in this module, when it first needs room to write and when it unparks its input and head buffers.
+   */
   take(): u8[] {
     if (this.free.length > 0) {
       const buf: u8[] = this.free[this.free.length - 1]
@@ -515,7 +538,11 @@ export class Http1OutputPool {
     return new Array<u8>(this.size)
   }
 
-  /** Takes back a buffer `take` gave. */
+  /**
+   * Takes back a buffer `take` gave.
+   *
+   * @internal Called by `Http1Connection` in this module, from `release` and `park`, once a borrowed buffer holds nothing it still needs.
+   */
   give(buf: u8[]): void {
     this.free.push(buf)
   }
@@ -564,14 +591,20 @@ export class Http1Connection {
   lastActive: i64 = 0
   /** When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. */
   headSince: i64 = 0
-  state: i32 = 0
-  response: i32 = 0
+  private state: i32 = 0
+  private response: i32 = 0
   /**
    * How the response's body is framed: a length (0 or more), `HTTP1_CHUNKED`,
    * or `HTTP1_NO_BODY` for one that ends with the connection.
+   *
+   * @internal Read by `std/net/handler.ts` to tell a sized response from a chunked one when it checks a write against what is owed.
    */
   responseFraming: i32 = 0
-  /** A response with a length: the bytes it still owes. */
+  /**
+   * A response with a length: the bytes it still owes.
+   *
+   * @internal Read by `std/net/handler.ts` to know how much of a sized body is still to write.
+   */
   responseLeft: i32 = 0
   outputStart: i32 = 0
   outputEnd: i32 = 0
@@ -581,24 +614,24 @@ export class Http1Connection {
    * the empty one is out of cache by the time a resting connection's next
    * request comes. Only the connection assigns `output`, and with it this.
    */
-  outputCap: i32 = 0
+  private outputCap: i32 = 0
   /** The most input the connection buffers, unread: the cap `inputRoom` holds it to. */
   bufferLimit: i32 = 0
   /** A request's head has been read and its exchange is not over. */
-  requestOpen: boolean = false
+  private requestOpen: boolean = false
   /** The request's body has been read to its end. */
-  requestEnded: boolean = false
+  private requestEnded: boolean = false
   /** The response carries no body (HEAD, 204, 304): what is written is dropped. */
   responseEmpty: boolean = false
   /** The connection closes once this exchange is over. */
   closeAfter: boolean = false
   /** The program accepted the request's WebSocket handshake. */
-  upgraded: boolean = false
+  private upgraded: boolean = false
   /** A write was held back; `next` answers nothing but `H1_WRITE` until there is room. */
   writeHeld: boolean = false
-  pongPending: boolean = false
+  private pongPending: boolean = false
   /** The peer's byte stream has ended. */
-  inputEnded: boolean = false
+  private inputEnded: boolean = false
   /** A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. */
   headTimed: boolean = false
   dataStart: i32 = 0
@@ -607,7 +640,7 @@ export class Http1Connection {
   opcode: i32 = 0
   /** `H1_ERROR`'s HTTP status or WebSocket close code, or `H1_WS_CLOSE`'s close code. */
   status: i32 = 0
-  pongLength: i32 = 0
+  private pongLength: i32 = 0
   /**
    * The TCP maximum segment size the program sets for this connection, for
    * `respondEncoded` under `HttpCompressor.segmentMode`; 0, the default,
@@ -625,7 +658,7 @@ export class Http1Connection {
    * as `write` does.
    */
   fd: i32 = -1
-  config: Http1Config
+  private config: Http1Config
   /**
    * The frame decoder: made when the slot first switches to WebSocket, so a
    * slot that only ever speaks HTTP never holds its buffers, then kept for
@@ -637,9 +670,13 @@ export class Http1Connection {
   /** A ping's payload, kept until its pong fits: empty until the first ping. */
   pong: u8[]
   /** No fields, for the responses the connection writes itself: made once. */
-  noFields: u8[][]
+  private noFields: u8[][]
 
-  /** A connection under `config`. A cap outside what the connection can work with panics. */
+  /**
+   * A connection under `config`. A cap outside what the connection can work with panics.
+   *
+   * @param config the caps the connection is held to, read now and kept
+   */
   constructor(config: Http1Config) {
     const big: i32 = 1073741824
     const one: i32 = 1
@@ -780,12 +817,20 @@ export class Http1Connection {
 
   // ---- Bytes in and out ---------------------------------------------------------
 
-  /** The most input the connection holds unread: what `inputRoom` counts against. */
+  /**
+   * The most input the connection holds unread: what `inputRoom` counts against.
+   *
+   * @returns the cap in bytes on unread input: the buffer limit for HTTP, the message cap plus a frame header for WebSocket
+   */
   inputLimit(): i32 {
     return this.state === H1_S_WEBSOCKET ? this.config.maxMessage + 14 : this.bufferLimit
   }
 
-  /** How many bytes `feed` would take now: none while a write is held back or once the connection is closing. */
+  /**
+   * How many bytes `feed` would take now: none while a write is held back or once the connection is closing.
+   *
+   * @returns how many more input bytes the connection takes now; 0 asks the carrier to stop reading
+   */
   inputRoom(): i32 {
     if (this.writeHeld || this.inputEnded || this.state === H1_S_CLOSING || this.state === H1_S_FAILED) {
       return 0
@@ -806,6 +851,11 @@ export class Http1Connection {
    * Takes as much of `buf[off .. off + len)` as `inputRoom` allows and
    * answers how much; the rest is the caller's to feed again later. A window
    * outside `buf` panics.
+   *
+   * @param buf the bytes the carrier read from the peer
+   * @param off where in `buf` the new bytes start
+   * @param len how many new bytes there are
+   * @returns how many of them the connection took, from `off`; the rest is the caller's to feed again
    */
   feed(buf: u8[], off: i32, len: i32): i32 {
     http1ServerCheckWindow("Http1Connection.feed", buf, off, len)
@@ -845,7 +895,7 @@ export class Http1Connection {
    * is written into it, which is why `room` calls it. It allocates only when
    * the pool has no free buffer, or for a connection's own, once.
    */
-  acquire(): void {
+  private acquire(): void {
     if (this.outputCap > 0) {
       return
     }
@@ -874,7 +924,11 @@ export class Http1Connection {
     this.outputEnd = 0
   }
 
-  /** Marks the first `n` bytes of the output sent. */
+  /**
+   * Marks the first `n` bytes of the output sent.
+   *
+   * @param n how many bytes from `outputStart` the carrier sent; more than are waiting counts as all of them
+   */
   consume(n: i32): void {
     const pending: i32 = this.outputEnd - this.outputStart
     this.outputStart = this.outputStart + (n < pending ? n : pending)
@@ -884,12 +938,20 @@ export class Http1Connection {
     }
   }
 
-  /** Whether the output holds bytes to send. */
+  /**
+   * Whether the output holds bytes to send.
+   *
+   * @returns true while `output[outputStart .. outputEnd)` is not empty, so the carrier should wait for writable
+   */
   wantsWrite(): boolean {
     return this.outputEnd > this.outputStart
   }
 
-  /** Whether the connection is over and everything is sent: the carrier closes it. */
+  /**
+   * Whether the connection is over and everything is sent: the carrier closes it.
+   *
+   * @returns true once the connection is closing or failed and no byte or pong is left to send
+   */
   isDone(): boolean {
     return (
       (this.state === H1_S_CLOSING || this.state === H1_S_FAILED) && !this.wantsWrite() && !this.pongPending
@@ -897,7 +959,7 @@ export class Http1Connection {
   }
 
   /** The room at the end of the output, once what was sent is moved out of the way. */
-  room(): i32 {
+  private room(): i32 {
     this.acquire()
     const output: u8[] = this.output
     const live: i32 = this.outputEnd - this.outputStart
@@ -912,14 +974,18 @@ export class Http1Connection {
   }
 
   /** The room a response or a frame may use: all but the control reserve. */
-  bodyRoom(): i32 {
+  private bodyRoom(): i32 {
     const r: i32 = this.room() - H1_CONTROL_RESERVE
     return r > 0 ? r : 0
   }
 
   // ---- Events -------------------------------------------------------------------
 
-  /** The next event; see the module comment. */
+  /**
+   * The next event; see the module comment.
+   *
+   * @returns one of the `H1_` events: `H1_NEED_MORE` when there is nothing to hand over yet, `H1_ERROR` once the connection has failed
+   */
   next(): i32 {
     if (this.state === H1_S_FAILED) {
       return H1_ERROR
@@ -943,7 +1009,7 @@ export class Http1Connection {
   }
 
   /** `next` while the connection speaks HTTP. */
-  nextRequest(): i32 {
+  private nextRequest(): i32 {
     while (true) {
       if (this.requestEnded) {
         if (this.response !== H1_R_DONE) {
@@ -1014,7 +1080,7 @@ export class Http1Connection {
    * Refuses the request with `status`: the response that says so, when none
    * has started, and the close after it. Answers `H1_ERROR`.
    */
-  fail(status: i32): i32 {
+  private fail(status: i32): i32 {
     this.status = status
     if (this.response === H1_R_NONE) {
       // The control reserve keeps room for this whatever the output holds.
@@ -1040,7 +1106,7 @@ export class Http1Connection {
   }
 
   /** The frame decoder, made on the slot's first switch to WebSocket. */
-  decoder(): WsDecoder {
+  private decoder(): WsDecoder {
     const ws: WsDecoder | null = this.ws
     if (ws !== null) {
       return ws
@@ -1051,7 +1117,7 @@ export class Http1Connection {
   }
 
   /** `next` once the slot has switched to WebSocket. */
-  nextFrame(): i32 {
+  private nextFrame(): i32 {
     while (true) {
       if (this.pongPending && !this.sendPong()) {
         return H1_NEED_MORE
@@ -1096,7 +1162,7 @@ export class Http1Connection {
   }
 
   /** Writes the pending pong if it fits, from the control reserve; answers whether it went. */
-  sendPong(): boolean {
+  private sendPong(): boolean {
     this.room()
     const end: i32 = websocketWriteFrame(
       this.output,
@@ -1117,7 +1183,7 @@ export class Http1Connection {
   }
 
   /** Writes a close frame with `code` (none for 1005), from the control reserve. */
-  sendClose(code: i32): void {
+  private sendClose(code: i32): void {
     this.room()
     const payload: u8[] | null = websocketClosePayload(code, "")
     // A code that may not be sent (1005, for a close that had none) is
@@ -1141,7 +1207,11 @@ export class Http1Connection {
 
   // ---- The response -------------------------------------------------------------
 
-  /** Whether the program may answer the current request now. */
+  /**
+   * Whether the program may answer the current request now.
+   *
+   * @returns true while a request's head has been read and no response to it has been started
+   */
   answerable(): boolean {
     return this.state === H1_S_HTTP && this.requestOpen && this.response === H1_R_NONE
   }
@@ -1155,6 +1225,13 @@ export class Http1Connection {
    * name or value `http1WriteResponseHead` refuses, or a head larger than the
    * output; `H1_AGAIN` when the output has no room for it yet (`H1_WRITE`
    * says when to try again); `H1_CLOSED` with no request to answer.
+   *
+   * @param status the HTTP status code to send, 100 to 599 but not 101
+   * @param names the program's field names, one per field; nothing checks their
+   *   case, and the reserved names are refused in any ASCII case
+   * @param values each field's value, at the same index as its name
+   * @param bodyLength the body's length in bytes, `HTTP1_CHUNKED`, or `HTTP1_NO_BODY`
+   * @returns 0 once the head is queued, else `H1_INVALID`, `H1_AGAIN` or `H1_CLOSED` as above
    */
   respond(status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 {
     if (!this.answerable()) {
@@ -1232,6 +1309,11 @@ export class Http1Connection {
    * when nothing was. A response with no body takes everything and sends
    * nothing. `H1_CLOSED` with no response under way. A window outside `buf`
    * panics.
+   *
+   * @param buf the body bytes to send, which stay the caller's
+   * @param off where in `buf` the window starts
+   * @param len how many bytes the window holds
+   * @returns how many bytes from `off` were taken, or `H1_AGAIN`, `H1_INVALID` or `H1_CLOSED` as above
    */
   write(buf: readonly u8[], off: i32, len: i32): i32 {
     http1ServerCheckWindow("Http1Connection.write", buf, off, len)
@@ -1288,6 +1370,11 @@ export class Http1Connection {
    * `H1_INVALID` for more than the response still owes; `H1_CLOSED` also
    * when the socket failed during the send, which aborts the connection. A
    * window outside `buf` panics.
+   *
+   * @param buf the body bytes to send, free for the caller to reuse once this returns
+   * @param off where in `buf` the window starts
+   * @param len how many bytes the window holds
+   * @returns how many bytes from `off` were sent or queued, or the error `write` would answer
    */
   sendBody(buf: readonly u8[], off: i32, len: i32): i32 {
     http1ServerCheckWindow("Http1Connection.sendBody", buf, off, len)
@@ -1334,6 +1421,8 @@ export class Http1Connection {
    * `H1_INVALID` for a response with a length that still owes bytes;
    * `H1_AGAIN` when the last chunk does not fit yet; `H1_CLOSED` with no
    * response under way.
+   *
+   * @returns 0 once the response is complete, else `H1_INVALID`, `H1_AGAIN` or `H1_CLOSED` as above
    */
   end(): i32 {
     if (this.response !== H1_R_BODY || this.state !== H1_S_HTTP) {
@@ -1371,6 +1460,8 @@ export class Http1Connection {
    * `HTTP_CODING_NONE` when the client refuses identity and does not take
    * gzip. Allocates nothing. Read at `H1_REQUEST`, `H1_BODY` or `H1_END`
    * alike: the head stays the request's until its response is done.
+   *
+   * @returns the `HTTP_CODING_` value the response should use, ready to pass to `respondEncoded`
    */
   acceptEncoding(): i32 {
     return this.acceptEncodingOf(HTTP_OFFER_GZIP)
@@ -1379,13 +1470,15 @@ export class Http1Connection {
   /**
    * Whether the current request's `Accept-Encoding` refuses the body as it
    * is (`httpIdentityRefused`); `respondEncoded` then gzips any body it can.
+   *
+   * @returns true when the client's `Accept-Encoding` rules out the body as it is, so only a compressed one is acceptable
    */
   identityRefused(): boolean {
     return this.acceptEncodingOf(toI32(0)) === HTTP_CODING_NONE
   }
 
   /** `httpAcceptEncoding` of the current request's `Accept-Encoding`, with `offered`. */
-  acceptEncodingOf(offered: i32): i32 {
+  private acceptEncodingOf(offered: i32): i32 {
     const parser: Http1Parser = this.parser
     const i: i32 = parser.headerIndex("accept-encoding")
     const spans: i32[] = parser.spans
@@ -1405,6 +1498,9 @@ export class Http1Connection {
    * connection's `mss` when the program set it, else `enc.mss` when the
    * program set it to other than `HTTP_DEFAULT_MSS`, else the socket's
    * (`socketMss`), else `HTTP_DEFAULT_MSS`.
+   *
+   * @param enc the compressor whose own `mss` is the fallback after this connection's
+   * @returns the segment size in bytes that segment counting uses for this connection
    */
   segmentMss(enc: HttpCompressor): i32 {
     if (this.mss > 0) {
@@ -1437,6 +1533,16 @@ export class Http1Connection {
    * larger than the output could ever hold or one `respond` refuses,
    * `H1_CLOSED` with no request to answer; 0 once it is queued. A window
    * outside `body` panics.
+   *
+   * @param status the HTTP status code to send, as `respond` takes it
+   * @param names the program's field names, without `Content-Encoding` (or `Vary` under `enc.vary`)
+   * @param values each field's value, at the same index as its name
+   * @param body the program's bytes the body is in, read but not kept
+   * @param off where in `body` the response body starts
+   * @param len how many bytes the response body holds as it is
+   * @param enc the compressor that gzips the body and adds the coding fields; its scratch output is reused per call
+   * @param coding the coding chosen for this request, normally what `acceptEncoding` answered
+   * @returns 0 once the whole response is queued, else `H1_AGAIN`, `H1_INVALID` or `H1_CLOSED` as above
    */
   respondEncoded(
     status: i32,
@@ -1524,7 +1630,7 @@ export class Http1Connection {
   }
 
   /** Takes back a head `respond` just queued: `outputEnd` and `closeAfter` as they were before it. */
-  unrespond(outputEnd: i32, closeAfter: boolean): void {
+  private unrespond(outputEnd: i32, closeAfter: boolean): void {
     this.outputEnd = outputEnd
     this.closeAfter = closeAfter
     this.response = H1_R_NONE
@@ -1542,6 +1648,9 @@ export class Http1Connection {
    * request is not a valid opening handshake (the program answers 400, or 426
    * for the wrong version) or `protocol` is not a token; `H1_AGAIN` when the
    * output has no room yet; `H1_CLOSED` with no request to answer.
+   *
+   * @param protocol the subprotocol to name in `Sec-WebSocket-Protocol`, one the client offered, or "" for none
+   * @returns 0 once the 101 is queued, else `H1_INVALID`, `H1_AGAIN` or `H1_CLOSED` as above
    */
   acceptWebSocket(protocol: string): i32 {
     if (!this.answerable()) {
@@ -1574,6 +1683,13 @@ export class Http1Connection {
    * `websocketWriteFrame` refuses, a close (that is `closeWebSocket`), or one
    * larger than the output; `H1_AGAIN` when it does not fit yet; `H1_CLOSED`
    * when the slot is not an open WebSocket. A window outside `buf` panics.
+   *
+   * @param fin true when this frame ends its message; false for a fragment that continuations follow
+   * @param opcode the frame's `WS_OP_` opcode: text, binary, continuation, ping or pong, never close
+   * @param buf the payload bytes, copied into the output
+   * @param off where in `buf` the window starts
+   * @param len how many bytes the window holds
+   * @returns 0 once the frame is queued, else `H1_INVALID`, `H1_AGAIN` or `H1_CLOSED` as above
    */
   sendFrame(fin: boolean, opcode: i32, buf: u8[], off: i32, len: i32): i32 {
     http1ServerCheckWindow("Http1Connection.sendFrame", buf, off, len)
@@ -1600,6 +1716,9 @@ export class Http1Connection {
    * then the connection is done once it is sent. Answers 0, `H1_INVALID` for a
    * code that may not be sent, or `H1_CLOSED` when the slot is not an open
    * WebSocket.
+   *
+   * @param code the close status code to send (RFC 6455 §7.4), such as 1000 for a normal close
+   * @returns 0 once the close frame is queued, else `H1_INVALID` or `H1_CLOSED` as above
    */
   closeWebSocket(code: i32): i32 {
     if (this.state !== H1_S_WEBSOCKET) {
@@ -1613,13 +1732,17 @@ export class Http1Connection {
     return 0
   }
 
-  /** Whether the slot has switched to WebSocket and is open. */
+  /**
+   * Whether the slot has switched to WebSocket and is open.
+   *
+   * @returns true while `next` reads frames rather than requests and `sendFrame` may be called
+   */
   isWebSocket(): boolean {
     return this.state === H1_S_WEBSOCKET
   }
 
   /** Whether nothing has moved for longer than the idle timeout, at `now` (`monotonicNanos`). */
-  idle(now: i64): boolean {
+  private idle(now: i64): boolean {
     return now - this.lastActive > toI64(this.config.idleTimeout) * toI64(1000000)
   }
 
@@ -1629,6 +1752,8 @@ export class Http1Connection {
    * call it after each `feed`; a program that feeds a connection itself calls
    * it the same way. Bytes that wait while the previous exchange is still
    * open start no clock: they count from when it is over (`nextRequest`).
+   *
+   * @param now the current time in `monotonicNanos`, which the deadline counts from
    */
   headArrived(now: i64): void {
     if (this.parser.buffered() > 0) {
@@ -1643,6 +1768,8 @@ export class Http1Connection {
    * the handshake: a record trickled a byte at a time hands no plaintext to
    * `headArrived` until it is whole, so its bytes would otherwise only keep
    * the slot from going idle.
+   *
+   * @internal Called by `headArrived` and by `Http1TlsServer` in this module to start the slowloris clock on ciphertext.
    */
   headAwaited(now: i64): void {
     if (!this.headTimed && this.state === H1_S_HTTP && !this.requestOpen) {
@@ -1652,11 +1779,15 @@ export class Http1Connection {
   }
 
   /** Whether a head has been arriving for longer than `headTimeout` at `now` (`monotonicNanos`). */
-  headLate(now: i64): boolean {
+  private headLate(now: i64): boolean {
     return this.headTimed && now - this.headSince > toI64(this.config.headTimeout) * toI64(1000000)
   }
 
-  /** Whether `expire` closes the slot at `now`: idle, or a head past its deadline. */
+  /**
+   * Whether `expire` closes the slot at `now`: idle, or a head past its deadline.
+   *
+   * @internal Called by `Http1Server.expire` and `Http1TlsServer.expire` in this module to pick the slots to close.
+   */
   expired(now: i64): boolean {
     return this.idle(now) || this.headLate(now)
   }
@@ -1669,6 +1800,10 @@ export class Http1Connection {
    * `lastActive` when it ends. Counting a quiet keep-alive's clock from
    * `lastActive` put it in the past once it was quiet for longer than
    * `headTimeout`, so each `expire` walked every slot.
+   *
+   * @param now the current time in `monotonicNanos`
+   * @returns the earliest `monotonicNanos` instant at which `expired` could answer true, so `expire` can skip the slot until then
+   * @internal Called by `Http1Server.expire` and `Http1TlsServer.expire` in this module to skip the slots that cannot expire yet.
    */
   expiresNoSooner(now: i64): i64 {
     const idle: i64 = this.lastActive + toI64(this.config.idleTimeout) * toI64(1000000)
@@ -1700,7 +1835,7 @@ const http1ExpireFloor = (config: Http1Config): i64 => {
  * `accept` until it calls `close`, and its descriptor is `fd(slot)`.
  */
 export class Http1Server {
-  config: Http1Config
+  private config: Http1Config
   /**
    * The connections built so far, slot `k`'s at `k`: one per slot ever
    * accepted into, and slot 0's once `connection` has asked for it.
@@ -1719,7 +1854,7 @@ export class Http1Server {
    */
   fds: i32[]
   /** Each used slot's interest as the loop last armed it, for `rearm`. */
-  armed: i32[]
+  private armed: i32[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
   /** The input and head buffers resting slots lend, with `Http1Config.idleInput`. */
@@ -1733,19 +1868,19 @@ export class Http1Server {
    */
   free: i32[]
   /** Where the socket is read into before the connection takes the bytes. */
-  scratch: u8[]
+  private scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
-  peer: u8[]
+  private peer: u8[]
   /** How many slots the pool may hold, which `size` answers. */
-  slots: i32 = 1
+  private slots: i32 = 1
   /** The listening socket, which the program made with `tcpListen` and still owns. */
-  listener: i32 = -1
+  private listener: i32 = -1
   /**
    * No slot can expire before this (`monotonicNanos`), so `expire` called
    * sooner walks none: it walks every slot only about once per the shorter
    * timeout, however many there are.
    */
-  expireAfter: i64 = 0
+  private expireAfter: i64 = 0
   /** How many calls of `expire` walked every slot, for a program measuring its cost. */
   expireScans: i32 = 0
 
@@ -1755,6 +1890,10 @@ export class Http1Server {
    * allocated by the first `accept` into it and kept, so a pool sized for a
    * peak costs at start-up only the read scratch, the shared `Date` and the
    * output pool, and at most `size` connections once the peak has come.
+   *
+   * @param config the caps every slot's connection is held to
+   * @param listener the listening socket from `tcpListen`, which stays the program's to close
+   * @param size how many connections the pool serves at once; less than 1 counts as 1
    */
   constructor(config: Http1Config, listener: i32, size: i32) {
     this.config = config
@@ -1773,7 +1912,7 @@ export class Http1Server {
   }
 
   /** A new connection on this pool's outputs and `Date`, for the next slot built. */
-  build(): Http1Connection {
+  private build(): Http1Connection {
     const conn: Http1Connection = new Http1Connection(this.config)
     conn.pool = this.outputs
     conn.date = this.date
@@ -1785,12 +1924,20 @@ export class Http1Server {
     return conn
   }
 
-  /** How many slots the pool has, built or not. */
+  /**
+   * How many slots the pool has, built or not.
+   *
+   * @returns the pool's capacity in connections, as the constructor fixed it
+   */
   size(): i32 {
     return this.slots
   }
 
-  /** How many slots hold a connection. */
+  /**
+   * How many slots hold a connection.
+   *
+   * @returns the count of slots accepted into and not yet closed
+   */
   busy(): i32 {
     let n: i32 = 0
     for (const fd of this.fds) {
@@ -1801,12 +1948,22 @@ export class Http1Server {
     return n
   }
 
-  /** Whether `slot` is a slot of this pool that holds a connection. */
+  /**
+   * Whether `slot` is a slot of this pool that holds a connection.
+   *
+   * @param slot the slot index to ask about, any value
+   * @returns true when the slot is in range and accepted into, not closed
+   */
   holds(slot: i32): boolean {
     return slot >= 0 && slot < toI32(this.fds.length) && this.fds[slot] >= 0
   }
 
-  /** The descriptor of `slot`, for `pollAdd`; -1 for a free or unknown one. */
+  /**
+   * The descriptor of `slot`, for `pollAdd`; -1 for a free or unknown one.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the slot's socket descriptor, which the pool owns and `close` closes; -1 when the slot holds none
+   */
   fd(slot: i32): i32 {
     return this.holds(slot) ? this.fds[slot] : -1
   }
@@ -1815,6 +1972,9 @@ export class Http1Server {
    * The connection of `slot`. A slot never accepted into, or out of range,
    * names slot 0's connection, which this builds when no slot has been yet
    * (the first `accept` then takes it, restarted).
+   *
+   * @param slot the slot `accept` answered
+   * @returns the slot's connection, which the pool keeps; read its events and write its response through it
    */
   connection(slot: i32): Http1Connection {
     if (slot >= 0 && slot < toI32(this.connections.length)) {
@@ -1828,6 +1988,8 @@ export class Http1Server {
    * slot, which the program adds to its loop with `H1_WANT_READ`; -11 when
    * none is waiting, `H1_POOL_FULL` when every slot is busy (the connection
    * is closed), or `tcpAccept`'s own failure.
+   *
+   * @returns the new connection's slot, or a negative code as above
    */
   accept(): i32 {
     const fd: i32 = tcpAccept(this.listener, this.peer)
@@ -1870,6 +2032,9 @@ export class Http1Server {
    * and the socket has more, then sends. Answers the interest. It begins a
    * serve call, which the program's `flush` of the slot ends: the responses
    * written in between carry one clock reading as their `Date`.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the `H1_WANT_` bits the slot now waits for, with `H1_DONE` once it should be closed
    */
   readable(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -1912,7 +2077,12 @@ export class Http1Server {
     return this.settle(slot)
   }
 
-  /** The socket of `slot` is writable: sends, and begins a serve call as `readable` does. Answers the interest. */
+  /**
+   * The socket of `slot` is writable: sends, and begins a serve call as `readable` does. Answers the interest.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the `H1_WANT_` bits the slot now waits for, with `H1_DONE` once it should be closed
+   */
   writable(slot: i32): i32 {
     if (!this.holds(slot)) {
       return H1_DONE
@@ -1927,6 +2097,9 @@ export class Http1Server {
    * for is made here and `H1_WRITE` comes in the same pass; otherwise what
    * the program writes in answer to one event and the next goes out together
    * at `flush`, as one segment rather than several.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the connection's next `H1_` event, as `Http1Connection.next` answers it
    */
   next(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -1944,6 +2117,9 @@ export class Http1Server {
    * answers the interest: `H1_DONE` once the connection is over and sent,
    * otherwise read while it has room and write while it holds bytes. It ends
    * the serve call, so a response written after it reads the clock anew.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the `H1_WANT_` bits to arm the slot with, or `H1_DONE` when the program should `close` it
    */
   flush(slot: i32): i32 {
     this.date.unhold()
@@ -1951,7 +2127,7 @@ export class Http1Server {
   }
 
   /** `flush` within a serve call: sends, answers the interest, and keeps the clock reading. */
-  settle(slot: i32): i32 {
+  private settle(slot: i32): i32 {
     if (!this.holds(slot)) {
       return H1_DONE
     }
@@ -1972,7 +2148,7 @@ export class Http1Server {
   }
 
   /** Writes what `slot`'s connection holds, which it holds, until the socket would block. */
-  send(slot: i32): void {
+  private send(slot: i32): void {
     const conn: Http1Connection = this.connections[slot]
     const fd: i32 = this.fds[slot]
     const pending: i32 = conn.outputEnd - conn.outputStart
@@ -1998,6 +2174,12 @@ export class Http1Server {
    * armed when it must. A keep-alive connection answers the same interest
    * request after request, and each `pollModify` is a system call
    * (`epoll_ctl`) that changes nothing.
+   *
+   * @param slot the slot `accept` answered
+   * @param wants the interest bits a serve call answered; only `H1_WANT_READ` and `H1_WANT_WRITE` count
+   * @returns true when the interest changed and the program should call
+   *   `pollModify`; false when `slot` is already armed for it, or is free or
+   *   out of range
    */
   rearm(slot: i32, wants: i32): boolean {
     const interest: i32 = wants & (H1_WANT_READ | H1_WANT_WRITE)
@@ -2008,7 +2190,11 @@ export class Http1Server {
     return true
   }
 
-  /** Closes `slot`'s socket, whatever is left unsent, and frees the slot. */
+  /**
+   * Closes `slot`'s socket, whatever is left unsent, and frees the slot.
+   *
+   * @param slot the slot to close; a free or unknown one is ignored
+   */
   close(slot: i32): void {
     if (!this.holds(slot)) {
       return
@@ -2024,6 +2210,9 @@ export class Http1Server {
   /**
    * Closes every slot that has been idle past `idleTimeout`, or reading one
    * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
+   *
+   * @param now the current time in `monotonicNanos`, which every timeout is measured against
+   * @returns how many slots this call closed
    */
   expire(now: i64): i32 {
     if (now < this.expireAfter) {
@@ -2058,7 +2247,7 @@ export class Http1Server {
  * `Http1Server`'s is.
  */
 export class Http1TlsServer {
-  config: Http1Config
+  private config: Http1Config
   tls: TlsTcpServer
   /**
    * The connections built so far, slot `k`'s at `k`: one per slot ever
@@ -2072,18 +2261,18 @@ export class Http1TlsServer {
    * another slot's live request. Its first read allocates it, once per
    * server, and a caller must not change it.
    */
-  vacant: Http1Connection | null = null
+  private vacant: Http1Connection | null = null
   /** The `Date` every slot's responses carry, as `Http1Server.date` is. */
   date: HttpDate
   /** Where TLS decrypts into before the connection takes the bytes. */
-  scratch: u8[]
+  private scratch: u8[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
   /** The input and head buffers resting slots lend, with `Http1Config.idleInput`. */
-  inputs: Http1OutputPool
-  heads: Http1OutputPool
+  private inputs: Http1OutputPool
+  private heads: Http1OutputPool
   /** No slot can expire before this (`monotonicNanos`): `Http1Server.expireAfter`. */
-  expireAfter: i64 = 0
+  private expireAfter: i64 = 0
   /** How many calls of `expire` walked every slot. */
   expireScans: i32 = 0
 
@@ -2093,6 +2282,11 @@ export class Http1TlsServer {
    * a slot builds its connection and, in `tls`, its handshake state, and
    * keeps them, so a pool sized for a peak costs at start-up only the read
    * scratches, the shared `Date` and the empty pools.
+   *
+   * @param tlsConfig the certificate chain and TLS settings every handshake uses
+   * @param config the caps every slot's connection is held to
+   * @param listener the listening socket from `tcpListen`, which stays the program's to close
+   * @param size how many connections the pool serves at once
    */
   constructor(tlsConfig: TlsServerConfig, config: Http1Config, listener: i32, size: i32) {
     this.config = config
@@ -2110,14 +2304,14 @@ export class Http1TlsServer {
    * built. Called by `accept` alone, as `tls` builds slots: slot `k`'s
    * connection must sit at index `k` of `connections`.
    */
-  build(): Http1Connection {
+  private build(): Http1Connection {
     const conn: Http1Connection = this.make()
     this.connections.push(conn)
     return conn
   }
 
   /** A connection on this pool's outputs and `Date` that no slot holds yet. */
-  make(): Http1Connection {
+  private make(): Http1Connection {
     const conn: Http1Connection = new Http1Connection(this.config)
     conn.pool = this.outputs
     conn.date = this.date
@@ -2128,22 +2322,40 @@ export class Http1TlsServer {
     return conn
   }
 
-  /** How many slots the pool has, built or not. */
+  /**
+   * How many slots the pool has, built or not.
+   *
+   * @returns the pool's capacity in connections, as `tls` holds it
+   */
   size(): i32 {
     return this.tls.size()
   }
 
-  /** How many slots hold a connection. */
+  /**
+   * How many slots hold a connection.
+   *
+   * @returns the count of slots accepted into and not yet closed, handshakes included
+   */
   busy(): i32 {
     return this.tls.busy()
   }
 
-  /** Whether `slot` holds a connection. */
+  /**
+   * Whether `slot` holds a connection.
+   *
+   * @param slot the slot index to ask about, any value
+   * @returns true when the slot is in range and accepted into, not closed
+   */
   holds(slot: i32): boolean {
     return this.tls.holds(slot)
   }
 
-  /** The descriptor of `slot`, for `pollAdd`; -1 for a free one. */
+  /**
+   * The descriptor of `slot`, for `pollAdd`; -1 for a free one.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the slot's socket descriptor, which the pool owns and `close` closes; -1 when the slot holds none
+   */
   fd(slot: i32): i32 {
     return this.tls.fd(slot)
   }
@@ -2153,7 +2365,7 @@ export class Http1TlsServer {
    * as `Http2TlsServer.live` asks: a slot accepted on `tls` directly holds a
    * TLS session and no `Http1Connection`, and reads as free here.
    */
-  live(slot: i32): boolean {
+  private live(slot: i32): boolean {
     return this.tls.holds(slot) && slot < toI32(this.connections.length)
   }
 
@@ -2161,6 +2373,9 @@ export class Http1TlsServer {
    * The HTTP/1.1 connection of `slot`. A slot never accepted into answers
    * `vacant`, as a free slot answers a connection that holds nothing, and
    * builds no slot; a slot out of range names slot 0's.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the slot's connection, which the pool keeps; the shared `vacant` one, not to be changed, for a slot never built
    */
   connection(slot: i32): Http1Connection {
     const index: i32 = slot >= 0 && slot < this.tls.size() ? slot : 0
@@ -2176,12 +2391,22 @@ export class Http1TlsServer {
     return made
   }
 
-  /** The ALPN protocol `slot`'s handshake chose, or empty. */
+  /**
+   * The ALPN protocol `slot`'s handshake chose, or empty.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the protocol identifier the handshake agreed on, such as "http/1.1", or "" when none was chosen yet or at all
+   */
   alpn(slot: i32): string {
     return this.tls.connection(slot).tls.alpn
   }
 
-  /** Whether `slot`'s handshake is done and chose a protocol other than `http/1.1`. */
+  /**
+   * Whether `slot`'s handshake is done and chose a protocol other than `http/1.1`.
+   *
+   * @param slot the slot `accept` answered
+   * @returns true when the slot will be shut down rather than served, because its client wants another protocol
+   */
   refused(slot: i32): boolean {
     const chosen: string = this.alpn(slot)
     return this.tls.connection(slot).state === TLS_RECORD_STATE_OPEN && chosen !== "" && chosen !== H1_ALPN
@@ -2192,6 +2417,10 @@ export class Http1TlsServer {
    * the caller's 32-byte server random and x25519 key, and gives it a fresh
    * connection, building the slot's on its first accept. Answers the slot, or
    * what `TlsTcpServer.accept` answers.
+   *
+   * @param serverRandom 32 fresh random bytes for the ServerHello
+   * @param ephemeralPrivate a fresh x25519 private key for this handshake alone
+   * @returns the new connection's slot, or the negative code `TlsTcpServer.accept` answers
    */
   accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32 {
     const slot: i32 = this.tls.accept(serverRandom, ephemeralPrivate)
@@ -2208,7 +2437,12 @@ export class Http1TlsServer {
     return slot
   }
 
-  /** The socket of `slot` is readable: TLS reads it, and what the connection has to send goes after. Answers the interest. */
+  /**
+   * The socket of `slot` is readable: TLS reads it, and what the connection has to send goes after. Answers the interest.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the TLS interest bits the slot now waits for (`H1_WANT_` values), with `TLS_RECORD_DONE` once it should be closed
+   */
   readable(slot: i32): i32 {
     const live: boolean = this.live(slot)
     const now: i64 = monotonicNanos()
@@ -2228,13 +2462,24 @@ export class Http1TlsServer {
     return this.flush(slot)
   }
 
-  /** The socket of `slot` is writable. Answers the interest. */
+  /**
+   * The socket of `slot` is writable. Answers the interest.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the TLS interest bits the slot now waits for (`H1_WANT_` values), with `TLS_RECORD_DONE` once it should be closed
+   */
   writable(slot: i32): i32 {
     this.tls.writable(slot)
     return this.flush(slot)
   }
 
-  /** Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does. Answers the interest. */
+  /**
+   * Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does. Answers the interest.
+   *
+   * @param slot the slot whose handshake waits for its signature
+   * @param key the certificate's P-256 private key, which stays the caller's to wipe
+   * @returns the TLS interest bits the slot now waits for (`H1_WANT_` values), with `TLS_RECORD_DONE` once it should be closed
+   */
   signP256(slot: i32, key: Secret<u8[]>): i32 {
     this.tls.signP256(slot, key)
     return this.flush(slot)
@@ -2244,6 +2489,9 @@ export class Http1TlsServer {
    * Moves what TLS has decrypted for `slot` into its connection, as far as
    * the connection has room, and answers the connection's next event. A free
    * slot, or one whose ALPN was another protocol, answers `H1_ERROR`.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the connection's next `H1_` event, as `Http1Connection.next` answers it
    */
   next(slot: i32): i32 {
     if (!this.live(slot) || this.refused(slot)) {
@@ -2277,6 +2525,9 @@ export class Http1TlsServer {
    * and sends it; shuts TLS down once the connection is over or ALPN chose
    * another protocol. Answers TLS's interest, with the write bit while the
    * connection still holds bytes.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the TLS interest bits the slot now waits for (`H1_WANT_` values), with `TLS_RECORD_DONE` once it should be closed
    */
   flush(slot: i32): i32 {
     if (!this.live(slot)) {
@@ -2299,7 +2550,7 @@ export class Http1TlsServer {
    * Writes what `slot`'s connection holds into TLS, as far as TLS takes it;
    * a slot never built has nothing to write.
    */
-  send(slot: i32): void {
+  private send(slot: i32): void {
     if (slot < 0 || slot >= toI32(this.connections.length)) {
       return
     }
@@ -2318,7 +2569,11 @@ export class Http1TlsServer {
     conn.release()
   }
 
-  /** Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does. */
+  /**
+   * Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does.
+   *
+   * @param slot the slot to close
+   */
   close(slot: i32): void {
     this.tls.close(slot)
     if (slot >= 0 && slot < toI32(this.connections.length)) {
@@ -2329,6 +2584,9 @@ export class Http1TlsServer {
   /**
    * Closes every slot that has been idle past `idleTimeout`, or reading one
    * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
+   *
+   * @param now the current time in `monotonicNanos`, which every timeout is measured against
+   * @returns how many slots this call closed
    */
   expire(now: i64): i32 {
     if (now < this.expireAfter) {

@@ -9,6 +9,19 @@
  * connection's stream calls (`openStream`, `streamWrite`, `streamRead`,
  * `nextStreamEvent` and the rest), not directly.
  *
+ *     const pools = new QuicStreamPools(65536, 111, 64)         // 64 connections of 100 + 3 + 8 slots
+ *     const streams = new QuicStreams(100, 3, 8, 65536, 1048576) // client bidi, client uni, own; bytes
+ *     streams.share(pools)                                       // before any stream has borrowed
+ *     streams.setPeerLimits(maxData, bidiLocal, bidiRemote, uni, maxStreamsBidi, maxStreamsUni)
+ *     streams.prime(packetLength)                                // per packet, before its frames: fills the reserve
+ *     const error: i64 = streams.onStream(frame.streamId, frame.offset, payload, frame.dataStart,
+ *       frame.dataLength, frame.fin)                             // 0, or the transport error to close with
+ *     const id: i64 = frame.streamId                             // the stream the frame was for
+ *     const got: i32 = streams.read(id, into, 0, 4096)           // bytes, 0, QUIC_STREAM_END or an error
+ *     const taken: i32 = streams.write(id, reply, 0, toI32(reply.length), true)
+ *     streams.beginPacket()
+ *     const next: i32 = streams.putNextChunk(out, at, end)       // `at` when no frame fits
+ *
  * **IDs** (§2.1). The low bit says who opened a stream (0 the client, 1 the
  * server) and the next one whether it carries data both ways (0) or only
  * from its opener (1). This side is a server: it opens IDs 1 and 3 modulo 4,
@@ -185,19 +198,41 @@ const QUIC_STREAM_ZERO: i64 = 0
 const QUIC_STREAM_ONE: i32 = 1
 const QUIC_STREAM_NO_BYTES: i32 = 0
 
-/** Whether `id` is a stream this side, the server, opens: its low bit is 1. */
+/**
+ * Whether `id` is a stream this side, the server, opens: its low bit is 1.
+ *
+ * @param id A stream ID (§2.1).
+ * @returns True for a server-opened stream, false for a client-opened one.
+ */
 export const quicStreamIsLocal = (id: i64): boolean => (id & 1) !== 0
 
-/** Whether `id` is a unidirectional stream: its second bit is 1. */
+/**
+ * Whether `id` is a unidirectional stream: its second bit is 1.
+ *
+ * @param id A stream ID (§2.1).
+ * @returns True when only the opener sends on it, false for a bidirectional stream.
+ */
 export const quicStreamIsUni = (id: i64): boolean => (id & 2) !== 0
 
-/** Whether bit `k` of `bits` is set; false outside the array. */
+/**
+ * Whether bit `k` of `bits` is set; false outside the array.
+ *
+ * @param bits A bitmap, bit `k` in byte `k >> 3` at bit `k & 7`.
+ * @param k The bit's index, from 0.
+ * @returns True when the bit is set; false when it is clear or `k` is outside the array.
+ */
 export const quicStreamBit = (bits: u8[], k: i32): boolean => {
   const at: i32 = k >> 3
   return at >= 0 && at < toI32(bits.length) && (toI32(bits[at]) & (QUIC_STREAM_ONE << (k & 7))) !== 0
 }
 
-/** Sets or clears bit `k` of `bits`. */
+/**
+ * Sets or clears bit `k` of `bits`.
+ *
+ * @param bits A bitmap, bit `k` in byte `k >> 3` at bit `k & 7`; changed in place.
+ * @param k The bit's index, from 0. An index outside the array changes nothing.
+ * @param on True to set the bit, false to clear it.
+ */
 export const quicStreamSetBit = (bits: u8[], k: i32, on: boolean): void => {
   const at: i32 = k >> 3
   if (at < 0 || at >= toI32(bits.length)) {
@@ -247,15 +282,25 @@ export class QuicStreamPools {
   readyData: u8[][]
   readyBits: u8[][]
   /** The empty array a free reserve entry holds. */
-  none: u8[]
+  private none: u8[]
   /** How many buffers the reserve holds. */
   ready: i32 = 0
-  /** The most the reserve keeps from one packet to the next: one connection's stream count. */
+  /**
+   * The most the reserve keeps from one packet to the next: one connection's stream count.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   hold: i32 = 0
   /** How many buffers each pool's free list has been grown to hold, by `fit`. */
-  room: i32 = 0
+  private room: i32 = 0
 
-  /** Pools for `connections` connections of `streams` stream slots each, `bufferSize` bytes each way. */
+  /**
+   * Pools for `connections` connections of `streams` stream slots each, `bufferSize` bytes each way.
+   *
+   * @param bufferSize The bytes of each stream buffer; each bitmap is a bit per byte of it.
+   * @param streams The stream slots of one connection, its `QuicStreams` count.
+   * @param connections How many connections share the pools. Each pool holds at most
+   *   `streams * 2 * connections` buffers.
+   */
   constructor(bufferSize: i32, streams: i32, connections: i32) {
     this.data = new BufferPool("QuicStreams.data", bufferSize, streams * 2 * connections)
     this.bits = new BufferPool("QuicStreams.bits", (bufferSize + 7) >> 3, streams * 2 * connections)
@@ -273,6 +318,7 @@ export class QuicStreamPools {
    * Readies the reserve for a packet that could start `need` receive sides:
    * trims it to `hold` buffers, then tops it up to `need`. Takes and gives
    * only when it is outside that window. Never inside an arena scope.
+   * @internal Read in quic-stream.ts outside the class.
    */
   prime(need: i32): void {
     this.drain(this.hold)
@@ -284,7 +330,10 @@ export class QuicStreamPools {
     this.fit()
   }
 
-  /** Gives the reserve's buffers past the first `most` back to the pools, each already zeroed by `keep`. Never inside an arena scope. */
+  /**
+   * Gives the reserve's buffers past the first `most` back to the pools, each already zeroed by `keep`. Never inside an arena scope.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   drain(most: i32): void {
     while (this.ready > most) {
       this.ready = this.ready - 1
@@ -303,7 +352,7 @@ export class QuicStreamPools {
    * the arena must not move by it (QUIC-3). The room doubles, so the pushes
    * cost O(1) for each buffer made.
    */
-  fit(): void {
+  private fit(): void {
     const made: i32 = this.data.made
     if (made <= this.room) {
       return
@@ -320,7 +369,10 @@ export class QuicStreamPools {
     this.room = target
   }
 
-  /** Lends the reserve's last buffer, into `stream`'s receive side. Panics when the reserve is empty: a packet handled without `prime`. */
+  /**
+   * Lends the reserve's last buffer, into `stream`'s receive side. Panics when the reserve is empty: a packet handled without `prime`.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   lend(stream: QuicStream): void {
     if (this.ready <= 0) {
       panic("QuicStreams: a receive buffer was wanted with none primed")
@@ -338,6 +390,7 @@ export class QuicStreamPools {
    * the same ceiling, so once the pools have made every buffer and lent them
    * all, a send side wanting one means the reserve holds it. Never inside an
    * arena scope, where a take would allocate.
+   * @internal Read in quic-stream.ts outside the class.
    */
   lendSend(stream: QuicStream): void {
     if (this.data.free.length === 0 && this.data.made >= this.data.ceiling && this.ready > 0) {
@@ -358,6 +411,7 @@ export class QuicStreamPools {
    * first `used` bytes of the buffer and the bits of them. Safe inside an
    * arena scope. Panics when the reserve is full: more given back between
    * two `drain`s than one connection holds, a table's bug.
+   * @internal Read in quic-stream.ts outside the class.
    */
   keep(buf: u8[], have: u8[], used: i32): void {
     if (this.ready >= toI32(this.readyData.length)) {
@@ -370,7 +424,12 @@ export class QuicStreamPools {
     this.ready = this.ready + 1
   }
 
-  /** How many buffers and bitmaps are lent to streams now, the reserve's left out: 0 once every stream that borrowed has given back. */
+  /**
+   * How many buffers and bitmaps are lent to streams now, the reserve's left out: 0 once every stream
+   * that borrowed has given back.
+   *
+   * @returns The buffers plus the bitmaps out on loan, so a side holding both counts 2.
+   */
   lent(): i32 {
     return this.data.lent() + this.bits.lent() - this.ready - this.ready
   }
@@ -380,6 +439,10 @@ export class QuicStreamPools {
  * Pushes `none` onto `free` until it is `target` long, then pops each one off
  * again: the capacity stays, so giving back that many buffers to the pool the
  * list belongs to never grows the arena.
+ *
+ * @param free A pool's free list; its length is unchanged on return.
+ * @param target The capacity, in entries, the list is grown to. No larger than its length does nothing.
+ * @param none The placeholder pushed and popped, the table's empty array.
  */
 export const quicStreamGrowFree = (free: u8[][], target: i32, none: u8[]): void => {
   const length: i32 = toI32(free.length)
@@ -405,7 +468,10 @@ export class QuicStream {
    */
   recvBuf: u8[]
   recvHave: u8[]
-  /** How far the application has read. */
+  /**
+   * How far the application has read.
+   * @internal Read by http3.ts, and in quic-stream.ts outside the class.
+   */
   recvRead: i64 = 0
   /** Every byte below this has arrived. */
   recvContiguous: i64 = 0
@@ -417,7 +483,10 @@ export class QuicStream {
   recvLimit: i64 = 0
   /** The peer's RESET_STREAM error code, or -1. */
   resetCode: i64 = -1
-  /** The STOP_SENDING error code this side asked with, or -1. */
+  /**
+   * The STOP_SENDING error code this side asked with, or -1.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   stopSendingCode: i64 = -1
   /**
    * The send buffer: byte `o` at `o % size`, its bit in `sendAcked` set once
@@ -433,38 +502,75 @@ export class QuicStream {
   sendNext: i64 = 0
   /** One past the last byte written. */
   sendEnd: i64 = 0
-  /** The credit the peer gave: no byte at or past this offset may be sent. */
+  /**
+   * The credit the peer gave: no byte at or past this offset may be sent.
+   * @internal Read by quic.ts, and in quic-stream.ts outside the class.
+   */
   sendLimit: i64 = 0
   /** Bytes a lost packet carried, `[resendLow, resendHigh)`, or -1; `resendFin` when the FIN was among them. */
   resendLow: i64 = -1
   resendHigh: i64 = -1
-  /** The error code of this side's RESET_STREAM, and its final size. */
+  /**
+   * The error code of this side's RESET_STREAM, and its final size.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   resetSentCode: i64 = 0
+  /** @internal Read in quic-stream.ts outside the class. */
   resetFinal: i64 = 0
   /** The peer's STOP_SENDING error code, or -1. */
   stopCode: i64 = -1
-  /** The limit the last STREAM_DATA_BLOCKED named, or -1. */
+  /**
+   * The limit the last STREAM_DATA_BLOCKED named, or -1.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   blockedAt: i64 = -1
-  /** The bytes of each buffer once borrowed, which the offsets wrap at whether or not one is. */
+  /**
+   * The bytes of each buffer once borrowed, which the offsets wrap at whether or not one is.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   size: i32 = 0
   sendState: i32 = 0
   recvState: i32 = 0
-  /** Whether the application wrote the FIN, a frame carried it, and the peer acknowledged it. */
+  /**
+   * Whether the application wrote the FIN, a frame carried it, and the peer acknowledged it.
+   * @internal Read by quic.ts, and in quic-stream.ts outside the class.
+   */
   finQueued: boolean = false
+  /** @internal Read in quic-stream.ts outside the class. */
   finSent: boolean = false
+  /** @internal Read in quic-stream.ts outside the class. */
   finAcked: boolean = false
+  /** @internal Read in quic-stream.ts outside the class. */
   resendFin: boolean = false
-  /** What this stream owes the peer: MAX_STREAM_DATA, STREAM_DATA_BLOCKED, RESET_STREAM, STOP_SENDING. */
+  /**
+   * What this stream owes the peer: MAX_STREAM_DATA, STREAM_DATA_BLOCKED, RESET_STREAM, STOP_SENDING.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   maxDataOwed: boolean = false
+  /** @internal Read in quic-stream.ts outside the class. */
   blockedOwed: boolean = false
+  /** @internal Read in quic-stream.ts outside the class. */
   resetOwed: boolean = false
+  /** @internal Read in quic-stream.ts outside the class. */
   stopOwed: boolean = false
-  /** Whether a write was cut short for room, so freed room is an event. */
+  /**
+   * Whether a write was cut short for room, so freed room is an event.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   wantsWrite: boolean = false
-  /** Whether the slot is in the event ring. */
+  /**
+   * Whether the slot is in the event ring.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   queued: boolean = false
 
-  /** A slot for buffers of `bufferSize` bytes, holding none: each side starts as `none`, the table's empty array. */
+  /**
+   * A slot for buffers of `bufferSize` bytes, holding none: each side starts as `none`, the table's
+   * empty array.
+   *
+   * @param bufferSize The bytes of the buffer each side borrows later.
+   * @param none The table's empty array, which every side holds until it borrows; shared, never written.
+   */
   constructor(bufferSize: i32, none: u8[]) {
     this.size = bufferSize
     this.recvBuf = none
@@ -473,22 +579,37 @@ export class QuicStream {
     this.sendAcked = none
   }
 
-  /** The buffer index of stream offset `offset`. */
+  /**
+   * The buffer index of stream offset `offset`.
+   *
+   * @param offset A byte offset in the stream, 0 or more.
+   * @returns `offset` modulo the buffer size, or 0 when the size is 0.
+   */
   at(offset: i64): i32 {
     return this.size > 0 ? toI32(offset % toI64(this.size)) : 0
   }
 
-  /** How many bytes can be read now. */
+  /**
+   * How many bytes can be read now.
+   * @internal Read by http3.ts and quic.ts, and in quic-stream.ts outside the class.
+   */
   readable(): i64 {
     return this.recvContiguous - this.recvRead
   }
 
-  /** How many more bytes the send buffer takes. */
+  /**
+   * How many more bytes the send buffer takes.
+   *
+   * @returns The buffer size less the bytes written and not yet acknowledged.
+   */
   room(): i64 {
     return toI64(this.size) - (this.sendEnd - this.sendBase)
   }
 
-  /** Whether the sending side has a frame to go: lost bytes, new bytes, or a FIN not yet sent. */
+  /**
+   * Whether the sending side has a frame to go: lost bytes, new bytes, or a FIN not yet sent.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   wantsToSend(): boolean {
     if (this.sendState === QUIC_SEND_NONE || this.sendState >= QUIC_SEND_DATA_RECVD) {
       return false
@@ -501,7 +622,10 @@ export class QuicStream {
     )
   }
 
-  /** Whether both sides are done, so the slot can be freed (§3.3). */
+  /**
+   * Whether both sides are done, so the slot can be freed (§3.3).
+   * @internal Read in quic-stream.ts outside the class.
+   */
   finished(): boolean {
     const sendDone: boolean =
       this.sendState === QUIC_SEND_NONE ||
@@ -518,6 +642,7 @@ export class QuicStream {
    * Empties the slot for stream `id`, with `recvLimit` and `sendLimit` its
    * first credits. It holds no buffers here, and a borrowed bitmap comes
    * back from its pool already zeroed.
+   * @internal Read in quic-stream.ts outside the class.
    */
   open(id: i64, recvLimit: i64, sendLimit: i64): void {
     this.id = id
@@ -554,7 +679,10 @@ export class QuicStream {
     this.wantsWrite = false
   }
 
-  /** Merges `[offset, offset + length)` into the range to send again, with the FIN when it was lost too. */
+  /**
+   * Merges `[offset, offset + length)` into the range to send again, with the FIN when it was lost too.
+   * @internal Read in quic-stream.ts outside the class.
+   */
   resend(offset: i64, length: i32, fin: boolean): void {
     if (this.sendState === QUIC_SEND_NONE || this.sendState >= QUIC_SEND_DATA_RECVD) {
       return
@@ -589,15 +717,15 @@ export class QuicStream {
 export class QuicStreams {
   slots: QuicStream[]
   /** Open addressing by ID: `index[h]` is a slot plus one, 0 for empty. */
-  index: i32[]
+  private index: i32[]
   /** Slots with news for the application, `eventCount` of them from `eventHead`. */
-  events: i32[]
+  private events: i32[]
   /**
    * The free slots, a stack of `freeCount`, so a stream opens without a
    * scan: a frame naming a high stream ID opens every lower one (§3.2), and
    * each of those costs one pop, not a pass over the table.
    */
-  free: i32[]
+  private free: i32[]
   /**
    * Where the streams borrow their buffers: the table's own pools, or the
    * set a server shares across its connections (`share`). `null` when the
@@ -605,12 +733,17 @@ export class QuicStreams {
    */
   pools: QuicStreamPools | null = null
   /** The empty array a side holds while it has no buffer borrowed. */
-  none: u8[]
+  private none: u8[]
   /** How many receive sides hold a buffer now: the rest are what a packet could start. */
-  recvLent: i32 = 0
-  /** The configured limits on the client's streams at once and this side's own. */
+  private recvLent: i32 = 0
+  /**
+   * The configured limits on the client's streams at once and this side's own.
+   * @internal Read by http3.ts.
+   */
   maxBidi: i64 = 0
+  /** @internal Read by http3.ts. */
   maxUni: i64 = 0
+  /** @internal Read by http3.ts. */
   localStreams: i64 = 0
   /** How many of each type the client opened, the limit advertised, and how many of them finished. */
   peerBidiOpened: i64 = 0
@@ -620,15 +753,15 @@ export class QuicStreams {
   peerBidiClosed: i64 = 0
   peerUniClosed: i64 = 0
   /** How many of each type this side opened, the client's limits, and how many of this side's are open. */
-  localBidiOpened: i64 = 0
-  localUniOpened: i64 = 0
-  localBidiLimit: i64 = 0
-  localUniLimit: i64 = 0
-  localOpen: i64 = 0
+  private localBidiOpened: i64 = 0
+  private localUniOpened: i64 = 0
+  private localBidiLimit: i64 = 0
+  private localUniLimit: i64 = 0
+  private localOpen: i64 = 0
   /** The peer's credit for each stream type as it opens (its transport parameters). */
-  peerBidiLocalCredit: i64 = 0
-  peerBidiRemoteCredit: i64 = 0
-  peerUniCredit: i64 = 0
+  private peerBidiLocalCredit: i64 = 0
+  private peerBidiRemoteCredit: i64 = 0
+  private peerUniCredit: i64 = 0
   /** The connection's receive credit: what was advertised, its window, what arrived, and what was read. */
   recvMaxData: i64 = 0
   windowData: i64 = 0
@@ -639,12 +772,12 @@ export class QuicStreams {
   sendTotal: i64 = 0
   writtenTotal: i64 = 0
   /** The transport error `locate` answered -2 for. */
-  locateError: i64 = 0
+  private locateError: i64 = 0
   /** The limit the last DATA_BLOCKED named, or -1. */
-  dataBlockedAt: i64 = -1
+  private dataBlockedAt: i64 = -1
   /** The limit each STREAMS_BLOCKED named, or -1. */
-  streamsBlockedBidiAt: i64 = -1
-  streamsBlockedUniAt: i64 = -1
+  private streamsBlockedBidiAt: i64 = -1
+  private streamsBlockedUniAt: i64 = -1
   /** What the last `putNextChunk` or `putNextControl` wrote, for the packet's record. */
   lastId: i64 = 0
   lastOffset: i64 = 0
@@ -653,30 +786,37 @@ export class QuicStreams {
   bufferSize: i32 = 0
   lastLength: i32 = 0
   lastKind: i32 = 0
-  eventHead: i32 = 0
-  eventCount: i32 = 0
+  private eventHead: i32 = 0
+  private eventCount: i32 = 0
   /** How many slots `free` holds. */
   freeCount: i32 = 0
   /** Where the next packet's search for a stream to send starts, and how many it has looked at. */
-  cursor: i32 = 0
-  scanned: i32 = 0
+  private cursor: i32 = 0
+  private scanned: i32 = 0
   /** Whether the last `putNextChunk` carried the FIN, for the packet's record. */
   lastFin: boolean = false
   /** Whether some stream may owe a control frame, so `putNextControl` looks at the slots at all. */
-  streamOwes: boolean = false
+  private streamOwes: boolean = false
   /** What the connection owes: MAX_DATA, DATA_BLOCKED, MAX_STREAMS and STREAMS_BLOCKED of each type. */
-  maxDataOwed: boolean = false
-  dataBlockedOwed: boolean = false
-  maxStreamsBidiOwed: boolean = false
-  maxStreamsUniOwed: boolean = false
-  streamsBlockedBidiOwed: boolean = false
-  streamsBlockedUniOwed: boolean = false
+  private maxDataOwed: boolean = false
+  private dataBlockedOwed: boolean = false
+  private maxStreamsBidiOwed: boolean = false
+  private maxStreamsUniOwed: boolean = false
+  private streamsBlockedBidiOwed: boolean = false
+  private streamsBlockedUniOwed: boolean = false
 
   /**
    * The table for a connection that lets the client open `maxBidi`
    * bidirectional and `maxUni` unidirectional streams at once and opens
    * `localStreams` of its own, each stream with `bufferSize` bytes each way,
    * and a connection receive window of `windowData` bytes.
+   *
+   * @param maxBidi The client-opened bidirectional streams that may be open at once.
+   * @param maxUni The client-opened unidirectional streams that may be open at once.
+   * @param localStreams The streams this side may have open at once, of both types.
+   * @param bufferSize The bytes of each stream's buffer, each way: the most a stream's credit runs ahead
+   *   of the application's reads.
+   * @param windowData The connection's receive window in bytes, the MAX_DATA step.
    */
   constructor(maxBidi: i64, maxUni: i64, localStreams: i64, bufferSize: i32, windowData: i64) {
     const count: i32 = toI32(maxBidi + maxUni + localStreams)
@@ -705,6 +845,8 @@ export class QuicStreams {
    * table's own: how a server's connections share one set. Call it before
    * any stream has borrowed, or after `reset`. Panics when the pools' buffers
    * are not `bufferSize` bytes.
+   *
+   * @param pools The pools to borrow from, kept by reference; usually shared with other connections.
    */
   share(pools: QuicStreamPools): void {
     if (pools.data.size !== this.bufferSize) {
@@ -724,6 +866,7 @@ export class QuicStreams {
    * table had when each slot owned its buffers: how many it holds turns on
    * when the peer acknowledges, so a lazily grown private pool would go on
    * allocating after any warm-up. A server's shared pools grow lazily.
+   * @internal Read by quic.ts.
    */
   ownPools(): QuicStreamPools | null {
     const pools: QuicStreamPools | null = this.pools
@@ -755,6 +898,8 @@ export class QuicStreams {
    * `idle` already is. Once warm the buffers a packet gives back refill the
    * reserve for the next one, so this costs a handful of comparisons, not a
    * take per side.
+   *
+   * @param bytes The packet's length in bytes.
    */
   prime(bytes: i32): void {
     const pools: QuicStreamPools | null = this.ownPools()
@@ -786,7 +931,7 @@ export class QuicStreams {
    * when the reserve is empty: a packet handled without `prime`, where a
    * take would allocate inside the scope.
    */
-  borrowRecv(stream: QuicStream): void {
+  private borrowRecv(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (stream.recvBuf.length > 0 || this.bufferSize <= 0) {
       return
@@ -803,7 +948,7 @@ export class QuicStreams {
    * every byte a frame reached: below `recvHighest`, which past a whole
    * buffer is all of it. Nothing when it holds none.
    */
-  giveRecv(stream: QuicStream): void {
+  private giveRecv(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (pools !== null && stream.recvBuf.length > 0) {
       pools.keep(
@@ -818,7 +963,7 @@ export class QuicStreams {
   }
 
   /** Borrows `stream`'s send buffer and bitmap from the pools, unless it holds them already or the streams have none. */
-  borrowSend(stream: QuicStream): void {
+  private borrowSend(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.ownPools()
     if (pools !== null && stream.sendBuf.length === 0) {
       pools.lendSend(stream)
@@ -832,7 +977,7 @@ export class QuicStreams {
    * byte acknowledged, or the side reset — and before a reset moves
    * `sendEnd` back.
    */
-  giveSend(stream: QuicStream): void {
+  private giveSend(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (pools !== null && stream.sendBuf.length > 0) {
       pools.keep(stream.sendBuf, stream.sendAcked, toI32(quicStreamMin(stream.sendEnd, toI64(stream.size))))
@@ -899,6 +1044,16 @@ export class QuicStreams {
    * Takes the peer's transport parameters (RFC 9000 §18.2): its limits on
    * the streams this side opens, the credit each kind of stream starts with,
    * and the connection's.
+   *
+   * @param maxData `initial_max_data`: the connection's send credit, in bytes.
+   * @param bidiLocal `initial_max_stream_data_bidi_local`: the bytes this side may send on a
+   *   client-opened bidirectional stream (local to the peer).
+   * @param bidiRemote `initial_max_stream_data_bidi_remote`: the bytes this side may send on a
+   *   bidirectional stream it opens.
+   * @param uni `initial_max_stream_data_uni`: the bytes this side may send on a unidirectional stream it
+   *   opens.
+   * @param maxStreamsBidi `initial_max_streams_bidi`: how many bidirectional streams this side may open.
+   * @param maxStreamsUni `initial_max_streams_uni`: how many unidirectional streams this side may open.
    */
   setPeerLimits(
     maxData: i64,
@@ -917,12 +1072,17 @@ export class QuicStreams {
   }
 
   /** The hash bucket `id` starts its probe at. */
-  bucket(id: i64): i32 {
+  private bucket(id: i64): i32 {
     const mixed: i64 = (id >> 2) ^ (id << 3) ^ (id >> 13)
     return toI32(mixed & toI64(toI32(this.index.length) - 1))
   }
 
-  /** The slot of stream `id`, or -1 when it is not open. */
+  /**
+   * The slot of stream `id`, or -1 when it is not open.
+   *
+   * @param id A stream ID.
+   * @returns The slot's index in the table, or -1 when no open stream has that ID.
+   */
   slotOf(id: i64): i32 {
     const size: i32 = toI32(this.index.length)
     let h: i32 = this.bucket(id)
@@ -942,14 +1102,19 @@ export class QuicStreams {
     return -1
   }
 
-  /** The stream `id`, or `null` when it is not open. */
+  /**
+   * The stream `id`, or `null` when it is not open.
+   *
+   * @param id A stream ID.
+   * @returns The stream's slot, owned by the table and reused once the stream is done; or `null`.
+   */
   find(id: i64): QuicStream | null {
     const k: i32 = this.slotOf(id)
     return k >= 0 && k < toI32(this.slots.length) ? this.slots[k] : null
   }
 
   /** Puts slot `k` in the index under its stream's ID. */
-  indexInsert(k: i32, id: i64): void {
+  private indexInsert(k: i32, id: i64): void {
     const size: i32 = toI32(this.index.length)
     let h: i32 = this.bucket(id)
     for (let probe: i32 = 0; probe < size; probe += 1) {
@@ -965,7 +1130,7 @@ export class QuicStreams {
   }
 
   /** Takes slot `k`, holding `id`, out of the index, moving later entries of its probe run back so none is lost. */
-  indexRemove(k: i32, id: i64): void {
+  private indexRemove(k: i32, id: i64): void {
     const size: i32 = toI32(this.index.length)
     const mask: i32 = size - 1
     let h: i32 = this.bucket(id)
@@ -1010,7 +1175,7 @@ export class QuicStreams {
   }
 
   /** Puts slot `k` on the event ring, unless it is there already. */
-  queue(k: i32): void {
+  private queue(k: i32): void {
     const size: i32 = toI32(this.events.length)
     if (k < 0 || k >= toI32(this.slots.length) || this.slots[k].queued || this.eventCount >= size) {
       return
@@ -1029,6 +1194,7 @@ export class QuicStreams {
    * or room to write again after a short write — or -1 when there is none.
    * Each stream comes up once however much happened to it; read and write it
    * until it has nothing more to say.
+   * @internal Read by quic.ts.
    */
   nextEvent(): i64 {
     const size: i32 = toI32(this.events.length)
@@ -1049,7 +1215,7 @@ export class QuicStreams {
   }
 
   /** Puts slot `k` on the free stack. */
-  pushFree(k: i32): void {
+  private pushFree(k: i32): void {
     const at: i32 = this.freeCount
     if (at >= 0 && at < toI32(this.free.length)) {
       this.free[at] = k
@@ -1058,7 +1224,7 @@ export class QuicStreams {
   }
 
   /** Takes a free slot off the stack, or -1 when every slot is in use. */
-  takeFree(): i32 {
+  private takeFree(): i32 {
     const at: i32 = this.freeCount - 1
     if (at < 0 || at >= toI32(this.free.length)) {
       return -1
@@ -1068,7 +1234,7 @@ export class QuicStreams {
   }
 
   /** Opens `id` in a free slot with its first credits; answers the slot, or -1 when none is free. */
-  openSlot(id: i64): i32 {
+  private openSlot(id: i64): i32 {
     const k: i32 = this.takeFree()
     if (k < 0 || k >= toI32(this.slots.length)) {
       return -1
@@ -1093,7 +1259,7 @@ export class QuicStreams {
    * the peer opened counts toward raising its limit: MAX_STREAMS is owed
    * once half the configured number have finished since the last one.
    */
-  release(k: i32): void {
+  private release(k: i32): void {
     if (k < 0 || k >= toI32(this.slots.length)) {
       return
     }
@@ -1137,7 +1303,7 @@ export class QuicStreams {
    * STREAM_STATE_ERROR for one of this side's that it has not opened or a
    * unidirectional stream without the half the frame is about (§19.4-§19.13).
    */
-  locate(id: i64, receiving: boolean): i32 {
+  private locate(id: i64, receiving: boolean): i32 {
     if (quicStreamIsUni(id) && quicStreamIsLocal(id) === receiving) {
       this.locateError = QUIC_ERROR_STREAM_STATE
       return -2
@@ -1185,7 +1351,7 @@ export class QuicStreams {
    * side gave, for the stream and for the connection (§4.1): past either it
    * is FLOW_CONTROL_ERROR. Answers 0 or that.
    */
-  creditReceived(stream: QuicStream, end: i64): i64 {
+  private creditReceived(stream: QuicStream, end: i64): i64 {
     if (end > stream.recvLimit) {
       return QUIC_ERROR_FLOW_CONTROL
     }
@@ -1204,6 +1370,15 @@ export class QuicStreams {
    * `offset`, and the FIN when `fin`. Answers 0, or the transport error that
    * closes the connection: the stream's ID (see `locate`), a stream only this
    * side sends on, the final size, or the credit.
+   *
+   * @param id The frame's stream ID.
+   * @param offset The stream offset of the frame's first byte.
+   * @param buf The packet holding the frame's data; copied from, not kept.
+   * @param from The index in `buf` of the first byte.
+   * @param length How many bytes the frame carries.
+   * @param fin Whether the frame carries the FIN, fixing the final size at `offset + length`.
+   * @returns `QUIC_ERROR_NO_ERROR` (0), or `QUIC_ERROR_STREAM_LIMIT`, `QUIC_ERROR_STREAM_STATE`,
+   *   `QUIC_ERROR_FINAL_SIZE` or `QUIC_ERROR_FLOW_CONTROL` to close the connection with.
    */
   onStream(id: i64, offset: i64, buf: u8[], from: i32, length: i32, fin: boolean): i64 {
     const k: i32 = this.locate(id, true)
@@ -1264,7 +1439,16 @@ export class QuicStreams {
     return QUIC_ERROR_NO_ERROR
   }
 
-  /** RESET_STREAM (§19.4): the peer abandons the stream at `finalSize` with `code`. Answers 0 or the transport error. */
+  /**
+   * RESET_STREAM (§19.4): the peer abandons the stream at `finalSize` with `code`. Answers 0 or the
+   * transport error.
+   *
+   * @param id The frame's stream ID.
+   * @param code The application's error code, kept for the reader.
+   * @param finalSize The stream's final size in bytes.
+   * @returns `QUIC_ERROR_NO_ERROR` (0), or `QUIC_ERROR_STREAM_LIMIT`, `QUIC_ERROR_STREAM_STATE`,
+   *   `QUIC_ERROR_FINAL_SIZE` or `QUIC_ERROR_FLOW_CONTROL` to close the connection with.
+   */
   onReset(id: i64, code: i64, finalSize: i64): i64 {
     const k: i32 = this.locate(id, true)
     if (k === -2) {
@@ -1303,6 +1487,11 @@ export class QuicStreams {
    * STOP_SENDING (§19.5): the peer wants no more of the stream, which this
    * side answers with RESET_STREAM carrying the same code (§3.5). Answers 0
    * or the transport error.
+   *
+   * @param id The frame's stream ID.
+   * @param code The application's error code, sent back in the RESET_STREAM.
+   * @returns `QUIC_ERROR_NO_ERROR` (0), or `QUIC_ERROR_STREAM_LIMIT` or `QUIC_ERROR_STREAM_STATE` to
+   *   close the connection with.
    */
   onStopSending(id: i64, code: i64): i64 {
     const k: i32 = this.locate(id, false)
@@ -1321,7 +1510,14 @@ export class QuicStreams {
     return QUIC_ERROR_NO_ERROR
   }
 
-  /** MAX_STREAM_DATA (§19.10): more credit for the stream. Answers 0 or the transport error. */
+  /**
+   * MAX_STREAM_DATA (§19.10): more credit for the stream. Answers 0 or the transport error.
+   *
+   * @param id The frame's stream ID.
+   * @param limit The new send limit, a stream offset in bytes; a lower one than held changes nothing.
+   * @returns `QUIC_ERROR_NO_ERROR` (0), or `QUIC_ERROR_STREAM_LIMIT` or `QUIC_ERROR_STREAM_STATE` to
+   *   close the connection with.
+   */
   onMaxStreamData(id: i64, limit: i64): i64 {
     const k: i32 = this.locate(id, false)
     if (k === -2) {
@@ -1340,13 +1536,19 @@ export class QuicStreams {
     return QUIC_ERROR_NO_ERROR
   }
 
-  /** STREAM_DATA_BLOCKED (§19.13): only the ID is checked; credit follows reading, not asking. */
+  /**
+   * STREAM_DATA_BLOCKED (§19.13): only the ID is checked; credit follows reading, not asking.
+   * @internal Read by quic.ts.
+   */
   onStreamDataBlocked(id: i64): i64 {
     const k: i32 = this.locate(id, true)
     return k === -2 ? this.locateError : QUIC_ERROR_NO_ERROR
   }
 
-  /** MAX_DATA (§19.9): more credit for the connection. */
+  /**
+   * MAX_DATA (§19.9): more credit for the connection.
+   * @internal Read by quic.ts.
+   */
   onMaxData(limit: i64): void {
     if (limit > this.sendMaxData) {
       this.sendMaxData = limit
@@ -1354,7 +1556,10 @@ export class QuicStreams {
     }
   }
 
-  /** MAX_STREAMS (§19.11): the peer lets this side open more streams of a type. */
+  /**
+   * MAX_STREAMS (§19.11): the peer lets this side open more streams of a type.
+   * @internal Read by quic.ts.
+   */
   onMaxStreams(uni: boolean, limit: i64): void {
     if (uni && limit > this.localUniLimit) {
       this.localUniLimit = limit
@@ -1366,7 +1571,7 @@ export class QuicStreams {
   }
 
   /** Counts `bytes` read (or abandoned by a reset) toward the connection's credit, raising it once half the window is used. */
-  consume(bytes: i64): void {
+  private consume(bytes: i64): void {
     this.recvConsumed = this.recvConsumed + bytes
     if (
       this.recvConsumed + this.windowData - this.recvMaxData >= this.windowData / 2 &&
@@ -1382,6 +1587,7 @@ export class QuicStreams {
    * unidirectional. Answers its ID, or `QUIC_STREAM_ERR_LIMIT` when the
    * peer's limit is reached (STREAMS_BLOCKED is then owed) or every slot for
    * this side's streams is taken.
+   * @internal Read by quic.ts.
    */
   open(bidi: boolean): i64 {
     const opened: i64 = bidi ? this.localBidiOpened : this.localUniOpened
@@ -1415,6 +1621,16 @@ export class QuicStreams {
    * FIN when `fin` and every byte fit. Answers how many bytes it took — fewer
    * than `length` when the send buffer is full, and the stream's event fires
    * once acknowledgements free room — or a `QUIC_STREAM_ERR_*`.
+   *
+   * @param id The stream ID.
+   * @param buf The bytes to send; copied, not kept.
+   * @param from The index in `buf` of the first byte.
+   * @param length How many bytes to write, 0 or more; a `from + length` past `buf` answers `QUIC_STREAM_ERR_UNKNOWN`.
+   * @param fin Whether this write ends the stream; queued only when all `length` bytes were taken.
+   * @returns The bytes taken, 0 to `length`; or `QUIC_STREAM_ERR_UNKNOWN` (no such stream, or a window
+   *   outside `buf`), `QUIC_STREAM_ERR_DIRECTION` (a stream this side only receives on),
+   *   `QUIC_STREAM_ERR_STOPPED` (the peer sent STOP_SENDING) or `QUIC_STREAM_ERR_FINISHED` (the FIN is
+   *   queued or the side was reset).
    */
   write(id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32 {
     const k: i32 = this.slotOf(id)
@@ -1470,6 +1686,14 @@ export class QuicStreams {
    * `QUIC_STREAM_END` or `QUIC_STREAM_ERR_RESET`, so read until one does.
    * After `QuicConnection.release`, a stream that still owed bytes answers
    * `QUIC_STREAM_END` and copies nothing: its buffer went back to the pool.
+   *
+   * @param id The stream ID.
+   * @param buf Where the bytes go.
+   * @param at The index in `buf` of the first byte written.
+   * @param length The most bytes to read, 0 or more; an `at + length` past `buf` answers `QUIC_STREAM_ERR_UNKNOWN`.
+   * @returns The bytes read, 0 or more; `QUIC_STREAM_END`; `QUIC_STREAM_ERR_RESET`;
+   *   `QUIC_STREAM_ERR_UNKNOWN` (no such stream, or a window outside `buf`); or
+   *   `QUIC_STREAM_ERR_DIRECTION` (a stream this side only sends on).
    */
   read(id: i64, buf: u8[], at: i32, length: i32): i32 {
     const k: i32 = this.slotOf(id)
@@ -1533,7 +1757,7 @@ export class QuicStreams {
   }
 
   /** Abandons the sending side of slot `k` with `code` (§3.1, §19.4): what was not sent is dropped and RESET_STREAM is owed. */
-  resetSlot(k: i32, code: i64): void {
+  private resetSlot(k: i32, code: i64): void {
     if (k < 0 || k >= toI32(this.slots.length)) {
       return
     }
@@ -1557,7 +1781,15 @@ export class QuicStreams {
     stream.blockedOwed = false
   }
 
-  /** Resets stream `id`'s sending side with `code`. Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. */
+  /**
+   * Resets stream `id`'s sending side with `code`. Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`.
+   *
+   * @param id The stream ID.
+   * @param code The application's error code for the RESET_STREAM.
+   * @returns `QUIC_STREAM_OK`; `QUIC_STREAM_ERR_UNKNOWN` (no such stream); `QUIC_STREAM_ERR_DIRECTION`
+   *   (a stream this side only receives on); or `QUIC_STREAM_ERR_FINISHED` (every byte was already
+   *   acknowledged, or the side was already reset).
+   */
   resetStream(id: i64, code: i64): i32 {
     const k: i32 = this.slotOf(id)
     if (k < 0 || k >= toI32(this.slots.length)) {
@@ -1574,7 +1806,16 @@ export class QuicStreams {
     return QUIC_STREAM_OK
   }
 
-  /** Asks the peer to stop sending on stream `id`, with `code` (STOP_SENDING, §3.5). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. */
+  /**
+   * Asks the peer to stop sending on stream `id`, with `code` (STOP_SENDING, §3.5). Answers
+   * `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`.
+   *
+   * @param id The stream ID.
+   * @param code The application's error code; only the first call's is sent.
+   * @returns `QUIC_STREAM_OK`; `QUIC_STREAM_ERR_UNKNOWN` (no such stream); `QUIC_STREAM_ERR_DIRECTION`
+   *   (a stream this side only sends on); or `QUIC_STREAM_ERR_FINISHED` (every byte already arrived,
+   *   or the stream was reset).
+   */
   stopSending(id: i64, code: i64): i32 {
     const k: i32 = this.slotOf(id)
     if (k < 0 || k >= toI32(this.slots.length)) {
@@ -1607,6 +1848,11 @@ export class QuicStreams {
    * the offset past it, with `lastId`, `lastOffset`, `lastLength` and
    * `lastFin` describing it for the packet's record; or `at` when no stream
    * has a frame that fits.
+   *
+   * @param buf The packet being built.
+   * @param at The index in `buf` where the frame starts.
+   * @param end The index in `buf` past the room the frame may use.
+   * @returns The index past the frame written, or `at` when none was.
    */
   putNextChunk(buf: u8[], at: i32, end: i32): i32 {
     const count: i32 = toI32(this.slots.length)
@@ -1642,7 +1888,7 @@ export class QuicStreams {
    * (§4.5); or, with no bytes left to send again, a lost FIN alone, as a
    * frame of no bytes at the final size.
    */
-  putResend(stream: QuicStream, buf: u8[], at: i32, end: i32): i32 {
+  private putResend(stream: QuicStream, buf: u8[], at: i32, end: i32): i32 {
     if (stream.resendLow >= 0) {
       let low: i64 = stream.resendLow < stream.sendBase ? stream.sendBase : stream.resendLow
       while (low < stream.resendHigh && quicStreamBit(stream.sendAcked, stream.at(low))) {
@@ -1699,7 +1945,7 @@ export class QuicStreams {
   }
 
   /** Describes the STREAM frame just written, for the packet's record. */
-  noteChunk(id: i64, offset: i64, length: i32, fin: boolean): void {
+  private noteChunk(id: i64, offset: i64, length: i32, fin: boolean): void {
     this.lastId = id
     this.lastOffset = offset
     this.lastLength = length
@@ -1710,7 +1956,7 @@ export class QuicStreams {
    * One STREAM frame of `stream`'s new bytes within both credits. A stream
    * held back by a credit owes the matching BLOCKED frame, once per limit.
    */
-  putNew(stream: QuicStream, k: i32, buf: u8[], at: i32, end: i32): i32 {
+  private putNew(stream: QuicStream, k: i32, buf: u8[], at: i32, end: i32): i32 {
     const unsent: i64 = stream.sendEnd - stream.sendNext
     const streamCredit: i64 = stream.sendLimit - stream.sendNext
     const connectionCredit: i64 = this.sendMaxData - this.sendTotal
@@ -1772,6 +2018,7 @@ export class QuicStreams {
    * Answers the offset past it, with `lastKind` (a
    * `QUIC_STREAM_CONTROL_*`) and `lastValue` (the stream it names, or 0)
    * for the packet's record; or `at` when nothing owed fits.
+   * @internal Read by quic.ts.
    */
   putNextControl(buf: u8[], at: i32, end: i32): i32 {
     this.lastValue = 0
@@ -1850,7 +2097,7 @@ export class QuicStreams {
   }
 
   /** The next control frame `stream` owes, if it fits; sets `lastKind`. */
-  putStreamControl(stream: QuicStream, buf: u8[], at: i32, end: i32): i32 {
+  private putStreamControl(stream: QuicStream, buf: u8[], at: i32, end: i32): i32 {
     if (stream.maxDataOwed) {
       const next: i32 = quicPutStreamValue(
         buf,
@@ -1906,6 +2153,11 @@ export class QuicStreams {
    * and its FIN when `fin`, was acknowledged: the bytes are marked, the
    * buffer's start moves past every acknowledged one, and once all of them
    * and the FIN are, the sending side is done (§3.1 "Data Recvd").
+   *
+   * @param id The stream ID the packet's record names.
+   * @param offset The stream offset of the chunk's first byte.
+   * @param length The chunk's bytes.
+   * @param fin Whether the chunk carried the FIN.
    */
   chunkAcked(id: i64, offset: i64, length: i32, fin: boolean): void {
     const k: i32 = this.slotOf(id)
@@ -1942,7 +2194,15 @@ export class QuicStreams {
     }
   }
 
-  /** A packet that carried those bytes was lost: they are queued to go again, unless the side is done or reset. */
+  /**
+   * A packet that carried those bytes was lost: they are queued to go again, unless the side is done
+   * or reset.
+   *
+   * @param id The stream ID the packet's record names; a stream no longer open is ignored.
+   * @param offset The stream offset of the chunk's first byte.
+   * @param length The chunk's bytes.
+   * @param fin Whether the chunk carried the FIN.
+   */
   chunkLost(id: i64, offset: i64, length: i32, fin: boolean): void {
     const stream: QuicStream | null = this.find(id)
     if (stream !== null) {
@@ -1954,6 +2214,7 @@ export class QuicStreams {
    * A packet that carried control frame `kind` (for stream `value`, or 0)
    * was acknowledged: a RESET_STREAM acknowledged ends its sending side
    * (§3.1 "Reset Recvd").
+   * @internal Read by quic.ts.
    */
   controlAcked(kind: i32, value: i64): void {
     if (kind !== QUIC_STREAM_CONTROL_RESET) {
@@ -1970,6 +2231,7 @@ export class QuicStreams {
    * A packet that carried control frame `kind` was lost: it is owed again
    * with the current value, while it still says something (§13.3) — a
    * BLOCKED frame only while the limit it named still holds.
+   * @internal Read by quic.ts.
    */
   controlLost(kind: i32, value: i64): void {
     if (kind === QUIC_STREAM_CONTROL_MAX_DATA) {
@@ -1990,7 +2252,7 @@ export class QuicStreams {
   }
 
   /** A lost control frame of stream `id`. */
-  streamControlLost(kind: i32, id: i64): void {
+  private streamControlLost(kind: i32, id: i64): void {
     const stream: QuicStream | null = this.find(id)
     if (stream === null) {
       return
