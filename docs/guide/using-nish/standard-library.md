@@ -2215,6 +2215,10 @@ and wake across processes on Linux. `nish/sync/ring` builds bounded queues of
 byte records in a region: `SpscRing` for one producer and one consumer,
 `MpscRing` for many producers. Native only. It has a page of its own,
 [Shared memory between processes](shared-memory.md).
+Records can also be rendered and sent in place (`reserve`, `commit`, `peek`,
+`Http1Connection.sendBody`, `release`):
+[wp47 §7](https://github.com/amritk/nish/blob/main/docs/wp47-shared-memory.md#records-copied-or-in-place)
+measures it against copying.
 
 ## `nish:secret`
 

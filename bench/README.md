@@ -1559,6 +1559,46 @@ median over the rounds, with the lowest and highest beside it. When `strace`
 is installed, one more run of `stream` and `idle` under `strace -f -c` counts
 the system calls a message costs: a busy ring's target is 0.
 
+## Ring in place
+
+`ring-inplace/run.mjs` compares JSON records of 1, 4 and 10 KB sent from a
+[`nish/sync/ring`](../std/sync/ring.ts) `SpscRing` through an
+`Http1Connection` either copied (`tryPush`, `tryPop`, `write`) or in place
+(`reserve`, `commit`, `peek`, `sendBody`, `release`). A producer process
+renders the records with `JsonWriter`, the parent serves them, and a reader
+process drains the socket. The three are pinned to three cores. It is
+[wp47](../docs/wp47-shared-memory.md)'s measure, and §7 there records its
+figures. It is not in this suite's tables. Linux only (it uses `taskset`).
+
+```bash
+npm run build
+node bench/ring-inplace/run.mjs                         # 5 rounds, CPUs 0, 1 and 2
+node bench/ring-inplace/run.mjs --quick                 # 3,000 messages a run
+node bench/ring-inplace/run.mjs --rounds 9 --cpus 1,2,3
+```
+
+Each round runs every size and mode twice in a seeded shuffled order. The
+table gives the consumer's p50 and p99 per message (its wait for the
+producer left out), the pipeline's ns a message, and the body bytes copied
+in user space a message, to two decimals. In place, that count is only the
+tails `sendBody` keeps when the socket does not take a body whole; the
+table gives how many messages had one. The kernel's copy into the socket,
+the output's compaction and the reader's `netRead` are not counted. A
+figure is the median over the runs, with the lowest and highest. The noise
+bands, for p50, p99 and the pipeline each, are the median gap between the
+two runs of a mode, and each difference between the modes is marked inside
+or outside the wider of the two modes' bands: one inside is not one.
+
+A run fails if the reader did not hear every byte sent, or if the FNV-1a
+sum over the bodies it parses out of the stream differs from the
+producer's over the records it rendered. It also fails if any wait passes
+its ten-second deadline or a child exits with an error. The sums are one
+byte at a time on the producer's and the reader's cores, so they raise the
+pipeline and p99 figures. On the 2026-11-07 run (wp47 §7), in place was
+faster at the consumer's median only at 10 KB (-13.7 %, band ±6.2 %). It
+made no difference to p99 at any size, and was slower over the pipeline
+at 10 KB (+18.3 %, band ±8.0 %).
+
 ## SQLite
 
 `sqlite/run.mjs` measures what [`nish/sqlite`](../docs/guide/using-nish/sqlite.md)
