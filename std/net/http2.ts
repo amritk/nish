@@ -9,19 +9,30 @@
  * It is sans-IO: bytes in, events and bytes out, and no socket anywhere.
  * `nish/net/http2-tls` runs it over TLS with ALPN `h2`.
  *
- *     import { Http2Config, Http2Connection, H2_NEED_MORE, H2_REQUEST, H2_DATA } from "nish/net/http2";
+ *     import { H2_ERROR, H2_NEED_MORE, H2_REQUEST, Http2Config, Http2Connection } from "nish/net/http2";
+ *     import { httpFieldBytes } from "nish/net/http-fields";
  *
+ *     const names: u8[][] = [httpFieldBytes("content-type")];
+ *     const values: u8[][] = [httpFieldBytes("text/plain")];
+ *     const body: u8[] = httpFieldBytes("hello");
  *     const conn = new Http2Connection(new Http2Config());
- *     // send conn.output[conn.outputStart .. conn.outputEnd), then conn.consume(sent)
- *     conn.feed(received, 0, n);
- *     let event: i32 = conn.next();
- *     while (event !== H2_NEED_MORE && event !== H2_ERROR) {
- *       // H2_REQUEST: conn.stream, conn.fields (method, path, get("accept")), conn.endStream
- *       // H2_DATA: conn.data[conn.dataStart .. conn.dataStart + conn.dataLength), conn.endStream
- *       event = conn.next();
- *     }
- *     conn.respond(stream, 200, names, values, false);
- *     conn.writeData(stream, body, 0, n, true);
+ *
+ *     // Hands the connection `received[0 .. n)`, read from the socket, and answers every request.
+ *     const serve = (received: u8[], n: i32): void => {
+ *       conn.feed(received, 0, n); // answers how much it took; feed the rest after `next`
+ *       let event: i32 = conn.next();
+ *       while (event !== H2_NEED_MORE && event !== H2_ERROR) {
+ *         // H2_DATA: conn.data[conn.dataStart .. conn.dataStart + conn.dataLength), conn.endStream
+ *         if (event === H2_REQUEST) {
+ *           // conn.stream, conn.fields (method, path, get("accept")), conn.endStream
+ *           conn.respond(conn.stream, 200, names, values, false);
+ *           conn.writeData(conn.stream, body, 0, toI32(body.length), true);
+ *         }
+ *         event = conn.next();
+ *       }
+ *       // while conn.wantsWrite(): send conn.output[conn.outputStart .. conn.outputEnd),
+ *       // then conn.consume(sent)
+ *     };
  *
  * **Events.** `next()` reads the frames `feed` handed it and answers the
  * first that means something to the program: `H2_REQUEST` (a stream opened
@@ -253,7 +264,11 @@ export class Http2Config {
   maxHeaderListSize: i32 = 16384
   /** The largest header block, compressed, across HEADERS and CONTINUATION. */
   maxHeaderBlock: i32 = 16384
-  /** SETTINGS_HEADER_TABLE_SIZE: the HPACK decoder's table. */
+  /**
+   * SETTINGS_HEADER_TABLE_SIZE, in bytes: the largest HPACK dynamic table the peer's header blocks may
+   * make the decoder keep. It is in force once the peer acknowledges the server's SETTINGS; until then
+   * the table is 4,096 bytes, RFC 7541's default. A size update past it is a COMPRESSION_ERROR.
+   */
   headerTableSize: i32 = 4096
   /** SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441): whether `:protocol` is accepted. */
   enableConnectProtocol: boolean = false
@@ -281,19 +296,34 @@ export class Http2Pools {
   /** `maxHeaderBlock`. */
   block: BufferPool
 
-  /** Pools of at most `ceiling` buffers each, for connections under `config`; `name` prefixes each pool's own. Allocates no buffer. */
+  /**
+   * Pools of at most `ceiling` buffers each, for connections under `config`. Allocates no buffer.
+   *
+   * @param name prefixes each pool's own name, as `name.input`, `name.output` and `name.block`
+   * @param config sizes the buffers: `maxFrameSize` plus a frame header, `outputSize` and `maxHeaderBlock`
+   *   bytes; read here only
+   * @param ceiling how many buffers of each kind may be lent at once
+   */
   constructor(name: string, config: Http2Config, ceiling: i32) {
     this.input = new BufferPool(`${name}.input`, config.maxFrameSize + H2_FRAME_HEADER_SIZE, ceiling)
     this.output = new BufferPool(`${name}.output`, config.outputSize, ceiling)
     this.block = new BufferPool(`${name}.block`, config.maxHeaderBlock, ceiling)
   }
 
-  /** How many buffers of the three kinds are lent now. */
+  /**
+   * How many buffers of the three kinds are lent now.
+   *
+   * @returns the buffers lent and not given back yet, of all three pools together
+   */
   lent(): i32 {
     return this.input.lent() + this.output.lent() + this.block.lent()
   }
 
-  /** How many buffers of the three kinds have ever been made. */
+  /**
+   * How many buffers of the three kinds have ever been made.
+   *
+   * @returns the buffers the three pools have allocated, together; at most three times the ceiling
+   */
   made(): i32 {
     return this.input.made + this.output.made + this.block.made
   }
@@ -309,8 +339,12 @@ export class Http2Stream {
   contentLength: i64 = -1
   /** The body bytes received. */
   received: i64 = 0
+  /** The stream's identifier, odd since a client opened it, or 0 while the slot is free. */
   id: i32 = 0
-  /** What the program has been handed since the last WINDOW_UPDATE for it. */
+  /**
+   * What the program has been handed since the last WINDOW_UPDATE for it.
+   * @internal Read by `Http2Connection` to credit the stream's window; not for callers.
+   */
   recvUnacked: i32 = 0
   /** The peer sent END_STREAM: half-closed (remote). */
   remoteEnded: boolean = false
@@ -318,7 +352,10 @@ export class Http2Stream {
   localEnded: boolean = false
   /** A final (non-1xx) response head was sent. */
   responded: boolean = false
-  /** `writeData` was held back by this stream's window. */
+  /**
+   * `writeData` was held back by this stream's window.
+   * @internal Read by `Http2Connection` to answer H2_WINDOW; not for callers.
+   */
   blocked: boolean = false
 }
 
@@ -391,9 +428,10 @@ export class Http2Connection {
   private config: Http2Config
   private frame: Http2Frame
   /**
-   * Where `input`, `output` and `block` are borrowed from: the server's, or
-   * a pool of one of each the connection makes itself when it first needs a
-   * buffer. A buffer the connection does not hold is `empty`.
+   * Where the connection borrows its input, its output and the header block it gathers: the pools
+   * `Http2TlsServer` shares among its slots, or, while this is `null` when a buffer is first needed,
+   * pools of one of each the connection makes itself. While the connection holds no input or no
+   * output buffer, `input` or `output` is an empty array.
    */
   pools: Http2Pools | null = null
   /** Bytes fed and not read yet are `input[inputStart .. inputEnd)`. */
@@ -404,7 +442,9 @@ export class Http2Connection {
   private block: u8[]
   /** Where a response's header block is encoded, emptied and reused. */
   private encoded: u8[]
+  /** The HPACK decoder for the peer's header blocks; `restart` empties its table. */
   decoder: HpackDecoder
+  /** The HPACK encoder for responses; every field is a literal without indexing, so its table stays empty. */
   encoder: HpackEncoder
   /**
    * The last request's or trailers' fields, valid until the next header block
@@ -439,7 +479,10 @@ export class Http2Connection {
   private settingValues: i64[]
   /** The peer's SETTINGS_INITIAL_WINDOW_SIZE. */
   private peerInitialWindow: i64 = 65535
-  /** The peer's SETTINGS_MAX_HEADER_LIST_SIZE, advisory; -1 until it sends one. */
+  /**
+   * The peer's SETTINGS_MAX_HEADER_LIST_SIZE, advisory; -1 until it sends one.
+   * @internal Unused: written from the peer's SETTINGS, and nothing reads it.
+   */
   peerMaxHeaderList: i64 = -1
   /** The window a new stream starts with on the receiving side. */
   private localInitialWindow: i64 = 65535
@@ -452,9 +495,13 @@ export class Http2Connection {
   data: u8[]
   /** H2_RESET's, H2_GOAWAY's and H2_ERROR's code. */
   errorCode: i64 = 0
+  /** Where the bytes fed and not read yet start in `input`. */
   inputStart: i32 = 0
+  /** Where the bytes fed and not read yet end in `input`. */
   inputEnd: i32 = 0
+  /** Where the bytes to send start in `output`; `consume` moves it. */
   outputStart: i32 = 0
+  /** Where the bytes to send end in `output`. */
   outputEnd: i32 = 0
   private blockLength: i32 = 0
   /** The stream the open header block is on, or 0 when none is open. */
@@ -477,12 +524,13 @@ export class Http2Connection {
   stream: i32 = 0
   /** H2_DATA's window onto `data`. */
   dataStart: i32 = 0
+  /** How many bytes of `data`, from `dataStart`, H2_DATA hands the program; 0 for an empty DATA. */
   dataLength: i32 = 0
   /** H2_GOAWAY's last stream identifier. */
   lastStreamId: i32 = 0
   /** The last stream identifier the server's first GOAWAY named, which no later one may raise (§6.8). */
   private sentLast: i32 = 0
-  /** How far into `input`, `output` and `block` the connection has written since it borrowed each: what giving it back zeroes. */
+  /** How far into `input` the connection has written since it borrowed it: what giving it back zeroes. */
   inputUsed: i32 = 0
   private outputUsed: i32 = 0
   private blockUsed: i32 = 0
@@ -491,9 +539,13 @@ export class Http2Connection {
   settingsAcked: boolean = false
   /** `writeData` was held back by the connection's window. */
   private sendBlocked: boolean = false
+  /** Whether a GOAWAY from the server is in the output: by `goaway`, `sendGoaway` or a connection error. */
   goawaySent: boolean = false
   private goawayReceived: boolean = false
-  /** The peer's byte stream has ended (`endInput`). */
+  /**
+   * The peer's byte stream has ended (`endInput`).
+   * @internal Read by `http2-tls.ts`'s server loop; not for callers.
+   */
   inputEnded: boolean = false
   /** Whether the last H2_REQUEST, H2_DATA or H2_TRAILERS ended its stream. */
   endStream: boolean = false
@@ -510,6 +562,9 @@ export class Http2Connection {
    * buffer until then, so `output` is empty after the constructor and after
    * `restart`: a caller that reads `output` itself calls `wantsWrite` first.
    * A cap outside what RFC 9113 allows panics.
+   *
+   * @param config the caps, checked here and kept, not copied: the connection reads it for as long as
+   *   it lives, so a program does not change it afterwards
    */
   constructor(config: Http2Config) {
     http2CheckCap("maxStreams", config.maxStreams, 1, 65536)
@@ -734,7 +789,7 @@ export class Http2Connection {
 
   // ---- Bytes in and out ---------------------------------------------------------
 
-  /** How many bytes `feed` would take now. */
+  /** @internal Unused: the room `feed` would find in the input buffer; nothing calls it. */
   inputRoom(): i32 {
     return this.config.maxFrameSize + H2_FRAME_HEADER_SIZE - (this.inputEnd - this.inputStart)
   }
@@ -745,6 +800,12 @@ export class Http2Connection {
    * has read what is there. Moves the unread bytes to the front of the
    * buffer, which ends the last H2_DATA's window. Once the connection has
    * failed it takes everything and keeps nothing.
+   *
+   * @param buf the bytes the peer sent; copied, so the caller may reuse it once `feed` answers
+   * @param off where they start in `buf`
+   * @param len how many there are; a window outside `buf` panics
+   * @returns how many bytes it took, from 0 to `len`: at most the room left in the input buffer, which
+   *   holds one frame of `maxFrameSize` and its header; `len` once the connection has failed
    */
   feed(buf: u8[], off: i32, len: i32): i32 {
     http2CheckWindow("Http2Connection.feed", buf, off, len)
@@ -765,6 +826,7 @@ export class Http2Connection {
    * Moves the unread input to the front of its buffer, which ends the last
    * H2_DATA's window, and answers the room after it: where a carrier may read
    * straight into `input` from `inputEnd`, then `received` what it read.
+   * @internal Read by `http2-tls.ts`'s server loop; not for callers.
    */
   inputTail(): i32 {
     this.holdInput()
@@ -773,7 +835,10 @@ export class Http2Connection {
     return toI32(this.input.length) - this.inputEnd
   }
 
-  /** Takes `n` bytes a carrier read into `input` at `inputEnd`, after `inputTail` gave it the room. */
+  /**
+   * Takes `n` bytes a carrier read into `input` at `inputEnd`, after `inputTail` gave it the room.
+   * @internal Read by `http2-tls.ts`'s server loop; not for callers.
+   */
   received(n: i32): void {
     const room: i32 = toI32(this.input.length) - this.inputEnd
     if (n < 0 || n > room) {
@@ -786,7 +851,11 @@ export class Http2Connection {
     }
   }
 
-  /** Marks the first `n` bytes of the output sent; once all of it is, the output goes back to its pool. */
+  /**
+   * Marks the first `n` bytes of the output sent; once all of it is, the output goes back to its pool.
+   *
+   * @param n how many bytes of `output[outputStart .. outputEnd)` were sent; more than that counts as all
+   */
   consume(n: i32): void {
     const pending: i32 = this.outputEnd - this.outputStart
     this.outputStart = this.outputStart + (n < pending ? n : pending)
@@ -795,7 +864,11 @@ export class Http2Connection {
     }
   }
 
-  /** Whether the output holds bytes to send; the SETTINGS a fresh connection owes are written first. */
+  /**
+   * Whether the output holds bytes to send; the SETTINGS a fresh connection owes are written first.
+   *
+   * @returns true when `output[outputStart .. outputEnd)` is not empty
+   */
   wantsWrite(): boolean {
     if (this.prefaceOwed) {
       this.holdOutput()
@@ -807,6 +880,8 @@ export class Http2Connection {
    * Whether the connection is over: everything is sent, and it failed, or no
    * stream is left after a GOAWAY went either way or after the peer's byte
    * stream ended (`endInput`) with nothing of it left unread.
+   *
+   * @returns true when the carrier may close the connection; false while anything is left to send
    */
   isDone(): boolean {
     if (this.wantsWrite()) {
@@ -820,6 +895,7 @@ export class Http2Connection {
   /**
    * The peer's byte stream has ended, so nothing more will be fed: once the
    * requests it already sent are answered, the connection is done.
+   * @internal Read by `http2-tls.ts`'s server loop; not for callers.
    */
   endInput(): void {
     this.inputEnded = true
@@ -850,7 +926,13 @@ export class Http2Connection {
 
   // ---- Streams ------------------------------------------------------------------
 
-  /** The slot holding stream `id`, or `null`. */
+  /**
+   * The slot holding stream `id`, or `null`.
+   *
+   * @param id the stream identifier
+   * @returns the stream's slot, which stays the connection's and holds another stream once this one
+   *   closes; `null` when no open stream has that identifier, and for an `id` of 0 or less
+   */
   find(id: i32): Http2Stream | null {
     if (id <= 0) {
       return null
@@ -977,6 +1059,9 @@ export class Http2Connection {
    * Writes GOAWAY with `code`, naming the last stream the peer had opened when
    * the server's first GOAWAY went: no later one may name a higher stream
    * (§6.8). Answers whether it fit.
+   *
+   * @param code the error code the GOAWAY carries (`H2_NO_ERROR` for a graceful close)
+   * @returns true when the frame was written to the output; false, changing nothing, when it did not fit
    */
   sendGoaway(code: i32): boolean {
     const last: i32 = this.goawaySent ? this.sentLast : this.lastPeerStream
@@ -1031,7 +1116,14 @@ export class Http2Connection {
 
   // ---- Reading ------------------------------------------------------------------
 
-  /** Reads frames until one is an event for the program, and answers it. */
+  /**
+   * Reads frames until one is an event for the program, and answers it.
+   *
+   * @returns `H2_REQUEST`, `H2_DATA`, `H2_TRAILERS`, `H2_RESET`, `H2_WINDOW` or `H2_GOAWAY`, with the
+   *   fields the module comment names for each; `H2_NEED_MORE` when the fed bytes hold no whole frame
+   *   (or preface) or the output lacks room for what reading one may make the connection send;
+   *   `H2_ERROR` once the connection has failed, now or before
+   */
   next(): i32 {
     while (true) {
       if (this.state === H2_STATE_FAILED) {
@@ -1499,9 +1591,10 @@ export class Http2Connection {
   /**
    * Encodes `:status` and `names`/`values` and sends the block as HEADERS and
    * as many CONTINUATION frames as the peer's SETTINGS_MAX_FRAME_SIZE needs,
-   * with END_STREAM when `endStream`. Answers 0, `H2_INVALID` for fields
-   * `httpFieldsCheckOutgoing` refuses or a status outside 100 to 599,
-   * `H2_AGAIN` when the output has no room for it yet, or `H2_CLOSED`.
+   * with END_STREAM when `endStream`; a `status` of 0 sends no `:status`.
+   * Answers 0, `H2_INVALID` for fields `httpFieldsCheckOutgoing` refuses or
+   * a block the output could never hold, or `H2_AGAIN` when the output has
+   * no room for it yet.
    * Nothing is encoded until it is sure to be sent, so the HPACK state never
    * moves for a block that was not.
    */
@@ -1566,7 +1659,19 @@ export class Http2Connection {
    * Answers stream `id` with `status` and the fields `names[k]`: `values[k]`,
    * lowercase and none of them connection-specific; END_STREAM when
    * `endStream`. A 1xx status but 101 may come before the final one and may
-   * not end the stream. Answers as `sendHead` does.
+   * not end the stream. The block is encoded into the output before it answers.
+   *
+   * @param id the stream to answer
+   * @param status the status code, 100 to 599 but not 101
+   * @param names the field names, lowercase; `:status` goes before them, and on a final response the
+   *   connection's `date` unless one of them is `date`
+   * @param values the value for each name, at the same index
+   * @param endStream whether the response has no body, which a 1xx may not ask
+   * @returns 0 when the head is in the output; `H2_CLOSED` when the stream has no slot, the server has
+   *   ended it, or the connection has failed; `H2_INVALID` for a status out of range or 101, a second
+   *   final response, a 1xx with `endStream`, fields `httpFieldsCheckOutgoing` refuses (names and values
+   *   of different lengths among them), or a head too large for the output buffer even when empty;
+   *   `H2_AGAIN` when the output has no room for it yet, nothing sent
    */
   respond(id: i32, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32 {
     const s: Http2Stream | null = this.writable(id)
@@ -1585,7 +1690,19 @@ export class Http2Connection {
     return result
   }
 
-  /** Ends stream `id` with a trailer section, after its response head (§8.1). Answers as `sendHead` does. */
+  /**
+   * Ends stream `id` with a trailer section, after its response head (§8.1). The block carries no
+   * `:status` and no `date`, and is encoded into the output before it answers.
+   *
+   * @param id the stream to end
+   * @param names the trailer field names, lowercase
+   * @param values the value for each name, at the same index
+   * @returns 0 when the trailers are in the output and the stream is ended; `H2_CLOSED` when the stream
+   *   has no slot, the server has ended it, or the connection has failed; `H2_INVALID` before a final
+   *   response head, for fields `httpFieldsCheckOutgoing` refuses (names and values of different
+   *   lengths among them), or a block too large for the output buffer even when empty; `H2_AGAIN` when
+   *   the output has no room for it yet, nothing sent
+   */
   writeTrailers(id: i32, names: u8[][], values: u8[][]): i32 {
     const s: Http2Stream | null = this.writable(id)
     if (s === null) {
@@ -1607,6 +1724,16 @@ export class Http2Connection {
    * stream or the connection, or once the output has drained, it may be
    * tried again — and `H2_CLOSED` for a stream with no final response head
    * or that has ended.
+   *
+   * @param id the stream to send on
+   * @param buf the body bytes; copied into the output, so the caller may reuse it once this answers
+   * @param off where they start in `buf`
+   * @param len how many to send; a window outside `buf` panics
+   * @param endStream whether these bytes end the body
+   * @returns how many bytes were taken, from 0 to `len` (0 only when `len` is 0); `H2_AGAIN` when `len`
+   *   is above 0 and none were taken, or when `len` is 0 with `endStream` and the empty DATA does not fit
+   *   yet; `H2_CLOSED` for a stream with no slot, no final response head, or that the server has ended,
+   *   and once the connection has failed
    */
   writeData(id: i32, buf: u8[], off: i32, len: i32, endStream: boolean): i32 {
     http2CheckWindow("Http2Connection.writeData", buf, off, len)
@@ -1665,6 +1792,12 @@ export class Http2Connection {
    * Resets stream `id` with `code` (§6.4), from the program's side: CANCEL,
    * say. Answers 0, `H2_AGAIN` when the output has no room for the frame yet
    * (the stream stays open), or `H2_CLOSED`.
+   *
+   * @param id the stream to reset
+   * @param code the error code the RST_STREAM carries, such as CANCEL (`H2_CANCEL` in `nish/net/http2-frame`)
+   * @returns 0 when the RST_STREAM is in the output and the stream's slot is free; `H2_AGAIN` when it
+   *   did not fit, the stream left open; `H2_CLOSED` when no open stream has that identifier or the
+   *   connection has failed
    */
   reset(id: i32, code: i32): i32 {
     if (this.state === H2_STATE_FAILED || this.find(id) === null) {
@@ -1680,6 +1813,9 @@ export class Http2Connection {
    * ignored; `isDone` once the last has closed and everything is sent.
    * Answers 0, also when a GOAWAY was already sent or the connection has
    * failed, or `H2_AGAIN` when the output has no room for the frame yet.
+   *
+   * @returns 0 when the GOAWAY is in the output, was already sent, or the connection has failed;
+   *   `H2_AGAIN` when the output has no room for it yet
    */
   goaway(): i32 {
     if (this.state === H2_STATE_FAILED || this.goawaySent) {

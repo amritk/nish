@@ -10,17 +10,22 @@
  * WebTransport on with `webtransportSessions`, and is sans-IO like it.
  *
  *     import { WebTransport, WebTransportConfig, WT_SESSION, WT_DATAGRAM } from "nish/net/webtransport";
+ *     import { Http3Connection, H3_NEED_MORE, H3_ERROR } from "nish/net/http3";
  *
- *     const wt = new WebTransport(new WebTransportConfig(), h3);   // once per slot, beside its Http3Connection
- *     // after quic.receive(...):
- *     let event: i32 = wt.next();
- *     while (event !== H3_NEED_MORE && event !== H3_ERROR) {
- *       // WT_SESSION: wt.sessionId, wt.fields (path, get("origin")) — accept or refuse it
- *       // WT_DATAGRAM: wt.sessionId, wt.data[wt.dataStart .. wt.dataStart + wt.dataLength)
- *       if (event === WT_SESSION) { wt.accept(wt.sessionId); }
- *       if (event === WT_DATAGRAM) { wt.sendDatagram(wt.sessionId, wt.data, wt.dataStart, wt.dataLength); }
- *       event = wt.next();
- *     }
+ *     // h3's Http3Config has webtransportSessions above 0.
+ *     const serve = (h3: Http3Connection): void => {
+ *       // once per slot, beside its Http3Connection:
+ *       const wt = new WebTransport(new WebTransportConfig(), h3);
+ *       // after quic.receive(...):
+ *       let event: i32 = wt.next();
+ *       while (event !== H3_NEED_MORE && event !== H3_ERROR) {
+ *         // WT_SESSION: wt.sessionId, wt.fields (path, get("origin")) — accept or refuse it
+ *         // WT_DATAGRAM: wt.sessionId, wt.data[wt.dataStart .. wt.dataStart + wt.dataLength)
+ *         if (event === WT_SESSION) { wt.accept(wt.sessionId); }
+ *         if (event === WT_DATAGRAM) { wt.sendDatagram(wt.sessionId, wt.data, wt.dataStart, wt.dataLength); }
+ *         event = wt.next();
+ *       }
+ *     };
  *
  * **Events.** `next()` answers a `WT_*` event, or one of `nish/net/http3`'s
  * for a plain request, which passes through untouched so one connection can
@@ -36,7 +41,7 @@
  * capsule was held back, can take more), `WT_DRAIN` (the client sent
  * DRAIN_WEBTRANSPORT_SESSION) and `WT_CLOSED` (the session is over:
  * `errorCode`, the CLOSE capsule's code or 0, the reason a window onto
- * `reason`, and `closedByPeer`). Each event names its session in `sessionId`
+ * `data`, and `closedByPeer`). Each event names its session in `sessionId`
  * and in `session`, its index in the table, `0 .. webtransportSessions - 1`,
  * for a program's own per-session arrays. A window is valid until the next
  * call.
@@ -161,7 +166,9 @@ export const WT_STREAM_RESET: i32 = 21
 export const WT_STREAM_STOPPED: i32 = 22
 /** `stream` — a session's stream, or its CONNECT stream — can take more. */
 export const WT_WRITABLE: i32 = 23
-/** The session is over: `errorCode`, `reason[reasonStart .. reasonStart + reasonLength)`, `closedByPeer`. */
+/**
+ * The session is over: `errorCode`, the reason `data[dataStart .. dataStart + dataLength)`, `closedByPeer`.
+ */
 export const WT_CLOSED: i32 = 24
 /** The client sent DRAIN_WEBTRANSPORT_SESSION: it will close the session soon. */
 export const WT_DRAIN: i32 = 25
@@ -223,13 +230,26 @@ export class WebTransportConfig {
   maxPending: i32 = 16
 }
 
-/** The HTTP/3 code an application's 32-bit `code` is sent as (`WT_FIRST_APP_CODE` + n + n / 0x1e, skipping the greased values). */
+/**
+ * The HTTP/3 code an application's 32-bit `code` is sent as (`WT_FIRST_APP_CODE` + n + n / 0x1e, skipping
+ * the greased values).
+ * @param code The application's code; only its low 32 bits are used, so a value past 2^32 - 1 or below 0
+ *   is taken as those bits.
+ * @returns The HTTP/3 error code, from `WT_FIRST_APP_CODE` to `wtCodeToHttp3(0xffffffff)`, never a greased
+ *   value.
+ */
 export const wtCodeToHttp3 = (code: i64): i64 => {
   const n: i64 = code & WT_U32
   return WT_FIRST_APP_CODE + n + n / toI64(0x1e)
 }
 
-/** The application code an HTTP/3 `code` carries, or -1 when it is outside the range, or one of its greased values. */
+/**
+ * The application code an HTTP/3 `code` carries, or -1 when it is outside the range, or one of its greased
+ * values.
+ * @param code An HTTP/3 error code, such as a peer's RESET_STREAM or STOP_SENDING code; any value.
+ * @returns The 32-bit application code, 0 to 2^32 - 1, the inverse of `wtCodeToHttp3`; -1 for a code below
+ *   `WT_FIRST_APP_CODE`, above `wtCodeToHttp3(0xffffffff)`, or greased.
+ */
 export const wtCodeFromHttp3 = (code: i64): i64 => {
   const last: i64 = wtCodeToHttp3(WT_U32)
   if (code < WT_FIRST_APP_CODE || code > last || h3Greased(code)) {
@@ -265,8 +285,13 @@ export class WebTransportWaiting {
   private tails: i32[]
   private salt: i64 = 0
   private freeHead: i32 = -1
+  /** How many streams are waiting now. */
   count: i32 = 0
 
+  /**
+   * Makes an empty room, its hash salted with 4 bytes from `crypto.getRandomValues`.
+   * @param size How many streams may wait at once; 0 or less makes room for 1.
+   */
   constructor(size: i32) {
     const n: i32 = size > 0 ? size : WT_ONE
     this.streams = new Array<i64>(n)
@@ -287,7 +312,7 @@ export class WebTransportWaiting {
     this.reset()
   }
 
-  /** Empties the room. */
+  /** @internal Empties the room; called by `WebTransport` in this module, not for callers. */
   reset(): void {
     this.heads.fill(WT_NONE)
     this.tails.fill(WT_NONE)
@@ -306,7 +331,10 @@ export class WebTransportWaiting {
     return toI32(mixed & toI64(toI32(this.heads.length) - 1))
   }
 
-  /** Files stream `stream`, waiting for session `session`; answers whether there was room. */
+  /**
+   * Files stream `stream`, waiting for session `session`; answers whether there was room.
+   * @internal Called by `WebTransport` in this module; not for callers.
+   */
   add(stream: i64, session: i64): boolean {
     const e: i32 = this.freeHead
     if (e < 0 || e >= toI32(this.next.length)) {
@@ -329,7 +357,10 @@ export class WebTransportWaiting {
     return true
   }
 
-  /** The oldest entry waiting for session `session`, or -1. */
+  /**
+   * The oldest entry waiting for session `session`, or -1.
+   * @internal Called by `WebTransport` in this module; not for callers.
+   */
   first(session: i64): i32 {
     let e: i32 = this.heads[this.bucket(session)]
     for (
@@ -345,7 +376,10 @@ export class WebTransportWaiting {
     return WT_NONE
   }
 
-  /** Takes entry `e` out of the room and answers its stream. */
+  /**
+   * Takes entry `e` out of the room and answers its stream.
+   * @internal Called by `WebTransport` in this module; not for callers.
+   */
   take(e: i32): i64 {
     const stream: i64 = this.streams[e]
     const b: i32 = this.bucket(this.sessions[e])
@@ -374,17 +408,22 @@ export class WebTransportWaiting {
  * which.
  */
 export class WebTransport {
+  /** The caps this layer was made with; the arrays they size are made by the constructor. */
   config: WebTransportConfig
   private h3: Http3Connection
   private quic: QuicConnection
-  /** The request fields of the last WT_SESSION: `h3.fields`. */
+  /** The request fields of the last WT_SESSION: the same object as the `Http3Connection`'s `fields`. */
   fields: HttpFields
   private header: Http3FrameHeader
   /** A datagram read whole, and one being sent; a CLOSE capsule being written. */
   private datagram: u8[]
   private outgoing: u8[]
   private capsuleOut: u8[]
-  /** The window of WT_DATAGRAM, WT_STREAM_DATA and WT_CLOSED: `datagram`, `h3.data`, or `reason`. */
+  /**
+   * The buffer the window of WT_DATAGRAM, WT_STREAM_DATA and WT_CLOSED lies in: this layer's own
+   * datagram buffer, the `Http3Connection`'s `data`, or this layer's store of CLOSE reasons. Valid
+   * until the next call.
+   */
   data: u8[]
   /** Each session's CLOSE payload as it arrives, `WT_REASON_MAX + 4` bytes a session. */
   private reason: u8[]
@@ -393,6 +432,7 @@ export class WebTransport {
   private acceptValues: u8[][]
   private none: u8[][]
   // Per session.
+  /** Each session's ID, its CONNECT stream's ID, by session index; -1 for a free index. */
   sessionIds: i64[]
   /** The capsule being read: its type, and what is left of its payload (-1 between capsules). */
   private capType: i64[]
@@ -402,6 +442,10 @@ export class WebTransport {
   private sessionSlot: i32[]
   /** The first of its streams (a QUIC slot, threaded through `nextStream`), and how many. */
   private firstStream: i32[]
+  /**
+   * How many streams each session holds, the client's and this side's together, up to `maxStreams`;
+   * a stream stops counting once both of its sides are over.
+   */
   streamCount: i32[]
   /** Whether the client's CLOSE has been read: nothing may follow it. */
   private closeRead: boolean[]
@@ -411,6 +455,7 @@ export class WebTransport {
   private capFill: i32[]
   /** Counters for a log or a rate cap, each saturating: datagrams in and out. */
   datagramsIn: i32[]
+  /** How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. */
   datagramsOut: i32[]
   /** The free sessions, a stack. */
   private free: i32[]
@@ -429,8 +474,20 @@ export class WebTransport {
   private adoptions: i32[]
   /** The last event's session ID, stream, and codes. */
   sessionId: i64 = -1
+  /**
+   * The stream ID of the last event about a stream: the client's or this side's stream, or the
+   * session's CONNECT stream; a WT_DATAGRAM leaves it as it was.
+   */
   stream: i64 = -1
+  /**
+   * The HTTP/3 code of the last WT_STREAM_RESET or WT_STREAM_STOPPED, or the 32-bit code of the
+   * last WT_CLOSED's CLOSE capsule (0 when the session ended without one).
+   */
   errorCode: i64 = 0
+  /**
+   * The WebTransport code `errorCode` maps to (`wtCodeFromHttp3`), or -1 when it maps to none; for
+   * WT_CLOSED, `errorCode` itself.
+   */
   appCode: i64 = -1
   /** Where the capsules of a DATA window are being read: `h3.data[capAt .. capEnd)`, for session `capSession`. */
   private capAt: i32 = 0
@@ -438,23 +495,34 @@ export class WebTransport {
   private capSession: i32 = -1
   /** The last event's session index, and its window onto `data`. */
   session: i32 = -1
+  /** Where the last event's window starts in `data`. */
   dataStart: i32 = 0
+  /** How many bytes the last event's window has. */
   dataLength: i32 = 0
+  /** How many session indexes are free; a valid request for a session while none is free is answered 429. */
   freeCount: i32 = 0
   private adoptCount: i32 = 0
   /** The `h3.generation` this layer's state belongs to. */
   private generation: i32 = 0
   /** Counters for a log or a test, each saturating: datagrams dropped, sessions refused here, streams refused. */
   datagramsDropped: i32 = 0
+  /** How many requests for a session this layer answered with a 400, 429 or 501, or `refuse` refused. */
   sessionsRefused: i32 = 0
   private streamsRefused: i32 = 0
   /** WT_STREAM's kind, and whether WT_CLOSED came from the client. */
   bidirectional: boolean = false
+  /**
+   * Whether the last WT_CLOSED came from the client: its CLOSE capsule, its FIN, or a reset the
+   * client sent; false when this side ended the session.
+   */
   closedByPeer: boolean = false
 
   /**
    * The WebTransport layer of `h3`, whose `Http3Config` must have
    * `webtransportSessions` above 0. A cap out of range panics.
+   * @param config The caps: `maxStreams` 1 to 4096 and `maxPending` 0 to 4096; kept, not copied.
+   * @param h3 The connection this layer reads and writes, kept for the layer's life; its restarts
+   *   restart this layer too.
    */
   constructor(config: WebTransportConfig, h3: Http3Connection) {
     const sessions: i32 = h3.config.webtransportSessions
@@ -578,6 +646,9 @@ export class WebTransport {
    * Reads what the connection has and answers the next event (see the
    * module comment): a `WT_*` one, or a plain request's `H3_*` one. Call it
    * until it answers H3_NEED_MORE or H3_ERROR.
+   * @returns A `WT_*` event; an `Http3Connection` event passed through, for a plain request or
+   *   H3_GOAWAY; H3_NEED_MORE when there is nothing more to read now; or H3_ERROR, when
+   *   `Http3Connection.next` answers it.
    */
   next(): i32 {
     this.current()
@@ -857,6 +928,11 @@ export class WebTransport {
    * streams reach the program from now on, the streams that waited for it
    * first. Answers 0, H3_AGAIN when the response does not fit yet, or
    * H3_CLOSED for one that is not a session asked for.
+   * @param id The session's ID, the `sessionId` of its WT_SESSION.
+   * @returns 0 once the 200 is written; H3_AGAIN while the stream has no room for it; H3_TOO_LARGE
+   *   when the head is past the client's SETTINGS_MAX_FIELD_SECTION_SIZE or the stream's buffer; or
+   *   H3_CLOSED for an ID that is not a session asked for and not yet answered, or a stream that can
+   *   no longer be written.
    */
   accept(id: i64): i32 {
     this.current()
@@ -881,6 +957,10 @@ export class WebTransport {
    * Refuses session `id` with `status`, 400 to 599 (draft-02 §3.2): the
    * response ends the stream, and what the client still sends is dropped.
    * Answers 0, H3_INVALID for a status out of range, or H3_CLOSED.
+   * @param id The session's ID, the `sessionId` of its WT_SESSION.
+   * @param status The response status, 400 to 599.
+   * @returns 0 once the session is let go; H3_INVALID for a status outside 400 to 599; or H3_CLOSED
+   *   for an ID that is not a session asked for and not yet answered.
    */
   refuse(id: i64, status: i32): i32 {
     this.current()
@@ -955,6 +1035,16 @@ export class WebTransport {
    * with WT_SESSION_GONE. Answers 0; H3_INVALID for a reason too long;
    * H3_AGAIN while the CONNECT stream has no room for the capsule, and
    * WT_WRITABLE then names it; or H3_CLOSED.
+   * @param id The session's ID.
+   * @param code The application's code; only its low 32 bits are sent.
+   * @param buf The buffer holding the reason; only read, and copied into the capsule. A window outside
+   *   it panics, whatever the session's state.
+   * @param off Where the reason starts in `buf`.
+   * @param len How many bytes the reason has, at most 1024.
+   * @returns 0 once the capsule and the FIN are written; H3_INVALID for a reason past 1024 bytes;
+   *   H3_AGAIN while the CONNECT stream has no room for the capsule; H3_TOO_LARGE for a capsule past
+   *   the stream's buffer; or H3_CLOSED for a session not accepted or already gone, or a CONNECT
+   *   stream that can no longer be written.
    */
   close(id: i64, code: i64, buf: u8[], off: i32, len: i32): i32 {
     h3CheckWindow("WebTransport.close", buf, off, len)
@@ -986,6 +1076,10 @@ export class WebTransport {
   /**
    * Sends DRAIN_WEBTRANSPORT_SESSION on session `id`: the client should
    * finish and close it. Answers 0, H3_AGAIN, or H3_CLOSED.
+   * @param id The session's ID.
+   * @returns 0 once the capsule is written; H3_AGAIN while the CONNECT stream has no room for it; or
+   *   H3_CLOSED for a session not accepted or already gone, or a CONNECT stream that can no longer be
+   *   written.
    */
   drain(id: i64): i32 {
     const s: i32 = this.openSession(id)
@@ -1224,6 +1318,12 @@ export class WebTransport {
    * Opens a stream of this side's for session `id` (draft-02 §4.1, §4.2).
    * Answers its ID; WT_LIMIT when the session holds `maxStreams`; H3_AGAIN
    * while the client's MAX_STREAMS allows no more; or H3_CLOSED.
+   * @param id The session's ID.
+   * @param bidirectional Whether the stream is bidirectional; a unidirectional one has no side for
+   *   the client to write.
+   * @returns The new stream's ID; WT_LIMIT when the session holds `maxStreams`; H3_AGAIN while the
+   *   client's MAX_STREAMS allows no more; or H3_CLOSED for a session not accepted, or one already
+   *   gone.
    */
   openStream(id: i64, bidirectional: boolean): i64 {
     const s: i32 = this.openSession(id)
@@ -1245,6 +1345,14 @@ export class WebTransport {
    * Writes up to `len` bytes of `buf` from `off` to session stream `id`, with
    * its FIN when `fin` and all were taken. Answers how many it took, or
    * H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`).
+   * @param id The stream's ID, one of a session this layer took or opened.
+   * @param buf The buffer holding the bytes; only read, and what is taken is copied.
+   * @param off Where the bytes start in `buf`.
+   * @param len How many bytes to write.
+   * @param fin Whether to end this side of the stream once every byte is taken.
+   * @returns How many bytes it took, fewer than `len` only when the send buffer filled (0 for a bare
+   *   FIN); H3_AGAIN when it took none; or H3_CLOSED for a stream this layer does not hold or with no
+   *   side here to write.
    */
   write(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
     this.current()
@@ -1259,7 +1367,12 @@ export class WebTransport {
     return n
   }
 
-  /** Resets this side of session stream `id` with the application's `code` (mapped, `wtCodeToHttp3`). Answers 0 or H3_CLOSED. */
+  /**
+   * Resets this side of session stream `id` with the application's `code` (mapped, `wtCodeToHttp3`).
+   * @param id The stream's ID, one of a session this layer took or opened.
+   * @param code The application's code; only its low 32 bits are sent, mapped.
+   * @returns 0 once the reset is sent, or H3_CLOSED for a stream this layer does not hold.
+   */
   resetStream(id: i64, code: i64): i32 {
     this.current()
     const k: i32 = this.streamSlot(id)
@@ -1274,7 +1387,14 @@ export class WebTransport {
     return 0
   }
 
-  /** Asks the client to stop its side of session stream `id` with the application's `code`, and drops what it sends. Answers 0 or H3_CLOSED. */
+  /**
+   * Asks the client to stop its side of session stream `id` with the application's `code`, and drops
+   * what it sends.
+   * @param id The stream's ID, one of a session this layer took or opened.
+   * @param code The application's code; only its low 32 bits are sent, mapped (`wtCodeToHttp3`).
+   * @returns 0 once STOP_SENDING is sent, or H3_CLOSED for a stream this layer does not hold or
+   *   whose client side is already over.
+   */
   stopSending(id: i64, code: i64): i32 {
     this.current()
     const k: i32 = this.streamSlot(id)
@@ -1295,6 +1415,8 @@ export class WebTransport {
    * The largest payload `sendDatagram` takes for session `id` now: what the
    * QUIC connection's `maxDatagramPayload` leaves after the quarter stream
    * ID; 0 for a session not accepted.
+   * @param id The session's ID.
+   * @returns The most payload bytes one datagram may carry now, 0 or more.
    */
   maxDatagramPayload(id: i64): i32 {
     if (this.openSession(id) < 0) {
@@ -1310,6 +1432,14 @@ export class WebTransport {
    * frame, never sent again if lost. Answers 0; H3_TOO_LARGE past
    * `maxDatagramPayload`; H3_AGAIN while QUIC's queue is full; or H3_CLOSED
    * for a session not accepted.
+   * @param id The session's ID.
+   * @param buf The buffer holding the payload; only read, and copied into the datagram. A window
+   *   outside it panics, whatever the session's state.
+   * @param off Where the payload starts in `buf`.
+   * @param len How many bytes the payload has.
+   * @returns 0 once the datagram is queued; H3_AGAIN while QUIC's queue is full; H3_TOO_LARGE past
+   *   `maxDatagramPayload`, or when QUIC refuses it for any other reason; or H3_CLOSED for a session
+   *   not accepted, or one already gone.
    */
   sendDatagram(id: i64, buf: u8[], off: i32, len: i32): i32 {
     h3CheckWindow("WebTransport.sendDatagram", buf, off, len)

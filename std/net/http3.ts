@@ -12,19 +12,31 @@
  * this module reads and writes that connection's streams. `nish/net/http3-server`
  * runs it over a UDP socket with ALPN `h3`.
  *
- *     import { Http3Config, Http3Connection, H3_NEED_MORE, H3_ERROR, H3_REQUEST, H3_DATA, H3_END } from "nish/net/http3";
+ *     import { Http3Config, Http3Connection, H3_NEED_MORE, H3_ERROR, H3_END } from "nish/net/http3";
+ *     import { httpFieldBytes } from "nish/net/http-fields";
+ *     import { QuicConnection } from "nish/net/quic";
  *
- *     const h3 = new Http3Connection(new Http3Config(), quic);   // once per slot; restart() per connection
- *     // after quic.receive(...):
- *     let event: i32 = h3.next();
- *     while (event !== H3_NEED_MORE && event !== H3_ERROR) {
- *       // H3_REQUEST: h3.stream, h3.fields (method, path, get("accept"))
- *       // H3_DATA: h3.data[h3.dataStart .. h3.dataStart + h3.dataLength)
- *       // H3_END: the request is whole; respond
- *       event = h3.next();
+ *     // Once per slot, beside a server QuicConnection; restart() per connection.
+ *     function open(quic: QuicConnection): Http3Connection {
+ *       return new Http3Connection(new Http3Config(), quic);
  *     }
- *     h3.respond(stream, 200, names, values, false);
- *     h3.writeData(stream, body, 0, n, true);   // answers how much it took
+ *
+ *     // After each quic.receive(...):
+ *     function serve(h3: Http3Connection): void {
+ *       const names: u8[][] = [httpFieldBytes("content-type")];
+ *       const values: u8[][] = [httpFieldBytes("text/plain")];
+ *       const body: u8[] = httpFieldBytes("hello\n");
+ *       let event: i32 = h3.next();
+ *       while (event !== H3_NEED_MORE && event !== H3_ERROR) {
+ *         // H3_REQUEST: h3.stream, h3.fields (method, path, get("accept"))
+ *         // H3_DATA: h3.data[h3.dataStart .. h3.dataStart + h3.dataLength)
+ *         if (event === H3_END) {   // the request is whole: respond
+ *           h3.respond(h3.stream, 200, names, values, false);
+ *           h3.writeData(h3.stream, body, 0, toI32(body.length), true);   // answers how much it took
+ *         }
+ *         event = h3.next();
+ *       }
+ *     }
  *
  * **Events.** `next()` reads the streams the QUIC connection has news for and
  * answers the first thing that means something to the program: `H3_REQUEST`
@@ -89,7 +101,7 @@
  * **Caps are start-up numbers**, all in `Http3Config`. The stream state for
  * every QUIC stream slot and the control frame are made by the constructor;
  * the body chunk and the field section are borrowed, around one read, from
- * pools that a server's connections share (`share`) and that a standalone
+ * pools that a server's connections share and that a standalone
  * connection keeps one buffer each of. A field section's
  * names and values are copied into arrays the connection keeps, which grow to
  * the largest section seen and are then reused, so a warm connection
@@ -397,9 +409,16 @@ const http3Min = (a: i64, b: i64): i64 => (a < b ? a : b)
 export class Http3Connection {
   // Pointers and 64-bit fields first, then 32-bit ones, then flags: the
   // order the layout packs without padding.
+  /** @internal Read by `webtransport.ts` for `webtransportSessions`; callers keep their own `Http3Config`. */
   config: Http3Config
+  /** The QUIC connection this one runs on, given to the constructor and kept for its life. */
   quic: QuicConnection
+  /**
+   * The QPACK decoder of the client's field sections, at dynamic table capacity 0; it also reads the
+   * client's encoder stream.
+   */
   decoder: QpackDecoder
+  /** The QPACK encoder of this side's field sections; it also reads the client's decoder stream. */
   encoder: QpackEncoder
   /** The last request's or trailers' fields, valid until the next of either. */
   fields: HttpFields
@@ -409,16 +428,20 @@ export class Http3Connection {
   /**
    * H3_DATA's bytes, and where a payload being skipped is read to: a
    * `bodyChunk`-byte buffer borrowed from `dataPool` for the read that needs
-   * it and held while an H3_DATA window is live, else `none`.
+   * it and held while an H3_DATA window is live, else an empty array. Any
+   * event but H3_DATA gives the buffer back, zeroed as far as reads wrote.
    */
   data: u8[]
   /** A HEADERS payload read whole, for the decoder: a buffer borrowed from `sectionPool` around one read and decode, else `none`. */
   private section: u8[]
   /** The empty array `data` and `section` are while they hold nothing borrowed. */
   private none: u8[]
-  /** Where `data` is borrowed from: the connection's own pool until `share` hands it its server's. */
+  /** Where `data` is borrowed from: the connection's own pool until its server lends it the server's. */
   dataPool: BufferPool
-  /** Where `section` is borrowed from, likewise. */
+  /**
+   * Where the buffer a HEADERS payload is read into whole, for the decoder, is borrowed from around one
+   * read and decode: the connection's own pool until its server lends it the server's.
+   */
   sectionPool: BufferPool
   /** A control frame's payload, read whole. */
   private control: u8[]
@@ -444,7 +467,7 @@ export class Http3Connection {
   date: u8[]
   /** The bytes of `date`, the field's name, made once. */
   private dateName: u8[]
-  /** The SETTINGS this side sends. */
+  /** The identifiers of the SETTINGS this side sends, in the order sent; fixed by the constructor. */
   settingIds: i64[]
   private settingValues: i64[]
   /** Per QUIC stream slot: the stream the state is for, or -1. */
@@ -476,42 +499,66 @@ export class Http3Connection {
    */
   private again: i64[]
   private waiting: i64[]
-  /** This side's streams, and the client's critical ones; -1 until there. */
+  /** This side's control, encoder and decoder streams; -1 until opened. */
   private ownControl: i64 = -1
   private ownEncoder: i64 = -1
   private ownDecoder: i64 = -1
+  /** The ID of the client's control stream, or -1 until its stream type has been read. */
   peerControl: i64 = -1
+  /** The ID of the client's QPACK encoder stream, or -1 until its stream type has been read. */
   peerEncoder: i64 = -1
+  /** The ID of the client's QPACK decoder stream, or -1 until its stream type has been read. */
   peerDecoder: i64 = -1
   /** The stream `next` is reading, or -1. */
   private active: i64 = -1
-  /** The ID this side's GOAWAY named, or -1; the client's last GOAWAY push ID, and its MAX_PUSH_ID. */
+  /** The ID this side's GOAWAY named, or -1; the client's last GOAWAY push ID. */
   private goawayId: i64 = -1
   private peerGoaway: i64 = -1
+  /**
+   * The client's MAX_PUSH_ID, or -1 until it sends one. It is checked (it may not fall, and bounds
+   * CANCEL_PUSH) and otherwise unused, since this side never pushes.
+   */
   maxPushId: i64 = -1
   /** The last event's stream. */
   stream: i64 = -1
-  /** H3_RESET's and H3_ERROR's code. */
+  /** H3_RESET's, H3_STOPPED's and H3_ERROR's code. */
   errorCode: i64 = 0
   /** H3_GOAWAY's push ID. */
   lastStreamId: i64 = 0
   /** H3_STREAM's session ID. */
   session: i64 = -1
-  /** The QUIC stream slot of the last event's stream: still right when the read that made the event freed it. */
+  /**
+   * The QUIC stream slot of the last event's stream: still right when the read that made the event freed it.
+   * @internal Read by `webtransport.ts` to find its own per-slot state; not for callers.
+   */
   slot: i32 = -1
-  /** H3_DATA's window onto `data`. */
+  /** Where H3_DATA's window onto `data` starts. */
   dataStart: i32 = 0
+  /** H3_DATA's window length in bytes, 1 to `bodyChunk`; valid until the next `next()`. */
   dataLength: i32 = 0
   /** How much of `control` is filled. */
   private controlFill: i32 = 0
   /** How far into the borrowed `data` reads have written: what its give-back zeroes. */
   private dataUsed: i32 = 0
+  /** 0 while the connection is open; 1 once it failed (H3_ERROR), which only `restart` undoes. */
   state: i32 = 0
-  /** Requests open: taken and not yet finished both ways. */
+  /**
+   * Requests open, taken and not yet finished both ways, plus the WebTransport streams held after this
+   * side's GOAWAY for a session below it.
+   */
   live: i32 = 0
-  /** Counters for a log or a test, each saturating: requests refused after GOAWAY, answered 431, and reset for a rule. */
+  /**
+   * Counters for a log or a test, each saturating and zeroed by `restart`. This one: request streams refused
+   * because their ID is at or past the one this side's GOAWAY named, and WebTransport streams dropped
+   * because their session's is.
+   */
   rejected: i32 = 0
+  /** Requests whose field section was past `maxFieldSectionSize` and that were answered with a 431. */
   tooLarge: i32 = 0
+  /**
+   * Requests reset for breaking a rule (a stream error, §8): a malformed message, a body that disagrees
+   * with `content-length`, a stream that ends before its HEADERS, a trailer section too large.
+   */
   streamErrors: i32 = 0
   private againHead: i32 = 0
   private againCount: i32 = 0
@@ -522,8 +569,9 @@ export class Http3Connection {
   settingsSeen: boolean = false
   /** Whether H3_RESET came from the client. */
   resetByPeer: boolean = false
-  /** Whether extended CONNECT is on, and WebTransport. */
+  /** Whether extended CONNECT is on. */
   private connect: boolean = false
+  /** Whether WebTransport is on: `webtransportSessions` above 0. Fixed by the constructor. */
   webtransport: boolean = false
 
   /**
@@ -532,6 +580,11 @@ export class Http3Connection {
    * one on every request stream fit half the connection's window, and let
    * the client open the three unidirectional streams it needs and this side
    * open its own three (§6.2). A cap out of range panics.
+   *
+   * @param config The caps; kept, not copied, so it must not change after this call.
+   * @param quic The server QUIC connection to run on, kept for this connection's life. Its stream caps
+   *   are checked as above, and it must take DATAGRAM frames exactly when `webtransportSessions` is above
+   *   0, or this panics.
    */
   constructor(config: Http3Config, quic: QuicConnection) {
     const buffer: i32 = quic.streams.bufferSize
@@ -688,7 +741,10 @@ export class Http3Connection {
 
   // ---- The connection -----------------------------------------------------------
 
-  /** Closes the connection with `code` (a connection error) and answers H3_ERROR. */
+  /**
+   * Closes the connection with `code` (a connection error) and answers H3_ERROR.
+   * @internal Called by `webtransport.ts` to fail the connection on a malformed datagram; not for callers.
+   */
   fail(code: i64): i32 {
     if (this.state !== H3_STATE_FAILED) {
       this.state = H3_STATE_FAILED
@@ -702,6 +758,9 @@ export class Http3Connection {
    * Whether this side sent GOAWAY and every request it took has finished
    * both ways, every byte of each response acknowledged: the carrier may
    * close the connection.
+   *
+   * @returns True when this side's GOAWAY has gone out, `live` is 0 and QUIC has closed every request
+   *   stream the client opened; false otherwise, and always before `goaway()` has sent one.
    */
   isDone(): boolean {
     const streams = this.quic.streams
@@ -766,6 +825,11 @@ export class Http3Connection {
    * Reads what the QUIC connection has for the program and answers the next
    * event (see the module comment). Call it after every datagram the QUIC
    * connection takes, until it answers H3_NEED_MORE or H3_ERROR.
+   *
+   * @returns One of the `H3_*` events: H3_REQUEST, H3_DATA, H3_TRAILERS, H3_END, H3_RESET, H3_WRITABLE,
+   *   H3_GOAWAY, and with WebTransport on H3_STREAM, H3_STOPPED and H3_DROPPED; H3_NEED_MORE when
+   *   nothing more is there, or while the QUIC handshake is not done; H3_ERROR once the connection has
+   *   failed, or the QUIC connection has closed, and on every call after.
    */
   next(): i32 {
     // The last H3_DATA window ends here. A body read chunk by chunk keeps the
@@ -778,10 +842,15 @@ export class Http3Connection {
   }
 
   /**
+   * @internal Called by `http3-server.ts` when it builds a slot.
+   *
    * Lends this connection its server's pools in place of its own, giving
    * back to the old pools whatever it holds. Panics unless their buffers are
    * `bodyChunk` and `maxFieldSectionSize` bytes long, as this connection's
    * reads need.
+   *
+   * @param data The pool H3_DATA's buffer is borrowed from from now on; kept, not copied.
+   * @param section The pool a HEADERS payload's buffer is borrowed from from now on; kept, not copied.
    */
   share(data: BufferPool, section: BufferPool): void {
     if (data.size !== this.config.bodyChunk || section.size !== this.config.maxFieldSectionSize) {
@@ -794,7 +863,11 @@ export class Http3Connection {
     this.sectionPool = section
   }
 
-  /** Releases the QUIC connection (`QuicConnection.release`) and gives back every pooled buffer this connection holds. */
+  /**
+   * Releases the QUIC connection (`QuicConnection.release`) and gives back every pooled buffer this
+   * connection holds.
+   * @internal Called by `http3-server.ts` when it frees a slot or has stopped; not for callers.
+   */
   release(): void {
     this.quic.release()
     this.giveBack()
@@ -1377,6 +1450,10 @@ export class Http3Connection {
    * Lets a stream H3_STREAM held go: its bytes come as H3_DATA from the next
    * `next()`, and the program may write it. Answers 0, or H3_CLOSED for a
    * stream that is not one held.
+   *
+   * @param id The stream H3_STREAM named in `stream`.
+   * @returns 0 once the stream is let go; H3_CLOSED for a stream not held, one already accepted, or
+   *   any stream once the connection has failed.
    */
   acceptStream(id: i64): i32 {
     const k: i32 = this.wtSlot(id)
@@ -1392,6 +1469,12 @@ export class Http3Connection {
    * Refuses WebTransport stream `id` with `code`: its side here is reset,
    * the client's asked to stop, and what it sent read and dropped. Answers 0,
    * or H3_CLOSED for a stream that is not a WebTransport one.
+   *
+   * @param id A WebTransport stream known here, held or accepted, the client's or this side's.
+   * @param code The application error code its RESET_STREAM and STOP_SENDING carry. A side already
+   *   finished, reset or being dropped is left as it is.
+   * @returns 0; H3_CLOSED for a stream that is not a WebTransport one known here, or any stream once
+   *   the connection has failed.
    */
   refuseStream(id: i64, code: i64): i32 {
     const k: i32 = this.wtSlot(id)
@@ -1418,6 +1501,14 @@ export class Http3Connection {
    * the signal 0x41, and the session ID, which go before anything written.
    * Answers its ID, H3_AGAIN while the client's MAX_STREAMS allows no more,
    * or H3_CLOSED with WebTransport off or the connection failed.
+   *
+   * @param session The session's ID: the ID of the client-initiated bidirectional stream that carried
+   *   its CONNECT. It is written as given; whether such a session is open here is not checked.
+   * @param bidirectional True for a bidirectional stream (signal 0x41), false for a unidirectional one
+   *   (type 0x54) this side only writes.
+   * @returns The new stream's ID; H3_AGAIN when QUIC can open no stream of that kind now; H3_CLOSED
+   *   with WebTransport off, the connection failed, or a `session` that is not a client-initiated
+   *   bidirectional stream ID.
    */
   openStream(session: i64, bidirectional: boolean): i64 {
     if (!this.webtransport || this.state === H3_STATE_FAILED || !http3IsRequest(session) || session < 0) {
@@ -1452,6 +1543,15 @@ export class Http3Connection {
    * many it took — fewer only when the send buffer filled, and H3_WRITABLE
    * then names the stream — or H3_AGAIN when it took none, or H3_CLOSED for
    * a stream with no side here to write, finished, reset, held or stopped.
+   * A window outside `buf` panics.
+   *
+   * @param id A WebTransport stream this side writes, accepted or opened by `openStream`.
+   * @param buf The bytes; copied into the stream's send buffer, so the caller may reuse it.
+   * @param off Where the bytes start in `buf`.
+   * @param len How many bytes to offer; 0 with `fin` sends only the FIN.
+   * @param fin True to finish this side of the stream once all `len` bytes are taken.
+   * @returns The bytes taken, 1 to `len`, or 0 for a FIN alone; H3_AGAIN when it took none, a `len` of
+   *   0 without `fin` among them; H3_CLOSED as above, or any stream once the connection has failed.
    */
   writeStream(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
     h3CheckWindow("Http3Connection.writeStream", buf, off, len)
@@ -1480,7 +1580,15 @@ export class Http3Connection {
     return n > 0 || (fin && len === 0) ? n : H3_AGAIN
   }
 
-  /** Resets this side of WebTransport stream `id` with `code`; the client's side goes on. Answers 0 or H3_CLOSED. */
+  /**
+   * Resets this side of WebTransport stream `id` with `code`; the client's side goes on.
+   *
+   * @param id A WebTransport stream known here.
+   * @param code The application error code RESET_STREAM carries; nothing is sent when this side is
+   *   already finished or reset.
+   * @returns 0; H3_CLOSED for a stream that is not a WebTransport one known here, or any stream once
+   *   the connection has failed.
+   */
   resetStream(id: i64, code: i64): i32 {
     const k: i32 = this.wtSlot(id)
     if (k < 0) {
@@ -1494,6 +1602,12 @@ export class Http3Connection {
    * Asks the client to stop its side of WebTransport stream `id` with
    * `code`, and drops what it still sends; this side's goes on. Answers 0 or
    * H3_CLOSED.
+   *
+   * @param id A WebTransport stream known here.
+   * @param code The application error code STOP_SENDING carries; nothing is sent when the client's
+   *   side has already ended or is being dropped.
+   * @returns 0; H3_CLOSED for a stream that is not a WebTransport one known here, or any stream once
+   *   the connection has failed.
    */
   stopStream(id: i64, code: i64): i32 {
     const k: i32 = this.wtSlot(id)
@@ -2075,6 +2189,18 @@ export class Http3Connection {
    * that is not an open request; H3_INVALID for a second head, a status out
    * of range or a field `httpFieldsCheckOutgoing` refuses; H3_TOO_LARGE for a
    * section past the client's SETTINGS_MAX_FIELD_SECTION_SIZE; or H3_AGAIN.
+   *
+   * @param id The request stream, as H3_REQUEST named it in `stream`.
+   * @param status The final status, 200 to 599.
+   * @param names The field names, lowercase and valid, as many as `values`; encoded, not kept.
+   * @param values The field values, one per name; encoded, not kept.
+   * @param endStream True to end the stream with the head, for a response with no body.
+   * @returns 0 once the whole HEADERS frame is in the send buffer; H3_CLOSED for a stream that is not
+   *   an open request: unknown, not yet handed to the program, its response finished or reset, stopped
+   *   by the client, or any stream once the connection has failed;
+   *   H3_INVALID as above; H3_TOO_LARGE for a section past the client's limit or a frame past the
+   *   stream's buffer; H3_AGAIN while the send buffer lacks room for the frame, and H3_WRITABLE then
+   *   names the stream.
    */
   respond(id: i64, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32 {
     const k: i32 = this.writeSlot(id)
@@ -2096,6 +2222,14 @@ export class Http3Connection {
    * Writes a trailer section on request stream `id` after its body, which
    * ends the stream. Answers as `respond` does; H3_INVALID before the head
    * or inside a DATA frame `writeData` has not finished.
+   *
+   * @param id The request stream, after `respond`.
+   * @param names The trailer field names, lowercase and valid, as many as `values`; encoded, not kept.
+   * @param values The trailer field values, one per name; encoded, not kept.
+   * @returns 0 once the whole frame is in the send buffer and the stream ended; H3_CLOSED for a stream
+   *   that is not an open request: unknown, not yet handed to the program, its response finished or
+   *   reset, stopped by the client, or any stream once the connection has failed;
+   *   H3_INVALID as above; H3_TOO_LARGE or H3_AGAIN as `respond` answers them.
    */
   writeTrailers(id: i64, names: u8[][], values: u8[][]): i32 {
     const k: i32 = this.writeSlot(id)
@@ -2121,6 +2255,19 @@ export class Http3Connection {
    * took none;
    * H3_CLOSED, or H3_INVALID before the head or when `endStream` would cut
    * short the DATA frame the last call started.
+   * A window outside `buf` panics.
+   *
+   * @param id The request stream, after `respond`.
+   * @param buf The body bytes; copied into the stream's send buffer, so the caller may reuse it.
+   * @param off Where the bytes start in `buf`.
+   * @param len How many bytes to offer; 0 with `endStream` sends only the end.
+   * @param endStream True to end the stream once all `len` bytes are taken.
+   * @returns The bytes taken, 1 to `len` — fewer when the send buffer filled, or when the stream closed
+   *   partway — or 0 for a `len` of 0; H3_AGAIN when it took none, or while bytes an earlier call
+   *   left owed cannot go; H3_CLOSED for a stream that is not an open request: unknown, not yet handed
+   *   to the program, its response finished or reset, stopped by the client, or any stream once the
+   *   connection has failed;
+   *   H3_INVALID as above.
    */
   writeData(id: i64, buf: u8[], off: i32, len: i32, endStream: boolean): i32 {
     h3CheckWindow("Http3Connection.writeData", buf, off, len)
@@ -2188,6 +2335,18 @@ export class Http3Connection {
    * H3_AGAIN while the send buffer lacks room, and H3_WRITABLE then names the
    * stream; or as `writeData` refuses, and H3_TOO_LARGE for a frame past the
    * stream's buffer.
+   * A window outside `buf` panics.
+   *
+   * @param id The request stream, after `respond`.
+   * @param buf The frame's payload; copied into the stream's send buffer, so the caller may reuse it.
+   * @param off Where the payload starts in `buf`.
+   * @param len The payload's length in bytes; the frame with its header must fit the stream's buffer.
+   * @param fin True to end the stream after the frame.
+   * @returns 0 once the whole frame is in the send buffer; H3_AGAIN while the send buffer lacks room for
+   *   it, and H3_WRITABLE then names the stream; H3_CLOSED for a stream that is not an open request:
+   *   unknown, not yet handed to the program, its response finished or reset, stopped by the client, or
+   *   any stream once the connection has failed;
+   *   H3_INVALID before the head or inside a DATA frame `writeData` has not finished; H3_TOO_LARGE.
    */
   writeDataWhole(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
     h3CheckWindow("Http3Connection.writeDataWhole", buf, off, len)
@@ -2224,6 +2383,13 @@ export class Http3Connection {
    * Resets request stream `id` both ways with `code` — H3_REQUEST_CANCELLED,
    * or H3_REQUEST_REJECTED for one the program did not process (§4.1.1).
    * Answers 0 or H3_CLOSED.
+   *
+   * @param id The request stream, as H3_REQUEST named it.
+   * @param code The error code RESET_STREAM and STOP_SENDING carry; STOP_SENDING is not sent once the
+   *   request has been read to its end.
+   * @returns 0; H3_CLOSED for a stream that is not an open request: unknown, not yet handed to the
+   *   program, its response finished or reset, stopped by the client, or any stream once the connection
+   *   has failed.
    */
   reset(id: i64, code: i64): i32 {
     const k: i32 = this.writeSlot(id)
@@ -2243,6 +2409,12 @@ export class Http3Connection {
    * not opened, opened by a later stream's frame (RFC 9000 §3.2), or still
    * waiting for its HEADERS. A WebTransport stream that names it as its
    * session may wait for it.
+   *
+   * @param id A stream ID, as a WebTransport stream named its session.
+   * @returns True while the request may still come: not opened and within what the client may open now,
+   *   opened but not yet read here, or waiting for its HEADERS; false for an ID that is no
+   *   client-initiated bidirectional stream, one at or past this side's GOAWAY, a WebTransport stream,
+   *   or one whose field section has been read or refused.
    */
   awaitsRequest(id: i64): boolean {
     if (!http3IsRequest(id) || id < 0 || (this.goawayId >= 0 && id >= this.goawayId)) {
@@ -2266,6 +2438,12 @@ export class Http3Connection {
    * side has finished its response — a refused WebTransport session's
    * stream, after its status. Answers 0, or H3_CLOSED for a stream that is
    * not a request here.
+   *
+   * @param id The request stream.
+   * @param code The error code STOP_SENDING carries; nothing is sent when the client's side has already
+   *   ended or is being dropped.
+   * @returns 0, also when there was nothing left to stop; H3_CLOSED for an ID that is no request stream
+   *   known here, or any stream once the connection has failed.
    */
   discardRequest(id: i64, code: i64): i32 {
     if (this.state === H3_STATE_FAILED || !http3IsRequest(id)) {
@@ -2286,6 +2464,10 @@ export class Http3Connection {
    * call never raises the ID, and sends nothing when the ID has not fallen.
    * Answers 0, or H3_AGAIN before this side's control stream is open or while
    * it has no room for the frame.
+   *
+   * @returns 0 once the frame is in the control stream's send buffer, or when there was nothing new to
+   *   send; H3_AGAIN before this side's control stream is open, while it has no room for the whole
+   *   frame, and on a connection that has failed.
    */
   goaway(): i32 {
     if (this.ownControl < 0 || this.state === H3_STATE_FAILED) {

@@ -5,14 +5,20 @@
  * unknown. Sans-IO: every reader takes a byte window `(buf, off, len)` and
  * reads it in place, and every writer writes into the caller's buffer at an
  * offset, before an end, and answers the offset past what it wrote, or -1
- * with nothing written. Nothing here allocates.
+ * when it does not fit (the frame writers may have written their header by
+ * then). Nothing here allocates.
  *
- *     import { Http3FrameHeader, h3ReadFrameHeader, h3PutFrameHeader, H3_FRAME_DATA } from "nish/net/http3-frame";
+ *     import {
+ *       Http3FrameHeader, h3ReadFrameHeader, h3PutFrameHeader, H3_FRAME_DATA, H3_FRAME_HEADER_MAX,
+ *     } from "nish/net/http3-frame";
  *
+ *     const buf: u8[] = [0x00, 0x03, 0x61, 0x62, 0x63];         // bytes a stream delivered: DATA, 3 bytes
  *     const h = new Http3FrameHeader();
- *     const size: i32 = h3ReadFrameHeader(h, buf, off, len);   // 0: the window ends inside the header
+ *     const size: i32 = h3ReadFrameHeader(h, buf, 0, toI32(buf.length));   // 2; 0 if the header is cut off
  *     // h.type, h.length; the payload is the next h.length bytes of the stream
- *     const at: i32 = h3PutFrameHeader(out, 0, toI32(out.length), H3_FRAME_DATA, toI64(n));
+ *     const out: u8[] = new Array<u8>(H3_FRAME_HEADER_MAX);
+ *     const n: i32 = 3;
+ *     const at: i32 = h3PutFrameHeader(out, 0, toI32(out.length), H3_FRAME_DATA, toI64(n));   // 2
  *
  * **Frames** (§7.1) are a type and a length, each a QUIC variable-length
  * integer, and then that many bytes of payload. On a QUIC stream a frame may
@@ -128,22 +134,39 @@ export const H3_SETTINGS_KEEP: i32 = 8
 
 /** What `h3ReadSettings` answers for a payload it read whole. */
 export const H3_SETTINGS_OK: i64 = 0
+/** H3_NO_ERROR (0x0100): no error, for closing a connection or stream with nothing to signal (§8.1). */
 export const H3_NO_ERROR: i64 = 0x0100
+/** H3_GENERAL_PROTOCOL_ERROR (0x0101): a protocol violation no more specific code names (§8.1). */
 export const H3_GENERAL_PROTOCOL_ERROR: i64 = 0x0101
+/** H3_INTERNAL_ERROR (0x0102): an internal error in the HTTP stack (§8.1). */
 export const H3_INTERNAL_ERROR: i64 = 0x0102
+/** H3_STREAM_CREATION_ERROR (0x0103): the peer created a stream this endpoint will not accept (§8.1). */
 export const H3_STREAM_CREATION_ERROR: i64 = 0x0103
+/** H3_CLOSED_CRITICAL_STREAM (0x0104): a stream the connection needs was closed or reset (§8.1). */
 export const H3_CLOSED_CRITICAL_STREAM: i64 = 0x0104
+/** H3_FRAME_UNEXPECTED (0x0105): a frame not allowed in the current state or on its stream (§8.1). */
 export const H3_FRAME_UNEXPECTED: i64 = 0x0105
+/** H3_FRAME_ERROR (0x0106): a frame whose layout or size is wrong (§8.1). */
 export const H3_FRAME_ERROR: i64 = 0x0106
+/** H3_EXCESSIVE_LOAD (0x0107): the peer behaves in a way that may cause excessive load (§8.1). */
 export const H3_EXCESSIVE_LOAD: i64 = 0x0107
+/** H3_ID_ERROR (0x0108): a stream ID or push ID used wrongly, such as past a limit or reused (§8.1). */
 export const H3_ID_ERROR: i64 = 0x0108
+/** H3_SETTINGS_ERROR (0x0109): an error in a SETTINGS payload (§8.1, §7.2.4). */
 export const H3_SETTINGS_ERROR: i64 = 0x0109
+/** H3_MISSING_SETTINGS (0x010a): the control stream did not start with SETTINGS (§8.1, §6.2.1). */
 export const H3_MISSING_SETTINGS: i64 = 0x010a
+/** H3_REQUEST_REJECTED (0x010b): the server refused a request before any processing of it (§8.1). */
 export const H3_REQUEST_REJECTED: i64 = 0x010b
+/** H3_REQUEST_CANCELLED (0x010c): a request or its response is cancelled (§8.1). */
 export const H3_REQUEST_CANCELLED: i64 = 0x010c
+/** H3_REQUEST_INCOMPLETE (0x010d): the client's stream ended without a whole request (§8.1). */
 export const H3_REQUEST_INCOMPLETE: i64 = 0x010d
+/** H3_MESSAGE_ERROR (0x010e): a malformed HTTP message (§8.1, §4.1.2). */
 export const H3_MESSAGE_ERROR: i64 = 0x010e
+/** H3_CONNECT_ERROR (0x010f): a CONNECT request's TCP connection was reset or closed abnormally (§8.1). */
 export const H3_CONNECT_ERROR: i64 = 0x010f
+/** H3_VERSION_FALLBACK (0x0110): the request cannot be served over HTTP/3; retry it over HTTP/1.1 (§8.1). */
 export const H3_VERSION_FALLBACK: i64 = 0x0110
 /** WT_SESSION_GONE (draft-ietf-webtrans-http3-02 §4.5): a WebTransport stream of a session that is gone, or can never come. */
 export const H3_WT_SESSION_GONE: i64 = 0x170d7b68
@@ -164,7 +187,9 @@ const H3_FRAME_ZERO: i32 = 0
 
 /** One frame header as `h3ReadFrameHeader` read it: the type and the payload's length. */
 export class Http3FrameHeader {
+  /** The frame type, 0 to 2^62 - 1, any value: set by each `h3ReadFrameHeader` that answers above 0. */
   type: i64 = 0
+  /** The payload's length in bytes, 0 to 2^62 - 1, set with `type`; the payload itself is not read here. */
   length: i64 = 0
 }
 
@@ -178,8 +203,14 @@ export class Http3FrameHeader {
 export class Http3Settings {
   private unknownIds: i64[]
   private unknownValues: i64[]
+  /** SETTINGS_QPACK_MAX_TABLE_CAPACITY in bytes as the peer sent it, unchecked; 0 by default. */
   maxTableCapacity: i64 = 0
+  /**
+   * SETTINGS_MAX_FIELD_SECTION_SIZE as the peer sent it: the largest field section it takes, as §4.2.2
+   * counts it; -1, unlimited, by default.
+   */
   maxFieldSectionSize: i64 = -1
+  /** SETTINGS_QPACK_BLOCKED_STREAMS, a count of streams, as the peer sent it, unchecked; 0 by default. */
   blockedStreams: i64 = 0
   /**
    * The extension settings WebTransport reads, -1 when the frame did not
@@ -189,8 +220,11 @@ export class Http3Settings {
    * as an unknown identifier while there is room, so `unknown` still finds it.
    */
   enableConnectProtocol: i64 = -1
+  /** SETTINGS_H3_DATAGRAM's value as the peer sent it, or -1 when the frame did not carry it. */
   h3Datagram: i64 = -1
+  /** SETTINGS_ENABLE_WEBTRANSPORT's value as the peer sent it, or -1 when the frame did not carry it. */
   enableWebtransport: i64 = -1
+  /** SETTINGS_WEBTRANSPORT_MAX_SESSIONS's value as the peer sent it, or -1 when the frame lacked it. */
   webtransportMaxSessions: i64 = -1
   /** The bits of the identifiers understood that the frame set. */
   seen: i32 = 0
@@ -199,12 +233,17 @@ export class Http3Settings {
   /** How many more there were, saturating at 2^31 - 1. */
   dropped: i32 = 0
 
+  /** Settings at their defaults, with room for `H3_SETTINGS_KEEP` unknown identifiers made once. */
   constructor() {
     this.unknownIds = new Array<i64>(H3_SETTINGS_KEEP)
     this.unknownValues = new Array<i64>(H3_SETTINGS_KEEP)
   }
 
-  /** Back to the defaults, for the next connection. */
+  /**
+   * Back to the defaults, for the next connection.
+   * @internal Called by `h3ReadSettings` before it reads and by `http3.ts`'s connection restart; not for
+   *   callers.
+   */
   reset(): void {
     this.maxTableCapacity = 0
     this.maxFieldSectionSize = -1
@@ -218,7 +257,12 @@ export class Http3Settings {
     this.dropped = 0
   }
 
-  /** The value of an identifier this module does not understand, or -1 when the frame did not carry it (or carried it past the kept ones). */
+  /**
+   * The value of an identifier this module does not understand.
+   * @param id The setting identifier to look up among the kept ones.
+   * @returns Its value as the peer sent it, 0 to 2^62 - 1, or -1 when it is not kept; -1 also for the three
+   *   identifiers this module understands, which are never kept.
+   */
   unknown(id: i64): i64 {
     for (let k: i32 = 0; k < this.unknownCount && k < H3_SETTINGS_KEEP; k++) {
       if (this.unknownIds[k] === id) {
@@ -228,7 +272,10 @@ export class Http3Settings {
     return H3_FRAME_NONE
   }
 
-  /** Records one pair; answers `H3_SETTINGS_OK` or H3_SETTINGS_ERROR for a reserved or repeated identifier. */
+  /**
+   * Records one pair; answers `H3_SETTINGS_OK` or H3_SETTINGS_ERROR for a reserved or repeated identifier.
+   * @internal Called once per pair by `h3ReadSettings`, which resets first; not for callers.
+   */
   take(id: i64, value: i64): i64 {
     if (id === 0x00 || (id >= 0x02 && id <= 0x05)) {
       return H3_SETTINGS_ERROR
@@ -288,14 +335,24 @@ export class Http3Settings {
   }
 }
 
-/** Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake. */
+/**
+ * Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake.
+ * @param what The caller's name, which starts the panic message.
+ * @param buf The buffer the window is meant to lie in.
+ * @param off The window's first byte offset; negative panics.
+ * @param len The window's length in bytes; negative panics, and so does an end past `buf.length`.
+ */
 export const h3CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
   if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
     panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
   }
 }
 
-/** `count` plus one, saturating at 2^31 - 1: every counter a peer drives. */
+/**
+ * `count` plus one, saturating at 2^31 - 1: every counter a peer drives.
+ * @param count The counter's current value.
+ * @returns `count + 1`, or `count` unchanged once it is 2^31 - 1.
+ */
 export const h3Count = (count: i32): i32 => (count < 2147483647 ? count + 1 : count)
 
 /** Whether `[at, end)` is a usable place to write in `buf`. */
@@ -305,16 +362,34 @@ const h3FrameRoom = (buf: u8[], at: i32, end: i32): boolean =>
 /**
  * The varint at `buf[at]`, read only from `buf[at .. end)`, or -1 when it
  * does not fit there. Advance past it by `h3VarintLength(buf, at)`.
+ * @param buf The bytes holding the integer.
+ * @param at The byte offset of the integer's first byte.
+ * @param end The offset the integer must end at or before; past `buf.length` reads nothing.
+ * @returns The value, 0 to 2^62 - 1, or -1 when `at` is outside `buf`, `end` is past `buf.length`, or the
+ *   integer's bytes run past `end`.
  */
 export const h3ReadVarint = (buf: u8[], at: i32, end: i32): i64 => quicVarintRead(buf, at, end)
 
-/** The length of the varint whose first byte is `buf[at]`: 1, 2, 4 or 8, or 0 outside `buf`. */
+/**
+ * The length of the varint whose first byte is `buf[at]`.
+ * @param buf The bytes holding the integer.
+ * @param at The byte offset of the integer's first byte.
+ * @returns 1, 2, 4 or 8 bytes, read from the first byte's two-bit prefix alone (the rest need not be in
+ *   `buf`), or 0 when `at` is outside `buf`.
+ */
 export const h3VarintLength = (buf: u8[], at: i32): i32 => quicVarintLength(buf, at)
 
 /**
  * Writes `value` as a varint in the fewest bytes at `buf[at]`, before `end`,
  * and answers the offset past it, or -1 when it does not fit or no varint
  * holds the value.
+ * @param buf The buffer to write into.
+ * @param at The byte offset to write the first byte at.
+ * @param end The offset the integer must end at or before; at most `buf.length`.
+ * @param value The value to encode, 0 to 2^62 - 1.
+ * @returns The offset past the 1, 2, 4 or 8 bytes written, or -1 with nothing written when `value` is
+ *   negative or above 2^62 - 1, `[at, end)` is not a window inside `buf`, or the integer does not fit before
+ *   `end`.
  */
 export const h3PutVarint = (buf: u8[], at: i32, end: i32, value: i64): i32 => {
   const size: i32 = quicVarintSize(value)
@@ -324,7 +399,12 @@ export const h3PutVarint = (buf: u8[], at: i32, end: i32, value: i64): i32 => {
   return quicVarintPut(buf, at, value, size)
 }
 
-/** How many bytes a frame header of `type` and `length` takes, or 0 when either is no varint. */
+/**
+ * How many bytes a frame header of `type` and `length` takes.
+ * @param type The frame type.
+ * @param length The payload's length in bytes.
+ * @returns 2 to 16 bytes, or 0 when `type` or `length` is negative or above 2^62 - 1.
+ */
 export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
   const a: i32 = quicVarintSize(type)
   const b: i32 = quicVarintSize(length)
@@ -336,6 +416,11 @@ export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
  * many bytes it took, or 0 when the window ends inside it (and `h` is not
  * touched). Any type and any length up to 2^62 - 1 is a header; whether the
  * type is allowed where it arrived is the stream's question.
+ * @param h The header to fill; set only when the answer is above 0.
+ * @param buf The bytes the stream delivered.
+ * @param off The window's first byte offset, where the header starts.
+ * @param len The window's length in bytes; the window must lie inside `buf`, or this panics.
+ * @returns The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
  */
 export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 => {
   h3CheckWindow("h3ReadFrameHeader", buf, off, len)
@@ -354,7 +439,16 @@ export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len:
   return at + quicVarintLength(buf, at) - off
 }
 
-/** Writes a frame header of `type` and `length` at `buf[at]`, before `end`; answers the offset past it, or -1. */
+/**
+ * Writes a frame header of `type` and `length` at `buf[at]`, before `end`.
+ * @param buf The buffer to write into.
+ * @param at The byte offset to write the header at.
+ * @param end The offset the header must end at or before; at most `buf.length`.
+ * @param type The frame type, 0 to 2^62 - 1, written as given.
+ * @param length The payload's length in bytes, 0 to 2^62 - 1; the payload is the caller's to write.
+ * @returns The offset past the 2 to 16 bytes written, or -1 with nothing written when `type` or `length` is
+ *   no varint, `[at, end)` is not a window inside `buf`, or the header does not fit before `end`.
+ */
 export const h3PutFrameHeader = (buf: u8[], at: i32, end: i32, type: i64, length: i64): i32 => {
   const size: i32 = h3FrameHeaderSize(type, length)
   if (size === 0 || !h3FrameRoom(buf, at, end) || at > end - size) {
@@ -363,11 +457,21 @@ export const h3PutFrameHeader = (buf: u8[], at: i32, end: i32, type: i64, length
   return h3PutVarint(buf, h3PutVarint(buf, at, end, type), end, length)
 }
 
-/** Whether `type` is one HTTP/2 used that HTTP/3 reserves, whose receipt is H3_FRAME_UNEXPECTED (§7.2.8). */
+/**
+ * Whether `type` is one HTTP/2 used that HTTP/3 reserves, whose receipt is H3_FRAME_UNEXPECTED (§7.2.8).
+ * @param type A frame type as read.
+ * @returns True for 0x02, 0x06, 0x08 and 0x09; false for every other type.
+ */
 export const h3ReservedHttp2Frame = (type: i64): boolean =>
   type === 0x02 || type === 0x06 || type === 0x08 || type === 0x09
 
-/** Whether `value` is one of the `0x1f * N + 0x21` values reserved to exercise the rule that unknowns are ignored (§7.2.8, §7.2.4.1, §6.2.3). */
+/**
+ * Whether `value` is one of the `0x1f * N + 0x21` values reserved to exercise the rule that unknowns are
+ * ignored (§7.2.8, §7.2.4.1, §6.2.3).
+ * @param value A frame type, setting identifier or stream type.
+ * @returns True when `value` is 0x21 or above and 0x21 more than a multiple of 0x1f; false otherwise,
+ *   negatives included.
+ */
 export const h3Greased = (value: i64): boolean => value >= 0x21 && (value - 0x21) % 0x1f === 0
 
 /**
@@ -375,6 +479,15 @@ export const h3Greased = (value: i64): boolean => value >= 0x21 && (value - 0x21
  * resets first). Answers `H3_SETTINGS_OK`, H3_FRAME_ERROR for a payload that
  * ends inside a pair (§7.1), or H3_SETTINGS_ERROR for a reserved or repeated
  * identifier (§7.2.4).
+ * @param s The settings to fill; reset first, and after an error answer its contents are not meaningful.
+ * @param buf The bytes holding the payload.
+ * @param off The payload's first byte offset.
+ * @param len The payload's length in bytes, the frame header's `length`; the window must lie inside `buf`,
+ *   or this panics. An empty payload is read as the defaults.
+ * @returns `H3_SETTINGS_OK` when every pair was read; H3_FRAME_ERROR when the payload ends inside an
+ *   identifier or a value; H3_SETTINGS_ERROR for an identifier HTTP/2 defined (0x00, 0x02 to 0x05) or a
+ *   repeat of an identifier understood, of an extension one, or of a kept unknown one. It stops at the first
+ *   error.
  */
 export const h3ReadSettings = (s: Http3Settings, buf: u8[], off: i32, len: i32): i64 => {
   h3CheckWindow("h3ReadSettings", buf, off, len)
@@ -403,8 +516,17 @@ export const h3ReadSettings = (s: Http3Settings, buf: u8[], off: i32, len: i32):
 /**
  * Writes a whole SETTINGS frame of the pairs `ids[k]`, `values[k]` at
  * `buf[at]`, before `end`, and answers the offset past it, or -1 when it does
- * not fit, the lists differ in length, or a value is no varint. It writes
+ * not fit, the lists differ in length, or an identifier or a value is no varint. It writes
  * what it is given: refusing a reserved identifier is the reader's job.
+ * @param buf The buffer to write into.
+ * @param at The byte offset to write the frame at.
+ * @param end The offset the frame must end at or before; at most `buf.length`.
+ * @param ids The setting identifiers, in the order they are written; read, not kept.
+ * @param values The values, one per identifier at the same index; read, not kept.
+ * @returns The offset past the frame written, header and payload, or -1 when the lists differ in length,
+ *   an identifier or a value is negative or above 2^62 - 1, `[at, end)` is not a window inside `buf`, or
+ *   the frame does not fit before `end`. Nothing is written for the first three; when only the payload
+ *   does not fit, the header may already be in `buf[at ..]`.
  */
 export const h3PutSettings = (buf: u8[], at: i32, end: i32, ids: i64[], values: i64[]): i32 => {
   const n: i32 = toI32(ids.length)
@@ -435,6 +557,15 @@ export const h3PutSettings = (buf: u8[], at: i32, end: i32, ids: i64[], values: 
  * Writes a frame whose payload is one identifier — GOAWAY, MAX_PUSH_ID or
  * CANCEL_PUSH (§7.2.6, §7.2.7, §7.2.3) — at `buf[at]`, before `end`; answers
  * the offset past it, or -1.
+ * @param buf The buffer to write into.
+ * @param at The byte offset to write the frame at.
+ * @param end The offset the frame must end at or before; at most `buf.length`.
+ * @param type The frame type, written as given: `H3_FRAME_GOAWAY`, `H3_FRAME_MAX_PUSH_ID` or
+ *   `H3_FRAME_CANCEL_PUSH`, which this does not check.
+ * @param id The stream ID or push ID the payload carries, 0 to 2^62 - 1.
+ * @returns The offset past the frame written, or -1 when `type` or `id` is no varint, `[at, end)` is not a
+ *   window inside `buf`, or the frame does not fit before `end`; when only the identifier does not fit, the
+ *   header may already be in `buf[at ..]`.
  */
 export const h3PutIdFrame = (buf: u8[], at: i32, end: i32, type: i64, id: i64): i32 => {
   const size: i32 = quicVarintSize(id)
@@ -449,6 +580,12 @@ export const h3PutIdFrame = (buf: u8[], at: i32, end: i32, type: i64, id: i64): 
  * The identifier a GOAWAY, MAX_PUSH_ID or CANCEL_PUSH payload
  * `buf[off, off + len)` carries, or -1 when the payload is not exactly one
  * varint, which is H3_FRAME_ERROR (§7.1).
+ * @param buf The bytes holding the payload.
+ * @param off The payload's first byte offset.
+ * @param len The payload's length in bytes, the frame header's `length`; the window must lie inside `buf`,
+ *   or this panics.
+ * @returns The identifier, 0 to 2^62 - 1, or -1 when the payload is empty, ends inside the varint, or has
+ *   bytes after it.
  */
 export const h3ReadIdPayload = (buf: u8[], off: i32, len: i32): i64 => {
   h3CheckWindow("h3ReadIdPayload", buf, off, len)
