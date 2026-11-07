@@ -494,6 +494,11 @@ const vectorZero = (walk: Walk, node: Node): string => {
 
 /** `new Array<T>(n)` or `new Float64Array(n)` as a checked, zero-filled `newArray`, or `null`. */
 const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const stored = walk.storageIds.indexOf(node.id)
+  if (stored >= 0) {
+    walk.usesStorage = true
+    return walk.storageTexts[stored]
+  }
   const callee = node.children[0]
   if (callee.kind !== N_IDENT || node.children[2].children.length !== 1) {
     return null

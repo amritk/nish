@@ -50,6 +50,7 @@ import {
 } from "./interop-abi"
 import { takesRange } from "./emit-builtins"
 import { StringSet } from "./map"
+import { unwrapParens } from "./emit-util"
 import { basename, dirname, relativePath, resolvePath } from "./paths"
 import { elementStride, FunctionSig, inlineElementStruct } from "./program"
 import {
@@ -1224,11 +1225,14 @@ export class StorageField {
   name: string
   offset: i32
   type: string
+  /** A `boolean`: one byte the TypeScript reading answers `true` or `false` for. */
+  flag: boolean
 
-  constructor(name: string, offset: i32, type: string) {
+  constructor(name: string, offset: i32, type: string, flag: boolean) {
     this.name = name
     this.offset = offset
     this.type = type
+    this.flag = flag
   }
 }
 
@@ -1245,15 +1249,23 @@ export class StorageLayout {
   stride: i32
   /** `Float32Array` and the like for a scalar element; empty for a record. */
   view: string
+  /** A scalar storage of `boolean`s, read by the TypeScript reading as `true` or `false`. */
+  flag: boolean
   fields: StorageField[]
+  /** The index of the declaring module in the compilation, and the id of its `new` there: where `--emit-ts` writes the view. */
+  module: i32
+  newId: i32
 
-  constructor(key: string, symbol: string, length: i32, stride: i32, view: string) {
+  constructor(key: string, symbol: string, length: i32, stride: i32, view: string, flag: boolean) {
     this.key = key
     this.symbol = symbol
     this.length = length
     this.stride = stride
     this.view = view
+    this.flag = flag
     this.fields = []
+    this.module = -1
+    this.newId = -1
   }
 }
 
@@ -1294,8 +1306,10 @@ export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
   const table = compilation.table
   const out: StorageLayout[] = []
   const keys = new StringSet()
+  let index = 0
   for (const unit of compilation.modules) {
     const program = unit.checker.program
+    index = index + 1
     for (const info of program.constantList) {
       if (!info.storage || info.origin !== program.source || info.storageElem < 0) {
         continue
@@ -1310,11 +1324,14 @@ export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
         info.storageSymbol,
         length,
         stride,
-        record === null ? storageView(table, info.storageElem) : ""
+        record === null ? storageView(table, info.storageElem) : "",
+        info.storageElem === T_BOOL
       )
+      layout.module = index - 1
+      layout.newId = unwrapParens(info.decl.children[2]).id
       if (record !== null) {
         for (const field of record.fields) {
-          layout.fields.push(new StorageField(field.name, field.offset, storageView(table, field.type)))
+          layout.fields.push(new StorageField(field.name, field.offset, storageView(table, field.type), field.type === T_BOOL))
         }
       }
       out.push(layout)

@@ -268,6 +268,14 @@ export class Walk {
    * stub, since the text JavaScript's meaning gives it may not be native's.
    */
   typeMiss: boolean
+  /**
+   * WP50 §5.4: each module storage `new` of this module, by node id, and the
+   * view of `STORAGE_FILE` it is written as (`src/emit-ts-storage.ts`).
+   * `usesStorage` is set once one is written, so the driver imports the file.
+   */
+  storageIds: i32[]
+  storageTexts: string[]
+  usesStorage: boolean
   /** Whether the module spells the ambient `HostHandle`, which the output declares for itself (`HOST_HANDLE_ALIAS`). */
   hostHandle: boolean
   /** The node being walked may hoist, by its position alone (`hoistChild`). */
@@ -293,6 +301,9 @@ export class Walk {
     }
     this.instanceNext = []
     this.instances = []
+    this.storageIds = []
+    this.storageTexts = []
+    this.usesStorage = false
     this.inInstance = false
     this.untyped = false
     this.repeat = false

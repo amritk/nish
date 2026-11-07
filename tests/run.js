@@ -30487,6 +30487,31 @@ if (!only || "wasm-host-page".includes(only)) {
         shown(res)
       )
     }
+    // The same page against the TypeScript reading (§5.4): `--emit-ts` writes
+    // nish-storage.ts, whose `memory` and `layout` stand where the wasm
+    // instance's do, so a loader made of them and the module's exports is all
+    // the page needs, and it must print the same lines.
+    const tsDir = at("ts")
+    const emitted = spawnSync(NISH, [at("main.ts"), "--emit-ts", tsDir], { cwd: root, encoding: "utf8" })
+    check("page: --emit-ts writes the module's reading and nish-storage.ts", emitted.status === 0 && fs.existsSync(path.join(tsDir, "nish-storage.ts")), shown(emitted))
+    if (emitted.status === 0) {
+      fs.writeFileSync(
+        at("drive-ts.mjs"),
+        [
+          'import * as m from "./ts/main.ts"',
+          'import { memory, layout } from "./ts/nish-storage.ts"',
+          'import { run } from "./page.ts"',
+          "console.log(run({ loadSync: () => ({ ...m, memory, layout }) }, new Uint8Array(0)).join(\"\\n\"))",
+          "",
+        ].join("\n")
+      )
+      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+        cwd: dir,
+        encoding: "utf8",
+      })
+      const expected = fs.readFileSync(path.join(root, "tests", "page", "expected.out"), "utf8").trim()
+      check("page: the same page prints the same lines against the --emit-ts reading", res.status === 0 && res.stdout.trim() === expected, shown(res))
+    }
     if (compiled.status === 0) {
       const typedDir = at("typed")
       fs.mkdirSync(typedDir)

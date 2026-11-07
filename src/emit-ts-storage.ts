@@ -1,0 +1,168 @@
+// Module storage in the TypeScript reading (WP50 §5.4).
+//
+// The wasm build lays every module storage out in linear memory and the page
+// reads it through `memory.buffer` and `layout` (§5.2). A page must run the
+// same against the TypeScript reading, so `--emit-ts` writes one more file,
+// `nish-storage.ts`: one `ArrayBuffer` laid out as `layout` says, `memory`
+// holding it as `buffer`, `layout` itself, and each storage as a view of it.
+// A module's storage `new` is written as that view (`newRow` in
+// `src/emit-ts-records.ts` asks `storageNewText`), so every read and write the
+// module makes lands in the buffer the page sees.
+//
+// - A scalar storage is the typed array its element reads as
+//   (`new Int32Array(heap, at, length)`); a `boolean` one is that byte array
+//   behind a proxy that reads `!== 0` and writes `1` or `0`.
+// - A record storage is an array of plain objects, one per element, whose
+//   fields are accessors over the heap's views at
+//   `(at + i * stride + offset) >> shift`. Every access is `name[i].field`
+//   (§5.1 refuses an element reference), so each one reads or writes the
+//   buffer, and a whole-element copy (`storeIdx`) is `Object.assign`, which
+//   runs each getter of the source and each setter of the target: field by
+//   field, as the native copy is.
+//
+// The offsets are the reading's own: each storage starts on an 8-byte
+// boundary from 0. A page reads them from `layout`, as it reads the wasm
+// build's, and never spells one.
+
+import { StorageLayout } from "./interop-wasm"
+
+/** The file the storage of a whole program is written to, beside its modules. */
+export const STORAGE_FILE: string = "nish-storage.ts"
+
+/** The name a module imports `STORAGE_FILE` as. */
+export const STORAGE_NAMESPACE: string = "__nishStorage"
+
+/** log2 of a view's element size: the shift from a byte address to its index. */
+const viewShift = (view: string): i32 => {
+  if (view === "Uint8Array" || view === "Int8Array") {
+    return 0
+  }
+  if (view === "Uint16Array" || view === "Int16Array") {
+    return 1
+  }
+  if (view === "Float64Array" || view === "BigInt64Array" || view === "BigUint64Array") {
+    return 3
+  }
+  return 2
+}
+
+/** `n` rounded up to a multiple of 8. */
+const align8 = (n: i32): i32 => n + ((8 - (n % 8)) % 8)
+
+/** The byte offset of each storage in the reading's heap, in `layouts` order. */
+const storageOffsets = (layouts: StorageLayout[]): i32[] => {
+  const out: i32[] = []
+  let at = 0
+  for (const s of layouts) {
+    at = align8(at)
+    out.push(at)
+    at = at + s.length * s.stride
+  }
+  out.push(align8(at))
+  return out
+}
+
+/** The text a storage's `new` is written as: its export from `STORAGE_FILE`, or "" when `id` is no storage of module `module`. */
+export const storageNewText = (layouts: StorageLayout[], module: i32, id: i32): string => {
+  let k = 0
+  while (k < layouts.length) {
+    if (layouts[k].module === module && layouts[k].newId === id) {
+      return `${STORAGE_NAMESPACE}.s${k}`
+    }
+    k = k + 1
+  }
+  return ""
+}
+
+/** The heap-wide view a record field reads through, named for its type. */
+const heapView = (view: string): string => `heap${view}`
+
+/** One field of a record element as a getter and a setter over its heap view. */
+const fieldAccessors = (name: string, view: string, offset: i32, flag: boolean): string => {
+  const shift = viewShift(view)
+  const slot = shift === 0 ? `at + ${offset}` : `(at + ${offset}) >> ${shift}`
+  const array = heapView(view)
+  if (flag) {
+    return `get ${name}() { return ${array}[${slot}] !== 0 }, set ${name}(v) { ${array}[${slot}] = v ? 1 : 0 }`
+  }
+  return `get ${name}() { return ${array}[${slot}] }, set ${name}(v) { ${array}[${slot}] = v }`
+}
+
+/** `STORAGE_FILE`'s text for `layouts`, which is not empty. */
+export const storageFileText = (layouts: StorageLayout[]): string => {
+  const offsets = storageOffsets(layouts)
+  const lines: string[] = []
+  lines.push("// Module storage for the TypeScript reading (WP50 §5.4), written by `nish --emit-ts`:")
+  lines.push("// one buffer laid out as `layout` says, each storage a view of it, so a page")
+  lines.push("// reads `memory.buffer` and `layout` here as it reads them from the wasm build.")
+  lines.push(`const heap = new ArrayBuffer(${offsets[layouts.length]})`)
+  const views: string[] = []
+  for (const s of layouts) {
+    for (const f of s.fields) {
+      if (views.indexOf(f.type) < 0) {
+        views.push(f.type)
+      }
+    }
+  }
+  for (const view of views) {
+    lines.push(`const ${heapView(view)} = new ${view}(heap)`)
+  }
+  let anyFlag = false
+  for (const s of layouts) {
+    if (s.flag) {
+      anyFlag = true
+    }
+  }
+  if (anyFlag) {
+    lines.push("// A `boolean` storage: its bytes, read as `!== 0` and written as `1` or `0`.")
+    lines.push(
+      'const isSlot = (k: string | symbol): k is string => typeof k === "string" && /^[0-9]+$/.test(k)'
+    )
+    lines.push("const flags = (bytes: Uint8Array): boolean[] =>")
+    lines.push("  new Proxy(bytes, {")
+    lines.push(
+      "    get: (t, k) => (isSlot(k) ? t[Number(k)] !== 0 : (t as unknown as Record<string | symbol, unknown>)[k]),"
+    )
+    lines.push("    set: (t, k, v) => {")
+    lines.push("      if (isSlot(k)) t[Number(k)] = v ? 1 : 0")
+    lines.push("      return true")
+    lines.push("    },")
+    lines.push("  }) as unknown as boolean[]")
+  }
+  lines.push("export const memory = { buffer: heap }")
+  lines.push("export const layout = {")
+  let k = 0
+  while (k < layouts.length) {
+    const s = layouts[k]
+    const fields: string[] = []
+    for (const f of s.fields) {
+      fields.push(`${f.name}: ${f.offset}`)
+    }
+    const tail = s.fields.length > 0 ? `, fields: { ${fields.join(", ")} }` : ""
+    lines.push(`  ${s.key}: { at: ${offsets[k]}, length: ${s.length}, stride: ${s.stride}${tail} },`)
+    k = k + 1
+  }
+  lines.push("}")
+  k = 0
+  while (k < layouts.length) {
+    const s = layouts[k]
+    const at = offsets[k]
+    if (s.fields.length === 0) {
+      const view = `new ${s.view}(heap, ${at}, ${s.length})`
+      // `any`: the module spells the storage's own type, which this file does not know.
+      lines.push(`export const s${k}: any = ${s.flag ? `flags(${view})` : view}`)
+    } else {
+      const accessors: string[] = []
+      for (const f of s.fields) {
+        accessors.push(fieldAccessors(f.name, f.type, f.offset, f.flag))
+      }
+      lines.push(`export const s${k}: any = Array.from({ length: ${s.length} }, (_, i) => {`)
+      lines.push(`  const at = ${at} + i * ${s.stride}`)
+      lines.push(`  return { ${accessors.join(", ")} }`)
+      lines.push("})")
+    }
+    k = k + 1
+  }
+  lines.push("")
+  return lines.join("\n")
+}

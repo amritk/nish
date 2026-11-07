@@ -28,3 +28,6 @@ export function fill(from: i32): i32 {
 export function waiting(): i32 {
   return ringSize(INPUT)
 }
+
+/** Nothing: the page drives the module. `--emit-ts` writes its reading from an entry with a `main`. */
+export function main(): void {}
