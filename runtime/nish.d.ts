@@ -671,7 +671,8 @@ declare module "nish:fs" {
    * the path cannot be read as a file: missing, a directory, a parent that
    * cannot be searched, a pipe with no length to ask for. It subsumes an
    * `existsSync` and has no time-of-check race; narrow the result with
-   * `if (text !== null)`.
+   * `if (text !== null)`. It answers `null` for exactly the paths
+   * `readFileSync` prints "cannot read" for.
    *
    * @param path The file to read.
    * @returns The file's contents, or `null` when it cannot be read as a file.
@@ -1504,19 +1505,19 @@ declare module "nish:net" {
    *   under Node.
    */
   export function netMss(fd: i32): i32;
-  /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
+  /** `TCP_NODELAY`, option id 1: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
   export const NET_TCP_NODELAY: i32;
   /**
-   * `TCP_QUICKACK` (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
+   * `TCP_QUICKACK`, option id 2 (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
    * delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
    * so a server that wants a mode sets it again after every response.
    */
   export const NET_TCP_QUICKACK: i32;
-  /** `SO_KEEPALIVE`: `value` 1 probes an idle connection, 0 does not. */
+  /** `SO_KEEPALIVE`, option id 3: `value` 1 probes an idle connection, 0 does not. */
   export const NET_SO_KEEPALIVE: i32;
-  /** `SO_SNDBUF`: the send buffer, `value` in bytes; Linux doubles the value it stores. */
+  /** `SO_SNDBUF`, option id 4: the send buffer, `value` in bytes; Linux doubles the value it stores. */
   export const NET_SO_SNDBUF: i32;
-  /** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
+  /** `SO_RCVBUF`, option id 5: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
   export const NET_SO_RCVBUF: i32;
   /**
    * A listening Unix-domain stream socket at `path`, whose file is `0600`, so
@@ -1645,7 +1646,7 @@ declare module "nish:net" {
    *   before anything is asked, or the failure.
    */
   export function peerCredentials(fd: i32, out: i32[]): i32;
-  /** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
+  /** `unixListen` flag 1: unlink a socket file nothing listens on, then bind. */
   export const NET_UNIX_UNLINK_STALE: i32;
   /** `unixSocketPair` kind: a byte stream. */
   export const NET_UNIX_STREAM: i32;
