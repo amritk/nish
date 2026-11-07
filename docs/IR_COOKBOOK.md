@@ -1236,9 +1236,15 @@ to takes it as one more parameter after its own, `%cap.0`, which it passes on
 at the direct call. There is no environment struct and no indirect call, and
 the captured value is not part of the instantiation's key: two arrows that read
 different values share a shape but still get one `define` each, because each
-arrow is its own callee. The instance's capture parameter carries no facts, so
-it has no `readonly` or `nocapture`, and the caller counts a captured reference
-as an escape (docs/LANGUAGE.md, "Function parameters").
+arrow is its own callee. The instance only forwards its capture parameter, so
+the parameter carries the attributes the arrow's own parameter for it earns,
+and the caller reads a captured reference as an argument to the arrow: an
+object the arrow only reads may be an alloca, and a parameter it only reads
+is `readonly nocapture` (`tests/cases/fnarg_capture_readonly`). Here the
+capture is an `i32`, so `%cap.0` is `noundef` alone. Past a data-parallel
+form, a task or an async function the capture is an escape again and
+`%cap.N` is `noundef` alone whatever its type (docs/LANGUAGE.md, "Function
+parameters").
 
 <!-- cookbook:begin fnarg-capture -->
 ```ts

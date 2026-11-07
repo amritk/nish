@@ -18,11 +18,17 @@
       }
     ],
     "routes": {
-      "/": { "type": "page", "title": "Introduction", "filepath": "docs/guide/index.md" },
       "/getting-started": {
         "type": "group",
         "title": "Getting started",
         "children": {
+          "/": {
+            "title": "Introduction",
+            "type": "page",
+            "filepath": "docs/guide/index.md",
+            "showInSidebar": true,
+            "hidden": false
+          },
           "/installation": {
             "type": "page",
             "title": "Installation",
@@ -129,5 +135,8 @@
         }
       }
     }
+  },
+  "siteConfig": {
+    "isPrivate": true
   }
 }

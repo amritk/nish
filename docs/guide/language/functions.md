@@ -184,6 +184,12 @@ element is the program's own path, so the first argument you pass is
 `process.argv[1]` — one index earlier than under Node, where `argv[0]` is
 `node` itself.
 
+Two other shapes start a program. An entry file with no `main` may write its
+statements at the top level, like a script, and they run as `main`
+([Your first program](../getting-started/first-program.md#without-main)). And
+`main` may be `async`, so it can `await` the functions it calls
+([Async functions](async.md)).
+
 ## Passing a function to a function
 
 A function is not a value in Nish: you cannot store one in a variable, a

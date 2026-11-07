@@ -26,14 +26,7 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import {
-  applyModuleEdits,
-  ASYNC_REFUSAL,
-  emitModule,
-  REGION_REFUSAL,
-  SIGNAL_REFUSAL,
-  Walk,
-} from "./emit-ts-edits"
+import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { scriptMain } from "./script"
@@ -51,6 +44,12 @@ const ENTRY_FILE: string = "entry.ts"
 
 /** The specifier the corpus refuses whole (NL4011). */
 const NET_SPECIFIER: string = "nish:net"
+/**
+ * `nish:async` and the file the output reads it from: not `nish/runtime`,
+ * where `spawn` is `nish:process`'s (`runtime/async.mjs`).
+ */
+const ASYNC_SPECIFIER: string = "nish:async"
+const ASYNC_RUNTIME: string = "nish/runtime/async.mjs"
 
 /** One file `--emit-ts` writes: a path relative to the output directory, and its text. */
 export class EmittedFile {
@@ -213,38 +212,45 @@ const runtimeImport = (keyword: string, names: StringSet): string =>
  * The launcher: install the Node host, run `main`, exit with its code. An
  * entry written as top-level code (`src/script.ts`) runs as it is imported,
  * so importing it is the whole run, and a run that ends exits 0, as the
- * native `main` built around it does.
+ * native `main` built around it does. A program with an `async` function
+ * (`tasks`) awaits `main`, then every task `spawn` started and has not seen
+ * finish, as the native driver drains its queue after `main` answers.
  */
-const launcher = (entryOut: string, script: boolean): string => {
+const launcher = (entryOut: string, script: boolean, tasks: boolean): string => {
+  const settle = tasks ? "await settleTasks()\n" : ""
   const sb = new StringBuilder()
   sb.add("// Written by `nish --emit-ts`: runs the program's `main` under Node.\n")
   sb.add(`import "${RUNTIME}/node"\n`)
   sb.add(`import { exit } from "${RUNTIME}"\n`)
+  if (tasks) {
+    sb.add(`import { settleTasks } from "${ASYNC_RUNTIME}"\n`)
+  }
   if (script) {
     sb.add(`import "${relativeSpecifier(ENTRY_FILE, entryOut)}"\n`)
     sb.add("\n")
+    sb.add(settle)
     sb.add("exit(0)\n")
     return sb.toText()
   }
   sb.add(`import { main } from "${relativeSpecifier(ENTRY_FILE, entryOut)}"\n`)
   sb.add("\n")
-  sb.add("const code = main()\n")
+  sb.add(tasks ? "const code = await main()\n" : "const code = main()\n")
+  sb.add(settle)
   sb.add('exit(typeof code === "number" ? code : 0)\n')
   return sb.toText()
 }
 
-/** The first function, method or arrow under `node` declared `async`, in source order, or null. */
-const firstAsync = (node: Node): Node | null => {
+/** Whether a function, method or arrow under `node` is declared `async`. */
+const hasAsync = (node: Node): boolean => {
   if ((node.flags & FLAG_ASYNC) !== 0) {
-    return node
+    return true
   }
   for (const child of node.children) {
-    const found = firstAsync(child)
-    if (found !== null) {
-      return found
+    if (hasAsync(child)) {
+      return true
     }
   }
-  return null
+  return false
 }
 
 /**
@@ -268,6 +274,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   // directory, and two modules that land on one path would overwrite each
   // other; both are refused rather than written somewhere else.
   const outputs: string[] = []
+  let anyAsync = false
   for (const unit of modules) {
     const out = outputPathOf(unit, base)
     if (out === ".." || out.startsWith("../") || out.startsWith("/")) {
@@ -290,11 +297,11 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
-    // WP49: one refusal per module, at its first async function. Read from the
-    // tree, not `program.functions`, which holds no generic nothing instantiates.
-    const asyncDecl = firstAsync(unit.file)
-    if (asyncDecl !== null) {
-      walk.refuse(asyncDecl, ASYNC_REFUSAL)
+    // WP49: an async function is written as the TypeScript it already is, and
+    // the launcher awaits `main` and every spawned task. Read from the tree,
+    // not `program.functions`, which holds no generic nothing instantiates.
+    if (!anyAsync && hasAsync(unit.file)) {
+      anyAsync = true
     }
     for (const stmt of unit.file.children) {
       if (stmt.kind !== N_IMPORT) {
@@ -311,6 +318,11 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       // A second import of one specifier: its rewrite is already listed, and
       // listing it twice would edit each import twice.
       if (holds(walk.specifierFrom, stmt.text)) {
+        continue
+      }
+      if (stmt.text === ASYNC_SPECIFIER) {
+        walk.specifierFrom.push(stmt.text)
+        walk.specifierTo.push(ASYNC_RUNTIME)
         continue
       }
       // `nish:secret` has source behind it, but it is answered by the runtime
@@ -391,6 +403,6 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     k = k + 1
   }
-  result.files.push(new EmittedFile(ENTRY_FILE, launcher(entryOut, script)))
+  result.files.push(new EmittedFile(ENTRY_FILE, launcher(entryOut, script, anyAsync)))
   return result
 }

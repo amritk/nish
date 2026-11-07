@@ -108,7 +108,9 @@ const native = ({ name, source }, compiler) => {
  */
 const unmodified = ({ source }) => {
   // An entry written as top-level code has no `main`: importing it runs it.
-  const entry = `const m = await import(${JSON.stringify(source)}); process.exit(typeof m.main === "function" ? m.main() : 0);`
+  // An async `main` is awaited, then every task `spawn` started (`nish:async`,
+  // runtime/async.mjs), as the native driver drains its queue.
+  const entry = `const m = await import(${JSON.stringify(source)}); const code = typeof m.main === "function" ? await m.main() : 0; await (await import("nish:async")).settleTasks(); process.exit(code);`
   const ran = spawnSync(
     "node",
     ["--experimental-strip-types", "--no-warnings", "--import", prelude, "-e", entry],
