@@ -131,9 +131,19 @@ type integer<Lo extends number, Hi extends number> = number;
 // `nish`.
 
 /** The success arm of a `Result`, as the discriminant proves it. */
-type ResultOk<T> = { readonly ok: true; readonly value: T };
+type ResultOk<T> = {
+  /** `true` on this arm: the discriminant `if (r.ok)` tests. */
+  readonly ok: true;
+  /** The success payload, readable only where `r.ok` or `r.isOk()` holds. */
+  readonly value: T;
+};
 /** The failure arm. */
-type ResultErr<E> = { readonly ok: false; readonly error: E };
+type ResultErr<E> = {
+  /** `false` on this arm: where `if (r.ok)` fails, `r` is this arm. */
+  readonly ok: false;
+  /** The failure payload, readable only where `!r.ok` or `r.isErr()` holds. */
+  readonly error: E;
+};
 
 /**
  * The methods every `Result` carries. `r.ok` is the same bit as a plain
@@ -209,7 +219,11 @@ type Result<T, E> = (ResultOk<T> | ResultErr<E>) & ResultMethods<T, E>;
  * @returns a `Result` on its success arm.
  */
 declare function Ok<T, E>(value: T): Result<T, E>;
-/** The success of a `Result<void, E>`, with no payload. Capability: none. */
+/**
+ * The success of a `Result<void, E>`, with no payload. Capability: none.
+ *
+ * @returns a `Result<void, E>` on its success arm.
+ */
 declare function Ok<E>(): Result<void, E>;
 /**
  * The failure value, likewise: its `Result` type comes from the context.
@@ -3374,6 +3388,21 @@ declare module "nish:simd" {
    * folds to a constant vector when every lane is one.
    *
    * @param a0 Lane 0, a `u8`; `a1` to `a15` are lanes 1 to 15 in order.
+   * @param a1 Lane 1.
+   * @param a2 Lane 2.
+   * @param a3 Lane 3.
+   * @param a4 Lane 4.
+   * @param a5 Lane 5.
+   * @param a6 Lane 6.
+   * @param a7 Lane 7.
+   * @param a8 Lane 8.
+   * @param a9 Lane 9.
+   * @param a10 Lane 10.
+   * @param a11 Lane 11.
+   * @param a12 Lane 12.
+   * @param a13 Lane 13.
+   * @param a14 Lane 14.
+   * @param a15 Lane 15.
    * @returns The vector.
    */
   export function u8x16(
@@ -3384,6 +3413,13 @@ declare module "nish:simd" {
    * A `u16x8` of 8 lanes, one argument per lane, lane 0 first.
    *
    * @param a0 Lane 0, a `u16`; `a1` to `a7` are lanes 1 to 7 in order.
+   * @param a1 Lane 1.
+   * @param a2 Lane 2.
+   * @param a3 Lane 3.
+   * @param a4 Lane 4.
+   * @param a5 Lane 5.
+   * @param a6 Lane 6.
+   * @param a7 Lane 7.
    * @returns The vector.
    */
   export function u16x8(a0: u16, a1: u16, a2: u16, a3: u16, a4: u16, a5: u16, a6: u16, a7: u16): u16x8;
@@ -3391,6 +3427,9 @@ declare module "nish:simd" {
    * An `i32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
    * @param a0 Lane 0, an `i32`; `a1` to `a3` are lanes 1 to 3 in order.
+   * @param a1 Lane 1.
+   * @param a2 Lane 2.
+   * @param a3 Lane 3.
    * @returns The vector.
    */
   export function i32x4(a0: i32, a1: i32, a2: i32, a3: i32): i32x4;
@@ -3398,6 +3437,9 @@ declare module "nish:simd" {
    * A `u32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
    * @param a0 Lane 0, a `u32`; `a1` to `a3` are lanes 1 to 3 in order.
+   * @param a1 Lane 1.
+   * @param a2 Lane 2.
+   * @param a3 Lane 3.
    * @returns The vector.
    */
   export function u32x4(a0: u32, a1: u32, a2: u32, a3: u32): u32x4;
@@ -3405,6 +3447,9 @@ declare module "nish:simd" {
    * An `f32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
    * @param a0 Lane 0, an `f32`; `a1` to `a3` are lanes 1 to 3 in order.
+   * @param a1 Lane 1.
+   * @param a2 Lane 2.
+   * @param a3 Lane 3.
    * @returns The vector.
    */
   export function f32x4(a0: f32, a1: f32, a2: f32, a3: f32): f32x4;
@@ -3412,6 +3457,7 @@ declare module "nish:simd" {
    * An `f64x2` of 2 lanes, one argument per lane, lane 0 first.
    *
    * @param a0 Lane 0, an `f64`; `a1` is lane 1.
+   * @param a1 Lane 1.
    * @returns The vector.
    */
   export function f64x2(a0: f64, a1: f64): f64x2;
@@ -4651,6 +4697,7 @@ declare function arena(): Disposable;
  * declaration costs a reader nothing.
  */
 declare interface CPtr {
+  /** The private brand that makes `CPtr` nominal. Not a field: nothing reads or writes it. */
   readonly __nishForeignPointer: unique symbol;
 }
 
@@ -4685,16 +4732,25 @@ type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 
  * an `i64` or `u64` crosses as a `bigint`, every other width as a `number`.
  */
 declare module "nish" {
+  /** A 32-bit signed integer, a `number` on the page. */
   export type i32 = number;
+  /** A 64-bit signed integer, a `bigint` on the page. */
   export type i64 = bigint;
+  /** An 8-bit unsigned integer, a `number` on the page. */
   export type u8 = number;
+  /** A 16-bit unsigned integer, a `number` on the page. */
   export type u16 = number;
+  /** A 32-bit unsigned integer, a `number` on the page. */
   export type u32 = number;
+  /** A 64-bit unsigned integer, a `bigint` on the page. */
   export type u64 = bigint;
+  /** A 32-bit float, a `number` on the page. */
   export type f32 = number;
+  /** A 64-bit float, a `number` on the page. */
   export type f64 = number;
   /** A ranged integer, which the loader checks on the way in. */
   export type integer<Lo extends number, Hi extends number> = number;
+  /** A host object's handle, the global `HostHandle`'s twin, spelled alike so the two are one type. */
   export type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 0;
 }
 
@@ -4973,6 +5029,7 @@ interface Array<T> {
    * argument of another type than the element is refused. Capability: none.
    *
    * @param searchElement the element looked for.
+   * @param fromIndex declared to match TypeScript's `lib`; `nish` refuses a second argument.
    * @returns its index, or `-1`.
    */
   indexOf(searchElement: T, fromIndex?: number): number;
@@ -5017,6 +5074,7 @@ interface Array<T> {
    * @param value the value stored.
    * @param start the first slot, `0` by default.
    * @param end the slot after the last, `a.length` by default.
+   * @returns the array, to `tsc` only: `nish` refuses the call as a value.
    */
   fill(value: T, start?: number, end?: number): this;
   /**
@@ -5110,6 +5168,7 @@ interface ReadonlyArray<T> {
    * and a `NaN` element is never found. Capability: none.
    *
    * @param searchElement the element looked for.
+   * @param fromIndex declared to match TypeScript's `lib`; `nish` refuses a second argument.
    * @returns its index, or `-1`.
    */
   indexOf(searchElement: T, fromIndex?: number): number;
@@ -5202,6 +5261,7 @@ interface String {
    * Capability: none.
    *
    * @param searchString the prefix.
+   * @param position declared to match TypeScript's `lib`; `nish` refuses a second argument.
    * @returns whether it is one.
    */
   startsWith(searchString: string, position?: number): boolean;
@@ -5210,6 +5270,7 @@ interface String {
    * `false`. One argument. Capability: none.
    *
    * @param searchString the suffix.
+   * @param endPosition declared to match TypeScript's `lib`; `nish` refuses a second argument.
    * @returns whether it is one.
    */
   endsWith(searchString: string, endPosition?: number): boolean;
