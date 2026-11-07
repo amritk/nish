@@ -28,7 +28,7 @@
 // `tryPop` and `write` in copy mode; in place, what `sendBody` copied of what
 // the socket did not take, and on how many messages (`tails`); in consumer
 // mode, `tryPush` and the in-place consumer's. Not counted, in
-// either mode: the response head, which `respond` writes into the output; the
+// any mode: the response head, which `respond` writes into the output; the
 // kernel's copy into the socket; `Http1Connection`'s compaction of its output;
 // and the reader's `netRead`. The reader's byte count must equal what the
 // consumer sent, and its FNV-1a over the bodies it parses out of the stream
