@@ -19,7 +19,7 @@
 // socket when it is readable, run the timers, answer every slot with news,
 // flush, and sleep until the next timer. Every wait is bounded: five seconds
 // without progress is a failure, never a hang.
-import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
+import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollRemove, pollWait, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 import { Secret, wipe } from "nish:secret";
 import {
   QUIC_FRAME_CONNECTION_CLOSE,
@@ -29,10 +29,13 @@ import {
   QUIC_FRAME_MAX_STREAMS_BIDI,
   QUIC_FRAME_MAX_STREAMS_UNI,
   QUIC_FRAME_MAX_STREAM_DATA,
+  QUIC_FRAME_PATH_CHALLENGE,
+  QUIC_FRAME_PATH_RESPONSE,
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
   quicPushConnectionClose,
+  quicPushPathData,
   quicPushStream,
   quicPutDatagram,
 } from "nish/net/quic-frame";
@@ -281,6 +284,10 @@ export class UdpClient {
   limits: i64[];
   offsets: i64[];
   datagrams: u8[][];
+  /** The PATH_RESPONSE frames owed for the PATH_CHALLENGEs read and not yet answered. */
+  responses: u8[];
+  /** How many PATH_CHALLENGEs the server has sent. */
+  challenges: i32 = 0;
   fd: i32 = -1;
   /** The connection's credit and what the client has sent against it; the limits on its streams. */
   maxData: i64 = 0;
@@ -316,6 +323,7 @@ export class UdpClient {
     this.limits = [];
     this.offsets = [];
     this.datagrams = [];
+    this.responses = [];
   }
 
   /** The server's transport parameters, read out of its EncryptedExtensions; false when there are none. */
@@ -393,6 +401,9 @@ export class UdpClient {
           this.maxStreamsBidi = f.value;
         } else if (f.type === QUIC_FRAME_MAX_STREAMS_UNI && f.value > this.maxStreamsUni) {
           this.maxStreamsUni = f.value;
+        } else if (f.type === QUIC_FRAME_PATH_CHALLENGE) {
+          this.challenges = this.challenges + 1;
+          quicPushPathData(this.responses, QUIC_FRAME_PATH_RESPONSE, payload, f.dataStart);
         } else if (f.type === QUIC_FRAME_DATAGRAM) {
           this.datagrams.push(range(payload, f.dataStart, f.dataStart + f.dataLength));
         } else if (f.type === QUIC_FRAME_CONNECTION_CLOSE || f.type === QUIC_FRAME_CONNECTION_CLOSE_APP) {
@@ -469,6 +480,20 @@ export class UdpLoop {
     this.client = new UdpClient(this.port);
     pollAdd(this.loop, this.client.fd, n32(1), CLIENT);
     return this.client;
+  }
+
+  /**
+   * The client's NAT rebinds: its datagrams leave from a new socket, a new
+   * port, from here on. The old socket leaves the loop but stays open, so
+   * the caller can count what the server still sends there; answers it.
+   */
+  rebind(): i32 {
+    const cl: UdpClient = this.client;
+    const old: i32 = cl.fd;
+    pollRemove(this.loop, old);
+    cl.fd = udpBind("127.0.0.1", n32(0), n32(0));
+    pollAdd(this.loop, cl.fd, n32(1), CLIENT);
+    return old;
   }
 
   /** Milliseconds until the server has a timer to run, or -1. */
@@ -602,7 +627,11 @@ export class UdpLoop {
       n = udpRecvFrom(cl.fd, cl.rx, n32(0), toI32(cl.rx.length), cl.from, cl.meta);
     }
     cl.scan();
-    if (cl.c.appWrite !== null && !cl.closing && cl.c.largestApp > cl.acked) {
+    if (toI32(cl.responses.length) > 0 && !cl.closing) {
+      const answers: u8[] = cl.responses;
+      cl.responses = [];
+      this.packet(answers);
+    } else if (cl.c.appWrite !== null && !cl.closing && cl.c.largestApp > cl.acked) {
       const none: u8[] = [];
       this.packet(none);
     }

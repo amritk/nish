@@ -206,7 +206,7 @@ const quiet = (t: Suite): void => {
   quic.recovery.micros = n64(-1);
   const key: Secret<u8[]> = secret(leafPrivate());
   const empty: u8[] = [];
-  server.serve(slot, empty, n32(0), n32(0), c.now, key);
+  server.serve(slot, empty, n32(0), n32(0), empty, c.now, key);
   wipe(key);
   t.eqI64("and serve hands it to the pacer before any flush", quic.recovery.micros, micros);
   server.clock(n64(-1));
@@ -437,7 +437,7 @@ const thousand = (t: Suite): void => {
 };
 
 /** A client that only sends datagrams, for the arena check: no application of its own in the server's loop. */
-class Lean {
+export class Lean {
   loop: LoopServer;
   c: QcClient;
   fd: i32 = -1;
@@ -526,7 +526,7 @@ const leanRound = (l: Lean, m: QmMeter): boolean => {
 };
 
 /** Sends `datagram` to the server and runs rounds until nothing moves. */
-const leanSend = (l: Lean, datagram: u8[], m: QmMeter): void => {
+export const leanSend = (l: Lean, datagram: u8[], m: QmMeter): void => {
   udpSendTo(l.fd, datagram, n32(0), toI32(datagram.length), l.to, n32(0), n32(0));
   for (let k: i32 = 0; k < 64 && leanRound(l, m); k++) {
     // until quiet
@@ -534,7 +534,7 @@ const leanSend = (l: Lean, datagram: u8[], m: QmMeter): void => {
 };
 
 /** A 1-RTT packet of `payload` from the client, with an ACK of everything it has first. */
-const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
+export const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
   const all: u8[] = [];
   if (l.c.largestApp >= n64(0)) {
     qcPushAppAck(all, l.c);
@@ -655,7 +655,7 @@ const idle = (t: Suite): void => {
 };
 
 /** A handshake from `l` to the server's slot, each server call metered by `m`; whether it completed. */
-const leanHandshake = (l: Lean, limits: H3Limits, m: QmMeter): boolean => {
+export const leanHandshake = (l: Lean, limits: H3Limits, m: QmMeter): boolean => {
   const hello: u8[] = h3Hello(limits);
   l.c.before = hello;
   leanSend(l, qcInitial(l.c, qcCrypto(n64(0), hello), n32(1200)), m);

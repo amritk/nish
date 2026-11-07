@@ -444,11 +444,16 @@ export class Http3Server {
   index: Http3CidIndex
   wheel: Http3Wheel
   /**
-   * Each slot's client address, as its first datagram came from. Not
+   * Where each slot sends now: its client's address as the first datagram
+   * came from, then wherever the connection follows the client to
+   * (`QuicConnection.sendAddress`, copied here by `flushSlot`). Not
    * validated until `quic(slot).addressValidated` is set (RFC 9000 §8.1): a
    * Retry token the listener checked, with `retry` on, or a Handshake packet
    * from the client. Before then it is the source of one UDP datagram, which
    * anyone can forge, so a cap or an allow-list keyed on it waits for that.
+   * After the handshake it changes when the client's address does (a NAT
+   * rebinding, §9.3), first to an address not yet validated, so a cap keyed
+   * on the address a session started from keeps its own copy.
    */
   addresses: u8[][]
   /** What `receive` reads into, and where `flush` writes a flight. */
@@ -743,7 +748,7 @@ export class Http3Server {
     }
     const slot: i32 = this.index.find(buf, dcidAt, dcidLength)
     if (slot >= 0) {
-      this.serve(slot, buf, at, len, now, key)
+      this.serve(slot, buf, at, len, address, now, key)
       return
     }
     this.unowned(buf, at, len, address, now, key)
@@ -793,7 +798,7 @@ export class Http3Server {
     this.state[slot] = H3_SERVER_BUSY
     this.signatures[slot] = H3_SERVER_NONE
     this.accepted = h3Count(this.accepted)
-    this.serve(slot, buf, at, len, now, key)
+    this.serve(slot, buf, at, len, address, now, key)
   }
 
   /**
@@ -869,11 +874,16 @@ export class Http3Server {
     this.micros = micros
   }
 
-  /** Hands `slot`'s connection a datagram, signs when the handshake asks, and refiles its IDs and timer. */
-  serve(slot: i32, buf: u8[], at: i32, len: i32, now: i64, key: Secret<u8[]>): void {
+  /**
+   * Hands `slot`'s connection a datagram from `address`, signs when the
+   * handshake asks, and refiles its IDs and timer. The connection decides
+   * from the address whether the client moved (RFC 9000 §9.3); an address
+   * that is not 18 bytes long leaves it where it is.
+   */
+  serve(slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
     const quic: QuicConnection = this.quics[slot]
     quic.recovery.micros = this.micros
-    quic.receiveWindow(buf, at, len, now)
+    quic.receiveWindowFrom(buf, at, len, address, now)
     const input: u8[] | null = quic.signatureInput()
     if (input !== null) {
       const signature: u8[] | null = this.signer.sign(key, input)
@@ -989,7 +999,21 @@ export class Http3Server {
     if (this.conns[slot].isDone() && !quic.closed()) {
       quic.close(H3_NO_ERROR)
     }
+    // A PATH_RESPONSE owed on a path the connection did not move to goes
+    // there, alone (RFC 9000 §9.1); asking for it runs the connection's
+    // timers first, so a validation that ran out has moved it back before
+    // the flight below picks where it goes.
+    const probe: i32 = quic.takeProbeInto(this.tx, H3_SERVER_ZERO, now)
+    if (probe > 0) {
+      this.send(this.tx, H3_SERVER_ZERO, probe, quic.probeAddress, H3_SERVER_ZERO, H3_SERVER_ZERO)
+    }
     const to: u8[] = this.addresses[slot]
+    if (quic.pathKnown) {
+      const current: u8[] = quic.sendAddress()
+      for (let k: i32 = 0; k < toI32(to.length) && k < toI32(current.length); k++) {
+        to[k] = current[k]
+      }
+    }
     let retried: boolean = false
     for (let guard: i32 = 0; guard < 64; guard++) {
       const n: i32 = quicListenerTakeFlight(
