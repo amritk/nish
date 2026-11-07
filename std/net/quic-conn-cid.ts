@@ -296,7 +296,7 @@ export class QuicCidTable {
   /**
    * How many peer IDs are active: retired ones leave their slots.
    *
-   * @returns The count of the peer's IDs not yet retired, from 0 to `limit`.
+   * @returns The count of the peer's IDs not yet retired, from 0 to `limit`, or to 1 for a `limit` below 1.
    */
   activePeer(): i32 {
     let n: i32 = 0
@@ -432,7 +432,7 @@ export class QuicCidTable {
     return QUIC_ERROR_NO_ERROR
   }
 
-  /** Points `current` at the oldest active peer ID, or -1 when none is. */
+  /** Makes the oldest active peer ID the current one, or none when no peer ID is active. */
   prune(): void {
     this.current = quicCidOldest(this.peer, -1, false)
   }

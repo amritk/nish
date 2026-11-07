@@ -234,7 +234,8 @@ export class QuicListenerAnswer {
    * An empty answer with room for a reply of `room` bytes.
    *
    * @param room The bytes reserved for `reply`, usually `QUIC_LISTENER_ANSWER_SIZE`; 0 or less reserves
-   *   none. `originalDcid` and `retryScid` get `QUIC_MAX_CID_LENGTH` (20) bytes each whatever it is.
+   *   none. `originalDcid` and `retryScid` get room for `QUIC_MAX_CID_LENGTH` (20) bytes each whatever it
+   *   is. That is capacity: all three start empty, their lengths 0 until an answer or `wipe` sets them.
    */
   constructor(room: i32) {
     this.room = room > 0 ? room : 0

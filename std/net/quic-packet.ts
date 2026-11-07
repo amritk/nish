@@ -286,7 +286,8 @@ export class QuicKeys {
 
   /**
    * Wraps keys already derived; the arrays are kept, not copied, so they stay the owner's to wipe.
-   * `packetAes` and `hpAes` start `null`, and `quicKeys` fills them for the AES suites.
+   * `packetAes` and `hpAes` start `null`. Only `quicKeys` fills them for the AES suites, so keys built
+   * by hand for an AES suite stay unusable: opening refuses them with `QUIC_ERR_KEYS`, and sealing answers `null`.
    *
    * @param aead The suite, one of the `QUIC_AEAD_*` constants.
    * @param key The packet-protection key: 16 bytes for AES-128-GCM, 32 for the others.
@@ -1910,7 +1911,7 @@ export const quicUnprotectHeader = (
  * `QUIC_ERR_NOT_PROTECTED` for a Retry, `QUIC_ERR_KEYS` for keys `quicKeys`
  * did not make, and `QUIC_ERR_SAMPLE` for a packet too short to sample.
  *
- * @param keys The level's keys; only the header-protection key is used.
+ * @param keys The level's keys; the whole set must be usable, though only the header-protection key is used.
  * @param datagram The received bytes `header` was parsed from, only read.
  * @param header The packet's parsed header.
  * @param largestPn The largest packet number processed in the packet's space, or -1 for none.

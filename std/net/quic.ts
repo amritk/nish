@@ -1241,7 +1241,7 @@ export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
  * @param key The server's static reset key, `QUIC_CONN_STATIC_KEY_SIZE` bytes.
  * @param cid The array holding the connection ID.
  * @param at Where the ID starts in `cid`.
- * @param length The ID's length in bytes, at most 20.
+ * @param length The ID's length in bytes, at most 20: the caller's to keep, as nothing checks it.
  * @param out Where the 16-byte token goes; bytes that would fall past its end are not written.
  * @param outAt Where in `out` the token starts.
  */
@@ -1432,10 +1432,7 @@ export class QuicConnection {
   bytesSent: i64 = 0
   /** The ALPN protocol the handshake chose. */
   alpn: string = ""
-  /**
-   * The client's `server_name`, or empty.
-   * @internal Nothing reads it.
-   */
+  /** The client's `server_name` the handshake read, or empty when it sent none. */
   serverName: string = ""
   /** The streams, both ways (`nish/net/quic-stream`). */
   streams: QuicStreams
@@ -1870,7 +1867,8 @@ export class QuicConnection {
    * the close, and nothing after it. Closing twice, or after the client
    * closed, does nothing.
    *
-   * @param code The application's error code, 0 to 2^62 - 1, sent in the CONNECTION_CLOSE.
+   * @param code The application's error code, sent in the CONNECTION_CLOSE; keeping it to 0 to 2^62 - 1 is
+   *   the caller's, as nothing checks it.
    */
   close(code: i64): void {
     if (this.closed()) {

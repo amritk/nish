@@ -129,8 +129,8 @@ export class QuicDatagramQueue {
    * @param buf The buffer to copy the payload into.
    * @param at The offset in `buf` to copy it to.
    * @param cap How many bytes from `at` the caller lets the payload take.
-   * @returns The payload's size in bytes, -1 when the ring is empty, or -2 when it does not fit, in which
-   *   case it stays queued for a bigger buffer.
+   * @returns The payload's size in bytes, -1 when the ring is empty, or -2 when it does not fit in `cap` or
+   *   `at` puts it outside `buf`, in which case it stays queued for a bigger buffer or a good window.
    */
   pop(buf: u8[], at: i32, cap: i32): i32 {
     const length: i32 = this.peekLength()

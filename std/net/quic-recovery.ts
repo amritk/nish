@@ -329,7 +329,8 @@ export class QuicSentPackets {
    * The `k`-th slot the last call acknowledged, or -1.
    *
    * @param k The position in `acked`, from 0 to `ackedCount - 1`, oldest first.
-   * @returns The slot, valid until the next `onAck` or `onTimeout`, or -1 for `k` out of range.
+   * @returns The slot, valid until the next `onAck`, `onAckEcn`, `onTimeout` or `discardSpace`, or -1 for `k`
+   *   out of range.
    */
   ackedSlot(k: i32): i32 {
     return k >= 0 && k < this.ackedCount && k < toI32(this.acked.length) ? this.acked[k] : -1
@@ -339,7 +340,8 @@ export class QuicSentPackets {
    * The `k`-th slot the last call declared lost, or -1.
    *
    * @param k The position in `lost`, from 0 to `lostCount - 1`, oldest first.
-   * @returns The slot, valid until the next `onAck` or `onTimeout`, or -1 for `k` out of range.
+   * @returns The slot, valid until the next `onAck`, `onAckEcn`, `onTimeout` or `discardSpace`, or -1 for `k`
+   *   out of range.
    */
   lostSlot(k: i32): i32 {
     return k >= 0 && k < this.lostCount && k < toI32(this.lost.length) ? this.lost[k] : -1
@@ -1137,8 +1139,7 @@ export class QuicRecovery {
    * GetPtoTimeAndSpace (A.8): when the probe timeout fires, the earliest
    * over the spaces with an ack-eliciting packet in flight, with the backoff
    * applied; the Application Data space counts only once the handshake is
-   * confirmed. Answers -1 with nothing in flight. `ptoSpace()` names the
-   * space it chose.
+   * confirmed. Answers -1 with nothing in flight.
    *
    * @returns The time the probe timeout fires, in the caller's milliseconds, or -1 when no space has one.
    */
