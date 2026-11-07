@@ -182,7 +182,10 @@ const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
 export class QuicSentPackets {
   /** @internal Read only by this module; `pnAt` answers for a slot. */
   pn: i64[]
-  /** @internal Read only by this module: each slot's send time, for loss and RTT. */
+  /**
+   * When each slot's packet was sent, the `now` `onPacketSent` was given, in milliseconds;
+   * loss detection and RTT samples read it.
+   */
   timeSent: i64[]
   /** When each packet was sent on the pacer's clock, in microseconds. */
   fineSent: i64[]

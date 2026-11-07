@@ -377,7 +377,10 @@ export class TlsClientHelloView {
   pskTicketAge: u32 = 0
   /** That identity's binder, the entry of the same index in `binders`. */
   pskBinderAt: i32 = 0
-  /** The chosen binder's length in bytes, 32 to 255 as read; it must equal the suite's hash length. */
+  /**
+   * The chosen binder's length in bytes, 32 to 255: `tlsReadPreSharedKey` refuses a shorter one
+   * when it parses the extension. It must equal the suite's hash length.
+   */
   pskBinderLength: i32 = 0
   /** Whether `ke_modes` lists `psk_dhe_ke`, the one mode the server resumes in. */
   pskDheKe: boolean = false

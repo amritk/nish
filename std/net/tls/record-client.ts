@@ -223,9 +223,9 @@ export class TlsRecordClient {
   private readLevel: i32 = 0
   /** The `TLS_LEVEL_*` the client's records are written at. */
   private writeLevel: i32 = 0
-  /** Where the bytes still to send begin in `output`. */
+  /** The index in `output` of the first byte still to send; `consume(sent)` moves it on. */
   outputStart: i32 = 0
-  /** Where the bytes still to send end in `output`. */
+  /** One past the last byte still to send in `output`; `outputStart` when nothing is pending. */
   outputEnd: i32 = 0
   /** @internal Read by `net/fetch.ts`. */
   plainStart: i32 = 0

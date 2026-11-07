@@ -350,15 +350,15 @@ export class TlsRecordServer {
   private readLevel: i32 = 0
   /** The `TLS_LEVEL_*` the server's records are written at. */
   writeLevel: i32 = 0
-  /** Where the bytes still to send begin in `output`. */
+  /** The index in `output` of the first byte still to send; `consume(sent)` moves it on. */
   outputStart: i32 = 0
-  /** Where the bytes still to send end in `output`. */
+  /** One past the last byte still to send in `output`; `outputStart` when nothing is pending. */
   outputEnd: i32 = 0
   /** How far into `output` this borrowing has written, which says whether its give-back zeroes. */
   private outputUsed: i32 = 0
-  /** Where the application data not yet read begins in `plain`. */
+  /** The index in `plain` of the first byte of application data the caller has not read. */
   plainStart: i32 = 0
-  /** Where the application data not yet read ends in `plain`. */
+  /** One past the last unread byte in `plain`; `plainStart` when none is pending. */
   plainEnd: i32 = 0
   /** How far into `plain` this borrowing has written. */
   private plainUsed: i32 = 0

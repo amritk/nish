@@ -176,14 +176,14 @@ class TlsRecordServer
 | `closeDue: boolean` | The server has closed and its `close_notify` waits for room in `output`. |
 | `keyUpdates: i32` | KeyUpdates taken from the client, against `TLS_RECORD_MAX_KEY_UPDATES`. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`; `empty` until a record is sealed. |
-| `outputEnd: i32` | Where the bytes still to send end in `output`. |
-| `outputStart: i32` | Where the bytes still to send begin in `output`. |
+| `outputEnd: i32` | One past the last byte still to send in `output`; `outputStart` when nothing is pending. |
+| `outputStart: i32` | The index in `output` of the first byte still to send; `consume(sent)` moves it on. |
 | `padding: i32` | How many zero bytes each protected record the server writes carries after its content type (§5.4); 0 unless the caller sets it. |
 | `peerAlert: i32` | The error alert the client sent, or -1 when it sent none. |
 | `peerClosed: boolean` | True once the client's `close_notify` has arrived. |
 | `plain: u8[]` | Application data the caller has not read is `plain[plainStart .. plainEnd)`; `empty` until a record brings some. |
-| `plainEnd: i32` | Where the application data not yet read ends in `plain`. |
-| `plainStart: i32` | Where the application data not yet read begins in `plain`. |
+| `plainEnd: i32` | One past the last unread byte in `plain`; `plainStart` when none is pending. |
+| `plainStart: i32` | The index in `plain` of the first byte of application data the caller has not read. |
 | `readHash: i32` | The hash length of the client's traffic secret in bytes (32 or 48), or 0 before it is known. |
 | `readProtection: TlsRecordProtection` | Opens the client's records; its sequence number counts the records read at the current keys. |
 | `readonly readTraffic256: Secret<u8[]>` | The client's and the server's current application traffic secrets, for KeyUpdate, each held at both hash lengths: `readHash` and `writeHash` say which of a pair holds the secret, and are 0 before it is known. |

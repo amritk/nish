@@ -158,6 +158,7 @@ class QuicCidTable
 | `new QuicCidTable(limit: i64, localCapacity: i32)` | A table for an advertised `limit` (2 to 8 in practice) with `localCapacity` slots for this side's IDs. |
 | `local: QuicCidEntry[]` | The slots for the IDs this side issued, so a caller can walk them, used or not. |
 | `nextLocal: i64` | The next local sequence number to issue. |
+| `peer: QuicCidEntry[]` | The slots for the IDs the peer issued, used or not, as `limit` bounds them; a caller walks them to see each ID and its reset token. |
 | `retireCount: i32` | How many RETIRE_CONNECTION_ID frames this side still owes the peer, at most twice `limit`. |
 | `activeLocal(): i32` | How many local IDs are active: a retired one leaves its slot. |
 | `activePeer(): i32` | How many peer IDs are active: retired ones leave their slots. |

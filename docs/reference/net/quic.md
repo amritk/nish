@@ -488,8 +488,8 @@ class QuicConnection
 | `keyUpdates: i32` | Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. |
 | `localEncoded: u8[]` | `localParameters` encoded for the TLS extension the server sends. |
 | `localParameters: QuicTransportParameters` | The server's transport parameters, set for each connection, and their encoding. |
-| `readonly nextReadSecret256: Secret<u8[]>` | The next generation's 1-RTT read secret under SHA-256; see `readSecret256`. |
-| `readonly nextReadSecret384: Secret<u8[]>` | The next generation's 1-RTT read secret under SHA-384; see `readSecret256`. |
+| `readonly nextReadSecret256: Secret<u8[]>` | The next generation's 1-RTT read secret under SHA-256, 32 bytes; see `readSecret256`. |
+| `readonly nextReadSecret384: Secret<u8[]>` | The next generation's 1-RTT read secret under SHA-384, 48 bytes; see `readSecret256`. |
 | `nextSkip: i64` | The next Application Data packet number skipped (RFC 9000 §21.4), or -1 before the 1-RTT keys; a test may set it to force one. `skipped` holds the last `QUIC_CONN_SKIP_RING` skipped, -1 where none, `skipHead` where the next goes, and `skipsDrawn` how many distances were drawn. |
 | `now: i64` | The latest time the caller gave, in milliseconds; time never runs backwards here. |
 | `otherIsNext: boolean` | Whether `otherReadKeys` are the next generation's rather than the previous one's. |
@@ -505,7 +505,7 @@ class QuicConnection
 | `probeOwed: boolean` | Whether a PATH_RESPONSE is owed on `probeAddress`, and whether the datagram being read carried a challenge for it. |
 | `readPhase: boolean` | The Key Phase bit of the current read keys, and of the current write keys. |
 | `readonly readSecret256: Secret<u8[]>` | The 1-RTT traffic secrets (RFC 9001 §6.1), one set of SHA-256's length and one of SHA-384's, the one the suite's hash picks in use: the current read secret, the next generation's, and the current write secret, which a key update ratchets in place. The write side keeps no next secret, because the server derives its next write keys only when it moves to them. |
-| `readonly readSecret384: Secret<u8[]>` | The current 1-RTT read secret under SHA-384; see `readSecret256`. |
+| `readonly readSecret384: Secret<u8[]>` | The current 1-RTT read secret under SHA-384, 48 bytes; see `readSecret256`. |
 | `recovery: QuicRecovery` | Loss detection, the RTT estimate, the congestion window and the pacer (RFC 9002). |
 | `sealedUnderKey: i64` | Packets sealed under the current 1-RTT write key, and packets that failed to authenticate, against those limits. |
 | `serverName: string` | The client's `server_name` the handshake read, or empty when it sent none. |
@@ -516,8 +516,8 @@ class QuicConnection
 | `tls: TlsServer \| null` | The `TlsServer` running this connection's handshake: null until the client's first Initial has opened, and again after `reset`. |
 | `tlsSlot: TlsServer \| null` | The slot's `TlsServer`, made by its first handshake and `restart`ed by every one after (QUIC-3). |
 | `writePhase: boolean` | The Key Phase bit of the current write keys. |
-| `readonly writeSecret256: Secret<u8[]>` | The current 1-RTT write secret under SHA-256; see `readSecret256`. |
-| `readonly writeSecret384: Secret<u8[]>` | The current 1-RTT write secret under SHA-384; see `readSecret256`. |
+| `readonly writeSecret256: Secret<u8[]>` | The current 1-RTT write secret under SHA-256, 32 bytes; see `readSecret256`. |
+| `readonly writeSecret384: Secret<u8[]>` | The current 1-RTT write secret under SHA-384, 48 bytes; see `readSecret256`. |
 | `acceptRetry(originalDcid: u8[], retryScid: u8[]): boolean` | Sets up a connection whose client came back with a Retry token that `nish/net/quic-listener` checked (RFC 9000 §8.1.2): `originalDcid` is the DCID of the client's Initial before the Retry, and `retryScid` the Retry's SCID, which the client now sends to. The server's transport parameters then name both (§7.3), and the client's address counts as validated, so the anti-amplification limit does not apply. Call it before the first `receive`; answers whether it took: not once the connection has started, and not for an ID over 20 bytes. |
 | `afterTls(): void` | Whatever TLS's last step made due: its output moved into each level's CRYPTO stream, the keys of each level it now has secrets for, the client's transport parameters checked once it has read them, and, when the handshake completes, the Handshake keys discarded (RFC 9001 §4.9.2), HANDSHAKE_DONE queued (§4.1.2) and the client given more connection IDs. |
 | `amplificationBlocked(): boolean` | Whether the anti-amplification limit stops the server sending (RFC 9000 §8.1): the client's address is not validated and three times what it sent leaves no room for a whole datagram. |

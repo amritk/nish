@@ -1416,15 +1416,15 @@ export class QuicConnection {
    * it moves to them.
    */
   readonly readSecret256: Secret<u8[]>
-  /** The next generation's 1-RTT read secret under SHA-256; see `readSecret256`. */
+  /** The next generation's 1-RTT read secret under SHA-256, 32 bytes; see `readSecret256`. */
   readonly nextReadSecret256: Secret<u8[]>
-  /** The current 1-RTT write secret under SHA-256; see `readSecret256`. */
+  /** The current 1-RTT write secret under SHA-256, 32 bytes; see `readSecret256`. */
   readonly writeSecret256: Secret<u8[]>
-  /** The current 1-RTT read secret under SHA-384; see `readSecret256`. */
+  /** The current 1-RTT read secret under SHA-384, 48 bytes; see `readSecret256`. */
   readonly readSecret384: Secret<u8[]>
-  /** The next generation's 1-RTT read secret under SHA-384; see `readSecret256`. */
+  /** The next generation's 1-RTT read secret under SHA-384, 48 bytes; see `readSecret256`. */
   readonly nextReadSecret384: Secret<u8[]>
-  /** The current 1-RTT write secret under SHA-384; see `readSecret256`. */
+  /** The current 1-RTT write secret under SHA-384, 48 bytes; see `readSecret256`. */
   readonly writeSecret384: Secret<u8[]>
   /** A connection ID being issued and its stateless reset token, before the table copies them. */
   private cidScratch: u8[]

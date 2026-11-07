@@ -2276,7 +2276,7 @@ class TlsClientHelloView
 | `nullCompressionOnly: boolean` | Whether `legacy_compression_methods` is the single null method TLS 1.3 requires (§4.1.2). |
 | `pskBinderAt: i32` | That identity's binder, the entry of the same index in `binders`. |
 | `pskBinderCount: i32` | How many binders `binders` holds, one an identity. |
-| `pskBinderLength: i32` | The chosen binder's length in bytes, 32 to 255 as read; it must equal the suite's hash length. |
+| `pskBinderLength: i32` | The chosen binder's length in bytes, 32 to 255: `tlsReadPreSharedKey` refuses a shorter one when it parses the extension. It must equal the suite's hash length. |
 | `pskBindersAt: i32` | `pre_shared_key`'s `binders` list: each a PskBinderEntry<32..255>. |
 | `pskBindersLength: i32` | The `binders` window's length in bytes, 0 when `pre_shared_key` was absent. |
 | `pskBindersPrefixAt: i32` | Where `binders`' two-byte length starts: the ClientHello up to here, its handshake header included, is what each binder is computed over (§4.2.11.2). |

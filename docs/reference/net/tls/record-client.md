@@ -116,8 +116,8 @@ class TlsRecordClient
 | `alert: i32` | The alert this client sent, or 0. |
 | `keyUpdates: i32` | How many KeyUpdates from the server this client has taken, up to `TLS_RECORD_MAX_KEY_UPDATES`. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`. |
-| `outputEnd: i32` | Where the bytes still to send end in `output`. |
-| `outputStart: i32` | Where the bytes still to send begin in `output`. |
+| `outputEnd: i32` | One past the last byte still to send in `output`; `outputStart` when nothing is pending. |
+| `outputStart: i32` | The index in `output` of the first byte still to send; `consume(sent)` moves it on. |
 | `padding: i32` | How many zero bytes each protected record the client writes carries after its content type (§5.4). |
 | `peerAlert: i32` | The error alert the server sent, or -1 when it sent none. |
 | `peerClosed: boolean` | True once the server's `close_notify` has arrived. |

@@ -241,6 +241,7 @@ class QuicSentPackets
 | `lost: i32[]` | The slots the last `onAck` or `onTimeout` declared lost, `lostCount` of them, oldest first. |
 | `lostCount: i32` | How many slots of `lost` the last `onAck` or `onTimeout` filled. |
 | `state: u8[]` | Each slot's state, with `QUIC_RECOVERY_MARKED` set if its packet was sent marked ECT(0). |
+| `timeSent: i64[]` | When each slot's packet was sent, the `now` `onPacketSent` was given, in milliseconds; loss detection and RTT samples read it. |
 | `ackedSlot(k: i32): i32` | The `k`-th slot the last call acknowledged, or -1. |
 | `fineAt(s: i32): i64` | When the packet in slot `s` was sent on the pacer's clock, in microseconds, or -1. |
 | `full(): boolean` | Whether every slot is taken, so nothing more can be recorded until a packet is settled. |
