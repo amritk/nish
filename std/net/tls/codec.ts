@@ -2,30 +2,48 @@
  * `nish/net/tls/codec` — the TLS 1.3 handshake messages a server and a
  * client read and write (RFC 8446 §4), as bytes.
  *
- * One reader and eight writers. `tlsParseClientHello` reads a ClientHello body
- * into a `TlsClientHello`, checking its structure: every length against the
- * bytes it claims, every vector against its RFC 8446 bounds, and no extension
- * twice (§4.2). A message that breaks one answers the alert a server sends for
- * it in the hello's `alert` field (`decode_error` for a malformed or truncated
- * one, `illegal_parameter` for a duplicate), never a panic, since every byte
- * of it is the peer's. What the fields *mean* — which version, which suite,
- * whether a share is missing — is the server's to decide, in `nish/net/tls`.
+ *     import {
+ *       TLS_VERSION_13, TlsClientHelloView, tlsCopyWindow, tlsEncodeServerHello,
+ *       tlsReadClientHello, tlsWindowHasU16
+ *     } from "nish/net/tls/codec";
  *
- * `tlsReadClientHello` is the same reader for a server that keeps its state
- * in a slot: it reads into a `TlsClientHelloView` made once, whose fields are
- * windows into the message rather than copies of it, so a ClientHello read
- * allocates nothing, and `tlsParseClientHello` copies a view's windows out.
+ *     // `body` is a ClientHello without its four-byte handshake header;
+ *     // `random`, `suite` and `x25519Public` are the server's own.
+ *     const hello = new TlsClientHelloView()
+ *     tlsReadClientHello(hello, body, 0, toI32(body.length))
+ *     if (hello.alert !== 0) {
+ *       // send hello.alert, such as TLS_ALERT_DECODE_ERROR (50), and close
+ *     } else if (tlsWindowHasU16(hello.data, hello.versionsAt, hello.versionsLength, TLS_VERSION_13)) {
+ *       const sessionId: u8[] = tlsCopyWindow(hello.data, hello.sessionIdAt, hello.sessionIdLength)
+ *       const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, x25519Public)
+ *     }
  *
- * The writers each answer one whole handshake message, header included:
- * ServerHello, a resumed ServerHello that names the PSK it accepts,
- * HelloRetryRequest, EncryptedExtensions, Certificate, CertificateVerify,
- * Finished and NewSessionTicket. Their inputs come from the server and the
- * caller's configuration rather than from the peer, so they check nothing.
- * Each is a `tlsWrite*` function that writes into the caller's array at an
- * offset — run over an empty array, it measures — and a `tlsEncode*` one
- * that answers the message in a fresh array.
+ * **One reader and eight writers.** `tlsParseClientHello` reads a ClientHello
+ * body into a `TlsClientHello`, checking its structure: every length against
+ * the bytes it claims, every vector against its RFC 8446 bounds, and no
+ * extension twice (§4.2). A message that breaks one answers the alert a server
+ * sends for it in the hello's `alert` field (`decode_error` for a malformed or
+ * truncated one, `illegal_parameter` for a duplicate), never a panic, since
+ * every byte of it is the peer's. What the fields *mean* — which version,
+ * which suite, whether a share is missing — is the server's to decide, in
+ * `nish/net/tls`.
  *
- * The client's side is the mirror: `tlsWriteClientHello` and
+ * **Reading without copying.** `tlsReadClientHello` is the same reader for a
+ * server that keeps its state in a slot: it reads into a `TlsClientHelloView`
+ * made once, whose fields are windows into the message rather than copies of
+ * it, so a ClientHello read allocates nothing, and `tlsParseClientHello`
+ * copies a view's windows out.
+ *
+ * **The writers trust their inputs.** Each answers one whole handshake
+ * message, header included: ServerHello, a resumed ServerHello that names the
+ * PSK it accepts, HelloRetryRequest, EncryptedExtensions, Certificate,
+ * CertificateVerify, Finished and NewSessionTicket. Their inputs come from the
+ * server and the caller's configuration rather than from the peer, so they
+ * check nothing. Each is a `tlsWrite*` function that writes into the caller's
+ * array at an offset — run over an empty array, it measures — and a
+ * `tlsEncode*` one that answers the message in a fresh array.
+ *
+ * **The client's side is the mirror**: `tlsWriteClientHello` and
  * `tlsEncodeClientHello` write the hello `nish/net/tls/client` sends, and five
  * readers — `tlsReadServerHello` (a HelloRetryRequest too),
  * `tlsReadEncryptedExtensions`, `tlsReadCertificate`,
@@ -35,14 +53,15 @@
  * are the peer's just as a client's are, so these readers never panic either
  * (the `tls-server-flight` fuzz target).
  *
- * The extensions read are `server_name` (RFC 6066 §3), `supported_groups`,
- * `signature_algorithms`, `supported_versions` and `key_share` (RFC 8446
- * §4.2), `application_layer_protocol_negotiation` (RFC 7301 §3.1) and
- * `quic_transport_parameters` (RFC 9001 §8.2), and `pre_shared_key` and
- * `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9), whose identities and
- * binders the reader checks against their syntax but does not open: a ticket
- * and its binder are the server's to judge. Every other extension is skipped,
- * which is what RFC 8446 §4.2 asks of a server that does not know it.
+ * **Extensions.** The ones read are `server_name` (RFC 6066 §3),
+ * `supported_groups`, `signature_algorithms`, `supported_versions` and
+ * `key_share` (RFC 8446 §4.2), `application_layer_protocol_negotiation`
+ * (RFC 7301 §3.1) and `quic_transport_parameters` (RFC 9001 §8.2), and
+ * `pre_shared_key` and `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
+ * whose identities and binders the reader checks against their syntax but
+ * does not open: a ticket and its binder are the server's to judge. Every
+ * other extension is skipped, which is what RFC 8446 §4.2 asks of a server
+ * that does not know it.
  *
  * Written from the RFCs, not ported from another implementation. Private
  * names carry the `tls` prefix because a `std/` module's private functions
@@ -53,17 +72,24 @@
 // ---- Handshake message types (RFC 8446 §4) --------------------------------
 
 export const TLS_HANDSHAKE_CLIENT_HELLO: i32 = 1
+/** `server_hello` (§4.1.3), which a HelloRetryRequest shares, told apart by its `random`. */
 export const TLS_HANDSHAKE_SERVER_HELLO: i32 = 2
+/** `new_session_ticket` (§4.6.1): a ticket the server sends after the handshake, for resumption. */
 export const TLS_HANDSHAKE_NEW_SESSION_TICKET: i32 = 4
+/** `encrypted_extensions` (§4.3.1): the server's extensions that do not belong in its ServerHello. */
 export const TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS: i32 = 8
+/** `certificate` (§4.4.2): the server's chain, leaf first. */
 export const TLS_HANDSHAKE_CERTIFICATE: i32 = 11
+/** `certificate_verify` (§4.4.3): a signature over the transcript under the leaf's key. */
 export const TLS_HANDSHAKE_CERTIFICATE_VERIFY: i32 = 15
+/** `finished` (§4.4.4): the MAC over the transcript that closes a side's flight. */
 export const TLS_HANDSHAKE_FINISHED: i32 = 20
 /** The synthetic message a HelloRetryRequest puts in the transcript in place of the first ClientHello (§4.4.1). */
 export const TLS_HANDSHAKE_MESSAGE_HASH: i32 = 254
 
 // ---- Extension types (RFC 8446 §4.2, RFC 7301, RFC 9001) ------------------
 
+/** `server_name` (RFC 6066 §3): the host name the client asks for, or the server's empty acknowledgement. */
 export const TLS_EXT_SERVER_NAME: i32 = 0
 /** `pre_shared_key` (§4.2.11): the client's identities and binders, which must be the last extension. */
 export const TLS_EXT_PRE_SHARED_KEY: i32 = 41
@@ -71,11 +97,17 @@ export const TLS_EXT_PRE_SHARED_KEY: i32 = 41
 export const TLS_EXT_EARLY_DATA: i32 = 42
 /** `psk_key_exchange_modes` (§4.2.9): which modes the client will resume in. */
 export const TLS_EXT_PSK_KEY_EXCHANGE_MODES: i32 = 45
+/** `supported_groups` (§4.2.7): the key-exchange groups the client offers. */
 export const TLS_EXT_SUPPORTED_GROUPS: i32 = 10
+/** `signature_algorithms` (§4.2.3): the schemes a CertificateVerify may be signed with. */
 export const TLS_EXT_SIGNATURE_ALGORITHMS: i32 = 13
+/** `application_layer_protocol_negotiation` (RFC 7301 §3.1): the protocols offered, or the one chosen. */
 export const TLS_EXT_ALPN: i32 = 16
+/** `supported_versions` (§4.2.1): where TLS 1.3 is offered and chosen, since `legacy_version` stays 1.2. */
 export const TLS_EXT_SUPPORTED_VERSIONS: i32 = 43
+/** `key_share` (§4.2.8): the (EC)DHE shares, or a HelloRetryRequest's `selected_group`. */
 export const TLS_EXT_KEY_SHARE: i32 = 51
+/** `quic_transport_parameters` (RFC 9001 §8.2): QUIC's own parameters, opaque to TLS. */
 export const TLS_EXT_QUIC_TRANSPORT_PARAMETERS: i32 = 57
 /** `cookie` (§4.2.2): what a HelloRetryRequest may carry and the client's second ClientHello echoes. */
 export const TLS_EXT_COOKIE: i32 = 44
@@ -447,10 +479,27 @@ const tlsReadU16Vector = (r: TlsReader, width: i32, min: i32, max: i32): i32 => 
   return end
 }
 
-/** Whether `list` holds `value`. */
+/**
+ * Whether `list` holds `value`.
+ *
+ * @param list The values to look in, such as a `TlsClientHello`'s `cipherSuites` or `groups`.
+ * @param value The code point to look for, such as a suite or a group.
+ * @returns true when `value` is somewhere in `list`.
+ */
 export const tlsListHas = (list: i32[], value: i32): boolean => list.indexOf(value) >= 0
 
-/** Whether the 16-bit values `data[at .. at + length)` hold `value`. */
+/**
+ * Whether the 16-bit values `data[at .. at + length)` hold `value`: how a
+ * server asks a `TlsClientHelloView`'s windows what it offers without copying
+ * them. The values are big-endian pairs; a last odd byte, and any part of the
+ * window outside `data`, is not read.
+ *
+ * @param data The buffer the window points into, such as a view's `data`.
+ * @param at Where the window starts in `data`, in bytes.
+ * @param length How many bytes the window holds, two a value.
+ * @param value The 16-bit code point to look for, such as `TLS_VERSION_13`.
+ * @returns true when one of the window's values is `value`.
+ */
 export const tlsWindowHasU16 = (data: u8[], at: i32, length: i32, value: i32): boolean => {
   for (
     let k: i32 = at;
@@ -664,6 +713,11 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
  * `psk_key_exchange_modes` is `missing_extension` (§4.2.9): rows 10 to 13 of
  * the fallback table in `docs/security/tls.md`, "Resumption". Nothing is copied: the windows
  * point into `data`, which must outlive the use made of them.
+ *
+ * @param hello The view to read into, cleared first; its `alert` is the verdict.
+ * @param data The buffer that holds the message, which the view's windows then point into.
+ * @param off Where the body starts in `data`, in bytes, just past the handshake header.
+ * @param len How many bytes the body is, from `off`.
  */
 export const tlsReadClientHello = (hello: TlsClientHelloView, data: u8[], off: i32, len: i32): void => {
   hello.clear()
@@ -742,6 +796,10 @@ export const tlsReadClientHello = (hello: TlsClientHelloView, data: u8[], off: i
  * answers whether there is one: false for an index out of range, or a hello
  * that offered no `pre_shared_key` or did not parse. It walks the lists
  * `tlsReadClientHello` checked, and allocates nothing.
+ *
+ * @param hello A view `tlsReadClientHello` has read into; its PSK windows are cleared first either way.
+ * @param index Which identity to choose, from 0, in the client's order.
+ * @returns true when the identity and its binder were found and the windows point at them.
  */
 export const tlsSelectPskIdentity = (hello: TlsClientHelloView, index: i32): boolean => {
   hello.pskIdentityAt = 0
@@ -870,7 +928,15 @@ export class TlsClientHello {
   }
 }
 
-/** A copy of `data[at .. at + length)`. */
+/**
+ * A copy of `data[at .. at + length)`, which is how a window of a view becomes
+ * an array of its own that outlives the buffer it was read from.
+ *
+ * @param data The buffer the window points into.
+ * @param at Where the window starts in `data`, in bytes.
+ * @param length How many bytes to copy; a negative one copies none.
+ * @returns A fresh array of `length` bytes; nothing from outside `data` is copied into it.
+ */
 export const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
   const out: u8[] = new Array<u8>(length < 0 ? TLS_CODEC_FROM : length)
   for (let k: i32 = 0; k < toI32(out.length) && at + k >= 0 && at + k < toI32(data.length); k++) {
@@ -892,7 +958,15 @@ const tlsCopyU16Window = (data: u8[], at: i32, length: i32): i32[] => {
   return out
 }
 
-/** The bytes of `data[at .. at + length)` as a string of one character a byte: ASCII here, a host name. */
+/**
+ * The bytes of `data[at .. at + length)` as a string of one character a byte:
+ * ASCII here, a host name.
+ *
+ * @param data The buffer the window points into.
+ * @param at Where the window starts in `data`, in bytes.
+ * @param length How many bytes the window holds; any part outside `data` is left out.
+ * @returns A fresh string, one character for each byte read.
+ */
 export const tlsWindowString = (data: u8[], at: i32, length: i32): string => {
   const parts: string[] = []
   for (let k: i32 = at; k < at + length && k >= 0 && k < toI32(data.length); k++) {
@@ -905,6 +979,11 @@ export const tlsWindowString = (data: u8[], at: i32, length: i32): string => {
  * Reads the ClientHello body `data[off .. off + len)` — the message without
  * its four-byte handshake header — into a fresh `TlsClientHello`, with
  * `tlsReadClientHello`'s checks and its `alert`, every field copied out.
+ *
+ * @param data The buffer that holds the message; nothing in the answer points into it.
+ * @param off Where the body starts in `data`, in bytes, just past the handshake header.
+ * @param len How many bytes the body is, from `off`.
+ * @returns A fresh hello whose `alert` is 0 when the body parsed, or the alert it earns.
  */
 export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHello => {
   const view = new TlsClientHelloView()
@@ -1060,6 +1139,11 @@ const tlsHexNibble = (c: i32): i32 => (c <= 57 ? c - 48 : c - 87)
  * Writes the bytes the lowercase hex constant `text` spells at `out[at]` and
  * answers where they end: how this stack's fixed values, written out where
  * they are defined, become bytes without an array of their own.
+ *
+ * @param text Lowercase hex digits, two a byte; a last odd digit is ignored, and nothing else is checked.
+ * @param out The array to write into; a byte that would land outside it is dropped.
+ * @param at Where the first byte goes in `out`.
+ * @returns `at` plus the number of bytes `text` spells, written or not.
  */
 export const tlsHexInto = (text: string, out: u8[], at: i32): i32 => {
   const length: i32 = toI32(text.length) >> 1
@@ -1140,6 +1224,16 @@ const tlsPutServerHello = (
  * `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying
  * the server's x25519 share. The extensions are `key_share` then
  * `supported_versions`, the order RFC 8448 §3 shows.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param random The server's 32-byte `random` (§4.1.3), written as it is.
+ * @param sessionId The buffer that holds the client's `legacy_session_id`, such as the hello's `data`.
+ * @param sessionIdOff Where the session id starts in `sessionId`.
+ * @param sessionIdLength How many bytes the session id is, 0 to 32.
+ * @param suite The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_128_GCM_SHA256`.
+ * @param x25519Public The server's x25519 public key, the share's `key_exchange`.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteServerHello = (
   out: u8[],
@@ -1159,6 +1253,18 @@ export const tlsWriteServerHello = (
  * `pre_shared_key` that names the client's identity number
  * `selectedIdentity` (a `uint16`) ahead of `key_share`, since the server
  * resumes only in `psk_dhe_ke` and so always sends its share.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param random The server's 32-byte `random` (§4.1.3), written as it is.
+ * @param sessionId The buffer that holds the client's `legacy_session_id`, such as the hello's `data`.
+ * @param sessionIdOff Where the session id starts in `sessionId`.
+ * @param sessionIdLength How many bytes the session id is, 0 to 32.
+ * @param suite The cipher suite the server chose.
+ * @param x25519Public The server's x25519 public key, the share's `key_exchange`.
+ * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
+ *   16 bits are written.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteServerHelloPsk = (
   out: u8[],
@@ -1188,6 +1294,15 @@ export const tlsWriteServerHelloPsk = (
  * a ServerHello whose `random` is the fixed HelloRetryRequest value, choosing
  * `suite`, echoing the session id, and asking for a share of `group` in
  * `key_share`. No cookie is sent.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param sessionId The buffer that holds the client's `legacy_session_id`, such as the hello's `data`.
+ * @param sessionIdOff Where the session id starts in `sessionId`.
+ * @param sessionIdLength How many bytes the session id is, 0 to 32.
+ * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
+ * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteHelloRetryRequest = (
   out: u8[],
@@ -1217,6 +1332,14 @@ export const tlsWriteHelloRetryRequest = (
  * a list of exactly one), an empty `server_name` when `acknowledgeServerName`
  * (RFC 6066 §3's acknowledgement), and the server's
  * `quic_transport_parameters` when `quicTransportParameters` is not `null`.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param extra Whole extensions, type and length included, written first and unchecked; empty for none.
+ * @param alpn The protocol the server chose, one character a byte, at most 255; empty to send no ALPN.
+ * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
+ * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteEncryptedExtensions = (
   out: u8[],
@@ -1256,6 +1379,11 @@ export const tlsWriteEncryptedExtensions = (
  * Writes a server's Certificate (§4.4.2) at `out[at]` and answers where it
  * ends: an empty request context, then each DER certificate of `chain`, leaf
  * first, with no extensions of its own.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param chain The DER certificates, leaf first, each written as it is.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
   const list: i32 = tlsPutU8(out, at + 4, 0) + 3
@@ -1271,7 +1399,16 @@ export const tlsWriteCertificate = (out: u8[], at: i32, chain: u8[][]): i32 => {
   return p
 }
 
-/** Writes a CertificateVerify (§4.4.3) at `out[at]`: the signature scheme and the signature as it goes on the wire. */
+/**
+ * Writes a CertificateVerify (§4.4.3) at `out[at]`: the signature scheme and
+ * the signature as it goes on the wire.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
+ * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ */
 export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signature: u8[]): i32 => {
   const body: i32 = tlsPutU16(out, at + 4, scheme) + 2
   const p: i32 = tlsPutBytes(out, body, signature)
@@ -1280,7 +1417,16 @@ export const tlsWriteCertificateVerify = (out: u8[], at: i32, scheme: i32, signa
   return p
 }
 
-/** Writes a Finished (§4.4.4) at `out[at]`, carrying `verifyData[off .. off + len)`. */
+/**
+ * Writes a Finished (§4.4.4) at `out[at]`, carrying `verifyData[off .. off + len)`.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param verifyData The buffer that holds the `verify_data`, the HMAC the key schedule computed.
+ * @param off Where the `verify_data` starts in `verifyData`.
+ * @param len How many bytes it is: the suite's hash length, 32 or 48.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
+ */
 export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32, len: i32): i32 => {
   const p: i32 = tlsPutWindow(out, at + 4, verifyData, off, len)
   tlsPutHeader(out, at, TLS_HANDSHAKE_FINISHED, p)
@@ -1294,6 +1440,19 @@ export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32,
  * `ticket[ticketOff .. ticketOff + ticketLength)`, and `extra` as the
  * extensions, encoded by the caller and written as they are. The server sends
  * none; RFC 8448 §3's ticket carries `early_data`.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param lifetime How long the ticket may be used, in seconds; RFC 8446 §4.6.1 caps it at seven days.
+ * @param ageAdd The `ticket_age_add` that obfuscates the ticket age, which §4.6.1 wants fresh and random.
+ * @param nonce The buffer that holds the `ticket_nonce`.
+ * @param nonceOff Where the nonce starts in `nonce`.
+ * @param nonceLength How many bytes the nonce is, 0 to 255.
+ * @param ticket The buffer that holds the ticket the client will send back.
+ * @param ticketOff Where the ticket starts in `ticket`.
+ * @param ticketLength How many bytes the ticket is: §4.6.1 allows 1 to 65535, not checked here.
+ * @param extra Whole extensions, type and length included, written unchecked; empty for none.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteNewSessionTicket = (
   out: u8[],
@@ -1325,6 +1484,13 @@ export const tlsWriteNewSessionTicket = (
  * spaces, the context string "TLS 1.3, server CertificateVerify", a zero byte,
  * and the transcript hash `transcriptHash[off .. off + len)` through
  * Certificate.
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the content starts in `out`. It has no handshake header: it is signed, not sent.
+ * @param transcriptHash The buffer that holds the transcript hash through the server's Certificate.
+ * @param off Where the hash starts in `transcriptHash`.
+ * @param len How many bytes the hash is: the suite's hash length.
+ * @returns Where the content ends in `out`: `at` plus 98 plus `len`, written or not.
  */
 export const tlsWriteCertificateVerifyContent = (
   out: u8[],
@@ -1349,6 +1515,12 @@ const tlsBytesString = (name: u8[]): string => tlsWindowString(name, TLS_CODEC_F
  * A ServerHello (§4.1.3) choosing `suite` and TLS 1.3, echoing the client's
  * `sessionId`, and carrying the server's x25519 share, in a fresh array
  * (`tlsWriteServerHello`).
+ *
+ * @param random The server's 32-byte `random` (§4.1.3), written as it is.
+ * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
+ * @param suite The cipher suite the server chose.
+ * @param x25519Public The server's x25519 public key, the share's `key_exchange`.
+ * @returns The whole message, handshake header included.
  */
 export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, x25519Public: u8[]): u8[] => {
   const none: u8[] = []
@@ -1378,7 +1550,18 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
   return out
 }
 
-/** A resumed handshake's ServerHello naming `selectedIdentity`, in a fresh array (`tlsWriteServerHelloPsk`). */
+/**
+ * A resumed handshake's ServerHello naming `selectedIdentity`, in a fresh
+ * array (`tlsWriteServerHelloPsk`).
+ *
+ * @param random The server's 32-byte `random` (§4.1.3), written as it is.
+ * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
+ * @param suite The cipher suite the server chose.
+ * @param x25519Public The server's x25519 public key, the share's `key_exchange`.
+ * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
+ *   16 bits are written.
+ * @returns The whole message, handshake header included.
+ */
 export const tlsEncodeServerHelloPsk = (
   random: u8[],
   sessionId: u8[],
@@ -1415,7 +1598,15 @@ export const tlsEncodeServerHelloPsk = (
   return out
 }
 
-/** A HelloRetryRequest (§4.1.4) choosing `suite`, echoing `sessionId` and asking for `group`, in a fresh array (`tlsWriteHelloRetryRequest`). */
+/**
+ * A HelloRetryRequest (§4.1.4) choosing `suite`, echoing `sessionId` and
+ * asking for `group`, in a fresh array (`tlsWriteHelloRetryRequest`).
+ *
+ * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
+ * @param suite The cipher suite the server chose, which the second ServerHello must choose again.
+ * @param group The group the client is asked to send a share for, such as `TLS_GROUP_X25519`.
+ * @returns The whole message, handshake header included.
+ */
 export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i32): u8[] => {
   const none: u8[] = []
   const sessionIdLength: i32 = toI32(sessionId.length)
@@ -1429,6 +1620,12 @@ export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i
 /**
  * EncryptedExtensions (§4.3.1) in a fresh array (`tlsWriteEncryptedExtensions`),
  * the ALPN protocol given as its bytes.
+ *
+ * @param extra Whole extensions, type and length included, written first and unchecked; empty for none.
+ * @param alpn The protocol the server chose, as its bytes, at most 255; empty to send no ALPN.
+ * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
+ * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
+ * @returns The whole message, handshake header included.
  */
 export const tlsEncodeEncryptedExtensions = (
   extra: u8[],
@@ -1459,7 +1656,12 @@ export const tlsEncodeEncryptedExtensions = (
   return out
 }
 
-/** A server's Certificate (§4.4.2) in a fresh array (`tlsWriteCertificate`). */
+/**
+ * A server's Certificate (§4.4.2) in a fresh array (`tlsWriteCertificate`).
+ *
+ * @param chain The DER certificates, leaf first, each written as it is.
+ * @returns The whole message, handshake header included.
+ */
 export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
   const none: u8[] = []
   const out: u8[] = new Array<u8>(tlsWriteCertificate(none, TLS_CODEC_FROM, chain))
@@ -1467,7 +1669,13 @@ export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
   return out
 }
 
-/** A CertificateVerify (§4.4.3) in a fresh array (`tlsWriteCertificateVerify`). */
+/**
+ * A CertificateVerify (§4.4.3) in a fresh array (`tlsWriteCertificateVerify`).
+ *
+ * @param scheme The signature scheme, such as `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`.
+ * @param signature The signature over `tlsCertificateVerifyContent`, in the scheme's wire encoding.
+ * @returns The whole message, handshake header included.
+ */
 export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] => {
   const none: u8[] = []
   const out: u8[] = new Array<u8>(tlsWriteCertificateVerify(none, TLS_CODEC_FROM, scheme, signature))
@@ -1475,7 +1683,12 @@ export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] =
   return out
 }
 
-/** A Finished (§4.4.4) carrying `verifyData`, in a fresh array (`tlsWriteFinished`). */
+/**
+ * A Finished (§4.4.4) carrying `verifyData`, in a fresh array (`tlsWriteFinished`).
+ *
+ * @param verifyData The whole `verify_data`, the HMAC the key schedule computed: 32 or 48 bytes.
+ * @returns The whole message, handshake header included.
+ */
 export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
   const none: u8[] = []
   const length: i32 = toI32(verifyData.length)
@@ -1484,7 +1697,16 @@ export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
   return out
 }
 
-/** A NewSessionTicket (§4.6.1) in a fresh array (`tlsWriteNewSessionTicket`). */
+/**
+ * A NewSessionTicket (§4.6.1) in a fresh array (`tlsWriteNewSessionTicket`).
+ *
+ * @param lifetime How long the ticket may be used, in seconds; RFC 8446 §4.6.1 caps it at seven days.
+ * @param ageAdd The `ticket_age_add` that obfuscates the ticket age, which §4.6.1 wants fresh and random.
+ * @param nonce The whole `ticket_nonce`, 0 to 255 bytes.
+ * @param ticket The whole ticket the client will send back: §4.6.1 allows 1 to 65535 bytes, not checked here.
+ * @param extra Whole extensions, type and length included, written unchecked; empty for none.
+ * @returns The whole message, handshake header included.
+ */
 export const tlsEncodeNewSessionTicket = (
   lifetime: u32,
   ageAdd: u32,
@@ -1526,7 +1748,13 @@ export const tlsEncodeNewSessionTicket = (
   return out
 }
 
-/** What a server's CertificateVerify signs (§4.4.3), in a fresh array (`tlsWriteCertificateVerifyContent`). */
+/**
+ * What a server's CertificateVerify signs (§4.4.3), in a fresh array
+ * (`tlsWriteCertificateVerifyContent`).
+ *
+ * @param transcriptHash The whole transcript hash through the server's Certificate.
+ * @returns The content to sign: 98 bytes of prefix, then the hash. It has no handshake header.
+ */
 export const tlsCertificateVerifyContent = (transcriptHash: u8[]): u8[] => {
   const none: u8[] = []
   const length: i32 = toI32(transcriptHash.length)
@@ -1550,7 +1778,13 @@ const tlsPutClientSchemes = (out: u8[], at: i32): i32 => {
   return tlsPutU16(out, p, TLS_SIGNATURE_RSA_PSS_RSAE_SHA512)
 }
 
-/** Whether `scheme` is one the client's `signature_algorithms` offers, the only ones a server's CertificateVerify may use (§4.4.3). */
+/**
+ * Whether `scheme` is one the client's `signature_algorithms` offers, the
+ * only ones a server's CertificateVerify may use (§4.4.3).
+ *
+ * @param scheme The scheme a server's CertificateVerify names.
+ * @returns true for ECDSA P-256 or P-384, or RSA-PSS (rsae) with SHA-256, SHA-384 or SHA-512.
+ */
 export const tlsClientOffersScheme = (scheme: i32): boolean =>
   scheme === TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 ||
   scheme === TLS_SIGNATURE_ECDSA_SECP384R1_SHA384 ||
@@ -1567,6 +1801,19 @@ export const tlsClientOffersScheme = (scheme: i32): boolean =>
  * `supported_versions` (TLS 1.3 alone), a `key_share` with the one entry
  * `shareGroup`/`sharePublic`, and `cookie` when `cookie` is not empty (the
  * echo of a HelloRetryRequest's, §4.2.2).
+ *
+ * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
+ * @param at Where the message, handshake header first, starts in `out`.
+ * @param random The client's 32-byte `random` (§4.1.2), written as it is.
+ * @param sessionId The `legacy_session_id`, 0 to 32 bytes; the client sends 32 for middlebox compatibility.
+ * @param suites The cipher suites offered, in order of preference.
+ * @param groups The groups `supported_groups` offers, in order of preference.
+ * @param shareGroup The group of the one key share sent, such as `TLS_GROUP_X25519`.
+ * @param sharePublic That share's public key, its `key_exchange`.
+ * @param serverName The host name for `server_name`, ASCII; empty to leave the extension out.
+ * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
+ * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
+ * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteClientHello = (
   out: u8[],
@@ -1655,7 +1902,20 @@ export const tlsWriteClientHello = (
   return p
 }
 
-/** A ClientHello (§4.1.2) in a fresh array (`tlsWriteClientHello`). */
+/**
+ * A ClientHello (§4.1.2) in a fresh array (`tlsWriteClientHello`).
+ *
+ * @param random The client's 32-byte `random` (§4.1.2), written as it is.
+ * @param sessionId The `legacy_session_id`, 0 to 32 bytes; the client sends 32 for middlebox compatibility.
+ * @param suites The cipher suites offered, in order of preference.
+ * @param groups The groups `supported_groups` offers, in order of preference.
+ * @param shareGroup The group of the one key share sent, such as `TLS_GROUP_X25519`.
+ * @param sharePublic That share's public key, its `key_exchange`.
+ * @param serverName The host name for `server_name`, ASCII; empty to leave the extension out.
+ * @param alpn The ALPN protocols offered, one character a byte, in order; empty to leave ALPN out.
+ * @param cookie A HelloRetryRequest's `cookie` to echo; empty to send none.
+ * @returns The whole message, handshake header included.
+ */
 export const tlsEncodeClientHello = (
   random: u8[],
   sessionId: u8[],
@@ -1978,6 +2238,11 @@ const tlsWindowIsHex = (data: u8[], at: i32, text: string): boolean => {
  * header — into `view`, which tells a HelloRetryRequest from it by its
  * `random` (§4.1.3). An absent extensions block parses: it is how a TLS 1.2
  * or older server answers, which the client refuses for its version.
+ *
+ * @param view The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+ * @param data The buffer that holds the message, which the view's windows then point into.
+ * @param off Where the ServerHello body starts in `data`, in bytes, just past the handshake header.
+ * @param len How many bytes the body is, from `off`.
  */
 export const tlsReadServerHello = (view: TlsServerFlightView, data: u8[], off: i32, len: i32): void => {
   const r: TlsReader | null = tlsFlightOpen(view, data, off, len)
@@ -2008,13 +2273,25 @@ const TLS_DOWNGRADE_11: string = "444f574e47524400"
  * Whether the ServerHello in `view` carries a downgrade sentinel in the last
  * 8 bytes of its random (§4.1.3), which a TLS 1.3 client must refuse with
  * `illegal_parameter`.
+ *
+ * @param view A view `tlsReadServerHello` has just read into.
+ * @returns true when the random ends in the TLS 1.2 or the TLS 1.1 sentinel.
  */
 export const tlsServerHelloDowngrade = (view: TlsServerFlightView): boolean => {
   const at: i32 = view.randomAt + TLS_RANDOM_SIZE - 8
   return tlsWindowIsHex(view.data, at, TLS_DOWNGRADE_12) || tlsWindowIsHex(view.data, at, TLS_DOWNGRADE_11)
 }
 
-/** Reads an EncryptedExtensions body (§4.3.1) into `view`. */
+/**
+ * Reads an EncryptedExtensions body (§4.3.1) into `view`: ALPN, an empty
+ * `server_name` and `supported_groups` may be there, and any other extension
+ * sets `extensionAlert`.
+ *
+ * @param view The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+ * @param data The buffer that holds the message, which the view's windows then point into.
+ * @param off Where the EncryptedExtensions body starts in `data`, in bytes, just past the handshake header.
+ * @param len How many bytes the body is, from `off`.
+ */
 export const tlsReadEncryptedExtensions = (
   view: TlsServerFlightView,
   data: u8[],
@@ -2035,6 +2312,11 @@ export const tlsReadEncryptedExtensions = (
  * entries. An empty list is `decode_error`, as §4.4.2.4 has a client answer
  * it; an entry with extensions is `unsupported_extension`, because the
  * client offers none that a CertificateEntry may carry.
+ *
+ * @param view The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+ * @param data The buffer that holds the message, which the view's windows then point into.
+ * @param off Where the Certificate body starts in `data`, in bytes, just past the handshake header.
+ * @param len How many bytes the body is, from `off`.
  */
 export const tlsReadCertificate = (view: TlsServerFlightView, data: u8[], off: i32, len: i32): void => {
   const r: TlsReader | null = tlsFlightOpen(view, data, off, len)
@@ -2061,7 +2343,15 @@ export const tlsReadCertificate = (view: TlsServerFlightView, data: u8[], off: i
   tlsFlightClose(view, r, off + len)
 }
 
-/** Reads a CertificateVerify body (§4.4.3) into `view`: the scheme and the signature. */
+/**
+ * Reads a CertificateVerify body (§4.4.3) into `view`: the scheme and the
+ * signature, neither of them checked here.
+ *
+ * @param view The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+ * @param data The buffer that holds the message, which the view's windows then point into.
+ * @param off Where the CertificateVerify body starts in `data`, in bytes, just past the handshake header.
+ * @param len How many bytes the body is, from `off`.
+ */
 export const tlsReadCertificateVerify = (view: TlsServerFlightView, data: u8[], off: i32, len: i32): void => {
   const r: TlsReader | null = tlsFlightOpen(view, data, off, len)
   if (r === null) {
@@ -2079,6 +2369,11 @@ export const tlsReadCertificateVerify = (view: TlsServerFlightView, data: u8[], 
  * Checks a NewSessionTicket body's structure (§4.6.1) into `view`'s `alert`:
  * the client keeps no tickets, so it reads one only to discard it, but a
  * malformed one is still `decode_error`.
+ *
+ * @param view The view to read into, cleared first; its `alert` and `extensionAlert` are the verdicts.
+ * @param data The buffer that holds the message, which the view's windows then point into.
+ * @param off Where the NewSessionTicket body starts in `data`, in bytes, just past the handshake header.
+ * @param len How many bytes the body is, from `off`.
  */
 export const tlsReadNewSessionTicket = (view: TlsServerFlightView, data: u8[], off: i32, len: i32): void => {
   const r: TlsReader | null = tlsFlightOpen(view, data, off, len)
@@ -2092,7 +2387,13 @@ export const tlsReadNewSessionTicket = (view: TlsServerFlightView, data: u8[], o
   tlsFlightClose(view, r, off + len)
 }
 
-/** The DER certificates of the Certificate `tlsReadCertificate` last read into `view`, leaf first, each a fresh array. */
+/**
+ * The DER certificates of the Certificate `tlsReadCertificate` last read into
+ * `view`, leaf first, each a fresh array.
+ *
+ * @param view A view `tlsReadCertificate` has just read into.
+ * @returns The chain, copied out of `view.data`; empty if the read failed or another message was read since.
+ */
 export const tlsCopyCertificates = (view: TlsServerFlightView): u8[][] => {
   const chain: u8[][] = []
   const r: TlsReader = new TlsReader(

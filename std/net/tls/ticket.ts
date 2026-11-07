@@ -3,7 +3,29 @@
  * (RFC 8446 §4.6.1), and the strike register that makes each one single-use
  * (§8.1). `docs/security/tls.md`, "Resumption", is the design this follows.
  *
- * A ticket is the key id (16 bytes, public, the additional data) ‖ a fresh
+ *     import {
+ *       TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketState, TlsTicketStrikes,
+ *       tlsTicketKeyDraw, tlsTicketKeyDue, tlsTicketOpen, tlsTicketSeal, tlsTicketSize,
+ *     } from "nish/net/tls/ticket";
+ *
+ *     const info = new TlsTicketKeyInfo()
+ *     const key = tlsTicketKeyDraw(info, monotonicNanos())
+ *     const strikes = new TlsTicketStrikes(TLS_TICKET_STRIKES_DEFAULT)
+ *
+ *     // Issuing: `state` is a TlsTicketState the server filled from a finished handshake.
+ *     const ticket: u8[] = new Array<u8>(tlsTicketSize(state))
+ *     const written = tlsTicketSeal(key, info, state, monotonicNanos(), ticket)  // 0: send no ticket
+ *
+ *     // Resuming (`TlsServer.resume` does this for a server): `offered` is a ticket the client sent.
+ *     const now = monotonicNanos()
+ *     const opened = new TlsTicketState()
+ *     const fresh = tlsTicketOpen(key, info, offered, now, opened)
+ *     if (fresh && strikes.take(opened.id, opened.expiresAt(), now)) {
+ *       // resume with opened.psk[0 .. opened.pskLength), then secureZero(opened.psk)
+ *     }
+ *     // when tlsTicketKeyDue(info, now), rotate as "Keys" below says; wipe(key) before it goes
+ *
+ * **The ticket.** A ticket is the key id (16 bytes, public, the additional data) ‖ a fresh
  * random nonce (12) ‖ the ChaCha20-Poly1305 ciphertext of the state ‖ its tag
  * (16). The state is what a resumed handshake reads: the suite, the time the
  * ticket was issued, its lifetime, the time of the full handshake its chain
@@ -12,36 +34,39 @@
  * start (8), the server name with a one-byte length, and the PSK with a
  * one-byte length, every integer big-endian.
  *
- * Every time is `monotonicNanos()`, read by the caller outside `expose` and
+ * **Time.** Every time is `monotonicNanos()`, read by the caller outside `expose` and
  * handed in as `now`: keys never leave the process, so neither does a ticket,
  * and a clock that cannot step keeps the strike register honest.
  *
- * - **Keys.** A ticket key is a `Secret<u8[]>` of 32 random bytes, which no
- *   class may hold (NL2430): the program keeps its current and previous keys
- *   in locals and lends them to `tlsTicketSeal` and `tlsTicketOpen`, which
- *   read them only inside `exposeWith`. Beside each key it keeps a
- *   `TlsTicketKeyInfo` — the id, the time it was drawn, how many tickets it has
- *   sealed, and its seal cap. `tlsTicketKeyDraw` draws a key into a record and
- *   `tlsTicketKeyDue` says when to replace it. The rotation turn is the
- *   program's, because a function hands back one `Secret` and may not reassign
- *   a borrowed one: `wipe(previous)`, `previous = current`,
- *   `previousInfo.copyFrom(currentInfo)`, `current = tlsTicketKeyDraw(currentInfo, now)`.
- * - **What the module enforces from the record.** A key seals for 12 hours of
- *   awake time after its draw and until its seal cap (2^30 tickets), and opens
- *   for 14 hours, inclusive; a ticket opens while `now` is no earlier than its
- *   issue time, no later than issue time plus lifetime, and no later than 24
- *   hours after its chain started, and only when its sealed lifetime is at
- *   most 7200 s and its chain start is no later than its issue time.
- * - **Wiping.** The plaintext of a seal or an open is a plain `u8[]` made in
- *   a `using a = arena()` block, wiped with `secureZero` once, at the point
- *   every path reaches; a failed open also wipes the state's PSK array. The
- *   seal's exposed function wipes the copy of the plaintext it hands the
- *   AEAD, and what the AEAD makes from the key is wiped by the AEAD
- *   (`nish/crypto/chacha20poly1305`).
- * - **`TlsTicketStrikes`** records each ticket's id (its nonce) until the
- *   ticket expires or 7200 s after the recording, whichever is sooner, in a
- *   table made once at its capacity. It never grows and fails closed when
- *   full.
+ * **Keys.** A ticket key is a `Secret<u8[]>` of 32 random bytes, which no
+ * class may hold (NL2430): the program keeps its current and previous keys
+ * in locals and lends them to `tlsTicketSeal` and `tlsTicketOpen`, which
+ * read them only inside `exposeWith`. Beside each key it keeps a
+ * `TlsTicketKeyInfo` — the id, the time it was drawn, how many tickets it has
+ * sealed, and its seal cap. `tlsTicketKeyDraw` draws a key into a record and
+ * `tlsTicketKeyDue` says when to replace it. The rotation turn is the
+ * program's, because a function hands back one `Secret` and may not reassign
+ * a borrowed one: `wipe(previous)`, `previous = current`,
+ * `previousInfo.copyFrom(currentInfo)`, `current = tlsTicketKeyDraw(currentInfo, now)`.
+ *
+ * **What the module enforces from the record.** A key seals for 12 hours of
+ * awake time after its draw and until its seal cap (2^30 tickets), and opens
+ * for 14 hours, inclusive; a ticket opens while `now` is no earlier than its
+ * issue time, no later than issue time plus lifetime, and no later than 24
+ * hours after its chain started, and only when its sealed lifetime is at
+ * most 7200 s and its chain start is no later than its issue time.
+ *
+ * **Wiping.** The plaintext of a seal or an open is a plain `u8[]` made in
+ * a `using a = arena()` block, wiped with `secureZero` once, at the point
+ * every path reaches; a failed open also wipes the state's PSK array. The
+ * seal's exposed function wipes the copy of the plaintext it hands the
+ * AEAD, and what the AEAD makes from the key is wiped by the AEAD
+ * (`nish/crypto/chacha20poly1305`).
+ *
+ * **`TlsTicketStrikes`** records each ticket's id (its nonce) until the
+ * ticket expires or 7200 s after the recording, whichever is sooner, in a
+ * table made once at its capacity. It never grows and fails closed when
+ * full.
  *
  * Written from the RFC and the design record, not ported from another
  * implementation. Private names carry the `tlsTicket` prefix because a `std/`
@@ -126,7 +151,12 @@ export class TlsTicketKeyInfo {
     this.sealCap = TLS_TICKET_SEAL_CAP
   }
 
-  /** Copies `other` into this record, as the rotation turn does from the current key's to the previous one's. */
+  /**
+   * Copies `other` into this record, as the rotation turn does from the current key's to the previous one's.
+   * The id is copied byte by byte into this record's own array, so the two records share nothing.
+   *
+   * @param other The record to copy from, left unchanged.
+   */
   copyFrom(other: TlsTicketKeyInfo): void {
     for (let k: i32 = 0; k < TLS_TICKET_KEY_ID_SIZE; k++) {
       this.id[k] = other.id[k]
@@ -173,7 +203,11 @@ export class TlsTicketState {
     this.id = new Array<u8>(TLS_TICKET_NONCE_SIZE)
   }
 
-  /** When the ticket stops opening: its issue time plus its lifetime. It opens at that instant, and not after. */
+  /**
+   * When the ticket stops opening: its issue time plus its lifetime. It opens at that instant, and not after.
+   *
+   * @returns The expiry in `monotonicNanos()`, which `TlsTicketStrikes.take` takes as its `expiresAt`.
+   */
   expiresAt(): i64 {
     return this.issuedAt + toI64(this.lifetime) * TLS_TICKET_NANOS
   }
@@ -183,6 +217,10 @@ export class TlsTicketState {
  * Draws a fresh key: 32 random bytes moved into the `Secret` it answers, a
  * fresh random id in `info`, `now` as its creation time and a count of 0.
  * The seal cap is left as the program set it.
+ *
+ * @param info The record to fill for the new key; its old id, time and count are overwritten.
+ * @param now The draw time, in `monotonicNanos()`.
+ * @returns The new key, owned by the caller, who keeps it in a local and wipes it when it is replaced.
  */
 export const tlsTicketKeyDraw = (info: TlsTicketKeyInfo, now: i64): Secret<u8[]> => {
   const key: u8[] = new Array<u8>(TLS_TICKET_KEY_SIZE)
@@ -193,7 +231,13 @@ export const tlsTicketKeyDraw = (info: TlsTicketKeyInfo, now: i64): Secret<u8[]>
   return secret(key)
 }
 
-/** True when the key `info` describes should be replaced: at the end of its issue window, or at its seal cap. */
+/**
+ * True when the key `info` describes should be replaced: at the end of its issue window, or at its seal cap.
+ *
+ * @param info The current key's record.
+ * @param now The time to judge at, in `monotonicNanos()`.
+ * @returns True when the program should rotate now; the key still opens tickets for a while after.
+ */
 export const tlsTicketKeyDue = (info: TlsTicketKeyInfo, now: i64): boolean =>
   now - info.createdAt >= TLS_TICKET_SEAL_WINDOW || info.sealed >= info.sealCap
 
@@ -226,6 +270,9 @@ const tlsTicketPlainLength = (state: TlsTicketState): i32 => {
  * The bytes `tlsTicketSeal` makes of `state`, 0 when it cannot seal it: a
  * suite this server does not know, a PSK of another length than its hash, or
  * a server name longer than 255 bytes, which is issued no ticket.
+ *
+ * @param state The state to be sealed, with its suite, server name and PSK lengths set.
+ * @returns The ticket's length in bytes, the least `out` that `tlsTicketSeal` accepts, or 0.
  */
 export const tlsTicketSize = (state: TlsTicketState): i32 => {
   const plain: i32 = tlsTicketPlainLength(state)
@@ -294,6 +341,13 @@ const tlsTicketSealExposed = (key: u8[], input: u8[]): u8[] => {
  * The plaintext is built after the key id and nonce in one array, the one
  * `exposeWith` hands its function, and wiped once, after the seal and its
  * refusals.
+ *
+ * @param key The ticket key, lent: it is read only inside `exposeWith`, and stays the caller's to wipe.
+ * @param info The key's record: its id heads the ticket and its count goes up by one on a seal.
+ * @param state What the ticket carries; its `issuedAt` is overwritten with `now`.
+ * @param now The issue time, in `monotonicNanos()`.
+ * @param out Where the ticket is written, from index 0; at least `tlsTicketSize(state)` bytes.
+ * @returns How many bytes of `out` hold the ticket, or 0 when nothing was sealed.
  */
 export const tlsTicketSeal = (
   key: Secret<u8[]>,
@@ -440,6 +494,14 @@ const tlsTicketNamesKey = (info: TlsTicketKeyInfo, ticket: u8[]): boolean => {
  * the AEAD ran, the state's PSK array is wiped. The plaintext is wiped once,
  * after the branch on the tag and on the parse, so the one wipe covers every
  * path.
+ *
+ * @param key The ticket key, lent: it is read only inside `exposeWith`, and stays the caller's to wipe.
+ * @param info The key's record, whose id the ticket must name.
+ * @param ticket The ticket as the client sent it: key id, nonce, ciphertext and tag.
+ * @param now The time to judge the key and the ticket at, in `monotonicNanos()`.
+ * @param out The state to fill; its PSK array holds secret bytes on true, which the caller wipes once used.
+ * @returns True when the ticket opened and is within its bounds; it is not yet checked against the strike
+ *   register, which `TlsTicketStrikes.take` does.
  */
 export const tlsTicketOpen = (
   key: Secret<u8[]>,
@@ -496,6 +558,11 @@ export class TlsTicketStrikes {
   /** The farthest from its home slot any id has been recorded: no entry of an id lies further along its chain. */
   longest: i32
 
+  /**
+   * Makes the whole table now, so that no `take` ever allocates; it panics on a capacity below 1.
+   *
+   * @param capacity How many ids the register can hold at once, `TLS_TICKET_STRIKES_DEFAULT` when in doubt.
+   */
   constructor(capacity: i32) {
     if (capacity < 1) {
       panic("TlsTicketStrikes: a capacity below 1")
@@ -509,7 +576,12 @@ export class TlsTicketStrikes {
     this.refusedFull = 0
   }
 
-  /** The slot an id's probe chain starts at: FNV-1a over its bytes. */
+  /**
+   * The slot an id's probe chain starts at: FNV-1a over its bytes.
+   *
+   * @param id The ticket id; only its first `TLS_TICKET_NONCE_SIZE` bytes are hashed.
+   * @returns A slot index, from 0 to `capacity - 1`.
+   */
   home(id: u8[]): i32 {
     let hash: i64 = 2166136261
     for (let k: i32 = 0; k < TLS_TICKET_NONCE_SIZE && k < toI32(id.length); k++) {
@@ -529,7 +601,13 @@ export class TlsTicketStrikes {
     return true
   }
 
-  /** How many entries hold `id` at `now`, live or expired: what the tests read to see one id recorded once. */
+  /**
+   * How many entries hold `id`, live or expired: what the tests read to see one id recorded once.
+   * It walks the whole table, so it is for tests and diagnostics, not for the handshake.
+   *
+   * @param id The ticket id to look for.
+   * @returns The number of slots ever used that hold `id`.
+   */
   count(id: u8[]): i32 {
     let found: i32 = 0
     for (let slot: i32 = 0; slot < this.capacity; slot++) {
@@ -540,7 +618,12 @@ export class TlsTicketStrikes {
     return found
   }
 
-  /** How many entries are held at `now`. */
+  /**
+   * How many entries are held at `now`.
+   *
+   * @param now The time to judge at, in `monotonicNanos()`; an entry whose expiry is `now` still counts.
+   * @returns The number of live entries, from 0 to `capacity`.
+   */
   live(now: i64): i32 {
     let held: i32 = 0
     for (let slot: i32 = 0; slot < this.capacity; slot++) {
@@ -561,6 +644,11 @@ export class TlsTicketStrikes {
    * looks for a free slot and stops at the first, so a `take` costs the
    * longest probe so far, not the capacity. An id of another length than a
    * nonce is refused, uncounted.
+   *
+   * @param id The ticket's id, its nonce (`TlsTicketState.id` after `tlsTicketOpen`).
+   * @param expiresAt When the ticket expires, in `monotonicNanos()` (`TlsTicketState.expiresAt()`).
+   * @param now The time of the resumption, in `monotonicNanos()`.
+   * @returns True when the id was recorded and the ticket may resume; false means refuse the resumption.
    */
   take(id: u8[], expiresAt: i64, now: i64): boolean {
     if (toI32(id.length) !== TLS_TICKET_NONCE_SIZE) {

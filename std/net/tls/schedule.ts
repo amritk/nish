@@ -98,6 +98,9 @@ const TLS_SCHEDULE_FROM: i32 = 0
  * The hash length of `suite`: 32 for the two SHA-256 suites, 48 for
  * `TLS_AES_256_GCM_SHA384`, and 0 for any suite this module does not
  * negotiate, which is how a caller tells the two apart.
+ *
+ * @param suite A cipher suite code point, such as `TLS_AES_128_GCM_SHA256`.
+ * @returns The suite's hash length in bytes (32 or 48), or 0 for a suite this module does not negotiate.
  */
 export const tlsSuiteHashLength = (suite: i32): i32 => {
   switch (suite) {
@@ -112,7 +115,12 @@ export const tlsSuiteHashLength = (suite: i32): i32 => {
   }
 }
 
-/** The AEAD key length of `suite`: 16 for AES-128-GCM, 32 for the other two, 0 for an unknown suite. */
+/**
+ * The AEAD key length of `suite`: 16 for AES-128-GCM, 32 for the other two, 0 for an unknown suite.
+ *
+ * @param suite A cipher suite code point, such as `TLS_AES_128_GCM_SHA256`.
+ * @returns The suite's AEAD key length in bytes (16 or 32), or 0 for a suite this module does not negotiate.
+ */
 export const tlsSuiteKeyLength = (suite: i32): i32 => {
   switch (suite) {
     case TLS_AES_128_GCM_SHA256:
@@ -130,6 +138,13 @@ export const tlsSuiteKeyLength = (suite: i32): i32 => {
  * HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
  * bytes from `prk` (RFC 8446's Secret), the label (without its `"tls13 "`
  * prefix, which is added) and `context`, held as a `Secret`.
+ *
+ * @param hashLength 48 for SHA-384; any other value runs SHA-256.
+ * @param prk The secret to expand. It stays the caller's: this function does not wipe it.
+ * @param label The label without its `"tls13 "` prefix, such as `"key"` or `"c hs traffic"`.
+ * @param context The public context bytes, usually a transcript hash; empty for none.
+ * @param length How many bytes to derive.
+ * @returns A fresh `Secret` holding the `length` derived bytes, which the caller owns and wipes.
  */
 export const tlsExpandLabel = (
   hashLength: i32,
@@ -163,6 +178,11 @@ const tlsExtractSha384Salted = (salt: u8[], ikm: Secret<u8[]>): u8[] =>
  * `Secret`. Both inputs are `Secret`s, since the schedule salts every extract
  * after the first with a derived secret; an empty salt keys HMAC as HashLen
  * zeros do.
+ *
+ * @param hashLength 48 for SHA-384; any other value runs SHA-256.
+ * @param salt The HMAC key. It stays the caller's: this function does not wipe it.
+ * @param ikm The input keying material. It stays the caller's as well.
+ * @returns A fresh `Secret` holding the HashLen-byte PRK, which the caller owns and wipes.
  */
 export const tlsExtract = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>): Secret<u8[]> => {
   if (hashLength === SHA384_SIZE) {
@@ -173,13 +193,27 @@ export const tlsExtract = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]
   return secret(prk)
 }
 
-/** The hash of the empty string, the transcript `Derive-Secret(., "derived", "")` hashes. */
+/**
+ * The hash of the empty string, the transcript `Derive-Secret(., "derived", "")` hashes.
+ *
+ * @param hashLength 48 for SHA-384; any other value runs SHA-256.
+ * @returns The digest of no bytes, in a fresh array. It is public, so it is plain.
+ */
 export const tlsEmptyHash = (hashLength: i32): u8[] => {
   const none: u8[] = []
   return hashLength === SHA384_SIZE ? sha384(none) : sha256(none)
 }
 
-/** Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcript hash, HashLen bytes held as a `Secret`. */
+/**
+ * Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcript hash, HashLen bytes
+ * held as a `Secret`.
+ *
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are derived.
+ * @param prk The stage of the schedule to derive from. It stays the caller's: this function does not wipe it.
+ * @param label The label without its `"tls13 "` prefix, such as `"s hs traffic"`.
+ * @param transcriptHash The transcript hash the secret is bound to, all of it used as the context.
+ * @returns A fresh `Secret` holding the HashLen derived bytes, which the caller owns and wipes.
+ */
 export const tlsDeriveSecret = (
   hashLength: i32,
   prk: Secret<u8[]>,
@@ -187,7 +221,13 @@ export const tlsDeriveSecret = (
   transcriptHash: u8[]
 ): Secret<u8[]> => tlsExpandLabel(hashLength, prk, label, transcriptHash, hashLength)
 
-/** The early secret with no PSK: HKDF-Extract of HashLen zeros under a zero salt (RFC 8446 §7.1). */
+/**
+ * The early secret with no PSK: HKDF-Extract of HashLen zeros under a zero salt (RFC 8446 §7.1). The zero
+ * salt and the zero input are wiped before it returns.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @returns A fresh `Secret` holding the early secret, which the caller owns and wipes.
+ */
 export const tlsEarlySecret = (hashLength: i32): Secret<u8[]> => {
   const salt: Secret<u8[]> = secret(new Array<u8>(hashLength))
   const ikm: Secret<u8[]> = secret(new Array<u8>(hashLength))
@@ -201,6 +241,10 @@ export const tlsEarlySecret = (hashLength: i32): Secret<u8[]> => {
  * The early secret of a resumed handshake: HKDF-Extract of the PSK under a
  * zero salt (RFC 8446 §7.1). The zero salt is wiped before it returns; the
  * PSK is the caller's.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param psk The pre-shared key the ticket stands for. It stays the caller's to wipe.
+ * @returns A fresh `Secret` holding the early secret, which the caller owns and wipes.
  */
 export const tlsPskEarlySecret = (hashLength: i32, psk: Secret<u8[]>): Secret<u8[]> => {
   const salt: Secret<u8[]> = secret(new Array<u8>(hashLength))
@@ -209,7 +253,13 @@ export const tlsPskEarlySecret = (hashLength: i32, psk: Secret<u8[]>): Secret<u8
   return early
 }
 
-/** The binder key of a resumption PSK: `Derive-Secret(early, "res binder", "")` (RFC 8446 §7.1). */
+/**
+ * The binder key of a resumption PSK: `Derive-Secret(early, "res binder", "")` (RFC 8446 §7.1).
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param earlySecret The early secret from `tlsPskEarlySecret`. It stays the caller's: this does not wipe it.
+ * @returns A fresh `Secret` holding the binder key, which the caller owns and wipes.
+ */
 export const tlsBinderKey = (hashLength: i32, earlySecret: Secret<u8[]>): Secret<u8[]> =>
   tlsDeriveSecret(hashLength, earlySecret, "res binder", tlsEmptyHash(hashLength))
 
@@ -217,6 +267,10 @@ export const tlsBinderKey = (hashLength: i32, earlySecret: Secret<u8[]>): Secret
  * The salt the handshake secret is extracted under, `Derive-Secret(early,
  * "derived", "")` (RFC 8446 §7.1): what `tlsHandshakeSecret` derives and
  * wipes itself, answered for a caller that extracts in place.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param earlySecret The early secret. It stays the caller's: this function does not wipe it.
+ * @returns A fresh `Secret` holding the salt, which the caller owns and wipes once the extract is done.
  */
 export const tlsHandshakeSalt = (hashLength: i32, earlySecret: Secret<u8[]>): Secret<u8[]> =>
   tlsDeriveSecret(hashLength, earlySecret, "derived", tlsEmptyHash(hashLength))
@@ -224,6 +278,11 @@ export const tlsHandshakeSalt = (hashLength: i32, earlySecret: Secret<u8[]>): Se
 /**
  * The PSK a ticket stands for: `HKDF-Expand-Label(resumption_master_secret,
  * "resumption", ticket_nonce, HashLen)` (RFC 8446 §4.6.1).
+ *
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are derived.
+ * @param resumptionMasterSecret The connection's resumption master secret. It stays the caller's to wipe.
+ * @param ticketNonce The `ticket_nonce` of the NewSessionTicket, all of it used as the context. It is public.
+ * @returns A fresh `Secret` holding the PSK, which the caller owns and wipes.
  */
 export const tlsResumptionPsk = (
   hashLength: i32,
@@ -234,6 +293,11 @@ export const tlsResumptionPsk = (
 /**
  * The handshake secret: HKDF-Extract of the ECDHE secret under
  * `Derive-Secret(early, "derived", "")`, which is wiped before it returns.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param earlySecret The early secret. It stays the caller's: this function does not wipe it.
+ * @param ecdhe The shared secret of the key exchange. It stays the caller's to wipe as well.
+ * @returns A fresh `Secret` holding the handshake secret, which the caller owns and wipes.
  */
 export const tlsHandshakeSecret = (
   hashLength: i32,
@@ -248,7 +312,12 @@ export const tlsHandshakeSecret = (
 
 /**
  * The master secret: HKDF-Extract of HashLen zeros under
- * `Derive-Secret(handshake, "derived", "")`, which is wiped before it returns.
+ * `Derive-Secret(handshake, "derived", "")`, which is wiped before it returns,
+ * as the zeros are.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param handshakeSecret The handshake secret. It stays the caller's: this function does not wipe it.
+ * @returns A fresh `Secret` holding the master secret, which the caller owns and wipes.
  */
 export const tlsMasterSecret = (hashLength: i32, handshakeSecret: Secret<u8[]>): Secret<u8[]> => {
   const derived: Secret<u8[]> = tlsDeriveSecret(
@@ -270,6 +339,11 @@ export const tlsMasterSecret = (hashLength: i32, handshakeSecret: Secret<u8[]>):
  * HashLen)`, where `baseKey` is the sender's handshake traffic secret. The
  * `finished_key` is wiped before it returns; `verify_data` goes on the wire,
  * so it is plain.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param baseKey The sender's handshake traffic secret. It stays the caller's: this does not wipe it.
+ * @param transcriptHash The transcript hash up to, and not including, the Finished message.
+ * @returns The HashLen bytes of `verify_data`, plain, in a fresh array.
  */
 export const tlsFinishedVerifyData = (hashLength: i32, baseKey: Secret<u8[]>, transcriptHash: u8[]): u8[] => {
   const none: u8[] = []
@@ -285,6 +359,11 @@ export const tlsFinishedVerifyData = (hashLength: i32, baseKey: Secret<u8[]>, tr
 /**
  * The AEAD key a traffic secret gives `suite`'s record protection (RFC 8446
  * §7.3), held as a `Secret`; empty for a suite this module does not negotiate.
+ *
+ * @param suite The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+ * @param trafficSecret The traffic secret the key comes from. It stays the caller's to wipe.
+ * @returns A fresh `Secret` holding the suite's key (16 or 32 bytes), or an empty one for an unknown suite.
+ *     The caller owns and wipes it.
  */
 export const tlsTrafficKey = (suite: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> => {
   const none: u8[] = []
@@ -298,6 +377,11 @@ export const tlsTrafficKey = (suite: i32, trafficSecret: Secret<u8[]>): Secret<u
 /**
  * The 12-byte IV a traffic secret gives `suite`'s record protection (RFC 8446
  * §7.3), held as a `Secret`; empty for a suite this module does not negotiate.
+ *
+ * @param suite The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+ * @param trafficSecret The traffic secret the IV comes from. It stays the caller's to wipe.
+ * @returns A fresh `Secret` holding the 12-byte IV, or an empty one for an unknown suite. The caller owns
+ *     and wipes it.
  */
 export const tlsTrafficIv = (suite: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> => {
   const none: u8[] = []
@@ -336,6 +420,11 @@ export class TlsTranscript {
   private twin256: Sha256
   private twin384: Sha384
 
+  /**
+   * Makes an empty transcript and all six of its hashers, once, so that `reset` can reuse them.
+   *
+   * @param hashLength 32 to hash with SHA-256, 48 to hash with SHA-384.
+   */
   constructor(hashLength: i32) {
     this.hashLength = hashLength
     this.sha256 = new Sha256()
@@ -357,7 +446,13 @@ export class TlsTranscript {
     hmacCopySha384(this.fresh384, this.sha384)
   }
 
-  /** Absorbs `data[off .. off + len)`, a whole handshake message or part of one. */
+  /**
+   * Absorbs `data[off .. off + len)`, a whole handshake message or part of one.
+   *
+   * @param data The array that holds the message bytes.
+   * @param off Where in `data` the bytes to absorb start.
+   * @param len How many bytes, from `off`, to absorb.
+   */
   update(data: u8[], off: i32, len: i32): void {
     if (this.hashLength === SHA384_SIZE) {
       this.sha384.update(data, off, len)
@@ -387,7 +482,11 @@ export class TlsTranscript {
     }
   }
 
-  /** The transcript hash of everything absorbed so far, in a fresh array; the transcript goes on. */
+  /**
+   * The transcript hash of everything absorbed so far, in a fresh array; the transcript goes on.
+   *
+   * @returns The `hashLength` bytes of the hash so far. It is public, so it is plain.
+   */
   hash(): u8[] {
     const out: u8[] = new Array<u8>(this.hashLength)
     this.hashInto(out, TLS_SCHEDULE_FROM)
@@ -431,7 +530,17 @@ const tlsEmptyHashInto = (hashLength: i32, out: u8[]): void => {
 /**
  * `tlsDeriveSecret` in place: Derive-Secret (RFC 8446 §7.1) of `prk` with
  * `label` and the transcript hash `transcriptHash[hashOff .. hashOff +
- * hashLength)`, its HashLen bytes written at `out[0]`.
+ * hashLength)`, its HashLen bytes written at `out[0]`. The scratch is wiped
+ * before it returns. It panics as `hkdfExpandLabelInto` does, a window outside
+ * its array included.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
+ * @param prk The stage of the schedule to derive from, plain. It stays the caller's to wipe.
+ * @param label The label without its `"tls13 "` prefix, such as `"s hs traffic"`.
+ * @param transcriptHash The array that holds the transcript hash.
+ * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
+ * @param out Where the derived secret is written, from index 0; the caller owns and wipes it.
  */
 export const tlsDeriveSecretInto = (
   kdf: HkdfScratch,
@@ -459,7 +568,12 @@ export const tlsDeriveSecretInto = (
 /**
  * `tlsMasterSecret` in place: HKDF-Extract of HashLen zeros under
  * `Derive-Secret(handshake, "derived", "")`, written at `out[0]`. The salt is
- * wiped before it returns.
+ * wiped before it returns, and so is the scratch.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
+ * @param handshakeSecret The handshake secret, plain. It stays the caller's to wipe.
+ * @param out Where the master secret is written, from index 0; the caller owns and wipes it.
  */
 export const tlsMasterSecretInto = (
   kdf: HkdfScratch,
@@ -480,6 +594,14 @@ export const tlsMasterSecretInto = (
  * hashOff + hashLength)` under `finished_key = Expand-Label(baseKey,
  * "finished", "", HashLen)` (RFC 8446 §4.4.4), written at `out[at]`. The
  * finished key is wiped before it returns, and so is the scratch.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
+ * @param baseKey The sender's handshake traffic secret, plain. It stays the caller's to wipe.
+ * @param transcriptHash The array that holds the transcript hash up to the Finished message.
+ * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
+ * @param out Where `verify_data` is written. It goes on the wire, so it is plain.
+ * @param at Where in `out` the HashLen bytes of `verify_data` start.
  */
 export const tlsFinishedVerifyDataInto = (
   kdf: HkdfScratch,
@@ -521,12 +643,25 @@ export const tlsFinishedVerifyDataInto = (
  * `tlsPskEarlySecret` in place: HKDF-Extract of `psk` under a zero salt
  * (RFC 8446 §7.1), written at `out[0]`. The scratch is wiped; the zero salt
  * holds nothing to wipe.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
+ * @param psk The pre-shared key, plain. It stays the caller's to wipe.
+ * @param out Where the early secret is written, from index 0; the caller owns and wipes it.
  */
 export const tlsPskEarlySecretInto = (kdf: HkdfScratch, hashLength: i32, psk: u8[], out: u8[]): void => {
   hkdfExtractInto(kdf, hashLength, new Array<u8>(hashLength), psk, out, TLS_SCHEDULE_FROM)
 }
 
-/** `tlsBinderKey` in place: `Derive-Secret(early, "res binder", "")`, written at `out[0]`. */
+/**
+ * `tlsBinderKey` in place: `Derive-Secret(early, "res binder", "")`, written at `out[0]`. The scratch is
+ * wiped before it returns.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
+ * @param earlySecret The early secret, plain. It stays the caller's to wipe.
+ * @param out Where the binder key is written, from index 0; the caller owns and wipes it.
+ */
 export const tlsBinderKeyInto = (kdf: HkdfScratch, hashLength: i32, earlySecret: u8[], out: u8[]): void => {
   const empty: u8[] = new Array<u8>(hashLength)
   tlsEmptyHashInto(hashLength, empty)
@@ -536,7 +671,13 @@ export const tlsBinderKeyInto = (kdf: HkdfScratch, hashLength: i32, earlySecret:
 /**
  * `tlsHandshakeSalt` in place: `Derive-Secret(early, "derived", "")`, the
  * salt a resumed handshake extracts its handshake secret under, written at
- * `out[0]`. The caller wipes it once the extract is done.
+ * `out[0]`. The caller wipes it once the extract is done. The scratch is wiped
+ * before it returns.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
+ * @param earlySecret The early secret, plain. It stays the caller's to wipe.
+ * @param out Where the salt is written, from index 0.
  */
 export const tlsHandshakeSaltInto = (
   kdf: HkdfScratch,
@@ -552,7 +693,17 @@ export const tlsHandshakeSaltInto = (
 /**
  * `tlsResumptionPsk` in place: `HKDF-Expand-Label(resumption_master_secret,
  * "resumption", ticketNonce[nonceOff .. nonceOff + nonceLength), HashLen)`
- * (RFC 8446 §4.6.1), written at `out[0]`.
+ * (RFC 8446 §4.6.1), written at `out[0]`. The scratch is wiped before it
+ * returns. A nonce window outside `ticketNonce`, or longer than 255 bytes,
+ * panics, as `hkdfExpandLabelInto` does.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
+ * @param resumptionMasterSecret The connection's resumption master secret, plain. It stays the caller's.
+ * @param ticketNonce The array that holds the ticket's `ticket_nonce`, which is public.
+ * @param nonceOff Where in `ticketNonce` the nonce starts.
+ * @param nonceLength How many bytes the nonce is.
+ * @param out Where the PSK is written, from index 0; the caller owns and wipes it.
  */
 export const tlsResumptionPskInto = (
   kdf: HkdfScratch,
@@ -588,6 +739,16 @@ export const tlsResumptionPskInto = (
  * whatever it finds; the binder the server computed is wiped before it
  * returns, as `tlsFinishedVerifyDataInto` wipes the finished key and the
  * scratch.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param hashLength The hash length, 32 or 48.
+ * @param binderKey The binder key from `tlsBinderKeyInto`, plain. It stays the caller's to wipe.
+ * @param truncatedHash The array that holds the hash of the ClientHello up to its binders list.
+ * @param hashOff Where in `truncatedHash` the `hashLength` bytes of that hash start.
+ * @param binder The array that holds the binder the client sent, usually the received ClientHello.
+ * @param binderOff Where in `binder` the client's binder starts.
+ * @param binderLength How many bytes the client's binder is.
+ * @returns `true` when the client's binder matches the one the server computed, so the client holds the PSK.
  */
 export const tlsBinderVerify = (
   kdf: HkdfScratch,
@@ -614,7 +775,15 @@ export const tlsBinderVerify = (
  * gives `suite` (RFC 8446 §7.3) written into `key`, which must be the suite's
  * key length, and its 12-byte IV into `iv`. `false`, writing nothing, for a
  * suite this module does not negotiate, a secret that is not its hash's
- * length, or a key or IV array of the wrong length.
+ * length, or a key or IV array of the wrong length. When it derives, the
+ * scratch is wiped before it returns.
+ *
+ * @param kdf The caller's HKDF scratch, which this computes in and wipes.
+ * @param suite The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+ * @param trafficSecret The traffic secret, plain, of the suite's hash length. It stays the caller's to wipe.
+ * @param key Where the AEAD key is written: an array of exactly the suite's key length (16 or 32 bytes).
+ * @param iv Where the IV is written: an array of exactly 12 bytes.
+ * @returns `true` when the key and IV were written; `false`, with nothing written, for a bad suite or length.
  */
 export const tlsTrafficKeysInto = (
   kdf: HkdfScratch,
@@ -712,6 +881,13 @@ const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, 
  * hashOff + hashLength)`, written over the HashLen bytes `dst` holds. `dst`
  * may be `prk`. Panics unless `hashLength` is 32 or 48 and both hold
  * HashLen bytes.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param prk The held stage of the schedule to derive from. It is only overwritten when it is also `dst`.
+ * @param label The label without its `"tls13 "` prefix, such as `"c ap traffic"`.
+ * @param transcriptHash The array that holds the transcript hash, which is public.
+ * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
+ * @param dst The held secret whose bytes the result overwrites. The caller still owns and wipes it.
  */
 export const tlsDeriveSecretHeld = (
   hashLength: i32,
@@ -734,7 +910,14 @@ export const tlsDeriveSecretHeld = (
 /**
  * `tlsHandshakeSecret` into a held `Secret`: HKDF-Extract of `ecdhe` under
  * `Derive-Secret(early, "derived", "")`, written over `dst`'s HashLen bytes.
- * The salt is wiped before it returns; `dst` may be `earlySecret`.
+ * The salt is wiped before it returns; `dst` may be `earlySecret`. Panics
+ * unless `hashLength` is 32 or 48 and `earlySecret` and `dst` hold HashLen
+ * bytes.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param earlySecret The held early secret. It is only overwritten when it is also `dst`.
+ * @param ecdhe The held shared secret of the key exchange. It stays the caller's to wipe.
+ * @param dst The held secret whose bytes the handshake secret overwrites. The caller still owns and wipes it.
  */
 export const tlsHandshakeSecretHeld = (
   hashLength: i32,
@@ -760,7 +943,12 @@ export const tlsHandshakeSecretHeld = (
  * `tlsMasterSecret` into a held `Secret`: HKDF-Extract of HashLen zeros under
  * `Derive-Secret(handshake, "derived", "")`, written over `dst`'s HashLen
  * bytes. The salt and the zeros are wiped before it returns; `dst` may be
- * `handshakeSecret`.
+ * `handshakeSecret`. Panics unless `hashLength` is 32 or 48 and both hold
+ * HashLen bytes.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param handshakeSecret The held handshake secret. It is only overwritten when it is also `dst`.
+ * @param dst The held secret whose bytes the master secret overwrites. The caller still owns and wipes it.
  */
 export const tlsMasterSecretHeld = (
   hashLength: i32,
@@ -788,7 +976,14 @@ export const tlsMasterSecretHeld = (
  * the HMAC of `transcriptHash[hashOff .. hashOff + hashLength)` under
  * `finished_key = Expand-Label(baseKey, "finished", "", HashLen)` (RFC 8446
  * §4.4.4). The finished key is held and wiped before it returns;
- * `verify_data` goes on the wire, so it is plain.
+ * `verify_data` goes on the wire, so it is plain. Panics unless `hashLength`
+ * is 32 or 48 and `baseKey` holds HashLen bytes.
+ *
+ * @param hashLength The hash length, 32 or 48.
+ * @param baseKey The sender's held handshake traffic secret. It stays the caller's: this does not wipe it.
+ * @param transcriptHash The array that holds the transcript hash up to the Finished message.
+ * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
+ * @returns The HashLen bytes of `verify_data`, plain, in a fresh array.
  */
 export const tlsFinishedVerifyDataHeld = (
   hashLength: i32,
@@ -820,6 +1015,12 @@ export const tlsFinishedVerifyDataHeld = (
  * reads them. `false`, writing nothing, for a suite this module does not
  * negotiate, a secret that is not its hash's length, or a key or IV array of
  * the wrong length.
+ *
+ * @param suite The negotiated cipher suite, such as `TLS_AES_128_GCM_SHA256`.
+ * @param trafficSecret The held traffic secret, of the suite's hash length. It stays the caller's to wipe.
+ * @param key Where the AEAD key is written: an array of exactly the suite's key length (16 or 32 bytes).
+ * @param iv Where the IV is written: an array of exactly 12 bytes.
+ * @returns `true` when the key and IV were written; `false`, with nothing written, for a bad suite or length.
  */
 export const tlsTrafficKeysFromHeld = (
   suite: i32,

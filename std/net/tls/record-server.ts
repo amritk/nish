@@ -184,7 +184,11 @@ export class TlsRecordPools {
   scratch: BufferPool
   reader: BufferPool
 
-  /** Four empty pools of `ceiling` buffers each; nothing is made until a slot needs it. */
+  /**
+   * Four empty pools of `ceiling` buffers each; nothing is made until a slot needs it.
+   *
+   * @param ceiling How many buffers each pool may lend at once: the carrier's slot count.
+   */
   constructor(ceiling: i32) {
     this.output = new BufferPool("TlsRecordServer.output", TLS_RECORD_OUTPUT_SIZE, ceiling)
     this.plain = new BufferPool("TlsRecordServer.plain", TLS_RECORD_PLAIN_SIZE, ceiling)
@@ -192,12 +196,20 @@ export class TlsRecordPools {
     this.reader = new BufferPool("TlsRecordReader.buffer", TLS_MAX_RECORD, ceiling)
   }
 
-  /** How many buffers of the four pools are lent now: 0 once every connection has given its back. */
+  /**
+   * How many buffers of the four pools are lent now: 0 once every connection has given its back.
+   *
+   * @returns The buffers lent and not yet given back, summed over the four pools.
+   */
   lent(): i32 {
     return this.output.lent() + this.plain.lent() + this.scratch.lent() + this.reader.lent()
   }
 
-  /** How many buffers the four pools have made: their high-water mark together. */
+  /**
+   * How many buffers the four pools have made: their high-water mark together.
+   *
+   * @returns The buffers ever made, summed over the four pools.
+   */
   made(): i32 {
     return this.output.made + this.plain.made + this.scratch.made + this.reader.made
   }
@@ -356,6 +368,13 @@ export class TlsRecordServer {
   /** The server has closed and its `close_notify` waits for room in `output`. */
   closeDue: boolean = false
 
+  /**
+   * Makes a slot for `tls` with a pool set of its own, one buffer of each
+   * kind, and starts the connection as `start` does. A carrier that shares
+   * its pools calls `borrowFrom` right after.
+   *
+   * @param tls The handshake this slot carries, fresh or just restarted.
+   */
   constructor(tls: TlsServer) {
     this.tls = tls
     this.reader = new TlsRecordReader()
@@ -384,6 +403,8 @@ export class TlsRecordServer {
    * `tls` that has already failed — a configuration
    * or randomness `TlsServer` refused — fails this connection at once, with
    * its alert queued in the clear.
+   *
+   * @param tls The handshake the new connection runs, fresh or just restarted.
    */
   start(tls: TlsServer): void {
     // The last connection's traffic keys. Its ephemeral key was wiped when it
@@ -417,6 +438,8 @@ export class TlsRecordServer {
    * slots share. Whatever is held from the old pools is given back first,
    * zeroed, and dropped with it, so call it on a slot with nothing in flight:
    * the carrier does, right after the constructor.
+   *
+   * @param pools The carrier's pool set, shared by all of its slots.
    */
   borrowFrom(pools: TlsRecordPools): void {
     this.release()
@@ -580,7 +603,11 @@ export class TlsRecordServer {
     return installed
   }
 
-  /** How many bytes `receive` would take now: what the socket should read at most. */
+  /**
+   * How many bytes `receive` would take now: what the socket should read at most.
+   *
+   * @returns The room left in the record reader's buffer, in bytes.
+   */
   space(): i32 {
     return this.reader.space()
   }
@@ -592,6 +619,12 @@ export class TlsRecordServer {
    * socket again), or `TLS_RECORD_INVALID` for a window outside `data`. Once
    * the connection has failed, or the client has sent `close_notify`, bytes
    * are taken and dropped (§6.1).
+   *
+   * @param data The array that holds the bytes read from the socket.
+   * @param off Where in `data` the bytes start.
+   * @param len How many bytes, from `off`, to offer.
+   * @returns How many bytes were taken, from 0 up to `len` (all of them once the connection has failed or
+   *     the client has closed); `TLS_RECORD_INVALID` for a window outside `data`.
    */
   receive(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
@@ -1041,6 +1074,12 @@ export class TlsRecordServer {
    * under the write protection, padded when it is protected. False, writing
    * nothing, when it does not fit; a refusal from `seal` itself, which only a
    * mistake here could cause, fails the connection.
+   *
+   * @param type The content type to send, such as `TLS_CONTENT_HANDSHAKE`.
+   * @param data The array that holds the content.
+   * @param off Where in `data` the content starts.
+   * @param len How many bytes of content, from `off`, to seal into this one record.
+   * @returns `true` when the record was added to `output`; `false` when it did not fit or `seal` refused it.
    */
   sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean {
     const room: i32 = this.recordRoom(len)
@@ -1213,6 +1252,10 @@ export class TlsRecordServer {
    * is under way or `output` is full, `TLS_RECORD_PIPE` once the server has
    * closed or the connection failed, or `TLS_RECORD_RESET` when the next keys
    * do not install and the connection fails on it.
+   *
+   * @param requestPeer `true` to set `request_update`, so that the client sends a KeyUpdate of its own.
+   * @returns 0 when the KeyUpdate was sealed and the write keys moved on, or one of the negative
+   *     `TLS_RECORD_*` codes above.
    */
   keyUpdate(requestPeer: boolean): i32 {
     if (this.state === TLS_RECORD_STATE_FAILED || this.state === TLS_RECORD_STATE_CLOSED) {
@@ -1234,6 +1277,9 @@ export class TlsRecordServer {
    * was still owed is dropped: the alert is the last thing the server sends,
    * so once it is sealed every key the connection holds is wiped, the
    * traffic keys and secrets as well as what `TlsServer` holds.
+   *
+   * @param alert The `TLS_ALERT_*` description to send, such as `TLS_ALERT_INTERNAL_ERROR`. It is not sent
+   *     when the server has already sent its `close_notify`, and a second call does nothing.
    */
   fail(alert: i32): void {
     if (this.state === TLS_RECORD_STATE_FAILED) {
@@ -1263,6 +1309,8 @@ export class TlsRecordServer {
   /**
    * Lets the first `n` bytes of `output` go, once the socket has taken them,
    * and seals what was waiting for the room.
+   *
+   * @param n How many bytes the socket wrote. It is clamped to 0 and to the bytes `output` holds.
    */
   consume(n: i32): void {
     const held: i32 = this.outputEnd - this.outputStart
@@ -1286,6 +1334,12 @@ export class TlsRecordServer {
    * `TLS_RECORD_AGAIN` while the handshake is under way or nothing fits,
    * `TLS_RECORD_PIPE` once the server has closed or the connection failed,
    * and `TLS_RECORD_INVALID` for a window outside `data`.
+   *
+   * @param data The array that holds the application data.
+   * @param off Where in `data` the bytes start.
+   * @param len How many bytes, from `off`, to send.
+   * @returns How many bytes were sealed, from 1 up to `len` (0 for a `len` of 0); `TLS_RECORD_RESET` when
+   *     nothing was sealed because the connection failed; or one of the negative codes above.
    */
   write(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
@@ -1338,6 +1392,12 @@ export class TlsRecordServer {
    * waiting; `TLS_RECORD_RESET` once the connection has failed; and
    * `TLS_RECORD_INVALID` for a window outside `buf`. Reading makes room, so
    * records the buffer was full for are handled before it answers.
+   *
+   * @param buf Where the application data is written.
+   * @param off Where in `buf` to start writing.
+   * @param len How many bytes, at most, to read.
+   * @returns How many bytes were written, which may be fewer than `len`, or 0 or a negative
+   *     `TLS_RECORD_*` code as above.
    */
   read(buf: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(buf.length), off, len)) {
@@ -1399,7 +1459,12 @@ export class TlsRecordServer {
     }
   }
 
-  /** What the CertificateVerify signs, while `interest` says `TLS_RECORD_SIGN`; `null` otherwise. */
+  /**
+   * What the CertificateVerify signs, while `interest` says `TLS_RECORD_SIGN`; `null` otherwise.
+   *
+   * @returns The bytes to sign, as `TlsServer.signatureInput` answers them; `null` when the connection is
+   *     not in its handshake.
+   */
   signatureInput(): u8[] | null {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
       return null
@@ -1412,6 +1477,9 @@ export class TlsRecordServer {
    * `tlsSignEcdsaP256` answers it) and seals the rest of the flight. Answers
    * 0, or the alert the connection failed with — `internal_error` when no
    * signature is due.
+   *
+   * @param signature The signature over `signatureInput()`, made with the certificate's private key.
+   * @returns 0 when the flight is sealed, or the `TLS_ALERT_*` value the connection failed with.
    */
   sign(signature: u8[]): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
@@ -1433,6 +1501,15 @@ export class TlsRecordServer {
    * and seals the flight that answers it, resumed or in full. Answers 0, or
    * the alert the connection failed with — `internal_error` when no ticket
    * waits.
+   *
+   * @param current The carrier's current ticket key. It is read, not kept, and stays the carrier's to wipe.
+   * @param currentInfo What the carrier knows of `current`: its id, when it was drawn, how many it sealed.
+   * @param previous The carrier's previous ticket key, or `current` again when it has only one. It stays
+   *     the carrier's to wipe.
+   * @param previousInfo What the carrier knows of `previous`.
+   * @param strikes The carrier's record of tickets already resumed, where the one resumed now is recorded.
+   * @param now The time now, in `monotonicNanos()`.
+   * @returns 0 when the answering flight is sealed, or the `TLS_ALERT_*` value the connection failed with.
    */
   resume(
     current: Secret<u8[]>,
@@ -1460,6 +1537,12 @@ export class TlsRecordServer {
    * ticket under `key` (`TlsServer.issue`) and queues its NewSessionTicket.
    * Whether one was queued; either way the resumption master secret is
    * wiped, and no second ticket is issued.
+   *
+   * @param key The carrier's current ticket key. It is read, not kept, and stays the carrier's to wipe.
+   * @param info What the carrier knows of `key`: its id, when it was drawn, how many it sealed.
+   * @param now The time now, in `monotonicNanos()`.
+   * @returns `true` when a NewSessionTicket was queued; `false` when none was, including on a connection
+   *     that is not open.
    */
   issue(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean {
     if (this.state !== TLS_RECORD_STATE_OPEN) {
@@ -1476,6 +1559,9 @@ export class TlsRecordServer {
    * bytes), `read` (application data, or the end of the client's stream),
    * sign, handle a ticket, or nothing more ever (`TLS_RECORD_DONE`: failed
    * or closed, and everything is sent).
+   *
+   * @returns `TLS_RECORD_WANT_READ`, `TLS_RECORD_WANT_WRITE`, `TLS_RECORD_DATA`, `TLS_RECORD_SIGN`,
+   *     `TLS_RECORD_TICKET` and `TLS_RECORD_DONE` ORed together; 0 when there is nothing to do yet.
    */
   interest(): i32 {
     let bits: i32 = 0

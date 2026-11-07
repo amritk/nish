@@ -247,6 +247,9 @@ export class TlsRecordClient {
    * sealed into `output` at once. A `tls` that has already failed, or whose
    * ClientHello cannot be written, fails this connection with its alert
    * queued in the clear.
+   *
+   * @param tls The handshake to carry, built and not yet started; the connection keeps it as `tls` and
+   *   wipes it in `wipe`.
    */
   constructor(tls: TlsClient) {
     this.tls = tls
@@ -360,7 +363,11 @@ export class TlsRecordClient {
     return installed
   }
 
-  /** How many bytes `receive` would take now: what the socket should read at most. */
+  /**
+   * How many bytes `receive` would take now: what the socket should read at most.
+   *
+   * @returns The free room in the record reader, in bytes: one largest record less what it holds unhandled.
+   */
   space(): i32 {
     return this.reader.space()
   }
@@ -372,6 +379,11 @@ export class TlsRecordClient {
    * outside `data`. Once the connection has failed, the server has sent
    * `close_notify`, or the client closed before the handshake was done, bytes
    * are taken and dropped (§6.1).
+   *
+   * @param data The buffer the socket was read into; the bytes are copied, not kept.
+   * @param off Where in `data` the bytes start.
+   * @param len How many bytes, from `off`, the socket gave.
+   * @returns How many of the `len` bytes were taken, or `TLS_RECORD_INVALID` (-22).
    */
   receive(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
@@ -937,6 +949,10 @@ export class TlsRecordClient {
    * is under way or `output` is full, `TLS_RECORD_PIPE` once the client has
    * closed or the connection failed, or `TLS_RECORD_RESET` when the next keys
    * do not install.
+   *
+   * @param requestPeer True to ask the server to update its sending keys as well.
+   * @returns 0 once the KeyUpdate is sealed and the new write keys installed, or one of the negative
+   *   `TLS_RECORD_*` values above.
    */
   keyUpdate(requestPeer: boolean): i32 {
     if (this.state === TLS_RECORD_STATE_FAILED || this.state === TLS_RECORD_STATE_CLOSED) {
@@ -979,7 +995,13 @@ export class TlsRecordClient {
     return this.sealRecord(TLS_CONTENT_ALERT, body, TLS_RECORD_CLIENT_FROM, two)
   }
 
-  /** Lets the first `n` bytes of `output` go, once the socket has taken them, and seals what was waiting for the room. */
+  /**
+   * Lets the first `n` bytes of `output` go, once the socket has taken them, and seals what was waiting
+   * for the room.
+   *
+   * @param n How many bytes from `outputStart` the socket took; clamped to what `output` holds, and a
+   *   negative count lets nothing go.
+   */
   consume(n: i32): void {
     const held: i32 = this.outputEnd - this.outputStart
     let take: i32 = n < held ? n : held
@@ -1002,6 +1024,12 @@ export class TlsRecordClient {
    * handshake is under way or nothing fits, `TLS_RECORD_PIPE` once the client
    * has closed or the connection failed, `TLS_RECORD_INVALID` for a window
    * outside `data`.
+   *
+   * @param data The bytes to send; only read, never kept.
+   * @param off Where the bytes start in `data`.
+   * @param len How many bytes to send; with `off`, a window that must lie inside `data`.
+   * @returns How many bytes were sealed (0 only for a `len` of 0), or a negative `TLS_RECORD_*` value:
+   *   `TLS_RECORD_RESET` when the connection failed during this call.
    */
   write(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
@@ -1053,6 +1081,12 @@ export class TlsRecordClient {
    * 0; `TLS_RECORD_AGAIN` when nothing is waiting; `TLS_RECORD_RESET` once
    * the connection has failed; `TLS_RECORD_INVALID` for a window outside
    * `buf`.
+   *
+   * @param buf Where the bytes go.
+   * @param off Where in `buf` the first byte goes.
+   * @param len The most bytes to copy; with `off`, a window that must lie inside `buf`.
+   * @returns How many bytes were copied, 0 at the server's `close_notify` or for a `len` of 0, or a
+   *   negative `TLS_RECORD_*` value as above.
    */
   read(buf: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(buf.length), off, len)) {
@@ -1128,6 +1162,9 @@ export class TlsRecordClient {
    * sent. Answers 0, or a non-zero alert once the connection has failed
    * (`failure`) — a verdict given before one is due answers
    * `internal_error`.
+   *
+   * @param ok True when the caller accepts the server's certificate chain and CertificateVerify.
+   * @returns 0 when the handshake goes on, or the alert the connection failed with.
    */
   authenticate(ok: boolean): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
@@ -1143,7 +1180,15 @@ export class TlsRecordClient {
     return this.state === TLS_RECORD_STATE_FAILED ? this.failure() : 0
   }
 
-  /** Refuses the server with the caller's `alert` (`TlsClient.reject`), sent; answers the alert. */
+  /**
+   * Refuses the server with the caller's `alert` (`TlsClient.reject`), sent; answers the alert.
+   *
+   * @param alert The TLS alert to send, a code from 1 to 255; `TlsClient.reject` takes any other value
+   *   as `bad_certificate`.
+   * @returns The alert the connection failed with (see `TlsClient.reject`); when the connection is not
+   *   in its handshake, nothing is sent and the answer is `failure` for a failed connection, else
+   *   `internal_error`.
+   */
   reject(alert: i32): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
       return this.state === TLS_RECORD_STATE_FAILED ? this.failure() : TLS_ALERT_INTERNAL_ERROR
@@ -1157,6 +1202,8 @@ export class TlsRecordClient {
    * Why a failed connection failed, never 0: the alert the client sent, else
    * the server's error alert, else `internal_error` for a failure with no
    * alert of its own (truncation, `abort`, `close_notify` mid-handshake).
+   *
+   * @returns A TLS alert code, never 0.
    */
   failure(): i32 {
     if (this.alert !== 0) {
@@ -1169,6 +1216,8 @@ export class TlsRecordClient {
    * What the connection wants next, as `TLS_RECORD_*` bits: read the socket,
    * write it, `read`, the caller's verdict on the server (`TLS_RECORD_AUTH`),
    * or nothing more ever (`TLS_RECORD_DONE`).
+   *
+   * @returns The `TLS_RECORD_*` interest bits OR-ed together.
    */
   interest(): i32 {
     let bits: i32 = 0

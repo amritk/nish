@@ -335,6 +335,9 @@ const tlsEcdsaDerInto = (der: u8[], rs: u8[]): void => {
  * An ECDSA signature `r || s` (32 bytes each, as `nish/crypto/p256` answers
  * it) as the DER `ECDSA-Sig-Value` a CertificateVerify carries (RFC 8446
  * §4.2.3), or `null` when `rs` is not 64 bytes.
+ *
+ * @param rs The signature's `r` then `s`, 32 big-endian bytes each.
+ * @returns A fresh array of 8 to 72 bytes holding the DER encoding, or `null`.
  */
 export const tlsEcdsaDerSignature = (rs: u8[]): u8[] | null => {
   if (toI32(rs.length) !== 64) {
@@ -351,6 +354,10 @@ export const tlsEcdsaDerSignature = (rs: u8[]): u8[] | null => {
  * encoded. `null` for a malformed key. The answer is what `TlsServer.sign`
  * takes. The key is borrowed, as every `Secret` parameter is: the caller made
  * it, and wipes it.
+ *
+ * @param priv The server's P-256 private key, borrowed.
+ * @param content The CertificateVerify input, as `TlsServer.signatureInput` answers it.
+ * @returns A fresh array holding the DER signature, or `null` for a malformed key.
  */
 export const tlsSignEcdsaP256 = (priv: Secret<u8[]>, content: u8[]): u8[] | null => {
   const rs: u8[] | null = p256SignSha256(priv, content)
@@ -392,6 +399,10 @@ export class TlsP256Signer {
    * signer's that has its length; `null` for a malformed key. It keeps
    * nothing: the P-256 signature releases what it allocated, and the DER is
    * written in place. The key is borrowed.
+   *
+   * @param priv The server's P-256 private key, borrowed.
+   * @param content The CertificateVerify input, as `TlsServer.signatureInput` answers it.
+   * @returns One of this signer's own arrays, which a later `sign` of the same length overwrites, or `null`.
    */
   sign(priv: Secret<u8[]>, content: u8[]): u8[] | null {
     if (
@@ -409,7 +420,12 @@ export class TlsP256Signer {
   }
 }
 
-/** Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`). */
+/**
+ * Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`).
+ *
+ * @param shared The exposed shared secret, `X25519_SIZE` bytes.
+ * @returns True when every byte is zero (a low-order peer share, RFC 7748 §6.1), which the handshake refuses.
+ */
 export const tlsIsZeroSecret = (shared: u8[]): boolean => timingSafeEqual(shared, new Array<u8>(X25519_SIZE))
 
 /**
@@ -437,13 +453,26 @@ const tlsHandshakeFromEcdhe256 = (ecdhe: u8[], salt: u8[]): u8[] => hmacSha256(s
 /** The SHA-384 handshake secret: HKDF-Extract of the ECDHE secret under `salt`, as the SHA-256 one is. */
 const tlsHandshakeFromEcdhe384 = (ecdhe: u8[], salt: u8[]): u8[] => hmacSha384(salt, ecdhe)
 
-/** Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`; answers `answer`. */
+/**
+ * Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`.
+ *
+ * @param held The exposed bytes, zeroed in place.
+ * @param answer The value to hand back, so a caller can wipe and answer in one expression.
+ * @returns `answer`, unchanged.
+ */
 export const tlsZeroHeld = (held: u8[], answer: i32): i32 => {
   wipe(held)
   return answer
 }
 
-/** Overwrites the bytes a `Secret` holds with `from`'s, for `exposeWith` to run on the destination; answers 0. */
+/**
+ * Overwrites the bytes a `Secret` holds with `from`'s, for `exposeWith` to run on the destination.
+ * Only as many bytes as the shorter of the two holds are copied; the rest of `held` is left as it was.
+ *
+ * @param held The destination's exposed bytes, written in place.
+ * @param from The bytes to copy in, read from index 0.
+ * @returns 0.
+ */
 export const tlsHeldCopyIn = (held: u8[], from: u8[]): i32 => {
   for (let k: i32 = 0; k < toI32(held.length) && k < toI32(from.length); k++) {
     held[k] = from[k]
@@ -455,6 +484,9 @@ export const tlsHeldCopyIn = (held: u8[], from: u8[]): i32 => {
  * A plain copy of a held secret, for a derivation that runs on its bytes
  * inside a `using arena()` block: the copy dies with the block, and its
  * caller `secureZero`s it before the block ends.
+ *
+ * @param held The exposed bytes to copy.
+ * @returns A fresh plain array of the same length, which the caller must wipe.
  */
 export const tlsHeldClone = (held: u8[]): u8[] => {
   const copy: u8[] = new Array<u8>(held.length)
@@ -468,6 +500,10 @@ export const tlsHeldClone = (held: u8[]): u8[] => {
  * Copies the bytes one `Secret` holds over another's, for `exposeWith` to
  * run on the source with the destination as its argument: no plain copy is
  * made on the way. Answers 0.
+ *
+ * @param from The source's exposed bytes.
+ * @param to The destination secret, borrowed; as many bytes as the shorter of the two holds are overwritten.
+ * @returns 0.
  */
 export const tlsHeldCopyOver = (from: u8[], to: Secret<u8[]>): i32 => exposeWith(to, from, tlsHeldCopyIn)
 
@@ -650,14 +686,21 @@ const TLS_ECDSA_SIGNATURE_MAX: i32 = 72
  * that says the secret is derived (`1 << index`).
  */
 export const TLS_SECRET_HANDSHAKE: i32 = 0
+/** `client_handshake_traffic_secret` (RFC 8446 §7.1): the client's Handshake-level keys. */
 export const TLS_SECRET_CLIENT_HANDSHAKE: i32 = 1
+/** `server_handshake_traffic_secret` (RFC 8446 §7.1): the server's Handshake-level keys. */
 export const TLS_SECRET_SERVER_HANDSHAKE: i32 = 2
+/** `client_application_traffic_secret_0` (RFC 8446 §7.1): the client's first application keys. */
 export const TLS_SECRET_CLIENT_APPLICATION: i32 = 3
+/** `server_application_traffic_secret_0` (RFC 8446 §7.1): the server's first application keys. */
 export const TLS_SECRET_SERVER_APPLICATION: i32 = 4
+/** `exporter_master_secret` (RFC 8446 §7.5), for a caller's own exporters. */
 export const TLS_SECRET_EXPORTER: i32 = 5
+/** The client Finished's expected `verify_data` (RFC 8446 §4.4.4), plain, since the wire carries it. */
 export const TLS_SECRET_CLIENT_FINISHED: i32 = 6
 /** The CertificateVerify input sits beside them: 98 bytes and the transcript hash. */
 export const TLS_SECRET_TO_BE_SIGNED: i32 = 7
+/** `resumption_master_secret` (RFC 8446 §7.1), what a NewSessionTicket's PSK is derived from. */
 export const TLS_SECRET_RESUMPTION: i32 = 8
 /** The PSK a ticket opened to, held from the binder's check to the early secret's extract. */
 export const TLS_SECRET_PSK: i32 = 9
@@ -703,6 +746,11 @@ export class TlsSecretPool {
   /** The CertificateVerify input, 98 bytes longer than the rest. */
   toBeSigned: u8[]
 
+  /**
+   * Allocates every array of the pool once, all zero, so a connection never allocates one for a secret.
+   *
+   * @param hashLength The suite's hash length in bytes: 32 for SHA-256, 48 for SHA-384.
+   */
   constructor(hashLength: i32) {
     this.handshake = secret(new Array<u8>(hashLength))
     this.clientHandshake = secret(new Array<u8>(hashLength))
@@ -1004,6 +1052,12 @@ export class TlsServer {
    * random and the 32-byte x25519 private key drawn for it. A random or key of
    * another length, or a configuration `tlsConfigFits` refuses, leaves the
    * server failed with `internal_error` before it reads anything.
+   *
+   * @param config What the server offers and answers with; held, not copied, and checked by `tlsConfigFits`.
+   * @param serverRandom The 32 random bytes of the ServerHello's `random`; the array itself is kept, so the
+   *   caller hands over a fresh one.
+   * @param ephemeralPrivate The 32-byte x25519 private key; copied into the server's `Secret` and then zeroed
+   *   in the caller's array, as `restart` does.
    */
   constructor(config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[]) {
     this.config = config
@@ -1044,6 +1098,9 @@ export class TlsServer {
    * only copy left is the one the server wipes. A random or key of another
    * length, or a configuration `tlsConfigFits` refused, leaves the server
    * failed with `internal_error`.
+   *
+   * @param serverRandom The next connection's 32 random bytes; the array itself is kept.
+   * @param ephemeralPrivate The next connection's 32-byte x25519 private key; zeroed once copied in.
    */
   restart(serverRandom: u8[], ephemeralPrivate: u8[]): void {
     const keyLength: i32 = toI32(ephemeralPrivate.length)
@@ -1105,12 +1162,21 @@ export class TlsServer {
     this.secrets().zero(TLS_SECRET_RESUMPTION)
   }
 
-  /** The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise. */
+  /**
+   * The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise.
+   *
+   * @returns One of the server's two pools, which the server keeps and reuses for the next connection.
+   */
   secrets(): TlsSecretPool {
     return this.hashLength === SHA384_SIZE ? this.secrets384 : this.secrets256
   }
 
-  /** Whether the handshake has derived secret `index` (`TLS_SECRET_*`) for this connection. */
+  /**
+   * Whether the handshake has derived secret `index` (`TLS_SECRET_*`) for this connection.
+   *
+   * @param index A `TLS_SECRET_*` index; any index outside 0 to 30 is never known.
+   * @returns True once the secret is derived; it stays true after `wipeSecret`, until `restart`.
+   */
   known(index: i32): boolean {
     return index >= 0 && index < 31 && (this.held & (1 << index)) !== 0
   }
@@ -1120,6 +1186,9 @@ export class TlsServer {
    * traffic secret, `clientHandshake` or `clientApplication` of `secrets()` —
    * is known yet. The Initial level has none: it is cleartext in TLS, and
    * QUIC derives its own from the connection id.
+   *
+   * @param level A `TLS_LEVEL_*` level.
+   * @returns True when the client's secret for `level` is derived; always false for Initial.
    */
   readKnown(level: i32): boolean {
     if (level === TLS_LEVEL_HANDSHAKE) {
@@ -1128,7 +1197,13 @@ export class TlsServer {
     return level === TLS_LEVEL_APPLICATION && this.known(TLS_SECRET_CLIENT_APPLICATION)
   }
 
-  /** Whether the secret the server *writes* `level` under — `serverHandshake` or `serverApplication` — is known yet. */
+  /**
+   * Whether the secret the server *writes* `level` under — `serverHandshake` or `serverApplication` — is
+   * known yet.
+   *
+   * @param level A `TLS_LEVEL_*` level.
+   * @returns True when the server's secret for `level` is derived; always false for Initial.
+   */
   writeKnown(level: i32): boolean {
     if (level === TLS_LEVEL_HANDSHAKE) {
       return this.known(TLS_SECRET_SERVER_HANDSHAKE)
@@ -1136,7 +1211,11 @@ export class TlsServer {
     return level === TLS_LEVEL_APPLICATION && this.known(TLS_SECRET_SERVER_APPLICATION)
   }
 
-  /** Zeroes secret `index` of `secrets()` once a carrier has taken what it needs from it; it stays known. */
+  /**
+   * Zeroes secret `index` of `secrets()` once a carrier has taken what it needs from it; it stays known.
+   *
+   * @param index A `TLS_SECRET_*` index; any other index wipes nothing.
+   */
   wipeSecret(index: i32): void {
     this.secrets().zero(index)
   }
@@ -1230,6 +1309,12 @@ export class TlsServer {
    * fault and not the peer's. Once the handshake is done, any further bytes
    * are `unexpected_message` too: the post-handshake messages a client may
    * send (KeyUpdate) belong to the record layer, which handles them itself.
+   *
+   * @param level The `TLS_LEVEL_*` level the bytes arrived at.
+   * @param data The array holding the bytes; only read, and copied into the server's own buffer.
+   * @param off Where in `data` the bytes start.
+   * @param len How many bytes, from `off`, to take; 0 does nothing and answers 0.
+   * @returns 0, or the `TLS_ALERT_*` the server failed with (the same one again on every later call).
    */
   receive(level: i32, data: u8[], off: i32, len: i32): i32 {
     if (this.state === TLS_STATE_FAILED) {
@@ -1702,6 +1787,15 @@ export class TlsServer {
    * table of "Resumption" in `docs/security/tls.md` says. A selected ticket
    * whose binder fails is `decrypt_error`, with nothing recorded (row 9).
    * Answers 0, or the alert the server fails with.
+   *
+   * @param current The newest ticket key, lent: read only inside `exposeWith`, and the carrier's to wipe.
+   * @param currentInfo The current key's record.
+   * @param previous The key before it, lent as `current` is.
+   * @param previousInfo The previous key's record.
+   * @param strikes The register a resumed ticket's id is recorded in, so that it resumes only once.
+   * @param now The time to judge the tickets at, in `monotonicNanos()`.
+   * @returns 0 when the hello was answered, resumed or not, or the `TLS_ALERT_*` the server failed with;
+   *   `internal_error` outside `TLS_STATE_WAIT_TICKET`.
    */
   resume(
     current: Secret<u8[]>,
@@ -1954,6 +2048,9 @@ export class TlsServer {
   /**
    * What CertificateVerify signs (RFC 8446 §4.4.3), while the state is
    * `TLS_STATE_WAIT_SIGNATURE`; `null` at any other time.
+   *
+   * @returns The pool's own `toBeSigned` array, not a copy: 98 bytes and the transcript hash, which the
+   *   caller signs and does not change. `null` outside `TLS_STATE_WAIT_SIGNATURE`.
    */
   signatureInput(): u8[] | null {
     if (this.state !== TLS_STATE_WAIT_SIGNATURE) {
@@ -1969,6 +2066,9 @@ export class TlsServer {
    * when called in another state or with an empty or over-long signature.
    * The signature is not checked here: a wrong one is the caller's bug, and
    * the client's verification is what catches it.
+   *
+   * @param signature The signature bytes, 1 to 65,535 of them, such as `tlsSignEcdsaP256` answers.
+   * @returns 0, or the `TLS_ALERT_*` the server failed with.
    */
   sign(signature: u8[]): i32 {
     if (this.state === TLS_STATE_FAILED) {
@@ -2078,6 +2178,11 @@ export class TlsServer {
    * `wipeResumption`. Before the handshake is done, or on a second call, it
    * answers false and touches nothing: a secret wiped then would leave no
    * ticket to issue, and one wiped already has nothing left to wipe.
+   *
+   * @param key The current ticket key, lent: read only inside `exposeWith`, and still the carrier's to wipe.
+   * @param info The key's record, which counts the ticket when one is sealed.
+   * @param now The issue time, in `monotonicNanos()`.
+   * @returns True when a NewSessionTicket was written for `takeOutput(TLS_LEVEL_APPLICATION)`.
    */
   issue(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean {
     if (this.state !== TLS_STATE_CONNECTED || this.issued) {
@@ -2185,6 +2290,9 @@ export class TlsServer {
    * secrets are already known, so a carrier that installs keys as they appear
    * can always protect what this answers. A carrier that reads the output
    * buffers in place calls `clearOutput` instead, and allocates nothing.
+   *
+   * @param level The `TLS_LEVEL_*` level to take the bytes of.
+   * @returns The pending bytes, owned by the caller; empty when there are none or `level` is not a level.
    */
   takeOutput(level: i32): u8[] {
     const none: u8[] = []
