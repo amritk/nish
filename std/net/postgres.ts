@@ -1185,7 +1185,9 @@ export class PgBinaryArray {
   /**
    * The current element as an integer, through `PgBinary.int`; a NULL, or a
    * walk that was refused, sets `binary.failed`.
-   * @returns The element, sign-extended to 64 bits, or 0 when `binary.failed` is set.
+   * @returns The element, sign-extended to 64 bits, or 0 when this call is
+   *   refused, which sets `binary.failed`. The flag is sticky and shared, so
+   *   an earlier refusal leaves it set without making this call answer 0.
    */
   int(): i64 {
     if (this.bad) {

@@ -5,8 +5,7 @@
  * sockets and the clock.
  *
  *     import {
- *       DNS_CLOSE, DNS_OUTGOING_MAX_BYTES, DNS_RESOLVE_MAX_ADDRESSES, DNS_RESOLVE_PENDING,
- *       DNS_SEND_TCP, DNS_SEND_UDP, DnsResolver,
+ *       DNS_OUTGOING_MAX_BYTES, DNS_RESOLVE_MAX_ADDRESSES, DnsResolver,
  *     } from "nish/net/dns-resolver"
  *     import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
  *     import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config"

@@ -10,7 +10,9 @@
  *       PG_CARRIER_MISSING, PG_CARRIER_NONE, PG_CARRIER_ROW, PgCarrier, PgCarrierLimits,
  *     } from "nish/net/postgres-carrier"
  *
- *     // `pool` registered "article"; `handler` serves the routes.
+ *     // A sketch: `pool` registered "article"; `handler` serves the routes;
+ *     // `ARTICLE` is the route's tag, `running` the server's loop condition,
+ *     // and `text` and `none` the program's content-type and empty body.
  *     const carrier = new PgCarrier(new PgCarrierLimits(), pool, pgTarget("127.0.0.1", 5432), handler)
  *     const answered: boolean[] = new Array<boolean>(256)  // one per query number
  *     while (running) {

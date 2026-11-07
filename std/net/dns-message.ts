@@ -14,7 +14,8 @@
  *     } from "nish/net/dns-message"
  *
  *     const query: u8[] = new Array<u8>(DNS_QUERY_MAX_BYTES)
- *     // `id` is a fresh random 16-bit number for each query.
+ *     // A sketch: `id` is a fresh random 16-bit number for each query, and
+ *     // `msg` a u8[] the program reads `mlen` bytes of reply into.
  *     const qlen: i32 = dnsBuildQuery(query, id, "example.com", DNS_TYPE_A)   // < 0: a DNS_ERR_* code
  *     // ... send query[0, qlen), read the datagram into msg[0, mlen) ...
  *     const reply: DnsReply = new DnsReply()

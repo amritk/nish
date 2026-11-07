@@ -384,7 +384,8 @@ export class Statement {
    * @param v The value.
    * @returns `Ok()`, or `Err` with `SQLITE_RANGE` for an index the statement
    *   has no parameter at, `SQLITE_MISUSE` for a finalized statement or one
-   *   mid-run (step it to the end or `reset` it first).
+   *   stepped since its last `reset`: finished or not, it refuses binds until
+   *   `reset`.
    */
   bindI64(i: i32, v: i64): Result<void, i32> {
     return done(nishsqlite_bind_i64(this.handle, i, v))
