@@ -179,3 +179,10 @@ The same file runs under Node, but tasks resume in a different order:
 
 A program whose output does not depend on which task runs first prints the
 same under both.
+
+`nish --emit-ts` writes an async program as the async/await it already is, so
+its output runs on Node's own and resumes in Node's order, as listed above.
+`awaitAll` is `Promise.all`, and the written `entry.ts` waits for every task
+`spawn` started before it exits, so none is cut off; only the order of what
+spawned tasks print can differ
+([Back to TypeScript](../using-nish/to-typescript.md)).

@@ -248,6 +248,8 @@ $ nish run version.ts
   wasm`, which links no C library, refuses a module that calls SQLite with
   exit 2.
 
+<a id="writing-typescript---emit-ts"></a>
+
 ## Writing TypeScript: `--emit-ts`
 
 `nish app.ts --emit-ts out/` writes your program back out as TypeScript that
@@ -270,10 +272,13 @@ Inside `out/`:
   `out/lib/tally.ts`.
 - **Each standard-library module** your program imports is written under
   `nish/`, so `nish/pair` becomes `out/nish/pair.ts`.
-- **`entry.ts`** runs your `main` and exits with the number it returns.
+- **`entry.ts`** runs your `main` and exits with the number it returns. In a
+  program with an `async` function it awaits `main`, then every task `spawn`
+  started, before it exits.
 
 Imports are rewritten so Node can follow them. A `nish:` builtin becomes
-`nish/runtime`, the one package the output imports, `nish:secret` included:
+`nish/runtime`, the one package the output imports, `nish:secret` included
+(`nish:async` alone becomes `nish/runtime/async.mjs`):
 its `wipe` is the runtime's, and `std/secret.ts` is not written. A `nish/x` or relative
 import becomes a relative path ending in `.ts`. An imported interface or type
 alias is marked `import { type Pair }`. A module that needs none of this, and
@@ -366,9 +371,6 @@ or a builtin call in the same body would have made it a stub. Call it, or write 
 body in the standard library is a stub, and the program is written.
 The sixth (NL4015) is a program that imports `nish:region`: the TypeScript
 runtime has no regions to allocate into yet, so keep that program native.
-The seventh (NL4016) is a module that declares an `async` function, even one
-nothing calls: the native build resumes its tasks in an order the TypeScript
-runtime does not answer yet, so keep that program native too.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:
 `uncheckedGet`, `uncheckedSet` and the `wrapping*` arithmetic run under Node,
@@ -421,6 +423,8 @@ errors there are **performance warnings** — the compiler took a slow path and
 names the faster one — which are on by default, print on stderr and never
 change the exit code. `--no-warn-performance` silences them.
 
+<a id="--json-for-tools"></a>
+
 ### `--json`, for tools
 
 `--json` prints each diagnostic as one flat JSON object per line on stdout,
@@ -443,6 +447,8 @@ $ nish bad.ts --json
   are JSON objects too, so under `--json` you never need to read stderr.
 - The standard library has a reader for these objects:
   [`nish/json`](standard-library.md#nishjson).
+
+<a id="--fix"></a>
 
 ### `--fix`
 

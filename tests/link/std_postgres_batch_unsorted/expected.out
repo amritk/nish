@@ -1,0 +1,44 @@
+PASS  sorted by default
+PASS  unsorted: no order by at all
+PASS  unsorted with orderBy: ordered by it alone
+PASS  sorted with orderBy, as before
+PASS  each key once
+PASS  rows of ordinals 2, 1, 3, 1, 2: each to every request for its key, at once, and no last event
+PASS  the run waits for its end
+PASS  the end gives every request one last event, in key order then request order
+PASS  next on a run that is over
+PASS  names no request
+PASS  nothing in flight
+PASS  nothing refused
+PASS  the run is free again, under its next handle
+PASS  a key with no row is missing, and only at the end
+PASS  no rows at all
+PASS  an error after rows of two keys fails every request once, those with rows too
+PASS  an error is not a refusal
+PASS  a lost connection after a row fails the run as an error does
+PASS  none of it was stray
+PASS  an ordinal past the keys
+PASS  ordinal 0
+PASS  a negative ordinal
+PASS  a NULL ordinal
+PASS  an ordinal that is not an integer
+PASS  an ordinal past an int8
+PASS  a row of no columns
+PASS  a bad ordinal after rows fails those keys' requests too
+PASS  an ordinal that goes back is accepted
+PASS  a key's ordinal may come again
+PASS  a bad ordinal does not set the program's text.failed
+PASS  an answer as it should be
+PASS  a second CommandComplete is stray
+PASS  a row after CommandComplete is stray
+PASS  an error after CommandComplete is stray
+PASS  a connection lost after CommandComplete
+PASS  a connection lost after a row, before CommandComplete
+PASS  a row after an error is stray
+PASS  a run whose keys both had rows
+PASS  the one run is taken again under a new handle
+PASS  a row on the spent handle answers false
+PASS  and next on it answers nothing
+PASS  each counted stray
+PASS  the reused run sees none of the old run's rows
+postgres batch unsorted: 43 passed, 0 failed, 0 skipped

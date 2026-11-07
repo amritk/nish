@@ -64,7 +64,6 @@ const AMBIENT_NAMES: string = " write writeError panic readFileSync readFileSync
 const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 integer Int32Array Float32Array Float64Array BigInt64Array "
 const SIGNAL_REFUSAL: string = "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)" [exported]
 const REGION_REFUSAL: string = "--emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native" [exported]
-const ASYNC_REFUSAL: string = "--emit-ts cannot yet write an async function, whose resume order the TypeScript runtime does not answer yet; keep it native" [exported]
 const INSTANCES_REFUSAL: string = "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"
 const UNTYPED_REFUSAL: string = "--emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type"
 const FOREIGN_REFUSAL: string = "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)"

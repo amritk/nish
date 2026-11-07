@@ -53,13 +53,30 @@ Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385
   [errors and `Result`](language/errors.md),
   [maps and sets](language/maps-and-sets.md), [generics](language/generics.md),
   [modules](language/modules.md), [memory](language/memory.md),
-  [regions](language/regions.md) and [async functions](language/async.md).
+  [regions](language/regions.md), [vectors (SIMD)](language/simd.md) and
+  [async functions](language/async.md).
 - **Using Nish** — [the command-line interface](using-nish/cli.md),
   [the standard library](using-nish/standard-library.md),
   [calling Nish from other languages](using-nish/interop.md),
   [threads](using-nish/threads.md),
-  [shared memory between processes](using-nish/shared-memory.md) and
-  [Terminal programs](using-nish/terminal.md).
+  [shared memory between processes](using-nish/shared-memory.md),
+  [SQLite](using-nish/sqlite.md),
+  [terminal programs](using-nish/terminal.md),
+  [the sandbox](using-nish/sandbox.md),
+  [compression](using-nish/compression.md) and
+  [going back to TypeScript](using-nish/to-typescript.md).
+- **Networking** — [sockets](using-nish/networking.md),
+  [Unix sockets](using-nish/unix-sockets.md),
+  [verifying TLS certificates](using-nish/tls-certificates.md),
+  [the TLS client](using-nish/tls-client.md),
+  [HTTP routing](using-nish/http-router.md),
+  [an API server](using-nish/api-server.md),
+  [WebSocket](using-nish/websocket.md),
+  [the HTTP client](using-nish/http-client.md),
+  [calling other services](using-nish/calling-services.md),
+  [PostgreSQL](using-nish/postgres.md),
+  [password hashing](using-nish/password-hashing.md) and
+  [authentication tokens (JWT)](using-nish/auth.md).
 
 This guide teaches; it is not the definition of the language. That is the
 [language reference](../LANGUAGE.md), and each page here links the section of

@@ -2,7 +2,8 @@
 
 `nish:net` gives a program TCP and UDP sockets and a loop that waits for
 whichever of them is ready. It is a thin layer: every socket is non-blocking,
-there is no `async` and no callback, and your `main` is the loop. The protocol
+there is no callback, and an [`async` function](../language/async.md) cannot
+wait on a socket yet, so your `main` is the loop. The protocol
 stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 [standard library](standard-library.md); this page is about the sockets
 themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
