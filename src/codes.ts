@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 819
+export const RULE_COUNT: i32 = 820
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -547,6 +547,8 @@ const diagnosticRules = (): string[] => [
   "NL3040",
   "`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear",
   "NL2359",
+  ", and a handle starts as `0`, the handle that names nothing: every other one is given out by the page",
+  "NL2670",
   "; a function name must be unique across the program, and an instantiation is named after its template",
   "NL3010",
   "` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got ",
@@ -713,6 +715,8 @@ const diagnosticRules = (): string[] => [
   "NL2571",
   "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
   "NL2266",
+  "` declares a C function, and a wasm module a page loads links no C: export `",
+  "NL2666",
   "` has a default and no type annotation; write its type before the default, `",
   "NL2598",
   "` in C, so a header that declared both would not compile: rename one of them",
@@ -721,8 +725,6 @@ const diagnosticRules = (): string[] => [
   "NL2330",
   "`main` cannot take parameters (command-line arguments are not supported yet)",
   "NL2139",
-  "` declares a C function, and a freestanding wasm build links no C: export `",
-  "NL2666",
   "` mentions a type parameter no other argument binds; annotate the parameter",
   "NL2342",
   "` takes a count that is an integer literal below the lane width, from 0 to ",

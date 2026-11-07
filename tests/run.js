@@ -29708,6 +29708,86 @@ if (!only || "vite".includes(only)) {
 // The round trip runs the page's real TypeScript under Node, and so does the
 // `--emit-ts` reading, which keeps the import. The refusals are tests/wordings cases.
 if (!only || "host-import".includes(only)) {
+  // What the compile alone answers, no wasm tools needed: a call into the page
+  // reaches `ffi`, so a policy that denies it refuses the program, the report
+  // names the call, and the program is not deterministic.
+  {
+    const hostDir = path.join(root, "tests", "host-import")
+    const program = [path.join(hostDir, "main.ts"), "--target", "wasm32", "--host", path.join(hostDir, "host.ts")]
+    const scratch = path.join(buildDir, "host-import-policy")
+    fs.rmSync(scratch, { recursive: true, force: true })
+    fs.mkdirSync(scratch, { recursive: true })
+    const denied = spawnSync(NISH, [...program, "--deny", "ffi", "-o", path.join(scratch, "denied.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "host-import: --deny ffi refuses a call into the page's host module, naming the call",
+      denied.status === 1 &&
+        denied.stderr.includes("`rI32` reaches `ffi`, which the capability policy does not grant (`--deny ffi`)") &&
+        denied.stderr.includes("calls hI32"),
+      shown(denied)
+    )
+    const report = path.join(scratch, "caps.json")
+    const reported = spawnSync(NISH, [...program, "--emit-capabilities", report, "-o", path.join(scratch, "caps.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const caps = reported.status === 0 ? JSON.parse(fs.readFileSync(report, "utf8")) : null
+    const callers =
+      caps === null
+        ? []
+        : caps.packages.flatMap((p) => p.modules.filter((m) => m.path === "main.ts").flatMap((m) => m.functions))
+    const rI32 = callers.find((f) => f.name === "rI32")
+    check(
+      "host-import: --emit-capabilities names ffi for a host call, with the call as its witness, and the program is not deterministic",
+      caps !== null &&
+        caps.deterministic === false &&
+        caps.capabilities.includes("ffi") &&
+        rI32 !== undefined &&
+        rI32.capabilities.includes("ffi") &&
+        rI32.witnesses.ffi.some((w) => w.calls === "hI32"),
+      reported.status === 0 ? JSON.stringify(rI32) : shown(reported)
+    )
+
+    // The reader: a byte order mark an editor saved keeps the first export,
+    // and a brace in a type parameter's constraint is a type, not a body, so
+    // the parser refuses it and quotes the page's own text: the body on the
+    // same line, which the parse saw blanked, included.
+    const read = (name, hostText) => {
+      fs.writeFileSync(path.join(scratch, `${name}.host.ts`), hostText)
+      fs.writeFileSync(
+        path.join(scratch, `${name}.ts`),
+        `import { first } from "./${name}.host"\nexport function f(): i32 {\n  return first(1)\n}\n`
+      )
+      return spawnSync(
+        NISH,
+        [
+          path.join(scratch, `${name}.ts`),
+          "--target",
+          "wasm32",
+          "--host",
+          path.join(scratch, `${name}.host.ts`),
+          "-o",
+          path.join(scratch, `${name}.ll`),
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    }
+    const marked = read("bom", "\uFEFFexport function first(x: i32): i32 {\n  return x\n}\n")
+    check("host-import: a host module that starts with a byte order mark keeps its first export", marked.status === 0, shown(marked))
+    const braced = read(
+      "constraint",
+      "export function first<T extends { id: i32 }>(x: T): T { return x }\n"
+    )
+    check(
+      "host-import: a brace in a host function's type parameter is read as a type, and the parser's refusal quotes the page's text",
+      braced.status === 1 &&
+        braced.stderr.includes("constraint.host.ts:1:33: syntax error: expected a type name, found `{`") &&
+        braced.stderr.includes("export function first<T extends { id: i32 }>(x: T): T { return x }"),
+      shown(braced)
+    )
+  }
   const why = wasmHostTools()
   if (why !== null) {
     skip(`host-import: ${why}`)

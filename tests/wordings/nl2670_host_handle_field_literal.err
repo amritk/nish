@@ -1,0 +1,1 @@
+Field `c` of class `Slot` is HostHandle<"canvas">, and a handle starts as `0`, the handle that names nothing: every other one is given out by the page

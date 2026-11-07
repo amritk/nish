@@ -467,13 +467,14 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
   }
   if (foreign && ctx.source.host) {
     checkHostSignature(ctx, sig, decl, name)
-  } else if (foreign && ctx.wasmFreestanding) {
-    // A freestanding module links no C, so the declaration would name an
+  } else if (foreign && ctx.pageModule) {
+    // A module a page loads links no C, so the declaration would name an
     // import nothing on the page provides: the browser refuses it at
-    // instantiation, long after the build said yes (WP50 §3).
+    // instantiation, long after the build said yes (WP50 §3). An `--emit-dts`
+    // compile is one too, linked by `scripts/build.sh --profile wasm`.
     ctx.error(
       decl.children[0],
-      `\`declare function ${name}\` declares a C function, and a freestanding wasm build links no C: export \`${name}\` from a host module the page provides (\`--host\`) and import it from there`
+      `\`declare function ${name}\` declares a C function, and a wasm module a page loads links no C: export \`${name}\` from a host module the page provides (\`--host\`) and import it from there`
     )
   } else if (foreign) {
     checkForeignSignature(ctx, sig, decl, name)

@@ -1,0 +1,1 @@
+Argument 1 of `draw`: expected HostHandle<"canvas">, got HostHandle<"socket">

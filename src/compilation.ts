@@ -752,6 +752,12 @@ export class Compilation {
     }
     const parser = new Parser(source)
     const file = parser.parseSourceFile()
+    if (host) {
+      // The page's text again, so a diagnostic, a parser's included, quotes
+      // what it wrote; the blanked text kept every offset and line break, so
+      // nothing moves.
+      source.text = text
+    }
     // Recorded rather than printed, because the stream and the shape are the
     // driver's to choose. Printed here, a parser refusal was the human report
     // whatever the command line said, so `--json` answered a program stage1's
@@ -765,9 +771,6 @@ export class Compilation {
       return false
     }
     if (host) {
-      // The page's text again, so a diagnostic quotes what it wrote; the
-      // blanked text kept every offset and line break, so nothing moves.
-      source.text = text
       source.host = true
       const problems = hostSignatureProblems(file)
       for (const problem of problems) {
@@ -799,6 +802,7 @@ export class Compilation {
     )
     checker.ctx.wasm = isWasmBuild(this.opts)
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
+    checker.ctx.pageModule = buildsPageModule(this.opts)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of

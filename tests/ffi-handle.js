@@ -58,7 +58,7 @@ export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, 
       "ffi_handle: a freestanding --target wasm32 build refuses `declare function counted_fclose` and names the host module",
       free.status === 1 &&
         free.stderr.includes(
-          "`declare function counted_fclose` declares a C function, and a freestanding wasm build links no C"
+          "`declare function counted_fclose` declares a C function, and a wasm module a page loads links no C"
         ) &&
         free.stderr.includes("(`--host`)"),
       shown(free)

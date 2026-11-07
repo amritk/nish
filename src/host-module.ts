@@ -30,6 +30,7 @@ import {
   N_FUNCTION,
   N_TYPE_ALIAS,
   N_TYPE_ARRAY,
+  N_TYPE_FUNCTION,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
   N_TYPE_REF,
@@ -50,6 +51,7 @@ import {
   TOK_END,
   TOK_ERROR,
   TOK_EXPORT,
+  TOK_EXTENDS,
   TOK_FUNCTION,
   TOK_GT,
   TOK_IDENT,
@@ -165,10 +167,12 @@ const closes = (kind: i32): boolean =>
 
 /**
  * Whether a `{` after a token of `kind` opens an object *type* rather than a
- * function's body: after `:`, `|`, `&`, `<`, `,`, `=>`, `(`, `[` or `?` it is
- * written where a type goes.
+ * function's body: after `:`, `|`, `&`, `<`, `,`, `=>`, `(`, `[`, `?`,
+ * `extends` or `=` it is written where a type goes.
  */
 const typePosition = (kind: i32): boolean =>
+  kind === TOK_EXTENDS ||
+  kind === TOK_ASSIGN ||
   kind === TOK_COLON ||
   kind === TOK_PIPE ||
   kind === TOK_AMP ||
@@ -195,12 +199,32 @@ class Tokens {
 }
 
 /**
+ * `text` with a leading byte order mark as blanks of the same length, so the
+ * offsets stay the page's. An editor may save one and tsc reads past it; the
+ * lexer would take it into the first word and lose the first export.
+ */
+const withoutByteOrderMark = (text: string): string => {
+  const mark = "\uFEFF"
+  if (!text.startsWith(mark)) {
+    return text
+  }
+  let blanks = ""
+  let i = 0
+  while (i < mark.length) {
+    blanks = `${blanks} `
+    i = i + 1
+  }
+  return `${blanks}${text.slice(mark.length)}`
+}
+
+/**
  * The text a host module is parsed as: `text` with everything but its exported
  * signatures blanked, offsets unchanged. `problem` is NL3049's or NL2661's
  * message when the file holds what the reader cannot skip, and the text is
  * then the original.
  */
-export const hostModuleText = (text: string): HostText => {
+export const hostModuleText = (page: string): HostText => {
+  const text = withoutByteOrderMark(page)
   const tokens = new Tokens()
   const lexer = new Lexer(text)
   const words = REGEX_WORDS()
@@ -281,9 +305,16 @@ const isWord = (tokens: Tokens, i: i32, word: string): boolean =>
  */
 const keepFunction = (tokens: Tokens, i: i32, kept: Kept): i32 => {
   let depth = 0
+  let params = false
   let k = i
   while (k < tokens.kinds.length) {
     const kind = tokens.kinds[k]
+    if (kind === TOK_LBRACE && !params && typePosition(tokens.kinds[k - 1])) {
+      // A type parameter's constraint or default, `<T extends { id: i32 }>`:
+      // kept whole, for the checker to refuse the generic function (NL2662).
+      k = closing(tokens, k) + 1
+      continue
+    }
     if (kind === TOK_LBRACE) {
       if (depth > 0 || typePosition(tokens.kinds[k - 1])) {
         const name = isWord(tokens, i + 1, "async") ? tokens.values[i + 3] : tokens.values[i + 2]
@@ -301,6 +332,7 @@ const keepFunction = (tokens: Tokens, i: i32, kept: Kept): i32 => {
       return k + 1
     }
     if (kind === TOK_LPAREN || kind === TOK_LBRACKET) {
+      params = params || kind === TOK_LPAREN
       depth = depth + 1
     } else if (kind === TOK_RPAREN || kind === TOK_RBRACKET) {
       depth = depth - 1
@@ -632,6 +664,9 @@ const spell = (type: Node): string => {
   }
   if (type.kind === N_TYPE_READONLY) {
     return "a readonly array"
+  }
+  if (type.kind === N_TYPE_FUNCTION) {
+    return "a function type"
   }
   return "a type that is no scalar"
 }

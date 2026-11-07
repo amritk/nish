@@ -206,6 +206,7 @@ cases/fnarg_forward added after R6: no rewriter to freeze it with
 cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
+cases/host_handle_native added after R6: no rewriter to freeze it with
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
 cases/io_create_exclusive added after R6: no rewriter to freeze it with
 cases/io_mkdir_mode added after R6: no rewriter to freeze it with

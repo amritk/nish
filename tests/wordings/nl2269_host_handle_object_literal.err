@@ -1,0 +1,1 @@
+Field `c` of `Slot` expects a value of type HostHandle<"canvas">, got i32

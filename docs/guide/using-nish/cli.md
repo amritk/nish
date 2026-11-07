@@ -197,8 +197,8 @@ likely to add to it:
 - **`--host <file.ts>`** — makes that file a host module: a TypeScript file
   of the page's whose exported functions a `--target wasm32` build imports
   from the page. Repeat it for each one; a root `package.json`'s
-  `"nish": { "host": [...] }` names them too. A native build that imports one
-  is refused.
+  `"nish": { "host": [...] }` names them too. A native or WASI build that
+  imports one is refused.
 
 The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — and host modules have a page of

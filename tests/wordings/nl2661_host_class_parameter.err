@@ -1,0 +1,1 @@
+Parameter `p` of host function `norm` is `Point`, and only a scalar, an enum or a `HostHandle` crosses between the page and wasm: write it into module storage and pass its index

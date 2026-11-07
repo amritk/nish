@@ -2674,7 +2674,10 @@ declare const __nishHostKind: unique symbol;
  * A branded `number` here, so `tsc` refuses passing one kind where another is
  * declared, as `nish` does; it cannot refuse the arithmetic, which `nish` does.
  */
-type HostHandle<K extends string> = number & { readonly [__nishHostKind]: K };
+type HostHandle<K extends string> = __NishHostHandle<K>;
+
+/** The one definition both `HostHandle`s name, the global one and the `"nish"` module's. */
+type __NishHostHandle<K extends string> = number & { readonly [__nishHostKind]: K };
 
 /**
  * `"nish"`: what a host module (the page's TypeScript) imports its widths
@@ -2694,7 +2697,7 @@ declare module "nish" {
   export type f64 = number;
   /** A ranged integer, which the loader checks on the way in. */
   export type integer<Lo extends number, Hi extends number> = number;
-  export type HostHandle<K extends string> = number & { readonly [__nishHostKind]: K };
+  export type HostHandle<K extends string> = __NishHostHandle<K>;
 }
 
 // ---- `lib.es2022`'s receivers, documented ---------------------------------------

@@ -11,7 +11,8 @@ loader's `loadSync` and `nish/vite`. Stage 2 is built: host modules
 the plugin's `host` option (`tests/run.js`, section `host-import`); stage 3 is
 the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
-the accepted design, and `npm test` compiles none of them yet.
+the accepted design; `npm test` compiles stage 2's (host modules and
+`HostHandle`) and none of the later stages' yet.
 
 cs, a browser arena shooter, is moving the bulk of its client into Nish
 compiled to WebAssembly: the fixed-step simulation (the same source the native
@@ -101,7 +102,7 @@ the Nish module imports them the way any TypeScript module would:
 ```ts
 // web/host.ts: the page's file, compiled by tsc and bundled by Vite
 import type { f64, i32, u32 } from "nish";
-export type GpuBuffer = HostHandle<"gpu-buffer">;
+export type GpuBuffer = HostHandle<"gpu_buffer">;
 
 export function hostLog(level: u32, code: i32): void { console.warn(level, code); }
 export function nowMs(): f64 { return performance.now(); }
@@ -203,8 +204,8 @@ nominal type:
 
 ```ts
 // web/host.ts
-export type GpuBuffer = HostHandle<"gpu-buffer">;
-export type GpuTexture = HostHandle<"gpu-texture">;
+export type GpuBuffer = HostHandle<"gpu_buffer">;
+export type GpuTexture = HostHandle<"gpu_texture">;
 
 const buffers = new HostTable<GPUBuffer>(); // nish/page, the page-side helper (§11)
 export function gpuCreateBuffer(bytes: u32, usage: u32): GpuBuffer {

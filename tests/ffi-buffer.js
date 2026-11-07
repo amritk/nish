@@ -49,15 +49,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     const exportOut = path.join(bufDir, "export_written")
     const exportBuilt = spawnSync(
       nish,
-      [
-        exported,
-        "-o",
-        `${exportOut}.ll`,
-        "--emit-header",
-        `${exportOut}.h`,
-        "--emit-dts",
-        `${exportOut}.d.ts`,
-      ],
+      [exported, "-o", `${exportOut}.ll`, "--emit-header", `${exportOut}.h`],
       { cwd: root, encoding: "utf8" }
     )
     const exportText = (ext) =>
@@ -71,12 +63,36 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
         exportHeader.includes("int64_t peek(const nish_array *b);"),
       exportHeader || shown(exportBuilt)
     )
-    const exportGlue = exportText("mjs")
-    const glueOf = (name) => exportGlue.slice(exportGlue.indexOf(`    ${name}: (`)).split("\n    }),")[0]
+    // A page module links no C (NL2666), so the glue's copy-back is reached by
+    // a buffer the module itself writes.
+    const pageWritten = write(
+      "page_written.ts",
+      [
+        "export function fill(b: u8[]): i32 {",
+        "  b[0] = 7;",
+        "  return 0;",
+        "}",
+        "",
+        "export function peek(b: u8[]): i32 {",
+        "  return toI32(b[0]);",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const pageOut = path.join(bufDir, "page_written")
+    const pageBuilt = spawnSync(nish, [pageWritten, "-o", `${pageOut}.ll`, "--emit-dts", `${pageOut}.d.ts`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const pageGlue =
+      pageBuilt.status === 0 && fs.existsSync(`${pageOut}.mjs`)
+        ? fs.readFileSync(`${pageOut}.mjs`, "utf8")
+        : ""
+    const glueOf = (name) => pageGlue.slice(pageGlue.indexOf(`    ${name}: (`)).split("\n    }),")[0]
     check(
-      "ffi_buffer: the wasm glue copies back a `u8[]` parameter C writes, and not one C only reads",
+      "ffi_buffer: the wasm glue copies back a `u8[]` parameter the module writes, and not one it only reads",
       glueOf("fill").includes("copyBack(b$, b);") && !glueOf("peek").includes("copyBack("),
-      exportGlue || shown(exportBuilt)
+      pageGlue || shown(pageBuilt)
     )
     const exportIr = exportText("ll")
     check(
@@ -358,7 +374,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       "ffi_buffer: a freestanding --target wasm32 build refuses `declare function write` and names the host module",
       free.status === 1 &&
         free.stderr.includes(
-          "`declare function write` declares a C function, and a freestanding wasm build links no C"
+          "`declare function write` declares a C function, and a wasm module a page loads links no C"
         ) &&
         free.stderr.includes("(`--host`)"),
       shown(free)
