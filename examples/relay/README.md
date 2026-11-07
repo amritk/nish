@@ -127,13 +127,19 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   step; one QUIC times out on its own is noticed at the slot's next relay
   timer, within 2 s while it forwards and 5 s while it waits for its hello.
 - **`--help`** exists; main.rs has no usage line.
+- **A player whose NAT rebinds keeps its session.** `nish/net/quic` follows a
+  peer's address change once the handshake is confirmed and validates the new
+  path with a PATH_CHALLENGE (RFC 9000 §9), as quinn does, and `Http3Server`
+  sends each flight to the address the connection chose. The per-peer table
+  keeps counting the session against the address it was placed under: the
+  slot's own copy of that address, taken when the address is validated, is
+  what the place goes back under when the session ends. So for the length of
+  a session a rebound player's place stays with its first address, and its new
+  address holds nothing for it; nothing is leaked and nothing is counted twice
+  (`tests/link/net_relay/rebind.ts`).
 
 ## Known gaps
 
-- **NAT rebinding.** The QUIC server does not follow a peer's address change
-  (no migration, RFC 9000 §9): `Http3Server` keeps the address of a
-  connection's first datagram, so a client whose NAT rebinds mid-session loses
-  its session, where quinn would validate the new path and keep it.
 - **DATA down is at most 1,164 bytes.** `nish/net/quic` sends 1,200-byte
   packets and has no path MTU discovery, so after the quarter stream ID and the
   3-byte header 1,164 bytes of payload fit; a larger datagram from the game

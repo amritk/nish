@@ -9,7 +9,9 @@
 #         tests/link/net_interop_server — shared with every job below.
 # quic-interop-runner: the runner's server role against quic-go and ngtcp2:
 #         handshake, transfer, retry, chacha20, multiplexing, keyupdate,
-#         handshakeloss (L1), transferloss (L2), blackhole (B) and http3.
+#         handshakeloss (L1), transferloss (L2), blackhole (B), http3, and
+#         rebind-port (BP) and rebind-addr (BA), the client's NAT rebinding
+#         mid-transfer, each new path validated before it is trusted.
 # h2spec: every h2spec case against the HTTP/2 server.
 # curl:   curl --http3 and --http2, a GET of a 1 MB file and a POST with a
 #         body each; and curl --http2 resuming a TLS 1.3 session on a second
@@ -22,11 +24,11 @@
 #
 # Every tool is pinned: actions by commit, images by digest, the runner by
 # commit, h2spec by release and SHA-256, Python packages by hash
-# (tests/interop/*-requirements.txt), tshark by package version. The
+# (tests/interop/*-requirements.txt), tshark by its .debs' SHA-256. The
 # simulator's run.sh is patched (tests/interop/simulator.dockerfile) so its
-# pcaps keep the packets of the case's last fraction of a second. Nothing here
-# turns a failure green: the one retry, a quic-interop-runner case run once
-# more after it fails, passes only if that second run succeeds, and the
+# pcaps keep the packets of the case's last fraction of a second. Nothing
+# here turns a failure green: the one retry, a quic-interop-runner case run
+# once more after it fails, passes only if that second run succeeds, and the
 # verdict prints both.
 #
 # The image's seed is the newest published release (server.dockerfile).
@@ -87,7 +89,7 @@ env:
   QUIC_GO: martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88
   NGTCP2: ghcr.io/ngtcp2/ngtcp2-interop@sha256:bd635531dbe210e5d7138a08dc61c2da2d702670ff718e440b961860f5e18235
   # The runner's cases, by the names its --json file gives them.
-  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3
+  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3,rebind-port,rebind-addr
   # h2spec 2.6.0's release tarball and its SHA-256.
   H2SPEC_URL: https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
   H2SPEC_SHA256: 157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318
@@ -180,17 +182,74 @@ jobs:
       - name: Enable IPv6 in Docker networks
         run: sudo modprobe ip6table_filter
 
-      # tshark and its libraries are 26.5 MB, 23.7 MB of it libwireshark17t64.
+      # tshark and its libraries are some 25 MB, most of it libwireshark.
       # The Azure mirror sometimes served that at a trickle, never idle for
       # `APT_OPTS`'s thirty seconds, so the step's five-minute limit fired
       # before any case ran (main, and #854, in October 2026). The action
       # fetches from other mirrors, keeps the .debs in the Actions cache keyed
       # by runner image, and cuts a stalled download at a minute per attempt.
+      #
+      # The runner needs Wireshark 4.5 or later (its README). Ubuntu 24.04 ships
+      # 4.2.2, whose QUIC dissector cannot follow a server's packet on a new
+      # path when the client's connection ID is zero-length, as quic-go's is:
+      # 4.2 links a connection to a new 5-tuple only through the packet's own
+      # DCID, so the server's first packet after a rebinding, its PATH_CHALLENGE,
+      # reads as "Unknown QUIC connection" and rebind-port and rebind-addr fail
+      # whatever the server sent. 4.6 attaches the connection to the new tuple
+      # once the client's packet there matches its DCID. So tshark comes from
+      # the Wireshark developers' stable PPA, as the exact .debs of its 4.6.9
+      # build: fetched from the Launchpad librarian, which keeps a file for
+      # good once the PPA moves on and drops it from its index, and each
+      # checked against the SHA-256 that index's signed Packages file gave it
+      # when it was pinned. apt then installs them, and fetches what they need
+      # from Ubuntu, through the cache action.
+      - name: Restore tshark's .debs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/tshark-download
+          key: tshark-4.6.9-1-ubuntu24.04.0-ppa1-amd64
+
+      - name: Fetch tshark's .debs and check their SHA-256
+        timeout-minutes: 5
+        run: |
+          dir="$RUNNER_TEMP/tshark-download"
+          mkdir -p "$dir" "$RUNNER_TEMP/tshark"
+          while read -r sum id name; do
+            if [ ! -f "$dir/$name" ]; then
+              curl -fsSL --retry 3 --connect-timeout 30 --max-time 120 -o "$dir/$name" "https://launchpadlibrarian.net/$id/$name"
+            fi
+            cp "$dir/$name" "$RUNNER_TEMP/tshark/$name"
+            echo "$sum  $RUNNER_TEMP/tshark/$name" | sha256sum -c -
+          done <<'EOF'
+          a97f88f43f1f2a32605491f6b46517ae2fada7a82df13d63c38412eead10c1a3 883202570 libwsutil17_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          e5648ea04631ba9414ab0b12f8e9384d987c00268763b123ccedf0874d2f0af6 883202568 libwiretap16_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          187cf9ac5753f4a91f3980948ed3fbb2feef0f4ac5a13895cb0b62df61681118 883202548 libwireshark-data_4.6.9-1~ubuntu24.04.0~ppa1_all.deb
+          21794bd0e73c57baa67f664235d4b23d5feb5fcf2f774a2892744a9a4b5b3492 883202566 libwireshark19_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          4fc6794928720b333261f14c3861401383a5dac732129b362d3022e8d0b0d8f1 883202573 wireshark-common_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          d03542b43901e69792b1b85d4ee0770bfdc425f9eda3635ef33afe25cf1f9718 883202572 tshark_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+          EOF
+
       - name: Install tshark, which the runner reads the traces with
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
-          packages: tshark=4.2.2-1.1build3
+          packages: >-
+            ${{ runner.temp }}/tshark/libwsutil17_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/libwiretap16_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/libwireshark-data_4.6.9-1~ubuntu24.04.0~ppa1_all.deb
+            ${{ runner.temp }}/tshark/libwireshark19_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/wireshark-common_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+            ${{ runner.temp }}/tshark/tshark_4.6.9-1~ubuntu24.04.0~ppa1_amd64.deb
+
+      - name: Check the tshark installed
+        run: |
+          # The first line reads "TShark (Wireshark) 4.6.9." for this build.
+          v="$(tshark --version | head -n1)"
+          echo "$v"
+          case "$v" in
+            "TShark (Wireshark) 4.6.9."*|"TShark (Wireshark) 4.6.9 "*) ;;
+            *) echo "expected tshark 4.6.9" >&2; exit 1 ;;
+          esac
 
       - name: Fetch the runner at its pinned commit
         timeout-minutes: 5

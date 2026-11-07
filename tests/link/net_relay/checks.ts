@@ -6,6 +6,7 @@ import { frameChecks } from "./frames";
 import { grantChecks } from "./grants";
 import { loopbackChecks } from "./loopback";
 import { peerChecks } from "./peers";
+import { rebindChecks } from "./rebind";
 import { setupChecks } from "./setup";
 
 /** Every check, in one suite. */
@@ -16,5 +17,6 @@ export const relayChecks = (): i32 => {
   setupChecks(t);
   peerChecks(t);
   loopbackChecks(t);
+  rebindChecks(t);
   return t.done();
 };

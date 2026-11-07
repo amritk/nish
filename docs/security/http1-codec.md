@@ -185,11 +185,13 @@ and a `Content-Length` body into one `netWrite2` and copies only what the
 socket did not take, through `write`, so the same back-pressure holds: under a
 4 KiB send buffer it answers short, a second call behind the held write
 answers `H1_AGAIN`, and `H1_WRITE` says when to go on. It keeps no reference
-to the caller's buffer once it returns. Every exchange is run through `write`
+to the caller's buffer once it returns, and only reads it: `sendBody` and
+`write` take a `readonly u8[]`, and a read-only body is sent whole and through
+the chunked fallback alike. Every exchange is run through `write`
 and through `sendBody`, and the client reads the same bytes: a 3,000-byte body,
 a 4 MiB one under the small send buffer, a response pipelined behind one
 already queued (sent in order, in the same call), and the fallbacks, which
-copy as `write` does — chunked, `HEAD`, a socket that would block before
+copy as `write` does — chunked, `HEAD`, a 204, a socket that would block before
 anything goes, and a connection with no socket of its own (sans-IO, and
 `Http1TlsServer`, whose output is TLS records; `fd` is -1 there, so a socket
 number is never written to past `restart` or `abort`). A body past the length,

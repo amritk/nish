@@ -15,7 +15,10 @@ and certificate reload, one upstream socket per session, GSO and GRO both
 sides and a clean stop on a signal, proved across loopback in `npm test`
 (§5a), and N9's soak flat: 100,000 sessions measured at 0 bytes kept, arena
 and resident set alike, since the handshake (#492), its signature (#512) and the QUIC
-listener (#515) keep nothing. **Open:** #430;
+listener (#515) keep nothing. A client's NAT rebinding, port or address,
+is followed and the new path validated (RFC 9000 §8.2, §9.3), the interop
+runner's `rebind-port` and `rebind-addr` cases with it (#1210, in review);
+connection migration a client starts stays out (§9). **Open:** #430;
 and the cs side of A1 — the port of `services/relay` itself, `boot-check`'s
 wire pass and `bench:offload` against the Rust relay. 0.16.0 carried N1, N2,
 N3, N5 and N6 (less #402 and `tcpConnect`, #411) and K1–K6 (less
@@ -134,7 +137,9 @@ whole body.
 
 - WebTransport over HTTP/2, which no browser cs targets speaks.
 - 0-RTT.
-- Connection migration.
+- Connection migration beyond a peer's address change: a server preferred
+  address, and a client moving to a new connection ID. A NAT rebinding is
+  followed with path validation (#1210).
 - Server push.
 - A QPACK dynamic table. Capacity 0 is legal, and the stack starts there.
 - Verifying a client's certificate.
@@ -342,7 +347,7 @@ lists what each module exports and what is verified, and
 | **Q2** | #441 (the connection: TLS over CRYPTO at three levels, transport parameters, ACKs, connection IDs, stream data), #444 (Version Negotiation, Retry, stateless reset, the idle timeout, key update both ways) | `nish/net/quic`, `quic-frame`, `quic-conn-params`, `quic-conn-ack`, `quic-conn-cid`, `quic-listener` | Proved against aioquic, each exchange replayed byte for byte from a Nish UDP client inside `npm test`, and by the quic-interop-runner against quic-go and ngtcp2 since #487. Loss recovery (Q3); full streams with flow control (Q4); ~~the AEAD limits (QUIC-6)~~, closed by #784; per-packet allocation (QUIC-3) and the key-update share of the arena (QUIC-4, capped); the wipes QUIC-2 and QUIC-5 record (#430) |
 | **Q3** | #466; the handshake flight's two probes and early resend (QUIC-8) | `nish/net/quic-recovery` (RFC 9002: sent-packet rings per space, the RTT estimate, loss by packet and time threshold, the probe timeout with backoff, NewReno, a pacer), used by `nish/net/quic` to send lost CRYPTO, STREAM and connection-ID frames again, and `nish/net/quic-listener`'s paced send | The interop runner's congestion cases; ECN; ~~detecting an optimistic ACK (QUIC-7)~~, closed by #784 |
 | **Q4** | #469 | `nish/net/quic-stream` (stream IDs, the §3 state machines, fixed buffers per stream, flow control both ways and at both levels, the limits, RESET_STREAM and STOP_SENDING), `nish/net/quic-datagram` (RFC 9221's rings), DATAGRAM frames and `max_datagram_frame_size` in `quic-frame` and `quic-conn-params`, `quic-listener`'s paced GSO flight and GRO receive, and `nish/net/quic` reading and writing every packet in place, a reusable slot (QUIC-3 closed) | The interop runner's transfer cases; ~~the AEAD limits (QUIC-6)~~, closed by #784. The handshake's own arena (88 KB a connection) went with N9's QUIC stage, which keeps the handshake's state in the slot: a connection through a reused slot now keeps 0 bytes (QUIC-3, `net_quic_memory`), and a handshake through the HTTP/3 carrier 0 bytes too, now that the caller's P-256 signature is made in scratch (#512) and `quic-listener` reads a datagram no slot owns in place and answers into scratch (H3-1 and H3-3 closed) |
-| **A1** | #488 | `examples/relay/` (not a `std/` module): `frame` and `grant` ported from cs's `frame.rs` and `grant.rs` with their fixtures, a hand-written JSON reader for the grant (N11's phase-one case), the per-peer table, `Relay` (the session flow, both caps, the rate cap, the hello and idle timeouts, STATS, CLOSE with every code, one upstream socket per session, GSO and GRO with `--offload`) on `nish/net/http3-server` and `nish/net/webtransport`, the identity (a 13-day self-signed P-256 certificate and its hash file, or `--cert`/`--key` re-read every 60 s) and main.rs's command line and environment, with a clean stop on SIGINT and SIGTERM | **NAT rebinding**: the QUIC server does not follow a peer's address change, so a client whose NAT rebinds loses its session. DATA down is at most 1,164 bytes until QUIC sends packets past 1,200; no DNS, so a grant names an address: the cs port, `boot-check`'s wire pass and `bench:offload` |
+| **A1** | #488 | `examples/relay/` (not a `std/` module): `frame` and `grant` ported from cs's `frame.rs` and `grant.rs` with their fixtures, a hand-written JSON reader for the grant (N11's phase-one case), the per-peer table, `Relay` (the session flow, both caps, the rate cap, the hello and idle timeouts, STATS, CLOSE with every code, one upstream socket per session, GSO and GRO with `--offload`) on `nish/net/http3-server` and `nish/net/webtransport`, the identity (a 13-day self-signed P-256 certificate and its hash file, or `--cert`/`--key` re-read every 60 s) and main.rs's command line and environment, with a clean stop on SIGINT and SIGTERM | DATA down is at most 1,164 bytes until QUIC sends packets past 1,200; no DNS, so a grant names an address: the cs port, `boot-check`'s wire pass and `bench:offload` |
 | **S2** (interop job) | #487 | No module: `.github/workflows/interop.yml` and `tests/interop/` run the quic-interop-runner (quic-go, ngtcp2), `h2spec`, `curl --http3` and `--http2`, and Chromium through Playwright over WebTransport against `tests/link/net_interop_server`, a server on every carrier from one loop whose smoke checks run in `npm test`; `h2spec` 146 of 146 | Autobahn's server cases for H1. Three `std/` defects were found here and fixed: the pacer's timer (#490), the minted certificate's extensions (#491), and a lost first flight resent one datagram per probe timeout (#514)
 
 K1 and K4 did not wait for their **Needs** column: they export no enum or
@@ -1096,7 +1101,7 @@ a named part of cs that cannot be written without it.
 | **N10.** `sort`, `toFixed`, and JavaScript's `String(x)` for `f64`; `split` | shader text, option parsers | `std` only |
 | **N11.** Typed JSON over a `std/json` tokenizer and writer | tokens, the match report, `/matches` | A1 needs a small hand-written case of this for the grant's payload, in phase one. **The writer is built** (#571): `JsonWriter` in `nish/json` writes any value into a caller-owned `u8[]`, allocating nothing per call except an `f64`'s digits (a temporary string the call gives back before it returns), byte for byte what `JSON.stringify` writes, and reports misuse and a full buffer through a sticky `JSON_WRITE_*` code (`tests/link/std_json_writer`, held to `JSON.stringify` under Node by `tests/run.js`; `bench/json-writer`). **The tokenizer is built** (#572): `nish/json-tokenizer` validates RFC 8259 JSON in a window of a `u8[]` with caller-owned buffers, enforced depth, string, number and total limits, and JSONTestSuite's `y_` and `n_` verdicts ([`docs/security/json.md`](security/json.md)). **Typed decoding is built** (#573), and N11 with it: `jsonDecode` and `jsonEncode` in `nish/json-typed` read one JSON object into a class and write it back, with code the compiler writes at each call from the class's fields, refusing unknown, duplicate, missing and mistyped fields with sticky codes and reusing a decoded object's storage ([`docs/LANGUAGE.md`](LANGUAGE.md#typed-json-nishjson-typed), `tests/link/std_json_typed`) |
 | **N12.** Non-blocking `spawn`, `kill` and `waitpid`; available parallelism and total memory | the master | runtime-os. **Built**: `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory`, globals and `nish:process` exports, in `runtime/runtime-os.c` ([`docs/LANGUAGE.md`](LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory); `tests/cases/os_spawn`, `os_kill`, `os_wait`, `os_cpu`, `os_memory`) |
-| **N13.** The client role of T1, against the web PKI | the account service: Postgres over TLS, HTTPS to Resend | Replaces the old plan's FFI route. S1 makes the C library unnecessary |
+| **N13.** The client role of T1, against the web PKI | the account service: Postgres over TLS, HTTPS to Resend | **Built (#480):** `nish/net/tls/client` and `nish/net/tls/record-client` speak the client side of TLS 1.3, `nish/net/tls/verify` checks the server's chain against the system's trust store, and `tlsConnect` in `nish/net/tls-tcp` puts it on TCP ([guide](guide/using-nish/tls-client.md), [`docs/security/tls.md`](security/tls.md)). It replaces the old plan's FFI route; S1 made the C library unnecessary. Postgres over TLS still waits on a carrier for `std/net/postgres.ts` (WP39) |
 | **N14.** Discriminated unions | the protocol's message families | Optional. A class with an enum tag and nullable payloads works until then |
 
 A server whose program is not the relay needs more than this list:
@@ -1111,11 +1116,15 @@ separate overlap flag, is withdrawn in its favour.
 
 ## 9. Not in the list, on purpose
 
-- **`async` and `await`.** N5's loop is the server's answer, as wp24 argued; the
-  browser's is N9's host-driven half.
+- **`async` and `await`.** Not for the relay: N5's loop is its answer, as
+  wp24 argued, and the browser's is N9's host-driven half. The language has
+  since gained `async` functions
+  ([LANGUAGE.md](LANGUAGE.md#async-functions-async-and-await)), from
+  [wp49](wp49-async-server.md), which reopened wp24's refusal for servers in
+  general; nothing in this note's stack depends on them.
 - **Closures and inheritance.** A protocol state machine is a struct and a
   `switch`, and the stack is written that way throughout.
 - **HTTP/2 WebTransport, 0-RTT and migration.** §3 says why each is out of
-  phase one. None is refused, and each can come later on its own measurement.
+  phase one; a client's NAT rebinding is followed all the same (#1210). None is refused, and each can come later on its own measurement.
 - **A second implementation of anything the game computes.** The relay is
   first precisely because it computes nothing the game does.

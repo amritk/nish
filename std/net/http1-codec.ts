@@ -1597,7 +1597,7 @@ const http1HexDigits = (len: i32): i32 => {
  * with `out` untouched. An empty window writes nothing and answers `at`,
  * because a chunk of size zero ends the body. A window outside `data` panics.
  */
-export const http1WriteChunk = (out: u8[], at: i32, data: u8[], off: i32, len: i32): i32 => {
+export const http1WriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i32, len: i32): i32 => {
   const size: i32 = toI32(data.length)
   if (off < 0 || len < 0 || off > size || len > size - off) {
     panic("http1WriteChunk: the window is outside the buffer")

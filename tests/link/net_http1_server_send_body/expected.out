@@ -13,12 +13,19 @@ PASS  a chunked sendBody copies as write does
 PASS  with the same bytes on the wire
 PASS  a HEAD's sendBody takes everything and sends nothing
 PASS  with the same bytes on the wire
+PASS  a 204's sendBody takes everything and sends nothing
+PASS  with the same bytes on the wire, and no body
+PASS  a readonly body is sent whole, nothing queued
+PASS  with the bytes write sends
+PASS  a readonly chunked body is copied as write copies it
+PASS  with the same bytes on the wire
 PASS  the first response is queued when the second's body is handed over
 PASS  sendBody sends it, the second head and the body together
 PASS  both pipelined exchanges complete
 PASS  and the client reads the same bytes, in order
 PASS  after respondEncoded, mode 0 answers H1_CLOSED
 PASS  after respondEncoded, mode 1 answers H1_CLOSED
+PASS  the compressed responses complete with the same bytes on the wire
 PASS  a body past the length is H1_INVALID, as write's
 PASS  and write's
 PASS  an empty body takes nothing
@@ -36,4 +43,4 @@ PASS  a sendBody after it is H1_CLOSED
 PASS  a connection with no socket has fd -1
 PASS  its sendBody copies as write does
 PASS  the same bytes queued
-http1 sendBody: 38 passed, 0 failed, 0 skipped
+http1 sendBody: 45 passed, 0 failed, 0 skipped
