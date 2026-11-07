@@ -29832,7 +29832,7 @@ if (!only || "host-import".includes(only)) {
       // a directory without main.ts, and with the DOM library a page has.
       const pageDir = at("page")
       fs.mkdirSync(pageDir)
-      for (const name of ["host.ts", "main.d.ts", "page.ts", "page_missing.ts", "page_kinds.ts"]) {
+      for (const name of ["host.ts", "main.d.ts", "page.ts", "page-missing.ts", "page-kinds.ts"]) {
         fs.copyFileSync(at(name), path.join(pageDir, name))
       }
       const typeCheckPage = (name, files) => {
@@ -29852,16 +29852,16 @@ if (!only || "host-import".includes(only)) {
       }
       const page = typeCheckPage("page", ["host.ts", "main.d.ts", "page.ts"])
       check("host-import: the host module and a page loading the program through main.d.ts type-check under tsc --strict", page.ok, page.output)
-      const short = typeCheckPage("missing", ["host.ts", "main.d.ts", "page_missing.ts"])
+      const short = typeCheckPage("missing", ["host.ts", "main.d.ts", "page-missing.ts"])
       check(
         "host-import: tsc refuses an import object missing one of the host module's functions",
-        !short.ok && /page_missing\.ts.*TS2739|is missing the following properties/.test(short.output),
+        !short.ok && /page-missing\.ts.*TS2739|is missing the following properties/.test(short.output),
         short.output
       )
-      const kinds = typeCheckPage("kinds", ["host.ts", "main.d.ts", "page_kinds.ts"])
+      const kinds = typeCheckPage("kinds", ["host.ts", "main.d.ts", "page-kinds.ts"])
       check(
         "host-import: tsc refuses a handle of one kind where a host function takes another",
-        !kinds.ok && kinds.output.includes("page_kinds.ts") && kinds.output.includes('"socket"'),
+        !kinds.ok && kinds.output.includes("page-kinds.ts") && kinds.output.includes('"socket"'),
         kinds.output
       )
     }

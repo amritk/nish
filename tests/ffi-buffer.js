@@ -311,9 +311,11 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
   }
 
   // WP40 B1.2 on wasm (docs/wp40-ffi-buffers-handles.md §5). A `--target
-  // wasm32` build of ffi_buffer_write assembles, and llc reads its data pointer
-  // as a 32-bit load at the header's offset 16 and its `n <= len` as an i64
-  // compare: the header is `{i64 len, i64 cap, i8* data}` on both targets. The
+  // wasm32-wasi` build of ffi_buffer_write assembles, and llc reads its data
+  // pointer as a 32-bit load at the header's offset 16 and its `n <= len` as an
+  // i64 compare: the header is `{i64 len, i64 cap, i8* data}` on both targets.
+  // A plain `--target wasm32` build is freestanding and links no C, so it
+  // refuses the `declare function` and names the host module (WP50 S2). The
   // freestanding `--profile wasm` route links IR compiled for the host, so it is
   // held separately: linked against a stub `write` with B1's own signature, the
   // symbol resolves, nothing is imported, and `main` hands the stub exactly the
@@ -324,7 +326,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.mkdirSync(wasmBufDir, { recursive: true })
     const bufCase = path.join(root, "tests", "cases", "ffi_buffer_write.ts")
     const w32Dir = path.join(wasmBufDir, "wasm32")
-    const w32 = spawnSync(nish, [bufCase, "--target", "wasm32", "-o", `${w32Dir}${path.sep}`], {
+    const w32 = spawnSync(nish, [bufCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -340,13 +342,26 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       "ffi_buffer: a --target wasm32 build passes llvm-as, and llc reads the data pointer as an i32.load at offset 16 and the count check as i64.le_u",
       w32As.status === 0 &&
         w32Llc.status === 0 &&
-        w32Ir.includes('target triple = "wasm32-unknown-unknown"') &&
+        w32Ir.includes('target triple = "wasm32-wasi"') &&
         w32Ir.includes("declare i64 @write(i32, i8*, i64)") &&
         w32Ir.includes("icmp ule i64 3, ") &&
         /\.functype\s+write \(i32, i32, i64\) -> \(i64\)/.test(asm) &&
         (asm.match(/i32\.load\s+16\n/g) ?? []).length >= 2 &&
         /i64\.le_u/.test(asm),
       shown(w32Llc)
+    )
+    const free = spawnSync(nish, [bufCase, "--target", "wasm32", "-o", path.join(wasmBufDir, "refused.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "ffi_buffer: a freestanding --target wasm32 build refuses `declare function write` and names the host module",
+      free.status === 1 &&
+        free.stderr.includes(
+          "`declare function write` declares a C function, and a freestanding wasm build links no C"
+        ) &&
+        free.stderr.includes("(`--host`)"),
+      shown(free)
     )
 
     if (has("wasm-ld")) {

@@ -12,8 +12,10 @@ import { spawnSync } from "node:child_process"
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, buildDir, wasiSysroot }) => {
-  // WP40 H1.2 on wasm. A `--target wasm32` build of ffi_handle_file assembles,
-  // and llc gives its `counted_fclose` the handle's pointer as an i32. The `--profile wasi` route
+  // WP40 H1.2 on wasm. A `--target wasm32-wasi` build of ffi_handle_file
+  // assembles, and llc gives its `counted_fclose` the handle's pointer as an
+  // i32; a freestanding `--target wasm32` build links no C and refuses its
+  // `declare function`s (WP50 S2). The `--profile wasi` route
   // links IR compiled for the host with runtime.c and the case's own driver
   // against wasi-libc, and runs it under Node's WASI: each `File` reads from
   // `fmemopen` there, and the run prints the native expected output, so every
@@ -25,7 +27,7 @@ export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.mkdirSync(wasmDir, { recursive: true })
     const handleCase = path.join(root, "tests", "cases", "ffi_handle_file.ts")
     const w32Dir = path.join(wasmDir, "wasm32")
-    const w32 = spawnSync(nish, [handleCase, "--target", "wasm32", "-o", `${w32Dir}${path.sep}`], {
+    const w32 = spawnSync(nish, [handleCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -41,12 +43,25 @@ export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, 
       "ffi_handle: a --target wasm32 build passes llvm-as, and llc calls `counted_fclose` with the handle's pointer as an i32",
       w32As.status === 0 &&
         w32Llc.status === 0 &&
-        w32Ir.includes('target triple = "wasm32-unknown-unknown"') &&
+        w32Ir.includes('target triple = "wasm32-wasi"') &&
         w32Ir.includes("declare i32 @counted_fclose(i8*)") &&
         w32Ir.includes("call i32 @counted_fclose(i8* ") &&
         /\.functype\s+counted_fclose \(i32\) -> \(i32\)/.test(asm) &&
         /call\s+counted_fclose\n/.test(asm),
       shown(w32Llc)
+    )
+    const free = spawnSync(nish, [handleCase, "--target", "wasm32", "-o", path.join(wasmDir, "refused.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "ffi_handle: a freestanding --target wasm32 build refuses `declare function counted_fclose` and names the host module",
+      free.status === 1 &&
+        free.stderr.includes(
+          "`declare function counted_fclose` declares a C function, and a freestanding wasm build links no C"
+        ) &&
+        free.stderr.includes("(`--host`)"),
+      shown(free)
     )
 
     if (wasiSysroot && has("wasm-ld")) {
