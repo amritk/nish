@@ -1,0 +1,13 @@
+-18
+slice out of range: [2, 5) of length 4
+firstPastEnd exit 1
+slice out of range: [5, 7) of length 6
+secondPastEnd exit 1
+slice out of range: [-1, 0) of length 6
+secondNegative exit 1
+sendmsg: 2 iovecs, nosignal 1, [+1, 4), [+2, 3)
+answer 7
+sendmsg: 2 iovecs, nosignal 1, [+0, 2147483642), [+0, 5)
+answer 2147483647
+sendmsg: 2 iovecs, nosignal 1, [+0, 2147483647), [+0, 0)
+answer 2147483647

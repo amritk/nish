@@ -198,6 +198,33 @@ The ids are plain `i32`s you pass straight to the call. They are not module
 constants, so `const MODE = NET_TCP_QUICKACK;` at the top of a module is an
 error; write the id where you call `netSetOption`.
 
+## Two buffers in one write: `netWrite2`
+
+A response is often a header and a body in two arrays. `netWrite2(fd, a,
+aOff, aLen, b, bOff, bLen)` sends `a`'s `[aOff, aOff + aLen)` and then `b`'s
+`[bOff, bOff + bLen)` in one system call, without copying them into one
+buffer first:
+
+```ts nish:ok
+import { netWrite2 } from "nish:net";
+
+// The head, then the body, in one `sendmsg`. The answer is how many bytes
+// went, which can be fewer than both: send the rest when the socket is
+// writable again.
+export const sendFramed = (fd: i32, head: readonly u8[], body: readonly u8[]): i32 =>
+  netWrite2(fd, head, 0, head.length, body, 0, body.length);
+```
+
+- **The answer counts bytes, as `netWrite`'s does.** A short write counts
+  what went, the head's bytes first; resume from there. `-11` (`EAGAIN`)
+  means the socket's send buffer is full, and `-32` (`EPIPE`) a peer that has
+  gone, never a `SIGPIPE`.
+- **Both ranges are checked before the call**, the first one first, and a
+  range outside its array stops the program with `slice out of range`, as
+  `netWrite`'s does. Either range may be empty.
+- **Native only.** A wasm build refuses it, and under Node it throws, as every
+  `nish:net` call does.
+
 ## A connection's segment size: `netMss`
 
 `netMss(fd)` answers how many bytes of payload one TCP segment on a connected

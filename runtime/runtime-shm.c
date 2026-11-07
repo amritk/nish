@@ -52,12 +52,24 @@
  * answer -95, as `setIdlePriority` does on Darwin, and on wasi creating or
  * opening a region answers -95 too.
  *
- * Results are 0 or a count on success and a negated errno on failure. Nothing
- * here allocates: the table is a fixed array, and a mapping is the kernel's. */
+ * **A window** (`nishshm_lend`) is a `u8[]` whose data is a range of the
+ * mapping, so a program writes the region with `copyBytes` and index stores
+ * and no copy. Its header is a record of this file's, malloc'd (never the
+ * arena: a `region()` would free it under the program) and never freed: the
+ * program may keep the array past `nishshm_give_back` and `nishshm_close`,
+ * and both leave it a header of length 0 and no data, so an index after them
+ * is a bounds panic, not a read of an unmapped page. A loop lends again with
+ * the window it gave back as `reuse`, which re-points that header and takes
+ * no memory.
+ *
+ * Results are 0 or a count on success and a negated errno on failure. The
+ * table is a fixed array, a mapping is the kernel's, and a window's header is
+ * the one allocation. */
 
 #define _GNU_SOURCE /* `syscall`, for the futex */
 #include <errno.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "nish.h"
@@ -90,10 +102,20 @@
 /* The longest name. Darwin's shm_open takes 31 bytes with its leading '/'. */
 #define NISHSHM_NAME_MAX 30
 
+/* A window `lend` made: a `u8[]` header whose data is the mapping. The header
+   comes first, so the program's array pointer is the record's. */
+typedef struct nishshm_window {
+  nish_array hdr;
+  uint8_t *lent;               /* `hdr.data` as lent; NULL once given back */
+  uint64_t lent_len;           /* the length lent */
+  struct nishshm_window *next; /* the region's next window */
+} nishshm_window;
+
 typedef struct nishshm_region {
   uint8_t *base;  /* the mapping, NULL while the slot is free */
   uint64_t size;  /* its length in bytes */
   int32_t gen;    /* the high bits of the slot's handle: 0 never used, 32767 retired */
+  nishshm_window *windows; /* every window this mapping lent, given back or not */
 } nishshm_region;
 
 /* NULL until this thread first maps a region. Slot 0 is never used, so no
@@ -312,6 +334,65 @@ void nishshm_write(int32_t h, int32_t at, const uint8_t *src, uint64_t n, uint64
   memcpy(dst, src + off, len);
 }
 
+/* -- windows ----------------------------------------------------------------- */
+
+/* The record of `a` among the region's windows, or NULL. A pointer walk, so a
+   header no window has is never read as one. */
+static nishshm_window *window_of(nishshm_region *r, const nish_array *a) {
+  nishshm_window *w = r->windows;
+  while (w != NULL && &w->hdr != a) w = w->next;
+  return w;
+}
+
+/* A `u8[]` of `len` bytes whose data is the region's bytes at `at`, checked as
+   a byte copy's window is. `reuse` NULL takes a new header, which is malloc'd
+   and never freed: the program may hold it after any giveBack or close, so it
+   must stay a header, one that reads as empty. Otherwise `reuse` must be a
+   window this region lent and was given back, and is re-pointed. */
+nish_array *nishshm_lend(int32_t h, int32_t at, int32_t len, nish_array *reuse) {
+  nishshm_region *r = region_checked(h);
+  uint8_t *p = window(h, at, (uint64_t)(int64_t)len, 0, (uint64_t)(int64_t)len);
+  nishshm_window *w;
+  if (reuse != NULL) {
+    w = window_of(r, reuse);
+    if (__builtin_expect(w == NULL || w->lent != NULL, 0))
+      shm_fail("reuse of length ", (int64_t)reuse->len,
+               " is not a window this region lent and was given back", 0, NULL);
+  } else {
+    w = (nishshm_window *)malloc(sizeof *w);
+    if (__builtin_expect(w == NULL, 0))
+      shm_fail("lend of ", len, " bytes found no memory for the window's header", 0, NULL);
+    w->next = r->windows;
+    r->windows = w;
+  }
+  w->hdr.len = w->hdr.cap = (uint64_t)len;
+  w->hdr.data = (char *)p;
+  w->lent = p;
+  w->lent_len = (uint64_t)len;
+  return &w->hdr;
+}
+
+/* Empties a lent window and answers its length. A pop or a shorter `length`
+   keeps the window; a push that moved its data took it out of the region, and
+   that, a second giveBack, or another region's window, panics. */
+int32_t nishshm_give_back(int32_t h, nish_array *a) {
+  nishshm_region *r = region_checked(h);
+  nishshm_window *w = window_of(r, a);
+  if (__builtin_expect(w == NULL || w->lent == NULL, 0))
+    shm_fail("window of length ", (int64_t)a->len,
+             " is not lent by this region: it was given back, or another region lent it", 0,
+             NULL);
+  if (__builtin_expect((uint8_t *)a->data != w->lent || a->len > w->lent_len, 0))
+    shm_fail("window of length ", (int64_t)a->len,
+             " is no longer the region's bytes: a push moved it, so it cannot be given back", 0,
+             NULL);
+  int32_t n = (int32_t)a->len;
+  a->len = a->cap = 0;
+  a->data = NULL;
+  w->lent = NULL;
+  return n;
+}
+
 /* -- regions ----------------------------------------------------------------- */
 
 int32_t nishshm_size(int32_t h) { return (int32_t)region_checked(h)->size; }
@@ -486,6 +567,16 @@ int32_t nishshm_unlink(const char *name) {
 int32_t nishshm_close(int32_t h) {
   nishshm_region *r = region_of(h);
   if (r == NULL) return -9;
+  /* Every window still on the mapping reads as empty before the pages go: one
+     a push moved off it is the program's array now, and is left alone. */
+  for (nishshm_window *w = r->windows; w != NULL; w = w->next) {
+    if (w->lent != NULL && (uint8_t *)w->hdr.data == w->lent) {
+      w->hdr.len = w->hdr.cap = 0;
+      w->hdr.data = NULL;
+    }
+    w->lent = NULL;
+  }
+  r->windows = NULL;
   munmap(r->base, (size_t)r->size);
   r->base = NULL;
   r->size = 0;

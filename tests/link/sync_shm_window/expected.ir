@@ -1,0 +1,4 @@
+declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*)
+call %struct.nish_array* @nishshm_lend(i32 %h, i32 %at, i32 %len, %struct.nish_array* %reuse)
+declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull)
+call i32 @nishshm_give_back(i32 %h, %struct.nish_array* %window)

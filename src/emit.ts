@@ -34,6 +34,8 @@ import { emitWipeBody } from "./emit-secret"
 import { SECRET_WIPE, secretRoleOf } from "./secret"
 import { emitRegionBody } from "./emit-region"
 import { isRegionIntrinsic, regionRoleIn } from "./region-check"
+import { emitShmWindowBody } from "./emit-shm-window"
+import { isShmWindowIntrinsic, shmWindowRole } from "./shm-window"
 import { emitJsonParts, emitJsonRoute, JsonPart } from "./emit-json"
 import {
   ASYNC_AWAIT,
@@ -679,6 +681,8 @@ export class Emitter {
       emitWipeBody(this, sig)
     } else if (isRegionIntrinsic(this.program, sig)) {
       emitRegionBody(this, sig, regionRoleIn(this.program, sig)) // WP46
+    } else if (isShmWindowIntrinsic(this.program, sig)) {
+      emitShmWindowBody(this, sig, shmWindowRole(this.program, sig))
     } else if (isLockMethod(sig)) {
       emitLockBody(this, sig) // WP29 P3
     } else if (isChannelSend(sig)) {

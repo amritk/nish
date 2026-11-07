@@ -1,0 +1,33 @@
+PASS  a window has the length lent
+PASS  and starts as the region's bytes, zeroed
+PASS  copyBytes into it writes the region
+PASS  another process reads what it wrote
+PASS  it sees a second mapping's write
+PASS  and a second mapping sees its store
+PASS  close the second mapping
+PASS  giveBack answers the length
+PASS  and empties the window
+PASS  a window given back lends again
+PASS  in the same header
+PASS  at its new range
+PASS  an empty window lends
+PASS  and gives back
+PASS  given-back: the child exits 1
+PASS  given-back: and says why
+PASS  closed: the child exits 1
+PASS  closed: and says why
+PASS  pushed: the child exits 1
+PASS  pushed: and says why
+PASS  outside: the child exits 1
+PASS  outside: and says why
+PASS  twice: the child exits 1
+PASS  twice: and says why
+PASS  reuse-lent: the child exits 1
+PASS  reuse-lent: and says why
+PASS  loop-given-back: the child exits 1
+PASS  loop-given-back: and says why
+PASS  loop-closed: the child exits 1
+PASS  loop-closed: and says why
+PASS  unlink the region
+PASS  close the region
+nish/sync/shm windows: 32 passed, 0 failed, 0 skipped

@@ -1,0 +1,2 @@
+declare noundef i32 @nish_net_write2(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef)
+call i32 @nish_net_write2(i32 %45, %struct.nish_array* %46, i64 1, i64 4, %struct.nish_array* %47, i64 2, i64 3)
