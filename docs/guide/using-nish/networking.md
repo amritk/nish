@@ -602,6 +602,17 @@ set: by a Handshake packet from the client, or by a Retry token when the
 server's config turns `retry` on. The relay example in `examples/relay` counts
 a client against its per-address cap only from that point.
 
+A QUIC client's address can change mid-connection, as a NAT rebinding changes
+its port. After the handshake, `Http3Server` follows it: the next packet from
+the new address moves the connection there, and the server sends a
+PATH_CHALLENGE the client must answer (RFC 9000 §9). Until the client answers,
+the server sends the new address at most three times what came from it, and
+with no answer it goes back to the last address that was proven. A forged
+source address can borrow a little traffic this way, never the connection.
+`Http3Server.addresses[slot]` is where the slot sends now, so it changes with
+the client: a cap keyed on the address a session started from keeps its own
+copy, as the relay does.
+
 ## Under Node
 
 A program that uses `nish:net` type-checks with `npm run check`, but it has no

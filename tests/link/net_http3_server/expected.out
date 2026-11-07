@@ -85,4 +85,10 @@ PASS  closed after its GOAWAY, its slot is free and still built
 PASS  a second client takes that slot
 PASS  a client taking the slot released keeps 0 bytes in the arena: the re-accept builds nothing
 PASS  while one past the high-water mark builds the next slot and keeps it
-http3 server: 87 passed, 0 failed, 0 skipped
+PASS  before the rebinding, the first response reaches the client's first port
+PASS  after the client's port changes, the next response reaches the new port
+PASS  the slot's address follows the client to it
+PASS  and the server validates the new port with a PATH_CHALLENGE sent there (§8.2)
+PASS  answered, the new port carries the next request and its response
+PASS  and nothing after the rebinding went to the first port
+http3 server: 93 passed, 0 failed, 0 skipped

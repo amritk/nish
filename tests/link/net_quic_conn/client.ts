@@ -124,6 +124,11 @@ export class QcClient {
   /** Every datagram the server sent, as sent. */
   datagrams: u8[][];
   view: ClientView;
+  /**
+   * The 18-byte `nish:net` address the client's datagrams come from, which
+   * `qcExchange` hands the server; empty, the default, for none at all.
+   */
+  address: u8[];
 
   constructor(suite: i32, scid: u8[]) {
     this.suite = suite;
@@ -138,6 +143,7 @@ export class QcClient {
     this.appRanges = [];
     this.longPayloads = [];
     this.datagrams = [];
+    this.address = [];
     this.appWriteSecret = [];
     this.appReadSecret = [];
     this.token = [];
@@ -413,7 +419,7 @@ export const qcReceive = (c: QcClient, datagram: u8[]): i32 => {
  * opens every datagram the server answers. Answers how many it answered.
  */
 export const qcExchange = (conn: QuicConnection, c: QcClient, datagram: u8[]): i32 => {
-  conn.receive(datagram, c.now);
+  conn.receiveWindowFrom(datagram, n32(0), toI32(datagram.length), c.address, c.now);
   const input: u8[] | null = conn.signatureInput();
   if (input !== null) {
     const key: Secret<u8[]> = secret(leafPrivate());

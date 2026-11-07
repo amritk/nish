@@ -289,7 +289,11 @@ the server's flight hold a slot each until the hello deadline, and none of
 the address's places (`net_relay_forged`, "they hold no place of the address
 and no global place, and none is shed", "two clients from that address then
 open sessions under its cap of two"); a validated client past the cap is
-still refused ("a third validated client from it is refused").
+still refused ("a third validated client from it is refused"). After the handshake the slot's
+address follows the client when its NAT rebinds (QUIC-11 in
+[quic.md](quic.md)), first to an address not yet validated; the relay keeps
+the address it counted the session under, so a move neither frees nor takes a
+place.
 
 The trade-off: before validation nothing caps an address. With `retry` off,
 one real address, forging nothing, can open every slot of the pool

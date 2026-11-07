@@ -207,4 +207,11 @@ PASS  keep no arena memory in the relay
 PASS  a datagram to the upstream socket from another address is dropped and counted
 PASS  a stream the client opens is reset, and the session goes on
 PASS  a plain request is answered 404
-relay: 209 passed, 0 failed, 0 skipped
+PASS  before the rebinding, the session is counted against 127.0.0.1
+PASS  after the client moves to 127.0.0.2, its DATA still reaches the game server
+PASS  the relay's QUIC validated the new address with a PATH_CHALLENGE the client answered
+PASS  and the game server's reply reaches the client at its new address
+PASS  nothing after the rebinding went to the old address
+PASS  the per-peer table still counts the session against 127.0.0.1, where it was placed, and nothing against 127.0.0.2
+PASS  when the session ends, its place goes back under 127.0.0.1: neither address holds one, and no row is left
+relay: 216 passed, 0 failed, 0 skipped
