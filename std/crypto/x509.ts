@@ -323,10 +323,13 @@ export class X509Certificate {
 
 /** One element's identifier octet and where its contents lie: `der[start .. end)`. */
 class X509DerElement {
+  /** @internal */
   tag: i32
-  /** Where the identifier octet is, so the whole element can be copied. */
+  /** @internal Where the identifier octet is, so the whole element can be copied. */
   at: i32
+  /** @internal */
   start: i32
+  /** @internal */
   end: i32
 
   constructor(tag: i32, at: i32, start: i32, end: i32) {
@@ -755,8 +758,11 @@ const x509DerHashAlgorithm = (der: u8[], start: i32, end: i32): i32 => {
 
 /** The signature algorithm `X509Certificate` reports, and for RSASSA-PSS its hash and salt length. */
 class X509SigAlg {
+  /** @internal */
   alg: i32 = 0
+  /** @internal */
   hash: i32 = 0
+  /** @internal */
   salt: i32 = 0
 }
 

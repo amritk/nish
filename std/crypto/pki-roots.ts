@@ -89,8 +89,11 @@ export const PKI_SYSTEM_DIR: string = "/etc/ssl/certs"
 
 /** What one load has read so far, and the DER already kept. */
 class PkiRootsLoad {
+  /** @internal */
   out: PkiRoots
+  /** @internal */
   seen: Set<string>
+  /** @internal */
   files: i32 = 0
 
   constructor() {

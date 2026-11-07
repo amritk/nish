@@ -155,7 +155,7 @@ const PKI_AT_ROOT: i32 = 1000
 export class PkiTrustStore {
   /** Every root, in the order given, no two with the same DER. */
   roots: X509Certificate[]
-  /** The roots under each subject, keyed by the subject's DER in hex. */
+  /** @internal The roots under each subject, keyed by the subject's DER in hex. */
   bySubject: Map<string, X509Certificate[]>
 
   constructor() {
@@ -179,18 +179,25 @@ export class PkiResult {
 
 /** One call's search: the pool, the host, the path so far, and what has been spent. */
 class PkiSearch {
+  /** @internal */
   store: PkiTrustStore
+  /** @internal */
   pool: X509Certificate[]
+  /** @internal */
   path: X509Certificate[]
-  /** The host as a DNS name, normalised, or `""` when it is an address. */
+  /** @internal The host as a DNS name, normalised, or `""` when it is an address. */
   host: string
+  /** @internal */
   nowMs: i64 = 0
+  /** @internal */
   signatures: i32 = 0
+  /** @internal */
   nameChecks: i32 = 0
-  /** The reason of the attempt nearest a root, and how near it got. */
+  /** @internal The reason of the attempt nearest a root, and how near it got. */
   bestCode: i32 = 0
+  /** @internal */
   bestScore: i32 = -1
-  /** Whether a bound was spent, which ends the search. */
+  /** @internal Whether a bound was spent, which ends the search. */
   spent: boolean = false
 
   constructor(store: PkiTrustStore, pool: X509Certificate[], host: string, nowMs: i64) {
