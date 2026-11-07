@@ -379,7 +379,14 @@ export class Cli {
   }
 
   /** A new child of `parent`; `call` names the declaration in a panic. */
-  private addCommand(call: string, parent: i32, name: string, id: i32, description: string, group: boolean): i32 {
+  private addCommand(
+    call: string,
+    parent: i32,
+    name: string,
+    id: i32,
+    description: string,
+    group: boolean
+  ): i32 {
     const p = this.checkCommand(call, parent)
     if (!isWord(name)) {
       panic(`cli-args: ${call}: '${name}' is not a command name`)
