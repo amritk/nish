@@ -46,7 +46,7 @@ const STAGES = [
     "accept/epoll dispatch",
     /epoll|accept|nish_poll|nish_run|Http1Server\.(next|serve|poll|run|wait|settle|expire)|ConduitWorker\.(drive|run|ready|pump)|clock_gettime/,
   ],
-  ["recv", /netRead|recv|inputRoom|Http1Connection\.(fill|read|lend)/i],
+  ["recv", /netRead|recv|inputRoom|Http1Connection\.(fill|read|lend|feed)/i],
   [
     "respond + sendBody",
     /respond|sendBody|netWrite|writev|sendto|__send|http1(Write|Put)|Http1Server\.send|Http1OutputPool|Http1Connection\.(write|end|flush)|answer\b|ConduitWorker\.answer/,
@@ -54,7 +54,7 @@ const STAGES = [
   ["head parse", /http1[A-Z]|Http1Parser|Http1Connection\.(parse|head|header)/],
   [
     "onHead + Jwt.verify",
-    /ConduitWorker\.(onHead|onEnd|decodeInto|query|planKind|fieldOf|store|parseTags)|JsonTokenizer|isText|bytesAre|Jwt|jwt|hmac|Hmac|sha256|Sha256|base64|Base64/,
+    /ConduitWorker\.(onHead|onEnd|decodeInto|query|planKind|fieldOf|store|parseTags)|ConduitReq\.|JsonTokenizer|isText|bytesAre|Jwt|jwt|hmac|Hmac|sha256|Sha256|base64|Base64/,
   ],
   [
     "ring push",
@@ -289,6 +289,44 @@ for (const m of machines) {
         say();
       }
     }
+  }
+
+  // Step 2 on a PMU: where the cycles go, by symbol, from the perf record rounds.
+  const recs = rounds
+    .filter((r) => r.perf_record?.top?.length)
+    .sort((a, b) => a.arm.localeCompare(b.arm));
+  if (recs.length) {
+    say(
+      `Step 2 by sampling, ${recs[0].perf_record.seconds} s of \`perf record -g -F 999\` on the HTTP workers (hardware cycles), self time by symbol. Kernel symbols print as addresses: the runner's kptr_restrict hides them, and the bench does not change it.`,
+    );
+    say();
+    const n = 15;
+    const user = recs.map((r) =>
+      r.perf_record.top.filter((t) => t.sym.startsWith("[.]")).slice(0, n),
+    );
+    say(
+      table(
+        recs.flatMap((r) => [`${r.arm} symbol`, "%", "stage"]),
+        Array.from({ length: n }, (_, i) =>
+          user.flatMap((u) => {
+            const t = u[i];
+            if (!t) return ["", "", ""];
+            const sym = t.sym.slice(4);
+            return [sym, f2(t.pct), stageOf(sym)];
+          }),
+        ),
+      ),
+    );
+    say();
+    say(
+      `Kernel ([k]) share of the top 60 symbols: ${recs
+        .map(
+          (r) =>
+            `${r.arm} ${f1(r.perf_record.top.filter((t) => t.sym.startsWith("[k]")).reduce((a, t) => a + t.pct, 0))}%`,
+        )
+        .join(", ")}.`,
+    );
+    say();
   }
 
   // Step 4: kernel time by syscall, from the tracing rounds.
