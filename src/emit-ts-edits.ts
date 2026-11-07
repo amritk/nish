@@ -198,6 +198,43 @@ export class Walk {
    */
   stubbed: boolean[]
   /**
+   * The nodes inside the instance being walked whose text the records row
+   * chose from the instance's types, each with that text, in walk order: where
+   * two instances that disagree are refused.
+   */
+  choiceNodes: Node[]
+  choiceTexts: string[]
+  /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
+  helpers: StringSet
+  /** Every width type the module spells, in first-use order. */
+  widths: StringSet
+  /** Every identifier the module spells but an ambient call's callee: the names a helper must not be imported as. */
+  names: StringSet
+  /**
+   * The local names this module imports that name only a type: an interface
+   * or a type alias. Node's type stripping erases an `import` element only
+   * when it says `type`, so each is written with one.
+   */
+  typeNames: StringSet
+  /** The import specifiers the driver rewrites, and what each becomes. */
+  specifierFrom: string[]
+  specifierTo: string[]
+  /** The nodes the module is refused at, with the message for each. */
+  refusedAt: Node[]
+  refusals: string[]
+  /** Each declaration `stub` marked, by node id, and the name it is warned about by. */
+  stubIds: i32[]
+  stubNames: string[]
+  /** The declarations written with a throwing body while `warnStubs` held, with the warning for each. */
+  stubbedAt: Node[]
+  stubWarnings: string[]
+  /** An internal error the walk ran into, or the empty string. */
+  failure: string
+  /** The statements hoisted out of the current statement so far, in order. */
+  preludes: string[]
+  /** The next number `temporary` tries. */
+  temps: i32
+  /**
    * A body no instance reaches is being walked. Its nodes have no types, so
    * the rows that need none rewrite it as they would any code and the rest
    * leave it as written; a copy or a zero that an element type would decide
@@ -229,45 +266,8 @@ export class Walk {
    * stub, since the text JavaScript's meaning gives it may not be native's.
    */
   typeMiss: boolean
-  /**
-   * The nodes inside the instance being walked whose text the records row
-   * chose from the instance's types, each with that text, in walk order: where
-   * two instances that disagree are refused.
-   */
-  choiceNodes: Node[]
-  choiceTexts: string[]
-  /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
-  helpers: StringSet
-  /** Every width type the module spells, in first-use order. */
-  widths: StringSet
   /** Whether the module spells the ambient `HostHandle`, which the output declares for itself (`HOST_HANDLE_ALIAS`). */
   hostHandle: boolean
-  /** Every identifier the module spells but an ambient call's callee: the names a helper must not be imported as. */
-  names: StringSet
-  /**
-   * The local names this module imports that name only a type: an interface
-   * or a type alias. Node's type stripping erases an `import` element only
-   * when it says `type`, so each is written with one.
-   */
-  typeNames: StringSet
-  /** The import specifiers the driver rewrites, and what each becomes. */
-  specifierFrom: string[]
-  specifierTo: string[]
-  /** The nodes the module is refused at, with the message for each. */
-  refusedAt: Node[]
-  refusals: string[]
-  /** Each declaration `stub` marked, by node id, and the name it is warned about by. */
-  stubIds: i32[]
-  stubNames: string[]
-  /** The declarations written with a throwing body while `warnStubs` held, with the warning for each. */
-  stubbedAt: Node[]
-  stubWarnings: string[]
-  /** An internal error the walk ran into, or the empty string. */
-  failure: string
-  /** The statements hoisted out of the current statement so far, in order. */
-  preludes: string[]
-  /** The next number `temporary` tries. */
-  temps: i32
   /** The node being walked may hoist, by its position alone (`hoistChild`). */
   hoistHere: boolean
   /** What `canHoist` answers to the hook being asked about the current node. */

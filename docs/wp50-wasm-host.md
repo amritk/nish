@@ -7,7 +7,7 @@ Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
 loader's `loadSync` and `nish/vite`. Stage 2 is built: host modules
 (`--host`, `nish.host`, `src/host-module.ts`), their import attributes,
 `HostHandle<K>`, `Imports` in the `.d.ts`, the loader's adapters, the kept
-`import` under `--emit-ts`, the refusals NL2661–NL2669, NL3049 and NL3050, and
+`import` under `--emit-ts`, the refusals NL2661–NL2670, NL3049 and NL3050, and
 the plugin's `host` option (`tests/run.js`, section `host-import`); stage 3 is
 the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are

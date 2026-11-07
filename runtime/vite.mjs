@@ -4,7 +4,8 @@
  *
  * The entries are the modules compiled to wasm, `nish({ entries })`, paths
  * from the root. (The root package.json's `nish` field cannot name them yet:
- * the compiler refuses a key there other than `noPanic` and `capabilities`.) In
+ * the compiler refuses a key there other than `noPanic`, `capabilities` and
+ * `host`.) In
  * `vite build` an import that resolves to one is answered with a generated
  * module. The plugin compiles the entry with `nish --target wasm32 --emit-dts`,
  * links the IR with `scripts/build.sh --profile wasm-host --inline`, and the

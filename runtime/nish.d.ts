@@ -2657,12 +2657,6 @@ declare interface CPtr {
 }
 
 /**
- * The brand that makes a `HostHandle` nominal per kind. It is never a value:
- * `declare` makes it a type-level symbol only, so the name costs nothing at run time.
- */
-declare const __nishHostKind: unique symbol;
-
-/**
  * `HostHandle<"kind">`: an object the page holds (a canvas, a GPU buffer, a
  * node), passed to and from a host module's functions as the small integer the
  * page's table keys it by (docs/LANGUAGE.md -> Host modules). It is an `i32` in
@@ -2673,11 +2667,15 @@ declare const __nishHostKind: unique symbol;
  *
  * A branded `number` here, so `tsc` refuses passing one kind where another is
  * declared, as `nish` does; it cannot refuse the arithmetic, which `nish` does.
+ * The brand is optional and keyed `__nishHostKind`, the shape `--emit-ts`
+ * declares for itself (`HOST_HANDLE_ALIAS` in `src/emit-ts-edits.ts`), so a
+ * handle the TypeScript reading spells is the page's, and the `0` a handle
+ * starts as is one.
  */
 type HostHandle<K extends string> = __NishHostHandle<K>;
 
 /** The one definition both `HostHandle`s name, the global one and the `"nish"` module's. */
-type __NishHostHandle<K extends string> = number & { readonly [__nishHostKind]: K };
+type __NishHostHandle<K extends string> = number & { readonly __nishHostKind?: K };
 
 /**
  * `"nish"`: what a host module (the page's TypeScript) imports its widths

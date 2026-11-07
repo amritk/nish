@@ -5987,9 +5987,10 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
   an import with no `--allow-undefined`.
 - **A host module exists only in a freestanding wasm build.** A native or
   `--target wasm32-wasi` build that imports one is refused (NL3050). A build
-  that makes a page module (`--target wasm32` or `--emit-dts`) refuses a
-  `declare function` (NL2666): the module links no C, so the declaration would
-  be an import the page does not supply.
+  that makes a page module (`--target wasm32`, or `--emit-dts` with no
+  `--target`) refuses a `declare function` (NL2666): the module links no C, so
+  the declaration would be an import the page does not supply. `--target
+  wasm32-wasi --emit-dts` links C, so it keeps `declare function` legal.
 - **The loader and its types.** `--emit-dts` adds
   `Imports = { host: typeof import("./host") }` to the `.d.ts`, and `load`
   takes it. The loader passes a function through by reference when every
@@ -6010,8 +6011,8 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
 `tsc`, where `runtime/nish.d.ts` brands a `number`. A handle supports `===` and
 `!==` against a handle of its kind or `0` ("none"), and is stored wherever a
 scalar is; it has no arithmetic and no conversion to or from a number, so it
-is made only by a host function that returns one. A field's default may only
-be `0` (NL2670). A second type argument, or
+is made only by a host function that returns one. A field's or a parameter's
+default may only be `0` (NL2670). A second type argument, or
 a kind that is not a string literal of letters, digits and `_`, is NL2669, and a string literal type
 anywhere but a `HostHandle`'s kind is NL2668. It lowers to
 `i32`, so a program with no host module emits nothing new.

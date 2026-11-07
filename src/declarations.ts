@@ -249,7 +249,14 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
   }
   // A number is a value of a number type only: the literal check takes a
   // number as the type it is written for, which a field's own check relies on.
-  if (isContextualLiteral(init) && !isNumeric(type) && !ctx.table.isRanged(type)) {
+  // A handle goes on to that check too, which takes `0` and words any other
+  // number as the page's to give out (NL2670), as for a field.
+  if (
+    isContextualLiteral(init) &&
+    !isNumeric(type) &&
+    !ctx.table.isRanged(type) &&
+    !ctx.table.isHostHandle(type)
+  ) {
     ctx.error(init, `Parameter \`${name}\` is ${ctx.table.typeName(type)} but its initializer is a number`)
     return
   }
@@ -471,7 +478,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     // A module a page loads links no C, so the declaration would name an
     // import nothing on the page provides: the browser refuses it at
     // instantiation, long after the build said yes (WP50 §3). An `--emit-dts`
-    // compile is one too, linked by `scripts/build.sh --profile wasm`.
+    // compile is one too, linked by `scripts/build.sh --profile wasm-host`.
     ctx.error(
       decl.children[0],
       `\`declare function ${name}\` declares a C function, and a wasm module a page loads links no C: export \`${name}\` from a host module the page provides (\`--host\`) and import it from there`

@@ -6,6 +6,9 @@ struct Slot (class) size=4 align=4
 function named(c: HostHandle<"canvas">): boolean -> @named
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function orNone(c: HostHandle<"canvas">): boolean -> @orNone
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function keep(c: HostHandle<"canvas">): HostHandle<"canvas"> -> @keep
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c
@@ -13,9 +16,11 @@ function keep(c: HostHandle<"canvas">): HostHandle<"canvas"> -> @keep
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: keep named nish_arena_mark nish_arena_release nish_print nish_str_concat
+  calls: keep named nish_arena_mark nish_arena_release nish_print nish_str_concat orNone
   stackSites=1 stackLocals=1
   local +0:9 slot: Slot (const)
   local +1:9 kept: HostHandle<"canvas"> (const)
   callee +1:16 keep -> @keep
   callee +2:46 named -> @named
+  callee +2:61 orNone -> @orNone
+  callee +2:73 orNone -> @orNone

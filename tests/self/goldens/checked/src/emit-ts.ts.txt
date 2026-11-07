@@ -18,7 +18,18 @@ import isBuiltinSpecifier from "./nish-modules" -> function @isBuiltinSpecifier
 import REGION_SPECIFIER from "./nish-modules" -> const REGION_SPECIFIER
 import SECRET_SPECIFIER from "./nish-modules" -> const SECRET_SPECIFIER
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
+import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
+import FLAG_SCRIPT from "./nodes" -> const FLAG_SCRIPT
+import N_CLASS from "./nodes" -> const N_CLASS
+import N_ENUM from "./nodes" -> const N_ENUM
+import N_EXPORT_ASSIGNMENT from "./nodes" -> const N_EXPORT_ASSIGNMENT
+import N_EXPORT_DECLARATION from "./nodes" -> const N_EXPORT_DECLARATION
+import N_FUNCTION from "./nodes" -> const N_FUNCTION
 import N_IMPORT from "./nodes" -> const N_IMPORT
+import N_IMPORT_EQUALS from "./nodes" -> const N_IMPORT_EQUALS
+import N_INTERFACE from "./nodes" -> const N_INTERFACE
+import N_MODULE_CONST from "./nodes" -> const N_MODULE_CONST
+import N_TYPE_ALIAS from "./nodes" -> const N_TYPE_ALIAS
 import Node from "./nodes" -> struct Node
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import dirname from "./paths" -> function @dirname
@@ -80,6 +91,13 @@ function relativeSpecifier(from: string, to: string): string -> @relativeSpecifi
   local +0:9 path: string (const)
   callee +0:16 relativePath -> @relativePath
   callee +0:29 dirname -> @dirname
+function isModule(file: Node): boolean -> @isModule
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer file: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 stmt: Node (const)
+  local +1:11 kind: i32 (const)
+  local +10:11 declares: boolean (const)
 function importOffset(text: string): i32 -> @importOffset
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: text
@@ -152,7 +170,7 @@ function hasAsync(node: Node): boolean -> @hasAsync
 function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeScript [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via Walk.constructor
-  calls: Compilation.entry DiagnosticSink.report DiagnosticSink.reportPortability Edit.constructor EmittedFile.constructor EmittedProgram.constructor StringMap.get Walk.constructor Walk.refuse applyModuleEdits commonDirectory dirname emitModule hasAsync holds importOffset isBuiltinSpecifier joinPath launcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq normalizePath outputPathOf relativeSpecifier resolvePath runtimeImport scriptMain
+  calls: Compilation.entry DiagnosticSink.report DiagnosticSink.reportPortability Edit.constructor EmittedFile.constructor EmittedProgram.constructor StringMap.get StringSet.size Walk.constructor Walk.refuse applyModuleEdits commonDirectory dirname emitModule hasAsync holds importOffset isBuiltinSpecifier isModule joinPath launcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq normalizePath outputPathOf relativeSpecifier resolvePath runtimeImport scriptMain
   pointer compilation: size=208 writesThrough=false captured=false passedTo=Compilation.entry#0
   stackSites=3 stackLocals=2
   local +0:9 result: EmittedProgram (const)
@@ -201,21 +219,25 @@ function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeSc
   callee +103:7 DiagnosticSink.report -> @DiagnosticSink.report
   local +114:13 node: Node (const)
   callee +115:7 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
-  local +118:11 header: string (const)
-  callee +119:7 runtimeImport -> @runtimeImport
-  callee +120:7 runtimeImport -> @runtimeImport
-  local +123:13 at: i32 (const)
-  callee +123:18 importOffset -> @importOffset
-  local +126:13 ordered: Edit[] (const)
-  local +127:11 placed: boolean (let)
-  local +128:18 edit: Edit (const)
-  callee +130:24 new Edit -> @Edit.constructor
-  callee +136:22 new Edit -> @Edit.constructor
-  local +140:11 text: string (const)
-  callee +140:18 applyModuleEdits -> @applyModuleEdits
-  callee +145:23 new EmittedFile -> @EmittedFile.constructor
-  local +151:7 entryOut: string (let)
-  local +152:7 script: boolean (let)
-  callee +157:16 scriptMain -> @scriptMain
-  callee +161:21 new EmittedFile -> @EmittedFile.constructor
-  callee +161:49 launcher -> @launcher
+  local +120:11 scriptFile: boolean (const)
+  callee +120:24 StringSet.size -> @StringSet.size
+  callee +120:53 StringSet.size -> @StringSet.size
+  callee +120:82 isModule -> @isModule
+  local +121:11 header: string (const)
+  callee +122:7 runtimeImport -> @runtimeImport
+  callee +123:7 runtimeImport -> @runtimeImport
+  local +127:13 at: i32 (const)
+  callee +127:18 importOffset -> @importOffset
+  local +130:13 ordered: Edit[] (const)
+  local +131:11 placed: boolean (let)
+  local +132:18 edit: Edit (const)
+  callee +134:24 new Edit -> @Edit.constructor
+  callee +140:22 new Edit -> @Edit.constructor
+  local +144:11 text: string (const)
+  callee +144:18 applyModuleEdits -> @applyModuleEdits
+  callee +149:23 new EmittedFile -> @EmittedFile.constructor
+  local +155:7 entryOut: string (let)
+  local +156:7 script: boolean (let)
+  callee +161:16 scriptMain -> @scriptMain
+  callee +165:21 new EmittedFile -> @EmittedFile.constructor
+  callee +165:49 launcher -> @launcher

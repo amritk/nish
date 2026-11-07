@@ -201,15 +201,16 @@ passes a host object short of a function. The loader passes a function through
 as it stands when every value crosses unchanged (`i32`, `i64`, `f32`, `f64`,
 an enum, a handle, and a `u8` or `u16` argument), and wraps it once, at `load`,
 when a value needs converting: a `u32` or `u64` argument is read unsigned, a
-`u8`, `u16`, `u32` or `u64` result is cut to its width, a `boolean` crosses as
+`u8` or `u16` result is masked to its width (a `u32` or `u64` one wraps as
+wasm's own conversion to `i32` or `i64` makes it), a `boolean` crosses as
 0 or 1, and a ranged integer result is range-checked (`RangeError` naming the
 function).
 
 `HostHandle<"kind">` names an object the page keeps in its own table: an `i32`
 index of its own nominal type. Handles of different kinds do not mix, under
 Nish and under `tsc` alike; a handle compares with `===` and `!==` against one
-of its kind or `0` ("none"), and supports nothing else. A field of a handle
-type may only default to `0` (NL2670).
+of its kind or `0` ("none"), and supports nothing else. A field or parameter
+of a handle type may only default to `0` (NL2670).
 
 What cannot cross is refused with the explicit form: an object, a class, a
 function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
@@ -219,8 +220,9 @@ literal or JSX, is refused with a message to move that code into a module the
 host file imports (NL3049). A host module exists only in a freestanding wasm
 build: a native or WASI build that imports one is refused (NL3050), and so is a
 `declare function` in any build that makes a page module, `--target wasm32` or
-`--emit-dts` (NL2666), whose functions the page supplies through a host module
-instead. A call to a host function is an `ffi` call, so `--deny ffi` refuses it.
+`--emit-dts` with no `--target` (NL2666), whose functions the page supplies
+through a host module instead. `--target wasm32-wasi --emit-dts` is a WASI
+program, which links C, so `declare function` stays legal there. A call to a host function is an `ffi` call, so `--deny ffi` refuses it.
 
 `--emit-ts` keeps the `import` as written, so the TypeScript reading calls the
 page's own functions. With Vite, list the host modules in the plugin's `host`
@@ -302,9 +304,11 @@ A function you define may not take a declared name either, since its symbol
 would be the C one, unless it is private and named like a C library function
 (`abs`, `free`, …): those always get a symbol of their own.
 
-A build that makes a page module, `--target wasm32` or `--emit-dts`, refuses
-`declare function` (NL2666): a page supplies its functions through a [host
-module](#functions-the-page-supplies-host-modules) instead.
+A build that makes a page module, `--target wasm32` or `--emit-dts` with no
+`--target`, refuses `declare function` (NL2666): a page supplies its functions
+through a [host module](#functions-the-page-supplies-host-modules) instead. A
+`--target wasm32-wasi` build links C, so it keeps `declare function` even with
+`--emit-dts`.
 
 A function from the C library links with `nish run` or `--link` as it is. One
 of your own goes on the build line beside the runtime:

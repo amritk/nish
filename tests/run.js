@@ -29965,6 +29965,49 @@ if (!only || "host-import".includes(only)) {
       ran.status === 0 && ran.stdout.trim() === "42 0.5",
       shown(ran)
     )
+
+    // The reading declares its own `HostHandle`; tsc takes a handle it starts
+    // at `0` and hands to the page's host function only if that is the shape
+    // runtime/nish.d.ts gives the page's.
+    const handleDir = at("emit-ts-handle")
+    const handleReading = spawnSync(NISH, [at("reading-handle.ts"), "--host", at("host.ts"), "--emit-ts", handleDir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    let handleTsc = { ok: false, output: shown(handleReading) }
+    if (handleReading.status === 0) {
+      const config = path.join(handleDir, "tsconfig.json")
+      fs.writeFileSync(
+        config,
+        JSON.stringify({
+          extends: path.join(root, "tsconfig.json"),
+          // The reading imports the host module by its `.ts` path, as Node runs it.
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true, allowImportingTsExtensions: true },
+          include: [],
+          files: [path.join(root, "runtime", "nish.d.ts"), at("host.ts"), path.join(handleDir, "reading-handle.ts")],
+        })
+      )
+      handleTsc = typeCheckProject(config, root)
+    }
+    check(
+      "host-import: tsc takes the --emit-ts reading's HostHandle, started at 0, where the page's host function takes one",
+      handleTsc.ok,
+      handleTsc.output
+    )
+
+    // A reading with no import or export is a script to a tsc without
+    // `moduleDetection: "force"`, so its alias would be global: it says `export {}`.
+    const scriptDir = at("emit-ts-script")
+    const scriptReading = spawnSync(NISH, [at("reading-script.ts"), "--emit-ts", scriptDir], { cwd: root, encoding: "utf8" })
+    const scriptText = scriptReading.status === 0 ? fs.readFileSync(path.join(scriptDir, "reading-script.ts"), "utf8") : ""
+    const moduleText = handleReading.status === 0 ? fs.readFileSync(path.join(handleDir, "reading-handle.ts"), "utf8") : ""
+    check(
+      "host-import: an --emit-ts reading of a script that spells HostHandle keeps its alias the file's with `export {}`, and a module's needs none",
+      scriptText.includes("number & { readonly __nishHostKind?: K }\nexport {}\n") &&
+        moduleText.includes("__nishHostKind") &&
+        !moduleText.includes("export {}"),
+      scriptReading.status === 0 ? scriptText : shown(scriptReading)
+    )
   }
 }
 

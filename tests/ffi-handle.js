@@ -40,7 +40,7 @@ export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, 
     const asm = w32Llc.status === 0 ? fs.readFileSync(w32S, "utf8") : ""
     const w32Ir = w32.status === 0 ? fs.readFileSync(w32Ll, "utf8") : ""
     check(
-      "ffi_handle: a --target wasm32 build passes llvm-as, and llc calls `counted_fclose` with the handle's pointer as an i32",
+      "ffi_handle: a --target wasm32-wasi build passes llvm-as, and llc calls `counted_fclose` with the handle's pointer as an i32",
       w32As.status === 0 &&
         w32Llc.status === 0 &&
         w32Ir.includes('target triple = "wasm32-wasi"') &&

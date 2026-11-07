@@ -16,6 +16,12 @@ entry:
   ret i1 %0
 }
 
+define internal noundef zeroext i1 @orNone(i32 noundef %c) #0 {
+entry:
+  %0 = icmp eq i32 %c, 0
+  ret i1 %0
+}
+
 define internal noundef i32 @keep(i32 noundef %c) #0 {
 entry:
   ret i32 %c
@@ -48,7 +54,16 @@ entry:
   %15 = call i1 @named(i32 %14)
   %16 = select i1 %15, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
   %17 = call i8* @nish_str_concat(i8* %13, i8* %16)
-  call void @nish_print(i8* %17)
+  %18 = call i8* @nish_str_concat(i8* %17, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %19 = call i1 @orNone(i32 0)
+  %20 = select i1 %19, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  %21 = call i8* @nish_str_concat(i8* %18, i8* %20)
+  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %23 = load i32, i32* %kept.addr, align 4
+  %24 = call i1 @orNone(i32 %23)
+  %25 = select i1 %24, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  %26 = call i8* @nish_str_concat(i8* %22, i8* %25)
+  call void @nish_print(i8* %26)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

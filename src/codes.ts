@@ -483,7 +483,7 @@ const diagnosticRules = (): string[] => [
   "NL2534",
   ", so the references the C library and the runtime make to that name would reach this function instead; rename it",
   "NL3037",
-  "` is a host module, and only a freestanding wasm build imports one: build with `--target wasm32` or `--emit-dts`",
+  "` is a host module, and only a freestanding wasm build imports one: build with `--target wasm32`, or with `--emit-dts` and no `--target`",
   "NL3050",
   "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
   "NL2285",

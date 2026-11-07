@@ -38,7 +38,22 @@ import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { scriptMain } from "./script"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
-import { FLAG_ASYNC, N_IMPORT, Node } from "./nodes"
+import {
+  FLAG_ASYNC,
+  FLAG_EXPORTED,
+  FLAG_SCRIPT,
+  N_CLASS,
+  N_ENUM,
+  N_EXPORT_ASSIGNMENT,
+  N_EXPORT_DECLARATION,
+  N_FUNCTION,
+  N_IMPORT,
+  N_IMPORT_EQUALS,
+  N_INTERFACE,
+  N_MODULE_CONST,
+  N_TYPE_ALIAS,
+  Node,
+} from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, joinPath, normalizePath, relativePath, resolvePath } from "./paths"
 import { StringBuilder } from "./strings"
@@ -158,6 +173,34 @@ const holds = (list: string[], text: string): boolean => {
 const relativeSpecifier = (from: string, to: string): string => {
   const path = relativePath(dirname(from), to)
   return path.startsWith("../") ? path : `./${path}`
+}
+
+/** Whether `file` imports or exports anything, which makes it a module to tsc rather than a script. */
+const isModule = (file: Node): boolean => {
+  for (const stmt of file.children) {
+    const kind = stmt.kind
+    if (
+      kind === N_IMPORT ||
+      kind === N_IMPORT_EQUALS ||
+      kind === N_EXPORT_ASSIGNMENT ||
+      kind === N_EXPORT_DECLARATION
+    ) {
+      return true
+    }
+    const declares =
+      kind === N_FUNCTION ||
+      kind === N_CLASS ||
+      kind === N_INTERFACE ||
+      kind === N_MODULE_CONST ||
+      kind === N_TYPE_ALIAS ||
+      kind === N_ENUM
+    // The `main` a script's top-level code is moved into (`src/script.ts`) is
+    // exported in the tree but not in the text.
+    if (declares && (stmt.flags & FLAG_EXPORTED) !== 0 && (stmt.flags & FLAG_SCRIPT) === 0) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -390,10 +433,14 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       compilation.sink.reportPortability(unit.source, node.start, node.end, walk.stubWarnings[r])
       r = r + 1
     }
+    // A file with no import or export is a script to tsc, whose alias would be
+    // global and meet the page's own `HostHandle`: `export {}` keeps it the file's.
+    const scriptFile = walk.helpers.size() === 0 && walk.widths.size() === 0 && !isModule(unit.file)
     const header =
       runtimeImport("import", walk.helpers) +
       runtimeImport("import type", walk.widths) +
-      (walk.hostHandle ? HOST_HANDLE_ALIAS : "")
+      (walk.hostHandle ? HOST_HANDLE_ALIAS : "") +
+      (walk.hostHandle && scriptFile ? "export {}\n" : "")
     if (header.length > 0) {
       const at = importOffset(unit.source.text)
       // An import line is an edit like any other, so it goes in source order:

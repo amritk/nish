@@ -208,13 +208,13 @@ const withoutByteOrderMark = (text: string): string => {
   if (!text.startsWith(mark)) {
     return text
   }
-  let blanks = ""
+  const blanks: string[] = []
   let i = 0
   while (i < mark.length) {
-    blanks = `${blanks} `
+    blanks.push(" ")
     i = i + 1
   }
-  return `${blanks}${text.slice(mark.length)}`
+  return `${blanks.join("")}${text.slice(mark.length)}`
 }
 
 /**

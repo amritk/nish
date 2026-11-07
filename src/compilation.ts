@@ -909,7 +909,7 @@ export class Compilation {
       ) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
-          `\`${imp.specifier}\` is a host module, and only a freestanding wasm build imports one: build with \`--target wasm32\` or \`--emit-dts\``
+          `\`${imp.specifier}\` is a host module, and only a freestanding wasm build imports one: build with \`--target wasm32\`, or with \`--emit-dts\` and no \`--target\``
         )
         checker.ctx.errored = false
         failedDecl = imp.decl
