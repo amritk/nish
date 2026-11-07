@@ -1020,14 +1020,15 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  * `stdout` and `stderr`, which keep what they held. The runtime writes `stdin`
  * and drains both outputs in one `poll` loop, so a child that fills one pipe
  * while the parent waits on another cannot deadlock it. When a stream passes
- * 16 MiB (`NISH_PIPED_CAP`) the child is killed with `SIGKILL` and that array keeps the first
- * 16 MiB. A child that exits without reading its stdin is not a failure. The
- * child inherits the environment and working directory, and no descriptor of the
- * program but its three streams; it starts with SIGPIPE as the program had it,
- * and the program's own SIGPIPE from writing to a child that stopped reading is
- * absorbed. The two output arrays are grown by the runtime, so `readonly` is
- * refused for them, as is a typed-array spelling (`Int32Array`, ...), whose
- * length is fixed. A `wasm32` build refuses it (NL2404).
+ * 16 MiB (`NISH_PIPED_CAP`) the child is killed with `SIGKILL` and that array
+ * keeps the first 16 MiB. A child that exits without reading its stdin is not a
+ * failure. The child inherits the environment and working directory, and no
+ * descriptor of the program but its three streams; it starts with SIGPIPE as
+ * the program had it, and the program's own SIGPIPE from writing to a child
+ * that stopped reading is absorbed. The two output arrays are grown by the
+ * runtime, so `readonly` is refused for them, as is a typed-array spelling
+ * (`Int32Array`, ...), whose length is fixed. A `wasm32` build refuses it
+ * (NL2404).
  * Capability: process.spawn.
  *
  * @param argv the program and its arguments.
@@ -1066,8 +1067,9 @@ declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
  * reaped stays a zombie until the program exits, as it would in C. Test
  * `pid > 0` before handing the answer on: a failure such as -1 (EPERM) passed
  * to `waitPid` reads as "any child". No reading under Node, which throws. A
- * `wasm32` build refuses it (NL2404), and a scope's task or a parallel body that calls it
- * is refused as any shared write is. Also exported by `nish:process`.
+ * `wasm32` build refuses it (NL2404), and a scope's task or a parallel body
+ * that calls it is refused as any shared write is. Also exported by
+ * `nish:process`.
  * Capability: process.spawn.
  *
  * @param argv the program and its arguments.
@@ -1080,10 +1082,10 @@ declare function spawn(argv: string[]): i32;
  * Send `sig` to `pid`. Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are
  * accepted, whose numbers are the same on Linux and Darwin, so a number means
  * the same signal on every host. A positive `pid` may be any process of this
- * user, not only a child. A `wasm32` build refuses it (NL2404), and a scope's task or a
- * parallel body that calls it is refused as any shared write is. Under Node it
- * checks the signal and the pid as the native one does and turns Node's error
- * code back into its errno. Also exported by `nish:process`.
+ * user, not only a child. A `wasm32` build refuses it (NL2404), and a scope's
+ * task or a parallel body that calls it is refused as any shared write is.
+ * Under Node it checks the signal and the pid as the native one does and turns
+ * Node's error code back into its errno. Also exported by `nish:process`.
  * Capability: process.spawn.
  *
  * @param pid the process signalled; 0 or below is -22, because `kill(2)` reads
@@ -1096,15 +1098,16 @@ declare function spawn(argv: string[]): i32;
 declare function kill(pid: i32, sig: i32): i32;
 /**
  * Reap a child and answer a fresh two-element array (the language has no
- * tuple). `pid` is a child's, or -1 for any child. After `signalFd()` a blocking
- * wait never sees EINTR, because that handler is installed with `SA_RESTART` and
- * the wait restarts, and it cannot be woken by SIGTERM either: a supervisor that
- * must answer a signal while its children run reaps with flag 1 (WNOHANG) on
- * each tick of a `pollWait` loop that also watches the signal descriptor, and
- * stops its children with `kill` when `readSignal` answers. No reading under
- * Node, which throws, naming itself. A `wasm32` build refuses it (NL2404), and a scope's
- * task or a parallel body that calls it is refused as any shared write is. Also
- * exported by `nish:process`. Capability: process.spawn.
+ * tuple). `pid` is a child's, or -1 for any child. After `signalFd()` a
+ * blocking wait never sees EINTR, because that handler is installed with
+ * `SA_RESTART` and the wait restarts, and it cannot be woken by SIGTERM either:
+ * a supervisor that must answer a signal while its children run reaps with
+ * flag 1 (WNOHANG) on each tick of a `pollWait` loop that also watches the
+ * signal descriptor, and stops its children with `kill` when `readSignal`
+ * answers. No reading under Node, which throws, naming itself. A `wasm32` build
+ * refuses it (NL2404), and a scope's task or a parallel body that calls it is
+ * refused as any shared write is. Also exported by `nish:process`.
+ * Capability: process.spawn.
  *
  * @param pid the child to wait for, or -1.
  * @param flags 0, or 1 for WNOHANG; any other bit is `[-22, 0]`, as is a pid
@@ -1124,8 +1127,8 @@ declare function waitPid(pid: i32, flags: i32): i32[];
  * it. A program asks it to decide how many workers to start; it reads the count
  * again on each call. Under Node it is `os.availableParallelism()` lowered by
  * `NISH_NUM_THREADS`, and since Node reads no cgroup quota, inside a container
- * with one the two can differ. A `wasm32` build refuses it (NL2404). It writes nothing
- * and may be called in a task. Also exported by `nish:process`.
+ * with one the two can differ. A `wasm32` build refuses it (NL2404). It writes
+ * nothing and may be called in a task. Also exported by `nish:process`.
  * Capability: none.
  *
  * @returns at least 1.
@@ -1135,8 +1138,8 @@ declare function availableParallelism(): i32;
  * Bytes of physical memory — `_SC_PHYS_PAGES` times the page size on Linux,
  * `hw.memsize` on Darwin. It is the machine's, not a cgroup's limit. Under Node
  * it is `os.totalmem()`, a `bigint` as every `i64` is there. A `wasm32` build
- * refuses it (NL2404). It writes nothing and may be called in a task. Also exported by
- * `nish:process`. Capability: none.
+ * refuses it (NL2404). It writes nothing and may be called in a task. Also
+ * exported by `nish:process`. Capability: none.
  *
  * @returns the byte count, or -1 when the host does not say.
  */
@@ -1177,9 +1180,10 @@ declare function setIdlePriority(): i32;
 /**
  * Pin this process to CPU `cpu` alone (`sched_setaffinity`). Narrow-only: it
  * never moves a process onto a CPU it was kept off. `availableParallelism()`
- * answers 1 afterwards, and children started afterwards inherit the mask. A task
- * or a parallel body that calls it is refused as any shared write is. A `wasm32`
- * build refuses it (NL2404). Also exported by `nish:process`. Capability: process.spawn.
+ * answers 1 afterwards, and children started afterwards inherit the mask. A
+ * task or a parallel body that calls it is refused as any shared write is. A
+ * `wasm32` build refuses it (NL2404). Also exported by `nish:process`.
+ * Capability: process.spawn.
  *
  * @param cpu the CPU index.
  * @returns 0, or a negative errno: a CPU outside the mask the process already
@@ -1663,11 +1667,11 @@ declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 declare function netSetOption(fd: i32, option: i32, value: i32): i32;
 /**
  * A connected TCP socket's send MSS, the payload bytes one segment carries: Linux's `TCP_INFO`
- * `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above 0 and on Darwin, though the kernel
- * answers its default `536` for those. The answer moves as the path does, so read it when it
- * is needed rather than once. It never panics. Not callable in a `scope()` task or a parallel
- * body. It compiles on wasm32 and the WASI profile, where it is the constant -1 with its
- * descriptor still evaluated; under Node it throws rather than answer -1.
+ * `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above 0 and on Darwin. The answer moves
+ * as the path does, so read it when it is needed rather than once. It never panics. Not
+ * callable in a `scope()` task or a parallel body. It compiles on wasm32 and the WASI
+ * profile, where it is the constant -1 with its descriptor still evaluated; under Node it
+ * throws rather than answer -1.
  * Capability: net.
  *
  * ```ts
@@ -1682,8 +1686,8 @@ declare function netSetOption(fd: i32, option: i32, value: i32): i32;
  *
  * @param fd the socket.
  * @returns the MSS; -1, never an errno, for anything else (a descriptor that is not open, a
- *   socket with no peer such as a listener or one never connected, a socket that is not TCP),
- *   and always on wasm.
+ *   socket with no peer such as a listener or one never connected, though the kernel answers
+ *   its default `536` for those, a socket that is not TCP), and always on wasm.
  */
 declare function netMss(fd: i32): i32;
 /**
