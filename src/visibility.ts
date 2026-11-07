@@ -95,6 +95,16 @@ export const isFreestandingWasmBuild = (opts: Options): boolean =>
  */
 export const buildsWasmModule = (opts: Options): boolean => isWasmBuild(opts) || opts.emitDts.length > 0
 
+/**
+ * Whether the build makes a module a page instantiates (WP50 §3): a
+ * freestanding wasm build, or an `--emit-dts` compile whose IR
+ * `scripts/build.sh --profile wasm-host` links. Only there may a program
+ * import a host module, and only there is `declare function` refused, since
+ * a C library on wasm stays a `--profile wasi` program.
+ */
+export const buildsPageModule = (opts: Options): boolean =>
+  isFreestandingWasmBuild(opts) || (opts.emitDts.length > 0 && !isWasmBuild(opts))
+
 /** Whether any module of the program declares a C function. */
 const declaresForeign = (programs: CheckedProgram[]): boolean => {
   for (const program of programs) {

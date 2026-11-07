@@ -169,6 +169,12 @@ export class CheckContext {
    * Set with `wasm`, and false everywhere else.
    */
   wasmFreestanding: boolean
+  /**
+   * The build makes a module a page instantiates (`buildsPageModule`), where
+   * a function from outside comes from a host module rather than from C, so
+   * `declare function` is refused. Set with `wasm`, and false everywhere else.
+   */
+  pageModule: boolean
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -328,6 +334,7 @@ export class CheckContext {
     this.strictExports = strictExports
     this.wasm = false
     this.wasmFreestanding = false
+    this.pageModule = false
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.current = null

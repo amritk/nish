@@ -94,10 +94,17 @@ export class SourceFile {
   text: string
   /** Byte offset of the first character of each line; `starts[0]` is 0. */
   starts: i32[]
+  /**
+   * A host module (WP50 §3): the page's own TypeScript, read for its exported
+   * signatures only (`src/host-module.ts`). Its functions are wasm imports from
+   * module `host`, so nothing here is checked as Nish or emitted.
+   */
+  host: boolean
 
   constructor(path: string, text: string) {
     this.path = path
     this.text = text
+    this.host = false
     this.starts = []
     this.starts.push(0)
     let i = 0

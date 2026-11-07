@@ -151,6 +151,7 @@ import {
   manifestEngineRange,
   manifestMalformedAt,
   manifestCapabilities,
+  manifestHost,
   manifestNish,
   manifestNoPanic,
   manifestVersion,
@@ -196,8 +197,10 @@ import { jsonQuote, splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
+import { hostModuleText, hostSignatureProblems, markHostFunctions } from "./host-module"
 import {
   buildModeOf,
+  buildsPageModule,
   buildsWasmModule,
   hostVisible,
   isFreestandingWasmBuild,
@@ -396,6 +399,13 @@ export class Compilation {
    */
   unreadableRoot: string
   /**
+   * The identities of the host modules (WP50 §3): `--host` and the root
+   * manifest's `"nish".host`, filled once the entry is known, since the
+   * manifest is the one above it. An import that reaches one reads it with
+   * `hostModuleText` rather than as Nish.
+   */
+  hostIdentities: StringSet
+  /**
    * The whole-program attribute fixpoint, once it has been computed.
    * `analyze()` memoises it here for the reason stage0's `src/compilation.ts` memoises
    * its own: the emitter needs it and so does the `--emit-checked` dump, and
@@ -475,6 +485,7 @@ export class Compilation {
     const cwd = realpathSync(".")
     this.workingDir = cwd === null ? "" : cwd
     this.unreadableRoot = ""
+    this.hostIdentities = new StringSet()
     this.facts = null
     this.analysisUnits = []
     this.rootPackageDir = ""
@@ -732,7 +743,13 @@ export class Compilation {
       this.unreadableRoot = path
       return false
     }
-    const source = new SourceFile(name, text)
+    const host = this.hostIdentities.has(identity)
+    const read = host ? hostModuleText(text) : null
+    const source = new SourceFile(name, read === null ? text : read.text)
+    if (read !== null && read.problem.length > 0) {
+      this.sink.report(source, read.start, read.end, read.problem)
+      return false
+    }
     const parser = new Parser(source)
     const file = parser.parseSourceFile()
     // Recorded rather than printed, because the stream and the shape are the
@@ -746,6 +763,20 @@ export class Compilation {
     }
     if (parser.diagnostics.length > 0) {
       return false
+    }
+    if (host) {
+      // The page's text again, so a diagnostic quotes what it wrote; the
+      // blanked text kept every offset and line break, so nothing moves.
+      source.text = text
+      source.host = true
+      const problems = hostSignatureProblems(file)
+      for (const problem of problems) {
+        this.sink.report(source, problem.node.start, problem.node.end, problem.message)
+      }
+      if (problems.length > 0) {
+        return false
+      }
+      markHostFunctions(file)
     }
     const isEntry = this.modules.length === 0
     if (isEntry) {
@@ -768,6 +799,7 @@ export class Compilation {
     )
     checker.ctx.wasm = isWasmBuild(this.opts)
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
+    checker.ctx.pageModule = buildsPageModule(this.opts)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of
@@ -780,6 +812,9 @@ export class Compilation {
     }
     this.byPath.set(identity, this.modules.length)
     this.modules.push(unit)
+    if (isEntry) {
+      this.hostIdentities = this.hostModules()
+    }
 
     // Phase 0 before pass 1a, so what is forbidden by design is refused before
     // the checker can report it as merely unsupported. The count around it is
@@ -859,6 +894,15 @@ export class Compilation {
           imp.specifier.startsWith(STD_PREFIX)
             ? `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames()})`
             : `Cannot find module \`${imp.specifier}\` (looked for ${target})`
+        )
+        checker.ctx.errored = false
+        failedDecl = imp.decl
+        continue
+      }
+      if (!buildsPageModule(this.opts) && this.hostIdentities.has(this.identityOf(target))) {
+        checker.ctx.errorAtSpecifier(
+          imp.decl,
+          `\`${imp.specifier}\` is a host module, and only a freestanding wasm build imports one: build with \`--target wasm32\` or \`--emit-dts\``
         )
         checker.ctx.errored = false
         failedDecl = imp.decl
@@ -1386,6 +1430,32 @@ export class Compilation {
       }
       k = k + 1
     }
+  }
+
+  /**
+   * The identities of the host modules (WP50 §3): each `--host` path, relative
+   * to the working directory, and each `"nish".host` entry, relative to the
+   * root manifest. A manifest whose `"nish"` field is refused names none here;
+   * `check` reports it (NL3036).
+   */
+  hostModules(): StringSet {
+    const out = new StringSet()
+    for (const path of this.opts.hosts) {
+      out.add(this.identityOf(path))
+    }
+    const source = this.rootManifest()
+    if (source === null) {
+      return out
+    }
+    const nish = manifestNish(source.text, PACKAGE_CONDITION)
+    if (nish.problem.length > 0) {
+      return out
+    }
+    const dir = dirname(source.path)
+    for (const entry of manifestHost(source.text, nish.hostAt).entries) {
+      out.add(this.identityOf(joinPath([dir, entry])))
+    }
+    return out
   }
 
   /**
