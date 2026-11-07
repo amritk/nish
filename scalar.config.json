@@ -846,6 +846,22 @@
                   }
                 }
               },
+              "/compiler": {
+                "type": "group",
+                "title": "Compiler reference",
+                "children": {
+                  "/command-line": {
+                    "type": "page",
+                    "title": "Command line",
+                    "filepath": "docs/reference/command-line.md"
+                  },
+                  "/diagnostics": {
+                    "type": "page",
+                    "title": "Diagnostics",
+                    "filepath": "docs/reference/diagnostics.md"
+                  }
+                }
+              },
               "/run-under-node": {
                 "type": "page",
                 "title": "Running under Node",
