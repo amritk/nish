@@ -470,8 +470,8 @@ const dedent = (lines) => {
 
 /**
  * A module comment as Markdown, by the convention docs/README.md states: the
- * lead paragraph, the usage example (the first indented block that imports
- * from `nish/` or `nish:`), and the rest as callouts, details and paragraphs.
+ * lead paragraph, the usage example (the first indented block that reads as
+ * code, whatever it imports), and the rest as callouts, details and paragraphs.
  */
 const moduleProse = (comment, prose) => {
   const blocks = comment
@@ -481,6 +481,13 @@ const moduleProse = (comment, prose) => {
   const isCode = (b) => indentOf(b[0]) >= 2 && !listItem.test(b[0].trim())
   const isList = (b) => !isCode(b) && listItem.test(b[0].trim())
   const code = (b) => fence(dedent(b))
+  // The usage example is the first code block that reads as code, not a
+  // diagram or a table: its first line opens with a keyword or a comment.
+  const looksLikeCode = (b) =>
+    isCode(b) &&
+    /^(?:import|export|const|let|var|function|class|type|interface|await|async|for|if|while|return)\b|^\/\//.test(
+      b.find((l) => l.trim()).trim()
+    )
   const lead = blocks.length > 0 && !isCode(blocks[0]) ? blocks.shift() : []
   const leadText = lead
     .join(" ")
@@ -488,9 +495,7 @@ const moduleProse = (comment, prose) => {
     .trim()
     // "nish/regex — regular expressions ..." leads with a lowercase word once the name is gone.
     .replace(/^[a-z]/, (c) => c.toUpperCase())
-  const usageAt = blocks.findIndex(
-    (b) => isCode(b) && /^\s*import\b[\s\S]*from\s+"nish[/:]/.test(b.join("\n"))
-  )
+  const usageAt = blocks.findIndex(looksLikeCode)
   // The usage example, with the indented blocks that directly follow it.
   let usage = ""
   if (usageAt >= 0) {
@@ -498,7 +503,9 @@ const moduleProse = (comment, prose) => {
     while (usageAt + n < blocks.length && isCode(blocks[usageAt + n])) {
       n++
     }
-    usage = code(blocks.splice(usageAt, n).flatMap((b, i) => (i ? ["", ...b] : b)))
+    // Always `ts`: an example may elide with `…` and still be TypeScript to a reader.
+    const lines = dedent(blocks.splice(usageAt, n).flatMap((b, i) => (i ? ["", ...b] : b)))
+    usage = `\`\`\`ts\n${lines.join("\n")}\n\`\`\``
   }
   // Each prose block with the lists and code blocks that follow it.
   const units = []
@@ -699,7 +706,7 @@ const renderObject = (o, ctx) => {
 /**
  * A constant is a limit, listed under `## Limits`, by its doc's first
  * sentence: one that opens with a bound ("The most …", "The longest …",
- * "At most …", "How deeply …"), or with "How many/much/long/far …" and says
+ * "At most …", "Most …", "How deep(ly) …"), or with "How many/much/long/far …" and says
  * what is bounded ("may", "kept", "holds", "refuses"). Its name does not
  * decide: `QUIC_TP_MAX_DATA` is a protocol identifier.
  */
@@ -711,7 +718,7 @@ const isLimit = (v) => {
       .trim()
   )
   const bound =
-    /^(?:the\s+(?:most|fewest|least|longest|shortest|largest|smallest|deepest|highest|lowest)|at\s+(?:most|least)|how\s+deep(?:ly)?)\b/i
+    /^(?:the\s+(?:most|fewest|least|longest|shortest|largest|smallest|deepest|highest|lowest)|at\s+(?:most|least)|most|how\s+deep(?:ly)?)\b/i
   const amount = /^how\s+(?:many|much|long|far)\b/i
   return bound.test(first) || (amount.test(first) && /\b(?:may|kept|keeps?|holds?|refus\w*)\b/i.test(first))
 }
@@ -1156,7 +1163,13 @@ const listFiles = (dir) => {
 }
 
 const main = async () => {
-  const check = process.argv.includes("--check")
+  const args = process.argv.slice(2)
+  const unknown = args.filter((a) => a !== "--check")
+  if (unknown.length > 0) {
+    console.error(`gen-reference: unknown argument ${unknown.join(" ")}; the one flag is --check`)
+    process.exit(2)
+  }
+  const check = args.includes("--check")
   const project = await readProject()
   const pages = collectPages(project)
   const configBefore = fs.readFileSync(path.join(root, configFile), "utf8")
@@ -1186,7 +1199,18 @@ const main = async () => {
     }
   }
   if (configAfter !== configBefore) {
-    problems.push(`stale: ${configFile} (the /reference routes or the "Language reference" link)`)
+    const before = JSON.parse(configBefore)
+    const after = JSON.parse(configAfter)
+    const routes = (c) => JSON.stringify(c.navigation.routes["/"].children["/reference"])
+    const headerOf = (c) => JSON.stringify(c.navigation.header)
+    const drift = []
+    if (routes(before) !== routes(after)) {
+      drift.push("the /reference routes")
+    }
+    if (headerOf(before) !== headerOf(after)) {
+      drift.push('the header\'s "Language reference" link')
+    }
+    problems.push(`stale: ${configFile} (${drift.join(" and ") || "the layout of the /reference routes"})`)
   }
   if (check) {
     if (problems.length > 0) {

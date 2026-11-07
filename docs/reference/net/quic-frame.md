@@ -88,7 +88,7 @@ import {
 } from "nish/net/quic-frame";
 ```
 
-```text
+```ts
 import { QuicFrame, quicParseFrame, quicPushAck, QUIC_FRAME_CRYPTO } from "nish/net/quic-frame";
 
 const frame = new QuicFrame();                       // one per connection, reused

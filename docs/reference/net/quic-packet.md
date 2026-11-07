@@ -77,7 +77,7 @@ import {
 } from "nish/net/quic-packet";
 ```
 
-```text
+```ts
 import { quicInitialSecrets, quicKeys, quicParseHeader, quicOpenPacket, QuicKeysSlot,
          QUIC_AEAD_AES_128_GCM, QUIC_PACKET_OK } from "nish/net/quic-packet";
 import { Secret, secret, wipe } from "nish:secret";

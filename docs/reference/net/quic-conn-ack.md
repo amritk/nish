@@ -11,7 +11,7 @@ import {
 } from "nish/net/quic-conn-ack";
 ```
 
-```text
+```ts
 import { QuicAckRanges } from "nish/net/quic-conn-ack";
 
 const received = new QuicAckRanges();

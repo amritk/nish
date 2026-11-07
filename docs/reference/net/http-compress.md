@@ -33,7 +33,7 @@ import {
 
 ```ts
 import { DEFLATE_FAST } from "nish/compress/deflate";
-import { HTTP_CODING_GZIP, HttpCompressor } from "nish/net/http-compress";
+import { HTTP_OFFER_GZIP, HttpCompressor, httpAcceptEncoding } from "nish/net/http-compress";
 
 const enc = new HttpCompressor(DEFLATE_FAST, 1024, 65536); // once per thread
 // HTTP/1.1, in one call:
@@ -44,7 +44,7 @@ const m: i32 = enc.compress(coding, body, 0, n);
 if (m >= 0) {
   enc.addFields(names, values);
   h2.respond(id, 200, enc.names, enc.values, false);
-  h2.write(id, enc.output, 0, m);
+  h2.writeData(id, enc.output, 0, m, true);
 }
 ```
 
@@ -177,20 +177,37 @@ function httpAcceptEncoding(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+the buffer holding the field value, such as the request head
+
 </scalar-field>
 
 <scalar-field name="start" type="i32" required>
+
+the index in `buf` of the value's first octet
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+the index just past the value's last octet
+
 </scalar-field>
 
 <scalar-field name="offered" type="i32" required>
+
+which codings the program can produce, `HTTP_OFFER_*` bits
+  or 0 for none
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the `HTTP_CODING_*` to send the body in, or `HTTP_CODING_NONE`
+  when nothing offered is acceptable and identity is refused too
+
 </scalar-field>
 
 ## httpCompressorDefault
@@ -204,6 +221,10 @@ function httpCompressorDefault(): HttpCompressor
 #### Returns
 
 <scalar-field name="returns" type="HttpCompressor">
+
+a new compressor the caller owns, one per thread, with every
+  other setting at its default
+
 </scalar-field>
 
 ## httpIdentityRefused
@@ -224,22 +245,35 @@ function httpIdentityRefused(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+the buffer holding the field value, such as the request head
+
 </scalar-field>
 
 <scalar-field name="start" type="i32" required>
+
+the index in `buf` of the value's first octet
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+the index just past the value's last octet
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the client said it cannot take the body uncompressed
+
 </scalar-field>
 
 ## httpSegments
 
 The number of TCP segments `bytes` bytes take at `mss` bytes a segment.
+A segment size of zero or less panics, since no count would mean anything.
 
 ```ts
 function httpSegments(bytes: i32, mss: i32): i32
@@ -248,14 +282,24 @@ function httpSegments(bytes: i32, mss: i32): i32
 #### Parameters
 
 <scalar-field name="bytes" type="i32" required>
+
+the length of the whole response, head and body, in bytes
+
 </scalar-field>
 
 <scalar-field name="mss" type="i32" required>
+
+the payload one segment carries, in bytes
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+how many segments the bytes fill, the last one possibly partial;
+  0 for no bytes
+
 </scalar-field>
 
 ## HttpCompressor
@@ -270,17 +314,10 @@ class HttpCompressor
 | Member | |
 | --- | --- |
 | `new HttpCompressor(level: i32, minLength: i32, maxLength: i32)` | A compressor at `level` (`DEFLATE_FAST` suits a server) for bodies of `minLength` to `maxLength` bytes. A level outside 0 to 9, a negative `minLength` or a `maxLength` below it panics. |
-| `readonly acceptEncodingValue: u8[]` |  |
-| `readonly contentEncodingName: u8[]` |  |
 | `decision: i32` | The last decision, an `HTTP_COMPRESS_*`; `HTTP_COMPRESS_NOT_ACCEPTED` before any. |
 | `encoder: i32` | `HTTP_ENCODER_AUTO` (the default), `HTTP_ENCODER_FIXED` or `HTTP_ENCODER_LEVEL`. |
 | `encoderRuns: i32` | How many times `compress` and `compressAnyway` ran an encoder, from 0: a count for a test or a profile to read, never consulted by a decision. It wraps past 2^31 - 1 to -2^31 rather than panic, as a server can run that many; read it as a difference between two reads. |
-| `readonly fixed: GzipFixedCompressor` | The small-body encoder: one fixed-Huffman block, nothing kept between calls. |
 | `fixedLimit: i32` | The longest body `HTTP_ENCODER_AUTO` gives the fixed-Huffman encoder: 16384 by default. |
-| `readonly gzip: GzipCompressor` |  |
-| `readonly gzipValue: u8[]` |  |
-| `readonly maxLength: i32` |  |
-| `readonly minLength: i32` | The shortest body worth compressing, and the longest the output can hold. |
 | `minSaving: i32` | The least a compressed body must save to be sent: `minSaving` bytes and `minSavingPercent` percent of the body, whichever is more. 1 and 0 by default (any saving at all); a value below those counts as them. |
 | `minSavingPercent: i32` |  |
 | `mss: i32` |  |
@@ -289,9 +326,7 @@ class HttpCompressor
 | `segmentMode: boolean` | Whether `respondEncoded` also sends the compressed response only when, head included, it takes fewer TCP segments of `mss` bytes than the body as it is; off by default. `mss` is `HTTP_DEFAULT_MSS` unless the program sets it, or a connection's own `mss` overrides it. |
 | `readonly values: u8[][]` |  |
 | `vary: boolean` | Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which a cache needs whenever the same resource may be sent either way. On by default; turn it off when the program sets its own `Vary`. |
-| `readonly varyName: u8[]` |  |
 | `addFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields followed by `Content-Encoding: gzip` and, when `vary`, `Vary: Accept-Encoding`. The arrays are reused, so after the first few calls this allocates nothing; they hold until the next call. |
-| `addVary(): void` | Appends `Vary: Accept-Encoding` to the arrays `identityFields` built when `vary` is set and the last decision `varies`. |
 | `compress(coding: i32, body: u8[], off: i32, len: i32): i32` | Compresses `body[off .. off + len)` into `output` when the length is in `[minLength, maxLength]`, `coding` is `HTTP_CODING_GZIP` and gzip saves what `minSaving` and `minSavingPercent` ask; answers the compressed length, or -1 to send the body as it is, and sets `decision` either way. `encoder` picks the encoder; the fixed-Huffman one stops as soon as its output passes what would be kept. A window outside `body` panics. |
 | `compressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32` | `compress` for a client that refuses identity (`httpIdentityRefused`): gzip whatever the body's length, the saving or the segments, so long as it is no longer than `maxLength`. Answers the compressed length, or -1 when `coding` is not gzip or the body is too long (sent as it is, which RFC 9110 §12.5.3 allows). |
 | `fewerSegments(identityBytes: i32, encodedBytes: i32, mss: i32): boolean` | `segmentMode`'s rule, for a response of `identityBytes` bytes sent as it is or `encodedBytes` compressed, heads included, at `mss` bytes a segment (`this.mss` when 0 or less): whether the compressed one takes fewer segments. When it does not, `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS`. `respondEncoded` calls it; a program driving HTTP/2 or HTTP/3 by hand may with its own head sizes. |
@@ -299,7 +334,6 @@ class HttpCompressor
 | `identityFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields and, when `vary` and the last decision `varies`, `Vary: Accept-Encoding`: the fields of a body sent as it is from a resource that is sometimes compressed. |
 | `leastSaving(len: i32): i32` | The bytes a compressed `len`-byte body must save: `minSaving` and `minSavingPercent`, at least 1. |
 | `oneSegment(coding: i32, len: i32, mss: i32): boolean` | `segmentMode`'s shortcut, before any encoder runs: whether a `len`-byte body that `compress` would try (its length in `[minLength, maxLength]` and `coding` gzip) is no longer than one segment of `mss` bytes (as `fewerSegments` reads it). Sent as it is, such a response takes one segment once its head fits beside it, and no compression takes fewer, so `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks the head: when it does not fit, the caller goes on to `compress`, which decides again. Anything else answers false and leaves `decision` alone. |
-| `segmentSize(mss: i32): i32` | The segment `segmentMode` counts in: `mss` when above 0, else `this.mss` when above 0, else `HTTP_DEFAULT_MSS`. |
 | `varies(): boolean` | Whether the last decision depended on the request's `Accept-Encoding`, so the response needs `Vary: Accept-Encoding`: a body sent compressed, or one sent as it is because the client did not take gzip. A body the lengths or the saving kept as it is would go out the same to any client. |
 
 ## Constants
@@ -350,11 +384,15 @@ Nothing offered is acceptable, identity included (§12.5.3: 406, or identity any
 
 `HTTP_COMPRESS_NOT_ACCEPTED: i32`
 
+The client did not accept gzip, so the body went as it is; the default before any decision.
+
 </scalar-card>
 
 <scalar-card title="5" icon="phosphor/regular/hash">
 
 `HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32`
+
+Under `segmentMode`, compressing would not have saved a TCP segment.
 
 </scalar-card>
 
@@ -376,17 +414,24 @@ response that already fits one segment, decided without compressing.
 
 `HTTP_COMPRESS_TOO_LARGE: i32`
 
+The body was longer than `maxLength`, more than `output` was sized for.
+
 </scalar-card>
 
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `HTTP_COMPRESS_TOO_LITTLE_SAVED: i32`
 
+Gzip ran but did not save `minSaving` bytes and `minSavingPercent` percent,
+or the saving asked for was the whole body, so no encoder ran.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `HTTP_COMPRESS_TOO_SMALL: i32`
+
+The body was shorter than `minLength`, too small to be worth compressing.
 
 </scalar-card>
 
@@ -414,17 +459,25 @@ encoder always, or the constructor's level always.
 
 `HTTP_ENCODER_FIXED: i32`
 
+The fixed-Huffman encoder for every body `compress` takes: fastest, at some
+cost in size on large bodies. `compressAnyway` falls back to the
+`GzipCompressor` when it fails.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `HTTP_ENCODER_LEVEL: i32`
 
+Always the `GzipCompressor` at the constructor's level, whatever the body's length.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `HTTP_OFFER_DEFLATE: i32`
+
+The `offered` bit for deflate, which is negotiated but never produced here.
 
 </scalar-card>
 

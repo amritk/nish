@@ -41,7 +41,7 @@ import {
 ```
 
 ```ts
-import { Http1Parser, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
+import { Http1Parser, HTTP1_NEED_MORE, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
 
 const p = new Http1Parser(maxTarget, maxHeaderBytes, maxHeaders, maxBody);
 p.feed(received, 0, n);
@@ -256,14 +256,23 @@ function http1BytesAre(
 #### Parameters
 
 <scalar-field name="bytes" type="u8[]" required>
+
+the field name as octets, as `nish/net/http-fields` holds it
+
 </scalar-field>
 
 <scalar-field name="word" type="string" required>
+
+the lowercase name to compare with
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `bytes` is `word` with any letters in either case
+
 </scalar-field>
 
 ## http1Chunk
@@ -285,17 +294,29 @@ function http1Chunk(
 #### Parameters
 
 <scalar-field name="data" type="u8[]" required>
+
+the body bytes to send
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+where in `data` the chunk's bytes start
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+how many bytes of `data` the chunk carries
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+the chunk's bytes, framing included, in a fresh array the caller owns
+
 </scalar-field>
 
 ## http1HexValue
@@ -309,11 +330,17 @@ function http1HexValue(c: i32): i32
 #### Parameters
 
 <scalar-field name="c" type="i32" required>
+
+the byte to read, as a number 0 to 255
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0 to 15 for a hex digit in either case, or -1 when `c` is not one
+
 </scalar-field>
 
 ## http1IsFieldText
@@ -327,11 +354,17 @@ function http1IsFieldText(text: string): boolean
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+the candidate value or reason phrase
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when nothing in `text` could end the line early; an empty string passes
+
 </scalar-field>
 
 ## http1IsOws
@@ -345,11 +378,17 @@ function http1IsOws(c: i32): boolean
 #### Parameters
 
 <scalar-field name="c" type="i32" required>
+
+the byte to test, as a number 0 to 255
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `c` is whitespace a field value is trimmed of
+
 </scalar-field>
 
 ## http1IsToken
@@ -363,11 +402,17 @@ function http1IsToken(text: string): boolean
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+the candidate token, such as a field name a caller wants to send
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `text` is a valid token, false for an empty string
+
 </scalar-field>
 
 ## http1IsTokenByte
@@ -381,11 +426,17 @@ function http1IsTokenByte(c: i32): boolean
 #### Parameters
 
 <scalar-field name="c" type="i32" required>
+
+the byte to test, as a number 0 to 255
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `c` may stand in a method, a field name or another token
+
 </scalar-field>
 
 ## http1IsValueByte
@@ -399,11 +450,17 @@ function http1IsValueByte(c: i32): boolean
 #### Parameters
 
 <scalar-field name="c" type="i32" required>
+
+the byte to test, as a number 0 to 255
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `c` cannot end the line early or smuggle a control byte into the value
+
 </scalar-field>
 
 ## http1LastChunk
@@ -417,6 +474,9 @@ function http1LastChunk(): u8[]
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+those five bytes in a fresh array the caller owns
+
 </scalar-field>
 
 ## http1PutText
@@ -434,17 +494,29 @@ function http1PutText(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+the caller's buffer
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+where in `out` the text starts
+
 </scalar-field>
 
 <scalar-field name="text" type="string" required>
+
+the text to write, one byte per character
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the offset in `out` just past the text
+
 </scalar-field>
 
 ## http1ResponseHead
@@ -476,23 +548,41 @@ function http1ResponseHead(
 #### Parameters
 
 <scalar-field name="status" type="i32" required>
+
+the status code, 100 to 599
+
 </scalar-field>
 
 <scalar-field name="reason" type="string" required>
+
+the reason phrase after the code, which may be empty
+
 </scalar-field>
 
 <scalar-field name="names" type="string[]" required>
+
+the caller's field names, one per field, beside `values`
+
 </scalar-field>
 
 <scalar-field name="values" type="string[]" required>
+
+the caller's field values, `values[i]` for `names[i]`
+
 </scalar-field>
 
 <scalar-field name="bodyLength" type="i32" required>
+
+the body's length in bytes, or `HTTP1_CHUNKED` or `HTTP1_NO_BODY`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+the head's bytes in a fresh array the caller owns, or `null` when the head is refused
+
 </scalar-field>
 
 ## http1SameWord
@@ -511,20 +601,35 @@ function http1SameWord(
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+the string holding the candidate
+
 </scalar-field>
 
 <scalar-field name="a" type="i32" required>
+
+where the candidate starts in `text`
+
 </scalar-field>
 
 <scalar-field name="b" type="i32" required>
+
+where the candidate ends in `text`, exclusive
+
 </scalar-field>
 
 <scalar-field name="word" type="string" required>
+
+the lowercase word to compare with
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the slice is `word` with any letters in either case
+
 </scalar-field>
 
 ## http1Text
@@ -543,20 +648,35 @@ function http1Text(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+the bytes to read from
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+where the text starts in `buf`
+
 </scalar-field>
 
 <scalar-field name="to" type="i32" required>
+
+where the text ends in `buf`, exclusive
+
 </scalar-field>
 
 <scalar-field name="lower" type="boolean" required>
+
+true to lowercase ASCII letters, as a field name wants
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+a fresh string of those bytes, one character per byte
+
 </scalar-field>
 
 ## http1WriteChunk
@@ -580,23 +700,41 @@ function http1WriteChunk(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+the caller's buffer the chunk is written into
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+where in `out` the chunk starts
+
 </scalar-field>
 
 <scalar-field name="data" type="readonly u8[]" required>
+
+the body bytes to send
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+where in `data` the chunk's bytes start
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+how many bytes of `data` the chunk carries
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the offset in `out` just past the chunk, or `HTTP1_NO_ROOM` when it does not fit
+
 </scalar-field>
 
 ## http1WriteLastChunk
@@ -614,14 +752,23 @@ function http1WriteLastChunk(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+the caller's buffer the last chunk is written into
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+where in `out` the last chunk starts
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the offset in `out` just past the five bytes, or `HTTP1_NO_ROOM` when they do not fit
+
 </scalar-field>
 
 ## http1WriteResponseHead
@@ -657,35 +804,65 @@ function http1WriteResponseHead(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+the caller's buffer the head is written into
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+where in `out` the head starts
+
 </scalar-field>
 
 <scalar-field name="status" type="i32" required>
+
+the status code, 100 to 599
+
 </scalar-field>
 
 <scalar-field name="reason" type="string" required>
+
+the reason phrase after the code, which may be empty
+
 </scalar-field>
 
 <scalar-field name="names" type="u8[][]" required>
+
+the caller's field names as octets, beside `values`
+
 </scalar-field>
 
 <scalar-field name="values" type="u8[][]" required>
+
+the caller's field values as octets, `values[i]` for `names[i]`
+
 </scalar-field>
 
 <scalar-field name="bodyLength" type="i32" required>
+
+the body's length in bytes, or `HTTP1_CHUNKED` or `HTTP1_NO_BODY`
+
 </scalar-field>
 
 <scalar-field name="connection" type="string" required>
+
+the `Connection` field's value to send, such as `"close"`, or empty for none
+
 </scalar-field>
 
 <scalar-field name="date" type="u8[]" required>
+
+the IMF-fixdate bytes to send as `Date`, or empty for none
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the offset in `out` just past the head, `HTTP1_REFUSED` for a head it will not write, or `HTTP1_NO_ROOM`
+
 </scalar-field>
 
 ## Http1Parser
@@ -703,40 +880,22 @@ class Http1Parser
 | `body: u8[]` | The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. |
 | `bodyLen: i32` |  |
 | `bodyOff: i32` |  |
-| `bodyTotal: i32` | De-chunked body bytes so far, against `maxBody`. |
-| `buf: u8[]` | The bytes fed and not yet consumed are `buf[start .. end)`. |
 | `chunked: boolean` |  |
 | `contentLength: i32` | The declared body length, or -1 when the request has none or is chunked. |
-| `end: i32` |  |
-| `fieldCount: i32` | Field lines of the request so far, its trailers included, against `maxHeaders`. |
 | `head: u8[]` | The request line and the kept field lines of the request, copied out of `buf` as each is read, names in lowercase: what the spans below index. Kept from one request to the next, so a slot that has seen its largest head allocates nothing for the next one. |
 | `headerCount: i32` | How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. |
-| `headHeld: boolean` | Whether a kept-alive request ended and its head is still held for the response: the next `next()` clears it before it reads a byte more. |
 | `headLength: i32` | How much of `head` the request uses. |
 | `keepAlive: boolean` |  |
 | `keepText: boolean` | Whether `method`, `target`, `names`, `values` and `upgrade` are filled as strings. A server that must allocate nothing per request turns it off and reads the head through `head`, the spans and the `...Is` methods. |
-| `left: i32` | Bytes left in a length-delimited body or in the current chunk. |
-| `lineControl: boolean` | Whether the line being scanned holds a byte a field value may not: a control byte other than HTAB, or DEL (RFC 9110 §5.5). `http1TakeLine` sets it as it looks for the line's end, so a field line's bytes are read once, not once for the LF and again for the check. |
-| `lineEnd: i32` |  |
-| `lineStart: i32` | The line `http1TakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped. |
-| `maxBody: i32` |  |
 | `maxChunk: i32` | The most body bytes one `HTTP1_BODY` hands over; a caller's number, 2^30 unless set. |
-| `maxHeaderBytes: i32` |  |
-| `maxHeaders: i32` |  |
-| `maxTarget: i32` |  |
 | `method: string` |  |
 | `methodEnd: i32` |  |
 | `methodStart: i32` | The method is `head[methodStart .. methodEnd)` and the target `head[targetStart .. targetEnd)`. |
 | `minor: i32` | The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. |
 | `names: string[]` | The field names, in lowercase, in the order they arrived; `values` beside them. |
 | `reason: string` | What was wrong, once `next()` said `HTTP1_ERROR`; for a log, not for the response. |
-| `scan: i32` | Where the search for the next LF resumes, so a line fed a byte at a time is scanned once. |
-| `sectionBytes: i32` | Bytes of the header or trailer section so far, against `maxHeaderBytes`. |
 | `spans: i32[]` | Four entries per field, into `head`: name start and end, value start and end (OWS trimmed). |
-| `start: i32` |  |
-| `state: i32` |  |
 | `status: i32` | The status code to answer once `next()` said `HTTP1_ERROR`. |
-| `tally: Http1ListTally` | Reused by every list `http1Tally` walks. |
 | `target: string` |  |
 | `targetEnd: i32` |  |
 | `targetStart: i32` |  |

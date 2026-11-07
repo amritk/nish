@@ -23,6 +23,17 @@ import {
 } from "nish/net/router";
 ```
 
+```ts
+const HOME: i32 = 0   // module constants, in the order the routes are added
+const USER: i32 = 1
+const router = new Router(new RouterLimits())
+if (router.add("GET", "/") !== HOME || router.add("GET", "/users/:id") !== USER) panic(...)
+// per request, with `params` made once beside the connection:
+switch (router.match(p.head, p.methodStart, p.methodEnd, p.head, p.targetStart, p.targetEnd, params)) {
+  case HOME: ... case USER: ... case ROUTER_NOT_FOUND: ...
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="routerDecode" icon="phosphor/regular/function" href="#routerdecode">
@@ -47,24 +58,13 @@ What a `Router` holds and refuses past.
 
 <scalar-callout type="info">
 
-```text
-const HOME: i32 = 0   // module constants, in the order the routes are added
-const USER: i32 = 1
-const router = new Router(new RouterLimits())
-if (router.add("GET", "/") !== HOME || router.add("GET", "/users/:id") !== USER) panic(...)
-// per request, with `params` made once beside the connection:
-switch (router.match(p.head, p.methodStart, p.methodEnd, p.head, p.targetStart, p.targetEnd, params)) {
-  case HOME: ... case USER: ... case ROUTER_NOT_FOUND: ...
-}
-```
-
-</scalar-callout>
-
 Nish has no function values, so a route is the index `add` answered, 0 for
 the first and one more for each after, and the program dispatches on it
 with `switch`, whose labels are module constants. A parameter is answered as a
 `[start, end)` pair of offsets into the target, never as a copy, and
 `routerDecode` percent-decodes one of them into a buffer the caller owns.
+
+</scalar-callout>
 
 <scalar-detail title="The table is built once; a match allocates nothing">
 
@@ -123,20 +123,35 @@ function routerDecode(
 #### Parameters
 
 <scalar-field name="target" type="u8[]" required>
+
+the buffer the range points into, usually the request head
+
 </scalar-field>
 
 <scalar-field name="start" type="i32" required>
+
+where the raw parameter starts in `target`
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+where the raw parameter ends in `target`
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+where the decoded bytes go, from index 0; the caller's buffer
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+how many decoded bytes were written, or `ROUTER_BAD_ESCAPE` or `ROUTER_NO_ROOM`
+
 </scalar-field>
 
 ## Router
@@ -152,50 +167,11 @@ class Router
 | Member | |
 | --- | --- |
 | `new Router(limits: RouterLimits)` | An empty table. Panics, naming the field, on a limit outside the range `RouterLimits` gives it. |
-| `deepest: i32` | The most segments any route has: a path is split no further than one past it. |
-| `endpointNext: i32[]` |  |
-| `firstChild: i32[]` | Per node: its first literal child, or -1; siblings chain through `nextSibling`. |
-| `firstEndpoint: i32[]` | Per node: the first route ending there, or -1; routes chain through `endpointNext`. |
-| `found: i32[]` |  |
-| `foundCount: i32` |  |
-| `labelEnd: i32[]` |  |
-| `labels: u8[]` | Every literal label, back to back. |
-| `labelStart: i32[]` | Per node: its literal label, `labels[labelStart .. labelEnd)`; empty for a parameter or `*` node. |
-| `maxMethods: i32` |  |
-| `maxParams: i32` |  |
-| `maxPatternBytes: i32` | The limits, copied out of the `RouterLimits` the table was made with. |
-| `maxRoutes: i32` |  |
-| `maxSegments: i32` |  |
-| `methodBytes: u8[]` | The methods the table knows, `methodBytes[methodStart[m] .. methodEnd[m])`, compared exactly (RFC 9110 §9.1). |
-| `methodEnd: i32[]` |  |
-| `methodStart: i32[]` |  |
-| `nextSibling: i32[]` | Per node: the next literal child of its parent, or -1. |
-| `otherMethod: boolean` | During a match: whether a route of another method ended at the path's end. |
-| `paramChild: i32[]` | Per node: its parameter child, or -1; one per node, since names take no part in matching. |
-| `patEnd: i32[]` |  |
-| `pathEnd: i32` |  |
-| `patKind: i32[]` | `add`'s scratch: each pattern segment's kind and span in the pattern. |
-| `patStart: i32[]` |  |
-| `routeMethod: i32[]` | Per route: its method's index into `methodStart`, the next route ending at its node, and its parameter pairs. |
-| `routeParams: i32[]` |  |
-| `segEnd: i32[]` |  |
-| `segments: i32` | During a match: how many segments the path has, where it ends, the method's index, and the pairs in `found`. |
-| `segStart: i32[]` | `match`'s scratch, sized by the constructor: each segment's span, then the pairs found so far. |
-| `visited: i32` | The nodes the last `match` visited: never more than `nodeCount()`, which the tests pin. |
-| `wanted: i32` |  |
-| `wildChild: i32[]` | Per node: its `*` child, or -1. |
 | `add(method: string, pattern: string): i32` | Adds the route `method pattern` and answers its index, counting from 0, or a negative `ROUTER_*` code; a refused pattern adds nothing. Whether a pattern is refused never depends on the order routes were added in. |
-| `addChild(node: i32, pattern: string, k: i32): i32` | Adds the child of `node` that pattern segment `k` leads to, and answers it. |
-| `childFor(node: i32, pattern: string, k: i32): i32` | The child of `node` that pattern segment `k` leads to, or -1. |
-| `endpointFor(node: i32): i32` | The route of the wanted method ending at `node`, or -1, noting a route of another method there. |
 | `lastVisited(): i32` | How many nodes the last `match` visited. |
 | `match(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32` | The route `method[mStart .. mEnd)` and `target[tStart .. tEnd)` reach, or a negative `ROUTER_*` code. On a route, its parameters are written to `params` as `[start, end)` offsets into `target`, two slots each, in the pattern's order, and a final `*` as one more pair; on a refusal `params` is untouched. Panics on a range outside its array. |
-| `methodIndex(method: string): i32` | The index of `method` among the methods the table knows, or -1. |
 | `nodeCount(): i32` | How many nodes the tree has, the root included: the most one `match` visits. |
 | `paramCount(route: i32): i32` | How many `[start, end)` pairs `route` answers: its parameters, and one more for a final `*`. |
-| `routes(): i32` | How many routes the table holds; the next `add` answers this index. |
-| `splitPattern(pattern: string): i32` | Splits `pattern`, which starts with `/`, into `patKind`/`patStart`/`patEnd` and answers how many segments it has, or the code that refuses it. |
-| `walk(target: u8[], node: i32, depth: i32): i32` | The route below `node`, which has consumed `depth` segments, for the wanted method, or -1. Literal, then parameter, then `*`: the first branch that reaches a route wins, and a branch that does not is left with the pairs it pushed popped. |
 
 ## RouterLimits
 

@@ -31,7 +31,7 @@ import {
 } from "nish/net/quic-listener";
 ```
 
-```text
+```ts
 import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT, QUIC_LISTENER_ANSWER_SIZE } from "nish/net/quic-listener";
 
 const listener = new QuicListener(config, entropy);      // entropy: QUIC_LISTENER_ENTROPY_SIZE random bytes

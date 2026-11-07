@@ -33,7 +33,7 @@ import {
 } from "nish/net/quic-conn-params";
 ```
 
-```text
+```ts
 import { QuicTransportParameters, quicEncodeTransportParameters,
          quicParseTransportParameters } from "nish/net/quic-conn-params";
 

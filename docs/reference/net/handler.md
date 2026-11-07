@@ -16,6 +16,26 @@ import {
 } from "nish/net/handler";
 ```
 
+```ts
+const HOME: i32 = 0   // module constants, in the order the routes are added
+const USER: i32 = 1
+const router = new Router(new RouterLimits())
+router.add("GET", "/")          // answers HOME
+router.add("GET", "/users/:id") // answers USER
+const h = new HttpHandler(new HandlerLimits(), tcpListen("0.0.0.0", 8080, 1024), router)
+while (true) {
+  h.wait(1000)
+  while (h.ready()) {
+    const req = h.take()
+    switch (req.route) {
+      case HOME: h.send(req, 200, TEXT, hello, 0, hello.length); break
+      case USER: { const w = h.json(); ...; h.sendJson(req, 200); break }
+      default: h.refuse(req)   // 404, or 405 with its Allow
+    }
+  }
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="HandlerLimits" icon="phosphor/regular/cube" href="#handlerlimits">
@@ -40,34 +60,14 @@ One request, whole: its head copied out of the carrier and its body.
 
 <scalar-callout type="info">
 
-```text
-const HOME: i32 = 0   // module constants, in the order the routes are added
-const USER: i32 = 1
-const router = new Router(new RouterLimits())
-router.add("GET", "/")          // answers HOME
-router.add("GET", "/users/:id") // answers USER
-const h = new HttpHandler(new HandlerLimits(), tcpListen("0.0.0.0", 8080, 1024), router)
-while (true) {
-  h.wait(1000)
-  while (h.ready()) {
-    const req = h.take()
-    switch (req.route) {
-      case HOME: h.send(req, 200, TEXT, hello, 0, hello.length); break
-      case USER: { const w = h.json(); ...; h.sendJson(req, 200); break }
-      default: h.refuse(req)   // 404, or 405 with its Allow
-    }
-  }
-}
-```
-
-</scalar-callout>
-
 The handler owns the readiness loop, the carrier and everything between a
 request's first byte and its last response byte: it accepts, routes each
 request at its head, gathers its body up to the cap, and hands the program
 the request once it is whole. Keep-alive and pipelining are the carrier's:
 a connection's next request is read only once the one before it is
 answered and handed over, so answers go out in request order.
+
+</scalar-callout>
 
 <scalar-detail title="There are no function values">
 
@@ -151,10 +151,10 @@ class HandlerLimits
 
 | Member | |
 | --- | --- |
-| `new HandlerLimits()` |  |
+| `new HandlerLimits()` | The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30 second body timeout, and the carrier's own defaults with the body cap lowered to one MiB. Change a field after construction to tune one. |
 | `bodyTimeout: i32` | Milliseconds from a request's head to the end of its body. A request still reading its body past it has its connection closed: the carrier's `idleTimeout` is refreshed by every byte, so a body trickled a byte at a time would otherwise hold its slot for good (HANDLER-5). It is checked each `wait`, at most once a second, so a connection may outlive it by up to a second, or until `wait` returns. |
 | `http: Http1Config` | The carrier's caps and timeouts; `http.maxBody` is the body cap, past which a request is answered 413. |
-| `jsonBytes: i32` | The JSON scratch buffer's size: the largest body `json` and `problem` can write. |
+| `jsonBytes: i32` | Bytes in the JSON scratch buffer: the largest body `json` and `problem` can write. A value past it makes `sendJson` answer 500. At least 256. |
 | `maxEvents: i32` | The most readiness events one `wait` takes. |
 | `slots: i32` | The most connections at once. |
 
@@ -170,80 +170,27 @@ class HttpHandler
 | Member | |
 | --- | --- |
 | `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. |
-| `acceptRestUntil: i64` | When an accept failed for want of a resource (EMFILE, ENFILE, ENOMEM): the listener is out of the loop until then, which it would otherwise wake every turn while its connection waits. 0 while it is in the loop. |
-| `allowBytes: u8[][]` |  |
-| `allowMasks: i64[]` | Each `Allow` value made, by the bit mask of the methods it lists: made once a mask and kept. |
-| `allowNames: u8[][]` |  |
-| `allowValues: u8[][]` |  |
-| `bodyCheckAt: i64` | When `wait` next looks for a body past `bodyTimeout`. |
-| `bodyTimeout: i64` | `bodyTimeout` in nanoseconds. |
-| `current: i32[]` |  |
-| `draining: boolean` | Set by `drain`: accept nothing more and close each connection once it is idle. |
-| `free: i32[]` |  |
-| `jsonBegun: boolean` | Whether `json` gave out the writer for a value `sendJson` has not yet sent. |
-| `jsonType: u8[]` |  |
-| `listener: i32` |  |
-| `loop: i32` |  |
-| `noFields: u8[][]` |  |
-| `open: boolean[]` |  |
-| `outputSize: i32` |  |
-| `probe: i32[]` | `refuse`'s scratch for `Router.match`. |
-| `problemType: u8[]` |  |
-| `queue: i32[]` | Whole requests waiting for `take`, a ring of `queue.length` with `queueCount` from `queueStart`. |
-| `queueCount: i32` |  |
-| `queueStart: i32` |  |
-| `readyFds: i32[]` | `pollWait`'s output. |
-| `requests: HttpRequest[]` | Every request the pool has made, and the indices of the free ones. |
-| `router: Router` |  |
 | `scratch: u8[]` | `json` and `problem` write here. |
 | `server: Http1Server` |  |
-| `slotGen: i32[]` | Per slot: its generation, its request (-1 for none), and whether it holds a connection. |
-| `turnAt: i64` | When the current turn's sockets were ready (`monotonicNanos`): a head read in it is stamped with this. |
-| `typeName: u8[][]` | One field for `send`; two for a 405. |
-| `typeValue: u8[][]` |  |
-| `watchedFired: boolean[]` | Per watched id: whether its descriptor was ready in the last `wait`. |
 | `writer: JsonWriter` |  |
-| `acceptAll(): void` | Takes every waiting connection. |
-| `allowFor(r: HttpRequest): u8[]` | The `Allow` value for `r`'s path: each method a route of it takes, and HEAD wherever GET is, since a GET route answers HEAD too. Made once for each set of methods. |
-| `begin(slot: i32, conn: Http1Connection): void` | A head: a request from the free list, the head copied into it, and its route. |
-| `closeSlot(slot: i32): void` | Closes `slot` and bumps its generation, so any answer still owed for it is dropped. A request the handler alone holds goes back now; one queued or taken goes back when `ready` passes it or the program answers it. |
 | `connections(): i32` | How many connections are open. |
 | `drain(): void` | Begins a graceful stop: the handler accepts no more connections, closes each idle one now, and closes each other one once the request on it is answered and sent, so `connections()` falls to 0 as the program answers what it holds. A request already read on a draining connection is still handed over and answered. The listener is the program's to close. |
-| `drive(slot: i32): void` | Takes `slot`'s events until it needs the socket again, then sends what it holds and re-arms it, or closes it once it is over. |
 | `empty(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say. |
 | `end(r: HttpRequest): i32` | Ends `r`'s response. `r` is the handler's again: it goes back once the carrier has taken every byte, and the connection's next request is read. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
-| `enqueue(r: HttpRequest): void` |  |
-| `expireBodies(now: i64): void` | Closes every connection whose request has been reading its body for longer than `bodyTimeout` at `now`. |
-| `finish(r: HttpRequest, conn: Http1Connection): void` | Ends `r`'s response once nothing is pending, and hands `r` back; otherwise leaves it flushing. |
 | `fired(id: i32): boolean` | Whether watched descriptor `id` was ready in the last `wait`. |
-| `forget(slot: i32): void` | The bookkeeping of a slot the carrier has closed. |
-| `gather(slot: i32, conn: Http1Connection): void` | Body bytes: appended to the request's body, which the carrier's cap bounds. |
 | `json(): JsonWriter` | The JSON writer, reset onto the handler's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
-| `keep(r: HttpRequest, buf: u8[], off: i32, len: i32): void` | Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. |
-| `live(r: HttpRequest): boolean` | Whether `r`'s connection is the one it was read on, still open. |
-| `obtain(): HttpRequest` | A free request, or a new one. |
 | `pooled(): i32` | How many requests the pool has made: the most ever in flight at once. |
 | `problem(r: HttpRequest, status: i32, title: string, detail: string): i32` | Answers `r` with an RFC 9457 problem: `application/problem+json` with `type` `about:blank`, `title` (the status's reason, for that type), `status` and, when not empty, `detail`, a sentence for a person about this occurrence. Nothing of the request is echoed, so a detail is the program's own words. |
-| `pushPending(r: HttpRequest, conn: Http1Connection): void` | Hands the carrier as much of `r`'s pending bytes as it takes. |
 | `ready(): boolean` | Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here. |
 | `refuse(r: HttpRequest): i32` | Answers a request the router refused, by its `route`: 405 with an `Allow` field naming the methods the path has (RFC 9110 §15.5.6), and 404 for anything else. A parameter's malformed escape is the program's to refuse, when it decodes the parameter. |
-| `release(r: HttpRequest): void` |  |
-| `releaseReading(slot: i32): void` | Hands back the request `slot` was reading when the carrier refused it. |
-| `resume(slot: i32, conn: Http1Connection): void` | `H1_WRITE`: the carrier has room again for the response under way. |
-| `roomy(conn: Http1Connection): boolean` | Whether `conn`'s output holds at most half its size unsent, so a response head fits behind it. |
-| `route(r: HttpRequest): void` | Routes `r` through the router. A HEAD that only a GET route matches takes that route, since a GET resource answers HEAD (RFC 9110 §9.3.2) and the carrier sends no body for it. |
 | `send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call. |
 | `sendFields(r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, the fields `names[k]`: `values[k]` and the body `body[off .. off + len)`, in one call. |
 | `sendJson(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and the value `json`'s writer holds, as `application/json`. A value the writer refused or did not finish — it outgrew `jsonBytes`, say — is answered as a 500 problem instead. |
 | `start(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32` | Starts `r`'s response: `status` (200 to 599), the fields `names[k]`: `values[k]`, and a body of `bodyLength` bytes or `HTTP1_CHUNKED`; then `write` the body and `end`. Answers `HANDLER_SENT`, or `HANDLER_DROPPED` when `r`'s connection has closed — every later `write` and `end` for it then does nothing, and `end` hands it back. |
-| `sweep(): void` | Every slot the carrier's `expire` closed. |
 | `take(): HttpRequest` | The next whole request, which the program now owes an answer. Panics when none is `ready`. |
 | `wait(timeoutMs: i32): i32` | One turn of the loop: waits up to `timeoutMs` (-1 for no limit) for a socket to be ready, accepts, reads and writes what is, closes the connections past their timeouts, and answers how many whole requests are waiting for `take`. |
 | `watch(fd: i32, id: i32): void` | Watches `fd` for reading beside the handler's sockets, as `id` (0 to `HANDLER_MAX_WATCHED - 1`): `fired(id)` says whether it was ready in the last `wait`. For a program's own descriptors — `signalFd()` for a graceful stop, a pipe from another thread. |
-| `whole(slot: i32, conn: Http1Connection): void` | The request is whole: queued for `take`, or parked while the response before it is still mostly unsent. |
 | `write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
-| `writeProblem(status: i32, title: string, detail: string): i32` | Writes a problem object into the scratch buffer and answers its length. One too large for it is written without its detail, and then without its title, which leaves room enough in the least `jsonBytes`. |
-| `writeProblemObject(status: i32, title: string, detail: string): i32` | `writeProblem`'s one try: the object's length, or -1 when it did not fit. |
 
 ## HttpRequest
 
@@ -257,31 +204,20 @@ class HttpRequest
 
 | Member | |
 | --- | --- |
-| `new HttpRequest(index: i32)` |  |
+| `new HttpRequest(index: i32)` | An empty request for the handler's pool; its buffers grow to the first request it holds and are kept for the ones after. |
 | `body: u8[]` | The body, `body[0 .. bodyLength)`. |
 | `bodyLength: i32` |  |
 | `gen: i32` |  |
 | `head: u8[]` | The method, the target and the header section, as the parser kept them (field names lowercased). |
-| `headerCount: i32` |  |
 | `index: i32` | Its index in the handler's pool. |
 | `methodEnd: i32` |  |
 | `methodStart: i32` |  |
-| `paramCount: i32` | How many parameter pairs `params` holds. |
-| `params: i32[]` | The route parameters as `[start, end)` pairs into `head`, in the pattern's order. |
-| `pathEnd: i32` | Where the path ends: the target's first `?`, or its end. |
-| `pending: u8[]` | What the carrier had no room for yet: `pending[pendingStart .. pendingEnd)`. |
-| `pendingEnd: i32` |  |
-| `pendingStart: i32` |  |
 | `queryValueEnd: i32` |  |
 | `queryValueStart: i32` | The span `queryIndex` found, raw. |
 | `route: i32` | The index `Router.add` answered for the route, or a negative `ROUTER_*` code. |
-| `since: i64` | When the head was read, as the handler's turn saw it (`monotonicNanos`); `bodyTimeout` runs from here. |
 | `slot: i32` | The connection's slot, and its generation when this request was read. |
-| `spans: i32[]` | Four per field, into `head`: name start and end, value start and end. |
-| `state: i32` |  |
 | `targetEnd: i32` |  |
 | `targetStart: i32` |  |
-| `checkParam(k: i32): void` |  |
 | `hasQuery(name: string): boolean` | Whether the query holds a parameter named `name`. |
 | `header(name: string): i32` | The index of the first field named `name`, which is lowercase, or `HANDLER_ABSENT`. |
 | `headerIs(name: string, value: string): boolean` | Whether the first field named `name` (lowercase) has exactly the value `value`. |

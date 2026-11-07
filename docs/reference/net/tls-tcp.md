@@ -15,6 +15,21 @@ import {
 } from "nish/net/tls-tcp";
 ```
 
+```ts
+const listener = tcpListen("0.0.0.0", 8443, 128);
+const tls = new TlsTcpServer(config, listener, 64);
+pollAdd(loop, listener, 1, LISTENER);
+// when the listener is readable:
+const slot: i32 = tls.accept(random32(), random32());
+if (slot >= 0) { pollAdd(loop, tls.fd(slot), 1, slot); }
+// when a connection's token comes back:
+let wants: i32 = (events & 5) !== 0 ? tls.readable(slot) : tls.writable(slot);
+if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signP256(slot, leafKey); }
+if ((wants & TLS_RECORD_DATA) !== 0) { tls.read(slot, buf, 0, buf.length); ... }
+if ((wants & TLS_RECORD_DONE) !== 0) { tls.close(slot); }
+else { pollModify(loop, tls.fd(slot), wants & 3, slot); }
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="tlsConnect" icon="phosphor/regular/function" href="#tlsconnect">
@@ -42,25 +57,6 @@ A pool of TLS 1.3 server connections on one listening socket.
 </scalar-card>
 
 </scalar-grid>
-
-<scalar-callout type="info">
-
-```text
-const listener = tcpListen("0.0.0.0", 8443, 128);
-const tls = new TlsTcpServer(config, listener, 64);
-pollAdd(loop, listener, 1, LISTENER);
-// when the listener is readable:
-const slot: i32 = tls.accept(random32(), random32());
-if (slot >= 0) { pollAdd(loop, tls.fd(slot), 1, slot); }
-// when a connection's token comes back:
-let wants: i32 = (events & 5) !== 0 ? tls.readable(slot) : tls.writable(slot);
-if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signP256(slot, leafKey); }
-if ((wants & TLS_RECORD_DATA) !== 0) { tls.read(slot, buf, 0, buf.length); ... }
-if ((wants & TLS_RECORD_DONE) !== 0) { tls.close(slot); }
-else { pollModify(loop, tls.fd(slot), wants & 3, slot); }
-```
-
-</scalar-callout>
 
 <scalar-detail title="The program is the loop">
 

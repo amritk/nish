@@ -655,13 +655,10 @@ class UrlPathSegments
 | Member | |
 | --- | --- |
 | `new UrlPathSegments()` | An iterator over nothing until `reset`. |
-| `bytes: u8[]` |  |
-| `done: boolean` |  |
-| `end: i32` |  |
+| `bytes: u8[]` | The array the path is read from, as `reset` was given it. |
 | `length: i32` | The current segment's length in raw bytes. |
-| `pos: i32` |  |
 | `start: i32` | The current segment's first byte. |
-| `next(): boolean` | Moves to the next segment and answers true, or answers false when the path has no more. |
+| `next(): boolean` | Moves to the next segment, whose bytes `start` and `length` then name. |
 | `reset(bytes: u8[], off: i32, len: i32): void` | Starts over on the path `bytes[off, off + len)`; panics when the window is outside the array. |
 
 ## UrlQuery
@@ -680,18 +677,13 @@ class UrlQuery
 | Member | |
 | --- | --- |
 | `new UrlQuery(limits: UrlQueryLimits)` | An iterator over nothing until `reset`, with the cap in `limits`. |
-| `bytes: u8[]` |  |
-| `count: i32` |  |
-| `end: i32` |  |
 | `failed: i32` | 0, or the `URL_QUERY_ERR_*` code every later `next()` answers. |
 | `hasValue: boolean` | False for a pair written without `=` (`a`), true for `a=` with `valueLength` 0. |
-| `keyLength: i32` |  |
-| `keyStart: i32` |  |
-| `maxPairs: i32` |  |
-| `pos: i32` |  |
-| `valueLength: i32` |  |
-| `valueStart: i32` |  |
-| `next(): i32` | `URL_QUERY_PAIR` with the windows set to the next pair, `URL_QUERY_END`, or `failed`. |
+| `keyLength: i32` | The current pair's key length in raw bytes. |
+| `keyStart: i32` | Where the current pair's key starts in `bytes`. |
+| `valueLength: i32` | The current pair's value length in raw bytes, 0 when it has none. |
+| `valueStart: i32` | Where the current pair's value starts in `bytes`. |
+| `next(): i32` | Moves to the next pair, setting the key and value windows. |
 | `reset(bytes: u8[], off: i32, len: i32): void` | Starts over on the query `bytes[off, off + len)`, clearing `failed`; panics when the window is outside the array. |
 
 ## UrlQueryLimits

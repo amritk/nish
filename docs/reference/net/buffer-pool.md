@@ -10,6 +10,14 @@ import {
 } from "nish/net/buffer-pool";
 ```
 
+```ts
+const pool = new BufferPool("TlsTcpServer.output", 33290, slots);
+// when a connection first needs room:
+const out: u8[] = pool.take();
+// ... write out[0 .. used) and send it ...
+pool.giveSecret(out, used); // or pool.give(out, used) for bytes that were never secret
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="BufferPool" icon="phosphor/regular/cube" href="#bufferpool">
@@ -20,21 +28,12 @@ A pool of `size`-byte `u8` buffers, at most `ceiling` of them, lent last given f
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="The shape of `Http1OutputPool`">
 
-```ts
-const pool = new BufferPool("TlsTcpServer.output", 33290, slots);
-// when a connection first needs room:
-const out: u8[] = pool.take();
-// ... write out[0 .. used) and send it ...
-pool.giveSecret(out, used); // or pool.give(out, used) for bytes that were never secret
-```
-
-</scalar-callout>
-
-It has the shape of `nish/net/http1-server`'s `Http1OutputPool` (`take`,
-`give`, `made`, a `u8[][]` free list), so the two read alike and can merge,
-with three things added:
+It has the shape of
+`nish/net/http1-server`'s `Http1OutputPool` (`take`, `give`, `made`, a
+`u8[][]` free list), so the two read alike and can merge, with three things
+added:
 
 - **A ceiling.** At most `ceiling` buffers ever exist. A server sizes it to
   what preallocating every slot would have cost, so a full server behaves as
@@ -49,12 +48,23 @@ with three things added:
   buffer, or a give-back with nothing lent is a borrower's bug, and each
   panics with the pool's name rather than corrupting the free list quietly.
 
-The pool grows to its high-water mark and never shrinks: after warm-up a
+</scalar-detail>
+
+<scalar-detail title="It never shrinks">
+
+The pool grows to its high-water mark: after warm-up a
 `take` pops the free list and a `give` pushes onto capacity it already has,
 so a warmed take/give loop moves the arena by nothing.
 
-Private helpers share the importing program's flat symbol namespace
-(`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
+</scalar-detail>
+
+<scalar-detail title="Helper names">
+
+Private helpers share the importing program's flat symbol
+namespace (`docs/wp26-stdlib.md` §3e), which is why each one carries the
+module's name.
+
+</scalar-detail>
 
 ## BufferPool
 
@@ -70,11 +80,7 @@ class BufferPool
 | Member | |
 | --- | --- |
 | `new BufferPool(name: string, size: i32, ceiling: i32)` | An empty pool: it makes nothing until the first `take`. `name` is what its panics print (the owner's type and field reads best, `"Http2TlsServer.output"`). Panics, naming the pool, unless `size` is above 0 and `ceiling` at least 1: a pool of neither makes a buffer nobody can use or none at all. |
-| `ceiling: i32` | The most buffers the pool will ever make. |
-| `free: u8[][]` | The buffers given back and not yet taken again; the last one is lent next. |
 | `made: i32` | How many buffers the pool has made: its high-water mark, since it never frees one. |
-| `name: string` | Names the pool in every panic, so a leak or a stray buffer says whose it is. |
-| `size: i32` | The length of every buffer the pool makes and takes back. |
 | `give(buf: u8[], used: i32): void` | Takes back a buffer `take` lent, after zeroing `buf[0 .. used)` with a plain fill. `used` is how far the borrower wrote: the zeroing promises nothing about bytes past it. For bytes that were never secret; a buffer that held plaintext or keys under TLS goes back through `giveSecret`.<br><br>Panics when `buf` is not `size` bytes, when `used` is outside `0 .. size`, or when nothing is lent. |
 | `giveSecret(buf: u8[], used: i32): void` | `give` for a buffer that held secret bytes: the zeroing is `secureZero`, whose stores no optimisation removes, where `give`'s fill is an ordinary store `-O2` may drop once nothing reads the buffer again. `secureZero` clears a whole array, so this zeroes all `size` bytes whenever `used` is above 0, and costs nothing for a buffer that was never written.<br><br>Panics as `give` does. |
 | `lent(): i32` | How many buffers are lent now: made, less those waiting on the free list. |

@@ -304,56 +304,34 @@ class Http1ResponseParser
 | --- | --- |
 | `new Http1ResponseParser(maxStatusLine: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i64, maxTrailerBytes: i32)` | Each `i32` limit is clamped into 0 to 2^30 and `maxBody` into 0 to 2^53, so that the sums the parser makes of them cannot overflow. |
 | `body: u8[]` | The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. |
-| `bodyLen: i32` |  |
-| `bodyOff: i32` |  |
+| `bodyLen: i32` | How many bytes the last `HTTP1_BODY` holds. |
+| `bodyOff: i32` | Where the last `HTTP1_BODY`'s bytes start in `body`. |
 | `bodyTotal: i64` | De-chunked body bytes so far, against `maxBody`. |
-| `buf: u8[]` | The bytes fed and not yet consumed are `buf[start .. end)`. |
-| `chunked: boolean` |  |
+| `chunked: boolean` | Whether the response's body is chunked. |
 | `closed: boolean` | Whether `finish()` said the server closed the connection. |
 | `contentLength: i64` | The declared body length, or -1 when the response has none or is chunked or read until close. |
-| `end: i32` |  |
 | `error: i32` | Why `next()` said `HTTP1_ERROR`: one of the `HTTP1_E_` codes. |
 | `errorText: string` | What was wrong, once `next()` said `HTTP1_ERROR`; for a log. |
-| `fieldCount: i32` | Field lines of the response so far, its trailers included, against `maxHeaders`. |
-| `head: u8[]` | The response's reason phrase and kept fields, copied: `head[reasonStart .. reasonEnd)` is the reason, and field `i` is `head[spans[4i] .. spans[4i + 1])`, its name in lowercase, then `head[spans[4i + 2] .. spans[4i + 3])`, its value. Both arrays are reused from response to response. |
-| `headUsed: i32` | Bytes of `head` in use, and the fields recorded in `spans`. |
-| `informational: i32` | Interim responses before this request's final one, against `HTTP1_MAX_INFORMATIONAL`. |
 | `keepStrings: boolean` | Whether `names`, `values` and `reason` are filled; `fieldsAsSpans()` clears it. |
-| `left: i64` | Bytes left in a length-delimited body or in the current chunk. |
-| `lineEnd: i32` |  |
-| `lineStart: i32` | The line `http1ClientTakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped. |
-| `maxBody: i64` |  |
-| `maxHeaderBytes: i32` |  |
-| `maxHeaders: i32` |  |
-| `maxStatusLine: i32` |  |
-| `maxTrailerBytes: i32` |  |
+| `maxBody: i64` | The most body bytes a response may carry, de-chunked; past it the parser refuses. |
 | `minor: i32` | The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. |
 | `names: string[]` | The field names, in lowercase, in the order they arrived; `values` beside them, OWS trimmed. These and `reason` are filled only while the parser keeps strings, which it does until `fieldsAsSpans()`; `fields()`, `fieldName`, `fieldValue`, `reasonText` and `header` answer in either mode. |
-| `persistent: boolean` |  |
 | `reason: string` | The reason phrase, which RFC 9112 §4 says a client ignores; for a log. |
-| `reasonEnd: i32` |  |
-| `reasonStart: i32` |  |
-| `scan: i32` | Where the search for the next LF resumes, so a line fed a byte at a time is scanned once. |
-| `sectionBytes: i32` | Bytes of the header or trailer section so far, against its limit. |
-| `spanCount: i32` |  |
-| `spans: i32[]` |  |
-| `start: i32` |  |
-| `state: i32` |  |
 | `status: i32` | The status code of the response last read. |
-| `values: string[]` |  |
-| `wasConnect: boolean` |  |
-| `wasHead: boolean` | What `expect` said of the request this response answers. |
+| `values: string[]` | The field values, each beside its name in `names`. |
+| `wasConnect: boolean` | What `expect` said of the request this response answers: whether it was a CONNECT. |
+| `wasHead: boolean` | What `expect` said of the request this response answers: whether it was a HEAD. |
 | `wasUpgrade: boolean` | Whether `expectUpgrade` said the request asked to switch protocols. |
 | `buffered(): i32` | How many bytes were fed and not consumed yet. |
 | `expect(methodWasHead: boolean, wasConnect: boolean): void` | Says what the request this response answers was: a response to HEAD has no body, and a 2xx to CONNECT is a tunnel. It takes effect only while the parser waits for a response's first status line, and the parser forgets it after that response's `HTTP1_END`; anywhere else it does nothing, so a pipelining caller says it once per response, after the last one's end. |
 | `expectUpgrade(): void` | Says the request this response answers asked to switch protocols (it was written by `http1UpgradeRequestHead`), so a 101 is that switch: the parser answers `HTTP1_HEAD` with its status and fields readable, `HTTP1_END`, and then `HTTP1_UPGRADE`, and `tunnelBytes()` answers what was fed past the head. Any other status is read as it would be without it. It is said after `expect`, which clears it, and like `expect` it takes effect only while the parser waits for a response's first status line. Without it a 101 is refused with `HTTP1_E_SWITCH`: a server may not switch a connection whose client never asked. |
 | `feed(data: u8[], off: i32, len: i32): void` | Appends `data[off .. off + len)` to the input. A window outside `data` panics. After `finish()`, or once the parser has closed or refused, the input is dropped; in a tunnel it is kept for `tunnelBytes()`. |
-| `fieldName(i: i32): string` | Field `i`'s name, in lowercase, as a fresh string; "" past the last field. |
+| `fieldName(i: i32): string` | Field `i`'s name, in lowercase, as a fresh string. |
 | `fields(): i32` | How many fields the response last read has; trailers are not kept. |
 | `fieldsAsSpans(): void` | Stops filling `names`, `values` and `reason`, which then stay empty: a response's fields are read through `fields()`, `fieldName`, `fieldValue`, `reasonText` and `header`, which make a string only when asked. A parser kept for many responses allocates nothing per response this way. |
-| `fieldValue(i: i32): string` | Field `i`'s value, OWS trimmed, as a fresh string; "" past the last field. |
+| `fieldValue(i: i32): string` | Field `i`'s value, OWS trimmed, as a fresh string. |
 | `finish(): void` | Says the server closed the connection: a body read until close ends there, a parser waiting for a response with nothing fed is closed, and anything else is `HTTP1_E_TRUNCATED` once the bytes fed before it are read. |
-| `header(name: string): string \| null` | The value of the first field named `name` (any case), or `null`. |
+| `header(name: string): string \| null` | The value of the first field named `name` (any case). |
 | `keepAlive(): boolean` | Whether the connection may carry the next request once this response has ended (RFC 9112 §9.3): a 1.1 response unless `Connection` lists `close`, a 1.0 response only when it lists `keep-alive`, and never one read until close, a tunnel or an error. |
 | `next(): i32` | The next event the input holds; see the module comment. |
 | `reasonText(): string` | The reason phrase, as a fresh string. |

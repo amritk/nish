@@ -19,6 +19,12 @@ import {
 } from "nish/net/tls/verify";
 ```
 
+```ts
+const trust: TlsClientTrust = tlsClientSystemTrust();
+// when conn.interest() says TLS_RECORD_AUTH:
+const alert: i32 = tlsClientAuthenticate(conn, trust, toI64(Date.now()));
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="tlsClientAuthenticate" icon="phosphor/regular/function" href="#tlsclientauthenticate">
@@ -64,16 +70,6 @@ The roots a client trusts, indexed once and shared by every connection made with
 </scalar-card>
 
 </scalar-grid>
-
-<scalar-callout type="info">
-
-```ts
-const trust: TlsClientTrust = tlsClientSystemTrust();
-// when conn.interest() says TLS_RECORD_AUTH:
-const alert: i32 = tlsClientAuthenticate(conn, trust, toI64(Date.now()));
-```
-
-</scalar-callout>
 
 <scalar-detail title="Two checks, both always made">
 

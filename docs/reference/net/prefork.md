@@ -27,6 +27,7 @@ import {
 ```
 
 ```ts
+import { tcpListenFlags } from "nish:net";
 import { preforkWorkers } from "nish/net/prefork";
 
 export const main = (): number => {
@@ -234,11 +235,18 @@ function preforkArgs(args: string[]): string[]
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string[]">
+
+a new list of the arguments the user gave, without the flags the
+  supervisor appended, so a worker reads the same ones the supervisor did
+
 </scalar-field>
 
 ## preforkIndex
@@ -252,11 +260,18 @@ function preforkIndex(args: string[]): i32
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+this worker's index, 0 to `N - 1`, or -1 in the supervisor (or any
+  process not started by one)
+
 </scalar-field>
 
 ## preforkListener
@@ -270,11 +285,18 @@ function preforkListener(args: string[]): i32
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the worker's arguments, `process.argv`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the listening socket's descriptor to serve instead of binding one,
+  or -1 when the worker should bind its own
+
 </scalar-field>
 
 ## preforkServiceChannel
@@ -290,11 +312,17 @@ function preforkServiceChannel(
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the worker's arguments, `process.argv`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the descriptor this worker reaches the service worker through, or -1
+
 </scalar-field>
 
 ## preforkServiceChannelOf
@@ -311,14 +339,24 @@ function preforkServiceChannelOf(
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the service worker's arguments, `process.argv`
+
 </scalar-field>
 
 <scalar-field name="index" type="i32" required>
+
+the other worker whose channel to look up, 0 to `N - 1`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the descriptor the service worker reaches worker `index` through,
+  or -1 for its own index, an index out of range, or any other process
+
 </scalar-field>
 
 ## preforkSupervise
@@ -349,20 +387,39 @@ function preforkSupervise<S>(
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
 </scalar-field>
 
 <scalar-field name="config" type="PreforkConfig" required>
+
+the supervisor's settings, every field checked (a bad one
+  panics) in the supervisor and each worker alike; past that check a
+  worker reads only `pin`
+
 </scalar-field>
 
 <scalar-field name="state" type="S" required>
+
+the program's own value, passed to every `onChannel` call
+
 </scalar-field>
 
 <scalar-field name="onChannel" type="(state: S, index: i32, fd: i32, events: i32) =&gt; void" required>
+
+what the supervisor runs when worker `index`'s channel
+  `fd` wakes it, with `pollWait`'s `events`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+in a worker, its index at once; in the supervisor, once it is done,
+  `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or `PREFORK_SPAWN_FAILED`
+
 </scalar-field>
 
 ## preforkSupervisorChannel
@@ -378,11 +435,18 @@ function preforkSupervisorChannel(
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the worker's arguments, `process.argv`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the descriptor the worker talks to the supervisor through, or -1
+  without `supervisorChannels` or outside a worker
+
 </scalar-field>
 
 ## preforkWith
@@ -406,14 +470,26 @@ function preforkWith(
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
 </scalar-field>
 
 <scalar-field name="config" type="PreforkConfig" required>
+
+the supervisor's settings, every field checked (a bad one
+  panics) in the supervisor and each worker alike; past that check a
+  worker reads only `pin`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+in a worker, its index at once; in the supervisor, once it is done,
+  `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or `PREFORK_SPAWN_FAILED`
+
 </scalar-field>
 
 ## preforkWorkerCount
@@ -432,14 +508,25 @@ function preforkWorkerCount(
 #### Parameters
 
 <scalar-field name="requested" type="i32" required>
+
+the program's own choice, `PreforkConfig.workers`; 0 or
+  less leaves it to the environment or the platform
+
 </scalar-field>
 
 <scalar-field name="env" type="string | null" required>
+
+the raw `NISH_WORKERS` text, or `null` when it is unset; text
+  that is not a positive whole number is ignored
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+how many worker processes the supervisor starts, always 1 or more
+
 </scalar-field>
 
 ## preforkWorkers
@@ -453,11 +540,18 @@ function preforkWorkers(args: string[]): i32
 #### Parameters
 
 <scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+in a worker, its index at once; in the supervisor, once it is done,
+  `PREFORK_STOPPED` or `PREFORK_SPAWN_FAILED`
+
 </scalar-field>
 
 ## PreforkConfig

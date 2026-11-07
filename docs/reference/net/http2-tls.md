@@ -11,18 +11,6 @@ import {
 } from "nish/net/http2-tls";
 ```
 
-<scalar-grid cols="2">
-
-<scalar-card title="Http2TlsServer" icon="phosphor/regular/cube" href="#http2tlsserver">
-
-A pool of HTTP/2 connections over TLS on one listening socket.
-
-</scalar-card>
-
-</scalar-grid>
-
-<scalar-callout type="info">
-
 ```ts
 const listener = tcpListen("0.0.0.0", 8443, 128);
 const server = new Http2TlsServer(tlsConfig, new Http2Config(), listener, 64);
@@ -44,7 +32,17 @@ if ((wants & TLS_RECORD_DONE) !== 0) { server.close(slot); }
 else { pollModify(loop, server.fd(slot), wants & 3, slot); }
 ```
 
-</scalar-callout>
+<scalar-grid cols="2">
+
+<scalar-card title="Http2TlsServer" icon="phosphor/regular/cube" href="#http2tlsserver">
+
+A pool of HTTP/2 connections over TLS on one listening socket.
+
+</scalar-card>
+
+</scalar-grid>
+
+<scalar-callout type="info">
 
 It is `nish/net/tls-tcp`'s loop with one step added: `next` moves what TLS
 has decrypted into the slot's connection and answers the connection's next
@@ -53,6 +51,8 @@ socket. Every call answers the TLS slot's interest, whose low two bits are
 the events `pollModify` takes. A connection whose input buffer is full
 stops reading TLS, TLS then stops asking for the socket to be read, and the
 peer's TCP window closes: back-pressure goes all the way down.
+
+</scalar-callout>
 
 <scalar-detail title="ALPN">
 

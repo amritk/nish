@@ -14,6 +14,14 @@ import {
 } from "nish/net/dns";
 ```
 
+```ts
+const client = new DnsClient(new DnsResolver(config, hosts, 4), loop, 1000);
+const lookup = client.start("example.com", 443, monotonicNanos());
+// in the loop: pollWait(loop, ready, client.timeoutMs(now, own)); hand
+// each token client.owns to client.ready, call client.tick(now), and
+// read client.result(lookup, out, ttls) until it is not PENDING.
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="dnsLookupWith" icon="phosphor/regular/function" href="#dnslookupwith">
@@ -38,22 +46,14 @@ A `DnsResolver` driven on the caller's loop.
 
 <scalar-callout type="info">
 
-```ts
-const client = new DnsClient(new DnsResolver(config, hosts, 4), loop, 1000);
-const lookup = client.start("example.com", 443, monotonicNanos());
-// in the loop: pollWait(loop, ready, client.timeoutMs(now, own)); hand
-// each token client.owns to client.ready, call client.tick(now), and
-// read client.result(lookup, out, ttls) until it is not PENDING.
-```
-
-</scalar-callout>
-
 `DnsClient` opens a fresh UDP socket on a kernel-chosen port for every UDP
 try and a TCP connection for every TCP one, watches each under a token of
 the range it was given, and closes it when the try ends. It never waits,
 never reads the clock and never reads a file: the caller's loop owns all
 three, so a lookup costs a server nothing while it waits. Each send's
 query ID is drawn from `crypto.getRandomValues`.
+
+</scalar-callout>
 
 Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.

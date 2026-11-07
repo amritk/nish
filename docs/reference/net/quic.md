@@ -51,7 +51,7 @@ import {
 } from "nish/net/quic";
 ```
 
-```text
+```ts
 import { QuicConnection, QuicServerConfig } from "nish/net/quic";
 
 const conn = new QuicConnection(config, entropy);   // entropy: QUIC_CONN_ENTROPY_SIZE random bytes

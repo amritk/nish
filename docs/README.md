@@ -155,8 +155,8 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
 
 - **Constants.** A constant is a limit, listed under `## Limits`, when the
   first sentence of its doc comment states a bound: it opens with "The
-  most", "The fewest" (or another superlative), "At most", "At least" or
-  "How deep", or with "How many", "How much", "How long" or "How far" and
+  most", "The fewest" (or another superlative), "At most", "At least",
+  "Most" or "How deep(ly)", or with "How many", "How much", "How long" or "How far" and
   says what is kept, held or refused. Every other constant, a protocol
   identifier named `MAX` (`QUIC_TP_MAX_DATA`) included, is under
   `## Constants`. A constant's card is titled with its value as written,
@@ -180,8 +180,15 @@ instead.
    title says it, and the first letter left is capitalised. Its first
    sentence is the module's line in `index.md`.
 2. **The usage example** is the first code block (lines indented two spaces
-   or more, not a list) that imports from `"nish/` or `"nish:`, together with any code
-   blocks right after it. It is shown after the import line.
+   or more, not a list) that reads as code: its first line opens with a
+   keyword (`import`, `export`, `const`, `let`, `var`, `function`, `class`,
+   `type`, `interface`, `await`, `async`, `for`, `if`, `while`, `return`) or
+   a `//` comment, whatever it imports. A diagram or a config before it
+   (`PRK = HKDF-Extract(...)`, a JSON object) stays with its paragraph. The
+   code blocks right after it, a blank line apart, join it. It is shown
+   after the import line, fenced `ts` whether or not it parses, since an
+   example may elide with `…`. Every other code block is fenced `ts` when it
+   parses and `text` otherwise.
 3. A list or code block belongs to the paragraph before it.
 4. **A warning** starts at any sentence that opens with bold text saying
    the module refuses, limits or caps something (`refus`, `limit`, `cap`),

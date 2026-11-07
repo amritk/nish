@@ -11,18 +11,6 @@ import {
 } from "nish/net/tls/record-client";
 ```
 
-<scalar-grid cols="2">
-
-<scalar-card title="TlsRecordClient" icon="phosphor/regular/cube" href="#tlsrecordclient">
-
-One TLS 1.3 client connection over a stream.
-
-</scalar-card>
-
-</scalar-grid>
-
-<scalar-callout type="info">
-
 ```ts
 const conn = new TlsRecordClient(new TlsClient(config, random, x25519Key, p256Key));
 // send conn.output[conn.outputStart .. conn.outputEnd), then conn.consume(sent)
@@ -34,7 +22,15 @@ if ((conn.interest() & TLS_RECORD_AUTH) !== 0) {
 const got: i32 = conn.read(buf, 0, buf.length);   // application data
 ```
 
-</scalar-callout>
+<scalar-grid cols="2">
+
+<scalar-card title="TlsRecordClient" icon="phosphor/regular/cube" href="#tlsrecordclient">
+
+One TLS 1.3 client connection over a stream.
+
+</scalar-card>
+
+</scalar-grid>
 
 <scalar-detail title="What it adds to `TlsClient`">
 

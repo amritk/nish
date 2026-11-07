@@ -193,17 +193,30 @@ function httpDateWrite(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+the buffer to write into; its length is not changed
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+the index in `out` where the date's first letter goes
+
 </scalar-field>
 
 <scalar-field name="seconds" type="i64" required>
+
+the instant to name, in whole seconds since 1970 UTC
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the index just past the date's last octet (`at + HTTP_DATE_SIZE`),
+  or -1 when nothing was written
+
 </scalar-field>
 
 ## httpFieldBytes
@@ -217,11 +230,18 @@ function httpFieldBytes(text: string): u8[]
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+the name or value to turn into octets; each character's code is
+  kept in one octet, so it should be Latin-1
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+a fresh array the caller owns, one octet per character of `text`
+
 </scalar-field>
 
 ## httpFieldConnectionSpecific
@@ -242,14 +262,24 @@ function httpFieldConnectionSpecific(
 #### Parameters
 
 <scalar-field name="name" type="u8[]" required>
+
+the field name's octets, in lowercase
+
 </scalar-field>
 
 <scalar-field name="value" type="u8[]" required>
+
+the field's value, which matters only for `te`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the field belongs to one HTTP/1.1 hop and must not be
+  sent or accepted in an HTTP/2 or HTTP/3 message
+
 </scalar-field>
 
 ## httpFieldIs
@@ -266,14 +296,23 @@ function httpFieldIs(
 #### Parameters
 
 <scalar-field name="bytes" type="u8[]" required>
+
+the octets to compare, such as a decoded field name
+
 </scalar-field>
 
 <scalar-field name="text" type="string" required>
+
+the expected spelling, one character an octet; case matters
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true only when both have the same length and every octet matches
+
 </scalar-field>
 
 ## httpFieldNameValid
@@ -289,11 +328,18 @@ function httpFieldNameValid(name: u8[]): boolean
 #### Parameters
 
 <scalar-field name="name" type="u8[]" required>
+
+the field name's octets, as the program would send them
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the name may go on the wire as it is; false for an empty
+  name, a non-token character or an uppercase letter
+
 </scalar-field>
 
 ## httpFieldSensitive
@@ -312,11 +358,17 @@ function httpFieldSensitive(name: u8[]): boolean
 #### Parameters
 
 <scalar-field name="name" type="u8[]" required>
+
+the field name's octets, in lowercase
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the encoder should send this field never-indexed
+
 </scalar-field>
 
 ## httpFieldValueValid
@@ -332,11 +384,18 @@ function httpFieldValueValid(value: u8[]): boolean
 #### Parameters
 
 <scalar-field name="value" type="u8[]" required>
+
+the field value's octets, as the program would send them
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the value cannot end a line or smuggle whitespace at its
+  edges, so it may be sent as it is
+
 </scalar-field>
 
 ## httpFieldsCheckOutgoing
@@ -357,14 +416,25 @@ function httpFieldsCheckOutgoing(
 #### Parameters
 
 <scalar-field name="names" type="u8[][]" required>
+
+the regular field names about to be sent, in order
+
 </scalar-field>
 
 <scalar-field name="values" type="u8[][]" required>
+
+the value for each name, at the same index
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`HTTP_FIELDS_OK` when the whole section may be sent, or the
+  `HTTP_FIELDS_*` code of the first field that may not (`HTTP_FIELDS_BAD_VALUE`
+  too when the two lists differ in length)
+
 </scalar-field>
 
 ## HttpFields
@@ -383,12 +453,11 @@ class HttpFields
 
 | Member | |
 | --- | --- |
-| `new HttpFields()` |  |
+| `new HttpFields()` | Makes an empty section, ready for its first read; no field is set yet. |
 | `authority: u8[]` | `:authority`, empty when absent. |
 | `contentLength: i64` | The `content-length`, or `HTTP_FIELDS_NO_LENGTH`. |
 | `method: u8[]` | `:method`, empty in a response or a trailer section. |
 | `names: u8[][]` | The regular fields' names, in order. |
-| `none: u8[]` | The empty value an absent pseudo-header reads as, made once. |
 | `path: u8[]` | `:path`, empty when absent. |
 | `protocol: u8[]` | `:protocol` of an extended CONNECT (RFC 8441), empty when absent. |
 | `scheme: u8[]` | `:scheme`, empty when absent. |
@@ -399,9 +468,7 @@ class HttpFields
 | `isConnect(): boolean` | Whether the method is CONNECT, plain (RFC 9113 §8.5) or extended (RFC 8441). |
 | `readRequest(names: u8[][], values: u8[][], extendedConnect: boolean): i32` | Reads a request's field section (RFC 9113 §8.3.1, RFC 9114 §4.3.1). Every request has `:method`. A CONNECT without `:protocol` has `:authority` and neither `:scheme` nor `:path` (RFC 9113 §8.5). An extended CONNECT — `:protocol` present, which only `extendedConnect` allows, the version having sent SETTINGS_ENABLE_CONNECT_PROTOCOL — has all four of the others (RFC 8441 §4). Any other request has `:scheme` and `:path`. A `:path` that does not start with `/` is OPTIONS's `*` or refused, and a `host` field must name `:authority` when both are there. |
 | `readResponse(names: u8[][], values: u8[][]): i32` | Reads a response's field section: exactly one `:status`, and no other pseudo-header (RFC 9113 §8.3.2). |
-| `readSection(names: u8[][], values: u8[][], allowed: i32): i32` | Reads `names` and `values` as a section whose pseudo-headers are those `allowed` names, recording them and the regular fields. The shape's own rules — which pseudo-headers are required — are the caller's. Answers the mask of pseudo-headers seen, or a negative refusal. |
 | `readTrailers(names: u8[][], values: u8[][]): i32` | Reads a trailer section: regular fields only (RFC 9113 §8.1). |
-| `takePseudo(pseudo: i32, value: u8[]): i32` | Records the pseudo-header `pseudo` as `value`, checking its syntax. |
 
 ## Constants
 

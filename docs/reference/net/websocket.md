@@ -57,6 +57,20 @@ import {
 } from "nish/net/websocket";
 ```
 
+```ts
+const d = new WsDecoder(true, maxMessage); // a server: frames must be masked
+d.feed(received, 0, n);
+let event: i32 = d.next();
+while (event !== WS_NEED_MORE) {
+  // WS_MESSAGE: d.opcode is WS_OP_TEXT or WS_OP_BINARY, the message
+  //   is d.data[0 .. d.dataLen), valid until the next call
+  // WS_PING / WS_PONG: the payload, the same way
+  // WS_CLOSE: d.closeCode and d.closeReason; answer with a close
+  // WS_ERROR: fail the connection, sending a close with d.closeCode
+  event = d.next();
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="websocketAcceptKey" icon="phosphor/regular/function" href="#websocketacceptkey">
@@ -182,20 +196,6 @@ frame's mask key are the caller's, from `crypto.getRandomValues`.
 
 **The decoder** is a push-pull machine like `Http1Parser`: `feed` any slice,
 then call `next()` until it answers `WS_NEED_MORE`.
-
-```ts
-const d = new WsDecoder(true, maxMessage); // a server: frames must be masked
-d.feed(received, 0, n);
-let event: i32 = d.next();
-while (event !== WS_NEED_MORE) {
-  // WS_MESSAGE: d.opcode is WS_OP_TEXT or WS_OP_BINARY, the message
-  //   is d.data[0 .. d.dataLen), valid until the next call
-  // WS_PING / WS_PONG: the payload, the same way
-  // WS_CLOSE: d.closeCode and d.closeReason; answer with a close
-  // WS_ERROR: fail the connection, sending a close with d.closeCode
-  event = d.next();
-}
-```
 
 </scalar-detail>
 
@@ -648,23 +648,14 @@ class WsDecoder
 
 | Member | |
 | --- | --- |
-| `new WsDecoder(expectMasked: boolean, maxMessage: i32)` |  |
-| `buf: u8[]` | The bytes fed and not yet consumed are `buf[start .. end)`. |
+| `new WsDecoder(expectMasked: boolean, maxMessage: i32)` | A decoder with nothing fed yet. |
 | `closeCode: i32` | The peer's status code after `WS_CLOSE` (`WS_CLOSE_NO_STATUS` when it sent none), or the one to send after `WS_ERROR`. |
 | `closeReason: string` | The peer's close reason after `WS_CLOSE`, or what was wrong after `WS_ERROR`. |
-| `control: u8[]` | A control frame's payload, kept apart so a ping cannot disturb a message in progress. |
 | `data: u8[]` | The last event's payload is `data[0 .. dataLen)`, valid until the next `next()`. |
-| `dataLen: i32` |  |
-| `end: i32` |  |
-| `expectMasked: boolean` |  |
-| `maxMessage: i32` |  |
-| `message: u8[]` | The message being assembled; its first `messageLen` bytes are live. |
-| `messageLen: i32` |  |
-| `messageOpcode: i32` | The opcode of the message whose fragments are arriving, or 0 between messages. |
+| `dataLen: i32` | How many bytes of `data` the last event filled. |
+| `expectMasked: boolean` | Whether every frame must be masked, as a server requires of a client. |
+| `maxMessage: i32` | The longest message accepted, in bytes; a longer one is refused with 1009. |
 | `opcode: i32` | The last event's opcode: `WS_OP_TEXT` or `WS_OP_BINARY` for a message, the control opcode otherwise. |
-| `start: i32` |  |
-| `state: i32` |  |
-| `utf8: WsUtf8` | The UTF-8 check of the text message being assembled. |
 | `feed(data: u8[], off: i32, len: i32): void` | Appends `data[off .. off + len)` to the input. A window outside `data` panics; after `WS_CLOSE` or `WS_ERROR` the input is dropped. |
 | `next(): i32` | The next event the input holds; see the module comment. |
 | `reset(): void` | Puts the decoder back as the constructor left it, for the next connection, keeping the buffers it has grown: a slot that is reused allocates nothing to start over. |
@@ -679,8 +670,8 @@ class WsHandshake
 
 | Member | |
 | --- | --- |
-| `new WsHandshake(error: i32, protocol: string)` |  |
-| `error: i32` |  |
+| `new WsHandshake(error: i32, protocol: string)` | The answer to one handshake check. |
+| `error: i32` | `WS_HS_OK`, or the `WS_HS_*` rule the response broke. |
 | `protocol: string` | The subprotocol the server chose, or `""` when it chose none. |
 
 ## Limits
@@ -713,11 +704,15 @@ From now on: the peer closed, with `closeCode` and `closeReason`.
 
 `WS_CLOSE_GOING_AWAY: i32`
 
+The endpoint is going away: a server shutting down, or a page closed.
+
 </scalar-card>
 
 <scalar-card title="1,011" icon="phosphor/regular/hash">
 
 `WS_CLOSE_INTERNAL_ERROR: i32`
+
+The endpoint met a condition it could not handle.
 
 </scalar-card>
 
@@ -725,11 +720,15 @@ From now on: the peer closed, with `closeCode` and `closeReason`.
 
 `WS_CLOSE_INVALID_DATA: i32`
 
+A message's data did not fit its type, such as a text message that is not UTF-8.
+
 </scalar-card>
 
 <scalar-card title="1,000" icon="phosphor/regular/hash">
 
 `WS_CLOSE_NORMAL: i32`
+
+The purpose of the connection is fulfilled.
 
 </scalar-card>
 
@@ -745,11 +744,15 @@ Reported for a close frame with no status; never sent.
 
 `WS_CLOSE_POLICY: i32`
 
+A message broke the endpoint's policy, when no other code fits.
+
 </scalar-card>
 
 <scalar-card title="1,002" icon="phosphor/regular/hash">
 
 `WS_CLOSE_PROTOCOL_ERROR: i32`
+
+The peer broke the framing rules.
 
 </scalar-card>
 
@@ -757,11 +760,15 @@ Reported for a close frame with no status; never sent.
 
 `WS_CLOSE_TOO_BIG: i32`
 
+A message was longer than the endpoint takes.
+
 </scalar-card>
 
 <scalar-card title="1,003" icon="phosphor/regular/hash">
 
 `WS_CLOSE_UNSUPPORTED: i32`
+
+The peer sent a kind of data the endpoint cannot take.
 
 </scalar-card>
 
@@ -873,11 +880,15 @@ The input so far holds no further event; feed more.
 
 `WS_OP_BINARY: i32`
 
+A binary message.
+
 </scalar-card>
 
 <scalar-card title="8" icon="phosphor/regular/hash">
 
 `WS_OP_CLOSE: i32`
+
+A close frame: an optional status code, then an optional UTF-8 reason.
 
 </scalar-card>
 
@@ -885,11 +896,15 @@ The input so far holds no further event; feed more.
 
 `WS_OP_CONTINUATION: i32`
 
+A frame that continues the message before it.
+
 </scalar-card>
 
 <scalar-card title="9" icon="phosphor/regular/hash">
 
 `WS_OP_PING: i32`
+
+A ping, which the peer answers with a pong carrying the same payload.
 
 </scalar-card>
 
@@ -897,11 +912,15 @@ The input so far holds no further event; feed more.
 
 `WS_OP_PONG: i32`
 
+A pong, the answer to a ping or an unasked heartbeat.
+
 </scalar-card>
 
 <scalar-card title="1" icon="phosphor/regular/hash">
 
 `WS_OP_TEXT: i32`
+
+A text message, UTF-8.
 
 </scalar-card>
 

@@ -24,6 +24,13 @@ import {
 } from "nish/net/dns-resolver";
 ```
 
+```ts
+const resolver = new DnsResolver(config, hosts, 4);
+const lookup = resolver.start("example.com", 443, now);
+// in the loop: send what nextOutgoing gives, feed replies to receive,
+// call tick(now) when nextDeadlineNanos() passes, then read result.
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="DnsResolver" icon="phosphor/regular/cube" href="#dnsresolver">
@@ -36,19 +43,12 @@ A stub resolver of `maxLookups` concurrent lookups over `config`'s servers, answ
 
 <scalar-callout type="info">
 
-```ts
-const resolver = new DnsResolver(config, hosts, 4);
-const lookup = resolver.start("example.com", 443, now);
-// in the loop: send what nextOutgoing gives, feed replies to receive,
-// call tick(now) when nextDeadlineNanos() passes, then read result.
-```
-
-</scalar-callout>
-
 `nish/net/dns` drives it over `nish:net` sockets and adds a blocking
 `resolveHost`; this module never imports `nish:net`, never reads a clock
 and never reads a file, so it compiles for `wasm32` and a test drives it
 with scripted packets.
+
+</scalar-callout>
 
 A lookup asks A and AAAA at once, one query each. Each query tries the
 servers of its `DnsConfig` in turn, `attempts` rounds of `timeout` seconds

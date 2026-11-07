@@ -31,6 +31,28 @@ import {
 } from "nish/net/http1-server";
 ```
 
+```ts
+const listener = tcpListen("0.0.0.0", 8080, 128);
+const server = new Http1Server(new Http1Config(), listener, 64);
+// when the listener is readable:
+const slot: i32 = server.accept();
+if (slot >= 0) { pollAdd(loop, server.fd(slot), 1, slot); }
+// when a connection's token comes back:
+let wants: i32 = (events & 5) !== 0 ? server.readable(slot) : server.writable(slot);
+let event: i32 = server.next(slot);
+while (event !== H1_NEED_MORE && event !== H1_ERROR) {
+  const conn: Http1Connection = server.connection(slot);
+  // H1_REQUEST: conn.parser.methodIs("GET"), conn.parser.targetIs("/"), ...
+  //   conn.respond(200, names, values, HTTP1_CHUNKED)
+  // H1_BODY: conn.data[conn.dataStart .. conn.dataStart + conn.dataLength)
+  // H1_END: conn.write(body, 0, n); conn.end()
+  event = server.next(slot);
+}
+wants = server.flush(slot);
+if ((wants & H1_DONE) !== 0) { server.close(slot); }
+else if (server.rearm(slot, wants)) { pollModify(loop, server.fd(slot), wants & 3, slot); }
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="Http1Config" icon="phosphor/regular/cube" href="#http1config">
@@ -70,32 +92,6 @@ The `Date` field an origin server with a clock sends on every final response (RF
 </scalar-card>
 
 </scalar-grid>
-
-<scalar-callout type="info">
-
-```ts
-const listener = tcpListen("0.0.0.0", 8080, 128);
-const server = new Http1Server(new Http1Config(), listener, 64);
-// when the listener is readable:
-const slot: i32 = server.accept();
-if (slot >= 0) { pollAdd(loop, server.fd(slot), 1, slot); }
-// when a connection's token comes back:
-let wants: i32 = (events & 5) !== 0 ? server.readable(slot) : server.writable(slot);
-let event: i32 = server.next(slot);
-while (event !== H1_NEED_MORE && event !== H1_ERROR) {
-  const conn: Http1Connection = server.connection(slot);
-  // H1_REQUEST: conn.parser.methodIs("GET"), conn.parser.targetIs("/"), ...
-  //   conn.respond(200, names, values, HTTP1_CHUNKED)
-  // H1_BODY: conn.data[conn.dataStart .. conn.dataStart + conn.dataLength)
-  // H1_END: conn.write(body, 0, n); conn.end()
-  event = server.next(slot);
-}
-wants = server.flush(slot);
-if ((wants & H1_DONE) !== 0) { server.close(slot); }
-else if (server.rearm(slot, wants)) { pollModify(loop, server.fd(slot), wants & 3, slot); }
-```
-
-</scalar-callout>
 
 <scalar-detail title="Events">
 
@@ -265,7 +261,6 @@ class Http1Connection
 | `new Http1Connection(config: Http1Config)` | A connection under `config`. A cap outside what the connection can work with panics. |
 | `bufferLimit: i32` | The most input the connection buffers, unread: the cap `inputRoom` holds it to. |
 | `closeAfter: boolean` | The connection closes once this exchange is over. |
-| `config: Http1Config` |  |
 | `data: u8[]` | `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. |
 | `dataLength: i32` |  |
 | `dataStart: i32` |  |
@@ -274,75 +269,47 @@ class Http1Connection
 | `heads: Http1OutputPool \| null` |  |
 | `headSince: i64` | When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. |
 | `headTimed: boolean` | A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. |
-| `inputEnded: boolean` | The peer's byte stream has ended. |
 | `inputs: Http1OutputPool \| null` | Where the parser's input and head buffers go while the slot rests, with `Http1Config.idleInput`; null otherwise. |
 | `lastActive: i64` | When the carrier last moved a byte for the connection, in `monotonicNanos`. |
 | `mss: i32` | The TCP maximum segment size the program sets for this connection, for `respondEncoded` under `HttpCompressor.segmentMode`; 0, the default, leaves it to the compressor and the socket (`segmentMss`). Each accept puts it back to 0. |
-| `noFields: u8[][]` | No fields, for the responses the connection writes itself: made once. |
 | `noOutput: u8[]` | The empty array `output` is while the connection holds no buffer. |
 | `opcode: i32` | `H1_WS_MESSAGE`'s opcode: text or binary. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`. Empty until the connection first needs room to write: then its own buffer, made once, or one borrowed from `pool` and given back by `release` once sent. |
-| `outputCap: i32` | `output.length`, kept beside the offsets so that `acquire` and `release` learn whether the connection holds a buffer without reading an array: the empty one is out of cache by the time a resting connection's next request comes. Only the connection assigns `output`, and with it this. |
 | `outputEnd: i32` |  |
 | `outputStart: i32` |  |
 | `parser: Http1Parser` | The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is the current request's from its `H1_REQUEST` until its response is done, `H1_END` included, however much of a pipelined request is fed behind it. |
 | `pong: u8[]` | A ping's payload, kept until its pong fits: empty until the first ping. |
-| `pongLength: i32` |  |
-| `pongPending: boolean` |  |
 | `pool: Http1OutputPool \| null` | Where `output` is borrowed from, for a connection of a pool; null for one that keeps its own. |
-| `requestEnded: boolean` | The request's body has been read to its end. |
-| `requestOpen: boolean` | A request's head has been read and its exchange is not over. |
-| `response: i32` |  |
 | `responseEmpty: boolean` | The response carries no body (HEAD, 204, 304): what is written is dropped. |
-| `responseFraming: i32` | How the response's body is framed: a length (0 or more), `HTTP1_CHUNKED`, or `HTTP1_NO_BODY` for one that ends with the connection. |
-| `responseLeft: i32` | A response with a length: the bytes it still owes. |
 | `socketMss: i32` | The MSS `Http1Server.accept` read from this connection's socket (`netMss`), or 0 when it reports none. |
-| `state: i32` |  |
 | `status: i32` | `H1_ERROR`'s HTTP status or WebSocket close code, or `H1_WS_CLOSE`'s close code. |
-| `upgraded: boolean` | The program accepted the request's WebSocket handshake. |
 | `writeHeld: boolean` | A write was held back; `next` answers nothing but `H1_WRITE` until there is room. |
 | `ws: WsDecoder \| null` | The frame decoder: made when the slot first switches to WebSocket, so a slot that only ever speaks HTTP never holds its buffers, then kept for the slot's later peers. |
 | `abort(): void` | The socket failed: nothing more is sent or read, and the connection is done. |
 | `acceptEncoding(): i32` | The content coding to answer the current request with, read from its `Accept-Encoding` with gzip offered (`httpAcceptEncoding`): `HTTP_CODING_GZIP`, `HTTP_CODING_IDENTITY` (also with no such field), or `HTTP_CODING_NONE` when the client refuses identity and does not take gzip. Allocates nothing. Read at `H1_REQUEST`, `H1_BODY` or `H1_END` alike: the head stays the request's until its response is done. |
-| `acceptEncodingOf(offered: i32): i32` | `httpAcceptEncoding` of the current request's `Accept-Encoding`, with `offered`. |
 | `acceptWebSocket(protocol: string): i32` | Accepts the current request's WebSocket opening handshake (RFC 6455 §4.2.2) with `protocol`, empty for none: the 101 is queued, and once the request has ended the slot reads frames. Answers 0; `H1_INVALID` when the request is not a valid opening handshake (the program answers 400, or 426 for the wrong version) or `protocol` is not a token; `H1_AGAIN` when the output has no room yet; `H1_CLOSED` with no request to answer. |
-| `acquire(): void` | Borrows `output` from the pool between connections of one, for a connection that keeps its own makes it the first time: before anything is written into it, which is why `room` calls it. It allocates only when the pool has no free buffer, or for a connection's own, once. |
 | `answerable(): boolean` | Whether the program may answer the current request now. |
-| `bodyRoom(): i32` | The room a response or a frame may use: all but the control reserve. |
 | `closeWebSocket(code: i32): i32` | Starts the closing handshake (§5.5.1, §7.1.2) with `code`: a close frame, then the connection is done once it is sent. Answers 0, `H1_INVALID` for a code that may not be sent, or `H1_CLOSED` when the slot is not an open WebSocket. |
 | `consume(n: i32): void` | Marks the first `n` bytes of the output sent. |
-| `decoder(): WsDecoder` | The frame decoder, made on the slot's first switch to WebSocket. |
 | `end(): i32` | Ends the response: the last chunk of a chunked body. Answers 0; `H1_INVALID` for a response with a length that still owes bytes; `H1_AGAIN` when the last chunk does not fit yet; `H1_CLOSED` with no response under way. |
 | `endInput(): void` | The peer's byte stream has ended: once what it sent is answered, the connection is done. |
-| `expired(now: i64): boolean` | Whether `expire` closes the slot at `now`: idle, or a head past its deadline. |
-| `expiresNoSooner(now: i64): i64` | The soonest `expired` can turn true at or after `now` (`monotonicNanos`), however the connection moves from here: `lastActive` only grows, and a head clock not yet started starts no earlier than `now`, unless an exchange is open: `nextRequest` starts a pipelined head's clock at `lastActive` when it ends. Counting a quiet keep-alive's clock from `lastActive` put it in the past once it was quiet for longer than `headTimeout`, so each `expire` walked every slot. |
-| `fail(status: i32): i32` | Refuses the request with `status`: the response that says so, when none has started, and the close after it. Answers `H1_ERROR`. |
 | `feed(buf: u8[], off: i32, len: i32): i32` | Takes as much of `buf[off .. off + len)` as `inputRoom` allows and answers how much; the rest is the caller's to feed again later. A window outside `buf` panics. |
 | `headArrived(now: i64): void` | Starts the head deadline at `now` (`monotonicNanos`) when bytes of a request head wait to be read and its clock has not started. The carriers call it after each `feed`; a program that feeds a connection itself calls it the same way. Bytes that wait while the previous exchange is still open start no clock: they count from when it is over (`nextRequest`). |
-| `headAwaited(now: i64): void` | Starts the head deadline at `now` (`monotonicNanos`) when the connection waits for a head and its clock has not started, whether or not a byte of it has been read. `Http1TlsServer` calls it when ciphertext arrives after the handshake: a record trickled a byte at a time hands no plaintext to `headArrived` until it is whole, so its bytes would otherwise only keep the slot from going idle. |
-| `headLate(now: i64): boolean` | Whether a head has been arriving for longer than `headTimeout` at `now` (`monotonicNanos`). |
 | `identityRefused(): boolean` | Whether the current request's `Accept-Encoding` refuses the body as it is (`httpIdentityRefused`); `respondEncoded` then gzips any body it can. |
-| `idle(now: i64): boolean` | Whether nothing has moved for longer than the idle timeout, at `now` (`monotonicNanos`). |
 | `inputLimit(): i32` | The most input the connection holds unread: what `inputRoom` counts against. |
 | `inputRoom(): i32` | How many bytes `feed` would take now: none while a write is held back or once the connection is closing. |
 | `isDone(): boolean` | Whether the connection is over and everything is sent: the carrier closes it. |
 | `isWebSocket(): boolean` | Whether the slot has switched to WebSocket and is open. |
 | `next(): i32` | The next event; see the module comment. |
-| `nextFrame(): i32` | `next` once the slot has switched to WebSocket. |
-| `nextRequest(): i32` | `next` while the connection speaks HTTP. |
 | `park(): void` | Gives the parser's input and head buffers to `inputs` and `heads` while the connection rests between exchanges: speaking HTTP, no request open, nothing fed and unread. Does nothing without the pools or otherwise. |
 | `release(): void` | Gives `output` back to the pool once nothing in it is waiting: no bytes to send, no write held back for room. The carrier calls it after each send; a connection that keeps its own buffer keeps it. |
 | `respond(status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32` | Answers the current request with `status` and the fields `names[k]`: `values[k]`, and the framing `bodyLength` asks for: a length, or `HTTP1_CHUNKED`, or `HTTP1_NO_BODY` for a 1xx, a 204 or a 304. A 1xx (but 101) is interim and the final status follows it. Answers 0; `H1_INVALID` for a status outside 100 to 599 or 101, a reserved field, a name or value `http1WriteResponseHead` refuses, or a head larger than the output; `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says when to try again); `H1_CLOSED` with no request to answer. |
 | `respondEncoded(status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32, enc: HttpCompressor, coding: i32): i32` | Answers the current request with all of `body[off .. off + len)` in one call: `respond`, `write` and `end`, the body compressed by `enc` when `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it, with `Content-Encoding: gzip` and the compressed `Content-Length`, and otherwise sent as it is; `Vary: Accept-Encoding` while `enc.vary` is set and the choice turned on the request (`HttpCompressor.varies`). Under `enc.segmentMode` the compressed response goes out only when, head included, it takes fewer segments of `segmentMss(enc)` bytes than the body as it is, and a response that fits one segment as it is goes so without compressing (`enc.oneSegment`); `enc.decision` says what was chosen. A request that refuses identity (`identityRefused`) is sent gzip whatever the length, the saving or the segments (`enc.compressAnyway`). The program's fields may not name `Content-Encoding` or, with `enc.vary`, `Vary`. The whole response is written or none of it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says when to try again, compressing again), `H1_INVALID` for a response larger than the output could ever hold or one `respond` refuses, `H1_CLOSED` with no request to answer; 0 once it is queued. A window outside `body` panics. |
 | `restart(): void` | Puts the connection back as the constructor left it, for the next peer. It allocates nothing. |
-| `room(): i32` | The room at the end of the output, once what was sent is moved out of the way. |
 | `segmentMss(enc: HttpCompressor): i32` | The segment `respondEncoded` counts in under `enc.segmentMode`: this connection's `mss` when the program set it, else `enc.mss` when the program set it to other than `HTTP_DEFAULT_MSS`, else the socket's (`socketMss`), else `HTTP_DEFAULT_MSS`. |
 | `sendBody(buf: readonly u8[], off: i32, len: i32): i32` | `write` of `buf[off .. off + len)`, sent from `buf` itself where it can be: under a `Content-Length` response on a connection whose carrier named its socket (`fd`, set by `Http1Server.accept`) and with no write held back, the queued output and the body leave in one `netWrite2`, and only what the socket did not take is copied into the output, the way `write` copies it (what does not fit is answered short, and `H1_WRITE` says when to send the rest). Once it returns the connection holds no reference to `buf`, so the caller may reuse or give back its bytes at once. A chunked or empty response, a write held back (`H1_AGAIN` or a short answer not yet followed by `H1_WRITE`), and a connection with no socket (`Http1TlsServer`, a sans-IO carrier) copy all of it: it is `write`, with the same bytes on the wire. Answers what `write` answers, `H1_INVALID` for more than the response still owes; `H1_CLOSED` also when the socket failed during the send, which aborts the connection. A window outside `buf` panics. |
-| `sendClose(code: i32): void` | Writes a close frame with `code` (none for 1005), from the control reserve. |
 | `sendFrame(fin: boolean, opcode: i32, buf: u8[], off: i32, len: i32): i32` | Sends one WebSocket frame, unmasked as a server's are (§5.1): a whole text or binary message, a fragment of one (`fin` false, then continuations), a ping or a pong. Answers 0; `H1_INVALID` for a frame `websocketWriteFrame` refuses, a close (that is `closeWebSocket`), or one larger than the output; `H1_AGAIN` when it does not fit yet; `H1_CLOSED` when the slot is not an open WebSocket. A window outside `buf` panics. |
-| `sendPong(): boolean` | Writes the pending pong if it fits, from the control reserve; answers whether it went. |
 | `unpark(): void` | Takes back the buffers `park` gave away, before bytes are fed. A parked buffer is `noOutput` itself, which a pointer compare finds without loading the empty array's header from a line the request touches nowhere else; any other empty buffer is still swapped for a lent one. |
-| `unrespond(outputEnd: i32, closeAfter: boolean): void` | Takes back a head `respond` just queued: `outputEnd` and `closeAfter` as they were before it. |
 | `wantsWrite(): boolean` | Whether the output holds bytes to send. |
 | `write(buf: readonly u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of the response body, as much as the output has room for, and answers how much: a chunk of a chunked body, or bytes of one with a length (more than it still owes is `H1_INVALID`). When not everything was taken, `H1_WRITE` says when to try the rest; `H1_AGAIN` when nothing was. A response with no body takes everything and sends nothing. `H1_CLOSED` with no response under way. A window outside `buf` panics. |
 
@@ -362,12 +329,9 @@ class Http1OutputPool
 
 | Member | |
 | --- | --- |
-| `new Http1OutputPool(size: i32)` |  |
+| `new Http1OutputPool(size: i32)` | An empty pool: no buffer is made until the first `take`. |
 | `free: u8[][]` |  |
 | `made: i32` | How many buffers the pool has made. |
-| `size: i32` |  |
-| `give(buf: u8[]): void` | Takes back a buffer `take` gave. |
-| `take(): u8[]` | A buffer of `size` bytes: the one given back last, or a new one. |
 
 ## Http1Server
 
@@ -382,23 +346,15 @@ class Http1Server
 | Member | |
 | --- | --- |
 | `new Http1Server(config: Http1Config, listener: i32, size: i32)` | A pool of `size` slots, at least one, serving `config` on `listener`. No slot is built here: a slot's connection and its buffers are allocated by the first `accept` into it and kept, so a pool sized for a peak costs at start-up only the read scratch, the shared `Date` and the output pool, and at most `size` connections once the peak has come. |
-| `armed: i32[]` | Each used slot's interest as the loop last armed it, for `rearm`. |
-| `config: Http1Config` |  |
 | `connections: Http1Connection[]` | The connections built so far, slot `k`'s at `k`: one per slot ever accepted into, and slot 0's once `connection` has asked for it. |
 | `date: HttpDate` | The `Date` every slot's responses carry, formatted once a second for all of them and read from the clock once per serve call: `readable` and `writable` hold a reading and `flush` lets it go. `date.pin` fixes its clock. |
-| `expireAfter: i64` | No slot can expire before this (`monotonicNanos`), so `expire` called sooner walks none: it walks every slot only about once per the shorter timeout, however many there are. |
 | `expireScans: i32` | How many calls of `expire` walked every slot, for a program measuring its cost. |
 | `fds: i32[]` | Each slot's descriptor, or -1 while it is free, for the slots accepted into so far: its length is the high-water mark, and a slot past it has never been used. |
 | `free: i32[]` | The slots closed since they were used, a stack whose top `accept` takes before it builds a slot past the high-water mark: finding one costs the same with every slot free as with all but one busy, where a scan of `fds` walked the busy ones. |
 | `heads: Http1OutputPool` |  |
 | `inputs: Http1OutputPool` | The input and head buffers resting slots lend, with `Http1Config.idleInput`. |
-| `listener: i32` | The listening socket, which the program made with `tcpListen` and still owns. |
 | `outputs: Http1OutputPool` | The output buffers the slots borrow while they write. |
-| `peer: u8[]` | The last accepted peer's address, in `nish:net`'s 18-byte form. |
-| `scratch: u8[]` | Where the socket is read into before the connection takes the bytes. |
-| `slots: i32` | How many slots the pool may hold, which `size` answers. |
 | `accept(): i32` | Accepts the next waiting connection into a free slot and answers the slot, which the program adds to its loop with `H1_WANT_READ`; -11 when none is waiting, `H1_POOL_FULL` when every slot is busy (the connection is closed), or `tcpAccept`'s own failure. |
-| `build(): Http1Connection` | A new connection on this pool's outputs and `Date`, for the next slot built. |
 | `busy(): i32` | How many slots hold a connection. |
 | `close(slot: i32): void` | Closes `slot`'s socket, whatever is left unsent, and frees the slot. |
 | `connection(slot: i32): Http1Connection` | The connection of `slot`. A slot never accepted into, or out of range, names slot 0's connection, which this builds when no slot has been yet (the first `accept` then takes it, restarted). |
@@ -409,8 +365,6 @@ class Http1Server
 | `next(slot: i32): i32` | `slot`'s connection's next event; `H1_ERROR` for a free slot. While a write is held back the output is sent first, so that the room it waits for is made here and `H1_WRITE` comes in the same pass; otherwise what the program writes in answer to one event and the next goes out together at `flush`, as one segment rather than several. |
 | `readable(slot: i32): i32` | The socket of `slot` is readable: reads it while the connection has room and the socket has more, then sends. Answers the interest. It begins a serve call, which the program's `flush` of the slot ends: the responses written in between carry one clock reading as their `Date`. |
 | `rearm(slot: i32, wants: i32): boolean` | Whether the program must `pollModify` `slot`'s descriptor to `wants`, the interest `readable`, `writable` or `flush` answered, and records it as armed when it must. A keep-alive connection answers the same interest request after request, and each `pollModify` is a system call (`epoll_ctl`) that changes nothing. |
-| `send(slot: i32): void` | Writes what `slot`'s connection holds, which it holds, until the socket would block. |
-| `settle(slot: i32): i32` | `flush` within a serve call: sends, answers the interest, and keeps the clock reading. |
 | `size(): i32` | How many slots the pool has, built or not. |
 | `writable(slot: i32): i32` | The socket of `slot` is writable: sends, and begins a serve call as `readable` does. Answers the interest. |
 
@@ -431,20 +385,13 @@ class Http1TlsServer
 | Member | |
 | --- | --- |
 | `new Http1TlsServer(tlsConfig: TlsServerConfig, config: Http1Config, listener: i32, size: i32)` | A pool of `size` slots, at least one, serving `config` over TLS under `tlsConfig` on `listener`. No slot is built here: the first `accept` into a slot builds its connection and, in `tls`, its handshake state, and keeps them, so a pool sized for a peak costs at start-up only the read scratches, the shared `Date` and the empty pools. |
-| `config: Http1Config` |  |
 | `connections: Http1Connection[]` | The connections built so far, slot `k`'s at `k`: one per slot ever accepted into. `connection` never adds to it; a slot never built reads `vacant` instead. |
 | `date: HttpDate` | The `Date` every slot's responses carry, as `Http1Server.date` is. |
-| `expireAfter: i64` | No slot can expire before this (`monotonicNanos`): `Http1Server.expireAfter`. |
 | `expireScans: i32` | How many calls of `expire` walked every slot. |
-| `heads: Http1OutputPool` |  |
-| `inputs: Http1OutputPool` | The input and head buffers resting slots lend, with `Http1Config.idleInput`. |
 | `outputs: Http1OutputPool` | The output buffers the slots borrow while they write. |
-| `scratch: u8[]` | Where TLS decrypts into before the connection takes the bytes. |
 | `tls: TlsTcpServer` |  |
-| `vacant: Http1Connection \| null` | What `connection` answers for every slot never built: one connection no slot holds and every such slot shares, so the slot never reads as another slot's live request. Its first read allocates it, once per server, and a caller must not change it. |
 | `accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32` | Accepts the next waiting connection as `TlsTcpServer.accept` does, with the caller's 32-byte server random and x25519 key, and gives it a fresh connection, building the slot's on its first accept. Answers the slot, or what `TlsTcpServer.accept` answers. |
 | `alpn(slot: i32): string` | The ALPN protocol `slot`'s handshake chose, or empty. |
-| `build(): Http1Connection` | A new connection on this pool's outputs and `Date`, for the next slot built. Called by `accept` alone, as `tls` builds slots: slot `k`'s connection must sit at index `k` of `connections`. |
 | `busy(): i32` | How many slots hold a connection. |
 | `close(slot: i32): void` | Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does. |
 | `connection(slot: i32): Http1Connection` | The HTTP/1.1 connection of `slot`. A slot never accepted into answers `vacant`, as a free slot answers a connection that holds nothing, and builds no slot; a slot out of range names slot 0's. |
@@ -452,12 +399,9 @@ class Http1TlsServer
 | `fd(slot: i32): i32` | The descriptor of `slot`, for `pollAdd`; -1 for a free one. |
 | `flush(slot: i32): i32` | Writes what `slot`'s connection holds into TLS, as far as TLS takes it, and sends it; shuts TLS down once the connection is over or ALPN chose another protocol. Answers TLS's interest, with the write bit while the connection still holds bytes. |
 | `holds(slot: i32): boolean` | Whether `slot` holds a connection. |
-| `live(slot: i32): boolean` | Whether `slot` holds a connection and has its HTTP/1.1 connection built, as `Http2TlsServer.live` asks: a slot accepted on `tls` directly holds a TLS session and no `Http1Connection`, and reads as free here. |
-| `make(): Http1Connection` | A connection on this pool's outputs and `Date` that no slot holds yet. |
 | `next(slot: i32): i32` | Moves what TLS has decrypted for `slot` into its connection, as far as the connection has room, and answers the connection's next event. A free slot, or one whose ALPN was another protocol, answers `H1_ERROR`. |
 | `readable(slot: i32): i32` | The socket of `slot` is readable: TLS reads it, and what the connection has to send goes after. Answers the interest. |
 | `refused(slot: i32): boolean` | Whether `slot`'s handshake is done and chose a protocol other than `http/1.1`. |
-| `send(slot: i32): void` | Writes what `slot`'s connection holds into TLS, as far as TLS takes it; a slot never built has nothing to write. |
 | `signP256(slot: i32, key: Secret<u8[]>): i32` | Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does. Answers the interest. |
 | `size(): i32` | How many slots the pool has, built or not. |
 | `writable(slot: i32): i32` | The socket of `slot` is writable. Answers the interest. |
@@ -483,19 +427,10 @@ class HttpDate
 | Member | |
 | --- | --- |
 | `new HttpDate()` | A date on the wall clock, with nothing formatted yet. |
-| `bytes: u8[]` | The IMF-fixdate of `second`: what `current` answers, made once. |
-| `held: boolean` |  |
-| `heldMs: i64` | The clock reading `hold` took, in milliseconds since 1970, while `held`. |
-| `pinned: boolean` |  |
-| `pinnedMs: i64` | The instant `pin` fixed, in milliseconds since 1970, while `pinned`. |
-| `reads: i64` | How many times the wall clock has been read. |
-| `rewrites: i64` | How many times `bytes` has been rewritten. |
-| `second: i64` | The second `bytes` holds, since 1970; -1 before the first `current`. |
 | `clockReads(): i64` | How many times the wall clock has been read: once per `hold`, and once per `current` outside one. |
 | `current(): u8[]` | The 29 bytes for now, which are rewritten only when the second differs from the one they hold — earlier as well as later, since a corrected clock steps back. It allocates nothing, and the array is the same one each time, so a caller copies it out rather than keeping it. A wall clock before 1970 or past 9999 answers the nearer of the two ends. |
 | `formats(): i64` | How many times the bytes have been rewritten: one per second that `current` was asked for, at most. |
 | `hold(): void` | Reads the wall clock once and makes `current` answer that reading until `unhold`, so the responses of one serve call cost one read. A pinned date reads nothing. A second `hold` takes a fresh reading. |
-| `now(): i64` | The wall clock, in milliseconds since 1970. |
 | `pin(unixMs: i64): boolean` | Makes `current` answer `unixMs`, milliseconds since 1970, until `unpin`. False, and nothing changed, for an instant before 1970-01-01T00:00:00Z or after 9999-12-31T23:59:59.999Z, which an IMF-fixdate cannot name. |
 | `unhold(): void` | Puts `current` back on a clock read per call, for a response written outside a serve call. |
 | `unpin(): void` | Puts `current` back on the wall clock. |
@@ -603,6 +538,8 @@ Interest bits, the same as `nish/net/tls/record-server`'s: the low two are `poll
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `H1_WANT_WRITE: i32`
+
+The slot has output waiting for the socket: ask the readiness loop for writable.
 
 </scalar-card>
 

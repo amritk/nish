@@ -22,6 +22,26 @@ import {
 } from "nish/net/upstream";
 ```
 
+```ts
+const h = new HttpHandler(new HandlerLimits(), listener, router)
+const users = new Upstream(h, "http://127.0.0.1:9000", new UpstreamLimits())
+while (true) {
+  h.wait(100) // one turn: the handler's sockets and the upstream's
+  while (h.ready()) {
+    const req = h.take()
+    switch (req.route) {
+      case USER: if (users.get(req, "/v1/users/7") !== UPSTREAM_E_NONE) { h.problem(req, 503, "Busy", "") } break
+      default: h.refuse(req)
+    }
+  }
+  while (users.ready()) { // the answers that arrived this turn
+    const r = users.take() // r.req is the request that asked
+    if (r.ok) { h.send(r.req, r.status, JSON, r.body, 0, r.length) } else { h.problem(r.req, 502, "Bad Gateway", "") }
+    users.release(r)
+  }
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="Upstream" icon="phosphor/regular/cube" href="#upstream">
@@ -43,30 +63,6 @@ One call: the request that asked, then, once `ready` hands it back, how it ended
 </scalar-card>
 
 </scalar-grid>
-
-<scalar-callout type="info">
-
-```ts
-const h = new HttpHandler(new HandlerLimits(), listener, router)
-const users = new Upstream(h, "http://127.0.0.1:9000", new UpstreamLimits())
-while (true) {
-  h.wait(100) // one turn: the handler's sockets and the upstream's
-  while (h.ready()) {
-    const req = h.take()
-    switch (req.route) {
-      case USER: if (users.get(req, "/v1/users/7") !== UPSTREAM_E_NONE) { h.problem(req, 503, "Busy", "") } break
-      default: h.refuse(req)
-    }
-  }
-  while (users.ready()) { // the answers that arrived this turn
-    const r = users.take() // r.req is the request that asked
-    if (r.ok) { h.send(r.req, r.status, JSON, r.body, 0, r.length) } else { h.problem(r.req, 502, "Bad Gateway", "") }
-    users.release(r)
-  }
-}
-```
-
-</scalar-callout>
 
 <scalar-detail title="`get` returns at once">
 
@@ -151,45 +147,14 @@ class Upstream
 | Member | |
 | --- | --- |
 | `new Upstream(h: HttpHandler, origin: string, limits: UpstreamLimits)` | Parses `origin`, looks its host up once (this blocks for at most `limits.lookupMs`), and makes every slot and connection buffer. Panics when a cap is below 1 or the watch ids run past the handler's. An unusable origin is not a panic: `error` says why, and every call fails with it. |
-| `address: u8[]` | The one address the pool connects to, checked against the policy if there is one. |
-| `calls: UpstreamResponse[]` |  |
-| `connections: UpstreamConnection[]` |  |
-| `done: i32[]` | Calls ended and not yet taken, in the order they ended. |
-| `doneCount: i32` |  |
-| `doneStart: i32` |  |
 | `error: i32` | Not `UPSTREAM_E_NONE` when the origin is unusable: every call then fails with it. |
 | `errorText: string` | Why the origin is unusable; empty when it is not. For a log. |
-| `free: i32[]` |  |
-| `freeCount: i32` |  |
-| `h: HttpHandler` |  |
-| `hostNames: string[]` |  |
-| `hostValues: string[]` |  |
-| `limits: UpstreamLimits` |  |
-| `turn: i64` | The handler turn `pump` last read. |
-| `waiting: i32[]` | Calls written into their slot and waiting for a connection, oldest first. |
-| `waitingCount: i32` |  |
-| `waitingStart: i32` |  |
-| `close(c: UpstreamConnection): void` |  |
-| `connect(c: UpstreamConnection): void` | Starts a connection for the call `c` holds; a failure ends the call. |
-| `dispatch(): void` | Puts waiting calls on connections: a kept-alive one first, then a new one. |
-| `end(r: UpstreamResponse, code: i32): void` | Hands `r` to `ready` with `code`. |
-| `fail(code: i32, text: string): void` |  |
-| `finish(c: UpstreamConnection, code: i32): void` | Ends the call `c` carries with `code`. A connection whose call ended any way but `UPSTREAM_E_NONE` is closed: what is left on it cannot be trusted to start the next response.<br><br>A call that failed on a reused connection before any byte of its response came is not ended but put back at the front of the queue, once: the origin closed the connection as the request crossed it, and a `GET` is safe to send again. Past its deadline it is not. |
 | `get(req: HttpRequest, path: string): i32` | Starts `GET path` for `req` and returns at once: `UPSTREAM_E_NONE` when the call is the pool's, which hands it back through `ready` and `take` however it ends; `UPSTREAM_E_FULL` when every slot is taken, and then nothing is held and `req` is still the program's to answer. `path` is copied out before this returns. |
-| `idle(): UpstreamConnection \| null` | A connection free for the next call: open, idle and still usable if one is, else closed, else null. An idle connection the origin has closed or sent bytes on is closed here, before a call is put on it. |
-| `interest(c: UpstreamConnection, events: i32): void` | Watches `c` for `events` alone. |
 | `openConnections(): i32` | How many connections to the origin are open. |
-| `parse(c: UpstreamConnection): void` | Takes every event the codec has for the call `c` carries. |
 | `pending(): i32` | How many calls hold a slot: queued, in flight, or finished and not yet released. |
-| `pump(): void` | Once per handler turn: reads and writes the connections that fired, then fails what is past its deadline. |
 | `ready(): boolean` | Whether a finished call is waiting for `take`; reads the upstream's sockets once per handler turn. |
-| `receive(c: UpstreamConnection): void` | Reads what arrived and runs the codec over it. |
 | `release(r: UpstreamResponse): void` | Gives a taken call's slot back to the pool. Panics for a call not taken or already released: two calls sharing a slot would hand one request's answer to another. |
-| `send(c: UpstreamConnection): void` | Writes what the socket takes of the call's head, then waits to read. |
-| `service(c: UpstreamConnection): void` | What a connection's turn found ready. |
-| `settle(origin: string): void` | Settles the origin: its `Host` value and the one address, or `error`. |
 | `take(): UpstreamResponse` | The next finished call, which the program gives back with `release`. Panics when none is `ready`. |
-| `usable(c: UpstreamConnection): boolean` | Whether the idle `c` has nothing to read. Anything else closes it: an end of stream or an error means the origin has given it up, and bytes no call asked for would be read as the next call's response. |
 
 ## UpstreamLimits
 
@@ -208,10 +173,10 @@ class UpstreamLimits
 | `lookupMs: i32` | How long the constructor's one lookup of the origin's host may take. |
 | `maxBody: i64` | The largest response body the codec accepts, at most 1 GiB; past it the call fails `HTTP1_E_BODY_LIMIT`. |
 | `maxHead: i32` | Room for one request head: the request line, `Host` and the empty line. |
-| `maxHeaderBytes: i32` |  |
-| `maxHeaders: i32` |  |
-| `maxStatusLine: i32` |  |
-| `maxTrailerBytes: i32` |  |
+| `maxHeaderBytes: i32` | The most bytes a response's header section may take. |
+| `maxHeaders: i32` | The most field lines a response may carry, trailers included. |
+| `maxStatusLine: i32` | The longest status line a response may have, in bytes. |
+| `maxTrailerBytes: i32` | The most bytes a response's trailer section may take. |
 | `outbound: OutboundPolicy \| null` | Checks the origin's host and address when set; set it whenever the origin comes from input. |
 | `timeoutMs: i32` | A call fails `UPSTREAM_E_TIMEOUT` this long after `get` if its response has not ended. |
 
@@ -226,19 +191,13 @@ class UpstreamResponse
 
 | Member | |
 | --- | --- |
-| `new UpstreamResponse(index: i32, headRoom: i32, placeholder: HttpRequest)` |  |
+| `new UpstreamResponse(index: i32, headRoom: i32, placeholder: HttpRequest)` | An empty call slot; `Upstream` makes its pool of them. |
 | `body: u8[]` | The body, in `body[0 .. length)`; the buffer is reused, so read `length`, not `body.length`. |
-| `deadline: i64` | When the call fails `UPSTREAM_E_TIMEOUT`, on `monotonicNanos`'s clock. |
 | `error: i32` | `UPSTREAM_E_NONE`, an `HTTP1_E_` refusal of the codec, or an `UPSTREAM_E_` code. |
-| `head: u8[]` | The request head, written by `get`. |
-| `headLength: i32` |  |
-| `index: i32` |  |
-| `length: i32` |  |
+| `length: i32` | How many bytes of `body` the response filled. |
 | `ok: boolean` | Whether the response was read to its end; `error` says why not. |
 | `req: HttpRequest` | The handler's request this call answers. |
-| `retried: boolean` | Made once more already, after a reused connection dropped it unanswered. |
 | `status: i32` | The final status code, once the response's head has arrived. |
-| `taken: boolean` | Taken by the program and not yet released. |
 
 ## Constants
 

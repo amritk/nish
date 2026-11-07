@@ -27,6 +27,16 @@ import {
 } from "nish/net/tls/record-server";
 ```
 
+```ts
+const conn = new TlsRecordServer(new TlsServer(config, random, key));
+conn.receive(bytes, 0, n);                 // what the socket read
+if ((conn.interest() & TLS_RECORD_SIGN) !== 0) {
+  conn.sign(tlsSignEcdsaP256(leaf, conn.signatureInput()));
+}
+// send conn.output[conn.outputStart .. conn.outputEnd), then conn.consume(sent)
+const got: i32 = conn.read(buf, 0, buf.length);   // application data
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="TlsRecordPools" icon="phosphor/regular/cube" href="#tlsrecordpools">
@@ -42,20 +52,6 @@ One TLS 1.3 server connection over a stream.
 </scalar-card>
 
 </scalar-grid>
-
-<scalar-callout type="info">
-
-```ts
-const conn = new TlsRecordServer(new TlsServer(config, random, key));
-conn.receive(bytes, 0, n);                 // what the socket read
-if ((conn.interest() & TLS_RECORD_SIGN) !== 0) {
-  conn.sign(tlsSignEcdsaP256(leaf, conn.signatureInput()));
-}
-// send conn.output[conn.outputStart .. conn.outputEnd), then conn.consume(sent)
-const got: i32 = conn.read(buf, 0, buf.length);   // application data
-```
-
-</scalar-callout>
 
 <scalar-detail title="What it adds to `TlsServer`">
 

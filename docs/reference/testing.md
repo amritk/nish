@@ -10,6 +10,20 @@ import {
 } from "nish/testing";
 ```
 
+```ts
+import { Suite } from "../std/testing";
+
+export const main = (): number => {
+  const t = new Suite("arrays");
+  const a: i32[] = [1, 2, 3];
+  if (!t.eqI32("length", a.length, 3)) {
+    return t.done();          // a[2] below would panic, not fail
+  }
+  t.eqI32("last", a[2], 3);
+  return t.done();            // 0 when nothing failed, 1 otherwise
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="Suite" icon="phosphor/regular/cube" href="#suite">
@@ -72,22 +86,6 @@ sufficient (`docs/wp26-stdlib.md` §4). Without the conversion the two
 comparisons against a length below would lower to `fcmp` on an `f64` in that
 mode and to `icmp` on an `i32` here, which is the same module compiling to
 two different programs.
-
-```ts
-import { Suite } from "../std/testing";
-```
-
-```ts
-export const main = (): number => {
-  const t = new Suite("arrays");
-  const a: i32[] = [1, 2, 3];
-  if (!t.eqI32("length", a.length, 3)) {
-    return t.done();          // a[2] below would panic, not fail
-  }
-  t.eqI32("last", a[2], 3);
-  return t.done();            // 0 when nothing failed, 1 otherwise
-};
-```
 
 ## Suite
 

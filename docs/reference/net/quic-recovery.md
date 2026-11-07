@@ -34,7 +34,7 @@ import {
 } from "nish/net/quic-recovery";
 ```
 
-```text
+```ts
 import { QuicRecovery, QUIC_RECOVERY_TIMEOUT_PTO } from "nish/net/quic-recovery";
 
 const recovery = new QuicRecovery();

@@ -16,6 +16,27 @@ import {
 } from "nish/net/http3-server";
 ```
 
+```ts
+const fd = udpBind("0.0.0.0", 4433, 0);
+const server = new Http3Server(quicConfig, new Http3Config(), fd, 64, listenerEntropy);
+// quicConfig.alpn is ["h3"]; pollAdd(loop, fd, 1, 0)
+// each time round the loop, with `now` in milliseconds:
+pollWait(loop, ready, server.timeout(now));
+server.clock(micros);                      // the same instant in microseconds, for the pacer
+server.receive(now, key);                  // every datagram waiting; signs handshakes with `key`
+server.tick(now);                          // the connections' timers
+let slot: i32 = server.ready();
+while (slot >= 0) {
+  const h3: Http3Connection = server.connection(slot);
+  let event: i32 = h3.next();
+  while (event !== H3_NEED_MORE && event !== H3_ERROR) { … ; event = h3.next(); }
+  slot = server.ready();
+}
+server.flush(now);                         // what every touched slot has to send
+// at shutdown:
+server.stop();                             // releases every slot, wipes the static keys
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="Http3CidIndex" icon="phosphor/regular/cube" href="#http3cidindex">
@@ -37,31 +58,6 @@ Slots filed by the millisecond of their next deadline: `head[b]` is a bucket's f
 </scalar-card>
 
 </scalar-grid>
-
-<scalar-callout type="info">
-
-```text
-const fd = udpBind("0.0.0.0", 4433, 0);
-const server = new Http3Server(quicConfig, new Http3Config(), fd, 64, listenerEntropy);
-// quicConfig.alpn is ["h3"]; pollAdd(loop, fd, 1, 0)
-// each time round the loop, with `now` in milliseconds:
-pollWait(loop, ready, server.timeout(now));
-server.clock(micros);                      // the same instant in microseconds, for the pacer
-server.receive(now, key);                  // every datagram waiting; signs handshakes with `key`
-server.tick(now);                          // the connections' timers
-let slot: i32 = server.ready();
-while (slot >= 0) {
-  const h3: Http3Connection = server.connection(slot);
-  let event: i32 = h3.next();
-  while (event !== H3_NEED_MORE && event !== H3_ERROR) { … ; event = h3.next(); }
-  slot = server.ready();
-}
-server.flush(now);                         // what every touched slot has to send
-// at shutdown:
-server.stop();                             // releases every slot, wipes the static keys
-```
-
-</scalar-callout>
 
 <scalar-detail title="Routing">
 

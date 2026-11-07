@@ -249,7 +249,6 @@ class OutboundPolicy
 | Member | |
 | --- | --- |
 | `new OutboundPolicy()` |  |
-| `allowHosts: string[]` | The names a URL may carry, lower-cased; empty for any. See `allowHost`. |
 | `maxBodyBytes: i64` | A fetch's body is cut off past this, or past the client's own cap if lower. |
 | `maxRedirects: i32` | At most this many redirects, or the client's own limit if lower. |
 | `permitted: u8[]` | `OUTBOUND_PERMIT_BYTES` per prefix `permit` let through. |

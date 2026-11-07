@@ -337,70 +337,14 @@ class FetchSyncClient
 
 | Member | |
 | --- | --- |
-| `new FetchSyncClient(options: HttpOptions)` |  |
-| `bodyError: i32` | How the latest response's body failed, `HTTP_E_NONE` while it has not; its reader answers it again. |
-| `bodyOpen: boolean` | Whether the latest response's body is unread. |
-| `deadline: i64` | The fetch's end in monotonic nanoseconds; `HTTP_CLIENT_NEVER` for none. |
+| `new FetchSyncClient(options: HttpOptions)` | A client with no connection open yet, its proxy settings read from the environment when `useEnvProxy` is set. |
 | `error: i32` | The last failure's `HTTP_E_*` code; `HTTP_E_NONE` after a fetch that answered. |
-| `errorText: string` |  |
-| `fd: i32` |  |
-| `generation: i32` | Counts responses; a reader reads only while its own is the open one. |
-| `gotByte: boolean` | Whether any byte of the response in flight has arrived. |
-| `httpProxy: string` | The proxy settings in use; "" for none. `setProxies` replaces them. |
-| `httpsProxy: string` |  |
-| `loop: i32` | The fd registered in `loop`, and for what. |
-| `lost: boolean` | Whether the failure in hand was the connection going away, which a retry may cure. |
-| `noProxy: string` |  |
-| `once: boolean` | Whether this is `fetchSync`'s client, closed whole once its one body is done with. |
-| `options: HttpOptions` |  |
-| `parser: Http1ResponseParser` |  |
-| `pendLen: i32` |  |
-| `pendOff: i32` | Where the latest response's unread body bytes start in `parser`, and how many. |
-| `plain: u8[]` | Where TLS application data is read before the parser takes it; empty until the first https connection. |
-| `rbuf: u8[]` |  |
-| `ready: i32[]` |  |
+| `errorText: string` | A sentence saying why the last failure happened, for a log; "" after a fetch that answered. |
+| `options: HttpOptions` | The options every fetch through this client follows. |
 | `reused: boolean` | Whether `fd` has carried a response before the one in flight. |
-| `route: string` | Where `fd` leads: an origin, or the proxy an http request went through. |
-| `routePolicy: OutboundPolicy \| null` | The outbound policy `fd` was dialled under; a connection is reused only under the same one. |
-| `tls: TlsRecordClient \| null` | The TLS connection over `fd` to an https origin; null over plain http. |
-| `trust: TlsClientTrust \| null` | The roots an https server's chain must end at, read on the client's first https fetch. |
-| `watched: i32` |  |
-| `watchedEvents: i32` |  |
 | `close(): void` | Closes the connection; the client can still fetch, on a new one. |
-| `dial(host: string, port: i32): i32` | Looks `host` up and connects to its addresses in turn, every step within `connectTimeoutMs` together: the connected fd, or -1 with the error set. |
-| `drain(): void` | Reads past a redirect's body so the connection can carry the next request; a body too long to be worth reading, or any failure, closes it. |
-| `drop(): void` | Closes the connection, if any, and forgets the open body. |
-| `exchange(url: Url, method: string, names: string[], values: string[], body: u8[] \| null): HttpResponse \| null` | One request and its response's head, on the kept connection when it leads to the same place, once more on a fresh one when a kept connection turns out to be gone (see the module comment). |
-| `fail(code: i32, text: string): void` |  |
-| `failTls(conn: TlsRecordClient): void` | Sets the error for the failed TLS connection `conn`, saying how it failed. |
-| `failWait(code: i32, text: string): void` | Sets the error for a wait that ended with `code`, `text` saying what timed out. |
 | `fetch(req: HttpRequest): HttpResponse \| null` | Sends `req` and answers the response once its head is in, following redirects as the options say; null on a failure, with `error` and `errorText` set. The body is read through the response's `body` before the next fetch. |
-| `fill(): boolean` | One read of the response into the parser, waiting up to `readTimeoutMs`; false with the error set. |
-| `flushTls(conn: TlsRecordClient): boolean` | Sends everything `conn` has sealed, waiting as `writeRaw` does; false with the error set. |
-| `head(): i32` | Reads up to the final response's head: `HTTP1_HEAD`, `HTTP1_UPGRADE`, or -1 with the error set. |
-| `hostRefusal(url: Url): string` | Why the outbound policy refuses to let a URL name `url`'s host; "" when there is no policy or it allows the host. |
-| `leftover(): boolean` | Whether bytes past the last response are held, in the parser or the TLS layer. |
-| `loadTrust(): boolean` | Reads the roots an https server's chain must end at, once per client: the PEM file `rootsPemPath` names, else the system's. False, with the error set, when none could be read, since no server could then be trusted. |
-| `open(url: Url): boolean` | Makes `fd` a connection to where `url` goes: the kept one when it leads there, else a new one, through a proxy when the settings say so. False on a failure, with the error set. |
-| `overdue(): boolean` | Fails with `HTTP_E_TOTAL_TIMEOUT` once the fetch's deadline has passed: a server that always has the next byte ready never lets a wait see it. |
-| `pump(): i32` | The parser's next event, reading from the socket as it needs; -1 with the error set. |
-| `quiet(): boolean` | Whether the kept connection has said nothing since its last response ended: no byte and no close waiting on the socket, none held unread. A server that spoke while idle answered nothing yet asked, and is closing or out of step, so the connection is not reused. |
-| `readBody(generation: i32, buf: u8[], off: i32, n: i32): i32` | `HttpBodyReader.read` for the response numbered `generation`. |
-| `readDeadline(): i64` | When the wait for the server's next byte ends: `readTimeoutMs` from now. |
-| `readRaw(want: i32): i32` | One read of up to `want` bytes from `fd` into `rbuf`, waiting up to `readTimeoutMs`: the count, 0 at the end of the stream, or -1 with the error set. |
-| `receiveTls(conn: TlsRecordClient): boolean` | One read of the socket into the TLS connection `conn`, waiting up to `readTimeoutMs`; false with the error set. |
-| `refuse(code: i32, text: string): HttpResponse \| null` | Refuses a redirect: closes the connection, whose response is left unread, and fails. |
-| `refuseBody(limit: i32): void` | `readAll`'s refusal: the body passed the caller's limit. |
-| `release(): void` | Closes the connection a body is done with, and `fetchSync`'s whole client with it. |
-| `secure(host: string, early: u8[]): boolean` | Runs a TLS 1.3 handshake for `host` over the fresh `fd`, `early` being what the proxy sent past its CONNECT answer. The server's chain and CertificateVerify are checked under the client's roots at the wall clock's time before its Finished is read. True once the connection is open and the client's last flight sent; false with the error set. |
-| `send(url: Url, method: string, names: string[], values: string[], body: u8[] \| null): HttpResponse \| null` | Writes the request on `fd` and reads its response's head. |
 | `setProxies(httpProxy: string, httpsProxy: string, noProxy: string): void` | Replaces the proxy settings, as the three variables would set them; "" for none. |
-| `tunnel(host: string, port: i32, proxy: Url): boolean` | Asks `proxy`, on the fresh `fd`, for a tunnel to `host:port`. True once the proxy answers 2xx, every byte after its head belonging to the tunnel. |
-| `unwatch(fd: i32): void` | Takes `fd` out of the poll loop before it is closed. |
-| `wait(fd: i32, events: i32, until: i64, code: i32): i32` | Waits for `events` on `fd` until `until`, or the fetch's deadline if that comes first: `HTTP_E_NONE` when it is ready, `code` or `HTTP_E_TOTAL_TIMEOUT` for whichever deadline passed, `HTTP_E_IO` when the poll loop cannot be made. |
-| `watch(fd: i32, events: i32): boolean` | Puts `fd` in the poll loop, waiting for `events`: false when the loop cannot be made. |
-| `writeAll(bytes: u8[], off: i32, len: i32): boolean` | Writes `bytes[off, off + len)` on the connection, through TLS for an https origin; false with the error set. |
-| `writeRaw(bytes: u8[], off: i32, len: i32): boolean` | Writes `bytes[off, off + len)` to `fd`, waiting up to `readTimeoutMs` each time it is full. |
 
 ## HttpBodyReader
 
@@ -415,9 +359,8 @@ class HttpBodyReader
 
 | Member | |
 | --- | --- |
-| `new HttpBodyReader(client: FetchSyncClient, generation: i32)` |  |
-| `client: FetchSyncClient` |  |
-| `generation: i32` |  |
+| `new HttpBodyReader(client: FetchSyncClient, generation: i32)` | A reader for the body of one response. |
+| `client: FetchSyncClient` | The client that made the response; it carries the connection the body arrives on. |
 | `read(buf: u8[], off: i32, n: i32): i32` | Up to `n` body bytes into `buf[off ..]`: how many (at least one), 0 at the end of the body, or a negated `HTTP_E_*` code, the client's `errorText` saying why. It waits for at least one byte, no more, so an event stream is read event by event. A window outside `buf` panics; an empty one answers 0 at once, reading nothing, so 0 means the end only when `n` is positive. |
 | `readAll(limit: i32): u8[] \| null` | The rest of the body in one array, or null on an error or once it passes `limit` bytes (`HTTP_E_BODY_TOO_LARGE`, and the connection is closed). |
 
@@ -435,11 +378,11 @@ class HttpOptions
 | --- | --- |
 | `new HttpOptions()` |  |
 | `connectTimeoutMs: i32` | The budget for the lookup and the connect together; 0 or less for none but the total. |
-| `crossOriginRedirects: boolean` |  |
-| `followRedirects: boolean` |  |
+| `crossOriginRedirects: boolean` | Let a followed redirect go to another origin (see the module comment). |
+| `followRedirects: boolean` | Follow a redirect rather than answer it; only to the same origin unless `crossOriginRedirects` is set. |
 | `maxBodyBytes: i64` | 256 MiB by default; a body past it fails with `HTTP_E_BODY_TOO_LARGE`. |
 | `maxHeaderBytes: i32` | The status line and the header section, each at most this. |
-| `maxRedirects: i32` |  |
+| `maxRedirects: i32` | The most redirect hops one fetch follows; past them the fetch fails. |
 | `outbound: OutboundPolicy \| null` | For a URL the program did not choose: only the addresses and hosts the policy allows are reached, no proxy is used, and its caps apply (see `nish/net/outbound`). Null for none. |
 | `readTimeoutMs: i32` | The longest wait for the server to send or take a byte; 0 or less for none. |
 | `rootsPemPath: string \| null` | A PEM file of the roots an https server's chain must end at; null for the system's. |
@@ -461,12 +404,12 @@ class HttpRequest
 
 | Member | |
 | --- | --- |
-| `new HttpRequest(method: string, url: string)` |  |
+| `new HttpRequest(method: string, url: string)` | A request with no header fields and no body. |
 | `body: u8[] \| null` | Null for no body at all; an empty array sends `Content-Length: 0`. |
-| `method: string` |  |
-| `names: string[]` |  |
-| `url: string` |  |
-| `values: string[]` |  |
+| `method: string` | The request method, sent as given, such as `GET` or `POST`. |
+| `names: string[]` | The header field names, in the order they are sent. |
+| `url: string` | The absolute URL the request is sent to. |
+| `values: string[]` | The header field values, each beside its name in `names`. |
 | `header(name: string, value: string): void` | Appends one header field; nothing is checked until the request is written. |
 
 ## HttpResponse
@@ -481,14 +424,14 @@ class HttpResponse
 
 | Member | |
 | --- | --- |
-| `new HttpResponse(body: HttpBodyReader)` |  |
-| `body: HttpBodyReader` |  |
-| `names: string[]` |  |
-| `reason: string` |  |
-| `status: i32` |  |
-| `url: string` |  |
-| `values: string[]` |  |
-| `header(name: string): string \| null` | The first value of the field `name`, in any case; null when the response has none. |
+| `new HttpResponse(body: HttpBodyReader)` | A response with no status and no fields yet; the client fills them in. |
+| `body: HttpBodyReader` | The reader for the response's body. |
+| `names: string[]` | The header field names, lower-cased, in the order they arrived. |
+| `reason: string` | The reason phrase the server sent beside the status. |
+| `status: i32` | The status code, such as 200. |
+| `url: string` | The URL that answered, which differs from the request's after a redirect. |
+| `values: string[]` | The header field values, each beside its name in `names`. |
+| `header(name: string): string \| null` | The first value of the field `name`, in any case. |
 
 ## Constants
 

@@ -72,6 +72,29 @@ import {
 } from "nish/net/postgres";
 ```
 
+```ts
+const config = new PgConfig();
+config.user = "app";
+config.database = "app";
+const nonce = new Array<u8>(18);
+crypto.getRandomValues(nonce);
+const conn = new PgConnection(config, password, nonce);
+// write conn.outputBuffer()[conn.outputStart() .. conn.outputEnd()), then conn.sent(n)
+// read into conn.inputBuffer() at conn.inputEnd(), up to conn.inputRoom() bytes, then conn.received(n)
+let event: i32 = conn.next();
+while (event !== PG_NEED_MORE && event !== PG_FAILED) {
+  // PG_READY: authenticated; prepare statements and send queries
+  //   conn.prepare("by_id", "select id, name from users where id = $1", [23]); conn.sync()
+  //   conn.bindStart("by_id"); conn.paramInt(7); conn.bindEnd(); conn.sync()
+  //   or conn.bindStartBinary("by_id") for binary result columns
+  // PG_ROW: conn.int(0), conn.colStart(1) .. + conn.colLength(1) in conn.inputBuffer()
+  //   after bindStartBinary: conn.binaryInt(0), the text column as before
+  // PG_COMPLETE: conn.tagRows(); PG_ERROR: conn.lastError.code
+  // PG_GROUP_DONE: one sync()'s group has been answered
+  event = conn.next();
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="pgTarget" icon="phosphor/regular/function" href="#pgtarget">
@@ -171,33 +194,6 @@ Decoders for PostgreSQL's text format, in place; a bad input sets `failed`, whic
 </scalar-card>
 
 </scalar-grid>
-
-<scalar-callout type="info">
-
-```ts
-const config = new PgConfig();
-config.user = "app";
-config.database = "app";
-const nonce = new Array<u8>(18);
-crypto.getRandomValues(nonce);
-const conn = new PgConnection(config, password, nonce);
-// write conn.outputBuffer()[conn.outputStart() .. conn.outputEnd()), then conn.sent(n)
-// read into conn.inputBuffer() at conn.inputEnd(), up to conn.inputRoom() bytes, then conn.received(n)
-let event: i32 = conn.next();
-while (event !== PG_NEED_MORE && event !== PG_FAILED) {
-  // PG_READY: authenticated; prepare statements and send queries
-  //   conn.prepare("by_id", "select id, name from users where id = $1", [23]); conn.sync()
-  //   conn.bindStart("by_id"); conn.paramInt(7); conn.bindEnd(); conn.sync()
-  //   or conn.bindStartBinary("by_id") for binary result columns
-  // PG_ROW: conn.int(0), conn.colStart(1) .. + conn.colLength(1) in conn.inputBuffer()
-  //   after bindStartBinary: conn.binaryInt(0), the text column as before
-  // PG_COMPLETE: conn.tagRows(); PG_ERROR: conn.lastError.code
-  // PG_GROUP_DONE: one sync()'s group has been answered
-  event = conn.next();
-}
-```
-
-</scalar-callout>
 
 <scalar-detail title="Events">
 
