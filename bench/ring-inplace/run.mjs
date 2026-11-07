@@ -11,9 +11,12 @@
 // Each round runs every (size, mode) pair twice, in an order shuffled afresh
 // for the round (a seeded shuffle, so a rerun repeats it). A figure is the
 // median over the rounds of both runs, with the lowest and highest beside
-// it. The noise band is how far the two runs of one mode in a round differ,
-// the median over rounds and modes: a difference between the modes inside
-// it is not one. The consumer runs under `taskset -c <first cpu>`, the
+// it. A noise band, for p50, p99 and the pipeline each, is how far the two
+// runs of one mode in a round differ, the median over rounds; a difference
+// between the modes is set against the wider of the two modes' bands, and
+// one inside it is not one. Every run must deliver what it sent, byte for
+// byte (the reader's FNV-1a over the bodies equals the producer's), or the
+// whole run fails. The consumer runs under `taskset -c <first cpu>`, the
 // producer and the reader on the second and third. `--quick` sends 3,000
 // messages a run rather than 50,000 and finishes in seconds.
 //
@@ -28,13 +31,22 @@ const opt = (name, fallback) => {
 }
 const quick = args.includes("--quick")
 const rounds = Number(opt("--rounds", "5"))
+if (!Number.isInteger(rounds) || rounds < 1) {
+  throw new Error(`--rounds wants a whole number of at least 1, not ${opt("--rounds")}`)
+}
 const n = quick ? 3000 : 50000
-const [consumerCpu, producerCpu, readerCpu] = opt("--cpus", "0,1,2").split(",")
+const cpus = opt("--cpus", "0,1,2").split(",")
+if (cpus.length !== 3 || cpus.some((c) => !/^\d+$/.test(c))) {
+  throw new Error(`--cpus wants three cpu numbers, consumer,producer,reader, not ${cpus.join(",")}`)
+}
+const [consumerCpu, producerCpu, readerCpu] = cpus
 const out = "build/ring-inplace"
 mkdirSync(out, { recursive: true })
 
-const run = (file, argv) => execFileSync(file, argv, { encoding: "utf8" })
-run("build/nish", ["bench/ring-inplace/bench.ts", "--link", `${out}/bench`])
+// A run of 50,000 messages takes about a second; one that takes minutes has
+// hung, and the bench's own deadlines are ten seconds a wait.
+const run = (file, argv, timeout) => execFileSync(file, argv, { encoding: "utf8", timeout })
+run("build/nish", ["bench/ring-inplace/bench.ts", "--link", `${out}/bench`], 600000)
 
 // mulberry32: a fixed seed, so a rerun shuffles in the same orders
 let seed = 0x6e697368
@@ -66,6 +78,11 @@ const field = (line, name) => {
 
 const sizes = [1024, 4096, 10240]
 const modes = ["copy", "inplace"]
+for (const m of modes) {
+  if (m !== "copy" && m !== "inplace") {
+    throw new Error(`unknown mode ${m}`)
+  }
+}
 const pairs = sizes.flatMap((s) =>
   modes.flatMap((m) => [
     [s, m, 0],
@@ -75,18 +92,16 @@ const pairs = sizes.flatMap((s) =>
 const samples = new Map(pairs.map(([s, m, k]) => [`${s} ${m} ${k}`, []]))
 for (let r = 0; r < rounds; r++) {
   for (const [s, m, k] of shuffled(pairs)) {
-    const line = run("taskset", [
-      "-c",
-      consumerCpu,
-      `${out}/bench`,
-      m,
-      String(s),
-      String(n),
-      producerCpu,
-      readerCpu,
-    ])
+    const line = run(
+      "taskset",
+      ["-c", consumerCpu, `${out}/bench`, m, String(s), String(n), producerCpu, readerCpu],
+      180000
+    )
     if (field(line, "sent") !== field(line, "heard")) {
       throw new Error(`${m} ${s}: the reader did not hear what was sent: ${line}`)
+    }
+    if (field(line, "made_sum") !== field(line, "read_sum")) {
+      throw new Error(`${m} ${s}: the bodies the reader parsed are not the records rendered: ${line}`)
     }
     samples.get(`${s} ${m} ${k}`).push(line)
   }
@@ -105,13 +120,16 @@ const gaps = (s, m, name) => {
 console.log(
   `${rounds} rounds of ${n.toLocaleString("en-US")} messages, each mode run twice a round; consumer on cpu ${consumerCpu}, producer on ${producerCpu}, reader on ${readerCpu}\n`
 )
+const band = (s, m, name) => median(gaps(s, m, name))
+const pct = (x) => `±${x.toFixed(1)}%`
 console.log(
-  "| record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | noise band p50 |"
+  "| record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | messages with a tail | noise band p50 / p99 / pipeline |"
 )
-console.log("| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+console.log("| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
 for (const s of sizes) {
   for (const m of modes) {
     const lines = both(s, m)
+    const tails = lines.map((l) => field(l, "tails"))
     const cols = [
       `${s / 1024} KB`,
       m === "copy" ? "copied" : "in place",
@@ -119,23 +137,29 @@ for (const s of sizes) {
       spread(lines.map((l) => field(l, "p50_ns"))),
       spread(lines.map((l) => field(l, "p99_ns"))),
       spread(lines.map((l) => field(l, "wall_ns"))),
-      f(median(lines.map((l) => field(l, "copied")))),
-      `±${median(gaps(s, m, "p50_ns")).toFixed(1)}%`,
+      (median(lines.map((l) => field(l, "copied"))) / n).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+      m === "copy" ? "—" : `${f(median(tails))} of ${f(n)} (at most ${f(Math.max(...tails))})`,
+      ["p50_ns", "p99_ns", "wall_ns"].map((name) => pct(band(s, m, name))).join(" / "),
     ]
     console.log(`| ${cols.join(" | ")} |`)
   }
 }
-console.log("\n| record | in place vs copied, consumer p50 | p99 | pipeline | noise band p50 |")
-console.log("| ---: | ---: | ---: | ---: | ---: |")
+console.log(
+  "\n| record | in place vs copied, consumer p50 | consumer p99 | pipeline |\n| ---: | ---: | ---: | ---: |"
+)
+/** The change in `name` from copied to in place, against the wider of the two modes' bands. */
 const change = (s, name) => {
   const c = median(both(s, "copy").map((l) => field(l, name)))
   const p = median(both(s, "inplace").map((l) => field(l, name)))
   const d = (100 * (p - c)) / c
-  return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`
+  const b = Math.max(band(s, "copy", name), band(s, "inplace", name))
+  return `${d >= 0 ? "+" : ""}${d.toFixed(1)}% (band ${pct(b)}, ${Math.abs(d) > b ? "outside" : "inside"})`
 }
 for (const s of sizes) {
-  const band = Math.max(median(gaps(s, "copy", "p50_ns")), median(gaps(s, "inplace", "p50_ns")))
   console.log(
-    `| ${s / 1024} KB | ${change(s, "p50_ns")} | ${change(s, "p99_ns")} | ${change(s, "wall_ns")} | ±${band.toFixed(1)}% |`
+    `| ${s / 1024} KB | ${change(s, "p50_ns")} | ${change(s, "p99_ns")} | ${change(s, "wall_ns")} |`
   )
 }
