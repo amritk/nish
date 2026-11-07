@@ -844,21 +844,31 @@ export const RUNTIME_BUDGETS = [
  * linked with runtime-wasm.c, from 2,827 to 2,091 (gzip 1,479 to 1,092, brotli 1,302
  * to 970). A wasm-opt pass shrinks the `.wasm` and so the inline module and leaves
  * the loader as it is, so every ceiling holds with one too.
+ *
+ * Raised for stage 3 (§6), measured the same way: a panic is the page's `nish.panic`
+ * import, called with its site, instead of a bare trap. add.wasm goes from 102 to 157
+ * bytes (gzip 111 to 150, brotli 87 to 136) and arrays.wasm from 2,091 to 2,322 (gzip
+ * 1,092 to 1,157, brotli 970 to 1,023): the import and the site argument at each panic.
+ * The loader grows by its panic half, the same text in every loader: the message
+ * decoder, `guarded` around each export (dead and re-entered modules refused), and
+ * `NishPanic` / `NishReentry`. add.mjs goes from 1,625 to 6,038 (gzip 732 to 2,279,
+ * brotli 625 to 1,995), arrays.mjs from 4,560 to 8,809 (gzip 1,602 to 3,033, brotli
+ * 1,399 to 2,673).
  */
 export const WASM_HOST_SIZE_BUDGETS = [
   {
     src: "examples/add.ts",
     runtime: false,
-    wasm: [102, 111, 87],
-    loader: [1625, 732, 625],
-    inline: [396, 253, 223],
+    wasm: [157, 150, 136],
+    loader: [6038, 2279, 1995],
+    inline: [557, 304, 262],
   },
   {
     src: "examples/arrays.ts",
     runtime: true,
-    wasm: [2091, 1092, 970],
-    loader: [4560, 1602, 1399],
-    inline: [6163, 1468, 1267],
+    wasm: [2322, 1157, 1023],
+    loader: [8809, 3033, 2673],
+    inline: [6766, 1544, 1335],
   },
 ]
 
