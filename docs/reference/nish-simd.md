@@ -1496,9 +1496,6 @@ function sum(v: u8x16 | u16x8): i32
 <scalar-field name="returns" type="i32">
 </scalar-field>
 
-The lanes added: a `u8x16` or `u16x8` in an `i32`, a float vector in lane
-order. An `i32x4` or `u32x4` total is `sumWrapping`.
-
 ```ts
 function sum(v: f32x4): f32
 ```
@@ -1512,9 +1509,6 @@ function sum(v: f32x4): f32
 
 <scalar-field name="returns" type="f32">
 </scalar-field>
-
-The lanes added: a `u8x16` or `u16x8` in an `i32`, a float vector in lane
-order. An `i32x4` or `u32x4` total is `sumWrapping`.
 
 ```ts
 function sum(v: f64x2): f64

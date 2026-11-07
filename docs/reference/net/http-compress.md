@@ -336,6 +336,22 @@ class HttpCompressor
 | `oneSegment(coding: i32, len: i32, mss: i32): boolean` | `segmentMode`'s shortcut, before any encoder runs: whether a `len`-byte body that `compress` would try (its length in `[minLength, maxLength]` and `coding` gzip) is no longer than one segment of `mss` bytes (as `fewerSegments` reads it). Sent as it is, such a response takes one segment once its head fits beside it, and no compression takes fewer, so `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks the head: when it does not fit, the caller goes on to `compress`, which decides again. Anything else answers false and leaves `decision` alone. |
 | `varies(): boolean` | Whether the last decision depended on the request's `Accept-Encoding`, so the response needs `Vary: Accept-Encoding`: a body sent compressed, or one sent as it is because the client did not take gzip. A body the lengths or the saving kept as it is would go out the same to any client. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="1,448" icon="phosphor/regular/hash">
+
+`HTTP_DEFAULT_MSS: i32`
+
+The maximum segment size `segmentMode` counts with unless told the
+connection's: a 1500-byte Ethernet MTU less 20 bytes of IPv4 header, 20 of
+TCP header and 12 of the timestamp option.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -432,16 +448,6 @@ or the saving asked for was the whole body, so no encoder ran.
 `HTTP_COMPRESS_TOO_SMALL: i32`
 
 The body was shorter than `minLength`, too small to be worth compressing.
-
-</scalar-card>
-
-<scalar-card title="1,448" icon="phosphor/regular/hash">
-
-`HTTP_DEFAULT_MSS: i32`
-
-The maximum segment size `segmentMode` counts with unless told the
-connection's: a 1500-byte Ethernet MTU less 20 bytes of IPv4 header, 20 of
-TCP header and 12 of the timestamp option.
 
 </scalar-card>
 

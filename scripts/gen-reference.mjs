@@ -631,11 +631,12 @@ const renderFunction = (f, ctx, fallback) => {
     }
     return fallback?.signatures?.[i] ?? fallback?.signatures?.[0] ?? (sigs[0].comment ? sigs[0] : sig)
   }
+  const firstDesc = sigs.length > 0 ? summary(doc(sigs[0], 0).comment, ctx) : ""
   for (const [i, sig] of sigs.entries()) {
     const c = doc(sig, i)
     const desc = summary(c.comment, ctx)
-    // An overload that repeats the first one's description shows it once.
-    if (desc && (i === 0 || c !== doc(sigs[0], 0))) {
+    // An overload that repeats the first one's description, word for word, shows it once.
+    if (desc && (i === 0 || desc !== firstDesc)) {
       out.push(desc)
     }
     out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``)
@@ -705,10 +706,12 @@ const renderObject = (o, ctx) => {
 
 /**
  * A constant is a limit, listed under `## Limits`, by its doc's first
- * sentence: one that opens with a bound ("The most …", "The longest …",
- * "At most …", "Most …", "How deep(ly) …"), or with "How many/much/long/far …" and says
- * what is bounded ("may", "kept", "holds", "refuses"). Its name does not
- * decide: `QUIC_TP_MAX_DATA` is a protocol identifier.
+ * sentence: one that opens with a bound ("The most|fewest|least|longest|
+ * shortest|largest|smallest|deepest|highest|lowest|maximum|minimum …",
+ * "At most|least …", "Most …", "How deep(ly) …"), or with "How
+ * many/much/long/far …" and says what is bounded ("may", "keep(s)", "kept",
+ * "hold(s)", "held", "refuse…"). Its name does not decide: `QUIC_TP_MAX_DATA`
+ * is a protocol identifier. `docs/README.md` states the same rule.
  */
 const isLimit = (v) => {
   const first = firstSentence(
@@ -718,9 +721,11 @@ const isLimit = (v) => {
       .trim()
   )
   const bound =
-    /^(?:the\s+(?:most|fewest|least|longest|shortest|largest|smallest|deepest|highest|lowest)|at\s+(?:most|least)|most|how\s+deep(?:ly)?)\b/i
+    /^(?:the\s+(?:most|fewest|least|longest|shortest|largest|smallest|deepest|highest|lowest|maximum|minimum)|at\s+(?:most|least)|most|how\s+deep(?:ly)?)\b/i
   const amount = /^how\s+(?:many|much|long|far)\b/i
-  return bound.test(first) || (amount.test(first) && /\b(?:may|kept|keeps?|holds?|refus\w*)\b/i.test(first))
+  return (
+    bound.test(first) || (amount.test(first) && /\b(?:may|keeps?|kept|holds?|held|refus\w*)\b/i.test(first))
+  )
 }
 
 const renderConstants = (heading, vars, ctx) => {
@@ -737,10 +742,11 @@ const renderConstants = (heading, vars, ctx) => {
 /**
  * One module's page. `mod` is its TypeDoc reflection, `spec` what a program
  * imports (null for the globals), `source` its file, `comment` the module
- * prose's source text and `fallback` the globals by name, whose doc comment a
- * builtin module's undocumented re-declaration shows.
+ * prose's source text, `intro` the lead when that prose has none, `note` a
+ * paragraph said after the lead either way, and `fallback` the globals by
+ * name, whose doc comment a builtin module's undocumented re-declaration shows.
  */
-const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }, link) => {
+const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fallback }, link) => {
   const ctx = { link, source, page }
   const prose = (s) => outsideCode(s, (p) => relinkProse(escapeProse(p), link, source, page))
   const members = (mod.children ?? []).filter((c) => c.kind !== Kind.module)
@@ -757,6 +763,9 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }
   const out = [header(source), spec === null ? `# ${title}` : `# \`${title}\``]
   if (lead || intro) {
     out.push(lead || intro)
+  }
+  if (note) {
+    out.push(note)
   }
   if (spec && members.length > 0) {
     const names = sortByName(members).map((m) => `  ${m.name},`)
@@ -847,6 +856,14 @@ const renderIndex = (pages) => {
 
 // ---- Modules --------------------------------------------------------------
 
+/**
+ * The builtin modules with Nish source behind them (`src/nish-modules.ts`,
+ * `isNishSourceModule`): a program imports `nish:region`, never `nish/region`,
+ * which the compiler refuses. Each gets one page, from its `std/` source,
+ * under its builtin name, in place of the `runtime/nish.d.ts` page.
+ */
+const SOURCE_MODULES = new Set(["region", "secret"])
+
 const collectPages = (project) => {
   const pages = []
   const runtime = project.children.find((m) => m.name === "runtime/nish")
@@ -888,6 +905,9 @@ const collectPages = (project) => {
       continue
     }
     const name = m.name.replace(/^nish:/, "")
+    if (SOURCE_MODULES.has(name)) {
+      continue
+    }
     const at = dtsLines.findIndex((l) => l.startsWith(`declare module ${JSON.stringify(m.name)}`))
     pages.push({
       mod: m,
@@ -910,14 +930,22 @@ const collectPages = (project) => {
     }
     const rel = m.name.slice("std/".length)
     const source = `std/${rel}.ts`
+    const builtin = SOURCE_MODULES.has(rel)
+    const spec = builtin ? `nish:${rel}` : `nish/${rel}`
     pages.push({
       mod: m,
-      spec: `nish/${rel}`,
-      title: `nish/${rel}`,
+      spec,
+      title: spec,
       source,
-      page: `${outDir}/${rel}.md`,
+      page: `${outDir}/${builtin ? `nish-${rel}` : rel}.md`,
       comment: leadingComment(fs.readFileSync(path.join(root, source), "utf8")),
       intro: "",
+      // Said whatever the module comment says, so the page names what to import.
+      note: builtin
+        ? `The \`${spec}\` builtin module, whose source is \`${source}\`. ` +
+          `A program imports it as \`${spec}\`; the compiler refuses \`nish/${rel}\`. ` +
+          "[The language reference](language.md#builtin-modules-nish) is the normative list."
+        : "",
     })
   }
   return pages.sort((a, b) => (a.page < b.page ? -1 : 1))

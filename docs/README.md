@@ -142,7 +142,9 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
 - **Pages.** A page's title is its module specifier as a code span
   (`` `nish/json` ``, `` `nish:secret` ``). `std/<path>.ts`, imported as `nish/<path>`, is
   `docs/reference/<path>.md`; the builtin module `nish:<name>` is
-  `docs/reference/nish-<name>.md`; the globals `runtime/nish.d.ts` declares are
+  `docs/reference/nish-<name>.md`, made from `std/<name>.ts` for the two
+  with source behind them (`nish:region`, `nish:secret`: the compiler
+  refuses `nish/region` and `nish/secret`); the globals `runtime/nish.d.ts` declares are
   `docs/reference/builtins.md`; `index.md` lists them all. `language.md` is
   `docs/LANGUAGE.md` with its links rewritten for the site.
 - **Members.** Every exported function, class, interface, type and constant
@@ -154,10 +156,12 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
   `String`, `Symbol`) shows only the members `runtime/nish.d.ts` declares.
 
 - **Constants.** A constant is a limit, listed under `## Limits`, when the
-  first sentence of its doc comment states a bound: it opens with "The
-  most", "The fewest" (or another superlative), "At most", "At least",
-  "Most" or "How deep(ly)", or with "How many", "How much", "How long" or "How far" and
-  says what is kept, held or refused. Every other constant, a protocol
+  first sentence of its doc comment states a bound: it opens with "The"
+  and one of "most", "fewest", "least", "longest", "shortest", "largest",
+  "smallest", "deepest", "highest", "lowest", "maximum" or "minimum"; with
+  "At most", "At least", "Most" or "How deep(ly)"; or with "How many", "How
+  much", "How long" or "How far" and uses "may", "keep(s)", "kept",
+  "hold(s)", "held" or a form of "refuse". Every other constant, a protocol
   identifier named `MAX` (`QUIC_TP_MAX_DATA`) included, is under
   `## Constants`. A constant's card is titled with its value as written,
   decimal digits grouped (`1,048,576`, `0x0e`, `"h3"`); only a constant with
@@ -165,7 +169,8 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
   others (`DNS_MAX_ANSWERS * 2`), is titled with its name.
 - **Overloads.** Each signature of an overloaded function is shown whole, in
   source order: its own description (or the first's, when it has none), its
-  signature, parameters and return.
+  signature, parameters and return. A description the first signature
+  already shows, word for word, is not printed again.
 - **Links.** A `{@link}` that names nothing fails the run, `--check`
   included.
 

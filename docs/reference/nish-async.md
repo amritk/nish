@@ -51,8 +51,6 @@ function awaitAll<A, B>(
 <scalar-field name="returns" type="Promise&lt;[A, B]&gt;">
 </scalar-field>
 
-Await every call at once; the answers come in the order the calls are written.
-
 ```ts
 function awaitAll<A, B, C>(
   a: Promise<A>,
@@ -76,8 +74,6 @@ function awaitAll<A, B, C>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C]&gt;">
 </scalar-field>
-
-Await every call at once; the answers come in the order the calls are written.
 
 ```ts
 function awaitAll<A, B, C, D>(
@@ -106,8 +102,6 @@ function awaitAll<A, B, C, D>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D]&gt;">
 </scalar-field>
-
-Await every call at once; the answers come in the order the calls are written.
 
 ```ts
 function awaitAll<A, B, C, D, E>(
@@ -140,8 +134,6 @@ function awaitAll<A, B, C, D, E>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E]&gt;">
 </scalar-field>
-
-Await every call at once; the answers come in the order the calls are written.
 
 ```ts
 function awaitAll<A, B, C, D, E, F>(
@@ -178,8 +170,6 @@ function awaitAll<A, B, C, D, E, F>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E, F]&gt;">
 </scalar-field>
-
-Await every call at once; the answers come in the order the calls are written.
 
 ```ts
 function awaitAll<A, B, C, D, E, F, G>(
@@ -220,8 +210,6 @@ function awaitAll<A, B, C, D, E, F, G>(
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E, F, G]&gt;">
 </scalar-field>
-
-Await every call at once; the answers come in the order the calls are written.
 
 ```ts
 function awaitAll<A, B, C, D, E, F, G, H>(

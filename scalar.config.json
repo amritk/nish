@@ -774,16 +774,6 @@
                     "filepath": "docs/reference/random.md"
                   },
                   "/regex": { "type": "page", "title": "nish/regex", "filepath": "docs/reference/regex.md" },
-                  "/region": {
-                    "type": "page",
-                    "title": "nish/region",
-                    "filepath": "docs/reference/region.md"
-                  },
-                  "/secret": {
-                    "type": "page",
-                    "title": "nish/secret",
-                    "filepath": "docs/reference/secret.md"
-                  },
                   "/sort": { "type": "page", "title": "nish/sort", "filepath": "docs/reference/sort.md" },
                   "/sqlite": {
                     "type": "page",

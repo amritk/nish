@@ -14,8 +14,8 @@ Every module a Nish program can import, one page each, generated from the doc co
 | [`nish:io`](nish-io.md) | The `nish:io` builtin module: the globals of the same names, importable. |
 | [`nish:net`](nish-net.md) | The `nish:net` builtin module: the globals of the same names, importable. |
 | [`nish:process`](nish-process.md) | The `nish:process` builtin module: the globals of the same names, importable. |
-| [`nish:region`](nish-region.md) | The `nish:region` builtin module: the globals of the same names, importable. |
-| [`nish:secret`](nish-secret.md) | The `nish:secret` builtin module: the globals of the same names, importable. |
+| [`nish:region`](nish-region.md) | Memory a program frees when it says so (docs/LANGUAGE.md, "Regions"). |
+| [`nish:secret`](nish-secret.md) | Key material, and the rules that keep it in (docs/LANGUAGE.md, "Secrets"). |
 | [`nish:simd`](nish-simd.md) | The `nish:simd` builtin module: the globals of the same names, importable. |
 | [`nish:term`](nish-term.md) | The `nish:term` builtin module: the globals of the same names, importable. |
 | [`nish:unsafe`](nish-unsafe.md) | The `nish:unsafe` builtin module: the globals of the same names, importable. |
@@ -117,8 +117,6 @@ Every module a Nish program can import, one page each, generated from the doc co
 | [`nish/pair`](pair.md) | Two values answered by one call. |
 | [`nish/random`](random.md) | A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node. |
 | [`nish/regex`](regex.md) | Regular expressions whose search time is linear in the input, whatever the pattern. |
-| [`nish/region`](region.md) | Memory a program frees when it says so (docs/LANGUAGE.md, "Regions"). |
-| [`nish/secret`](secret.md) | Key material, and the rules that keep it in (docs/LANGUAGE.md, "Secrets"). |
 | [`nish/sort`](sort.md) | `xs.sort(cmp)` on an array, in Nish: a stable merge sort, compiled once per comparator. |
 | [`nish/sqlite`](sqlite.md) | SQLite, the database in a file, from a Nish program. |
 | [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
