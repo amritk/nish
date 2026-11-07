@@ -13,6 +13,7 @@
  *     const streams = new QuicStreams(100, 3, 8, 65536, 1048576) // client bidi, client uni, own; bytes
  *     streams.share(pools)                                       // before any stream has borrowed
  *     streams.setPeerLimits(maxData, bidiLocal, bidiRemote, uni, maxStreamsBidi, maxStreamsUni)
+ *     streams.prime(packetLength)                                // per packet, before its frames: fills the reserve
  *     const error: i64 = streams.onStream(frame.streamId, frame.offset, payload, frame.dataStart,
  *       frame.dataLength, frame.fin)                             // 0, or the transport error to close with
  *     const id: i64 = frame.streamId                             // the stream the frame was for
@@ -1624,7 +1625,7 @@ export class QuicStreams {
    * @param id The stream ID.
    * @param buf The bytes to send; copied, not kept.
    * @param from The index in `buf` of the first byte.
-   * @param length How many bytes to write, 0 or more; `from + length` must lie within `buf`.
+   * @param length How many bytes to write, 0 or more; a `from + length` past `buf` answers `QUIC_STREAM_ERR_UNKNOWN`.
    * @param fin Whether this write ends the stream; queued only when all `length` bytes were taken.
    * @returns The bytes taken, 0 to `length`; or `QUIC_STREAM_ERR_UNKNOWN` (no such stream, or a window
    *   outside `buf`), `QUIC_STREAM_ERR_DIRECTION` (a stream this side only receives on),
@@ -1689,7 +1690,7 @@ export class QuicStreams {
    * @param id The stream ID.
    * @param buf Where the bytes go.
    * @param at The index in `buf` of the first byte written.
-   * @param length The most bytes to read, 0 or more; `at + length` must lie within `buf`.
+   * @param length The most bytes to read, 0 or more; an `at + length` past `buf` answers `QUIC_STREAM_ERR_UNKNOWN`.
    * @returns The bytes read, 0 or more; `QUIC_STREAM_END`; `QUIC_STREAM_ERR_RESET`;
    *   `QUIC_STREAM_ERR_UNKNOWN` (no such stream, or a window outside `buf`); or
    *   `QUIC_STREAM_ERR_DIRECTION` (a stream this side only sends on).

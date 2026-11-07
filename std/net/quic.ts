@@ -3771,7 +3771,9 @@ export class QuicConnection {
    * @param out Where the datagram is written.
    * @param at Where in `out` it starts; `out` needs `QUIC_CONN_DATAGRAM_SIZE` bytes from here.
    * @param now The caller's monotonic time in milliseconds; timers due by then run first.
-   * @returns The datagram's length in bytes, or 0 when no PATH_RESPONSE is owed or the room is short.
+   * @returns The datagram's length in bytes, or 0 when no PATH_RESPONSE is owed, the connection is closed,
+   *   the handshake is not complete, the room is short, or the packet cannot be built within the path's budget (the
+   *   owed PATH_RESPONSE is then dropped).
    */
   takeProbeInto(out: u8[], at: i32, now: i64): i32 {
     this.handleTimer(now)

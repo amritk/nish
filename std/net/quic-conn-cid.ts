@@ -296,7 +296,7 @@ export class QuicCidTable {
   /**
    * How many peer IDs are active: retired ones leave their slots.
    *
-   * @returns The count of the peer's IDs not yet retired, from 0 to `limit`, or to 1 for a `limit` below 1.
+   * @returns The count of the peer's IDs not yet retired, from 0 to `limit`.
    */
   activePeer(): i32 {
     let n: i32 = 0

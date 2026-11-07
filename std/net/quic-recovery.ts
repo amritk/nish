@@ -245,7 +245,8 @@ export class QuicSentPackets {
    * The state of slot `s`, or free for a slot outside the ring.
    *
    * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
-   * @returns The slot's state without its ECT(0) mark: free, in flight, acknowledged or lost.
+   * @returns The slot's state without its ECT(0) mark: free, in flight, acknowledged, lost, or lost now
+   *   (`markLost`'s mark for a packet the current call declared lost).
    */
   stateAt(s: i32): i32 {
     if (s < 0 || s >= toI32(this.state.length)) {
