@@ -55,6 +55,7 @@ Every module a Nish program can import, one page each, generated from the doc co
 | [`nish/crypto/x25519`](crypto/x25519.md) | The X25519 Diffie-Hellman function of RFC 7748. |
 | [`nish/crypto/x509-random`](crypto/x509-random.md) | The private key and the serial number `nish/crypto/x509`'s `x509MintSelfSigned` needs, drawn from the operating system's CSPRNG, and the mint that draws its own serial. |
 | [`nish/crypto/x509`](crypto/x509.md) | DER, PEM and the X.509 certificates a WebTransport or TLS server holds: read a P-256 private key and a certificate chain out of PEM, and mint the short-lived self-signed ECDSA P-256 certificate a browser pins by its SHA-256. |
+| [`nish/host/ring`](host/ring.md) | A single-producer, single-consumer ring of `i32` words over module storage, shared by a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §11). |
 | [`nish/json-equal`](json-equal.md) | Whether two JSON values are equal by JSON Schema's rule, a canonical text and a hash that agree with it, and the first repeated element of an array, which is what `const`, `enum` and `uniqueItems` ask. |
 | [`nish/json-format`](json-format.md) | The string formats of JSON Schema draft 2020-12 (§7.3 of the validation vocabulary), each a predicate, and one dispatcher that answers valid, invalid or unknown for a format named in a schema. |
 | [`nish/json-number`](json-number.md) | JSON number text compared and divided exactly, the arithmetic JSON Schema's `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `const` and `enum` ask for. |

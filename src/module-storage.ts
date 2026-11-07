@@ -24,8 +24,8 @@
  *   element is a place, not a value**: `sim[i].x` reads and writes a field,
  *   `sim[i] = v` and `sim[i] = sim[j]` copy a whole element, and nothing binds,
  *   passes or returns one. Under `--emit-ts` the storage is one `ArrayBuffer`
- *   and `sim[i].x` is index arithmetic over a typed-array view, which has no
- *   object a binding could hold.
+ *   and `sim[i]` an object of accessors over it, so a binding that held one
+ *   would alias the buffer where the native build holds a copy.
  */
 
 import { parameterSpelling } from "./checker"

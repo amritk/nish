@@ -32,7 +32,7 @@ There are six findings, all fixed by the stage that found them:
 | File | Functions |
 | --- | --- |
 | `runtime/page.mjs`, `runtime/page.d.ts` | `HostTable` (`add`, `get`, `take`, `#check`), `ringOver`, `reportPanic` |
-| `std/host/ring.ts` | `ringCount`, `ringSize`, `ringPush`, `ringShift`, `ringClear` |
+| `std/host/ring.ts` | `ringCapacity`, `ringCount`, `ringSize`, `ringFree`, `ringPush`, `ringShift`, `ringClear` |
 | `runtime/runtime-wasm.c` | the `nish.panic` import (`nish_host_panic`, `NISH_DIE`) under `NISH_WASM_HOST` |
 | `src/interop-wasm.ts` | the generated loader: `panicText`, `panicOf`, `guardLoader` (`guarded`), `win` and `pushHostEntry` |
 | `src/emit-strings.ts` | `emitHostWindow`: a window's bound in the module |

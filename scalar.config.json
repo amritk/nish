@@ -472,6 +472,17 @@
                       }
                     }
                   },
+                  "/host": {
+                    "type": "group",
+                    "title": "nish/host",
+                    "children": {
+                      "/ring": {
+                        "type": "page",
+                        "title": "nish/host/ring",
+                        "filepath": "docs/reference/host/ring.md"
+                      }
+                    }
+                  },
                   "/json": { "type": "page", "title": "nish/json", "filepath": "docs/reference/json.md" },
                   "/json-equal": {
                     "type": "page",

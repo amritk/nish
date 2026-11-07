@@ -1520,11 +1520,50 @@ emitted and no initialiser runs** — every use lowers to the value itself.
   array, class or interface constant would need an allocation, and there is no
   code to run it.
 - The initialiser is literals, other constants (declared anywhere, or
-  imported), and arithmetic over them. A call, a `new`, a local — anything else
-  — is rejected.
+  imported), and arithmetic over them. A call, a local — anything else — is
+  rejected. The one `new` allowed is module storage, below.
 - Folding uses the language's own arithmetic, so an overflowing fold is an
   error rather than a wrap, and `1 / 0` in a constant is refused at compile
   time.
+
+### Module storage
+
+```ts nish:ok
+const SCORES = new Int32Array(4);
+
+const sum = (xs: Int32Array): i32 => {
+  let total: i32 = 0;
+  for (let i = 0; i < xs.length; i++) {
+    total += xs[i];
+  }
+  return total;
+};
+
+export const main = (): i32 => {
+  SCORES[0] = 30;
+  SCORES[3] = 4;
+  console.log(`${sum(SCORES)} ${SCORES[1]}`);   // 34 0
+  return 0;
+};
+```
+
+A top-level `const` holding `new Array<T>(n)` or a typed-array `new` of a
+constant length is **module storage**: a static, zero-filled array that keeps
+its values between calls, with no initialiser that runs. It is the only
+state a module keeps (there is no top-level `let`).
+
+- The length is a constant from 1 to 16,777,216. The element is pointer-free:
+  a number, `boolean`, an enum or range whose zero is a member, a
+  `HostHandle`, or an interface no class implements with fields of those.
+- **It never grows or moves**: no method call on it (`push`, `pop`, `sort`,
+  NL2673) and no `length =`. Keep a count beside it.
+- **Its name is a place, not a value**: index it and read `length`; never bind,
+  store or return it. Lend it only to a parameter spelled with a typed-array
+  name (`xs: Int32Array`) or to a host function's buffer window. A record
+  element is a place too: `bodies[i].x = 1` and `bodies[i] = bodies[j]` are
+  fine, `const b = bodies[i]` is refused; pass the index.
+- Under `--profile wasm-host` the page reads and writes it through `layout`
+  and `views()` in the `.d.ts`. The rules: `LANGUAGE.md` → "Module storage".
 
 ### Classes and interfaces
 

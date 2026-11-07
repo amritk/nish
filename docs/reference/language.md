@@ -1476,7 +1476,9 @@ top-level code, so only `const` is available ``,
 `reject_const_top_level_let`), and `var` is refused wherever it is written
 ([Forbidden constructs](#forbidden-constructs-phase-0-validator)). Modules have no top-level code, so there is no
 initialisation order to worry about — which is exactly why a top-level `const`
-must be a value the compiler can compute for itself.
+must be a value the compiler can compute for itself. The one piece of state a
+module keeps is [module storage](#module-storage), a `const` array laid out
+and zero-filled at compile time, which is a declaration, not code.
 
 ### Top-level code
 
@@ -1733,7 +1735,9 @@ having no top-level code and therefore no initialisation order.
 - **The type must be `i32`, `i64`, `f64`, `number`, `boolean`, or `string`.**
   An array, class, or interface constant would need an allocation, and there is
   no code to run it (`` must be a number, boolean, or string ``,
-  `tests/cases/reject_const_array`).
+  `tests/cases/reject_const_array`). The exception is a `new Array<T>(n)` or
+  typed-array `new` of a compile-time length, which is
+  [module storage](#module-storage) and has rules of its own.
 - **The initialiser is an ordinary Nish expression restricted to literals
   and other constants**: the operators of [Operators](#operators) over numeric,
   boolean, and string literals, other module constants (declared anywhere in
@@ -1782,6 +1786,108 @@ having no top-level code and therefore no initialisation order.
 - **A string constant is a value**, so it is a receiver like any other string:
   `NAME.length` is the folded literal's byte length
   (`tests/cases/const_string_member`).
+
+### Module storage
+
+**A top-level `const` whose initialiser is `new Array<T>(n)`, or `new` of one
+of the typed-array names, is module storage**: a fixed array the module keeps
+between calls, laid out by the compiler and zero-filled before the first call,
+so no code runs to build it and the module still has no top-level code
+(`tests/cases/storage_module`, `docs/wp50-wasm-host.md` §5). It is the one
+place a module keeps state, and the place a page reads and writes a wasm
+module's memory in place ([Host modules](#host-modules-the-functions-a-page-supplies)).
+It is legal in every build, native included.
+
+```ts
+interface Body { x: f32; vx: f32; hits: u32; alive: boolean }
+
+export const SLOTS: i32 = 8
+export const bodies = new Array<Body>(SLOTS)
+export const scale = new Float64Array(2)
+
+export const step = (): void => {
+  for (let i = 0; i < bodies.length; i++) {
+    if (bodies[i].alive) bodies[i].x = bodies[i].x + bodies[i].vx
+  }
+}
+```
+
+```llvm
+@bodies.data = global [8 x %struct.Body] zeroinitializer, align 16
+@bodies = global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x %struct.Body]* @bodies.data to i8*) }, align 8
+```
+
+- **Two globals.** `<name>.data` holds the elements and `<name>` is an
+  ordinary array header over them, so every read and write is the indexing an
+  array already lowers to. The data has external linkage: the
+  `--profile wasm-host` link exports it, and the loader reads its address
+  from that export. Another module reaches the storage as
+  `@<name> = external global %struct.nish_array`. Both names carry the
+  module's symbol prefix ([cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#module-storage-two-globals-a-page-can-find)).
+- **The length is known at compile time**: a literal, a module constant, or
+  arithmetic over them (`wrappingAdd` and the other `nish:unsafe` folds
+  included), from 1 to 16,777,216 elements. Anything else is
+  `` Module storage `X` needs a length known at compile time: a literal, a module constant, or arithmetic over them, because the page reads its layout from the type ``
+  (NL2676, `reject_storage_dynamic_length`), and a length outside the range is
+  `` Module storage `X` has length 0; a storage holds from 1 to 16777216 elements ``
+  (NL2680, `reject_storage_length_zero`).
+- **The element is pointer-free, and zero is one of its values**: a number, a
+  `boolean`, an enum or a ranged integer whose zero is a member, a
+  `HostHandle`, or an interface no class implements whose fields are all of
+  these (one level: a field may not be another record). A string, an array, a
+  class, a `Map` or a `| null` is
+  `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
+  (NL2671, `reject_storage_string_element`, `_array_element`,
+  `_class_element`, `_map_element`, `_nullable_element`,
+  `_record_string_field`), and an enum or range without a zero is
+  `` Module storage `X` is zero-filled, and 0 is not a value of T; give the type a zero member, or store the number and convert it where it is read ``
+  (NL2672, `reject_storage_enum_no_zero`, `_range_no_zero`).
+- **An annotation must say what the `new` makes**: `const xs: f64[] = new
+  Int32Array(4)` is NL2679 (`reject_storage_annotation`). The annotation may
+  be left off.
+- **It never moves and never resizes.** `push`, `pop`, `sort`, any other
+  method and `X.length =` are
+  `` Module storage `X` has a fixed length and a fixed place, so `X.m` is not available: index it, and keep a count beside it for the slots in use ``
+  (NL2673, `reject_storage_push`, `_pop`, `_sort`, `_length_assign`).
+  `X[i]` and `X.length` are what remain.
+- **Its name is a place, not a value.** Binding, returning, storing or
+  passing `X` itself is
+  `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
+  (NL2677, `reject_storage_pass_whole`). The two exceptions are lendings:
+  a **scalar** storage passed to a parameter spelled with a typed-array name
+  (which has no `push`, `pop` or `length =`), as in
+  `const total = (xs: Int32Array): i32 => …; total(SCORES)`
+  (`tests/cases/storage_lend`), and to a host function's buffer window
+  ([Host modules](#host-modules-the-functions-a-page-supplies)). A record
+  storage is never lent.
+- **A record element is a place too.** `X[i].x` reads and writes a field,
+  and `X[i] = X[j]` or `X[i] = v` copies a whole element, field by field.
+  Binding, returning or storing `X[i]` is NL2674
+  (`reject_storage_bind_element`); passing it is
+  `` An element of module storage `X` cannot be passed as an argument: it is a place, not a value; pass the index, or the fields the callee needs ``
+  (NL2675, `reject_storage_pass_element`), except `out.push(X[i])` onto an
+  array of the same record, which copies; and `for (const p of X)` over a
+  record storage is NL2678 (`reject_storage_for_of`): loop over the index. A
+  `for-of` over a scalar storage binds numbers and is allowed.
+- **It is memory every function reaches**, so it moves the inferred
+  attributes: a function that reads storage is at most `readonly`, one that
+  writes it is neither `readonly` nor `readnone`
+  (`tests/cases/storage_attributes`), and a `parallelMap` body that writes it
+  is refused as any shared write is (`reject_storage_parallel_write`).
+- **Under `--emit-ts` it is a typed view, and only it.** The reading writes
+  one more file, `nish-storage.ts`, holding one `ArrayBuffer` laid out as the
+  wasm build's `layout` says, `memory` (`{ buffer }`), `layout` itself, and
+  each storage as a view of the buffer; the module's `new` is written as that
+  view (`src/emit-ts-storage.ts`, `docs/wp50-wasm-host.md` §5.4). A scalar
+  storage is the typed array its element reads as (`Int32Array`,
+  `Float32Array`, …; a `boolean` one is a byte array behind a proxy that reads
+  `!== 0`). A record storage is an array of objects whose fields are getters
+  and setters over the buffer, so `X[i].x = v` writes the bytes a page reads,
+  and a whole-element copy is `Object.assign`. Each storage starts on an
+  8-byte boundary from 0, so the reading's offsets differ from the wasm
+  build's; a page reads them from `layout` and never spells one. A local
+  `f32[]` is still a plain JavaScript array there: only module storage is a
+  view.
 
 ### Type aliases
 
@@ -5986,9 +6092,10 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
   an enum, a `HostHandle`, and `void` as a result. `i64` and `u64` are a
   `bigint` on the page's side (`import type { i64 } from "nish"`). Refused,
   each naming the explicit form: an object, a class, a function, `unknown` or
-  `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a typed
-  array (NL2664, a later stage's buffer window), a `string` parameter (NL2665,
-  a later stage's) and a `string` result (NL2667).
+  `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
+  `string` parameter (NL2665: strings cross in WP50 stage 4, so until then the
+  program writes the text into module storage and passes its length) and a
+  `string` result (NL2667). An array crosses only as a buffer window, below.
 - **Each host function is a declaration with the wasm import attributes**:
   module `host`, its own name. It carries no other attribute, and its callers
   lose `readnone` and `willreturn` as for a C declaration. `wasm-ld` makes it
@@ -6012,6 +6119,114 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
   the TypeScript reading calls the same functions.
 - **A call to a host function is an `ffi` call**: `--deny ffi` refuses it and
   `--emit-capabilities` names it.
+
+**An array crosses as a buffer window: the array, then `at: u32, n: u32`**
+(`tests/host-window`, `docs/wp50-wasm-host.md` §5.3). The host lends the page
+the elements `[at, at + n)` of the array the program passes, in place, with no
+copy:
+
+```ts
+// host.ts, the page's
+export function doubleF32(xs: Float32Array, at: u32, n: u32): void {
+  for (let i = at; i < at + n; i++) xs[i] *= 2;
+}
+```
+
+```ts
+// the program
+const DATA = new Float32Array(64)
+export const tick = (): void => { doubleF32(DATA, 16, 8) }
+```
+
+- **Six elements lend**: `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` and
+  `f64[]`, their `readonly` forms and their typed-array names. Any other
+  array is NL2681 (`` a buffer window lends only `u8[]`, `u16[]`, `u32[]`,
+  `i32[]`, `f32[]` or `f64[]` (or the typed array of each): copy the values
+  into one of those ``). The two parameters after it must be there (NL2682,
+  `` a buffer window with no `at: u32, n: u32` after it ``) and be `u32`, the
+  width of a wasm32 address (NL2683). NL2664, which refused every typed array
+  before windows existed, is retired.
+- **The window is checked in the module, before the page runs.** `at` and `n`
+  are zero-extended and added in `i64`, so a sum that wraps in 32 bits still
+  fails, and held against the array's length; past the end is an `ffi-length`
+  panic,
+  `` `doubleF32`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs) ``,
+  numbered and named from the host function's own parameters
+  ([cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#a-host-buffer-window-checked-in-i64)). A call
+  that lends `0, toU32(xs.length)` is proven in bounds and emits no check.
+- **What the page gets is a view of all of memory and an index.** The
+  loader's adapter passes a whole-memory view of the element type, the
+  array's first element plus `at` as the index, and `n`, so the host
+  function's `xs[at]` is the program's `DATA[at]`. A page that indexes outside
+  `[at, at + n)` reaches the rest of the module: the page is trusted, and it
+  reads only its window ([security record](../security/wasm-host.md)).
+- **Module storage lends to a window** like any array of a lending element,
+  and so does a local array. A record storage does not.
+
+**Module storage is the page's view of the module.** Under
+`--profile wasm-host` the link exports each storage's data, and `--emit-dts`
+types what the loader builds from it:
+
+- **`layout`**, a `Layout` with one entry per storage, keyed by its name (by
+  its symbol when two modules export the same name):
+  `{ at, length, stride, fields? }`, where `at` is the byte address in
+  `memory`, `stride` the element's size, and `fields` each record field's
+  byte offset within the element. `length`, `stride` and each offset are
+  literal types in the `.d.ts`, so a page that hard-codes one, or reads a
+  field the module does not have, fails `tsc` once the layout changes. `at`
+  is read from the instance at load and never moves. A record field is read
+  through the whole-memory view of its width:
+  `views().f32[(layout.bodies.at + i * layout.bodies.stride + layout.bodies.fields.x) >> 2]`.
+- **`views()`**, the whole memory as `buffer` and as each typed array (`u8`,
+  `i8`, `u16`, `i16`, `u32`, `i32`, `f32`, `f64`, `i64`, `u64`), and
+  `storage.<key>`, a typed view of each scalar storage (a `boolean` one as
+  `Uint8Array`, an enum or range as `Int32Array`, a `HostHandle` as
+  `Uint32Array`). `views()` answers the same object until a growing memory
+  replaces `memory.buffer`, so a page calls it again after any call into the
+  module rather than keeping one view across calls.
+
+**Under `--profile wasm-host` a panic is the page's to report**
+(`tests/panic`, `docs/wp50-wasm-host.md` §6). The module imports one function
+from module `nish`, `panic`, and every runtime panic calls it with its kind
+and the words it would print natively; the loader turns that into an
+exception:
+
+- **The call that panicked throws `NishPanic`**, an `Error` whose `message` is
+  the native text (`index out of range: 9 >= 4`,
+  `slice out of range: [a, b) of length len`, an overflow's text,
+  `out of memory`, `the program exited with code 3`, or `panic(…)`'s own
+  words) and which carries `kind` (`panic`, `index`, `slice`, `overflow`,
+  `memory`, `exit`, `divide`, or `trap`, `reentry` or `exception` for a
+  module that died some other way) and `site`, the panic site's number
+  (-1 for none).
+- **Before it throws, the loader calls `onPanic`.** `load(bytes, { onPanic,
+  sites })` takes the reporter; the default, `reportPanic` from `nish/page`,
+  writes `nish: <message>` to `console.error`, as a native program writes it
+  to stderr. An exception the reporter throws is swallowed: the `NishPanic` is
+  thrown either way.
+- **`sites` names where.** The wasm-host link writes `<out>.wasm.sites.json`,
+  `[{ kind, at }]` with one entry per panic site, indexed by `site`. Passed to
+  `load` (parsed), it ends each message with ` at path:line:col`; without it
+  the message is the native text alone. `--profile wasm` is unchanged: it
+  imports nothing, and each panic is a bare trap, though the loader still
+  marks the module dead.
+- **A panic ends the module.** Its memory survives, as it was, for a page
+  that reads it, but every later call throws `NishPanic`
+  (`the module is dead: …`) before the module runs. An exception a host
+  import throws out of a call ends the module the same way, since the call it
+  interrupted never finished.
+
+**One call at a time.** A host import, or the reporter, that calls an export
+while a call into the module is still running gets `NishReentry` (`a call into
+the module was made while another call into it was running`), and the inner
+call never runs. The outer call's state is half changed at that point, which
+is why the loader refuses rather than runs it (`docs/security/wasm-host.md`,
+WH-3). Left uncaught, the `NishReentry` escapes the outer call too, and like
+any exception out of a call it ends the module. A page that needs the
+module's answer schedules the call for after the import returns. In a module
+that links the runtime, a call also gives back, once its result is read,
+everything it allocated in the arena, so a long-lived page does not grow the
+module's memory call by call.
 
 **`HostHandle<K>` is a nominal `i32` for an object the page keeps**
 (`docs/wp50-wasm-host.md` §4). `K` is a string literal type, and

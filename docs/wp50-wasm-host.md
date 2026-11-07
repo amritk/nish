@@ -1,6 +1,6 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stages 1 and 2 built.** The owner accepted every
+**Status: accepted, 2026-11-06; stages 1, 2 and 3 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
@@ -8,8 +8,13 @@ loader's `loadSync` and `nish/vite`. Stage 2 is built: host modules
 (`--host`, `nish.host`, `src/host-module.ts`), their import attributes,
 `HostHandle<K>`, `Imports` in the `.d.ts`, the loader's adapters, the kept
 `import` under `--emit-ts`, the refusals NL2661–NL2670, NL3049 and NL3050, and
-the plugin's `host` option (`tests/run.js`, section `host-import`); stage 3 is
-the next. The anchors below are at `39a87b3b`.
+the plugin's `host` option (`tests/run.js`, section `host-import`). Stage 3 is
+built: module storage (`src/module-storage.ts`) and its codes, `Layout` and
+`views()`, buffer windows, the `nish.panic` import with site numbers and
+`<out>.sites.json`, the loader's re-entry and dead-module guard, `nish/page`
+and `nish/host/ring`, and the storage's TypeScript reading
+(`src/emit-ts-storage.ts`, which departs from §5.4's sketch as it says); its
+security record is `docs/security/wasm-host.md`. Stage 4 is the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design; `npm test` compiles stage 2's (host modules and
 `HostHandle`) and none of the later stages' yet.
@@ -265,7 +270,7 @@ export const sim: SimState[] = new Array<SimState>(1);
 ```
 
 ```llvm
-@instances.data = internal global [4096 x %struct.Instance] zeroinitializer, align 4
+@instances.data = global [4096 x %struct.Instance] zeroinitializer, align 16
 @instances = global %struct.nish_array { i64 4096, i64 4096, i8* bitcast ([4096 x %struct.Instance]* @instances.data to i8*) }, align 8
 ```
 
@@ -384,10 +389,11 @@ declare void @gpuWrite(i32, i32, i8*, i32, i32) #4
   the view is the array's own typed array and the index is `at` itself. Either
   way the page hands it straight to `queue.writeBuffer(gpuBuf, o, data, at, n)`,
   whose `dataOffset` and `size` are element counts for a typed array. Module
-  storage is a typed-array view in the TS reading (§5.4). Whether a local
-  `f32[]` is a `Float32Array` there today is a fact stage 3 checks. If it is
-  not, the TS reading converts at the call and pays an allocation the wasm
-  reading does not.
+  storage is a typed-array view in the TS reading (§5.4). Stage 3 checked
+  whether a local `f32[]` is a `Float32Array` there: it is not. A local
+  `new Float32Array(n)` is a plain zero-filled `Array` in the TS reading, and
+  it crosses as that array, unconverted, so a page that needs a real typed
+  array in both readings lends module storage.
 - **Write-through: WP40's rule unchanged.** A `u8[]` argument may be written
   by the host during the call, and the compiler records the call as a store.
   A `readonly` one may not. The rule is the declaration's word, as in C. The
@@ -428,8 +434,17 @@ export const input = new Uint32Array(heap, INPUT_AT, 256);
 // instances[i].yaw = a   →   F32[(INSTANCES_AT + i * 24 + 12) >> 2] = a
 ```
 
-A record array's field access is rewritten to index arithmetic over the
-matching view. That is why §5.1 refuses an element reference: with no
+**As built (stage 3), a record storage is not index arithmetic.** Each element
+is a plain object whose fields are accessors over the heap's views at
+`(at + i * stride + offset) >> shift`, so `instances[i].yaw = a` stays as it
+is written and runs a setter that writes the buffer, and a whole-element copy
+is `Object.assign`, field by field as the native copy is
+(`src/emit-ts-storage.ts`). The source needs no rewrite at each access, and
+the page sees the same bytes either way. The offsets are the reading's own,
+each storage on an 8-byte boundary from 0, so a page reads them from `layout`
+and never spells one. A scalar storage is the typed-array view sketched above
+(a `boolean` one is a byte view behind a proxy). The rule below still holds.
+That is why §5.1 refuses an element reference: with no
 interior pointer to represent, every access is `name[i].field`, and the
 rewrite is local. `load` for the TS reading returns the same
 `{ memory: { buffer: heap }, layout }`, so the page builds the same views.
@@ -487,8 +502,11 @@ nish: { panic(kind: number, site: number, msg: number, len: number, a: bigint, b
   exception that escapes an import kills the module the same way: it unwinds
   through Nish frames that have no landing pads, so module storage may be half
   written.
-- **The site.** In a wasm build the emitter passes each panic call a site
-  number, the panic site's index in the order `--emit-panics` writes them.
+- **The site.** In a wasm build the emitter tags each panic call with a site
+  number (`!nish.site !{i32 N}`), numbered in the order it first writes each
+  (kind, position), and `scripts/build.sh --profile wasm-host` rewrites the
+  tagged call into the runtime's `_at` form that passes it
+  (`docs/IR_COOKBOOK.md` → "Panic sites").
   The build also writes `x.sites.json`, mapping each number to
   `{ kind, at: "path:line:col" }`, which a development page loads. The module
   carries no file names (Q9). Native IR and native panics are unchanged, so no
@@ -804,7 +822,7 @@ answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 | --- | --- | --- | --- |
 | 1 | **Link and load (W6, W8).** `--profile wasm-host`: explicit exports, `--memory`, a fixed stack, `wasm-opt` when present, `--inline`. Loader `load(source, imports)` and `loadSync`. The `nish/vite` plugin for exports (the page imports the module as TypeScript). The Vite-readiness test of the loader's text. The `wasm-size` guard with today's figures | Q5, Q10 | shrinks: −214 B on the hello world, −736 B on `arrays.ts` (raw) |
 | 2 | **Imports and handles (W1, W4).** Host modules (`--host`, `package.json`), reading their signatures and skipping bodies. Import attributes. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. The TS reading keeps the `import`. The refusals: a `string` result, an object, a function, a `Promise`, `declare function` in a wasm build, a host module in a native build. The plugin gains host modules | Q1, Q2, Q6 | about 20 B per imported function; nothing without one |
-| 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | the panic import and its site arguments: measured and stated by the stage |
+| 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | the panic import and its site arguments: measured and stated by the stage. **Built**; record `docs/security/wasm-host.md` |
 | 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | the unit's size, measured before it lands; nothing to a program with no strings |
 | 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured |
 | 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |

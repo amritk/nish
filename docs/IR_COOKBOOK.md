@@ -11421,6 +11421,60 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-const -->
 
+### Module storage: two globals a page can find
+
+A top-level `const` holding a `new` array of a constant length is not folded
+like the constants above: it is *module storage* (WP50 stage 3,
+[LANGUAGE.md → Module storage](LANGUAGE.md#module-storage)), and it is the
+one top-level `const` that emits globals. There are two, both with external
+linkage so the linker keeps them and `--emit-dts` can name their addresses:
+`@SCORES.data`, the zero-filled elements, aligned to 16, and `@SCORES`, an
+ordinary `%struct.nish_array` header whose length and capacity are the
+constant and whose data pointer is the first. Nothing runs to set either up.
+
+```ts
+// st.ts, compiled with `--target wasm32`
+const SCORES = new Int32Array(8)
+
+export function bump(i: u32): i32 {
+  SCORES[i] += 1
+  return SCORES[i]
+}
+```
+
+```llvm
+@SCORES.data = global [8 x i32] zeroinitializer, align 16
+@SCORES = global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x i32]* @SCORES.data to i8*) }, align 8
+
+define noundef i32 @bump(i32 noundef %i) #0 {
+entry:
+  %0 = zext i32 %i to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2), !nish.site !{i32 0}
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  ...
+```
+
+Every use goes through the header, as for any array, so indexing, the bounds
+check and lending it to an `Int32Array` parameter are the code an ordinary
+`i32[]` gets: storage needs no case of its own past the checker. The header
+is never written (no method may be called on storage, and its `length` may
+not be assigned), which is what lets the page keep a view of
+`@SCORES.data` for the life of the module. The `!nish.site` tags are the
+[panic sites](#panic-sites-a-number-per-call-a-table-at-the-end). Golden:
+`tests/cases/storage_module.ll`; lending, `tests/cases/storage_lend.ll`.
+
 ### Top-level code
 
 An entry module with no `main` runs its top-level code as one. The compiler
@@ -11812,6 +11866,88 @@ and `willreturn` because it calls a body nobody can see. A `u8` or `u16` is
 and the loader's adapter gives the page `a >>> 0`. A program with no host
 module emits no such attribute, so every other golden is unchanged
 (`tests/run.js`, section `host-import`).
+
+### A host buffer window, checked in i64
+
+A host function may take an array as a *window*: a typed-array parameter
+followed by two `u32`s, `at` and `n`
+([LANGUAGE.md → Host modules](LANGUAGE.md#host-modules-the-functions-a-page-supplies)). Before the
+import is called, the module holds `at + n` against the array's length.
+Both are zero-extended and added in `i64`, so `at = 0xFFFFFFF0, n = 0x20`
+sums to `0x100000010` and fails, where a 32-bit sum would wrap to 16 and pass
+(`docs/security/wasm-host.md`, WH-1). A failure is a `panic` with the
+message naming the parameters; the operand is then the array's data pointer,
+which the loader turns into an index into its whole-memory view.
+
+```ts
+// host.ts, the page's
+import type { u32 } from "nish"
+export function scale(xs: Float32Array, at: u32, n: u32): void { /* ... */ }
+```
+
+```ts
+// sim.ts, compiled with `--target wasm32 --host host.ts`
+import { scale } from "./host.ts"
+
+const DATA = new Float32Array(64)
+
+export function run(at: u32): f32 {
+  scale(DATA, at, 8)
+  return DATA[at]
+}
+```
+
+```llvm
+define noundef float @run(i32 noundef %at) #0 {
+entry:
+  %0 = zext i32 %at to i64
+  %1 = zext i32 8 to i64
+  %2 = add i64 %0, %1
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @DATA, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = icmp ule i64 %2, %4
+  br i1 %5, label %ffi.ok, label %ffi.length
+
+ffi.length:
+  call void @nish_panic(i8* bitcast ({ i64, [85 x i8] }* @.str.0 to i8*)), !nish.site !{i32 0}
+  unreachable
+
+ffi.ok:
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @DATA, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  call void @scale(i8* %7, i32 %at, i32 8)
+  ...
+```
+
+`.str.0` is "`` `scale`: argument 2 (at) plus argument 3 (n) reaches past the
+end of argument 1 (xs) ``". The check is `ule`, not `ult`: a window may end
+exactly at the array's end, and `n = 0` lends nothing. A call the compiler
+can prove in range, `scale(DATA, 0, toU32(DATA.length))`, has no check at
+all (`tests/run.js`, section `host-import-window`).
+
+### Panic sites: a number per call, a table at the end
+
+Under `--target wasm32` each call of a runtime panic (`@nish_panic_index`,
+`@nish_panic_slice`, `@nish_panic_overflow`, `@nish_panic_div`,
+`@nish_panic`) carries `!nish.site !{i32 N}`, numbered in the order the
+emitter first writes a (kind, position) pair, and the module ends with the
+table as comments:
+
+```llvm
+; nish.site 0 panic sim.ts:6:3
+; nish.site 1 index sim.ts:7:10
+```
+
+The tag is unnamed metadata that code generation drops, so `--profile wasm`
+links the bytes it linked before. `scripts/build.sh --profile wasm-host`
+rewrites each tagged call into the runtime's `_at` form, which takes the
+site first (`call void @nish_panic_index_at(i32 1, i64 %8, i64 %10)`) and
+hands it to the page's `nish.panic` import, offsets each module's numbers
+past the previous module's, and writes the table to `<out>.sites.json` as
+`{ "kind": "index", "at": "sim.ts:7:10" }` entries. The loader reads the
+site from that list, so a panic says where it happened
+(`index out of range: 9 >= 8 at sim.ts:7:10`) without a single source
+position in the module's bytes.
 
 ### `CPtr`: the pointer a C function hands back
 

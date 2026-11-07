@@ -275,7 +275,7 @@ is its plan. [README.md](README.md) indexes them.
 | 47 | Shared work across cores: regions, atomics and rings | built: `nish/sync/shm`, `nish/sync/ring` and `examples/prefork-jobs.ts` | [wp47](wp47-shared-memory.md) |
 | 48 | Compressed 32-bit references: a whole-program mode against `i32` handles, measured | proposed; neither built, the lean node layout recommended | [wp48](wp48-compressed-references.md) |
 | 49 | `async`/`await` on the server, and the TechEmpower top | D1 accepted (reverses WP24 for a restricted `async`); stages 1 to 4 built — the renames, `nish/net/upstream` and the Postgres carrier, every TFB test type, and the language: `async`, `await`, `spawn`, `awaitAll` lowered to frames, tasks on an in-process queue; stage 5's executor over `pollWait` and stage 6 open | [wp49](wp49-async-server.md) |
-| 50 | A WebAssembly module a TypeScript page drives: imports, handles, shared memory, strings, determinism, size | accepted 2026-11-06; nothing built, stage 1 next | [wp50](wp50-wasm-host.md) |
+| 50 | A WebAssembly module a TypeScript page drives: imports, handles, shared memory, strings, determinism, size | accepted 2026-11-06; stages 1–3 built (link and load, host imports and handles, module storage and the driven module); stage 4 next | [wp50](wp50-wasm-host.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each

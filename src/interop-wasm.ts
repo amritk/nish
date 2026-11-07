@@ -1335,7 +1335,9 @@ export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
         // would then depend on which entry program loaded this module.
         const fields: StorageField[] = []
         for (const field of record.fields) {
-          fields.push(new StorageField(field.name, field.offset, storageView(table, field.type), field.type === T_BOOL))
+          fields.push(
+            new StorageField(field.name, field.offset, storageView(table, field.type), field.type === T_BOOL)
+          )
         }
         layout.fields = fields
       }
