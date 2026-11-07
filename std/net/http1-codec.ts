@@ -190,7 +190,8 @@ export class Http1Parser {
   /**
    * The bytes fed and not yet consumed are `buf[start .. end)`.
    * @internal Filled by `feed` in this module, and swapped for a pooled buffer
-   * by std/net/http1-server.ts when it parks or resumes the input.
+   * by std/net/http1-server.ts when it parks or resumes the input; written
+   * directly by bench/http1-conn.
    */
   buf: u8[]
   /**
@@ -215,8 +216,9 @@ export class Http1Parser {
   start: i32 = 0
   /**
    * Where the unconsumed input ends in `buf`.
-   * @internal Moved by `feed` in this module, and reset by
-   * std/net/http1-server.ts when it parks the input buffer.
+   * @internal Moved by `feed` in this module, reset by
+   * std/net/http1-server.ts when it parks the input buffer, and moved directly
+   * by bench/http1-conn.
    */
   end: i32 = 0
   /**

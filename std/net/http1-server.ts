@@ -516,7 +516,7 @@ export class Http1OutputPool {
   /**
    * An empty pool: no buffer is made until the first `take`.
    *
-   * @param size the length in bytes of every buffer the pool makes, the connections' `outputSize`
+   * @param size the length in bytes of every buffer the pool makes
    */
   constructor(size: i32) {
     this.size = size
@@ -1227,7 +1227,8 @@ export class Http1Connection {
    * says when to try again); `H1_CLOSED` with no request to answer.
    *
    * @param status the HTTP status code to send, 100 to 599 but not 101
-   * @param names the program's field names, lowercase, one per field
+   * @param names the program's field names, one per field; nothing checks their
+   *   case, and the reserved names are refused in any ASCII case
    * @param values each field's value, at the same index as its name
    * @param bodyLength the body's length in bytes, `HTTP1_CHUNKED`, or `HTTP1_NO_BODY`
    * @returns 0 once the head is queued, else `H1_INVALID`, `H1_AGAIN` or `H1_CLOSED` as above
@@ -1802,6 +1803,7 @@ export class Http1Connection {
    *
    * @param now the current time in `monotonicNanos`
    * @returns the earliest `monotonicNanos` instant at which `expired` could answer true, so `expire` can skip the slot until then
+   * @internal Called by `Http1Server.expire` and `Http1TlsServer.expire` in this module to skip the slots that cannot expire yet.
    */
   expiresNoSooner(now: i64): i64 {
     const idle: i64 = this.lastActive + toI64(this.config.idleTimeout) * toI64(1000000)

@@ -106,7 +106,10 @@ export const HTTP_COMPRESS_NOT_ACCEPTED: i32 = 1
 export const HTTP_COMPRESS_TOO_SMALL: i32 = 2
 /** The body was longer than `maxLength`, more than `output` was sized for. */
 export const HTTP_COMPRESS_TOO_LARGE: i32 = 3
-/** Gzip ran but did not save `minSaving` bytes and `minSavingPercent` percent. */
+/**
+ * Gzip ran but did not save `minSaving` bytes and `minSavingPercent` percent,
+ * or the saving asked for was the whole body, so no encoder ran.
+ */
 export const HTTP_COMPRESS_TOO_LITTLE_SAVED: i32 = 4
 /** Under `segmentMode`, compressing would not have saved a TCP segment. */
 export const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5
@@ -117,7 +120,11 @@ export const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5
  * encoder always, or the constructor's level always.
  */
 export const HTTP_ENCODER_AUTO: i32 = 0
-/** Always the fixed-Huffman encoder: fastest, at some cost in size on large bodies. */
+/**
+ * The fixed-Huffman encoder for every body `compress` takes: fastest, at some
+ * cost in size on large bodies. `compressAnyway` falls back to the
+ * `GzipCompressor` when it fails.
+ */
 export const HTTP_ENCODER_FIXED: i32 = 1
 /** Always the `GzipCompressor` at the constructor's level, whatever the body's length. */
 export const HTTP_ENCODER_LEVEL: i32 = 2
@@ -648,7 +655,9 @@ export class HttpCompressor {
    * @param mss the connection's segment size in bytes, or 0 or less for the
    *   compressor's own
    * @returns true when the body fits one segment, so compressing it cannot
-   *   help and it is sent as it is if its head fits too
+   *   help and it is sent as it is if its head fits too; false when `coding` is
+   *   not gzip, `len` is outside `[minLength, maxLength]`, or the body does not
+   *   fit one segment
    */
   oneSegment(coding: i32, len: i32, mss: i32): boolean {
     if (

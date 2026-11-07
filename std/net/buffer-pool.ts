@@ -9,9 +9,10 @@
  *     // ... write out[0 .. used) and send it ...
  *     pool.giveSecret(out, used); // or pool.give(out, used) for bytes that were never secret
  *
- * **It has the shape of `nish/net/http1-server`'s `Http1OutputPool` (`take`,
- * `give`, `made`, a `u8[][]` free list), so the two read alike and can merge,
- * with three things added:**
+ * **The shape of `Http1OutputPool`.** It has the shape of
+ * `nish/net/http1-server`'s `Http1OutputPool` (`take`, `give`, `made`, a
+ * `u8[][]` free list), so the two read alike and can merge, with three things
+ * added:
  *
  * - **A ceiling.** At most `ceiling` buffers ever exist. A server sizes it to
  *   what preallocating every slot would have cost, so a full server behaves as
@@ -26,12 +27,13 @@
  *   buffer, or a give-back with nothing lent is a borrower's bug, and each
  *   panics with the pool's name rather than corrupting the free list quietly.
  *
- * **The pool grows to its high-water mark and never shrinks:** after warm-up a
+ * **It never shrinks.** The pool grows to its high-water mark: after warm-up a
  * `take` pops the free list and a `give` pushes onto capacity it already has,
  * so a warmed take/give loop moves the arena by nothing.
  *
- * **Private helpers share the importing program's flat symbol namespace**
- * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
+ * **Helper names.** Private helpers share the importing program's flat symbol
+ * namespace (`docs/wp26-stdlib.md` §3e), which is why each one carries the
+ * module's name.
  */
 
 /**
@@ -42,7 +44,11 @@
  */
 export class BufferPool {
   // References, then 32-bit fields: the order the layout packs without padding.
-  /** The buffers given back and not yet taken again; the last one is lent next. */
+  /**
+   * The buffers given back and not yet taken again; the last one is lent next.
+   * @internal Read by std/net/quic-stream.ts, and grown ahead of need by
+   * std/net/http3.ts and std/net/http3-server.ts.
+   */
   free: u8[][]
   /**
    * Names the pool in every panic, so a leak or a stray buffer says whose it is.
@@ -55,7 +61,10 @@ export class BufferPool {
    * std/net/http3.ts and std/net/quic-stream.ts to know how much room a borrowed buffer has.
    */
   size: i32 = 0
-  /** The most buffers the pool will ever make. */
+  /**
+   * The most buffers the pool will ever make.
+   * @internal Read by `take` here, and by std/net/quic-stream.ts to cap what it primes and borrows.
+   */
   ceiling: i32 = 0
   /** How many buffers the pool has made: its high-water mark, since it never frees one. */
   made: i32 = 0

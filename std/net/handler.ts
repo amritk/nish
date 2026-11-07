@@ -1077,7 +1077,9 @@ export class HttpHandler {
    * @param names the field names, as bytes, beside `values`
    * @param values each field's value, `values[k]` for `names[k]`
    * @param bodyLength how many body bytes will follow, or `HTTP1_CHUNKED` for a body of unknown length
-   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed
+   *   first, or when the carrier's output was too full to take the head and
+   *   the connection was closed for it
    */
   start(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 {
     if (r.state !== HANDLER_HELD) {
@@ -1212,7 +1214,9 @@ export class HttpHandler {
    * @param body the buffer holding the body; the caller's again on return
    * @param off where in `body` the body bytes start
    * @param len how many body bytes to send
-   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed
+   *   first, or when the carrier's output was too full to take the head and
+   *   the connection was closed for it
    */
   send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32 {
     this.typeValue[0] = contentType
@@ -1228,7 +1232,9 @@ export class HttpHandler {
    * @param body the buffer holding the body; the caller's again on return
    * @param off where in `body` the body bytes start
    * @param len how many body bytes to send
-   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed
+   *   first, or when the carrier's output was too full to take the head and
+   *   the connection was closed for it
    */
   sendFields(
     r: HttpRequest,
@@ -1254,7 +1260,9 @@ export class HttpHandler {
    * Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say.
    * @param r a request taken and not yet answered; the handler's again after this call
    * @param status the response status, from 200 to 599
-   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed
+   *   first, or when the carrier's output was too full to take the head and
+   *   the connection was closed for it
    */
   empty(r: HttpRequest, status: i32): i32 {
     return this.sendFields(r, status, this.noFields, this.noFields, this.scratch, HANDLER_ZERO, HANDLER_ZERO)
@@ -1278,7 +1286,9 @@ export class HttpHandler {
    * outgrew `jsonBytes`, say — is answered as a 500 problem instead.
    * @param r a request taken and not yet answered; the handler's again after this call
    * @param status the response status for a value that fit, from 200 to 599
-   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed
+   *   first, or when the carrier's output was too full to take the head and
+   *   the connection was closed for it
    */
   sendJson(r: HttpRequest, status: i32): i32 {
     if (!this.jsonBegun) {
@@ -1301,7 +1311,9 @@ export class HttpHandler {
    * @param status the response status, from 200 to 599, also written into the object
    * @param title the status's reason phrase, or empty to leave it out
    * @param detail a sentence for a person about this occurrence, or empty to leave it out
-   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed
+   *   first, or when the carrier's output was too full to take the head and
+   *   the connection was closed for it
    */
   problem(r: HttpRequest, status: i32, title: string, detail: string): i32 {
     const length: i32 = this.writeProblem(status, title, detail)
@@ -1351,7 +1363,9 @@ export class HttpHandler {
    * anything else. A parameter's malformed escape is the program's to refuse,
    * when it decodes the parameter.
    * @param r a request whose `route` is negative, taken and not yet answered; the handler's again after this call
-   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed
+   *   first, or when the carrier's output was too full to take the head and
+   *   the connection was closed for it
    */
   refuse(r: HttpRequest): i32 {
     if (r.route === ROUTER_METHOD_NOT_ALLOWED) {
