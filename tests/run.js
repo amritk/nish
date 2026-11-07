@@ -17496,9 +17496,9 @@ if (dealtHere("cliChecks")) {
       ? fs.readFileSync(sidecar("strings", "d.ts"), "utf8")
       : ""
     check(
-      "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource): Promise<Exports>`",
+      "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>`",
       addDts.includes("  add(a: number, b: number): number;") &&
-        addDts.includes("export function load(bytes: BufferSource): Promise<Exports>;"),
+        addDts.includes("export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;"),
       addDts
     )
     check(
@@ -18713,7 +18713,8 @@ if (dealtHere("cliChecks")) {
       }
       const dts = fs.readFileSync(sidecar(stem, "d.ts"), "utf8")
       const mjs = fs.readFileSync(sidecar(stem, "mjs"), "utf8")
-      const exports = dts.slice(dts.indexOf("export interface Exports {"), dts.indexOf("\n}\n"))
+      const exportsAt = dts.indexOf("export interface Exports {")
+      const exports = dts.slice(exportsAt, dts.indexOf("\n}\n", exportsAt))
       const declaredExports = [...exports.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1])
       const missing = declaredExports.filter((name) => !new RegExp(`^ {4}${name}: `, "m").test(mjs))
       check(
@@ -18816,11 +18817,12 @@ if (dealtHere("cliChecks")) {
     )
     check(
       "interop-unsigned.mjs masks a narrow argument in, narrows a narrow result out, and reads u32/u64 unsigned",
-      unsignedMjs.includes("idU8: (x) => raw.idU8(x & 0xff) & 0xff,") &&
-        unsignedMjs.includes("idU16: (x) => raw.idU16(x & 0xffff) & 0xffff,") &&
-        unsignedMjs.includes("idU32: (x) => raw.idU32(x) >>> 0,") &&
-        unsignedMjs.includes("idU64: (x) => BigInt.asUintN(64, raw.idU64(x)),") &&
-        unsignedMjs.includes("scaleF32: raw.scaleF32,"),
+      // Every export runs inside `guarded` (docs/security/wasm-host.md, WH-3).
+      unsignedMjs.includes("idU8: (x) => guarded(() => raw.idU8(x & 0xff) & 0xff),") &&
+        unsignedMjs.includes("idU16: (x) => guarded(() => raw.idU16(x & 0xffff) & 0xffff),") &&
+        unsignedMjs.includes("idU32: (x) => guarded(() => raw.idU32(x) >>> 0),") &&
+        unsignedMjs.includes("idU64: (x) => guarded(() => BigInt.asUintN(64, raw.idU64(x))),") &&
+        unsignedMjs.includes("scaleF32: (x) => guarded(() => raw.scaleF32(x)),"),
       unsignedMjs
     )
     if (unsigned.status === 0) {
@@ -19038,12 +19040,15 @@ if (dealtHere("cliChecks")) {
         "  console.log(name + ' | ' + row.join(' | '));",
         "}",
         // A trap inside wasm (`new Int32Array(-1)` is a huge allocation: memory.grow fails, `unreachable`)
-        // surfaces as a RuntimeError; the loader's `finally` releases the arena and later calls still work.
+        // surfaces as a RuntimeError and leaves the module dead (docs/wp50-wasm-host.md §6): the next
+        // call is refused with NishPanic before it runs, and a fresh load answers again.
         // The native addon would `_exit(1)` with "out of memory" instead, so only the wasm build is probed.
         ...(wasmOk
           ? [
               'let trap = ""; try { apis.wasm.squares(-1); } catch (e) { trap = e.constructor.name; }',
-              "console.log('trap | ' + trap + ' | ' + apis.wasm.sumF64(xs));",
+              'let after = ""; try { apis.wasm.sumF64(xs); } catch (e) { after = e.constructor.name; }',
+              `const again = await (await import(${JSON.stringify(sidecar("arrays", "mjs"))})).load(readFileSync(${JSON.stringify(wasm)}));`,
+              "console.log('trap | ' + trap + ' | ' + after + ' | ' + again.sumF64(xs));",
             ]
           : []),
         ...(napiOk
@@ -19072,8 +19077,8 @@ if (dealtHere("cliChecks")) {
           detail
         )
         check(
-          "wasm: a trap (squares(-1) -> RuntimeError) releases the arena and the next call works",
-          lines.includes("trap | RuntimeError | 4.5"),
+          "wasm: a trap (squares(-1) -> RuntimeError) leaves the module dead, the next call is NishPanic, and a fresh load works",
+          lines.includes("trap | RuntimeError | NishPanic | 4.5"),
           detail
         )
       }
@@ -29527,7 +29532,13 @@ if (!only || "wasm-host".includes(only)) {
       let fixedReading = shown(fixed)
       let fixedOk = false
       if (fixed.status === 0) {
-        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(at("arrays.16.wasm"))), {})
+        // The panic import is the one a wasm-host module needs; nothing here panics.
+        const panic = () => {
+          throw new Error("arrays.16.wasm panicked")
+        }
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(at("arrays.16.wasm"))), {
+          nish: { panic },
+        })
         const memory = instance.exports.memory
         let grew = true
         try {

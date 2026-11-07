@@ -787,11 +787,14 @@ case "$profile" in
     done
     # Under wasm-host a panic site is the page's `nish.panic` import, which
     # runtime-wasm.c makes the call to: IR with a tagged site links it, or the
-    # panic would stay the silent trap of an undefined weak stub.
+    # panic would stay the silent trap of an undefined weak stub. Linked for
+    # that alone, it exports none of its arena entry points: no loader calls
+    # them, and unexported they are left out of the module.
+    panic_only=0
     if [ "$profile" = wasm-host ] && [ "$wasm_named" = 0 ] && [ "$round_wanted" = 0 ]; then
       for i in ${inputs[@]+"${inputs[@]}"}; do
         case "$i" in
-          *.ll) if grep -q ', !nish.site !{i32 ' "$i"; then round_wanted=1; fi ;;
+          *.ll) if grep -q ', !nish.site !{i32 ' "$i"; then round_wanted=1; panic_only=1; fi ;;
         esac
       done
     fi
@@ -896,7 +899,7 @@ case "$profile" in
             done < <(sed -nE 's/^@"?([^" =]+\.data)"? = global .*/\1/p' "$i") ;;
         esac
       done
-      if [ "$runtime_linked" = 1 ]; then
+      if [ "$runtime_linked" = 1 ] && [ "$panic_only" = 0 ]; then
         for name in nish_arena_mark nish_arena_release nish_alloc_array nish_reset_arena nish_free_arena; do
           exports+=("-Wl,--export=$name")
         done

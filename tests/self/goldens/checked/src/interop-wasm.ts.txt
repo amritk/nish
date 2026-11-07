@@ -572,8 +572,8 @@ function storageLayouts(compilation: Compilation): StorageLayout[] -> @storageLa
   callee +25:22 unwrapParens -> @unwrapParens
   local +30:15 fields: StorageField[] (const)
   local +31:20 field: FieldInfo (const)
-  callee +32:23 new StorageField -> @StorageField.constructor
-  callee +32:66 storageView -> @storageView
+  callee +33:13 new StorageField -> @StorageField.constructor
+  callee +33:56 storageView -> @storageView
 function heapViews(): string[] -> @heapViews
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

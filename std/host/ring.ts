@@ -36,8 +36,10 @@
 const RING_HEADER: i32 = 2
 
 /** The number of slots, the ring's length less its header; 0 for a ring too short to have one. */
-export const ringCapacity = (ring: Int32Array): i32 =>
-  ring.length > RING_HEADER ? ring.length - RING_HEADER : 0
+export const ringCapacity = (ring: Int32Array): i32 => {
+  const length: i32 = toI32(ring.length)
+  return length > RING_HEADER ? length - RING_HEADER : 0
+}
 
 /** `count` brought into `[0, 2 * capacity)`, whatever a page wrote there. */
 const ringCount = (count: i32, capacity: i32): i32 => {
@@ -88,7 +90,7 @@ export const ringShift = (ring: Int32Array): i32 => {
 
 /** Empties the ring: the head catches up with the tail, and the slots keep their stale words. */
 export const ringClear = (ring: Int32Array): void => {
-  if (ring.length >= RING_HEADER) {
+  if (toI32(ring.length) >= RING_HEADER) {
     ring[0] = ring[1]
   }
 }
