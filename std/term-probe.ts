@@ -219,8 +219,9 @@ const termPassthrough = (multiplexer: string, query: string): string => {
 /**
  * Every query the probe asks, as one write; `TermProbe` reads the answers.
  *
- * @param env The environment, which picks the queries: under a multiplexer some pass through it,
- *   and under `screen` or the Linux console the string queries are left out.
+ * @param env The environment, which picks the queries: under a multiplexer some are wrapped to
+ *   reach the terminal outside it, and under `screen` or the Linux console the kitty graphics and
+ *   DECRQSS queries, which answer in strings, are left out.
  * @returns The queries, ending in DA1, to `write` at once.
  */
 export const probeQueries = (env: TermEnv): string => {

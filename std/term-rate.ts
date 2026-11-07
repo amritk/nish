@@ -359,12 +359,18 @@ export class RateController {
    * @internal Used by `Terminal` in term-io.ts.
    */
   rttMs: f64
-  /** The link's latency without bytes: the least, over the kept trips, of the round trip less the bytes' time. */
-  private baseRttMs: f64
+  /**
+   * The link's latency without bytes: the least, over the kept trips, of the round trip less the bytes' time.
+   * @internal Used by the tests in tests/link/std_term_rate.
+   */
+  baseRttMs: f64
   /** The latency as last worked out while the bandwidth was known, held once its samples age out. */
   private heldLatencyMs: f64
-  /** The round trips of the probe and of the latest frames sent onto an idle link, `rateTripCount` at most. */
-  private tripMs: f64[]
+  /**
+   * The round trips of the probe and of the latest frames sent onto an idle link, `rateTripCount` at most.
+   * @internal Used by the tests in tests/link/std_term_rate.
+   */
+  tripMs: f64[]
   /** Their byte counts, 0 for the probe. */
   private tripBytes: f64[]
   /** The bytes a second each of the latest answers proves at least, its bytes over its round trip. */
@@ -390,15 +396,26 @@ export class RateController {
   private frameBytes: f64
   private current: RateDecision
   private measured: TermStats
-  /** The least tier detail is cut to keep: the floor tier under `RATE_FIRST`, 5 under `DETAIL_FIRST`. */
-  private floorFps: i32
+  /**
+   * The least tier detail is cut to keep: the floor tier under `RATE_FIRST`, 5 under `DETAIL_FIRST`.
+   * @internal Used by the tests in tests/link/std_term_rate.
+   */
+  floorFps: i32
   /**
    * The least tier above which `RATE_FIRST` keeps full detail.
    * @internal Nothing reads it.
    */
   minTier: i32
-  private prefer: i32
-  private maxUnacked: i32
+  /**
+   * What gives way first, `RATE_FIRST` or `DETAIL_FIRST`, from the options.
+   * @internal Used by the tests in tests/link/std_term_rate.
+   */
+  prefer: i32
+  /**
+   * How many frames may await their acknowledgement at once: 1 or 2.
+   * @internal Used by the tests in tests/link/std_term_rate.
+   */
+  maxUnacked: i32
   /**
    * The fixed frame rate, or 0 when the controller chooses.
    * @internal Used by `Terminal` in term-io.ts.
@@ -425,8 +442,11 @@ export class RateController {
   private floorNext: i32
   /** Whether a frame has been asked for, so the pacer's clock runs. */
   private paced: boolean
-  /** Whether a round trip, from the probe or an answer, is known. */
-  private haveRtt: boolean
+  /**
+   * Whether a round trip, from the probe or an answer, is known.
+   * @internal Used by the tests in tests/link/std_term_rate.
+   */
+  haveRtt: boolean
   /** Whether a frame has been acknowledged, so decisions can start. */
   private haveAck: boolean
   /**
@@ -434,8 +454,9 @@ export class RateController {
    * frame that waited behind another or two trips of different sizes, within
    * `rateFreshMs`. The answers' bytes over their round trips are only a lower
    * bound and never make it known.
+   * @internal Used by the tests in tests/link/std_term_rate.
    */
-  private haveRate: boolean
+  haveRate: boolean
   /** Whether a frame has been sent, so cost and size are known. */
   private haveFrame: boolean
 
