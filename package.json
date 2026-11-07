@@ -1,6 +1,6 @@
 {
   "name": "nish",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
@@ -101,10 +101,10 @@
     "nish"
   ],
   "optionalDependencies": {
-    "@amritk/nish-x86_64-linux": "0.35.0",
-    "@amritk/nish-aarch64-linux": "0.35.0",
-    "@amritk/nish-aarch64-darwin": "0.35.0",
-    "@amritk/nish-x86_64-darwin": "0.35.0"
+    "@amritk/nish-x86_64-linux": "0.36.0",
+    "@amritk/nish-aarch64-linux": "0.36.0",
+    "@amritk/nish-aarch64-darwin": "0.36.0",
+    "@amritk/nish-x86_64-darwin": "0.36.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
