@@ -248,6 +248,8 @@ $ nish run version.ts
   wasm`, which links no C library, refuses a module that calls SQLite with
   exit 2.
 
+<a id="writing-typescript---emit-ts"></a>
+
 ## Writing TypeScript: `--emit-ts`
 
 `nish app.ts --emit-ts out/` writes your program back out as TypeScript that
@@ -421,6 +423,8 @@ errors there are **performance warnings** — the compiler took a slow path and
 names the faster one — which are on by default, print on stderr and never
 change the exit code. `--no-warn-performance` silences them.
 
+<a id="--json-for-tools"></a>
+
 ### `--json`, for tools
 
 `--json` prints each diagnostic as one flat JSON object per line on stdout,
@@ -443,6 +447,8 @@ $ nish bad.ts --json
   are JSON objects too, so under `--json` you never need to read stderr.
 - The standard library has a reader for these objects:
   [`nish/json`](standard-library.md#nishjson).
+
+<a id="--fix"></a>
 
 ### `--fix`
 
