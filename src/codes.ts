@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 820
+export const RULE_COUNT: i32 = 830
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -81,6 +81,8 @@ const diagnosticRules = (): string[] => [
   "NL2515",
   "`, a `let` of the function it is written in: an arrow argument is handed what it captures as an argument when the call is made, so it may read only a `const` or a parameter of that function, whose value is the one the arrow is handed; bind the value to a `const` before the call",
   "NL2585",
+  ": its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`",
+  "NL2671",
   "` is a `Secret` parameter, which its caller owns and wipes: returned, it would be a second name for that key in the caller, one of the two wiped by nobody or both read once it is wiped. Return a value computed from it inside `expose`, or a new `secret(...)` made from one",
   "NL2546",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
@@ -353,6 +355,8 @@ const diagnosticRules = (): string[] => [
   "NL2622",
   " that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line",
   "NL2657",
+  "` needs a length known at compile time: a literal, a module constant, or arithmetic over them, because the page reads its layout from the type",
+  "NL2676",
   "`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`",
   "NL1062",
   "` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it",
@@ -501,6 +505,8 @@ const diagnosticRules = (): string[] => [
   "NL2607",
   "` can leave this `wipe()` unwiped: a holder's `wipe()` ends every `Secret` field it holds itself, with `wipe(",
   "NL2541",
+  "` cannot be passed as an argument: it is a place, not a value; pass the index, or the fields the callee needs",
+  "NL2675",
   "` does not return a `Promise<T>`: an async function is passed only where the function type says it is awaited",
   "NL2639",
   "` is a mask type and has no constructor: a mask is what a lane-wise compare (`eq`, `lt` and the rest) answers",
@@ -683,6 +689,8 @@ const diagnosticRules = (): string[] => [
   "NL1057",
   " is not well-formed JSON, so this compiler could not read an entry point out of it",
   "NL3021",
+  "; give the type a zero member, or store the number and convert it where it is read",
+  "NL2672",
   "` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into",
   "NL2487",
   "` is checked, but not yet compiled: the lowering of `async` is not in this release",
@@ -711,6 +719,8 @@ const diagnosticRules = (): string[] => [
   "NL2550",
   "`export default` / `export =` are not supported; use a named `export function`",
   "NL2129",
+  "` is not available: index it, and keep a count beside it for the slots in use",
+  "NL2673",
   "`: test a `CPtr | null` field through a `const` first, as in `const p = this.",
   "NL2571",
   "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
@@ -859,6 +869,8 @@ const diagnosticRules = (): string[] => [
   "NL2454",
   "` takes u32 or u64 operands (convert with toU32 or toU64), got ",
   "NL2399",
+  "`, which is a place, not a value: loop over the index and use `",
+  "NL2678",
   "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
   "NL2143",
   " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
@@ -941,6 +953,8 @@ const diagnosticRules = (): string[] => [
   "NL2292",
   "` is a generic function, and a generic function cannot ",
   "NL2298",
+  "` is a place, not a value: read and write its fields (`",
+  "NL2674",
   '` is only allowed as the kind of a `HostHandle<"kind">`',
   "NL2668",
   "` is read before it is assigned in the constructor of `",
@@ -1195,6 +1209,8 @@ const diagnosticRules = (): string[] => [
   "NL2004",
   "` grant does not cover: it is granted ",
   "NL2594",
+  "` is a place, not a value: index it (`",
+  "NL2677",
   "` takes an `f32x4` or an `f64x2`, got ",
   "NL2624",
   "`, whose length is fixed: declare it `",
@@ -1405,6 +1421,8 @@ const diagnosticRules = (): string[] => [
   "NL1004",
   " (no interpreter at runtime)",
   "NL1005",
+  "; a storage holds from 1 to ",
+  "NL2680",
   "` has no exported function `",
   "NL2376",
   "` is already imported from `",
@@ -1545,6 +1563,8 @@ const diagnosticRules = (): string[] => [
   "NL4005",
   "Unsupported operator `",
   "NL2259",
+  " but its `new` makes ",
+  "NL2679",
   " to write through it)",
   "NL2264",
   "` does not fit in i32",

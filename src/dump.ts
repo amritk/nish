@@ -223,6 +223,10 @@ const structText = (table: TypeTable, info: StructInfo, out: string[]): void => 
 
 /** The folded value in source syntax, so a dump can be pasted back into a program. */
 const constantSyntax = (info: ConstInfo): string => {
+  if (info.storage) {
+    // Module storage folds to its length; its elements are zero-filled.
+    return `new Array(${info.intValue})`
+  }
   if (info.type === T_STRING) {
     return jsonQuote(info.textValue)
   }

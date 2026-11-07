@@ -26,7 +26,7 @@
  */
 
 import { CheckContext } from "./context"
-import { storesInlineElements, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
 import {
   N_BINARY,
   N_CALL,
@@ -41,7 +41,7 @@ import {
   Node,
 } from "./nodes"
 import { ConstInfo, StructInfo, inlineElementStruct } from "./program"
-import { isAssignmentOperator } from "./emit-util"
+import { SORT_LOCAL } from "./std-modules"
 import { T_BOOL, isNumeric } from "./types"
 
 /** The most elements one storage may hold: its byte size stays far below wasm's 4 GiB. */
@@ -145,9 +145,12 @@ const storageLengthShaped = (info: ConstInfo, expr: Node): boolean => {
       const target: ConstInfo | null = scope === null ? null : scope.constant(expr.text)
       return target !== null && !target.storage
     }
-    case N_CALL:
-      // `wrappingMul(A, B)` under `nish:unsafe`: the folder's to judge.
-      return true
+    case N_CALL: {
+      // `wrappingMul(A, B)` under `nish:unsafe` is the one call a constant
+      // folds; whether it is that import is the folder's to judge.
+      const callee = expr.children[0]
+      return callee.kind === N_IDENT && callee.text.startsWith("wrapping")
+    }
     default:
       return false
   }
@@ -337,6 +340,20 @@ export const checkStorageUses = (ctx: CheckContext, node: Node): void => {
   }
 }
 
+/**
+ * Refuse `S.length = n` on module storage with its own message, ahead of the
+ * array rule that would point at `push`, which storage refuses too. Called by
+ * the assignment check once it has typed the receiver; true when it reported.
+ */
+export const refuseStorageLength = (ctx: CheckContext, target: Node): boolean => {
+  const info = storageNamed(ctx, target.children[0])
+  if (info === null) {
+    return false
+  }
+  refuseMethod(ctx, info, target, "length =")
+  return true
+}
+
 const refuseElementValue = (ctx: CheckContext, info: ConstInfo, node: Node): void => {
   ctx.error(
     node,
@@ -355,6 +372,14 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
   const callee = call.children[0]
   const args = call.children[1]
   let pushesCopy = false
+  if (callee.kind === N_IDENT && callee.text === SORT_LOCAL && args.children.length > 0) {
+    // `xs.sort(cmp)` was rewritten to the std sort over `xs` (`arrays.ts`).
+    const sorted = storageNamed(ctx, args.children[0])
+    if (sorted !== null) {
+      refuseMethod(ctx, sorted, callee, "sort")
+      return
+    }
+  }
   if (callee.kind === N_MEMBER) {
     const info = storageNamed(ctx, callee.children[0])
     if (info !== null) {
@@ -390,7 +415,7 @@ const checkStorageAssignment = (ctx: CheckContext, node: Node): void => {
   if (lhs.kind === N_MEMBER && lhs.text === "length") {
     const info = storageNamed(ctx, lhs.children[0])
     if (info !== null) {
-      refuseMethod(ctx, info, lhs, "length =")
+      // `refuseStorageLength` reported it while the assignment was checked.
       checkStorageUses(ctx, rhs)
       return
     }

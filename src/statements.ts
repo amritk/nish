@@ -966,7 +966,7 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
       } else {
         ctx.error(
           node,
-          "Top-level `let` is not supported; a module has no top-level code, so only `const` is available"
+          "Top-level `let` is not supported; a module has no top-level code, so only `const` is available: state that outlives a call is module storage, `const sim = new Array<Sim>(64)` written as `sim[0].tick`"
         )
       }
     }
