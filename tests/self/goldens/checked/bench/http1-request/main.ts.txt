@@ -965,7 +965,7 @@ function skipJsonPlain(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlain 
   callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
   callee +1:10 skipJsonPlainWalk -> @nish.skipJsonPlainWalk
   callee +1:31 bytesRunStart -> @nish.bytesRunStart
-function copyBytes(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
+function copyBytes(dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.copyBytesWalk
   escaping: at count from
@@ -1018,7 +1018,7 @@ function skipJsonPlainWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPl
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 c: i32 (const)
-function copyBytesWalk(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
+function copyBytesWalk(dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_panic_index nish_panic_overflow
@@ -1300,13 +1300,13 @@ function http1ServerCheckCap(name: string, value: i32, low: i32, high: i32): voi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-function http1ServerCheckWindow(what: string, buf: u8[], off: i32, len: i32): void -> @nish.http1ServerCheckWindow
+function http1ServerCheckWindow(what: string, buf: readonly u8[], off: i32, len: i32): void -> @nish.http1ServerCheckWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 size: i32 (const)
-function http1ServerCopy(out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 -> @nish.http1ServerCopy
+function http1ServerCopy(out: u8[], at: i32, src: readonly u8[], off: i32, n: i32): i32 -> @nish.http1ServerCopy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: at n off
@@ -1672,7 +1672,7 @@ function Http1Connection.respond(this: Http1Connection, status: i32, names: u8[]
   callee -22:22 http1WriteResponseHead -> @nish.http1WriteResponseHead
   callee -18:7 http1ServerReason -> @nish.http1ServerReason
   callee -13:7 HttpDate.current -> @nish.HttpDate.current
-function Http1Connection.write(this: Http1Connection, buf: u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.write [exported method]
+function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
@@ -1687,7 +1687,7 @@ function Http1Connection.write(this: Http1Connection, buf: u8[], off: i32, len: 
   local -9:9 take: i32 (let)
   callee +4:24 http1WriteChunk -> @nish.http1WriteChunk
   callee +6:24 http1ServerCopy -> @nish.http1ServerCopy
-function Http1Connection.sendBody(this: Http1Connection, buf: u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.sendBody [exported method]
+function Http1Connection.sendBody(this: Http1Connection, buf: readonly u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.sendBody [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
@@ -1695,12 +1695,12 @@ function Http1Connection.sendBody(this: Http1Connection, buf: u8[], off: i32, le
   pointer this: size=192 writesThrough=true captured=false passedTo=nish.Http1Connection.write#0 nish.Http1Connection.abort#0 nish.Http1Connection.consume#0 nish.Http1Connection.write#0 nish.Http1Connection.release#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.Http1Connection.write#1 nish.Http1Connection.write#1
   stackSites=0 stackLocals=0
-  callee -21:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
-  callee -10:14 Http1Connection.write -> @nish.Http1Connection.write
-  local -8:11 pending: i32 (const)
-  local -7:11 n: i32 (const)
-  callee -5:7 Http1Connection.abort -> @nish.Http1Connection.abort
-  local -2:9 sent: i32 (let)
+  callee -22:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
+  callee -11:14 Http1Connection.write -> @nish.Http1Connection.write
+  local -9:11 pending: i32 (const)
+  local -8:11 n: i32 (const)
+  callee -6:7 Http1Connection.abort -> @nish.Http1Connection.abort
+  local -3:9 sent: i32 (let)
   callee +1:7 Http1Connection.consume -> @nish.Http1Connection.consume
   local +6:13 copied: i32 (const)
   callee +6:27 Http1Connection.write -> @nish.Http1Connection.write
@@ -5702,7 +5702,7 @@ function http1HexDigits(len: i32): i32 -> @nish.http1HexDigits
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:7 digits: i32 (let)
-function http1WriteChunk(out: u8[], at: i32, data: u8[], off: i32, len: i32): i32 -> @nish.http1WriteChunk [exported]
+function http1WriteChunk(out: u8[], at: i32, data: readonly u8[], off: i32, len: i32): i32 -> @nish.http1WriteChunk [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len

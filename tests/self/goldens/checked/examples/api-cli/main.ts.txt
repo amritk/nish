@@ -2694,7 +2694,7 @@ function skipJsonPlain(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlain 
   callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
   callee +1:10 skipJsonPlainWalk -> @nish.skipJsonPlainWalk
   callee +1:31 bytesRunStart -> @nish.bytesRunStart
-function copyBytes(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
+function copyBytes(dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.copyBytesWalk
   escaping: at count from
@@ -2747,7 +2747,7 @@ function skipJsonPlainWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPl
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 c: i32 (const)
-function copyBytesWalk(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
+function copyBytesWalk(dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_panic_index nish_panic_overflow
