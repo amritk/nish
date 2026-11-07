@@ -7,11 +7,15 @@
  * Sans-IO, like the rest of `nish/net`.
  *
  *     import { QuicConnection, QuicServerConfig } from "nish/net/quic";
+ *     import { tlsSignEcdsaP256 } from "nish/net/tls";
  *
  *     const conn = new QuicConnection(config, entropy);   // entropy: QUIC_CONN_ENTROPY_SIZE random bytes
  *     conn.receiveWindow(buf, off, len, now);              // every datagram the client sends; now in ms
  *     const input: u8[] | null = conn.signatureInput();
- *     if (input !== null) { conn.sign(tlsSignEcdsaP256(key, input)); }
+ *     if (input !== null) {
+ *       const signature: u8[] | null = tlsSignEcdsaP256(key, input);   // key: Secret<u8[]>
+ *       if (signature !== null) { conn.sign(signature); }
+ *     }
  *     let n: i32 = conn.takeDatagramInto(out, 0, now);     // out: at least QUIC_CONN_DATAGRAM_SIZE bytes
  *     while (n > 0) { … send out[0 .. n) to the client … ; n = conn.takeDatagramInto(out, 0, now); }
  *     let id: i64 = conn.nextStreamEvent();                 // a stream with news: read it, write it
@@ -419,6 +423,11 @@ export const QUIC_CONN_CONFIDENTIALITY_LIMIT: i64 = 8388608
  * with AEAD_LIMIT_REACHED. AES-GCM's is 2^52, ChaCha20-Poly1305's 2^36.
  */
 export const QUIC_CONN_INTEGRITY_LIMIT_GCM: i64 = 4503599627370496
+/**
+ * ChaCha20-Poly1305's integrity limit (RFC 9001 §6.6), 2^36 packets that fail
+ * to authenticate over a connection, across every key, before it closes with
+ * AEAD_LIMIT_REACHED. The connection counts failures against the limit of the AEAD it negotiated.
+ */
 export const QUIC_CONN_INTEGRITY_LIMIT_CHACHA: i64 = 68719476736
 /**
  * How many skipped packet numbers the server remembers (RFC 9000 §21.4): an
@@ -428,7 +437,17 @@ export const QUIC_CONN_INTEGRITY_LIMIT_CHACHA: i64 = 68719476736
  * reaches back at least 7 × 129 = 903 packets.
  */
 export const QUIC_CONN_SKIP_RING: i32 = 8
+/**
+ * The fewest Application Data packets between two skipped packet numbers
+ * (RFC 9000 §21.4). Large enough that the gaps cost the client almost
+ * nothing in ACK ranges.
+ */
 export const QUIC_CONN_SKIP_MIN: i64 = 128
+/**
+ * How many distances past `QUIC_CONN_SKIP_MIN` a skip may fall at: the next
+ * skipped number is `QUIC_CONN_SKIP_MIN` plus 0 to 896 packets on, so one in
+ * every 128 to 1024 is skipped.
+ */
 export const QUIC_CONN_SKIP_SPREAD: i64 = 897
 /**
  * The HMAC counter the skip distances are drawn under, past any connection
@@ -604,6 +623,14 @@ export class QuicStreamData {
   data: u8[]
   fin: boolean = false
 
+  /**
+   * A run as `readStream` hands it out.
+   *
+   * @param streamId The RFC 9000 stream ID the bytes arrived on.
+   * @param data The bytes, in stream order; the run owns this array, so the caller may keep it. Empty
+   *   for a run that only carries the FIN.
+   * @param fin True when the run ends at the stream's FIN, so nothing more follows on `streamId`.
+   */
   constructor(streamId: i64, data: u8[], fin: boolean) {
     this.streamId = streamId
     this.data = data
@@ -902,6 +929,9 @@ class QuicConnSpace {
    * Key slot `k` of this space: in the Initial and Handshake spaces 0 holds
    * the read keys and 1 the write keys; in Application Data 0 and 1 hold
    * the read keys' generations and 2 and 3 the write keys'.
+   *
+   * @param k The slot index, 0 to 1 in the Initial and Handshake spaces and 0 to 3 in Application Data.
+   * @returns The slot itself, borrowed from the space and reused across keys; slot 0 for a `k` out of range.
    */
   keySlot(k: i32): QuicKeysSlot {
     const at: i32 = k >= 0 && k < toI32(this.keySlots.length) ? k : 0
@@ -1183,6 +1213,11 @@ const quicConnWipePacketKey = (keys: QuicKeys | null): void => {
  * `nish/net/quic-listener` derives the same token from a packet's ID alone
  * once the connection is gone, which is what lets a server that lost its
  * state end the connection.
+ *
+ * @param key The server's static reset key, `QUIC_CONN_STATIC_KEY_SIZE` bytes
+ *   (`QuicServerConfig.statelessResetKey`).
+ * @param cid The connection ID the token is for, all of its bytes.
+ * @returns A fresh 16-byte token (`QUIC_RESET_TOKEN_SIZE`); the full MAC it was cut from is wiped.
  */
 export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
   const mac: u8[] = hmacSha256(key, cid)
@@ -1196,6 +1231,14 @@ export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
  * `out[outAt ..]`, computed in a connection's own HMAC scratch inside an
  * arena block, so issuing an ID keeps nothing (QUIC-3). The scratch and the
  * full MAC are wiped before it returns.
+ *
+ * @param mac The connection's HMAC-SHA256 scratch, wiped on return.
+ * @param key The server's static reset key, `QUIC_CONN_STATIC_KEY_SIZE` bytes.
+ * @param cid The array holding the connection ID.
+ * @param at Where the ID starts in `cid`.
+ * @param length The ID's length in bytes, at most 20.
+ * @param out Where the 16-byte token goes; bytes that would fall past its end are not written.
+ * @param outAt Where in `out` the token starts.
  */
 export const quicConnResetTokenInto = (
   mac: HmacSha256Scratch,
@@ -1574,6 +1617,11 @@ export class QuicConnection {
    * Entropy of another length, or limits outside what `QuicServerConfig`
    * documents, leave the connection closing with INTERNAL_ERROR before it
    * reads anything; it then sends nothing.
+   *
+   * @param config The server's limits and keys. The connection keeps a reference and reads it for
+   *   its whole life, `reset`s included, so do not change it under a live connection.
+   * @param entropy `QUIC_CONN_ENTROPY_SIZE` (104) random bytes for this connection's first peer;
+   *   zeroed in place once copied.
    */
   constructor(config: QuicServerConfig, entropy: u8[]) {
     this.config = config
@@ -1660,6 +1708,9 @@ export class QuicConnection {
    * the constructor's configuration's. A slot reset this way allocates
    * nothing, and neither does the next handshake (QUIC-3 in
    * `docs/security/quic.md`).
+   *
+   * @param entropy `QUIC_CONN_ENTROPY_SIZE` (104) fresh random bytes for the next peer, never ones
+   *   used before; zeroed in place once copied.
    */
   reset(entropy: u8[]): void {
     this.wipeAll()
@@ -1753,7 +1804,11 @@ export class QuicConnection {
     }
   }
 
-  /** Whether the connection has closed, either way. */
+  /**
+   * Whether the connection has closed, either way.
+   *
+   * @returns True once it is closing, draining or timed out; it stays true until `reset`.
+   */
   closed(): boolean {
     return (
       this.state === QUIC_STATE_CLOSING ||
@@ -1771,6 +1826,10 @@ export class QuicConnection {
    * validated, so the anti-amplification limit does not apply. Call it
    * before the first `receive`; answers whether it took: not once the
    * connection has started, and not for an ID over 20 bytes.
+   *
+   * @param originalDcid The DCID of the client's first Initial, from the checked Retry token; copied.
+   * @param retryScid The SCID the Retry packet carried; copied.
+   * @returns True when the connection took the Retry, false (and nothing changed) otherwise.
    */
   acceptRetry(originalDcid: u8[], retryScid: u8[]): boolean {
     if (
@@ -1805,6 +1864,8 @@ export class QuicConnection {
    * (CONNECTION_CLOSE 0x1d; RFC 9000 §10.2). The next `takeDatagram` answers
    * the close, and nothing after it. Closing twice, or after the client
    * closed, does nothing.
+   *
+   * @param code The application's error code, 0 to 2^62 - 1, sent in the CONNECTION_CLOSE.
    */
   close(code: i64): void {
     if (this.closed()) {
@@ -1856,12 +1917,22 @@ export class QuicConnection {
    * connection: one of its active connection IDs, or, until the handshake is
    * done, the DCID of the client's first Initial. A closed connection still
    * answers for its IDs; the caller drops it once it is done with it.
+   *
+   * @param dcid The destination connection ID of the datagram's first packet, all of its bytes.
+   * @returns True when the datagram should be handed to this connection.
    */
   ownsConnectionId(dcid: u8[]): boolean {
     return this.ownsConnectionIdAt(dcid, QUIC_CONN_FROM, toI32(dcid.length))
   }
 
-  /** `ownsConnectionId` of the ID `buf[at .. at + length)`, read in place, so a carrier routes without a copy. */
+  /**
+   * `ownsConnectionId` of the ID `buf[at .. at + length)`, read in place, so a carrier routes without a copy.
+   *
+   * @param buf The array holding the ID, usually the received datagram.
+   * @param at Where the ID starts in `buf`.
+   * @param length The ID's length in bytes.
+   * @returns True when the datagram should be handed to this connection.
+   */
   ownsConnectionIdAt(buf: u8[], at: i32, length: i32): boolean {
     if (this.cids.ownsLocalAt(buf, at, length)) {
       return true
@@ -1874,7 +1945,13 @@ export class QuicConnection {
     )
   }
 
-  /** `receiveWindow` of a whole datagram. */
+  /**
+   * `receiveWindow` of a whole datagram.
+   *
+   * @param datagram The UDP payload, read and never written.
+   * @param now The caller's monotonic time in milliseconds.
+   * @returns 0, or the transport or application error the connection has closed with.
+   */
   receive(datagram: u8[], now: i64): i64 {
     return this.receiveWindow(datagram, QUIC_CONN_FROM, toI32(datagram.length), now)
   }
@@ -1889,6 +1966,12 @@ export class QuicConnection {
    * cannot be used is dropped and counted (see the module header). Once the
    * connection has closed, or its idle timeout has passed by `now`, every
    * datagram is ignored.
+   *
+   * @param buf The array holding the datagram; read, never written, and not kept past the call.
+   * @param off Where the datagram starts in `buf`.
+   * @param len The datagram's length in bytes; a client's first Initial needs at least 1200.
+   * @param now The caller's monotonic time in milliseconds.
+   * @returns 0, or the error the connection has closed with (also once it was already closed).
    */
   receiveWindow(buf: u8[], off: i32, len: i32, now: i64): i64 {
     return this.receiveWindowFrom(buf, off, len, this.none, now)
@@ -1899,6 +1982,13 @@ export class QuicConnection {
    * `nish:net` address: the connection follows the client from one address
    * to another (RFC 9000 §9) — see "Paths" in the module header. An
    * address of any other length is no address, as `receiveWindow` gives.
+   *
+   * @param buf The array holding the datagram; read, never written, and not kept past the call.
+   * @param off Where the datagram starts in `buf`.
+   * @param len The datagram's length in bytes; a client's first Initial needs at least 1200.
+   * @param address The 18-byte `nish:net` address the datagram came from; copied, not kept.
+   * @param now The caller's monotonic time in milliseconds.
+   * @returns 0, or the error the connection has closed with (also once it was already closed).
    */
   receiveWindowFrom(buf: u8[], off: i32, len: i32, address: u8[], now: i64): i64 {
     this.runClocks(now)
@@ -3232,7 +3322,13 @@ export class QuicConnection {
     }
   }
 
-  /** What CertificateVerify must sign while the handshake waits for it, else `null` (see `TlsServer.signatureInput`). */
+  /**
+   * What CertificateVerify must sign while the handshake waits for it, else `null` (see
+   * `TlsServer.signatureInput`).
+   *
+   * @returns The bytes to sign with the certificate's key, or `null` when no signature is owed or the
+   *   connection has closed.
+   */
   signatureInput(): u8[] | null {
     const tls: TlsServer | null = this.tls
     if (tls === null || this.closed()) {
@@ -3246,6 +3342,10 @@ export class QuicConnection {
    * rest of the server's flight. Answers 0, or the CRYPTO_ERROR the
    * connection closed with when TLS refused it (a call at the wrong time, or
    * an empty signature: `internal_error`).
+   *
+   * @param signature The certificate key's signature over `signatureInput()`, in the encoding the
+   *   negotiated TLS signature scheme uses.
+   * @returns 0, or the error the connection has closed with (also when it was already closed).
    */
   sign(signature: u8[]): i64 {
     const tls: TlsServer | null = this.tls
@@ -3285,7 +3385,11 @@ export class QuicConnection {
     return timeout < floor ? floor : timeout
   }
 
-  /** When the idle timeout passes, or -1 when there is none or the timer has not started. */
+  /**
+   * When the idle timeout passes, or -1 when there is none or the timer has not started.
+   *
+   * @returns The time in the caller's milliseconds, or -1.
+   */
   idleDeadline(): i64 {
     const timeout: i64 = this.idleTimeout()
     return timeout >= 0 && this.idleSince >= 0 ? this.idleSince + timeout : -1
@@ -3302,6 +3406,8 @@ export class QuicConnection {
    * gone out (`takeDatagram` sends it), once a closed connection's keys are
    * wiped, and with no idle timeout, nothing in flight, no update pending
    * and no path being validated.
+   *
+   * @returns The time in the caller's milliseconds at which to call `handleTimer`, or -1.
    */
   deadline(): i64 {
     if (this.closed()) {
@@ -3332,6 +3438,8 @@ export class QuicConnection {
    * Whether the anti-amplification limit stops the server sending (RFC 9000
    * §8.1): the client's address is not validated and three times what it
    * sent leaves no room for a whole datagram.
+   *
+   * @returns True while the address (or a new path being validated) has no budget left for a datagram.
    */
   amplificationBlocked(): boolean {
     return (
@@ -3362,6 +3470,8 @@ export class QuicConnection {
    * §6.2.4): `takeDatagram` then sends it. `receive` and `takeDatagram` run
    * it themselves. Time never runs backwards here: an earlier `now` than one
    * already given counts as that one.
+   *
+   * @param now The caller's monotonic time in milliseconds.
    */
   handleTimer(now: i64): void {
     this.runClocks(now)
@@ -3636,6 +3746,9 @@ export class QuicConnection {
    * address `receiveWindowFrom` last moved it to, or the first Initial's.
    * A carrier sends every datagram of `takeDatagramInto` here; it is empty
    * (all zero) for a connection fed by `receiveWindow` alone.
+   *
+   * @returns The connection's own address array, borrowed: it changes in place when the connection
+   *   moves, so copy it to keep it.
    */
   sendAddress(): u8[] {
     return this.pathCurrent
@@ -3649,6 +3762,11 @@ export class QuicConnection {
    * path (§8.1), whichever is less. The carrier sends it to
    * `probeAddress`, before `takeDatagramInto`'s datagrams. It is answered
    * once and never sent again (§13.3).
+   *
+   * @param out Where the datagram is written.
+   * @param at Where in `out` it starts; `out` needs `QUIC_CONN_DATAGRAM_SIZE` bytes from here.
+   * @param now The caller's monotonic time in milliseconds; timers due by then run first.
+   * @returns The datagram's length in bytes, or 0 when no PATH_RESPONSE is owed or the room is short.
    */
   takeProbeInto(out: u8[], at: i32, now: i64): i32 {
     this.handleTimer(now)
@@ -3725,6 +3843,8 @@ export class QuicConnection {
    * or answered it less than a probe timeout ago, so the next read keys are
    * not ready), and until the client has acknowledged a packet sent with the
    * current keys.
+   *
+   * @returns True when the update started, false when it may not yet.
    */
   updateKeys(): boolean {
     if (
@@ -3764,6 +3884,8 @@ export class QuicConnection {
    * stopped, or it has room to write again after a short write — or -1
    * when there is none. Each stream comes up once however much happened;
    * read and write it until it has nothing more to say.
+   *
+   * @returns A stream ID, or -1.
    */
   nextStreamEvent(): i64 {
     return this.streams.nextEvent()
@@ -3775,6 +3897,9 @@ export class QuicConnection {
    * `QUIC_STREAM_ERR_STATE` when not connected, or `QUIC_STREAM_ERR_LIMIT`
    * when the client's MAX_STREAMS is reached (STREAMS_BLOCKED then goes out)
    * or `localStreams` of the server's are open.
+   *
+   * @param bidirectional True for a stream both sides send on, false for one only the server sends on.
+   * @returns The new stream's ID, or a negative `QUIC_STREAM_ERR_*`.
    */
   openStream(bidirectional: boolean): i64 {
     if (this.state !== QUIC_STATE_CONNECTED) {
@@ -3792,6 +3917,13 @@ export class QuicConnection {
    * only the client sends on, one already finished or reset, or one the
    * client asked to stop (STOP_SENDING, which this side answered with
    * RESET_STREAM).
+   *
+   * @param id The stream's ID.
+   * @param buf The bytes to send; copied into the stream's buffer, so the caller may reuse it.
+   * @param from Where the bytes start in `buf`.
+   * @param length How many bytes to offer.
+   * @param fin True to finish the sending side once all `length` bytes are taken.
+   * @returns The number of bytes taken, 0 to `length`, or a negative `QUIC_STREAM_ERR_*`.
    */
   streamWrite(id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32 {
     if (this.state !== QUIC_STATE_CONNECTED) {
@@ -3806,12 +3938,26 @@ export class QuicConnection {
    * once every byte up to the FIN was read, `QUIC_STREAM_ERR_RESET` once the
    * client reset the stream (its code is the stream's `resetCode`), or
    * another `QUIC_STREAM_ERR_*`. Reading is what gives the client more credit.
+   *
+   * @param id The stream's ID.
+   * @param buf Where the bytes go.
+   * @param at Where in `buf` they start.
+   * @param length The most bytes to read.
+   * @returns The number of bytes read, 0, `QUIC_STREAM_END`, or a negative `QUIC_STREAM_ERR_*`.
    */
   streamRead(id: i64, buf: u8[], at: i32, length: i32): i32 {
     return this.streams.read(id, buf, at, length)
   }
 
-  /** Abandons stream `id`'s sending side with application error `code` (RESET_STREAM). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. */
+  /**
+   * Abandons stream `id`'s sending side with application error `code` (RESET_STREAM). Answers
+   * `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`.
+   *
+   * @param id The stream's ID; it must be one the server sends on.
+   * @param code The application's error code, sent to the client in RESET_STREAM.
+   * @returns `QUIC_STREAM_OK`, or a negative `QUIC_STREAM_ERR_*` (`QUIC_STREAM_ERR_STATE` when not
+   *   connected).
+   */
   streamReset(id: i64, code: i64): i32 {
     if (this.state !== QUIC_STATE_CONNECTED) {
       return QUIC_STREAM_ERR_STATE
@@ -3819,7 +3965,15 @@ export class QuicConnection {
     return this.streams.resetStream(id, code)
   }
 
-  /** Asks the client to stop sending on stream `id`, with application error `code` (STOP_SENDING). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. */
+  /**
+   * Asks the client to stop sending on stream `id`, with application error `code` (STOP_SENDING).
+   * Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`.
+   *
+   * @param id The stream's ID; it must be one the client sends on.
+   * @param code The application's error code, sent to the client in STOP_SENDING.
+   * @returns `QUIC_STREAM_OK`, or a negative `QUIC_STREAM_ERR_*` (`QUIC_STREAM_ERR_STATE` when not
+   *   connected).
+   */
   streamStopSending(id: i64, code: i64): i32 {
     if (this.state !== QUIC_STATE_CONNECTED) {
       return QUIC_STREAM_ERR_STATE
@@ -3832,6 +3986,8 @@ export class QuicConnection {
    * none: the all-at-once form of `nextStreamEvent` and `streamRead`, which
    * allocates the run it answers. `fin` marks the last of its stream; a
    * stream the client reset is passed over.
+   *
+   * @returns A new run the caller owns, or `null` when no stream has data or a FIN waiting.
    */
   readStream(): QuicStreamData | null {
     let id: i64 = this.streams.nextEvent()
@@ -3861,6 +4017,12 @@ export class QuicConnection {
    * connected, the stream is unknown, its side is already finished (or the
    * client stopped it), or the data would pass the credit the client gave
    * for the stream or the connection, or the room in the stream's buffer.
+   *
+   * @param id The stream's ID.
+   * @param data The bytes to send; copied, so the caller may reuse it.
+   * @param fin True to finish the sending side after `data`.
+   * @returns `QUIC_STREAM_OK` when every byte was queued, or a negative `QUIC_STREAM_ERR_*` with nothing
+   *   queued.
    */
   writeStream(id: i64, data: u8[], fin: boolean): i32 {
     if (this.state !== QUIC_STATE_CONNECTED) {
@@ -3892,6 +4054,8 @@ export class QuicConnection {
    * client's `max_datagram_frame_size` with the frame's type and Length, and
    * a 1-RTT packet of `QUIC_CONN_DATAGRAM_SIZE` with the longest packet
    * number; 0 when the client takes none, or the server sends none.
+   *
+   * @returns The payload size in bytes, 0 up to a little under `QUIC_CONN_DATAGRAM_SIZE`.
    */
   maxDatagramPayload(): i32 {
     const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
@@ -3923,6 +4087,11 @@ export class QuicConnection {
    * none, `QUIC_DATAGRAM_ERR_TOO_BIG` for a frame past the client's limit or
    * a payload past `maxDatagramPayload()`, or `QUIC_DATAGRAM_ERR_FULL` while
    * the ring holds `QUIC_CONN_DATAGRAM_QUEUE` waiting.
+   *
+   * @param buf The array holding the payload; copied into the ring, so the caller may reuse it.
+   * @param from Where the payload starts in `buf`.
+   * @param length The payload's length in bytes.
+   * @returns `QUIC_DATAGRAM_OK`, or one of the `QUIC_DATAGRAM_ERR_*` codes above with nothing queued.
    */
   sendDatagram(buf: u8[], from: i32, length: i32): i32 {
     if (
@@ -3950,6 +4119,11 @@ export class QuicConnection {
    * at most `cap` bytes, and forgets it. Answers its length,
    * `QUIC_DATAGRAM_NONE` when none is waiting, or `QUIC_DATAGRAM_ERR_ROOM`,
    * keeping it, when it does not fit.
+   *
+   * @param buf Where the payload goes.
+   * @param at Where in `buf` it starts.
+   * @param cap The most bytes `buf` has room for from `at`.
+   * @returns The payload's length in bytes, `QUIC_DATAGRAM_NONE`, or `QUIC_DATAGRAM_ERR_ROOM`.
    */
   readDatagram(buf: u8[], at: i32, cap: i32): i32 {
     return this.datagramsIn.pop(buf, at, cap)
@@ -3960,6 +4134,9 @@ export class QuicConnection {
   /**
    * The next datagram to send, or `null` when nothing is due: the
    * allocating form of `takeDatagramInto`, which a test or a recording uses.
+   *
+   * @param now The caller's monotonic time in milliseconds.
+   * @returns A new array the caller owns, at most `QUIC_CONN_DATAGRAM_SIZE` bytes, or `null`.
    */
   takeDatagram(now: i64): u8[] | null {
     const out: u8[] = new Array<u8>(QUIC_CONN_DATAGRAM_SIZE)
@@ -3988,6 +4165,11 @@ export class QuicConnection {
    * inside an arena block: nothing it does allocates past the call. This is
    * not paced: a carrier that paces calls `nish/net/quic-listener`'s
    * `quicListenerTakeFlight` instead.
+   *
+   * @param out Where the datagram is written.
+   * @param at Where in `out` it starts; `out` needs `QUIC_CONN_DATAGRAM_SIZE` bytes from here.
+   * @param now The caller's monotonic time in milliseconds; timers due by then run first.
+   * @returns The datagram's length in bytes, at most `QUIC_CONN_DATAGRAM_SIZE`, or 0.
    */
   takeDatagramInto(out: u8[], at: i32, now: i64): i32 {
     this.handleTimer(now)
