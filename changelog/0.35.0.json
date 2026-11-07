@@ -1,0 +1,479 @@
+{
+  "version": "0.35.0",
+  "date": "2026-11-07",
+  "tag": "v0.35.0",
+  "range": {
+    "from": "v0.34.1",
+    "to": "e29d7d5f"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-34-1",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.34.1",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "39f1994"
+      ],
+      "pr": 1197,
+      "author": "github-actions[bot]",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "bound-the-wide-tree-parse-by-a-same",
+      "type": "test",
+      "scope": "cli",
+      "breaking": false,
+      "title": "bound the wide-tree parse by a same-process ratio, and show stdout when a runner case exits wrong",
+      "body": "`tests/link/std_cli_args` bounded a parse of a 500-command tree at 10 µs\nof wall time, and failed on loaded CI runners (16 busy loops sharing its\ncore read 20 µs a parse). It now times the same argv on that tree and on\na tree that holds only its last leaf, in ten alternating batches of 1,000\nparses, and bounds the ratio of the two sides' fastest batches at 3. It\nmeasured 1.00 to 1.19, idle and under load. A parse that compares every\ntoken with every command's name reads 11.3 to 12.2 and fails it; the old\nbound passed that parser at 9.1 µs.\n\nThe Nish golden runner returned on a link case's wrong exit code without\nreporting its stdout, so CI's log named the exit code and not the check\nthat failed. It now prints the stdout from the first line that differs\nfrom `expected.out`, at most 12 lines of at most 200 bytes each, under\nthe one exit-code failure.",
+      "metrics": [],
+      "refs": [
+        "#1195"
+      ],
+      "tests": [
+        "tests/link/std_cli_args"
+      ],
+      "commits": [
+        "0e0c0e7"
+      ],
+      "pr": 1198,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "deal-the-suite-s-tail-eight-ways-to",
+      "type": "ci",
+      "scope": "self",
+      "breaking": false,
+      "title": "deal the suite's tail eight ways to keep each shard near ten minutes",
+      "body": "Shard 1 of the `test` job ran 20.6 minutes against a 25-minute timeout,\nbecause everything after the link programs ran there alone. Eleven\nself-contained groups of that tail (the p256 seams, the net startup checks,\nthe thread and wasi checks, crypto, array, runtime, cli, release and\nc-symbol checks, the run cache, and the simd section) are now `tail`\nentries in DEALT_SECTIONS, dealt by cost like every other section. The simd\ngroup is `pinned` to shard 2 so the seven ci.yml steps that read its build\noutput run beside it; a new check holds those steps to that shard. In a\nfiltered run every tail group stays on shard 1, and the delegation line\nnames it, so a filtered shard still leaves nothing undone.\n\ntests/shard-costs.json is regenerated from run 41882940444's shard logs, and\nthe matrix grows from four shards to eight; a simulated deal gives about\n390 s of dealt work per shard plus about 200 s of fixed setup.",
+      "metrics": [
+        "shard job wall 20.6 / 14.4 / 11.6 / 14.3 min at 4 shards (run 41882940444)"
+      ],
+      "refs": [
+        "docs/wp10-ci.md"
+      ],
+      "tests": [],
+      "commits": [
+        "cbbcedd"
+      ],
+      "pr": 1200,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "async-and-await-the-checker-wp49-stage-4",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "async and await, the checker (WP49 stage 4, part 1)",
+      "body": "The checker accepts `async` functions and checks the rules of\ndocs/wp49-async-server.md §2: `await` only on a direct call to an async\nfunction, at the top of a statement; `Promise<T>` only as an async\nfunction's return type; `spawn` and `awaitAll` only on async calls; and no\npromise values, `.then`/`.catch`/`.finally`, `Promise` statics, `for await`\nor recursion through `await`. Each refusal has its own code, NL1063 and\nNL2639 to NL2655, and a negative test.\n\nThe lowering is not in this release: a program that passes every rule but\nkeeps an `async` function is refused with NL2653, and wasm builds refuse\nasync with NL2652, so a program with no `async` compiles byte for byte as\nbefore.",
+      "metrics": [],
+      "refs": [
+        "docs/wp49-async-server.md#stage-4-part-1-the-checkers-codes-and-decisions"
+      ],
+      "tests": [
+        "tests/cases/reject_async_*"
+      ],
+      "commits": [
+        "89dad84"
+      ],
+      "pr": 1160,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "run-an-entry-module-s-top-level-code",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "run an entry module's top-level code as `main`",
+      "body": "An entry module that declares no `main` may now hold statements at the top\nlevel, the way a script does. Right after parsing, the compiler moves them,\nin order, into a synthesized `export const main = (): void => { ... }`\n(src/script.ts). Every later pass sees an ordinary entry point, so the\nnative program is the one a hand-written `main` gives, and it exits 0\nunless the code calls `process.exit`.\n\nWhat moves: every top-level statement, every top-level `let`, and every\nnon-exported top-level `const` that no declaration names. A `const` that a\nfunction, a class or another staying constant names stays a module\nconstant, because a function cannot read a local of `main`.\n\nThree rules keep the source meaning the same natively and under Node, where\nthe statements run where they stand:\n- a function naming a variable of the code is told why it cannot (NL2656)\n  instead of getting \"Unknown identifier\";\n- a declaration the code reaches, directly or through a function, must\n  stand above it (NL2657);\n- a variable of the code may not share a name with a declaration or import\n  (NL2658).\n\nAn imported module, or an entry that declares `main`, keeps the old\nrefusal. `--emit-ts` writes the code back where it stands, and its\n`entry.ts` imports the module instead of calling `main`.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#top-level-code",
+        "docs/IR_COOKBOOK.md#top-level-code"
+      ],
+      "tests": [
+        "tests/cases/script_basic",
+        "tests/cases/script_exit",
+        "tests/cases/reject_script_local_in_function",
+        "tests/cases/reject_script_declared_below",
+        "tests/cases/reject_script_name_collision"
+      ],
+      "commits": [
+        "66f9806"
+      ],
+      "pr": 1203,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "lower-async-functions-to-frame-state-machines-wp49",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "lower async functions to frame state machines (WP49 stage 4, part 2)",
+      "body": "An async program now compiles to native code. A function that awaits becomes\n`i1 @f.resume(i8* frame)`: a switch on the frame's state resumes it where its\nlast await left off, and the frame `{ i32 state, parameters, answer, rest }`\nholds its callees' frames, its locals and every value live across an await,\nsized at compile time across modules. A function that awaits nothing stays a\nplain function and keeps every attribute; one that awaits loses `willreturn`\nand `readonly`. `spawn`, `awaitAll` and an async `main` run on an in-process\ndriver that stage 5's executor replaces. NL2653 is retired, NL2652 still\nrefuses async in a wasm build, and `--emit-ts` refuses an async function\n(NL4016) until the TypeScript half lands.\n\nA program with no async function compiles byte for byte as before: 0 of the\n905 positive tests/cases programs without async write different IR.",
+      "metrics": [],
+      "refs": [
+        "docs/wp49-async-server.md#stage-4-part-2-the-lowering"
+      ],
+      "tests": [
+        "tests/cases/async_*",
+        "tests/link/async_across_modules",
+        "tests/cases/reject_emit_ts_async*"
+      ],
+      "commits": [
+        "9ce49ba"
+      ],
+      "pr": 1202,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "allow-null-as-the-default-of-a-nullable",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "allow null as the default of a nullable parameter",
+      "body": "A parameter whose declared type is a union with `null` may now take `null`\nas its default, on functions, methods and constructors, in one module and\nacross modules. An options argument can then be written the way Node's are,\nwithout bringing `undefined` into the language: `fetch(url)` and\n`fetch(url, init)` are one function (WP49 D7). Optional parameters (`x?: T`)\nstay refused.\n\nThe default is filled in at the call site like every other default: a call\nthat leaves the argument out passes a typed null pointer, the same IR as\nwriting `null`, and the callee is compiled as if the argument were always\npassed. Every existing golden program compiles to the same IR (0 of 907\ndiffer). `null` on a type without `null` is refused (NL2659), as is any\nother default of a `T | null` parameter, which would build a value per call\n(NL2660); a type parameter keeps its existing refusal.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#default-and-rest-parameters",
+        "docs/wp49-async-server.md"
+      ],
+      "tests": [
+        "tests/cases/param_default_null",
+        "tests/link/param_modules",
+        "tests/cases/reject_param_default_null_not_nullable",
+        "tests/cases/reject_param_default_object",
+        "tests/cases/reject_param_default_null_generic"
+      ],
+      "commits": [
+        "98c4f9a"
+      ],
+      "pr": 1205,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "let-a-pgbatcher-skip-the-ordinal-sort-1207",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "let a PgBatcher skip the ordinal sort",
+      "body": "* feat(interop): let a PgBatcher skip the ordinal sort\n\nPgBatchConfig.sorted (true by default) says whether the batch statement\norders its rows by ordinal. Set it to false and the statement ends at the\nlateral join, or orders by `orderBy` alone, so PostgreSQL plans no Sort\nnode for it when `orderBy` is empty. Rows then route as they come, a\nPG_BATCH_ROW for every request of the row's key at once, and each\nrequest's last event waits for the execution's end: after `end`, DONE or\nMISSING in key order, then request order; after `fail` or a refused\nordinal, one PG_BATCH_FAILED for every request. An ordinal is still\nrefused when missing, NULL, not an integer or outside the keys; one that\ngoes back or repeats is accepted. The default statement and its event\norder are unchanged byte for byte.\n\nRefs: docs/guide/using-nish/postgres.md#skipping-the-ordinal-sort\nTests: tests/link/std_postgres_batch_unsorted, tests/postgres/live (batch, explain)\n\n* fix(interop): lay PgBatchRun's had flags out with its arrays\n\nThe had array sat between i32 fields, so PgBatchRun carried 8 bytes of\npadding and the performance gate's NL9010 refused it. Declaring it with\ntags and first brings the run back to 56 bytes.\n\nTests: node tests/run.js performance\n\n* test(interop): drive an unsorted batch's mid-run loss through the pool\n\nThe unsorted link test now loses a pooled connection after a row of one key\nand before CommandComplete: the row is delivered, then every request gets\nexactly one PG_BATCH_FAILED, and nothing counts as stray. docs/AI.md names\nthe batcher as what reads no clock.\n\nTests: node tests/run.js std_postgres_batch",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "39a87b3"
+      ],
+      "pr": 1207,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "emit-async-functions-as-typescript-async-await-wp49",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "emit async functions as TypeScript async/await (WP49 stage 4, part 3)",
+      "body": "`--emit-ts` now writes async programs as TypeScript `async`/`await`, which run under Node and print what the native build prints. Before, it refused them with NL4016, which is now retired. Its entry stays in `src/codes.ts` and it is recorded in `tests/wordings/unreachable.txt`.\n\nAsync source is already TypeScript, so the emitter passes it through. Two things change:\n- The `nish:async` import is rewritten to `nish/runtime/async.mjs`.\n- When any module has an async function, the generated `entry.ts` awaits `main` and then `settleTasks()`. So every spawned task finishes before the process exits, as the native driver drains its queue, and `main`'s exit code is kept.\n\n`runtime/async.mjs` is new. It is the Node reading of `nish:async`:\n- `awaitAll` is `Promise.all` over its 2 to 8 tasks.\n- `spawn` starts a task without awaiting it.\n- `settleTasks` drains every pending task, including tasks spawned by other tasks.\n\nThe `--emit-ts` differential harness and the unmodified-run hook await an async `main` the same way.\n\nEight of the nine `tests/cases/async_*` programs now agree with native under `--emit-ts`. `async_spawn` stays on the known list as a new `order` row. Node runs a spawned task only to its first `await` before `spawn` returns, while the native scheduler runs it until it first waits, so the same lines print in a different order. An `order` row is accepted only for a listed program with equal exit status and stderr. docs/LANGUAGE.md, the guide's async page and docs/RUN_UNDER_NODE.md describe this difference.\n\nNative output is unchanged: compiled with main's compiler and with this branch's, 0 of 918 tests/cases programs differ.\n\nRefs: docs/LANGUAGE.md#async, docs/RUN_UNDER_NODE.md, docs/wp49-async-server.md\nTests: tests/emit-ts/async, tests/differential/emit-ts-known.txt, tests/cases/async_spawn\n\nPart of #1141",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8729fb2"
+      ],
+      "pr": 1212,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "bring-the-docs-up-to-date-with-captures",
+      "type": "docs",
+      "breaking": false,
+      "title": "bring the docs up to date with captures, async, top-level code and defaults",
+      "body": "Several pages still described the language as it was before arrows could read their caller's `const` locals and parameters, before `async`/`await` compiled, before an entry module could run top-level code as `main`, and before default and rest parameters. Each now says what the reference says: `async` compiles but cannot wait on a socket yet, a capture is read and never assigned, and `--sandbox` confines a script's implicit `main`. The guide index lists every routed page, and MASTER_PLAN and the docs index mark WP46 stages 1-2, WP38 S3 and WP49 stages 1-4 as built.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "501332f"
+      ],
+      "pr": 1216,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "read-an-arrow-s-captures-as-arguments-to",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "read an arrow's captures as arguments to it",
+      "body": "A value an arrow captures is now judged the way passing it to the arrow\nwould be, at the arrow's own parameter for it. Before, every capture\ncounted as an escape. Now an object an arrow only reads can be an alloca\nor be released with its pass, and a parameter it only reads is `readonly\nnocapture`, in the function that wrote the arrow and on the `%cap.N` the\ninstance forwards it through. Anything the arrow keeps, hands to a\nfunction that keeps it, or forwards to another instance that keeps it,\nstill escapes.\n\nA capture is read this way only when every function between the call and\nthe arrow is an ordinary instance that just forwards it (`captureTarget`).\nPast a data-parallel form, a chunk loop, `spawn`, a task or an async\nfunction, it escapes as before, and `%cap.N` is `noundef` alone. A lifted\narrow now decides `elementsFree` for its captures, so an element of a\ncaptured listing is kept unless the arrow proves it keeps none. A captured\narray is never a carrier whose strings go to the caller with it, since the\ncarrier rule never sees the arrow's reads (CG-13).\n\nMeasured: 20M calls of a function whose arrow only reads a fresh `Box` and\na string, 9 interleaved rounds against main's compiler: median\n688.9 -> 292.6 ms (noise bands +-20.0% and +-12.0%), peak RSS 782940 ->\n13008 KB, checksum 10620 on both",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#function-parameters",
+        "docs/security/codegen.md CG-13"
+      ],
+      "tests": [
+        "tests/cases/mem_capture_read_stack",
+        "fnarg_capture_readonly",
+        "mem_capture_read_scope",
+        "mem_capture_element_keep",
+        "mem_capture_forward_keep",
+        "mem_capture_callee_keep",
+        "mem_capture_async",
+        "tests/link/mem_capture_parallel_forward"
+      ],
+      "commits": [
+        "c7cee2b"
+      ],
+      "pr": 1215,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "add-wp50-a-webassembly-module-a-typescript-page",
+      "type": "docs",
+      "breaking": false,
+      "title": "add WP50, a WebAssembly module a TypeScript page drives",
+      "body": "The design note for cs's client boundary, wp34's N8 and the host-driven\nhalf of N9, accepted by the owner on 2026-11-06 with Q1 revised.\n\nA function the page supplies is imported from the page's own TypeScript\nmodule, a host module named in package.json or by --host, with its\nsignature read from that file; `declare function` stays C's. Typed\n`HostHandle` kinds, fixed pointer-free module storage the page views in\nplace with its layout in the `.d.ts`, `(view, at, n)` buffer windows and\nstrings that cross without a copy, flat memory proved by a type rule,\npanics the page can report, a loader and Vite plugin that need no fetch,\n`--deterministic` for bit-identical floats across native, wasm and the\nTypeScript reading, a size guard and the acceptance example. It says why\nnot wasm-bindgen or the Component Model, and which helpers go in `std`.\nNothing is built; stage 1 is next.\n\nMeasured: explicit exports instead of --export-all: add.wasm 316 -> 102 B\n(brotli 211 -> 87), arrays.wasm 2,827 -> 2,091 B (brotli 1,302 -> 970);\ninlined as a Uint8Array literal, +25% over the separate file under brotli",
+      "metrics": [],
+      "refs": [
+        "docs/wp50-wasm-host.md"
+      ],
+      "tests": [],
+      "commits": [
+        "c2654ef"
+      ],
+      "pr": 1213,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "show-every-guide-section-in-the-scalar-sidebar",
+      "type": "docs",
+      "breaking": false,
+      "title": "show every guide section in the Scalar sidebar",
+      "body": "Scalar gives each top-level route group its own sidebar, so a reader on one section of the guide saw no way into the other two. The three groups now sit under one root group, which keeps every URL as it was and lists every page on every page; the config gains its `info` block. Scalar spells some heading IDs differently from GitHub, so six headings gain an `<a id>` with GitHub's spelling and the guide's links to them land on both sites.\n\nThe emit-ts known list drops `cases/mem_capture_async`, which agrees under --emit-ts since #1212 and #1215 both landed and failed main's shard 5 as an XPASS.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "51efed7"
+      ],
+      "pr": 1220,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "fix-the-std-dns-port-collision-postgres-live",
+      "type": "test",
+      "scope": "interop",
+      "breaking": false,
+      "title": "fix the std_dns port collision, postgres-live's ready line and a stale emit-ts row",
+      "body": "* test(interop): draw another port when std_dns's TCP listen collides\n\n`link/std_dns` binds its DNS server's UDP socket on an ephemeral port and\nthen listens over TCP on the same number. The kernel only promised that\nport free for UDP, so another test on the shard holding it over TCP made\nsetup fail with -98 (EADDRINUSE) and the case flaked. Setup now closes the\nUDP socket and draws a new port, up to 32 times, until TCP takes it too.\n\nMeasured: with the ephemeral range squeezed to 64 ports and 48 held over TCP, the old program failed setup 9 of 12 runs, the new one passed 12 of 12\nTests: tests/link/std_dns\n\n* test(interop): match a forked server's ready line through interleaved stdout\n\nThe postgres-live `tfb` check starts the TechEmpower database server with\ntwo worker processes on one stdout pipe and waits for a whole\n`listening <port>` line. `console.log` writes its text and its newline as\ntwo writes, so the workers' lines can interleave into\n`listening 42373listening 42373\\n\\n` and the wait timed out. `waitFor`\nnow matches the text, which each short write still delivers whole.\n\nTests: tests/postgres/live (tfb, carrier)\n\n* test(codegen): drop mem_capture_async from the emit-ts known list\n\nReading an arrow's captures as arguments to it made the async-capture\nprogram agree under --emit-ts, so the corpus check reported it as an\nunexpected pass and turned main's shard 5 red. Regenerated with\n`node tests/differential/emit-ts.js --update` under the Node CI pins.\n\nTests: tests/differential/emit-ts-known.txt",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "472b40e"
+      ],
+      "pr": 1217,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "shared-region-windows-and-a-two-buffer-netwrite",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "shared-region windows and a two-buffer netWrite",
+      "body": "`SharedRegion.lend(at, len, reuse)` returns a `u8[]` whose bytes are a range of the region itself, not a copy. `copyBytes`, index stores and `netRead` into it write the shared memory directly. `giveBack(window)` empties the window and answers its length. `close` also empties every window still lent. An index into a window after either one is a bounds panic, never a read of an unmapped page.\n\nA window's header is runtime-owned and never freed, so a kept reference stays valid and reads as empty. Pass a given-back window as `reuse` to lend again without allocating. A push that moves a window off the region makes `giveBack` panic. Without `reuse`, each lend keeps 48 bytes (SHM-6, decided).\n\n`nish:net` gains `netWrite2(fd, a, aOff, aLen, b, bOff, bLen)`, which writes two ranges in one `sendmsg` with `MSG_NOSIGNAL`. An example is a response head and its body, sent without copying them together. Both ranges are bounds-checked first, and the count is clamped to fit an `i32`.\n\nThis is the first stage of writing ring records in place (#1209). The SpscRing reserve/peek API and `Http1Connection.sendBody` build on it.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/security/shm.md"
+      ],
+      "tests": [
+        "tests/link/sync_shm_window",
+        "tests/link/net_write2",
+        "tests/cases/net_write2_bounds"
+      ],
+      "commits": [
+        "42ad26e"
+      ],
+      "pr": 1214,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "fewer-cache-misses-per-request-on-cold-http1server",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "fewer cache misses per request on cold Http1Server keep-alive connections",
+      "body": "Http1Parser's fields are laid out hot-first. The buffers come first, then the window and scan state, the flags, the request's numbers and limits, and last what only keepText, an error or a chunked body reads. The size stays 200 B. The parser makes its spans array before its other arrays, and Http1Connection makes its parser before its HttpDate, so the lines a request touches sit next to each other. Http1Connection.unpark recognises a parked buffer by comparing it with the slot's noOutput before it loads the buffer's length. That is a speed-up with no behaviour of its own. Nothing the parser accepts or refuses changes, nor any wire byte, limit, status or public API.\n\nbench/http1-conn gains a 10,000-connection idleInput pool driven the way Http1Server serves a request, one request per connection in round-robin. Its shapes are idle, direct (reading straight into the lent buffer), and idle-dram and direct-dram, which sweep a 1 GiB eviction ring between requests so each connection's lines come from DRAM. It also reports peak RSS per idle connection, and misses.sh gives per-function and per-line cachegrind attribution for both builds. The direct read saves no misses and stays in the bench. No change measures a wall-time gain outside the old/old′ noise band.",
+      "metrics": [
+        "cachegrind D1 misses per idle request 10.95 -> 9.01, DRAM-cold LL 10.94 -> 9.00; ns/request idle 0.989 (old′ 0.984), idle-dram 0.968 (old′ 0.995, ranges overlap); RSS per idle connection 1026 B both"
+      ],
+      "refs": [
+        "bench/http1-conn/README.md",
+        "docs/BENCHMARKS.md",
+        "docs/security/http1-codec.md"
+      ],
+      "tests": [
+        "tests/link/net_http1_server/checks.ts"
+      ],
+      "commits": [
+        "259bd0a"
+      ],
+      "pr": 1211,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "follow-a-quic-peer-s-address-change-with",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "follow a QUIC peer's address change with path validation",
+      "body": "A QUIC connection served by `Http3Server`, and so a WebTransport session through the relay, now survives the client's NAT rebinding. A cs player whose home router gives their UDP flow a new port or address mid-match keeps their session. Before, the server routed the rebound client's packets to the right slot but kept replying to the dead address.\n\nThe rules come from RFC 9000.\n- A non-probing packet with the largest packet number so far, from a new address, after the handshake is confirmed, moves the connection (§9.3).\n- The server validates the new path with an unpredictable PATH_CHALLENGE in a datagram padded to 1,200 bytes (§8.2.1). Until the path is validated, it sends there no more than three times what it received from it.\n- Validation gives up after max(3·PTO, 6·kInitialRtt) and goes back to the last validated address (§8.2.4, §9.3.2), so a forged source cannot redirect the connection for good.\n- A probe-only packet gets its PATH_RESPONSE on its own path and moves nothing. Every PATH_RESPONSE goes to the address its challenge came from (§8.2.2).\n- A late packet from the old path does not move the connection back, and before the handshake is confirmed a datagram from another address is dropped.\n- Once the new address is validated, the congestion controller and RTT estimator start again from their initial values unless only the port changed (§9.4), and ECN validation restarts.\n\nAll path state sits in the slot and is sized when the slot is built; nothing allocates per packet, and `Arena.used()` stays flat over repeated rebinds. The server still sends `disable_active_migration`. Server-initiated migration and `preferred_address` remain out of scope. The relay README says what a rebind does to a session's per-peer count. The security record has the finding as QUIC-11.\n\nThe Interop workflow now runs the quic-interop-runner's rebind-port and rebind-addr cases against quic-go and ngtcp2. It reads their traces with tshark 4.6.9, installed from hash-pinned .debs, because Ubuntu's 4.2.2 cannot follow zero-length-DCID server packets onto the new path.\n\nRefs: docs/security/quic.md#findings (QUIC-11), docs/wp34-hosting-cs.md, docs/guide/using-nish/networking.md\nTests: tests/link/net_quic_path, tests/link/net_http3_server (rebind), tests/link/net_loopback, tests/link/net_relay (rebind), Interop rebind-port and rebind-addr\n\nPart of #1210",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "86dd82e"
+      ],
+      "pr": 1218,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "send-an-http1connection-body-from-a-caller-s",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "send an Http1Connection body from a caller's buffer",
+      "body": "* feat(runtime): shared-region windows and a two-buffer netWrite\n\n`SharedRegion.lend(at, len[, reuse])` answers a `u8[]` whose data is\nbytes [at, at + len) of the mapping, so a reader and a writer share\nbytes without a copy. `giveBack(window)` and `close()` empty every\nwindow they end, so a later index panics instead of reading an unmapped\npage. The two are compiler-known intrinsics of `nish/sync/shm`, not FFI:\na foreign function can lend a `u8[]`'s data but can never answer an\narray header.\n\n`netWrite2(fd, a, aOff, aLen, b, bOff, bLen)` in `nish:net` sends two\nchecked ranges in one `sendmsg` (MSG_NOSIGNAL), so a header and a body\nleave in one system call. A short write answers its count.\n\nTests: tests/link/sync_shm_window, tests/link/net_write2, tests/cases/net_write2_bounds\nRefs: #1209\n\n* docs(runtime): record shared-region windows and netWrite2\n\nAdd the user-guide sections for lend/giveBack and netWrite2, their\nLANGUAGE.md rules and cookbook entries, the SHM-4 to SHM-6 findings and\nthe netWrite2 property in the security records, and a stand-in sendmsg\nin net_write2_bounds that prints the iovecs the runtime builds.\n\nRefs: #1209\nTests: tests/cases/net_write2_bounds\n\n* fix(codegen): prove the netWrite2 range reads and list it in the nish:net exports\n\nThe range-check loop's bound is now `at + 2 < values.length`, so the\nthree argument reads it makes are in range by the loop condition and\nsrc/compile.ts gains no NL9007 past the performance baseline. The\nunknown-export case names netWrite2 among nish:net's exports.\n\nTests: tests/cases/reject_net_unknown_export\n\n* fix(codegen): read each netWrite2 range triple before emitting its check\n\nThe loop bound proved the three argument reads only up to the first\nemit call, so two of them still kept a bounds check and src/compile.ts\nstayed past the performance baseline. All three are now read first.\n\nTests: tests/run.js selfhost (performance ratchet)\n\n* test(runtime): pin that giveBack and close end a window's length proof\n\nA loop bound over a window no longer holds after giveBack or close inside\nthe loop, and the new cases fail if the compiler takes either call to keep\nthe window's length. Adds the wasm32 and first-buffer reject cases for\nnetWrite2, fixes LANGUAGE.md's net_write2 reference, and records SHM-6's\nlist-walk cost.\n\nTests: tests/link/sync_shm_window, tests/cases/reject_net_write2_wasm, tests/cases/reject_net_write2_element_a\n\n* test(interop): drop mem_capture_async from the emit-ts known list\n\nIt went in as refused (#1215) while async functions learnt to emit as\nTypeScript (#1212); with both on main it agrees under --emit-ts, so the\nlist, regenerated under CI's Node, no longer names it.\n\nTests: tests/run.js emit-ts\n\n* feat(runtime): send an Http1Connection body from a caller's buffer\n\n`Http1Connection.sendBody(buf, off, len)` sends a Content-Length body\nstraight from the program's array on an `Http1Server` slot: the queued\noutput (a head, a pipelined response before it) and the body leave in one\n`netWrite2`, and only what the socket did not take is copied into the\noutput through `write`, with its back-pressure and answers. It keeps no\nreference to `buf` once it returns. A chunked, empty or finished response,\na write held back, and a connection with no socket of its own (sans-IO, or\n`Http1TlsServer`, whose output is TLS records) copy as `write` does, with\nthe same bytes on the wire. The carrier names the socket in the new\n`fd` field, which `restart` and `abort` clear, so a recycled descriptor is\nnever written.\n\nTests: tests/link/net_http1_server_send_body, tests/link/net_http1_server_send_body_window\n\n* test(self): regenerate the checked goldens for Http1Connection.sendBody",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "bdde99f"
+      ],
+      "pr": 1223,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "reserve-commit-peek-and-release-on-spscring-1224",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "reserve, commit, peek and release on SpscRing",
+      "body": "An `SpscRing` producer can now write a record straight into ring memory, and a consumer can read one where it lies. Each skips one copy of the record.\n\n- `reserve(n)` answers a `u8[]` window of `n` bytes in the ring. Write it with `copyBytes` or any `u8[]` writer, then `commit(len)` publishes the first `len` bytes as one record. `abandon()` drops the reservation. When there is no contiguous room, `reserve` answers an empty window and never blocks.\n- A window is always contiguous: when the tail of the ring is too short, `commit` writes a skip marker and the record starts at offset 0. `n` is limited to half the ring less 4, so an empty ring always has room.\n- `peek()` lends the next record as a `readonly u8[]`, and `release()` frees it for the producer. A record `tryPush` wrote across the end answers empty from `peek`, and the caller takes it with `tryPop`.\n\nThe ring keeps one producer window and one consumer window and re-points them with `SharedRegion.lend`'s `reuse`, so the busy path allocates nothing and makes no system call. Memory ordering is unchanged:\n- `commit` is `tryPush`'s release (or doorbell) store of the tail.\n- `peek` is `tryPop`'s acquire load.\n- `release` is the release store of the head.\n\n`tryPush`, `tryPop`, `popBatch` and `popWait` behave as before. A second reservation, or a pop while a record is lent, stops the program and names the call. A forged skip marker or length from a peer panics, or at worst yields wrong bytes, and never a read outside the region (SHM-7, SHM-8).",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/shared-memory.md",
+        "docs/wp47-shared-memory.md",
+        "docs/security/shm.md"
+      ],
+      "tests": [
+        "tests/link/sync_ring_inplace"
+      ],
+      "commits": [
+        "9ccf496"
+      ],
+      "pr": 1224,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "let-http1connection-sendbody-take-a-readonly-u8-1227",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "let Http1Connection.sendBody take a readonly u8[]",
+      "body": "* feat(runtime): shared-region windows and a two-buffer netWrite\n\n`SharedRegion.lend(at, len[, reuse])` answers a `u8[]` whose data is\nbytes [at, at + len) of the mapping, so a reader and a writer share\nbytes without a copy. `giveBack(window)` and `close()` empty every\nwindow they end, so a later index panics instead of reading an unmapped\npage. The two are compiler-known intrinsics of `nish/sync/shm`, not FFI:\na foreign function can lend a `u8[]`'s data but can never answer an\narray header.\n\n`netWrite2(fd, a, aOff, aLen, b, bOff, bLen)` in `nish:net` sends two\nchecked ranges in one `sendmsg` (MSG_NOSIGNAL), so a header and a body\nleave in one system call. A short write answers its count.\n\nTests: tests/link/sync_shm_window, tests/link/net_write2, tests/cases/net_write2_bounds\nRefs: #1209\n\n* docs(runtime): record shared-region windows and netWrite2\n\nAdd the user-guide sections for lend/giveBack and netWrite2, their\nLANGUAGE.md rules and cookbook entries, the SHM-4 to SHM-6 findings and\nthe netWrite2 property in the security records, and a stand-in sendmsg\nin net_write2_bounds that prints the iovecs the runtime builds.\n\nRefs: #1209\nTests: tests/cases/net_write2_bounds\n\n* fix(codegen): prove the netWrite2 range reads and list it in the nish:net exports\n\nThe range-check loop's bound is now `at + 2 < values.length`, so the\nthree argument reads it makes are in range by the loop condition and\nsrc/compile.ts gains no NL9007 past the performance baseline. The\nunknown-export case names netWrite2 among nish:net's exports.\n\nTests: tests/cases/reject_net_unknown_export\n\n* fix(codegen): read each netWrite2 range triple before emitting its check\n\nThe loop bound proved the three argument reads only up to the first\nemit call, so two of them still kept a bounds check and src/compile.ts\nstayed past the performance baseline. All three are now read first.\n\nTests: tests/run.js selfhost (performance ratchet)\n\n* test(runtime): pin that giveBack and close end a window's length proof\n\nA loop bound over a window no longer holds after giveBack or close inside\nthe loop, and the new cases fail if the compiler takes either call to keep\nthe window's length. Adds the wasm32 and first-buffer reject cases for\nnetWrite2, fixes LANGUAGE.md's net_write2 reference, and records SHM-6's\nlist-walk cost.\n\nTests: tests/link/sync_shm_window, tests/cases/reject_net_write2_wasm, tests/cases/reject_net_write2_element_a\n\n* test(interop): drop mem_capture_async from the emit-ts known list\n\nIt went in as refused (#1215) while async functions learnt to emit as\nTypeScript (#1212); with both on main it agrees under --emit-ts, so the\nlist, regenerated under CI's Node, no longer names it.\n\nTests: tests/run.js emit-ts\n\n* feat(runtime): send an Http1Connection body from a caller's buffer\n\n`Http1Connection.sendBody(buf, off, len)` sends a Content-Length body\nstraight from the program's array on an `Http1Server` slot: the queued\noutput (a head, a pipelined response before it) and the body leave in one\n`netWrite2`, and only what the socket did not take is copied into the\noutput through `write`, with its back-pressure and answers. It keeps no\nreference to `buf` once it returns. A chunked, empty or finished response,\na write held back, and a connection with no socket of its own (sans-IO, or\n`Http1TlsServer`, whose output is TLS records) copy as `write` does, with\nthe same bytes on the wire. The carrier names the socket in the new\n`fd` field, which `restart` and `abort` clear, so a recycled descriptor is\nnever written.\n\nTests: tests/link/net_http1_server_send_body, tests/link/net_http1_server_send_body_window\n\n* test(self): regenerate the checked goldens for Http1Connection.sendBody\n\n* fix(runtime): let Http1Connection.sendBody take a readonly u8[]\n\nsendBody and write take their body as a readonly u8[], so a view the caller\nmay only read, such as a ring's peek, is handed over as it is. The copy\nbehind write is a loop over a checked range instead of copyBytes, which\nrefuses a readonly source, and http1WriteChunk reads its data as readonly.\n\nTests: tests/link/net_http1_server_send_body\n\n* fix(runtime): let copyBytes copy from a readonly u8[]\n\ncopyBytes and its walk take their source as a readonly u8[], a compatible\nwidening: every u8[] is still accepted, and dst stays a u8[], so the copy\nwithin one array is unchanged. http1ServerCopy goes back to one copyBytes\nfor a readonly body.\n\n* test(self): regenerate the checked goldens for the readonly sources",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7715cb7"
+      ],
+      "pr": 1227,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "complete-the-spscring-in-place-notes-1228",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "complete the SpscRing in-place notes",
+      "body": "This fills in what #1224's review found missing from the SpscRing reserve/peek docs.\n\nThe guide now says:\n- What a window reference sees when it is kept past its call: the next `reserve` or `peek` re-points it.\n- Reserved bytes are not zeroed, so commit only what you wrote.\n- A `push` onto a window is caught at `commit` or `abandon`.\n- `popWait` also stops the program while a record is lent.\n- A peek consumer polls. There is no wait call for peeking yet.\n\nA ring of 8 bytes cannot reserve, and reserving from one now stops the program with a message saying so. A ring of 16 can reserve 4 bytes.\n\nThe shm security record changes:\n- It names `commit` as the writer of the skip marker.\n- It recounts its findings: five fixed, one open, two decided.\n- It names the tests for SHM-7. New tests pin the guard that refuses a forged mid-lap skip marker in `tryPop`, `popBatch` and `peek`.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/shared-memory.md",
+        "docs/security/shm.md"
+      ],
+      "tests": [
+        "tests/link/sync_ring_inplace"
+      ],
+      "commits": [
+        "42307a3"
+      ],
+      "pr": 1228,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "publish-the-install-library-and-security-pages-on",
+      "type": "docs",
+      "breaking": false,
+      "title": "publish the install, library and security pages on the docs site",
+      "body": "The docs site served the guide alone, and a guide link to INSTALL.md, the standard library's README or a security record came back as a download. INSTALL.md, std/README.md, RUN_UNDER_NODE.md, BENCHMARKS.md, CHANGELOG.md and all 44 security records are now pages of it, so links between pages stay relative and open there, as they do on GitHub, and the header's Changelog opens its page. LANGUAGE.md is held back for now and unchanged: every page that links it, and the header, names it on GitHub. A link from a page to any other file (a source file, a test, a design note) names it on GitHub at main, and the benchmark generators write BENCHMARKS.md's links the same way.\n\nThe site spells some heading IDs differently from GitHub and gives headings below level 4 none, so headings pages link to across that gap carry an `<a id>` with GitHub's spelling and the scroll margin the site gives its own headings. docs/check-links.mjs checks this repo's GitHub URLs against the checkout, refuses a relative link from a page to a non-page, and names an anchor that would land on GitHub but not on the site; its slug rule agrees with the site's preview on all 1,230 headings it rendered.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f255ad2"
+      ],
+      "pr": 1222,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "benchmark-ring-records-copied-versus-in-place-1229",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "benchmark ring records copied versus in place",
+      "body": "`bench/ring-inplace` pushes JSON records of about 1, 4 and 10 KB through a 16 MB `SpscRing` to an `Http1Connection` and a socket reader, in three pinned processes. It runs two ways:\n- **copied:** render into a buffer, `tryPush`, `tryPop`, then `write`\n- **in place:** `reserve`, render into the window, `commit`, `peek`, `sendBody`, then `release`\n\nIt reports, per mode and size:\n- consumer p50 and p99 in ns\n- the pipeline in ns per message\n- body bytes copied per message, counted exactly by the program, with a same-mode noise band for each figure\n\nEach run checks the result. An FNV-1a sum of every body rendered must equal the sum of every body the reader heard, and every byte sent must be heard. Every wait in the processes and ring has a deadline, a non-zero child exit fails the run, and the driver has a timeout.\n\nIn place copies no body bytes in user space. The copied path copies about three times each body: 2,921 / 12,137 / 30,569 bytes per message. The kernel's socket copy is not counted in either mode.\n\nThe consumer is faster only at 10 KB (-13.7 %, outside its ±6.2 % band). At 1 and 4 KB the difference is inside the band. Over the whole pipeline, in place is slower at 10 KB (+18.3 %, outside ±8.0 %). This bench does not show why.",
+      "metrics": [
+        "consumer p50 in place vs copied +4.0 % (±8.2 %) / -5.1 % (±12.9 %) / -13.7 % (±6.2 %); pipeline +7.4 % (±7.4 %) / -0.1 % (±19.6 %) / +18.3 % (±8.0 %) at 1 / 4 / 10 KB, 5 rounds x 2 runs x 50,000 messages, 4-core cloud VM, 3 pinned CPUs"
+      ],
+      "refs": [
+        "docs/wp47-shared-memory.md#records-copied-or-in-place"
+      ],
+      "tests": [
+        "node bench/ring-inplace/run.mjs --quick"
+      ],
+      "commits": [
+        "e29d7d5"
+      ],
+      "pr": 1229,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    }
+  ]
+}
