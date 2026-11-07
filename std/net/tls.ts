@@ -1181,7 +1181,9 @@ export class TlsServer {
    * Whether the handshake has derived secret `index` (`TLS_SECRET_*`) for this connection.
    *
    * @param index A `TLS_SECRET_*` index; any index outside 0 to 30 is never known.
-   * @returns True once the secret is derived; it stays true after `wipeSecret`, until `restart`.
+   * @returns True once the secret is derived; it stays true after `wipeSecret`, until `restart`,
+   *   except that `sign` clears `TLS_SECRET_TO_BE_SIGNED` and the client's Finished clears
+   *   `TLS_SECRET_HANDSHAKE`.
    */
   known(index: i32): boolean {
     return index >= 0 && index < 31 && (this.held & (1 << index)) !== 0

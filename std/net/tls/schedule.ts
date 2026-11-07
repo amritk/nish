@@ -424,7 +424,8 @@ export class TlsTranscript {
   /**
    * Makes an empty transcript and all six of its hashers, once, so that `reset` can reuse them.
    *
-   * @param hashLength 32 to hash with SHA-256, 48 to hash with SHA-384.
+   * @param hashLength 32 to hash with SHA-256, 48 to hash with SHA-384, or 0 for a
+   *   transcript whose hash `reset` names later.
    */
   constructor(hashLength: i32) {
     this.hashLength = hashLength

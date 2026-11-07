@@ -356,7 +356,11 @@ export class TlsRecordServer {
   /** The server's flight is signed and finished, so its Handshake-level output may be sealed. */
   private flightReady: boolean = false
   peerClosed: boolean = false
-  /** The client's TCP stream ended. Without a `close_notify` before it, that is truncation and the connection failed. */
+  /**
+   * The client's TCP stream ended. Without a `close_notify` before it, that is truncation and the connection failed.
+   *
+   * @internal Read by `net/tls-tcp.ts`.
+   */
   ended: boolean = false
   /** Whether the server's first handshake message has been seen, which decides the compatibility record. */
   private firstMessageSeen: boolean = false
@@ -1340,8 +1344,9 @@ export class TlsRecordServer {
    * @param data The array that holds the application data.
    * @param off Where in `data` the bytes start.
    * @param len How many bytes, from `off`, to send.
-   * @returns How many bytes were sealed, from 1 up to `len` (0 for a `len` of 0); `TLS_RECORD_RESET` when
-   *     nothing was sealed because the connection failed; or one of the negative codes above.
+   * @returns How many bytes were sealed, from 1 up to `len` (0 for a `len` of 0 on an open connection
+   *     with Application keys and no KeyUpdate pending); `TLS_RECORD_RESET` when nothing was sealed
+   *     because the connection failed; or one of the negative codes above, whatever `len` is.
    */
   write(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
@@ -1483,7 +1488,9 @@ export class TlsRecordServer {
    *
    * @param signature The signature over `signatureInput()`, made with the certificate's private key.
    * @returns 0 when the flight is sealed, or the `TLS_ALERT_*` value the connection failed with;
-   *     `internal_error`, without failing it, on a connection already open or closed.
+   *     `internal_error`, without failing it, on a connection already open or closed. A connection
+   *     that failed without an alert (a truncated stream, the peer's alert, `abort`) also answers 0:
+   *     `state` tells it from a sealed flight.
    */
   sign(signature: u8[]): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
@@ -1514,7 +1521,9 @@ export class TlsRecordServer {
    * @param strikes The carrier's record of tickets already resumed, where the one resumed now is recorded.
    * @param now The time now, in `monotonicNanos()`.
    * @returns 0 when the answering flight is sealed, or the `TLS_ALERT_*` value the connection failed with;
-   *     `internal_error`, without failing it, on a connection already open or closed.
+   *     `internal_error`, without failing it, on a connection already open or closed. A connection
+   *     that failed without an alert (a truncated stream, the peer's alert, `abort`) also answers 0:
+   *     `state` tells it from a sealed flight.
    */
   resume(
     current: Secret<u8[]>,

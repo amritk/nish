@@ -1028,7 +1028,8 @@ export class TlsRecordClient {
    * @param data The bytes to send; only read, never kept.
    * @param off Where the bytes start in `data`.
    * @param len How many bytes to send; with `off`, a window that must lie inside `data`.
-   * @returns How many bytes were sealed (0 only for a `len` of 0), or a negative `TLS_RECORD_*` value:
+   * @returns How many bytes were sealed (0 only for a `len` of 0 on an open connection with Application
+   *   keys and no KeyUpdate pending), or a negative `TLS_RECORD_*` value, whatever `len` is:
    *   `TLS_RECORD_RESET` when the connection failed during this call.
    */
   write(data: u8[], off: i32, len: i32): i32 {

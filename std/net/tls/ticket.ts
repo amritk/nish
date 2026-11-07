@@ -567,7 +567,10 @@ export class TlsTicketStrikes {
   capacity: i32
   /** How many ids are held or were held and expired: slots ever used. */
   filled: i32
-  /** The farthest from its home slot any id has been recorded: no entry of an id lies further along its chain. */
+  /**
+   * The farthest from its home slot any id has been recorded: no entry of an id lies further along its chain.
+   * `net/tls.ts` reads it to stop a probe.
+   */
   longest: i32
 
   /**

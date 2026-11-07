@@ -505,7 +505,7 @@ export class TlsClient {
    * The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise.
    *
    * @returns The client's own pool, one named field per secret; only the secrets the handshake has
-   *   reached hold one. It is the client's own, not a copy, and `wipe` zeroes it.
+   *   reached hold a value. It is the client's own, not a copy, and `wipe` zeroes it.
    */
   secrets(): TlsSecretPool {
     return this.hashLength === SHA384_SIZE ? this.secrets384 : this.secrets256

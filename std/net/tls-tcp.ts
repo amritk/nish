@@ -279,8 +279,6 @@ export class TlsTcpServer {
    * real randomness, and every later connection reuses its state.
    *
    * @returns The new slot's connection, failed until `accept` restarts it, already pushed onto `connections`.
-   *
-   * @internal Read by `tests/link/net_tls_record_tcp`.
    */
   build(): TlsRecordServer {
     const random: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
