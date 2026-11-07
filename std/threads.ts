@@ -2,21 +2,36 @@
  * `std/threads` — data parallelism, a scope for heterogeneous tasks, and a
  * lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
  *
- *     import { AtomicI32, Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope, scopeWithStack } from "nish/threads";
+ *     import { parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope, scopeWithStack } from "nish/threads";
  *
- *     parallelMapInto(src, dst, (x) => x * 3);
- *     const ys = parallelMap(src, (x) => x * k + b); // k, b: `const` locals, read by the body
- *     const sq = parallelFrom(n, (i) => i * i);
- *     const total = parallelReduce(src, (a, b) => a + b, 0);
- *     {
- *       using s = scope();
- *       s.spawn(sumOf, xs, out, 0);
- *       s.spawn(maxOf, ys, out, 1);
- *     } // both tasks have run, and `out` holds both answers
- *     {
- *       using s = scopeWithStack(64 * 1024 * 1024); // each task's thread has a 64 MiB stack
- *       s.spawn(checkModule, ast, out, 0);
- *     }
+ *     const sumOf = (xs: i32[]): i32 => {
+ *       let total: i32 = 0;
+ *       for (const x of xs) {
+ *         total = total + x;
+ *       }
+ *       return total;
+ *     };
+ *
+ *     export const main = (): i32 => {
+ *       const src: i32[] = [1, 2, 3, 4];
+ *       const k: i32 = 10;
+ *       const dst: i32[] = [0, 0, 0, 0];
+ *       parallelMapInto(src, dst, (x) => x * 3);               // dst is [3, 6, 9, 12]
+ *       const ys = parallelMap(src, (x) => x * k);             // [10, 20, 30, 40]: `k` is read by the body
+ *       const sq = parallelFrom(4, (i) => i * i);              // [0, 1, 4, 9]
+ *       const total = parallelReduce(src, (a, b) => a + b, 0); // 10
+ *       const out: i32[] = [0, 0];
+ *       {
+ *         using s = scope();
+ *         s.spawn(sumOf, ys, out, 0);
+ *         s.spawn(sumOf, sq, out, 1);
+ *       } // both tasks have run, and `out` is [100, 14]
+ *       {
+ *         using s = scopeWithStack(64 * 1024 * 1024); // each task's thread has a 64 MiB stack
+ *         s.spawn(sumOf, src, out, 0);
+ *       }
+ *       return total;
+ *     };
  *
  * **What is written here is the meaning, not the implementation.** Each body
  * below is the sequential program, and it is what runs under Node, what
@@ -31,7 +46,7 @@
  * allocates first. So the length check, its message and the order a reduce combines in
  * are this file's, whichever way the program is compiled.
  *
- * What makes the region safe is checked at the call, not trusted
+ * **What makes the region safe is checked at the call, not trusted**
  * (docs/LANGUAGE.md, "Data parallelism"): the function passed as `f` may write
  * nothing its caller could observe, may allocate only temporaries it drops
  * before it returns — they are given back after every element — `dst` may not
@@ -42,7 +57,7 @@
  * body as a parameter of its own, which no body may write through. Importing this module compiles the program with `--threads`,
  * because every worker needs an arena of its own.
  *
- * A reduce is deterministic. `src` is split into `min(64, ceil(n / BLOCK))`
+ * **A reduce is deterministic.** `src` is split into `min(64, ceil(n / BLOCK))`
  * blocks, each block is folded from `identity`, and the block results are
  * combined left to right — here, on one thread, and by the compiled program on
  * any number of them — so an `f64` sum is the same bits on one core or sixty
@@ -160,6 +175,14 @@ const dstTooShort = (have: i32, want: i32): void => {
  * `dst[i] = f(src[i])` for every index of `src`, on as many threads as the
  * machine has and the length is worth. `dst` must be at least as long as
  * `src`, which is checked once, before any element is written.
+ *
+ * @param src the elements to map, read and not written.
+ * @param dst where `f(src[i])` is written, at the same index. If it is shorter
+ *   than `src` the program stops before any element is written; any elements
+ *   past `src.length` are left as they were.
+ * @param f computes one element from one element of `src`. It is called once
+ *   per element, natively on any thread and in no set order, so it may write
+ *   nothing its caller could observe (see the module header).
  */
 export const parallelMapInto = <T, U>(src: T[], dst: U[], f: (x: T) => U): void => {
   const n: i32 = toI32(src.length)
@@ -173,6 +196,15 @@ export const parallelMapInto = <T, U>(src: T[], dst: U[], f: (x: T) => U): void 
  * `f` folded over `src`, blockwise from `identity` and then left to right over
  * the blocks, so the answer does not depend on how many threads computed it.
  * An empty `src` answers `identity`.
+ *
+ * @param src the elements to fold, read and not written.
+ * @param f combines an accumulator with an element, and the blocks' results
+ *   with each other, so it must be associative for the answer to mean the
+ *   fold it reads as.
+ * @param identity what each block's fold starts from, which must be `f`'s
+ *   identity, such as `0` for `+`.
+ * @returns the fold of every element of `src`, the same however many threads
+ *   computed it.
  */
 export const parallelReduce = <T>(src: T[], f: (acc: T, x: T) => T, identity: T): T => {
   const blocks: i32 = reduceBlockCount(toI32(src.length))
@@ -192,6 +224,11 @@ export const parallelReduce = <T>(src: T[], f: (acc: T, x: T) => T, identity: T)
  * A new array of `f(src[i])` for every index of `src`: `parallelMapInto` into
  * an array this call allocates, before any element is computed, so nothing
  * but the map itself can hold it while the region runs.
+ *
+ * @param src the elements to map, read and not written.
+ * @param f computes one element from one element of `src`, under the rules
+ *   `parallelMapInto` gives its `f`.
+ * @returns a new array of `src.length` elements, which the caller owns.
  */
 export const parallelMap = <T, U>(src: T[], f: (x: T) => U): U[] => {
   const dst = new Array<U>(toI32(src.length))
@@ -217,6 +254,11 @@ const fromRange = <U>(dst: U[], f: (i: i32) => U, lo: i32, hi: i32): void => {
  * A new array of `n` elements, `f(i)` at index `i`, computed on as many
  * threads as the machine has and the length is worth: `Array.from({ length:
  * n }, (_, i) => f(i))`, with the array allocated before any element is.
+ *
+ * @param n how many elements the array has.
+ * @param f computes the element at an index from the index alone, under the
+ *   rules `parallelMapInto` gives its `f`.
+ * @returns a new array of `n` elements, which the caller owns.
  */
 export const parallelFrom = <U>(n: i32, f: (i: i32) => U): U[] => {
   const dst = new Array<U>(n)
@@ -284,6 +326,7 @@ const slotWritten = (at: i32): boolean => at < 0 || at >= 0
  */
 export class ThreadScope {
   /**
+   * @internal Used by `scopeWithStack`.
    * The stack, in bytes, of each thread the scope's tasks run on, or 0 for the
    * platform's default. Only `scopeWithStack` writes it, and only
    * `nish_scope_join` (runtime/runtime-parallel.c) reads it, as the scope's
@@ -296,6 +339,14 @@ export class ThreadScope {
    * Run `entry(arg)` on a thread of its own and store its answer in `dst[at]`
    * when the scope closes. `at` is checked here, before the task is taken, and
    * again when its answer is stored.
+   *
+   * @param entry the task: a function of one argument, run on a thread of its
+   *   own when the scope closes.
+   * @param arg what `entry` is called with when the task runs.
+   * @param dst the array the task's answer is stored in, once every task of
+   *   the scope has finished.
+   * @param at the index in `dst` the answer goes to. One outside `dst` stops
+   *   the program here, before the task is taken.
    */
   spawn<A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void {
     if (!slotWritten(at)) {
@@ -317,6 +368,9 @@ export class ThreadScope {
    * a scope is only ever the receiver of a `spawn` statement, so `s.spawnWith(...)`
    * written in a program is refused by that rule (NL2389), as passing the
    * scope would be.
+   *
+   * @param entry the task, whose answer is dropped.
+   * @param arg what `entry` is called with when the task runs.
    */
   spawnWith<A, R>(entry: (arg: A) => R, arg: A): void {
     runWith(entry, arg)
@@ -327,6 +381,8 @@ export class ThreadScope {
    * captured `const` locals are its arguments, on a thread of its own when the
    * scope closes, and store nothing. Only the compiler names this method, and
    * a program that names it is refused as `spawnWith`'s is (NL2389).
+   *
+   * @param entry the task: an arrow of no parameters, whose answer is dropped.
    */
   spawnThunk<R>(entry: () => R): void {
     runThunk(entry)
@@ -342,7 +398,12 @@ export class ThreadScope {
   }
 }
 
-/** A new scope, for a `using` declaration: `using s = scope()`. */
+/**
+ * A new scope, for a `using` declaration: `using s = scope()`.
+ *
+ * @returns a new scope of its own, whose tasks run on threads of the
+ *   platform's default stack size and are joined when the block ends.
+ */
 export const scope = (): ThreadScope => new ThreadScope()
 
 /**
@@ -360,6 +421,11 @@ const MIN_STACK: i32 = 131072
  * rounds `bytes` up to the page size and adds a guard page below it, so a task
  * that overflows it faults instead of writing past it. Under Node, and on a
  * target without threads, the size is checked and has no other effect.
+ *
+ * @param bytes the least stack each task's thread gets, in bytes. Below
+ *   131,072 (128 KiB) is a compile error when it is a constant (NL2584) and
+ *   stops the program when it is computed.
+ * @returns a new scope of its own, joined when the block ends.
  */
 export const scopeWithStack = (bytes: i32): ThreadScope => {
   if (bytes < MIN_STACK) {
@@ -385,6 +451,7 @@ export class MutexGuard<T> {
   value: T
 
   /**
+   * @internal Read by nothing written here.
    * The lock word: 0 when the lock is free, 1 while a guard's block holds it.
    * Nothing written here reads or writes it. Natively the compiler takes it
    * with an acquire compare-and-swap in `lock()` and gives it back with a
@@ -393,6 +460,12 @@ export class MutexGuard<T> {
    */
   word: i32 = 0
 
+  /**
+   * A guard over `value`, with the lock free. `Mutex` makes its one guard
+   * with this.
+   *
+   * @param value the data the lock owns, held as it is, not copied.
+   */
   constructor(value: T) {
     this.value = value
   }
@@ -422,6 +495,13 @@ export class Mutex<T> {
   /** The one guard, which holds the data; only `lock()` hands it out. */
   private guard: MutexGuard<T>
 
+  /**
+   * A free lock that owns `init`.
+   *
+   * @param init the data the lock owns. It must be fresh all the way down: a
+   *   scalar, or a `new` expression or a literal built only from fresh values
+   *   (NL2463), so that nothing else holds a path to it that skips the lock.
+   */
   constructor(init: T) {
     this.guard = new MutexGuard<T>(init)
   }
@@ -429,6 +509,9 @@ export class Mutex<T> {
   /**
    * The guard over the data, for a `using` declaration: `using g = m.lock()`.
    * Natively the call waits until the lock is free and takes it.
+   *
+   * @returns the lock's one guard, the same object on every call, through
+   *   whose `value` the data is read and written.
    */
   lock(): MutexGuard<T> {
     return this.guard
@@ -454,35 +537,63 @@ export class AtomicI32 {
   /** The value; named only by this class's methods, which the compiler emits. */
   private value: i32
 
+  /**
+   * An atomic holding `value`.
+   *
+   * @param value the starting value.
+   */
   constructor(value: i32) {
     this.value = value
   }
 
-  /** The value. */
+  /**
+   * The value.
+   *
+   * @returns the value at the moment of the read.
+   */
   load(): i32 {
     return this.value
   }
 
-  /** Sets the value to `value`. */
+  /**
+   * Sets the value to `value`.
+   *
+   * @param value the new value.
+   */
   store(value: i32): void {
     this.value = value
   }
 
-  /** Adds `delta`, wrapping, and answers the value before. */
+  /**
+   * Adds `delta`, wrapping, and answers the value before.
+   *
+   * @param delta how much to add; a negative one subtracts.
+   * @returns the value just before the addition.
+   */
   add(delta: i32): i32 {
     const old = this.value
     this.value = wrappingAdd(old, delta)
     return old
   }
 
-  /** Subtracts `delta`, wrapping, and answers the value before. */
+  /**
+   * Subtracts `delta`, wrapping, and answers the value before.
+   *
+   * @param delta how much to subtract; a negative one adds.
+   * @returns the value just before the subtraction.
+   */
   sub(delta: i32): i32 {
     const old = this.value
     this.value = wrappingSub(old, delta)
     return old
   }
 
-  /** Keeps the smaller of the value and `value`, and answers the value before. */
+  /**
+   * Keeps the smaller of the value and `value`, and answers the value before.
+   *
+   * @param value the candidate, stored only when it is below the value.
+   * @returns the value just before the update.
+   */
   min(value: i32): i32 {
     const old = this.value
     if (value < old) {
@@ -491,7 +602,12 @@ export class AtomicI32 {
     return old
   }
 
-  /** Keeps the larger of the value and `value`, and answers the value before. */
+  /**
+   * Keeps the larger of the value and `value`, and answers the value before.
+   *
+   * @param value the candidate, stored only when it is above the value.
+   * @returns the value just before the update.
+   */
   max(value: i32): i32 {
     const old = this.value
     if (value > old) {
@@ -500,14 +616,27 @@ export class AtomicI32 {
     return old
   }
 
-  /** Sets the value to `value` and answers the value before. */
+  /**
+   * Sets the value to `value` and answers the value before.
+   *
+   * @param value the new value.
+   * @returns the value it replaced.
+   */
   exchange(value: i32): i32 {
     const old = this.value
     this.value = value
     return old
   }
 
-  /** Sets the value to `desired` if it is `expected`, and answers the value it saw. */
+  /**
+   * Sets the value to `desired` if it is `expected`, and answers the value it
+   * saw.
+   *
+   * @param expected the value the update requires.
+   * @param desired the value stored when the value is `expected`.
+   * @returns the value seen before the update: `expected` exactly when the
+   *   update happened.
+   */
   compareExchange(expected: i32, desired: i32): i32 {
     const old = this.value
     if (old === expected) {
@@ -538,35 +667,65 @@ export class AtomicI64 {
   /** The value; named only by this class's methods, which the compiler emits. */
   private value: i64
 
+  /**
+   * An atomic holding `value`.
+   *
+   * @param value the starting value.
+   */
   constructor(value: i64) {
     this.value = value
   }
 
-  /** The value. */
+  /**
+   * The value.
+   *
+   * @returns the value at the moment of the read.
+   */
   load(): i64 {
     return this.value
   }
 
-  /** Sets the value to `value`. */
+  /**
+   * Sets the value to `value`.
+   *
+   * @param value the new value.
+   */
   store(value: i64): void {
     this.value = value
   }
 
-  /** Adds `delta` and answers the value before; natively the sum wraps at 64 bits. */
+  /**
+   * Adds `delta` and answers the value before; natively the sum wraps at 64
+   * bits.
+   *
+   * @param delta how much to add; a negative one subtracts.
+   * @returns the value just before the addition.
+   */
   add(delta: i64): i64 {
     const old = this.value
     this.value = old + delta
     return old
   }
 
-  /** Subtracts `delta` and answers the value before; natively the difference wraps at 64 bits. */
+  /**
+   * Subtracts `delta` and answers the value before; natively the difference
+   * wraps at 64 bits.
+   *
+   * @param delta how much to subtract; a negative one adds.
+   * @returns the value just before the subtraction.
+   */
   sub(delta: i64): i64 {
     const old = this.value
     this.value = old - delta
     return old
   }
 
-  /** Keeps the smaller of the value and `value`, and answers the value before. */
+  /**
+   * Keeps the smaller of the value and `value`, and answers the value before.
+   *
+   * @param value the candidate, stored only when it is below the value.
+   * @returns the value just before the update.
+   */
   min(value: i64): i64 {
     const old = this.value
     if (value < old) {
@@ -575,7 +734,12 @@ export class AtomicI64 {
     return old
   }
 
-  /** Keeps the larger of the value and `value`, and answers the value before. */
+  /**
+   * Keeps the larger of the value and `value`, and answers the value before.
+   *
+   * @param value the candidate, stored only when it is above the value.
+   * @returns the value just before the update.
+   */
   max(value: i64): i64 {
     const old = this.value
     if (value > old) {
@@ -584,14 +748,27 @@ export class AtomicI64 {
     return old
   }
 
-  /** Sets the value to `value` and answers the value before. */
+  /**
+   * Sets the value to `value` and answers the value before.
+   *
+   * @param value the new value.
+   * @returns the value it replaced.
+   */
   exchange(value: i64): i64 {
     const old = this.value
     this.value = value
     return old
   }
 
-  /** Sets the value to `desired` if it is `expected`, and answers the value it saw. */
+  /**
+   * Sets the value to `desired` if it is `expected`, and answers the value it
+   * saw.
+   *
+   * @param expected the value the update requires.
+   * @param desired the value stored when the value is `expected`.
+   * @returns the value seen before the update: `expected` exactly when the
+   *   update happened.
+   */
   compareExchange(expected: i64, desired: i64): i64 {
     const old = this.value
     if (old === expected) {
@@ -634,21 +811,29 @@ export class Channel<T> {
   private head: i32 = 0
 
   /**
+   * @internal Read by nothing written here.
    * Natively: the runtime's handle on the channel (runtime/runtime-parallel.c),
    * 0 until the channel is first used. Nothing written here reads or writes it.
    */
   state: i64 = 0
 
+  /** An empty channel, open until its scope joins. */
   constructor() {
     this.queue = []
   }
 
-  /** Hand `x` to the receiver. It never waits: a channel holds as many values as are sent. */
+  /**
+   * Hand `x` to the receiver. It never waits: a channel holds as many values
+   * as are sent.
+   *
+   * @param x the value to send. A string is copied out of the sender's arena.
+   */
   send(x: T): void {
     this.queue.push(x)
   }
 
   /**
+   * @internal Called by `ChannelWalk`.
    * The next value, for a loop that has found one waiting (`ChannelWalk`).
    * Natively the loop is the compiler's, which takes a value with the runtime
    * instead, and nothing calls this.
@@ -659,7 +844,7 @@ export class Channel<T> {
     return x
   }
 
-  /** Whether a value is waiting, under Node, where nothing is sent while a loop runs. */
+  /** @internal Called by `ChannelWalk`. Whether a value is waiting, under Node, where nothing is sent while a loop runs. */
   ready(): boolean {
     return this.head < toI32(this.queue.length)
   }

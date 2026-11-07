@@ -11,8 +11,10 @@
  *     const end: i32 = z.compress(src, 0, n, out, 0); // -1: no room
  *     const got: i32 = new ZlibDecompressor().decompress(out, 0, end, back, 0, n); // < 0: an error
  *
- * The objects allocate their tables once and nothing per call; the free
- * functions build one for a single call. The header written is `0x78` and
+ * **Allocated once.** The objects allocate their tables once and nothing per
+ * call; the free functions build one for a single call.
+ *
+ * **What is written and what is refused.** The header written is `0x78` and
  * the `FLEVEL` of the level, with no preset dictionary. Reading refuses a
  * method other than 8, a window over 32 KB, a header whose check fails
  * (`ZLIB_ERR_HEADER`) and a preset dictionary (`ZLIB_ERR_DICTIONARY`, since
@@ -53,7 +55,12 @@ const zlibWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
 export class ZlibCompressor {
   private readonly deflater: Deflater
 
-  /** A compressor at `level`, 0 to 9; another level panics. */
+  /**
+   * A compressor at `level`, 0 to 9; another level panics.
+   *
+   * @param level How hard to compress, `DEFLATE_STORE` (0) to
+   *   `DEFLATE_BEST` (9); it also picks the header's `FLEVEL`.
+   */
   constructor(level: i32) {
     this.deflater = new Deflater(level)
   }
@@ -63,6 +70,15 @@ export class ZlibCompressor {
    * stream and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out`
    * cannot hold it; `compressBound(len)` bytes always can. A window outside
    * its array panics. Allocates nothing.
+   *
+   * @param src The array that holds the data to compress.
+   * @param off Where in `src` the data starts.
+   * @param len How many bytes of data to compress.
+   * @param out The caller's array the stream is written into.
+   * @param at Where in `out` the stream starts.
+   * @returns The index in `out` one past the stream's last byte, so the
+   *   stream is `out[at .. result)`; or `DEFLATE_NO_ROOM`, after which the
+   *   bytes of `out` from `at` may have been overwritten and mean nothing.
    */
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     zlibWindow("ZlibCompressor.compress", src, off, len)
@@ -113,6 +129,22 @@ export class ZlibDecompressor {
    * answers where the output ends, or a negative `ZLIB_ERR_*` or
    * `DEFLATE_ERR_*`. A window outside its array, or a negative `limit`,
    * panics. Allocates nothing.
+   *
+   * @param src The array that holds the zlib stream.
+   * @param off Where in `src` the stream starts.
+   * @param len How many bytes the stream is; every one must belong to it,
+   *   since a byte after the trailer is `DEFLATE_ERR_TRAILING`.
+   * @param out The caller's array the data is written into.
+   * @param at Where in `out` the data starts.
+   * @param limit The most bytes of data to accept; a longer stream is
+   *   `DEFLATE_ERR_OUTPUT_LIMIT`, as is one that reaches the end of `out`.
+   * @returns The index in `out` one past the data's last byte, so the data
+   *   is `out[at .. result)`; or a negative code: `DEFLATE_ERR_TRUNCATED`
+   *   (the input ends inside the stream), `ZLIB_ERR_HEADER`,
+   *   `ZLIB_ERR_DICTIONARY`, `ZLIB_ERR_ADLER`, `DEFLATE_ERR_TRAILING`,
+   *   `DEFLATE_ERR_OUTPUT_LIMIT` or another `DEFLATE_ERR_*`. After an error
+   *   the bytes of `out` from `at` may have been overwritten and mean
+   *   nothing.
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
     zlibWindow("ZlibDecompressor.decompress", src, off, len)
@@ -159,10 +191,34 @@ export class ZlibDecompressor {
   }
 }
 
-/** `ZlibCompressor.compress` at `level`, building the compressor for this call alone. */
+/**
+ * `ZlibCompressor.compress` at `level`, building the compressor for this call
+ * alone.
+ *
+ * @param src The array that holds the data to compress.
+ * @param off Where in `src` the data starts.
+ * @param len How many bytes of data.
+ * @param out The caller's array the stream is written into.
+ * @param at Where in `out` the stream starts.
+ * @param level How hard to compress, 0 to 9; another level panics.
+ * @returns The index in `out` one past the stream's last byte, or
+ *   `DEFLATE_NO_ROOM`, as `ZlibCompressor.compress` answers.
+ */
 export const zlibCompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 =>
   new ZlibCompressor(level).compress(src, off, len, out, at)
 
-/** `ZlibDecompressor.decompress`, building the decompressor for this call alone. */
+/**
+ * `ZlibDecompressor.decompress`, building the decompressor for this call
+ * alone.
+ *
+ * @param src The array that holds the zlib stream.
+ * @param off Where in `src` the stream starts.
+ * @param len How many bytes the stream is, trailer included.
+ * @param out The caller's array the data is written into.
+ * @param at Where in `out` the data starts.
+ * @param limit The most bytes of data to accept.
+ * @returns The index in `out` one past the data's last byte, or a negative
+ *   code, as `ZlibDecompressor.decompress` answers.
+ */
 export const zlibDecompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 =>
   new ZlibDecompressor().decompress(src, off, len, out, at, limit)

@@ -2,16 +2,17 @@
  * `nish/sync/ring` — bounded lock-free queues of byte records in a shared
  * region, for handing work between processes on different cores.
  *
- *     import { createRegion, unlinkRegion } from "nish/sync/shm"
+ *     import { createRegion, openRegion } from "nish/sync/shm"
  *     import { initSpscRing, attachSpscRing, spscRingBytes } from "nish/sync/ring"
  *
  *     const region = createRegion("jobs", spscRingBytes(65536)).expect("region")
  *     const ring = initSpscRing(region, 0, 65536, true)
- *     ring.tryPush(job, 0, job.length) // false when full
+ *     ring.tryPush(job, 0, toI32(job.length)) // false when full
  *
- *     // The other process, with the region opened by name:
- *     const ring = attachSpscRing(region, 0).expect("ring")
- *     const n = ring.popWait(buf, 0, 1000) // the record's length, or RING_EMPTY
+ *     // The other process opens the region by name and attaches:
+ *     const view = openRegion("jobs").expect("open")
+ *     const rx = attachSpscRing(view, 0).expect("ring")
+ *     const n = rx.popWait(buf, 0, 1000) // the record's length, or RING_EMPTY
  *
  * **Two rings.** `SpscRing` has one producer and one consumer, and holds
  * records of any length up to its capacity back to back: a record costs its
@@ -141,10 +142,25 @@ const ringCheckPlace = (region: SharedRegion, base: i32, bytes: i64, what: strin
   }
 }
 
-/** The bytes an `SpscRing` of `capacity` data bytes takes from its base. */
+/**
+ * The bytes an `SpscRing` of `capacity` data bytes takes from its base: the
+ * 256-byte header and the data. Nothing is checked here; `initSpscRing`
+ * refuses a capacity that is not a power of two from 8.
+ * @param capacity the ring's data bytes, as `initSpscRing` will be given them
+ * @returns how many bytes from the ring's base the region must hold
+ */
 export const spscRingBytes = (capacity: i32): i32 => RING_DATA_AT + capacity
 
-/** The bytes an `MpscRing` of `slots` slots of `slotBytes` takes from its base. */
+/**
+ * The bytes an `MpscRing` of `slots` slots of `slotBytes` takes from its base:
+ * the 256-byte header and each slot's 16-byte head and payload. Nothing is
+ * checked here; `initMpscRing` refuses a shape it cannot make.
+ * @param slots how many records the ring holds at once, as `initMpscRing`
+ *   will be given it
+ * @param slotBytes the longest record, in bytes, as `initMpscRing` will be
+ *   given it
+ * @returns how many bytes from the ring's base the region must hold
+ */
 export const mpscRingBytes = (slots: i32, slotBytes: i32): i32 =>
   RING_DATA_AT + slots * (RING_SLOT_HEAD + slotBytes)
 
@@ -215,6 +231,11 @@ export class SpscRing {
   head: i64
   /** The other side's position, as last loaded. */
   private seenHead: i64
+  /**
+   * The producer's position as this object, consuming, last loaded it: the
+   * cache a pop compares `head` with before it loads the producer's counter
+   * again. A snapshot, possibly behind the shared counter.
+   */
   seenTail: i64
   /** `reserve`'s window, re-pointed by each call; null until the first. */
   private wnd: u8[] | null = null
@@ -229,6 +250,14 @@ export class SpscRing {
   /** The position of the record `lengthAt` last read, past any skip marker. */
   private found: i64 = 0
 
+  /**
+   * Reads the header of the ring at `base`: its capacity and doorbell, and
+   * both positions (each an `ACQUIRE` load). It checks nothing; a program
+   * gets its ring from `initSpscRing` or `attachSpscRing`, which check the
+   * place and the magic first.
+   * @param region the region the ring lives in
+   * @param base the byte offset of the ring's header in `region`
+   */
   constructor(region: SharedRegion, base: i32) {
     this.region = region
     this.base = base
@@ -243,7 +272,15 @@ export class SpscRing {
   /**
    * Appends `src[off, off + len)` as one record: false when the ring has no
    * room for it now. A record longer than the ring could ever hold panics,
-   * and so does a call while a reservation is open.
+   * and so does a call while a reservation is open. The bytes are plain
+   * copies, published to the consumer by one store of the producer's position:
+   * `RELEASE`, or `SEQ_CST` followed by the doorbell check on a doorbell ring.
+   * @param src the bytes to queue
+   * @param off where in `src` the record starts
+   * @param len the record's length in bytes, from 0; its length rounded up to
+   *   4, plus 4, may not exceed `capacity`. A range outside `src` panics
+   * @returns true when the record is queued, false when the ring is too full
+   *   for it now (nothing is written)
    */
   tryPush(src: readonly u8[], off: i32, len: i32): boolean {
     if (this.reserved >= 0) {
@@ -305,6 +342,11 @@ export class SpscRing {
    * for one; outside that, or while a reservation is open, it panics. A ring
    * of 8 has no such `n` and always panics; one of 16 allows 4. The bytes
    * are not zeroed: they hold whatever the ring last held there.
+   * @param n the most bytes the record may have; `commit` may publish fewer
+   * @returns the producer's window, the same array on every call after the
+   *   first and re-pointed by each: its bytes are the ring's own memory, so
+   *   what is written into it lands in the region, which the consumer may
+   *   read once `commit` publishes it. Length `n`, or 0 when there is no room
    */
   reserve(n: i32): u8[] {
     if (this.reserved >= 0) {
@@ -355,6 +397,8 @@ export class SpscRing {
    * store `tryPush` makes. The window is given back, so it is empty after.
    * Panics without a reservation, for `len` outside `[0, n]`, or when a
    * `push` moved the window out of the ring.
+   * @param len how many of the window's bytes, from its start, make the
+   *   record: from 0 to the `n` that `reserve` was given
    */
   commit(len: i32): void {
     const n: i32 = this.reserved
@@ -432,7 +476,13 @@ export class SpscRing {
    * Moves the next record into `dst` from `off` and answers its length:
    * `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued)
    * when it is longer than `dst.length - off`. Panics while `peek` has a
-   * record lent.
+   * record lent. The producer's position is loaded `ACQUIRE` (only when the
+   * cache says the ring is empty), and the freed space is handed back with a
+   * `RELEASE` store of the consumer's position.
+   * @param dst the buffer the record is copied into
+   * @param off where in `dst` the record's first byte goes
+   * @returns the record's length in bytes, or `RING_EMPTY`, or
+   *   `RING_TOO_SMALL`
    */
   tryPop(dst: u8[], off: i32): i32 {
     this.notPeeked("tryPop")
@@ -453,7 +503,15 @@ export class SpscRing {
    * Moves up to `lens.length` records into `dst`, back to back from 0, while
    * they fit, and sets `lens[i]` to each one's length: how many it moved. One
    * load of the producer's position and one store of the consumer's, however
-   * many records it moves. Panics while `peek` has a record lent.
+   * many records it moves. Panics while `peek` has a record lent. The load is
+   * `ACQUIRE` and the store, made only when a record moved, is `RELEASE`.
+   * @param dst the buffer the records are copied into, with no gap between
+   *   them; the first record that does not fit the room left ends the batch
+   *   and stays queued
+   * @param lens where each moved record's length is written, from index 0;
+   *   its length is the most records one call moves
+   * @returns how many records it moved, 0 when the ring is empty or the next
+   *   record does not fit `dst`; `lens[0, count)` holds their lengths
    */
   popBatch(dst: u8[], lens: i32[]): i32 {
     this.notPeeked("popBatch")
@@ -489,7 +547,16 @@ export class SpscRing {
    * limit): `RING_EMPTY` only once that has passed. `SHM_UNSUPPORTED` for a
    * ring without a doorbell, or off Linux, where the caller polls `tryPop`.
    * Panics while `peek` has a record lent, from `tryPop`, so the message
-   * names `tryPop`.
+   * names `tryPop`. The deadline is checked between rounds of polling, so a
+   * wait can run past it by one round; a ring without a doorbell still polls
+   * one round before it answers `SHM_UNSUPPORTED`.
+   * @param dst the buffer the record is copied into
+   * @param off where in `dst` the record's first byte goes
+   * @param timeoutMs the longest wait in milliseconds, from the call; 0 polls
+   *   one round, negative waits with no limit
+   * @returns what `tryPop` answers for the record (its length, or
+   *   `RING_TOO_SMALL`), `RING_EMPTY` when the time ran out, or
+   *   `SHM_UNSUPPORTED`
    */
   popWait(dst: u8[], off: i32, timeoutMs: i32): i32 {
     const deadline: i64 = ringDeadline(timeoutMs)
@@ -520,7 +587,12 @@ export class SpscRing {
    * there is none, and also for a record peek cannot lend: one `tryPush`
    * wrapped across the end of the ring, or one of length 0. On an empty
    * answer nothing is lent, and `tryPop` takes the record if there is one.
-   * Panics while a record is lent.
+   * Panics while a record is lent. The producer's position is loaded
+   * `ACQUIRE` when the cache says the ring is empty.
+   * @returns the consumer's window, the same array on every call after the
+   *   first and re-pointed by each: its bytes are the ring's own memory, not a
+   *   copy, and stay the record's until `release`, which empties the window.
+   *   Length 0 when nothing is lent
    */
   peek(): readonly u8[] {
     this.notPeeked("peek")
@@ -561,7 +633,21 @@ export class SpscRing {
 /**
  * Writes an `SpscRing`'s header at `base` and answers the ring: `capacity`
  * data bytes, a power of two from 8, and `doorbell` for `popWait`. The
- * memory is the creator's to give; a ring already there is reset.
+ * memory is the creator's to give; a ring already there is reset. The header
+ * is stored `RELAXED` and its magic last with `RELEASE`, so an attach whose
+ * `ACQUIRE` load reads that store sees the header stored before it. A reset
+ * ring had the magic already, so an attach racing a reset has no such
+ * promise.
+ * @param region the region the ring lives in
+ * @param base the byte offset of the ring's header, a multiple of 64 with
+ *   `spscRingBytes(capacity)` bytes of the region from it; anything else
+ *   panics
+ * @param capacity the ring's data bytes, a power of two from 8 (anything else
+ *   panics); a record costs its length rounded up to 4, plus 4
+ * @param doorbell whether a consumer's `popWait` may sleep on Linux's futex,
+ *   at the cost of a `SEQ_CST` store and load on every push
+ * @returns a new `SpscRing` on the empty ring, for this process's producer
+ *   or consumer
  */
 export const initSpscRing = (region: SharedRegion, base: i32, capacity: i32, doorbell: boolean): SpscRing => {
   if (capacity < 8 || !ringIsPowerOfTwo(capacity)) {
@@ -577,7 +663,18 @@ export const initSpscRing = (region: SharedRegion, base: i32, capacity: i32, doo
   return new SpscRing(region, base)
 }
 
-/** The `SpscRing` an `initSpscRing` wrote at `base`; an error when there is none. */
+/**
+ * The `SpscRing` an `initSpscRing` wrote at `base`; an error when there is
+ * none. The magic is loaded `ACQUIRE`, which pairs with the `RELEASE` store
+ * of it that the init function makes last.
+ * @param region the region the ring lives in, as this process mapped it
+ * @param base the byte offset of the ring's header, a multiple of 64 inside
+ *   the region; anything else panics, and so does a ring whose data would run
+ *   past the region's end
+ * @returns a new `SpscRing` that starts from both positions as the header
+ *   holds them now, or the reason there is no ring at `base`: no SPSC magic,
+ *   or a capacity no `initSpscRing` writes
+ */
 export const attachSpscRing = (region: SharedRegion, base: i32): Result<SpscRing, string> => {
   ringCheckPlace(region, base, toI64(RING_DATA_AT), "an SPSC ring")
   if (region.loadI32(base + RING_MAGIC_AT, ACQUIRE) !== RING_SPSC_MAGIC) {
@@ -609,6 +706,14 @@ export class MpscRing {
   /** The consumer's position: records ever popped (this object's, as the consumer). */
   head: i64
 
+  /**
+   * Reads the header of the ring at `base`: its shape, its doorbell and the
+   * consumer's position (an `ACQUIRE` load). It checks nothing; a program
+   * gets its ring from `initMpscRing` or `attachMpscRing`, which check the
+   * place and the magic first.
+   * @param region the region the ring lives in
+   * @param base the byte offset of the ring's header in `region`
+   */
   constructor(region: SharedRegion, base: i32) {
     this.region = region
     this.base = base
@@ -626,7 +731,17 @@ export class MpscRing {
 
   /**
    * Queues `src[off, off + len)` as one record: false when every slot is
-   * taken now. A record longer than a slot panics.
+   * taken now. A record longer than a slot panics. The producer claims a slot
+   * with a `RELAXED` compare-exchange on the enqueue position, after an
+   * `ACQUIRE` load of the slot's sequence number; it copies the record in and
+   * publishes it with one store of that number, `RELEASE`, or `SEQ_CST`
+   * followed by the doorbell check on a doorbell ring.
+   * @param src the bytes to queue
+   * @param off where in `src` the record starts
+   * @param len the record's length in bytes, from 0 to `slotBytes`; a range
+   *   outside `src` panics
+   * @returns true when the record is queued, false when the slot it would
+   *   take has not been freed by the consumer yet (nothing is written)
    */
   tryPush(src: readonly u8[], off: i32, len: i32): boolean {
     if (len < 0 || len > this.slotBytes) {
@@ -684,7 +799,13 @@ export class MpscRing {
   /**
    * Moves the next record into `dst` from `off` and answers its length:
    * `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued)
-   * when it is longer than `dst.length - off`.
+   * when it is longer than `dst.length - off`. The slot's sequence number is
+   * loaded `ACQUIRE`, and the slot is freed for the producers with a
+   * `RELEASE` store of it.
+   * @param dst the buffer the record is copied into
+   * @param off where in `dst` the record's first byte goes
+   * @returns the record's length in bytes, or `RING_EMPTY`, or
+   *   `RING_TOO_SMALL`
    */
   tryPop(dst: u8[], off: i32): i32 {
     if (!this.ready(ACQUIRE)) {
@@ -703,6 +824,15 @@ export class MpscRing {
   /**
    * Moves up to `lens.length` records into `dst`, back to back from 0, while
    * they fit, and sets `lens[i]` to each one's length: how many it moved.
+   * Unlike `SpscRing.popBatch` it costs what as many `tryPop`s would: an
+   * `ACQUIRE` load and a `RELEASE` store per record.
+   * @param dst the buffer the records are copied into, with no gap between
+   *   them; the first record that does not fit the room left ends the batch
+   *   and stays queued
+   * @param lens where each moved record's length is written, from index 0;
+   *   its length is the most records one call moves
+   * @returns how many records it moved, 0 when the ring is empty or the next
+   *   record does not fit `dst`; `lens[0, count)` holds their lengths
    */
   popBatch(dst: u8[], lens: i32[]): i32 {
     let count: i32 = 0
@@ -724,7 +854,20 @@ export class MpscRing {
     return count
   }
 
-  /** `SpscRing.popWait`, for this ring. */
+  /**
+   * `SpscRing.popWait`, for this ring: `tryPop`, but on an empty ring it polls
+   * briefly and then sleeps until a push rings the doorbell, for at most
+   * `timeoutMs`, checked between rounds of polling. A ring without a doorbell,
+   * or one off Linux, answers `SHM_UNSUPPORTED` after a round that finds
+   * nothing.
+   * @param dst the buffer the record is copied into
+   * @param off where in `dst` the record's first byte goes
+   * @param timeoutMs the longest wait in milliseconds, from the call; 0 polls
+   *   one round, negative waits with no limit
+   * @returns what `tryPop` answers for the record (its length, or
+   *   `RING_TOO_SMALL`), `RING_EMPTY` when the time ran out, or
+   *   `SHM_UNSUPPORTED`
+   */
   popWait(dst: u8[], off: i32, timeoutMs: i32): i32 {
     const deadline: i64 = ringDeadline(timeoutMs)
     while (true) {
@@ -752,7 +895,23 @@ export class MpscRing {
 /**
  * Writes an `MpscRing`'s header at `base` and answers the ring: `slots`
  * slots, a power of two from 2, of `slotBytes` each, a multiple of 8 from 8,
- * and `doorbell` for `popWait`. A ring already there is reset.
+ * and `doorbell` for `popWait`. A ring already there is reset. The header and
+ * every slot's sequence number are stored `RELAXED` and the magic last with
+ * `RELEASE`, so an attach whose `ACQUIRE` load reads that store sees them
+ * all. A reset ring had the magic already, so an attach racing a reset has
+ * no such promise.
+ * @param region the region the ring lives in
+ * @param base the byte offset of the ring's header, a multiple of 64 with
+ *   `mpscRingBytes(slots, slotBytes)` bytes of the region from it; anything
+ *   else panics
+ * @param slots how many records the ring holds at once, a power of two from
+ *   2; anything else panics
+ * @param slotBytes the longest record, in bytes, a multiple of 8 from 8;
+ *   anything else panics
+ * @param doorbell whether a consumer's `popWait` may sleep on Linux's futex,
+ *   at the cost of a `SEQ_CST` store and load on every push
+ * @returns a new `MpscRing` on the empty ring, for this process's producer
+ *   or consumer
  */
 export const initMpscRing = (
   region: SharedRegion,
@@ -786,7 +945,18 @@ export const initMpscRing = (
   return new MpscRing(region, base)
 }
 
-/** The `MpscRing` an `initMpscRing` wrote at `base`; an error when there is none. */
+/**
+ * The `MpscRing` an `initMpscRing` wrote at `base`; an error when there is
+ * none. The magic is loaded `ACQUIRE`, which pairs with the `RELEASE` store
+ * of it that the init function makes last.
+ * @param region the region the ring lives in, as this process mapped it
+ * @param base the byte offset of the ring's header, a multiple of 64 inside
+ *   the region; anything else panics, and so does a ring whose slots would
+ *   run past the region's end
+ * @returns a new `MpscRing` that starts from the consumer's position as the
+ *   header holds it now, or the reason there is no ring at `base`: no MPSC
+ *   magic, or a shape no `initMpscRing` writes
+ */
 export const attachMpscRing = (region: SharedRegion, base: i32): Result<MpscRing, string> => {
   ringCheckPlace(region, base, toI64(RING_DATA_AT), "an MPSC ring")
   if (region.loadI32(base + RING_MAGIC_AT, ACQUIRE) !== RING_MPSC_MAGIC) {

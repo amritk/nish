@@ -1,14 +1,24 @@
 /**
  * `std/text` — the string operations a program has to write itself.
  *
- * The language gives a string `length`, `charCodeAt`, `substring`, `indexOf`,
- * `startsWith`, `endsWith` and `===` by content, and an array `join`. It does
+ *     import { replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
+ *
+ *     export const main = (): i32 => {
+ *       const lines: string[] = splitLines("a b\n  c  \n"); // ["a b", "  c  "]
+ *       const words: string[] = splitWhitespace(lines[0]); // ["a", "b"]
+ *       const c: string = trim(lines[1]); // "c"
+ *       const dashed: string = replaceAll("a b", " ", "-"); // "a-b"
+ *       return toI32(words.length);
+ *     };
+ *
+ * **The language gives a string `length`, `charCodeAt`, `substring`, `indexOf`,
+ * `startsWith`, `endsWith` and `===` by content, and an array `join`.** It does
  * **not** give `split`, `trim`, `toLowerCase` or a regular expression (that is
  * `std/regex`), and that is a decision rather than a gap: each allocates, and
  * several need a locale or a character table this runtime has no room for
  * (`docs/wp7-runtime.md` keeps the runtime under a measured byte budget).
  *
- * So a program that reads a file and wants its lines writes the loop. This
+ * **So a program that reads a file and wants its lines writes the loop.** This
  * module is that loop, written once. Every offset here is a **byte** offset,
  * like `s.length` itself, and every function but one is ASCII-only where it
  * inspects characters at all — a UTF-8 string passes through `splitLines` and
@@ -16,7 +26,7 @@
  * multi-byte sequence. The one is `codePointLength`, which counts code points
  * rather than bytes and answers the same natively and under Node; it says how.
  *
- * Every width this module declares is spelled (`i32`, never `number`) *and*
+ * **Every width this module declares is spelled** (`i32`, never `number`) *and*
  * every value a builtin hands it is converted at the read: `s.length`,
  * `a.length`, `s.charCodeAt(i)` and `s.indexOf(t)` all answer `number`
  * (LANGUAGE.md, *Arrays and strings as receivers*), and `number` is `f64` under
@@ -54,6 +64,9 @@ const isTextBlankByte = (code: i32): boolean =>
  * the end. A `\r\n` line ending keeps its `\r`: stripping it would make this
  * function guess at the file's provenance, and a caller that needs it gone can
  * `trimEnd` each line.
+ *
+ * @param text The text to split; an empty one has no lines.
+ * @returns A fresh array of the lines, in order.
  */
 export const splitLines = (text: string): string[] => {
   const length: i32 = toI32(text.length)
@@ -84,6 +97,11 @@ export const splitLines = (text: string): string[] => {
  * Leading, trailing and repeated blanks produce no empty elements, which is what
  * splitting a line of command-line flags wants — and it is why this is not
  * `split(text, " ")`, which would.
+ *
+ * @param text The text to split; the blanks are space, tab, newline and
+ *   carriage return.
+ * @returns A fresh array of the non-blank runs, in order; empty when `text` is
+ *   all blank.
  */
 export const splitWhitespace = (text: string): string[] => {
   const length: i32 = toI32(text.length)
@@ -109,7 +127,13 @@ export const splitWhitespace = (text: string): string[] => {
   return parts
 }
 
-/** `text` without its leading blank bytes. */
+/**
+ * `text` without its leading blank bytes.
+ *
+ * @param text The text to trim; the blanks are space, tab, newline and carriage return.
+ * @returns `text` from its first non-blank byte on, or `""` when it is all
+ *   blank.
+ */
 export const trimStart = (text: string): string => {
   const length: i32 = toI32(text.length)
   let i: i32 = 0
@@ -119,7 +143,13 @@ export const trimStart = (text: string): string => {
   return text.substring(i, length)
 }
 
-/** `text` without its trailing blank bytes. */
+/**
+ * `text` without its trailing blank bytes.
+ *
+ * @param text The text to trim; the blanks are space, tab, newline and carriage return.
+ * @returns `text` up to and including its last non-blank byte, or `""` when it
+ *   is all blank.
+ */
 export const trimEnd = (text: string): string => {
   let end: i32 = toI32(text.length)
   while (end > 0 && isTextBlankByte(toI32(text.charCodeAt(end - 1)))) {
@@ -128,13 +158,23 @@ export const trimEnd = (text: string): string => {
   return text.substring(0, end)
 }
 
-/** `text` without blank bytes at either end. */
+/**
+ * `text` without blank bytes at either end.
+ *
+ * @param text The text to trim; the blanks are space, tab, newline and carriage return.
+ * @returns `text` from its first non-blank byte to its last, or `""` when it is
+ *   all blank.
+ */
 export const trim = (text: string): string => trimEnd(trimStart(text))
 
 /**
  * Whether `needle` occurs anywhere in `haystack`. One `indexOf`, named, because
  * `indexOf(...) >= 0` at a call site reads as arithmetic where the question is a
  * yes or a no. `contains(s, "")` is `true`, as `indexOf("")` is `0`.
+ *
+ * @param haystack The text searched.
+ * @param needle The text looked for, compared byte for byte.
+ * @returns `true` when `needle` occurs in `haystack`.
  */
 export const contains = (haystack: string, needle: string): boolean => toI32(haystack.indexOf(needle)) >= 0
 
@@ -148,6 +188,12 @@ export const contains = (haystack: string, needle: string): boolean => toI32(hay
  *
  * An empty `needle` answers `text` unchanged, because every other answer is a
  * choice about how many empty matches a string contains.
+ *
+ * @param text The text whose occurrences are replaced.
+ * @param needle The text looked for. Occurrences are found left to right and
+ *   do not overlap: after a match the search goes on past its end.
+ * @param replacement The text each occurrence becomes; it is not searched.
+ * @returns The text with every occurrence replaced.
  */
 export const replaceAll = (text: string, needle: string, replacement: string): string => {
   const needleLength: i32 = toI32(needle.length)
@@ -176,6 +222,12 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
  * they are equal. A caller comparing generated text against a golden wants the
  * first differing line and not a boolean, because printing two whole files is
  * not a diagnostic.
+ *
+ * @param left One side's lines.
+ * @param right The other side's lines, compared to `left`'s with `!==` by
+ *   content.
+ * @returns The index of the first line that differs, the shorter length when
+ *   one side is a prefix of the other, or `-1` when they are equal.
  */
 export const firstDifference = (left: string[], right: string[]): i32 => {
   const leftLength: i32 = toI32(left.length)
@@ -216,6 +268,14 @@ const NON_ASCII: i32 = 128
  * 16 or 32 bytes at a time (docs/LANGUAGE.md, "Byte search"). It is
  * **variable-time**: how long it takes says where the first match is, so it is
  * never for secret data.
+ *
+ * @param text The text searched.
+ * @param bytes The set of bytes looked for, written as a string of 1 to 16
+ *   ASCII characters; their order does not matter.
+ * @param from Where the search starts, as a byte offset, clamped into
+ *   `[0, text.length]`.
+ * @returns The byte offset of the first match at or after `from`, or -1 when
+ *   there is none.
  */
 export const indexOfAny = (text: string, bytes: string, from: i32): i32 => {
   const count: i32 = toI32(bytes.length)
@@ -320,6 +380,9 @@ const textUnitsAreBytes = (): boolean => toI32("\u00e9".length) === 2
  * stray continuation byte counts nothing, or the two halves of a pair joined
  * at run time, which are one string under Node and two lone surrogates
  * natively.
+ *
+ * @param text The text whose code points are counted.
+ * @returns How many code points `text` holds, counted as above.
  */
 export const codePointLength = (text: string): i32 => {
   const length: i32 = toI32(text.length)

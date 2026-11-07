@@ -1,14 +1,27 @@
 /**
  * `std/testing` — a test runner for Nish programs, written in Nish.
  *
- * The repository's own suite is `tests/run.js`, a Node program: it compiles the
- * corpus, assembles it, links it and diffs the result against a golden, so it
- * has to be able to spawn a compiler and read a directory. This module answers
- * the other half of the question — a *program* that checks its own behaviour
- * and reports it — and it answers it in the language, with no Node anywhere.
+ *     import { Suite } from "nish/testing";
  *
- * Five language rules shape the API, and each of them removes a shape that a
- * JavaScript test framework would have reached for first:
+ *     export const main = (): i32 => {
+ *       const t = new Suite("arrays");
+ *       const a: i32[] = [1, 2, 3];
+ *       if (!t.eqI32("length", toI32(a.length), 3)) {
+ *         return t.done();          // a[2] below would panic, not fail
+ *       }
+ *       t.eqI32("last", a[2], 3);
+ *       return t.done();            // 0 when nothing failed, 1 otherwise
+ *     };
+ *
+ * **It is the other half of `tests/run.js`.** The repository's own suite is
+ * `tests/run.js`, a Node program: it compiles the corpus, assembles it, links
+ * it and diffs the result against a golden, so it has to be able to spawn a
+ * compiler and read a directory. This module answers the other half of the
+ * question — a *program* that checks its own behaviour and reports it — and it
+ * answers it in the language, with no Node anywhere.
+ *
+ * **Five language rules shape the API**, and each of them removes a shape that
+ * a JavaScript test framework would have reached for first:
  *
  *   1. **A function is not a value** ([LANGUAGE.md](../docs/LANGUAGE.md) §
  *      Functions), so there is no `test("name", () => { ... })`. A suite is an
@@ -33,14 +46,14 @@
  *   5. **There are no optional or default parameters**, so every assertion
  *      takes its name and its detail in full.
  *
- * The output is deliberately the shape `tests/run.js` prints — `PASS  <name>`,
- * `FAIL  <name>` with an indented detail line, `SKIP  <name> (<reason>)`, and a
- * summary that ends `N passed, M failed, K skipped` — so a Nish test program
- * reads like the rest of the suite and a skip is counted rather than merely
- * mentioned. A green run that skipped half its checks should look different
- * from one that proved everything.
+ * **The output is deliberately the shape `tests/run.js` prints** —
+ * `PASS  <name>`, `FAIL  <name>` with an indented detail line,
+ * `SKIP  <name> (<reason>)`, and a summary that ends
+ * `N passed, M failed, K skipped` — so a Nish test program reads like the rest
+ * of the suite and a skip is counted rather than merely mentioned. A green run that skipped half its checks should
+ * look different from one that proved everything.
  *
- * The widths are spelled explicitly (`i32`, `i64`, `f64`) rather than as
+ * **The widths are spelled explicitly** (`i32`, `i64`, `f64`) rather than as
  * `number`, so the module means the same thing under `--number-mode f64` as it
  * does by default, exactly as `examples/arrays.ts` does — and every length this
  * module reads from a builtin is converted with `toI32`, because `.length`
@@ -49,18 +62,6 @@
  * comparisons against a length below would lower to `fcmp` on an `f64` in that
  * mode and to `icmp` on an `i32` here, which is the same module compiling to
  * two different programs.
- *
- *     import { Suite } from "../std/testing";
- *
- *     export const main = (): number => {
- *       const t = new Suite("arrays");
- *       const a: i32[] = [1, 2, 3];
- *       if (!t.eqI32("length", a.length, 3)) {
- *         return t.done();          // a[2] below would panic, not fail
- *       }
- *       t.eqI32("last", a[2], 3);
- *       return t.done();            // 0 when nothing failed, 1 otherwise
- *     };
  */
 
 /**
@@ -146,12 +147,24 @@ export class Suite {
    */
   private failures: string[]
 
+  /**
+   * An empty suite: nothing passed, failed or skipped yet.
+   *
+   * @param name what the summary line `done` prints starts with, so several
+   *   suites in one program stay apart.
+   */
   constructor(name: string) {
     this.name = name
     this.failures = []
   }
 
-  /** Records a pass. Public because a program with a check of its own shape still wants the tally. */
+  /**
+   * Records a pass. Public because a program with a check of its own shape
+   * still wants the tally.
+   *
+   * @param name the check's name, printed after `PASS`.
+   * @returns `true`, so a check of its own shape can answer what this answers.
+   */
   pass(name: string): boolean {
     this.passed += 1
     console.log(`PASS  ${name}`)
@@ -162,6 +175,10 @@ export class Suite {
    * Records a failure, with `detail` on its own indented line when there is
    * one. An empty `detail` prints no second line, which is what a check whose
    * name already says everything wants.
+   *
+   * @param name the check's name, printed after `FAIL` and recapped by `done`.
+   * @param detail what went wrong, printed on the next line; empty for none.
+   * @returns `false`, so a check of its own shape can answer what this answers.
    */
   fail(name: string, detail: string): boolean {
     this.failed += 1
@@ -177,12 +194,23 @@ export class Suite {
    * Records a check that did not run, and why. It answers `void` rather than a
    * `boolean` because there is no outcome to branch on: the caller has already
    * decided to skip, the way `tests/run.js` decides when `llvm-as` is missing.
+   *
+   * @param name the check's name, printed after `SKIP`.
+   * @param reason why it did not run, printed in parentheses after the name.
    */
   skip(name: string, reason: string): void {
     this.skipped += 1
     console.log(`SKIP  ${name} (${reason})`)
   }
 
+  /**
+   * Passes when `condition` is true.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param condition what the check asserts.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
+   */
   ok(name: string, condition: boolean): boolean {
     if (condition) {
       return this.pass(name)
@@ -190,6 +218,15 @@ export class Suite {
     return this.fail(name, "expected true, got false")
   }
 
+  /**
+   * Passes when `actual` equals `expected`; a failure prints both.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param actual the value the program computed.
+   * @param expected the value it should be.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
+   */
   eqBool(name: string, actual: boolean, expected: boolean): boolean {
     if (actual === expected) {
       return this.pass(name)
@@ -197,6 +234,15 @@ export class Suite {
     return this.fail(name, `expected ${expected}, got ${actual}`)
   }
 
+  /**
+   * Passes when `actual` equals `expected`; a failure prints both.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param actual the value the program computed.
+   * @param expected the value it should be.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
+   */
   eqI32(name: string, actual: i32, expected: i32): boolean {
     if (actual === expected) {
       return this.pass(name)
@@ -204,6 +250,15 @@ export class Suite {
     return this.fail(name, `expected ${expected}, got ${actual}`)
   }
 
+  /**
+   * Passes when `actual` equals `expected`; a failure prints both.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param actual the value the program computed.
+   * @param expected the value it should be.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
+   */
   eqI64(name: string, actual: i64, expected: i64): boolean {
     if (actual === expected) {
       return this.pass(name)
@@ -215,6 +270,12 @@ export class Suite {
    * Exact `f64` equality, which is `fcmp oeq`: `NaN` is equal to nothing, so a
    * check of a computation that can produce one fails rather than passing by
    * accident. Use `nearF64` for anything that went through arithmetic.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param actual the value the program computed.
+   * @param expected the value it should be.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
    */
   eqF64(name: string, actual: f64, expected: f64): boolean {
     if (actual === expected) {
@@ -227,6 +288,14 @@ export class Suite {
    * `f64` equality within `tolerance`, the absolute difference. The tolerance
    * is a parameter rather than a constant here because the right epsilon
    * belongs to the computation, not to the harness.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param actual the value the program computed.
+   * @param expected the value it should be.
+   * @param tolerance the largest difference that still passes, inclusive. A
+   *   `NaN` on either side fails whatever it is.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
    */
   nearF64(name: string, actual: f64, expected: f64, tolerance: f64): boolean {
     let delta: f64 = actual - expected
@@ -243,6 +312,12 @@ export class Suite {
    * String equality by content (`nish_str_eq`), which is what `===` on two
    * strings already means. The values are quoted in the message so that a
    * trailing space or an empty string is visible in the diff.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param actual the value the program computed.
+   * @param expected the value it should be.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
    */
   eqStr(name: string, actual: string, expected: string): boolean {
     if (actual === expected) {
@@ -261,6 +336,12 @@ export class Suite {
    * The detail quotes the needle in full and the haystack only to
    * `TESTING_EXCERPT` bytes: the needle is what a reader compares, and the
    * haystack is what they have already got.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param haystack the text searched, such as captured output.
+   * @param needle the text it must contain; an empty one is found in anything.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
    */
   contains(name: string, haystack: string, needle: string): boolean {
     if (toI32(haystack.indexOf(needle)) >= 0) {
@@ -279,6 +360,13 @@ export class Suite {
    * nothing is met by anything. The detail names the first fragment that is
    * missing and how many are, because a detail that quoted all of them would bury
    * the one a reader fixes first.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param haystack the text searched, such as captured output.
+   * @param needles the fragments it must contain, in any order and each
+   *   anywhere; empty ones are skipped.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
    */
   containsAll(name: string, haystack: string, needles: string[]): boolean {
     let looked: i32 = 0
@@ -317,6 +405,12 @@ export class Suite {
    * by hand. `<end of input>` is the side that ran out, which is what a missing
    * or an extra line at the end looks like from here, and the line number is the
    * one an editor takes.
+   *
+   * @param name the check's name, printed after `PASS` or `FAIL`.
+   * @param actual the lines the program produced.
+   * @param expected the lines it should have produced.
+   * @returns whether the check passed, so the caller can stop before a read
+   *   that depends on it.
    */
   eqLines(name: string, actual: string[], expected: string[]): boolean {
     const at: i32 = testingFirstDifferentLine(actual, expected)
@@ -333,6 +427,8 @@ export class Suite {
    * nothing failed, 1 otherwise. A skip is not a failure, so it does not move
    * the code — it moves the count on the summary line, which is the whole
    * reason the count is printed.
+   *
+   * @returns 0 when no check failed and 1 otherwise, for `main` to return.
    */
   done(): i32 {
     if (toI32(this.failures.length) > 0) {

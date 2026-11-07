@@ -176,7 +176,13 @@ export class GzipCompressor {
   private readonly deflater: Deflater
   private readonly crc: Crc32
 
-  /** A compressor at `level`, 0 to 9 (`DEFLATE_FAST`, `DEFLATE_DEFAULT`, ...); another level panics. */
+  /**
+   * A compressor at `level`, 0 to 9 (`DEFLATE_FAST`, `DEFLATE_DEFAULT`, ...);
+   * another level panics.
+   *
+   * @param level How hard to compress, `DEFLATE_STORE` (0) to
+   *   `DEFLATE_BEST` (9); 1 and 9 also set the header's `XFL`.
+   */
   constructor(level: i32) {
     this.deflater = new Deflater(level)
     this.crc = new Crc32()
@@ -187,6 +193,15 @@ export class GzipCompressor {
    * member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out`
    * cannot hold it; `compressBound(len)` bytes always can. A window outside
    * its array panics. Allocates nothing.
+   *
+   * @param src The array that holds the data to compress.
+   * @param off Where in `src` the data starts.
+   * @param len How many bytes of data to compress.
+   * @param out The caller's array the member is written into.
+   * @param at Where in `out` the member starts.
+   * @returns The index in `out` one past the member's last byte, so the
+   *   member is `out[at .. result)`; or `DEFLATE_NO_ROOM`, after which the
+   *   bytes of `out` from `at` may have been overwritten and mean nothing.
    */
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     gzipWindow("GzipCompressor.compress", src, off, len)
@@ -205,7 +220,14 @@ export class GzipCompressor {
   }
 }
 
-/** The most bytes `GzipFixedCompressor.compress` writes for `n` bytes of input. */
+/**
+ * The most bytes `GzipFixedCompressor.compress` writes for `n` bytes of input.
+ *
+ * @param n The length of the input, in bytes; a negative `n` answers the
+ *   bound of 0.
+ * @returns A size in bytes, not a position: a `room` of this many always
+ *   holds the member.
+ */
 export const gzipFixedBound = (n: i32): i32 => fixedDeflateBound(n) + GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE
 
 /**
@@ -230,6 +252,18 @@ export class GzipFixedCompressor {
    * will take stops early on an input that does not shrink.
    * `gzipFixedBound(len)` always fits. A window outside its array panics.
    * Allocates nothing.
+   *
+   * @param src The array that holds the data to compress.
+   * @param off Where in `src` the data starts.
+   * @param len How many bytes of data to compress.
+   * @param out The caller's array the member is written into.
+   * @param at Where in `out` the member starts.
+   * @param room How many bytes of `out` from `at` the member may use; the
+   *   window `out[at .. at + room)` must lie inside `out`.
+   * @returns The index in `out` one past the member's last byte, so the
+   *   member is `out[at .. result)`; or `DEFLATE_NO_ROOM`, after which the
+   *   bytes of `out[at .. at + room)` may have been overwritten and mean
+   *   nothing.
    */
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32 {
     gzipWindow("GzipFixedCompressor.compress", src, off, len)
@@ -277,6 +311,21 @@ export class GzipDecompressor {
    * `DEFLATE_ERR_TRUNCATED` or another `DEFLATE_ERR_*` for a malformed
    * stream. An empty input is truncated. A window outside its array, or a
    * negative `limit`, panics. Allocates nothing.
+   *
+   * @param src The array that holds the gzip data, one member or several.
+   * @param off Where in `src` the first member starts.
+   * @param len How many bytes the members are; every one must belong to a
+   *   member, since anything else after the last is `GZIP_ERR_HEADER`.
+   * @param out The caller's array the data is written into, the members'
+   *   one after another.
+   * @param at Where in `out` the data starts.
+   * @param limit The most bytes of data to accept over all the members; a
+   *   longer body is `DEFLATE_ERR_OUTPUT_LIMIT`, as is one that reaches the
+   *   end of `out`.
+   * @returns The index in `out` one past the data's last byte, so the data
+   *   is `out[at .. result)`; or one of the negative codes above, after
+   *   which the bytes of `out` from `at` may have been overwritten and mean
+   *   nothing.
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
     gzipWindow("GzipDecompressor.decompress", src, off, len)
@@ -327,11 +376,32 @@ export class GzipDecompressor {
  * `GzipCompressor.compress` at `level`, building the compressor for this call
  * alone (about 330 KB, allocated and filled): keep a `GzipCompressor` for
  * anything repeated.
+ *
+ * @param src The array that holds the data to compress.
+ * @param off Where in `src` the data starts.
+ * @param len How many bytes of data to compress.
+ * @param out The caller's array the member is written into.
+ * @param at Where in `out` the member starts.
+ * @param level How hard to compress, 0 to 9; another level panics.
+ * @returns The index in `out` one past the member's last byte, or
+ *   `DEFLATE_NO_ROOM`, as `GzipCompressor.compress` answers.
  */
 export const gzipCompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 =>
   new GzipCompressor(level).compress(src, off, len, out, at)
 
-/** `GzipDecompressor.decompress`, building the decompressor for this call alone. */
+/**
+ * `GzipDecompressor.decompress`, building the decompressor for this call
+ * alone.
+ *
+ * @param src The array that holds the gzip data, one member or several.
+ * @param off Where in `src` the first member starts.
+ * @param len How many bytes the members are.
+ * @param out The caller's array the data is written into.
+ * @param at Where in `out` the data starts.
+ * @param limit The most bytes of data to accept over all the members.
+ * @returns The index in `out` one past the data's last byte, or a negative
+ *   code, as `GzipDecompressor.decompress` answers.
+ */
 export const gzipDecompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 =>
   new GzipDecompressor().decompress(src, off, len, out, at, limit)
 
@@ -360,7 +430,13 @@ export class GzipWriter {
   private started: boolean
   private finished: boolean
 
-  /** A writer at `level`, 0 to 9; another level panics. */
+  /**
+   * A writer at `level`, 0 to 9; another level panics. It is ready for a
+   * first body without a call to `start`.
+   *
+   * @param level How hard to compress, `DEFLATE_STORE` (0) to
+   *   `DEFLATE_BEST` (9).
+   */
   constructor(level: i32) {
     this.deflater = new Deflater(level)
     this.crc = new Crc32()
@@ -395,6 +471,11 @@ export class GzipWriter {
    * call compresses once per 64 KB pending: `deflateBound` of all of it,
    * with the constant part of `deflateBound` again for each compression
    * after the first.
+   *
+   * @param len The length of the next `write`, in bytes; 0 for a `flush` or
+   *   `finish`.
+   * @returns A size in bytes, not a position: the room `out` must have from
+   *   `at` for that call not to answer `DEFLATE_NO_ROOM`.
    */
   bound(len: i32): i32 {
     const drains: i32 = (len >> 16) + 1
@@ -448,6 +529,16 @@ export class GzipWriter {
    * pending), or `DEFLATE_NO_ROOM` when `out` has less than `bound(len)`
    * bytes from `at`. Writing after `finish` panics, as does a window outside
    * its array.
+   *
+   * @param src The array that holds the next piece of the body; its bytes
+   *   are copied, so the caller may reuse it once `write` returns.
+   * @param off Where in `src` the piece starts.
+   * @param len How many bytes the piece is.
+   * @param out The caller's array the output is written into.
+   * @param at Where in `out` the output starts.
+   * @returns The index in `out` one past the last byte written, so the
+   *   caller sends `out[at .. result)`, which may be empty; or
+   *   `DEFLATE_NO_ROOM`, when nothing was taken and nothing written.
    */
   write(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     gzipWindow("GzipWriter.write", src, off, len)
@@ -487,6 +578,13 @@ export class GzipWriter {
    * Compresses everything pending and ends with an empty stored block, so a
    * reader can decode every byte written so far (zlib's `Z_SYNC_FLUSH`).
    * Answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`.
+   * Flushing after `finish` panics, as does a window outside `out`.
+   *
+   * @param out The caller's array the output is written into.
+   * @param at Where in `out` the output starts.
+   * @returns The index in `out` one past the last byte written, so the
+   *   caller sends `out[at .. result)`; or `DEFLATE_NO_ROOM`, when nothing
+   *   was written.
    */
   flush(out: u8[], at: i32): i32 {
     gzipWindow("GzipWriter.flush", out, at, 0)
@@ -510,7 +608,15 @@ export class GzipWriter {
   /**
    * Compresses everything pending as the final block and writes the
    * trailer; answers the new end of `out`, or `DEFLATE_NO_ROOM` below
-   * `bound(0)`. `start` begins another body.
+   * `bound(0)`. `start` begins another body; until then `write`, `flush`
+   * and `finish` panic, as does a window outside `out`.
+   *
+   * @param out The caller's array the output is written into.
+   * @param at Where in `out` the output starts.
+   * @returns The index in `out` one past the trailer's last byte, so the
+   *   caller sends `out[at .. result)` as the end of the body; or
+   *   `DEFLATE_NO_ROOM`, when nothing was written and the body is not yet
+   *   finished.
    */
   finish(out: u8[], at: i32): i32 {
     gzipWindow("GzipWriter.finish", out, at, 0)
@@ -576,7 +682,14 @@ export class GzipReader {
   /** Whether a member has been read; another may follow. */
   private members: i32
 
-  /** A reader that refuses more than `limit` decoded bytes in all; a negative `limit` panics. */
+  /**
+   * A reader that refuses more than `limit` decoded bytes in all; a negative
+   * `limit` panics. It is ready for a first body without a call to `start`.
+   *
+   * @param limit The most decoded bytes one body may have, over all its
+   *   members; past it, `read` answers `DEFLATE_ERR_OUTPUT_LIMIT`. `start`
+   *   keeps it.
+   */
   constructor(limit: i64) {
     if (limit < 0) {
       panic("GzipReader: a negative limit")
@@ -616,24 +729,51 @@ export class GzipReader {
     this.members = 0
   }
 
-  /** The buffer to copy input into, from `inputEnd()` for at most `inputRoom()` bytes. */
+  /**
+   * The buffer to copy input into, from `inputEnd()` for at most
+   * `inputRoom()` bytes; then `commit` how many were copied. It may first
+   * move the input not yet decoded to the front, so read `inputEnd()` after
+   * this call.
+   *
+   * @returns The reader's own 16 KB input buffer, the same array every call
+   *   and every body: not the caller's to keep, and only its bytes from
+   *   `inputEnd()` are the caller's to write.
+   */
   inputBuffer(): u8[] {
     this.compact()
     return this.input
   }
 
-  /** Where new input goes in `inputBuffer()`. */
+  /**
+   * Where new input goes in `inputBuffer()`.
+   *
+   * @returns An index into `inputBuffer()`. `inputBuffer()`, `inputRoom()`,
+   *   `commit` and `feed` may change it, so read it after them.
+   */
   inputEnd(): i32 {
     return this.inEnd
   }
 
-  /** How many bytes `inputBuffer()` has room for. */
+  /**
+   * How many bytes `inputBuffer()` has room for, from `inputEnd()`. Like
+   * `inputBuffer()`, it may first move the input not yet decoded to the
+   * front.
+   *
+   * @returns A count of bytes; 0 when the buffer is full of input not yet
+   *   decoded, which `read` must use up before more fits.
+   */
   inputRoom(): i32 {
     this.compact()
     return toI32(this.input.length) - this.inEnd
   }
 
-  /** Takes `n` bytes copied into `inputBuffer()` at `inputEnd()`; more than `inputRoom()` panics. */
+  /**
+   * Takes `n` bytes copied into `inputBuffer()` at `inputEnd()`; more than
+   * `inputRoom()` panics.
+   *
+   * @param n How many bytes were copied, from 0 to `inputRoom()`; a
+   *   negative `n` panics.
+   */
   commit(n: i32): void {
     if (n < 0 || n > toI32(this.input.length) - this.inEnd) {
       panic("GzipReader.commit: more bytes than the buffer has room for")
@@ -641,7 +781,17 @@ export class GzipReader {
     this.inEnd += n
   }
 
-  /** Copies as much of `src[off .. off + len)` as fits and answers how much. */
+  /**
+   * Copies as much of `src[off .. off + len)` as fits and answers how much.
+   * A window outside `src` panics.
+   *
+   * @param src The array that holds the next input; its bytes are copied,
+   *   so the caller may reuse it once `feed` returns.
+   * @param off Where in `src` the input starts.
+   * @param len How many bytes of input are offered.
+   * @returns How many bytes were taken, from 0 to `len`: the caller offers
+   *   the rest again after `read` has used some input up.
+   */
   feed(src: u8[], off: i32, len: i32): i32 {
     gzipWindow("GzipReader.feed", src, off, len)
     const room: i32 = this.inputRoom()
@@ -782,6 +932,15 @@ export class GzipReader {
    * many (at least 1; `max` is at least 1), or `GZIP_NEED_INPUT` when it needs more input first,
    * `GZIP_END` once the body has ended, or a negative error, after which it
    * answers that error again until `start`. A window outside `out` panics.
+   *
+   * @param out The caller's array the decoded bytes are copied into.
+   * @param at Where in `out` they start.
+   * @param max The most bytes to copy, at least 1; `out[at .. at + max)`
+   *   must lie inside `out`.
+   * @returns A count, not a position: the bytes are `out[at .. at + result)`.
+   *   Or `GZIP_NEED_INPUT` (0), `GZIP_END` (-100), or a negative error code
+   *   (`GZIP_ERR_*`, `DEFLATE_ERR_TRUNCATED`, `DEFLATE_ERR_OUTPUT_LIMIT` or
+   *   another `DEFLATE_ERR_*`), which is final.
    */
   read(out: u8[], at: i32, max: i32): i32 {
     gzipWindow("GzipReader.read", out, at, max)

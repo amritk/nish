@@ -15,7 +15,7 @@
  * windows, `src[off .. off + len)` in and `out[at ..)` out, and answer where
  * the output ends. Everything a call needs — the match finder's hash chains,
  * the block's symbols, the Huffman scratch, the decoder's tables — is
- * allocated by the constructor, about 330 KB for a `Deflater` and 4 KB for an
+ * allocated by the constructor, about 330 KB for a `Deflater` and 27 KB for an
  * `Inflater`, so build one per thread and reuse it: a call allocates nothing.
  * The free functions `deflateCompress` and `deflateDecompress` build one for
  * a single call, for a program that compresses once.
@@ -174,6 +174,10 @@ const INF_S_DONE: i32 = 3
  * level: the input stored, five bytes of framing for every 65,535 and for
  * every block, and slack for the last partial byte. `n` is at most
  * 2^31 - 1 less the framing; a negative `n` answers 0.
+ *
+ * @param n The length of the input, in bytes.
+ * @returns A size in bytes, not a position: an `out` with this many bytes
+ *   from `at` always holds the stream.
  */
 export const deflateBound = (n: i32): i32 => {
   if (n < 0) {
@@ -186,6 +190,10 @@ export const deflateBound = (n: i32): i32 => {
  * The most bytes a compressed body of `n` input bytes takes in any of this
  * directory's formats: `deflateBound(n)` with room for gzip's 18 bytes of
  * header and trailer, which covers zlib's 6.
+ *
+ * @param n The length of the input, in bytes.
+ * @returns A size in bytes, not a position: an `out` with this many bytes
+ *   from `at` always holds the raw, zlib or gzip stream.
  */
 export const compressBound = (n: i32): i32 => deflateBound(n) + 18
 
@@ -724,7 +732,13 @@ export class Deflater {
   /** How many entries of `rle` the block uses. */
   private rleCount: i32
 
-  /** A compressor at `level`, 0 to 9; another level panics. */
+  /**
+   * A compressor at `level`, 0 to 9; another level panics.
+   *
+   * @param level How hard to compress: `DEFLATE_STORE` (0) stores,
+   *   `DEFLATE_FAST` (1) to 3 match greedily, 4 to `DEFLATE_BEST` (9) match
+   *   lazily on longer chains, `DEFLATE_DEFAULT` being 6.
+   */
   constructor(level: i32) {
     if (level < 0 || level > 9) {
       panic(`Deflater: level ${level} is outside 0 to 9`)
@@ -876,6 +890,16 @@ export class Deflater {
    * DEFLATE stream, and answers where it ends, or `DEFLATE_NO_ROOM` when
    * `out` cannot hold it: `deflateBound(len)` bytes always can. A window
    * outside its array panics. Allocates nothing.
+   *
+   * @param src The array that holds the data to compress.
+   * @param off Where in `src` the data starts.
+   * @param len How many bytes of data to compress.
+   * @param out The caller's array the stream is written into.
+   * @param at Where in `out` the stream starts.
+   * @returns The index in `out` one past the stream's last byte, so the
+   *   stream is `out[at .. result)`; or `DEFLATE_NO_ROOM`, after which the
+   *   bytes of `out` from `at` may have been overwritten and mean nothing.
+   *   Each call is a whole stream: nothing carries over to the next.
    */
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
     deflateWindow("Deflater.compress", src, off, len)
@@ -1672,6 +1696,10 @@ export class Deflater {
  * bits a byte, the block's header and end code, and the eight bytes of slack
  * its word-wide bit writer stores past the last whole byte. A negative `n`
  * answers the bound of 0.
+ *
+ * @param n The length of the input, in bytes.
+ * @returns A size in bytes, not a position: a `room` of this many always
+ *   holds the block.
  */
 export const fixedDeflateBound = (n: i32): i32 => {
   if (n < 0) {
@@ -1761,6 +1789,18 @@ export class FixedDeflater {
    * the output when it is smaller passes the most it will take, and an input
    * that does not compress is abandoned part way. `fixedDeflateBound(len)`
    * always fits. A window outside its array panics. Allocates nothing.
+   *
+   * @param src The array that holds the data to compress.
+   * @param off Where in `src` the data starts.
+   * @param len How many bytes of data to compress.
+   * @param out The caller's array the block is written into.
+   * @param at Where in `out` the block starts.
+   * @param room How many bytes of `out` from `at` the block may use; the
+   *   window `out[at .. at + room)` must lie inside `out`.
+   * @returns The index in `out` one past the block's last byte, so the
+   *   stream is `out[at .. result)`; or `DEFLATE_NO_ROOM`, after which the
+   *   bytes of `out[at .. at + room)` may have been overwritten and mean
+   *   nothing.
    */
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32 {
     deflateWindow("FixedDeflater.compress", src, off, len)
@@ -1907,7 +1947,14 @@ export class InflateTable {
   /**
    * A table indexing `bits` bits, for an alphabet of up to `symbols`
    * symbols, with room for `capacity` entries: the main table and its
-   * subtables.
+   * subtables. The arrays are allocated here and filled by `Inflater`.
+   *
+   * @param bits How many bits of the next code the main table indexes at
+   *   once; a longer code goes through a subtable.
+   * @param symbols The size of the alphabet the table decodes, such as 288
+   *   for literal/length codes or 32 for distances.
+   * @param capacity How many entries to allocate for the main table and
+   *   all its subtables; `Inflater` passes zlib's `enough` figures.
    */
   constructor(bits: i32, symbols: i32, capacity: i32) {
     this.bits = bits
@@ -2987,6 +3034,19 @@ export class Inflater {
    * block, or another negative `DEFLATE_ERR_*` for a malformed stream. A
    * window outside its array, or a negative `limit`, panics. Allocates
    * nothing.
+   *
+   * @param src The array that holds the raw DEFLATE stream.
+   * @param off Where in `src` the stream starts.
+   * @param len How many bytes the stream is; every one must belong to it,
+   *   since a byte after the final block is `DEFLATE_ERR_TRAILING`.
+   * @param out The caller's array the data is written into.
+   * @param at Where in `out` the data starts.
+   * @param limit The most bytes of data to accept; a longer stream is
+   *   `DEFLATE_ERR_OUTPUT_LIMIT`, as is one that reaches the end of `out`.
+   * @returns The index in `out` one past the data's last byte, so the data
+   *   is `out[at .. result)`; or a negative `DEFLATE_ERR_*` code. After an
+   *   error the bytes of `out` from `at` may have been overwritten and mean
+   *   nothing. Either way `consumed` says how far into `src` it read.
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
     deflateWindow("Inflater.decompress", src, off, len)
@@ -3016,10 +3076,30 @@ export class Inflater {
  * `Deflater.compress` at `level`, building the compressor for this call
  * alone: 330 KB allocated and filled each time, so keep a `Deflater` for
  * anything repeated.
+ *
+ * @param src The array that holds the data to compress.
+ * @param off Where in `src` the data starts.
+ * @param len How many bytes of data to compress.
+ * @param out The caller's array the stream is written into.
+ * @param at Where in `out` the stream starts.
+ * @param level How hard to compress, 0 to 9; another level panics.
+ * @returns The index in `out` one past the stream's last byte, or
+ *   `DEFLATE_NO_ROOM`, as `Deflater.compress` answers.
  */
 export const deflateCompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 =>
   new Deflater(level).compress(src, off, len, out, at)
 
-/** `Inflater.decompress`, building the decompressor for this call alone. */
+/**
+ * `Inflater.decompress`, building the decompressor for this call alone.
+ *
+ * @param src The array that holds the raw DEFLATE stream.
+ * @param off Where in `src` the stream starts.
+ * @param len How many bytes the stream is.
+ * @param out The caller's array the data is written into.
+ * @param at Where in `out` the data starts.
+ * @param limit The most bytes of data to accept.
+ * @returns The index in `out` one past the data's last byte, or a negative
+ *   `DEFLATE_ERR_*` code, as `Inflater.decompress` answers.
+ */
 export const deflateDecompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 =>
   new Inflater().decompress(src, off, len, out, at, limit)
