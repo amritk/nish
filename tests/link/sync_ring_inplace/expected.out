@@ -1,0 +1,72 @@
+PASS  a reservation is the length asked for
+PASS  and nothing is queued before commit
+PASS  commit empties the window
+PASS  peek lends the record, of the length committed
+PASS  with the bytes written into the window
+PASS  release empties it
+PASS  and frees the record
+PASS  so peek answers empty
+PASS  the next reservation is the same window
+PASS  abandon empties it
+PASS  and publishes nothing
+PASS  a ring with no room for a window answers it empty
+PASS  tryPop takes the record before it
+PASS  a reservation past the end of the lap fits at its start
+PASS  tryPop steps over the skip marker
+PASS  to the record
+PASS  a record that ends the lap exactly needs no skip marker
+PASS  popBatch steps over a skip marker
+PASS  to the record
+PASS  peek takes the record before it
+PASS  and steps over the skip marker
+PASS  to the record
+PASS  peek answers empty for a record tryPush wrapped
+PASS  which tryPop takes
+PASS  whole
+PASS  peek answers empty for a record of length 0
+PASS  which tryPop takes
+PASS  leaving none
+PASS  tryPush and reserve mix over 2000 records of 1 to 124 bytes
+PASS  peek lends most of them
+PASS  the consumer starts
+PASS  the producer reserved or pushed every record
+PASS  the consumer exits 0
+PASS  the consumer took every record
+PASS  in order, each its length and bytes
+PASS  most of them lent in place by peek
+PASS  the producer starts
+PASS  the reserving producer exits 0
+PASS  popBatch and popWait took every record
+PASS  in order, each its length and bytes
+PASS  reserve-twice: the child exits 1
+PASS  reserve-twice: and says why
+PASS  reserve-none: the child exits 1
+PASS  reserve-none: and says why
+PASS  reserve-long: the child exits 1
+PASS  reserve-long: and says why
+PASS  commit-none: the child exits 1
+PASS  commit-none: and says why
+PASS  commit-long: the child exits 1
+PASS  commit-long: and says why
+PASS  abandon-none: the child exits 1
+PASS  abandon-none: and says why
+PASS  push-reserved: the child exits 1
+PASS  push-reserved: and says why
+PASS  pushed: the child exits 1
+PASS  pushed: and says why
+PASS  peek-twice: the child exits 1
+PASS  peek-twice: and says why
+PASS  pop-peeked: the child exits 1
+PASS  pop-peeked: and says why
+PASS  batch-peeked: the child exits 1
+PASS  batch-peeked: and says why
+PASS  release-none: the child exits 1
+PASS  release-none: and says why
+PASS  lone-marker: the child exits 1
+PASS  lone-marker: and says why
+PASS  loop-commit: the child exits 1
+PASS  loop-commit: and says why
+PASS  loop-release: the child exits 1
+PASS  loop-release: and says why
+PASS  unlink the region
+nish/sync/ring in place: 71 passed, 0 failed, 0 skipped

@@ -215,13 +215,48 @@ Both rings offer `tryPush`, `tryPop`, `popBatch(dst, lens)` and
 `popWait(dst, off, timeoutMs)`. `popBatch` moves as many records as fit with
 one load of the producers' position and one store of the consumer's.
 
+**In place, on `SpscRing`.** `reserve(n)` lends the producer the ring's
+next `n` bytes as a `u8[]` (a `SharedRegion.lend` window) and `commit(len)`
+publishes the first `len` of them with the same stores as `tryPush`: a
+relaxed store of the length, then the release tail store (sequentially
+consistent, then the doorbell, on a ring with one). `abandon()` publishes
+nothing. `peek()` lends the consumer the next record as a `readonly u8[]`
+after the acquire load of the tail, and `release()` frees it with the
+release store of the head that `tryPop` makes. Each end keeps one window
+header and re-points it with `lend`'s `reuse`, so a busy ring allocates
+nothing and makes no system call (a lend without `reuse` keeps 48 bytes,
+SHM-6 in the security record). Every call answers at once: `reserve`
+answers an empty window when there is no room, and `peek` when there is no
+record.
+
+A window is one run of bytes, so a reservation never straddles the end of
+the data. One that would starts at the next lap, and the producer writes
+the length word -1, a **skip marker**, in the rest of this one; every pop
+path (`tryPop`, `popBatch`, `popWait`, `peek`) reads a marker as "the
+record is at the start of the next lap" and steps over it. `n` is at most
+`capacity / 2 - 4`, so the marker and the record always fit an empty ring.
+`tryPush` still copies a record across the end in two parts, as before;
+`peek` answers empty for such a record, and for one of length 0 (an empty
+window is "nothing"), and `tryPop` takes it. The format keeps its magic
+"nrs1": a consumer from before this change that meets a marker panics with
+"the ring is corrupt" rather than misreading it, and both ends are normally
+one build.
+
+One reservation and one lent record at a time. A second `reserve`,
+`tryPush` during a reservation, `commit` of more than was reserved, or
+`peek`, `tryPop` or `popBatch` while a record is lent each panic with a
+message that names the call; `commit`, `abandon` and `release` give the
+window back, so an index through it afterwards is the ordinary `index out of
+range: i >= 0`, also inside a loop whose bound was the window's length.
+
 **What is not checked, and what is.** Who calls what is not checked. Two
 producers on an `SpscRing`, or two consumers on either ring, lose or repeat
 records. That is a misuse the type cannot see across processes. They never
 read or write outside the region, though, because every access is a checked
 `SharedRegion` access. A length a peer wrote that cannot be a record (below
-0, past the capacity, past what was published) panics with "the ring is
-corrupt", naming the length and the position (SHM-1 in the security record).
+0, past the capacity, past what was published, or a skip marker with no
+record after it) panics with "the ring is corrupt", naming the length and
+the position (SHM-1 and SHM-7 in the security record).
 An `MpscRing` producer that dies between claiming a slot and publishing it
 stalls the consumer at that slot for good: the slot's turn never comes. The
 supervisor that restarts a producer must make a fresh ring. A lock-free queue
