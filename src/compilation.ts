@@ -772,7 +772,7 @@ export class Compilation {
     }
     if (host) {
       source.host = true
-      const problems = hostSignatureProblems(file)
+      const problems = hostSignatureProblems(file, parser)
       for (const problem of problems) {
         this.sink.report(source, problem.node.start, problem.node.end, problem.message)
       }

@@ -37,6 +37,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
+import { Parser } from "./parser"
 import { StringBuilder } from "./strings"
 import {
   TOK_ARROW,
@@ -546,7 +547,7 @@ export class HostProblem {
  * every buffer until stage 3, is retired. A name the module declares — an enum or a
  * `HostHandle` alias — is left for the checker.
  */
-export const hostSignatureProblems = (file: Node): HostProblem[] => {
+export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[] => {
   const problems: HostProblem[] = []
   const local = new StringSet()
   for (const stmt of file.children) {
@@ -612,7 +613,7 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
           problems.push(pair)
           continue
         }
-        asWindow(type)
+        asWindow(type, parser)
         k = k + 2 // `at` and `n`, each a `u32` the pair check read
       } else if (!crosses(type, scalars, local)) {
         problems.push(typeProblem(`Parameter \`${p}\``, name, type))
@@ -718,11 +719,12 @@ const windowMissing = (p: string, name: string, param: Node): HostProblem =>
  * page may write, as it is in the page's own reading. Every other spelling
  * already names its element and is left as written.
  */
-const asWindow = (type: Node): void => {
+const asWindow = (type: Node, parser: Parser): void => {
   if (type.kind !== N_TYPE_REF || type.text === "Array" || type.text === "ReadonlyArray") {
     return
   }
-  const element = new Node(N_TYPE_REF, type.start, type.end)
+  // From the parser, so the element has an id inside the checker's tables.
+  const element = parser.node(N_TYPE_REF, type.start, type.end)
   element.text = typedElement(type.text)
   type.kind = N_TYPE_ARRAY
   type.text = ""
