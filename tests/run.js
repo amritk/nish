@@ -29698,6 +29698,196 @@ if (!only || "vite".includes(only)) {
   }
 }
 
+// ---- WP50 stage 2: a wasm module imports the page's host functions --------------
+//
+// tests/host-import holds a host module with one function per kind of value that
+// crosses, a program that calls each, an entry for `--emit-ts`, and three pages
+// for tsc. Compiled with `--host`, each host function is a `declare` with the wasm
+// import attributes, the link keeps it as an import from module `host`, and the
+// loader passes the host function through as it stands unless a value converts.
+// The round trip runs the page's real TypeScript under Node, and so does the
+// `--emit-ts` reading, which keeps the import. The refusals are tests/wordings cases.
+if (!only || "host-import".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`host-import: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "host-import")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "host-import"))) {
+      fs.copyFileSync(path.join(root, "tests", "host-import", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("host-import: a program importing a host module compiles for wasm32 with --host", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const ir = fs.readFileSync(at("main.ll"), "utf8")
+      // Each host function is a declaration whose attributes name module `host`
+      // and the function: the import clang's wasm backend writes. An unsigned
+      // narrow width is `zeroext`, as a C declaration of it would be.
+      const declared = [
+        ["hI32", "i32 @hI32(i32)"],
+        ["hU8", "zeroext i8 @hU8(i8 zeroext)"],
+        ["hU16", "zeroext i16 @hU16(i16 zeroext)"],
+        ["hU32", "i32 @hU32(i32)"],
+        ["hF32", "float @hF32(float)"],
+        ["hF64", "double @hF64(double)"],
+        ["hBool", "zeroext i1 @hBool(i1 zeroext)"],
+        ["hI64", "i64 @hI64(i64)"],
+        ["hU64", "i64 @hU64(i64)"],
+        ["hPercent", "i32 @hPercent(i32)"],
+        ["hNext", "i32 @hNext(i32)"],
+        ["hCanvas", "i32 @hCanvas(i32)"],
+        ["hSame", "i32 @hSame(i32)"],
+      ]
+      const missing = declared.filter(([name, signature]) => {
+        const line = new RegExp(`^declare ${signature.replace(/[()]/g, "\\$&")} #(\\d+)$`, "m").exec(ir)
+        return (
+          line === null ||
+          !ir.includes(
+            `attributes #${line[1]} = { "wasm-import-module"="host" "wasm-import-name"="${name}" }`
+          )
+        )
+      })
+      check(
+        "host-import: each host function is a declare carrying wasm-import-module \"host\" and its own name",
+        missing.length === 0,
+        `not declared as expected: ${missing.map(([name]) => name).join(", ")}`
+      )
+      const assembled = spawnSync("llvm-as", [at("main.ll"), "-o", at("main.bc")], { encoding: "utf8" })
+      check("host-import: llvm-as accepts the IR", assembled.status === 0, shown(assembled))
+
+      const linked = wasmHostLink([at("main.ll")], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      check("host-import: the module links with --profile wasm-host", linked.status === 0, shown(linked))
+      if (linked.status === 0) {
+        const imports = WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(at("main.wasm"))))
+        const wanted = declared.map(([name]) => name).sort()
+        const got = imports
+          .filter((i) => i.module === "host" && i.kind === "function")
+          .map((i) => i.name)
+          .sort()
+        check(
+          "host-import: the linked module imports each host function from module `host`, and nothing else from it",
+          JSON.stringify(got) === JSON.stringify(wanted) && imports.every((i) => i.module !== "host" || i.kind === "function"),
+          JSON.stringify(imports)
+        )
+
+        // The page's own host.ts, under Node's type stripping plus the enum
+        // transform, through the loader --emit-dts wrote: each value crosses
+        // both ways, and each conversion shows where the plain function would
+        // be wrong (u8 300 + 10, a u32 of 2^32 - 1, a boolean, a u64 past 2^63).
+        fs.writeFileSync(
+          at("round-trip.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import * as host from "./host.ts"',
+            'import { loadSync } from "./main.mjs"',
+            'const m = loadSync(readFileSync(new URL("./main.wasm", import.meta.url)), { host })',
+            "const out = [m.rI32(21), m.rU8(10), m.rU16(10), m.rU32(0xffffffff), m.rF32(1.5), m.rF64(2),",
+            "  m.rBool(true), m.rBool(false), m.rI64(-5n), m.rU64(2n ** 63n), m.rPercent(42),",
+            "  m.rNext(true), m.rNext(false), m.rCanvas(4), m.rCanvas(5), m.sameCanvas(2)]",
+            'console.log(out.map(String).join(" "))',
+            "let refused = ''",
+            "try { m.rPercent(101) } catch (e) { refused = e.constructor.name + ': ' + e.message }",
+            "console.log(refused)",
+          ].join("\n")
+        )
+        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+        const [values, refusal] = run.stdout.split("\n")
+        check(
+          "host-import: every kind round-trips through the loader to the page's host.ts and back",
+          run.status === 0 && values === "42 54 4474 0 3 0.5 0 1 -6 9223372036854775809 42 1 0 1 2 1",
+          shown(run)
+        )
+        check(
+          "host-import: a host result outside its declared range is refused on the way into wasm",
+          refusal !== undefined && refusal.startsWith("RangeError") && refusal.includes("host.hPercent"),
+          shown(run)
+        )
+      }
+
+      // Converting nothing costs nothing: a function whose values all cross as
+      // they stand is the page's own, with no wrapper around it.
+      const loader = fs.readFileSync(at("main.mjs"), "utf8")
+      const byReference = ["hI32", "hF32", "hF64", "hI64", "hNext", "hCanvas", "hSame"]
+      const wrapped = byReference.filter((name) => !loader.includes(`      ${name}: hostFn("${name}"),`))
+      check(
+        "host-import: the loader passes a host function whose values all cross as they stand by reference",
+        wrapped.length === 0 && loader.includes('hU32: (a0) => host_hU32(a0 >>> 0),'),
+        `wrapped: ${wrapped.join(", ")}`
+      )
+
+      // The page's tsc: the host module is the `Imports` the loader declares as
+      // it stands; one short of a function is not, and a handle of one kind
+      // where another is declared is refused as nish refuses it.
+      // The page sees the module through main.d.ts alone, so it is checked in
+      // a directory without main.ts, and with the DOM library a page has.
+      const pageDir = at("page")
+      fs.mkdirSync(pageDir)
+      for (const name of ["host.ts", "main.d.ts", "page.ts", "page_missing.ts", "page_kinds.ts"]) {
+        fs.copyFileSync(at(name), path.join(pageDir, name))
+      }
+      const typeCheckPage = (name, files) => {
+        const config = path.join(pageDir, `tsconfig.${name}.json`)
+        fs.writeFileSync(
+          config,
+          JSON.stringify({
+            extends: path.join(root, "tsconfig.json"),
+            // A page has the DOM, whose `crypto` runtime/nish.d.ts redeclares
+            // for Nish programs; create-vite's skipLibCheck is how a page has both.
+            compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+            include: [],
+            files: [path.join(root, "runtime", "nish.d.ts"), ...files.map((f) => path.join(pageDir, f))],
+          })
+        )
+        return typeCheckProject(config, root)
+      }
+      const page = typeCheckPage("page", ["host.ts", "main.d.ts", "page.ts"])
+      check("host-import: the host module and a page loading the program through main.d.ts type-check under tsc --strict", page.ok, page.output)
+      const short = typeCheckPage("missing", ["host.ts", "main.d.ts", "page_missing.ts"])
+      check(
+        "host-import: tsc refuses an import object missing one of the host module's functions",
+        !short.ok && /page_missing\.ts.*TS2739|is missing the following properties/.test(short.output),
+        short.output
+      )
+      const kinds = typeCheckPage("kinds", ["host.ts", "main.d.ts", "page_kinds.ts"])
+      check(
+        "host-import: tsc refuses a handle of one kind where a host function takes another",
+        !kinds.ok && kinds.output.includes("page_kinds.ts") && kinds.output.includes('"socket"'),
+        kinds.output
+      )
+    }
+
+    // The TypeScript reading keeps the import, from where the host module is,
+    // so under Node it calls the page's own functions.
+    const emitted = at("emit-ts")
+    const reading = spawnSync(NISH, [at("reading.ts"), "--host", at("host.ts"), "--emit-ts", emitted], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran =
+      reading.status === 0
+        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(emitted, "entry.ts")], {
+            cwd: emitted,
+            encoding: "utf8",
+          })
+        : reading
+    check(
+      "host-import: the --emit-ts reading imports the host module and calls its real functions under Node",
+      ran.status === 0 && ran.stdout.trim() === "42 0.5",
+      shown(ran)
+    )
+  }
+}
+
 if (!only || "wasm-size".includes(only)) {
   // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
   const host = `${process.platform}-${process.arch}`

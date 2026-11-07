@@ -358,7 +358,8 @@ const keepExports = (text: string, tokens: Tokens): HostText => {
         // Followed by `;`, the end of the file or a new line; anything else
         // (`| null`, `& X`) makes it a different type, and it is not read.
         const next = i + 8
-        const lineEnds = next >= n || text.substring(tokens.ends[i + 7], tokens.starts[next]).indexOf("\n") >= 0
+        const lineEnds =
+          next >= n || text.substring(tokens.ends[i + 7], tokens.starts[next]).indexOf("\n") >= 0
         if (next < n && tokens.kinds[next] === TOK_SEMICOLON) {
           kept.keep(i, next)
           i = next + 1
@@ -481,6 +482,7 @@ const SCALAR_NAMES = (): StringSet => {
     "number",
     "void",
     "HostHandle",
+    "integer",
   ]) {
     names.add(name)
   }

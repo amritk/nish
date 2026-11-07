@@ -920,7 +920,9 @@ export class Compilation {
       unit.importedIdentities.push(targetIdentity)
       unit.importedNames.push(found.name)
       if (!this.discover(target, found.name, found.packageName)) {
+        // Its errors are reported; the statement's other names would read and report it again.
         ok = false
+        failedDecl = imp.decl
       } else {
         unit.resolved.set(imp.specifier, this.byPath.get(targetIdentity, -1))
       }
