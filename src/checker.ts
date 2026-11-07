@@ -10,7 +10,13 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
-import { aliasType, builtinTypeName, rejectRangedIntegerName, resolveType } from "./annotations"
+import {
+  aliasType,
+  builtinTypeName,
+  rejectRangedIntegerName,
+  resolveType,
+  typedArrayElement,
+} from "./annotations"
 import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression, WANT_INFERRED } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
@@ -105,6 +111,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
+import { checkStorageUses, isStorageNew, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
 import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER, SORT_LOCAL, SORT_SPECIFIER } from "./std-modules"
 import {
@@ -835,6 +842,9 @@ export class Checker {
     const exported = isExported(stmt)
     for (const decl of stmt.children[0].children) {
       const name = decl.children[0].text
+      if (decl.children[2].kind !== N_EMPTY && this.collectStorage(decl, name, exported)) {
+        continue
+      }
       if (decl.children[1].kind === N_EMPTY) {
         this.ctx.error(decl.children[0], `Module constant \`${name}\` needs a type annotation`)
         continue
@@ -868,6 +878,62 @@ export class Checker {
       info.scope = this.program
       this.program.addConstant(info)
     }
+  }
+
+  /**
+   * WP50 S3: `const sim = new Array<Sim>(4)` at the top level is module
+   * storage (`src/module-storage.ts`). Answers false when `decl` is not a
+   * storage `new`, so it is collected as a constant. The element and the
+   * length are checked when constants fold, once every interface knows
+   * whether a class implements it.
+   */
+  collectStorage(decl: Node, name: string, exported: boolean): boolean {
+    const init = storageNewNode(decl.children[2])
+    if (init.kind !== N_NEW || init.children[0].kind !== N_IDENT) {
+      return false
+    }
+    const typed = typedArrayElement(init.children[0].text)
+    if (!isStorageNew(init, typed)) {
+      return false
+    }
+    const typeArgs = init.children[1]
+    let elem = typed
+    if (typed < 0) {
+      if (typeArgs.children.length !== 1) {
+        this.ctx.error(init, "`new Array` needs exactly one type argument, e.g. `new Array<number>(n)`")
+        return true
+      }
+      elem = resolveType(typeArgs.children[0], this.ctx)
+    } else if (typeArgs.children.length > 0) {
+      this.ctx.error(init, `\`new ${init.children[0].text}\` takes no type argument`)
+      return true
+    }
+    if (elem === T_ERROR) {
+      return true
+    }
+    const type = this.ctx.table.arrayOf(elem)
+    if (decl.children[1].kind !== N_EMPTY) {
+      const declared = resolveType(decl.children[1], this.ctx)
+      if (declared !== T_ERROR && declared !== type) {
+        this.ctx.error(
+          decl.children[1],
+          `Module storage \`${name}\` is declared ${this.ctx.table.typeName(declared)} but its \`new\` makes ${this.ctx.table.typeName(type)}; annotate it ${this.ctx.table.typeName(type)}, or leave the annotation off`
+        )
+        return true
+      }
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(decl.children[0], `\`${name}\` is already declared in this module`)
+      return true
+    }
+    const info = new ConstInfo(name, type, decl, this.program.source)
+    info.exported = exported
+    info.scope = this.program
+    info.storage = true
+    info.storageElem = elem
+    info.storageSymbol = `${this.program.symbolPrefix}${name}`
+    this.program.addConstant(info)
+    return true
   }
 
   /**
@@ -1735,6 +1801,8 @@ export const checkSignatureBody = (
     // above — the walk reads types and bindings pass 2 has just written.
     const beforeElements = ctx.sink.count()
     checkElementReferences(ctx, body)
+    // WP50 S3: module storage is a place, never a value (`src/module-storage.ts`).
+    checkStorageUses(ctx, body)
     if (ctx.sink.count() > beforeElements) {
       sig.poisoned = true
       failed = true

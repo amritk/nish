@@ -1124,10 +1124,23 @@ export class ConstInfo {
   /** Memoised fold, and the in-progress mark that catches a cycle. */
   folded: boolean
   folding: boolean
+  /**
+   * WP50 S3: module storage, `const sim = new Array<Sim>(4)` at the top level
+   * (`src/module-storage.ts`). It is not folded to a value: it names a global
+   * array whose header and data are static, `intValue` is its length once
+   * folded, and `storageElem` its element type. `type` is the array type.
+   */
+  storage: boolean
+  storageElem: i32
+  /** The storage's LLVM global, `@<symbol>` for the header and `@<symbol>.data` for the elements. */
+  storageSymbol: string
 
   constructor(name: string, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
     this.type = type
+    this.storage = false
+    this.storageElem = -1
+    this.storageSymbol = ""
     this.intValue = toI64(0)
     this.floatValue = 0.0
     this.textValue = ""

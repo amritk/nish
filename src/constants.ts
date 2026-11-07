@@ -36,6 +36,7 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
+import { acceptStorageLength, checkStorage } from "./module-storage"
 import { ConstInfo } from "./program"
 import { StringBuilder } from "./strings"
 import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING } from "./types"
@@ -239,6 +240,10 @@ export const foldConstant = (ctx: CheckContext, info: ConstInfo): void => {
     ctx.errored = true
     return
   }
+  if (info.storage) {
+    foldStorage(ctx, info)
+    return
+  }
   info.folding = true
   const initializer = info.decl.children[2]
   const value = fold(ctx, info, initializer, info.type)
@@ -276,6 +281,23 @@ export const foldConstant = (ctx: CheckContext, info: ConstInfo): void => {
   info.intValue = value.intValue
   info.floatValue = value.floatValue
   info.textValue = value.textValue
+}
+
+/**
+ * WP50 S3: module storage folds its length, never a value (`src/module-storage.ts`).
+ * It is marked folded either way, so an error is reported once.
+ */
+const foldStorage = (ctx: CheckContext, info: ConstInfo): void => {
+  info.folded = true
+  const length = checkStorage(ctx, info)
+  if (length === null) {
+    return
+  }
+  const value = fold(ctx, info, length, T_I32)
+  if (value.type === T_ERROR) {
+    return
+  }
+  acceptStorageLength(ctx, info, length, value.type === T_I32 || value.type === T_I64, value.intValue)
 }
 
 const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {

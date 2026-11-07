@@ -66,6 +66,8 @@ import {
   emitElementAccess,
   emitForOf,
   emitJsonPutF64Kernel,
+  storageDeclaration,
+  storageGlobals,
 } from "./emit-arrays"
 import {
   checksArgumentRange,
@@ -481,6 +483,12 @@ export class Emitter {
     // `%struct.X = type { ... }` for every class or interface the module can see.
     for (const decl of structTypeDeclarations(this)) {
       this.module.addTypeDecl(decl)
+    }
+    // WP50 S3: module storage is static, so it is defined here and not built.
+    for (const info of this.program.constantList) {
+      if (info.storage && info.origin === this.program.source) {
+        storageGlobals(this, info)
+      }
     }
     for (const sig of this.program.functions) {
       // Typed JSON: an instantiation of `jsonDecode` or `jsonEncode` is never
@@ -1620,6 +1628,13 @@ export class Emitter {
    */
   emitIdentifier(expr: Node): string {
     const constant = this.program.nodeConstants[expr.id]
+    if (constant !== null && constant.storage) {
+      // WP50 S3: module storage is its static header, declared where imported.
+      if (constant.origin !== this.program.source) {
+        storageDeclaration(this, constant)
+      }
+      return `@${constant.storageSymbol}`
+    }
     if (constant !== null) {
       return constantText(this, constant)
     }
