@@ -117,7 +117,7 @@ test than it looks.
 
 `src/` is an Nish program, so everything in the section above holds, and it is
 written in Nish-0 on top of that (`.claude/selfhost.md`): no closures (capturing
-arrow arguments: from the release after 0.27.2, under the rolling freeze), no `Map`,
+arrow arguments are allowed: they shipped in 0.29.0, which the seed is past), no `Map`,
 no `try`, one `Node` class, side tables as arrays indexed by `Node.id`. What the
 compiler adds as house rules:
 

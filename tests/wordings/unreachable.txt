@@ -75,6 +75,7 @@ NL1015  retired: `async` functions are forbidden, the Phase 0 refusal WP49 stage
 NL2173  retired: `async functions are not supported`, stage0's refusal, shadowed by NL1015 until WP49 stage 4 allowed `async`
 NL2174  retired: `async methods are not supported`, stage0's refusal; a method is still refused, by NL1063
 NL2653  retired: `async` refused as "checked, but not yet compiled" until its native lowering landed (WP49 stage 4, part 2); a wasm build is still refused, by NL2652
+NL4016  retired: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (WP49 stage 4, part 3; tests/emit-ts/async)
 
 # --- Retired at R6: stage0 stated the rule, and stage0 is gone. ---------------
 # These were `tests/wordings/stage0_only.txt`: codes a program does provoke, but

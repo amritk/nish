@@ -41,7 +41,8 @@ mode.
 Compile with `--number-mode f64`: `number` becomes `double`, literals may be
 fractional, `x / 0` is `Infinity`, and `Math.sqrt(n)` works directly on a
 `number`. Array indices are truncated toward zero, `.length` is a double, and
-`main` must be declared `main(): i32` because the exit code is an integer
+a `main` that answers the exit code is declared `main(): i32`, not `number`,
+because the exit code is an integer
 (`tests/cases/f64_mode`, `arr_f64`, `math_intrinsics`). In i32 mode you can
 mix: `const x: f64 = 1.5` and `Math.sqrt(toF64(n))`. Two things are still
 not JavaScript even in f64 mode: `toI32` saturates instead of wrapping
@@ -81,7 +82,12 @@ compiler refuses the block if anything allocated in it could outlive it
 ([LANGUAGE.md: `using a = arena()`](LANGUAGE.md#using-a--arena)).
 `Arena.used()` tells you whether it worked
 (`tests/cases/mem_scope_dynamic_array` prints it before and after 100000
-calls). `--no-stack-alloc` shows the arena-only IR for comparison.
+calls). `--no-stack-alloc` shows the arena-only IR for comparison. State
+that lives longer than one pass but not for the whole run, such as a
+connection's or a cache entry's, goes in a region from `nish:region`, which
+one `free` gives back
+([LANGUAGE.md: Regions](LANGUAGE.md#regions-nishregion),
+[guide](guide/language/regions.md)).
 
 ### Does a tail-recursive function use constant stack?
 

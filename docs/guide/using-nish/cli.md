@@ -270,10 +270,13 @@ Inside `out/`:
   `out/lib/tally.ts`.
 - **Each standard-library module** your program imports is written under
   `nish/`, so `nish/pair` becomes `out/nish/pair.ts`.
-- **`entry.ts`** runs your `main` and exits with the number it returns.
+- **`entry.ts`** runs your `main` and exits with the number it returns. In a
+  program with an `async` function it awaits `main`, then every task `spawn`
+  started, before it exits.
 
 Imports are rewritten so Node can follow them. A `nish:` builtin becomes
-`nish/runtime`, the one package the output imports, `nish:secret` included:
+`nish/runtime`, the one package the output imports, `nish:secret` included
+(`nish:async` alone becomes `nish/runtime/async.mjs`):
 its `wipe` is the runtime's, and `std/secret.ts` is not written. A `nish/x` or relative
 import becomes a relative path ending in `.ts`. An imported interface or type
 alias is marked `import { type Pair }`. A module that needs none of this, and
@@ -366,9 +369,6 @@ or a builtin call in the same body would have made it a stub. Call it, or write 
 body in the standard library is a stub, and the program is written.
 The sixth (NL4015) is a program that imports `nish:region`: the TypeScript
 runtime has no regions to allocate into yet, so keep that program native.
-The seventh (NL4016) is a module that declares an `async` function, even one
-nothing calls: the native build resumes its tasks in an order the TypeScript
-runtime does not answer yet, so keep that program native too.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:
 `uncheckedGet`, `uncheckedSet` and the `wrapping*` arithmetic run under Node,
