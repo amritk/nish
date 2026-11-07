@@ -184,6 +184,7 @@ function IRFunction.branchOnOverflow(this: IRFunction, flag: string, code: i32, 
   calls: IRFunction.emit IRFunction.newBlock IRFunction.overflowFailAt IRFunction.placeBlock nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=184 writesThrough=true captured=false passedTo=IRFunction.overflowFailAt#0 IRFunction.newBlock#0 IRFunction.emit#0 IRFunction.placeBlock#0
   stackSites=0 stackLocals=0
+  local -4:11 key: string (const)
   local -3:11 owner: i32 (const)
   callee -3:19 IRFunction.overflowFailAt -> @IRFunction.overflowFailAt
   local -2:11 fail: IRBlock (const)
@@ -203,7 +204,7 @@ function IRFunction.overflowFailAt(this: IRFunction, location: string): i32 -> @
 function IRFunction.overflowFailText(this: IRFunction): string -> @IRFunction.overflowFailText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.tagSite
-  calls: IRBlock.constructor IRBlock.toText IRFunction.tagSite StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
+  calls: IRBlock.constructor IRBlock.toText IRFunction.tagSite StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_panic_index nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
   pointer this: size=184 writesThrough=false captured=false passedTo=IRFunction.tagSite#0
   stackSites=4 stackLocals=4
   local +0:11 out: StringBuilder (const)
@@ -217,13 +218,15 @@ function IRFunction.overflowFailText(this: IRFunction): string -> @IRFunction.ov
   local +19:13 block: IRBlock (const)
   callee +19:21 new IRBlock -> @IRBlock.constructor
   local +20:11 argument: string (let)
-  local +25:13 location: string (const)
-  local +26:13 dbg: string (const)
-  callee +28:12 IRFunction.tagSite -> @IRFunction.tagSite
-  callee +31:7 StringBuilder.add -> @StringBuilder.add
-  callee +32:7 StringBuilder.add -> @StringBuilder.add
-  callee +32:15 IRBlock.toText -> @IRBlock.toText
-  callee +35:12 StringBuilder.toText -> @StringBuilder.toText
+  local +25:13 key: string (const)
+  local +26:13 bar: i32 (const)
+  local +27:13 location: string (const)
+  local +28:13 dbg: string (const)
+  callee +30:12 IRFunction.tagSite -> @IRFunction.tagSite
+  callee +33:7 StringBuilder.add -> @StringBuilder.add
+  callee +34:7 StringBuilder.add -> @StringBuilder.add
+  callee +34:15 IRBlock.toText -> @IRBlock.toText
+  callee +37:12 StringBuilder.toText -> @StringBuilder.toText
 function IRFunction.newTemp(this: IRFunction): string -> @IRFunction.newTemp [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

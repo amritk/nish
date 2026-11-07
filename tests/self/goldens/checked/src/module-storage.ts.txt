@@ -19,12 +19,14 @@ import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import ConstInfo from "./program" -> struct ConstInfo
 import StructInfo from "./program" -> struct StructInfo
+import elementStride from "./program" -> function @elementStride
 import inlineElementStruct from "./program" -> function @inlineElementStruct
 import SORT_LOCAL from "./std-modules" -> const SORT_LOCAL
 import T_BOOL from "./types" -> const T_BOOL
 import isHostWindow from "./types" -> function @isHostWindow
 import isNumeric from "./types" -> function @isNumeric
 const STORAGE_MAX_LENGTH: i32 = 16777216
+const STORAGE_MAX_BYTES: i32 = 268435456
 function isStorageNew(init: Node, typedElement: i32): boolean -> @isStorageNew [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq unwrapParens
@@ -60,12 +62,15 @@ function acceptStorageLength(ctx: CheckContext, info: ConstInfo, lengthNode: Nod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: value
-  calls: nish_str_concat nish_str_from_i32 nish_str_from_i64 storageReport
-  pointer ctx: size=296 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0
-  pointer info: size=88 writesThrough=true captured=false passedTo=storageReport#1 storageReport#1
-  pointer lengthNode: size=40 writesThrough=false captured=false passedTo=storageReport#2 storageReport#2
+  calls: elementStride nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 storageReport
+  pointer ctx: size=296 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0 storageReport#0
+  pointer info: size=88 writesThrough=true captured=false passedTo=storageReport#1 storageReport#1 storageReport#1
+  pointer lengthNode: size=40 writesThrough=false captured=false passedTo=storageReport#2 storageReport#2 storageReport#2
   stackSites=0 stackLocals=0
-  callee -17:5 storageReport -> @storageReport
+  callee -27:5 storageReport -> @storageReport
+  callee -18:5 storageReport -> @storageReport
+  local -10:9 stride: i32 (const)
+  callee -10:18 elementStride -> @elementStride
   callee -8:5 storageReport -> @storageReport
 function storageReport(ctx: CheckContext, info: ConstInfo, node: Node, message: string): void -> @storageReport
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
