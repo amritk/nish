@@ -17,8 +17,8 @@ sides and a clean stop on a signal, proved across loopback in `npm test`
 and resident set alike, since the handshake (#492), its signature (#512) and the QUIC
 listener (#515) keep nothing. A client's NAT rebinding, port or address,
 is followed and the new path validated (RFC 9000 §8.2, §9.3), the interop
-runner's `rebind-port` and `rebind-addr` cases with it (#1210, in review);
-connection migration a client starts stays out (§9). **Open:** #430;
+runner's `rebind-port` and `rebind-addr` cases with it (#1210, merged in #1218
+and shipped in 0.35.0); connection migration a client starts stays out (§9). **Open:** #430;
 and the cs side of A1 — the port of `services/relay` itself, `boot-check`'s
 wire pass and `bench:offload` against the Rust relay. 0.16.0 carried N1, N2,
 N3, N5 and N6 (less #402 and `tcpConnect`, #411) and K1–K6 (less
