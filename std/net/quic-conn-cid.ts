@@ -5,25 +5,28 @@
  *
  *     import { QuicCidTable } from "nish/net/quic-conn-cid";
  *
- *     const ids = new QuicCidTable(4, 4);         // the active_connection_id_limit advertised; local slots
- *     ids.addLocal(serverScid, token);             // sequence 0
- *     ids.addPeer(0, 0, clientScid, none);         // the client's first SCID, sequence 0
- *     const error: i64 = ids.retireLocal(frame.value, packetDcid);
+ *     const ids = new QuicCidTable(4, 4)               // the limit advertised; local slots
+ *     ids.addLocal(serverScid, [])                     // sequence 0, sent in the SCID, so no token
+ *     ids.addLocal(nextCid, resetToken)                // sequence 1, for a NEW_CONNECTION_ID frame
+ *     ids.addPeer(0, 0, clientScid, [])                // the client's first SCID, sequence 0
+ *     const dcid: u8[] = ids.currentPeer()             // the ID this side sends to
+ *     const error: i64 = ids.retireLocal(sequence, packet, dcidAt, dcidLength)
+ *     // error is QUIC_ERROR_NO_ERROR, or QUIC_ERROR_PROTOCOL_VIOLATION to close with
  *
- * **Local IDs** are the ones this side handed out: sequence 0 is the Source
+ * **Local IDs.** They are the ones this side handed out: sequence 0 is the Source
  * Connection ID of its first packet, and each later one goes out in a
  * NEW_CONNECTION_ID frame (`nextUnannounced` answers the next one still to). The peer
  * retires one with RETIRE_CONNECTION_ID: a sequence number never issued, or
  * the one the retiring packet was itself sent to, is a PROTOCOL_VIOLATION
  * (§19.16).
  *
- * **Peer IDs** come from the peer's first packet and its NEW_CONNECTION_ID
+ * **Peer IDs.** They come from the peer's first packet and its NEW_CONNECTION_ID
  * frames (§19.15). A sequence number seen before must carry the same ID and
  * token, or it is a PROTOCOL_VIOLATION; an ID already given another sequence
  * number is one too. More active IDs than the limit this side advertised is
  * a CONNECTION_ID_LIMIT_ERROR (§5.1.1). Retire Prior To retires every older ID
- * at once: each is queued in `retirePending`, for this side to send
- * RETIRE_CONNECTION_ID for, and `current` moves to the oldest still active.
+ * at once: each is queued for this side to send RETIRE_CONNECTION_ID for,
+ * and the ID this side sends to moves to the oldest still active.
  * Queued retirements past twice the limit are a CONNECTION_ID_LIMIT_ERROR too
  * (§5.1.2), which bounds what a peer can make this side owe it.
  *
@@ -73,7 +76,14 @@ export class QuicCidEntry {
   }
 }
 
-/** Copies `length` bytes of `from` at `at` into the start of `to`, and zeroes the rest of `to`. */
+/**
+ * Copies `length` bytes of `from` at `at` into the start of `to`, and zeroes the rest of `to`.
+ *
+ * @param to The destination; every one of its bytes is written, so it is fully overwritten.
+ * @param from The source; bytes it does not have (an index before 0 or past its end) are copied as zero.
+ * @param at The offset in `from` of the first byte to copy.
+ * @param length How many bytes to copy; past `to.length` the extra bytes are dropped.
+ */
 export const quicCidCopy = (to: u8[], from: u8[], at: i32, length: i32): void => {
   for (let k: i32 = 0; k < toI32(to.length); k += 1) {
     to[k] = k < length && at + k >= 0 && at + k < toI32(from.length) ? from[at + k] : toU8(0)
@@ -137,18 +147,24 @@ export class QuicCidTable {
   local: QuicCidEntry[]
   peer: QuicCidEntry[]
   /** Peer sequence numbers this side must send RETIRE_CONNECTION_ID for, oldest first, as a ring of `retireCount` from `retireHead`. */
-  retirePending: i64[]
+  private retirePending: i64[]
   /** The next local sequence number to issue. */
   nextLocal: i64 = 0
   /** The peer's highest Retire Prior To so far. */
-  peerRetirePriorTo: i64 = 0
-  limit: i64 = 2
+  private peerRetirePriorTo: i64 = 0
+  private limit: i64 = 2
   /** The index in `peer` of the ID this side sends to, or -1 before the peer gave one. */
-  current: i32 = -1
-  retireHead: i32 = 0
+  private current: i32 = -1
+  private retireHead: i32 = 0
   retireCount: i32 = 0
 
-  /** A table for an advertised `limit` (2 to 8 in practice) with `localCapacity` slots for this side's IDs. */
+  /**
+   * A table for an advertised `limit` (2 to 8 in practice) with `localCapacity` slots for this side's IDs.
+   *
+   * @param limit The `active_connection_id_limit` this side advertised: how many peer IDs may be active at
+   *   once, and half the size of the retirement ring. Below 1 still gets one peer slot.
+   * @param localCapacity How many of this side's IDs can be active at once; `addLocal` answers -1 past it.
+   */
   constructor(limit: i64, localCapacity: i32) {
     const peerSlots: i32 = limit < 1 ? 1 : toI32(limit)
     this.local = quicCidSlots(localCapacity)
@@ -173,9 +189,15 @@ export class QuicCidTable {
   }
 
   /**
-   * Issues the first `length` bytes of `cid` as the next local ID, with its
+   * Issues `cid`, up to its first 20 bytes, as the next local ID, with its
    * 16-byte reset token (or none, empty, for sequence 0), and answers its
    * sequence number; -1 when every local slot is taken.
+   *
+   * @param cid The ID's bytes, copied into the slot; past 20 bytes (`QUIC_MAX_CID_LENGTH`) the rest is
+   *   dropped.
+   * @param resetToken The 16-byte stateless reset token, copied; any other length, empty included, means
+   *   none.
+   * @returns The ID's sequence number, counting up from 0, or -1 when every local slot is taken.
    */
   addLocal(cid: u8[], resetToken: u8[]): i64 {
     const k: i32 = quicCidFree(this.local)
@@ -197,7 +219,11 @@ export class QuicCidTable {
     return sequence
   }
 
-  /** How many local IDs are active: a retired one leaves its slot. */
+  /**
+   * How many local IDs are active: a retired one leaves its slot.
+   *
+   * @returns The count of issued, not yet retired local IDs, from 0 to `localCapacity`.
+   */
   activeLocal(): i32 {
     let n: i32 = 0
     for (const entry of this.local) {
@@ -208,12 +234,26 @@ export class QuicCidTable {
     return n
   }
 
-  /** Whether `dcid` is an active local ID: whether a packet sent to it is this connection's. */
+  /**
+   * Whether `dcid` is an active local ID: whether a packet sent to it is this connection's.
+   *
+   * @param dcid A packet's whole Destination Connection ID.
+   * @returns True when it matches one of this side's active IDs byte for byte.
+   */
   ownsLocal(dcid: u8[]): boolean {
     return this.ownsLocalAt(dcid, QUIC_CID_ZERO, toI32(dcid.length))
   }
 
-  /** Whether `buf[at .. at + length)` is an active local ID. Every slot is compared, each in constant time. */
+  /**
+   * Whether `buf[at .. at + length)` is an active local ID. Each active slot
+   * of that length is compared in constant time, and the loop does not stop
+   * at a match; unused slots and slots of another length are skipped.
+   *
+   * @param buf The bytes holding the ID, such as a received datagram; only read.
+   * @param at The offset of the ID's first byte in `buf`.
+   * @param length The ID's length in bytes.
+   * @returns True when the bytes match one of this side's active IDs of that length.
+   */
   ownsLocalAt(buf: u8[], at: i32, length: i32): boolean {
     let owned: boolean = false
     for (const entry of this.local) {
@@ -231,6 +271,12 @@ export class QuicCidTable {
    * ID the packet itself was sent to (§19.16). Retiring one twice is fine. A
    * retired ID leaves its slot, so a peer that retires one ID after another
    * cannot grow the table.
+   *
+   * @param sequence The Sequence Number field of the RETIRE_CONNECTION_ID frame.
+   * @param buf The bytes holding the Destination Connection ID of the packet the frame came in.
+   * @param at The offset of that ID's first byte in `buf`.
+   * @param length That ID's length in bytes.
+   * @returns `QUIC_ERROR_NO_ERROR`, or `QUIC_ERROR_PROTOCOL_VIOLATION` to close the connection with.
    */
   retireLocal(sequence: i64, buf: u8[], at: i32, length: i32): i64 {
     if (sequence < 0 || sequence >= this.nextLocal) {
@@ -247,7 +293,11 @@ export class QuicCidTable {
     return QUIC_ERROR_NO_ERROR
   }
 
-  /** How many peer IDs are active: retired ones leave their slots. */
+  /**
+   * How many peer IDs are active: retired ones leave their slots.
+   *
+   * @returns The count of the peer's IDs not yet retired, from 0 to `limit`.
+   */
   activePeer(): i32 {
     let n: i32 = 0
     for (const entry of this.peer) {
@@ -258,7 +308,15 @@ export class QuicCidTable {
     return n
   }
 
-  /** `addPeerAt` of whole arrays: `resetToken` empty for none. */
+  /**
+   * `addPeerAt` of whole arrays: `resetToken` empty for none.
+   *
+   * @param sequence The ID's sequence number: 0 for the SCID of the peer's first packet.
+   * @param retirePriorTo The frame's Retire Prior To field, 0 for the first packet's SCID.
+   * @param cid The whole ID, copied into a slot.
+   * @param resetToken The 16-byte stateless reset token; any other length, empty included, means none.
+   * @returns `QUIC_ERROR_NO_ERROR`, or the error to close the connection with, as `addPeerAt` answers.
+   */
   addPeer(sequence: i64, retirePriorTo: i64, cid: u8[], resetToken: u8[]): i64 {
     return this.addPeerAt(
       sequence,
@@ -282,6 +340,17 @@ export class QuicCidTable {
    * or the queued retirements would pass what §5.1 allows, in which case the
    * table is left as it was. The tokens are compared in constant time, since
    * a token is what a stateless reset is checked against.
+   *
+   * @param sequence The ID's sequence number from the NEW_CONNECTION_ID frame, or 0 for the first packet's
+   *   SCID.
+   * @param retirePriorTo The frame's Retire Prior To field; a value below an earlier one changes nothing.
+   * @param cid The bytes holding the ID, such as the received packet; only read, and the ID is copied out.
+   * @param cidAt The offset of the ID's first byte in `cid`.
+   * @param cidLength The ID's length in bytes, 0 to 20; longer is a PROTOCOL_VIOLATION.
+   * @param token The bytes holding the reset token; read only when `hasToken`.
+   * @param tokenAt The offset of the token's first byte in `token`.
+   * @param hasToken Whether a 16-byte token comes with the ID: false only for the first packet's SCID.
+   * @returns `QUIC_ERROR_NO_ERROR`, `QUIC_ERROR_PROTOCOL_VIOLATION` or `QUIC_ERROR_CONNECTION_ID_LIMIT`.
    */
   addPeerAt(
     sequence: i64,
@@ -363,18 +432,28 @@ export class QuicCidTable {
     return QUIC_ERROR_NO_ERROR
   }
 
-  /** Points `current` at the oldest active peer ID, or -1 when none is. */
+  /** Makes the oldest active peer ID the current one, or none when no peer ID is active. */
   prune(): void {
     this.current = quicCidOldest(this.peer, -1, false)
   }
 
-  /** The peer ID this side sends to: its slot, or `null` before the peer gave any. */
+  /**
+   * The peer ID this side sends to: its slot, or `null` before the peer gave any.
+   *
+   * @returns The table's own entry, not a copy, so it changes when the peer's IDs do; `null` when no
+   *   peer ID is active.
+   */
   currentPeerEntry(): QuicCidEntry | null {
     const at: i32 = this.current
     return at >= 0 && at < toI32(this.peer.length) ? this.peer[at] : null
   }
 
-  /** A copy of the peer ID this side sends to, or empty before the peer gave any. */
+  /**
+   * A copy of the peer ID this side sends to, or empty before the peer gave any.
+   *
+   * @returns A new array of the ID's bytes, the caller's to keep; empty when no peer ID is active, and
+   *   also when the active one is zero-length (use `currentPeerEntry` to tell the two apart).
+   */
   currentPeer(): u8[] {
     const entry: QuicCidEntry | null = this.currentPeerEntry()
     const length: i32 = entry !== null ? entry.length : 0
@@ -385,7 +464,12 @@ export class QuicCidTable {
     return out
   }
 
-  /** Queues a RETIRE_CONNECTION_ID for peer sequence `sequence`, unless it is queued already or the ring is full. */
+  /**
+   * Queues a RETIRE_CONNECTION_ID for peer sequence `sequence`, unless it is queued already or the
+   * ring is full.
+   *
+   * @param sequence The sequence number of the peer ID to retire; `takeRetire` hands it back.
+   */
   queueRetire(sequence: i64): void {
     const size: i32 = toI32(this.retirePending.length)
     for (let k: i32 = 0; k < this.retireCount; k += 1) {
@@ -404,7 +488,11 @@ export class QuicCidTable {
     }
   }
 
-  /** The oldest queued retirement, or -1 when none is queued. Taking it removes it. */
+  /**
+   * The oldest queued retirement, or -1 when none is queued. Taking it removes it.
+   *
+   * @returns The peer sequence number to send RETIRE_CONNECTION_ID for, or -1 when none is queued.
+   */
   takeRetire(): i64 {
     const size: i32 = toI32(this.retirePending.length)
     if (this.retireCount === 0 || size === 0) {
@@ -417,7 +505,12 @@ export class QuicCidTable {
     return first
   }
 
-  /** The first local ID still to be announced in a NEW_CONNECTION_ID frame, oldest first, or `null`. */
+  /**
+   * The first local ID still to be announced in a NEW_CONNECTION_ID frame, oldest first, or `null`.
+   *
+   * @returns The table's own entry, whose `announced` the caller sets once the frame is sent; `null` when
+   *   every active local ID was announced.
+   */
   nextUnannounced(): QuicCidEntry | null {
     const k: i32 = quicCidOldest(this.local, -1, true)
     return k >= 0 && k < toI32(this.local.length) ? this.local[k] : null

@@ -14,7 +14,7 @@
  *       at = frame.end;
  *     }
  *
- * **Every frame type of RFC 9000 is read**, 0x00 to 0x1e, and RFC 9221's
+ * **Coverage.** Every frame type of RFC 9000 is read, 0x00 to 0x1e, and RFC 9221's
  * DATAGRAM, 0x30 and 0x31, so a type outside those is the one parse error a
  * well-formed packet cannot produce. What
  * a frame *means* is `nish/net/quic`'s: this module checks only what §19 says
@@ -36,7 +36,7 @@
  * every field it reads and resets the rest, and stores nothing but numbers,
  * so a payload made inside an arena block can be read inside it.
  *
- * **The writers** come in two forms. A `put` writer writes one frame into a
+ * **Writers.** They come in two forms. A `put` writer writes one frame into a
  * caller's buffer at an offset, before an end, and answers the offset past
  * it, or -1 with nothing written; a `push` writer appends one to an array
  * and answers whether it could, by growing the array and calling the `put`
@@ -67,15 +67,21 @@ import {
 
 // ---- Frame types (RFC 9000 §19, Table 3 of §12.4) ------------------------------
 
+/** PADDING (§19.1): a single zero byte that means nothing, used to make a packet bigger. */
 export const QUIC_FRAME_PADDING: i32 = 0x00
+/** PING (§19.2): the type alone, sent to get an acknowledgement or to keep a connection alive. */
 export const QUIC_FRAME_PING: i32 = 0x01
 /** ACK without ECN counts. */
 export const QUIC_FRAME_ACK: i32 = 0x02
 /** ACK with the three ECN counts after the ranges. */
 export const QUIC_FRAME_ACK_ECN: i32 = 0x03
+/** RESET_STREAM (§19.4): the sender abandons a stream, with an error code and the final size. */
 export const QUIC_FRAME_RESET_STREAM: i32 = 0x04
+/** STOP_SENDING (§19.5): asks the peer to stop sending on a stream, with an error code. */
 export const QUIC_FRAME_STOP_SENDING: i32 = 0x05
+/** CRYPTO (§19.6): TLS handshake bytes at an offset in one packet number space's crypto stream. */
 export const QUIC_FRAME_CRYPTO: i32 = 0x06
+/** NEW_TOKEN (§19.7): a server's token for the client to present in a later connection's Initial. */
 export const QUIC_FRAME_NEW_TOKEN: i32 = 0x07
 /**
  * The first of the eight STREAM types, 0x08 to 0x0f. `quicParseFrame` answers
@@ -83,22 +89,35 @@ export const QUIC_FRAME_NEW_TOKEN: i32 = 0x07
  * `offset`, `dataLength` and `fin` (§19.8).
  */
 export const QUIC_FRAME_STREAM: i32 = 0x08
+/** MAX_DATA (§19.9): the connection's flow-control limit, in bytes across every stream. */
 export const QUIC_FRAME_MAX_DATA: i32 = 0x10
+/** MAX_STREAM_DATA (§19.10): one stream's flow-control limit, in bytes. */
 export const QUIC_FRAME_MAX_STREAM_DATA: i32 = 0x11
+/** MAX_STREAMS (§19.11) for bidirectional streams: how many the peer may open in all. */
 export const QUIC_FRAME_MAX_STREAMS_BIDI: i32 = 0x12
+/** MAX_STREAMS (§19.11) for unidirectional streams: how many the peer may open in all. */
 export const QUIC_FRAME_MAX_STREAMS_UNI: i32 = 0x13
+/** DATA_BLOCKED (§19.12): the sender has data to send but the connection limit holds it back. */
 export const QUIC_FRAME_DATA_BLOCKED: i32 = 0x14
+/** STREAM_DATA_BLOCKED (§19.13): the sender is held back by one stream's limit. */
 export const QUIC_FRAME_STREAM_DATA_BLOCKED: i32 = 0x15
+/** STREAMS_BLOCKED (§19.14) for bidirectional streams: the sender wants to open more than it may. */
 export const QUIC_FRAME_STREAMS_BLOCKED_BIDI: i32 = 0x16
+/** STREAMS_BLOCKED (§19.14) for unidirectional streams: the sender wants to open more than it may. */
 export const QUIC_FRAME_STREAMS_BLOCKED_UNI: i32 = 0x17
+/** NEW_CONNECTION_ID (§19.15): another connection ID the peer may use, with its reset token. */
 export const QUIC_FRAME_NEW_CONNECTION_ID: i32 = 0x18
+/** RETIRE_CONNECTION_ID (§19.16): the sender stops using the peer's connection ID of a sequence number. */
 export const QUIC_FRAME_RETIRE_CONNECTION_ID: i32 = 0x19
+/** PATH_CHALLENGE (§19.17): eight bytes the peer must echo in a PATH_RESPONSE to validate a path. */
 export const QUIC_FRAME_PATH_CHALLENGE: i32 = 0x1a
+/** PATH_RESPONSE (§19.18): the eight bytes of a PATH_CHALLENGE, echoed back. */
 export const QUIC_FRAME_PATH_RESPONSE: i32 = 0x1b
 /** CONNECTION_CLOSE with a transport error code and the frame type that caused it. */
 export const QUIC_FRAME_CONNECTION_CLOSE: i32 = 0x1c
 /** CONNECTION_CLOSE with an application error code, allowed only in 1-RTT packets. */
 export const QUIC_FRAME_CONNECTION_CLOSE_APP: i32 = 0x1d
+/** HANDSHAKE_DONE (§19.20): the server confirms the handshake; only a server sends it. */
 export const QUIC_FRAME_HANDSHAKE_DONE: i32 = 0x1e
 /**
  * DATAGRAM (RFC 9221 §4): an unreliable application payload. Type 0x30 runs
@@ -111,22 +130,39 @@ export const QUIC_FRAME_DATAGRAM_LENGTH: i32 = 0x31
 
 // ---- Transport error codes (RFC 9000 §20.1) ------------------------------------
 
+/** NO_ERROR: the connection closes without an error; also `quicParseFrame`'s answer for a good frame. */
 export const QUIC_ERROR_NO_ERROR: i64 = 0x00
+/** INTERNAL_ERROR: the endpoint broke on its own, not because of anything the peer sent. */
 export const QUIC_ERROR_INTERNAL: i64 = 0x01
+/** CONNECTION_REFUSED: the server will not accept the connection. */
 export const QUIC_ERROR_CONNECTION_REFUSED: i64 = 0x02
+/** FLOW_CONTROL_ERROR: the peer sent more data than the advertised limits allow. */
 export const QUIC_ERROR_FLOW_CONTROL: i64 = 0x03
+/** STREAM_LIMIT_ERROR: the peer opened a stream past the limit it was given. */
 export const QUIC_ERROR_STREAM_LIMIT: i64 = 0x04
+/** STREAM_STATE_ERROR: a frame arrived for a stream not in a state that permits it. */
 export const QUIC_ERROR_STREAM_STATE: i64 = 0x05
+/** FINAL_SIZE_ERROR: a stream's final size changed, or data arrived past it. */
 export const QUIC_ERROR_FINAL_SIZE: i64 = 0x06
+/** FRAME_ENCODING_ERROR: a frame is badly formed, such as truncated or with a length past the packet. */
 export const QUIC_ERROR_FRAME_ENCODING: i64 = 0x07
+/** TRANSPORT_PARAMETER_ERROR: the peer's transport parameters are malformed or invalid. */
 export const QUIC_ERROR_TRANSPORT_PARAMETER: i64 = 0x08
+/** CONNECTION_ID_LIMIT_ERROR: the peer gave more connection IDs than `active_connection_id_limit`. */
 export const QUIC_ERROR_CONNECTION_ID_LIMIT: i64 = 0x09
+/** PROTOCOL_VIOLATION: the peer broke the protocol in a way no more specific code names. */
 export const QUIC_ERROR_PROTOCOL_VIOLATION: i64 = 0x0a
+/** INVALID_TOKEN: a server received a client Initial whose Token field it cannot accept, from a Retry or NEW_TOKEN. */
 export const QUIC_ERROR_INVALID_TOKEN: i64 = 0x0b
+/** APPLICATION_ERROR: the application closed, reported in a transport close where 0x1d may not be sent. */
 export const QUIC_ERROR_APPLICATION: i64 = 0x0c
+/** CRYPTO_BUFFER_EXCEEDED: the peer sent more CRYPTO data than the endpoint buffers. */
 export const QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED: i64 = 0x0d
+/** KEY_UPDATE_ERROR: the peer made a mistake in a key update (RFC 9001 §6). */
 export const QUIC_ERROR_KEY_UPDATE: i64 = 0x0e
+/** AEAD_LIMIT_REACHED: the keys reached their confidentiality or integrity limit (RFC 9001 §6.6). */
 export const QUIC_ERROR_AEAD_LIMIT_REACHED: i64 = 0x0f
+/** NO_VIABLE_PATH: no network path is fit for QUIC, such as one whose MTU is too small. */
 export const QUIC_ERROR_NO_VIABLE_PATH: i64 = 0x10
 /** CRYPTO_ERROR is this plus the TLS alert description (RFC 9001 §4.8): 0x0100 to 0x01ff. */
 export const QUIC_ERROR_CRYPTO: i64 = 0x0100
@@ -212,8 +248,11 @@ export class QuicFrame {
  * read inside it.
  */
 class QuicFrameReader {
+  /** @internal Read in quic-frame.ts outside the class. */
   at: i32
+  /** @internal Read in quic-frame.ts outside the class. */
   end: i32
+  /** @internal Read in quic-frame.ts outside the class. */
   failed: boolean = false
 
   constructor(at: i32, end: i32) {
@@ -496,6 +535,15 @@ const quicFrameReadBody = (r: QuicFrameReader, d: u8[], frame: QuicFrame, type: 
  * further, and `frame.type` still holds the type when it was read, which is
  * what CONNECTION_CLOSE reports. A window outside `payload` is
  * `QUIC_ERROR_INTERNAL`, the caller's fault rather than the peer's.
+ *
+ * @param frame The frame to fill, reused across frames and packets; its windows (`dataStart` and the
+ *   like) are offsets into `payload`, so they mean something only while `payload` is unchanged.
+ * @param payload The decrypted packet payload, as the peer sent it; only read, never kept.
+ * @param at The offset of the frame's first byte, its type.
+ * @param end One past the last byte the frame may use, normally the payload's end; a frame reaching past
+ *   it is `QUIC_ERROR_FRAME_ENCODING`.
+ * @returns `QUIC_ERROR_NO_ERROR` (0) for a good frame, otherwise the `QUIC_ERROR_*` code to close the
+ *   connection with.
  */
 export const quicParseFrame = (frame: QuicFrame, payload: u8[], at: i32, end: i32): i64 => {
   quicFrameReset(frame, at)
@@ -538,6 +586,13 @@ export const quicParseFrame = (frame: QuicFrame, payload: u8[], at: i32, end: i3
  * ACK, CRYPTO and the transport CONNECTION_CLOSE; a 0-RTT packet anything
  * but ACK, CRYPTO, NEW_TOKEN, HANDSHAKE_DONE and the retire and response
  * frames a client cannot have a reason to send yet; a 1-RTT packet anything.
+ *
+ * @param type The frame type as `quicParseFrame` answers it in `QuicFrame.type`, every STREAM type as
+ *   `QUIC_FRAME_STREAM`.
+ * @param packetType The packet's `QUIC_PACKET_*` type from `nish/net/quic-packet`, `QUIC_PACKET_SHORT`
+ *   for 1-RTT.
+ * @returns True when §12.4 permits the frame there; false when it does not permit that frame in that
+ *   packet type, and for a packet type that carries no frames, such as Retry.
  */
 export const quicFrameAllowed = (type: i32, packetType: i32): boolean => {
   if (packetType === QUIC_PACKET_SHORT) {
@@ -570,6 +625,10 @@ export const quicFrameAllowed = (type: i32, packetType: i32): boolean => {
 /**
  * Whether a frame of `type` asks for an acknowledgement (RFC 9000 §13.2):
  * every frame but ACK, PADDING and CONNECTION_CLOSE.
+ *
+ * @param type The frame type as `quicParseFrame` answers it.
+ * @returns True when a packet holding this frame is ack-eliciting, which is what decides whether the
+ *   peer must acknowledge it promptly.
  */
 export const quicFrameAckEliciting = (type: i32): boolean =>
   !(
@@ -621,7 +680,12 @@ const quicFrameGrow = (out: u8[], size: i32): i32 => {
 const quicFrameVarints3 = (a: i64, b: i64, c: i64): boolean =>
   quicVarintSize(a) !== 0 && quicVarintSize(b) !== 0 && quicVarintSize(c) !== 0
 
-/** Appends `count` PADDING frames, which are `count` zero bytes. A count below one appends nothing. */
+/**
+ * Appends `count` PADDING frames, which are `count` zero bytes. A count below one appends nothing.
+ *
+ * @param out The bytes to grow, such as a packet payload being built.
+ * @param count How many bytes of padding to append.
+ */
 export const quicPushPadding = (out: u8[], count: i32): void => {
   quicPacketGrow(out, count)
 }
@@ -629,6 +693,12 @@ export const quicPushPadding = (out: u8[], count: i32): void => {
 /**
  * Writes `count` PADDING frames, zero bytes, into `buf[at .. at + count)`,
  * clamped to `buf`, and answers the offset past them.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the first zero byte.
+ * @param count How many zero bytes to write; fewer are written where `buf` ends first.
+ * @returns The offset past the last byte written, which is short of `at + count` when `buf` was too small and
+ *   `at` itself when nothing could be written.
  */
 export const quicPutPadding = (buf: u8[], at: i32, count: i32): i32 => {
   let k: i32 = 0
@@ -639,7 +709,15 @@ export const quicPutPadding = (buf: u8[], at: i32, count: i32): i32 => {
   return at + k
 }
 
-/** Writes a frame that is its type alone, PING or HANDSHAKE_DONE; -1 for another type or no room. */
+/**
+ * Writes a frame that is its type alone, PING or HANDSHAKE_DONE; -1 for another type or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset to write the one byte at.
+ * @param end One past the last byte the frame may use, such as the end of the packet's room.
+ * @param type `QUIC_FRAME_PING` or `QUIC_FRAME_HANDSHAKE_DONE`.
+ * @returns `at + 1`, or -1 with nothing written.
+ */
 export const quicPutTypeOnly = (buf: u8[], at: i32, end: i32, type: i32): i32 => {
   if ((type !== QUIC_FRAME_PING && type !== QUIC_FRAME_HANDSHAKE_DONE) || !quicFrameRoom(buf, at, end, 1)) {
     return -1
@@ -647,7 +725,13 @@ export const quicPutTypeOnly = (buf: u8[], at: i32, end: i32, type: i32): i32 =>
   return quicFramePutByte(buf, at, type)
 }
 
-/** Appends a frame that is its type alone: PING or HANDSHAKE_DONE. Answers `false` for another type. */
+/**
+ * Appends a frame that is its type alone: PING or HANDSHAKE_DONE. Answers `false` for another type.
+ *
+ * @param out The bytes to append the frame's one byte to.
+ * @param type `QUIC_FRAME_PING` or `QUIC_FRAME_HANDSHAKE_DONE`.
+ * @returns True when the frame was appended; false, appending nothing, for any other type.
+ */
 export const quicPushTypeOnly = (out: u8[], type: i32): boolean => {
   if (type !== QUIC_FRAME_PING && type !== QUIC_FRAME_HANDSHAKE_DONE) {
     return false
@@ -660,6 +744,11 @@ export const quicPushTypeOnly = (out: u8[], type: i32): boolean => {
  * The size of the ACK frame `quicPutAck` writes for these ranges, or 0 when
  * it would refuse them: no ranges, ranges out of order or touching, a pair
  * the array does not hold, or a value no varint holds.
+ *
+ * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+ * @param rangeCount How many pairs to read from the front of `ranges`; the rest of the array is ignored.
+ * @param ackDelay The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+ * @returns The frame's size in bytes, or 0 when `quicPutAck` would refuse these arguments.
  */
 export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 => {
   if (rangeCount < 1 || rangeCount * 2 > toI32(ranges.length) || quicVarintSize(ackDelay) === 0) {
@@ -700,6 +789,15 @@ export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 
  * largest at least two below the smallest of the pair before it), with
  * `ackDelay` already scaled by this endpoint's exponent. Answers -1, writing
  * nothing, where `quicAckSize` answers 0 or the frame does not fit.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+ * @param rangeCount How many pairs to read from the front of `ranges`.
+ * @param ackDelay The ACK Delay field, already scaled: microseconds shifted right by the exponent.
+ * @returns The offset past the frame, or -1 with nothing written. The frame is always type 0x02, without ECN
+ *   counts.
  */
 export const quicPutAck = (
   buf: u8[],
@@ -734,7 +832,15 @@ export const quicPutAck = (
   return cursor
 }
 
-/** Appends the ACK frame `quicPutAck` writes. Answers `false`, appending nothing, where it refuses. */
+/**
+ * Appends the ACK frame `quicPutAck` writes. Answers `false`, appending nothing, where it refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+ * @param rangeCount How many pairs to read from the front of `ranges`.
+ * @param ackDelay The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+ * @returns True when the frame was appended.
+ */
 export const quicPushAck = (out: u8[], ranges: i64[], rangeCount: i32, ackDelay: i64): boolean => {
   const size: i32 = quicAckSize(ranges, rangeCount, ackDelay)
   if (size === 0) {
@@ -747,6 +853,11 @@ export const quicPushAck = (out: u8[], ranges: i64[], rangeCount: i32, ackDelay:
 /**
  * The bytes a CRYPTO frame's header takes for `length` bytes of data at
  * `offset`: the type, the offset and the length.
+ *
+ * @param offset The crypto stream offset, in bytes, of the frame's first data byte, up to 2^62 − 1.
+ * @param length How many data bytes the frame carries.
+ * @returns The header's size in bytes, not counting the data, which is what a sender subtracts from a
+ *   packet's room to see how much data fits.
  */
 export const quicCryptoOverhead = (offset: i64, length: i32): i32 =>
   1 + quicVarintSize(offset) + quicVarintSize(toI64(length))
@@ -755,6 +866,15 @@ export const quicCryptoOverhead = (offset: i64, length: i32): i32 =>
  * Writes a CRYPTO frame (§19.6) carrying `data[from .. from + length)` at
  * stream offset `offset`. Answers -1, writing nothing, for a window outside
  * `data`, an offset whose end passes 2^62 − 1, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param offset The crypto stream offset, in bytes, of the first byte carried.
+ * @param data The handshake bytes to take the window from; copied, not kept.
+ * @param from The offset in `data` of the first byte to carry.
+ * @param length How many bytes to carry.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutCrypto = (
   buf: u8[],
@@ -780,7 +900,16 @@ export const quicPutCrypto = (
   return cursor + length
 }
 
-/** Appends the CRYPTO frame `quicPutCrypto` writes. Answers `false`, appending nothing, where it refuses. */
+/**
+ * Appends the CRYPTO frame `quicPutCrypto` writes. Answers `false`, appending nothing, where it refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param offset The crypto stream offset, in bytes, of the first byte carried.
+ * @param data The handshake bytes to take the window from; copied, not kept.
+ * @param from The offset in `data` of the first byte to carry.
+ * @param length How many bytes to carry.
+ * @returns True when the frame was appended.
+ */
 export const quicPushCrypto = (out: u8[], offset: i64, data: u8[], from: i32, length: i32): boolean => {
   if (!quicFrameWindowFits(data, from, length) || offset < 0 || offset > QUIC_MAX_VARINT - toI64(length)) {
     return false
@@ -794,6 +923,11 @@ export const quicPushCrypto = (out: u8[], offset: i64, data: u8[], from: i32, le
  * The bytes a STREAM frame's header takes for `length` bytes of data on
  * `streamId` at `offset`: the type, the stream ID, the offset when it is not
  * zero, and the length, which `quicPutStream` always writes.
+ *
+ * @param streamId The stream the frame is for; meaningful up to 2^62 − 1.
+ * @param offset The stream offset, in bytes, of the frame's first data byte.
+ * @param length How many data bytes the frame carries.
+ * @returns The header's size in bytes, not counting the data.
  */
 export const quicStreamOverhead = (streamId: i64, offset: i64, length: i32): i32 =>
   1 + quicVarintSize(streamId) + (offset === 0 ? 0 : quicVarintSize(offset)) + quicVarintSize(toI64(length))
@@ -807,6 +941,17 @@ export const quicStreamOverhead = (streamId: i64, offset: i64, length: i32): i32
  * always written, so another frame may follow; the Offset field only when it
  * is not zero. Answers -1, writing nothing, for a `length` past the array, a
  * stream ID that is not a varint, an end past 2^62 − 1, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param streamId The stream the data belongs to.
+ * @param offset The stream offset, in bytes, of the first byte carried.
+ * @param data The bytes to carry, read as a ring; copied, not kept.
+ * @param from The index in `data` of the first byte to carry, inside the array when `length` is above zero.
+ * @param length How many bytes to carry, at most `data.length`; 0 for a frame that only carries FIN.
+ * @param fin Whether these bytes end the stream, so that `offset + length` is its final size.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutStream = (
   buf: u8[],
@@ -852,6 +997,15 @@ export const quicPutStream = (
  * `streamId` at `offset`, with FIN when `fin`, as `quicPutStream` writes it.
  * Answers `false`, appending nothing, for a window outside `data`, a stream
  * ID that is not a varint or an end past 2^62 − 1.
+ *
+ * @param out The bytes to append the frame to.
+ * @param streamId The stream the data belongs to.
+ * @param offset The stream offset, in bytes, of the first byte carried.
+ * @param data The bytes to take the window from; copied, not kept, and not read as a ring.
+ * @param from The offset in `data` of the first byte to carry.
+ * @param length How many bytes to carry; 0 for a frame that only carries FIN.
+ * @param fin Whether these bytes end the stream.
+ * @returns True when the frame was appended.
  */
 export const quicPushStream = (
   out: u8[],
@@ -896,6 +1050,14 @@ const quicFrameValueFits = (type: i32, value: i64): boolean => {
  * MAX_STREAMS_UNI, DATA_BLOCKED, STREAMS_BLOCKED_BIDI, STREAMS_BLOCKED_UNI or
  * RETIRE_CONNECTION_ID. Answers -1 for another type, a value no varint holds,
  * a stream count past 2^60, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param type One of the seven `QUIC_FRAME_*` types above.
+ * @param value What the type carries: a limit in bytes for MAX_DATA and DATA_BLOCKED, a count of streams for
+ *   the four stream-count types, a sequence number for RETIRE_CONNECTION_ID.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutValue = (buf: u8[], at: i32, end: i32, type: i32, value: i64): i32 => {
   if (!quicFrameValueFits(type, value) || !quicFrameRoom(buf, at, end, 1 + quicVarintSize(value))) {
@@ -904,7 +1066,14 @@ export const quicPutValue = (buf: u8[], at: i32, end: i32, type: i32, value: i64
   return quicFramePutVarint(buf, quicFramePutByte(buf, at, type), value)
 }
 
-/** Appends the frame `quicPutValue` writes. Answers `false`, appending nothing, where it refuses. */
+/**
+ * Appends the frame `quicPutValue` writes. Answers `false`, appending nothing, where it refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param type One of the seven types `quicPutValue` writes.
+ * @param value What the type carries: bytes, a count of streams or a sequence number, as for `quicPutValue`.
+ * @returns True when the frame was appended.
+ */
 export const quicPushValue = (out: u8[], type: i32, value: i64): boolean => {
   if (!quicFrameValueFits(type, value)) {
     return false
@@ -917,6 +1086,15 @@ export const quicPushValue = (out: u8[], type: i32, value: i64): boolean => {
 /**
  * Writes a MAX_STREAM_DATA or STREAM_DATA_BLOCKED frame: the stream ID and
  * the limit. Answers -1 for another type, a value no varint holds, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param type `QUIC_FRAME_MAX_STREAM_DATA` or `QUIC_FRAME_STREAM_DATA_BLOCKED`.
+ * @param streamId The stream the limit is for.
+ * @param value The stream's limit in bytes: the new one for MAX_STREAM_DATA, the one the sender is blocked at
+ *   for STREAM_DATA_BLOCKED.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutStreamValue = (
   buf: u8[],
@@ -938,7 +1116,15 @@ export const quicPutStreamValue = (
   return quicFramePutVarint(buf, cursor, value)
 }
 
-/** Appends the frame `quicPutStreamValue` writes. Answers `false`, appending nothing, where it refuses. */
+/**
+ * Appends the frame `quicPutStreamValue` writes. Answers `false`, appending nothing, where it refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param type `QUIC_FRAME_MAX_STREAM_DATA` or `QUIC_FRAME_STREAM_DATA_BLOCKED`.
+ * @param streamId The stream the limit is for.
+ * @param value The stream's limit in bytes.
+ * @returns True when the frame was appended.
+ */
 export const quicPushStreamValue = (out: u8[], type: i32, streamId: i64, value: i64): boolean => {
   if (
     (type !== QUIC_FRAME_MAX_STREAM_DATA && type !== QUIC_FRAME_STREAM_DATA_BLOCKED) ||
@@ -972,6 +1158,16 @@ const quicFrameNewCidSize = (sequence: i64, retirePriorTo: i64, cidLength: i32, 
  * of `connectionId`. Answers -1 for a connection ID outside 1 to 20 bytes or
  * past the array, a reset token that is not 16 bytes, a Retire Prior To
  * above the sequence number, a value no varint holds, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param sequence The sequence number this endpoint gives the new connection ID.
+ * @param retirePriorTo The peer is to retire every connection ID of a lower sequence number; 0 retires none.
+ * @param connectionId The bytes of the new ID, which may be a longer buffer; copied, not kept.
+ * @param cidLength How many bytes of `connectionId` are the ID, 1 to 20.
+ * @param resetToken The 16-byte stateless reset token tied to the ID; copied, not kept.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutNewConnectionId = (
   buf: u8[],
@@ -1000,6 +1196,13 @@ export const quicPutNewConnectionId = (
  * Appends a NEW_CONNECTION_ID frame (§19.15). Answers `false` for a
  * connection ID outside 1 to 20 bytes, a reset token that is not 16 bytes, a
  * Retire Prior To above the sequence number, or a value no varint holds.
+ *
+ * @param out The bytes to append the frame to.
+ * @param sequence The sequence number this endpoint gives the new connection ID.
+ * @param retirePriorTo The peer is to retire every connection ID of a lower sequence number; 0 retires none.
+ * @param connectionId The new ID, the whole array; copied, not kept.
+ * @param resetToken The 16-byte stateless reset token tied to the ID; copied, not kept.
+ * @returns True when the frame was appended; false, appending nothing, otherwise.
  */
 export const quicPushNewConnectionId = (
   out: u8[],
@@ -1032,6 +1235,14 @@ export const quicPushNewConnectionId = (
  * Writes a PATH_CHALLENGE or PATH_RESPONSE frame carrying the eight bytes
  * `data[from .. from + 8)`. Answers -1 for another type, a window outside
  * `data`, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param type `QUIC_FRAME_PATH_CHALLENGE` or `QUIC_FRAME_PATH_RESPONSE`.
+ * @param data Holds the eight bytes: fresh random ones for a challenge, the challenge's own for a response.
+ * @param from The offset in `data` of the first of the eight bytes.
+ * @returns The offset past the frame, nine bytes on, or -1 with nothing written.
  */
 export const quicPutPathData = (buf: u8[], at: i32, end: i32, type: i32, data: u8[], from: i32): i32 => {
   if (
@@ -1046,7 +1257,15 @@ export const quicPutPathData = (buf: u8[], at: i32, end: i32, type: i32, data: u
   return cursor + QUIC_PATH_DATA_SIZE
 }
 
-/** Appends the frame `quicPutPathData` writes. Answers `false`, appending nothing, where it refuses. */
+/**
+ * Appends the frame `quicPutPathData` writes. Answers `false`, appending nothing, where it refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param type `QUIC_FRAME_PATH_CHALLENGE` or `QUIC_FRAME_PATH_RESPONSE`.
+ * @param data Holds the eight bytes to carry.
+ * @param from The offset in `data` of the first of the eight bytes.
+ * @returns True when the frame was appended.
+ */
 export const quicPushPathData = (out: u8[], type: i32, data: u8[], from: i32): boolean => {
   if (
     (type !== QUIC_FRAME_PATH_CHALLENGE && type !== QUIC_FRAME_PATH_RESPONSE) ||
@@ -1061,6 +1280,15 @@ export const quicPushPathData = (out: u8[], type: i32, data: u8[], from: i32): b
 /**
  * Writes a RESET_STREAM frame (§19.4) or, with `finalSize` at -1, a
  * STOP_SENDING frame (§19.5). Answers -1 for a value no varint holds, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param streamId The stream being reset or asked to stop.
+ * @param errorCode The application's error code for why.
+ * @param finalSize For RESET_STREAM, the stream's final size: how many bytes of it were ever sent.
+ *   -1 asks for STOP_SENDING instead.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutStreamError = (
   buf: u8[],
@@ -1088,7 +1316,15 @@ export const quicPutStreamError = (
   return cursor
 }
 
-/** Appends the frame `quicPutStreamError` writes. Answers `false`, appending nothing, where it refuses. */
+/**
+ * Appends the frame `quicPutStreamError` writes. Answers `false`, appending nothing, where it refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param streamId The stream being reset or asked to stop.
+ * @param errorCode The application's error code for why.
+ * @param finalSize The stream's final size in bytes for RESET_STREAM, or -1 for STOP_SENDING.
+ * @returns True when the frame was appended.
+ */
 export const quicPushStreamError = (out: u8[], streamId: i64, errorCode: i64, finalSize: i64): boolean => {
   const reset: boolean = finalSize !== -1
   if (!quicFrameVarints3(streamId, errorCode, reset ? finalSize : 0)) {
@@ -1120,6 +1356,15 @@ const quicFrameCloseSize = (application: boolean, errorCode: i64, frameType: i64
  * caused the error (0 when none did); with `application` true the 0x1d form,
  * which has no frame type. `reason` is the phrase, UTF-8, possibly empty.
  * Answers -1 for a value no varint holds, or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param application Whether the close is the application's (0x1d) rather than the transport's (0x1c).
+ * @param errorCode A `QUIC_ERROR_*` code for a transport close, the application's own code otherwise.
+ * @param frameType The frame type that caused a transport error, 0 when none did; ignored when `application`.
+ * @param reason The whole array is the reason phrase; copied, not kept.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutConnectionClose = (
   buf: u8[],
@@ -1149,7 +1394,17 @@ export const quicPutConnectionClose = (
   return cursor + reasonLength
 }
 
-/** Appends the frame `quicPutConnectionClose` writes. Answers `false`, appending nothing, where it refuses. */
+/**
+ * Appends the frame `quicPutConnectionClose` writes. Answers `false`, appending nothing, where it
+ * refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param application Whether the close is the application's (0x1d) rather than the transport's (0x1c).
+ * @param errorCode A `QUIC_ERROR_*` code for a transport close, the application's own code otherwise.
+ * @param frameType The frame type that caused a transport error, 0 when none did; ignored when `application`.
+ * @param reason The whole array is the reason phrase, UTF-8, possibly empty; copied, not kept.
+ * @returns True when the frame was appended.
+ */
 export const quicPushConnectionClose = (
   out: u8[],
   application: boolean,
@@ -1168,6 +1423,10 @@ export const quicPushConnectionClose = (
 /**
  * Appends a NEW_TOKEN frame (§19.7) carrying `token`. Answers `false` for an
  * empty token, which §19.7 forbids.
+ *
+ * @param out The bytes to append the frame to.
+ * @param token The whole array is the token the client is to present later; copied, not kept.
+ * @returns True when the frame was appended; false, appending nothing, for an empty token.
  */
 export const quicPushNewToken = (out: u8[], token: u8[]): boolean => {
   const length: i32 = toI32(token.length)
@@ -1185,12 +1444,23 @@ export const quicPushNewToken = (out: u8[], token: u8[]): boolean => {
  * The size of the DATAGRAM frame `quicPutDatagram` writes for a payload of
  * `length` bytes: the type, the Length and the payload. This is the size RFC
  * 9221 §3 holds to `max_datagram_frame_size`.
+ *
+ * @param length The payload's size in bytes.
+ * @returns The whole frame's size in bytes.
  */
 export const quicDatagramSize = (length: i32): i32 => 1 + quicVarintSize(toI64(length)) + length
 
 /**
  * Writes a DATAGRAM frame with a Length (type 0x31, RFC 9221 §4) carrying
  * `data[from .. from + length)`. Answers -1 for a window outside `data` or no room.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param data The payload's bytes; copied, not kept.
+ * @param from The offset in `data` of the payload's first byte.
+ * @param length The payload's size in bytes.
+ * @returns The offset past the frame, or -1 with nothing written.
  */
 export const quicPutDatagram = (buf: u8[], at: i32, end: i32, data: u8[], from: i32, length: i32): i32 => {
   if (!quicFrameWindowFits(data, from, length) || !quicFrameRoom(buf, at, end, quicDatagramSize(length))) {
