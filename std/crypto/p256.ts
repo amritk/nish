@@ -3,12 +3,18 @@
  * deterministic nonces of RFC 6979.
  *
  *     import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256";
+ *     import { Secret, secret, wipe } from "nish:secret";
  *
- *     const priv: Secret<u8[]> = secret(readKey());              // nish:secret
- *     const pub: u8[] | null = p256PublicKey(priv);             // 65 bytes, 0x04 || X || Y
- *     const sig: u8[] | null = p256SignSha256(priv, message);   // 64 bytes, r || s
- *     wipe(priv);
- *     const ok: boolean = p256VerifySha256(pub, message, sig);
+ *     const raw: u8[] = new Array<u8>(32)
+ *     crypto.getRandomValues(raw)                              // in [1, n) but for about one draw in 2^32
+ *     const priv: Secret<u8[]> = secret(raw)
+ *     const message: u8[] = [104, 105]
+ *     const pub: u8[] | null = p256PublicKey(priv)             // 65 bytes, 0x04 || X || Y
+ *     const sig: u8[] | null = p256SignSha256(priv, message)   // 64 bytes, r || s
+ *     wipe(priv)
+ *     if (pub !== null && sig !== null) {
+ *       p256VerifySha256(pub, message, sig)                    // true
+ *     }
  *
  * A private key is 32 big-endian bytes holding a scalar in [1, n); a public
  * key is the uncompressed SEC1 encoding of SEC 1 §2.3.3; a signature is `r`
@@ -4055,8 +4061,11 @@ const p256ScalarInverse = (out: u32[], a: u32[]): void => {
  * Z = 0 is the identity, which the complete formulas take like any other point.
  */
 class P256ProjectivePoint {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   x: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   y: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z: u32[]
 
   /** The identity, (0 : 1 : 0). */
@@ -4074,13 +4083,21 @@ class P256ProjectivePoint {
  * selects into, and the curve's `b`, which the formulas multiply by.
  */
 class P256PointScratch {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t0: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t1: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t2: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t3: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t4: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   sum: P256ProjectivePoint
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   entry: P256ProjectivePoint
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   b: u32[]
 
   constructor() {
@@ -5247,6 +5264,9 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
  * The public key of `priv`: `priv * G` in the 65-byte uncompressed SEC 1
  * encoding. Answers `null` unless `priv` is `P256_SCALAR_SIZE` bytes holding a
  * scalar in [1, n) — 0 and n and everything above are not private keys.
+ *
+ * @param priv The private key, 32 big-endian bytes.
+ * @returns The 65-byte public key, or `null` for a key that is not one.
  */
 export const p256PublicKey = (priv: Secret<u8[]>): u8[] | null => expose(priv, p256PublicKeyExposed)
 
@@ -5276,6 +5296,11 @@ const p256PublicKeyExposed = (priv: u8[]): u8[] | null => {
  * uncompressed point on the curve, and for a product at infinity, which a
  * valid key and point cannot give. An x of zero is a point like any other
  * and is answered.
+ *
+ * @param priv This side's private key, 32 big-endian bytes.
+ * @param peerPoint The peer's 65-byte uncompressed public key.
+ * @returns The 32-byte shared secret, or `null` for a refused key or point and
+ *   a product at infinity.
  */
 export const p256Ecdh = (priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> | null => {
   const shared: u8[] | null = exposeWith(priv, peerPoint, p256EcdhExposed)
@@ -5337,6 +5362,10 @@ const p256EcdhExposed = (priv: u8[], peerPoint: u8[]): u8[] | null => {
  * bits. The same key and digest always give the same signature, and `s` is
  * not normalised to the lower half. Answers `null` for a private key
  * `p256PublicKey` would refuse.
+ *
+ * @param priv The private key, 32 big-endian bytes.
+ * @param digest The message's hash; only its leftmost 256 bits count.
+ * @returns The 64-byte signature `r || s`, or `null` for a refused key.
  */
 export const p256Sign = (priv: Secret<u8[]>, digest: u8[]): u8[] | null =>
   exposeWith(priv, digest, p256SignExposed)
@@ -5364,6 +5393,11 @@ const p256SignExposed = (priv: u8[], digest: u8[]): u8[] | null => {
  * verifies too, as FIPS 186-4 and SEC 1 have it. Nothing here asks for the
  * lower `s`, so a protocol that needs one signature per message and key (a
  * signature used as an identifier, say) has to refuse the upper half itself.
+ *
+ * @param pub The signer's 65-byte uncompressed public key.
+ * @param digest The message's hash; only its leftmost 256 bits count.
+ * @param sig The 64-byte signature `r || s`.
+ * @returns `true` when the signature is valid, `false` for anything else.
  */
 export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   if (toI32(sig.length) !== 64) {
@@ -5420,10 +5454,23 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   return timingSafeEqual(vBytes, rBytes)
 }
 
-/** `p256Sign` of the SHA-256 of `msg`: ECDSA with SHA-256 over the whole message. */
+/**
+ * `p256Sign` of the SHA-256 of `msg`: ECDSA with SHA-256 over the whole message.
+ *
+ * @param priv The private key, 32 big-endian bytes.
+ * @param msg The whole message, hashed here.
+ * @returns The 64-byte signature `r || s`, or `null` for a refused key.
+ */
 export const p256SignSha256 = (priv: Secret<u8[]>, msg: u8[]): u8[] | null => p256Sign(priv, sha256(msg))
 
-/** `p256Verify` of the SHA-256 of `msg`. */
+/**
+ * `p256Verify` of the SHA-256 of `msg`.
+ *
+ * @param pub The signer's 65-byte uncompressed public key.
+ * @param msg The whole message, hashed here.
+ * @param sig The 64-byte signature `r || s`.
+ * @returns `true` when the signature is valid, `false` for anything else.
+ */
 export const p256VerifySha256 = (pub: u8[], msg: u8[], sig: u8[]): boolean =>
   p256Verify(pub, sha256(msg), sig)
 
@@ -5653,32 +5700,113 @@ const p256WindowFits = (length: i32, at: i32, len: i32): boolean => at >= 0 && l
  *     const ok: boolean = p256SignSha256Into(scratch, priv, msg, 0, msg.length, sig, 0);
  */
 export class P256SignScratch {
-  /** FIPS 180-4 §4.2.2's round constants. */
+  /**
+   * FIPS 180-4 §4.2.2's round constants.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   kt: u32[]
-  /** A SHA-256 hash value, schedule and padded tail. */
+  /**
+   * A SHA-256 hash value.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   hash: u32[]
+  /**
+   * A SHA-256 message schedule.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   schedule: u32[]
+  /**
+   * A SHA-256 message's padded tail.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   tail: u8[]
-  /** An HMAC key block and the message after it. */
+  /**
+   * An HMAC key block and the message after it.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   block: u8[]
-  /** `V || sep`, where every key update's message starts (RFC 6979 §3.2 steps d, f and h.3). */
+  /**
+   * `V || sep`, where every key update's message starts (RFC 6979 §3.2 steps d, f and h.3).
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   message: u8[]
-  /** RFC 6979's `K` and `V`; the last `V` is the nonce. */
+  /**
+   * RFC 6979's `K`.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   k: u8[]
+  /**
+   * RFC 6979's `V`; the last `V` is the nonce.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   v: u8[]
-  /** The message's digest, then int2octets of it mod n: RFC 6979's `h1`. */
+  /**
+   * The message's digest, then int2octets of it mod n: RFC 6979's `h1`.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   h1: u8[]
-  /** The digest mod n, `r`, the nonce point's affine x, and `k^-1` in the Montgomery domain. */
+  /**
+   * The digest mod n.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   z: u32[]
+  /**
+   * The signature's `r`.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   r: u32[]
+  /**
+   * The nonce point's affine x.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   x: u32[]
+  /**
+   * The nonce `k`, then `k^-1`, in the Montgomery domain.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   kM: u32[]
-  /** The order n and R^2 mod n. */
+  /**
+   * The order n.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   n: u32[]
+  /**
+   * R^2 mod n.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   r2: u32[]
-  /** The nonce's multiple of G, the comb table of G and point scratch. */
+  /**
+   * The nonce's multiple of G.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   point: P256ProjectivePoint
+  /**
+   * The comb table of G.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   table: u32[]
+  /**
+   * The point arithmetic's scratch.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   points: P256PointScratch
 
   constructor() {
@@ -5803,6 +5931,15 @@ const p256WipeSignScratch = (sc: P256SignScratch): void => {
  * leaves the arena where it was; every secret the scratch held — RFC 6979's
  * `K` and `V`, the nonce's inverse, its point and the point scratch — is wiped
  * before it returns, as are the fresh arrays the key's own steps worked in.
+ *
+ * @param sc The scratch to sign in, one per signer.
+ * @param priv The private key, 32 big-endian bytes.
+ * @param msg The array holding the message.
+ * @param off Where the message starts in `msg`.
+ * @param len The message's length in bytes.
+ * @param out The array the signature is written into.
+ * @param at Where the 64 bytes start in `out`.
+ * @returns `true` once the signature is written, `false` for a refused key.
  */
 export const p256SignSha256Into = (
   sc: P256SignScratch,
