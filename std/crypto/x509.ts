@@ -4,6 +4,7 @@
  * PEM, and mint the short-lived self-signed ECDSA P-256 certificate a browser
  * pins by its SHA-256.
  *
+ *     import { Secret, wipe } from "nish:secret";
  *     import { x509MintSelfSigned, x509CertificateHash, derToPem } from "nish/crypto/x509";
  *     // Native only: a program that imports this does not compile for wasm32, which has no entropy.
  *     import { x509DrawP256Key, x509DrawSerial } from "nish/crypto/x509-random";
@@ -36,9 +37,9 @@
  * validator needs: subjectAltName, basicConstraints, keyUsage, extKeyUsage,
  * nameConstraints and the two key identifiers. A duplicate or malformed one
  * refuses the certificate, and any other critical one sets `unknownCritical`.
- * It parses and does not validate: no module in `std/` does RFC 5280 §6 path
- * validation yet, so applying these is the caller's. The mint writes two extensions of its
- * own (below).
+ * It parses and does not validate: applying these to a chain is RFC 5280 §6
+ * path validation, which `nish/crypto/pki`'s `pkiVerifyServer` does. The mint
+ * writes two extensions of its own (below).
  *
  * **PEM is RFC 7468's strict grammar**, with standard base64 (`+` and `/`,
  * padded with `=`), not `base64url`: 64 characters a line and a shorter last
@@ -214,6 +215,7 @@ export class X509GeneralSubtree {
   /** For a directoryName, the Name's DER, whole. */
   dirName: u8[]
 
+  /** A subtree with no form and no name; `x509ParseCertificate` fills each one it reads. */
   constructor() {
     this.ip = []
     this.mask = []
@@ -302,6 +304,11 @@ export class X509Certificate {
   /** Whether a critical extension is one this module does not decode: RFC 5280 §4.2 has a verifier refuse it. */
   unknownCritical: boolean = false
 
+  /**
+   * A certificate with every field empty, zero, `false` or `null`, and
+   * `bcPathLen` and `keyUsage` at -1 for absent; `x509ParseCertificate` fills
+   * one in.
+   */
   constructor() {
     this.der = []
     this.tbs = []
@@ -905,6 +912,10 @@ const x509DerUnsignedInto = (der: u8[], e: X509DerElement, out: u8[], off: i32, 
  * 2^(8 * width), and `width` is 32 (P-256) or 48 (P-384). This is the form a
  * TLS `CertificateVerify` or an X.509 signature carries; that each value is
  * below the curve's order is the curve's check.
+ *
+ * @param sig The DER signature, read and not kept.
+ * @param width The octets each of `r` and `s` is padded to: 32 for P-256, 48 for P-384.
+ * @returns A fresh array of `2 * width` octets, `r` then `s`, or `null`.
  */
 export const x509DerSignatureRSWidth = (sig: u8[], width: i32): u8[] | null => {
   if (width !== 32 && width !== 48) {
@@ -933,6 +944,9 @@ export const x509DerSignatureRSWidth = (sig: u8[], width: i32): u8[] | null => {
 /**
  * `x509DerSignatureRSWidth` for P-256: `r || s`, 32 octets each, the form
  * `nish/crypto/p256` takes.
+ *
+ * @param sig The DER signature, read and not kept.
+ * @returns A fresh 64-octet array, `r` then `s`, or `null`.
  */
 export const x509DerSignatureRS = (sig: u8[]): u8[] | null => x509DerSignatureRSWidth(sig, 32)
 
@@ -1123,6 +1137,10 @@ const x509EndsWith = (text: string, suffix: string): boolean => {
  * `der` as a PEM block (RFC 7468 §2): `-----BEGIN label-----`, the base64 of
  * the DER in lines of 64 characters, and `-----END label-----`, each line
  * ending in a line feed.
+ *
+ * @param der The bytes to encode; any length, empty included.
+ * @param label The text between `BEGIN ` and the dashes, such as `CERTIFICATE`; written as given, unchecked.
+ * @returns The PEM text, ending in a line feed.
  */
 export const derToPem = (der: u8[], label: string): string => {
   const body: string = base64StdPadEncode(der)
@@ -1142,7 +1160,12 @@ export const derToPem = (der: u8[], label: string): string => {
  * an unterminated block, an END whose label is not its BEGIN's, a line longer
  * than 64 characters or a short line before the last, a header line, or
  * base64 that is not canonical. Blocks with other labels must be as well
- * formed, and are skipped; so is text outside the blocks.
+ * formed, and are skipped; so is text outside the blocks, though an
+ * `-----END` line outside a block answers `null`. A line may end in CRLF.
+ *
+ * @param pem The PEM text.
+ * @param label The label to collect, compared byte for byte.
+ * @returns A fresh array holding each matching block's DER, freshly decoded, or `null`.
  */
 export const pemToDer = (pem: string, label: string): u8[][] | null => {
   const out: u8[][] = []
@@ -1358,6 +1381,9 @@ const x509WipeBlocks = (blocks: u8[][] | null): void => {
  * and answers `null`. Every block decoded from `pem` is wiped before this
  * returns, whichever answer it gives; `pem` itself is the caller's string,
  * which nothing can wipe (X509-7 in docs/security/crypto-x509.md).
+ *
+ * @param pem The PEM text holding the key.
+ * @returns The 32-byte scalar, big-endian, in a fresh `Secret` the caller wipes, or `null`.
  */
 export const x509ParseP256PrivateKey = (pem: string): Secret<u8[]> | null => {
   const sec1: u8[][] | null = pemToDer(pem, "EC PRIVATE KEY")
@@ -1421,6 +1447,10 @@ const x509DerNameSound = (der: u8[], e: X509DerElement): boolean => {
  * each attribute — is not implemented (X509-12 in docs/security/crypto-x509.md),
  * so two Names spelled differently that it would match answer `false`. That
  * fails closed: a chain whose issuer and subject differ only so is not built.
+ *
+ * @param a One Name's DER, whole, as `X509Certificate.issuer` or `subject` holds it.
+ * @param b The other Name's DER.
+ * @returns Whether the two are byte for byte equal.
  */
 export const x509NameEqual = (a: u8[], b: u8[]): boolean => x509BytesEqual(a, b)
 
@@ -1430,6 +1460,10 @@ export const x509NameEqual = (a: u8[], b: u8[]): boolean => x509BytesEqual(a, b)
  * `name`'s RDN at the same place, byte for byte — how a directoryName
  * constraint (RFC 5280 §4.2.1.10) is matched. An empty `base` is a prefix of
  * every Name. `false` when either is not a Name.
+ *
+ * @param base The constraint's Name, whole DER.
+ * @param name The Name tested against it, whole DER.
+ * @returns Whether `base` is a prefix of `name`.
  */
 export const x509NameIsPrefix = (base: u8[], name: u8[]): boolean => {
   const b: X509DerElement | null = x509DerExpect(base, 0, toI32(base.length), X509_TAG_SEQUENCE)
@@ -2004,7 +2038,10 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
  * and what its extensions say. It does not check the signature
  * (`x509VerifySignature` does), that `notBefore` is not after `notAfter` or
  * that either is near any clock, or what the extensions mean for a chain,
- * which is a path validator's to apply.
+ * which is a path validator's to apply: `nish/crypto/pki`'s `pkiVerifyServer`.
+ *
+ * @param der One certificate's DER, read and not kept.
+ * @returns A new certificate whose byte fields are copies of `der`'s, or `null`.
  */
 export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   const total: i32 = toI32(der.length)
@@ -2149,7 +2186,10 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
  * clock, nor what each one's basicConstraints, keyUsage and name constraints
  * allow, nor a trust anchor. Nothing here does RFC 5280 §6's path
  * validation, and a chain this answers is no evidence that anyone
- * vouches for the leaf.
+ * vouches for the leaf; `nish/crypto/pki`'s `pkiVerifyServer` is what does.
+ *
+ * @param pem The PEM text, such as a server's chain file.
+ * @returns A fresh array of new certificates, or `null`.
  */
 export const x509ParseChain = (pem: string): X509Certificate[] | null => {
   const blocks: u8[][] | null = pemToDer(pem, "CERTIFICATE")
@@ -2175,6 +2215,10 @@ export const x509ParseChain = (pem: string): X509Certificate[] | null => {
  * `issuer.subject` and that the times hold are fields the caller compares, and
  * whether `issuer` may issue at all (`bcCa`, `keyUsage`) is a path
  * validator's to decide, so a `true` here is not path validation.
+ *
+ * @param cert The certificate whose signature is checked.
+ * @param issuer The certificate whose key is meant to have made it; `cert` itself for a self-signed one.
+ * @returns Whether the signature verifies.
  */
 export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certificate): boolean => {
   if (!cert.ecdsaSha256 || !issuer.p256) {
@@ -2225,6 +2269,13 @@ const x509MintExtensions = (): u8[] => [
  * `serial` — big-endian, leading zeros ignored — is zero or
  * needs more than `X509_MAX_SERIAL` octets as a positive INTEGER (clear the top
  * bit of 20 random bytes, or use fewer).
+ *
+ * @param priv The 32-byte P-256 private scalar, big-endian; read, and left for the caller to wipe.
+ * @param commonName The subject's and issuer's common name, 1 to 64 bytes of UTF-8 without a NUL.
+ * @param notBeforeMs When validity starts, in milliseconds since 1970-01-01 UTC.
+ * @param days How long it is valid, 1 to `X509_MAX_DAYS`.
+ * @param serial The serial number's octets, big-endian.
+ * @returns The certificate's DER, a fresh array, or `null`.
  */
 export const x509MintSelfSigned = (
   priv: Secret<u8[]>,
@@ -2301,5 +2352,8 @@ export const x509MintSelfSigned = (
  * The SHA-256 of a certificate's DER: the value WebTransport's
  * `serverCertificateHashes` pins, and what `openssl x509 -outform DER |
  * sha256sum` prints.
+ *
+ * @param der The certificate's DER, whole.
+ * @returns The 32-byte digest, a fresh array.
  */
 export const x509CertificateHash = (der: u8[]): u8[] => sha256(der)

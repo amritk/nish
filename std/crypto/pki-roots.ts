@@ -6,7 +6,7 @@
  *     import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots";
  *
  *     const store: PkiRoots = pkiLoadSystemRoots();
- *     // store.roots: X509Certificate[], parsed, no two with the same DER
+ *     // store.roots: the parsed roots, no two with the same DER
  *     // store.sources: the files they were read from, in order
  *     // store.skipped: the PEM blocks and files that were not a root
  *
@@ -61,6 +61,7 @@ export class PkiRoots {
   /** The PEM blocks that were not a root, and the files too large or past the cap to read. */
   skipped: i32 = 0
 
+  /** An empty load: no roots, no sources, nothing skipped. */
   constructor() {
     this.roots = []
     this.sources = []
@@ -74,6 +75,8 @@ export class PkiRoots {
  * `crypto/x509/root_linux.go`, cited as facts, not copied code: Debian, Ubuntu,
  * Arch and Gentoo; Fedora and RHEL; openSUSE; OpenELEC; CentOS and RHEL 7;
  * Alpine, macOS and the BSDs.
+ *
+ * @returns The bundle paths, in a fresh array each call.
  */
 export const pkiSystemBundles = (): string[] => [
   "/etc/ssl/certs/ca-certificates.crt",
@@ -220,7 +223,14 @@ const pkiRootsIsDigit = (c: i32): boolean => c >= 48 && c <= 57
 
 const pkiRootsIsHex = (c: i32): boolean => pkiRootsIsDigit(c) || (c >= 97 && c <= 102)
 
-/** Whether a directory entry is one a trust directory holds: `*.pem`, `*.crt`, or the hash form `xxxxxxxx.N`. */
+/**
+ * Whether a directory entry is one a trust directory holds: `*.pem`, `*.crt`,
+ * or the hash form `xxxxxxxx.N`.
+ *
+ * @param name The entry's name, without its directory.
+ * @returns `true` for a name ending `.pem` or `.crt` with something before
+ *   it, or eight lowercase hex digits, a dot and one or more decimal digits.
+ */
 export const pkiRootsDirEntry = (name: string): boolean => {
   if (name.endsWith(".pem") || name.endsWith(".crt")) {
     return name.length > 4
@@ -262,6 +272,11 @@ const pkiRootsDir = (load: PkiRootsLoad, dir: string): void => {
  * first of `bundles` that reads as a file, then every directory of `dirs`, in
  * that order. A path that cannot be read contributes nothing; a duplicate DER
  * is kept once, where it was first read.
+ *
+ * @param file A file to read first, or `null` for none.
+ * @param dirs The directories to read every trust entry of.
+ * @param bundles The candidate bundle files; only the first that reads is used.
+ * @returns A new `PkiRoots` with what was found, empty when nothing was.
  */
 export const pkiLoadRoots = (file: string | null, dirs: string[], bundles: string[]): PkiRoots => {
   const load: PkiRootsLoad = new PkiRootsLoad()
@@ -301,6 +316,13 @@ const pkiRootsSplitDirs = (list: string): string[] => {
  * the order can be tested against fixture trees rather than the host's `/etc`.
  * `certFile` and `certDir` are `SSL_CERT_FILE` and `SSL_CERT_DIR`, `null`
  * when unset; an empty value counts as unset.
+ *
+ * @param certFile The value of `SSL_CERT_FILE`, or `null` when unset.
+ * @param certDir The value of `SSL_CERT_DIR`, a `:`-separated list, or `null`
+ *   when unset.
+ * @param dirs The directories read when neither variable is set.
+ * @param bundles The bundle files tried when neither variable is set.
+ * @returns A new `PkiRoots`, as `pkiLoadRoots` gives it.
  */
 export const pkiLoadRootsFor = (
   certFile: string | null,
@@ -320,6 +342,9 @@ export const pkiLoadRootsFor = (
  * The roots this program should trust: those `SSL_CERT_FILE` and
  * `SSL_CERT_DIR` name when either is set and not empty, and otherwise the
  * first of `pkiSystemBundles()` that exists and `/etc/ssl/certs`.
+ *
+ * @returns A new `PkiRoots`, read afresh on every call; empty when nothing
+ *   was found.
  */
 export const pkiLoadSystemRoots = (): PkiRoots =>
   pkiLoadRootsFor(getenv("SSL_CERT_FILE"), getenv("SSL_CERT_DIR"), [PKI_SYSTEM_DIR], pkiSystemBundles())

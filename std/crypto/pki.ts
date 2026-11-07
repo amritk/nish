@@ -7,13 +7,22 @@
  *     import { pkiLoadSystemRoots } from "nish/crypto/pki-roots";
  *     import { PKI_OK, PkiResult, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki";
  *
- *     const store: PkiTrustStore = pkiTrustStore(pkiLoadSystemRoots().roots);
- *     // chain: each certificate's DER as the server sent it, its own first
- *     const r: PkiResult = pkiVerifyServer(chain, "example.com", toI64(Date.now()), store);
- *     if (r.code !== PKI_OK) {
- *       console.log(pkiReason(r.code));
- *     }
- *     // r.path, when PKI_OK: the leaf first, the trusted root last
+ *     // chain: each certificate's DER as the server sent it, the leaf first
+ *     const check = (chain: u8[][], host: string, store: PkiTrustStore): boolean => {
+ *       const r: PkiResult = pkiVerifyServer(chain, host, toI64(Date.now()), store);
+ *       if (r.code !== PKI_OK) {
+ *         console.log(pkiReason(r.code));
+ *         return false;
+ *       }
+ *       // r.path: the leaf first, the trusted root last
+ *       return true;
+ *     };
+ *
+ *     export const main = (): i32 => {
+ *       const store: PkiTrustStore = pkiTrustStore(pkiLoadSystemRoots().roots);
+ *       const chain: u8[][] = [];
+ *       return check(chain, "example.com", store) ? 0 : 1;
+ *     };
  *
  * The network chooses every byte of `chain` (docs/security/crypto-pki.md,
  * "Threat model"), so every refusal has a reason code of its own and every
@@ -158,6 +167,7 @@ export class PkiTrustStore {
   /** @internal The roots under each subject, keyed by the subject's DER in hex. */
   bySubject: Map<string, X509Certificate[]>
 
+  /** An empty store; `pkiTrustStore` builds a filled one. */
   constructor() {
     this.roots = []
     this.bySubject = new Map<string, X509Certificate[]>()
@@ -171,6 +181,10 @@ export class PkiResult {
   /** When `PKI_OK`, the path: the leaf first, the root last; otherwise empty. */
   path: X509Certificate[]
 
+  /**
+   * @param code `PKI_OK` or the reason the chain was refused.
+   * @param path The path found, kept as given, not copied.
+   */
   constructor(code: i32, path: X509Certificate[]) {
     this.code = code
     this.path = path
@@ -492,7 +506,12 @@ const pkiHostDns = (hostname: string): string | null => {
  * compared without case after one trailing dot is stripped from each side,
  * against the dNSNames, a wildcard only as a whole leftmost label. The
  * subject's common name is never read, so a certificate without a
- * subjectAltName names no host.
+ * subjectAltName names no host. Nothing but the names is checked.
+ *
+ * @param leaf The certificate the server presented as its own.
+ * @param hostname The name or address dialled: a DNS name, ASCII, or an IPv4
+ *   or IPv6 address, the IPv6 one bare or in brackets.
+ * @returns `true` when one of `leaf`'s names matches `hostname`.
  */
 export const pkiMatchHostname = (leaf: X509Certificate, hostname: string): boolean => {
   const ip: u8[] | null = pkiParseIp(pkiStripDot(hostname))
@@ -617,6 +636,11 @@ const pkiSignatureCode = (cert: X509Certificate, issuer: X509Certificate): i32 =
  * or SHA-384 under P-256 or P-384, RSA PKCS#1 v1.5 with SHA-256, SHA-384 or
  * SHA-512 and RSASSA-PSS under a key of `PKI_MIN_RSA_BITS` or more whose
  * modulus is a whole number of bytes, and Ed25519. Nothing else about either certificate is checked.
+ *
+ * @param cert The certificate whose signature is checked.
+ * @param issuer The certificate whose subject public key is to have made it.
+ * @returns `true` when the signature verifies; `false` for a bad signature, a
+ *   weak or unparsable key, or an algorithm not listed here.
  */
 export const pkiVerifySignature = (cert: X509Certificate, issuer: X509Certificate): boolean =>
   pkiSignatureCode(cert, issuer) === PKI_OK
@@ -1068,7 +1092,15 @@ const pkiLeafCode = (leaf: X509Certificate, hostname: string, nowMs: i64): i32 =
   return pkiMatchHostname(leaf, hostname) ? PKI_OK : PKI_ERR_HOSTNAME
 }
 
-/** A store of `roots`, indexed by subject; a root whose DER is one already given is kept once. */
+/**
+ * A store of `roots`, indexed by subject; a root whose DER is one already
+ * given is kept once. Nothing about a root is checked here: its validity and
+ * extensions are checked when a path reaches it.
+ *
+ * @param roots The certificates to trust, as `x509ParseCertificate` gave them.
+ * @returns A new store, whose lists hold the given certificates themselves,
+ *   not copies; `roots` itself is not kept.
+ */
 export const pkiTrustStore = (roots: X509Certificate[]): PkiTrustStore => {
   const store = new PkiTrustStore()
   for (const root of roots) {
@@ -1100,7 +1132,27 @@ export const pkiTrustStore = (roots: X509Certificate[]): PkiTrustStore => {
  * ASCII (an internationalised name in its A-label form); `nowMs` is the
  * instant to judge validity at, milliseconds since 1970-01-01 UTC; `store`
  * holds the roots trusted. `PKI_OK` with the path, or the reason it was
- * refused — see the module's header for which reason when several apply.
+ * refused.
+ *
+ * When several reasons apply, the first in this order is given: an empty
+ * chain is `PKI_ERR_MALFORMED`; more than `PKI_MAX_CHAIN_CERTS` certificates
+ * or `PKI_MAX_CHAIN_BYTES` bytes is `PKI_ERR_CHAIN_TOO_LONG`; then, certificate
+ * by certificate in the order sent, one that does not parse is
+ * `PKI_ERR_MALFORMED` and one with more than `PKI_MAX_NAMES` names or
+ * `PKI_MAX_SUBTREES` subtrees is `PKI_ERR_BUDGET`; then the leaf's own checks,
+ * in turn its validity, an unknown critical extension, being a CA, its key
+ * usage, its extended key usage and the host name; then the path search,
+ * whose reason the module's header ranks, or `PKI_ERR_BUDGET` when it ran out
+ * of signatures or name comparisons; and last, once a path is found, the
+ * leaf's profile.
+ *
+ * @param chain Each certificate's DER as the server sent it, the leaf first.
+ * @param hostname The name or address dialled.
+ * @param nowMs The instant to judge validity at, in milliseconds since
+ *   1970-01-01 UTC.
+ * @param store The roots trusted.
+ * @returns A new result: `PKI_OK` with a fresh path, or a reason with an
+ *   empty one.
  */
 export const pkiVerifyServer = (
   chain: u8[][],
@@ -1157,7 +1209,12 @@ export const pkiVerifyServer = (
   return new PkiResult(s.spent ? PKI_ERR_BUDGET : s.bestCode, none)
 }
 
-/** A sentence for `code`, for a log or an error message. */
+/**
+ * A sentence for `code`, for a log or an error message.
+ *
+ * @param code `PKI_OK` or a `PKI_ERR_` constant.
+ * @returns What the code means, or "unknown reason" for any other number.
+ */
 export const pkiReason = (code: i32): string => {
   if (code === PKI_OK) {
     return "the chain is trusted and names the host"
