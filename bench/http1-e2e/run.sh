@@ -51,7 +51,10 @@ nish_prefix() {
     case "$v" in *.tgz) npm install -g --prefix "$prefix" --no-audit --no-fund "$v" >&2 ;;
                  *) npm install -g --prefix "$prefix" --no-audit --no-fund "nish@$v" >&2 ;; esac
     case "$arm" in
-      K-*) patch -d "$prefix/lib/node_modules/nish" -p1 < "$HERE/patches/knob-${arm#K-}.patch" >&2 ;;
+      # The launcher package and its native package each carry std/: patch both.
+      K-*) for d in "$prefix"/lib/node_modules/nish "$prefix"/lib/node_modules/nish/node_modules/@amritk/nish-*; do
+             patch -d "$d" -p1 < "$HERE/patches/knob-${arm#K-}.patch" >&2
+           done ;;
     esac
   fi
   echo "$prefix"

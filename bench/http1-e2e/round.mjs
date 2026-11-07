@@ -294,6 +294,8 @@ const measuredRound = async () => {
     nish: args.nish,
     machine: machine(),
     load: { users: USERS, think: THINK, ramp: RAMP, measure: MEASURE, tail: TAIL, window: [from, to] },
+    // A round that traces or samples is slower: report.mjs keeps it out of step 1.
+    tracing: TRACE > 0 || PERF_RECORD > 0,
     http_workers: http.length,
     window_s: to - from,
     requests: win.completed,
