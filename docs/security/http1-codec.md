@@ -31,7 +31,7 @@ with its own `WS_HS_*` code; it adds no finding.
 | File | Functions |
 | --- | --- |
 | `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
-| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
+| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`; the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
 
@@ -178,6 +178,24 @@ answers what it took, the connection reads nothing until half the output is
 free (so the window the program writes from stays valid), and `H1_WRITE` says
 when to go on. The sans-IO checks drive each held-back path: a head, a chunk,
 the last chunk and a frame that do not fit, and the room each waits for.
+
+**A body sent from the caller's bytes is `write`'s, on the wire and in its
+answers** (`net_http1_server_send_body`): `sendBody` gathers the queued output
+and a `Content-Length` body into one `netWrite2` and copies only what the
+socket did not take, through `write`, so the same back-pressure holds: under a
+4 KiB send buffer it answers short, a second call behind the held write
+answers `H1_AGAIN`, and `H1_WRITE` says when to go on. It keeps no reference
+to the caller's buffer once it returns. Every exchange is run through `write`
+and through `sendBody`, and the client reads the same bytes: a 3,000-byte body,
+a 4 MiB one under the small send buffer, a response pipelined behind one
+already queued (sent in order, in the same call), and the fallbacks, which
+copy as `write` does — chunked, `HEAD`, a socket that would block before
+anything goes, and a connection with no socket of its own (sans-IO, and
+`Http1TlsServer`, whose output is TLS records; `fd` is -1 there, so a socket
+number is never written to past `restart` or `abort`). A body past the length,
+or one after `respondEncoded` has finished the response, is refused as
+`write` refuses it. A send that fails other than by blocking (the peer reset
+the connection) aborts the connection and answers `H1_CLOSED`.
 
 **What the program writes is checked** (`net_http1`, `net_http1_server`): a
 status outside 100 to 599, 101 through `respond`, a field the server decides
@@ -446,7 +464,8 @@ a connection past its size.
 
 **The program's mistakes panic** (one program each): a window outside its
 buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`
-(`net_http1_server_write_window`) and `sendFrame`
+(`net_http1_server_write_window`), `sendBody`
+(`net_http1_server_send_body_window`) and `sendFrame`
 (`net_http1_server_frame_window`), `http1WriteChunk`
 (`net_http1_write_chunk_window`), `websocketWriteFrame`
 (`net_websocket_write_window`), and the parser's and decoder's own `feed`
