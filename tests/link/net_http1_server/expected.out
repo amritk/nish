@@ -144,6 +144,16 @@ PASS  without idleInput a resting slot keeps its input buffer
 PASS  two slots served one after the other share one input and one head buffer
 PASS  and both rest with none of their own
 PASS  a pipelined pair on a slot that lent its buffers is answered in order
+PASS  a slot that lent its buffers holds its noOutput in their place
+PASS  the first part of a request split across reads takes a lent buffer back
+PASS  and the rest of it is answered, the buffer lent again after
+PASS  a request that grows past the lent input buffer is answered, and its slot lends the grown one
+PASS  the next request on the other slot takes the grown buffer and is answered
+PASS  both slots resting with their buffers lent are closed past idleTimeout
+PASS  and their clients see the end, what they lent still in the pools
+PASS  a peer on a freed slot is served from the pools
+PASS  a WebSocket handshake on a slot that lent its buffers switches
+PASS  and closes on a close
 PASS  with nothing gone wrong in that loop
 PASS  respond with no request is H1_CLOSED
 PASS  so are write and end
@@ -229,7 +239,7 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 231 passed, 0 failed, 0 skipped
+http1 server: 241 passed, 0 failed, 0 skipped
 PASS  a pooled connection reads a request holding no output buffer
 PASS  its response borrows one
 PASS  which it keeps while bytes wait to be sent

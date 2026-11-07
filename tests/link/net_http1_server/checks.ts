@@ -1156,6 +1156,57 @@ export const serverChecks = (): i32 => {
   const again1 = ll.response(l1, false);
   const again2 = ll.response(l1, false);
   t.ok("a pipelined pair on a slot that lent its buffers is answered in order", again1.text() === hello.text() && again2.text() === hello.text());
+  ll.settle();
+  // A parked buffer is the connection's own empty array, not a fresh one:
+  // `unpark` finds it by identity, without reading its length.
+  const lc: Http1Connection = ll.plain.connection(ZERO);
+  t.ok("a slot that lent its buffers holds its noOutput in their place", lc.parser.buf === lc.noOutput && lc.parser.body === lc.noOutput && lc.parser.head === lc.noOutput);
+  const split: u8[] = ascii(get);
+  ll.sendRange(l1, split, ZERO, toI32(9));
+  ll.settle();
+  t.ok("the first part of a request split across reads takes a lent buffer back", lc.parser.buf !== lc.noOutput && toI32(lc.parser.buf.length) === HTTP1_FIRST_INPUT && ll.plain.inputs.free.length === 0);
+  ll.sendRange(l1, split, toI32(9), toI32(split.length));
+  const splitRest = ll.response(l1, false);
+  ll.settle();
+  t.ok("and the rest of it is answered, the buffer lent again after", splitRest.text() === hello.text() && ll.plain.inputs.made === 1 && lc.parser.buf === lc.noOutput);
+  // A request read whole in one feed that is longer than the lent input
+  // buffer: the parser grows its own past it, and lends the grown one next.
+  const longValue: string[] = [];
+  for (let k: i32 = 0; k < 800; k++) {
+    longValue.push("v");
+  }
+  const longBody: string[] = [];
+  for (let k: i32 = 0; k < 300; k++) {
+    longBody.push("b");
+  }
+  ll.send(l1, ascii(`POST /echo HTTP/1.1\r\nHost: a\r\nX-Long: ${longValue.join("")}\r\nContent-Length: 300\r\n\r\n${longBody.join("")}`));
+  const grownReply = ll.response(l1, false);
+  ll.settle();
+  t.ok(
+    "a request that grows past the lent input buffer is answered, and its slot lends the grown one",
+    grownReply.text() === longBody.join("") && lc.parser.buf === lc.noOutput && toI32(ll.plain.inputs.free[ll.plain.inputs.free.length - 1].length) > HTTP1_FIRST_INPUT
+  );
+  ll.send(l2, ascii(get));
+  t.ok("the next request on the other slot takes the grown buffer and is answered", ll.response(l2, false).text() === hello.text() && ll.plain.inputs.made === 1);
+  ll.settle();
+  t.eqI32("both slots resting with their buffers lent are closed past idleTimeout", ll.plain.expire(monotonicNanos() + toI64(2000000000)), toI32(2));
+  t.ok(
+    "and their clients see the end, what they lent still in the pools",
+    ll.awaitEnd(l1) && ll.awaitEnd(l2) && ll.plain.busy() === 0 && ll.plain.inputs.free.length === 1 && ll.plain.heads.free.length === 1
+  );
+  const l3: i32 = ll.connect(false);
+  ll.send(l3, ascii(get));
+  t.ok("a peer on a freed slot is served from the pools", ll.response(l3, false).text() === hello.text() && ll.plain.inputs.made === 1 && ll.plain.heads.made === 1);
+  const lendShake: string =
+    "GET /ws HTTP/1.1\r\nHost: a\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+  ll.settle();
+  ll.send(l3, join([ascii(lendShake), clientFrame(WS_OP_TEXT, ascii("lent"))]));
+  const lentSwitch = ll.response(l3, false);
+  const ld = new WsDecoder(false, 1048576);
+  t.ok("a WebSocket handshake on a slot that lent its buffers switches", lentSwitch.status === 101 && wsEvent(ll, l3, ld) === WS_MESSAGE && ld.dataLen === 4);
+  const lentBye: u8[] | null = websocketClosePayload(toI32(1000), "bye");
+  ll.send(l3, clientFrame(WS_OP_CLOSE, lentBye === null ? [] : lentBye));
+  t.ok("and closes on a close", wsEvent(ll, l3, ld) === WS_CLOSE && ll.awaitEnd(l3));
   t.eqStr("with nothing gone wrong in that loop", ll.failure, "");
   ll.shutdown();
 
