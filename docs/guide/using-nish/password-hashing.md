@@ -306,12 +306,29 @@ Start from 0.
 On that 4-core machine, at cost 10, the batcher answered 1.9 to 2.3 times as
 many logins a second as a process per core once logins arrived faster than
 those processes could answer (about 67 a second): up to about 150 a second.
-On one core it never lost. **At light load on several cores it is slower**:
-at 10 to 60 logins a second a process per core answered sooner, at p50 or
-p99, because a login that arrives during a run waits for that run to end
-while the other processes are idle. If your logins are few and latency
-matters more than capacity, verify each on its own worker; if they come in
-bursts or at your servers' limit, batch them.
+On one core it never lost. **At light load on several cores one batcher is
+slower**: at 10 to 60 logins a second a process per core answered sooner,
+because a login that arrives during a run waits for that run to end while
+the other processes are idle.
+
+**On several cores, run one batcher per process.** A
+[prefork server](networking.md#a-server-on-every-core-nishnetprefork), one
+worker process a core, each with a batcher of `cores: 1`, gets both: a login
+that arrives while one worker is busy goes to another, and the logins that
+queue at a busy worker share its next batch. In each worker, the config above
+becomes:
+
+```ts
+const config: BcryptBatchConfig = { width: bcryptCalibrate(), holdNanos: hold, cores: 1, cost: 10 };
+```
+
+In [the measurements](../../security/crypto-bcrypt.md#one-batcher-per-process)
+it was level with a process per core at 10 and 30 logins a second, faster
+than both at 60, and answered as many logins a second as one batcher over
+every core under load, with lower latency. Those workers were dealt logins
+round-robin. `SO_REUSEPORT` spreads connections by a hash of their addresses
+instead, so it can hand a login to a busy worker while another is idle, and
+that login waits as it would for one batcher.
 
 `run` blocks its thread until every task has finished, about one batch: run
 the batcher on a thread other than the event loop's. A request is wiped only

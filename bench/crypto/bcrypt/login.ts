@@ -81,7 +81,14 @@ const direct = (arrive: i64[], start: i64, hash: string, worker: i32, workers: i
  * batcher whenever a batch is due; the refused count. A ticket is the login's
  * index among this worker's, `mine[ticket]` its index in the schedule.
  */
-const batched = (arrive: i64[], start: i64, hash: string, b: BcryptBatcher, worker: i32, workers: i32): i32 => {
+const batched = (
+  arrive: i64[],
+  start: i64,
+  hash: string,
+  b: BcryptBatcher,
+  worker: i32,
+  workers: i32
+): i32 => {
   const mine: i32[] = []
   for (let i: i32 = worker; i >= 0 && i < arrive.length; i += workers) {
     mine.push(i)
@@ -167,5 +174,7 @@ export const main = (): i32 => {
     console.log(b.error)
     return 1
   }
-  return batched(arrive, start, hash, b.value, parseInt(process.argv[9]), parseInt(process.argv[10])) === 0 ? 0 : 1
+  return batched(arrive, start, hash, b.value, parseInt(process.argv[9]), parseInt(process.argv[10])) === 0
+    ? 0
+    : 1
 }
