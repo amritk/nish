@@ -44,12 +44,20 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
-import { ConstInfo, StructInfo, inlineElementStruct } from "./program"
+import { ConstInfo, StructInfo, elementStride, inlineElementStruct } from "./program"
 import { SORT_LOCAL } from "./std-modules"
 import { T_BOOL, isHostWindow, isNumeric } from "./types"
 
-/** The most elements one storage may hold: its byte size stays far below wasm's 4 GiB. */
+/** The most elements one storage may hold. */
 const STORAGE_MAX_LENGTH: i32 = 16777216
+
+/**
+ * The most bytes one storage may span: 16,777,216 elements of the widest
+ * number fit, and a record wide enough to pass it would otherwise reach a
+ * data section the linker cannot write (wasm's is 32-bit) instead of a
+ * diagnostic.
+ */
+const STORAGE_MAX_BYTES: i32 = 268435456
 
 /**
  * Whether `init`, a top-level `const`'s initialiser, is a storage `new`:
@@ -120,6 +128,16 @@ export const acceptStorageLength = (
       info,
       lengthNode,
       `Module storage \`${info.name}\` has length ${value}; a storage holds from 1 to ${STORAGE_MAX_LENGTH} elements`
+    )
+    return
+  }
+  const stride = elementStride(ctx.program, ctx.table, info.storageElem)
+  if (value * toI64(stride) > toI64(STORAGE_MAX_BYTES)) {
+    storageReport(
+      ctx,
+      info,
+      lengthNode,
+      `Module storage \`${info.name}\` has length ${value} of ${stride}-byte elements; a storage holds from 1 to ${STORAGE_MAX_LENGTH} elements and at most ${STORAGE_MAX_BYTES} bytes`
     )
     return
   }

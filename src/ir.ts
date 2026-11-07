@@ -293,7 +293,10 @@ export class IRFunction {
    * (`useRuntime`).
    */
   branchOnOverflow(flag: string, code: i32, callee: string): void {
-    const owner = this.overflowFailAt(this.dbgLocation)
+    // A numbered site is part of the key: one block per site, so each
+    // overflow reports its own (wasm32 only; native keys on the location).
+    const key = this.sites === null ? this.dbgLocation : `${this.dbgLocation}|${this.siteAt}`
+    const owner = this.overflowFailAt(key)
     const fail = this.overflowFails[owner]
     const ok = this.newBlock("ovf.ok")
     this.overflowCallee = callee
@@ -304,7 +307,7 @@ export class IRFunction {
     this.placeBlock(ok)
   }
 
-  /** The index of the overflow block for `location`, reserved at the first check there. */
+  /** The index of the overflow block for `location` (a `-g` location, then `|` and the site on wasm32), reserved at the first check there. */
   overflowFailAt(location: string): i32 {
     let k = 0
     while (k < this.overflowLocations.length) {
@@ -346,7 +349,9 @@ export class IRFunction {
         argument = owner === 0 ? "%ovf.op" : `%ovf.op.${owner}`
         block.instructions.push(`${argument} = phi i32 ${incoming.join(", ")}`)
       }
-      const location = this.overflowLocations[owner]
+      const key = this.overflowLocations[owner]
+      const bar = key.indexOf("|")
+      const location = bar < 0 ? key : key.slice(0, bar)
       const dbg = location.length > 0 ? `, !dbg ${location}` : ""
       block.instructions.push(
         `${this.tagSite(`call void ${this.overflowCallee}(i32 ${argument})`, this.overflowSiteAts[owner])}${dbg}`

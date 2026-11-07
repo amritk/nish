@@ -823,10 +823,12 @@ const guardLoader = (needsRuntime: boolean): string[] => {
   lines.push(
     '      throw new NishReentry("a call into the module was made while another call into it was running");'
   )
-  lines.push("    state.busy = true;")
+  // The mark comes before `busy` is set: were it to throw, the module would
+  // still not be stuck answering NishReentry to every later call.
   if (needsRuntime) {
     lines.push("    const mark = raw.nish_arena_mark();")
   }
+  lines.push("    state.busy = true;")
   lines.push("    try {")
   lines.push("      return call();")
   lines.push("    } catch (e) {")

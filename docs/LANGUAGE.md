@@ -1824,11 +1824,13 @@ export const step = (): void => {
   module's symbol prefix ([cookbook](IR_COOKBOOK.md#module-storage-two-globals-a-page-can-find)).
 - **The length is known at compile time**: a literal, a module constant, or
   arithmetic over them (`wrappingAdd` and the other `nish:unsafe` folds
-  included), from 1 to 16,777,216 elements. Anything else is
+  included), from 1 to 16,777,216 elements and at most 256 MiB
+  (268,435,456 bytes). Anything else is
   `` Module storage `X` needs a length known at compile time: a literal, a module constant, or arithmetic over them, because the page reads its layout from the type ``
   (NL2676, `reject_storage_dynamic_length`), and a length outside the range is
   `` Module storage `X` has length 0; a storage holds from 1 to 16777216 elements ``
-  (NL2680, `reject_storage_length_zero`).
+  (NL2680, `reject_storage_length_zero`; past 256 MiB the message names the
+  element's size, `reject_storage_too_many_bytes`).
 - **The element is pointer-free, and zero is one of its values**: a number, a
   `boolean`, an enum or a ranged integer whose zero is a member, a
   `HostHandle`, or an interface no class implements whose fields are all of

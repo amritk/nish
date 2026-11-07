@@ -185,7 +185,8 @@ export const main = (): i32 => {
 ```
 
 - **Its length is known when the program compiles**: a number, or a `const`
-  the compiler can work out, from 1 to 16,777,216. `new Array<T>(n)` and
+  the compiler can work out, from 1 to 16,777,216, and the storage holds at
+  most 256 MiB. `new Array<T>(n)` and
   `new Int32Array(n)`, `Float32Array`, `Float64Array` and `BigInt64Array` all
   make one.
 - **Its elements are numbers, booleans, enums, handles, or records** of

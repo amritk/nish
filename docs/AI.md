@@ -1552,7 +1552,7 @@ constant length is **module storage**: a static, zero-filled array that keeps
 its values between calls, with no initialiser that runs. It is the only
 state a module keeps (there is no top-level `let`).
 
-- The length is a constant from 1 to 16,777,216. The element is pointer-free:
+- The length is a constant from 1 to 16,777,216, at most 256 MiB in all. The element is pointer-free:
   a number, `boolean`, an enum or range whose zero is a member, a
   `HostHandle`, or an interface no class implements with fields of those.
 - **It never grows or moves**: no method call on it (`push`, `pop`, `sort`,

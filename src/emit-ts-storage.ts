@@ -11,7 +11,8 @@
 //
 // - A scalar storage is the typed array its element reads as
 //   (`new Int32Array(heap, at, length)`); a `boolean` one is that byte array
-//   behind a proxy that reads `!== 0` and writes `1` or `0`.
+//   behind a proxy that reads `!== 0` and writes `1` or `0`, and whose
+//   iterator yields the flags, so `for (const f of flags)` reads booleans.
 // - A record storage is an array of plain objects, one per element, whose
 //   fields are accessors over the heap's views at
 //   `(at + i * stride + offset) >> shift`. Every access is `name[i].field`
@@ -120,9 +121,13 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
     )
     lines.push("const flags = (bytes: Uint8Array): boolean[] =>")
     lines.push("  new Proxy(bytes, {")
-    lines.push(
-      "    get: (t, k) => (isSlot(k) ? t[Number(k)] !== 0 : (t as unknown as Record<string | symbol, unknown>)[k]),"
-    )
+    lines.push("    get: (t, k) => {")
+    lines.push("      if (isSlot(k)) return t[Number(k)] !== 0")
+    lines.push("      // `for of` reads the flags, not the bytes; any other method runs on the bytes.")
+    lines.push("      if (k === Symbol.iterator) return function* () { for (const b of t) yield b !== 0 }")
+    lines.push("      const v = (t as unknown as Record<string | symbol, unknown>)[k]")
+    lines.push('      return typeof v === "function" ? v.bind(t) : v')
+    lines.push("    },")
     lines.push("    set: (t, k, v) => {")
     lines.push("      if (isSlot(k)) t[Number(k)] = v ? 1 : 0")
     lines.push("      return true")
