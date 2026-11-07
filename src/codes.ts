@@ -543,7 +543,7 @@ const diagnosticRules = (): string[] => [
   "NL3035",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
   "NL2123",
-  "` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once",
+  "` field is one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once",
   "NL3036",
   "`??` cannot default an element read: past the end of the array, JavaScript answers the default and ",
   "NL2489",

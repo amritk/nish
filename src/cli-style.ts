@@ -71,6 +71,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.section("Interop")
   menu.row("--emit-header", "<file.h>", "a C header for the exports")
   menu.row("--emit-dts", "<file.d.ts>", "their typings, and a <file>.mjs loader")
+  menu.row("--host", "<file.ts>", "a page module whose functions wasm imports")
   menu.row("--emit-napi", "<shim.c>", "a Node-API shim, to load them from Node")
   menu.row("--emit-napi-async", "<shim.c>", "the same, plus a promise for each export")
   menu.row("--emit-ts", "<dir>", "the program as TypeScript, instead of IR")

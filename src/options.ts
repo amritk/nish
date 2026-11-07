@@ -61,6 +61,13 @@ export class Options {
    */
   emitHeader: string
   emitDts: string
+  /**
+   * WP50 stage 2: the files `--host` names, as written, each a host module: the
+   * page's own TypeScript, whose exported functions a freestanding wasm module
+   * imports (`src/host-module.ts`). The root `package.json`'s `nish.host` adds
+   * to them. Empty in every build that names none.
+   */
+  hosts: string[]
   emitNapi: string
   /**
    * WP24 A1: the same shim with the asynchronous exports added. A separate
@@ -253,6 +260,7 @@ export class Options {
     this.threads = false
     this.emitHeader = ""
     this.emitDts = ""
+    this.hosts = []
     this.emitNapi = ""
     this.emitNapiAsync = ""
     this.emitTs = ""

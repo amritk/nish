@@ -446,10 +446,10 @@ const manifestRepeatedMember = (members: ManifestMembers): i32 => {
 
 /**
  * The root package's `"nish"` field, read strictly (docs/wp36-capability-policy.md
- * §3): where its `noPanic` and `capabilities` values start, or -1 for one it
+ * §3): where its `noPanic`, `capabilities` and `host` values start, or -1 for one it
  * does not write. `problem` is the opening of the NL3036 message when the
- * field is not one object, written once, whose only keys are `noPanic` and
- * `capabilities`, each written once, with the span it is reported at; both
+ * field is not one object, written once, whose only keys are `noPanic`,
+ * `capabilities` and `host` (WP50 stage 2's host modules), each written once, with the span it is reported at; both
  * positions are then -1, so nothing in a field the reader cannot vouch for is
  * honoured. Keys are decoded as JSON.parse decodes them, so an escaped
  * spelling is the key it spells.
@@ -460,6 +460,8 @@ export class NishManifest {
   problemEnd: i32
   noPanicAt: i32
   capabilitiesAt: i32
+  /** WP50 stage 2: where the `host` list of host modules starts, or -1. */
+  hostAt: i32
 
   constructor() {
     this.problem = ""
@@ -467,6 +469,7 @@ export class NishManifest {
     this.problemEnd = 0
     this.noPanicAt = -1
     this.capabilitiesAt = -1
+    this.hostAt = -1
   }
 }
 
@@ -546,6 +549,11 @@ export const manifestNish = (manifest: string, condition: string): NishManifest 
       out.noPanicAt = valueAt
     } else if (key === "capabilities") {
       out.capabilitiesAt = valueAt
+    } else if (key === "host") {
+      if (valueAt < 0 || valueAt >= manifest.length || manifest.charCodeAt(valueAt) !== OPEN_BRACKET) {
+        return manifestNishProblem("`host` is not an array", valueAt, fields.valueEnd[f])
+      }
+      out.hostAt = valueAt
     } else {
       return manifestNishProblem(
         `\`${key}\` is no key of \`${condition}\``,
@@ -566,6 +574,13 @@ export const manifestNoPanic = (manifest: string, at: i32): ManifestList => {
   }
   return out
 }
+
+/**
+ * The root package's `"nish": { "host": [...] }` (WP50 stage 2): the host
+ * modules a freestanding wasm build imports from, as written, relative to the
+ * root package.
+ */
+export const manifestHost = (manifest: string, at: i32): ManifestList => manifestNoPanic(manifest, at)
 
 /**
  * The root package's `"nish": { "capabilities": { "allow": [...], "deny": [...] } }`

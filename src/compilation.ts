@@ -1409,7 +1409,7 @@ export class Compilation {
   /**
    * The root package's `"nish"` field, read strictly (`manifestNish`), or null
    * when there is no manifest or the field is refused: it is one object,
-   * written once, whose only keys are `noPanic` and `capabilities`, and
+   * written once, whose only keys are `noPanic`, `capabilities` and `host`, and
    * anything else is NL3036 where `package.json` writes it, so that nothing
    * the reader cannot vouch for is honoured, a policy least of all.
    */
@@ -1425,7 +1425,7 @@ export class Compilation {
       source,
       nish.problemStart,
       nish.problemEnd,
-      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\` and \`capabilities\`, each written once`
+      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\`, \`capabilities\` and \`host\`, each written once`
     )
     return null
   }
