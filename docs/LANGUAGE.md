@@ -10114,8 +10114,11 @@ export const main = (): i32 => {
   `JSON_DECODE_TYPE`, and its length is bounded by `JsonLimits.maxNumberBytes`
   like any number's. Decoding into one reuses its bytes, so `Arena.used()`
   stays flat over decodes into one object. It reads its text as
-  `nish/json-value` reads a number. Its methods run under Node, and
-  `tests/run.js` holds them to the native lines (`readers.ts`).
+  `nish/json-value` reads a number: `text()`, `isI64()` and `i64()`,
+  `isU64()` and `u64()`, and `f64()`, the nearest double; `setText(t)` sets it
+  when `t` is one JSON number and answers whether it was. A new one holds
+  `0`. Its methods run under Node, and `tests/run.js` holds them to the
+  native lines (`readers.ts`).
 - **A `Map<string, V>` is an object.** Decoding empties the map the field
   holds once the object opens, then reads each key as a new string and its
   value as a `V`, made fresh for the key (a zero, `""`, the enum's first member,

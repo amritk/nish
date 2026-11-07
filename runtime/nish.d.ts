@@ -255,9 +255,9 @@ declare var process: Process;
 // declared here; docs/LANGUAGE.md -> Numeric conversions has their rules.
 
 /**
- * `x` as an `i32`. A narrower or equal-width integer wraps, a wider one is
- * sign- or zero-extended by its own signedness, and a float saturates (NaN is
- * 0, out of range clamps). Capability: none.
+ * `x` as an `i32`. An integer of 32 bits or more wraps to its low 32 bits, a
+ * narrower one is sign- or zero-extended by its own signedness, and a float
+ * saturates (NaN is 0, out of range clamps). Capability: none.
  *
  * @param x the value to convert.
  * @returns `x` in 32 signed bits.
@@ -1776,8 +1776,8 @@ declare module "nish:async" {
 
 /**
  * The arena the runtime allocates from, read. Both members are available in
- * both number modes; `Arena.release` and `Arena.reset` were removed, and a call
- * to either is an unknown builtin (NL2244).
+ * both number modes. `Arena` has no `release` and no `reset`: a call to either
+ * is an unknown builtin (NL2244).
  */
 declare const Arena: {
   /**
@@ -1835,7 +1835,7 @@ declare interface CPtr {
 // `TypedArray.prototype.set`'s meaning (WP34 N2). A `u8[]` is an `Array` to
 // `tsc`, and `lib.es5.d.ts` gives `Array` a `fill` of the same meaning but no
 // `set`; `runtime/nish.mjs` installs it under Node. No member needs a
-// capability.
+// capability except `Math.random`, which needs `entropy`.
 
 /**
  * `Math`. The f64-only functions (`sqrt`, `floor`, `ceil`, `trunc`, `sin`,
@@ -2061,8 +2061,6 @@ interface Array<T> {
    * @param value the value stored.
    * @param start the first slot, `0` by default.
    * @param end the slot after the last, `a.length` by default.
-   * @returns the array itself, which Nish never reads: the call is a
-   *   statement.
    */
   fill(value: T, start?: number, end?: number): this;
   /**

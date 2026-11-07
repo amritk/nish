@@ -148,7 +148,7 @@ export const JSON_DECODE_UNKNOWN: i32 = -22
  * checked, because its value is never read.
  */
 export const JSON_DECODE_DUPLICATE: i32 = -23
-/** An object that ended without one of the class's fields; `errorAt` is its closing brace. */
+/** An object that ended without a required field of the class; `errorAt` is its closing brace. */
 export const JSON_DECODE_MISSING: i32 = -24
 /**
  * More keys, over every `Map` field one decoding fills, than `maxMapKeys`;
