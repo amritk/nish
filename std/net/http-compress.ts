@@ -363,21 +363,21 @@ const httpCompressBytes = (text: string): u8[] => {
  * the response fields that say so. One per thread; allocated once.
  */
 export class HttpCompressor {
-  readonly gzip: GzipCompressor
+  private readonly gzip: GzipCompressor
   /** The small-body encoder: one fixed-Huffman block, nothing kept between calls. */
-  readonly fixed: GzipFixedCompressor
+  private readonly fixed: GzipFixedCompressor
   /** Where `compress` writes; valid until the next call. */
   readonly output: u8[]
   /** The fields `addFields` built: the program's, then `Content-Encoding` and `Vary`. */
   readonly names: u8[][]
   readonly values: u8[][]
-  readonly contentEncodingName: u8[]
-  readonly gzipValue: u8[]
-  readonly varyName: u8[]
-  readonly acceptEncodingValue: u8[]
+  private readonly contentEncodingName: u8[]
+  private readonly gzipValue: u8[]
+  private readonly varyName: u8[]
+  private readonly acceptEncodingValue: u8[]
   /** The shortest body worth compressing, and the longest the output can hold. */
-  readonly minLength: i32
-  readonly maxLength: i32
+  private readonly minLength: i32
+  private readonly maxLength: i32
   /**
    * The least a compressed body must save to be sent: `minSaving` bytes and
    * `minSavingPercent` percent of the body, whichever is more. 1 and 0 by
@@ -643,7 +643,7 @@ export class HttpCompressor {
    * Appends `Vary: Accept-Encoding` to the arrays `identityFields` built when
    * `vary` is set and the last decision `varies`.
    */
-  addVary(): void {
+  private addVary(): void {
     if (this.vary && this.varies()) {
       this.names.push(this.varyName)
       this.values.push(this.acceptEncodingValue)

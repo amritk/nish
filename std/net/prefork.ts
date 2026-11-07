@@ -347,25 +347,25 @@ class PreforkSlot {
 
 /** The supervisor's state while it runs. */
 class PreforkSupervisor {
-  config: PreforkConfig
+  private config: PreforkConfig
   program: string
-  args: string[]
+  private args: string[]
   slots: PreforkSlot[]
   /** While the group starts: each worker's end to the service worker, -1 for none. */
-  toService: i32[]
+  private toService: i32[]
   /** While the group starts: the service worker's end to each worker, -1 for none. */
-  fromWorkers: i32[]
+  private fromWorkers: i32[]
   /** When a group still running gets SIGKILL. */
-  cascadeAt: i64 = 0
+  private cascadeAt: i64 = 0
   running: i32 = 0
   /** The readiness loop each supervisor channel is added to. */
-  loop: i32
+  private loop: i32
   /** `config.serviceWorker`: with it at 0 or above, the workers are one group. */
-  service: i32
+  private service: i32
   /** The group is being stopped, to be started again once none of it is left. */
-  cascading: boolean = false
+  private cascading: boolean = false
   /** Worker i's listener at i, held for the whole run; empty without `listenPort`. */
-  listeners: i32[]
+  private listeners: i32[]
 
   constructor(config: PreforkConfig, args: string[], count: i32, loop: i32) {
     this.config = config
@@ -391,7 +391,7 @@ class PreforkSupervisor {
    * Start worker `index` with its channel ends, the service ones from
    * `pairs`; false when a socketpair, the loop or the spawn refused it.
    */
-  start(index: i32): boolean {
+  private start(index: i32): boolean {
     const fds: i32[] = []
     let own: i32 = -1
     if (this.config.supervisorChannels) {
@@ -458,7 +458,7 @@ class PreforkSupervisor {
   }
 
   /** The slot `pid` ran in, or -1. */
-  find(pid: i32): i32 {
+  private find(pid: i32): i32 {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (this.slots[i].pid === pid) {
         return i
@@ -472,7 +472,7 @@ class PreforkSupervisor {
    * at least `quickExitMs`, else, or when `failed` (`spawn` refused it), after
    * a wait that starts at `backoffMs` and doubles up to `backoffCapMs`.
    */
-  backoff(slot: PreforkSlot, now: i64, failed: boolean): void {
+  private backoff(slot: PreforkSlot, now: i64, failed: boolean): void {
     if (failed || now - slot.at < toI64(this.config.quickExitMs)) {
       const cap: i32 = this.config.backoffCapMs
       if (slot.delay === 0) {
@@ -538,7 +538,7 @@ class PreforkSupervisor {
   }
 
   /** Stop the group so it starts again whole: SIGTERM now, SIGKILL after `graceMs`. */
-  cascade(now: i64): void {
+  private cascade(now: i64): void {
     this.cascading = true
     this.cascadeAt = now + toI64(this.config.graceMs)
     this.signal(PREFORK_SIGTERM)
@@ -557,7 +557,7 @@ class PreforkSupervisor {
   }
 
   /** A pair from each worker to the service worker; false when one failed. */
-  pairs(): boolean {
+  private pairs(): boolean {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (i !== this.service) {
         const pair: i32[] = [-1, -1]
@@ -572,7 +572,7 @@ class PreforkSupervisor {
   }
 
   /** Close every end `pairs` made: the workers hold their copies now. */
-  closePairs(): void {
+  private closePairs(): void {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (this.toService[i] >= 0) {
         netClose(this.toService[i])
@@ -591,7 +591,7 @@ class PreforkSupervisor {
    * false when `first`; otherwise it backs off the slot that failed and stops
    * the workers it started, to be tried again whole.
    */
-  restartGroup(first: boolean): boolean {
+  private restartGroup(first: boolean): boolean {
     if (this.running > 0) {
       return true
     }
@@ -682,7 +682,7 @@ class PreforkSupervisor {
   }
 
   /** Send `sig` to every running worker. */
-  signal(sig: i32): void {
+  private signal(sig: i32): void {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (this.slots[i].pid > 0) {
         kill(this.slots[i].pid, sig)

@@ -406,7 +406,7 @@ export class HttpFields {
   /** The `content-length`, or `HTTP_FIELDS_NO_LENGTH`. */
   contentLength: i64 = -1
   /** The empty value an absent pseudo-header reads as, made once. */
-  none: u8[]
+  private none: u8[]
 
   constructor() {
     this.method = []
@@ -458,7 +458,7 @@ export class HttpFields {
    * rules — which pseudo-headers are required — are the caller's. Answers
    * the mask of pseudo-headers seen, or a negative refusal.
    */
-  readSection(names: u8[][], values: u8[][], allowed: i32): i32 {
+  private readSection(names: u8[][], values: u8[][], allowed: i32): i32 {
     this.clear()
     const n: i32 = toI32(names.length)
     if (n !== toI32(values.length)) {
@@ -514,7 +514,7 @@ export class HttpFields {
   }
 
   /** Records the pseudo-header `pseudo` as `value`, checking its syntax. */
-  takePseudo(pseudo: i32, value: u8[]): i32 {
+  private takePseudo(pseudo: i32, value: u8[]): i32 {
     switch (pseudo) {
       case HTTP_FIELDS_METHOD:
         this.method = value

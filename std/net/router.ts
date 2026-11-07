@@ -103,53 +103,53 @@ export class RouterLimits {
 export class Router {
   // References, then 32-bit fields: the order the layout packs without padding.
   /** Per node: its first literal child, or -1; siblings chain through `nextSibling`. */
-  firstChild: i32[]
+  private firstChild: i32[]
   /** Per node: the next literal child of its parent, or -1. */
-  nextSibling: i32[]
+  private nextSibling: i32[]
   /** Per node: its literal label, `labels[labelStart .. labelEnd)`; empty for a parameter or `*` node. */
-  labelStart: i32[]
-  labelEnd: i32[]
+  private labelStart: i32[]
+  private labelEnd: i32[]
   /** Per node: its parameter child, or -1; one per node, since names take no part in matching. */
-  paramChild: i32[]
+  private paramChild: i32[]
   /** Per node: its `*` child, or -1. */
-  wildChild: i32[]
+  private wildChild: i32[]
   /** Per node: the first route ending there, or -1; routes chain through `endpointNext`. */
-  firstEndpoint: i32[]
+  private firstEndpoint: i32[]
   /** Every literal label, back to back. */
-  labels: u8[]
+  private labels: u8[]
   /** Per route: its method's index into `methodStart`, the next route ending at its node, and its parameter pairs. */
-  routeMethod: i32[]
-  endpointNext: i32[]
-  routeParams: i32[]
+  private routeMethod: i32[]
+  private endpointNext: i32[]
+  private routeParams: i32[]
   /** The methods the table knows, `methodBytes[methodStart[m] .. methodEnd[m])`, compared exactly (RFC 9110 §9.1). */
   methodBytes: u8[]
   methodStart: i32[]
   methodEnd: i32[]
   /** `match`'s scratch, sized by the constructor: each segment's span, then the pairs found so far. */
-  segStart: i32[]
-  segEnd: i32[]
-  found: i32[]
+  private segStart: i32[]
+  private segEnd: i32[]
+  private found: i32[]
   /** `add`'s scratch: each pattern segment's kind and span in the pattern. */
-  patKind: i32[]
-  patStart: i32[]
-  patEnd: i32[]
+  private patKind: i32[]
+  private patStart: i32[]
+  private patEnd: i32[]
   /** The limits, copied out of the `RouterLimits` the table was made with. */
-  maxPatternBytes: i32 = 0
-  maxSegments: i32 = 0
+  private maxPatternBytes: i32 = 0
+  private maxSegments: i32 = 0
   maxParams: i32 = 0
-  maxRoutes: i32 = 0
-  maxMethods: i32 = 0
+  private maxRoutes: i32 = 0
+  private maxMethods: i32 = 0
   /** The most segments any route has: a path is split no further than one past it. */
-  deepest: i32 = 0
+  private deepest: i32 = 0
   /** During a match: how many segments the path has, where it ends, the method's index, and the pairs in `found`. */
-  segments: i32 = 0
-  pathEnd: i32 = 0
-  wanted: i32 = 0
-  foundCount: i32 = 0
+  private segments: i32 = 0
+  private pathEnd: i32 = 0
+  private wanted: i32 = 0
+  private foundCount: i32 = 0
   /** During a match: whether a route of another method ended at the path's end. */
-  otherMethod: boolean = false
+  private otherMethod: boolean = false
   /** The nodes the last `match` visited: never more than `nodeCount()`, which the tests pin. */
-  visited: i32 = 0
+  private visited: i32 = 0
 
   /** An empty table. Panics, naming the field, on a limit outside the range `RouterLimits` gives it. */
   constructor(limits: RouterLimits) {
@@ -186,7 +186,7 @@ export class Router {
   }
 
   /** How many routes the table holds; the next `add` answers this index. */
-  routes(): i32 {
+  private routes(): i32 {
     return toI32(this.routeMethod.length)
   }
 
@@ -291,7 +291,7 @@ export class Router {
    * Splits `pattern`, which starts with `/`, into `patKind`/`patStart`/`patEnd`
    * and answers how many segments it has, or the code that refuses it.
    */
-  splitPattern(pattern: string): i32 {
+  private splitPattern(pattern: string): i32 {
     const length: i32 = toI32(pattern.length)
     let count: i32 = 0
     let start: i32 = 1
@@ -333,7 +333,7 @@ export class Router {
   }
 
   /** The child of `node` that pattern segment `k` leads to, or -1. */
-  childFor(node: i32, pattern: string, k: i32): i32 {
+  private childFor(node: i32, pattern: string, k: i32): i32 {
     const kind: i32 = this.patKind[k]
     if (kind === ROUTER_PARAM) {
       return this.paramChild[node]
@@ -353,7 +353,7 @@ export class Router {
   }
 
   /** Adds the child of `node` that pattern segment `k` leads to, and answers it. */
-  addChild(node: i32, pattern: string, k: i32): i32 {
+  private addChild(node: i32, pattern: string, k: i32): i32 {
     const child: i32 = this.nodeCount()
     const kind: i32 = this.patKind[k]
     const at: i32 = toI32(this.labels.length)
@@ -464,7 +464,7 @@ export class Router {
    * that reaches a route wins, and a branch that does not is left with the
    * pairs it pushed popped.
    */
-  walk(target: u8[], node: i32, depth: i32): i32 {
+  private walk(target: u8[], node: i32, depth: i32): i32 {
     this.visited += 1
     if (depth === this.segments) {
       return this.endpointFor(node)
@@ -511,7 +511,7 @@ export class Router {
   }
 
   /** The route of the wanted method ending at `node`, or -1, noting a route of another method there. */
-  endpointFor(node: i32): i32 {
+  private endpointFor(node: i32): i32 {
     for (let e: i32 = this.firstEndpoint[node]; e >= 0; e = this.endpointNext[e]) {
       if (this.routeMethod[e] === this.wanted) {
         return e

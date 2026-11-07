@@ -274,7 +274,7 @@ export class HttpRequest {
     return handlerDecimal(this.head, this.params[2 * k], this.params[2 * k + 1])
   }
 
-  checkParam(k: i32): void {
+  private checkParam(k: i32): void {
     if (k < 0 || k >= this.paramCount) {
       panic(`HttpRequest.param: the route has ${this.paramCount} parameter(s), not one at ${k}`)
     }
@@ -361,57 +361,57 @@ export class HttpRequest {
  */
 export class HttpHandler {
   server: Http1Server
-  router: Router
+  private router: Router
   /** Every request the pool has made, and the indices of the free ones. */
-  requests: HttpRequest[]
-  free: i32[]
+  private requests: HttpRequest[]
+  private free: i32[]
   /** Whole requests waiting for `take`, a ring of `queue.length` with `queueCount` from `queueStart`. */
-  queue: i32[]
+  private queue: i32[]
   /** Per slot: its generation, its request (-1 for none), and whether it holds a connection. */
-  slotGen: i32[]
-  current: i32[]
-  open: boolean[]
+  private slotGen: i32[]
+  private current: i32[]
+  private open: boolean[]
   /** `pollWait`'s output. */
-  readyFds: i32[]
+  private readyFds: i32[]
   /** Per watched id: whether its descriptor was ready in the last `wait`. */
-  watchedFired: boolean[]
+  private watchedFired: boolean[]
   /** `json` and `problem` write here. */
   scratch: u8[]
   writer: JsonWriter
   /** `refuse`'s scratch for `Router.match`. */
-  probe: i32[]
+  private probe: i32[]
   /** One field for `send`; two for a 405. */
-  typeName: u8[][]
-  typeValue: u8[][]
-  allowNames: u8[][]
-  allowValues: u8[][]
+  private typeName: u8[][]
+  private typeValue: u8[][]
+  private allowNames: u8[][]
+  private allowValues: u8[][]
   /** Each `Allow` value made, by the bit mask of the methods it lists: made once a mask and kept. */
-  allowMasks: i64[]
-  allowBytes: u8[][]
-  jsonType: u8[]
-  problemType: u8[]
-  noFields: u8[][]
+  private allowMasks: i64[]
+  private allowBytes: u8[][]
+  private jsonType: u8[]
+  private problemType: u8[]
+  private noFields: u8[][]
   /**
    * When an accept failed for want of a resource (EMFILE, ENFILE, ENOMEM):
    * the listener is out of the loop until then, which it would otherwise wake
    * every turn while its connection waits. 0 while it is in the loop.
    */
-  acceptRestUntil: i64 = 0
+  private acceptRestUntil: i64 = 0
   /** `bodyTimeout` in nanoseconds. */
-  bodyTimeout: i64 = 0
+  private bodyTimeout: i64 = 0
   /** When the current turn's sockets were ready (`monotonicNanos`): a head read in it is stamped with this. */
   turnAt: i64 = 0
   /** When `wait` next looks for a body past `bodyTimeout`. */
-  bodyCheckAt: i64 = 0
-  listener: i32 = 0
+  private bodyCheckAt: i64 = 0
+  private listener: i32 = 0
   loop: i32 = 0
-  queueStart: i32 = 0
-  queueCount: i32 = 0
-  outputSize: i32 = 0
+  private queueStart: i32 = 0
+  private queueCount: i32 = 0
+  private outputSize: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
-  draining: boolean = false
+  private draining: boolean = false
   /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
-  jsonBegun: boolean = false
+  private jsonBegun: boolean = false
 
   /**
    * A handler over `listener`, a listening socket the program made
@@ -569,7 +569,7 @@ export class HttpHandler {
   }
 
   /** Takes every waiting connection. */
-  acceptAll(): void {
+  private acceptAll(): void {
     if (this.draining) {
       return
     }
@@ -594,7 +594,7 @@ export class HttpHandler {
    * Takes `slot`'s events until it needs the socket again, then sends what it
    * holds and re-arms it, or closes it once it is over.
    */
-  drive(slot: i32): void {
+  private drive(slot: i32): void {
     const conn: Http1Connection = this.server.connection(slot)
     let event: i32 = this.server.next(slot)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
@@ -633,12 +633,12 @@ export class HttpHandler {
   }
 
   /** Whether `conn`'s output holds at most half its size unsent, so a response head fits behind it. */
-  roomy(conn: Http1Connection): boolean {
+  private roomy(conn: Http1Connection): boolean {
     return (conn.outputEnd - conn.outputStart) * 2 <= this.outputSize
   }
 
   /** A head: a request from the free list, the head copied into it, and its route. */
-  begin(slot: i32, conn: Http1Connection): void {
+  private begin(slot: i32, conn: Http1Connection): void {
     if (this.draining) {
       // A head read during the drain is the connection's last.
       conn.closeAfter = true
@@ -683,7 +683,7 @@ export class HttpHandler {
    * that route, since a GET resource answers HEAD (RFC 9110 §9.3.2) and the
    * carrier sends no body for it.
    */
-  route(r: HttpRequest): void {
+  private route(r: HttpRequest): void {
     const params: i32[] = r.params
     let route: i32 = this.router.match(
       r.head,
@@ -716,7 +716,7 @@ export class HttpHandler {
   }
 
   /** Body bytes: appended to the request's body, which the carrier's cap bounds. */
-  gather(slot: i32, conn: Http1Connection): void {
+  private gather(slot: i32, conn: Http1Connection): void {
     const at: i32 = this.current[slot]
     if (at < 0) {
       return
@@ -734,7 +734,7 @@ export class HttpHandler {
   }
 
   /** The request is whole: queued for `take`, or parked while the response before it is still mostly unsent. */
-  whole(slot: i32, conn: Http1Connection): void {
+  private whole(slot: i32, conn: Http1Connection): void {
     const at: i32 = this.current[slot]
     if (at < 0) {
       return
@@ -747,7 +747,7 @@ export class HttpHandler {
     }
   }
 
-  enqueue(r: HttpRequest): void {
+  private enqueue(r: HttpRequest): void {
     r.state = HANDLER_QUEUED
     const size: i32 = toI32(this.queue.length)
     if (this.queueCount === size) {
@@ -763,7 +763,7 @@ export class HttpHandler {
   }
 
   /** `H1_WRITE`: the carrier has room again for the response under way. */
-  resume(slot: i32, conn: Http1Connection): void {
+  private resume(slot: i32, conn: Http1Connection): void {
     const at: i32 = this.current[slot]
     if (at < 0) {
       return
@@ -779,7 +779,7 @@ export class HttpHandler {
   }
 
   /** Hands the carrier as much of `r`'s pending bytes as it takes. */
-  pushPending(r: HttpRequest, conn: Http1Connection): void {
+  private pushPending(r: HttpRequest, conn: Http1Connection): void {
     const left: i32 = r.pendingEnd - r.pendingStart
     if (left === 0) {
       return
@@ -795,7 +795,7 @@ export class HttpHandler {
   }
 
   /** Ends `r`'s response once nothing is pending, and hands `r` back; otherwise leaves it flushing. */
-  finish(r: HttpRequest, conn: Http1Connection): void {
+  private finish(r: HttpRequest, conn: Http1Connection): void {
     r.state = HANDLER_FLUSHING
     if (r.pendingEnd > r.pendingStart) {
       return
@@ -809,7 +809,7 @@ export class HttpHandler {
   }
 
   /** A free request, or a new one. */
-  obtain(): HttpRequest {
+  private obtain(): HttpRequest {
     const count: i32 = toI32(this.free.length)
     if (count > 0) {
       const at: i32 = this.free[count - 1]
@@ -822,7 +822,7 @@ export class HttpHandler {
     return r
   }
 
-  release(r: HttpRequest): void {
+  private release(r: HttpRequest): void {
     if (r.state === HANDLER_FREE) {
       return
     }
@@ -831,7 +831,7 @@ export class HttpHandler {
   }
 
   /** Hands back the request `slot` was reading when the carrier refused it. */
-  releaseReading(slot: i32): void {
+  private releaseReading(slot: i32): void {
     const at: i32 = this.current[slot]
     if (at >= 0 && this.requests[at].state === HANDLER_READING) {
       this.current[slot] = -1
@@ -844,13 +844,13 @@ export class HttpHandler {
    * dropped. A request the handler alone holds goes back now; one queued or
    * taken goes back when `ready` passes it or the program answers it.
    */
-  closeSlot(slot: i32): void {
+  private closeSlot(slot: i32): void {
     this.server.close(slot)
     this.forget(slot)
   }
 
   /** The bookkeeping of a slot the carrier has closed. */
-  forget(slot: i32): void {
+  private forget(slot: i32): void {
     this.open[slot] = false
     this.slotGen[slot] = this.slotGen[slot] + 1
     const at: i32 = this.current[slot]
@@ -864,7 +864,7 @@ export class HttpHandler {
   }
 
   /** Closes every connection whose request has been reading its body for longer than `bodyTimeout` at `now`. */
-  expireBodies(now: i64): void {
+  private expireBodies(now: i64): void {
     for (let s: i32 = 0; s < toI32(this.current.length) && s < toI32(this.open.length); s++) {
       const at: i32 = this.current[s]
       if (this.open[s] && at >= 0 && at < toI32(this.requests.length)) {
@@ -877,7 +877,7 @@ export class HttpHandler {
   }
 
   /** Every slot the carrier's `expire` closed. */
-  sweep(): void {
+  private sweep(): void {
     for (let s: i32 = 0; s < toI32(this.open.length); s++) {
       if (this.open[s] && !this.server.holds(s)) {
         this.forget(s)
@@ -914,7 +914,7 @@ export class HttpHandler {
   }
 
   /** Whether `r`'s connection is the one it was read on, still open. */
-  live(r: HttpRequest): boolean {
+  private live(r: HttpRequest): boolean {
     return this.server.holds(r.slot) && this.slotGen[r.slot] === r.gen
   }
 
@@ -1013,7 +1013,7 @@ export class HttpHandler {
   }
 
   /** Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. */
-  keep(r: HttpRequest, buf: u8[], off: i32, len: i32): void {
+  private keep(r: HttpRequest, buf: u8[], off: i32, len: i32): void {
     const live: i32 = r.pendingEnd - r.pendingStart
     if (toI32(r.pending.length) - r.pendingEnd < len) {
       if (r.pendingStart > 0 || toI32(r.pending.length) < live + len) {
@@ -1131,7 +1131,7 @@ export class HttpHandler {
    * One too large for it is written without its detail, and then without its
    * title, which leaves room enough in the least `jsonBytes`.
    */
-  writeProblem(status: i32, title: string, detail: string): i32 {
+  private writeProblem(status: i32, title: string, detail: string): i32 {
     let length: i32 = this.writeProblemObject(status, title, detail)
     if (length < 0) {
       length = this.writeProblemObject(status, title, "")
@@ -1144,7 +1144,7 @@ export class HttpHandler {
   }
 
   /** `writeProblem`'s one try: the object's length, or -1 when it did not fit. */
-  writeProblemObject(status: i32, title: string, detail: string): i32 {
+  private writeProblemObject(status: i32, title: string, detail: string): i32 {
     const w: JsonWriter = this.json()
     w.beginObject()
     w.key("type")
@@ -1191,7 +1191,7 @@ export class HttpHandler {
    * HEAD wherever GET is, since a GET route answers HEAD too. Made once for
    * each set of methods.
    */
-  allowFor(r: HttpRequest): u8[] {
+  private allowFor(r: HttpRequest): u8[] {
     const router: Router = this.router
     const methods: i32 = toI32(router.methodStart.length)
     let mask: i64 = 0
