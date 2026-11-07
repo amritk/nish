@@ -385,7 +385,7 @@ export class Upstream {
    * nothing is held and `req` is still the program's to answer. `path` is
    * copied out before this returns.
    * @param req The handler's request the call answers; it stays held until the call ends.
-   * @param path The origin's path to get, with its query.
+   * @param path The origin's path to get, with its query, in origin form: it starts with `/`. An empty path, or one without the leading `/`, ends the call with `UPSTREAM_E_REQUEST`, which `take` reports, while `get` still returns `UPSTREAM_E_NONE`.
    * @returns `UPSTREAM_E_NONE` when the call started, `UPSTREAM_E_FULL` when no slot is free.
    */
   get(req: HttpRequest, path: string): i32 {
