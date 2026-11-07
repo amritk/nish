@@ -15,7 +15,7 @@ on a different core without a socket or a system call per message.
 | to sleep until another process says there is work | [`popWait`, or `waitI32` and `wake`](#sleeping-until-there-is-work) |
 
 The rules are in the reference,
-[Shared memory between processes](../../LANGUAGE.md#shared-memory-between-processes-nishsyncshm-and-nishsyncring).
+[Shared memory between processes](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#shared-memory-between-processes-nishsyncshm-and-nishsyncring).
 Both modules are native only, and a program that imports neither is
 unchanged.
 

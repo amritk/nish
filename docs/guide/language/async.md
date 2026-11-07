@@ -6,7 +6,7 @@ TypeScript does, with `async`, `Promise<T>` and `await`, but it never lets a
 promise become a value: every `await` is on a call, written where the call is
 made. That is what lets the compiler know, before the program runs, how much
 memory each waiting task needs. The rules are in the reference under
-[Async functions](../../LANGUAGE.md#async-functions-async-and-await).
+[Async functions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#async-functions-async-and-await).
 
 > [!NOTE]
 > In this release the tasks of a program run one after another inside the

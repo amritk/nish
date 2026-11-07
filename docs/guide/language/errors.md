@@ -5,7 +5,7 @@ function that can fail says so in its return type by returning a
 `Result<T, E>`, and the compiler makes every caller decide what happens to the
 failure before it can touch the success value. The rules here are defined in
 the reference under
-[Result and error handling](../../LANGUAGE.md#result-and-error-handling).
+[Result and error handling](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#result-and-error-handling).
 
 ## A function that can fail
 

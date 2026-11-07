@@ -9,7 +9,7 @@ stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
 listeners, connections and pairs, passing a descriptor over one, and naming
 the process at the other end. The rules are in the reference,
-[`nish:net`](../../LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
+[`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
 
 Every function is also a global, as every `nish:` export is, but importing them
 says where they come from. They are native only: a `wasm32` build has no

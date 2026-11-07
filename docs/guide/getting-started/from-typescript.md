@@ -74,7 +74,7 @@ compared with `===` and `!==`. The [language pages](../language/control-flow.md)
 declarations for `i32`, `Result` and the other built-in names
 (`runtime/nish.d.ts`), so `tsc` and your editor understand a Nish file. The
 reverse does not hold: `nish` is the authority, as the reference's
-[It is still TypeScript](../../LANGUAGE.md#it-is-still-typescript) says.
+[It is still TypeScript](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#it-is-still-typescript) says.
 
 `Math` carries over too, with JavaScript's answers down to the corner cases —
 `Math.round(-0.3)` is `-0`, `Math.max(1, NaN)` is `NaN`, `Math.imul` wraps —
@@ -136,8 +136,8 @@ program instead of wrapping round, as
 makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
 `i32` or `f64` means the same in either mode. See
 [Types](../language/types.md), and the reference's
-[Types](../../LANGUAGE.md#types) and
-[Numeric literals](../../LANGUAGE.md#numeric-literals).
+[Types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#types) and
+[Numeric literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#numeric-literals).
 
 ## No `any`, `unknown` or union types
 
@@ -224,7 +224,7 @@ narrowing needed. Anywhere else, such as on a number, it is refused
 (`NL1048`), and so is a default for an array element, `xs[i] ?? d`
 (`NL2489`): past the end of the array, Node answers `d` where Nish stops the
 program. `?.[i]` and `f?.()` are not supported. See the reference's
-[Nullable types](../../LANGUAGE.md#nullable-types).
+[Nullable types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nullable-types).
 
 ## No exceptions
 
@@ -269,7 +269,7 @@ as a statement, and reading `r.value` before checking `r.isErr()` or
 `panic("message")`, which ends the program the way an overflow does. [Errors and `Result`](../language/errors.md) covers the rest,
 including `orReturn()`, which passes an error up to the caller like Rust's
 `?`. The reference is
-[Result and error handling](../../LANGUAGE.md#result-and-error-handling).
+[Result and error handling](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#result-and-error-handling).
 
 ## Classes without inheritance
 
@@ -327,7 +327,7 @@ An interface holds fields only, never methods: behaviour that several classes
 share is a top-level function that takes the interface, like `greet` above.
 There is also no `abstract`, no `static`, and no getters or setters. See
 [Classes and interfaces](../language/classes-and-interfaces.md) and the
-reference's [Classes](../../LANGUAGE.md#classes).
+reference's [Classes](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#classes).
 
 ## Smaller reflexes
 
@@ -355,5 +355,5 @@ if (xs.length) {
 
 The full list of refused constructs, each with its message and what to write
 instead, is the reference's
-[Forbidden constructs](../../LANGUAGE.md#forbidden-constructs-phase-0-validator)
-and [Rejected by the checker](../../LANGUAGE.md#rejected-by-the-checker).
+[Forbidden constructs](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)
+and [Rejected by the checker](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#rejected-by-the-checker).

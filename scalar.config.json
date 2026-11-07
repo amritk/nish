@@ -8,7 +8,12 @@
   "navigation": {
     "header": [
       { "type": "link", "title": "GitHub", "to": "https://github.com/amritk/nish", "newTab": true },
-      { "type": "link", "title": "Language reference", "to": "/reference/language" },
+      {
+        "type": "link",
+        "title": "Language reference",
+        "to": "https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md",
+        "newTab": true
+      },
       { "type": "link", "title": "Changelog", "to": "/reference/changelog" }
     ],
     "routes": {
@@ -240,11 +245,6 @@
             "type": "group",
             "title": "Reference",
             "children": {
-              "/language": {
-                "type": "page",
-                "title": "Language reference",
-                "filepath": "docs/LANGUAGE.md"
-              },
               "/install": { "type": "page", "title": "Installing", "filepath": "docs/INSTALL.md" },
               "/standard-library": {
                 "type": "page",

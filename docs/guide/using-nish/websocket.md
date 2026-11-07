@@ -8,7 +8,7 @@ connection it opened itself, plain TCP from [`nish:net`](networking.md) or TLS
 from [`nish/net/tls-tcp`](tls-client.md). It draws no randomness either: the
 client's nonce and every mask key are yours to give, from
 `crypto.getRandomValues`. It is imported like any other library module
-([`export` and `import`](../../LANGUAGE.md#export-and-import)).
+([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
 ## Accepting a WebSocket on a server
 

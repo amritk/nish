@@ -7,7 +7,7 @@ every certificate on the way is valid now and allowed to do what it does, and
 that the server's certificate names the host the program meant to reach.
 Without that check, TLS encrypts the connection to whoever answered. The
 module is part of the [standard library](standard-library.md) and is imported
-like any other ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
+like any other ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
 ## Verifying a chain
 

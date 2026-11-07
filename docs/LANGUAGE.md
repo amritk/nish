@@ -24,10 +24,10 @@ Conventions:
   with `nish` and have no dedicated test case yet.
 - Error messages are quoted as the fragment `tests/run.js` matches; the full
   line is `<file>:<line>:<col>: error: <message>` followed by a caret excerpt
-  ([wp10-ci.md](https://github.com/amritk/nish/blob/main/docs/wp10-ci.md#diagnostic-format)).
+  ([wp10-ci.md](wp10-ci.md#diagnostic-format)).
 - "i32 mode" is the default; "f64 mode" is `--number-mode f64`. Everything
   else is mode-independent unless stated.
-- The exact IR for each construct is in [IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md).
+- The exact IR for each construct is in [IR_COOKBOOK.md](IR_COOKBOOK.md).
 
 Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 [Nullable types](#nullable-types) ·
@@ -168,7 +168,7 @@ same `i32`).
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const nish_str *` in, `nish_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
 | `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
 | `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
-| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. A receiver spelled with one of the names has no `push` or `pop`, as in TypeScript ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)). They name the JS typed array a host passes ([wp8-interop.md](https://github.com/amritk/nish/blob/main/docs/wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](https://github.com/amritk/nish/blob/main/docs/wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
+| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. A receiver spelled with one of the names has no `push` or `pop`, as in TypeScript ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)). They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
 | `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, narrowing, and a `??` default: [Nullable types](#nullable-types). |
@@ -180,7 +180,7 @@ same `i32`).
 Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`),
 `src/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
 `cls_point`; the ten-struct layout test `tests/layout/structs.ts` (offsets and
-`sizeof` cross-checked against clang, [wp2-classes.md](https://github.com/amritk/nish/blob/main/docs/wp2-classes.md#layout)).
+`sizeof` cross-checked against clang, [wp2-classes.md](wp2-classes.md#layout)).
 
 Type rules:
 
@@ -235,7 +235,7 @@ Type rules:
   Arrays of arrays (`tests/cases/arr_nested`), arrays of strings
   (`tests/cases/arr_strings`), arrays of class instances and class fields
   of array type work *(CLI only)*.
-- **`integer<Lo, Hi>` is a ranged integer** ([wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md)):
+- **`integer<Lo, Hi>` is a ranged integer** ([wp31-ranged-integers.md](wp31-ranged-integers.md)):
   an `i32` the compiler knows lies in `[Lo, Hi]`. It is an `i32` in the IR, in
   memory and at the ABI, in both number modes, and `tsc` reads it as a
   `number` alias (`runtime/nish.d.ts`). `integer<0, 0xFF>` and
@@ -562,7 +562,7 @@ the IR; only a computed count costs the mask
 ### Nullable types
 
 `T | null` is available for `T` a class, interface, array, or string
-(`tests/cases/mem_nullable`; [wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md#4-t--null)). It
+(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t--null)). It
 is the same LLVM pointer type as `T` with the constant `null` as one more
 value, so nothing is boxed; `null` takes its type from context.
 
@@ -673,7 +673,7 @@ value, so nothing is boxed; `null` takes its type from context.
   (`reject_optional_chain_secret`).
 - **Attributes**: a nullable parameter or return loses `nonnull` and
   `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
-  rules ([ARCHITECTURE.md](https://github.com/amritk/nish/blob/main/docs/ARCHITECTURE.md#attribute-soundness-rules)).
+  rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
 
 ### Discriminated unions
 
@@ -1166,7 +1166,7 @@ A function that can fail says so in its return type, hands back a
 `Result<T, E>`, and the caller cannot get at the success value without first
 deciding what happens to the failure. There is no `throw`, no `try`, and no
 unwinding anywhere in the language (WP16;
-[wp16-results.md](https://github.com/amritk/nish/blob/main/docs/wp16-results.md)).
+[wp16-results.md](wp16-results.md)).
 
 ```ts
 const half = (n: i32): Result<i32, string> => {
@@ -1255,7 +1255,7 @@ which case it is an arena bump like any other escaping allocation
 Eight bytes is where the six supported targets agree about a register rather
 than a number worth tuning; the measurements, and the one place the packing
 still costs something against C and Rust, are in
-[wp17-result-abi.md](https://github.com/amritk/nish/blob/main/docs/wp17-result-abi.md).
+[wp17-result-abi.md](wp17-result-abi.md).
 
 ### The surface
 
@@ -1362,7 +1362,7 @@ mismatch is named rather than papered over; convert it by hand with
 ### It is still TypeScript
 
 Every line above parses as TypeScript, and with
-[`runtime/nish.d.ts`](https://github.com/amritk/nish/blob/main/runtime/nish.d.ts) on the include path it
+[`runtime/nish.d.ts`](../runtime/nish.d.ts) on the include path it
 type-checks under plain `tsc --strict` and in an editor too. The declarations
 model `Result` as the tagged union TypeScript would use anyway, intersected
 with the method surface, so `if (r.ok)` and `if (r.isOk())` narrow `r` in
@@ -1401,7 +1401,7 @@ NISH_RESULT_ASSERT(sizeof(nish_result_i32_i32_word) == 8, "...");
 The word is not a description of the ABI, it is the ABI: clang lowers a
 function returning *or taking* that type to `i64` on every supported native
 target, which is the same declaration the module already defines
-([wp17-result-abi.md](https://github.com/amritk/nish/blob/main/docs/wp17-result-abi.md) §3). A C host includes the header
+([wp17-result-abi.md](wp17-result-abi.md) §3). A C host includes the header
 and calls across with no glue, in both directions (`tests/run.js`, the WP17
 interop block).
 
@@ -1415,7 +1415,7 @@ may recycle.
 
 A **ranged parameter** (`integer<Lo, Hi>`, [Types](#types)) crosses as the
 `i32` it is, and is checked where every call passes through
-([wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md) §9):
+([wp31-ranged-integers.md](wp31-ranged-integers.md) §9):
 
 - **Where the check lives is the linkage condition.** A function that
   `--strict-exports` makes `internal` has every caller in view, so each call
@@ -1532,7 +1532,7 @@ console.log(total)              // 10
 ### Functions
 
 A function is declared as an arrow bound to a module-level `const`
-([wp22-arrow-functions.md](https://github.com/amritk/nish/blob/main/docs/wp22-arrow-functions.md)):
+([wp22-arrow-functions.md](wp22-arrow-functions.md)):
 
 ```ts
 const add = (a: number, b: number): number => {
@@ -1586,7 +1586,7 @@ spelling; the two compile to identical IR, instruction for instruction
   not only below its own line, and two of them may call each other
   (`tests/cases/fn_arrow_hoisting`). Nothing else would let a file be converted
   from one spelling to the other without reordering it
-  ([wp22-arrow-functions.md](https://github.com/amritk/nish/blob/main/docs/wp22-arrow-functions.md) §8b).
+  ([wp22-arrow-functions.md](wp22-arrow-functions.md) §8b).
 - Calls take exactly the declared number of arguments (`expects 1 argument`,
   `tests/cases/reject_arity`), each of exactly the declared type
   (`` Argument 1 of `area`: expected Shape, got Rect ``,
@@ -1702,7 +1702,7 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
   site, so an exported function's symbol takes every parameter: the
   `--emit-dts` typings, the `--emit-header` prototype and the `--emit-napi`
   shim require each argument, and take a rest parameter as one plain array
-  ([wp8-interop.md](https://github.com/amritk/nish/blob/main/docs/wp8-interop.md#the-c-abi)).
+  ([wp8-interop.md](wp8-interop.md#the-c-abi)).
 - What a call evaluates is what TypeScript evaluates: each argument once, left
   to right, whether it fills a default's place or gathers into a rest
   (`tests/cases/param_eval_order`). A rest array the callee returns, stores in
@@ -1931,7 +1931,7 @@ and their `.ll` goldens are byte-identical files.
   (`reject_enum_bitwise`). **Bit flags therefore stay `i32` module constants**:
   `A | B` on an enum would produce a value that is no declared member, which is
   the one thing the type exists to prevent
-  ([wp23-language-surface.md](https://github.com/amritk/nish/blob/main/docs/wp23-language-surface.md) §10 question 1 leaves
+  ([wp23-language-surface.md](wp23-language-surface.md) §10 question 1 leaves
   the wider form open).
 - **A `switch` takes an enum discriminant and enum-member labels**
   (`tests/cases/enum_ir`), which is what an enum is for: the statement lowers
@@ -2901,7 +2901,7 @@ export const main = (): i32 => {
   called by the C runtime, which has no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
   that mentions the parameter it constrains, and a bound that is "any type with
   a method `compare`" are not planned on this path. The design and the
-  milestones are in [wp18-generics.md](https://github.com/amritk/nish/blob/main/docs/wp18-generics.md).
+  milestones are in [wp18-generics.md](wp18-generics.md).
 
 ### Generic classes and interfaces
 
@@ -2934,7 +2934,7 @@ export const main = (): i32 => {
   (`tests/cases/reject_generic_class`). The two positions that take them are an
   annotation (`const b: Box<i32>`) and `new` (`new Box<i32>(7)`) — the two a
   one-token parser can read a type-argument list in, which is the same reason a
-  *call* infers instead (§2a of [wp18-generics.md](https://github.com/amritk/nish/blob/main/docs/wp18-generics.md)). A class
+  *call* infers instead (§2a of [wp18-generics.md](wp18-generics.md)). A class
   that is not generic takes none:
   `` `Point` is not generic, so `new Point` takes no type arguments ``
   (`tests/cases/reject_cls_new_generic`).
@@ -3130,8 +3130,8 @@ an instantiation of its own**, exactly as each type-argument tuple is: one
 its callee directly (`tests/cases/fnarg_named`). There is no function pointer,
 no indirect call and no function value anywhere; the parameter has no LLVM
 parameter at all, and the whole-program fixpoint sees an ordinary direct call
-it can prove things through ([wp23-language-surface.md](https://github.com/amritk/nish/blob/main/docs/wp23-language-surface.md)
-§6, and [wp28-compatibility-mode.md](https://github.com/amritk/nish/blob/main/docs/wp28-compatibility-mode.md) §7.4 for what
+it can prove things through ([wp23-language-surface.md](wp23-language-surface.md)
+§6, and [wp28-compatibility-mode.md](wp28-compatibility-mode.md) §7.4 for what
 the other kind of callee would cost).
 
 ```typescript
@@ -3268,7 +3268,7 @@ export const main = (): i32 => {
 
 An `async` function is a task the compiler can size: it may wait, and every
 wait is written `await` on a direct call
-([wp49-async-server.md](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md) §2). No expression ever has a
+([wp49-async-server.md](wp49-async-server.md) §2). No expression ever has a
 promise type, so there is no promise to store, pass or chain, and an awaited
 call's frame nests in its caller's. **An `async` function compiles to a frame
 and a resume switch** (`async_lowered`, `async_await_single`,
@@ -3281,7 +3281,7 @@ main` is resumed from the process entry until it finishes and its spawned
 tasks are done (`async_main`). In this release the tasks run on an
 in-process queue and nothing waits on the outside world, so every task runs
 to completion; the event loop that waits on sockets and timers is the next
-stage's ([wp49-async-server.md](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md), "Stage 4, part 2"). A
+stage's ([wp49-async-server.md](wp49-async-server.md), "Stage 4, part 2"). A
 program with no `async` function compiles byte for byte as before, and one
 whose `async` functions are never called keeps them `internal`, as it would a
 plain function (`async_unused`). A function that awaits loses `willreturn`
@@ -3399,7 +3399,7 @@ interleaving prints the same lines in another order (`async_spawn`, the
 `parallelMapInto`, `parallelMap`, `parallelFrom` and `parallelReduce` run a
 function over every element of an array, or every index of a new one, on as
 many threads as the machine has and the length is worth
-([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §4.1). They are imported from
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.1). They are imported from
 the standard library, and the function is a [function parameter](#function-parameters):
 a top-level function by name, or an arrow written at the call — which may read
 the `const` locals of the function it is written in
@@ -3451,7 +3451,7 @@ export const main = (): i32 => {
   the one about `dst`, which nothing else can reach.
 - **A short array is the loop it would have been.** A map is divided only
   once every thread's share carries enough work to pay for handing it to
-  another thread ([wp20-threads.md](https://github.com/amritk/nish/blob/main/docs/wp20-threads.md) §8e). How many elements
+  another thread ([wp20-threads.md](wp20-threads.md) §8e). How many elements
   that is — the *grain* — is sized per call from a static estimate of what
   `f` costs: 2^21 over the estimate, which counts one per operation, 32 per
   allocation, 4 per call, and a loop's body as many times as its literal
@@ -3463,7 +3463,7 @@ export const main = (): i32 => {
   any difference between the loop and a byte-identical copy of it (at most
   3.3% and 9.1%); at two chunks of 2^19 units the minimum won by 1.16x and
   the median by only 1.04x, within that 9.1%
-  ([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §8a). So a body estimated
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §8a). So a body estimated
   at 3, such as `(x) => x + 1` or `(x) => x * x`, is divided past 699,050
   elements (`tests/link/par_map`), `(x * 31 + 7) % 1000` past 262,144
   (`tests/link/par_map_large`), a body with a loop far sooner, and a cheaper
@@ -3472,11 +3472,11 @@ export const main = (): i32 => {
   is no hand-off and no indirect call. The estimate counts a call as a call
   and not as the callee's body, so a body that hides its work behind a call
   is divided too little rather than too much. There is no knob for the grain
-  ([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §9).
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §9).
 - **The threads are a pool, as many as the cores the process may use.** The
   first region or scope join that divides starts one worker per core but the
   caller's, which is the last of them, and at most 63 workers; they park
-  between calls ([wp20-threads.md](https://github.com/amritk/nish/blob/main/docs/wp20-threads.md) §8e). The core count is
+  between calls ([wp20-threads.md](wp20-threads.md) §8e). The core count is
   the smallest of the CPUs online, the process's affinity mask (`taskset`, a
   container's cpuset) and the cgroup v2 `cpu.max` quota rounded up, so a
   program in a container limited to two cores divides two ways, not as many
@@ -3837,13 +3837,11 @@ export const main = (): i32 => {
   whose name is declared twice there keeps the stricter rule above
   (`_shadow`).
 
-<a id="scoped-tasks-using-s--scope" style="scroll-margin-top: 65px"></a>
-
 ### Scoped tasks: `using s = scope()`
 
 A scope runs a handful of different functions at once, each on a thread of its
 own, and joins them all when the block that declares it ends
-([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §4.2). It is the shape
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.2). It is the shape
 `parallelMapInto` cannot take: work that is not one function over one array.
 
 ```typescript
@@ -4145,7 +4143,7 @@ export const main = (): i32 => {
   (`tests/cases/reject_thread_dispose_elsewhere`).
 - **There is no thread count.** Each spawn is one task and each task one
   thread; a scope with more tasks than cores leaves the scheduler to share them
-  ([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §9 declines the knob until
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §9 declines the knob until
   a measurement asks for it).
 
 What a task may do is what a data-parallel body may, less the rules about an
@@ -4272,7 +4270,7 @@ the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
 `--js-explicit-resource-management` on Node 22 and is native from Node 24.
 
 `parallelFor`, non-scalar results and `scope(n)` are not in this stage
-([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §7); the lock is the next
+([wp29-thread-surface.md](wp29-thread-surface.md) §7); the lock is the next
 section, [atomics](#atomics-atomici32-and-atomici64) the one after it, and
 [channels](#channels-channelt) the one after that.
 
@@ -4281,7 +4279,7 @@ section, [atomics](#atomics-atomici32-and-atomici64) the one after it, and
 A `Mutex` lets a scope's tasks share one value they all update: the data lives
 inside the lock, and the only way to it is the guard `lock()` answers, bound by
 `using`, which holds the lock until its block ends
-([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §4.3). It is Rust's
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.3). It is Rust's
 `Mutex<T>`, narrowed until no borrow checker is needed.
 
 ```typescript
@@ -4734,7 +4732,7 @@ A `Channel` passes scalars from a scope's tasks to one receiver: the tasks that
 produce call `send`, and the one that consumes walks the channel with
 `for...of`, which waits for values and ends once every task that may send on
 it has returned and it is drained
-([wp29-thread-surface.md](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §4.4). Nobody closes a
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.4). Nobody closes a
 channel, so nobody can close one too early, or twice.
 
 ```typescript
@@ -4955,8 +4953,6 @@ for the lock. A task's channel is checked where it can be read, at the
 `parallelMapInto` and a channel is made only beside a scope. `select` stays
 declined (wp29 §9).
 
-<a id="what-nish---fix-writes-for-a-thread-program" style="scroll-margin-top: 65px"></a>
-
 ### What `nish --fix` writes for a thread program
 
 The thread refusals end with the code to write instead (each pinned whole by
@@ -5125,7 +5121,7 @@ export const main = (): i32 => {
 ### Byte search: `indexOfAny` in `nish/text`
 
 `indexOfAny(text, bytes, from)` answers the first index at or after `from`
-whose byte is one of `bytes`, or -1 ([wp38-simd.md](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md) §3.1). It is
+whose byte is one of `bytes`, or -1 ([wp38-simd.md](wp38-simd.md) §3.1). It is
 the scan a parser spends its time in — the next `"` or `\` in a JSON string,
 the next delimiter in a line — and natively it reads 16 or 32 bytes at a time.
 
@@ -5180,7 +5176,7 @@ walker compiled as written (`bench/index-of-any.ts`).
 The four runs answer the first index in `[from, to)` of a `u8[]` whose byte
 is not in their class, or `to` when every byte there is; `copyBytes` copies a
 window of one array into another, or into itself
-([wp38-simd.md](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md), S6a). They are the scans and the copy a parser
+([wp38-simd.md](wp38-simd.md), S6a). They are the scans and the copy a parser
 spends its time in, and `std/json` is written over them.
 
 ```typescript
@@ -5436,7 +5432,7 @@ a foreign function may read the bytes until it returns and may not keep the
 address.** A function that keeps its argument — `putenv`, `setvbuf`'s buffer, a
 callback's context — is declared to take a `CPtr` instead, and the program hands
 it a copy C made (`tests/cases/ffi_string_param`, `ffi_string_param_arena`,
-[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#a-string-parameter-borrowed-as-const-char-)):
+[cookbook](IR_COOKBOOK.md#a-string-parameter-borrowed-as-const-char-)):
 
 ```ts
 declare function strdup(s: string): CPtr | null;
@@ -5487,7 +5483,7 @@ at the call.** C keeps its buffer — `strerror`'s table, `getenv`'s environment
 `setlocale`'s static, which the next call may overwrite — and the copy is the
 program's own string from then on, placed, kept and released like any other
 allocation of the function that made the call (`tests/cases/ffi_string_return`,
-[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#a-string-result-copied-out-of-const-char-)):
+[cookbook](IR_COOKBOOK.md#a-string-result-copied-out-of-const-char-)):
 
 ```ts
 declare function strerror(errnum: i32): string;
@@ -5535,7 +5531,7 @@ ffi.copy:
 **`CPtr` is an address C owns.** It is eight bytes and `i8*` in the IR, and that
 is the whole of what the compiler knows about it: it is not arena memory, not a
 `%struct`, not a `nish_str`, and its lifetime is the C library's business
-(`tests/cases/ffi_pointer`, [cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#cptr-the-pointer-a-c-function-hands-back)).
+(`tests/cases/ffi_pointer`, [cookbook](IR_COOKBOOK.md#cptr-the-pointer-a-c-function-hands-back)).
 
 ```ts
 declare function calloc(count: u64, size: u64): CPtr | null;
@@ -5595,7 +5591,7 @@ NUL-terminated bytes at `p` into a new string of the program's own.** It is the
 copy a `string` result makes, offered for the pointers a `string` result cannot
 be: the ones C allocated for the caller to free. The program copies, then frees
 C's buffer itself (`tests/cases/ffi_owned_string`,
-[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#readcstring-a-string-out-of-a-buffer-c-owns)):
+[cookbook](IR_COOKBOOK.md#readcstring-a-string-out-of-a-buffer-c-owns)):
 
 ```ts
 import { readCString } from "nish:unsafe";
@@ -5933,8 +5929,8 @@ call graph; a function that calls no C keeps both (`tests/cases/ffi_scalar`).
 unwinding out of a foreign call is undefined in this language, the same position
 clang takes compiling C, because there is no `throw` and no landing pad with
 which to do anything else. See
-[`docs/wp27-ffi.md`](https://github.com/amritk/nish/blob/main/docs/wp27-ffi.md) §2 and the
-[cookbook entry](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#declare-function-calling-c).
+[`docs/wp27-ffi.md`](wp27-ffi.md) §2 and the
+[cookbook entry](IR_COOKBOOK.md#declare-function-calling-c).
 
 **A program that calls C is no longer one the compiler can reason about end to
 end.** That is the trade the feature is: the whole-program fact fixpoint is the
@@ -5944,7 +5940,7 @@ performance thesis, and a foreign call is a hole in it.
 runs a program's frozen JavaScript rewrite against `runtime/shim.mjs`, on the
 premise that the same source means the same thing in both worlds; that premise
 does not hold for a source whose meaning is "whatever this C function does"
-([wp27-ffi.md](https://github.com/amritk/nish/blob/main/docs/wp27-ffi.md) §5). The evidence for an FFI program is arranged the
+([wp27-ffi.md](wp27-ffi.md) §5). The evidence for an FFI program is arranged the
 other way round: a golden `.ll`, an `llvm-as` pass, a native round trip against
 real libc, and the attribute assertions.
 
@@ -6874,7 +6870,7 @@ also be imported from a `nish:` module, which is the same builtin under a name
 that cannot be shadowed (see [Builtin modules](#builtin-modules-nish) below).
 Effects (`none`, `read`, `write`) are what the call does to the purity of the
 enclosing function
-([ARCHITECTURE.md](https://github.com/amritk/nish/blob/main/docs/ARCHITECTURE.md#attribute-soundness-rules)).
+([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
 
 ### Builtin modules (`nish:`)
 
@@ -7003,7 +6999,7 @@ are `NaN`, `Number("0x1A")` is `26` (as in JavaScript; hex floats such as
 `nish_parse_number(s, mode)` in the runtime (mode 0 `parseFloat`, 1 `Number`,
 2 `parseInt`, the last followed by `llvm.fptosi.sat.i32.f64`); their effect
 is write (`strtod`/`strtoll` may set `errno`), so a function that parses is
-never `readonly` ([wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md#string-to-number)).
+never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 
 ### `nish:unsafe`: unchecked access and defined wrapping
 
@@ -7211,7 +7207,7 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
 Every operation on a vector is a free function of `nish:simd`, because a
 TypeScript program cannot overload `+`. The operand types pick the lowering,
 and each lowers to LLVM vector IR or a target-independent `llvm.*` intrinsic:
-no golden holds `llvm.x86.` or `llvm.aarch64.` ([wp38-simd.md](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md)
+no golden holds `llvm.x86.` or `llvm.aarch64.` ([wp38-simd.md](wp38-simd.md)
 §3.2).
 
 ```ts
@@ -7342,7 +7338,7 @@ choice (WP34 N6).
   answer, so a caller's `ctSelect(ctEq(a, b), x, y)` never shows LLVM a
   boolean. `readnone nounwind` is what clang writes on the same statement and is
   true of an empty string, so a function that only selects stays `readnone`.
-  [IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#ctselect-and-cteq) shows the IR. Without the
+  [IR_COOKBOOK.md](IR_COOKBOOK.md#ctselect-and-cteq) shows the IR. Without the
   barrier `opt -O2` folds `ctSelect(ctEq(a, b), x, y)` into one `select` on
   `a === b` — `tests/run.js` checks both halves of that sentence, so it learns
   if LLVM ever sees through the `asm` or stops needing it.
@@ -7388,7 +7384,7 @@ choice (WP34 N6).
   runner's noise, a secret index into a table that fits in the L1 cache, or
   another processor goes unseen.
 
-The TypeScript reading ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2):
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2):
 `runtime/nish.mjs` supplies both as pure functions of their operands, so the
 answers agree and only the timing is not claimed. Over **`u32`** they are
 **class A**: a `u32` is a `number` there, the shim puts each answer back in
@@ -7432,7 +7428,7 @@ that caller. This builtin is the store that stays (#385).
   `nish_wipe` in `runtime/runtime.c` writes each byte through a `volatile`
   pointer, which the C standard makes behaviour no optimisation may remove
   even once LTO has inlined the body, and is `noinline` besides, so the call
-  stays visible in a disassembly. [IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#securezero)
+  stays visible in a disassembly. [IR_COOKBOOK.md](IR_COOKBOOK.md#securezero)
   shows the IR.
 - **It is pinned under `-O2 -flto`, where it matters.** The runtime unit test
   builds a probe the way `--link` builds, `-O2 -flto` over the runtime's
@@ -7452,7 +7448,7 @@ that caller. This builtin is the store that stays (#385).
   which links `runtime.c`; a freestanding wasm module linked with
   `runtime-wasm.c` has no `nish_wipe`, as it has no strings.
 
-The TypeScript reading ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2) is
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 **class A**: `runtime/nish.mjs` supplies it as a loop that sets every element
 to zero, and `wipe_bytes` prints the same lines under the prelude as natively.
 What Node cannot promise is the native build's stronger claim, because a
@@ -7502,10 +7498,10 @@ it (#386; [security/cli.md](security/cli.md), CLI-7 and CLI-9).
   `call i64 @nish_euid()` and `call zeroext i1 @nish_is_executable(i8* %p)`,
   declared `nounwind willreturn` and ordered with every write, because the file
   system is not memory LLVM tracks and a failure stores `errno`
-  ([IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#lstatownermodesync-geteuid-and-isexecutablesync)).
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#lstatownermodesync-geteuid-and-isexecutablesync)).
 - **Globals, and not in a `nish:` module** yet, as `secureZero` is.
 
-The TypeScript reading ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2) is
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 **class A**: `runtime/nish.mjs` supplies `fs.lstatSync`'s `uid` and `mode`
 packed the same way as a BigInt, `process.geteuid()`, and `fs.accessSync` with
 `X_OK`, and `owner_checks` prints the same lines under the prelude as natively.
@@ -8057,7 +8053,7 @@ so a driver has to be able to turn the failure into its own diagnostic. They
 exist so that a compiler written in Nish can create its own `-o dir/`,
 tell `-o out` meaning a directory from `-o out` meaning a file, and shell out
 for `--link` — `mkdirSync` and `spawnSync` are the calls
-[wp14-selfhost.md](https://github.com/amritk/nish/blob/main/docs/wp14-selfhost.md) §3a D4 named as the price of a
+[wp14-selfhost.md](wp14-selfhost.md) §3a D4 named as the price of a
 self-hosted link step, and `isDirectorySync` is the one §7a named as the price
 of the last spelling of `-o` that, at the time, only the TypeScript compiler
 handled.
@@ -8125,7 +8121,7 @@ differ for names that are not (`docs/wp13-differential.md`).
 It is a **call and not `process.env.CC`**, and that is a language decision
 rather than a spelling: `process.env.NAME` is member access on a key chosen at
 runtime, which Phase 0 forbids outright
-([wp19-stage0-retirement.md](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md) §4). The two
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §4). The two
 `process.*` values the language does have — `process.argv`, and
 `process.platform` / `process.arch` below — are fixed names with no key.
 
@@ -8224,7 +8220,7 @@ checker: `` `Date.now` reaches the operating system, and a wasm32 build has none
 to reach `` (NL2404; `reject_os_now_wasm`, `reject_os_random_wasm`,
 `reject_os_mtime_wasm`, `reject_os_signal_fd_wasm`, `reject_os_read_signal_wasm`).
 
-**The TypeScript reading** ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2).
+**The TypeScript reading** ([wp33-round-trip.md](wp33-round-trip.md) §2).
 `Date.now` is **class A**: Node's is the same floored `CLOCK_REALTIME`, and the
 `os_` block of `tests/run.js` holds both readings between two reads of Node's
 own clock. `statMtimeSync` is **class A** under `runtime/nish.mjs`, which answers
@@ -8239,7 +8235,7 @@ plain array too and panics past 65,536 with the native words; `os_random` and
 **class C**, with no synchronous reading at all: Node delivers a signal only to
 its event loop, which a blocking `readSignal` never returns to, so the prelude's
 versions throw rather than answer. The row in
-[wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.5 gives the translation.
+[wp33-round-trip.md](wp33-round-trip.md) §3.5 gives the translation.
 
 ### Children and the machine: `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`
 
@@ -8349,7 +8345,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (no `nish:net` call looks one up; [`nish/net/dns`](https://github.com/amritk/nish/blob/main/std/net/dns.ts) resolves it first), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
+| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (no `nish:net` call looks one up; [`nish/net/dns`](../std/net/dns.ts) resolves it first), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
 | `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flag `4`, with flag `1` and on Linux only, attaches a classic BPF program (`SO_ATTACH_REUSEPORT_CBPF`) that hands each connection to the listener at the index of the CPU that received it, in the order the group's listeners were bound; a CPU past the group's size falls back to the hash. Flag `4` without `1` is `-22`, and off Linux it is `-95`. Flags add: `3` is both, `5` and `7` steer. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
@@ -8770,7 +8766,7 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   for a connection, a byte or a datagram by calling again on `-11`, as
   `net_tcp_echo` and `net_udp_echo` do.
 
-**The TypeScript reading** ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2) is
+**The TypeScript reading** ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 **class C**, as `signalFd`'s is: Node's sockets are asynchronous only, and a
 socket becomes ready only to Node's event loop, which a program that owns its
 loop never returns to. `runtime/nish.d.ts` declares `nish:net` and the globals,
@@ -8968,19 +8964,19 @@ bytes — natively and under WASI, and expect the same lines from both.
 | `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length. An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1 (`tests/link/cg_sec_push_limit`) | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
 | `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return; behind a test that the array holds an element, such as `if (a.length > 0)`, the check is proven away (`panics_pop`). The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
-| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](https://github.com/amritk/nish/blob/main/docs/wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
+| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620); a second argument is refused too (`` `sort` takes one comparator ``, NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
-| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy` Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
+| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy` Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
 | `s.indexOf(sub: string[, from: number]): number` | the first **byte** offset at or after `from` at which `sub` occurs, or `-1`; `from` defaults to `0`. `from` is clamped into `[0, s.length]` first, as in JavaScript: a negative start searches from `0`, and a start past the end finds nothing, except that the empty needle answers the clamped start, so `s.indexOf("")` is `0`, `s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float start converts as JavaScript's `ToIntegerOrInfinity` does — a fraction truncates and `NaN` is `0` — and an unsigned one is clamped from above only, so a `u64` past 2^63 is past the end. Under Node the program is the same call to `String.prototype.indexOf`, whose answers differ only where every offset does, on text that is not ASCII (NL8001, under "Portability warnings"). One `nish_str_index_of` or `nish_str_index_of_from` call and no allocation: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c), and the clamp is a `llvm.smin` / `llvm.smax` pair in the caller, which a literal `0` does without. A loop that walks every match, `at = s.indexOf(sub, at + sub.length)`, therefore copies nothing | `str_search`, `str_index_of_from`, `str_index_of_from_port`; `reject_str_index_of_type`, `reject_str_index_of_arity`, `reject_str_index_of_from_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
 | `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
-| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Natively the string's bytes are the array's, so `write` or `writeFileSync` sends any bytes back out unchanged ([File I/O](#file-io), `io_write_bytes`). Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.2); under `--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to U+FFFD. Bytes that are not text go out through `writeBytes` and `writeFileBytesSync`, which agree on every host. `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
+| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Natively the string's bytes are the array's, so `write` or `writeFileSync` sends any bytes back out unchanged ([File I/O](#file-io), `io_write_bytes`). Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2); under `--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to U+FFFD. Bytes that are not text go out through `writeBytes` and `writeFileBytesSync`, which agree on every host. `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
 and a code-point index would need a decode per access (`codePointLength` in
@@ -9135,15 +9131,15 @@ whole.
   length the bounds proof holds.
 - **A window into a buffer is `(buf, offset, length)` by convention**, not a
   view type: a second array layout would be one every array path in the emitter
-  has to handle ([wp34-hosting-cs.md](https://github.com/amritk/nish/blob/main/docs/wp34-hosting-cs.md) §4 N2).
+  has to handle ([wp34-hosting-cs.md](wp34-hosting-cs.md) §4 N2).
 
-The TypeScript reading ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2): `fill` is
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2): `fill` is
 **class A** — a `u8[]` is a plain `Array` under Node, and `Array.prototype.fill`
 has `TypedArray.prototype.fill`'s meaning for every argument Nish admits. `set`
 is **class A under `runtime/nish.mjs`**, which adds the one method `Array` lacks
 to `Array.prototype` with the copy-first semantics and the native panic, and
 **class C** in a TypeScript host without it, where a plain array has no `set`
-([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.3). Every `bytes_*` program with
+([wp33-round-trip.md](wp33-round-trip.md) §3.3). Every `bytes_*` program with
 a `main` runs under both and agrees byte for byte.
 
 ### Readonly arrays
@@ -9295,7 +9291,7 @@ program `tsc` accepts reaches that push.
 ### `Arena`
 
 Reading the arena the runtime allocates from
-([wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md#3-explicit-control)). The automatic placement
+([wp6-memory.md](wp6-memory.md#3-explicit-control)). The automatic placement
 described under [Memory model](#memory-model) frees what a program allocates;
 [`using a = arena()`](#using-a--arena) below frees a batch by hand, with the
 proof done by the compiler. These two read the arena's position, and the
@@ -9317,8 +9313,6 @@ have reported before ([Memory model](#memory-model), item 2). A function that
 calls `Arena.mark` in its own body (`managesArena`) never gets an automatic
 arena scope, for the function or for a loop's pass, so the position it reads
 is never moved under it by a scope it did not write.
-
-<a id="using-a--arena" style="scroll-margin-top: 65px"></a>
 
 #### `using a = arena()`
 
@@ -9424,9 +9418,9 @@ const tally = (rows: string[]): i32 => {
 The global `Map<K, V>` and `Set<T>` are JavaScript's: insertion-ordered, with
 keys compared by SameValueZero, so `-0` is `+0` and `NaN` is `NaN`. They need
 no import. They are generic classes written in Nish in
-[`std/collections.ts`](https://github.com/amritk/nish/blob/main/std/collections.ts), which a module loads by naming
+[`std/collections.ts`](../std/collections.ts), which a module loads by naming
 `Map` or `Set` in a type or after `new`, and the layout and every decision
-below are [wp32-map.md](https://github.com/amritk/nish/blob/main/docs/wp32-map.md)'s.
+below are [wp32-map.md](wp32-map.md)'s.
 
 ```typescript
 export const main = (): i32 => {
@@ -9527,7 +9521,7 @@ export const main = (): i32 => {
   away dead entries, and when there are none it panics with
   `Map maximum size exceeded` (or `Set …`) *(CLI only: the case takes 16 million
   inserts)*.
-- **Asking about one key twice is one probe** ([wp32-map.md](https://github.com/amritk/nish/blob/main/docs/wp32-map.md)
+- **Asking about one key twice is one probe** ([wp32-map.md](wp32-map.md)
   §9.1). Three patterns keep the first probe's answer — the entry it found, or
   the empty bucket it stopped at and the key's hash — and write through it:
   `setValueAt` of the entry where the key was found, and `insertAt` the bucket
@@ -9563,11 +9557,11 @@ export const main = (): i32 => {
   visited (`map_fused_walk`). `tests/run.js` counts one call of `probe`, no
   hash of its own and no `get`, `set` or `has` in the loop of
   `map_fused_wordcount`'s golden
-  ([IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#fused-lookups-one-probe-for-a-key-asked-about-twice)).
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#fused-lookups-one-probe-for-a-key-asked-about-twice)).
 - **`nish/map` adds `reserve(m, n)` and `getOrInsert(m, k, v)`**, the two
   things a program asks of a table that JavaScript's `Map` has no call for
-  ([wp32-map.md](https://github.com/amritk/nish/blob/main/docs/wp32-map.md) §9.2). Their bodies in
-  [`std/map.ts`](https://github.com/amritk/nish/blob/main/std/map.ts) are what runs under Node — `reserve` does
+  ([wp32-map.md](wp32-map.md) §9.2). Their bodies in
+  [`std/map.ts`](../std/map.ts) are what runs under Node — `reserve` does
   nothing, and `getOrInsert` is a `get`, and a `set` of `v` when the key was
   missing, answering the value either way — so a program that uses them runs
   unmodified there (`examples/wordcount.ts`). Natively neither body is called:
@@ -9631,7 +9625,7 @@ export const main = (): i32 => {
 - **`m.get(k)` answers `V | undefined`**, as it does under `tsc`: a *maybe*.
   It is one probe, and a maybe is read in one of three ways, the three a
   program that type-checks under `tsc --strict` has
-  ([wp32-map.md](https://github.com/amritk/nish/blob/main/docs/wp32-map.md) §3):
+  ([wp32-map.md](wp32-map.md) §3):
 
   ```typescript
   export const main = (): i32 => {
@@ -9695,7 +9689,7 @@ export const main = (): i32 => {
     because the rewrite differs by place. Some fail under `tsc` too (an
     operand, a `const` annotated `V`); the rest are legal TypeScript that this
     version does not take, because a maybe never crosses a call, never reaches
-    memory, and is narrowed only in a `const` ([wp32-map.md](https://github.com/amritk/nish/blob/main/docs/wp32-map.md) §3.2):
+    memory, and is narrowed only in a `const` ([wp32-map.md](wp32-map.md) §3.2):
 
     | Place | Message after `` `m.get("a")` is `i32 \| undefined` `` | Case |
     | --- | --- | --- |
@@ -9736,7 +9730,7 @@ export const main = (): i32 => {
 - **`for...of` walks a table in insertion order**: `for (const k of m.keys())`,
   `for (const v of m.values())`, and for a `Set`, `for (const x of s)`,
   `s.keys()` and `s.values()`, which are one walk, as JavaScript's
-  `Set.prototype.keys` *is* `values` ([wp32-map.md](https://github.com/amritk/nish/blob/main/docs/wp32-map.md) §6.2, §6.3;
+  `Set.prototype.keys` *is* `values` ([wp32-map.md](wp32-map.md) §6.2, §6.3;
   `tests/cases/map_iter_keys`, `map_iter_values`, `set_iter`, `set_iter_keys`,
   `set_iter_values`). The variable takes `K` or `V`, and a deleted key is not
   visited. A walk in a generic function or method is checked per
@@ -9796,7 +9790,7 @@ export const main = (): i32 => {
     `keyAt` or `valueAt` for the variable, and `walkClose` on each edge out,
     all emitted `internal` into each module that walks, like the rest of the
     table (`tests/link/map_walk_two_modules`)
-    ([IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#map-and-set-iteration)). Under `-g` the
+    ([IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration)). Under `-g` the
     variable is described in its slot like any `for...of` variable
     (`dbg_map_iter`).
   - **An iterator is not a value**, so `keys()` and `values()` anywhere but as
@@ -9847,7 +9841,7 @@ export const main = (): i32 => {
 `jsonDecode(d, out)` reads one JSON object into a class and `jsonEncode(w,
 value)` writes one back, and the code that does it is written by the compiler
 from the class's fields. They are generic functions in
-[`std/json-typed.ts`](https://github.com/amritk/nish/blob/main/std/json-typed.ts), and every call of one is lowered
+[`std/json-typed.ts`](../std/json-typed.ts), and every call of one is lowered
 in place, in the module that makes it, so nothing is looked up by name at run
 time and no class carries anything it would not otherwise have.
 
@@ -9879,9 +9873,9 @@ export const main = (): i32 => {
 };
 ```
 
-- **The decoder is `JsonDecoder`**, a [`JsonTokenizer`](https://github.com/amritk/nish/blob/main/std/json-tokenizer.ts)
+- **The decoder is `JsonDecoder`**, a [`JsonTokenizer`](../std/json-tokenizer.ts)
   over the input and a sticky error, and the encoder is the
-  [`JsonWriter`](https://github.com/amritk/nish/blob/main/std/json.ts) the call is given. The code written for a
+  [`JsonWriter`](../std/json.ts) the call is given. The code written for a
   class is straight-line calls of their methods, one per field: for decoding,
   a loop over the object's keys that sends each key to the field it names
   and reads the value with the method of the field's type; for encoding,
@@ -9890,7 +9884,7 @@ export const main = (): i32 => {
   `Map`'s values each get the same code of their own, so it recurses as the
   data does (`tests/link/std_json_typed`, whose `main.ll` is the golden of the
   code written for a one-field class and `tag.ll` of the code for a `u64`, an
-  enum and arrays of each; [IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#typed-json)).
+  enum and arrays of each; [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)).
   Because the encoding is calls of the writer's methods, it is written in the
   writer's modes: a writer set with `setIndent(2)` encodes what
   `JSON.stringify(v, null, 2)` writes, and a `setStrict(true)` writer fails a
@@ -10158,7 +10152,7 @@ export const main = (): i32 => {
   ends at the writer's depth limit with `JSON_WRITE_TOO_DEEP`, because the
   encoding stops at the first failure rather than recursing on.
 - **The TypeScript reading is class C**
-  ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2). Under Node the type
+  ([wp33-round-trip.md](wp33-round-trip.md) §2). Under Node the type
   arguments are erased, so there is no layout to write the code from, and the
   bodies in `std/json-typed.ts` that Node runs end the program with
   `panic("nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased")`
@@ -10177,7 +10171,7 @@ export const main = (): i32 => {
 Every builtin carries exactly one **capability** label, or a deliberate none,
 and the compiler works out which capabilities every function, module and
 package can reach — directly, through any chain of calls, across packages — with
-one witness call chain for each ([wp35-capabilities.md](https://github.com/amritk/nish/blob/main/docs/wp35-capabilities.md)).
+one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
 A program is refused for what it reaches only under a [capability
 policy](#the-capability-policy); without one, the set is a report.
 
@@ -10243,7 +10237,7 @@ and `"nish": { "capabilities": { "allow": [...], "deny": [...] } }` in the
 root `package.json` (the one nearest above the entry, where `noPanic` is read)
 are a **capability policy**, and a program whose entry reaches a capability
 the policy does not grant is refused
-([wp36-capability-policy.md](https://github.com/amritk/nish/blob/main/docs/wp36-capability-policy.md)). The same object's
+([wp36-capability-policy.md](wp36-capability-policy.md)). The same object's
 `dependencies` key grants a dependency its gated capabilities, as [a
 dependency's capabilities](#a-dependencys-capabilities) says (NL3041, NL3042):
 
@@ -10303,15 +10297,13 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   `caps_policy_manifest_granted`). `nish run` takes both flags and refuses
   before it links; `--fix` and `--emit-ast` refuse them.
 
-<a id="a-dependencys-capabilities" style="scroll-margin-top: 65px"></a>
-
 ##### A dependency's capabilities
 
 A dependency — a package loaded from `node_modules` — may reach `ffi`,
 `fs.read`, `fs.write`, `net`, `process.spawn` and `unsafe`, the **gated**
 capabilities, only when the root
 `package.json` grants them to it by name; it reaches every other capability
-without one ([wp40-dependency-capabilities.md](https://github.com/amritk/nish/blob/main/docs/wp40-dependency-capabilities.md)):
+without one ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)):
 
 ```json
 { "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } }
@@ -10400,8 +10392,6 @@ without one grants the capability whole, as before:
   `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
   The four-operand call in "The sandbox" below predates it.
 
-<a id="the-capability-lockfile" style="scroll-margin-top: 65px"></a>
-
 ##### The capability lockfile
 
 `--update-capability-lock` writes `nish-capabilities.lock.json` beside the
@@ -10453,7 +10443,7 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
 reaches. The policy above refuses at compile time a program that reaches more
 than it grants; the sandbox makes the kernel refuse, at run time, what the
 program's code does not reach, `ffi` callees and constructors included
-([wp37-os-sandbox.md](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md),
+([wp37-os-sandbox.md](wp37-os-sandbox.md),
 [security/sandbox.md](security/sandbox.md)):
 
 ```llvm
@@ -10689,7 +10679,7 @@ entry:
   `i64` has no divergence to report, because JavaScript has no `>>>` for
   BigInt at all (`tests/cases/bit_shift_fill`, `u_shift_logical`; the
   differential rewrite adds `| 0` around an `i32` `>>>` so Node and the
-  native binary agree, [wp13-differential.md](https://github.com/amritk/nish/blob/main/docs/wp13-differential.md)).
+  native binary agree, [wp13-differential.md](wp13-differential.md)).
 - **Bitwise operators cannot fail.** They have no divisor check and no panic
   path, unlike `/` and `%`, so a function whose arithmetic is all bitwise
   keeps `readnone` and `willreturn` (`tests/cases/bit_attributes`).
@@ -10754,14 +10744,14 @@ entry:
   none: a program writes `u8[]`, and `Uint8Array` is not a type it can spell.
   That asymmetry is only a spelling. `u8[]`, `u16[]`, `u32[]` and `u64[]` cross
   a host boundary as the matching typed array
-  ([wp30-bytes-interop.md](https://github.com/amritk/nish/blob/main/docs/wp30-bytes-interop.md)), and an element of one needs
+  ([wp30-bytes-interop.md](wp30-bytes-interop.md)), and an element of one needs
   **none** of the masking its scalar twin needs: a scalar `u32` result travels
   in an i32 value type and reaches JavaScript negative above 2^31 unless the
   loader restores it, while an element is a byte in `data` that `Uint32Array`
   reads unsigned. `boolean[]` still has no flat view at all, because an `i1`
   must be 0 or 1 and that is a per-element check rather than a reinterpretation.
   At a host boundary the name is the JS typed array that crosses
-  ([wp8-interop.md](https://github.com/amritk/nish/blob/main/docs/wp8-interop.md)).
+  ([wp8-interop.md](wp8-interop.md)).
 - **Evaluation order** follows JavaScript: `x op= e` reads `x` before
   evaluating `e` (`tests/cases/cf_compound_assign`); `a[i] = v` evaluates
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,
@@ -10797,7 +10787,7 @@ entry:
 
 There is no garbage collector. Every object, array, and runtime string is
 placed by one of four mechanisms, all decided at compile time
-([wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md)); none changes what a program computes, only
+([wp6-memory.md](wp6-memory.md)); none changes what a program computes, only
 where its memory lives and when it is reused.
 
 1. **Stack allocation.** A `new C(...)`, object literal, array literal, or
@@ -10985,7 +10975,7 @@ where its memory lives and when it is reused.
    when memory is reused, never what a value holds. Turning the recursion into
    an actual loop, rather than a jump back to the top of the frame, is then
    the optimiser's job, which every build profile but `debug` runs
-   ([wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md) §2b).
+   ([wp6-memory.md](wp6-memory.md) §2b).
 
 3. **A reclaim at the call site.** A function that *returns* a string can have
    no scope of its own — the string has to outlive it — so its caller takes the
@@ -11000,10 +10990,10 @@ where its memory lives and when it is reused.
    `mem_reclaim_guards`). Independent of `--no-stack-alloc`
    (`tests/cases/mem_reclaim_no_stack_alloc`), and invisible to a program: it
    changes when memory is reused, never what it holds
-   ([wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md) §2a).
+   ([wp6-memory.md](wp6-memory.md) §2a).
 4. **Explicit control** with the [`Arena`](#arena) builtins, and
    `nish_reset_arena()` / `nish_arena_mark()` / `nish_arena_release()` for a C
-   or Node host ([wp8-interop.md](https://github.com/amritk/nish/blob/main/docs/wp8-interop.md)).
+   or Node host ([wp8-interop.md](wp8-interop.md)).
 
 Everything else is bumped from the arena by the inlined fast path, and the
 arena is released when `main` returns. Objects stored into fields or arrays
@@ -11022,7 +11012,7 @@ by the caller.
   (`tests/cases/opt_target_triple`). The default emits neither line, so
   clang supplies them at link time; the flag matters when running `opt` or
   `llc` by hand, which otherwise assume a generic layout and never vectorise
-  ([wp9-optimisation.md](https://github.com/amritk/nish/blob/main/docs/wp9-optimisation.md#--target-triple-and---target-host)).
+  ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
   It shapes what a compile emits and links, and `--fix`, which rewrites the
   sources and emits and links nothing, refuses it with a usage error (exit 2)
   rather than dropping it, as it refuses `-o` and `--link`: fix first, then
@@ -11144,7 +11134,7 @@ by the caller.
     nothing and has no rewrite — that function still loses its arena scope and
     still retains its memory, silently, unless it earns the scope through its
     callees ([Memory model](#memory-model), item 2), which is a known gap
-    rather than a guarantee ([wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md), "Left out"); when the assigned
+    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
     value is not an allocation;
     when the function returns a pointer, because then its caller owns the
     memory; when the value being dropped may already be reachable from
@@ -11258,7 +11248,7 @@ by the caller.
     for an unsigned index, at the start of that statement, a guard the proof
     credits, so an index in range runs as before and one out of range still
     exits 1, at the guard
-    (`tests/fix/guard-*`, [`tests/fix/README.md`](https://github.com/amritk/nish/blob/main/tests/fix/README.md)).
+    (`tests/fix/guard-*`, [`tests/fix/README.md`](../tests/fix/README.md)).
     Silent outside a loop, where one check is not a cost anybody is paying,
     and silent unless the receiver is a plain local and the index a plain
     local or an offset from one, `i + c`, which are the shapes the analysis
@@ -11294,7 +11284,7 @@ by the caller.
     the compiler write the bound through, and `slice` has no clamp at all but
     **panics** where `substring` would have clamped — it was measured 1.18x
     over an unfolded `substring` on a lexer-shaped scan
-    ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §4), and the fold is what
+    ([wp15-performance.md](wp15-performance.md) §4), and the fold is what
     closes most of that gap for a bound the guard proves
     (`tests/cases/perf_clamp`). Reported on the bound, once per bound, so
     `s.substring(from, to)` with neither end proven warns twice. Silent
@@ -11313,7 +11303,7 @@ by the caller.
     the default and keeps it under the flag, and nothing at all on
     `bench/spectral`, whose binary is in fact 64 bytes *smaller* with it. The
     wall clock does not move on either
-    ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §9), so the message names the
+    ([wp15-performance.md](wp15-performance.md) §9), so the message names the
     missed specialisation and no speed figure. It is reported at a call in a
     loop rather than per function. Reported once per
     call site. Silent for an exported function, where the ABI is the point;
@@ -11356,7 +11346,7 @@ by the caller.
     interface's, and the class says nothing about it
     (`tests/cases/perf_padding_suffix_quiet`).
 - **Portability warnings are the second diagnostic that is not an error**
-  ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §5.2). A program here can also be
+  ([wp33-round-trip.md](wp33-round-trip.md) §5.2). A program here can also be
   read as TypeScript and run under Node with `runtime/nish.mjs`, and at a few
   kinds of site the two readings both run to the end and quietly answer
   differently; `--warn-portability` reports those sites, in the shape a
@@ -11376,7 +11366,7 @@ by the caller.
   is not one of them, because the TypeScript tests already notice it. The
   rows, one code each in band NL8xxx:
 
-  | Code | Row ([wp33](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
+  | Code | Row ([wp33](wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
   | --- | --- | --- | --- |
   | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored (a data-parallel body's answer included), compared or combined with a number literal, taken from a width (`width - s.length`), used as an array index, a loop bound or `parallelFrom`'s count — directly, through a function it is passed to, or through a helper that returns it; the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
   | NL8002 | checked `slice` (3.2) | a `slice(a)` or `slice(a, b)` on a string with a bound that is a negative literal, or that is placed inside `[0, length]` neither by the bounds proof which folds a `substring` clamp nor by the receiver's own text: an ASCII string literal, a `const` bound to one, a `const` copied from such a `const`, or a module constant that folds to one has a known length, and a bound no larger than it is quiet when it is a non-negative literal, or a local the same bounds proof holds between 0 and that length — a `const` or a `let` its initialiser bounds, or one a guard bounds — and, when the receiver's length is what proves either of two bounds, the first is known to be no larger than the second, from the largest the first can be and the smallest the second can be (`tests/cases/port_str_slice_literal_quiet`; past the end, a reversed pair such as `slice(5, 2)`, a pair nothing orders, a `let` receiver and a non-ASCII literal still warn, `port_str_slice_literal_past`); one warning per call, at the first such bound | clamps the bounds and counts a negative one from the end, where this panics |
@@ -11550,7 +11540,7 @@ by the caller.
   failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is `{"severity","code","message"}`. The
   bands and the registry are in
-  [wp10-ci.md](https://github.com/amritk/nish/blob/main/docs/wp10-ci.md#code). A clean compile with no warnings prints
+  [wp10-ci.md](wp10-ci.md#code). A clean compile with no warnings prints
   nothing.
 - **`--emit-ast`** prints the syntax tree of every module after Phase 0 as an
   indented `<KIND> <start> <end>` tree — the node kinds of `src/nodes.ts` and
@@ -11597,7 +11587,7 @@ by the caller.
 ### Writing the program out as TypeScript
 
 - **`--emit-ts <dir>` writes the checked program back out as TypeScript**
-  that Node runs with its type stripping ([wp33](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3),
+  that Node runs with its type stripping ([wp33](wp33-round-trip.md) §3),
   one file per module, and emits no IR (`src/emit-ts.ts`). Each module of the
   root package keeps its path relative to the directory they all share; each
   standard-library module the program reaches is written under `nish/` beside
@@ -11688,7 +11678,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`, `net_write2_bounds`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
 | `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). A `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not a site |
-| `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
+| `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
 | `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
 | `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
 | `expect` | `r.expect(message)` on an `Err` | nothing; `unwrapOr` and `orReturn` are not sites (`tests/cases/panics_expect`) |
@@ -11847,7 +11837,7 @@ modules:
 - **What it does not promise.** The four warnings are conservative in the
   direction of silence: each fires only where the compiler can name the memory
   and the rewrite, so a program it accepts can still retain memory in a shape
-  no rule recognises ([wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md), "Left out"). Nor does it
+  no rule recognises ([wp6-memory.md](wp6-memory.md), "Left out"). Nor does it
   cover memory a program keeps on purpose: an array it pushes onto for its
   whole run is reachable, and so not retention.
 - `--deny-retention` changes no byte of the IR: a program it accepts is the one

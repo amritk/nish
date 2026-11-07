@@ -8,7 +8,7 @@ done application data flows both ways. Both are *sans-IO*: they never read a
 socket or a clock, so you drive them from your own loop over
 [`nish:net`](networking.md). They are written in Nish and imported like any
 other library module
-([`export` and `import`](../../LANGUAGE.md#export-and-import)).
+([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
 Most programs want neither directly: `nish/net/tls-tcp`'s `tlsConnect` opens
 a TCP connection, runs the handshake, checks the server and hands you a

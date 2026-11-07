@@ -104,10 +104,11 @@ who write programs in Nish. A page there follows these rules:
 - **No links to the compiler's records**: not to `wp*.md`,
   `MASTER_PLAN.md` or `.claude/`.
 - **Link pages relatively, everything else on GitHub.** The site serves
-  every file `scalar.config.json` routes: the guide, the reference
-  (`LANGUAGE.md`, `INSTALL.md`, `std/README.md`, ...) and the security
-  records. A relative link from one of those to another opens it on the
-  site, as it does on GitHub. A relative link to any other file — a source
+  every file `scalar.config.json` routes: the guide, the reference pages
+  (`INSTALL.md`, `std/README.md`, ...) and the security records.
+  `LANGUAGE.md` is not one of them yet, so it is linked on GitHub too. A
+  relative link from a routed file to another opens it on the site, as it
+  does on GitHub. A relative link to any other file — a source
   file, a test, a design note — the site serves as a download, so a routed
   page links one as `https://github.com/amritk/nish/blob/main/<path>`
   (`tree/main/` for a directory), anchor and all. `node docs/check-links.mjs`

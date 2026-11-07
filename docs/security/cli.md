@@ -141,7 +141,7 @@ this is what is true now.
 
 - **The RT-9 primitives are builtins**: `lstatOwnerModeSync(path): i64`,
   `geteuid(): i64` and `isExecutableSync(path): boolean`
-  ([LANGUAGE.md](../LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-isexecutablesync)).
+  ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-isexecutablesync)).
   `src/` may call them once a release ships them (the rolling freeze), so
   **CLI-7 and CLI-9 stay open** for the release after this one: a hit that
   refuses a cache root it does not own or that is group- or world-writable,
