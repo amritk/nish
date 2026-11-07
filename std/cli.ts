@@ -115,8 +115,8 @@ export const SGR_STRIKETHROUGH: string = "9"
  * plain.
  */
 export class Style {
-  on: boolean
-  colour: boolean
+  private on: boolean
+  private colour: boolean
   headingThemed: string
   headingMono: string
   nameThemed: string
@@ -152,7 +152,7 @@ export class Style {
    * `text` unchanged when marking up is off or the chosen list is empty, so a
    * caller never has to ask.
    */
-  paint(text: string, themed: string, mono: string): string {
+  private paint(text: string, themed: string, mono: string): string {
     const code = this.colour ? themed : mono
     if (!this.on || text.length === 0 || code.length === 0) {
       return text
@@ -544,12 +544,12 @@ const padTo = (width: i32, column: i32): string => spaces(width + 2 <= column ? 
  * up whether or not `style` paints, as long as the text is ASCII.
  */
 export class HelpMenu {
-  style: Style
-  program: string
-  column: i32
-  usageColumn: i32
-  lines: string[]
-  usages: i32
+  private style: Style
+  private program: string
+  private column: i32
+  private usageColumn: i32
+  private lines: string[]
+  private usages: i32
 
   constructor(style: Style, program: string, column: i32, usageColumn: i32) {
     this.style = style

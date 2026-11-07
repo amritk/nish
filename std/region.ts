@@ -35,7 +35,7 @@
  * read through `runtime/nish.d.ts`.
  */
 export class Region<T> {
-  /** Never read: the compiler's type has no fields. */
+  /** @internal Never read: the compiler's type has no fields. */
   root: T | null = null
 }
 

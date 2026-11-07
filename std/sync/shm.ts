@@ -194,7 +194,7 @@ export const fence = (order: i32): void => {
  */
 export class SharedRegion {
   /** The runtime's handle; it names nothing after `close`. */
-  handle: i32
+  private handle: i32
 
   constructor(handle: i32) {
     this.handle = handle

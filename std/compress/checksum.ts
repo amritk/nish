@@ -103,12 +103,12 @@ const checksumWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
  */
 export class Crc32 {
   /** `table[k * 256 + b]`: the CRC of byte `b` followed by `k` zero bytes. */
-  readonly table: u32[]
+  private readonly table: u32[]
   /**
    * `braid[k * 256 + b]`: the same, followed by the 32 bytes of the other
    * four braids' words as well, which a braid steps over.
    */
-  readonly braid: u32[]
+  private readonly braid: u32[]
 
   /** Builds the eight tables and their braided form. */
   constructor() {

@@ -51,7 +51,7 @@ const zlibWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
 
 /** A zlib compressor at one level, allocated once. Not shared between threads. */
 export class ZlibCompressor {
-  readonly deflater: Deflater
+  private readonly deflater: Deflater
 
   /** A compressor at `level`, 0 to 9; another level panics. */
   constructor(level: i32) {
@@ -100,7 +100,7 @@ export class ZlibCompressor {
 
 /** A zlib decompressor, allocated once. Not shared between threads. */
 export class ZlibDecompressor {
-  readonly inflater: Inflater
+  private readonly inflater: Inflater
 
   /** Builds the tables. */
   constructor() {

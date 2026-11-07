@@ -100,7 +100,7 @@ const mix = (h: i32): i32 => {
 /** A generator of pseudo-random numbers: a Weyl sequence from its seed, each state mixed. */
 export class Rng {
   /** Where the walk is: the seed plus the increment times the steps taken, wrapped. */
-  state: i32
+  private state: i32
 
   /** A generator whose sequence `seed` decides: two made from one seed answer the same numbers. */
   constructor(seed: i32) {

@@ -202,32 +202,32 @@ const ringSleep = (region: SharedRegion, base: i32, ready: boolean, waitMs: i32)
  */
 export class SpscRing {
   /** The region the ring lives in. */
-  region: SharedRegion
+  private region: SharedRegion
   /** Its header's offset in the region. */
-  base: i32
+  private base: i32
   /** Data bytes, a power of two. */
   capacity: i32
   /** Whether a push rings the consumer's doorbell. */
-  doorbell: boolean
+  private doorbell: boolean
   /** The producer's position: bytes ever pushed (this object's, as a producer). */
-  tail: i64
+  private tail: i64
   /** The consumer's position: bytes ever popped (this object's, as a consumer). */
   head: i64
   /** The other side's position, as last loaded. */
-  seenHead: i64
+  private seenHead: i64
   seenTail: i64
   /** `reserve`'s window, re-pointed by each call; null until the first. */
-  wnd: u8[] | null = null
+  private wnd: u8[] | null = null
   /** `peek`'s window, likewise. */
-  view: u8[] | null = null
+  private view: u8[] | null = null
   /** The open reservation's bytes, or -1 for none. */
-  reserved: i32 = -1
+  private reserved: i32 = -1
   /** The padding the open reservation skips at the tail. */
-  reservedPad: i32 = 0
+  private reservedPad: i32 = 0
   /** The position past the record `peek` lent, or -1 for none. */
-  peekedEnd: i64 = -1
+  private peekedEnd: i64 = -1
   /** The position of the record `lengthAt` last read, past any skip marker. */
-  found: i64 = 0
+  private found: i64 = 0
 
   constructor(region: SharedRegion, base: i32) {
     this.region = region
@@ -597,15 +597,15 @@ export const attachSpscRing = (region: SharedRegion, base: i32): Result<SpscRing
  */
 export class MpscRing {
   /** The region the ring lives in. */
-  region: SharedRegion
+  private region: SharedRegion
   /** Its header's offset in the region. */
-  base: i32
+  private base: i32
   /** Slots, a power of two. */
-  slots: i32
+  private slots: i32
   /** Each slot's payload bytes, a multiple of 8. */
-  slotBytes: i32
+  private slotBytes: i32
   /** Whether a push rings the consumer's doorbell. */
-  doorbell: boolean
+  private doorbell: boolean
   /** The consumer's position: records ever popped (this object's, as the consumer). */
   head: i64
 

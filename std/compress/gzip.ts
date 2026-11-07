@@ -173,8 +173,8 @@ const gzipReadHeader = (crc: Crc32, src: u8[], p: i32, end: i32): i32 => {
  * allocated once and reused by every call. Not shared between threads.
  */
 export class GzipCompressor {
-  readonly deflater: Deflater
-  readonly crc: Crc32
+  private readonly deflater: Deflater
+  private readonly crc: Crc32
 
   /** A compressor at `level`, 0 to 9 (`DEFLATE_FAST`, `DEFLATE_DEFAULT`, ...); another level panics. */
   constructor(level: i32) {
@@ -214,8 +214,8 @@ export const gzipFixedBound = (n: i32): i32 => fixedDeflateBound(n) + GZIP_HEADE
  * depends on its input alone. Not shared between threads.
  */
 export class GzipFixedCompressor {
-  readonly deflater: FixedDeflater
-  readonly crc: Crc32
+  private readonly deflater: FixedDeflater
+  private readonly crc: Crc32
 
   /** Builds the tables. */
   constructor() {
@@ -260,8 +260,8 @@ export class GzipFixedCompressor {
  * Not shared between threads.
  */
 export class GzipDecompressor {
-  readonly inflater: Inflater
-  readonly crc: Crc32
+  private readonly inflater: Inflater
+  private readonly crc: Crc32
 
   /** Builds the tables. */
   constructor() {
@@ -346,19 +346,19 @@ export const gzipDecompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32
  * once; `start` begins the next body.
  */
 export class GzipWriter {
-  readonly deflater: Deflater
-  readonly crc: Crc32
+  private readonly deflater: Deflater
+  private readonly crc: Crc32
   /** The history and the pending input. */
-  readonly window: u8[]
+  private readonly window: u8[]
   /** Where the pending input starts in `window`, and where it ends. */
-  pending: i32
-  fill: i32
+  private pending: i32
+  private fill: i32
   /** The CRC-32 and length of every byte written so far. */
-  checksum: u32
-  size: u32
+  private checksum: u32
+  private size: u32
   /** Whether the header has been written, and whether `finish` has. */
-  started: boolean
-  finished: boolean
+  private started: boolean
+  private finished: boolean
 
   /** A writer at `level`, 0 to 9; another level panics. */
   constructor(level: i32) {
@@ -402,7 +402,7 @@ export class GzipWriter {
   }
 
   /** Writes the header into `out` at `at` if it has not been; answers the new position. */
-  header(out: u8[], at: i32): i32 {
+  private header(out: u8[], at: i32): i32 {
     if (this.started) {
       return at
     }
@@ -416,7 +416,7 @@ export class GzipWriter {
    * then slides the window so that the last 32 KB stay as history. Answers
    * the new position, or -1.
    */
-  drain(out: u8[], at: i32, final: boolean): i32 {
+  private drain(out: u8[], at: i32, final: boolean): i32 {
     const d: Deflater = this.deflater
     const end: i32 = d.compressRange(
       this.window,
@@ -549,32 +549,32 @@ export class GzipWriter {
  * once; `start` begins the next body.
  */
 export class GzipReader {
-  readonly inflater: Inflater
-  readonly crc: Crc32
+  private readonly inflater: Inflater
+  private readonly crc: Crc32
   /** Input not yet decoded. */
-  readonly input: u8[]
+  private readonly input: u8[]
   /** The decoded window: history from `windowStart`, unread output from `readPos` to `writePos`. */
-  readonly output: u8[]
-  inStart: i32
-  inEnd: i32
-  readPos: i32
-  writePos: i32
+  private readonly output: u8[]
+  private inStart: i32
+  private inEnd: i32
+  private readPos: i32
+  private writePos: i32
   /** Where the current member's output began, for its distances. */
-  histStart: i32
+  private histStart: i32
   /** Where the bytes not yet checksummed start. */
-  crcPos: i32
+  private crcPos: i32
   /** 0: a member header next; 1: inside a member's stream; 2: its trailer; 3: done; < 0: failed. */
-  phase: i32
+  private phase: i32
   /** Whether more input may come. */
-  more: boolean
+  private more: boolean
   /** The member's running CRC-32 and length, and the body's total length. */
-  checksum: u32
-  size: u32
-  total: i64
+  private checksum: u32
+  private size: u32
+  private total: i64
   /** The most decoded bytes `read` hands out in all. */
-  readonly limit: i64
+  private readonly limit: i64
   /** Whether a member has been read; another may follow. */
-  members: i32
+  private members: i32
 
   /** A reader that refuses more than `limit` decoded bytes in all; a negative `limit` panics. */
   constructor(limit: i64) {
@@ -657,7 +657,7 @@ export class GzipReader {
   }
 
   /** Moves the undecoded input to the front of its buffer. */
-  compact(): void {
+  private compact(): void {
     if (this.inStart > 0) {
       const n: i32 = this.inEnd - this.inStart
       copyBytes(this.input, 0, this.input, this.inStart, n)
@@ -667,7 +667,7 @@ export class GzipReader {
   }
 
   /** Adds the decoded bytes not yet checksummed to the member's CRC-32 and length. */
-  sum(): void {
+  private sum(): void {
     const n: i32 = this.writePos - this.crcPos
     if (n > 0) {
       this.checksum = this.crc.update(this.checksum, this.output, this.crcPos, n)
@@ -677,7 +677,7 @@ export class GzipReader {
   }
 
   /** Slides the decoded window down once the unread output has been read and the buffer is past half. */
-  slide(): void {
+  private slide(): void {
     if (this.readPos === this.writePos && this.writePos > GZIP_READER_WINDOW) {
       this.sum()
       const keep: i32 = GZIP_READER_WINDOW
@@ -691,7 +691,7 @@ export class GzipReader {
   }
 
   /** Decodes as far as the input and the output buffer allow; answers 0 or a final code. */
-  advance(): i32 {
+  private advance(): i32 {
     while (true) {
       const avail: i32 = this.inEnd - this.inStart
       if (this.phase === 0) {
@@ -773,7 +773,7 @@ export class GzipReader {
   }
 
   /** The room `input` has without compacting. */
-  inputRoomRaw(): i32 {
+  private inputRoomRaw(): i32 {
     return toI32(this.input.length) - this.inEnd
   }
 

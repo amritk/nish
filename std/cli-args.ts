@@ -165,10 +165,15 @@ const closest = (typed: string, names: string[]): string => {
 
 /** A flag spec taken apart: `-r, --raw-output`, `--limit <n>`, `--no-color`. */
 class FlagSpec {
+  /** @internal Used by `Cli`. */
   short: string
+  /** @internal Used by `Cli`. */
   long: string
+  /** @internal Used by `Cli`. */
   meta: string
+  /** @internal Used by `Cli`. */
   value: i32
+  /** @internal Used by `Cli`. */
   negated: boolean
 
   constructor(call: string, spec: string) {
@@ -219,50 +224,68 @@ class FlagSpec {
  * declaration answers a handle (an `i32`) that `parse`'s answer is read by.
  */
 export class Cli {
+  /** @internal Used by `ParseResult`. */
   name: string
+  /** @internal Used by `ParseResult`. */
   version: string
-  description: string
+  private description: string
 
-  cmdName: string[]
-  cmdParent: i32[]
+  private cmdName: string[]
+  private cmdParent: i32[]
+  /** @internal Used by `ParseResult`. */
   cmdId: i32[]
-  cmdDesc: string[]
+  private cmdDesc: string[]
+  /** @internal Used by `ParseResult`. */
   cmdGroup: boolean[]
-  cmdPath: string[]
-  cmdAliases: string[]
-  aliasOwner: i32[]
-  aliasName: string[]
-  cmdEpilog: string[]
+  private cmdPath: string[]
+  private cmdAliases: string[]
+  private aliasOwner: i32[]
+  private aliasName: string[]
+  private cmdEpilog: string[]
+  /** @internal Used by `ParseResult`. */
   cmdFirstArg: i32[]
-  cmdLastArg: i32[]
-  cmdVariadic: boolean[]
-  cmdOptionalArg: boolean[]
-  children: Map<string, i32>
+  private cmdLastArg: i32[]
+  private cmdVariadic: boolean[]
+  private cmdOptionalArg: boolean[]
+  private children: Map<string, i32>
 
-  flagOwner: i32[]
-  flagShort: string[]
-  flagLong: string[]
-  flagMeta: string[]
+  private flagOwner: i32[]
+  private flagShort: string[]
+  private flagLong: string[]
+  private flagMeta: string[]
+  /** @internal Used by `ParseResult`. */
   flagValue: i32[]
+  /** @internal Used by `ParseResult`. */
   flagNegated: boolean[]
-  flagNegatable: boolean[]
-  flagDesc: string[]
+  private flagNegatable: boolean[]
+  private flagDesc: string[]
+  /** @internal Used by `ParseResult`. */
   flagDefault: string[]
+  /** @internal Used by `ParseResult`. */
   flagHasDefault: boolean[]
-  flagRequired: boolean[]
+  private flagRequired: boolean[]
+  /** @internal Used by `ParseResult`. */
   flagRepeatable: boolean[]
-  flags: Map<string, i32>
-  negations: Map<string, i32>
+  private flags: Map<string, i32>
+  private negations: Map<string, i32>
+  /** @internal Used by `ParseResult`. */
   cmdRequired: i32[][]
+  /** @internal Used by `ParseResult`. */
   globalRequired: i32[]
-  ids: Map<string, i32>
+  private ids: Map<string, i32>
 
+  /** @internal Used by `ParseResult`. */
   argOwner: i32[]
+  /** @internal Used by `ParseResult`. */
   argName: string[]
+  /** @internal Used by `ParseResult`. */
   argRequired: boolean[]
+  /** @internal Used by `ParseResult`. */
   argVariadic: boolean[]
-  argDesc: string[]
+  private argDesc: string[]
+  /** @internal Used by `ParseResult`. */
   argIndex: i32[]
+  /** @internal Used by `ParseResult`. */
   argNext: i32[]
 
   /** A tree with only its root, the program `name` at `version`, for `description`. */
@@ -312,14 +335,14 @@ export class Cli {
   }
 
   /** The command `handle`, or a panic naming `call` when there is none. */
-  checkCommand(call: string, handle: i32): i32 {
+  private checkCommand(call: string, handle: i32): i32 {
     if (!(handle >= 0 && handle < toI32(this.cmdName.length))) {
       panic(`cli-args: ${call}: ${handle} is not a command handle`)
     }
     return handle
   }
 
-  /** The flag `handle`, or a panic naming `call` when there is none. */
+  /** @internal Called by `ParseResult`. The flag `handle`, or a panic naming `call` when there is none. */
   checkFlag(call: string, handle: i32): i32 {
     if (!(handle >= 0 && handle < toI32(this.flagLong.length))) {
       panic(`cli-args: ${call}: ${handle} is not a flag handle`)
@@ -327,7 +350,7 @@ export class Cli {
     return handle
   }
 
-  /** The argument `handle`, or a panic naming `call` when there is none. */
+  /** @internal Called by `ParseResult`. The argument `handle`, or a panic naming `call` when there is none. */
   checkArgument(call: string, handle: i32): i32 {
     if (!(handle >= 0 && handle < toI32(this.argName.length))) {
       panic(`cli-args: ${call}: ${handle} is not an argument handle`)
@@ -335,19 +358,19 @@ export class Cli {
     return handle
   }
 
-  /** The command line that names `handle`: the program, then each command down to it. */
+  /** @internal Called by `ParseResult`. The command line that names `handle`: the program, then each command down to it. */
   pathOf(handle: i32): string {
     return this.cmdPath[this.checkCommand("path", handle)]
   }
 
-  /** Whether `handle` holds commands rather than running: a group, or a root given children. */
+  /** @internal Called by nothing. Whether `handle` holds commands rather than running: a group, or a root given children. */
   isGroup(handle: i32): boolean {
     const h = this.checkCommand("isGroup", handle)
     return this.cmdGroup[h]
   }
 
   /** A new child of `parent`; `call` names the declaration in a panic. */
-  addCommand(call: string, parent: i32, name: string, id: i32, description: string, group: boolean): i32 {
+  private addCommand(call: string, parent: i32, name: string, id: i32, description: string, group: boolean): i32 {
     const p = this.checkCommand(call, parent)
     if (!isWord(name)) {
       panic(`cli-args: ${call}: '${name}' is not a command name`)
@@ -429,13 +452,13 @@ export class Cli {
   }
 
   /** Whether a flag of `scope` (a command, or `GLOBAL`) answers to `key`, as itself or as a negation. */
-  taken(scope: i32, key: string): boolean {
+  private taken(scope: i32, key: string): boolean {
     const k = scopeKey(scope, key)
     return this.flags.has(k) || this.negations.has(k)
   }
 
   /** Whether `scope` already answers to any of `--long`, its negation (for `--no-x`), or `-short`. */
-  scopeHas(scope: i32, spec: FlagSpec): boolean {
+  private scopeHas(scope: i32, spec: FlagSpec): boolean {
     if (this.taken(scope, `--${spec.long}`) || (spec.negated && this.taken(scope, `--no-${spec.long}`))) {
       return true
     }
@@ -443,12 +466,12 @@ export class Cli {
   }
 
   /** Whether flag `f` answers to `--name`, as itself or, negatable, as its negation. */
-  answersTo(f: i32, name: string): boolean {
+  private answersTo(f: i32, name: string): boolean {
     return this.flagLong[f] === name || (this.flagNegatable[f] && `no-${this.flagLong[f]}` === name)
   }
 
   /** A new flag in `scope` from `spec`; `call` names the declaration in a panic. */
-  addFlag(call: string, scope: i32, spec: string, description: string): i32 {
+  private addFlag(call: string, scope: i32, spec: string, description: string): i32 {
     const s = new FlagSpec(call, spec)
     if (s.long === "help" || s.long === "version" || s.short === "h" || s.short === "v") {
       panic(`cli-args: ${call}: -h, --help, -v and --version are taken`)
@@ -636,19 +659,19 @@ export class Cli {
    * The flag `name` (dashes included) names in `table` at `cmd`: its own, then
    * a global; -1 for none. `table` is `flags`, or `negations` for `--no-x`.
    */
-  lookup(table: Map<string, i32>, cmd: i32, name: string): i32 {
+  private lookup(table: Map<string, i32>, cmd: i32, name: string): i32 {
     const own = table.get(scopeKey(cmd, name)) ?? -1
     return own >= 0 ? own : (table.get(scopeKey(GLOBAL, name)) ?? -1)
   }
 
-  /** How `f` is spelled on the command line: its long name, or `--no-x` for one declared that way. */
+  /** @internal Called by `ParseResult`. How `f` is spelled on the command line: its long name, or `--no-x` for one declared that way. */
   spelling(f: i32): string {
     const h = this.checkFlag("spelling", f)
     return this.flagNegated[h] ? `--no-${this.flagLong[h]}` : `--${this.flagLong[h]}`
   }
 
   /** Every long flag `cmd` answers to, for a did-you-mean. */
-  longNames(cmd: i32): string[] {
+  private longNames(cmd: i32): string[] {
     const names: string[] = []
     for (let f: i32 = 0; f < toI32(this.flagLong.length); f++) {
       if (this.flagOwner[f] === cmd || this.flagOwner[f] === GLOBAL) {
@@ -665,7 +688,7 @@ export class Cli {
     return names
   }
 
-  /** The names `cmd`'s children answer to, in declaration order, then their aliases when `withAliases`. */
+  /** @internal Called by `ParseResult`. The names `cmd`'s children answer to, in declaration order, then their aliases when `withAliases`. */
   childNames(cmd: i32, withAliases: boolean): string[] {
     const names: string[] = []
     for (let c: i32 = 0; c < toI32(this.cmdName.length); c++) {
@@ -723,7 +746,7 @@ export class Cli {
   }
 
   /** Records `token` as no command `r`'s group holds, with the nearest one that it does. */
-  unknownCommand(r: ParseResult, token: string): void {
+  private unknownCommand(r: ParseResult, token: string): void {
     const near = closest(token, this.childNames(r.command, true))
     r.badCommand = true
     r.fail(
@@ -733,7 +756,7 @@ export class Cli {
   }
 
   /** Records `--name`, `--name=value`, `--name value` or `--no-name` from `token`; answers the next index. */
-  longFlag(r: ParseResult, argv: string[], next: i32, token: string): i32 {
+  private longFlag(r: ParseResult, argv: string[], next: i32, token: string): i32 {
     const eq: i32 = toI32(token.indexOf("="))
     const name = eq < 0 ? token : token.substring(0, eq)
     if (name === "--help") {
@@ -774,7 +797,7 @@ export class Cli {
   }
 
   /** Records the cluster `-abc` (or `-l5`, `-l=5`, `-l 5`) from `token`; answers the next index. */
-  shortFlags(r: ParseResult, argv: string[], next: i32, token: string): i32 {
+  private shortFlags(r: ParseResult, argv: string[], next: i32, token: string): i32 {
     for (let k: i32 = 1; k < toI32(token.length); k++) {
       const letter = token.substring(k, k + 1)
       if (letter === "h") {
@@ -810,7 +833,7 @@ export class Cli {
    * not empty, or else the token at `next` when the flag's value takes it;
    * answers the index after whatever it took.
    */
-  takeValue(r: ParseResult, argv: string[], next: i32, f: i32, attached: string): i32 {
+  private takeValue(r: ParseResult, argv: string[], next: i32, f: i32, attached: string): i32 {
     const kind: i32 = this.flagValue[f]
     if (kind === VALUE_NONE) {
       r.set(f, "true")
@@ -838,13 +861,13 @@ export class Cli {
   }
 
   /** A help row's flag column for `f`: `-s, --long`, with `--[no-]x` for a negatable one. */
-  flagLabel(f: i32): string {
+  private flagLabel(f: i32): string {
     const long = this.flagNegatable[f] ? `--[no-]${this.flagLong[f]}` : this.spelling(f)
     return this.flagShort[f].length > 0 ? `-${this.flagShort[f]}, ${long}` : long
   }
 
   /** A help row's description for `f`, with what it is: repeatable, its default, required. */
-  flagText(f: i32): string {
+  private flagText(f: i32): string {
     let text = this.flagDesc[f]
     if (this.flagRepeatable[f]) {
       text = `${text} (repeatable)`
@@ -859,7 +882,7 @@ export class Cli {
   }
 
   /** Adds a `section` row to `rows` for every flag `owner` (a command, or `GLOBAL`) declares. */
-  flagRows(rows: HelpRow[], section: string, owner: i32): void {
+  private flagRows(rows: HelpRow[], section: string, owner: i32): void {
     for (let f: i32 = 0; f < toI32(this.flagLong.length); f++) {
       if (this.flagOwner[f] === owner) {
         rows.push(new HelpRow(section, this.flagLabel(f), this.flagMeta[f], this.flagText(f)))
@@ -931,9 +954,13 @@ export class Cli {
 
 /** One row of a help page, kept until the widest row sets the column. */
 class HelpRow {
+  /** @internal Used by `Cli`. */
   section: string
+  /** @internal Used by `Cli`. */
   label: string
+  /** @internal Used by `Cli`. */
   meta: string
+  /** @internal Used by `Cli`. */
   text: string
 
   constructor(section: string, label: string, meta: string, text: string) {
@@ -950,7 +977,7 @@ class HelpRow {
  * them. Values are read by the handles the tree was declared with.
  */
 export class ParseResult {
-  cli: Cli
+  private cli: Cli
   /** The command line that names it: `api users keys list`. */
   path: string
   /** The error line for `PARSE_ERROR`, the version line for `PARSE_VERSION`, else empty. */
@@ -959,9 +986,11 @@ export class ParseResult {
   hint: string
   /** The command line of the command an error was found at; empty without one. */
   errorPath: string
-  setFlags: i32[]
-  setValues: string[]
+  private setFlags: i32[]
+  private setValues: string[]
+  /** @internal Used by `Cli`. */
   positionalValues: string[]
+  /** @internal Used by `Cli`. */
   restValues: string[]
   /** `PARSE_OK`, `PARSE_HELP`, `PARSE_VERSION` or `PARSE_ERROR`. */
   kind: i32
@@ -971,11 +1000,13 @@ export class ParseResult {
   id: i32
   /** The status to exit with: 2 for an error, 0 otherwise. */
   exitCode: i32
+  /** @internal Used by `Cli`. */
   wantHelp: boolean
-  /** Whether help was asked for by the word `help`, which a path follows. */
+  /** @internal Used by `Cli`. Whether help was asked for by the word `help`, which a path follows. */
   helpWord: boolean
-  /** Whether a word named no command, which `help <path>` does not forgive. */
+  /** @internal Used by `Cli`. Whether a word named no command, which `help <path>` does not forgive. */
   badCommand: boolean
+  /** @internal Used by `Cli`. */
   wantVersion: boolean
 
   constructor(cli: Cli) {
@@ -999,7 +1030,7 @@ export class ParseResult {
     this.restValues = []
   }
 
-  /** Records `text` as the error found at `cmd`, unless one is already recorded: the first wins. */
+  /** @internal Called by `Cli`. Records `text` as the error found at `cmd`, unless one is already recorded: the first wins. */
   fail(cmd: i32, text: string): void {
     if (this.message.length === 0) {
       this.errorPath = this.cli.pathOf(cmd)
@@ -1008,13 +1039,14 @@ export class ParseResult {
     }
   }
 
-  /** Records flag `f` as given `value`. */
+  /** @internal Called by `Cli`. Records flag `f` as given `value`. */
   set(f: i32, value: string): void {
     this.setFlags.push(f)
     this.setValues.push(value)
   }
 
   /**
+   * @internal Called by `Cli`.
    * Settles the kind once the walk is over: help (unless `help <path>` named
    * no command), then the version, then an error, then the checks only a
    * whole command line can fail.
@@ -1070,7 +1102,7 @@ export class ParseResult {
   }
 
   /** The first of the `required` flags the arguments did not set, else -1. */
-  firstMissing(required: i32[]): i32 {
+  private firstMissing(required: i32[]): i32 {
     for (let i: i32 = 0; i < toI32(required.length); i++) {
       if (this.lastSet(required[i]) < 0) {
         return required[i]
@@ -1083,7 +1115,7 @@ export class ParseResult {
    * Where the last value of flag `f` is in `setValues`, or -1 when it was not
    * given: a scan of the flags the arguments set, so bounded by their count.
    */
-  lastSet(f: i32): i32 {
+  private lastSet(f: i32): i32 {
     for (let i: i32 = toI32(this.setFlags.length) - 1; i >= 0 && i < toI32(this.setFlags.length); i--) {
       if (this.setFlags[i] === f) {
         return i

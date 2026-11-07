@@ -420,7 +420,7 @@ export class MutexGuard<T> {
  */
 export class Mutex<T> {
   /** The one guard, which holds the data; only `lock()` hands it out. */
-  guard: MutexGuard<T>
+  private guard: MutexGuard<T>
 
   constructor(init: T) {
     this.guard = new MutexGuard<T>(init)
@@ -452,7 +452,7 @@ export class Mutex<T> {
  */
 export class AtomicI32 {
   /** The value; named only by this class's methods, which the compiler emits. */
-  value: i32
+  private value: i32
 
   constructor(value: i32) {
     this.value = value
@@ -536,7 +536,7 @@ export class AtomicI32 {
  */
 export class AtomicI64 {
   /** The value; named only by this class's methods, which the compiler emits. */
-  value: i64
+  private value: i64
 
   constructor(value: i64) {
     this.value = value
@@ -628,10 +628,10 @@ export class AtomicI64 {
  */
 export class Channel<T> {
   /** Under Node: every value sent, in the order it was sent. */
-  queue: T[]
+  private queue: T[]
 
   /** Under Node: how many of `queue`'s values a loop has taken. */
-  head: i32 = 0
+  private head: i32 = 0
 
   /**
    * Natively: the runtime's handle on the channel (runtime/runtime-parallel.c),
@@ -679,7 +679,7 @@ export class Channel<T> {
  * never made: the compiler lowers the loop itself.
  */
 class ChannelWalk<T> {
-  channel: Channel<T>
+  private channel: Channel<T>
 
   constructor(channel: Channel<T>) {
     this.channel = channel

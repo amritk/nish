@@ -34,7 +34,7 @@
  * every field is an integer. Made by `secret`, read only through `expose`.
  */
 export class Secret<T> {
-  /** The wrapped value. Only this module reads or writes it (`src/secret.ts`). */
+  /** @internal Used by `expose` and `exposeWith`. The wrapped value. Only this module reads or writes it (`src/secret.ts`). */
   value: T
 
   constructor(value: T) {

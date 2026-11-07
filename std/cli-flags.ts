@@ -75,9 +75,13 @@ export const FLAG_ERR_UNKNOWN_COMMAND: i32 = 6
 
 /** One declared flag: its name without the `--`, its `FLAG_*` kind and its help. */
 export class FlagSpec {
+  /** @internal Used by `FlagTable`. */
   name: string
+  /** @internal Used by `FlagTable` and `ParsedFlags`. */
   kind: i32
+  /** @internal Used by `FlagTable`. */
   meta: string
+  /** @internal Used by `FlagTable`. */
   description: string
 
   constructor(name: string, kind: i32, meta: string, description: string) {
@@ -93,9 +97,13 @@ export class FlagSpec {
  * split once so that matching does not split them per parse, and its help.
  */
 export class CommandSpec {
+  /** @internal Used by `FlagTable` and `ParsedFlags`. */
   path: string
+  /** @internal Used by `FlagTable`. */
   words: string[]
+  /** @internal Used by `FlagTable` and `ParsedFlags`. */
   shape: string
+  /** @internal Used by `FlagTable`. */
   description: string
 
   constructor(path: string, words: string[], shape: string, description: string) {
@@ -174,8 +182,11 @@ const isFlagName = (name: string): boolean => {
  * program's own text and a mistake there is a bug.
  */
 export class FlagTable {
+  /** @internal Used by `ParsedFlags`. */
   program: string
+  /** @internal Used by `ParsedFlags`. */
   flags: FlagSpec[]
+  /** @internal Used by `ParsedFlags`. */
   commands: CommandSpec[]
 
   constructor(program: string) {
@@ -184,7 +195,7 @@ export class FlagTable {
     this.commands = []
   }
 
-  /** The index of the flag `name` (without `--`), or `-1`. */
+  /** @internal Called by `ParsedFlags`. The index of the flag `name` (without `--`), or `-1`. */
   indexOf(name: string): i32 {
     for (let i: i32 = 0; i < toI32(this.flags.length); i++) {
       if (this.flags[i].name === name) {
@@ -195,7 +206,7 @@ export class FlagTable {
   }
 
   /** A flag of `kind`, after the checks every declaring method shares. */
-  declare(name: string, kind: i32, meta: string, description: string): void {
+  private declare(name: string, kind: i32, meta: string, description: string): void {
     if (!isFlagName(name)) {
       panic(
         `nish/cli-flags: a flag name is not empty and has no leading '-', '=' or whitespace, got "${name}"`
@@ -268,7 +279,7 @@ export class FlagTable {
    * `-1`. A path spelled by a prefix of `words` counts; the words after it
    * are the positionals.
    */
-  matchCommand(words: string[]): i32 {
+  private matchCommand(words: string[]): i32 {
     let best: i32 = -1
     let bestLength: i32 = 0
     for (let i: i32 = 0; i < toI32(this.commands.length); i++) {
@@ -287,7 +298,7 @@ export class FlagTable {
    * including the first that no declared path continues with, so
    * `remote rename x` against `remote add` is `"remote rename"`.
    */
-  unknownCommand(words: string[]): string {
+  private unknownCommand(words: string[]): string {
     let known: i32 = 0
     for (const c of this.commands) {
       let k: i32 = 0
@@ -436,12 +447,13 @@ export class FlagTable {
  * given as such.
  */
 export class ParsedFlags {
-  table: FlagTable
+  private table: FlagTable
   ok: boolean
   code: i32
   message: string
   argument: string
   command: string
+  /** @internal Used by `FlagTable`. */
   commandAt: i32
   positionals: string[]
   counts: i32[]
@@ -474,7 +486,7 @@ export class ParsedFlags {
     }
   }
 
-  /** Records the first usage error; a parse stops at it. */
+  /** @internal Called by `FlagTable`. Records the first usage error; a parse stops at it. */
   fail(code: i32, message: string, argument: string): void {
     this.ok = false
     this.code = code
@@ -482,7 +494,7 @@ export class ParsedFlags {
     this.argument = argument
   }
 
-  /** Stores `value` for the flag at `at`, spelled `flag` in `arg`, or fails as its kind requires. */
+  /** @internal Called by `FlagTable`. Stores `value` for the flag at `at`, spelled `flag` in `arg`, or fails as its kind requires. */
   take(at: i32, flag: string, value: string, arg: string): void {
     const kind = this.table.flags[at].kind
     if (kind === FLAG_REPEATABLE) {
@@ -510,7 +522,7 @@ export class ParsedFlags {
   }
 
   /** The index of the flag `name` of `kind`; a name the table does not declare so is a bug, and panics. */
-  slot(name: string, kind: i32): i32 {
+  private slot(name: string, kind: i32): i32 {
     const at = this.table.indexOf(name)
     if (at < 0 || this.table.flags[at].kind !== kind) {
       panic(`nish/cli-flags: ${this.table.program} declares no such flag --${name} of that kind`)
@@ -556,7 +568,7 @@ export class ParsedFlags {
    * shape, or `<command>` when the table has commands and none matched, then
    * `[flags]`.
    */
-  usageLine(): string {
+  private usageLine(): string {
     const table = this.table
     if (this.commandAt >= 0) {
       const c = table.commands[this.commandAt]

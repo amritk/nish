@@ -451,16 +451,17 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
  * literal/length symbols, the largest alphabet.
  */
 export class DeflateHuffmanScratch {
-  /** Symbols sorted by frequency, then by symbol. */
+  /** @internal Used by `deflateLengths`. Symbols sorted by frequency, then by symbol. */
   readonly syms: i32[]
-  /** Their frequencies, then (in place) the tree, then their lengths. */
+  /** @internal Used by `deflateLengths`. Their frequencies, then (in place) the tree, then their lengths. */
   readonly keys: i32[]
-  /** The other half of each radix pass. */
+  /** @internal Used by `deflateLengths`. The other half of each radix pass. */
   readonly tmpSyms: i32[]
+  /** @internal Used by `deflateLengths`. */
   readonly tmpKeys: i32[]
-  /** The radix pass's 256 buckets. */
+  /** @internal Used by `deflateLengths`. The radix pass's 256 buckets. */
   readonly buckets: i32[]
-  /** How many codes have each length, 0 to 32. */
+  /** @internal Used by `deflateLengths`. How many codes have each length, 0 to 32. */
   readonly perLength: i32[]
 
   /** Allocates the scratch. */
@@ -666,62 +667,62 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
  */
 export class Deflater {
   /** `head[h]`: the most recent position whose hash is `h`, plus `delta`; 0 for none. */
-  readonly head: i32[]
+  private readonly head: i32[]
   /** `prev[p & 32767]`: the position before `p` with `p`'s hash. */
-  readonly prev: i32[]
+  private readonly prev: i32[]
   /** The block's symbols: a literal byte, or `dist << 9 | (256 + len - 3)`. */
-  readonly tokens: i32[]
+  private readonly tokens: i32[]
   /** The block's literal/length and distance frequencies. */
-  readonly litFreq: i32[]
-  readonly distFreq: i32[]
+  private readonly litFreq: i32[]
+  private readonly distFreq: i32[]
   /** The dynamic code for the block. */
-  readonly litLens: i32[]
-  readonly litCodes: i32[]
-  readonly distLens: i32[]
-  readonly distCodes: i32[]
+  private readonly litLens: i32[]
+  private readonly litCodes: i32[]
+  private readonly distLens: i32[]
+  private readonly distCodes: i32[]
   /** The code-length code, and the run-length coded lengths it codes. */
-  readonly clFreq: i32[]
-  readonly clLens: i32[]
-  readonly clCodes: i32[]
-  readonly rle: i32[]
+  private readonly clFreq: i32[]
+  private readonly clLens: i32[]
+  private readonly clCodes: i32[]
+  private readonly rle: i32[]
   /** The fixed code (§3.2.6). */
-  readonly fixedLitLens: i32[]
-  readonly fixedLitCodes: i32[]
-  readonly fixedDistLens: i32[]
-  readonly fixedDistCodes: i32[]
+  private readonly fixedLitLens: i32[]
+  private readonly fixedLitCodes: i32[]
+  private readonly fixedDistLens: i32[]
+  private readonly fixedDistCodes: i32[]
   /** Length - 3 to length symbol - 257; distance to distance symbol, as `deflateDistSymbol` reads it. */
-  readonly lengthSymbol: i32[]
-  readonly distSymbol: i32[]
+  private readonly lengthSymbol: i32[]
+  private readonly distSymbol: i32[]
   /** Base and extra bits of each length and distance symbol. */
-  readonly lengthBase: i32[]
-  readonly lengthExtra: i32[]
-  readonly distBase: i32[]
-  readonly distExtra: i32[]
+  private readonly lengthBase: i32[]
+  private readonly lengthExtra: i32[]
+  private readonly distBase: i32[]
+  private readonly distExtra: i32[]
   /** Canonical-code and length-building scratch. */
-  readonly countScratch: i32[]
-  readonly nextScratch: i32[]
-  readonly scratch: DeflateHuffmanScratch
+  private readonly countScratch: i32[]
+  private readonly nextScratch: i32[]
+  private readonly scratch: DeflateHuffmanScratch
   /** Bits written but not yet stored, low bit first, and how many. */
-  bitBuf: u64
-  bitCount: i32
-  /** The level, 0 to 9. */
+  private bitBuf: u64
+  private bitCount: i32
+  /** @internal Used by `GzipCompressor`, `GzipWriter` (std/compress/gzip.ts) and `ZlibCompressor` (std/compress/zlib.ts). The level, 0 to 9. */
   readonly level: i32
   /** Candidates tried per position. */
-  readonly maxChain: i32
+  private readonly maxChain: i32
   /** A match this long is taken without looking further. */
-  readonly niceLength: i32
+  private readonly niceLength: i32
   /** A match shorter than this is checked against the next position's (levels 4 to 9); 0 for greedy. */
-  readonly lazyLength: i32
+  private readonly lazyLength: i32
   /** The shortest match taken: 4 at levels 1 to 3, whose hash covers four bytes, else 3. */
-  readonly minMatch: i32
+  private readonly minMatch: i32
   /** A table position is an index of the current input plus this. */
-  delta: i32
+  private delta: i32
   /** The next call's `delta` floor: past every position the tables hold, by a whole window. */
-  base: i32
+  private base: i32
   /** How many of `tokens` the block holds. */
-  count: i32
+  private count: i32
   /** How many entries of `rle` the block uses. */
-  rleCount: i32
+  private rleCount: i32
 
   /** A compressor at `level`, 0 to 9; another level panics. */
   constructor(level: i32) {
@@ -861,6 +862,7 @@ export class Deflater {
   }
 
   /**
+   * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Forgets the history: the next call starts a stream from nothing. Only a
    * streaming writer needs it; `compress` starts a new stream on every call.
    */
@@ -890,6 +892,7 @@ export class Deflater {
   }
 
   /**
+   * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Starts a stream whose history begins at index `start` of the next input:
    * every position the tables hold is pushed a window behind it.
    */
@@ -903,6 +906,7 @@ export class Deflater {
   }
 
   /**
+   * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Ends a stream whose input ended at index `end`: the next stream's
    * positions start a window past every position the tables now hold.
    */
@@ -911,6 +915,7 @@ export class Deflater {
   }
 
   /**
+   * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Moves the tables' positions down by `shift`, as the input they index
    * moves down by `shift` bytes; a position that falls below 0 is dropped.
    * The streaming writer calls it when it slides its window.
@@ -920,6 +925,7 @@ export class Deflater {
   }
 
   /**
+   * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Writes the whole bytes of the bit buffer, and the last partial byte
    * padded with zeros, into `out` at `op`; answers the end, or
    * `DEFLATE_NO_ROOM`.
@@ -946,7 +952,7 @@ export class Deflater {
    * storing whole words into `out` at `op`; answers the new `op`. The caller
    * has checked the room.
    */
-  putBits(out: u8[], op: i32, v: i32, n: i32): i32 {
+  private putBits(out: u8[], op: i32, v: i32, n: i32): i32 {
     let bb: u64 = this.bitBuf | (toU64(toU32(v)) << toU64(this.bitCount))
     let bc: i32 = this.bitCount + n
     let p: i32 = op
@@ -970,7 +976,7 @@ export class Deflater {
    * partial byte's padding: the byte alignment a stored block's `LEN`
    * starts at. Answers the new `op`; the caller has checked the room.
    */
-  alignBits(out: u8[], op: i32): i32 {
+  private alignBits(out: u8[], op: i32): i32 {
     let p: i32 = op
     let bb: u64 = this.bitBuf
     let bc: i32 = this.bitCount
@@ -987,6 +993,7 @@ export class Deflater {
   }
 
   /**
+   * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Compresses `src[start .. end)` as blocks into `out[op .. oe)`, matching
    * back as far as `histStart`; `final` marks the last block BFINAL. Answers
    * the new output position, with up to 31 bits still in the bit buffer, or
@@ -1046,7 +1053,7 @@ export class Deflater {
    * window above the floor again; a position more than a window behind `p`
    * becomes 0, which is never a candidate.
    */
-  rebase(p: i32): void {
+  private rebase(p: i32): void {
     const shift: i32 = p + this.delta - (DEFLATE_WINDOW + 1)
     const head: i32[] = this.head
     const prev: i32[] = this.prev
@@ -1067,7 +1074,7 @@ export class Deflater {
    * `len << 16 | dist`, or 0 for none at least `minMatch` long. `p + 4 <=
    * end`, which the caller checks.
    */
-  longest(src: u8[], p: i32, end: i32, histStart: i32): i32 {
+  private longest(src: u8[], p: i32, end: i32, histStart: i32): i32 {
     const head: i32[] = this.head
     const prev: i32[] = this.prev
     if (
@@ -1143,7 +1150,7 @@ export class Deflater {
   }
 
   /** Records `p` in the chains without searching; `p + 4 <= src.length`. */
-  insert(src: u8[], p: i32): void {
+  private insert(src: u8[], p: i32): void {
     const head: i32[] = this.head
     const prev: i32[] = this.prev
     if (toI32(head.length) !== DEFLATE_HASH_SIZE || toI32(prev.length) !== DEFLATE_WINDOW) {
@@ -1160,14 +1167,14 @@ export class Deflater {
   }
 
   /** Clears the block's symbols and frequencies. */
-  startBlock(): void {
+  private startBlock(): void {
     this.litFreq.fill(0)
     this.distFreq.fill(0)
     this.count = 0
   }
 
   /** Records the match `len`, `dist` as the block's next symbol. */
-  addMatch(len: i32, dist: i32): void {
+  private addMatch(len: i32, dist: i32): void {
     const tokens: i32[] = this.tokens
     const n: i32 = this.count
     if (n < 0 || n >= toI32(tokens.length) || len < 3 || len > 258 || dist < 1 || dist > DEFLATE_WINDOW) {
@@ -1187,7 +1194,7 @@ export class Deflater {
   }
 
   /** Records the literal `b` as the block's next symbol. */
-  addLiteral(b: i32): void {
+  private addLiteral(b: i32): void {
     const tokens: i32[] = this.tokens
     const n: i32 = this.count
     if (n < 0 || n >= toI32(tokens.length) || b < 0 || b > 255) {
@@ -1205,7 +1212,7 @@ export class Deflater {
    * finder, the chains and the symbol bookkeeping are written out in this one
    * loop over locals, because this is the fast level's whole cost.
    */
-  collectGreedy(src: u8[], start: i32, end: i32, histStart: i32): i32 {
+  private collectGreedy(src: u8[], start: i32, end: i32, histStart: i32): i32 {
     this.startBlock()
     const head: i32[] = this.head
     const prev: i32[] = this.prev
@@ -1313,7 +1320,7 @@ export class Deflater {
    * Fills the block's symbols from `p`, deferring each match by a position
    * while the next one finds a longer one; answers where the block ends.
    */
-  collectLazy(src: u8[], start: i32, end: i32, histStart: i32): i32 {
+  private collectLazy(src: u8[], start: i32, end: i32, histStart: i32): i32 {
     this.startBlock()
     let p: i32 = start
     const room: i32 = DEFLATE_BLOCK_TOKENS - 2
@@ -1358,7 +1365,7 @@ export class Deflater {
    * `pending` bits: each piece of up to 65,535 bytes has three header bits,
    * the padding to a byte and four bytes of `LEN` / `NLEN`.
    */
-  storedBits(n: i32, pending: i32): i32 {
+  private storedBits(n: i32, pending: i32): i32 {
     let bits: i32 = 0
     let left: i32 = n
     let bc: i32 = pending
@@ -1375,6 +1382,7 @@ export class Deflater {
   }
 
   /**
+   * @internal Called by `GzipWriter` (std/compress/gzip.ts).
    * Writes `src[start .. end)` as stored blocks, the last BFINAL when
    * `final`; answers the new position, or -1 without writing when it does
    * not fit in `out[op .. oe)`.
@@ -1411,7 +1419,7 @@ export class Deflater {
    * `hlit` literal/length and `hdist` distance lengths, and their
    * frequencies in `clFreq`.
    */
-  buildRle(hlit: i32, hdist: i32): void {
+  private buildRle(hlit: i32, hdist: i32): void {
     const rle: i32[] = this.rle
     const freq: i32[] = this.clFreq
     const ll: i32[] = this.litLens
@@ -1479,7 +1487,7 @@ export class Deflater {
    * dynamic, a fixed and a stored block; answers the new position, or -1
    * without writing when that does not fit in `out[op .. oe)`.
    */
-  writeBlock(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32 {
+  private writeBlock(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32 {
     const lf: i32[] = this.litFreq
     const df: i32[] = this.distFreq
     lf[256] = 1
@@ -1585,7 +1593,7 @@ export class Deflater {
    * code into `out` at `op`; answers the new position. The room was checked
    * by the block's exact size.
    */
-  writeSymbols(lc: i32[], ll: i32[], dc: i32[], dl: i32[], out: u8[], op: i32): i32 {
+  private writeSymbols(lc: i32[], ll: i32[], dc: i32[], dl: i32[], out: u8[], op: i32): i32 {
     const tokens: i32[] = this.tokens
     const n: i32 = this.count
     const lsym: i32[] = this.lengthSymbol
@@ -1682,17 +1690,17 @@ export const fixedDeflateBound = (n: i32): i32 => {
  */
 export class FixedDeflater {
   /** `head[h]`: one past the last position, from the input's start, whose four bytes hash to `h`; 0 for none. */
-  readonly head: i32[]
+  private readonly head: i32[]
   /** Per byte: its fixed code, bit-reversed, below bit 16, and the code's length above. */
-  readonly literal: i32[]
+  private readonly literal: i32[]
   /** Per length - 3: the length symbol's code and then its extra bits, below bit 16, and how many bits above. */
-  readonly length: i32[]
+  private readonly length: i32[]
   /** Distance to distance symbol, as `Deflater.distSymbol` maps it. */
-  readonly distSymbol: i32[]
+  private readonly distSymbol: i32[]
   /** Per distance symbol: its five-bit code, bit-reversed; its base distance; its extra bits. */
-  readonly distCode: i32[]
-  readonly distBase: i32[]
-  readonly distExtra: i32[]
+  private readonly distCode: i32[]
+  private readonly distBase: i32[]
+  private readonly distExtra: i32[]
 
   /** The tables, once. */
   constructor() {
@@ -1884,15 +1892,16 @@ export class FixedDeflater {
  */
 export class InflateTable {
   /**
+   * @internal Used by `Inflater`.
    * `entries[peek]`: value << 16 | extra << 11 | kind << 8 | length. The low
    * byte is the length alone, so a bit buffer shifts by an entry as it is.
    */
   readonly entries: i32[]
-  /** The prefix the table indexes. */
+  /** @internal Used by `Inflater`. The prefix the table indexes. */
   readonly bits: i32
-  /** How many codes have each length 0 to 15. */
+  /** @internal Used by `Inflater`. How many codes have each length 0 to 15. */
   readonly count: i32[]
-  /** The symbols, ordered by code. */
+  /** @internal Used by `Inflater`. The symbols, ordered by code. */
   readonly symbols: i32[]
 
   /**
@@ -1936,38 +1945,39 @@ const INF_TABLE_CODELEN: i32 = 2
  * Not shared between threads.
  */
 export class Inflater {
-  readonly lit: InflateTable
-  readonly dist: InflateTable
-  readonly codeLengths: InflateTable
-  readonly fixedLit: InflateTable
-  readonly fixedDist: InflateTable
+  private readonly lit: InflateTable
+  private readonly dist: InflateTable
+  private readonly codeLengths: InflateTable
+  private readonly fixedLit: InflateTable
+  private readonly fixedDist: InflateTable
   /** The lengths a dynamic header sends, literal/length then distance. */
-  readonly lens: i32[]
+  private readonly lens: i32[]
   /** The order-indexed code-length code lengths. */
-  readonly clLens: i32[]
+  private readonly clLens: i32[]
   /** Scratch for building a table. */
-  readonly offsets: i32[]
+  private readonly offsets: i32[]
   /** Each symbol's table entry with a length of 0, per kind of table: `entryOf(kind, s, 0)`. */
-  readonly litEntries: i32[]
-  readonly distEntries: i32[]
-  readonly clEntries: i32[]
-  readonly lengthBase: i32[]
-  readonly lengthExtra: i32[]
-  readonly distBase: i32[]
-  readonly distExtra: i32[]
+  private readonly litEntries: i32[]
+  private readonly distEntries: i32[]
+  private readonly clEntries: i32[]
+  private readonly lengthBase: i32[]
+  private readonly lengthExtra: i32[]
+  private readonly distBase: i32[]
+  private readonly distExtra: i32[]
   /** Where `inflate` resumes: the block header, a stored block, a Huffman block, or done. */
-  state: i32
+  private state: i32
   /** Whether the block being read is the final one. */
-  last: boolean
+  private last: boolean
   /** Whether the Huffman block uses the fixed code. */
-  fixed: boolean
+  private fixed: boolean
   /** Bytes of the current stored block still to copy. */
-  storedLeft: i32
+  private storedLeft: i32
   /** Bits read but not consumed, low bit first, and how many. */
-  bitBuf: u64
-  bitCount: i32
-  /** Where the last `inflate` stopped in its input and its output. */
+  private bitBuf: u64
+  private bitCount: i32
+  /** @internal Used by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts). Where the last `inflate` stopped in its input and its output. */
   inPos: i32
+  /** @internal Used by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts). */
   outPos: i32
   /** The input bytes the last `decompress` read, its final block included. */
   consumed: i32
@@ -2030,7 +2040,7 @@ export class Inflater {
     }
   }
 
-  /** Starts a new stream: the next `inflate` reads a first block header. */
+  /** @internal Called by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts). Starts a new stream: the next `inflate` reads a first block header. */
   reset(): void {
     this.state = INF_S_BLOCK
     this.last = false
@@ -2043,7 +2053,7 @@ export class Inflater {
   /**
    * The table entry for symbol `s` of a table of `kind`.
    */
-  entryOf(kind: i32, s: i32, len: i32): i32 {
+  private entryOf(kind: i32, s: i32, len: i32): i32 {
     if (kind === INF_TABLE_CODELEN) {
       return (s << 16) | len
     }
@@ -2071,7 +2081,7 @@ export class Inflater {
    * (an incomplete set of a single one-bit code is allowed, as RFC 1951
    * §3.2.7 allows one distance code).
    */
-  build(t: InflateTable, lens: i32[], from: i32, n: i32, kind: i32): i32 {
+  private build(t: InflateTable, lens: i32[], from: i32, n: i32, kind: i32): i32 {
     const count: i32[] = t.count
     const syms: i32[] = t.symbols
     const entries: i32[] = t.entries
@@ -2276,7 +2286,7 @@ export class Inflater {
    * symbol with its true code length, or -1 when the bits run out before a
    * code ends (`bc` too small), or -2 when no code matches.
    */
-  slowDecode(t: InflateTable, kind: i32, bb: u64, bc: i32): i32 {
+  private slowDecode(t: InflateTable, kind: i32, bb: u64, bc: i32): i32 {
     const count: i32[] = t.count
     const syms: i32[] = t.symbols
     let code: i32 = 0
@@ -2305,7 +2315,7 @@ export class Inflater {
   }
 
   /** Reads bytes of `src` into the bit buffer from `inPos` while it has room and `end` allows. */
-  fill(src: u8[], end: i32): void {
+  private fill(src: u8[], end: i32): void {
     let bb: u64 = this.bitBuf
     let bc: i32 = this.bitCount
     let ip: i32 = this.inPos
@@ -2331,7 +2341,7 @@ export class Inflater {
   }
 
   /** The low `n` bits of the bit buffer, consumed; the caller has checked that `n` are there. */
-  take(n: i32): i32 {
+  private take(n: i32): i32 {
     const v: i32 = toI32(this.bitBuf & ((toU64(1) << toU64(n)) - toU64(1)))
     this.bitBuf = this.bitBuf >> toU64(n)
     this.bitCount = this.bitCount - n
@@ -2343,7 +2353,7 @@ export class Inflater {
    * the bits to the next byte boundary: where a stored block's `LEN`, or the
    * framing after the final block, begins.
    */
-  unread(): void {
+  private unread(): void {
     const drop: i32 = this.bitCount & 7
     this.bitBuf = this.bitBuf >> toU64(drop)
     this.bitCount = this.bitCount - drop
@@ -2357,7 +2367,7 @@ export class Inflater {
    * and builds its tables. Answers 0, `INFLATE_NEED_INPUT` when the input ran
    * out first (nothing is consumed then: the caller rewinds), or an error.
    */
-  readDynamic(src: u8[], end: i32): i32 {
+  private readDynamic(src: u8[], end: i32): i32 {
     // The bit buffer in locals: the lengths are stored into an `i32[]`,
     // which the fields could alias, and every symbol would reload them.
     let bb: u64 = this.bitBuf
@@ -2511,6 +2521,7 @@ export class Inflater {
   }
 
   /**
+   * @internal Called by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts).
    * Decodes from `src[ip .. inEnd)` into `out[op .. outEnd)`, resuming where
    * the last call stopped; a match may reach back to `histStart`. `more`
    * says whether input may follow `inEnd`: with it, running out is
@@ -2550,7 +2561,7 @@ export class Inflater {
   }
 
   /** `inflate`'s state machine, once its windows are checked. */
-  step(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 {
+  private step(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 {
     while (true) {
       const s: i32 = this.state
       if (s === INF_S_DONE) {
@@ -2648,7 +2659,7 @@ export class Inflater {
    * (answers 0, the state back at a block header), or until the input or
    * the output runs short or the stream is malformed (answers that code).
    */
-  huffman(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 {
+  private huffman(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 {
     const lt: InflateTable = this.fixed ? this.fixedLit : this.lit
     const dt: InflateTable = this.fixed ? this.fixedDist : this.dist
     const le: i32[] = lt.entries
@@ -2954,7 +2965,7 @@ export class Inflater {
    * says: -1 when the bits run out before the code ends, -2 when no code
    * matches. A code is decoded only once all its bits are here.
    */
-  lookup(t: InflateTable, kind: i32, entries: i32[], bb: u64, bc: i32): i32 {
+  private lookup(t: InflateTable, kind: i32, entries: i32[], bb: u64, bc: i32): i32 {
     const mask: u64 = toU64((1 << t.bits) - 1)
     let e: i32 = entries[toI32(bb & mask)]
     if (((e >> 8) & 7) === INF_SUB) {

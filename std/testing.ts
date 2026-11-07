@@ -132,19 +132,19 @@ const testingFirstDifferentLine = (actual: string[], expected: string[]): i32 =>
  */
 export class Suite {
   /** Names the summary line, so several suites in one program stay apart. */
-  name: string
+  private name: string
   // These three have initializers because the constructor does not assign them,
   // and every field holds a value once it returns. `name` does not, and an
   // initializer there would only be a store the constructor overwrites.
-  passed: i32 = 0
-  failed: i32 = 0
-  skipped: i32 = 0
+  private passed: i32 = 0
+  private failed: i32 = 0
+  private skipped: i32 = 0
   /**
    * The names of the checks that failed, recapped by `done`. The detail of
    * each was printed when it happened; this is the list a reader wants after
    * a hundred lines of output have scrolled the failures off the screen.
    */
-  failures: string[]
+  private failures: string[]
 
   constructor(name: string) {
     this.name = name
