@@ -71,8 +71,10 @@
  * **Errors.** A connection that is refused, reset, closed or past its connect
  * timeout fails every query on it with `PG_CARRIER_FAILED`, `failure` the
  * connection's `PG_ERR_*` and `socketError` the socket's negative errno
- * (`-110` for the timeout). A statement the server refuses answers
- * `PG_CARRIER_ERROR`, then `PG_CARRIER_FAILED` with `failure` `PG_ERR_NONE`.
+ * (`-110` for the timeout, 0 when the server closed cleanly). A plain query
+ * the server refuses answers `PG_CARRIER_ERROR`, then `PG_CARRIER_FAILED`
+ * with `failure` `PG_ERR_NONE`; a batched query the server refuses answers
+ * only `PG_CARRIER_FAILED` with `failure` `PG_ERR_NONE`.
  * Programming errors (a cap out of range, an unknown batcher id, `send()`
  * with no build open) panic.
  *

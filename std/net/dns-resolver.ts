@@ -10,20 +10,26 @@
  *     } from "nish/net/dns-resolver"
  *     import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
  *     import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config"
+ *     import { readFileBytesSync } from "nish:fs"
+ *     import { monotonicNanos } from "nish:process"
  *
  *     const config = new DnsConfig()
- *     dnsParseResolvConf(conf, 0, confLen, config)          // the bytes of resolv.conf
+ *     const resolv: u8[] = readFileBytesSync("/etc/resolv.conf") ?? new Array<u8>(0)
+ *     dnsParseResolvConf(resolv, 0, toI32(resolv.length), config)
  *     const resolver = new DnsResolver(config, null, 4)
- *     const lookup: i32 = resolver.start("example.com", 443, now)
+ *     const lookup: i32 = resolver.start("example.com", 443, monotonicNanos())
  *     // lookup < 0: DNS_RESOLVE_BUSY, or the DNS_ERR_* code of a name that is not one
  *     const out: u8[] = new Array<u8>(DNS_OUTGOING_MAX_BYTES)
  *     const to: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
  *     const meta: i32[] = new Array<i32>(2)
- *     let q: i32 = resolver.nextOutgoing(out, to, meta, id)  // id: fresh, random, 16 bits
+ *     const idBytes: u8[] = new Array<u8>(2)
+ *     crypto.getRandomValues(idBytes)                      // a fresh, random 16-bit ID per send
+ *     let q: i32 = resolver.nextOutgoing(out, to, meta, (toI32(idBytes[0]) << 8) | toI32(idBytes[1]))
  *     while (q >= 0) {
  *       // meta[0] DNS_SEND_UDP or DNS_SEND_TCP: close q's old socket, send out[0, meta[1]) to `to`
  *       // meta[0] DNS_CLOSE: close q's socket
- *       q = resolver.nextOutgoing(out, to, meta, nextId)
+ *       crypto.getRandomValues(idBytes)
+ *       q = resolver.nextOutgoing(out, to, meta, (toI32(idBytes[0]) << 8) | toI32(idBytes[1]))
  *     }
  *     // a datagram for q:  resolver.receive(q, buf, len, from, now)
  *     // TCP bytes for q:   resolver.receiveStream(q, buf, len, now)
@@ -275,8 +281,9 @@ export class DnsResolver {
    * A resolver with room for `maxLookups` lookups at once, every buffer made
    * now. Panics unless `maxLookups` is 1 to `DNS_RESOLVER_MAX_LOOKUPS`.
    * `config` and `hosts` are kept, not copied: `start` reads both, and a
-   * running query reads `config`'s servers, `timeout` and `attempts`, so a
-   * program may parse them again between lookups but not while one runs.
+   * running query reads `config`'s servers, search list, `searchCount`,
+   * `ndots`, `timeout` and `attempts`, so a program may parse them again
+   * between lookups but not while one runs.
    *
    * @param config The servers, search list, `ndots`, `timeout` (seconds) and
    *   `attempts`, as `dnsParseResolvConf` read them.

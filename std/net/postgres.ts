@@ -3438,12 +3438,21 @@ export class PgPool {
     return ticket
   }
 
-  /** The number of requests waiting for a connection. */
+  /**
+   * How many requests wait for a connection.
+   *
+   * @returns The requests queued and not yet given a connection.
+   */
   waiting(): i32 {
     return this.queueCount
   }
 
-  /** The number of groups in flight on every connection, sent and not yet done: the `inFlight` a `PgBatchClock` reads. */
+  /**
+   * How many groups are in flight across every connection: the `inFlight` a
+   * `PgBatchClock` reads.
+   *
+   * @returns The groups sent and not yet done, summed over every connection.
+   */
   inFlight(): i32 {
     let n: i32 = 0
     for (const slot of this.slots) {
@@ -4010,15 +4019,20 @@ export class PgBatcher {
     }
   }
 
-  /** The number of requests waiting for `take`. */
+  /**
+   * How many requests wait for `take`.
+   *
+   * @returns The requests queued and not yet taken into a batch.
+   */
   waiting(): i32 {
     return this.count
   }
 
   /**
-   * Drops the oldest waiting request and answers its tag, or -1 when none
-   * waits: for a program that cannot reach the server to fail requests
-   * rather than hold them.
+   * Drops the oldest waiting request, so that a carrier that cannot reach the
+   * server fails its requests rather than holds them.
+   *
+   * @returns The dropped request's tag, or -1 when none waits.
    * @internal Used by `PgCarrier.next` in std/net/postgres-carrier.ts.
    */
   shed(): i32 {
@@ -4684,7 +4698,11 @@ export class PgBatchClock {
     this.starts = new Array<i64>(5)
   }
 
-  /** The number of items waiting. */
+  /**
+   * How many items wait for a batch.
+   *
+   * @returns The items queued and not yet started in a batch.
+   */
   waiting(): i32 {
     return this.count
   }
@@ -4717,7 +4735,11 @@ export class PgBatchClock {
     return true
   }
 
-  /** The count that starts a batch now: the larger of `minCount` and the average times `factor`, at most `maxCount`. */
+  /**
+   * The count that starts a batch now.
+   *
+   * @returns The larger of `minCount` and the average times `factor`, at most `maxCount`.
+   */
   target(): i32 {
     const scaled: f64 = Math.ceil(this.average * this.factor)
     let target: i32 = this.minCount
@@ -4754,7 +4776,11 @@ export class PgBatchClock {
     return reason
   }
 
-  /** When the oldest waiting item has waited `maxWaitUs`, in the caller's microseconds; -1 when none waits. */
+  /**
+   * When the oldest waiting item will have waited `maxWaitUs`.
+   *
+   * @returns That time in the caller's microseconds, or -1 when none waits.
+   */
   deadline(): i64 {
     if (this.count === 0) {
       return -1
@@ -4865,7 +4891,11 @@ export class PgBatchTurns {
     this.busy = new Array<boolean>(size)
   }
 
-  /** The slot that collects: the lowest-numbered free one, or `PG_TURNS_NONE` when every slot holds a batch. */
+  /**
+   * The slot that collects the next batch.
+   *
+   * @returns The lowest-numbered free slot, or `PG_TURNS_NONE` when every slot holds a batch.
+   */
   collector(): i32 {
     for (let i: i32 = 0; i < this.size; i++) {
       if (!this.busy[i]) {
@@ -4875,12 +4905,20 @@ export class PgBatchTurns {
     return PG_TURNS_NONE
   }
 
-  /** The number of slots holding a batch. */
+  /**
+   * How many slots hold a batch.
+   *
+   * @returns The slots whose batch has `started` and not yet `finished`.
+   */
   inFlight(): i32 {
     return this.running
   }
 
-  /** When the collector's timer fires, `PgBatchClock.deadline()`; -1 when nothing waits. */
+  /**
+   * When the collector's timer fires, as `PgBatchClock.deadline()` gives it.
+   *
+   * @returns That time in the caller's microseconds, or -1 when nothing waits.
+   */
   deadline(): i64 {
     return this.clock.deadline()
   }

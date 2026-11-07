@@ -7,6 +7,7 @@
  *     import { DNS_RESOLVE_MAX_ADDRESSES, DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver"
  *     import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config"
  *     import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
+ *     import { readFileBytesSync } from "nish:fs"
  *     import { pollCreate, pollWait } from "nish:net"
  *     import { monotonicNanos } from "nish:process"
  *
@@ -18,7 +19,8 @@
  *
  *     // A server: the lookup rides the loop it already runs.
  *     const config: DnsConfig = new DnsConfig()
- *     dnsParseResolvConf(resolvBytes, 0, resolvLen, config)
+ *     const resolv: u8[] = readFileBytesSync("/etc/resolv.conf") ?? new Array<u8>(0)
+ *     dnsParseResolvConf(resolv, 0, toI32(resolv.length), config)
  *     const loop: i32 = pollCreate()
  *     const client: DnsClient = new DnsClient(new DnsResolver(config, null, 4), loop, 1000)
  *     const lookup: i32 = client.start("example.com", 443, monotonicNanos())

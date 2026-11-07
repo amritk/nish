@@ -205,8 +205,8 @@ const dnsLower = (b: i32): i32 => (b >= 65 && b <= 90 ? b + 32 : b)
  *   bytes always have room for any name that is one.
  * @param id The query ID, 0 to 0xFFFF; any other value panics.
  * @param name The name to ask, such as `"example.com"` or `"example.com."`:
- *   printable ASCII, labels of 1 to 63 bytes, at most 253 bytes without the
- *   trailing dot.
+ *   bytes 33 to 126 (printable ASCII without the space), labels of 1 to 63
+ *   bytes, at most 253 bytes without the trailing dot.
  * @param qtype `DNS_TYPE_A` or `DNS_TYPE_AAAA`; any other is `DNS_ERR_QTYPE`.
  * @returns The query's length in bytes, written to `out[0, length)`, or a
  *   negative `DNS_ERR_*` code: `DNS_ERR_QTYPE`, `DNS_ERR_EMPTY_LABEL`,
@@ -430,8 +430,10 @@ const dnsKeepAddress = (msg: u8[], at: i32, size: i32, port: i32, ttl: i32, repl
  * @param len How many bytes of `msg`, from offset 0, are the reply; a length
  *   outside `msg` panics.
  * @param query The query this reply should answer, as `dnsBuildQuery` wrote
- *   it: the reply's ID and question are compared with its bytes, and a query
- *   whose question cannot be read back panics.
+ *   it: the reply's ID and question are compared with its bytes. A query under
+ *   12 bytes, or with another ID, answers `DNS_ERR_ID`; once the reply passes
+ *   the ID, QR, opcode and QDCOUNT checks, a query whose question cannot be
+ *   read back panics.
  * @param queryLen The query's length, as `dnsBuildQuery` answered it; a length
  *   outside `query` panics.
  * @param port The port, 0 to 0xFFFF, written big-endian into the last two bytes

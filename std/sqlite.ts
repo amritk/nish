@@ -243,8 +243,9 @@ export class Database {
 
   /**
    * Wraps an adapter handle. A program gets a `Database` from `openDatabase`
-   * rather than building one; a handle that names no connection makes every
-   * call answer `SQLITE_MISUSE`.
+   * rather than building one. With a handle that names no connection, a call
+   * that can fail fails with `SQLITE_MISUSE`; `lastInsertRowid` and `changes`
+   * answer 0, and `error` answers a message.
    *
    * @param handle The adapter's connection handle.
    */
@@ -365,8 +366,10 @@ export class Statement {
 
   /**
    * Wraps an adapter handle. A program gets a `Statement` from
-   * `Database.prepare` rather than building one; a handle that names no
-   * statement makes every call answer `SQLITE_MISUSE` or a NULL column.
+   * `Database.prepare` rather than building one. With a handle that names no
+   * statement, a call that can fail fails with `SQLITE_MISUSE`, and the
+   * other column readers answer as for a column that is not there: 0,
+   * `SQLITE_NULL`, or `null`.
    *
    * @param handle The adapter's statement handle.
    */
