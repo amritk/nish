@@ -27,14 +27,20 @@
 // bytes of body copied in user space over the run, counted here: `tryPush`,
 // `tryPop` and `write` in copy mode; in place, what `sendBody` copied of what
 // the socket did not take, and on how many messages (`tails`); in consumer
-// mode, `tryPush` and the in-place consumer's. Not counted, in
-// any mode: the response head, which `respond` writes into the output; the
+// mode, `tryPush`, the in-place consumer's, and the `tryPop` of each record
+// that wrapped. `stalls` counts the messages whose response head found no
+// room behind the last message's tail, so the consumer drained before
+// `respond`; that drain is inside the timed window. Not counted, in any mode: the response head, which `respond` writes into the output; the
 // kernel's copy into the socket; `Http1Connection`'s compaction of its output;
 // and the reader's `netRead`. The reader's byte count must equal what the
 // consumer sent, and its FNV-1a over the bodies it parses out of the stream
 // must equal the producer's over the records it rendered; run.mjs checks both.
-// Every wait has a deadline of ten seconds (the reader's, since its last byte;
-// the connect wait's, five), and a child that fails fails the run.
+// Every wait in the three processes has a deadline of ten seconds (the
+// reader's counts from its start, then from its last byte; the connect
+// wait's is five), and a child that fails fails the run. The one exception
+// is the parent's `waitPid` on each child once the run is over: it has no
+// deadline of its own, and is bounded by the children's deadlines and by
+// run.mjs's timeout on the whole program.
 // The producer and the reader are this program again, under
 // `taskset -c <cpu>` when that is not -1; run.mjs pins the parent.
 import { kill, monotonicNanos, spawn, waitPid } from "nish:process"
@@ -405,6 +411,7 @@ const consumer = (
   let copied: i64 = toI64(0)
   let tails: i32 = 0
   let wrapped: i32 = 0
+  let stalls: i32 = 0
   let tailBytes: i64 = toI64(0)
   let sent: i64 = toI64(0)
   let bodies: i64 = toI64(0)
@@ -467,6 +474,9 @@ const consumer = (
     let head: i32 = conn.respond(200, names, values, len)
     // No room for the head behind that tail yet: send it, then answer.
     const stalled: i64 = monotonicNanos()
+    if (head === H1_AGAIN) {
+      stalls = stalls + 1
+    }
     while (head === H1_AGAIN) {
       if (monotonicNanos() - stalled > DEADLINE_NS) {
         fail(name, prod, read, `respond found no room on ${i}`)
@@ -546,7 +556,7 @@ const consumer = (
   const cents: i64 = (bodies * toI64(100) + toI64(n / 2)) / toI64(n)
   const frac: i64 = cents % toI64(100)
   console.log(
-    `${mode} ${size} n ${n} ring ${cap} body_bytes ${cents / toI64(100)}.${frac < toI64(10) ? "0" : ""}${frac} p50_ns ${percentile(hist, timed, 50)} p99_ns ${percentile(hist, timed, 99)} mean_ns ${sum / toI64(timed)} wall_ns ${wall / toI64(n)} copied ${copied} tails ${tails} tail_bytes ${tailBytes} wrapped ${wrapped} waited_ns ${waited / toI64(n)} sent ${sent + bodies} heard ${heard} made_sum ${made} read_sum ${parsed}`
+    `${mode} ${size} n ${n} ring ${cap} body_bytes ${cents / toI64(100)}.${frac < toI64(10) ? "0" : ""}${frac} p50_ns ${percentile(hist, timed, 50)} p99_ns ${percentile(hist, timed, 99)} mean_ns ${sum / toI64(timed)} wall_ns ${wall / toI64(n)} copied ${copied} tails ${tails} tail_bytes ${tailBytes} wrapped ${wrapped} stalls ${stalls} waited_ns ${waited / toI64(n)} sent ${sent + bodies} heard ${heard} made_sum ${made} read_sum ${parsed}`
   )
   return 0
 }

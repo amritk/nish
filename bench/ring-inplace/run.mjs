@@ -189,3 +189,9 @@ for (const s of sizes) {
     console.log(`| ${s / 1024} KB | ${label[to]} vs ${label[from]} | ${cols.join(" | ")} |`)
   }
 }
+// A stall is a message whose response head waited for the last message's
+// tail to drain, inside the timed window; print the most any run had.
+const stalls = sizes.flatMap((s) =>
+  modes.map((m) => `${s / 1024} KB ${label[m]} ${f(Math.max(...both(s, m).map((l) => field(l, "stalls"))))}`)
+)
+console.log(`\nrespond stalls, the most in any run: ${stalls.join(", ")}`)

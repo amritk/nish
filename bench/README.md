@@ -1598,12 +1598,18 @@ the wider of their bands: one inside is no measured difference.
 
 A run fails if the reader did not hear every byte sent, or if the FNV-1a
 sum over the bodies it parses out of the stream differs from the
-producer's over the records it rendered. Every wait has a ten-second
-deadline, the drain of the output and the reader included (the reader's
-runs from the last byte it read); the wait for the reader to connect has
-five seconds. A child that exits with an error fails the run. The sums are
-one byte at a time on the producer's and the reader's cores, so they raise
-the pipeline and p99 figures.
+producer's over the records it rendered. Every wait inside the run has a
+ten-second deadline, the producer's wait for room in a full ring, the
+drain of the output and the reader included (the reader's runs from its
+start, then from the last byte it read); the wait for the reader to
+connect has five seconds. The consumer's `waitPid` on each child after the
+run has no deadline of its own: the children's deadlines and `run.mjs`'s
+timeout bound it. A child that exits with an error fails the run.
+`stalls` counts the messages whose response head had to wait for the last
+message's tail to drain, inside the timed window; it was added after the
+full runs and was 0 for every size and mode in the `--quick` runs at both
+ring sizes. The sums are one byte at a time on the producer's and the
+reader's cores, so they raise the pipeline and p99 figures.
 
 On 2026-11-07, 5 rounds × 2 runs × 50,000 messages, on an Intel Xeon
 Processor @ 2.30 GHz (4 cores; 48 KiB L1d and 2 MiB L2 a core, 260 MiB L3
@@ -1666,10 +1672,13 @@ cuts the consumer's median by 14.8 % and 18.7 % with no measured pipeline
 difference, and at 1 and 4 KB makes no measured difference but a 4 KB p99
 12.4 % higher with the 16 MiB ring (band ±11.6 %); the producer half is
 worth adopting at no size measured, being slower over the pipeline at every
-size with the 16 MiB ring. With the 1 MiB ring the in-place pipeline gap
-closes at 4 and 10 KB but not at 1 KB, so the cache explanation (the
-producer renders into ring memory the consumer reads) is supported at 4
-and 10 KB and not supported at 1 KB. wp47 §7 has the reasoning and every
+size with the 16 MiB ring (inferred from consumer against in place, which
+differ only in the producer half). With the 1 MiB ring the in-place
+pipeline gap falls inside its band at 4 and 10 KB but not at 1 KB. That is
+consistent with the cache explanation (the producer renders into ring
+memory the consumer reads) at 4 and 10 KB, not shown, and not consistent
+with it at 1 KB: no band covers the change between ring sizes, and
+neither run measured cache misses. wp47 §7 has the reasoning and every
 exception.
 
 ## SQLite

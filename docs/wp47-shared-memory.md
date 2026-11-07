@@ -442,13 +442,25 @@ it renders. A run that fails either check fails the whole run. Both sums
 are one byte at a time, on the producer's and the reader's cores, so they
 slow the producer and the reader, which pace the pipeline. The pipeline
 and p99 figures here are higher than those of a run without the check.
-Every wait has a ten-second deadline: the producer's attach, each request,
-each record, room for each response head, each short body write, each
-drain of the output, and the reader, whose deadline runs from the last
-byte it read. The wait for the reader to connect has five seconds. A
-child that exits with an error fails the run. (An earlier version of this
+Every wait inside the run has a ten-second deadline: the producer's
+attach, room in a full ring for each record, each request, each record,
+room for each response head, each short body write, each drain of the
+output, and the reader, whose deadline runs from its start and then from
+the last byte it read. The wait for the reader to connect has five
+seconds. The one wait without a deadline of its own is the consumer's
+`waitPid` on each child after the run, bounded by the children's
+deadlines and by `run.mjs`'s timeout on the whole program. A child that
+exits with an error fails the run. (An earlier version of this
 section claimed the ten seconds for every wait when the drain and the
 reader had none, so a reader that stopped could hang the run.)
+
+A message whose response head finds no room behind the last message's
+tail makes the consumer drain before `respond`, inside the timed window,
+and how often that happens can differ by mode. The bench counts these as
+`stalls`, and `run.mjs` prints the most any run had. The counter came
+after the full runs above: in the `--quick` runs at both ring sizes
+(3,000 messages a run) it was 0 for every size and mode; the full runs
+did not record it.
 
 Each round runs every size and mode twice, in a seeded shuffled order, with
 50,000 messages a run. A figure is the median over 5 rounds × 2 runs, with
@@ -521,22 +533,29 @@ What this says, and only as far as the bands allow:
   band ±9.9 %) and 18.7 % (1 MiB, band ±4.8 %) with no measured difference
   to the pipeline; at 1 and 4 KB it makes no measured difference except a
   4 KB p99 12.4 % higher at 16 MiB, just outside its ±11.6 % band and
-  inside it at 1 MiB. The producer half is not worth adopting at any size
-  measured: it is never faster over the pipeline, and is slower at every
-  size with the 16 MiB ring.
+  inside it at 1 MiB. In consumer mode not every record is lent: at 1 MiB
+  and 10 KB about 1 % wrap and are popped. The producer half is not worth
+  adopting at any size measured: inferred from consumer against in place,
+  it is never faster over the pipeline, and is slower at every size with
+  the 16 MiB ring.
 - **Copies.** In place makes no user-space copy of the body, except
   partial-write tails, and these runs had none (0 bytes over 0 of 50,000
   messages in every run). Copied moves each body three times in user space
   (2,921 bytes for a 973-byte body). Consumer moves it once, `tryPush`'s
   copy, plus the wrapped records it pops: a median of 2, 12 and 30 a run
   of 50,000 at 1, 4 and 10 KB with the 16 MiB ring, and 45, 193 and 486
-  with the 1 MiB ring, which wraps sixteen times as often.
+  with the 1 MiB ring. At 4 and 10 KB that is about sixteen times as many,
+  as the ring is a sixteenth the size; at 1 KB it is 22.5 times.
 - **The pipeline with the 16 MiB ring** is slower in place than copied at
   every size: +5.9 % (band ±2.7 %), +3.8 % (±2.5 %) and +6.2 % (±4.1 %).
   Consumer makes no measured difference to copied at any size (-2.4 %,
   +0.8 %, -0.7 %, each inside its band), and is faster than in place at
-  every size (-7.9 %, -2.8 %, -6.5 %, each outside). So the pipeline cost
-  belongs to the producer half: rendering into the ring.
+  every size (-7.9 %, -2.8 %, -6.5 %, each outside). Consumer and in place
+  differ only in the producer half, so the pipeline cost is inferred to
+  belong to it; there is no producer-only mode to show it directly. The
+  in-place producer differs in more than where it renders: it also skips
+  `tryPush`'s copy and renders into a window `reserve` lends rather than a
+  private buffer, so these runs do not say which of those is the cost.
 - **The small ring and the cache explanation.** An earlier version of this
   section guessed that in place's pipeline was slower because the producer
   renders into ring memory the consumer reads from. With the 1 MiB ring,
@@ -544,11 +563,15 @@ What this says, and only as far as the bands allow:
   copied at 4 KB (+0.3 %, band ±2.1 %) and 10 KB (-0.8 %, band ±2.0 %),
   where at 16 MiB it was outside its band at both. At 1 KB the gap stays:
   +7.8 % (band ±5.3 %), and consumer is still faster than in place there
-  (-6.0 %, band ±3.4 %). So the cache explanation is supported at 4 and
-  10 KB and not supported at 1 KB, where some other cost of the producer
-  half, per record rather than per byte, is the likelier one. Neither run
-  measured cache misses, so this is what the figures fit, not a cause
-  shown.
+  (-6.0 %, band ±3.4 %). That is consistent with the cache explanation at
+  4 and 10 KB, not shown, and not consistent with it at 1 KB. No band
+  covers the change between ring sizes itself: it is a difference of two
+  differences, and the in-place pipeline's ranges at the two ring sizes
+  overlap (4 KB: 10,887 to 12,451 against 10,169 to 11,983; 10 KB: 26,784
+  to 29,586 against 24,691 to 27,533). At 4 KB the 16 MiB gap was only
+  just outside its band (+3.8 %, band ±2.5 %). At 1 KB some cost of the
+  producer half other than the cache is a possibility, not measured.
+  Neither run measured cache misses.
 - **The consumer's median** is faster in place than copied at 10 KB at
   both sizes (-15.8 %, band ±9.9 %; -27.3 %, band ±7.5 %). At 4 KB it is
   4.8 % and 5.1 % faster, outside bands of ±3.1 % and ±3.7 %. At 1 KB with
@@ -558,7 +581,11 @@ What this says, and only as far as the bands allow:
   the 1 MiB ring it is 11.9 % slower (band ±7.5 %).
 - **The consumer's p99** makes no measured difference between any two
   modes, except the 4 KB consumer-against-copied figure above and, at 1 MiB
-  and 10 KB, consumer against in place (+5.7 %, band ±4.6 %).
+  and 10 KB, consumer against in place (+5.7 %, band ±4.6 %). A candidate
+  cause there is the wrapped pops: that run pops 486 of 50,000 records,
+  about 1 %, each a full 10 KB `tryPop` copy inside the timed window, and
+  1 % is the p99 boundary. The pops cannot explain the 4 KB +12.4 % at
+  16 MiB, which has 12.
 
 To reproduce:
 
