@@ -312,6 +312,8 @@ export const main = (): i32 => {
 };
 ```
 
+<a id="different-tasks-at-once-using-s--scope"></a>
+
 ## Different tasks at once: `using s = scope()`
 
 A scope runs different functions side by side, each on a thread. Open it with
@@ -1007,6 +1009,8 @@ export const main = (): i32 => {
   of a million short strings took a median of 24 ms on four threads, against
   40 ms for the same loop on one. A scope's task answer is copied in by the
   joining thread when it is under 64 KB, and taken whole above that.
+
+<a id="letting-nish---fix-write-it"></a>
 
 ## Letting `nish --fix` write it
 

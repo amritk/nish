@@ -227,7 +227,13 @@ const live = (exe, db, scenario, sql = []) => {
   return { out: r.stdout ?? "", status: r.status, err: r.stderr ?? "" };
 };
 
-/** Resolves once `out()` holds `line`, or with false after `ms` or once `child` exits without it. */
+/**
+ * Resolves once `out()` holds `line`, or with false after `ms` or once `child`
+ * exits without it. The text is matched, not a whole line: `console.log`
+ * writes its text and its newline apart, so the workers of a forked server
+ * sharing this pipe interleave (`listening 1listening 1\n\n`), while each
+ * short write still lands whole.
+ */
 const waitFor = (child, out, line, ms) =>
   new Promise((resolve) => {
     const start = Date.now();
@@ -236,7 +242,7 @@ const waitFor = (child, out, line, ms) =>
       gone = true;
     });
     const poll = () => {
-      if (out().split("\n").includes(line)) resolve(true);
+      if (out().includes(line)) resolve(true);
       else if (gone || Date.now() - start > ms) resolve(false);
       else setTimeout(poll, 10);
     };

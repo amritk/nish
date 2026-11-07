@@ -2407,6 +2407,9 @@ in is in parentheses.
   HS256, against OpenSSL. Its section
   [An AVX2 message schedule](sha256-block/README.md#an-avx2-message-schedule-measured-not-built)
   measures the vector schedule (#1186).
+- [`http1-conn/`](http1-conn/README.md): `Http1Connection` per request on one
+  connection, over a cold pool and over an idle `Http1Server` pool with
+  `idleInput`, and the peak RSS of one idle connection.
 - [`http1-request/`](http1-request/README.md): `std/net/http1`'s request
   parser on a browser, an API, a short and a 4 KB JSON request (#1187).
 - [`jwt-verify/`](jwt-verify/README.md): decoding and verifying an HS256 JWT

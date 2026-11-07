@@ -666,8 +666,10 @@ export class Http1Connection {
       big - H1_LINE_OVERHEAD
     )
     this.config = config
-    this.date = new HttpDate()
+    // The parser is made first: the arena places each block after the last,
+    // so its front fields sit on the lines just behind the connection's own.
     this.parser = new Http1Parser(config.maxTarget, config.maxHeaderBytes, config.maxHeaders, config.maxBody)
+    this.date = new HttpDate()
     this.parser.keepText = false
     this.parser.maxChunk = config.chunkSize
     this.ws = null
@@ -756,16 +758,22 @@ export class Http1Connection {
     }
   }
 
-  /** Takes back the buffers `park` gave away, before bytes are fed. */
+  /**
+   * Takes back the buffers `park` gave away, before bytes are fed. A parked
+   * buffer is `noOutput` itself, which a pointer compare finds without
+   * loading the empty array's header from a line the request touches nowhere
+   * else; any other empty buffer is still swapped for a lent one.
+   */
   unpark(): void {
     const inputs: Http1OutputPool | null = this.inputs
     const heads: Http1OutputPool | null = this.heads
     const p: Http1Parser = this.parser
-    if (inputs !== null && toI32(p.buf.length) === 0) {
+    const none: u8[] = this.noOutput
+    if (inputs !== null && (p.buf === none || toI32(p.buf.length) === 0)) {
       p.buf = inputs.take()
       p.body = p.buf
     }
-    if (heads !== null && toI32(p.head.length) === 0) {
+    if (heads !== null && (p.head === none || toI32(p.head.length) === 0)) {
       p.head = heads.take()
     }
   }

@@ -425,6 +425,29 @@ next request is unread`, `and once nothing is open or unread both go back`,
 `a pipelined pair on a slot that lent its buffers is answered in order`, and
 `without idleInput a resting slot keeps its input buffer`.
 
+**A lent buffer is taken back by identity, and the layout moves only where
+fields sit** (`net_http1_server`, `_f64`, 2026-11-06, written against `main`
+at `98c4f9a7`). `Http1Parser`'s fields are ordered hot first (its buffers, the
+window and scan state, the flags, then the request's numbers, the caps and,
+last, what only a `keepText` parser or a response reads), and it makes its
+`spans` before its other arrays, so a request on a cold slot touches fewer
+lines; `Http1Connection` makes its parser before its `HttpDate`.
+`Http1Parser`'s size stays 200 bytes and no slot holds a new buffer. `unpark` first compares a
+buffer with the slot's `noOutput`, which `park` put in its place, and only
+then runs the length test it ran before. The comparison is a speed-up and has
+no behaviour of its own: `noOutput` is empty, so the length test alone takes
+the same branch, and an empty buffer that is not `noOutput` is still swapped
+for a lent one. What the parser accepts or refuses does not change. Tests: `a slot that lent its buffers holds
+its noOutput in their place`, `the first part of a request split across reads
+takes a lent buffer back`, `and the rest of it is answered, the buffer lent
+again after`, `a request that grows past the lent input buffer is answered, and
+its slot lends the grown one`, `the next request on the other slot takes the
+grown buffer and is answered`, `both slots resting with their buffers lent are
+closed past idleTimeout`, `and their clients see the end, what they lent still
+in the pools`, `a peer on a freed slot is served from the pools`, `a WebSocket
+handshake on a slot that lent its buffers switches` and `and closes on a
+close`, in `tests/link/net_http1_server` and `_f64`.
+
 **ALPN** (`net_http1_server`): a TLS handshake that chose `http/1.1`, or none,
 is served; one that chose `h2` is shut down with `close_notify` before any
 HTTP/1.1 byte.

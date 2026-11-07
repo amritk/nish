@@ -783,10 +783,12 @@ function Http1Connection.constructor(this: Http1Connection, config: Http1Config)
   pointer this: size=192 writesThrough=true captured=false passedTo=nish.Http1Connection.restart#0
   pointer config: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local -27:11 big: i32 (const)
-  local -26:11 one: i32 (const)
-  local -25:11 smallest: i32 (const)
-  local -24:11 output: i32 (const)
+  local -29:11 big: i32 (const)
+  local -28:11 one: i32 (const)
+  local -27:11 smallest: i32 (const)
+  local -26:11 output: i32 (const)
+  callee -25:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
+  callee -24:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
   callee -23:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
   callee -22:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
   callee -21:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
@@ -794,11 +796,9 @@ function Http1Connection.constructor(this: Http1Connection, config: Http1Config)
   callee -19:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
   callee -18:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
   callee -17:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
-  callee -16:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
-  callee -15:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
-  callee -9:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
-  callee -2:17 new HttpDate -> @nish.HttpDate.constructor
-  callee -1:19 new Http1Parser -> @nish.Http1Parser.constructor
+  callee -11:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
+  callee -2:19 new Http1Parser -> @nish.Http1Parser.constructor
+  callee -1:17 new HttpDate -> @nish.HttpDate.constructor
   local +13:9 limit: i32 (let)
   callee +21:5 Http1Connection.restart -> @nish.Http1Connection.restart
 function Http1Connection.restart(this: Http1Connection): void -> @nish.Http1Connection.restart [exported method]
@@ -830,9 +830,10 @@ function Http1Connection.unpark(this: Http1Connection): void -> @nish.Http1Conne
   calls: nish.Http1OutputPool.take
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -4:11 inputs: Http1OutputPool | null (const)
-  local -3:11 heads: Http1OutputPool | null (const)
-  local -2:11 p: Http1Parser (const)
+  local -5:11 inputs: Http1OutputPool | null (const)
+  local -4:11 heads: Http1OutputPool | null (const)
+  local -3:11 p: Http1Parser (const)
+  local -2:11 none: u8[] (const)
   callee +0:15 Http1OutputPool.take -> @nish.Http1OutputPool.take
   callee +4:16 Http1OutputPool.take -> @nish.Http1OutputPool.take
 function Http1Connection.inputLimit(this: Http1Connection): i32 -> @nish.Http1Connection.inputLimit [exported method]
@@ -4759,49 +4760,49 @@ struct Http1ListTally (class) size=12 align=4
   field matches: i32 index=1 offset=4 initialized
   field lastMatches: boolean index=2 offset=8 initialized
 struct Http1Parser (class) size=200 align=8 exported
-  field method: string index=0 offset=0 initialized
-  field target: string index=1 offset=8 initialized
-  field names: string[] index=2 offset=16
-  field values: string[] index=3 offset=24
-  field upgrade: string index=4 offset=32 initialized
-  field body: u8[] index=5 offset=40
-  field reason: string index=6 offset=48 initialized
-  field buf: u8[] index=7 offset=56
-  field head: u8[] index=8 offset=64
-  field spans: i32[] index=9 offset=72
-  field tally: Http1ListTally index=10 offset=80
-  field maxTarget: i32 index=11 offset=88 initialized
-  field maxHeaderBytes: i32 index=12 offset=92 initialized
-  field maxHeaders: i32 index=13 offset=96 initialized
-  field maxBody: i32 index=14 offset=100 initialized
-  field maxChunk: i32 index=15 offset=104 initialized
-  field minor: i32 index=16 offset=108 initialized
-  field contentLength: i32 index=17 offset=112 initialized
-  field bodyOff: i32 index=18 offset=116 initialized
-  field bodyLen: i32 index=19 offset=120 initialized
-  field status: i32 index=20 offset=124 initialized
-  field methodStart: i32 index=21 offset=128 initialized
-  field methodEnd: i32 index=22 offset=132 initialized
-  field targetStart: i32 index=23 offset=136 initialized
-  field targetEnd: i32 index=24 offset=140 initialized
-  field headerCount: i32 index=25 offset=144 initialized
-  field headLength: i32 index=26 offset=148 initialized
-  field start: i32 index=27 offset=152 initialized
-  field end: i32 index=28 offset=156 initialized
-  field scan: i32 index=29 offset=160 initialized
-  field state: i32 index=30 offset=164 initialized
-  field left: i32 index=31 offset=168 initialized
-  field bodyTotal: i32 index=32 offset=172 initialized
-  field sectionBytes: i32 index=33 offset=176 initialized
-  field fieldCount: i32 index=34 offset=180 initialized
-  field lineStart: i32 index=35 offset=184 initialized
-  field lineEnd: i32 index=36 offset=188 initialized
-  field lineControl: boolean index=37 offset=192 initialized
-  field chunked: boolean index=38 offset=193 initialized
-  field keepAlive: boolean index=39 offset=194 initialized
-  field upgrading: boolean index=40 offset=195 initialized
-  field headHeld: boolean index=41 offset=196 initialized
-  field keepText: boolean index=42 offset=197 initialized
+  field buf: u8[] index=0 offset=0
+  field head: u8[] index=1 offset=8
+  field spans: i32[] index=2 offset=16
+  field body: u8[] index=3 offset=24
+  field start: i32 index=4 offset=32 initialized
+  field end: i32 index=5 offset=36 initialized
+  field scan: i32 index=6 offset=40 initialized
+  field state: i32 index=7 offset=44 initialized
+  field lineStart: i32 index=8 offset=48 initialized
+  field lineEnd: i32 index=9 offset=52 initialized
+  field headerCount: i32 index=10 offset=56 initialized
+  field headLength: i32 index=11 offset=60 initialized
+  field lineControl: boolean index=12 offset=64 initialized
+  field chunked: boolean index=13 offset=65 initialized
+  field keepAlive: boolean index=14 offset=66 initialized
+  field upgrading: boolean index=15 offset=67 initialized
+  field headHeld: boolean index=16 offset=68 initialized
+  field keepText: boolean index=17 offset=69 initialized
+  field sectionBytes: i32 index=18 offset=72 initialized
+  field fieldCount: i32 index=19 offset=76 initialized
+  field minor: i32 index=20 offset=80 initialized
+  field left: i32 index=21 offset=84 initialized
+  field contentLength: i32 index=22 offset=88 initialized
+  field bodyOff: i32 index=23 offset=92 initialized
+  field bodyLen: i32 index=24 offset=96 initialized
+  field methodStart: i32 index=25 offset=100 initialized
+  field methodEnd: i32 index=26 offset=104 initialized
+  field targetStart: i32 index=27 offset=108 initialized
+  field targetEnd: i32 index=28 offset=112 initialized
+  field maxTarget: i32 index=29 offset=116 initialized
+  field maxHeaderBytes: i32 index=30 offset=120 initialized
+  field maxHeaders: i32 index=31 offset=124 initialized
+  field maxBody: i32 index=32 offset=128 initialized
+  field maxChunk: i32 index=33 offset=132 initialized
+  field method: string index=34 offset=136 initialized
+  field target: string index=35 offset=144 initialized
+  field names: string[] index=36 offset=152
+  field values: string[] index=37 offset=160
+  field upgrade: string index=38 offset=168 initialized
+  field reason: string index=39 offset=176 initialized
+  field tally: Http1ListTally index=40 offset=184
+  field status: i32 index=41 offset=192 initialized
+  field bodyTotal: i32 index=42 offset=196 initialized
   constructor -> @nish.Http1Parser.constructor
   method feed -> @nish.Http1Parser.feed
   method next -> @nish.Http1Parser.next
@@ -4830,7 +4831,7 @@ function Http1Parser.constructor(this: Http1Parser, maxTarget: i32, maxHeaderByt
   callee +1:27 http1Clamp -> @nish.http1Clamp
   callee +2:23 http1Clamp -> @nish.http1Clamp
   callee +3:20 http1Clamp -> @nish.http1Clamp
-  callee +15:5 Http1Parser.restart -> @nish.Http1Parser.restart
+  callee +18:5 Http1Parser.restart -> @nish.Http1Parser.restart
 function Http1Parser.feed(this: Http1Parser, data: u8[], off: i32, len: i32): void -> @nish.Http1Parser.feed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
