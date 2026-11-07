@@ -2,6 +2,11 @@
  * `nish/crypto/base64url` — RFC 4648 §5 base64url, unpadded, as JWS and the
  * relay's grants spell a key or a tag inside a URL or a header.
  *
+ *     import { base64urlEncode, base64urlDecode } from "nish/crypto/base64url";
+ *
+ *     const text: string = base64urlEncode(tag); // no `=` padding
+ *     const back: u8[] | null = base64urlDecode(text); // null for any other spelling
+ *
  * The alphabet is `A-Z a-z 0-9 - _`, and there is no `=`: the length of the
  * text already says how many bytes the last group holds (RFC 4648 §3.2 lets a
  * specification that knows its lengths drop the padding, and RFC 7515 §2 does).
@@ -92,6 +97,10 @@ const base64urlSextetOf = (c: i32): i32 => {
  * so one index walks the input and the only branches are on how many bits are
  * waiting — which depends on the position, never on the bytes. An array longer
  * than 2^31 - 1 bytes panics.
+ *
+ * @param data The bytes to encode; they are read, not changed.
+ * @returns The unpadded base64url text, `ceil(4n / 3)` characters for `n`
+ *   bytes.
  */
 export const base64urlEncode = (data: u8[]): string => {
   // Refused before `toI32`, which saturates a longer length under
@@ -130,6 +139,10 @@ export const base64urlEncode = (data: u8[]): string => {
  * Each group of four characters becomes one 24-bit word, six bits a
  * character, which splits into three bytes; a short final group of two or
  * three characters fills the top of the word and gives one or two.
+ *
+ * @param text The unpadded base64url text, usually from a peer.
+ * @returns A fresh array of the decoded bytes, or `null` when `text` is not the
+ *   canonical spelling of any bytes.
  */
 export const base64urlDecode = (text: string): u8[] | null => {
   // A text past 2^31 - 1 bytes is refused before `toI32`, which would
@@ -238,6 +251,10 @@ const base64StdPadSextetOf = (c: i32): i32 => {
  * `data` in padded standard base64, as one line: PEM's body, and SCRAM's
  * nonces, salts and proofs (RFC 5802 §5.1). One `=` closes a final group of
  * two bytes, two a group of one. An array longer than 2^31 - 1 bytes panics.
+ *
+ * @param data The bytes to encode; they are read, not changed.
+ * @returns The padded standard base64 text, `4 × ceil(n / 3)` characters for
+ *   `n` bytes, with no line breaks.
  */
 export const base64StdPadEncode = (data: u8[]): string => {
   if (data.length > 2147483647) {
@@ -272,6 +289,11 @@ export const base64StdPadEncode = (data: u8[]): string => {
  * The empty text is the spelling of no bytes (RFC 4648 §10). Where the padding
  * is depends on the length alone; the characters themselves are read by masks
  * and judged once, after the last.
+ *
+ * @param text The padded standard base64 text, with no line breaks or
+ *   whitespace.
+ * @returns A fresh array of the decoded bytes, or `null` when `text` is not
+ *   their canonical padded spelling.
  */
 export const base64StdPadDecode = (text: string): u8[] | null => {
   if (text.length > 2147483647) {
