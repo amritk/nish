@@ -1,0 +1,39 @@
+PASS  write copies the body into the output
+PASS  sendBody sends the head and the body in one call, leaving nothing queued
+PASS  both exchanges complete
+PASS  and the client reads the same bytes
+PASS  under a small send buffer sendBody answers short
+PASS  having sent more than the output could hold
+PASS  write answers no more than the output holds
+PASS  a sendBody behind the held write copies as write does: no room yet
+PASS  as write's own second call answers
+PASS  both 4 MiB exchanges complete
+PASS  and the client reads the same bytes
+PASS  a chunked sendBody copies as write does
+PASS  with the same bytes on the wire
+PASS  a HEAD's sendBody takes everything and sends nothing
+PASS  with the same bytes on the wire
+PASS  the first response is queued when the second's body is handed over
+PASS  sendBody sends it, the second head and the body together
+PASS  both pipelined exchanges complete
+PASS  and the client reads the same bytes, in order
+PASS  after respondEncoded, mode 0 answers H1_CLOSED
+PASS  after respondEncoded, mode 1 answers H1_CLOSED
+PASS  a body past the length is H1_INVALID, as write's
+PASS  and write's
+PASS  an empty body takes nothing
+PASS  and leaves the head queued
+PASS  the length in two calls: the first
+PASS  the second
+PASS  that response completes
+PASS  the socket is full
+PASS  a sendBody into it takes the body all the same
+PASS  by copying it behind the head, nothing held
+PASS  the first byte is sent
+PASS  the second, to a reset peer, is H1_CLOSED
+PASS  and the connection is aborted and done
+PASS  a sendBody after it is H1_CLOSED
+PASS  a connection with no socket has fd -1
+PASS  its sendBody copies as write does
+PASS  the same bytes queued
+http1 sendBody: 38 passed, 0 failed, 0 skipped

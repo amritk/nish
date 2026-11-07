@@ -51,7 +51,9 @@
  * connection answers `H1_NEED_MORE` until the socket has drained half the
  * output, then `H1_WRITE`. Until then it reads nothing, so the window the
  * program is writing from stays valid: back-pressure on the way out. Nothing
- * buffers a whole body.
+ * buffers a whole body. On an `Http1Server` slot `sendBody` sends a body with
+ * a length from the program's own array, the queued output with it, and
+ * copies only what the socket did not take, under the same rules.
  *
  * **What the server decides.** The framing field (`Content-Length` or
  * `Transfer-Encoding: chunked`) and the `Connection` field are the server's;
@@ -127,7 +129,7 @@ import {
   HttpCompressor,
   httpAcceptEncoding,
 } from "nish/net/http-compress"
-import { netClose, netMss, netRead, netWrite, tcpAccept } from "nish:net"
+import { netClose, netMss, netRead, netWrite, netWrite2, tcpAccept } from "nish:net"
 import {
   HTTP1_BODY,
   HTTP1_CHUNKED,
@@ -615,6 +617,14 @@ export class Http1Connection {
   mss: i32 = 0
   /** The MSS `Http1Server.accept` read from this connection's socket (`netMss`), or 0 when it reports none. */
   socketMss: i32 = 0
+  /**
+   * The plain TCP socket the carrier sends `output` on, which `sendBody`
+   * writes to directly: `Http1Server.accept` sets it, and `restart` and
+   * `abort` put it back to -1. -1 for a connection with no such socket (a
+   * sans-IO carrier, `Http1TlsServer`'s TLS records), where `sendBody` copies
+   * as `write` does.
+   */
+  fd: i32 = -1
   config: Http1Config
   /**
    * The frame decoder: made when the slot first switches to WebSocket, so a
@@ -713,6 +723,7 @@ export class Http1Connection {
     this.headSince = 0
     this.mss = 0
     this.socketMss = 0
+    this.fd = -1
     this.release()
     this.park()
   }
@@ -816,6 +827,7 @@ export class Http1Connection {
     this.outputEnd = 0
     this.pongPending = false
     this.writeHeld = false
+    this.fd = -1
     this.release()
   }
 
@@ -1250,6 +1262,62 @@ export class Http1Connection {
       this.writeHeld = true
     }
     return take
+  }
+
+  /**
+   * `write` of `buf[off .. off + len)`, sent from `buf` itself where it can
+   * be: under a `Content-Length` response on a connection whose carrier
+   * named its socket (`fd`, set by `Http1Server.accept`) and with no write
+   * held back, the queued output and the body leave in one `netWrite2`, and
+   * only what the socket did not take is copied into the output, the way
+   * `write` copies it (what does not fit is answered short, and `H1_WRITE`
+   * says when to send the rest). Once it returns the connection holds no
+   * reference to `buf`, so the caller may reuse or give back its bytes at
+   * once. A chunked or empty response, a write held back (`H1_AGAIN` or a
+   * short answer not yet followed by `H1_WRITE`), and a connection with no
+   * socket (`Http1TlsServer`, a sans-IO carrier) copy all of it: it is
+   * `write`, with the same bytes on the wire. Answers what `write` answers,
+   * `H1_INVALID` for more than the response still owes; `H1_CLOSED` also
+   * when the socket failed during the send, which aborts the connection. A
+   * window outside `buf` panics.
+   */
+  sendBody(buf: u8[], off: i32, len: i32): i32 {
+    http1ServerCheckWindow("Http1Connection.sendBody", buf, off, len)
+    if (
+      this.fd < 0 ||
+      this.writeHeld ||
+      this.response !== H1_R_BODY ||
+      this.state !== H1_S_HTTP ||
+      this.responseEmpty ||
+      this.responseFraming < 0 ||
+      len === 0 ||
+      len > this.responseLeft
+    ) {
+      return this.write(buf, off, len)
+    }
+    const pending: i32 = this.outputEnd - this.outputStart
+    const n: i32 = netWrite2(this.fd, this.output, this.outputStart, pending, buf, off, len)
+    if (n < 0 && n !== H1_AGAIN) {
+      this.abort()
+      return H1_CLOSED
+    }
+    let sent: i32 = 0
+    if (n > 0) {
+      this.lastActive = monotonicNanos()
+      this.consume(n)
+      sent = n > pending ? n - pending : 0
+      this.responseLeft = this.responseLeft - sent
+    }
+    if (sent < len) {
+      const copied: i32 = this.write(buf, off + sent, len - sent)
+      if (copied > 0) {
+        sent = sent + copied
+      } else if (sent === 0) {
+        return copied
+      }
+    }
+    this.release()
+    return sent
   }
 
   /**
@@ -1777,6 +1845,7 @@ export class Http1Server {
     this.fds[k] = fd
     this.armed[k] = H1_WANT_READ
     conn.restart()
+    conn.fd = fd
     // Once a connection, not a request, so a keep-alive request costs no
     // syscall: a path whose MSS moves after the handshake is not followed.
     const mss: i32 = netMss(fd)
