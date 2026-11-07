@@ -157,7 +157,11 @@
  * routing each row by its ordinal (checked first: a server's ordinal is
  * refused before it routes anything), and `next(run)` answers
  * `PG_BATCH_ROW`, then `PG_BATCH_DONE`, `PG_BATCH_MISSING` or
- * `PG_BATCH_FAILED`, for each request. It reads no clock, and the batcher
+ * `PG_BATCH_FAILED`, for each request. The statement orders its rows by
+ * ordinal, so a key's last events come as soon as a later key's row does;
+ * with `sorted` false it does not (no Sort node, when `orderBy` is ""), rows
+ * are answered in whatever order they come, and every last event waits for
+ * the execution's end. It reads no clock, and the batcher
  * itself allocates only in its constructor (the connection's output buffer a
  * take writes into may still grow, up to its `maxOutput`); when to take is
  * the program's.
@@ -3349,6 +3353,14 @@ export class PgBatchConfig {
   runs: i32 = 16
   /** Whether every row of a batch comes in binary format, read with the binary decoders and its ordinal by `binaryInt`; false for text. */
   binary: boolean = false
+  /**
+   * Whether the statement orders its rows by ordinal, so each key's last
+   * event comes as soon as a later key's row does. False drops `q.ord` from
+   * the `order by` (and the Sort node it costs, when `orderBy` is ""): rows
+   * route in whatever order they come, and every request's last event waits
+   * for the execution's end.
+   */
+  sorted: boolean = true
 }
 
 /** One execution's requests, grouped by key, and how far its rows have been routed. */
@@ -3356,6 +3368,8 @@ class PgBatchRun {
   /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch. */
   tags: i32[]
   first: i32[]
+  /** Under `sorted` false, whether key `k` has had a row; grown by `take` with `tags`, and empty when sorted. */
+  had: boolean[]
   keys: i32 = 0
   /** The key rows are being read for, whether it has had one, and the next of its requests to answer. */
   cur: i32 = 0
@@ -3373,6 +3387,7 @@ class PgBatchRun {
   constructor() {
     this.tags = []
     this.first = []
+    this.had = []
   }
 
   /** Opens the run for `keys` keys, none of whose rows have been read. */
@@ -3385,6 +3400,9 @@ class PgBatchRun {
     this.target = -1
     this.ended = false
     this.failed = false
+    for (let k: i32 = 0; k < keys && k < toI32(this.had.length); k++) {
+      this.had[k] = false
+    }
   }
 }
 
@@ -3401,7 +3419,11 @@ class PgBatchRun {
  * connection to `fail(run)`; after each, `next(run)` answers events until
  * `PG_BATCH_NONE`, `tag` naming the request each is about. Every row goes to
  * every request for its key, and every request gets one last event:
- * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`. A batch with
+ * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`. Sorted (the
+ * default), rows come in key order and a key's last events come as soon as
+ * a later key's row does; with `sorted` false, rows come in any order, each
+ * answered at once, and every last event waits for `end` or `fail`, then
+ * comes in key order. A batch with
  * `binary` set comes in binary format: its rows are read with the binary
  * decoders, `binaryInt` for each ordinal, and the caller's `binary.failed`
  * is left as it was.
@@ -3445,7 +3467,7 @@ export class PgBatcher {
   private readonly runs: PgBatchRun[]
   /** The request the last `next(run)` answered about; -1 for none. */
   tag: i32 = -1
-  /** The number of runs failed by a bad ordinal (missing, NULL, not an integer, or naming no key still open), stopping at 2^31 - 1: each counts its first refused row, and the rows after it, dropped with the failed run, are not counted. */
+  /** The number of runs failed by a bad ordinal (missing, NULL, not an integer, or naming no key still open; with `sorted` false, any key of the run is open), stopping at 2^31 - 1: each counts its first refused row, and the rows after it, dropped with the failed run, are not counted. */
   refused: i32 = 0
   /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored, stopping at 2^31 - 1. */
   stray: i32 = 0
@@ -3454,6 +3476,7 @@ export class PgBatcher {
   private readonly keyType: i32
   private readonly maxBytes: i32
   private readonly binary: boolean
+  private readonly sorted: boolean
   private storeEnd: i32 = 0
   private head: i32 = 0
   private count: i32 = 0
@@ -3492,10 +3515,15 @@ export class PgBatcher {
     this.maxRequests = maxRequests
     this.maxBytes = config.maxBytes
     this.binary = config.binary
+    this.sorted = config.sorted
     this.name = config.name
     const type: string = keyType === PG_BATCH_INT ? "int8" : "text"
     const order: string = config.orderBy.length > 0 ? `, ${config.orderBy}` : ""
-    this.sql = `select t.*, q.ord from unnest($1::${type}[]) with ordinality as q(key, ord) cross join lateral (${config.select}) as t order by q.ord${order}`
+    let tail: string = ` order by q.ord${order}`
+    if (!config.sorted) {
+      tail = config.orderBy.length > 0 ? ` order by ${config.orderBy}` : ""
+    }
+    this.sql = `select t.*, q.ord from unnest($1::${type}[]) with ordinality as q(key, ord) cross join lateral (${config.select}) as t${tail}`
     const queueSize: i32 = config.queueSize
     this.qTags = new Array<i32>(queueSize)
     this.qHashes = new Array<i32>(queueSize)
@@ -3765,6 +3793,9 @@ export class PgBatcher {
       // Grown together: `first` holds one more than `tags`, which bounds the keys too.
       run.tags = new Array<i32>(toI32(this.takenKeys.length))
       run.first = new Array<i32>(toI32(this.takenKeys.length) + 1)
+      if (!this.sorted) {
+        run.had = new Array<boolean>(toI32(this.takenKeys.length))
+      }
     }
     run.first[0] = 0
     for (let k: i32 = 0; k < keys && k < toI32(this.keyCounts.length); k++) {
@@ -3854,11 +3885,12 @@ export class PgBatcher {
   /**
    * Routes `conn`'s current row, of run `r`'s execution, by the ordinal in
    * its last column: `next(r)` then answers `PG_BATCH_ROW` for each request
-   * of its key, after the last events of the keys before it. False, and the
+   * of its key, after the last events of the keys before it (with `sorted`
+   * false, at once: no last event comes before `end`). False, and the
    * row dropped, when the run has failed; and when the ordinal is NULL, not
-   * an integer, or names no key still open (one out of range, or one before
-   * the key the last row was for): that counts in `refused` and fails the
-   * run; and on a spent handle, which counts in `stray`. Panics on a handle
+   * an integer, or names no key still open (one out of range, or, sorted,
+   * one before the key the last row was for): that counts in `refused` and
+   * fails the run; and on a spent handle, which counts in `stray`. Panics on a handle
    * `take` cannot give, or when the run's events are not all answered.
    */
   row(r: i32, conn: PgConnection): boolean {
@@ -3887,8 +3919,9 @@ export class PgBatcher {
       bad = conn.text.failed
       conn.text.failed = failed
     }
-    // Ordinals count from 1 and come in order: a row may name the current key again, never one before it.
-    if (bad || ordinal < toI64(run.cur) + 1 || ordinal > toI64(run.keys)) {
+    // Ordinals count from 1 and, sorted, come in order: a row may name the current key again, never one before it.
+    const least: i64 = this.sorted ? toI64(run.cur) + 1 : toI64(1)
+    if (bad || ordinal < least || ordinal > toI64(run.keys)) {
       if (this.refused < 2147483647) {
         this.refused += 1
       }
@@ -3896,6 +3929,9 @@ export class PgBatcher {
       return false
     }
     run.target = toI32(ordinal) - 1
+    if (!this.sorted && run.target < toI32(run.had.length)) {
+      run.had[run.target] = true
+    }
     return true
   }
 
@@ -3941,6 +3977,9 @@ export class PgBatcher {
       return PG_BATCH_NONE
     }
     const run: PgBatchRun = found
+    if (!this.sorted) {
+      return this.nextUnsorted(run)
+    }
     // The keys before the row's, or every key once the execution is over, have had all their rows.
     let limit: i32 = run.cur
     if (run.target >= 0) {
@@ -3970,6 +4009,36 @@ export class PgBatcher {
     if (run.ended && run.cur >= run.keys) {
       run.open = false
     }
+    return PG_BATCH_NONE
+  }
+
+  // `next` with `sorted` false: the row's `PG_BATCH_ROW` events at once, and
+  // every last event only once the execution is over, `cur` walking the keys.
+  private nextUnsorted(run: PgBatchRun): i32 {
+    if (run.target >= 0 && run.target < toI32(run.tags.length)) {
+      const at: i32 = run.first[run.target] + run.at
+      if (at < run.first[run.target + 1]) {
+        run.at += 1
+        this.tag = run.tags[at]
+        return PG_BATCH_ROW
+      }
+      run.target = -1
+      run.at = 0
+    }
+    if (!run.ended) {
+      return PG_BATCH_NONE
+    }
+    while (run.cur < run.keys && run.cur < toI32(run.had.length)) {
+      if (this.emit(run)) {
+        if (run.failed) {
+          return PG_BATCH_FAILED
+        }
+        return run.had[run.cur] ? PG_BATCH_DONE : PG_BATCH_MISSING
+      }
+      run.cur += 1
+      run.at = 0
+    }
+    run.open = false
     return PG_BATCH_NONE
   }
 }

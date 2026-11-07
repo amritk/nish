@@ -71,6 +71,8 @@ import PAR_REDUCE from "./program" -> const PAR_REDUCE
 import PAR_SPAWN from "./program" -> const PAR_SPAWN
 import PAR_TASK from "./program" -> const PAR_TASK
 import ParallelCall from "./program" -> struct ParallelCall
+import JSON_NONE from "./program" -> const JSON_NONE
+import MAP_NONE from "./program" -> const MAP_NONE
 import ROLE_CONSTRUCTOR from "./program" -> const ROLE_CONSTRUCTOR
 import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
@@ -140,6 +142,10 @@ struct CaptureSlot (class) size=16 align=8 exported
   field index: i32 index=1 offset=8
   constructor -> @CaptureSlot.constructor
   method type -> @CaptureSlot.type
+struct CaptureTarget (class) size=16 align=8 exported
+  field sig: FunctionSig index=0 offset=0
+  field index: i32 index=1 offset=8
+  constructor -> @CaptureTarget.constructor
 struct ScopeFinding (class) size=24 align=8 exported
   field node: Node index=0 offset=0
   field message: string index=1 offset=8
@@ -827,6 +833,80 @@ function capturesOf(sig: FunctionSig): CaptureSlot[] -> @capturesOf [exported]
   stackSites=0 stackLocals=0
   local +0:9 out: CaptureSlot[] (const)
   callee +1:3 collectCaptures -> @collectCaptures
+function CaptureTarget.constructor(this: CaptureTarget, sig: FunctionSig, index: i32): void -> @CaptureTarget.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: index sig
+  pointer this: size=16 writesThrough=true captured=false
+  pointer sig: size=176 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function carriesCapture(sig: FunctionSig, arrow: FunctionSig, k: i32): boolean -> @carriesCapture
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via capturesOf
+  calls: capturesOf
+  pointer sig: size=176 writesThrough=true captured=true passedTo=capturesOf#0
+  pointer arrow: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 slot: CaptureSlot (const)
+  callee +0:22 capturesOf -> @capturesOf
+function forwardsOnly(sig: FunctionSig, arrow: FunctionSig, k: i32, seen: FunctionSig[]): boolean -> @forwardsOnly
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: k sig
+  calls: FunctionSig.body FunctionSig.foreign FunctionSig.isAsync bodyForwardsOnly nish_array_grow
+  pointer sig: size=176 writesThrough=true captured=true passedTo=FunctionSig.foreign#0 FunctionSig.isAsync#0 FunctionSig.body#0
+  pointer arrow: size=176 writesThrough=false captured=false passedTo=bodyForwardsOnly#2
+  pointer seen: size=0 writesThrough=true captured=false passedTo=bodyForwardsOnly#4
+  stackSites=0 stackLocals=0
+  local -21:14 done: FunctionSig (const)
+  local -16:9 instance: Instantiation | null (const)
+  callee -12:5 FunctionSig.foreign -> @FunctionSig.foreign
+  callee -11:5 FunctionSig.isAsync -> @FunctionSig.isAsync
+  local -4:9 body: Node | null (const)
+  callee -4:16 FunctionSig.body -> @FunctionSig.body
+  callee +1:10 bodyForwardsOnly -> @bodyForwardsOnly
+function bodyForwardsOnly(callees: FunctionSig | null[], node: Node, arrow: FunctionSig, k: i32, seen: FunctionSig[]): boolean -> @bodyForwardsOnly
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via carriesCapture
+  escaping: k
+  calls: bodyForwardsOnly carriesCapture forwardsOnly nish_panic_index
+  pointer callees: size=0 writesThrough=false captured=false passedTo=bodyForwardsOnly#0
+  pointer node: size=40 writesThrough=false captured=false
+  pointer arrow: size=176 writesThrough=false captured=false passedTo=carriesCapture#1 forwardsOnly#1 bodyForwardsOnly#2
+  pointer seen: size=0 writesThrough=true captured=false passedTo=forwardsOnly#3 bodyForwardsOnly#4
+  stackSites=0 stackLocals=0
+  local +0:9 next: FunctionSig | null (const)
+  callee +1:24 carriesCapture -> @carriesCapture
+  callee +1:59 forwardsOnly -> @forwardsOnly
+  local +4:14 child: Node (const)
+  callee +5:10 bodyForwardsOnly -> @bodyForwardsOnly
+function captureTarget(callee: FunctionSig, arrow: FunctionSig, k: i32): CaptureTarget | null -> @captureTarget [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via carriesCapture
+  escaping: k
+  calls: CaptureTarget.constructor FunctionSig.isAsync FunctionSig.writtenArity carriesCapture forwardsOnly nish_alloc_struct nish_panic_overflow
+  pointer callee: size=176 writesThrough=true captured=true passedTo=carriesCapture#0 forwardsOnly#0
+  pointer arrow: size=176 writesThrough=true captured=true passedTo=FunctionSig.isAsync#0 carriesCapture#1 forwardsOnly#1 CaptureTarget.constructor#1 FunctionSig.writtenArity#0
+  stackSites=1 stackLocals=1
+  callee +0:50 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +3:8 carriesCapture -> @carriesCapture
+  local +6:9 seen: FunctionSig[] (const)
+  callee +7:10 forwardsOnly -> @forwardsOnly
+  callee +7:49 new CaptureTarget -> @CaptureTarget.constructor
+  callee +7:74 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+function arrowCallee(program: CheckedProgram, parents: ParentTable, arrow: Node): FunctionSig | null -> @arrowCallee [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: arrow
+  calls: ParentTable.parentOf nish_panic_index
+  pointer program: size=688 writesThrough=false captured=false
+  pointer parents: size=8 writesThrough=false captured=false passedTo=ParentTable.parentOf#0 ParentTable.parentOf#0 ParentTable.parentOf#0
+  pointer arrow: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local +0:7 at: Node (let)
+  local +1:7 parent: Node | null (let)
+  callee +1:16 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +4:14 ParentTable.parentOf -> @ParentTable.parentOf
+  local +9:9 call: Node | null (const)
+  callee +9:16 ParentTable.parentOf -> @ParentTable.parentOf
 function letCaptureMessage(name: string): string -> @letCaptureMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

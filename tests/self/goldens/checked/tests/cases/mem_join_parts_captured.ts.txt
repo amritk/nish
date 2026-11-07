@@ -9,18 +9,19 @@ function Log.constructor(this: Log): void -> @Log.constructor [constructor]
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function noteLast(log: Log, n: i32): string -> @noteLast
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: log
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via atLast$fn.15.noteLast$arrow0
   calls: atLast$fn.15.noteLast$arrow0 nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer log: size=8 writesThrough=true captured=true
-  stackSites=0 stackLocals=0
+  pointer log: size=8 writesThrough=true captured=false passedTo=noteLast$arrow0#1
+  stackSites=1 stackLocals=1
   local +0:9 parts: string[] (const)
   local +1:12 i: i32 (let)
   callee +4:3 atLast<(i) => ...> -> @atLast$fn.15.noteLast$arrow0
 function run(log: Log, calls: i32): string -> @run
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via noteLast
   calls: nish_panic_overflow nish_str_from_i32 noteLast
-  pointer log: size=8 writesThrough=true captured=true passedTo=noteLast#0
+  pointer log: size=8 writesThrough=true captured=false passedTo=noteLast#0
   stackSites=0 stackLocals=0
   local +0:7 total: i32 (let)
   local +1:12 i: i32 (let)
@@ -32,10 +33,10 @@ function churn(): i32 -> @churn
   local +0:7 t: i32 (let)
   local +1:12 i: i32 (let)
 function main(): void -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Log.constructor churn nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_from_i32 run
-  stackSites=0 stackLocals=0
+  calls: Log.constructor churn nish_arena_mark nish_arena_release nish_print nish_str_from_i32 run
+  stackSites=1 stackLocals=1
   local +0:9 log: Log (const)
   callee +0:15 new Log -> @Log.constructor
   local +1:9 total: string (const)

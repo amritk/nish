@@ -137,6 +137,9 @@ import {
 } from "./nodes"
 import { Options } from "./options"
 import {
+  CaptureTarget,
+  arrowCallee,
+  captureTarget,
   isAtomicMethod,
   isChannelReader,
   isChannelSend,
@@ -537,6 +540,13 @@ export class ArgEdge {
    */
   heldBy: string
   index: i32
+  /**
+   * For a capture read as an argument to its arrow (`noteCaptured`), the
+   * instance this function called to hand it over, or "": the write the edge
+   * carries is that call's, so it is the callee a shared write is named by
+   * (`writesAnArgument`).
+   */
+  via: string
 
   constructor(callee: string, index: i32, param: string, owner: PrivateArray | null, path: MemPath) {
     this.callee = callee
@@ -546,6 +556,7 @@ export class ArgEdge {
     this.dirt = null
     this.heldBy = ""
     this.index = index
+    this.via = ""
   }
 
   /** Whether the argument is memory only the caller reaches: a private array no callee keeps. */
@@ -1975,33 +1986,60 @@ class FactCollector {
 
   /**
    * What an arrow argument captures from this function (WP29) is handed, at
-   * the call, to a parameter of the instantiation that no fact describes, and
-   * the arrow may store it or write through it. So each capture is an escape
-   * of what it names here: a parameter loses `readonly` and `nocapture`, and
-   * an object of this call's own is dirt below it, as an escape is anywhere.
+   * the call, to a parameter of the instance it is given to. That instance
+   * and every one it forwards the value through only pass it on, so the one
+   * function that can do anything with it is the arrow, at its own parameter
+   * for the capture (`captureTarget`). Each capture is therefore read as an
+   * argument to the arrow at that index, by the same two routes `f(x)` takes:
+   * a parameter inherits the arrow parameter's facts through the fixpoint
+   * (`passedToCallees`), and its writes, pollution and an object of this
+   * call's own compose with the arrow's facts (`ArgEdge`). With no target (a
+   * parallel form, a task or an async instance on the way) the capture is an
+   * escape of what it names: a parameter loses `readonly` and `nocapture`,
+   * and an object of this call's own is dirt below it.
    */
-  noteCaptures(node: Node): void {
-    if (node.kind === N_IDENT) {
-      const local: Local | null = this.unit.program.nodeLocals[node.id]
-      const source: Local | null = local === null || local.captureOf === null ? null : sourceLocal(local)
-      if (source !== null) {
-        this.noteCaptured(source)
-      }
-    }
-    for (const child of node.children) {
-      this.noteCaptures(child)
+  noteCaptures(arrow: Node, lifted: FunctionSig): void {
+    const callee = arrowCallee(this.unit.program, this.unit.parents, arrow)
+    let k = 0
+    while (k < lifted.captures.length) {
+      const target: CaptureTarget | null = callee === null ? null : captureTarget(callee, lifted, k)
+      this.noteCaptured(lifted.captures[k], target, callee === null ? "" : callee.name)
+      k = k + 1
     }
   }
 
-  noteCaptured(source: Local): void {
+  noteCaptured(source: Local, target: CaptureTarget | null, via: string): void {
     if (source.storage === STORAGE_PARAM) {
-      this.escapeParam(source.name)
+      const pointer = this.facts.pointerParam(source.name)
+      if (target === null || pointer === null) {
+        // A string is an escape handed to any user function, as `noteUse` has it.
+        this.escapeParam(source.name)
+        return
+      }
+      pointer.passedToCallees.push(target.sig.name)
+      pointer.passedToIndices.push(target.index)
+      const edge = new ArgEdge(
+        target.sig.name,
+        target.index,
+        pointer.name,
+        null,
+        new MemPath(ROOT_PARAM, pointer.name, "")
+      )
+      edge.via = via
+      this.facts.argEdges.push(edge)
       return
     }
     const path = this.localPathAt(source, 0)
     if (path.kind === ROOT_OWN) {
-      this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
+      if (target === null) {
+        this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
+      } else {
+        const edge = this.ownEdge(new ArgEdge(target.sig.name, target.index, "", null, path))
+        edge.via = via
+        this.facts.argEdges.push(edge)
+      }
     } else if (path.kind === ROOT_PARAM) {
+      // An alias of a parameter, or of memory one reaches, keeps the escape.
       this.escapeParam(path.name)
     }
   }
@@ -2930,7 +2968,7 @@ class FactCollector {
     if (node.kind === N_ARROW) {
       const lifted = program.nodeCallees[node.id]
       if (lifted !== null && lifted.capturesForCall) {
-        this.noteCaptures(node)
+        this.noteCaptures(node, lifted)
       }
       return
     }
@@ -5637,10 +5675,13 @@ const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): 
     }
   }
   for (const edge of f.argEdges) {
-    if (edge.callee === callee && pastBelow(facts, f, edge) !== PAST_NONE) {
+    // A capture's edge is to the arrow, which this function never calls: the
+    // instance it called to hand the capture over is the one to name.
+    const named = edge.callee === callee || edge.via === callee
+    if (named && pastBelow(facts, f, edge) !== PAST_NONE) {
       return true
     }
-    if (edge.callee !== callee || !edgeWrites(facts, edge)) {
+    if (!named || !edgeWrites(facts, edge)) {
       continue
     }
     // An object of the caller's own is a shared write only where it may hold
@@ -5649,7 +5690,7 @@ const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): 
     if (edge.path.kind !== ROOT_OWN) {
       return true
     }
-    const g = facts.get(callee)
+    const g = facts.get(edge.callee)
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     if (reachesForeign(f, edge.path.name, edge.path.steps, target === null || target.writesDeep)) {
       return true

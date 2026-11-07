@@ -105,6 +105,7 @@ import isSpawnTaskCall from "./emit-parallel" -> function @isSpawnTaskCall
 import keepElement from "./emit-parallel" -> function @keepElement
 import openScope from "./emit-parallel" -> function @openScope
 import CaptureSlot from "./parallel" -> struct CaptureSlot
+import captureTarget from "./parallel" -> function @captureTarget
 import capturesOf from "./parallel" -> function @capturesOf
 import isAtomicMethod from "./parallel" -> function @isAtomicMethod
 import isChannelSend from "./parallel" -> function @isChannelSend
@@ -336,6 +337,7 @@ struct Emitter (class) size=352 align=8 exported
   method llvm -> @Emitter.llvm
   method captureOperands -> @Emitter.captureOperands
   method captureParamTypes -> @Emitter.captureParamTypes
+  method captureParamAttributes -> @Emitter.captureParamAttributes
   method captureValue -> @Emitter.captureValue
   method paramObject -> @Emitter.paramObject
   method llvmAbi -> @Emitter.llvmAbi
@@ -448,9 +450,9 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=160
   sharedWrite: +0:5
   escaping: sig
-  calls: DebugInfo.beginFunction Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue captureParamName emitAtomicBody emitChannelSendBody emitConstructorPrologue emitLockBody emitParamRangeChecks emitRegionBody emitShmWindowBody emitWipeBody functionAttributes isAtomicMethod isChannelSend isLockMethod isRegionIntrinsic isShmWindowIntrinsic nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat paramAttributes paramValue privateAbi regionRoleIn returnAttributes secretRoleOf shmWindowRole suspends transformAsync unpackReturnedResult
-  pointer this: size=352 writesThrough=true captured=true passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0 Emitter.isLibraryCopy#0 emitParamRangeChecks#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 emitWipeBody#0 emitRegionBody#0 emitShmWindowBody#0 emitLockBody#0 emitChannelSendBody#0 emitAtomicBody#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 Emitter.emitScopeExit#0 transformAsync#0
-  pointer sig: size=176 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitParamRangeChecks#1 emitConstructorPrologue#1 secretRoleOf#0 emitWipeBody#1 isRegionIntrinsic#1 emitRegionBody#1 regionRoleIn#1 isShmWindowIntrinsic#1 emitShmWindowBody#1 shmWindowRole#1 isLockMethod#0 emitLockBody#1 isChannelSend#0 emitChannelSendBody#1 isAtomicMethod#0 emitAtomicBody#1 suspends#0 transformAsync#1
+  calls: DebugInfo.beginFunction Emitter.captureParamAttributes Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue captureParamName emitAtomicBody emitChannelSendBody emitConstructorPrologue emitLockBody emitParamRangeChecks emitRegionBody emitShmWindowBody emitWipeBody functionAttributes isAtomicMethod isChannelSend isLockMethod isRegionIntrinsic isShmWindowIntrinsic nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat paramAttributes paramValue privateAbi regionRoleIn returnAttributes secretRoleOf shmWindowRole suspends transformAsync unpackReturnedResult
+  pointer this: size=352 writesThrough=true captured=true passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamAttributes#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0 Emitter.isLibraryCopy#0 emitParamRangeChecks#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 emitWipeBody#0 emitRegionBody#0 emitShmWindowBody#0 emitLockBody#0 emitChannelSendBody#0 emitAtomicBody#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 Emitter.emitScopeExit#0 transformAsync#0
+  pointer sig: size=176 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.captureParamAttributes#1 Emitter.captureParamTypes#1 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitParamRangeChecks#1 emitConstructorPrologue#1 secretRoleOf#0 emitWipeBody#1 isRegionIntrinsic#1 emitRegionBody#1 regionRoleIn#1 isShmWindowIntrinsic#1 emitShmWindowBody#1 shmWindowRole#1 isLockMethod#0 emitLockBody#1 isChannelSend#0 emitChannelSendBody#1 isAtomicMethod#0 emitAtomicBody#1 suspends#0 transformAsync#1
   stackSites=0 stackLocals=0
   local -1:11 facts: FunctionFacts (const)
   callee -1:19 Emitter.factsFor -> @Emitter.factsFor
@@ -468,54 +470,56 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   callee +19:17 paramAttributes -> @paramAttributes
   callee +21:19 new IRParam -> @IRParam.constructor
   callee +21:37 Emitter.llvmAbi -> @Emitter.llvmAbi
+  local +26:11 capAttrs: string[][] (const)
+  callee +26:22 Emitter.captureParamAttributes -> @Emitter.captureParamAttributes
   local +27:9 captured: i32 (let)
   local +28:16 type: string (const)
   callee +28:24 Emitter.captureParamTypes -> @Emitter.captureParamTypes
   local +29:13 attrs: string[] (const)
-  callee +33:19 new IRParam -> @IRParam.constructor
-  callee +33:31 captureParamName -> @captureParamName
-  callee +36:15 new IRFunction -> @IRFunction.constructor
-  callee +36:48 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +41:9 Emitter.isLibraryCopy -> @Emitter.isLibraryCopy
-  callee +48:16 privateAbi -> @privateAbi
-  callee +52:29 returnAttributes -> @returnAttributes
-  callee +59:27 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  callee +59:52 functionAttributes -> @functionAttributes
-  local +81:11 debug: DebugInfo | null (const)
-  callee +83:7 DebugInfo.beginFunction -> @DebugInfo.beginFunction
-  callee +87:5 emitParamRangeChecks -> @emitParamRangeChecks
-  callee +91:7 IRFunction.emit -> @IRFunction.emit
-  callee +91:46 Emitter.useRuntime -> @Emitter.useRuntime
-  local +100:13 name: string (const)
-  callee +101:11 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local +102:15 object: string (const)
-  callee +102:24 unpackReturnedResult -> @unpackReturnedResult
-  callee +105:11 paramValue -> @paramValue
-  callee +106:11 FunctionFacts.isStackParam -> @FunctionFacts.isStackParam
-  callee +116:7 emitConstructorPrologue -> @emitConstructorPrologue
-  local +118:11 body: Node (const)
-  callee +121:9 secretRoleOf -> @secretRoleOf
-  callee +122:7 emitWipeBody -> @emitWipeBody
-  callee +123:16 isRegionIntrinsic -> @isRegionIntrinsic
-  callee +124:7 emitRegionBody -> @emitRegionBody
-  callee +124:33 regionRoleIn -> @regionRoleIn
-  callee +125:16 isShmWindowIntrinsic -> @isShmWindowIntrinsic
-  callee +126:7 emitShmWindowBody -> @emitShmWindowBody
-  callee +126:36 shmWindowRole -> @shmWindowRole
-  callee +127:16 isLockMethod -> @isLockMethod
-  callee +128:7 emitLockBody -> @emitLockBody
-  callee +129:16 isChannelSend -> @isChannelSend
-  callee +130:7 emitChannelSendBody -> @emitChannelSendBody
-  callee +131:16 isAtomicMethod -> @isAtomicMethod
-  callee +132:7 emitAtomicBody -> @emitAtomicBody
-  callee +134:7 Emitter.emitBlock -> @Emitter.emitBlock
-  callee +136:7 Emitter.emitReturnValue -> @Emitter.emitReturnValue
-  callee +140:10 IRBlock.terminated -> @IRBlock.terminated
-  callee +140:10 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee +141:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee +142:7 IRFunction.emit -> @IRFunction.emit
-  callee +144:9 suspends -> @suspends
-  callee +145:7 transformAsync -> @transformAsync
+  callee +30:19 new IRParam -> @IRParam.constructor
+  callee +30:31 captureParamName -> @captureParamName
+  callee +33:15 new IRFunction -> @IRFunction.constructor
+  callee +33:48 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +38:9 Emitter.isLibraryCopy -> @Emitter.isLibraryCopy
+  callee +45:16 privateAbi -> @privateAbi
+  callee +49:29 returnAttributes -> @returnAttributes
+  callee +56:27 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  callee +56:52 functionAttributes -> @functionAttributes
+  local +78:11 debug: DebugInfo | null (const)
+  callee +80:7 DebugInfo.beginFunction -> @DebugInfo.beginFunction
+  callee +84:5 emitParamRangeChecks -> @emitParamRangeChecks
+  callee +88:7 IRFunction.emit -> @IRFunction.emit
+  callee +88:46 Emitter.useRuntime -> @Emitter.useRuntime
+  local +97:13 name: string (const)
+  callee +98:11 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local +99:15 object: string (const)
+  callee +99:24 unpackReturnedResult -> @unpackReturnedResult
+  callee +102:11 paramValue -> @paramValue
+  callee +103:11 FunctionFacts.isStackParam -> @FunctionFacts.isStackParam
+  callee +113:7 emitConstructorPrologue -> @emitConstructorPrologue
+  local +115:11 body: Node (const)
+  callee +118:9 secretRoleOf -> @secretRoleOf
+  callee +119:7 emitWipeBody -> @emitWipeBody
+  callee +120:16 isRegionIntrinsic -> @isRegionIntrinsic
+  callee +121:7 emitRegionBody -> @emitRegionBody
+  callee +121:33 regionRoleIn -> @regionRoleIn
+  callee +122:16 isShmWindowIntrinsic -> @isShmWindowIntrinsic
+  callee +123:7 emitShmWindowBody -> @emitShmWindowBody
+  callee +123:36 shmWindowRole -> @shmWindowRole
+  callee +124:16 isLockMethod -> @isLockMethod
+  callee +125:7 emitLockBody -> @emitLockBody
+  callee +126:16 isChannelSend -> @isChannelSend
+  callee +127:7 emitChannelSendBody -> @emitChannelSendBody
+  callee +128:16 isAtomicMethod -> @isAtomicMethod
+  callee +129:7 emitAtomicBody -> @emitAtomicBody
+  callee +131:7 Emitter.emitBlock -> @Emitter.emitBlock
+  callee +133:7 Emitter.emitReturnValue -> @Emitter.emitReturnValue
+  callee +137:10 IRBlock.terminated -> @IRBlock.terminated
+  callee +137:10 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee +138:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee +139:7 IRFunction.emit -> @IRFunction.emit
+  callee +141:9 suspends -> @suspends
+  callee +142:7 transformAsync -> @transformAsync
 function Emitter.isStackSite(this: Emitter, node: Node): boolean -> @Emitter.isStackSite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionFacts.isStackSite
@@ -732,10 +736,10 @@ function Emitter.foreignDeclarationFor(this: Emitter, sig: FunctionSig): string 
 function Emitter.declarationFor(this: Emitter, sig: FunctionSig): string -> @Emitter.declarationFor [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.factsFor
-  calls: Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.factsFor Emitter.llvmAbi FunctionSig.isCompileTime IRModule.attrGroupFor functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes returnAttributes
-  pointer this: size=352 writesThrough=false captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0
-  pointer sig: size=176 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1
-  stackSites=3 stackLocals=3
+  calls: Emitter.captureParamAttributes Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.factsFor Emitter.llvmAbi FunctionSig.isCompileTime IRModule.attrGroupFor functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat paramAttributes returnAttributes
+  pointer this: size=352 writesThrough=false captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamAttributes#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0
+  pointer sig: size=176 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.isCompileTime#0 Emitter.captureParamAttributes#1 Emitter.captureParamTypes#1
+  stackSites=4 stackLocals=4
   local +0:11 facts: FunctionFacts (const)
   callee +0:19 Emitter.factsFor -> @Emitter.factsFor
   callee +1:5 Emitter.declareSignatureTypes -> @Emitter.declareSignatureTypes
@@ -747,15 +751,20 @@ function Emitter.declarationFor(this: Emitter, sig: FunctionSig): string -> @Emi
   callee +10:32 Emitter.llvmAbi -> @Emitter.llvmAbi
   local +12:20 attr: string (const)
   callee +12:28 paramAttributes -> @paramAttributes
-  local +19:16 type: string (const)
-  callee +19:24 Emitter.captureParamTypes -> @Emitter.captureParamTypes
-  local +22:11 ret: string[] (const)
-  local +24:18 attr: string (const)
-  callee +24:26 returnAttributes -> @returnAttributes
-  callee +34:14 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local +35:11 group: string (const)
-  callee +35:34 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  callee +35:59 functionAttributes -> @functionAttributes
+  local +19:11 capAttrs: string[][] (const)
+  callee +19:22 Emitter.captureParamAttributes -> @Emitter.captureParamAttributes
+  local +20:9 captured: i32 (let)
+  local +21:16 type: string (const)
+  callee +21:24 Emitter.captureParamTypes -> @Emitter.captureParamTypes
+  local +22:13 parts: string[] (const)
+  local +24:20 attr: string (const)
+  local +31:11 ret: string[] (const)
+  local +33:18 attr: string (const)
+  callee +33:26 returnAttributes -> @returnAttributes
+  callee +43:14 Emitter.llvmAbi -> @Emitter.llvmAbi
+  local +44:11 group: string (const)
+  callee +44:34 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  callee +44:59 functionAttributes -> @functionAttributes
 function Emitter.useRuntime(this: Emitter, name: string): string -> @Emitter.useRuntime [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
@@ -1475,6 +1484,22 @@ function Emitter.captureParamTypes(this: Emitter, sig: FunctionSig, isPrivate: b
   callee +4:24 capturesOf -> @capturesOf
   callee +5:16 Emitter.llvmAbi -> @Emitter.llvmAbi
   callee +5:29 CaptureSlot.type -> @CaptureSlot.type
+function Emitter.captureParamAttributes(this: Emitter, sig: FunctionSig, isPrivate: boolean): string[][] -> @Emitter.captureParamAttributes [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via capturesOf
+  escaping: isPrivate
+  calls: FactsTable.get captureTarget capturesOf nish_array_grow nish_panic_index paramAttributes
+  pointer this: size=352 writesThrough=false captured=false
+  pointer sig: size=176 writesThrough=true captured=true passedTo=capturesOf#0 captureTarget#0
+  stackSites=0 stackLocals=0
+  local +0:11 out: string[][] (const)
+  local +4:16 slot: CaptureSlot (const)
+  callee +4:24 capturesOf -> @capturesOf
+  local +5:13 target: CaptureTarget | null (const)
+  callee +5:22 captureTarget -> @captureTarget
+  local +6:13 facts: FunctionFacts | null (const)
+  callee +6:68 FactsTable.get -> @FactsTable.get
+  callee +11:11 paramAttributes -> @paramAttributes
 function Emitter.captureValue(this: Emitter, slot: CaptureSlot): string -> @Emitter.captureValue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
