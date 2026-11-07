@@ -79,7 +79,7 @@ export class PanicSiteTable {
 }
 
 /** The kind a site table records for a call of runtime panic `callee`, or "" for none. */
-export const panicCallKind = (instr: string): string => {
+const panicCallKind = (instr: string): string => {
   if (!instr.startsWith("call void @nish_panic")) {
     return ""
   }

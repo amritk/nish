@@ -1330,9 +1330,14 @@ export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
       layout.module = index - 1
       layout.newId = unwrapParens(info.decl.children[2]).id
       if (record !== null) {
+        // Built as a local and assigned whole: a push through `layout.fields`
+        // reads as a write to shared memory, and the checker's witness for it
+        // would then depend on which entry program loaded this module.
+        const fields: StorageField[] = []
         for (const field of record.fields) {
-          layout.fields.push(new StorageField(field.name, field.offset, storageView(table, field.type), field.type === T_BOOL))
+          fields.push(new StorageField(field.name, field.offset, storageView(table, field.type), field.type === T_BOOL))
         }
+        layout.fields = fields
       }
       out.push(layout)
     }
@@ -1408,7 +1413,7 @@ export const layoutTypes = (layouts: StorageLayout[]): string[] => {
  * from the exported `<symbol>.data` global, and `views()`, rebuilt only when
  * a grow replaced `memory.buffer`.
  */
-export const layoutLoader = (layouts: StorageLayout[], memory: string): string[] => {
+const layoutLoader = (layouts: StorageLayout[], memory: string): string[] => {
   const lines: string[] = []
   lines.push("  const layout = {")
   for (const s of layouts) {
