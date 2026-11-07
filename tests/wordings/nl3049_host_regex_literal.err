@@ -1,0 +1,1 @@
+A regular expression literal in a host module: its exports are read without TypeScript's parser, so move that code into a module the host file imports

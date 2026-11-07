@@ -3284,6 +3284,15 @@ export class Parser {
       literal.end = this.previousEnd
       return literal
     }
+    // WP50 §4: a string literal type, the kind in `HostHandle<"buffer">`. Its
+    // text is the literal as written, quotes included, which no numeric
+    // literal begins with, and the checker refuses it everywhere else.
+    if (this.at(TOK_STRING)) {
+      const literal = this.node(N_TYPE_LITERAL, start, this.end)
+      literal.text = this.file.text.substring(start, this.end)
+      this.advance()
+      return literal
+    }
     if (!this.at(TOK_IDENT)) {
       return this.fail(`expected a type name, found \`${tokenName(this.kind)}\``)
     }

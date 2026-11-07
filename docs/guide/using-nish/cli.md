@@ -194,10 +194,15 @@ likely to add to it:
 - **`--target <triple>` or `--target host`** — stamps the IR with a target's
   data layout, for cross-compiling or for reading optimised IR by hand.
   `--link` does not need it.
+- **`--host <file.ts>`** — makes that file a host module: a TypeScript file
+  of the page's whose exported functions a `--target wasm32` build imports
+  from the page. Repeat it for each one; a root `package.json`'s
+  `"nish": { "host": [...] }` names them too. A native or WASI build that
+  imports one is refused.
 
 The sidecars that let C, Node and WebAssembly call your code —
-`--emit-header`, `--emit-napi`, `--emit-dts` — have a page of their own:
-[Calling Nish from other languages](interop.md).
+`--emit-header`, `--emit-napi`, `--emit-dts` — and host modules have a page of
+their own: [Calling Nish from other languages](interop.md).
 
 ### SQLite is linked when your program calls it
 
@@ -280,7 +285,8 @@ Imports are rewritten so Node can follow them. A `nish:` builtin becomes
 `nish/runtime`, the one package the output imports, `nish:secret` included
 (`nish:async` alone becomes `nish/runtime/async.mjs`):
 its `wipe` is the runtime's, and `std/secret.ts` is not written. A `nish/x` or relative
-import becomes a relative path ending in `.ts`. An imported interface or type
+import becomes a relative path ending in `.ts`. A host module (`--host`) is not
+written: the import points back at the page's own file, relative to `out/`. An imported interface or type
 alias is marked `import { type Pair }`. A module that needs none of this, and
 none of the rewrites below, is written byte for byte; one rewrite that reaches
 an otherwise plain module is `const s = "hi"`, written `const s: string = "hi"`

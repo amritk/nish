@@ -1,6 +1,7 @@
 // WP40 B1.2's checks (docs/wp40-ffi-buffers-handles.md): a `u8[]` handed to a
-// `declare function`, its `ffi-length` site, and its wasm32 and freestanding
-// `--profile wasm` builds. They live beside `tests/run.js`, which calls
+// `declare function`, its `ffi-length` site, its `--target wasm32-wasi` build,
+// its refusal in a freestanding `--target wasm32` build (NL2666), and a
+// freestanding `--profile wasm` link of host IR. They live beside `tests/run.js`, which calls
 // `runFfiBufferChecks` with its own helpers, so that file stays under Biome's
 // size limit. A record cites each check by its exact name.
 import fs from "node:fs"
@@ -49,15 +50,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     const exportOut = path.join(bufDir, "export_written")
     const exportBuilt = spawnSync(
       nish,
-      [
-        exported,
-        "-o",
-        `${exportOut}.ll`,
-        "--emit-header",
-        `${exportOut}.h`,
-        "--emit-dts",
-        `${exportOut}.d.ts`,
-      ],
+      [exported, "-o", `${exportOut}.ll`, "--emit-header", `${exportOut}.h`],
       { cwd: root, encoding: "utf8" }
     )
     const exportText = (ext) =>
@@ -71,12 +64,36 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
         exportHeader.includes("int64_t peek(const nish_array *b);"),
       exportHeader || shown(exportBuilt)
     )
-    const exportGlue = exportText("mjs")
-    const glueOf = (name) => exportGlue.slice(exportGlue.indexOf(`    ${name}: (`)).split("\n    }),")[0]
+    // A page module links no C (NL2666), so the glue's copy-back is reached by
+    // a buffer the module itself writes.
+    const pageWritten = write(
+      "page_written.ts",
+      [
+        "export function fill(b: u8[]): i32 {",
+        "  b[0] = 7;",
+        "  return 0;",
+        "}",
+        "",
+        "export function peek(b: u8[]): i32 {",
+        "  return toI32(b[0]);",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const pageOut = path.join(bufDir, "page_written")
+    const pageBuilt = spawnSync(nish, [pageWritten, "-o", `${pageOut}.ll`, "--emit-dts", `${pageOut}.d.ts`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const pageGlue =
+      pageBuilt.status === 0 && fs.existsSync(`${pageOut}.mjs`)
+        ? fs.readFileSync(`${pageOut}.mjs`, "utf8")
+        : ""
+    const glueOf = (name) => pageGlue.slice(pageGlue.indexOf(`    ${name}: (`)).split("\n    }),")[0]
     check(
-      "ffi_buffer: the wasm glue copies back a `u8[]` parameter C writes, and not one C only reads",
+      "ffi_buffer: the wasm glue copies back a `u8[]` parameter the module writes, and not one it only reads",
       glueOf("fill").includes("copyBack(b$, b);") && !glueOf("peek").includes("copyBack("),
-      exportGlue || shown(exportBuilt)
+      pageGlue || shown(pageBuilt)
     )
     const exportIr = exportText("ll")
     check(
@@ -311,9 +328,11 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
   }
 
   // WP40 B1.2 on wasm (docs/wp40-ffi-buffers-handles.md §5). A `--target
-  // wasm32` build of ffi_buffer_write assembles, and llc reads its data pointer
-  // as a 32-bit load at the header's offset 16 and its `n <= len` as an i64
-  // compare: the header is `{i64 len, i64 cap, i8* data}` on both targets. The
+  // wasm32-wasi` build of ffi_buffer_write assembles, and llc reads its data
+  // pointer as a 32-bit load at the header's offset 16 and its `n <= len` as an
+  // i64 compare: the header is `{i64 len, i64 cap, i8* data}` on both targets.
+  // A plain `--target wasm32` build is freestanding and links no C, so it
+  // refuses the `declare function` and names the host module (WP50 S2). The
   // freestanding `--profile wasm` route links IR compiled for the host, so it is
   // held separately: linked against a stub `write` with B1's own signature, the
   // symbol resolves, nothing is imported, and `main` hands the stub exactly the
@@ -324,7 +343,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.mkdirSync(wasmBufDir, { recursive: true })
     const bufCase = path.join(root, "tests", "cases", "ffi_buffer_write.ts")
     const w32Dir = path.join(wasmBufDir, "wasm32")
-    const w32 = spawnSync(nish, [bufCase, "--target", "wasm32", "-o", `${w32Dir}${path.sep}`], {
+    const w32 = spawnSync(nish, [bufCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -337,16 +356,29 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     const asm = w32Llc.status === 0 ? fs.readFileSync(w32S, "utf8") : ""
     const w32Ir = w32.status === 0 ? fs.readFileSync(w32Ll, "utf8") : ""
     check(
-      "ffi_buffer: a --target wasm32 build passes llvm-as, and llc reads the data pointer as an i32.load at offset 16 and the count check as i64.le_u",
+      "ffi_buffer: a --target wasm32-wasi build passes llvm-as, and llc reads the data pointer as an i32.load at offset 16 and the count check as i64.le_u",
       w32As.status === 0 &&
         w32Llc.status === 0 &&
-        w32Ir.includes('target triple = "wasm32-unknown-unknown"') &&
+        w32Ir.includes('target triple = "wasm32-wasi"') &&
         w32Ir.includes("declare i64 @write(i32, i8*, i64)") &&
         w32Ir.includes("icmp ule i64 3, ") &&
         /\.functype\s+write \(i32, i32, i64\) -> \(i64\)/.test(asm) &&
         (asm.match(/i32\.load\s+16\n/g) ?? []).length >= 2 &&
         /i64\.le_u/.test(asm),
       shown(w32Llc)
+    )
+    const free = spawnSync(nish, [bufCase, "--target", "wasm32", "-o", path.join(wasmBufDir, "refused.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "ffi_buffer: a freestanding --target wasm32 build refuses `declare function write` and names the host module",
+      free.status === 1 &&
+        free.stderr.includes(
+          "`declare function write` declares a C function, and a wasm module a page loads links no C"
+        ) &&
+        free.stderr.includes("(`--host`)"),
+      shown(free)
     )
 
     if (has("wasm-ld")) {

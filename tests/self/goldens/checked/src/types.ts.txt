@@ -30,6 +30,7 @@ const K_UNION: i32 = 21
 const K_VECTOR: i32 = 22
 const K_REGION: i32 = 23
 const K_MASK: i32 = 24
+const K_HOST_HANDLE: i32 = 25
 const R_UNKNOWN: i32 = 0 [exported]
 const R_OK: i32 = 1 [exported]
 const R_ERR: i32 = 2 [exported]
@@ -95,6 +96,8 @@ struct TypeTable (class) size=96 align=8 exported
   method holdsMask -> @TypeTable.holdsMask
   method regionOf -> @TypeTable.regionOf
   method isRegion -> @TypeTable.isRegion
+  method hostHandleOf -> @TypeTable.hostHandleOf
+  method isHostHandle -> @TypeTable.isHostHandle
   method laneCount -> @TypeTable.laneCount
   method rangedOf -> @TypeTable.rangedOf
   method isRanged -> @TypeTable.isRanged
@@ -150,6 +153,16 @@ function isForeignBuffer(table: TypeTable, t: i32): boolean -> @isForeignBuffer 
   stackSites=0 stackLocals=0
   callee +0:13 TypeTable.kindOf -> @TypeTable.kindOf
   callee +0:44 TypeTable.refOf -> @TypeTable.refOf
+function isHostType(table: TypeTable, t: i32): boolean -> @isHostType [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: t
+  calls: TypeTable.isEnum TypeTable.isHostHandle TypeTable.isRanged isForeignScalar
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.isEnum#0 TypeTable.isHostHandle#0
+  stackSites=0 stackLocals=0
+  callee +0:3 isForeignScalar -> @isForeignScalar
+  callee +0:25 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +0:46 TypeTable.isEnum -> @TypeTable.isEnum
+  callee +0:65 TypeTable.isHostHandle -> @TypeTable.isHostHandle
 function isForeignScalar(t: i32): boolean -> @isForeignScalar
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -514,6 +527,20 @@ function TypeTable.isRegion(this: TypeTable, type: i32): boolean -> @TypeTable.i
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function TypeTable.hostHandleOf(this: TypeTable, kind: string): i32 -> @TypeTable.hostHandleOf [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via TypeTable.intern
+  escaping: kind
+  calls: TypeTable.intern
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
+  stackSites=0 stackLocals=0
+  callee +0:12 TypeTable.intern -> @TypeTable.intern
+function TypeTable.isHostHandle(this: TypeTable, type: i32): boolean -> @TypeTable.isHostHandle [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: nish_panic_index
+  pointer this: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function TypeTable.laneCount(this: TypeTable, type: i32): i32 -> @TypeTable.laneCount [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -636,7 +663,7 @@ function TypeTable.mangle(this: TypeTable, type: i32): string -> @TypeTable.mang
   callee +28:23 TypeTable.scalarName -> @TypeTable.scalarName
   callee +30:23 TypeTable.scalarName -> @TypeTable.scalarName
   callee +32:23 TypeTable.mangle -> @TypeTable.mangle
-  callee +34:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee +36:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.unionMangle(this: TypeTable, type: i32): string -> @TypeTable.unionMangle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -802,7 +829,7 @@ function TypeTable.llvmType(this: TypeTable, type: i32): string -> @TypeTable.ll
   callee +8:20 TypeTable.laneCount -> @TypeTable.laneCount
   callee +8:46 TypeTable.llvmType -> @TypeTable.llvmType
   callee +10:20 TypeTable.laneCount -> @TypeTable.laneCount
-  callee +14:22 internalErrorFor -> @internalErrorFor
+  callee +16:22 internalErrorFor -> @internalErrorFor
 function TypeTable.alignOf(this: TypeTable, type: i32): i32 -> @TypeTable.alignOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -828,7 +855,7 @@ function TypeTable.typeName(this: TypeTable, type: i32): string -> @TypeTable.ty
   callee +23:29 TypeTable.laneCount -> @TypeTable.laneCount
   callee +23:58 TypeTable.laneCount -> @TypeTable.laneCount
   callee +25:26 TypeTable.typeName -> @TypeTable.typeName
-  callee +27:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee +29:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.scalarName(this: TypeTable, type: i32): string -> @TypeTable.scalarName [exported method]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

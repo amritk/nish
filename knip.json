@@ -27,6 +27,7 @@
     "tests/wordings/**",
     "tests/c-symbols/**",
     "tests/fix/**",
+    "tests/host-import/**",
     "tests/parser/**",
     "tests/lexer/**",
     "tests/layout/**",

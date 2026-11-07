@@ -87,6 +87,15 @@ program imports is written under `out/nish/`, and every `nish:` import,
 `nish/runtime/async.mjs`). Its `wipe` zero-fills the array under
 Node but cannot erase a copy the engine made, so a key that must be erased
 stays in the native build ([the record](../../security/secret.md), SECRET-6).
+A host module's import (`--host`, see [interop](interop.md#functions-the-page-supplies-host-modules))
+is kept as written and points at the page's own file, so the TypeScript calls
+the same functions the wasm build imports. A module that names `HostHandle`
+itself gets its own declaration of it in the output, the same shape the
+page's has, `(number & { readonly __nishHostKind: K }) | 0`. `tsc` then takes
+the `0` a handle starts as and a handle of the same kind, and refuses any
+other number and a handle of another kind, as `nish` does; a handle imported
+from the host module keeps the page's definition, which is the same type.
+What `tsc` cannot refuse is arithmetic on a handle or an `as` cast.
 [The CLI page](cli.md#writing-typescript---emit-ts) lists every rewrite and
 the kinds of module that are refused (C functions, NL4010; signals and
 `nish:net`, NL4011; a compound assignment whose index would run twice,

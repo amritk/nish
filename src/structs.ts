@@ -580,6 +580,15 @@ export const checkLiteralInitializer = (
   } else if (!ctx.table.assignable(initType, type)) {
     const got = ctx.table.typeName(initType)
     ctx.error(init, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`)
+  } else if (ctx.table.isHostHandle(type)) {
+    // A handle is the page's to give out: the one number a slot may start as
+    // is `0`, the handle that names nothing, as for any other literal.
+    if (init.kind !== N_NUMBER || init.text !== "0") {
+      ctx.error(
+        init,
+        `${what} is ${ctx.table.typeName(type)}, and a handle starts as \`0\`, the handle that names nothing: every other one is given out by the page`
+      )
+    }
   } else if (initType === type && ((exact && isNumeric(type)) || ctx.table.isRanged(type))) {
     // The literal is stored as written, so it has to be one of the type's
     // values: a whole number for an integer, inside a range's bounds (WP31 §6).

@@ -1,0 +1,1 @@
+`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`

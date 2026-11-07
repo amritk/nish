@@ -26,14 +26,36 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
+import {
+  applyModuleEdits,
+  emitModule,
+  HOST_HANDLE_ALIAS,
+  REGION_REFUSAL,
+  SIGNAL_REFUSAL,
+  Walk,
+} from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { scriptMain } from "./script"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
-import { FLAG_ASYNC, N_IMPORT, Node } from "./nodes"
+import {
+  FLAG_ASYNC,
+  FLAG_EXPORTED,
+  FLAG_SCRIPT,
+  N_CLASS,
+  N_ENUM,
+  N_EXPORT_ASSIGNMENT,
+  N_EXPORT_DECLARATION,
+  N_FUNCTION,
+  N_IMPORT,
+  N_IMPORT_EQUALS,
+  N_INTERFACE,
+  N_MODULE_CONST,
+  N_TYPE_ALIAS,
+  Node,
+} from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
-import { dirname, normalizePath, relativePath } from "./paths"
+import { dirname, joinPath, normalizePath, relativePath, resolvePath } from "./paths"
 import { StringBuilder } from "./strings"
 
 /** The specifier every emitted module imports the runtime by. */
@@ -115,9 +137,14 @@ const commonDirectory = (a: string, b: string): string => {
 /**
  * Where `unit` is written, relative to the output directory, or the empty
  * string for a module that is not written: a dependency package's, which the
- * program imports from where it is installed.
+ * program imports from where it is installed, or a host module.
  */
 const outputPathOf = (unit: ModuleUnit, base: string): string => {
+  // A host module is the page's own TypeScript (WP50 §3), imported from where
+  // it is rather than copied, as the wasm loader passes it.
+  if (unit.source.host) {
+    return ""
+  }
   if (unit.packageName === ROOT_PACKAGE) {
     return relativePath(base, unit.path)
   }
@@ -146,6 +173,34 @@ const holds = (list: string[], text: string): boolean => {
 const relativeSpecifier = (from: string, to: string): string => {
   const path = relativePath(dirname(from), to)
   return path.startsWith("../") ? path : `./${path}`
+}
+
+/** Whether `file` imports or exports anything, which makes it a module to tsc rather than a script. */
+const isModule = (file: Node): boolean => {
+  for (const stmt of file.children) {
+    const kind = stmt.kind
+    if (
+      kind === N_IMPORT ||
+      kind === N_IMPORT_EQUALS ||
+      kind === N_EXPORT_ASSIGNMENT ||
+      kind === N_EXPORT_DECLARATION
+    ) {
+      return true
+    }
+    const declares =
+      kind === N_FUNCTION ||
+      kind === N_CLASS ||
+      kind === N_INTERFACE ||
+      kind === N_MODULE_CONST ||
+      kind === N_TYPE_ALIAS ||
+      kind === N_ENUM
+    // The `main` a script's top-level code is moved into (`src/script.ts`) is
+    // exported in the tree but not in the text.
+    if (declares && (stmt.flags & FLAG_EXPORTED) !== 0 && (stmt.flags & FLAG_SCRIPT) === 0) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -265,7 +320,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   const entry = compilation.entry()
   let base = dirname(normalizePath(entry.path))
   for (const unit of modules) {
-    if (unit.packageName === ROOT_PACKAGE) {
+    if (unit.packageName === ROOT_PACKAGE && !unit.source.host) {
       base = commonDirectory(base, dirname(normalizePath(unit.path)))
     }
   }
@@ -334,7 +389,22 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       }
       const target = unit.resolved.get(stmt.text, -1)
       const dest = target >= 0 && target < outputs.length ? outputs[target] : ""
-      if (dest.length > 0) {
+      const hostPath =
+        target >= 0 && target < modules.length && modules[target].source.host
+          ? modules[target].source.path
+          : ""
+      if (hostPath.length > 0) {
+        // The page's module (a module's path is never empty), named from
+        // where this file is written.
+        const at = compilation.workingDir
+        walk.specifierFrom.push(stmt.text)
+        walk.specifierTo.push(
+          relativeSpecifier(
+            resolvePath(at, joinPath([compilation.opts.emitTs, out])),
+            resolvePath(at, hostPath)
+          )
+        )
+      } else if (dest.length > 0) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(relativeSpecifier(out, dest))
       }
@@ -363,7 +433,14 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       compilation.sink.reportPortability(unit.source, node.start, node.end, walk.stubWarnings[r])
       r = r + 1
     }
-    const header = runtimeImport("import", walk.helpers) + runtimeImport("import type", walk.widths)
+    // A file with no import or export is a script to tsc, whose alias would be
+    // global and meet the page's own `HostHandle`: `export {}` keeps it the file's.
+    const scriptFile = walk.helpers.size() === 0 && walk.widths.size() === 0 && !isModule(unit.file)
+    const header =
+      runtimeImport("import", walk.helpers) +
+      runtimeImport("import type", walk.widths) +
+      (walk.hostHandle ? HOST_HANDLE_ALIAS : "") +
+      (walk.hostHandle && scriptFile ? "export {}\n" : "")
     if (header.length > 0) {
       const at = importOffset(unit.source.text)
       // An import line is an edit like any other, so it goes in source order:

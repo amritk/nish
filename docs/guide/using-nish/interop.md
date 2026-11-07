@@ -97,7 +97,8 @@ console.log(stats.mean(new Float64Array([1, 2, 3, 4])));       // 2.5
 ```
 
 `load(source, imports)` takes the bytes or a compiled `WebAssembly.Module`, and
-an import object that defaults to `{}`. The `wasm` profile
+an import object. It defaults to `{}`, unless the module imports a host module
+(below): then it is required, `{ host }`, and the `.d.ts` types it. The `wasm` profile
 is freestanding — no C library — so functions that take or return strings, or
 do I/O, are not callable from it; the generated `.d.ts` lists them as
 comments. A whole program that does need them can be built for WASI instead,
@@ -153,6 +154,84 @@ In a build, `import { add } from "./stats.ts"` gets the wasm build, compiled,
 linked with `--profile wasm-host --inline` and loaded with `loadSync`. Under
 `vite serve` the import stays the TypeScript itself. Entries are paths from
 the project root.
+
+### Functions the page supplies: host modules
+
+A module that calls back into the page imports those functions from an
+ordinary TypeScript file the page owns, a *host module*. Name it with
+`--host`, or in the root `package.json` as `"nish": { "host": ["web/host.ts"] }`;
+an import from any other file is an ordinary Nish import:
+
+```ts
+// web/host.ts: the page's own file, checked by tsc and bundled as usual
+import type { f64, HostHandle, u32 } from "nish";
+export type Canvas = HostHandle<"canvas">;
+
+export function nowMs(): f64 { return performance.now(); }
+export function fill(c: Canvas, rgb: u32): void { canvases[c].fill(rgb); }
+```
+
+```ts
+// draw.ts: the Nish module
+import { Canvas, fill, nowMs } from "./web/host.ts";
+
+export function frame(c: Canvas): f64 {
+  fill(c, 0x336699);
+  return nowMs();
+}
+```
+
+```console
+$ nish draw.ts --target wasm32 --host web/host.ts --emit-dts draw.d.ts -o draw.ll
+$ $NISH/scripts/build.sh draw.ll -o draw.wasm --profile wasm-host
+```
+
+```js
+import * as host from "./web/host.ts";
+import { load } from "./draw.mjs";
+
+const draw = await load(await (await fetch("draw.wasm")).arrayBuffer(), { host });
+```
+
+Nish reads only the host module's exported signatures, and skips each function
+body unread, so a body may use the DOM, closures and promises. Each function
+becomes a wasm import from module `host` under its own name. The `.d.ts` gains
+`Imports = { host: typeof import("./web/host") }`, so `tsc` refuses a page that
+passes a host object short of a function. The loader passes a function through
+as it stands when every value crosses unchanged (`i32`, `i64`, `f32`, `f64`,
+an enum, a handle, and a `u8` or `u16` argument), and wraps it once, at `load`,
+when a value needs converting: a `u32` or `u64` argument is read unsigned, a
+`u8` or `u16` result is masked to its width (a `u32` or `u64` one wraps as
+wasm's own conversion to `i32` or `i64` makes it), a `boolean` crosses as
+0 or 1, and a ranged integer result is range-checked (`RangeError` naming the
+function).
+
+`HostHandle<"kind">` names an object the page keeps in its own table: an `i32`
+index of its own nominal type. Handles of different kinds do not mix, under
+Nish and under `tsc` alike; a handle compares with `===` and `!==` against one
+of its kind or `0` ("none"), and supports nothing else. A field or parameter
+of a handle type may only default to `0` (NL2670).
+
+What cannot cross is refused with the explicit form: an object, a class, a
+function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
+`string` result (NL2667), and, for now, a typed array (NL2664) or a `string`
+parameter (NL2665). A host-module body the lexer cannot read, such as a regex
+literal or JSX, is refused with a message to move that code into a module the
+host file imports (NL3049). A host module exists only in a freestanding wasm
+build: a native or WASI build that imports one is refused (NL3050), and so is a
+`declare function` in any build that makes a page module, `--target wasm32` or
+`--emit-dts` with no `--target` (NL2666), whose functions the page supplies
+through a host module instead. `--target wasm32-wasi --emit-dts` is a WASI
+program, which links C, so `declare function` stays legal there. A call to a host function is an `ffi` call, so `--deny ffi` refuses it.
+
+`--emit-ts` keeps the `import` as written, so the TypeScript reading calls the
+page's own functions. With Vite, list the host modules in the plugin's `host`
+option (or the `package.json` field); the plugin passes them to the compiler and
+the loader, and the page passes nothing:
+
+```js
+export default { plugins: [nish({ entries: ["src/draw.ts"], host: ["web/host.ts"] })] };
+```
 
 **Cross the boundary once per batch, not once per element.** A call into a
 `.node` addon costs about 30 ns and a call into wasm about 2 ns before any work
@@ -224,6 +303,12 @@ of the package. Every declaration of one name must give it the same types.
 A function you define may not take a declared name either, since its symbol
 would be the C one, unless it is private and named like a C library function
 (`abs`, `free`, …): those always get a symbol of their own.
+
+A build that makes a page module, `--target wasm32` or `--emit-dts` with no
+`--target`, refuses `declare function` (NL2666): a page supplies its functions
+through a [host module](#functions-the-page-supplies-host-modules) instead. A
+`--target wasm32-wasi` build links C, so it keeps `declare function` even with
+`--emit-dts`.
 
 A function from the C library links with `nish run` or `--link` as it is. One
 of your own goes on the build line beside the runtime:

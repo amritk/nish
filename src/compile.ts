@@ -715,6 +715,13 @@ export const main = (): number => {
         return 2
       }
       opts.emitDts = process.argv[arg]
+    } else if (value === "--host") {
+      arg = arg + 1
+      if (arg >= process.argv.length || process.argv[arg].length === 0) {
+        console.error("compile: --host needs a file")
+        return 2
+      }
+      opts.hosts.push(process.argv[arg])
     } else if (value === "--emit-ts") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -2702,7 +2709,7 @@ const writeSidecars = (compilation: Compilation, fns: ExternalFunction[]): boole
     if (!makeDirectoryFor(opts.emitDts)) {
       return false
     }
-    writeFileSync(opts.emitDts, generateDts(compilation, fns))
+    writeFileSync(opts.emitDts, generateDts(compilation, fns, opts.emitDts))
     console.error(`wrote ${opts.emitDts}`)
     const loader = wasmLoaderPath(opts.emitDts)
     writeFileSync(loader, generateWasmLoader(compilation, fns, opts.emitDts))

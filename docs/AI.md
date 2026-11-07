@@ -1480,6 +1480,13 @@ export const main = (): i32 => {
 ```
 
 - **No body, and it cannot be `export`ed.**
+- **Not in a `--target wasm32` build, nor an `--emit-dts` one with no
+  `--target`** (NL2666; `--target wasm32-wasi` keeps it): there a function the page
+  supplies is imported from a host module, the page's own TypeScript file
+  named by `--host`, and becomes a wasm import from module `host`. Only
+  scalars, enums and `HostHandle<"kind">` (a nominal `i32` for an object the
+  page keeps) cross; `import { Canvas, fill } from "./host.ts"`, no `type`
+  modifier.
 - **A class with a `CPtr` field is a handle class: open one with `using`.**
   `using f = new File(p)` closes `f` once at every exit of its block (falling
   off the end, `return`, `break`, `continue`, `orReturn()`), so never call the
@@ -3019,8 +3026,8 @@ export const first = (xs: i32[]): i32 => uncheckedGet(xs, 0);
 A package that must not touch the network says so in `package.json`,
 `"nish": { "capabilities": { "deny": ["net"] } }`, and `--deny net` or an
 allowlist such as `--allow fs.read,exit` says the same on the command line.
-The `"nish"` field holds `noPanic` and `capabilities` and nothing else, each
-written once; anything more is refused (NL3036) rather than skipped. A
+The `"nish"` field holds `noPanic`, `capabilities` and `host` and nothing
+else, each written once; anything more is refused (NL3036) rather than skipped. A
 program whose `main` — or, in a library or a header build, any export —
 reaches more is refused (NL2459), spanned at the first call and naming the
 whole chain to the builtin; nothing changes in a program

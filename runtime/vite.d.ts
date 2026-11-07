@@ -6,6 +6,12 @@
 export interface NishViteOptions {
   /** Modules to build to wasm, paths from the root. Default: none. */
   entries?: string[];
+  /**
+   * Host modules, paths from the root, each passed to the compiler as
+   * `--host`; a root `package.json` `"nish": { "host": [...] }` also names
+   * them. The ones an entry imports are passed to its loader. Default: none.
+   */
+  host?: string[];
   /** The `nish` command. Default: this package's `bin/nish`. */
   compiler?: string;
   /** `scripts/build.sh`. Default: this package's. */

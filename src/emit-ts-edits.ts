@@ -138,6 +138,17 @@ const AMBIENT_NAMES: string =
 const WIDTH_TYPES: string =
   " i32 i64 u8 u16 u32 u64 f32 f64 integer Int32Array Float32Array Float64Array BigInt64Array "
 
+/**
+ * What the output declares where the module spells the ambient `HostHandle`:
+ * `nish/runtime` has none. It is runtime/nish.d.ts's shape, keyed by a string
+ * and not a `unique symbol`, since two declarations of a `unique symbol` are
+ * two types and the page's host function would refuse the reading's handle.
+ * tsc takes `0` and a handle of the same kind, and refuses any other number
+ * and another kind, as nish does.
+ */
+export const HOST_HANDLE_ALIAS: string =
+  "type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 0\n"
+
 /** The message NL4011 carries; `src/codes.ts` keys the code on it. */
 export const SIGNAL_REFUSAL: string =
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)"
@@ -189,38 +200,6 @@ export class Walk {
    */
   stubbed: boolean[]
   /**
-   * A body no instance reaches is being walked. Its nodes have no types, so
-   * the rows that need none rewrite it as they would any code and the rest
-   * leave it as written; a copy or a zero that an element type would decide
-   * is refused (NL4014) in the program's own modules, since no instance says
-   * which, and written as a stub in the standard library's.
-   */
-  untyped: boolean
-  /** An instance's tables are installed, so a template node is walked as itself. */
-  inInstance: boolean
-  /** The second or a later instance of one template is being walked: its refusals were already recorded. */
-  repeat: boolean
-  /**
-   * The records row chose a copy or a zero from the instance's types while
-   * this instance was walked, so instances that disagree are refused (NL4013)
-   * rather than reported as an internal error.
-   */
-  instanceChoice: boolean
-  /**
-   * Whether a stub written with a throwing body is warned about, and a copy
-   * or zero an untyped body would choose is refused: the driver's answer, true
-   * for the program's own modules and false for the standard library's, whose
-   * bodies (`insertAt`, `Channel.send` and the like) are not the reader's to
-   * change and are written as stubs without a word.
-   */
-  warnStubs: boolean
-  /**
-   * A row asked for the type of a node in the untyped body being walked and
-   * found none, where a type would decide its text: the body is written as a
-   * stub, since the text JavaScript's meaning gives it may not be native's.
-   */
-  typeMiss: boolean
-  /**
    * The nodes inside the instance being walked whose text the records row
    * chose from the instance's types, each with that text, in walk order: where
    * two instances that disagree are refused.
@@ -257,6 +236,40 @@ export class Walk {
   preludes: string[]
   /** The next number `temporary` tries. */
   temps: i32
+  /**
+   * A body no instance reaches is being walked. Its nodes have no types, so
+   * the rows that need none rewrite it as they would any code and the rest
+   * leave it as written; a copy or a zero that an element type would decide
+   * is refused (NL4014) in the program's own modules, since no instance says
+   * which, and written as a stub in the standard library's.
+   */
+  untyped: boolean
+  /** An instance's tables are installed, so a template node is walked as itself. */
+  inInstance: boolean
+  /** The second or a later instance of one template is being walked: its refusals were already recorded. */
+  repeat: boolean
+  /**
+   * The records row chose a copy or a zero from the instance's types while
+   * this instance was walked, so instances that disagree are refused (NL4013)
+   * rather than reported as an internal error.
+   */
+  instanceChoice: boolean
+  /**
+   * Whether a stub written with a throwing body is warned about, and a copy
+   * or zero an untyped body would choose is refused: the driver's answer, true
+   * for the program's own modules and false for the standard library's, whose
+   * bodies (`insertAt`, `Channel.send` and the like) are not the reader's to
+   * change and are written as stubs without a word.
+   */
+  warnStubs: boolean
+  /**
+   * A row asked for the type of a node in the untyped body being walked and
+   * found none, where a type would decide its text: the body is written as a
+   * stub, since the text JavaScript's meaning gives it may not be native's.
+   */
+  typeMiss: boolean
+  /** Whether the module spells the ambient `HostHandle`, which the output declares for itself (`HOST_HANDLE_ALIAS`). */
+  hostHandle: boolean
   /** The node being walked may hoist, by its position alone (`hoistChild`). */
   hoistHere: boolean
   /** What `canHoist` answers to the hook being asked about the current node. */
@@ -288,6 +301,7 @@ export class Walk {
     this.choiceTexts = []
     this.helpers = new StringSet()
     this.widths = new StringSet()
+    this.hostHandle = false
     this.names = new StringSet()
     this.typeNames = new StringSet()
     for (const imp of program.imports) {
@@ -560,6 +574,10 @@ const ambientCallee = (walk: Walk, node: Node): string => {
 const observe = (walk: Walk, node: Node): string => {
   if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
     walk.widths.add(node.text)
+    return ""
+  }
+  if (node.kind === N_TYPE_REF && node.text === "HostHandle") {
+    walk.hostHandle = true
     return ""
   }
   if (node.kind !== N_CALL || node.children.length === 0 || node.children[0].kind !== N_IDENT) {
@@ -837,6 +855,9 @@ const bodyIndex = (node: Node): i32 => {
 const observeWidths = (walk: Walk, node: Node): void => {
   if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
     walk.widths.add(node.text)
+  }
+  if (node.kind === N_TYPE_REF && node.text === "HostHandle") {
+    walk.hostHandle = true
   }
   for (const child of node.children) {
     observeWidths(walk, child)

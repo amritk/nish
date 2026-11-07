@@ -1,0 +1,1 @@
+The result of host function `corner` is an object type, and only a scalar, an enum or a `HostHandle` crosses between the page and wasm: write it into module storage and pass its index

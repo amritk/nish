@@ -225,6 +225,12 @@ export const resolveType = (node: Node, ctx: CheckContext): i32 => {
           "a return value or an alias"
       )
     case N_TYPE_LITERAL:
+      if (isStringLiteralType(node)) {
+        return ctx.errorType(
+          node,
+          `A string literal type \`${node.text}\` is only allowed as the kind of a \`HostHandle<"kind">\``
+        )
+      }
       // WP31 §4: a literal type is a bound of `integer<Lo, Hi>` and nothing
       // else, which `rangedBound` reads without coming here. Anywhere else it
       // would be a literal type argument in general, a const generic, which is
@@ -326,6 +332,10 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   // reserved since 0.10.0: `integer` never means anything else.
   if (name === "integer") {
     return resolveRanged(node, args, argc, ctx)
+  }
+
+  if (name === "HostHandle") {
+    return resolveHostHandle(node, args, argc, ctx)
   }
 
   if (name === "Array") {
@@ -538,6 +548,42 @@ const resolveRanged = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
   return ctx.table.rangedOf(toI32(lo), toI32(hi))
 }
 
+/** Whether a literal type is a string, `"canvas"`, rather than a number: its text keeps the quotes. */
+const isStringLiteralType = (node: Node): boolean => node.text.startsWith('"') || node.text.startsWith("'")
+
+/**
+ * `HostHandle<"kind">` (WP50 S2, `docs/wp50-wasm-host.md` §4): an `i32` the
+ * page gave out, one type per kind. The kind is a name, letters, digits and
+ * `_` after a letter, because it is spelled into the mangled name of every
+ * function instantiated over the handle.
+ */
+const resolveHostHandle = (node: Node, args: Node, argc: i32, ctx: CheckContext): i32 => {
+  const kind = argc === 1 && isStringLiteralType(args.children[0]) ? args.children[0].text : ""
+  const name = kind.length > 2 ? kind.substring(1, kind.length - 1) : ""
+  if (!isHandleKind(name)) {
+    return ctx.errorType(
+      node,
+      '`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`'
+    )
+  }
+  return ctx.table.hostHandleOf(name)
+}
+
+const isHandleKind = (name: string): boolean => {
+  if (name.length === 0) {
+    return false
+  }
+  for (let i = 0; i < name.length; i++) {
+    const c = name.charCodeAt(i)
+    const letter = (c >= 97 && c <= 122) || (c >= 65 && c <= 90)
+    const digit = c >= 48 && c <= 57
+    if (!(letter || (i > 0 && (digit || c === 95)))) {
+      return false
+    }
+  }
+  return true
+}
+
 /** What `rangedBound` answers once it has reported; no bound in `i32` is this far out. */
 const BOUND_REFUSED: i64 = 1099511627776
 
@@ -548,7 +594,7 @@ const BOUND_REFUSED: i64 = 1099511627776
  * `typeof`, which Phase 0 forbids (WP31 §11).
  */
 const rangedBound = (ctx: CheckContext, bound: Node): i64 => {
-  if (bound.kind !== N_TYPE_LITERAL) {
+  if (bound.kind !== N_TYPE_LITERAL || isStringLiteralType(bound)) {
     ctx.error(
       bound,
       `A bound of \`integer<Lo, Hi>\` must be an integer literal, got \`${ctx.textOf(bound)}\` (a type or a constant cannot state a bound)`
@@ -956,6 +1002,7 @@ export const builtinTypeName = (name: string): boolean => {
     name === "Array" ||
     name === "ReadonlyArray" ||
     name === "Result" ||
+    name === "HostHandle" ||
     name === "integer"
   )
 }

@@ -1,12 +1,18 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stage 1 built.** The owner accepted every
+**Status: accepted, 2026-11-06; stages 1 and 2 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
-loader's `loadSync` and `nish/vite`; stage 2 is the next. The anchors below are at `39a87b3b`.
+loader's `loadSync` and `nish/vite`. Stage 2 is built: host modules
+(`--host`, `nish.host`, `src/host-module.ts`), their import attributes,
+`HostHandle<K>`, `Imports` in the `.d.ts`, the loader's adapters, the kept
+`import` under `--emit-ts`, the refusals NL2661–NL2670, NL3049 and NL3050, and
+the plugin's `host` option (`tests/run.js`, section `host-import`); stage 3 is
+the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
-the accepted design, and `npm test` compiles none of them yet.
+the accepted design; `npm test` compiles stage 2's (host modules and
+`HostHandle`) and none of the later stages' yet.
 
 cs, a browser arena shooter, is moving the bulk of its client into Nish
 compiled to WebAssembly: the fixed-step simulation (the same source the native
@@ -96,7 +102,7 @@ the Nish module imports them the way any TypeScript module would:
 ```ts
 // web/host.ts: the page's file, compiled by tsc and bundled by Vite
 import type { f64, i32, u32 } from "nish";
-export type GpuBuffer = HostHandle<"gpu-buffer">;
+export type GpuBuffer = HostHandle<"gpu_buffer">;
 
 export function hostLog(level: u32, code: i32): void { console.warn(level, code); }
 export function nowMs(): f64 { return performance.now(); }
@@ -107,11 +113,11 @@ export function gpuWrite(b: GpuBuffer, offset: u32, data: Float32Array, at: u32,
 
 ```ts
 // client.ts: the Nish module
-import { type GpuBuffer, gpuWrite, hostLog, nowMs } from "../web/host.ts";
+import { GpuBuffer, gpuWrite, hostLog, nowMs } from "../web/host.ts";
 ```
 
 ```llvm
-declare void @hostLog(i32 zeroext, i32) #2
+declare void @hostLog(i32, i32) #2
 declare double @nowMs() #3
 attributes #2 = { "wasm-import-module"="host" "wasm-import-name"="hostLog" }
 attributes #3 = { "wasm-import-module"="host" "wasm-import-name"="nowMs" }
@@ -198,8 +204,8 @@ nominal type:
 
 ```ts
 // web/host.ts
-export type GpuBuffer = HostHandle<"gpu-buffer">;
-export type GpuTexture = HostHandle<"gpu-texture">;
+export type GpuBuffer = HostHandle<"gpu_buffer">;
+export type GpuTexture = HostHandle<"gpu_texture">;
 
 const buffers = new HostTable<GPUBuffer>(); // nish/page, the page-side helper (§11)
 export function gpuCreateBuffer(bytes: u32, usage: u32): GpuBuffer {

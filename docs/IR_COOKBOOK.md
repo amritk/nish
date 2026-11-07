@@ -11763,6 +11763,56 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi -->
 
+### A host import: a function the page supplies
+
+A wasm module calls the page that loads it through a *host module*, the page's
+own TypeScript file named by `--host` (WP50 stage 2, `docs/wp50-wasm-host.md`
+§3). Each exported function of it is a `declare`, like a C declaration, with
+two string attributes that clang's wasm backend reads: the import's module,
+always `host`, and its name. `wasm-ld` turns the declaration into an import
+with no `--allow-undefined`, and the loader `--emit-dts` writes fills it from
+the `host` object the page passes.
+
+```ts
+// host.ts, the page's
+import type { f64, u32 } from "nish"
+export type Canvas = HostHandle<"canvas">
+export function fill(c: Canvas, rgb: u32): void { canvases[c].fill(rgb) }
+export function nowMs(): f64 { return performance.now() }
+```
+
+```ts
+// draw.ts, compiled with `--target wasm32 --host host.ts`
+import { Canvas, fill, nowMs } from "./host.ts"
+
+export function frame(c: Canvas): f64 {
+  fill(c, 0x336699)
+  return nowMs()
+}
+```
+
+```llvm
+declare void @fill(i32, i32) #1
+declare double @nowMs() #2
+define noundef double @frame(i32 noundef %c) #0 {
+entry:
+  call void @fill(i32 %c, i32 3368601)
+  %0 = tail call double @nowMs()
+  ret double %0
+}
+attributes #0 = { nounwind }
+attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
+attributes #2 = { "wasm-import-module"="host" "wasm-import-name"="nowMs" }
+```
+
+The `HostHandle` is a plain `i32`: the kind exists only in the checker. As for
+C, the declaration carries no other attribute, and `frame` loses `readnone`
+and `willreturn` because it calls a body nobody can see. A `u8` or `u16` is
+`zeroext` on both sides, as a C prototype's would be; a `u32` is a bare `i32`,
+and the loader's adapter gives the page `a >>> 0`. A program with no host
+module emits no such attribute, so every other golden is unchanged
+(`tests/run.js`, section `host-import`).
+
 ### `CPtr`: the pointer a C function hands back
 
 `CPtr` is an address C owns (WP27 S2). It is `i8*` and eight bytes wide, and

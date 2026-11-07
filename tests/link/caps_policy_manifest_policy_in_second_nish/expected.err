@@ -1,1 +1,1 @@
-package.json:5:3: error: `nish` is written twice: the root package's `nish` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once
+package.json:5:3: error: `nish` is written twice: the root package's `nish` field is one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once

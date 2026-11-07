@@ -1,0 +1,1 @@
+Host function `first` is generic, and a wasm import is one function with one signature: write it once per type it takes
