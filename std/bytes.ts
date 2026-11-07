@@ -301,7 +301,7 @@ export const skipJsonPlain = (b: u8[], from: i32, to: i32): i32 => {
  * panics `copyBytes` before any byte is written. Natively the copy is one
  * `llvm.memmove`.
  */
-export const copyBytes = (dst: u8[], at: i32, src: u8[], from: i32, count: i32): void => {
+export const copyBytes = (dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void => {
   if (count < 0 || at < 0 || from < 0 || at > toI32(dst.length) - count || from > toI32(src.length) - count) {
     panic("copyBytes: the range lies outside an array")
   }
@@ -425,7 +425,7 @@ const skipJsonPlainWalk = (b: u8[], from: i32, to: i32): i32 => {
 }
 
 /** `copyBytes`'s walk, once its ranges are checked: forward, or backward when `dst` is `src` and the bytes move up. */
-const copyBytesWalk = (dst: u8[], at: i32, src: u8[], from: i32, count: i32): void => {
+const copyBytesWalk = (dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void => {
   if (at <= from) {
     let k: i32 = 0
     while (k < count) {

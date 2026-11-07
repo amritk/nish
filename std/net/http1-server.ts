@@ -259,11 +259,8 @@ const http1ServerCheckWindow = (what: string, buf: readonly u8[], off: i32, len:
 /** Copies `src[off .. off + n)` to `out` at `at`, which the caller has made sure holds it, and answers where it ends. */
 const http1ServerCopy = (out: u8[], at: i32, src: readonly u8[], off: i32, n: i32): i32 => {
   if (n > 0 && at >= 0 && off >= 0 && at <= toI32(out.length) - n && off <= toI32(src.length) - n) {
-    // Both windows fit, as they do for every caller. copyBytes refuses a readonly source, so this is a
-    // plain loop over a range already checked, which the optimiser turns into vector moves.
-    for (let k: i32 = 0; k < n; k++) {
-      out[at + k] = src[off + k]
-    }
+    // Both windows fit, as they do for every caller: one move, not a byte loop.
+    copyBytes(out, at, src, off, n)
     return at + n
   }
   for (let k: i32 = 0; k < n && at + k < toI32(out.length) && off + k < toI32(src.length); k++) {
