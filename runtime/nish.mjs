@@ -379,6 +379,9 @@ registerHooks({
     if (specifier === "nish:simd") {
       return next(new URL("./core.mjs", import.meta.url).href, context);
     }
+    if (specifier === "nish:async") {
+      return next(new URL("./async.mjs", import.meta.url).href, context);
+    }
     if (specifier === "nish:region") {
       return { url: `data:text/javascript,${encodeURIComponent(regionSource)}`, shortCircuit: true };
     }

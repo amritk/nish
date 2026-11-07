@@ -4,9 +4,12 @@
 > to LLVM IR. Every Nish program is legal TypeScript syntax and type-checks
 > under `tsc --strict`, but the subset is far smaller than TypeScript: no `any`,
 > no `throw`, no function values (a callback is an arrow written at the call,
-> which may read the caller's `const` locals), no inheritance, no truthiness,
+> which may read the caller's `const` locals and parameters), no inheritance, no truthiness,
 > and no implicit conversion of any kind. Generics are monomorphised: each
-> instantiation is its own function or struct. Failure is a `Result<T, E>` the
+> instantiation is its own function or struct. `async` functions and `await`
+> compile to frames sized when the program is linked, but a promise is never a
+> value: each call is awaited where it is made, or handed to `spawn` or
+> `awaitAll`. Failure is a `Result<T, E>` the
 > checker will not let you drop; absence is `T | null` you must narrow. There is
 > no garbage collector — allocation is placed at compile time.
 

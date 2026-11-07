@@ -240,7 +240,7 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish.sortWith$i32$fn.16.nish_main$arrow0 nish.sortWith$i32$fn.16.nish_main$arrow1 nish.sortWith$i32$fn.16.nish_main$arrow2 nish_arena_mark nish_arena_release nish_print show
-  stackSites=3 stackLocals=3
+  stackSites=4 stackLocals=4
   local +0:9 k: i32 (const)
   local +1:9 near: i32[] (const)
   callee +3:3 sortWith<i32, (a, b) => ...> -> @nish.sortWith$i32$fn.16.nish_main$arrow0

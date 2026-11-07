@@ -1,8 +1,11 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
-**Status: proposed; D1 accepted.** Nothing here is built. The anchors below
+**Status: D1 accepted; stages 1 to 4 built (§10), stages 5 and 6 open.** The
+language half — `async`, `await`, `Promise<T>`, `spawn`, `awaitAll` and the
+frame lowering — compiles, with its tasks on an in-process queue; the executor
+that waits on sockets and timers (stage 5) is not built. The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
-note is a proposal and is not compiled by `npm test`. This note reopens
+note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
 the owner's (§9). The owner accepted D1 on 2026-11-01, on one condition: an
 `await` never blocks the process, and `async` costs the server nothing it
@@ -461,10 +464,9 @@ writes the same IR as before, byte for byte, over every positive case.
   at once, up to its first real wait, where Node runs it only to its first
   `await` and the rest after the spawning task yields (`async_spawn`,
   `docs/LANGUAGE.md`, "Where it is not Node").
-- **`--emit-ts` refuses an `async` function for now** (NL4016,
-  `reject_emit_ts_async`): the runtime the output imports does not answer the
-  resume order, `awaitAll` or `spawn` yet. Writing it is the follow-up to
-  this part.
+- **`--emit-ts` writes an `async` function as Node async/await** (part 3;
+  NL4016, its refusal until then, is retired): `docs/LANGUAGE.md`, "Under
+  `--emit-ts`", and `tests/emit-ts/async/`.
 
 Stage 5 replaces the driver, and nothing in the frame layout: the `malloc` per
 spawn with a slab per spawned kind, the queue with the executor of §4 in

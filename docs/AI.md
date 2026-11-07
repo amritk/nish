@@ -108,8 +108,9 @@ the difference is a row of [the user guide's table](guide/using-nish/to-typescri
 or a bug in `nish` worth reporting. A program on `nish:net`, the signal
 descriptor or a C declaration (NL4010, NL4011), a compound assignment whose
 index would run twice (NL4012) or a generic whose element type decides its
-code (NL4013, NL4014) or an `async` function (NL4016) is refused and has no
-TypeScript to run.
+code (NL4013, NL4014) is refused and has no TypeScript to run. An `async`
+program is written as Node async/await, whose spawned tasks may print in
+another order than native.
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
@@ -588,8 +589,11 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
 - **Parameters are immutable**: `p = 1`, `p++`, `p += 1` are all rejected. Copy
   into a `let` first.
 - A non-`void` function must return on every path.
-- Rejected: generators, a method that is `async`, destructured / rest / optional / default
-  parameters, overloads, nested function declarations. Type parameters *are*
+- Rejected: generators, a method that is `async`, destructured and optional
+  (`x?: T`) parameters, overloads, nested function declarations. A default
+  (`n: i32 = 1`) or a rest parameter (`...ns: i32[]`) is allowed on a
+  function, a method, a constructor or a module `const` arrow — see
+  "Optional parameters" in [Recipes for what is missing](#recipes-for-what-is-missing). Type parameters *are*
   allowed — see [Generic functions](#generic-functions).
 
 ### Generic functions
@@ -855,8 +859,8 @@ export const main = (): i32 => {
   (`(x) => { if (x > limit) { hits.push(x) } }`); each capture becomes one more
   argument of the direct call. It may not assign to one, read a `let`
   (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
-  read `this` (bind `const self = this`), or read a function parameter of its
-  function. An arrow inside another arrow, or given to a method, a
+  read `this` (bind `const self = this`), or read a function-typed parameter
+  of its function. An arrow inside another arrow, or given to a method, a
   constructor, `expose` or `exposeWith`, captures nothing; `xs.sort(cmp)`'s
   comparator is the exception, and captures as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
@@ -884,7 +888,8 @@ export const main = (): i32 => {
 switch, one that awaits nothing a plain function, and `export async function
 main` runs to its end, then finishes every task it spawned. Nothing waits on
 sockets or timers in this release, so every task runs to completion.
-`--emit-ts` refuses it for now (`NL4016`); keep such a program native. A call
+`--emit-ts` writes it as Node async/await, where `spawn`ed tasks resume in
+Node's order, not the native one. A call
 that can fail answers `Promise<Result<T, E>>`: test the `Result` after the
 `await`. The rules:
 
@@ -2293,7 +2298,8 @@ backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
 `i32`: **a negative number is a failure, not an exception** — `-11` means "would
 block, call again", `-32` a peer that has gone (never SIGPIPE), `-98` the port
 is in use, `-111` refused, `-22` a bad argument. Every socket is non-blocking,
-and there is no `async` and no callback: your `main` is the loop. A client calls
+and there is no callback, and an `async` function cannot wait on a socket yet
+(its tasks run on an in-process queue): your `main` is the loop. A client calls
 `tcpConnect(addr)`, which answers the descriptor while it is still connecting;
 wait for it to be writable, then `connectResult(fd)` is 0 or the failure. Buffers
 are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
@@ -2854,7 +2860,8 @@ guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
 
 **Call another service from a route handler** — there is no `await fetch()`
-in a handler and no event-loop callback: `nish/net/upstream`'s `Upstream(h,
+in a handler (an `async` task does not wait on a socket yet) and no event-loop
+callback: `nish/net/upstream`'s `Upstream(h,
 origin, limits)` is a pool of keep-alive connections to one `http:` origin on
 the `HttpHandler`'s own loop. `users.get(req, path)` returns at once — test it
 for `UPSTREAM_E_FULL`, which holds nothing — and keeps `req` held; after each
