@@ -15,13 +15,13 @@
  *       // close the connection with theirs.error; theirs.errorParameter names the parameter
  *     }
  *
- * **A `QuicTransportParameters` starts at every parameter's default** (§18.2),
- * so a parse leaves a parameter the peer did not send at the value the RFC
+ * **Defaults.** A `QuicTransportParameters` starts at every parameter's
+ * default (§18.2), so a parse leaves a parameter the peer did not send at the value the RFC
  * says it then has. The encoder writes a parameter only when it differs from
  * that default, plus the connection IDs, which have none.
  *
- * **What a parse refuses**, each a TRANSPORT_PARAMETER_ERROR (§7.4, §18.2):
- * an ID or a length that does not fit, a parameter running past the bytes, a
+ * **What a parse refuses.** Each of these is a TRANSPORT_PARAMETER_ERROR
+ * (§7.4, §18.2): an ID or a length that does not fit, a parameter running past the bytes, a
  * known parameter sent twice, a varint-valued parameter whose value is not
  * exactly one varint, `disable_active_migration` with a value, a server-only
  * parameter from a client (`original_destination_connection_id`,
@@ -35,7 +35,7 @@
  * Whether `initial_source_connection_id` is present and right is the
  * connection's check, because it needs the packet the ID came in.
  *
- * **Written from RFC 9000 §18**, in this module's own structure; nothing here is
+ * **Provenance.** Written from RFC 9000 §18, in this module's own structure; nothing here is
  * ported from another implementation. Private names carry the
  * `quicParams` prefix (`docs/wp26-stdlib.md` §3e).
  */

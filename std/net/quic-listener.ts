@@ -35,7 +35,7 @@
  * listener a packet for a connection that is still alive would give that
  * token, which ends the connection, to whoever sent it (RFC 9000 §21.11).
  *
- * **Retry tokens** (§8.1.4) are this server's own format: a marker byte, the
+ * **Retry tokens** (§8.1.4). They are this server's own format: a marker byte, the
  * time the token was issued, and the client's original Destination
  * Connection ID, then 16 bytes of HMAC-SHA256 under the configuration's
  * `retryTokenKey` over all of that, the Retry's Source Connection ID (which
@@ -47,7 +47,7 @@
  * INVALID_TOKEN (§8.1.2); a token without the marker, which some other
  * server issued, is treated as no token at all (§8.1.3).
  *
- * **Stateless resets** (§10.3) end in the token `quicStatelessResetToken`
+ * **Stateless resets** (§10.3). They end in the token `quicStatelessResetToken`
  * derives (computed in place, by `quicConnResetTokenInto`) from the configuration's static key and the packet's connection
  * ID, so a server that restarted with the same key can end the connections
  * it lost. RFC 9000 §10.3 and §10.3.3 bound them, and each bound is held
@@ -60,7 +60,7 @@
  * `QUIC_LISTENER_RESET_INTERVAL` milliseconds. Each reset's other bytes are
  * unpredictable, from the listener's own generator.
  *
- * **Pacing** (RFC 9002 §7.7) is the carrier's send loop, so it is here
+ * **Pacing** (RFC 9002 §7.7). It is the carrier's send loop, so it is here
  * beside the rest of what the carrier calls: `quicListenerTakePaced` takes a
  * connection's next datagram only when its pacer has the credit for it, and
  * `quicListenerPaceTime` says when it will. The pacer earns 5/4 of the

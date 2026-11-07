@@ -33,7 +33,7 @@
  *       slot.wipe()                                                         // once the level is done
  *     }
  *
- * **The module is sans-IO**: bytes in, bytes out, no socket and no clock. It
+ * **Sans-IO.** The module takes bytes in and gives bytes out, with no socket and no clock. It
  * frames and protects packets and stops there, so it knows nothing of frames,
  * of a connection's state or of which keys a level is on; that is
  * `nish/net/quic` (WP34 Q2). Only version 1 (`0x00000001`) is spoken. A long
@@ -94,12 +94,12 @@
  * who holds the header-protection key, and RFC 9001 §5.4.1 protects it against
  * observers, not timing), and whether a payload authenticated.
  *
- * **Written from RFC 9000 and RFC 9001**, in this module's own structure: nothing
+ * **Provenance.** Written from RFC 9000 and RFC 9001, in this module's own structure: nothing
  * here is ported from another implementation. The packet-number decoding
  * follows the arithmetic of RFC 9000 §A.3 and the length choice the rule of
  * §A.2, neither line by line.
  *
- * **Private names carry the `quicPacket` prefix** because a `std/` module's
+ * **Private names.** They carry the `quicPacket` prefix because a `std/` module's
  * private functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
@@ -286,8 +286,9 @@ export class QuicKeys {
 
   /**
    * Wraps keys already derived; the arrays are kept, not copied, so they stay the owner's to wipe.
-   * `packetAes` and `hpAes` start `null`. Only `quicKeys` fills them for the AES suites, so keys built
-   * by hand for an AES suite stay unusable: opening refuses them with `QUIC_ERR_KEYS`, and sealing answers `null`.
+   * `packetAes` and `hpAes` start `null`; the `quicKeys*` functions fill them for the AES suites. A
+   * `QuicKeys` built by hand for an AES suite stays unusable: opening refuses it with `QUIC_ERR_KEYS`, and
+   * sealing answers `null`.
    *
    * @param aead The suite, one of the `QUIC_AEAD_*` constants.
    * @param key The packet-protection key: 16 bytes for AES-128-GCM, 32 for the others.

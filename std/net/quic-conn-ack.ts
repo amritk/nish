@@ -21,12 +21,12 @@
  * peer that sends packet numbers full of holes costs a fixed amount of memory
  * and loses only very late packets.
  *
- * **When to acknowledge** is the connection's choice; this module records
+ * **When to acknowledge.** That is the connection's choice; this module records
  * whether something ack-eliciting arrived since the last ACK it wrote
  * (`ackPending`). ACK frames carry an ACK Delay the caller supplies, and no
  * ECN counts.
  *
- * **Written from RFC 9000 §12.3, §13.2 and §19.3**, not ported from another
+ * **Provenance.** Written from RFC 9000 §12.3, §13.2 and §19.3, not ported from another
  * implementation. Private names carry the `quicAck` prefix
  * (`docs/wp26-stdlib.md` §3e).
  */

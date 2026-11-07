@@ -14,7 +14,7 @@
  *       at = frame.end;
  *     }
  *
- * **Every frame type of RFC 9000 is read**, 0x00 to 0x1e, and RFC 9221's
+ * **Coverage.** Every frame type of RFC 9000 is read, 0x00 to 0x1e, and RFC 9221's
  * DATAGRAM, 0x30 and 0x31, so a type outside those is the one parse error a
  * well-formed packet cannot produce. What
  * a frame *means* is `nish/net/quic`'s: this module checks only what §19 says
@@ -36,7 +36,7 @@
  * every field it reads and resets the rest, and stores nothing but numbers,
  * so a payload made inside an arena block can be read inside it.
  *
- * **The writers** come in two forms. A `put` writer writes one frame into a
+ * **Writers.** They come in two forms. A `put` writer writes one frame into a
  * caller's buffer at an offset, before an end, and answers the offset past
  * it, or -1 with nothing written; a `push` writer appends one to an array
  * and answers whether it could, by growing the array and calling the `put`

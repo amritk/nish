@@ -329,8 +329,10 @@ export class QuicSentPackets {
    * The `k`-th slot the last call acknowledged, or -1.
    *
    * @param k The position in `acked`, from 0 to `ackedCount - 1`, oldest first.
-   * @returns The slot, valid until the next `onAck`, `onAckEcn`, `onTimeout` or `discardSpace`, or -1 for `k`
-   *   out of range.
+   * @returns The slot, or -1 for `k` out of range. It names that packet only until the next call that
+   *   records, settles or frees a packet in this space, any of which can free or reuse the slot:
+   *   `onPacketSent`, `onAck`, `onAckEcn`, `onTimeout`, `evictOldest`, `discardSpace` and `reset` on the
+   *   recovery, and this ring's own `full` and `compact`.
    */
   ackedSlot(k: i32): i32 {
     return k >= 0 && k < this.ackedCount && k < toI32(this.acked.length) ? this.acked[k] : -1
@@ -340,8 +342,10 @@ export class QuicSentPackets {
    * The `k`-th slot the last call declared lost, or -1.
    *
    * @param k The position in `lost`, from 0 to `lostCount - 1`, oldest first.
-   * @returns The slot, valid until the next `onAck`, `onAckEcn`, `onTimeout` or `discardSpace`, or -1 for `k`
-   *   out of range.
+   * @returns The slot, or -1 for `k` out of range. It names that packet only until the next call that
+   *   records, settles or frees a packet in this space, any of which can free or reuse the slot:
+   *   `onPacketSent`, `onAck`, `onAckEcn`, `onTimeout`, `evictOldest`, `discardSpace` and `reset` on the
+   *   recovery, and this ring's own `full` and `compact`.
    */
   lostSlot(k: i32): i32 {
     return k >= 0 && k < this.lostCount && k < toI32(this.lost.length) ? this.lost[k] : -1

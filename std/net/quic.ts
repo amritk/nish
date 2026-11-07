@@ -34,7 +34,7 @@
  * client's are parsed and checked (RFC 9000 §7.3, §7.4) before the server's
  * flight leaves.
  *
- * **Streams** are `nish/net/quic-stream`'s: both kinds, opened by either
+ * **Streams.** They are `nish/net/quic-stream`'s: both kinds, opened by either
  * side, with flow control per stream and for the connection raised as the
  * application reads, and the stream limits raised as streams finish. The
  * application sees them through a small surface: `nextStreamEvent` names a
@@ -52,7 +52,7 @@
  * congestion window, and is never sent again. `readDatagram` hands out what
  * arrived. Each way is a fixed ring (`nish/net/quic-datagram`).
  *
- * **Loss recovery** (RFC 9002) is `nish/net/quic-recovery`'s: every
+ * **Loss recovery** (RFC 9002). It is `nish/net/quic-recovery`'s: every
  * ack-eliciting packet is recorded in its space's ring with what it carried
  * (its CRYPTO range, its STREAM chunks, HANDSHAKE_DONE and the control
  * frames), the client's ACKs give the RTT estimate and show what was lost by

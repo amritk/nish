@@ -13,14 +13,14 @@
  *     const error: i64 = ids.retireLocal(sequence, packet, dcidAt, dcidLength)
  *     // error is QUIC_ERROR_NO_ERROR, or QUIC_ERROR_PROTOCOL_VIOLATION to close with
  *
- * **Local IDs** are the ones this side handed out: sequence 0 is the Source
+ * **Local IDs.** They are the ones this side handed out: sequence 0 is the Source
  * Connection ID of its first packet, and each later one goes out in a
  * NEW_CONNECTION_ID frame (`nextUnannounced` answers the next one still to). The peer
  * retires one with RETIRE_CONNECTION_ID: a sequence number never issued, or
  * the one the retiring packet was itself sent to, is a PROTOCOL_VIOLATION
  * (§19.16).
  *
- * **Peer IDs** come from the peer's first packet and its NEW_CONNECTION_ID
+ * **Peer IDs.** They come from the peer's first packet and its NEW_CONNECTION_ID
  * frames (§19.15). A sequence number seen before must carry the same ID and
  * token, or it is a PROTOCOL_VIOLATION; an ID already given another sequence
  * number is one too. More active IDs than the limit this side advertised is
