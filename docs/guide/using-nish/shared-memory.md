@@ -12,6 +12,7 @@ on a different core without a socket or a system call per message.
 | a counter, flag or total they all update | [the atomics on a region](#counting-across-processes) |
 | to read, write or `netRead` into a region's bytes with no copy | [`lend` and `giveBack`](#a-regions-bytes-as-an-array-lend-and-giveback) |
 | a queue from one process to another | [`SpscRing`](#a-queue-spscring-and-mpscring) |
+| to write or read a queued record where it lies, with no copy | [`reserve`, `commit`, `peek` and `release`](#records-in-place-reserve-commit-peek-and-release) |
 | a queue from many processes to one | [`MpscRing`](#a-queue-spscring-and-mpscring) |
 | to sleep until another process says there is work | [`popWait`, or `waitI32` and `wake`](#sleeping-until-there-is-work) |
 
@@ -190,6 +191,66 @@ The repository's
 [`examples/prefork-jobs.ts`](../../../examples/prefork-jobs.ts) puts it
 together: four prefork workers send jobs to a fifth on one `MpscRing`, and
 each gets its answers back on an `SpscRing` of its own.
+
+## Records in place: `reserve`, `commit`, `peek` and `release`
+
+`tryPush` and `tryPop` copy each record once. An `SpscRing` also lends the
+record's bytes where they lie in the ring, as `lend` does a region's.
+`reserve(n)` answers a `u8[]` window of `n` bytes for the producer to write,
+and `commit(len)` publishes its first `len`; `peek()` answers the next record
+as a `readonly u8[]`, and `release()` frees it:
+
+```ts nish:ok
+import { createRegion, unlinkRegion } from "nish/sync/shm";
+import { attachSpscRing, initSpscRing, spscRingBytes } from "nish/sync/ring";
+
+export const main = (): i32 => {
+  const region = createRegion("guide-inplace", spscRingBytes(4096)).expect("create");
+  const producer = initSpscRing(region, 0, 4096, false);
+  const consumer = attachSpscRing(region, 0).expect("attach"); // in the other process
+  const w: u8[] = producer.reserve(64); // empty when there is no room now
+  if (w.length > 0) {
+    for (let i = 0; i < 3; i++) {
+      w[i] = toU8(7 + i); // writes the ring, no copy
+    }
+    producer.commit(3); // publishes 3 of the 64 bytes
+  }
+  const r: readonly u8[] = consumer.peek();
+  if (r.length > 0) {
+    console.log(`${r.length} bytes, the first ${r[0]}`); // 3 bytes, the first 7
+    consumer.release();
+  }
+  unlinkRegion("guide-inplace").expect("unlink");
+  return 0;
+};
+```
+
+- **Neither blocks.** With no room for `n` bytes now, `reserve` answers an
+  empty window and lends nothing; try again later, as with `tryPush`. `n` is
+  from 1 to half the ring less 4, so an empty ring always has room for one.
+- **`abandon()` publishes nothing.** It ends a reservation you do not want.
+- **An empty `peek` may still have a record.** Besides an empty ring, it
+  answers empty for a record of length 0 and for one `tryPush` wrote across
+  the end of the ring, which are not one run of bytes. `tryPop` takes those,
+  so a consumer that peeks falls back to it:
+  `if (r.length === 0) { n = consumer.tryPop(buf, 0) }`.
+- **After `commit`, `abandon` or `release` the window is empty**, and the
+  next index stops the program, as after `giveBack`. Each end keeps one
+  window and points it at the next record, so the busy path allocates
+  nothing; do not keep a window past the call that ends it.
+- **One at a time.** A second `reserve` before `commit` or `abandon`, a
+  `tryPush` while a reservation is open, or a `peek`, `tryPop` or `popBatch`
+  while a record is lent stops the program and names the call. So do
+  `commit` of more bytes than were reserved, and a `push` onto the window.
+- **A peeked record is not a snapshot.** Its bytes are the ring's, so a
+  broken producer can change them while you read. Check a field once, or
+  copy the record into a buffer of your own first (or take it with `tryPop`) when
+  you must decide on bytes you do not trust.
+- **The ring stays one ring.** A reservation that would cross the end of the
+  ring starts at the beginning, behind a marker every pop steps over, so
+  `tryPush`, `reserve`, `tryPop`, `popBatch`, `popWait` and `peek` mix freely
+  on one ring. Both ends must be built from a Nish that has `reserve`: an
+  older consumer stops at the marker with `the ring is corrupt`.
 
 ## Sleeping until there is work
 
