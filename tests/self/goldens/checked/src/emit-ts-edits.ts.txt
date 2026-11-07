@@ -64,6 +64,7 @@ const AMBIENT_NAMES: string = " write writeError panic readFileSync readFileSync
 const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 integer Int32Array Float32Array Float64Array BigInt64Array "
 const HOST_HANDLE_ALIAS: string = "type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 0\n" [exported]
 const SIGNAL_REFUSAL: string = "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)" [exported]
+const WAIT_REFUSAL: string = "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native" [exported]
 const REGION_REFUSAL: string = "--emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native" [exported]
 const INSTANCES_REFUSAL: string = "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"
 const UNTYPED_REFUSAL: string = "--emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type"
@@ -276,8 +277,8 @@ function observe(walk: Walk, node: Node): string -> @observe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: StringSet.add Walk.helperName Walk.refuse ambientCallee isNetExport listedWord nish_panic_index nish_str_eq
-  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.refuse#0 ambientCallee#0 Walk.helperName#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=Walk.refuse#1 ambientCallee#1
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.refuse#0 Walk.refuse#0 ambientCallee#0 Walk.helperName#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=Walk.refuse#1 Walk.refuse#1 ambientCallee#1
   stackSites=0 stackLocals=0
   callee -5:35 listedWord -> @listedWord
   callee -4:5 StringSet.add -> @StringSet.add
@@ -286,10 +287,11 @@ function observe(walk: Walk, node: Node): string -> @observe
   local +11:9 name: string (const)
   callee +14:55 isNetExport -> @isNetExport
   callee +15:5 Walk.refuse -> @Walk.refuse
-  local +18:9 ambient: string (const)
-  callee +18:19 ambientCallee -> @ambientCallee
-  local +22:9 local: string (const)
-  callee +22:17 Walk.helperName -> @Walk.helperName
+  callee +19:5 Walk.refuse -> @Walk.refuse
+  local +22:9 ambient: string (const)
+  callee +22:19 ambientCallee -> @ambientCallee
+  local +26:9 local: string (const)
+  callee +26:17 Walk.helperName -> @Walk.helperName
 function isLazyCall(call: Node): boolean -> @isLazyCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq

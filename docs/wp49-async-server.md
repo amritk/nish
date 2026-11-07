@@ -489,6 +489,70 @@ owes each of them before a task may wait on the kernel:
   has finished before `spawn` returns; once one can pend, the C entry must
   run the loop after a plain `main` too, not just after an `async` one.
 
+## Stage 5, part 1: the executor and the first waits
+
+Part 1 replaces stage 4's in-process queue with the executor of §4 in
+`runtime/runtime-async.c` and adds the three waits every later stage builds
+on: `sleep(ms)`, `readable(fd)` and `writable(fd)` in `nish:async`. Async
+`fetch`, `serve`, the Postgres pool and cancellation are later parts. The
+security record is [`security/async.md`](security/async.md).
+
+- **The executor.** A task is a node from a slab per spawned kind (a free
+  list refilled by doubling chunks, never given back to `malloc`), with a
+  permanent index and a generation that moves on each reuse. A wait is a
+  token, `(generation << 32) | (slot + 1)`, polled by the resume that follows
+  the `await` (`nish_async_poll`: `-1` pending, else the answer); a wait that
+  can be answered at once is made already fired, so the task never suspends
+  for it. `nish_async_next` answers the head of the ready queue, or blocks on
+  `epoll` (`kqueue` on Darwin) and a binary heap of timers, ties broken by the
+  order they were made; it answers null when nothing waits. A completion whose
+  generation no longer matches its task is dropped and counted
+  (`nish_async_stat(1)`, ASYNC-1).
+- **The driver.** `@nish.async.run` resumes the nodes `nish_async_next`
+  answers through the same `switch` on the kind as stage 4, entering the
+  node's region around each resume, and returns to the C entry when the next
+  node is `main`'s (index 0, kind -1). `@nish.async.drain` runs it until
+  nothing waits. The queue, `@nish.async.step` and the `free` per task are
+  gone.
+- **A descriptor wait owns a duplicate** (`F_DUPFD_CLOEXEC`), registered
+  one-shot and closed when it fires, so two tasks can wait on one descriptor
+  and a closed, reused number cannot answer for the new file (ASYNC-4).
+
+The three debts stage 4 left are paid:
+
+- **(a) The arena is a stack: a region per task.** Each spawned task owns a
+  region (`runtime/runtime-region.c`), entered around every resume and freed
+  when the task finishes (`tests/link/async_region_per_task`). `main` keeps
+  the arena.
+- **(b) Spawn arguments outlive the spawner.** A `string` argument is copied
+  into the task's region before the task first runs (`nish_async_copy_str`);
+  numbers, booleans and enums are copied by value; any other type is refused,
+  NL2673 (`tests/link/async_spawn_args`, `async_sleep_spawn_string`,
+  `reject_async_spawn_array_arg`).
+- **(c) A synchronous `main` runs the loop.** An `async` `main` that awaits
+  nothing compiles to a plain call, and the C entry then drains the executor
+  before it exits with `main`'s answer (`tests/link/async_sync_main_loop`).
+
+**How the executor is linked.** `scripts/build.sh` greps the program's IR for
+`^declare [^"]*@nish_async_`: the driver declares `nish_async_next` and every
+spawn, wait and async `main` declares its runtime call, so a program with
+`async` gets `runtime-async.c` compiled and linked beside `runtime.c`, and any
+other program links none of it. `--runtime-objects` builds it into the runtime
+cache with the rest (`src/run-cache.ts`), and `--runtime-from` links its
+object only when wanted. Measured on this change: a non-async program's IR is
+byte-identical to its IR before the executor landed (D1 over every positive
+case: 918 the same, the 10 that differ all `async` by design), and `llvm-nm`
+finds 0 `nish_async` symbols in `entry_main`'s binary against 49 in
+`async_sleep`'s. `tests/runtime-budgets.js` holds the executor's `-Oz` `.text`
+to `RUNTIME_ASYNC_TEXT_BUDGET`.
+
+**What it does not do.** A wait has no deadline: a descriptor that never
+becomes ready parks its task, and the program, until the peer sends or
+closes (ASYNC-6, open until cancellation). The executor is cooperative and
+runs on `main`'s thread (ASYNC-5). `--emit-ts` writes `sleep` as a
+`setTimeout` and refuses `readable`/`writable` (NL4017). `async` stays
+refused under the wasm profiles (NL2652).
+
 ## Not in this work package
 
 - Promises as values: arrays of them, `Promise.all` over an array, `.then`.

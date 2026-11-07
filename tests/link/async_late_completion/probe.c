@@ -1,6 +1,6 @@
 /* The executor's late completions, driven through its C entry points as the
    compiled driver would (runtime/runtime-async.c; docs/security/async.md,
-   AS-1). Every wait records the (index, generation) of the task that made it,
+   ASYNC-1). Every wait records the (index, generation) of the task that made it,
    and a completion whose task has finished since is dropped and counted, not
    delivered to whatever task holds the node by then.
 

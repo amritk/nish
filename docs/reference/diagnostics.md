@@ -2,7 +2,7 @@
 
 # Diagnostics
 
-Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. This page lists all 824: the 4 of band 0, which no rule matches, and the 820 rules `src/codes.ts` holds, 64 of them retired.
+Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. This page lists all 828: the 4 of band 0, which no rule matches, and the 824 rules `src/codes.ts` holds, 64 of them retired.
 
 A rule is matched by a fragment of its message: the longest literal run of the message's template, with the names, types and counts it interpolates cut out. The fragment is matched as a substring, so `…` marks where the message goes on. Each example is a program from `tests/wordings/` that the suite compiles, and the message it gets, word for word. [Reading diagnostics](../guide/using-nish/cli.md#reading-diagnostics) in the guide says how to act on one; the [command-line reference](command-line.md) lists the flags that turn the warnings on and off.
 
@@ -13339,6 +13339,30 @@ export function f(c: Canvas = 7): Canvas {
 Parameter `c` is HostHandle<"canvas">, and a handle starts as `0`, the handle that names nothing: every other one is given out by the page
 ```
 
+### NL2671
+
+The message of an error contains:
+
+```text
+` is a wait on the executor, written only where it is awaited: `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`, inside an `async` function
+```
+
+### NL2672
+
+The message of an error contains:
+
+```text
+` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on
+```
+
+### NL2673
+
+The message of an error contains:
+
+```text
+…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
+```
+
 ## NL3xxx: modules and the driver
 
 ### NL3001
@@ -14179,6 +14203,14 @@ The message of an error contains:
 ```
 
 **Retired**: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (WP49 stage 4, part 3; tests/emit-ts/async)
+
+### NL4017
+
+The message of an error contains:
+
+```text
+…--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```
 
 ## NL7xxx: deprecation warnings
 

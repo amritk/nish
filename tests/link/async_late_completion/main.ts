@@ -3,7 +3,7 @@
 // way yet to leave a wait behind (cancellation is a later stage), so
 // `probe.c` drives the executor's C entry points the way the compiled driver
 // does; this program builds it against the runtime and runs it.
-// docs/security/async.md, AS-1.
+// docs/security/async.md, ASYNC-1.
 import { runProbe } from "./lib"
 
 export const main = (): number => runProbe("async_late_completion")

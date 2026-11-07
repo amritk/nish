@@ -1,0 +1,5 @@
+the number is reused: yes
+woken by: the timer
+the wait: -1
+after a write to the pair: 1
+then nothing waits: yes

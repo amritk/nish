@@ -4413,9 +4413,9 @@ declare module "nish:region" {
  *       spawn(log(c + d));
  *     }
  *
- * The two are reached only through the import. Each argument is a direct call
- * to an `async` function, written where it is made, which the checker holds
- * it to (`src/async-check.ts`); `tsc` sees ordinary promises. A spawned
+ * All five are reached only through the import. Each argument to `awaitAll`
+ * or `spawn` is a direct call to an `async` function, written where it is
+ * made, which the checker holds it to (`src/async-check.ts`); `tsc` sees ordinary promises. A spawned
  * call's arguments are numbers, `boolean`s, enums or `string`s (NL2673): the
  * task outlives the function that spawned it.
  *

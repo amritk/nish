@@ -7,7 +7,10 @@ Tasks for `async` functions: start one and go on, or await two to eight at once.
 ```ts
 import {
   awaitAll,
+  readable,
+  sleep,
   spawn,
+  writable,
 } from "nish:async";
 ```
 
@@ -36,9 +39,27 @@ Wait for two calls at once.
 
 </scalar-card>
 
+<scalar-card title="readable" icon="phosphor/regular/function" href="#readable">
+
+Suspend the task until `fd` has bytes to read, or its peer has hung up, while the executor runs the others.
+
+</scalar-card>
+
+<scalar-card title="sleep" icon="phosphor/regular/function" href="#sleep">
+
+Suspend the task for `ms` milliseconds while the executor runs the others.
+
+</scalar-card>
+
 <scalar-card title="spawn" icon="phosphor/regular/function" href="#spawn">
 
 Start `task` as a task of its own and go on without waiting for it.
+
+</scalar-card>
+
+<scalar-card title="writable" icon="phosphor/regular/function" href="#writable">
+
+Suspend the task until `fd` takes bytes without blocking, while the executor runs the others.
 
 </scalar-card>
 
@@ -46,11 +67,28 @@ Start `task` as a task of its own and go on without waiting for it.
 
 <scalar-callout type="info">
 
-The two are reached only through the import. Each argument is a direct call
-to an `async` function, written where it is made, which the checker holds
-it to (`src/async-check.ts`); `tsc` sees ordinary promises.
+All five are reached only through the import. Each argument to `awaitAll`
+or `spawn` is a direct call to an `async` function, written where it is
+made, which the checker holds it to (`src/async-check.ts`); `tsc` sees ordinary promises. A spawned
+call's arguments are numbers, `boolean`s, enums or `string`s (NL2673): the
+task outlives the function that spawned it.
 
 </scalar-callout>
+
+`sleep(ms)`, `readable(fd)` and `writable(fd)` are the waits a task makes
+on the executor, an epoll (kqueue on Darwin) loop that resumes ready tasks
+in the kernel's order and then expired timers by deadline:
+
+```ts
+import { readable, sleep } from "nish:async";
+```
+
+```ts
+async function tick(): Promise<void> {
+  await sleep(10);
+  console.log("tick");
+}
+```
 
 There is no `async` in a wasm build: under a `wasm32` target or
 `--profile wasi` an `async` function is NL2652.
@@ -446,6 +484,61 @@ The answers, in the order the calls are written.
 
 </scalar-field>
 
+## readable
+
+Suspend the task until `fd` has bytes to read, or its peer has hung up,
+while the executor runs the others. Written only as
+`await readable(fd)` inside an `async` function (NL2671). Refused under
+`--emit-ts` (NL4017).
+
+```ts
+function readable(fd: i32): Promise<boolean>
+```
+
+#### Parameters
+
+<scalar-field name="fd" type="i32" required>
+
+An open descriptor: a socket, a pipe or a terminal.
+
+</scalar-field>
+
+#### Returns
+
+<scalar-field name="returns" type="Promise&lt;boolean&gt;">
+
+`true` once `fd` is ready; `false` when the wait could not be
+  made (an `fd` that is not open). A regular file is always ready.
+
+</scalar-field>
+
+## sleep
+
+Suspend the task for `ms` milliseconds while the executor runs the
+others. Written only as `await sleep(ms)` inside an `async` function
+(NL2671).
+
+```ts
+function sleep(ms: i32): Promise<boolean>
+```
+
+#### Parameters
+
+<scalar-field name="ms" type="i32" required>
+
+The milliseconds to wait, an `i32`.
+
+</scalar-field>
+
+#### Returns
+
+<scalar-field name="returns" type="Promise&lt;boolean&gt;">
+
+`true` once the time has passed; `false` at once for a negative
+  `ms`, which makes no wait.
+
+</scalar-field>
+
 ## spawn
 
 Start `task` as a task of its own and go on without waiting for it. It
@@ -463,5 +556,32 @@ function spawn(task: Promise<void>): void
 A direct call to an `async` function (NL2644). Nothing reads
   its answer, so it answers `void` or a `Result` it reports itself
   (NL2646).
+
+</scalar-field>
+
+## writable
+
+Suspend the task until `fd` takes bytes without blocking, while the
+executor runs the others. Written only as `await writable(fd)` inside an
+`async` function (NL2671). Refused under `--emit-ts` (NL4017).
+
+```ts
+function writable(fd: i32): Promise<boolean>
+```
+
+#### Parameters
+
+<scalar-field name="fd" type="i32" required>
+
+An open descriptor: a socket, a pipe or a terminal.
+
+</scalar-field>
+
+#### Returns
+
+<scalar-field name="returns" type="Promise&lt;boolean&gt;">
+
+`true` once `fd` is ready; `false` when the wait could not be
+  made (an `fd` that is not open). A regular file is always ready.
 
 </scalar-field>
