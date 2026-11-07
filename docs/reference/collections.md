@@ -11,6 +11,19 @@ import {
 } from "nish/collections";
 ```
 
+```ts
+const counts = new Map<string, i32>()
+const seen = new Set<string>()
+for (const w of ["to", "be", "or", "not", "to", "be"]) {
+  counts.set(w, (counts.get(w) ?? 0) + 1)
+  seen.add(w)
+}
+for (const w of counts.keys()) {
+  console.log(`${w} ${counts.get(w) ?? 0}`)  // "to 2", "be 2", "or 1", ...
+}
+seen.size  // 4, and seen.has("or") is true
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="Map" icon="phosphor/regular/cube" href="#map">
@@ -93,29 +106,12 @@ class Map<K, V>
 
 | Member | |
 | --- | --- |
-| `new Map<K, V>()` |  |
-| `entryHashes: u32[]` | The full hash of each entry; 0 once the entry is deleted. |
-| `entryKeys: K[]` |  |
-| `entryValues: V[]` |  |
-| `live: i32` | Live entries, as an `i32` for the load and compaction arithmetic. |
-| `mask: i32` | `slots.length - 1`: the table is a power of two. |
+| `new Map<K, V>()` | An empty map. |
 | `size: number` | How many entries are live. The one field a program may read, and it may not write it. |
-| `slots: u32[]` | Bucket -> fingerprint and entry index plus one; see the header. |
-| `walks: i32` | How many `for...of` loops are walking the table now. While it is above 0 a rebuild doubles rather than compacts, and `clear` marks entries dead rather than truncating, so no entry moves under a walk's cursor (§6.2). |
 | `clear(): void` | Empty the table in place: the buckets are zeroed and the entries truncated, or, while a loop walks the table, marked dead and kept (§6.1). |
-| `delete(key: K): boolean` |  |
-| `has(key: K): boolean` |  |
-| `insertAt(absent: i64, key: K, value: V): void` | Append an entry for `key` at the empty bucket an absent probe result names, reusing its hash. |
-| `keyAt(index: i32): K` | The key of entry `index`, which `walkNext` answered. |
-| `probe(key: K): i64` | The packed probe result for `key`: see `probeTable`, `foundAt` and `absentAt`. |
-| `rebuild(): void` | Compact or double, then re-file the buckets from the stored hashes (§6.1). While a loop walks the table it always doubles and moves no entry, and the first rebuild after the walk compacts (§6.2). |
-| `reserveSlots(n: number): void` | `reserve(m, n)` from `nish/map` (docs/wp32-map.md §9.2): grow the bucket table until `n` entries, dead ones included, fit under the load bound, so that the inserts up to `n` rebuild nothing. It only ever grows the buckets and re-files them from the stored hashes, so no entry moves and it is as safe under a walk as the doubling a walk already allows (§6.2). A count that is not positive, or not a number, does nothing, as `reserve` does under Node; one past the entry cap is the cap. |
+| `delete(key: K): boolean` | Removes the entry for `key`, if there is one; the others keep their order. |
+| `has(key: K): boolean` | Whether the map has an entry for `key`. |
 | `set(key: K, value: V): Map<K, V>` | Set `key` to `value`, in place when it is there and at the end when it is not: one probe. |
-| `setValueAt(index: i32, value: V): void` | Overwrite the value of the entry a probe found; it keeps its place. |
-| `valueAt(index: i32): V` | The value of the entry a probe found, or a walk reached. |
-| `walkClose(): void` |  |
-| `walkNext(from: i32): i32` |  |
-| `walkOpen(): void` | The four pieces a `for...of` over `keys()` or `values()` is lowered to (`emitForOf`, docs/wp32-map.md §6.2): `walkOpen` where the loop is entered, `walkNext` for the first live entry and after each pass, `keyAt` or `valueAt` for the loop variable, and `walkClose` on every edge that leaves the loop. Two stores a loop, and none per entry. |
 
 ## Set
 
@@ -127,22 +123,9 @@ class Set<T>
 
 | Member | |
 | --- | --- |
-| `new Set<T>()` |  |
-| `entryHashes: u32[]` |  |
-| `entryKeys: T[]` |  |
-| `live: i32` |  |
-| `mask: i32` |  |
+| `new Set<T>()` | An empty set. |
 | `size: number` | How many elements are live. The one field a program may read, and it may not write it. |
-| `slots: u32[]` |  |
-| `walks: i32` | `Map`'s walk count: how many `for...of` loops are walking the table now. |
 | `add(key: T): Set<T>` | Add `key` at the end when it is not there already: one probe. |
-| `clear(): void` |  |
-| `delete(key: T): boolean` |  |
-| `has(key: T): boolean` |  |
-| `insertAt(absent: i64, key: T): void` |  |
-| `keyAt(index: i32): T` |  |
-| `probe(key: T): i64` |  |
-| `rebuild(): void` |  |
-| `walkClose(): void` |  |
-| `walkNext(from: i32): i32` |  |
-| `walkOpen(): void` | `Map`'s walk: `for (const x of s)`, `s.keys()` and `s.values()` are all this one. |
+| `clear(): void` | Removes every key, keeping the table's memory. |
+| `delete(key: T): boolean` | Removes `key`, if it is there; the others keep their order. |
+| `has(key: T): boolean` | Whether `key` is in the set. |

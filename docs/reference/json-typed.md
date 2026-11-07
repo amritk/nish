@@ -28,7 +28,6 @@ import {
   jsonEncodeNumber,
   jsonEncodeStringArray,
   jsonEncodeStringArrayOrNull,
-  jsonEncodeStringOrNull,
   jsonEncodeU32Array,
   jsonEncodeU32ArrayOrNull,
   jsonEncodeU64,
@@ -129,12 +128,6 @@ Writes an array whose every element is a string.
 <scalar-card title="jsonEncodeStringArrayOrNull" icon="phosphor/regular/function" href="#jsonencodestringarrayornull">
 
 Writes `null`, or the array as `jsonEncodeStringArray` writes it.
-
-</scalar-card>
-
-<scalar-card title="jsonEncodeStringOrNull" icon="phosphor/regular/function" href="#jsonencodestringornull">
-
-Writes a `string | null` field's value: `null`, or the string.
 
 </scalar-card>
 
@@ -900,31 +893,6 @@ The elements, or `null`.
 
 </scalar-field>
 
-## jsonEncodeStringOrNull
-
-Writes a `string | null` field's value: `null`, or the string.
-
-```ts
-function jsonEncodeStringOrNull(
-  w: JsonWriter,
-  s: string | null,
-): void
-```
-
-#### Parameters
-
-<scalar-field name="w" type="JsonWriter" required>
-
-The writer.
-
-</scalar-field>
-
-<scalar-field name="s" type="string | null" required>
-
-The value.
-
-</scalar-field>
-
 ## jsonEncodeU32Array
 
 Writes an array whose every element is a `u32`.
@@ -1068,53 +1036,41 @@ class JsonDecoder
 | `new JsonDecoder(src: u8[], off: i32, len: i32, limits: JsonLimits)` | A decoder over `src[off, off + len)`, with no error and no map key taken. |
 | `errorAt: i32` | The byte offset in the input of the token the error was found at; `-1` until one. |
 | `failed: i32` | `JSON_DECODE_OK`, or the first `JSON_DECODE_*` or `JSON_TOK_ERR_*` code. |
-| `held: boolean` | Whether the tokenizer's current token is a value nothing has read yet: the first token of an array element, read to see whether the array had ended, or a value `takeNull` found was not `null`. |
 | `ignoreUnknown: boolean` | Step over a key that names no field instead of failing with `JSON_DECODE_UNKNOWN`. |
 | `mapKeys: i32` | The keys the maps of this decoding have taken so far; `reset` clears it. |
 | `maxMapKeys: i32` | The most keys every `Map` field of one decoding may take together, 4,096 unless set; past it, `JSON_DECODE_MAP_LIMIT`. At `0` or below, no map may take a key, so a map's only accepted value is `{}`. |
-| `tok: JsonTokenizer` | The tokenizer over the input, under the caller's `JsonLimits`. |
 | `beginArray(): boolean` | Takes the next value as the opening of an array. |
 | `beginObject(): boolean` | Takes the next value as the opening of an object. |
 | `boolean(): boolean` | The next value as a `boolean`. |
-| `booleanArray(xs: boolean[]): boolean[]` | The next value as an array whose every element is a `boolean`, into `xs`. |
+| `booleanArray(xs: boolean[]): boolean[]` | The next value as an array whose every element is a `boolean`, into `xs`.<br><br>Each element overwrites the slot `xs` already has or is pushed past its end, and the slots left over are popped, so an array no longer than `xs` allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or with the tokenizer's code when the input is malformed, and leaves `xs` untouched; a failure inside the array leaves its contents unspecified. |
 | `booleanArrayOrNull(xs: boolean[] \| null): boolean[] \| null` | The next value as `null`, or as an array `booleanArray` reads, into `xs` when it is an array and into a new one when it is `null`. |
-| `duplicateField(): void` | Records `JSON_DECODE_DUPLICATE` at the current key, which the object already gave. |
 | `f64(): f64` | The next value as an `f64`: any number, the nearest double, and past the double range an infinity. |
-| `f64Array(xs: f64[]): f64[]` | The next value as an array whose every element is an `f64`, read as `f64()` reads one, into `xs`. |
+| `f64Array(xs: f64[]): f64[]` | The next value as an array whose every element is an `f64`, read as `f64()` reads one, into `xs`.<br><br>Each element overwrites the slot `xs` already has or is pushed past its end, and the slots left over are popped, so an array no longer than `xs` allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or with the tokenizer's code when the input is malformed, and leaves `xs` untouched; a failure inside the array leaves its contents unspecified. |
 | `f64ArrayOrNull(xs: f64[] \| null): f64[] \| null` | The next value as `null`, or as an array `f64Array` reads, into `xs` when it is an array and into a new one when it is `null`. |
-| `fail(code: i32, at: i32): void` | Records the first error; once one is recorded, this does nothing. |
-| `finish(): i32` | Ends the decoding after the top-level value: nothing but blanks may follow it, and anything else is `JSON_DECODE_TYPE`. |
 | `i32(): i32` | The next value as an `i32`: an integer written without a fraction or an exponent, from -2^31 to 2^31 - 1. A numeric enum is read with it too. |
-| `i32Array(xs: i32[]): i32[]` | The next value as an array whose every element is an `i32`, read as `i32()` reads one, into `xs`. |
+| `i32Array(xs: i32[]): i32[]` | The next value as an array whose every element is an `i32`, read as `i32()` reads one, into `xs`.<br><br>Each element overwrites the slot `xs` already has or is pushed past its end, and the slots left over are popped, so an array no longer than `xs` allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or with the tokenizer's code when the input is malformed, and leaves `xs` untouched; a failure inside the array leaves its contents unspecified. |
 | `i32ArrayOrNull(xs: i32[] \| null): i32[] \| null` | The next value as `null`, or as an array `i32Array` reads, into `xs` when it is an array and into a new one when it is `null`. |
 | `i64(): i64` | The next value as an `i64`: an integer written without a fraction or an exponent. Any integer `isInteger` accepts fits an `i64`, so there is no range to check. |
-| `i64Array(xs: i64[]): i64[]` | The next value as an array whose every element is an `i64`, read as `i64()` reads one, into `xs`. |
+| `i64Array(xs: i64[]): i64[]` | The next value as an array whose every element is an `i64`, read as `i64()` reads one, into `xs`.<br><br>Each element overwrites the slot `xs` already has or is pushed past its end, and the slots left over are popped, so an array no longer than `xs` allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or with the tokenizer's code when the input is malformed, and leaves `xs` untouched; a failure inside the array leaves its contents unspecified. |
 | `i64ArrayOrNull(xs: i64[] \| null): i64[] \| null` | The next value as `null`, or as an array `i64Array` reads, into `xs` when it is an array and into a new one when it is `null`. |
-| `integer(lo: i64, hi: i64, bounded: boolean): i64` | The next value as an integer, from `lo` to `hi` when `bounded`, or `0` with an error. Every `i64` it answers is the tokenizer's or made with `toI64`, so that under Node, where an `i64` is a BigInt, what a caller computes with it never mixes a BigInt with a number. |
 | `key(): string` | The current key, decoded: a `Map` field's key. |
-| `keyByte(at: i32): i32` | Byte `at` of the current key when the key has no escape, so that its bytes are the input's, and `-1` otherwise: for a key with an escape, for an `at` outside it, and when the current token is not a key. A `-1` matches no byte of a field's name, and the code written for a class then compares the key with each name of its length through `keyIs`, which decodes the escapes. |
-| `keyIs(name: string): boolean` | Whether the current key, its escapes decoded, is `name`. |
-| `keyLength(): i32` | The current key's length in bytes once decoded, or `-1` when the current token is not a key: what the code written for a class switches on before it compares a key's bytes with a field's name. |
+| `keyByte(at: i32): i32` | Byte `at` of the current key when the key has no escape, so that its bytes are the input's, and `-1` otherwise: for a key with an escape, for an `at` outside it, and when the current token is not a key or string. A `-1` matches no byte of a field's name, and the code written for a class then compares the key with each name of its length through `keyIs`, which decodes the escapes. |
+| `keyLength(): i32` | The current key's length in bytes once decoded, or `-1` when the current token is not a key or string: what the code written for a class switches on before it compares a key's bytes with a field's name. |
 | `mapRoom(): boolean` | Whether the maps of this decoding may take another key, the current one: whether they have taken fewer than `maxMapKeys` between them, counting it as taken when they may. A key is counted here, before its value is read, so the keys of a map inside another map count before the outer key's value is whole, and the total never passes the limit. `JSON_DECODE_MAP_LIMIT` at the key when they may not. |
-| `missingField(): void` | Records `JSON_DECODE_MISSING` at the `}` of the object just closed, which left out a required field. |
 | `nextElement(): boolean` | Whether the open array has another element, whose first token is then held for the read that follows. |
 | `nextField(): boolean` | Reads the next key of the open object, or its end. |
 | `number(n: JsonNumber): void` | The next value as a `JsonNumber`: its text, copied into `n`'s bytes exactly as the input writes it. Anything but a number is `JSON_DECODE_TYPE`, and `n` keeps the number it held. Its bytes are reused, and grown only for a longer number. |
 | `reset(src: u8[], off: i32, len: i32): void` | Starts over on `src[off, off + len)`, keeping the limits, `ignoreUnknown` and `maxMapKeys`, and clearing any error and the count of map keys taken. |
 | `string(cur: string): string` | The next value as a string: `cur` itself when the input's string is equal to it, which allocates nothing, and a new string otherwise. |
-| `stringArray(xs: string[]): string[]` | The next value as an array whose every element is a string, read as `string(cur)` reads one, each against the string its slot holds, into `xs`. |
+| `stringArray(xs: string[]): string[]` | The next value as an array whose every element is a string, read as `string(cur)` reads one, each against the string its slot holds, into `xs`.<br><br>Each element overwrites the slot `xs` already has or is pushed past its end, and the slots left over are popped, so an array no longer than `xs` grows nothing. Only the container is reused: an element whose text changed is a new string. A value that is not an array fails with `JSON_DECODE_TYPE`, or with the tokenizer's code when the input is malformed, and leaves `xs` untouched; a failure inside the array leaves its contents unspecified. |
 | `stringArrayOrNull(xs: string[] \| null): string[] \| null` | The next value as `null`, or as an array `stringArray` reads, into `xs` when it is an array and into a new one when it is `null`. |
-| `take(): i32` | Takes the next value's first token: the held token, when there is one, and the tokenizer's next otherwise. |
-| `takeNull(): boolean` | Takes the next value when it is `null`, and holds it for the read that follows when it is not. |
 | `text(): string` | The current key or string as a new string, made by one `String.fromBytes`: straight from the input when it has no escape, and from its unescaped bytes when it has one. |
 | `u32(): u32` | The next value as a `u32`: an integer written without a fraction or an exponent, from 0 to 2^32 - 1. The bounds are compared and never computed with, so under Node a number beside a BigInt is fine. |
-| `u32Array(xs: u32[]): u32[]` | The next value as an array whose every element is a `u32`, read as `u32()` reads one, into `xs`. |
+| `u32Array(xs: u32[]): u32[]` | The next value as an array whose every element is a `u32`, read as `u32()` reads one, into `xs`.<br><br>Each element overwrites the slot `xs` already has or is pushed past its end, and the slots left over are popped, so an array no longer than `xs` allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or with the tokenizer's code when the input is malformed, and leaves `xs` untouched; a failure inside the array leaves its contents unspecified. |
 | `u32ArrayOrNull(xs: u32[] \| null): u32[] \| null` | The next value as `null`, or as an array `u32Array` reads, into `xs` when it is an array and into a new one when it is `null`. |
 | `u64(): u64` | The next value as a `u64`: an integer written in digits alone, with no sign, fraction or exponent, up to 2^64 - 1, read through the tokenizer's `numberU64`. A negative number, `-0` included, and one past 2^64 - 1 are `JSON_DECODE_RANGE`, as a fraction is. |
-| `u64Array(xs: u64[]): u64[]` | The next value as an array whose every element is a `u64`, read as `u64()` reads one, into `xs`. |
+| `u64Array(xs: u64[]): u64[]` | The next value as an array whose every element is a `u64`, read as `u64()` reads one, into `xs`.<br><br>Each element overwrites the slot `xs` already has or is pushed past its end, and the slots left over are popped, so an array no longer than `xs` allocates nothing. A value that is not an array fails with `JSON_DECODE_TYPE`, or with the tokenizer's code when the input is malformed, and leaves `xs` untouched; a failure inside the array leaves its contents unspecified. |
 | `u64ArrayOrNull(xs: u64[] \| null): u64[] \| null` | The next value as `null`, or as an array `u64Array` reads, into `xs` when it is an array and into a new one when it is `null`. |
-| `unknownField(): void` | Handles a key that names no field: with `ignoreUnknown` set, steps over the key's value, checked but not kept, and otherwise records `JSON_DECODE_UNKNOWN` at the key. |
-| `wrongType(): void` | `JSON_DECODE_TYPE` at the current token, unless the read that found it failed already. |
 
 ## JsonNumber
 
@@ -1149,7 +1105,6 @@ class JsonNumber
 | `i64(): i64` | The number as an `i64`. |
 | `isI64(): boolean` | Whether the number is an `i64`. |
 | `isU64(): boolean` | Whether the number is a `u64`. |
-| `reader(): JsonTokenizer` | A tokenizer over the text, read to its one token. It may open no container and take a number of any length, so it allocates no stack. |
 | `setText(text: string): boolean` | Sets the text to `text` when it is one JSON number and nothing else; any other text leaves the number as it was. |
 | `text(): string` | The number's text. |
 | `u64(): u64` | The number as a `u64`. |

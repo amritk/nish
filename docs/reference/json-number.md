@@ -114,11 +114,17 @@ function jsonNumberCanonical(text: string): string
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+a JSON number text.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+the canonical text of its value, or `""` when `text` is refused.
+
 </scalar-field>
 
 ## jsonNumberCompare
@@ -139,14 +145,24 @@ function jsonNumberCompare(
 #### Parameters
 
 <scalar-field name="a" type="string" required>
+
+the first JSON number text.
+
 </scalar-field>
 
 <scalar-field name="b" type="string" required>
+
+the second JSON number text.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`-1`, `0` or `1` as `a` is below, equal to or above `b`, or a
+  negative `JSON_NUMBER_ERR_*` code.
+
 </scalar-field>
 
 ## jsonNumberMultipleOf
@@ -173,14 +189,24 @@ function jsonNumberMultipleOf(
 #### Parameters
 
 <scalar-field name="value" type="string" required>
+
+the JSON number text to test.
+
 </scalar-field>
 
 <scalar-field name="divisor" type="string" required>
+
+the JSON number text it should be a multiple of.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`1` for a multiple, `0` for not one, or a negative
+  `JSON_NUMBER_ERR_*` code when the question is refused.
+
 </scalar-field>
 
 ## Limits

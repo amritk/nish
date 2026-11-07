@@ -213,9 +213,9 @@ bytes; `parse` over a `u8[]` reads the same bytes both ways.
 
 <scalar-detail title="Public is not the whole API">
 
-Nish has no private members, so the
-methods marked "Internal" in their comments, and the fields, are reachable
-by a program; the guarantees above hold only through the methods that are
+The compiler ignores `private`, so every
+member is reachable by a program; `private` and `@internal` mark what is
+not API, and the guarantees above hold only through the members that are
 not marked so. `append` with indices of the program's choosing, for
 example, skips the check that keeps a tree finite.
 
@@ -231,8 +231,8 @@ the same under `--number-mode f64`, and it runs under the Node prelude, where
 
 A JSON tree, and the memory every value of it lives in. Make one, then
 `parse` into it or build with the `new*` methods; the module header has the
-rules. Its fields and its "Internal" methods are reachable, as every
-member in Nish is; use the others.
+rules. Its `private` and `@internal` members are reachable, as every
+member in Nish is, because the compiler ignores `private`; use the others.
 
 ```ts
 class JsonDocument
@@ -240,119 +240,56 @@ class JsonDocument
 
 | Member | |
 | --- | --- |
-| `new JsonDocument(limits: JsonLimits)` |  |
-| `bytes: u8[]` | The bytes of every string, key and number, decoded, one after the other. |
-| `byteTop: i32` |  |
-| `count: i32[]` | Per value: a string's or a number's byte count, or a container's member count. |
+| `new JsonDocument(limits: JsonLimits)` | An empty document whose parses are held to `limits`, with `maxDepth` capped at `JSON_WRITER_MAX_DEPTH` so that every document a parse accepts can be written back. `maxValues` starts at `JSON_VALUE_DEFAULT_MAX_VALUES`. |
+| `byteTop: i32` | How many bytes of the decoded-text store are in use. |
 | `duplicates: i32` | `JSON_VALUE_DUPLICATE_REFUSE` or `JSON_VALUE_DUPLICATE_LAST`; read by `parse`. |
 | `errorAt: i32` | The byte offset in the parsed array the error was found at, and `-1` until one. |
 | `failed: i32` | The last `parse`'s code: `0`, a `JSON_TOK_ERR_*` code or `JSON_VALUE_ERR_DUPLICATE`. |
-| `first: i32[]` | Per value: a string's or a number's first byte in `bytes`, a container's first slot, a boolean's `0` or `1`. |
 | `generation: i32` | The generation every handle of the current document carries; see `JSON_VALUE_INDEX_BITS`. |
-| `kinds: u8[]` | Per value: its `JSON_VALUE_*` kind. |
 | `maxValues: i32` | The most values the document holds; more is `JSON_VALUE_ERR_VALUES`. At most `JSON_VALUE_MAX_VALUES`. |
-| `numbers: JsonTokenizer` | A tokenizer over one stored number at a time, for `isI64`, `i64` and `f64`, limited only by `i32`. |
-| `openBase: i32[]` |  |
-| `openKeyAt: i32[]` |  |
-| `openKeyLength: i32[]` |  |
-| `openKeySource: i32[]` |  |
-| `openValue: i32[]` | The parse's own stacks: the open containers, where each one's members start in the pending arrays and the key it is the value of, if any; and the pending arrays, which hold every member read and not yet placed, with its key and the key's source offset. The sort arrays are the duplicate check's. All of them keep their length from one parse to the next, which is what lets a parse allocate nothing. |
-| `parent: i32[]` | Per value: the container it is in, or `-1`. |
-| `pendingKeyAt: i32[]` |  |
-| `pendingKeyLength: i32[]` |  |
-| `pendingSource: i32[]` |  |
-| `pendingTop: i32` | How many members are pending. |
-| `pendingValue: i32[]` |  |
 | `rangeGeneration: i32` | The generation the ranges were written in; `0`, never a generation, when none were. |
 | `ranges: JsonValueRanges \| null` | The source ranges, `null` until the first `parseRanged` or setter, so that a document that never keeps ranges allocates nothing for them. They are current only while `rangeGeneration` is `generation`, and then only for the first `rangeTop` values and `slotRangeTop` slots: past them is an earlier document's, and reads as `-1`, so that a value or member a builder adds writes nothing here. Validity rides on the generation, which `clear` moves anyway, so that a plain `parse` writes nothing for ranges. |
-| `rangeTop: i32` |  |
-| `room: i32[]` | Per value: how many slots a container has from `first`, its members and room to grow. |
-| `slotKeyAt: i32[]` |  |
-| `slotKeyLength: i32[]` |  |
-| `slotRangeTop: i32` |  |
 | `slotTop: i32` | How many member slots are in use, and how many bytes. |
-| `slotValue: i32[]` | Per member slot: the member's value, and an object member's key as a window of `bytes`. |
-| `sortA: i32[]` |  |
-| `sortB: i32[]` |  |
-| `textBytes: u8[]` | `parseText`'s copy of its string. |
-| `tok: JsonTokenizer` |  |
 | `top: i32` | How many values are in use: the handles are `0 .. top - 1`. |
-| `unsignedFits: boolean` | Whether the last `unsigned` read a number that fits a `u64`. |
-| `adoptable(c: i32, v: i32): i32` | Internal: whether the value at index `v` may go into the container at index `c`: it is a value, it is in no container, and it is not `c` or a container `c` is inside. Through `push` and `set`, that is what keeps every tree finite. |
-| `append(c: i32, v: i32, keyAt: i32, keyLength: i32): void` | Internal: adds index `v`, with the key `bytes[keyAt, keyAt + keyLength)`, after the last member of index `c`, unchecked: `push` and `set` check first. A container whose slots are full moves them to the end of the slot arrays with twice the room, unless they are at the end already, where they grow in place; the slots it leaves are not reused until `clear`. |
 | `at(v: JsonValue, i: i32): JsonValue` | Element `i` of an array, or the value of member `i` of an object, in order; `-1` when there is none. |
 | `boolean(v: JsonValue): boolean` | A boolean's value; `false` for any other value. |
-| `bytesEqual(at: i32, n: i32, s: string): boolean` | Internal: whether `bytes[at, at + n)` are exactly `s`'s bytes. |
 | `clear(): void` | Forgets every value, keeping the memory for the next parse or build. Every handle is invalid afterwards. |
-| `close(c: i32, base: i32): i32` | Internal: Places the members pending from `base` into container `c` as one run of slots, checking an object's keys for duplicates first. Answers `0`, or `JSON_VALUE_ERR_DUPLICATE` with `errorAt` set. Keep in step with `closeRanged`. |
-| `closeRanged(c: i32, base: i32): i32` | Internal: `close` for `parseRanged`, which also gives each member its key's range. Keep in step with `close`. |
-| `comparePending(a: i32, b: i32): i32` | Internal: Pending members `a` and `b` ordered by key bytes. |
-| `duplicateKeys(base: i32, n: i32): i32` | Internal: The duplicate check over the `n` members pending from `base`. Under `JSON_VALUE_DUPLICATE_LAST`, a repeated key's later members are marked gone (their pending value set to `-1`) and the first one takes the last one's value. Small objects compare every pair; larger ones are sorted by key with ties in member order, so a key's repeats are next to each other and the first of them is its first member. Keep in step with `duplicateKeysRanged`. |
-| `duplicateKeysRanged(base: i32, n: i32): i32` | Internal: `duplicateKeys` for `closeRanged`, the same check. A copy, so that `duplicateKeys` keeps the one caller that lets it inline into `parse`. Keep in step with `duplicateKeys`. |
 | `end(v: JsonValue): i32` | One past the offset of `v`'s last byte: `v` is `src[start(v), end(v))`. |
 | `f64(v: JsonValue): f64` | A number's nearest `f64`, ties to even, as `JSON.parse` reads it; `0` for any other value. |
-| `findKey(x: i32, key: string): i32` | Internal: the slot of the member of the object at index `x` whose key is `key`'s bytes, or `-1`. |
 | `get(v: JsonValue, key: string): JsonValue` | The value of the member of object `v` whose key is `key`'s bytes; `-1` when there is none. |
-| `handle(x: i32): JsonValue` | Internal: the handle of index `x` in this document's generation; a negative `x` is answered as it is. |
-| `hasKeyRange(s: i32): boolean` | Internal: whether slot `s` has a current key range: below `slotRangeTop`, and written in this generation. |
-| `hasValueRange(x: i32): boolean` | Internal: whether value `x` has a current range: below `rangeTop`, and written in this generation. |
 | `i64(v: JsonValue): i64` | A number's value as an `i64` when `isI64(v)` holds, and `0` otherwise. |
-| `index(v: JsonValue): i32` | Internal: the index handle `v` names in this document, or `-1` when it names nothing here. |
 | `isI64(v: JsonValue): boolean` | Whether `v` is a number written without a fraction or an exponent whose value fits an `i64`: the spelling, so `1.0` is not one. `isIntegral(v)` asks whether the value is whole. |
 | `isIntegral(v: JsonValue): boolean` | Whether `v` is a number whose value is whole, however it is written: JSON Schema 2020-12's "integer", the tokenizer's `isIntegral`. `1.0`, `1e2` and `1e400` are, where `isI64(v)` and `isU64(v)` go by spelling and by range and answer `false` for all three. `false` for any other kind and for a handle from an earlier parse. |
 | `isU64(v: JsonValue): boolean` | Whether `v` is a number written without a sign, a fraction or an exponent whose value fits a `u64`: the spelling, as `isI64(v)` is. |
 | `keyAt(v: JsonValue, i: i32): string` | The key of member `i` of an object, decoded; `""` when `v` is not an object or has no member `i`. |
 | `keyEnd(o: JsonValue, i: i32): i32` | One past the offset of the last byte of the key of member `i` of object `o`, its closing quote. |
-| `keySlot(x: i32, i: i32): i32` | Internal: the slot of member `i` of the object at index `x`, or `-1` when `x` is not an object or has no member `i`. |
 | `keyStart(o: JsonValue, i: i32): i32` | The offset of the first byte of the key of member `i` of object `o`, its opening quote. |
 | `kind(v: JsonValue): i32` | `v`'s `JSON_VALUE_*` kind, or `JSON_VALUE_NONE` when `v` names no value of this document's current contents. |
-| `kindAt(x: i32): i32` | Internal: the kind of index `x`, or `JSON_VALUE_NONE`. |
 | `length(v: JsonValue): i32` | How many elements an array has, or members an object has; `-1` for any other value. |
-| `lengthAt(x: i32): i32` | Internal: `length` of index `x`. |
-| `moveKeyRanges(from: i32, to: i32, n: i32): void` | Internal: `append` moving the `n` slots from `from`, some of them below `slotRangeTop`, to `to`, the end of the slots: their key ranges move with them, and the slots between keep none. `moveSlots` has checked the generation, and a slot below `slotRangeTop` means the arrays were made; reading them here, not through `rangeArrays`, keeps `append` small. |
-| `moveSlots(start: i32, n: i32): i32` | Internal: copies the `n` slots from `start` to the end of the slot arrays, key ranges with them, and answers where they now start. Key ranges move only when the slots are below `slotRangeTop` and of this generation, the test that comes first: a document that never keeps ranges, or a builder's own slots, skip the copy without leaving `append`'s loop. |
-| `newArray(): JsonValue` |  |
-| `newBoolean(b: boolean): JsonValue` |  |
+| `newArray(): JsonValue` | A new empty array, which `push` fills. |
+| `newBoolean(b: boolean): JsonValue` | A new boolean. |
 | `newF64(x: f64): JsonValue` | A number holding `x` as `String(x)` spells it, the shortest digits that read back as `x`, with `-0` as `0`: what `JsonWriter.f64` writes. `JSON_VALUE_ERR_NUMBER` for NaN and both infinities, which JSON cannot spell. |
 | `newI64(x: i64): JsonValue` | A number holding `x`'s digits. |
-| `newNode(kind: i32, first: i32, count: i32): i32` | Internal: a new value of `kind` with its two words, in no container, and its index; `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`. |
-| `newNull(): JsonValue` |  |
+| `newNull(): JsonValue` | A new `null`. |
 | `newNumber(text: string): JsonValue` | A number holding `text` exactly, which must be one JSON number and nothing else (RFC 8259 §6); `JSON_VALUE_ERR_NUMBER` otherwise. This is how a program writes a number no integer or float type holds. |
-| `newObject(): JsonValue` |  |
-| `newStored(kind: i32, s: string): JsonValue` | Internal: a new value of `kind` holding `s`'s bytes, as a handle. |
+| `newObject(): JsonValue` | A new empty object, which `set` fills. |
 | `newString(s: string): JsonValue` | A string holding `s`'s bytes. |
 | `newU64(x: u64): JsonValue` | A number holding `x`'s digits. |
 | `numberText(v: JsonValue): string` | A number's text, exactly as it was written or built; `""` for any other value. |
-| `ownRanges(): void` | Internal: before a setter writes a range, forgets an earlier generation's, so that none of them reads as this one's. |
 | `parse(src: u8[], off: i32, len: i32): JsonValue` | Clears the document and parses `src[off, off + len)` into it. Answers the root value, or a negative code — the tokenizer's `JSON_TOK_ERR_*` or `JSON_VALUE_ERR_DUPLICATE` — which is also in `failed`, with the byte offset in `errorAt`. Nothing is kept from a parse that fails. Keeps no source ranges; `parseRanged` does.<br><br>Keep in step with `parseRanged`, the same loop plus the ranges. |
-| `parseFailed(code: i32, at: i32): i32` | Internal: Records a failed parse and forgets what it built. |
 | `parseRanged(src: u8[], off: i32, len: i32): JsonValue` | `parse`, and every value and member key keeps the range of bytes it was read from, for `start`, `end`, `keyStart` and `keyEnd`. The same answer, code and `errorAt` as `parse` on the same bytes.<br><br>A loop of its own rather than a flag `parse` tests, so that `parse` runs the loop it ran before ranges existed: a dispatch inside `parse` let this loop inline there and cost the plain loop more instructions. A program that links both can still see the plain loop's code laid out differently (`docs/BENCHMARKS.md`). Keep in step with `parse`. |
 | `parseText(s: string): JsonValue` | `parse` over the bytes of `s`, copied into an array the document reuses; `errorAt` is a byte offset in `s`. Keep in step with `parseTextRanged`. |
 | `parseTextRanged(s: string): JsonValue` | `parseRanged` over the bytes of `s`, as `parseText` is `parse`'s; its offsets are byte offsets in `s`. Keep in step with `parseText`. |
 | `push(a: JsonValue, v: JsonValue): i32` | Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. |
-| `rangeArrays(): JsonValueRanges` | Internal: the range arrays, made the first time a parse or setter writes a range. |
-| `readNumber(x: i32): boolean` | Internal: points the number tokenizer at index `x`'s text and reads its one token; `false` when it is not a number. |
-| `repeat(head: i32, later: i32, firstRepeat: i32): i32` | Internal: Pending member `later` repeats the key of the earlier `head`: under `JSON_VALUE_DUPLICATE_LAST` `head` takes its value and it is marked gone. Answers the smallest source offset of a repeating key seen so far. |
-| `samePendingKey(a: i32, b: i32): boolean` | Internal: Whether pending members `a` and `b` have the same key bytes. |
 | `set(o: JsonValue, key: string, v: JsonValue): i32` | Sets member `key` of object `o` to `v`: in place, keeping its position, when `o` has the key, and appended last when it does not, as assigning a property of a JavaScript object does. The value it replaces leaves the object and is in no container afterwards. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. |
 | `setKeyRange(o: JsonValue, i: i32, start: i32, end: i32): i32` | Gives the key of member `i` of object `o` the range `[start, end)`, as `setRange` does a value's. `JSON_VALUE_ERR_HANDLE` when `o` is not an object or has no member `i`. |
 | `setRange(v: JsonValue, start: i32, end: i32): i32` | Gives `v` the range `[start, end)`, for a loader that builds a document from another text with the `new*` methods and keeps where each value came from. `JSON_VALUE_OK`, `JSON_VALUE_ERR_HANDLE`, or `JSON_VALUE_ERR_RANGE` when `0 <= start <= end` does not hold. |
-| `slotAt(x: i32, i: i32): i32` | Internal: the slot of member or element `i` of the container at index `x`, or `-1`. |
-| `sortPending(base: i32, n: i32): i32[]` | Internal: The pending indices `base .. base + n - 1` sorted by key, ties in index order: a bottom-up merge sort between the two sort arrays, which answers whichever of them holds the result. Keep in step with `sortPendingRanged`. |
-| `sortPendingRanged(base: i32, n: i32): i32[]` | Internal: `sortPending` for `duplicateKeysRanged`, the same sort. A copy, so that `sortPending` keeps the one caller that lets it inline into `parse`. Keep in step with `sortPending`. |
 | `start(v: JsonValue): i32` | The offset of `v`'s first byte in the bytes the document parsed. |
-| `storeSource(tok: JsonTokenizer): i32` | Internal: The tokenizer's current token as written, a number's text, onto the end of `bytes`; answers its length. Keep in step with `storeSourceRanged`. |
-| `storeSourceRanged(tok: JsonTokenizer): i32` | Internal: `storeSource` for `parseRanged`, the same copy. A copy, so that `storeSource` keeps the one caller that lets it inline into `parse`. Keep in step with `storeSource`. |
-| `storeString(tok: JsonTokenizer): i32` | Internal: The tokenizer's current string or key, decoded onto the end of `bytes`; answers its length. |
-| `storeText(s: string): i32` | Internal: `s`'s bytes onto the end of `bytes`; answers how many. |
 | `string(v: JsonValue): string` | A string's decoded bytes as a string; `""` for any other value. |
 | `stringEquals(v: JsonValue, s: string): boolean` | Whether `v` is a string whose decoded bytes are `s`'s. Allocates nothing. |
 | `stringify(v: JsonValue): string` | `v` as minified JSON text: written into a buffer that doubles until it fits, then made into one string. `""` when `v` names nothing or the writer refuses it, which only a built tree deeper than `JSON_WRITER_MAX_DEPTH` makes it do; `write` gives the code. |
-| `textOf(at: i32, n: i32): string` | Internal: `bytes[at, at + n)` as a string, in one allocation. |
 | `u64(v: JsonValue): u64` | A number's value as a `u64` when `isU64(v)` holds, and `0` otherwise. |
-| `unsigned(x: i32): u64` | Internal: the digits of the number at index `x` as a `u64`, setting `unsignedFits` to whether it is a `u64` at all: no sign, no fraction or exponent, and at most 2^64 - 1. Every `u64` comes from `toU64`, which is a BigInt under Node, and nothing here wraps, so it means the same there. |
 | `write(v: JsonValue, w: JsonWriter): void` | Writes `v` into `w` as one value, members in order and numbers as their text; the outcome is the writer's, in `w.failed`. A value that names nothing writes nothing and fails nothing. A parsed tree is never deeper than the writer nests; a built one deeper than `JSON_WRITER_MAX_DEPTH` ends at `JSON_WRITE_TOO_DEEP`, where the recursion stops. |
-| `writeAt(x: i32, w: JsonWriter): void` | Internal: `write` of index `x`. |
 
 ## JsonValue
 
@@ -396,11 +333,15 @@ The most `maxValues` can be: a handle keeps a value's index in its low 22 bits.
 
 `JSON_VALUE_ARRAY: i32`
 
+An array: `length` and `at` read its elements, in order.
+
 </scalar-card>
 
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `JSON_VALUE_BOOLEAN: i32`
+
+The kind of `true` and `false`, which `boolean` reads.
 
 </scalar-card>
 
@@ -480,6 +421,8 @@ What `kind` answers for a handle that names no value.
 
 `JSON_VALUE_NULL: i32`
 
+The kind of `null`.
+
 </scalar-card>
 
 <scalar-card title="3" icon="phosphor/regular/hash">
@@ -494,6 +437,8 @@ A number, kept as its text: `numberText`, `isI64`, `i64`, `isU64`, `u64` and `f6
 
 `JSON_VALUE_OBJECT: i32`
 
+An object: `length`, `keyAt`, `at` and `get` read its members, in order.
+
 </scalar-card>
 
 <scalar-card title="0" icon="phosphor/regular/hash">
@@ -507,6 +452,8 @@ What a builder answers when it did what it was asked.
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `JSON_VALUE_STRING: i32`
+
+A string, decoded: `string` and `stringEquals` read it.
 
 </scalar-card>
 

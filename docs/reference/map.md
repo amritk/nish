@@ -11,6 +11,17 @@ import {
 } from "nish/map";
 ```
 
+```ts
+import { reserve, getOrInsert } from "nish/map"
+
+const counts = new Map<string, i32>()
+reserve(counts, 64)  // room for 64 words before the table grows
+for (const w of ["to", "be", "or", "not", "to", "be"]) {
+  counts.set(w, getOrInsert(counts, w, 0) + 1)  // a new word starts at 0
+}
+counts.get("to")  // 2
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="getOrInsert" icon="phosphor/regular/function" href="#getorinsert">
@@ -29,15 +40,15 @@ Make room in `_m` for `_n` entries in all, so that inserting up to `_n` never gr
 
 <scalar-callout type="info">
 
-The bodies below are the meaning, and they are what runs under Node:
+**The bodies below are the meaning**, and they are what runs under Node:
 `reserve` does nothing, and `getOrInsert` is a `get`, and a `set` when the
-key was missing. Natively neither body is ever called. The compiler lowers
-every call in place, as it lowers `hashKey` and `sameKey`: `reserve` is the
-table's `reserveSlots`, which grows the buckets so that `n` entries fit
-without a rebuild, and `getOrInsert` is one `probe` of the key, then the
+key was missing. **Natively neither body is ever called.** The compiler
+lowers every call in place, as it lowers `hashKey` and `sameKey`: `reserve`
+is the table's `reserveSlots`, which grows the buckets so that `n` entries
+fit without a rebuild, and `getOrInsert` is one `probe` of the key, then the
 value it found or an insert through the empty bucket the probe stopped at,
-with the hash it already computed. So this module writes no `.ll` of its
-own, and a one-file program that imports it is still one module.
+with the hash it already computed. So this module writes no `.ll` of its own,
+and a one-file program that imports it is still one module.
 
 </scalar-callout>
 
@@ -58,17 +69,29 @@ function getOrInsert<K, V>(
 #### Parameters
 
 <scalar-field name="m" type="Map&lt;K, V&gt;" required>
+
+the map to look in, and to add to when `key` is missing.
+
 </scalar-field>
 
 <scalar-field name="key" type="K" required>
+
+the key to find.
+
 </scalar-field>
 
 <scalar-field name="value" type="V" required>
+
+the value to store when `key` is missing.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+the value `key` already had, or `value` when it had none.
+
 </scalar-field>
 
 ## reserve
@@ -88,7 +111,14 @@ function reserve<K, V>(
 #### Parameters
 
 <scalar-field name="_m" type="Map&lt;K, V&gt;" required>
+
+the map to presize.
+
 </scalar-field>
 
 <scalar-field name="_n" type="number" required>
+
+how many entries it should hold, those already in it counted,
+  without growing.
+
 </scalar-field>

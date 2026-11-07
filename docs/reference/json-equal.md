@@ -117,20 +117,35 @@ function jsonEqual(
 #### Parameters
 
 <scalar-field name="da" type="JsonDocument" required>
+
+the document that holds `a`.
+
 </scalar-field>
 
 <scalar-field name="a" type="i32" required>
+
+a value handle from `da`.
+
 </scalar-field>
 
 <scalar-field name="db" type="JsonDocument" required>
+
+the document that holds `b`, which may be `da` itself.
+
 </scalar-field>
 
 <scalar-field name="b" type="i32" required>
+
+a value handle from `db`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the two values are equal as JSON Schema compares them.
+
 </scalar-field>
 
 ## jsonEqualCanonical
@@ -155,14 +170,24 @@ function jsonEqualCanonical(
 #### Parameters
 
 <scalar-field name="doc" type="JsonDocument" required>
+
+the document that holds `v`.
+
 </scalar-field>
 
 <scalar-field name="v" type="i32" required>
+
+the value to write out.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+the canonical text, which two values share exactly when `jsonEqual`
+  calls them equal.
+
 </scalar-field>
 
 ## jsonEqualFirstDuplicate
@@ -182,14 +207,23 @@ function jsonEqualFirstDuplicate(
 #### Parameters
 
 <scalar-field name="doc" type="JsonDocument" required>
+
+the document that holds `v`.
+
 </scalar-field>
 
 <scalar-field name="v" type="i32" required>
+
+the array to search.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the index of the first repeated element, or `-1` when there is none.
+
 </scalar-field>
 
 ## jsonEqualHash
@@ -210,12 +244,21 @@ function jsonEqualHash(
 #### Parameters
 
 <scalar-field name="doc" type="JsonDocument" required>
+
+the document that holds `v`.
+
 </scalar-field>
 
 <scalar-field name="v" type="i32" required>
+
+the value to hash.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u64">
+
+the hash, the same for any two values `jsonEqual` calls equal.
+
 </scalar-field>

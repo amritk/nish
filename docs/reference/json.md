@@ -204,14 +204,23 @@ function jsonField(
 #### Parameters
 
 <scalar-field name="object" type="string" required>
+
+the text of one JSON object.
+
 </scalar-field>
 
 <scalar-field name="name" type="string" required>
+
+the field to look for, matched against each key's decoded text.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+the first such field's value, or `null` when there is none.
+
 </scalar-field>
 
 ## jsonFields
@@ -250,14 +259,24 @@ function jsonFields(
 #### Parameters
 
 <scalar-field name="object" type="string" required>
+
+the text of one JSON object.
+
 </scalar-field>
 
 <scalar-field name="names" type="string[]" required>
+
+the fields to look for.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="(string | null)[]">
+
+one value per name, in the order of `names`, each `null` when that
+  field is missing.
+
 </scalar-field>
 
 ## jsonStringifyString
@@ -274,11 +293,17 @@ function jsonStringifyString(s: string): string
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to quote.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+the quoted, escaped text.
+
 </scalar-field>
 
 ## JsonWriter
@@ -313,28 +338,21 @@ class JsonWriter
 
 | Member | |
 | --- | --- |
-| `new JsonWriter(buf: u8[], start: i32)` |  |
-| `afterKey: boolean` | Whether a key has been written in the innermost object and its value is due. |
-| `buf: u8[]` |  |
+| `new JsonWriter(buf: u8[], start: i32)` | A writer that starts its text at `buf[start ..)`, as `reset` does. |
+| `buf: u8[]` | The caller's buffer the text is written into; the writer never grows it. |
 | `depth: i32` | How many containers are open. |
-| `done: boolean` | Whether the top-level value has been written whole. |
 | `end: i32` | The cursor: the bytes written are `buf[start .. end)`. |
 | `failed: i32` | `JSON_WRITE_OK`, or the first `JSON_WRITE_*` code a call hit. |
-| `indentByte: i32` | The byte an indent is made of: a space, or a tab after `setIndentTab`. |
 | `indentWidth: i32` | How many `indentByte`s each level of nesting puts at the start of a line, or `0` for the minified text. A mode, not a part of the text: `reset` keeps it, so a writer set up once writes every text the same way. |
-| `objectsHigh: i32` |  |
-| `objectsLow: i32` | The kinds of the open containers, one bit each, 1 for an object, as a stack 64 bits deep: the innermost is bit 0 of `objectsLow`, an opener shifts the pair left by one and a closer shifts it back. So the check before every value — is the innermost container an object? — is one `and` of one word, and costs the minified text nothing a cached copy would save. Two `i32` words rather than an `i64` or an array, so that a writer allocates nothing and the module still runs under Node, where an `i64` is a BigInt. |
-| `sep: i32` | What goes before the next key or element of the innermost container, one `JSON_WRITER_SEP_*`: nothing, a comma, and in an indented text a line break or a comma and a line break. The minified text tests it only where it would test a "comma due" flag, against 0 and 1, so the indented states cost it nothing; bit 1 is the indent and every step keeps it. |
-| `start: i32` |  |
 | `strict: boolean` | Whether a NaN or infinite `f64` is `JSON_WRITE_NON_FINITE` rather than `null`. Kept by `reset`. |
-| `beginArray(): void` |  |
-| `beginObject(): void` |  |
-| `boolean(v: boolean): void` |  |
+| `beginArray(): void` | Opens an array where a value is due, with the same errors as `beginObject`. |
+| `beginObject(): void` | Opens an object where a value is due. `JSON_WRITE_KEY_EXPECTED` inside an object before its key, `JSON_WRITE_TOO_DEEP` past `JSON_WRITER_MAX_DEPTH` open containers, `JSON_WRITE_DONE` after the top-level value, and `JSON_WRITE_FULL` when `buf` has no room. |
+| `boolean(v: boolean): void` | `true` or `false`. |
 | `complete(): boolean` | Whether one whole value has been written, every container closed, and nothing failed. |
-| `endArray(): void` |  |
-| `endObject(): void` |  |
+| `endArray(): void` | Closes the innermost array. `JSON_WRITE_UNBALANCED` when that is not an array, or nothing is open. |
+| `endObject(): void` | Closes the innermost object. `JSON_WRITE_UNBALANCED` when that is not an object, or nothing is open, and `JSON_WRITE_VALUE_EXPECTED` when a key is still waiting for its value. |
 | `f64(v: f64): void` | `v` as `String(v)` spells it, which is `JSON.stringify`'s rule: the shortest digits that read back as `v`, `-0` as `0`, and `null` for NaN and both infinities, which JSON cannot spell — or, once `setStrict(true)`, `JSON_WRITE_NON_FINITE` for those three, with nothing written. |
-| `i32(v: i32): void` |  |
+| `i32(v: i32): void` | `v` in decimal, as `String(v)` spells it. |
 | `i64(v: i64): void` | The digits of `v`, the minimum included: the arithmetic stays on the negative side, where it fits. |
 | `key(name: string): void` | The next member's key, with the comma before it and the colon after it. |
 | `keyBytes(bytes: u8[], off: i32, len: i32): void` | `key` for a name held as bytes, `bytes[off .. off + len)`, escaped exactly as `key` escapes a string of those bytes, and allocating nothing: what a caller that keeps its text in a byte buffer, such as `nish/json-value`'s `JsonDocument`, writes without making a string per key. A window outside `bytes` is `JSON_WRITE_BAD_WINDOW`, checked once, before anything is written. |

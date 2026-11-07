@@ -95,7 +95,8 @@ size.
 
 ## isJsonPointer
 
-Whether `s` is an RFC 6901 JSON Pointer (the module header's grammar). Allocates nothing.
+Whether `s` is an RFC 6901 JSON Pointer (the module header's grammar).
+Allocates nothing.
 
 ```ts
 function isJsonPointer(s: string): boolean
@@ -104,11 +105,17 @@ function isJsonPointer(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a JSON Pointer, the empty one included.
+
 </scalar-field>
 
 ## isRelativeJsonPointer
@@ -125,11 +132,17 @@ function isRelativeJsonPointer(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a relative JSON Pointer.
+
 </scalar-field>
 
 ## jsonPointerEscape
@@ -144,11 +157,17 @@ function jsonPointerEscape(token: string): string
 #### Parameters
 
 <scalar-field name="token" type="string" required>
+
+one reference token, as it reads in an object key.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+the token as it is written inside a pointer.
+
 </scalar-field>
 
 ## jsonPointerParse
@@ -165,11 +184,18 @@ function jsonPointerParse(
 #### Parameters
 
 <scalar-field name="p" type="string" required>
+
+the pointer text.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string[] | null">
+
+the decoded reference tokens, in order, or `null` when `p` is not a
+  JSON Pointer.
+
 </scalar-field>
 
 ## jsonPointerResolve
@@ -190,17 +216,30 @@ function jsonPointerResolve(
 #### Parameters
 
 <scalar-field name="doc" type="JsonDocument" required>
+
+the document to look in.
+
 </scalar-field>
 
 <scalar-field name="root" type="i32" required>
+
+the value the pointer starts from.
+
 </scalar-field>
 
 <scalar-field name="p" type="string" required>
+
+the pointer text.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the handle of the value named, `JSON_POINTER_NONE`, or
+  `JSON_POINTER_ERR_SYNTAX`.
+
 </scalar-field>
 
 ## Constants

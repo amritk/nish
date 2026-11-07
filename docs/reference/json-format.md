@@ -255,11 +255,18 @@ function isDate(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the date is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a date, false otherwise.
+
 </scalar-field>
 
 ## isDateTime
@@ -273,11 +280,18 @@ function isDateTime(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the date-time is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a date-time, false otherwise.
+
 </scalar-field>
 
 ## isDuration
@@ -296,11 +310,18 @@ function isDuration(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the duration is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a duration, false otherwise.
+
 </scalar-field>
 
 ## isEmail
@@ -314,11 +335,18 @@ function isEmail(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the mailbox is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a mailbox, false otherwise.
+
 </scalar-field>
 
 ## isHostname
@@ -332,11 +360,18 @@ function isHostname(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the host name is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a host name, false otherwise.
+
 </scalar-field>
 
 ## isIpv4
@@ -350,11 +385,18 @@ function isIpv4(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the IPv4 address
+  is allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is an IPv4 address, false otherwise.
+
 </scalar-field>
 
 ## isIpv6
@@ -368,11 +410,18 @@ function isIpv6(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the IPv6 address
+  is allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is an IPv6 address, false otherwise.
+
 </scalar-field>
 
 ## isIri
@@ -386,11 +435,18 @@ function isIri(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the IRI is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is an IRI, false otherwise.
+
 </scalar-field>
 
 ## isIriReference
@@ -404,11 +460,18 @@ function isIriReference(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the IRI
+  reference is allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is an IRI reference, false otherwise.
+
 </scalar-field>
 
 ## isRegex
@@ -424,11 +487,17 @@ function isRegex(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the pattern source, without slashes or flags.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `nish/regex` compiles `s`, false otherwise.
+
 </scalar-field>
 
 ## isTime
@@ -442,11 +511,18 @@ function isTime(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the time is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a time, false otherwise.
+
 </scalar-field>
 
 ## isUri
@@ -460,11 +536,18 @@ function isUri(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the URI is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a URI, false otherwise.
+
 </scalar-field>
 
 ## isUriReference
@@ -478,16 +561,24 @@ function isUriReference(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the URI
+  reference is allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a URI reference, false otherwise.
+
 </scalar-field>
 
 ## isUriTemplate
 
-Whether `s` is an RFC 6570 URI template, `http://example.com/{term:1}/{term}`.
+Whether `s` is an RFC 6570 URI template,
+`http://example.com/{term:1}/{term}`.
 
 ```ts
 function isUriTemplate(s: string): boolean
@@ -496,11 +587,18 @@ function isUriTemplate(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the URI template
+  is allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a URI template, false otherwise.
+
 </scalar-field>
 
 ## isUuid
@@ -514,11 +612,18 @@ function isUuid(s: string): boolean
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+the text to check, whole: nothing before or after the UUID is
+  allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when `s` is a UUID, false otherwise.
+
 </scalar-field>
 
 ## jsonFormatCheck
@@ -537,14 +642,23 @@ function jsonFormatCheck(
 #### Parameters
 
 <scalar-field name="id" type="i32" required>
+
+a format id from `jsonFormatId`.
+
 </scalar-field>
 
 <scalar-field name="value" type="string" required>
+
+the string instance to check.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`JSON_FORMAT_VALID`, `JSON_FORMAT_INVALID` or `JSON_FORMAT_UNKNOWN`.
+
 </scalar-field>
 
 ## jsonFormatId
@@ -559,11 +673,19 @@ function jsonFormatId(name: string): i32
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+the name a schema's `format` keyword gives, such as
+  `"date-time"`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the format's `JSON_FORMAT_*` id, or -1 when this module does not
+  check that format.
+
 </scalar-field>
 
 ## jsonFormatValidate
@@ -583,14 +705,23 @@ function jsonFormatValidate(
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+the name a schema's `format` keyword gives.
+
 </scalar-field>
 
 <scalar-field name="value" type="string" required>
+
+the string instance to check.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`JSON_FORMAT_VALID`, `JSON_FORMAT_INVALID` or `JSON_FORMAT_UNKNOWN`.
+
 </scalar-field>
 
 ## Constants

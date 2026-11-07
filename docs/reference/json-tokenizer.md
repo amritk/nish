@@ -217,55 +217,28 @@ class JsonTokenizer
 
 | Member | |
 | --- | --- |
-| `new JsonTokenizer(src: u8[], off: i32, len: i32, limits: JsonLimits)` |  |
+| `new JsonTokenizer(src: u8[], off: i32, len: i32, limits: JsonLimits)` | A tokenizer over `src[off, off + len)` held to `limits`. A negative limit counts as 0, and the depth stack is allocated here, once, `maxDepth` bytes long, and `reset` reuses it. |
 | `depth: i32` | Containers open after the current token. |
-| `end: i32` |  |
 | `errorAt: i32` | The byte offset in `src` the error was found at, and `-1` until one. Read it only once `failed` is set: a `JSON_TOK_ERR_WINDOW` records the `off` the caller passed, which may itself be negative or past the end of `src`. |
 | `failed: i32` | The sticky error, a negative `JSON_TOK_ERR_*` code; `0` until one. |
-| `integerValue: i64` | The integral number `integerScan` read last, negated. |
 | `integral: boolean` | Whether the current number is written with neither a fraction nor an exponent: the spelling, so `1.0` is not. `isIntegral()` reads the value. |
 | `kind: i32` | The current token's kind, the last `next()` answered; `JSON_TOK_END` before the first. |
-| `maxDepth: i32` |  |
-| `maxNumberBytes: i32` |  |
-| `maxStringBytes: i32` |  |
-| `maxTotalBytes: i32` |  |
-| `off: i32` | The window: bytes `[off, end)` of `src`. |
-| `pos: i32` | The next byte `next()` reads. |
-| `src: u8[]` |  |
-| `stack: u8[]` | One byte per open container, `JSON_TOK_IN_OBJECT` or `JSON_TOK_IN_ARRAY`, `maxDepth` long. |
-| `stringBytes: i32` | The current string's or key's length once decoded; shorter than its raw length exactly when it holds an escape. |
-| `tokEnd: i32` |  |
+| `src: u8[]` | The bytes being read. The tokenizer never writes them. |
+| `tokEnd: i32` | One past the current token's last byte; see `tokStart`. |
 | `tokStart: i32` | The current token's bytes, `src[tokStart, tokEnd)`; a string's and a key's include their quotes. |
-| `unsignedValue: u64` | The integral number `unsignedScan` read last. |
-| `want: i32` | What `next()` expects at `pos`. |
-| `close(at: i32, inside: i32): i32` | A closer at `at`, which must match the innermost container, `inside`. |
-| `emit(k: i32, start: i32, stop: i32): i32` | Records the token `src[start, stop)` of kind `k` and what may follow it. |
-| `escapeCodePoint(at: i32): i32` | The code point of the escape whose backslash is at `at`, a surrogate pair joined into one, or a negative error, recorded. Used both to check a string and, on one already checked, to decode it. |
-| `fail(code: i32, at: i32): i32` | Records the first error and answers it. |
-| `integerScan(): boolean` | Reads the integral number's digits into `integerValue`, negated, and answers whether its magnitude fits `i64` for its sign. Accumulating a negative number reaches -2^63, where a positive one stops at 2^63 - 1, so the bound for a positive number is one less. |
 | `isInteger(): boolean` | Whether the current token is a number written without a fraction or an exponent whose value fits in an `i64`: `-0` and `9223372036854775807` are, `1.0`, `1e2` and `9223372036854775808` are not. That is the spelling rule; `isIntegral()` asks whether the value is whole. |
 | `isIntegral(): boolean` | Whether the current token is a number whose value is a whole number, however it is written: JSON Schema 2020-12's "integer". `-0.0`, `1.0`, `1e2`, `100e-2` and `1e400` are; `1.5`, `10e-2` and `1e-400` are not. It says nothing about fitting an `i64`, and it is not the `integral` field or `isInteger()`, which go by spelling and refuse `1.0` and `1e2`.<br><br>It reads the text, never an `f64`, so `12345678901234567890.0` and `1e400` answer exactly. With F fraction digits, z trailing zeros across all the digits and the exponent E, the value is whole when every digit is zero or E - F + z >= 0. F and z count bytes of the token, so F - z fits an `i32` whatever the limits, and `jsonTokDigitsExceed` compares E with it without adding up more of E than it needs, so `1e99999999999` answers too. |
 | `isText(): boolean` | Whether the current token is a key or a string. |
 | `isU64(): boolean` | Whether the current token is a number written in digits alone, with no sign, fraction or exponent, whose value fits in a `u64`: `0` and `18446744073709551615` are; `-0`, `-1`, `1.0`, `1e2` and `18446744073709551616` are not. |
-| `key(at: i32): i32` | A key at `at`: a string, whose colon the next call reads. |
 | `keyEquals(name: string): boolean` | Whether the current key or string, decoded, is exactly `name`'s bytes; `false` when the token is neither. Nothing is allocated or written. `name.length` and `charCodeAt` are bytes natively. Under Node they are UTF-16 code units, compared one by one against the decoded UTF-8 bytes: an ASCII name answers the same both ways, a genuine non-ASCII name does not match there, and a name whose code units 0x80 to 0xFF spell those bytes does (`"Ã©"` matches a key `"é"`). That is the bytes against code units divergence `docs/wp33-round-trip.md` §3.2 records. |
-| `literal(at: i32, word: string, k: i32): i32` | `true`, `false` or `null` at `at`; a window that ends inside the word is truncated. |
 | `next(): i32` | The next token's kind, `JSON_TOK_END`, or a negative error, which is sticky. |
-| `number(at: i32): i32` | A number at `at`, to RFC 8259 §6: `-`? then `0` or a digit run not starting with `0`, then `.` and digits, then `e` or `E`, a sign and digits. What follows it is the next call's to judge, so `01` is a `0` and then an error: `JSON_TOK_ERR_SYNTAX` inside a container (`[01]`), `JSON_TOK_ERR_TRAILING` at the top level. `1x` is a `1` and then the same.<br><br>Nothing past the limit is read: the scan stops one byte past it, and a number that reaches that byte is refused for its length, whatever the grammar would have said of the rest. |
 | `numberF64(): f64` | The current number as the nearest `f64`, ties to even, as `JSON.parse` reads it: `-0` is negative zero, a magnitude past the largest double is an infinity and one below the smallest is zero. `0` when the current token is not a number. |
 | `numberI64(): i64` | The current number as an `i64` when `isInteger()` holds, and `0` otherwise. Read it after checking `isInteger()`: a `0` alone does not say which. |
-| `numberRefused(code: i32, at: i32, i: i32): i32` | `code` at `i`, unless the number starting at `at` has run past its limit, which is the error then. |
-| `numberSlow(): f64` | The current number through `parseFloat`, which is `strtod` and correctly rounded, for a number of more than 19 significant digits or with an exponent past `JSON_TOK_EXPONENT_CAP`. The text is copied into a string first, in one allocation by `String.fromBytes`. The function answers a number, so its own arena scope releases the copy when it returns (docs/LANGUAGE.md, "Memory model", item 2), as `JsonWriter.f64`'s digits are released. A `using a = arena()` block would say the same thing, but Node 22 cannot parse `using`, and this module also runs under Node. A token outside `src` can only mean the caller shortened the array after `next()` read it, and answers `0` rather than panic. |
 | `numberU64(): u64` | The current number as a `u64` when `isU64()` holds, and `0` otherwise. Read it after checking `isU64()`: a `0` alone does not say which. |
-| `open(at: i32, inside: i32): i32` | An opener at `at`, refused past the depth limit. |
 | `reset(src: u8[], off: i32, len: i32): void` | Starts over on `src[off, off + len)`, keeping the limits and the depth stack, and clearing any error. A window outside `src` or longer than the total limit is refused here, and the first `next()` answers it. |
 | `skipValue(): i32` | Steps over the value the current token starts, so that the next `next()` answers what follows it. After a key, that is the key's value; after an opener, everything up to and including its closer; after a scalar or a closer, nothing. Answers the kind of the last token it read (the closer, or the scalar), or a negative error. |
-| `string(at: i32, k: i32): i32` | A string at `at`, its opening quote, as a key or a value: checked to the closing quote and measured once decoded, decoding nothing. The length limit counts raw bytes and is checked at every byte, so a string past it is refused where it crosses the limit, not where it ends. |
 | `stringInto(out: u8[], at: i32): i32` | Writes the current key's or string's decoded bytes to `out` from `at`, and answers how many; `-1`, writing nothing, when the current token is neither or `out` has fewer than `stringLength()` bytes from `at`. |
 | `stringLength(): i32` | The current key's or string's length once decoded, or `-1` when the token is neither. |
-| `top(): i32` | The kind of the innermost open container, or `0` at the top level. |
-| `unsignedScan(): boolean` | Reads the integral number's digits into `unsignedValue` and answers whether it is unsigned and fits a `u64`. RFC 8259 allows no leading zero, so a number of up to 19 digits is below 10^19 and always fits, and one of 21 or more never does. One of 20 fits exactly when it is a `1` and then 19 digits no greater than 2^64 - 1's last 19, 8446744073709551615, so the sum never wraps and needs no divide. |
-| `value(at: i32): i32` | A value at `at`. |
 
 ## Constants
 
@@ -286,17 +259,24 @@ over; and a body of 16 MiB is past what an HTTP server should buffer anyway.
 
 `JSON_DEFAULT_MAX_NUMBER_BYTES: i32`
 
+The default longest number text, in bytes: room for any double in its shortest form.
+
 </scalar-card>
 
 <scalar-card title="1,048,576" icon="phosphor/regular/hash">
 
 `JSON_DEFAULT_MAX_STRING_BYTES: i32`
 
+The default longest string or key: a mebibyte of raw bytes between its
+quotes, escapes counted as written.
+
 </scalar-card>
 
 <scalar-card title="16,777,216" icon="phosphor/regular/hash">
 
 `JSON_DEFAULT_MAX_TOTAL_BYTES: i32`
+
+The default largest window, in bytes: a 16 MiB body.
 
 </scalar-card>
 
