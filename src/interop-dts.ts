@@ -175,6 +175,12 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
       ? "export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;"
       : "export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;"
   )
+  lines.push("/** `load` without the wait, for bytes already in hand: a worker, a test, a small module. */")
+  lines.push(
+    specifiers.length > 0
+      ? "export function loadSync(bytes: BufferSource, imports: Imports): Exports;"
+      : "export function loadSync(bytes: BufferSource, options?: LoadOptions): Exports;"
+  )
   if (layouts.length > 0) {
     lines.push("/** The instance `load` answers: its memory, its storage layout and its exports. */")
     lines.push("export type Module = Exports;")

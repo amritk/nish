@@ -30186,6 +30186,153 @@ if (!only || "module-storage".includes(only)) {
   }
 }
 
+// ---- WP50 stage 3: a wasm-host panic the page can read ----------------------
+//
+// tests/panic holds a program whose exports each end one way: an index past
+// the end, an overflow, a `panic`, an exit, an allocation `--memory 1` cannot
+// hold, a host import that calls back in, a host import that throws. Under
+// --profile wasm-host the runtime calls the `nish.panic` import before it
+// traps; the loader names the site from the build's `.sites.json`, marks the
+// module dead, calls `onPanic` and throws NishPanic. Every export runs in the
+// arena's mark/release bracket, so a loop of allocating calls keeps memory flat.
+if (!only || "wasm-host-panic".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`panic: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "panic")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "panic"))) {
+      fs.copyFileSync(path.join(root, "tests", "panic", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("panic: a program with panic sites compiles for wasm32 with --emit-dts", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const ir = fs.readFileSync(at("main.ll"), "utf8")
+      check(
+        "panic: a wasm32 build tags each panic call with its site and lists the sites",
+        /call void @nish_panic_index\([^\n]*!nish\.site !\{i32 \d+\}/.test(ir) && /^; nish\.site \d+ index tests\/panic\/main\.ts:\d+:\d+|^; nish\.site \d+ index [^\n]*main\.ts:\d+:\d+/m.test(ir),
+        ir.split("\n").filter((l) => l.includes("nish.site")).join("\n")
+      )
+      const runtimeWasm = path.join(root, "runtime", "runtime-wasm.c")
+      const grown = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      const fixed = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("fixed.wasm"), "--profile", "wasm-host", "--memory", "1"])
+      check("panic: the program links under --profile wasm-host, growing and with --memory 1", grown.status === 0 && fixed.status === 0, shown(grown) + shown(fixed))
+      if (grown.status === 0 && fixed.status === 0) {
+        const imported = WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(at("main.wasm"))))
+          .map((e) => `${e.module}.${e.name}`)
+          .sort()
+        check("panic: the wasm-host link imports nish.panic beside the host functions", imported.join(",") === "host.boom,host.reenter,nish.panic", imported.join(","))
+        const sites = fs.existsSync(at("main.wasm.sites.json")) ? JSON.parse(fs.readFileSync(at("main.wasm.sites.json"), "utf8")) : null
+        check(
+          "panic: the build writes <out>.sites.json, naming each site's kind and path:line:col",
+          Array.isArray(sites) && sites.some((s) => s.kind === "index" && /main\.ts:17:\d+$/.test(s.at)),
+          JSON.stringify(sites)
+        )
+        fs.writeFileSync(
+          at("drive.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import * as loader from "./main.mjs"',
+            'import { run } from "./page.ts"',
+            "const [wasm, sites, what] = process.argv.slice(2)",
+            'console.log(run(loader, readFileSync(wasm), JSON.parse(readFileSync(sites, "utf8")), what).join("\\n"))',
+            "",
+          ].join("\n")
+        )
+        const drive = (wasm, what) => {
+          const res = spawnSync(
+            process.execPath,
+            ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
+            { cwd: dir, encoding: "utf8" }
+          )
+          return { res, lines: res.status === 0 ? res.stdout.trim().split("\n") : [] }
+        }
+        const index = drive("main.wasm", "index")
+        check(
+          "panic: an index past the end throws NishPanic with the native message and its site, and onPanic sees it",
+          index.lines[0] === "ok 0" &&
+            /^NishPanic\(index\) index out of range: 9 >= 4 at [^\n]*main\.ts:17:\d+$/.test(index.lines[1] ?? "") &&
+            /^seen index \d+ index out of range: 9 >= 4 at /.test(index.lines[3] ?? ""),
+          shown(index.res)
+        )
+        check(
+          "panic: a dead module answers every later call with NishPanic, before it runs",
+          /^NishPanic\(index\) the module is dead: index out of range/.test(index.lines[2] ?? "") && index.lines.length === 4,
+          shown(index.res)
+        )
+        const overflow = drive("main.wasm", "overflow")
+        check(
+          "panic: an overflow names its operation",
+          /^NishPanic\(overflow\) attempt to add with overflow at [^\n]*main\.ts:20:\d+$/.test(overflow.lines[0] ?? ""),
+          shown(overflow.res)
+        )
+        const fail = drive("main.wasm", "fail")
+        check(
+          "panic: panic(message) carries the program's words, and a reporter that calls back in gets NishPanic",
+          /^NishPanic\(panic\) the page asked at [^\n]*main\.ts:24:\d+$/.test(fail.lines[0] ?? "") &&
+            fail.lines.includes("seen note -1 onPanic re-entry: true"),
+          shown(fail.res)
+        )
+        const exit = drive("main.wasm", "exit")
+        check(
+          "panic: process.exit ends the module as an exit with its code",
+          exit.lines[0] === "NishPanic(exit) the program exited with code 3" && exit.lines[1] === "seen exit -1 the program exited with code 3",
+          shown(exit.res)
+        )
+        const nested = drive("main.wasm", "nested")
+        check(
+          "panic: an import that calls back into an export throws NishReentry, and the inner call never ran",
+          nested.lines[0] === "ok 1" && /^NishReentry /.test(nested.lines[1] ?? "") && nested.lines[2] === "count 101",
+          shown(nested.res)
+        )
+        const thrown = drive("main.wasm", "thrown")
+        check(
+          "panic: an exception escaping a host import kills the module",
+          thrown.lines[0] === "Error the page threw" && /^NishPanic\(exception\) the module is dead: /.test(thrown.lines[1] ?? ""),
+          shown(thrown.res)
+        )
+        const flat = drive("main.wasm", "flat")
+        check(
+          "panic: every export runs in the arena's mark/release bracket, so 2000 allocating calls do not grow memory",
+          flat.lines[0] === "last 4095 grew false",
+          shown(flat.res)
+        )
+        const oom = drive("fixed.wasm", "oom")
+        check(
+          "panic: an allocation --memory 1 cannot hold panics out of memory",
+          /^NishPanic\(memory\) out of memory/.test(oom.lines[0] ?? ""),
+          shown(oom.res)
+        )
+      }
+
+      const pageDir = at("page")
+      fs.mkdirSync(pageDir)
+      for (const name of ["main.d.ts", "page.ts"]) {
+        fs.copyFileSync(at(name), path.join(pageDir, name))
+      }
+      const config = path.join(pageDir, "tsconfig.json")
+      fs.writeFileSync(
+        config,
+        JSON.stringify({
+          extends: path.join(root, "tsconfig.json"),
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+          include: [],
+          files: ["main.d.ts", "page.ts"].map((f) => path.join(pageDir, f)),
+        })
+      )
+      const page = typeCheckProject(config, root)
+      check("panic: the page type-checks against main.d.ts: Panic, LoadOptions, NishPanic, NishReentry", page.ok, page.output)
+    }
+  }
+}
+
 if (!only || "wasm-size".includes(only)) {
   // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
   const host = `${process.platform}-${process.arch}`

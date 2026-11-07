@@ -818,14 +818,16 @@ case "$profile" in
             rewritten="$sites_dir/${#host_inputs[@]}.ll"
             awk -v base="$sites_base" -v list="$sites_json" '
               # One tagged call: "call void @nish_panic<x>(<args>)<attrs>, !nish.site !{i32 N}<rest>".
-              function untag(line,    at, rest, close, n, head, open) {
+              # (`close` is a builtin, so the brace is `shut`.)
+              function untag(line,    at, rest, shut, n, head, open, args) {
                 at = index(line, ", !nish.site !{i32 ")
                 rest = substr(line, at + 19)
-                close = index(rest, "}")
-                n = substr(rest, 1, close - 1) + base
+                shut = index(rest, "}")
+                n = substr(rest, 1, shut - 1) + base
                 head = substr(line, 1, at - 1)
                 open = index(head, "(")
-                return substr(head, 1, open - 1) "_at(i32 " n ", " substr(head, open + 1) substr(rest, close + 1)
+                args = substr(head, open + 1)
+                return substr(head, 1, open - 1) "_at(i32 " n (substr(args, 1, 1) == ")" ? "" : ", ") args substr(rest, shut + 1)
               }
               /^; nish\.site [0-9]+ / {
                 kind = $4
@@ -838,11 +840,10 @@ case "$profile" in
                 print
                 next
               }
-              /^declare void @nish_panic[a-z_]*\(/ {
+              /^declare [a-z_ ]*void @nish_panic[a-z_]*\(/ {
                 print
                 open = index($0, "(")
-                name = substr($0, 15, open - 15)
-                print "declare void @" name "_at(i32, " substr($0, open + 1)
+                print substr($0, 1, open - 1) "_at(i32" (substr($0, open + 1, 1) == ")" ? "" : ", ") substr($0, open + 1)
                 next
               }
               index($0, ", !nish.site !{i32 ") > 0 { print untag($0); next }
