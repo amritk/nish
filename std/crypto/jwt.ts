@@ -1273,7 +1273,9 @@ export class JwtVerifier {
   private readonly part: u8[]
   /**
    * The last token's signature, decoded, at the front; `JWT_MAX_SIGNATURE`
-   * bytes long, whatever the signature's own length.
+   * bytes long, whatever the signature's own length. It is written only once
+   * the header passes, so after a refusal before that it still holds an
+   * earlier token's bytes.
    */
   readonly sig: u8[]
   private readonly text: u8[]
@@ -1367,7 +1369,8 @@ export class JwtVerifier {
    * (`JWT_ERR_SIGNATURE`); the signature's base64url (`JWT_ERR_FORMAT`); its
    * length, the key's fit and the signature itself (`JWT_ERR_SIGNATURE`); the
    * payload's base64url (`JWT_ERR_FORMAT`); the payload's members in the
-   * order written and a missing `exp` (`JWT_ERR_CLAIMS`); and then `exp`,
+   * order written and, while `requireExp` is set (the default), a missing
+   * `exp` (`JWT_ERR_CLAIMS`); and then `exp`,
    * `nbf`, `iat`, `iss`, `aud` and `sub`, in that order.
    *
    * @param key The key to verify with; it alone decides the algorithm, and a

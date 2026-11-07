@@ -320,8 +320,10 @@ const pkiRootsSplitDirs = (list: string): string[] => {
  * @param certFile The value of `SSL_CERT_FILE`, or `null` when unset.
  * @param certDir The value of `SSL_CERT_DIR`, a `:`-separated list, or `null`
  *   when unset.
- * @param dirs The directories read when neither variable is set.
- * @param bundles The bundle files tried when neither variable is set.
+ * @param dirs The directories read when neither variable is set; ignored
+ *   when either is.
+ * @param bundles The bundle files tried when neither variable is set;
+ *   ignored when either is.
  * @returns A new `PkiRoots`, as `pkiLoadRoots` gives it.
  */
 export const pkiLoadRootsFor = (

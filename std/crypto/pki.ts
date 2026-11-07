@@ -182,6 +182,8 @@ export class PkiResult {
   path: X509Certificate[]
 
   /**
+   * One verification's answer, as `pkiVerifyServer` gives it.
+   *
    * @param code `PKI_OK` or the reason the chain was refused.
    * @param path The path found, kept as given, not copied.
    */
