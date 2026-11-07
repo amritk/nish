@@ -446,9 +446,17 @@ export class HkdfScratch {
   sha384: HmacSha384Scratch
   /** T(i - 1), HashLen bytes of it; wiped before every function returns. */
   previous: u8[]
-  /** The one-byte block counter `i`. */
+  /**
+   * The one-byte block counter `i`.
+   *
+   * @internal Written by this module's `*Into` functions.
+   */
   counter: u8[]
-  /** HKDF-Expand-Label's `info`, built here: public, so it is not wiped. */
+  /**
+   * HKDF-Expand-Label's `info`, built here: public, so it is not wiped.
+   *
+   * @internal Written by this module's `*Into` functions.
+   */
   label: u8[]
 
   constructor() {

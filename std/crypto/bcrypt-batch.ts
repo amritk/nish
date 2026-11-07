@@ -130,12 +130,14 @@ export class BcryptAnswer {
  * queue's array, made at the password's length and filled by `bcryptBatchTake`.
  */
 class BcryptBatchKey {
+  /** @internal Read by this module's batch functions; the class is not exported. */
   readonly key: Secret<u8[]>
 
   constructor(length: i32) {
     this.key = secret(new Array<u8>(length))
   }
 
+  /** @internal Called by `BcryptBatcher.run`; the class is not exported. */
   wipe(): void {
     wipe(this.key)
   }
@@ -170,13 +172,25 @@ const bcryptBatchTake = (password: Secret<u8[]>): BcryptBatchKey => {
  * `Err`.
  */
 class BcryptBatchShare {
+  /** @internal Read by this module's task functions; the class is not exported. */
   passwords: BcryptBatchKey[]
+  /** @internal Read by this module's task functions; the class is not exported. */
   kinds: i32[]
-  /** A verify's stored hash, "" for a hash. */
+  /**
+   * A verify's stored hash, "" for a hash.
+   *
+   * @internal Read by this module's task functions; the class is not exported.
+   */
   hashes: string[]
-  /** 16 bytes a request; a verify's are zeros and are not read. */
+  /**
+   * 16 bytes a request; a verify's are zeros and are not read.
+   *
+   * @internal Read by this module's task functions; the class is not exported.
+   */
   salts: u8[]
+  /** @internal Read by this module's task functions; the class is not exported. */
   cost: i32
+  /** @internal Read by this module's task functions; the class is not exported. */
   width: i32
 
   constructor(cost: i32, width: i32) {
@@ -433,22 +447,22 @@ const bcryptBatchAnswerOf = (ticket: i32, kind: i32, said: string): BcryptAnswer
  * `waitNanos` says when the next `run` is due.
  */
 export class BcryptBatcher {
-  holdNanos: i64
+  private holdNanos: i64
   /** The queue, from `head`: each request's copy of its password, kind, stored hash, salt (16 bytes each), ticket and arrival. */
-  passwords: BcryptBatchKey[]
-  kinds: i32[]
-  hashes: string[]
-  salts: u8[]
-  tickets: i32[]
-  arrived: i64[]
+  private passwords: BcryptBatchKey[]
+  private kinds: i32[]
+  private hashes: string[]
+  private salts: u8[]
+  private tickets: i32[]
+  private arrived: i64[]
   /** Answers made without a batch (a salt of the wrong length), handed out by the next `run`. */
-  early: BcryptAnswer[]
-  width: i32
-  cores: i32
-  cost: i32
-  head: i32
+  private early: BcryptAnswer[]
+  private width: i32
+  private cores: i32
+  private cost: i32
+  private head: i32
   /** The next ticket. */
-  next: i32
+  private next: i32
 
   constructor(config: BcryptBatchConfig) {
     this.width = config.width
@@ -503,7 +517,7 @@ export class BcryptBatcher {
   }
 
   /** Appends one request to the queue. */
-  enqueue(password: Secret<u8[]>, kind: i32, hash: string, salt: u8[], ticket: i32, now: i64): void {
+  private enqueue(password: Secret<u8[]>, kind: i32, hash: string, salt: u8[], ticket: i32, now: i64): void {
     this.passwords.push(bcryptBatchTake(password))
     this.kinds.push(kind)
     this.hashes.push(hash)
@@ -615,7 +629,7 @@ export class BcryptBatcher {
    * The queue indices of the `taken` oldest requests, verifies by the cost
    * their hash names and then hashes, each group in arrival order.
    */
-  orderOf(taken: i32): i32[] {
+  private orderOf(taken: i32): i32[] {
     const keyed: i32[] = []
     const keys: i32[] = []
     for (let i: i32 = this.head; i < this.head + taken && i < toI32(this.kinds.length); i++) {
@@ -651,7 +665,7 @@ export class BcryptBatcher {
   }
 
   /** Drops the requests before `head` once they are most of the queue, so a long-lived batcher's arrays stay small. */
-  compact(): void {
+  private compact(): void {
     if (this.head < 64 || this.head * 2 < toI32(this.kinds.length)) {
       return
     }

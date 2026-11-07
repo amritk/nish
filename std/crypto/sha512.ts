@@ -276,7 +276,9 @@ class Sha512Engine {
   block: u8[]
   /** The message schedule W_0 .. W_79, kept so a block allocates nothing. */
   schedule: u64[]
+  /** @internal Set by `nish/crypto/hmac` when it wipes, copies or restarts a hasher. */
   count: u64 = 0
+  /** @internal Set by `nish/crypto/hmac` when it wipes, copies or restarts a hasher. */
   filled: i32 = 0
   finished: boolean = false
 
@@ -287,7 +289,7 @@ class Sha512Engine {
   }
 
   /** One application of §6.4.2 to the block at `src[off]` .. `src[off + 127]`. */
-  compress(src: u8[], off: i32): void {
+  private compress(src: u8[], off: i32): void {
     const w = this.schedule
     const h = this.state
     const wLen: i32 = toI32(w.length)
@@ -358,6 +360,7 @@ class Sha512Engine {
     h[7] = h[7] + hh
   }
 
+  /** @internal Called by `Sha512` and `Sha384`, which hold the engine. */
   absorb(data: u8[], off: i32, len: i32): void {
     if (this.finished) {
       panic("sha512: update after digest")
@@ -397,6 +400,8 @@ class Sha512Engine {
   /**
    * Makes `twin` this engine at the same point. `twin` is a fresh engine of the
    * same hash, so its arrays are reused rather than allocated a second time.
+   *
+   * @internal Called by `Sha512` and `Sha384`, which hold the engine.
    */
   copyInto(twin: Sha512Engine): void {
     for (let i: i32 = 0; i < 8; i++) {
@@ -410,7 +415,11 @@ class Sha512Engine {
     twin.finished = this.finished
   }
 
-  /** Pads (§5.1.2), compresses what is left, and answers the first `size` bytes of H(N) (§6.4.2, §6.5). */
+  /**
+   * Pads (§5.1.2), compresses what is left, and answers the first `size` bytes of H(N) (§6.4.2, §6.5).
+   *
+   * @internal Called by `Sha512` and `Sha384`, which hold the engine.
+   */
   finish(size: i32): u8[] {
     if (this.finished) {
       panic("sha512: digest taken twice")

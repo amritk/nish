@@ -500,11 +500,11 @@ export class HmacSha256Scratch {
   /** H(K XOR opad, …): keyed by `begin`, fed the inner digest by `finishInto`. */
   outer: Sha256
   /** A hasher nothing is ever fed: the initial hash value `begin` copies from. */
-  fresh: Sha256
+  private fresh: Sha256
   /** One key block XOR a pad, wiped as soon as it is absorbed. */
-  pad: u8[]
+  private pad: u8[]
   /** The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with instead; wiped once used. */
-  keyHash: u8[]
+  private keyHash: u8[]
 
   constructor() {
     this.inner = new Sha256()
@@ -541,7 +541,7 @@ export class HmacSha256Scratch {
    * caller's key in a local it reassigns, which would make the key look
    * stored to the arena analysis.
    */
-  keyBlocks(key: u8[], off: i32, len: i32): void {
+  private keyBlocks(key: u8[], off: i32, len: i32): void {
     // Starting a hasher again copies only the live part of `fresh`, so the
     // last computation's block and schedule are wiped first (K1-7).
     hmacWipeSha256(this.inner)
@@ -592,11 +592,11 @@ export class HmacSha384Scratch {
   /** H(K XOR opad, …): keyed by `begin`, fed the inner digest by `finishInto`. */
   outer: Sha384
   /** A hasher nothing is ever fed: the initial hash value `begin` copies from. */
-  fresh: Sha384
+  private fresh: Sha384
   /** One key block XOR a pad, wiped as soon as it is absorbed. */
-  pad: u8[]
+  private pad: u8[]
   /** The SHA-384 of a key longer than a block; wiped once used. */
-  keyHash: u8[]
+  private keyHash: u8[]
 
   constructor() {
     this.inner = new Sha384()
@@ -633,7 +633,7 @@ export class HmacSha384Scratch {
    * caller's key in a local it reassigns, which would make the key look
    * stored to the arena analysis.
    */
-  keyBlocks(key: u8[], off: i32, len: i32): void {
+  private keyBlocks(key: u8[], off: i32, len: i32): void {
     // Starting a hasher again copies only the live part of `fresh`, so the
     // last computation's block and schedule are wiped first (K1-7).
     hmacWipeSha384(this.inner)
@@ -923,24 +923,42 @@ const hmacMidstates512 = (out: u64[], inner: u64[], outer: u64[]): void => {
  * therefore used by one computation at a time, as a `Sha256` is.
  */
 export class HmacKey {
-  /** Words 0 to 7: the keyed inner chaining value; 8 to 15: the keyed outer one. */
+  /**
+   * Words 0 to 7: the keyed inner chaining value; 8 to 15: the keyed outer one.
+   *
+   * @internal Read by `hmacKeyedInto`, `hmacKeyedVerify` and their helpers.
+   */
   readonly pads: Secret<u64[]>
-  /** SHA-256's work hashers; idle and wiped between tags. */
+  /**
+   * SHA-256's work hashers; idle and wiped between tags.
+   *
+   * @internal Read by `hmacKeyedInto`, `hmacKeyedVerify` and their helpers.
+   */
   readonly inner256: Sha256
+  /** @internal Read by `hmacKeyedInto`, `hmacKeyedVerify` and their helpers. */
   readonly outer256: Sha256
   /**
    * SHA-384's and SHA-512's work hashers: SHA-384 is SHA-512's compression
    * from another start, cut to 48 bytes, so resumed from a chaining value the
    * two are one hasher and differ only in the digest length taken.
+   *
+   * @internal Read by `hmacKeyedInto`, `hmacKeyedVerify` and their helpers.
    */
   readonly inner512: Sha512
+  /** @internal Read by `hmacKeyedInto`, `hmacKeyedVerify` and their helpers. */
   readonly outer512: Sha512
-  /** `HMAC_SHA256`, `HMAC_SHA384` or `HMAC_SHA512`. */
+  /**
+   * `HMAC_SHA256`, `HMAC_SHA384` or `HMAC_SHA512`.
+   *
+   * @internal Read by `hmacKeyedInto`, `hmacKeyedVerify` and their helpers.
+   */
   readonly hash: i32
   /**
    * Whether the key still MACs: `wipe()` clears it. A wiped key's chaining
    * values are zeros anyone can resume from, so a tag under them proves
    * nothing and none is computed.
+   *
+   * @internal Read by `hmacKeyedInto`, `hmacKeyedVerify` and their helpers.
    */
   live: boolean
 

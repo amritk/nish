@@ -435,6 +435,8 @@ export class Sha256 {
    * The message length absorbed so far, in bytes. An `i64` because §5.1.1
    * appends the length in bits as a 64-bit number, and a transcript can pass
    * 2^31 bytes where an `i32` would wrap.
+   *
+   * @internal Set by `nish/crypto/hmac` and `nish/net/postgres` when they wipe, copy or restart a hasher.
    */
   total: i64 = 0
   /** H_0 .. H_7, the eight words of the intermediate hash value (§6.2.2 step 4). */
@@ -447,8 +449,13 @@ export class Sha256 {
    * it once rather than once per block.
    */
   schedule: u32[]
-  /** How many bytes of `block` are live, always below `SHA256_BLOCK` between calls. */
+  /**
+   * How many bytes of `block` are live, always below `SHA256_BLOCK` between calls.
+   *
+   * @internal Set by `nish/crypto/hmac` and `nish/net/postgres` when they wipe, copy or restart a hasher.
+   */
   fill: i32 = 0
+  /** @internal Set by `nish/crypto/hmac` and `nish/net/postgres` when they wipe, copy or restart a hasher. */
   finished: boolean = false
 
   constructor() {
