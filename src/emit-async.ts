@@ -308,7 +308,7 @@ export const emitAsyncCall = (
  * `spawn`'s node, from the executor's slab for its kind (`nish_async_spawn`),
  * with a region of its own: the task is entered, its string arguments copied
  * into its region (the checker refuses any other argument that points at
- * memory, NL2672), started, and left; a task that finished at once gives its
+ * memory, NL2673), started, and left; a task that finished at once gives its
  * node back, and one that waits is resumed by `@nish.async.run` when the
  * kernel says its wait is over.
  */
