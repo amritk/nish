@@ -41,7 +41,11 @@ const ended = (l: typeof Loader, call: () => unknown): string => {
   }
 }
 
-export const run = (l: typeof Loader, bytes: BufferSource, sites: Sites, what: string): string[] => {
+/**
+ * `markOf` reads the arena's mark (`nish_arena_mark`) straight from the
+ * instance, which a page never needs; the driver hands it in for `mark`.
+ */
+export const run = (l: typeof Loader, bytes: BufferSource, sites: Sites, what: string, markOf: () => bigint): string[] => {
   const seen: Panic[] = []
   const back: { m: Module | null } = { m: null }
   const m = open(l, bytes, sites, seen, back, what === "thrown")
@@ -70,6 +74,26 @@ export const run = (l: typeof Loader, bytes: BufferSource, sites: Sites, what: s
     let last = 0
     for (let i = 0; i < 2000; i++) last = m.fill(4096)
     out.push(`last ${last} grew ${m.memory.buffer.byteLength - before > 65536}`)
+  } else if (what === "mark") {
+    // Every export runs between a mark and its release, an array result
+    // decoded inside them, so the mark after each call is the one before it.
+    // (A panic skips the release: the module is dead, its arena never read.)
+    // The first allocation places the arena; the mark is read from there on.
+    m.fill(4)
+    const base = markOf()
+    const calls: [string, () => unknown][] = [
+      ["bump", () => m.bump()],
+      ["cell", () => m.cell(2)],
+      ["sum", () => m.sum(40, 2)],
+      ["fill", () => m.fill(4096)],
+      ["row", () => m.row(5).join(",")],
+      ["row", () => m.row(3000).length],
+    ]
+    for (const [name, call] of calls) {
+      const result = ended(l, call)
+      const after = markOf()
+      out.push(`${name} ${result} ${after === base ? "held" : `moved ${after - base}`}`)
+    }
   } else if (what === "oom") {
     out.push(ended(l, () => m.fill(1 << 20)))
   }

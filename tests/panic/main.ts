@@ -48,3 +48,12 @@ export const nested = (): u32 => {
 export const thrown = (): void => {
   boom()
 }
+
+/** A row of `n` cells, built in the arena and copied out to the page. */
+export const row = (n: i32): i32[] => {
+  const xs: i32[] = []
+  for (let i = 0; i < n; i++) {
+    xs.push(i * 2)
+  }
+  return xs
+}

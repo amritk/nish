@@ -64,6 +64,7 @@ import {
 } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
+import { STORAGE_NAMESPACE } from "./emit-ts-storage"
 
 /** Whether `type` is a record an array holds inline: an interface no class implements. */
 const inlineRecord = (program: CheckedProgram, type: i32): boolean => {
@@ -455,7 +456,7 @@ const typedArrayZero = (name: string): string => {
   return name === "BigInt64Array" ? "0n" : ""
 }
 
-/** The width a typed array holds, which its `newArray` is typed by. */
+/** The width a typed array holds, which its `newArray` is typed by, or "" for a name that is no typed array. */
 const typedArrayWidth = (name: string): string => {
   if (name === "Float64Array") {
     return "f64"
@@ -463,7 +464,10 @@ const typedArrayWidth = (name: string): string => {
   if (name === "Float32Array") {
     return "f32"
   }
-  return name === "Int32Array" ? "i32" : "i64"
+  if (name === "Int32Array") {
+    return "i32"
+  }
+  return name === "BigInt64Array" ? "i64" : ""
 }
 
 /**
@@ -492,7 +496,6 @@ const vectorZero = (walk: Walk, node: Node): string => {
   return `${walk.helperName(splat)}(0)`
 }
 
-/** `new Array<T>(n)` or `new Float64Array(n)` as a checked, zero-filled `newArray`, or `null`. */
 /**
  * Module storage's `new` (WP50 §5.4): the view `nish-storage.ts` exports for
  * it, which that file types `any`, cast to the array the module wrote, so
@@ -512,11 +515,12 @@ const storageRow = (walk: Walk, node: Node, text: string): string => {
   return `(${text} as ${element}[])`
 }
 
+/** `new Array<T>(n)` or `new Float64Array(n)` as a checked, zero-filled `newArray`, or `null`. */
 const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const stored = walk.storageIds.indexOf(node.id)
   if (stored >= 0) {
     walk.usesStorage = true
-    return storageRow(walk, node, walk.storageTexts[stored])
+    return storageRow(walk, node, `${STORAGE_NAMESPACE}.s${walk.storageSlots[stored]}`)
   }
   const callee = node.children[0]
   if (callee.kind !== N_IDENT || node.children[2].children.length !== 1) {

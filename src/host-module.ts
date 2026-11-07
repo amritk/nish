@@ -600,12 +600,7 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
         )
       } else if (isBuffer(type, typed, scalars)) {
         if (windowElement(type) === "") {
-          problems.push(
-            new HostProblem(
-              `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, and a buffer window lends only \`u8[]\`, \`u16[]\`, \`u32[]\`, \`i32[]\`, \`f32[]\` or \`f64[]\` (or the typed array of each): copy the values into one of those`,
-              type
-            )
-          )
+          problems.push(windowElementProblem(p, name, type))
           continue
         }
         const pair = windowPairProblem(params, k, p, name)
@@ -731,6 +726,13 @@ const asWindow = (type: Node, parser: Parser): void => {
   type.text = ""
   type.children = [element]
 }
+
+/** A buffer parameter whose element no window lends. */
+const windowElementProblem = (p: string, name: string, type: Node): HostProblem =>
+  new HostProblem(
+    `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, and a buffer window lends only \`u8[]\`, \`u16[]\`, \`u32[]\`, \`i32[]\`, \`f32[]\` or \`f64[]\` (or the typed array of each): copy the values into one of those`,
+    type
+  )
 
 /** A parameter or result whose type is none a wasm import carries. */
 const typeProblem = (where: string, name: string, type: Node): HostProblem =>

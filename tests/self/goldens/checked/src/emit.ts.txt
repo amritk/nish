@@ -390,7 +390,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   callee +34:24 new StringSet -> @StringSet.constructor
   callee +36:20 new StringMap -> @StringMap.constructor
   callee +39:23 isWasmBuild -> @isWasmBuild
-  callee +39:43 new PanicSiteTable -> @PanicSiteTable.constructor
+  callee +39:62 new PanicSiteTable -> @PanicSiteTable.constructor
   callee +42:26 new StringSet -> @StringSet.constructor
   local +45:16 library: AnalysisUnit (const)
   callee +49:20 new DebugInfo -> @DebugInfo.constructor

@@ -35,10 +35,11 @@ struct Options (class) size=200 align=8 exported
   field denyCapabilities: i32 index=29 offset=152
   field sandbox: i32 index=30 offset=156
   field sandboxCapabilities: i32 index=31 offset=160
-  field sandboxRead: string[] index=32 offset=168
-  field sandboxWrite: string[] index=33 offset=176
-  field sandboxExec: string[] index=34 offset=184
-  field updateCapabilityLock: boolean index=35 offset=192
+  field panicSites: boolean index=32 offset=164
+  field sandboxRead: string[] index=33 offset=168
+  field sandboxWrite: string[] index=34 offset=176
+  field sandboxExec: string[] index=35 offset=184
+  field updateCapabilityLock: boolean index=36 offset=192
   constructor -> @Options.constructor
   method recordsPanics -> @Options.recordsPanics
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]

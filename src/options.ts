@@ -229,6 +229,12 @@ export class Options {
    */
   sandboxCapabilities: i32
   /**
+   * WP50 S3: tag each wasm32 panic call with its site, for a program
+   * `Compilation.guardsPanics` says is written for the panic guard. Set by
+   * `Compilation.emit`.
+   */
+  panicSites: boolean
+  /**
    * WP37: the directories `--allow fs.read=<dir>` and `--allow fs.write=<dir>`
    * scope those capabilities to under `--sandbox`, each resolved to its
    * absolute, symlink-free path. Empty when the capability is granted whole
@@ -282,6 +288,7 @@ export class Options {
     this.denyCapabilities = 0
     this.sandbox = 0
     this.sandboxCapabilities = 0
+    this.panicSites = false
     this.sandboxRead = []
     this.sandboxWrite = []
     this.sandboxExec = []

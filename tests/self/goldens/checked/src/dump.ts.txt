@@ -117,12 +117,14 @@ function structText(table: TypeTable, info: StructInfo, out: string[]): void -> 
   local +29:9 ctor: FunctionSig | null (const)
   local +33:7 i: i32 (let)
   callee +35:26 StringMap.keyAt -> @StringMap.keyAt
-function constantSyntax(info: ConstInfo): string -> @constantSyntax
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: jsonQuote nish_str_concat nish_str_from_f64 nish_str_from_i64
+function constantSyntax(table: TypeTable, info: ConstInfo): string -> @constantSyntax
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.typeName jsonQuote nish_str_concat nish_str_from_f64 nish_str_from_i64
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   pointer info: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:12 jsonQuote -> @jsonQuote
+  callee +0:25 TypeTable.typeName -> @TypeTable.typeName
+  callee +3:12 jsonQuote -> @jsonQuote
 function position(source: SourceFile, offset: i32): string -> @position
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: offset
@@ -170,7 +172,7 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   sharedWrite: +0:3
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.definedIn SourceFile.columnOf SourceFile.lineOf TypeTable.typeName bodyTables constantSyntax factsText jsonQuote nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32 signatureLine structText
   pointer unit: size=88 writesThrough=false captured=false
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 structText#0 signatureLine#0 factsText#1 bodyTables#2
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 constantSyntax#0 structText#0 signatureLine#0 factsText#1 bodyTables#2
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer out: size=0 writesThrough=true captured=false passedTo=structText#2 factsText#4 bodyTables#4
   stackSites=1 stackLocals=1

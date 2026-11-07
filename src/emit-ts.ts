@@ -34,7 +34,7 @@ import {
   SIGNAL_REFUSAL,
   Walk,
 } from "./emit-ts-edits"
-import { STORAGE_FILE, STORAGE_NAMESPACE, storageFileText, storageNewText } from "./emit-ts-storage"
+import { STORAGE_FILE, STORAGE_NAMESPACE, storageFileText } from "./emit-ts-storage"
 import { storageLayouts } from "./interop-wasm"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
@@ -262,6 +262,10 @@ const braceList = (names: StringSet): string => {
 }
 
 /** The line a non-empty name list is imported from the runtime by, or the empty string. */
+/** The line a module that writes a storage `new` imports `STORAGE_FILE` with, from `out`. */
+const storageImport = (out: string): string =>
+  `import * as ${STORAGE_NAMESPACE} from "${relativeSpecifier(out, STORAGE_FILE)}"\n`
+
 const runtimeImport = (keyword: string, names: StringSet): string =>
   names.size() === 0 ? "" : `${keyword} ${braceList(names)} from "${RUNTIME}"\n`
 
@@ -356,11 +360,17 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
-    for (const s of layouts) {
+    let slot = 0
+    while (slot < layouts.length) {
+      const s = layouts[slot]
       if (s.module === k - 1) {
         walk.storageIds.push(s.newId)
-        walk.storageTexts.push(storageNewText(layouts, k - 1, s.newId))
+        walk.storageSlots.push(slot)
       }
+      slot = slot + 1
+    }
+    if (walk.storageIds.length > 0) {
+      walk.storageImport = storageImport(out)
     }
     // WP49: an async function is written as the TypeScript it already is, and
     // the launcher awaits `main` and every spawned task. Read from the tree,
@@ -451,9 +461,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       runtimeImport("import type", walk.widths) +
       (walk.hostHandle ? HOST_HANDLE_ALIAS : "") +
       (walk.hostHandle && scriptFile ? "export {}\n" : "") +
-      (walk.usesStorage
-        ? `import * as ${STORAGE_NAMESPACE} from "${relativeSpecifier(out, STORAGE_FILE)}"\n`
-        : "")
+      (walk.usesStorage ? walk.storageImport : "")
     if (header.length > 0) {
       const at = importOffset(unit.source.text)
       // An import line is an edit like any other, so it goes in source order:

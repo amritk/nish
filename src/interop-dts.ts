@@ -48,6 +48,7 @@ import {
   hostFunctions,
   hostSpecifiers,
   layoutTypes,
+  loaderGuarded,
   storageLayouts,
   wasmBridged,
   wasmSkipReason,
@@ -105,7 +106,10 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push("/** A wasm i1 result: JS receives 0 or 1, never `true` / `false`. */")
   lines.push("export type WasmBool = 0 | 1;")
   lines.push("")
-  pushAll(lines, panicTypes())
+  const guard = loaderGuarded(compilation)
+  if (guard) {
+    pushAll(lines, panicTypes())
+  }
   // WP50 S3: with module storage the page builds its views from `layout`.
   const layouts = storageLayouts(compilation)
   if (layouts.length > 0) {
@@ -173,14 +177,18 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push(
     specifiers.length > 0
       ? "export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;"
-      : "export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;"
+      : guard
+        ? "export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;"
+        : "export function load(bytes: BufferSource): Promise<Exports>;"
   )
-  lines.push("/** `load` without the wait, for bytes already in hand: a worker, a test, a small module. */")
-  lines.push(
-    specifiers.length > 0
-      ? "export function loadSync(bytes: BufferSource, imports: Imports): Exports;"
-      : "export function loadSync(bytes: BufferSource, options?: LoadOptions): Exports;"
-  )
+  if (guard) {
+    lines.push("/** `load` without the wait, for bytes already in hand: a worker, a test, a small module. */")
+    lines.push(
+      specifiers.length > 0
+        ? "export function loadSync(bytes: BufferSource, imports: Imports): Exports;"
+        : "export function loadSync(bytes: BufferSource, options?: LoadOptions): Exports;"
+    )
+  }
   if (layouts.length > 0) {
     lines.push("/** The instance `load` answers: its memory, its storage layout and its exports. */")
     lines.push("export type Module = Exports;")
@@ -191,9 +199,9 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
 
 /**
  * WP50 S3 (`docs/wp50-wasm-host.md` §6): what a panic looks like to the page,
- * the options every `load` takes beside the host modules, and the two errors
- * the loader throws. Every loader has them, since every export runs in the
- * guard that throws them.
+ * the options `load` takes beside the host modules, and the two errors the
+ * loader throws. A guarded loader (`loaderGuarded`) has them, since every
+ * export runs in the guard that throws them; a plain one has none.
  */
 const panicTypes = (): string[] => {
   const lines: string[] = []
@@ -210,7 +218,7 @@ const panicTypes = (): string[] => {
   lines.push("/** What `load` takes beside the host modules. */")
   lines.push("export interface LoadOptions {")
   lines.push(
-    "  /** Told once when the module panics, before the call throws. Default: nish/page's reporter. */"
+    "  /** Told once when the module panics, before the call throws; a trap or a host function's exception kills the module unannounced. Default: nish/page's reporter. */"
   )
   lines.push("  onPanic?: (panic: Panic) => void;")
   lines.push(
@@ -228,7 +236,7 @@ const panicTypes = (): string[] => {
   lines.push("}")
   lines.push("")
   lines.push(
-    "/** A call into the module while another call into it was running; the module was not touched. */"
+    "/** A call into the module while another call into it was running. The inner call never ran; an outer call that lets this escape kills the module. */"
   )
   lines.push("export declare class NishReentry extends Error {}")
   lines.push("")

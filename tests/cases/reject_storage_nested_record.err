@@ -1,0 +1,1 @@
+Module storage `S` cannot hold Out.p (In): a record field that is itself a record is a pointer to it

@@ -1811,17 +1811,20 @@ export const step = (): void => {
 ```
 
 ```llvm
-@bodies.data = global [8 x %struct.Body] zeroinitializer, align 16
-@bodies = global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x %struct.Body]* @bodies.data to i8*) }, align 8
+@nish_storage_0_bodies.data = global [8 x %struct.Body] zeroinitializer, align 16
+@nish_storage_0_bodies = global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x %struct.Body]* @nish_storage_0_bodies.data to i8*) }, align 8
 ```
 
-- **Two globals.** `<name>.data` holds the elements and `<name>` is an
+- **Two globals.** `<symbol>.data` holds the elements and `<symbol>` is an
   ordinary array header over them, so every read and write is the indexing an
-  array already lowers to. The data has external linkage: the
-  `--profile wasm-host` link exports it, and the loader reads its address
-  from that export. Another module reaches the storage as
-  `@<name> = external global %struct.nish_array`. Both names carry the
-  module's symbol prefix ([cookbook](IR_COOKBOOK.md#module-storage-two-globals-a-page-can-find)).
+  array already lowers to. The symbol is `nish_storage_<module>_<name>`, with
+  `<module>` the module's place in the program, so two modules may each keep
+  a private storage of one name, and none takes a C symbol such as `write`.
+  The data has external linkage: the `--profile wasm-host` link exports it,
+  and the loader reads its address from that export. The header is
+  `internal` unless the storage is exported; another module reaches an
+  exported one as `@<symbol> = external global %struct.nish_array`
+  ([cookbook](IR_COOKBOOK.md#module-storage-two-globals-a-page-can-find)).
 - **The length is known at compile time**: a literal, a module constant, or
   arithmetic over them (`wrappingAdd` and the other `nish:unsafe` folds
   included), from 1 to 16,777,216 elements and at most 256 MiB
@@ -1834,12 +1837,16 @@ export const step = (): void => {
 - **The element is pointer-free, and zero is one of its values**: a number, a
   `boolean`, an enum or a ranged integer whose zero is a member, a
   `HostHandle`, or an interface no class implements whose fields are all of
-  these (one level: a field may not be another record). A string, an array, a
-  class, a `Map` or a `| null` is
+  these. A string, an array, a class, a `Map` or a `| null` is
   `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
   (NL2671, `reject_storage_string_element`, `_array_element`,
   `_class_element`, `_map_element`, `_nullable_element`,
-  `_record_string_field`), and an enum or range without a zero is
+  `_record_string_field`). An interface a class implements, generic classes
+  included, is a class's shape and is refused the same way
+  (`reject_storage_implemented_interface`, `_generic_implementer`). A field
+  may not be another record, since a record field is a pointer to it:
+  `` Module storage `X` cannot hold Out.p (In): a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record ``
+  (NL2685, `reject_storage_nested_record`). An enum or range without a zero is
   `` Module storage `X` is zero-filled, and 0 is not a value of T; give the type a zero member, or store the number and convert it where it is read ``
   (NL2672, `reject_storage_enum_no_zero`, `_range_no_zero`).
 - **An annotation must say what the `new` makes**: `const xs: f64[] = new
@@ -1859,7 +1866,17 @@ export const step = (): void => {
   `const total = (xs: Int32Array): i32 => …; total(SCORES)`
   (`tests/cases/storage_lend`), and to a host function's buffer window
   ([Host modules](#host-modules-the-functions-a-page-supplies)). A record
-  storage is never lent.
+  storage is never lent. A lending to a function of the same module holds
+  only while that function keeps the parameter in place: it may index it,
+  read `.length`, loop over it with `for of`, call a method that reads it
+  (`at`, `indexOf`, `slice`, `map`, …), call `fill`, `sort`, `reverse` or
+  `copyWithin` as a statement, and lend it on to another such parameter or a
+  buffer window. Anything else (binding it under another name, returning it,
+  passing it to an `i32[]` parameter, which could `push`) is
+  `` Module storage `X` cannot be lent to `f`, which lets its parameter `a` go further than indexing: … ``
+  (NL2684, `reject_storage_lend_respell_arg`, `_const`, `_return`), and so is
+  lending to a function another module declares, whose body this check does
+  not read.
 - **A record element is a place too.** `X[i].x` reads and writes a field,
   and `X[i] = X[j]` or `X[i] = v` copies a whole element, field by field.
   Binding, returning or storing `X[i]` is NL2674
@@ -2353,6 +2370,13 @@ and their `.ll` goldens are byte-identical files.
   (`export_memory_native`, `tests/link/export_memory_native_sibling`). The
   linker's other names, `_start`, `__heap_base`, `__data_end` and
   `__indirect_function_table`, are already refused by the rule above.
+  A wasm program with module storage reserves two more: its loader answers
+  the storage as `layout` and `views` beside the exports (§5.2 of
+  `docs/wp50-wasm-host.md`), so in such a program an exported function of
+  either name is
+  `` `views` is the name the wasm loader answers the program's module storage under: an exported function of the program's own package keeps its name as its symbol, so the loader would answer two things named `views` and the page could not reach this function; rename it ``
+  (NL3051, `tests/cases/reject_storage_loader_name`). A program without
+  module storage keeps both names (`export_loader_names_no_storage`).
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
@@ -6198,7 +6222,8 @@ exception:
   writes `nish: <message>` to `console.error`, as a native program writes it
   to stderr. An exception the reporter throws is swallowed: the `NishPanic` is
   thrown either way.
-- **`sites` names where.** The wasm-host link writes `<out>.wasm.sites.json`,
+- **`sites` names where.** The wasm-host link writes `<out>.sites.json`
+  (`app.wasm.sites.json` for `-o app.wasm`),
   `[{ kind, at }]` with one entry per panic site, indexed by `site`. Passed to
   `load` (parsed), it ends each message with ` at path:line:col`; without it
   the message is the native text alone. `--profile wasm` is unchanged: it
@@ -6935,8 +6960,10 @@ stores `calls`, keeps `i < xs.length` and `i < c.v.length`
 (`arr_range_call_loop`), and one that stores `v` ends `c.v`'s facts
 (`arr_range_call_rebind`). A builtin handed only numbers, booleans and
 strings — `console.log`, `panic`, a string method — has the empty summary,
-since without mutable module state or a function value what a call is handed
-is all it can reach.
+since without a function value what a call is handed is all it can reach:
+the one mutable module state, [module storage](#module-storage), is named
+only by its own module's code, and its length never changes, so no call can
+end a length fact about it.
 
 A function every call to which the compiler can see is **entered with what
 every call site proves** about its parameters: a floor and an upper bound of
@@ -8137,7 +8164,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 
 | Refused | Code |
 | --- | --- |
-| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`) |
+| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant or [module storage](#module-storage), whose elements are pointer-free, and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`) |
 | outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
 | `enter`'s or `enterWith`'s `f` answering anything but a number, a `boolean`, an `enum` or a `Region`: an array, an object or a string | **NL2611** (`reject_region_enter_result`, `reject_region_enter_string`) |
 | `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | **NL2612** (`reject_region_threads`) |
@@ -11161,9 +11188,10 @@ where its memory lives and when it is reused.
    when nothing the function was handed can hold a pointer at all: every
    parameter, `this` included, is a number, a `boolean`, an `enum`, a
    `string`, or an object whose fields are all numbers, booleans and enums.
-   The language has no mutable global, so memory older than the call is
-   reachable only through those parameters, and none of it has a slot a
-   pointer fits in (`tests/cases/mem_callee_scope`, the Are We Fast Yet
+   The one mutable global is [module storage](#module-storage), whose
+   elements are pointer-free, so memory older than the call that has a slot
+   a pointer fits in is reachable only through those parameters, and none
+   of it has one (`tests/cases/mem_callee_scope`, the Are We Fast Yet
    `List` benchmark; `mem_callee_scope_tree`, its `Storage` benchmark, where
    10000 runs leave `Arena.used()` where one left it). A callee that stores
    what it allocates into `this` or a parameter, a function that returns a

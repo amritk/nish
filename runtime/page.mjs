@@ -4,6 +4,9 @@
 // the default `onPanic` reporter. Plain ECMAScript with no imports, so a
 // browser loads it as it is.
 
+/** What a slot holds when no object is in it: the free list is never searched. */
+const EMPTY = Symbol("empty");
+
 /**
  * The objects a host module hands the program as `HostHandle<"kind">`
  * values: `add` answers a handle, `get` reads it and `take` removes it. Slot 0
@@ -14,9 +17,6 @@
  * out again by a later `add`, so a stale handle the program kept names the
  * newer object; it can reach only what the table holds.
  */
-/** What a slot holds when no object is in it: the free list is never searched. */
-const EMPTY = Symbol("empty");
-
 export class HostTable {
   #slots = [EMPTY];
   #free = [];

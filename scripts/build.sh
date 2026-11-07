@@ -785,16 +785,28 @@ case "$profile" in
         *.ll) if grep -q '@nish_round_init' "$i"; then round_wanted=1; fi ;;
       esac
     done
-    # Under wasm-host a panic site is the page's `nish.panic` import, which
-    # runtime-wasm.c makes the call to: IR with a tagged site links it, or the
-    # panic would stay the silent trap of an undefined weak stub. Linked for
-    # that alone, it exports none of its arena entry points: no loader calls
-    # them, and unexported they are left out of the module.
+    # Under wasm-host a program whose loader guards panics (one with module
+    # storage or a host module: the compiler ends its IR with a
+    # `; nish.sites <count>` line) reports each panic through the page's
+    # `nish.panic` import, which runtime-wasm.c makes the call to when it is
+    # compiled with NISH_WASM_HOST. Any other program links the bytes it always
+    # did, with no import. IR with a tagged site links the runtime for the
+    # import, or the panic would stay the silent trap of an undefined weak
+    # stub; linked for that alone, it exports none of its arena entry points:
+    # no loader calls them, and unexported they are left out of the module.
+    host_panics=0
     panic_only=0
-    if [ "$profile" = wasm-host ] && [ "$wasm_named" = 0 ] && [ "$round_wanted" = 0 ]; then
+    if [ "$profile" = wasm-host ]; then
       for i in ${inputs[@]+"${inputs[@]}"}; do
         case "$i" in
-          *.ll) if grep -q ', !nish.site !{i32 ' "$i"; then round_wanted=1; panic_only=1; fi ;;
+          *.ll) if grep -qE '^; nish\.sites [0-9]+$' "$i"; then host_panics=1; fi ;;
+        esac
+      done
+    fi
+    if [ "$host_panics" = 1 ] && [ "$wasm_named" = 0 ] && [ "$round_wanted" = 0 ]; then
+      for i in ${inputs[@]+"${inputs[@]}"}; do
+        case "$i" in
+          *.ll) if grep -qE '^[[:space:]]+call void @nish_panic[A-Za-z0-9_]*\(.*, !nish\.site !\{i32 ' "$i"; then round_wanted=1; panic_only=1; fi ;;
         esac
       done
     fi
@@ -810,72 +822,80 @@ case "$profile" in
         -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
         "${inputs[@]}" -o "$out"
     else
-      # Panic sites (WP50 stage 3). On wasm32 the compiler tags each call of a
-      # runtime panic `!nish.site !{i32 N}` and lists the sites at the end of
-      # the module as `; nish.site N <kind> <path:line:col>` comments; code
-      # generation drops both, so `--profile wasm` links what it always did.
-      # Here each tagged call becomes its `_at` form taking the site as a
-      # first argument, numbered across the inputs, runtime-wasm.c (compiled
-      # with NISH_WASM_HOST) hands it to the page's `nish.panic` import, and
-      # the sites are written to `<out>.sites.json` for the loader.
-      make_work
-      sites_dir="$work/sites"
-      mkdir -p "$sites_dir"
-      sites_base=0
-      sites_json="$sites_dir/sites"
-      : > "$sites_json"
-      host_inputs=()
-      for i in "${inputs[@]}"; do
-        case "$i" in
-          *.ll)
-            rewritten="$sites_dir/${#host_inputs[@]}.ll"
-            awk -v base="$sites_base" -v list="$sites_json" '
-              # One tagged call: "call void @nish_panic<x>(<args>)<attrs>, !nish.site !{i32 N}<rest>".
-              # (`close` is a builtin, so the brace is `shut`.)
-              function untag(line,    at, rest, shut, n, head, open, args) {
-                at = index(line, ", !nish.site !{i32 ")
-                rest = substr(line, at + 19)
-                shut = index(rest, "}")
-                n = substr(rest, 1, shut - 1) + base
-                head = substr(line, 1, at - 1)
-                open = index(head, "(")
-                args = substr(head, open + 1)
-                return substr(head, 1, open - 1) "_at(i32 " n (substr(args, 1, 1) == ")" ? "" : ", ") args substr(rest, shut + 1)
-              }
-              /^; nish\.site [0-9]+ / {
-                kind = $4
-                where = $0
-                sub(/^; nish\.site [0-9]+ [a-z]+ /, "", where)
-                gsub(/\\/, "\\\\", where)
-                gsub(/"/, "\\\"", where)
-                printf "  { \"kind\": \"%s\", \"at\": \"%s\" }\n", kind, where >> list
-                count++
-                print
-                next
-              }
-              /^declare [a-z_ ]*void @nish_panic[a-z_]*\(/ {
-                print
-                open = index($0, "(")
-                print substr($0, 1, open - 1) "_at(i32" (substr($0, open + 1, 1) == ")" ? "" : ", ") substr($0, open + 1)
-                next
-              }
-              index($0, ", !nish.site !{i32 ") > 0 { print untag($0); next }
-              { print }
-              END { print count + 0 > (list ".count") }
-            ' "$i" > "$rewritten"
-            sites_base=$((sites_base + $(cat "$sites_json.count")))
-            host_inputs+=("$rewritten") ;;
-          *) host_inputs+=("$i") ;;
-        esac
-      done
-      {
-        printf '['
-        if [ -s "$sites_json" ]; then
-          printf '\n'
-          sed '$!s/$/,/' "$sites_json"
-        fi
-        printf ']\n'
-      } > "$out.sites.json"
+      # Panic sites (WP50 stage 3). For a program whose loader guards panics
+      # the compiler tags each call of a runtime panic `!nish.site !{i32 N}`
+      # and lists the sites at the end of the module as
+      # `; nish.site N <kind> <path:line:col>` comments; code generation drops
+      # both, so `--profile wasm` links what it always did. Here each tagged
+      # call becomes its `_at` form taking the site as a first argument,
+      # numbered across the inputs, runtime-wasm.c (compiled with
+      # NISH_WASM_HOST) hands it to the page's `nish.panic` import, and the
+      # sites are written to `<out>.sites.json` for the loader. A program
+      # without the `; nish.sites` line has no tag, no import and no sidecar.
+      host_define=()
+      host_inputs=("${inputs[@]}")
+      if [ "$host_panics" = 1 ]; then
+        host_define=(-DNISH_WASM_HOST)
+        make_work
+        sites_dir="$work/sites"
+        mkdir -p "$sites_dir"
+        sites_base=0
+        sites_json="$sites_dir/sites"
+        : > "$sites_json"
+        host_inputs=()
+        for i in "${inputs[@]}"; do
+          case "$i" in
+            *.ll)
+              rewritten="$sites_dir/${#host_inputs[@]}.ll"
+              awk -v base="$sites_base" -v list="$sites_json" '
+                # One tagged call: "call void @nish_panic<x>(<args>)<attrs>, !nish.site !{i32 N}<rest>".
+                # (`close` is a builtin, so the brace is `shut`.)
+                function untag(line,    at, rest, shut, n, head, open, args) {
+                  at = index(line, ", !nish.site !{i32 ")
+                  rest = substr(line, at + 19)
+                  shut = index(rest, "}")
+                  n = substr(rest, 1, shut - 1) + base
+                  head = substr(line, 1, at - 1)
+                  open = index(head, "(")
+                  args = substr(head, open + 1)
+                  return substr(head, 1, open - 1) "_at(i32 " n (substr(args, 1, 1) == ")" ? "" : ", ") args substr(rest, shut + 1)
+                }
+                /^; nish\.site [0-9]+ / {
+                  kind = $4
+                  where = $0
+                  sub(/^; nish\.site [0-9]+ [a-z]+ /, "", where)
+                  gsub(/\\/, "\\\\", where)
+                  gsub(/"/, "\\\"", where)
+                  printf "  { \"kind\": \"%s\", \"at\": \"%s\" }\n", kind, where >> list
+                  count++
+                  print
+                  next
+                }
+                /^declare [a-z_ ]*void @nish_panic[a-z_]*\(/ {
+                  print
+                  open = index($0, "(")
+                  print substr($0, 1, open - 1) "_at(i32" (substr($0, open + 1, 1) == ")" ? "" : ", ") substr($0, open + 1)
+                  next
+                }
+                # Only a call line: a string constant may spell the tag in its bytes.
+                /^[ \t]+call void @nish_panic[A-Za-z0-9_]*\(.*, !nish\.site !\{i32 [0-9]+\}/ { print untag($0); next }
+                { print }
+                END { print count + 0 > (list ".count") }
+              ' "$i" > "$rewritten"
+              sites_base=$((sites_base + $(cat "$sites_json.count")))
+              host_inputs+=("$rewritten") ;;
+            *) host_inputs+=("$i") ;;
+          esac
+        done
+        {
+          printf '['
+          if [ -s "$sites_json" ]; then
+            printf '\n'
+            sed '$!s/$/,/' "$sites_json"
+          fi
+          printf ']\n'
+        } > "$out.sites.json"
+      fi
       # The export list. A module's exported functions are its `define` lines
       # with external linkage and default visibility: the compiler gives
       # everything else `internal` or `private`, and the other linkages are
@@ -910,7 +930,7 @@ case "$profile" in
         bytes=$((memory_mib * 1048576))
         memory+=("-Wl,--initial-memory=$bytes" "-Wl,--max-memory=$bytes")
       fi
-      "$CC" "${wasm_compile[@]}" -DNISH_WASM_HOST \
+      "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
         ${tls[@]+"${tls[@]}"} \
         -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
         "${host_inputs[@]}" -o "$out"

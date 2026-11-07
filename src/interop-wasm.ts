@@ -445,8 +445,13 @@ export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored:
   return new WasmBridge(bridged, needsRuntime)
 }
 
-/** Names the loader's own locals use; a parameter spelled the same gets an underscore. */
-const wasmIsLoaderLocal = (name: string): boolean =>
+/**
+ * Names the loader's own locals use; a parameter spelled the same gets an
+ * underscore. `guard` is a loader with the panic guard (`loaderGuarded`),
+ * whose locals differ from the plain loader's.
+ */
+const wasmIsLoaderLocal = (name: string, guard: boolean): boolean =>
+  (guard ? name === "guarded" || name === "state" || name === "refuse" : name === "scoped") ||
   name === "raw" ||
   name === "memory" ||
   name === "header" ||
@@ -454,14 +459,15 @@ const wasmIsLoaderLocal = (name: string): boolean =>
   name === "arrayOut" ||
   name === "copyBack" ||
   name === "rangeIn" ||
-  name === "guarded" ||
-  name === "state" ||
-  name === "refuse" ||
   name === "result" ||
   name === "instance" ||
   name === "bytes"
 
-const wasmJsParam = (name: string): string => (wasmIsLoaderLocal(name) ? `${name}_` : name)
+const wasmJsParam = (name: string, guard: boolean): string =>
+  wasmIsLoaderLocal(name, guard) ? `${name}_` : name
+
+/** An error the loader throws for a bad argument: tagged by `refuse` in a guarded loader, so the module stays alive. */
+const refused = (guard: boolean, error: string): string => (guard ? `refuse(${error})` : error)
 
 /**
  * The check a ranged *argument* gets before the call (WP31 §9), or `""` for
@@ -518,7 +524,28 @@ const wasmReturned = (table: TypeTable, sig: FunctionSig, ret: TypedView | null,
 const wasmRaw = (sig: FunctionSig): string =>
   sig.name.indexOf(".") >= 0 ? `raw["${sig.name}"]` : `raw.${sig.name}`
 
-const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
+/** Whether a plain loader's array-free export needs a wrapper: a narrow unsigned or ranged argument (WP31), a packed `Result`, or an unsigned result. */
+const wasmConverts = (table: TypeTable, sig: FunctionSig): boolean => {
+  for (const t of sig.paramTypes) {
+    if (wasmUnsignedIn(table, t).length > 0 || table.isRanged(t)) {
+      return true
+    }
+  }
+  return wasmTakesPacked(table, sig) || wasmUnsignedResult(table, sig.returnType)
+}
+
+/** Whether `wasmUnsignedOut` has anything to do, which decides if a plain loader's export needs a wrapper at all. */
+const wasmUnsignedResult = (table: TypeTable, t: i32): boolean => {
+  const kind = table.kindOf(t)
+  return kind === T_U8 || kind === T_U16 || kind === T_U32 || kind === T_U64
+}
+
+/**
+ * One export's entry in `exportsOf`. In a guarded loader every export runs in
+ * `guarded`; in a plain one an export with no array runs bare, or is the raw
+ * export itself when nothing converts, and one with an array in `scoped`.
+ */
+const wasmWrapper = (table: TypeTable, fn: ExternalFunction, guard: boolean): string[] => {
   const sig = fn.sig
   const name = jsExportName(sig)
   const raw = wasmRaw(sig)
@@ -533,7 +560,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
   const params: string[] = []
   i = 0
   while (i < sig.paramNames.length) {
-    params.push(wasmJsParam(sig.paramNames[i]))
+    params.push(wasmJsParam(sig.paramNames[i], guard))
     i = i + 1
   }
 
@@ -545,9 +572,14 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
   }
   if (!anyView) {
     // WP17/WP15: a packed `Result` and an unsigned width both need converting,
-    // and a ranged argument checking (WP31). Nothing is copied in, but the
-    // call still runs inside `guarded` (WP50 S3), which refuses a dead or
-    // re-entered module and gives back whatever the call allocated.
+    // and a ranged argument checking (WP31). Nothing is copied in; a plain
+    // loader has nothing to release, and a guarded one still runs the call
+    // in `guarded` (WP50 S3), which refuses a dead or re-entered module and
+    // gives back whatever the call allocated.
+    if (!guard && !wasmConverts(table, sig)) {
+      lines.push(`${name}: ${raw},`)
+      return lines
+    }
     const operands: string[] = []
     i = 0
     while (i < sig.paramTypes.length) {
@@ -555,7 +587,8 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
       i = i + 1
     }
     const call = `${raw}(${operands.join(", ")})`
-    lines.push(`${name}: (${params.join(", ")}) => guarded(() => ${wasmReturned(table, sig, ret, call)}),`)
+    const value = wasmReturned(table, sig, ret, call)
+    lines.push(`${name}: (${params.join(", ")}) => ${guard ? `guarded(() => ${value})` : value},`)
     return lines
   }
 
@@ -595,7 +628,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
       body.push("return result;")
     }
   }
-  lines.push(`${name}: (${params.join(", ")}) => guarded(() => {`)
+  lines.push(`${name}: (${params.join(", ")}) => ${guard ? "guarded" : "scoped"}(() => {`)
   for (const line of body) {
     lines.push(`  ${line}`)
   }
@@ -609,7 +642,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
  * shim throws for one, and a number that is not an integer in the range is the
  * `RangeError`, with both messages worded as the shim words them.
  */
-const wasmRangeHelper = (table: TypeTable, bridged: ExternalFunction[]): string[] => {
+const wasmRangeHelper = (table: TypeTable, bridged: ExternalFunction[], guard: boolean): string[] => {
   const lines: string[] = []
   let any = false
   for (const fn of bridged) {
@@ -622,9 +655,11 @@ const wasmRangeHelper = (table: TypeTable, bridged: ExternalFunction[]): string[
   }
   lines.push("  /** A ranged argument, judged as the number it is rather than after ToInt32 wraps it. */")
   lines.push("  const rangeIn = (value, lo, hi, what) => {")
-  lines.push('    if (typeof value !== "number") throw refuse(new TypeError(what + " must be a number"));')
+  lines.push(`    if (typeof value !== "number") throw ${refused(guard, 'new TypeError(what + " must be a number")')};`)
   lines.push("    if (!Number.isInteger(value) || value < lo || value > hi)")
-  lines.push('      throw refuse(new RangeError(what + " must be an integer in [" + lo + ", " + hi + "]"));')
+  lines.push(
+    `      throw ${refused(guard, 'new RangeError(what + " must be an integer in [" + lo + ", " + hi + "]")')};`
+  )
   lines.push("    return value;")
   lines.push("  };")
   return lines
@@ -636,7 +671,7 @@ const wasmRangeHelper = (table: TypeTable, bridged: ExternalFunction[]): string[
  * it selects. `resultOut` turns that into the object `--emit-dts` declares, so
  * a caller never sees the encoding.
  */
-const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[]): string[] => {
+const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[], guard: boolean): string[] => {
   const lines: string[] = []
   if (!wasmHasPackedResult(table, bridged)) {
     return lines
@@ -649,7 +684,9 @@ const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[]): strin
   lines.push("  };")
   lines.push("  const resultIn = (r, writeValue, writeError) => {")
   lines.push('    if (r === null || typeof r !== "object" || typeof r.ok !== "boolean")')
-  lines.push('      throw refuse(new TypeError("expected { ok: true, value } or { ok: false, error }"));')
+  lines.push(
+    `      throw ${refused(guard, 'new TypeError("expected { ok: true, value } or { ok: false, error }")')};`
+  )
   lines.push(
     "    const payload = r.ok ? (writeValue === null ? 0n : writeValue(r.value)) : writeError(r.error);"
   )
@@ -849,6 +886,15 @@ const guardLoader = (needsRuntime: boolean): string[] => {
   return lines
 }
 
+/**
+ * Whether the loader carries WP50 S3's panic guard (`docs/wp50-wasm-host.md`
+ * §6): a program that imports a host module or declares module storage, the
+ * programs written for `--profile wasm-host`. Any other program keeps the
+ * plain loader and `.d.ts` byte for byte, whose trap releases the arena and
+ * leaves the module callable, as `--profile wasm` promises.
+ */
+export const loaderGuarded = (compilation: Compilation): boolean => compilation.guardsPanics()
+
 export const generateWasmLoader = (
   compilation: Compilation,
   fns: ExternalFunction[],
@@ -875,18 +921,22 @@ export const generateWasmLoader = (
   lines.push(" */")
   // WP50 S2: with a host module the page owes `imports.host`, so there is no
   // default, and the object the module links against is `importsOf`'s.
-  // WP50 S3: every load has a `state` the panic import, the guard around
-  // each export and the re-entry flag share (`panicLoader`).
+  // WP50 S3: a guarded loader's every load has a `state` the panic import,
+  // the guard around each export and the re-entry flag share (`panicLoader`).
   const hosts = hostFunctions(compilation)
+  const guard = loaderGuarded(compilation)
   const params = hosts.length > 0 ? "source, imports" : "source, imports = {}"
-  const linked = hosts.length > 0 ? "importsOf(imports, state)" : "linkOf(imports, state)"
+  const linked = !guard ? "imports" : hosts.length > 0 ? "importsOf(imports, state)" : "linkOf(imports, state)"
+  const bound = guard ? ", state" : ""
   lines.push(`export async function load(${params}) {`)
-  lines.push("  const state = stateOf(imports);")
+  if (guard) {
+    lines.push("  const state = stateOf(imports);")
+  }
   lines.push("  const instance =")
   lines.push("    source instanceof WebAssembly.Module")
   lines.push(`      ? await WebAssembly.instantiate(source, ${linked})`)
   lines.push(`      : (await WebAssembly.instantiate(source, ${linked})).instance;`)
-  lines.push("  return exportsOf(instance, state);")
+  lines.push(`  return exportsOf(instance${bound});`)
   lines.push("}")
   lines.push("")
   lines.push("/**")
@@ -895,22 +945,28 @@ export const generateWasmLoader = (
   lines.push(" * thread; above that, call `load`, or compile the module in a worker and pass it here.")
   lines.push(" */")
   lines.push(`export function loadSync(${params}) {`)
-  lines.push("  const state = stateOf(imports);")
+  if (guard) {
+    lines.push("  const state = stateOf(imports);")
+  }
   lines.push(
     "  const module = source instanceof WebAssembly.Module ? source : new WebAssembly.Module(source);"
   )
-  lines.push(`  return exportsOf(new WebAssembly.Instance(module, ${linked}), state);`)
+  lines.push(`  return exportsOf(new WebAssembly.Instance(module, ${linked})${bound});`)
   lines.push("}")
   lines.push("")
-  pushAll(lines, panicLoader(hosts.length > 0))
+  if (guard) {
+    pushAll(lines, panicLoader(hosts.length > 0))
+  }
   if (hosts.length > 0) {
     pushAll(lines, hostImportsOf(table, hosts))
   }
   lines.push("/** The exports of one instance, arrays marshalled: the body `load` and `loadSync` share. */")
-  lines.push("function exportsOf(instance, state) {")
+  lines.push(`function exportsOf(instance${bound}) {`)
   lines.push("  const raw = instance.exports;")
-  lines.push("  state.memory = raw.memory;")
-  pushAll(lines, guardLoader(bridge.needsRuntime))
+  if (guard) {
+    lines.push("  state.memory = raw.memory;")
+    pushAll(lines, guardLoader(bridge.needsRuntime))
+  }
   if (bridge.needsRuntime) {
     lines.push("  const memory = raw.memory;")
     lines.push(
@@ -928,7 +984,7 @@ export const generateWasmLoader = (
     // interop-napi.ts carries the reason. `Uint8Array` takes `a`, the way
     // "a user" does.
     lines.push(
-      '    if (!(value instanceof Ctor)) throw refuse(new TypeError(what + " must be " + (/^[AEIO]/.test(Ctor.name) ? "an " : "a ") + Ctor.name));'
+      `    if (!(value instanceof Ctor)) throw ${refused(guard, 'new TypeError(what + " must be " + (/^[AEIO]/.test(Ctor.name) ? "an " : "a ") + Ctor.name)')};`
     )
     lines.push("    const hdr = raw.nish_alloc_array(BigInt(elemSize), BigInt(value.length));")
     lines.push("    new Ctor(memory.buffer, header(hdr).data, value.length).set(value);")
@@ -944,8 +1000,19 @@ export const generateWasmLoader = (
     lines.push("    const { len, data } = header(hdr);")
     lines.push("    value.set(new value.constructor(memory.buffer, data, Math.min(len, value.length)));")
     lines.push("  };")
-    pushAll(lines, wasmResultHelpers(table, bridge.bridged))
-    pushAll(lines, wasmRangeHelper(table, bridge.bridged))
+    if (!guard) {
+      lines.push("  /** Run `fn`, then release everything it allocated in the arena, even when it traps. */")
+      lines.push("  const scoped = (fn) => {")
+      lines.push("    const mark = raw.nish_arena_mark();")
+      lines.push("    try {")
+      lines.push("      return fn();")
+      lines.push("    } finally {")
+      lines.push("      raw.nish_arena_release(mark);")
+      lines.push("    }")
+      lines.push("  };")
+    }
+    pushAll(lines, wasmResultHelpers(table, bridge.bridged, guard))
+    pushAll(lines, wasmRangeHelper(table, bridge.bridged, guard))
     if (layouts.length > 0) {
       pushAll(lines, layoutLoader(layouts, "memory"))
     }
@@ -954,8 +1021,8 @@ export const generateWasmLoader = (
     lines.push("    nish_reset_arena: raw.nish_reset_arena,")
     lines.push("    nish_free_arena: raw.nish_free_arena,")
   } else {
-    pushAll(lines, wasmResultHelpers(table, bridge.bridged))
-    pushAll(lines, wasmRangeHelper(table, bridge.bridged))
+    pushAll(lines, wasmResultHelpers(table, bridge.bridged, guard))
+    pushAll(lines, wasmRangeHelper(table, bridge.bridged, guard))
     if (layouts.length > 0) {
       pushAll(lines, layoutLoader(layouts, "raw.memory"))
     }
@@ -968,7 +1035,7 @@ export const generateWasmLoader = (
   }
   for (const fn of bridge.bridged) {
     lines.push(tsSignatureLine(table, fn.sig, `    /** ${fn.unit.name}: `, " */"))
-    for (const line of wasmWrapper(table, fn)) {
+    for (const line of wasmWrapper(table, fn, guard)) {
       lines.push(`    ${line}`)
     }
   }
@@ -1109,6 +1176,9 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
     lines.push("  let windowBuffer = null;")
     lines.push("  let windows = null;")
     lines.push("  const win = () => {")
+    lines.push(
+      '    if (state.memory === null) throw new Error("a host import lent a window before the module finished loading");'
+    )
     lines.push("    const b = state.memory.buffer;")
     lines.push("    if (b !== windowBuffer) {")
     lines.push("      windowBuffer = b;")
@@ -1157,9 +1227,8 @@ const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entr
       // pointer becomes an element index and `at` is counted from it.
       args.push(`a${i + 1}`)
       passed.push(`win().${window}`)
-      passed.push(
-        `(a${i} >>> ${windowShift(window)}) + (${hostArgument(table, sig.paramTypes[i + 1], `a${i + 1}`)})`
-      )
+      // `at` is a `u32` (`checkHostSignature`), so `hostArgument` would read it as `>>> 0`.
+      passed.push(`(a${i} >>> ${windowShift(window)}) + (a${i + 1} >>> 0)`)
       i = i + 2
       continue
     }
@@ -1222,11 +1291,11 @@ const windowShift = (view: string): i32 => {
 
 // ---- WP50 S3: the layout of module storage ------------------------------------
 
-/** One field of a record storage's element: its name, byte offset and type. */
+/** One field of a record storage's element: its name, type and byte offset. */
 export class StorageField {
   name: string
-  offset: i32
   type: string
+  offset: i32
   /** A `boolean`: one byte the TypeScript reading answers `true` or `false` for. */
   flag: boolean
 
@@ -1351,16 +1420,30 @@ export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
 
 /** The whole-memory typed arrays `views()` answers, by key, each one the page indexes by byte address over its width. */
 const heapViews = (): string[] => [
-  "u8:Uint8Array",
-  "i8:Int8Array",
-  "u16:Uint16Array",
-  "i16:Int16Array",
-  "u32:Uint32Array",
-  "i32:Int32Array",
-  "f32:Float32Array",
-  "f64:Float64Array",
-  "i64:BigInt64Array",
-  "u64:BigUint64Array",
+  "u8: Uint8Array",
+  "i8: Int8Array",
+  "u16: Uint16Array",
+  "i16: Int16Array",
+  "u32: Uint32Array",
+  "i32: Int32Array",
+  "f32: Float32Array",
+  "f64: Float64Array",
+  "i64: BigInt64Array",
+  "u64: BigUint64Array",
+]
+
+/** `heapViews` as the loader makes them, each over `buffer`. */
+const heapViewsNew = (): string[] => [
+  "u8: new Uint8Array(buffer)",
+  "i8: new Int8Array(buffer)",
+  "u16: new Uint16Array(buffer)",
+  "i16: new Int16Array(buffer)",
+  "u32: new Uint32Array(buffer)",
+  "i32: new Int32Array(buffer)",
+  "f32: new Float32Array(buffer)",
+  "f64: new Float64Array(buffer)",
+  "i64: new BigInt64Array(buffer)",
+  "u64: new BigUint64Array(buffer)",
 ]
 
 /** `Layout` and `Views` for the `.d.ts` (§5.2): the literal-typed layout of every storage. */
@@ -1397,8 +1480,7 @@ export const layoutTypes = (layouts: StorageLayout[]): string[] => {
   lines.push("export interface Views {")
   lines.push("  readonly buffer: ArrayBuffer;")
   for (const entry of heapViews()) {
-    const colon = entry.indexOf(":")
-    lines.push(`  readonly ${entry.substring(0, colon)}: ${entry.substring(colon + 1)};`)
+    lines.push(`  readonly ${entry};`)
   }
   lines.push("  readonly storage: {")
   for (const s of layouts) {
@@ -1438,9 +1520,8 @@ const layoutLoader = (layouts: StorageLayout[], memory: string): string[] => {
   lines.push("    if (cached !== null && cached.buffer === buffer) return cached;")
   lines.push("    cached = {")
   lines.push("      buffer,")
-  for (const entry of heapViews()) {
-    const colon = entry.indexOf(":")
-    lines.push(`      ${entry.substring(0, colon)}: new ${entry.substring(colon + 1)}(buffer),`)
+  for (const entry of heapViewsNew()) {
+    lines.push(`      ${entry},`)
   }
   lines.push("      storage: {")
   for (const s of layouts) {

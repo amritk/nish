@@ -39,36 +39,40 @@ import { StringMap } from "./map"
  * wasm-host` rewrites a tagged call into the runtime's `_at` variant that
  * hands N to the page's `nish.panic` import, and writes the table, which the
  * module ends with as `; nish.site` comments, to `<out>.sites.json`.
+ * The table exists only for a program whose loader guards panics
+ * (`Compilation.guardsPanics`), and its text starts with a `; nish.sites`
+ * line even when it lists none: that line is what tells build.sh to link
+ * the panic import, so a program without one links main's bytes.
  */
 export class PanicSiteTable {
   kinds: string[]
   ats: string[]
+  /** "<kind> <at>" to its site number. */
+  numbers: StringMap
 
   constructor() {
     this.kinds = []
     this.ats = []
+    this.numbers = new StringMap()
   }
 
   /** The number of the site `kind` at `at` ("path:line:col"), given at its first call. */
   add(kind: string, at: string): i32 {
-    let k = 0
-    while (k < this.kinds.length) {
-      if (this.kinds[k] === kind && this.ats[k] === at) {
-        return k
-      }
-      k = k + 1
+    const key = `${kind} ${at}`
+    const known = this.numbers.get(key, -1)
+    if (known >= 0) {
+      return known
     }
     this.kinds.push(kind)
     this.ats.push(at)
+    this.numbers.set(key, this.kinds.length - 1)
     return this.kinds.length - 1
   }
 
-  /** The table as the comments the module ends with, one site a line; "" for none. */
+  /** The table as the comments the module ends with: the `; nish.sites <count>` line, then one site a line. */
   toText(): string {
     const out = new StringBuilder()
-    if (this.kinds.length > 0) {
-      out.add("\n")
-    }
+    out.add(`\n; nish.sites ${this.kinds.length}\n`)
     let k = 0
     while (k < this.kinds.length) {
       out.add(`; nish.site ${k} ${this.kinds[k]} ${this.ats[k]}\n`)

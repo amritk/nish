@@ -57,6 +57,7 @@ import {
   RUNTIME_BUDGETS,
   TLS_TCP_START_BYTES,
   WASM_HOST_SIZE_BUDGETS,
+  WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
@@ -17496,9 +17497,9 @@ if (dealtHere("cliChecks")) {
       ? fs.readFileSync(sidecar("strings", "d.ts"), "utf8")
       : ""
     check(
-      "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>`",
+      "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource): Promise<Exports>`",
       addDts.includes("  add(a: number, b: number): number;") &&
-        addDts.includes("export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;"),
+        addDts.includes("export function load(bytes: BufferSource): Promise<Exports>;"),
       addDts
     )
     check(
@@ -18817,12 +18818,11 @@ if (dealtHere("cliChecks")) {
     )
     check(
       "interop-unsigned.mjs masks a narrow argument in, narrows a narrow result out, and reads u32/u64 unsigned",
-      // Every export runs inside `guarded` (docs/security/wasm-host.md, WH-3).
-      unsignedMjs.includes("idU8: (x) => guarded(() => raw.idU8(x & 0xff) & 0xff),") &&
-        unsignedMjs.includes("idU16: (x) => guarded(() => raw.idU16(x & 0xffff) & 0xffff),") &&
-        unsignedMjs.includes("idU32: (x) => guarded(() => raw.idU32(x) >>> 0),") &&
-        unsignedMjs.includes("idU64: (x) => guarded(() => BigInt.asUintN(64, raw.idU64(x))),") &&
-        unsignedMjs.includes("scaleF32: (x) => guarded(() => raw.scaleF32(x)),"),
+      unsignedMjs.includes("idU8: (x) => raw.idU8(x & 0xff) & 0xff,") &&
+        unsignedMjs.includes("idU16: (x) => raw.idU16(x & 0xffff) & 0xffff,") &&
+        unsignedMjs.includes("idU32: (x) => raw.idU32(x) >>> 0,") &&
+        unsignedMjs.includes("idU64: (x) => BigInt.asUintN(64, raw.idU64(x)),") &&
+        unsignedMjs.includes("scaleF32: raw.scaleF32,"),
       unsignedMjs
     )
     if (unsigned.status === 0) {
@@ -19040,15 +19040,12 @@ if (dealtHere("cliChecks")) {
         "  console.log(name + ' | ' + row.join(' | '));",
         "}",
         // A trap inside wasm (`new Int32Array(-1)` is a huge allocation: memory.grow fails, `unreachable`)
-        // surfaces as a RuntimeError and leaves the module dead (docs/wp50-wasm-host.md §6): the next
-        // call is refused with NishPanic before it runs, and a fresh load answers again.
+        // surfaces as a RuntimeError; the loader's `finally` releases the arena and later calls still work.
         // The native addon would `_exit(1)` with "out of memory" instead, so only the wasm build is probed.
         ...(wasmOk
           ? [
               'let trap = ""; try { apis.wasm.squares(-1); } catch (e) { trap = e.constructor.name; }',
-              'let after = ""; try { apis.wasm.sumF64(xs); } catch (e) { after = e.constructor.name; }',
-              `const again = await (await import(${JSON.stringify(sidecar("arrays", "mjs"))})).load(readFileSync(${JSON.stringify(wasm)}));`,
-              "console.log('trap | ' + trap + ' | ' + after + ' | ' + again.sumF64(xs));",
+              "console.log('trap | ' + trap + ' | ' + apis.wasm.sumF64(xs));",
             ]
           : []),
         ...(napiOk
@@ -19077,8 +19074,8 @@ if (dealtHere("cliChecks")) {
           detail
         )
         check(
-          "wasm: a trap (squares(-1) -> RuntimeError) leaves the module dead, the next call is NishPanic, and a fresh load works",
-          lines.includes("trap | RuntimeError | NishPanic | 4.5"),
+          "wasm: a trap (squares(-1) -> RuntimeError) releases the arena and the next call works",
+          lines.includes("trap | RuntimeError | 4.5"),
           detail
         )
       }
@@ -26810,14 +26807,14 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     "simd: --emit-dts and its wasm loader export none of the vector signatures, naming the type, nor a class that holds one",
     sides.status === 0 &&
       d.includes("twice(x: number): number;") &&
-      m.includes("twice: (x) => guarded(() => raw.twice(x))") &&
-      !/\braw\.(first|make|sum)\b/.test(m) &&
+      m.includes("twice: raw.twice") &&
+      !/\b(first|make|sum): raw\./.test(m) &&
       d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector") &&
       d.includes("the result is `i32x4`, a `nish:simd` vector") &&
       d.includes("sum(vs: i32x4[]): number  -- not exported to JS") &&
-      !/\braw\.pair\b/.test(m) &&
+      !/\bpair: raw\./.test(m) &&
       d.includes("the result is `Result<f64x2, string>`, which holds a `nish:simd` vector") &&
-      !/\braw\.peek(Nested)?\b/.test(m) &&
+      !/\bpeek(Nested)?: raw\./.test(m) &&
       d.includes("peek(h: Holder): number  -- not exported to JS: argument 1 (h) is `Holder`, which holds a `nish:simd` vector") &&
       d.includes("peekNested(h: Nested): number  -- not exported to JS: argument 1 (h) is `Nested`, which holds a `nish:simd` vector"),
     `${shown(sides)}\n--- lib.d.ts\n${d}\n--- lib.mjs\n${m}`
@@ -29532,13 +29529,7 @@ if (!only || "wasm-host".includes(only)) {
       let fixedReading = shown(fixed)
       let fixedOk = false
       if (fixed.status === 0) {
-        // The panic import is the one a wasm-host module needs; nothing here panics.
-        const panic = () => {
-          throw new Error("arrays.16.wasm panicked")
-        }
-        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(at("arrays.16.wasm"))), {
-          nish: { panic },
-        })
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(at("arrays.16.wasm"))), {})
         const memory = instance.exports.memory
         let grew = true
         try {
@@ -30215,7 +30206,7 @@ if (!only || "module-storage".includes(only)) {
           .sort()
         check(
           "module-storage: the wasm-host link exports each storage's `.data` global",
-          exported.join(",") === "bodies.data,input.data,scale.data",
+          exported.join(",") === "nish_storage_0_bodies.data,nish_storage_0_input.data,nish_storage_0_scale.data",
           exported.join(",")
         )
         fs.writeFileSync(
@@ -30285,6 +30276,67 @@ if (!only || "module-storage".includes(only)) {
         stride.output
       )
     }
+    // B4: a storage's symbols are `nish_storage_<module>_<name>`, so a storage
+    // named after a libc function does not take its symbol, and two modules
+    // may each keep a private storage of one name.
+    const names = path.join(dir, "names")
+    fs.mkdirSync(names, { recursive: true })
+    const named = (name, text) => {
+      fs.writeFileSync(path.join(names, name), text)
+      return path.join(names, name)
+    }
+    const writeSrc = named("write.ts", "const write = new Int32Array(4)\nwrite[1] = 7\nconsole.log(`write ${write[1]}`)\n")
+    const writeExe = path.join(names, "write")
+    const writeBuilt = spawnSync(NISH, [writeSrc, "-o", path.join(names, "write-out") + path.sep, "--link", writeExe], { cwd: root, encoding: "utf8" })
+    const writeRun = writeBuilt.status === 0 ? spawnSync(writeExe, [], { encoding: "utf8" }) : writeBuilt
+    check(
+      "module-storage: a storage named `write` keeps libc's `write`, natively",
+      writeRun.status === 0 && writeRun.stdout === "write 7\n",
+      shown(writeBuilt) + shown(writeRun)
+    )
+    named("a.ts", "const cache = new Int32Array(16)\nexport const bumpA = (i: u32): i32 => { cache[i] += 1; return cache[i] }\n")
+    named("b.ts", "const cache = new Int32Array(16)\nexport const bumpB = (i: u32): i32 => { cache[i] += 2; return cache[i] }\n")
+    const both = 'import { bumpA } from "./a"\nimport { bumpB } from "./b"\nexport const both = (i: u32): i32 => bumpA(i) * 100 + bumpB(i)\n'
+    const nativeMain = named("main.ts", both + "console.log(`${both(3)} ${both(3)}`)\n")
+    const twoExe = path.join(names, "two")
+    const twoBuilt = spawnSync(NISH, [nativeMain, "-o", path.join(names, "native") + path.sep, "--link", twoExe], { cwd: root, encoding: "utf8" })
+    const twoRun = twoBuilt.status === 0 ? spawnSync(twoExe, [], { encoding: "utf8" }) : twoBuilt
+    check(
+      "module-storage: two modules each keep a private `cache`, natively",
+      twoRun.status === 0 && twoRun.stdout === "102 204\n",
+      shown(twoBuilt) + shown(twoRun)
+    )
+    const wasmMain = named("page.ts", both)
+    const wasmDir = path.join(names, "wasm")
+    const twoWasm = spawnSync(
+      NISH,
+      [wasmMain, "--target", "wasm32", "--emit-dts", path.join(names, "page.d.ts"), "-o", wasmDir + path.sep],
+      { cwd: root, encoding: "utf8" }
+    )
+    const twoLinked =
+      twoWasm.status === 0
+        ? wasmHostLink(
+            ["page.ll", "a.ll", "b.ll"].map((f) => path.join(wasmDir, f)).concat([path.join(root, "runtime", "runtime-wasm.c")]),
+            ["-o", path.join(names, "page.wasm"), "--profile", "wasm-host"]
+          )
+        : twoWasm
+    const twoDts = twoWasm.status === 0 ? fs.readFileSync(path.join(names, "page.d.ts"), "utf8") : ""
+    const twoExports =
+      twoLinked.status === 0
+        ? WebAssembly.Module.exports(new WebAssembly.Module(fs.readFileSync(path.join(names, "page.wasm"))))
+            .filter((e) => e.kind === "global")
+            .map((e) => e.name)
+            .sort()
+            .join(",")
+        : ""
+    check(
+      "module-storage: two private `cache`s link under --profile wasm-host with distinct Layout keys",
+      twoLinked.status === 0 &&
+        twoExports === "nish_storage_1_cache.data,nish_storage_2_cache.data" &&
+        twoDts.includes("  cache: { at: number; length: 16; stride: 4 };") &&
+        twoDts.includes("  nish_storage_2_cache: { at: number; length: 16; stride: 4 };"),
+      shown(twoWasm) + shown(twoLinked) + twoExports + "\n" + twoDts
+    )
   }
 }
 
@@ -30337,14 +30389,51 @@ if (!only || "wasm-host-panic".includes(only)) {
           Array.isArray(sites) && sites.some((s) => s.kind === "index" && /main\.ts:17:\d+$/.test(s.at)),
           JSON.stringify(sites)
         )
+        // The link rewrites tagged panic calls line by line. A string whose
+        // bytes spell the tag is a constant, not a call: it keeps its bytes,
+        // and only the real call is numbered. The module storage is what
+        // makes the link guard its panics at all.
+        fs.writeFileSync(
+          at("spelled.ts"),
+          [
+            "const kept = new Array<i32>(1)",
+            "export const keep = (): i32 => kept.length",
+            "export const tag = (): string => \", !nish.site !{i32 7}\"",
+            "export const tagLength = (): i32 => tag().length",
+            "export const pick = (xs: i32[], i: i32): i32 => xs[i]",
+            "",
+          ].join("\n")
+        )
+        const spelledIr = spawnSync(NISH, [at("spelled.ts"), "--target", "wasm32", "-o", at("spelled.ll")], { cwd: root, encoding: "utf8" })
+        const spelled =
+          spelledIr.status === 0 ? wasmHostLink([at("spelled.ll"), runtimeWasm], ["-o", at("spelled.wasm"), "--profile", "wasm-host"]) : spelledIr
+        const spelledSites = fs.existsSync(at("spelled.wasm.sites.json")) ? JSON.parse(fs.readFileSync(at("spelled.wasm.sites.json"), "utf8")) : null
+        let spelledLength = -1
+        if (spelled.status === 0) {
+          const module = new WebAssembly.Module(fs.readFileSync(at("spelled.wasm")))
+          const imports = {}
+          for (const e of WebAssembly.Module.imports(module)) {
+            imports[e.module] = imports[e.module] ?? {}
+            imports[e.module][e.name] = () => 0
+          }
+          spelledLength = new WebAssembly.Instance(module, imports).exports.tagLength()
+        }
+        check(
+          "panic: a string constant that spells the site tag is left alone by the link's rewrite; only the call is numbered",
+          spelled.status === 0 && spelledLength === 21 && Array.isArray(spelledSites) && spelledSites.length === 1 && spelledSites[0].kind === "index",
+          `${shown(spelled)} length ${spelledLength} sites ${JSON.stringify(spelledSites)}`
+        )
         fs.writeFileSync(
           at("drive.mjs"),
           [
             'import { readFileSync } from "node:fs"',
             'import * as loader from "./main.mjs"',
             'import { run } from "./page.ts"',
+            "const Real = WebAssembly.Instance",
+            "let raw = null",
+            "WebAssembly.Instance = function (module, imports) { const made = new Real(module, imports); raw = made.exports; return made }",
             "const [wasm, sites, what] = process.argv.slice(2)",
-            'console.log(run(loader, readFileSync(wasm), JSON.parse(readFileSync(sites, "utf8")), what).join("\\n"))',
+            'console.log(run(loader, readFileSync(wasm), JSON.parse(readFileSync(sites, "utf8")), what, () => raw.nish_arena_mark()).join("\\n"))',
             "",
           ].join("\n")
         )
@@ -30368,6 +30457,13 @@ if (!only || "wasm-host-panic".includes(only)) {
           "panic: a dead module answers every later call with NishPanic, before it runs",
           /^NishPanic\(index\) the module is dead: index out of range/.test(index.lines[2] ?? "") && index.lines.length === 4,
           shown(index.res)
+        )
+        const mark = drive("main.wasm", "mark")
+        check(
+          "panic: the arena mark after every call, an array result included, is the mark before it",
+          mark.lines.join("\n") ===
+            ["bump ok 1 held", "cell ok 0 held", "sum ok 42 held", "fill ok 4095 held", "row ok 0,2,4,6,8 held", "row ok 3000 held"].join("\n"),
+          shown(mark.res)
         )
         const overflow = drive("main.wasm", "overflow")
         check(
@@ -30464,14 +30560,60 @@ if (!only || "wasm-host-panic".includes(only)) {
   }
 }
 
+// ---- WH-2, the page half: ringOver over counts the module forged -----------
+//
+// docs/security/wasm-host.md WH-2: a ring's head and tail are words in module
+// storage, which the module (or a bug in it) can set to anything. The Nish
+// half reduces them before every use (tests/link/std_host_ring's `forged:`
+// lines); here runtime/page.mjs's `ringOver` reads counts of -7, 2^31 - 1 and
+// a size past the capacity, and every push and shift stays inside the ring's
+// words: the guard words on both sides keep their bytes, and `size` stays in
+// 0..capacity. Without the reduction, a head of -7 would read `w[2 + -7 % 4]`,
+// a word before the ring.
+if (!only || "module-storage".includes(only) || "wasm-host-page".includes(only)) {
+  const script = [
+    `import { ringOver } from ${JSON.stringify(pathToFileURL(path.join(root, "runtime", "page.mjs")).href)}`,
+    "const GUARD = 0x5a5a5a5a",
+    "const lines = []",
+    "for (const [head, tail] of [[-7, 0], [0, -7], [2147483647, 0], [0, 2147483647], [-2147483648, 2147483647], [0, 9], [3, 1000003]]) {",
+    "  const words = new Int32Array(16).fill(GUARD)",
+    "  const memory = { buffer: words.buffer }",
+    "  // The ring: 2 counts and 4 slots, at byte 16, guard words before and after.",
+    "  words.fill(0, 4, 10)",
+    "  words[4] = head",
+    "  words[5] = tail",
+    "  const ring = ringOver(memory, { at: 16, length: 6 })",
+    "  const sizes = [ring.size()]",
+    "  for (let i = 0; i < 6; i++) { ring.push(100 + i); sizes.push(ring.size()) }",
+    "  for (let i = 0; i < 6; i++) { ring.shift(); sizes.push(ring.size()) }",
+    "  ring.clear()",
+    "  sizes.push(ring.size())",
+    "  const guarded = [0, 1, 2, 3, 10, 11, 12, 13, 14, 15].every((k) => words[k] === GUARD)",
+    "  const inRange = sizes.every((n) => Number.isInteger(n) && n >= 0 && n <= ring.capacity)",
+    "  lines.push(`${head},${tail} ${guarded && inRange ? \"held\" : \"broke \" + JSON.stringify([...words]) + \" \" + sizes}`)",
+    "}",
+    "console.log(lines.join(\"\\n\"))",
+    "",
+  ].join("\n")
+  const forged = spawnSync(process.execPath, ["--input-type=module", "-e", script], { cwd: root, encoding: "utf8" })
+  check(
+    "WH-2: ringOver reads forged counts (-7, 2^31 - 1, a size past the capacity) without a word outside the ring",
+    forged.status === 0 &&
+      forged.stdout ===
+        ["-7,0", "0,-7", "2147483647,0", "0,2147483647", "-2147483648,2147483647", "0,9", "3,1000003"].map((p) => `${p} held\n`).join(""),
+    shown(forged)
+  )
+}
+
 // ---- WP50 stage 3: nish/page, the page half of a wasm-host module -----------
 //
 // tests/page holds a module with two `nish/host/ring` rings in module storage
 // and a page that drives them through runtime/page.mjs's `ringOver`, the page
 // filling one and draining the other; it also exercises `HostTable` (slot 0 is
 // never handed out, a taken or forged handle throws) and `reportPanic`. tsc
-// checks the page against main.d.ts and runtime/page.d.ts.
-if (!only || "wasm-host-page".includes(only)) {
+// checks the page against main.d.ts and runtime/page.d.ts. The rings live in
+// module storage, so the `module-storage` filter runs this section too.
+if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only)) {
   const why = wasmHostTools()
   if (why !== null) {
     skip(`page: ${why}`)
@@ -30617,6 +30759,8 @@ if (!only || "wasm-size".includes(only)) {
     }
     for (const { src, runtime, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
       const stem = path.basename(src, ".ts")
+      // The directory outlives a run: a sidecar an older build left must not pass for this one's.
+      fs.rmSync(path.join(dir, `${stem}.wasm.sites.json`), { force: true })
       const ll = wasmHostCompile(dir, stem)
       const link =
         ll === null
@@ -30647,6 +30791,37 @@ if (!only || "wasm-size".includes(only)) {
             "tests/runtime-budgets.js with the measurement and why"
         )
       }
+      // A program with no module storage and no host module gets main's bytes.
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === src)
+      const plain = wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], [
+        "-o",
+        path.join(dir, `${stem}.plain.wasm`),
+        "--profile",
+        "wasm",
+      ])
+      const digest = (file) =>
+        fs.existsSync(path.join(dir, file))
+          ? crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, file))).digest("hex")
+          : "missing"
+      const got = {
+        dts: digest(`${stem}.d.ts`),
+        loader: digest(`${stem}.mjs`),
+        wasm: plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain),
+        host: digest(`${stem}.wasm`),
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        `wasm-size: ${src}'s .d.ts, loader, --profile wasm and --profile wasm-host .wasm are main's bytes`,
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+      const imported = WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(path.join(dir, `${stem}.wasm`))))
+      const sidecar = fs.existsSync(path.join(dir, `${stem}.wasm.sites.json`))
+      check(
+        `wasm-size: ${stem}.wasm under --profile wasm-host imports nothing and writes no sites sidecar`,
+        imported.length === 0 && !sidecar,
+        `imports: ${JSON.stringify(imported)}; sidecar: ${sidecar}`
+      )
     }
   }
 }

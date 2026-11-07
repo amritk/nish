@@ -11426,11 +11426,15 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 A top-level `const` holding a `new` array of a constant length is not folded
 like the constants above: it is *module storage* (WP50 stage 3,
 [LANGUAGE.md → Module storage](LANGUAGE.md#module-storage)), and it is the
-one top-level `const` that emits globals. There are two, both with external
-linkage so the linker keeps them and `--emit-dts` can name their addresses:
-`@SCORES.data`, the zero-filled elements, aligned to 16, and `@SCORES`, an
-ordinary `%struct.nish_array` header whose length and capacity are the
-constant and whose data pointer is the first. Nothing runs to set either up.
+one top-level `const` that emits globals. There are two, named
+`nish_storage_<module>_<name>` so that two modules may each keep a private
+`SCORES` (or a `write`, which would otherwise take libc's symbol):
+`@nish_storage_0_SCORES.data`, the zero-filled elements, aligned to 16, with
+external linkage so the linker keeps it and the `--profile wasm-host` link can
+export its address, and `@nish_storage_0_SCORES`, an ordinary
+`%struct.nish_array` header whose length and capacity are the constant and
+whose data pointer is the first. The header is `internal` unless the storage
+is exported. Nothing runs to set either up.
 
 ```ts
 // st.ts, compiled with `--target wasm32`
@@ -11443,13 +11447,13 @@ export function bump(i: u32): i32 {
 ```
 
 ```llvm
-@SCORES.data = global [8 x i32] zeroinitializer, align 16
-@SCORES = global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x i32]* @SCORES.data to i8*) }, align 8
+@nish_storage_0_SCORES.data = global [8 x i32] zeroinitializer, align 16
+@nish_storage_0_SCORES = internal global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x i32]* @nish_storage_0_SCORES.data to i8*) }, align 8
 
 define noundef i32 @bump(i32 noundef %i) #0 {
 entry:
   %0 = zext i32 %i to i64
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 0
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 0
   %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %bounds.ok, label %bounds.fail
@@ -11459,7 +11463,7 @@ bounds.fail:
   unreachable
 
 bounds.ok:
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 2
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
@@ -11471,7 +11475,7 @@ check and lending it to an `Int32Array` parameter are the code an ordinary
 `i32[]` gets: storage needs no case of its own past the checker. The header
 is never written (no method may be called on storage, and its `length` may
 not be assigned), which is what lets the page keep a view of
-`@SCORES.data` for the life of the module. The `!nish.site` tags are the
+`@nish_storage_0_SCORES.data` for the life of the module. The `!nish.site` tags are the
 [panic sites](#panic-sites-a-number-per-call-a-table-at-the-end). Golden:
 `tests/cases/storage_module.ll`; lending, `tests/cases/storage_lend.ll`.
 

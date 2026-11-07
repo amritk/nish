@@ -12,22 +12,15 @@ function align8(n: i32): i32 -> @align8
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-function storageOffsets(layouts: StorageLayout[]): i32[] -> @storageOffsets
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: align8 nish_array_grow nish_panic_overflow
+function storageEnd(layouts: StorageLayout[]): i32 -> @storageEnd
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: align8 nish_panic_overflow
   pointer layouts: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 out: i32[] (const)
-  local +1:7 at: i32 (let)
-  local +2:14 s: StorageLayout (const)
-  callee +3:10 align8 -> @align8
-  callee +7:12 align8 -> @align8
-function storageNewText(layouts: StorageLayout[], module: i32, id: i32): string -> @storageNewText [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_concat nish_str_from_i32
-  pointer layouts: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:7 k: i32 (let)
+  local +0:7 at: i32 (let)
+  local +1:14 s: StorageLayout (const)
+  callee +2:10 align8 -> @align8
+  callee +4:10 align8 -> @align8
 function heapView(view: string): string -> @heapView
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -44,26 +37,26 @@ function fieldAccessors(name: string, view: string, offset: i32, flag: boolean):
   callee +2:17 heapView -> @heapView
 function storageFileText(layouts: StorageLayout[]): string -> @storageFileText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fieldAccessors heapView nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 storageOffsets
-  pointer layouts: size=0 writesThrough=false captured=false passedTo=storageOffsets#0
+  calls: align8 fieldAccessors nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 storageEnd
+  pointer layouts: size=0 writesThrough=false captured=false passedTo=storageEnd#0
   stackSites=4 stackLocals=4
-  local +0:9 offsets: i32[] (const)
-  callee +0:19 storageOffsets -> @storageOffsets
-  local +1:9 lines: string[] (const)
-  local +6:9 views: string[] (const)
-  local +7:14 s: StorageLayout (const)
-  local +8:16 f: StorageField (const)
-  local +14:14 view: string (const)
-  callee +15:25 heapView -> @heapView
-  local +17:7 anyFlag: boolean (let)
-  local +18:14 s: StorageLayout (const)
-  local +45:7 k: i32 (let)
-  local +47:11 s: StorageLayout (const)
+  local +0:9 lines: string[] (const)
+  callee +4:46 storageEnd -> @storageEnd
+  local +5:9 views: string[] (const)
+  local +6:14 s: StorageLayout (const)
+  local +7:16 f: StorageField (const)
+  local +13:14 view: string (const)
+  local +16:7 anyFlag: boolean (let)
+  local +17:14 s: StorageLayout (const)
+  local +45:7 at: i32 (let)
+  local +46:14 s: StorageLayout (const)
+  callee +47:10 align8 -> @align8
   local +48:11 fields: string[] (const)
   local +49:16 f: StorageField (const)
   local +52:11 tail: string (const)
-  local +59:11 s: StorageLayout (const)
-  local +60:11 at: i32 (const)
+  local +58:7 k: i32 (let)
+  local +59:14 s: StorageLayout (const)
+  callee +60:10 align8 -> @align8
   local +62:13 view: string (const)
   local +66:13 accessors: string[] (const)
   local +67:18 f: StorageField (const)

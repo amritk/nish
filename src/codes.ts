@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 833
+export const RULE_COUNT: i32 = 836
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -77,6 +77,8 @@ const diagnosticRules = (): string[] => [
   "NL2586",
   "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter",
   "NL2505",
+  "` go further than indexing: storage keeps its length, so a callee it is lent to only indexes the parameter, reads its `length`, loops over it, calls a method that reads it, or lends it on the same way — never passes it elsewhere, binds, returns or stores it, where it could be spelled `T[]` and resized",
+  "NL2684",
   "` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through",
   "NL2515",
   "`, a `let` of the function it is written in: an arrow argument is handed what it captures as an argument when the call is made, so it may read only a `const` or a parameter of that function, whose value is the one the arrow is handed; bind the value to a `const` before the call",
@@ -387,6 +389,8 @@ const diagnosticRules = (): string[] => [
   "NL2356",
   "` has a type parameter's type, so a default cannot be one value: the type is the caller's, and TypeScript refuses a constant for it too",
   "NL2596",
+  ": a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record",
+  "NL2685",
   "` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's",
   "NL2327",
   "` writes the argument `exposeWith` hands it, a channel out of `expose` its result type does not name: return what it computes instead",
@@ -757,6 +761,8 @@ const diagnosticRules = (): string[] => [
   "NL2199",
   "` is inspected, and the value it replaces is dropped: test it first with `",
   "NL2377",
+  "` is the name the wasm loader answers the program's module storage under: ",
+  "NL3051",
   "`, which only its body could bind, and a block body's type is not inferred",
   "NL2343",
   "storage outside the region that grows inside it would move into the region",

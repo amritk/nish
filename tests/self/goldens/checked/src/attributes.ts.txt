@@ -2302,41 +2302,41 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=2 stackLocals=2
-  local -165:9 program: CheckedProgram (const)
-  local -162:9 ownMemory: boolean (const)
-  callee -162:41 isChannelSend -> @isChannelSend
-  callee -162:63 jsonRouteOf -> @jsonRouteOf
-  local -157:9 facts: FunctionFacts (const)
-  callee -157:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -155:23 structSize -> @structSize
-  callee -154:23 pointerAlign -> @pointerAlign
-  callee -134:23 rootsHoldNoPointer -> @rootsHoldNoPointer
-  callee -126:54 isScalarArgument -> @isScalarArgument
-  local -125:7 i: i32 (let)
-  local -123:11 type: i32 (const)
-  callee -122:9 isPointerParam -> @isPointerParam
-  callee -120:9 new PointerParamFacts -> @PointerParamFacts.constructor
-  callee -118:11 structSize -> @structSize
-  callee -118:38 TypeTable.stripNull -> @TypeTable.stripNull
-  callee -117:11 pointerAlign -> @pointerAlign
-  callee -109:7 jsonRouteOf -> @jsonRouteOf
-  callee -108:5 markJsonRoute -> @markJsonRoute
-  callee -103:7 isChannelSend -> @isChannelSend
-  callee -102:5 markChannelSend -> @markChannelSend
-  callee -97:7 isAtomicMethod -> @isAtomicMethod
-  callee -96:5 markAtomic -> @markAtomic
-  callee -91:7 isRegionIntrinsic -> @isRegionIntrinsic
-  callee -90:5 markRegionIntrinsic -> @markRegionIntrinsic
-  callee -89:9 Options.recordsPanics -> @Options.recordsPanics
-  callee -88:29 new PanicSite -> @PanicSite.constructor
-  callee -82:7 isShmWindowIntrinsic -> @isShmWindowIntrinsic
-  callee -81:5 markShmWindow -> @markShmWindow
-  callee -63:7 FunctionSig.foreign -> @FunctionSig.foreign
-  local -62:9 at: i32 (let)
-  local -61:9 p: i32 (let)
-  callee -59:11 isPointerParam -> @isPointerParam
-  callee -58:13 lentBuffer -> @lentBuffer
-  callee -58:43 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  local -166:9 program: CheckedProgram (const)
+  local -163:9 ownMemory: boolean (const)
+  callee -163:41 isChannelSend -> @isChannelSend
+  callee -163:63 jsonRouteOf -> @jsonRouteOf
+  local -158:9 facts: FunctionFacts (const)
+  callee -158:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -156:23 structSize -> @structSize
+  callee -155:23 pointerAlign -> @pointerAlign
+  callee -135:23 rootsHoldNoPointer -> @rootsHoldNoPointer
+  callee -127:54 isScalarArgument -> @isScalarArgument
+  local -126:7 i: i32 (let)
+  local -124:11 type: i32 (const)
+  callee -123:9 isPointerParam -> @isPointerParam
+  callee -121:9 new PointerParamFacts -> @PointerParamFacts.constructor
+  callee -119:11 structSize -> @structSize
+  callee -119:38 TypeTable.stripNull -> @TypeTable.stripNull
+  callee -118:11 pointerAlign -> @pointerAlign
+  callee -110:7 jsonRouteOf -> @jsonRouteOf
+  callee -109:5 markJsonRoute -> @markJsonRoute
+  callee -104:7 isChannelSend -> @isChannelSend
+  callee -103:5 markChannelSend -> @markChannelSend
+  callee -98:7 isAtomicMethod -> @isAtomicMethod
+  callee -97:5 markAtomic -> @markAtomic
+  callee -92:7 isRegionIntrinsic -> @isRegionIntrinsic
+  callee -91:5 markRegionIntrinsic -> @markRegionIntrinsic
+  callee -90:9 Options.recordsPanics -> @Options.recordsPanics
+  callee -89:29 new PanicSite -> @PanicSite.constructor
+  callee -83:7 isShmWindowIntrinsic -> @isShmWindowIntrinsic
+  callee -82:5 markShmWindow -> @markShmWindow
+  callee -64:7 FunctionSig.foreign -> @FunctionSig.foreign
+  local -63:9 at: i32 (let)
+  local -62:9 p: i32 (let)
+  callee -60:11 isPointerParam -> @isPointerParam
+  callee -59:13 lentBuffer -> @lentBuffer
+  callee -59:43 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
   callee -30:64 isShmSource -> @isShmSource
   callee -24:9 TypeTable.stripNull -> @TypeTable.stripNull
   local -16:9 collector: FactCollector (const)

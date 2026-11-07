@@ -140,6 +140,7 @@ import {
   checkImplements,
   collectStructMembers,
   declareStruct,
+  markTemplateImplements,
   referencedStructNames,
   signatureStructNames,
 } from "./structs"
@@ -305,6 +306,7 @@ export class Checker {
           const template = this.program.structTemplate(stmt.children[0].text)
           if (template !== null && template.decl === stmt) {
             resolveStructTemplateConstraints(template)
+            markTemplateImplements(this.program, stmt)
           }
           declareMethodTypeParameters(this.ctx, stmt)
         }
@@ -931,7 +933,6 @@ export class Checker {
     info.scope = this.program
     info.storage = true
     info.storageElem = elem
-    info.storageSymbol = `${this.program.symbolPrefix}${name}`
     this.program.addConstant(info)
     return true
   }

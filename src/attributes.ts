@@ -3955,7 +3955,8 @@ const collectFacts = (
     // block (docs/wp40-ffi-buffers-handles.md §3c), unlike the worst cases
     // above, which stay. Nor can C re-enter Nish to do it: an exported function
     // it calls back reaches no array the caller holds, because a module has no
-    // `let`, no array `const` and no `static` field to keep one in. It holds
+    // `let` and no `static` field to keep one in, and its one array `const`,
+    // module storage, has a static header whose length never moves. It holds
     // only while no header crosses: a stage that hands C a `nish_array *` sets
     // it back to `true` here, as `std/sync/shm.ts`'s `nishshm_close` does,
     // because closing a region empties every window it lent (`markShmWindow`).

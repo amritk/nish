@@ -2053,7 +2053,9 @@ const bytePointer = (emitter: Emitter, arr: string, at: string): string => {
  * every array is, which every indexing path already reads. `len` and `cap` are
  * the length, and nothing may change either. The data has external linkage
  * so a `--profile wasm-host` link can export its address (`--export=<symbol>.data`,
- * `docs/wp50-wasm-host.md` §5.2); a local symbol cannot be exported.
+ * `docs/wp50-wasm-host.md` §5.2); a local symbol cannot be exported. Its
+ * symbol, `nish_storage_<module>_<name>` (`Compilation.nameStorage`), is the
+ * program's alone. The header is `internal` unless another module imports it.
  */
 export const storageGlobals = (emitter: Emitter, info: ConstInfo): void => {
   const slot = elementLLVMType(emitter.program, emitter.table, info.storageElem)
@@ -2061,7 +2063,7 @@ export const storageGlobals = (emitter: Emitter, info: ConstInfo): void => {
   emitter.declareType(ARRAY_TYPE)
   emitter.declareGlobal(`@${info.storageSymbol}.data = global ${data} zeroinitializer, align 16`)
   emitter.declareGlobal(
-    `@${info.storageSymbol} = global ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
+    `@${info.storageSymbol} = ${info.exported ? "" : "internal "}global ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
   )
 }
 

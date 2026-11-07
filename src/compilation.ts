@@ -1260,12 +1260,18 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    this.nameStorage()
     // `process.argv` is legal anywhere in a program that has an entry point, so
     // every module needs to know whether the entry declares `main` before its
     // bodies are checked.
     const hasMain = this.entry().checker.program.entryMain !== null
+    const peers: CheckContext[] = []
+    for (const unit of this.modules) {
+      peers.push(unit.checker.ctx)
+    }
     for (const unit of this.modules) {
       unit.checker.ctx.entryHasMain = hasMain
+      unit.checker.ctx.peers = peers
     }
     // Constants fold once every module has its signatures, because an
     // initialiser may name a constant imported from a module checked later.
@@ -2875,6 +2881,53 @@ export class Compilation {
     )
   }
 
+  /** Whether any module of the program declares module storage. */
+  hasStorage(): boolean {
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.storage) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  /**
+   * WP50 S3 (§6): whether the program is written for `--profile wasm-host`'s
+   * panic guard, by importing a host module or declaring module storage. Only
+   * then are its wasm32 panic sites tagged (so the link routes them to the
+   * page's `nish.panic` import) and its loader guarded (`loaderGuarded`); any
+   * other program keeps its `.wasm`, loader and `.d.ts` as they were.
+   */
+  guardsPanics(): boolean {
+    for (const unit of this.modules) {
+      if (unit.checker.program.source.host) {
+        return true
+      }
+    }
+    return this.hasStorage()
+  }
+
+  /**
+   * WP50 §5.1: each module storage's symbol, `nish_storage_<module>_<name>`
+   * by its module's place in `modules`, so two modules that each declare a
+   * `cache` link, and no storage meets a C symbol such as libc's `write`.
+   * `storageLayouts` numbers the modules the same way.
+   */
+  nameStorage(): void {
+    let k = 0
+    while (k < this.modules.length) {
+      const program = this.modules[k].checker.program
+      for (const info of program.constantList) {
+        if (info.storage && info.origin === program.source) {
+          info.storageSymbol = `nish_storage_${k}_${info.name}`
+        }
+      }
+      k = k + 1
+    }
+  }
+
   /**
    * A function's *symbol* must be unique across the program whether or not it
    * is exported, and the entry wrapper reserves `main` as well. An external
@@ -3093,9 +3146,15 @@ export class Compilation {
    * `memory` is one Node refuses to compile. The linker's other names
    * (`_start`, `__heap_base`, ...) begin with `_` and are refused above on
    * every target.
+   *
+   * A wasm program with module storage may not call one `layout` or `views`
+   * either (WP50 §5.2): the loader answers the storage's layout and views under
+   * those names beside the exports, so the export would be shadowed. A program
+   * with no storage keeps both names.
    */
   rejectCLibrarySymbols(): void {
     const wasmModule = buildsWasmModule(this.opts)
+    const loaderNames = wasmModule && this.hasStorage()
     for (const unit of this.modules) {
       if (unit.packageName !== ROOT_PACKAGE) {
         continue
@@ -3120,6 +3179,15 @@ export class Compilation {
             at.start,
             at.end,
             `\`memory\` is the name a wasm module exports its linear memory under: ${why}, so the module would export two things named \`memory\` and no host could load it; rename it`
+          )
+          continue
+        }
+        if (loaderNames && (sig.name === "layout" || sig.name === "views")) {
+          this.sink.report(
+            unit.source,
+            at.start,
+            at.end,
+            `\`${sig.name}\` is the name the wasm loader answers the program's module storage under: ${why}, so the loader would answer two things named \`${sig.name}\` and the page could not reach this function; rename it`
           )
           continue
         }
@@ -3336,6 +3404,7 @@ export class Compilation {
       this.opts.sandboxCapabilities = this.sandboxWidened(fact === null ? 0 : fact.caps)
       this.narrowSandbox(facts)
     }
+    this.opts.panicSites = this.guardsPanics()
     const units = this.analysisUnits
     const stems = this.outputStems()
     const copies: AnalysisUnit[] = this.libraryUnits(units)

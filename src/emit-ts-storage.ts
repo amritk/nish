@@ -5,9 +5,9 @@
 // same against the TypeScript reading, so `--emit-ts` writes one more file,
 // `nish-storage.ts`: one `ArrayBuffer` laid out as `layout` says, `memory`
 // holding it as `buffer`, `layout` itself, and each storage as a view of it.
-// A module's storage `new` is written as that view (`newRow` in
-// `src/emit-ts-records.ts` asks `storageNewText`), so every read and write the
-// module makes lands in the buffer the page sees.
+// A module's storage `new` is written as that view, `s<slot>` (`newRow` in
+// `src/emit-ts-records.ts`), so every read and write the module makes lands in
+// the buffer the page sees.
 //
 // - A scalar storage is the typed array its element reads as
 //   (`new Int32Array(heap, at, length)`); a `boolean` one is that byte array
@@ -50,32 +50,16 @@ const viewShift = (view: string): i32 => {
 /** `n` rounded up to a multiple of 8. */
 const align8 = (n: i32): i32 => n + ((8 - (n % 8)) % 8)
 
-/** The byte offset of each storage in the reading's heap, in `layouts` order. */
-const storageOffsets = (layouts: StorageLayout[]): i32[] => {
-  const out: i32[] = []
+/** The size of the reading's heap: every storage of `layouts`, each from an 8-byte boundary. */
+const storageEnd = (layouts: StorageLayout[]): i32 => {
   let at = 0
   for (const s of layouts) {
-    at = align8(at)
-    out.push(at)
-    at = at + s.length * s.stride
+    at = align8(at) + s.length * s.stride
   }
-  out.push(align8(at))
-  return out
+  return align8(at)
 }
 
-/** The text a storage's `new` is written as: its export from `STORAGE_FILE`, or "" when `id` is no storage of module `module`. */
-export const storageNewText = (layouts: StorageLayout[], module: i32, id: i32): string => {
-  let k = 0
-  while (k < layouts.length) {
-    if (layouts[k].module === module && layouts[k].newId === id) {
-      return `${STORAGE_NAMESPACE}.s${k}`
-    }
-    k = k + 1
-  }
-  return ""
-}
-
-/** The heap-wide view a record field reads through, named for its type. */
+/** The heap-wide view a record field reads through, named for its type; `storageFileText` spells it inline. */
 const heapView = (view: string): string => `heap${view}`
 
 /** One field of a record element as a getter and a setter over its heap view. */
@@ -91,12 +75,11 @@ const fieldAccessors = (name: string, view: string, offset: i32, flag: boolean):
 
 /** `STORAGE_FILE`'s text for `layouts`, which is not empty. */
 export const storageFileText = (layouts: StorageLayout[]): string => {
-  const offsets = storageOffsets(layouts)
   const lines: string[] = []
   lines.push("// Module storage for the TypeScript reading (WP50 §5.4), written by `nish --emit-ts`:")
   lines.push("// one buffer laid out as `layout` says, each storage a view of it, so a page")
   lines.push("// reads `memory.buffer` and `layout` here as it reads them from the wasm build.")
-  lines.push(`const heap = new ArrayBuffer(${offsets[layouts.length]})`)
+  lines.push(`const heap = new ArrayBuffer(${storageEnd(layouts)})`)
   const views: string[] = []
   for (const s of layouts) {
     for (const f of s.fields) {
@@ -106,7 +89,7 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
     }
   }
   for (const view of views) {
-    lines.push(`const ${heapView(view)} = new ${view}(heap)`)
+    lines.push(`const heap${view} = new ${view}(heap)`)
   }
   let anyFlag = false
   for (const s of layouts) {
@@ -136,22 +119,23 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
   }
   lines.push("export const memory = { buffer: heap }")
   lines.push("export const layout = {")
-  let k = 0
-  while (k < layouts.length) {
-    const s = layouts[k]
+  // Each storage starts on an 8-byte boundary, as `storageEnd` counts them.
+  let at = 0
+  for (const s of layouts) {
+    at = align8(at)
     const fields: string[] = []
     for (const f of s.fields) {
       fields.push(`${f.name}: ${f.offset}`)
     }
     const tail = s.fields.length > 0 ? `, fields: { ${fields.join(", ")} }` : ""
-    lines.push(`  ${s.key}: { at: ${offsets[k]}, length: ${s.length}, stride: ${s.stride}${tail} },`)
-    k = k + 1
+    lines.push(`  ${s.key}: { at: ${at}, length: ${s.length}, stride: ${s.stride}${tail} },`)
+    at = at + s.length * s.stride
   }
   lines.push("}")
-  k = 0
-  while (k < layouts.length) {
-    const s = layouts[k]
-    const at = offsets[k]
+  at = 0
+  let k = 0
+  for (const s of layouts) {
+    at = align8(at)
     if (s.fields.length === 0) {
       const view = `new ${s.view}(heap, ${at}, ${s.length})`
       // `any`: the module spells the storage's own type, which this file does not know.
@@ -166,6 +150,7 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
       lines.push(`  return { ${accessors.join(", ")} }`)
       lines.push("})")
     }
+    at = at + s.length * s.stride
     k = k + 1
   }
   lines.push("")

@@ -844,31 +844,49 @@ export const RUNTIME_BUDGETS = [
  * linked with runtime-wasm.c, from 2,827 to 2,091 (gzip 1,479 to 1,092, brotli 1,302
  * to 970). A wasm-opt pass shrinks the `.wasm` and so the inline module and leaves
  * the loader as it is, so every ceiling holds with one too.
- *
- * Raised for stage 3 (§6), measured the same way: a panic is the page's `nish.panic`
- * import, called with its site, instead of a bare trap. add.wasm goes from 102 to 157
- * bytes (gzip 111 to 150, brotli 87 to 136) and arrays.wasm from 2,091 to 2,322 (gzip
- * 1,092 to 1,157, brotli 970 to 1,023): the import and the site argument at each panic.
- * The loader grows by its panic half, the same text in every loader: the message
- * decoder, `guarded` around each export (dead and re-entered modules refused), and
- * `NishPanic` / `NishReentry`. add.mjs goes from 1,625 to 6,038 (gzip 732 to 2,279,
- * brotli 625 to 1,995), arrays.mjs from 4,560 to 8,809 (gzip 1,602 to 3,033, brotli
- * 1,399 to 2,673).
  */
 export const WASM_HOST_SIZE_BUDGETS = [
   {
     src: "examples/add.ts",
     runtime: false,
-    wasm: [157, 150, 136],
-    loader: [6038, 2279, 1995],
-    inline: [557, 304, 262],
+    wasm: [102, 111, 87],
+    loader: [1625, 732, 625],
+    inline: [396, 253, 223],
   },
   {
     src: "examples/arrays.ts",
     runtime: true,
-    wasm: [2322, 1157, 1023],
-    loader: [8809, 3033, 2673],
-    inline: [6766, 1544, 1335],
+    wasm: [2091, 1092, 970],
+    loader: [4560, 1602, 1399],
+    inline: [6163, 1468, 1267],
+  },
+]
+
+/**
+ * What a program that uses no stage-2 or stage-3 feature gets is what it got before
+ * them (WP50 stage 3, docs/wp50-wasm-host.md §6): the sha-256 of the `--emit-dts`
+ * `.d.ts` and loader, and of the `.wasm` linked by `--profile wasm` and by
+ * `--profile wasm-host`, for each example. Only a program with module storage or a
+ * host module gets the guarded loader and the `nish.panic` import. Taken from the
+ * 0.36.0 compiler and main's scripts/build.sh and runtime-wasm.c, with clang 18
+ * on linux-x64 and no wasm-opt; the `wasm-size` block of tests/run.js holds
+ * every build to them. A change that moves one is a change to every plain program's
+ * bytes: it updates the digest here and says why in its commit.
+ */
+export const WASM_PLAIN_DIGESTS = [
+  {
+    src: "examples/add.ts",
+    dts: "a778903f14bc84f10b073b3596be86f4afee5b2f6ef357f0259fd4398b506d2c",
+    loader: "8ff7c215c5a084df79f7bc3d88b82d0137422cddeb1bbea8bb958890c8cc792a",
+    wasm: "6440497d7438b6f38e8adbc6f31fa1b265825fde3f85e02fc253e4ddc5eeccdc",
+    host: "a57f2f52343518d5d351f91d2a7d40fa6281a20fb8b3be7d116d14e8db6daae6",
+  },
+  {
+    src: "examples/arrays.ts",
+    dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
+    loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
+    wasm: "04188e4288db9a287591844b1d1d8f8fc20f0c406f91625d15ac7189c2902d24",
+    host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
   },
 ]
 

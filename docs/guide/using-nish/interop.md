@@ -268,6 +268,10 @@ The loaded module carries two things for it, and `--emit-dts` types both:
   the same object until a growing memory replaces `memory.buffer`, so call
   it again after each call into the module rather than keeping a view.
 
+Both names are the loader's, so a program with module storage cannot export
+a function called `layout` or `views`; the compiler refuses one and asks you
+to rename it. A program without storage keeps both names.
+
 ```ts
 // sim.ts
 interface Body {
@@ -340,10 +344,15 @@ export const tick = (): void => {
 ### When the module panics
 
 A native program that panics prints a message and stops. A module in a page
-cannot stop the page, so under `--profile wasm-host` every panic (an index
-out of range, an overflow, a `panic(...)`, an allocation `--memory` cannot
-hold, a `process.exit`) unwinds out of the module and the call that started
-it throws `NishPanic`, exported by the generated loader:
+cannot stop the page, so under `--profile wasm-host` a program that keeps
+[module storage](#sharing-memory-with-the-page) or imports a
+[host module](#functions-the-page-supplies-host-modules) reports every panic
+(an index out of range, an overflow, a `panic(...)`, an allocation
+`--memory` cannot hold, a `process.exit`): it unwinds out of the module and
+the call that started it throws `NishPanic`, exported by the generated
+loader. A program with neither gets a plainer loader: a panic is the bare
+`RuntimeError` a trap is, what the call allocated is released, and the next
+call runs as before.
 
 ```js
 import { loadSync, NishPanic } from "./sim.mjs";
@@ -362,7 +371,7 @@ try {
   exception is thrown. Without one, the loader writes `nish: <message>` to
   the console, as `reportPanic` from `nish/page` does.
 - **Where it happened.** `build.sh` writes `<out>.sites.json` beside the
-  module, a list of `{ kind, at }` with `at` a `path:line:col`. Pass the
+  module (`app.wasm.sites.json` for `-o app.wasm`), a list of `{ kind, at }` with `at` a `path:line:col`. Pass the
   parsed list as `sites` and each message ends with ` at <path:line:col>`;
   `site` is the index into that list, or -1.
 - **A panicked module is dead.** Its memory is left as it was, for a page

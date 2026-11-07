@@ -456,7 +456,7 @@ export class Emitter {
     this.strings = new StringMap()
     this.stringRefs = []
     this.debug = null
-    this.panicSites = isWasmBuild(opts) ? new PanicSiteTable() : null
+    this.panicSites = isWasmBuild(opts) && opts.panicSites ? new PanicSiteTable() : null
     this.libraries = []
     this.jsonParts = []
     this.jsonPartNames = new StringSet()

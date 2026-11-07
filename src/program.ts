@@ -1132,7 +1132,7 @@ export class ConstInfo {
    */
   storage: boolean
   storageElem: i32
-  /** The storage's LLVM global, `@<symbol>` for the header and `@<symbol>.data` for the elements. */
+  /** The storage's LLVM global, `@<symbol>` for the header and `@<symbol>.data` for the elements; `Compilation.nameStorage` sets it. */
   storageSymbol: string
 
   constructor(name: string, type: i32, decl: Node, origin: SourceFile) {

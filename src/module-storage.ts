@@ -34,9 +34,12 @@ import { isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit
 import {
   N_BINARY,
   N_CALL,
+  N_EXPR_STMT,
   N_FOR_OF,
+  N_FUNCTION,
   N_IDENT,
   N_INDEX,
+  N_LIST,
   N_MEMBER,
   N_NEW,
   N_NUMBER,
@@ -44,7 +47,7 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
-import { ConstInfo, StructInfo, elementStride, inlineElementStruct } from "./program"
+import { ConstInfo, FunctionSig, StructInfo, elementStride, inlineElementStruct } from "./program"
 import { SORT_LOCAL } from "./std-modules"
 import { T_BOOL, isHostWindow, isNumeric } from "./types"
 
@@ -86,7 +89,7 @@ export const checkStorage = (ctx: CheckContext, info: ConstInfo): Node | null =>
   const name = info.name
   const elem = info.storageElem
   const spelled = ctx.table.typeName(elem)
-  if (!checkStorageElement(ctx, info, elemNode, elem, spelled, 0)) {
+  if (!checkStorageElement(ctx, info, elemNode, elem, spelled)) {
     return null
   }
   const args = expr.children[2]
@@ -178,56 +181,90 @@ const storageLengthShaped = (info: ConstInfo, expr: Node): boolean => {
   }
 }
 
-/** Whether `elem` is a type whose zero fill is one of its values and holds no pointer. */
-const checkStorageElement = (
-  ctx: CheckContext,
-  info: ConstInfo,
-  at: Node,
-  elem: i32,
-  spelled: string,
-  depth: i32
-): boolean => {
+/** What a storage element's check found: nothing wrong, an element with no type, a zero that is no value, or a type storage cannot hold. */
+const FAULT_NONE: i32 = 0
+const FAULT_SILENT: i32 = 1
+const FAULT_ZERO: i32 = 2
+const FAULT_HOLD: i32 = 3
+const FAULT_NESTED: i32 = 4
+
+/**
+ * Whether `elem` is a type whose zero fill is one of its values and holds no
+ * pointer; reports against `at`, spelling the element `spelled`, when not.
+ */
+const checkStorageElement = (ctx: CheckContext, info: ConstInfo, at: Node, elem: i32, spelled: string): boolean => {
   const table = ctx.table
-  if (elem < 0) {
-    return false
-  }
-  if (isNumeric(elem) || elem === T_BOOL || table.isHostHandle(elem)) {
+  const fault = storageElementFault(ctx, info, elem)
+  if (fault === FAULT_NONE) {
     return true
   }
-  if (table.isEnum(elem) || table.isEnumMemberType(elem) || table.isRanged(elem)) {
-    if (storageZeroIsMember(ctx, info, elem)) {
-      return true
+  if (fault !== FAULT_HOLD) {
+    return storageFaultReport(ctx, info, at, fault, spelled)
+  }
+  const scope = info.scope
+  const record: StructInfo | null = scope === null ? null : inlineElementStruct(scope, table, elem)
+  if (record === null) {
+    return storageFaultReport(ctx, info, at, fault, spelled)
+  }
+  let bad = -1
+  let inner = FAULT_NONE
+  let k = 0
+  while (bad < 0 && k < record.fields.length) {
+    inner = storageElementFault(ctx, info, record.fields[k].type)
+    if (inner !== FAULT_NONE) {
+      bad = k
     }
+    k = k + 1
+  }
+  if (bad < 0) {
+    return true
+  }
+  const field = record.fields[bad]
+  // A field that is itself a record is a pointer to it, so it is refused as nested.
+  const nested = inner === FAULT_HOLD && scope !== null && inlineElementStruct(scope, table, field.type) !== null
+  const label = `${spelled}.${field.name} (${table.typeName(field.type)})`
+  return storageFaultReport(ctx, info, at, nested ? FAULT_NESTED : inner, label)
+}
+
+/** What is wrong with `elem` as a storage element or a record field, never looking inside a record. */
+const storageElementFault = (ctx: CheckContext, info: ConstInfo, elem: i32): i32 => {
+  const table = ctx.table
+  if (elem < 0) {
+    return FAULT_SILENT
+  }
+  if (isNumeric(elem) || elem === T_BOOL || table.isHostHandle(elem)) {
+    return FAULT_NONE
+  }
+  if (table.isEnum(elem) || table.isEnumMemberType(elem) || table.isRanged(elem)) {
+    return storageZeroIsMember(ctx, info, elem) ? FAULT_NONE : FAULT_ZERO
+  }
+  return FAULT_HOLD
+}
+
+/** Report `fault` for the element spelled `spelled`, and answer false. */
+const storageFaultReport = (ctx: CheckContext, info: ConstInfo, at: Node, fault: i32, spelled: string): boolean => {
+  if (fault === FAULT_ZERO) {
     storageReport(
       ctx,
       info,
       at,
       `Module storage \`${info.name}\` is zero-filled, and 0 is not a value of ${spelled}; give the type a zero member, or store the number and convert it where it is read`
     )
-    return false
+  } else if (fault === FAULT_NESTED) {
+    storageReport(
+      ctx,
+      info,
+      at,
+      `Module storage \`${info.name}\` cannot hold ${spelled}: a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record`
+    )
+  } else if (fault === FAULT_HOLD) {
+    storageReport(
+      ctx,
+      info,
+      at,
+      `Module storage \`${info.name}\` cannot hold ${spelled}: its bytes are zero-filled where a page can read them, so an element is a number, a \`boolean\`, an enum or range whose zero is a member, a \`HostHandle\`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a \`Map\` or a \`| null\``
+    )
   }
-  const scope = info.scope
-  let record: StructInfo | null = null
-  if (scope !== null && depth === 0) {
-    record = inlineElementStruct(scope, table, elem)
-  }
-  if (record !== null) {
-    for (const field of record.fields) {
-      const fieldName = table.typeName(field.type)
-      if (
-        !checkStorageElement(ctx, info, at, field.type, `${spelled}.${field.name} (${fieldName})`, depth + 1)
-      ) {
-        return false
-      }
-    }
-    return true
-  }
-  storageReport(
-    ctx,
-    info,
-    at,
-    `Module storage \`${info.name}\` cannot hold ${spelled}: its bytes are zero-filled where a page can read them, so an element is a number, a \`boolean\`, an enum or range whose zero is a member, a \`HostHandle\`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a \`Map\` or a \`| null\``
-  )
   return false
 }
 
@@ -438,10 +475,12 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
 /**
  * Whether argument `i`, `arg`, lends scalar module storage to a parameter
  * that cannot move it: one declared with a typed-array name (`Int32Array`,
- * `Float32Array`, ...), which has no `push`, `pop` or `length =`, or a host
- * function's buffer window, which the page reads in place. Either reaches
- * the static elements through the storage's own header, so the storage still
- * never moves; a record element stays a place and is never lent.
+ * `Float32Array`, ...) that the callee only reads and writes in place
+ * (`lentParamStays`), or a host function's buffer window, which the page
+ * reads in place. Either reaches the static elements through the storage's
+ * own header, so the storage still never moves; a record element stays a
+ * place and is never lent. A typed-array parameter the callee lets go is
+ * refused here, at the argument, and answers true so the use is reported once.
  */
 const lendsStorage = (ctx: CheckContext, callee: Node, i: i32, arg: Node): boolean => {
   const info = storageNamed(ctx, unwrapParens(arg))
@@ -456,7 +495,212 @@ const lendsStorage = (ctx: CheckContext, callee: Node, i: i32, arg: Node): boole
   if (origin !== null && origin.host) {
     return isHostWindow(ctx.table, sig.paramTypes[i])
   }
-  return parameterSpelling(ctx, sig, sig.paramNames[i]) !== ""
+  const name = sig.paramNames[i]
+  if (parameterSpelling(ctx, sig, name) === "") {
+    return false
+  }
+  if (!lentParamStays(ctx, sig, name)) {
+    ctx.error(
+      arg,
+      `Module storage \`${info.name}\` cannot be lent to \`${callee.text}\`, which lets its parameter \`${name}\` go further than indexing: storage keeps its length, so a callee it is lent to only indexes the parameter, reads its \`length\`, loops over it, calls a method that reads it, or lends it on the same way — never passes it elsewhere, binds, returns or stores it, where it could be spelled \`T[]\` and resized`
+    )
+  }
+  return true
+}
+
+/** How many parameters `lentParamStays` follows a lent array through before it gives up. */
+const LEND_DEPTH: i32 = 8
+
+/**
+ * The parameters a lent array reaches, in the order `lentParamStays` judges
+ * them: a lend on to a function of the same module appends its parameter
+ * rather than recursing into it, so the walk is one loop with no cycle through
+ * the call graph, and a parameter already listed is not listed again.
+ */
+class LendQueue {
+  sigs: FunctionSig[]
+  names: string[]
+
+  constructor() {
+    this.sigs = []
+    this.names = []
+  }
+
+  /** Appends `name` of `sig` unless it is listed already. */
+  add(sig: FunctionSig, name: string): void {
+    let k = 0
+    while (k < this.sigs.length && k < this.names.length) {
+      if (this.sigs[k] === sig && this.names[k] === name) {
+        return
+      }
+      k = k + 1
+    }
+    this.sigs.push(sig)
+    this.names.push(name)
+  }
+}
+
+/**
+ * Whether `method` of a typed array answers something other than the array
+ * itself, so calling it on a lent parameter lets nothing escape.
+ */
+const lendSafeMethod = (method: string): boolean =>
+  method === "at" ||
+  method === "every" ||
+  method === "filter" ||
+  method === "find" ||
+  method === "findIndex" ||
+  method === "forEach" ||
+  method === "includes" ||
+  method === "indexOf" ||
+  method === "join" ||
+  method === "lastIndexOf" ||
+  method === "map" ||
+  method === "reduce" ||
+  method === "slice" ||
+  method === "some"
+
+/** Whether `method` works in place and answers the array itself, safe only where that answer is dropped. */
+const lendInPlaceMethod = (method: string): boolean =>
+  method === "copyWithin" || method === "fill" || method === "reverse" || method === "sort"
+
+/**
+ * Whether `sig`'s body uses its parameter `name` only in place, and so does
+ * every parameter of the same module it lends the array on to: a typed-array
+ * spelling forbids `push`, `pop` and `length =` on that binding, but the value
+ * can still flow to a `T[]` binding (an argument, a `const`, a return), whose
+ * spelling allows them and would resize module storage through its static
+ * header (WP50 §5.1). A name the body shadows is judged by every use of it,
+ * which refuses more than it must and never less.
+ */
+const lentParamStays = (ctx: CheckContext, sig: FunctionSig, name: string): boolean => {
+  const queue = new LendQueue()
+  queue.add(sig, name)
+  let k = 0
+  while (k < queue.sigs.length && k < queue.names.length) {
+    const next = queue.sigs[k]
+    if (k >= LEND_DEPTH || next.decl.kind !== N_FUNCTION || next.decl.children.length < 4) {
+      return false
+    }
+    if (!lentUsesStay(ctx, next, queue.names[k], next.decl.children[3], null, null, null, queue)) {
+      return false
+    }
+    k = k + 1
+  }
+  return true
+}
+
+/**
+ * `lentParamStays` over `node`, whose three nearest ancestors are `parent`,
+ * `grand` and `great` (null past the body): a use is judged by those alone.
+ */
+const lentUsesStay = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  name: string,
+  node: Node,
+  parent: Node | null,
+  grand: Node | null,
+  great: Node | null,
+  queue: LendQueue
+): boolean => {
+  if (node.kind === N_IDENT && node.text === name) {
+    return lentUseStays(ctx, sig, node, parent, grand, great, queue)
+  }
+  for (const child of node.children) {
+    if (!lentUsesStay(ctx, sig, name, child, node, parent, grand, queue)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Whether one reference to a lent parameter, under `parent`, `grand` and `great`, keeps it in place. */
+const lentUseStays = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  use: Node,
+  parent: Node | null,
+  grand: Node | null,
+  great: Node | null,
+  queue: LendQueue
+): boolean => {
+  if (parent === null) {
+    return false
+  }
+  if (parent.kind === N_INDEX) {
+    return parent.children[0] === use
+  }
+  if (parent.kind === N_FOR_OF) {
+    return parent.children[1] === use
+  }
+  if (parent.kind === N_MEMBER) {
+    if (parent.children[0] !== use) {
+      return false
+    }
+    if (parent.text === "length" || lendSafeMethod(parent.text)) {
+      return true
+    }
+    // `xs.fill(0);` as a statement: its answer, the array itself, is dropped.
+    return (
+      lendInPlaceMethod(parent.text) &&
+      grand !== null &&
+      grand.kind === N_CALL &&
+      grand.children[0] === parent &&
+      great !== null &&
+      great.kind === N_EXPR_STMT
+    )
+  }
+  if (parent.kind === N_LIST && grand !== null && grand.kind === N_CALL && grand.children[1] === parent) {
+    return lentOnStays(ctx, sig, grand, use, queue)
+  }
+  return false
+}
+
+/** The context of the module that defines `sig`, or `null`. */
+const homeContext = (ctx: CheckContext, sig: FunctionSig): CheckContext | null => {
+  if (sig.definedIn(ctx.source)) {
+    return ctx
+  }
+  for (const peer of ctx.peers) {
+    if (sig.definedIn(peer.source)) {
+      return peer
+    }
+  }
+  return null
+}
+
+/**
+ * Whether a lent parameter passed on as an argument of `call` may stay in
+ * place: to a host function's buffer window, or to a typed-array parameter of
+ * another function, which joins `queue` to be judged in turn. `call` sits in
+ * `sig`'s body, so its callee is resolved in the scope of `sig`'s module,
+ * which a std function lending on (`ringSize` to `ringCapacity`) needs.
+ */
+const lentOnStays = (ctx: CheckContext, sig: FunctionSig, call: Node, use: Node, queue: LendQueue): boolean => {
+  const callee = call.children[0]
+  const home = homeContext(ctx, sig)
+  if (callee.kind !== N_IDENT || home === null) {
+    return false
+  }
+  const next = home.signature(callee.text)
+  if (next === null) {
+    return false
+  }
+  const at = call.children[1].children.indexOf(use)
+  if (at < 0 || at >= next.paramNames.length) {
+    return false
+  }
+  const origin = next.origin
+  if (origin !== null && origin.host) {
+    return isHostWindow(ctx.table, next.paramTypes[at])
+  }
+  const name = next.paramNames[at]
+  if (parameterSpelling(ctx, next, name) === "") {
+    return false
+  }
+  queue.add(next, name)
+  return true
 }
 
 const checkStorageAssignment = (ctx: CheckContext, node: Node): void => {

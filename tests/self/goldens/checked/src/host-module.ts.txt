@@ -314,7 +314,7 @@ function HostProblem.constructor(this: HostProblem, message: string, node: Node)
 function hostSignatureProblems(file: Node, parser: Parser): HostProblem[] -> @hostSignatureProblems [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via asWindow
-  calls: HostProblem.constructor SCALAR_NAMES StringSet.add StringSet.constructor TYPED_ARRAYS asWindow crosses isBuffer isTypeNamed nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq spell typeProblem unparen windowElement windowPairProblem
+  calls: HostProblem.constructor SCALAR_NAMES StringSet.add StringSet.constructor TYPED_ARRAYS asWindow crosses isBuffer isTypeNamed nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq typeProblem unparen windowElement windowElementProblem windowPairProblem
   pointer file: size=40 writesThrough=false captured=false
   pointer parser: size=112 writesThrough=true captured=false passedTo=asWindow#1
   stackSites=1 stackLocals=1
@@ -343,19 +343,18 @@ function hostSignatureProblems(file: Node, parser: Parser): HostProblem[] -> @ho
   callee +45:11 new HostProblem -> @HostProblem.constructor
   callee +50:18 isBuffer -> @isBuffer
   callee +51:13 windowElement -> @windowElement
-  callee +53:13 new HostProblem -> @HostProblem.constructor
-  callee +54:69 spell -> @spell
-  local +60:15 pair: HostProblem | null (const)
-  callee +60:22 windowPairProblem -> @windowPairProblem
-  callee +65:9 asWindow -> @asWindow
-  callee +67:19 crosses -> @crosses
-  callee +68:23 typeProblem -> @typeProblem
-  local +71:11 answer: Node (const)
-  callee +71:20 unparen -> @unparen
-  callee +75:9 isTypeNamed -> @isTypeNamed
-  callee +77:9 new HostProblem -> @HostProblem.constructor
-  callee +82:17 crosses -> @crosses
-  callee +83:21 typeProblem -> @typeProblem
+  callee +52:25 windowElementProblem -> @windowElementProblem
+  local +55:15 pair: HostProblem | null (const)
+  callee +55:22 windowPairProblem -> @windowPairProblem
+  callee +60:9 asWindow -> @asWindow
+  callee +62:19 crosses -> @crosses
+  callee +63:23 typeProblem -> @typeProblem
+  local +66:11 answer: Node (const)
+  callee +66:20 unparen -> @unparen
+  callee +70:9 isTypeNamed -> @isTypeNamed
+  callee +72:9 new HostProblem -> @HostProblem.constructor
+  callee +77:17 crosses -> @crosses
+  callee +78:21 typeProblem -> @typeProblem
 function windowElement(type: Node): string -> @windowElement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -406,6 +405,13 @@ function asWindow(type: Node, parser: Parser): void -> @asWindow
   callee -1:19 Parser.node -> @Parser.node
   callee +0:18 typedElement -> @typedElement
   callee +1:23 Parser.list -> @Parser.list
+function windowElementProblem(p: string, name: string, type: Node): HostProblem -> @windowElementProblem
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: HostProblem.constructor nish_alloc_struct nish_str_concat spell
+  pointer type: size=40 writesThrough=true captured=true passedTo=spell#0 HostProblem.constructor#2
+  stackSites=0 stackLocals=0
+  callee +0:3 new HostProblem -> @HostProblem.constructor
+  callee +1:59 spell -> @spell
 function typeProblem(where: string, name: string, type: Node): HostProblem -> @typeProblem
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   escaping: name where
