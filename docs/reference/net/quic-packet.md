@@ -78,23 +78,33 @@ import {
 ```
 
 ```ts
-import { quicInitialSecrets, quicKeys, quicParseHeader, quicOpenPacket, QuicKeysSlot,
-         QUIC_AEAD_AES_128_GCM, QUIC_PACKET_OK } from "nish/net/quic-packet";
-import { Secret, secret, wipe } from "nish:secret";
+import { QuicHeader, QuicInitialSecrets, QuicKeys, QuicKeysSlot, QuicPacket, quicInitialSecrets,
+         quicKeys, quicLongHeader, quicOpenPacket, quicParseHeader, quicSealPacket,
+         QUIC_AEAD_AES_128_GCM, QUIC_PACKET_INITIAL, QUIC_PACKET_OK } from "nish/net/quic-packet"
+import { Secret, secret, wipe } from "nish:secret"
 
-const secrets = quicInitialSecrets(clientDcid);            // RFC 9001 §5.2
-if (secrets === null) { … a DCID over 20 bytes … }
-const client: u8[] = new Array<u8>(secrets.client.length); // public, so a copy
-client.set(secrets.client);
-const held: Secret<u8[]> = secret(client);
-const slot = new QuicKeysSlot();                           // ours, so ours to wipe
-const keys = quicKeys(slot, QUIC_AEAD_AES_128_GCM, held);
-wipe(held);
-if (keys === null) { … }
-const header = quicParseHeader(datagram, 0, 8);            // 8: our short-header DCID length
-const packet = quicOpenPacket(keys, datagram, header, largestReceived);
-if (packet.error === QUIC_PACKET_OK) { … packet.payload holds the frames … }
-slot.wipe();                                               // once the level is done
+const dcid: u8[] = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08]
+const secrets: QuicInitialSecrets | null = quicInitialSecrets(dcid)   // RFC 9001 §5.2
+if (secrets !== null) {
+  const client: u8[] = new Array<u8>(32)                              // public, so a copy
+  client.set(secrets.client)
+  const held: Secret<u8[]> = secret(client)
+  const slot: QuicKeysSlot = new QuicKeysSlot()                       // ours, so ours to wipe
+  const keys: QuicKeys | null = quicKeys(slot, QUIC_AEAD_AES_128_GCM, held)
+  wipe(held)
+  const header: u8[] | null = quicLongHeader(QUIC_PACKET_INITIAL, dcid, [], [], 0, 4, 20)
+  if (keys !== null && header !== null) {
+    const datagram: u8[] | null = quicSealPacket(keys, header, 0, new Array<u8>(20))
+    if (datagram !== null) {
+      const parsed: QuicHeader = quicParseHeader(datagram, 0, 8)      // 8: our short DCID length
+      const packet: QuicPacket = quicOpenPacket(keys, datagram, parsed, -1)
+      if (packet.error === QUIC_PACKET_OK) {
+        // packet.payload holds the 20 bytes of frames sealed above
+      }
+    }
+  }
+  slot.wipe()                                                         // once the level is done
+}
 ```
 
 <scalar-grid cols="2">
@@ -359,9 +369,9 @@ One packet with its protection removed by `quicOpenPacket`, or as far as that go
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="Sans-IO">
 
-The module is sans-IO: bytes in, bytes out, no socket and no clock. It
+The module takes bytes in and gives bytes out, with no socket and no clock. It
 frames and protects packets and stops there, so it knows nothing of frames,
 of a connection's state or of which keys a level is on; that is
 `nish/net/quic` (WP34 Q2). Only version 1 (`0x00000001`) is spoken. A long
@@ -369,7 +379,7 @@ header of another version is parsed as far as RFC 8999's invariants go,
 which is what a server needs to send Version Negotiation, and reported as
 `QUIC_ERR_VERSION`.
 
-</scalar-callout>
+</scalar-detail>
 
 <scalar-callout type="warning">
 
@@ -444,14 +454,22 @@ observers, not timing), and whether a payload authenticated.
 
 </scalar-detail>
 
+<scalar-detail title="Provenance">
+
 Written from RFC 9000 and RFC 9001, in this module's own structure: nothing
 here is ported from another implementation. The packet-number decoding
 follows the arithmetic of RFC 9000 §A.3 and the length choice the rule of
 §A.2, neither line by line.
 
-Private names carry the `quicPacket` prefix because a `std/` module's
+</scalar-detail>
+
+<scalar-detail title="Private names">
+
+They carry the `quicPacket` prefix because a `std/` module's
 private functions share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e).
+
+</scalar-detail>
 
 ## quicDecryptPacket
 
@@ -476,20 +494,36 @@ function quicDecryptPacket(
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The level's keys, as `quicKeys` or one of its `Into` forms made them.
+
 </scalar-field>
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes `header` was parsed from, only read.
+
 </scalar-field>
 
 <scalar-field name="header" type="QuicHeader" required>
+
+The packet's parsed header.
+
 </scalar-field>
 
 <scalar-field name="packet" type="QuicPacket" required>
+
+What `quicRemoveHeaderProtection` answered for this packet.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the payload authenticated, `QUIC_ERR_RESERVED_BITS` included, so read
+  `packet.error` too.
+
 </scalar-field>
 
 ## quicDecryptPayload
@@ -513,23 +547,41 @@ function quicDecryptPayload(
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The level's keys, as `quicKeys` or one of its `Into` forms made them.
+
 </scalar-field>
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes `header` was parsed from, only read.
+
 </scalar-field>
 
 <scalar-field name="header" type="QuicHeader" required>
+
+The packet's parsed header.
+
 </scalar-field>
 
 <scalar-field name="clear" type="u8[]" required>
+
+What `quicUnprotectHeader` answered for this packet: the AEAD's associated data.
+
 </scalar-field>
 
 <scalar-field name="packet" type="QuicPacket" required>
+
+The result `quicUnprotectHeader` filled for this packet; only its `error` is changed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A new array holding the frames, also for `QUIC_ERR_RESERVED_BITS`, or `null`.
+
 </scalar-field>
 
 ## quicInitialSecrets
@@ -548,11 +600,17 @@ function quicInitialSecrets(
 #### Parameters
 
 <scalar-field name="dcid" type="u8[]" required>
+
+The Destination Connection ID of the client's first Initial, 0 to 20 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicInitialSecrets | null">
+
+The two 32-byte secrets as plain arrays, which are not secret, or `null`.
+
 </scalar-field>
 
 ## quicInitialSecretsInto
@@ -576,26 +634,48 @@ function quicInitialSecretsInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+  before each returns (its `info` label is not).
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The bytes holding the client's first Destination Connection ID, such as the datagram.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset in `buf` where the ID starts.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+The ID's length in bytes, 0 to 20.
+
 </scalar-field>
 
 <scalar-field name="client" type="u8[]" required>
+
+The 32-byte array `client_initial_secret` is written over.
+
 </scalar-field>
 
 <scalar-field name="server" type="u8[]" required>
+
+The 32-byte array `server_initial_secret` is written over.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when both secrets were written; false, both untouched, otherwise.
+
 </scalar-field>
 
 ## quicKeyUpdateSecret
@@ -616,14 +696,23 @@ function quicKeyUpdateSecret(
 #### Parameters
 
 <scalar-field name="aead" type="i32" required>
+
+The negotiated suite, one of the `QUIC_AEAD_*` constants.
+
 </scalar-field>
 
 <scalar-field name="trafficSecret" type="Secret&lt;u8[]&gt;" required>
+
+The current generation's traffic secret; borrowed, and left for the caller to wipe.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;u8[]&gt; | null">
+
+The next generation's secret, a new `Secret` the caller owns and wipes, or `null`.
+
 </scalar-field>
 
 ## quicKeyUpdateSecretHeldInto
@@ -644,14 +733,23 @@ function quicKeyUpdateSecretHeldInto(
 #### Parameters
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
+
+The secret overwritten with the next generation's; the caller's, and the caller wipes it.
+
 </scalar-field>
 
 <scalar-field name="src" type="Secret&lt;u8[]&gt;" required>
+
+The current generation's secret; borrowed, and not wiped here unless it is `dst`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when `dst` holds the next secret; false, both untouched, for mismatched or wrong lengths.
+
 </scalar-field>
 
 ## quicKeyUpdateSecretInto
@@ -672,20 +770,36 @@ function quicKeyUpdateSecretInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+  before each returns (its `info` label is not).
+
 </scalar-field>
 
 <scalar-field name="aead" type="i32" required>
+
+The negotiated suite, one of the `QUIC_AEAD_*` constants.
+
 </scalar-field>
 
 <scalar-field name="secret" type="u8[]" required>
+
+The current traffic secret as a plain array; only read, and not wiped.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The array the next secret is written over, 32 bytes (48 for AES-256-GCM).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when `out` holds the next secret; false, `out` untouched, for a wrong length or `aead`.
+
 </scalar-field>
 
 ## quicKeys
@@ -717,17 +831,30 @@ function quicKeys(
 #### Parameters
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
+
+The caller's slot to derive into; its earlier keys are overwritten.
+
 </scalar-field>
 
 <scalar-field name="aead" type="i32" required>
+
+The negotiated suite, one of the `QUIC_AEAD_*` constants.
+
 </scalar-field>
 
 <scalar-field name="trafficSecret" type="Secret&lt;u8[]&gt;" required>
+
+The level's traffic secret, 32 bytes (48 for AES-256-GCM); borrowed: it is
+  not wiped here, and the caller wipes it once no more keys come from it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicKeys | null">
+
+`slot.keys`, valid until the slot is derived into again or wiped, or `null`.
+
 </scalar-field>
 
 ## quicKeysHeldInto
@@ -749,17 +876,29 @@ function quicKeysHeldInto(
 #### Parameters
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
+
+The caller's slot to derive into; its earlier keys are overwritten.
+
 </scalar-field>
 
 <scalar-field name="aead" type="i32" required>
+
+The negotiated suite, one of the `QUIC_AEAD_*` constants.
+
 </scalar-field>
 
 <scalar-field name="secret" type="Secret&lt;u8[]&gt;" required>
+
+The traffic secret, 32 bytes (48 for AES-256-GCM); borrowed, and left for the caller to wipe.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicKeys | null">
+
+`slot.keys`, valid until the slot is derived into again or wiped, or `null`.
+
 </scalar-field>
 
 ## quicKeysInto
@@ -782,20 +921,37 @@ function quicKeysInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+  before each returns (its `info` label is not).
+
 </scalar-field>
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
+
+The caller's slot to derive into; its earlier keys are overwritten.
+
 </scalar-field>
 
 <scalar-field name="aead" type="i32" required>
+
+The negotiated suite, one of the `QUIC_AEAD_*` constants.
+
 </scalar-field>
 
 <scalar-field name="secret" type="u8[]" required>
+
+The traffic secret as a plain array, 32 bytes (48 for AES-256-GCM); only read, and not
+  wiped, so a caller passing a non-Initial secret wipes it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicKeys | null">
+
+`slot.keys`, valid until the slot is derived into again or wiped, or `null`.
+
 </scalar-field>
 
 ## quicKeysUpdate
@@ -822,17 +978,29 @@ function quicKeysUpdate(
 #### Parameters
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
+
+The caller's slot for the next generation; a different slot from the one `keys` live in.
+
 </scalar-field>
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The current generation's keys, whose header-protection key is copied; left unchanged.
+
 </scalar-field>
 
 <scalar-field name="nextSecret" type="Secret&lt;u8[]&gt;" required>
+
+The next generation's traffic secret; borrowed, and left for the caller to wipe.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicKeys | null">
+
+`slot.keys`, valid until the slot is derived into again or wiped, or `null`.
+
 </scalar-field>
 
 ## quicKeysUpdateInto
@@ -841,6 +1009,9 @@ function quicKeysUpdate(
 the next generation's packet key and IV from `nextSecret`, and `keys`'
 header-protection key shared, as every generation shares it (RFC 9001
 §6). Answers the slot's keys, or `null` where `quicKeysUpdate` does.
+Unlike `quicKeysUpdate` the header-protection key and its schedule are the
+same arrays as `keys`', not a copy, so wiping either generation zeroes the
+header-protection key both use.
 
 ```ts
 function quicKeysUpdateInto(
@@ -854,20 +1025,36 @@ function quicKeysUpdateInto(
 #### Parameters
 
 <scalar-field name="kdf" type="HkdfScratch" required>
+
+The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+  before each returns (its `info` label is not).
+
 </scalar-field>
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
+
+The caller's slot for the next generation; a different slot from the one `keys` live in.
+
 </scalar-field>
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The current generation's keys, whose header-protection arrays are shared; left unchanged.
+
 </scalar-field>
 
 <scalar-field name="nextSecret" type="u8[]" required>
+
+The next generation's traffic secret as a plain array; only read, and not wiped.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicKeys | null">
+
+`slot.keys`, valid until the slot is derived into again or wiped, or `null`.
+
 </scalar-field>
 
 ## quicKeysWipe
@@ -886,6 +1073,10 @@ function quicKeysWipe(keys: QuicKeys): void
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The keys to zero. Nothing marks them wiped and nothing refuses them afterwards, so derive
+  into them again before sealing or opening with them.
+
 </scalar-field>
 
 ## quicLongHeader
@@ -919,29 +1110,53 @@ function quicLongHeader(
 #### Parameters
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_PACKET_INITIAL`, `QUIC_PACKET_ZERO_RTT` or `QUIC_PACKET_HANDSHAKE`.
+
 </scalar-field>
 
 <scalar-field name="dcid" type="u8[]" required>
+
+The Destination Connection ID, 0 to 20 bytes.
+
 </scalar-field>
 
 <scalar-field name="scid" type="u8[]" required>
+
+The Source Connection ID, 0 to 20 bytes.
+
 </scalar-field>
 
 <scalar-field name="token" type="u8[]" required>
+
+An Initial's token, or empty.
+
 </scalar-field>
 
 <scalar-field name="packetNumber" type="i64" required>
+
+The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+
 </scalar-field>
 
 <scalar-field name="pnLength" type="i32" required>
+
+The packet number's length on the wire, 1 to 4 bytes.
+
 </scalar-field>
 
 <scalar-field name="payloadLength" type="i32" required>
+
+The plaintext payload's length in bytes, without the AEAD tag.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A new array holding the header, or `null` for an argument out of range.
+
 </scalar-field>
 
 ## quicLongHeaderSize
@@ -964,29 +1179,54 @@ function quicLongHeaderSize(
 #### Parameters
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_PACKET_INITIAL`, `QUIC_PACKET_ZERO_RTT` or `QUIC_PACKET_HANDSHAKE`.
+
 </scalar-field>
 
 <scalar-field name="dcidLength" type="i32" required>
+
+The Destination Connection ID's length in bytes, 0 to 20.
+
 </scalar-field>
 
 <scalar-field name="scidLength" type="i32" required>
+
+The Source Connection ID's length in bytes, 0 to 20.
+
 </scalar-field>
 
 <scalar-field name="tokenLength" type="i32" required>
+
+The token's length in bytes; 0 for anything but an Initial.
+
 </scalar-field>
 
 <scalar-field name="packetNumber" type="i64" required>
+
+The full packet number, 0 to 2^62 - 1; only range-checked, as the size does not
+  depend on it.
+
 </scalar-field>
 
 <scalar-field name="pnLength" type="i32" required>
+
+The packet number's length on the wire, 1 to 4 bytes.
+
 </scalar-field>
 
 <scalar-field name="payloadLength" type="i32" required>
+
+The plaintext payload's length in bytes, without the AEAD tag.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The header's length in bytes, packet number included, or 0 for an argument out of range.
+
 </scalar-field>
 
 ## quicOpenPacket
@@ -1009,25 +1249,41 @@ function quicOpenPacket(
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The level's keys, as `quicKeys` or one of its `Into` forms made them.
+
 </scalar-field>
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes `header` was parsed from, only read.
+
 </scalar-field>
 
 <scalar-field name="header" type="QuicHeader" required>
+
+The packet's parsed header.
+
 </scalar-field>
 
 <scalar-field name="largestPn" type="i64" required>
+
+The largest packet number processed in the packet's space, or -1 for none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicPacket">
+
+A new `QuicPacket`; read its `error` before any other field.
+
 </scalar-field>
 
 ## quicPacketCopy
 
 Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows.
+A byte outside either window is skipped rather than written, so a wrong window cannot panic.
 
 ```ts
 function quicPacketCopy(
@@ -1042,18 +1298,33 @@ function quicPacketCopy(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into; it is not grown.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset in `buf` of the first byte written.
+
 </scalar-field>
 
 <scalar-field name="bytes" type="u8[]" required>
+
+The bytes to copy from.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The byte offset in `bytes` of the first byte copied.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to copy.
+
 </scalar-field>
 
 ## quicPacketGrow
@@ -1071,9 +1342,15 @@ function quicPacketGrow(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to lengthen.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+How many zero bytes to append; 0 or less appends none.
+
 </scalar-field>
 
 ## quicPacketNumberDecode
@@ -1095,17 +1372,29 @@ function quicPacketNumberDecode(
 #### Parameters
 
 <scalar-field name="largestPn" type="i64" required>
+
+The largest packet number processed in this space, or -1 for none.
+
 </scalar-field>
 
 <scalar-field name="truncatedPn" type="i64" required>
+
+The packet number's low bytes as the header carried them, below 2^(8 × `pnLength`).
+
 </scalar-field>
 
 <scalar-field name="pnLength" type="i32" required>
+
+The packet number's length on the wire, 1 to 4 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The full packet number, 0 to 2^62 - 1, or -1 for an argument out of range.
+
 </scalar-field>
 
 ## quicPacketNumberLength
@@ -1126,14 +1415,23 @@ function quicPacketNumberLength(
 #### Parameters
 
 <scalar-field name="fullPn" type="i64" required>
+
+The packet number about to be sent, 0 to 2^62 - 1.
+
 </scalar-field>
 
 <scalar-field name="largestAcked" type="i64" required>
+
+The largest packet number the peer has acknowledged in this space, or -1 for none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The packet-number length in bytes, 1 to 4, or 0 when none will do.
+
 </scalar-field>
 
 ## quicParseHeader
@@ -1160,17 +1458,29 @@ function quicParseHeader(
 #### Parameters
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes, only read; the datagram runs to the array's end.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset where the packet starts.
+
 </scalar-field>
 
 <scalar-field name="shortDcidLength" type="i32" required>
+
+The length in bytes of the connection IDs this endpoint hands out, 0 to 20.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicHeader">
+
+A new `QuicHeader`; read its `error` before any other field.
+
 </scalar-field>
 
 ## quicParseHeaderInto
@@ -1198,23 +1508,41 @@ function quicParseHeaderInto(
 #### Parameters
 
 <scalar-field name="header" type="QuicHeader" required>
+
+The header to overwrite; its windows index into `datagram`.
+
 </scalar-field>
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes, only read.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset where the packet starts.
+
 </scalar-field>
 
 <scalar-field name="limit" type="i32" required>
+
+The byte offset one past the datagram's end.
+
 </scalar-field>
 
 <scalar-field name="shortDcidLength" type="i32" required>
+
+The length in bytes of the connection IDs this endpoint hands out, 0 to 20.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`QUIC_PACKET_OK`, or the `QUIC_ERR_*` that stopped the parse.
+
 </scalar-field>
 
 ## quicPutLongHeader
@@ -1244,41 +1572,78 @@ function quicPutLongHeader(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into; it is not grown.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset in `buf` where the packet starts.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_PACKET_INITIAL`, `QUIC_PACKET_ZERO_RTT` or `QUIC_PACKET_HANDSHAKE`.
+
 </scalar-field>
 
 <scalar-field name="dcid" type="u8[]" required>
+
+The bytes holding the Destination Connection ID at their start.
+
 </scalar-field>
 
 <scalar-field name="dcidLength" type="i32" required>
+
+How many bytes of `dcid` are the ID, 0 to 20.
+
 </scalar-field>
 
 <scalar-field name="scid" type="u8[]" required>
+
+The bytes holding the Source Connection ID at their start.
+
 </scalar-field>
 
 <scalar-field name="scidLength" type="i32" required>
+
+How many bytes of `scid` are the ID, 0 to 20.
+
 </scalar-field>
 
 <scalar-field name="token" type="u8[]" required>
+
+The whole of an Initial's token; empty for the other types.
+
 </scalar-field>
 
 <scalar-field name="packetNumber" type="i64" required>
+
+The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+
 </scalar-field>
 
 <scalar-field name="pnLength" type="i32" required>
+
+The packet number's length on the wire, 1 to 4 bytes.
+
 </scalar-field>
 
 <scalar-field name="payloadLength" type="i32" required>
+
+The plaintext payload's length in bytes, without the AEAD tag.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The byte offset one past the packet number, where the payload goes, or -1 when nothing was
+  written.
+
 </scalar-field>
 
 ## quicPutShortHeader
@@ -1304,32 +1669,61 @@ function quicPutShortHeader(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into; it is not grown.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset in `buf` where the packet starts.
+
 </scalar-field>
 
 <scalar-field name="dcid" type="u8[]" required>
+
+The bytes holding the Destination Connection ID at their start.
+
 </scalar-field>
 
 <scalar-field name="dcidLength" type="i32" required>
+
+How many bytes of `dcid` are the ID, 0 to 20.
+
 </scalar-field>
 
 <scalar-field name="spin" type="boolean" required>
+
+The latency spin bit (RFC 9000 §17.4).
+
 </scalar-field>
 
 <scalar-field name="keyPhase" type="boolean" required>
+
+The Key Phase bit, which says which generation of 1-RTT keys protects the packet
+  (RFC 9001 §6).
+
 </scalar-field>
 
 <scalar-field name="packetNumber" type="i64" required>
+
+The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+
 </scalar-field>
 
 <scalar-field name="pnLength" type="i32" required>
+
+The packet number's length on the wire, 1 to 4 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The byte offset one past the packet number, where the payload goes, or -1 when nothing was
+  written.
+
 </scalar-field>
 
 ## quicRemoveHeaderProtection
@@ -1359,20 +1753,35 @@ function quicRemoveHeaderProtection(
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The level's keys; the whole set must be usable, though only the header-protection key is used.
+
 </scalar-field>
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes `header` was parsed from, only read.
+
 </scalar-field>
 
 <scalar-field name="header" type="QuicHeader" required>
+
+The packet's parsed header.
+
 </scalar-field>
 
 <scalar-field name="largestPn" type="i64" required>
+
+The largest packet number processed in the packet's space, or -1 for none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicPacket">
+
+A new `QuicPacket` with no payload yet; read its `error` before any other field.
+
 </scalar-field>
 
 ## quicRetryIntegrityTag
@@ -1393,14 +1802,23 @@ function quicRetryIntegrityTag(
 #### Parameters
 
 <scalar-field name="odcid" type="u8[]" required>
+
+The Destination Connection ID of the client's first Initial, 0 to 20 bytes.
+
 </scalar-field>
 
 <scalar-field name="retryWithoutTag" type="u8[]" required>
+
+The Retry packet from its first byte to just before the tag, only read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The 16-byte tag as a new array, or `null`.
+
 </scalar-field>
 
 ## quicRetryPacket
@@ -1426,23 +1844,41 @@ function quicRetryPacket(
 #### Parameters
 
 <scalar-field name="dcid" type="u8[]" required>
+
+The client's Source Connection ID, which the Retry is sent to; 0 to 20 bytes.
+
 </scalar-field>
 
 <scalar-field name="scid" type="u8[]" required>
+
+The server's new Source Connection ID, 0 to 20 bytes.
+
 </scalar-field>
 
 <scalar-field name="token" type="u8[]" required>
+
+The address-validation token the client is to echo; at least one byte.
+
 </scalar-field>
 
 <scalar-field name="odcid" type="u8[]" required>
+
+The Destination Connection ID of the client's first Initial, 0 to 20 bytes.
+
 </scalar-field>
 
 <scalar-field name="unused" type="i32" required>
+
+The first byte's four low bits, 0 to 15.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A new array holding the whole Retry, tag included, or `null`.
+
 </scalar-field>
 
 ## quicRetryVerify
@@ -1463,17 +1899,31 @@ function quicRetryVerify(
 #### Parameters
 
 <scalar-field name="odcid" type="u8[]" required>
+
+The Destination Connection ID of the Initial this client sent.
+
 </scalar-field>
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes `header` was parsed from, only read.
+
 </scalar-field>
 
 <scalar-field name="header" type="QuicHeader" required>
+
+The Retry's header from `quicParseHeader`, which copies out `retryTag`;
+  `quicParseHeaderInto` leaves that array as it was.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the integrity tag is valid for `odcid`: the packet was not altered and answers the
+  Initial that carried that DCID. It authenticates nothing more (RFC 9001 §5.8).
+
 </scalar-field>
 
 ## quicSealInPlace
@@ -1503,26 +1953,47 @@ function quicSealInPlace(
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The level's keys, as `quicKeys` or one of its `Into` forms made them.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer holding the packet; it is not grown, so it needs 16 bytes of room past the payload.
+
 </scalar-field>
 
 <scalar-field name="start" type="i32" required>
+
+The byte offset in `buf` where the packet starts.
+
 </scalar-field>
 
 <scalar-field name="headerLength" type="i32" required>
+
+The header's length in bytes, packet number included.
+
 </scalar-field>
 
 <scalar-field name="payloadLength" type="i32" required>
+
+The plaintext payload's length in bytes; with the packet number, at least 4.
+
 </scalar-field>
 
 <scalar-field name="packetNumber" type="i64" required>
+
+The full packet number the header carries, 0 to 2^62 - 1.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The byte offset one past the AEAD tag, or -1 when the packet is not to be sent.
+
 </scalar-field>
 
 ## quicSealPacket
@@ -1555,20 +2026,35 @@ function quicSealPacket(
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The level's keys, as `quicKeys` or one of its `Into` forms made them.
+
 </scalar-field>
 
 <scalar-field name="header" type="u8[]" required>
+
+The unprotected header, only read.
+
 </scalar-field>
 
 <scalar-field name="packetNumber" type="i64" required>
+
+The full packet number the header carries, 0 to 2^62 - 1.
+
 </scalar-field>
 
 <scalar-field name="payload" type="u8[]" required>
+
+The plaintext frames, only read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A new array holding the protected packet, 16 bytes longer than header and payload, or `null`.
+
 </scalar-field>
 
 ## quicShortHeader
@@ -1592,23 +2078,42 @@ function quicShortHeader(
 #### Parameters
 
 <scalar-field name="dcid" type="u8[]" required>
+
+The Destination Connection ID, 0 to 20 bytes.
+
 </scalar-field>
 
 <scalar-field name="spin" type="boolean" required>
+
+The latency spin bit (RFC 9000 §17.4).
+
 </scalar-field>
 
 <scalar-field name="keyPhase" type="boolean" required>
+
+The Key Phase bit, which says which generation of 1-RTT keys protects the packet
+  (RFC 9001 §6).
+
 </scalar-field>
 
 <scalar-field name="packetNumber" type="i64" required>
+
+The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+
 </scalar-field>
 
 <scalar-field name="pnLength" type="i32" required>
+
+The packet number's length on the wire, 1 to 4 bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A new array holding the header, or `null` for an argument out of range.
+
 </scalar-field>
 
 ## quicUnprotectHeader
@@ -1634,23 +2139,41 @@ function quicUnprotectHeader(
 #### Parameters
 
 <scalar-field name="keys" type="QuicKeys" required>
+
+The level's keys, as `quicKeys` or one of its `Into` forms made them.
+
 </scalar-field>
 
 <scalar-field name="datagram" type="u8[]" required>
+
+The received bytes `header` was parsed from, only read.
+
 </scalar-field>
 
 <scalar-field name="header" type="QuicHeader" required>
+
+The packet's parsed header.
+
 </scalar-field>
 
 <scalar-field name="largestPn" type="i64" required>
+
+The largest packet number processed in the packet's space, or -1 for none.
+
 </scalar-field>
 
 <scalar-field name="packet" type="QuicPacket" required>
+
+The result to overwrite; its `header` and `payload` arrays are not touched.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A new array holding the header in the clear, or an empty one when `packet.error` is set.
+
 </scalar-field>
 
 ## quicVarintLength
@@ -1669,14 +2192,23 @@ function quicVarintLength(
 #### Parameters
 
 <scalar-field name="bytes" type="u8[]" required>
+
+The bytes holding the integer.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset of the integer's first byte.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The integer's length in bytes, which may run past the end of `bytes`; or 0.
+
 </scalar-field>
 
 ## quicVarintPush
@@ -1695,14 +2227,23 @@ function quicVarintPush(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to append to.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+The integer, 0 to 2^62 - 1.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the integer was appended.
+
 </scalar-field>
 
 ## quicVarintPushSized
@@ -1722,17 +2263,29 @@ function quicVarintPushSized(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The array to append to.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+The integer, 0 to 2^62 - 1.
+
 </scalar-field>
 
 <scalar-field name="size" type="i32" required>
+
+The encoded length in bytes: 1, 2, 4 or 8, at least `quicVarintSize(value)`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the integer was appended.
+
 </scalar-field>
 
 ## quicVarintPut
@@ -1755,20 +2308,35 @@ function quicVarintPut(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into; it is not grown.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset of the integer's first byte.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+The integer, 0 to 2^62 - 1.
+
 </scalar-field>
 
 <scalar-field name="size" type="i32" required>
+
+The encoded length in bytes: 1, 2, 4 or 8, at least `quicVarintSize(value)`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The byte offset one past the integer, or -1 when nothing was written.
+
 </scalar-field>
 
 ## quicVarintRead
@@ -1789,17 +2357,29 @@ function quicVarintRead(
 #### Parameters
 
 <scalar-field name="bytes" type="u8[]" required>
+
+The bytes holding the integer.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The byte offset of the integer's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+The byte offset the integer must end at or before, at most `bytes.length`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The integer, 0 to 2^62 - 1, or -1 when it cannot be read.
+
 </scalar-field>
 
 ## quicVarintSize
@@ -1814,11 +2394,17 @@ function quicVarintSize(value: i64): i32
 #### Parameters
 
 <scalar-field name="value" type="i64" required>
+
+The integer to encode.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The encoded length in bytes, or 0 when `value` has no encoding.
+
 </scalar-field>
 
 ## QuicHeader
@@ -1866,7 +2452,7 @@ class QuicInitialSecrets
 
 | Member | |
 | --- | --- |
-| `new QuicInitialSecrets(client: u8[], server: u8[])` |  |
+| `new QuicInitialSecrets(client: u8[], server: u8[])` | Pairs two secrets already derived, keeping the arrays rather than copying them. |
 | `client: u8[]` | `client_initial_secret`: what protects the client's Initial packets. |
 | `server: u8[]` | `server_initial_secret`: what protects the server's. |
 
@@ -1883,7 +2469,7 @@ class QuicKeys
 
 | Member | |
 | --- | --- |
-| `new QuicKeys(aead: i32, key: u8[], iv: u8[], hp: u8[])` |  |
+| `new QuicKeys(aead: i32, key: u8[], iv: u8[], hp: u8[])` | Wraps keys already derived; the arrays are kept, not copied, so they stay the owner's to wipe. `packetAes` and `hpAes` start `null`; the `quicKeys*` functions fill them for the AES suites. A `QuicKeys` built by hand for an AES suite stays unusable: opening refuses it with `QUIC_ERR_KEYS`, and sealing answers `null`. |
 | `aead: i32` | `QUIC_AEAD_AES_128_GCM`, `_AES_256_GCM` or `_CHACHA20_POLY1305`. |
 | `hp: u8[]` | The header-protection key, the same length as `key`. |
 | `hpAes: AesKey \| null` | `hp` expanded, for the AES suites; `null` for ChaCha20-Poly1305. |

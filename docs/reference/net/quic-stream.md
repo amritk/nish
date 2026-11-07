@@ -51,6 +51,21 @@ import {
 } from "nish/net/quic-stream";
 ```
 
+```ts
+const pools = new QuicStreamPools(65536, 111, 64)         // 64 connections of 100 + 3 + 8 slots
+const streams = new QuicStreams(100, 3, 8, 65536, 1048576) // client bidi, client uni, own; bytes
+streams.share(pools)                                       // before any stream has borrowed
+streams.setPeerLimits(maxData, bidiLocal, bidiRemote, uni, maxStreamsBidi, maxStreamsUni)
+streams.prime(packetLength)                                // per packet, before its frames: fills the reserve
+const error: i64 = streams.onStream(frame.streamId, frame.offset, payload, frame.dataStart,
+  frame.dataLength, frame.fin)                             // 0, or the transport error to close with
+const id: i64 = frame.streamId                             // the stream the frame was for
+const got: i32 = streams.read(id, into, 0, 4096)           // bytes, 0, QUIC_STREAM_END or an error
+const taken: i32 = streams.write(id, reply, 0, toI32(reply.length), true)
+streams.beginPacket()
+const next: i32 = streams.putNextChunk(out, at, end)       // `at` when no frame fits
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="quicStreamBit" icon="phosphor/regular/function" href="#quicstreambit">
@@ -209,14 +224,23 @@ function quicStreamBit(
 #### Parameters
 
 <scalar-field name="bits" type="u8[]" required>
+
+A bitmap, bit `k` in byte `k >> 3` at bit `k & 7`.
+
 </scalar-field>
 
 <scalar-field name="k" type="i32" required>
+
+The bit's index, from 0.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the bit is set; false when it is clear or `k` is outside the array.
+
 </scalar-field>
 
 ## quicStreamGrowFree
@@ -236,12 +260,21 @@ function quicStreamGrowFree(
 #### Parameters
 
 <scalar-field name="free" type="u8[][]" required>
+
+A pool's free list; its length is unchanged on return.
+
 </scalar-field>
 
 <scalar-field name="target" type="i32" required>
+
+The capacity, in entries, the list is grown to. No larger than its length does nothing.
+
 </scalar-field>
 
 <scalar-field name="none" type="u8[]" required>
+
+The placeholder pushed and popped, the table's empty array.
+
 </scalar-field>
 
 ## quicStreamIsLocal
@@ -255,11 +288,17 @@ function quicStreamIsLocal(id: i64): boolean
 #### Parameters
 
 <scalar-field name="id" type="i64" required>
+
+A stream ID (§2.1).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True for a server-opened stream, false for a client-opened one.
+
 </scalar-field>
 
 ## quicStreamIsUni
@@ -273,11 +312,17 @@ function quicStreamIsUni(id: i64): boolean
 #### Parameters
 
 <scalar-field name="id" type="i64" required>
+
+A stream ID (§2.1).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when only the opener sends on it, false for a bidirectional stream.
+
 </scalar-field>
 
 ## quicStreamSetBit
@@ -295,12 +340,21 @@ function quicStreamSetBit(
 #### Parameters
 
 <scalar-field name="bits" type="u8[]" required>
+
+A bitmap, bit `k` in byte `k >> 3` at bit `k & 7`; changed in place.
+
 </scalar-field>
 
 <scalar-field name="k" type="i32" required>
+
+The bit's index, from 0. An index outside the array changes nothing.
+
 </scalar-field>
 
 <scalar-field name="on" type="boolean" required>
+
+True to set the bit, false to clear it.
+
 </scalar-field>
 
 ## QuicStream
@@ -316,48 +370,26 @@ class QuicStream
 | Member | |
 | --- | --- |
 | `new QuicStream(bufferSize: i32, none: u8[])` | A slot for buffers of `bufferSize` bytes, holding none: each side starts as `none`, the table's empty array. |
-| `blockedAt: i64` | The limit the last STREAM_DATA_BLOCKED named, or -1. |
-| `blockedOwed: boolean` |  |
-| `finAcked: boolean` |  |
-| `finQueued: boolean` | Whether the application wrote the FIN, a frame carried it, and the peer acknowledged it. |
-| `finSent: boolean` |  |
 | `id: i64` |  |
-| `maxDataOwed: boolean` | What this stream owes the peer: MAX_STREAM_DATA, STREAM_DATA_BLOCKED, RESET_STREAM, STOP_SENDING. |
-| `queued: boolean` | Whether the slot is in the event ring. |
 | `recvBuf: u8[]` | The receive buffer: byte `o` of the stream at `o % size`, its bit in `recvHave` set while unread. Both are the table's empty array until the first byte arrives and after the side is done, and borrowed in between. |
 | `recvContiguous: i64` | Every byte below this has arrived. |
 | `recvFinal: i64` | The final size once a FIN or RESET_STREAM fixed it, or -1. |
 | `recvHave: u8[]` |  |
 | `recvHighest: i64` | The highest offset any frame reached, which flow control counts. |
 | `recvLimit: i64` | The credit this side gave: no byte at or past this offset may arrive. |
-| `recvRead: i64` | How far the application has read. |
 | `recvState: i32` |  |
-| `resendFin: boolean` |  |
 | `resendHigh: i64` |  |
 | `resendLow: i64` | Bytes a lost packet carried, `[resendLow, resendHigh)`, or -1; `resendFin` when the FIN was among them. |
 | `resetCode: i64` | The peer's RESET_STREAM error code, or -1. |
-| `resetFinal: i64` |  |
-| `resetOwed: boolean` |  |
-| `resetSentCode: i64` | The error code of this side's RESET_STREAM, and its final size. |
 | `sendAcked: u8[]` |  |
 | `sendBase: i64` | Every byte below this was acknowledged, and its room released. |
 | `sendBuf: u8[]` | The send buffer: byte `o` at `o % size`, its bit in `sendAcked` set once acknowledged and not yet released. Borrowed by the first write, and kept until every byte is acknowledged or the side is reset, since a lost packet is sent again from it. |
 | `sendEnd: i64` | One past the last byte written. |
-| `sendLimit: i64` | The credit the peer gave: no byte at or past this offset may be sent. |
 | `sendNext: i64` | The next byte never sent: the stream's credit and the connection's count up to here. |
 | `sendState: i32` |  |
-| `size: i32` | The bytes of each buffer once borrowed, which the offsets wrap at whether or not one is. |
 | `stopCode: i64` | The peer's STOP_SENDING error code, or -1. |
-| `stopOwed: boolean` |  |
-| `stopSendingCode: i64` | The STOP_SENDING error code this side asked with, or -1. |
-| `wantsWrite: boolean` | Whether a write was cut short for room, so freed room is an event. |
 | `at(offset: i64): i32` | The buffer index of stream offset `offset`. |
-| `finished(): boolean` | Whether both sides are done, so the slot can be freed (§3.3). |
-| `open(id: i64, recvLimit: i64, sendLimit: i64): void` | Empties the slot for stream `id`, with `recvLimit` and `sendLimit` its first credits. It holds no buffers here, and a borrowed bitmap comes back from its pool already zeroed. |
-| `readable(): i64` | How many bytes can be read now. |
-| `resend(offset: i64, length: i32, fin: boolean): void` | Merges `[offset, offset + length)` into the range to send again, with the FIN when it was lost too. |
 | `room(): i64` | How many more bytes the send buffer takes. |
-| `wantsToSend(): boolean` | Whether the sending side has a frame to go: lost bytes, new bytes, or a FIN not yet sent. |
 
 ## QuicStreamPools
 
@@ -398,19 +430,10 @@ class QuicStreamPools
 | `new QuicStreamPools(bufferSize: i32, streams: i32, connections: i32)` | Pools for `connections` connections of `streams` stream slots each, `bufferSize` bytes each way. |
 | `bits: BufferPool` |  |
 | `data: BufferPool` |  |
-| `hold: i32` | The most the reserve keeps from one packet to the next: one connection's stream count. |
-| `none: u8[]` | The empty array a free reserve entry holds. |
 | `ready: i32` | How many buffers the reserve holds. |
 | `readyBits: u8[][]` |  |
 | `readyData: u8[][]` | The reserve: `ready` buffers and their bitmaps, taken from the pools and not lent to a stream; the rest of each list is `none`. |
-| `room: i32` | How many buffers each pool's free list has been grown to hold, by `fit`. |
-| `drain(most: i32): void` | Gives the reserve's buffers past the first `most` back to the pools, each already zeroed by `keep`. Never inside an arena scope. |
-| `fit(): void` | Grows each pool's free list until it can hold every buffer the pool has made, by pushing `none` and popping it straight off again, so that a give-back never grows it. A slot's `reset` gives back every buffer its connection held at once, more than the free list ever held before, and the arena must not move by it (QUIC-3). The room doubles, so the pushes cost O(1) for each buffer made. |
-| `keep(buf: u8[], have: u8[], used: i32): void` | Takes `buf` and its bitmap `have` back into the reserve, zeroing the first `used` bytes of the buffer and the bits of them. Safe inside an arena scope. Panics when the reserve is full: more given back between two `drain`s than one connection holds, a table's bug. |
-| `lend(stream: QuicStream): void` | Lends the reserve's last buffer, into `stream`'s receive side. Panics when the reserve is empty: a packet handled without `prime`. |
-| `lendSend(stream: QuicStream): void` | Lends `stream` a send buffer and bitmap: taken from the pools while they have one to give, else the reserve's last. The reserve counts against the same ceiling, so once the pools have made every buffer and lent them all, a send side wanting one means the reserve holds it. Never inside an arena scope, where a take would allocate. |
 | `lent(): i32` | How many buffers and bitmaps are lent to streams now, the reserve's left out: 0 once every stream that borrowed has given back. |
-| `prime(need: i32): void` | Readies the reserve for a packet that could start `need` receive sides: trims it to `hold` buffers, then tops it up to `need`. Takes and gives only when it is outside that window. Never inside an arena scope. |
 
 ## QuicStreams
 
@@ -427,107 +450,46 @@ class QuicStreams
 | --- | --- |
 | `new QuicStreams(maxBidi: i64, maxUni: i64, localStreams: i64, bufferSize: i32, windowData: i64)` | The table for a connection that lets the client open `maxBidi` bidirectional and `maxUni` unidirectional streams at once and opens `localStreams` of its own, each stream with `bufferSize` bytes each way, and a connection receive window of `windowData` bytes. |
 | `bufferSize: i32` | The bytes of each stream's buffer, each way. |
-| `cursor: i32` | Where the next packet's search for a stream to send starts, and how many it has looked at. |
-| `dataBlockedAt: i64` | The limit the last DATA_BLOCKED named, or -1. |
-| `dataBlockedOwed: boolean` |  |
-| `eventCount: i32` |  |
-| `eventHead: i32` |  |
-| `events: i32[]` | Slots with news for the application, `eventCount` of them from `eventHead`. |
-| `free: i32[]` | The free slots, a stack of `freeCount`, so a stream opens without a scan: a frame naming a high stream ID opens every lower one (§3.2), and each of those costs one pop, not a pass over the table. |
 | `freeCount: i32` | How many slots `free` holds. |
-| `index: i32[]` | Open addressing by ID: `index[h]` is a slot plus one, 0 for empty. |
 | `lastFin: boolean` | Whether the last `putNextChunk` carried the FIN, for the packet's record. |
 | `lastId: i64` | What the last `putNextChunk` or `putNextControl` wrote, for the packet's record. |
 | `lastKind: i32` |  |
 | `lastLength: i32` |  |
 | `lastOffset: i64` |  |
 | `lastValue: i64` |  |
-| `localBidiLimit: i64` |  |
-| `localBidiOpened: i64` | How many of each type this side opened, the client's limits, and how many of this side's are open. |
-| `localOpen: i64` |  |
-| `localStreams: i64` |  |
-| `localUniLimit: i64` |  |
-| `localUniOpened: i64` |  |
-| `locateError: i64` | The transport error `locate` answered -2 for. |
-| `maxBidi: i64` | The configured limits on the client's streams at once and this side's own. |
-| `maxDataOwed: boolean` | What the connection owes: MAX_DATA, DATA_BLOCKED, MAX_STREAMS and STREAMS_BLOCKED of each type. |
-| `maxStreamsBidiOwed: boolean` |  |
-| `maxStreamsUniOwed: boolean` |  |
-| `maxUni: i64` |  |
-| `none: u8[]` | The empty array a side holds while it has no buffer borrowed. |
 | `peerBidiClosed: i64` |  |
 | `peerBidiLimit: i64` |  |
-| `peerBidiLocalCredit: i64` | The peer's credit for each stream type as it opens (its transport parameters). |
 | `peerBidiOpened: i64` | How many of each type the client opened, the limit advertised, and how many of them finished. |
-| `peerBidiRemoteCredit: i64` |  |
 | `peerUniClosed: i64` |  |
-| `peerUniCredit: i64` |  |
 | `peerUniLimit: i64` |  |
 | `peerUniOpened: i64` |  |
 | `pools: QuicStreamPools \| null` | Where the streams borrow their buffers: the table's own pools, or the set a server shares across its connections (`share`). `null` when the streams have no buffers at all (`bufferSize` 0, or no slots). |
 | `recvConsumed: i64` |  |
-| `recvLent: i32` | How many receive sides hold a buffer now: the rest are what a packet could start. |
 | `recvMaxData: i64` | The connection's receive credit: what was advertised, its window, what arrived, and what was read. |
 | `recvTotal: i64` |  |
-| `scanned: i32` |  |
 | `sendMaxData: i64` | The connection's send credit from the peer, what was sent against it, and what is written but not sent. |
 | `sendTotal: i64` |  |
 | `slots: QuicStream[]` |  |
-| `streamOwes: boolean` | Whether some stream may owe a control frame, so `putNextControl` looks at the slots at all. |
-| `streamsBlockedBidiAt: i64` | The limit each STREAMS_BLOCKED named, or -1. |
-| `streamsBlockedBidiOwed: boolean` |  |
-| `streamsBlockedUniAt: i64` |  |
-| `streamsBlockedUniOwed: boolean` |  |
 | `windowData: i64` |  |
 | `writtenTotal: i64` |  |
 | `beginPacket(): void` | Starts a packet: the next `putNextChunk` calls look at each stream at most once. |
-| `borrowRecv(stream: QuicStream): void` | Lends `stream` a receive buffer and bitmap from the reserve `prime` filled, unless it holds them already or the streams have none. Panics when the reserve is empty: a packet handled without `prime`, where a take would allocate inside the scope. |
-| `borrowSend(stream: QuicStream): void` | Borrows `stream`'s send buffer and bitmap from the pools, unless it holds them already or the streams have none. |
-| `bucket(id: i64): i32` | The hash bucket `id` starts its probe at. |
 | `chunkAcked(id: i64, offset: i64, length: i32, fin: boolean): void` | A packet that carried bytes `[offset, offset + length)` of stream `id`, and its FIN when `fin`, was acknowledged: the bytes are marked, the buffer's start moves past every acknowledged one, and once all of them and the FIN are, the sending side is done (§3.1 "Data Recvd"). |
 | `chunkLost(id: i64, offset: i64, length: i32, fin: boolean): void` | A packet that carried those bytes was lost: they are queued to go again, unless the side is done or reset. |
-| `consume(bytes: i64): void` | Counts `bytes` read (or abandoned by a reset) toward the connection's credit, raising it once half the window is used. |
-| `controlAcked(kind: i32, value: i64): void` | A packet that carried control frame `kind` (for stream `value`, or 0) was acknowledged: a RESET_STREAM acknowledged ends its sending side (§3.1 "Reset Recvd"). |
-| `controlLost(kind: i32, value: i64): void` | A packet that carried control frame `kind` was lost: it is owed again with the current value, while it still says something (§13.3) — a BLOCKED frame only while the limit it named still holds. |
-| `creditReceived(stream: QuicStream, end: i64): i64` | Counts the peer's bytes on `stream` up to `end` against the credit this side gave, for the stream and for the connection (§4.1): past either it is FLOW_CONTROL_ERROR. Answers 0 or that. |
 | `find(id: i64): QuicStream \| null` | The stream `id`, or `null` when it is not open. |
 | `giveBack(): void` | Gives every slot's borrowed buffers back, each with its used extent zeroed. |
-| `giveRecv(stream: QuicStream): void` | Gives `stream`'s receive buffer and bitmap back to the pools, zeroing every byte a frame reached: below `recvHighest`, which past a whole buffer is all of it. Nothing when it holds none. |
-| `giveSend(stream: QuicStream): void` | Gives `stream`'s send buffer and bitmap back to the pools, zeroing every byte a write reached: below `sendEnd`, which past a whole buffer is all of it. Called only once nothing can be sent again from it — every byte acknowledged, or the side reset — and before a reset moves `sendEnd` back. |
-| `indexInsert(k: i32, id: i64): void` | Puts slot `k` in the index under its stream's ID. |
-| `indexRemove(k: i32, id: i64): void` | Takes slot `k`, holding `id`, out of the index, moving later entries of its probe run back so none is lost. |
-| `locate(id: i64, receiving: boolean): i32` | The slot a frame for stream `id` refers to (§3.2, §4.6, §19.8): opening it, and every lower stream of its type, when it is the peer's and new. `receiving` says whether the frame is about the stream's receiving half (STREAM, RESET_STREAM, STREAM_DATA_BLOCKED) or its sending half (STOP_SENDING, MAX_STREAM_DATA). Answers the slot; -1 for a stream that finished and is gone, whose frames are ignored; or -2 with `locateError` holding STREAM_LIMIT_ERROR for the peer's stream past the limit, or STREAM_STATE_ERROR for one of this side's that it has not opened or a unidirectional stream without the half the frame is about (§19.4-§19.13). |
-| `nextEvent(): i64` | The ID of the next stream with something new for the application — a stream the peer opened, bytes or a FIN to read, a reset, a STOP_SENDING, or room to write again after a short write — or -1 when there is none. Each stream comes up once however much happened to it; read and write it until it has nothing more to say. |
-| `noteChunk(id: i64, offset: i64, length: i32, fin: boolean): void` | Describes the STREAM frame just written, for the packet's record. |
-| `onMaxData(limit: i64): void` | MAX_DATA (§19.9): more credit for the connection. |
 | `onMaxStreamData(id: i64, limit: i64): i64` | MAX_STREAM_DATA (§19.10): more credit for the stream. Answers 0 or the transport error. |
-| `onMaxStreams(uni: boolean, limit: i64): void` | MAX_STREAMS (§19.11): the peer lets this side open more streams of a type. |
 | `onReset(id: i64, code: i64, finalSize: i64): i64` | RESET_STREAM (§19.4): the peer abandons the stream at `finalSize` with `code`. Answers 0 or the transport error. |
 | `onStopSending(id: i64, code: i64): i64` | STOP_SENDING (§19.5): the peer wants no more of the stream, which this side answers with RESET_STREAM carrying the same code (§3.5). Answers 0 or the transport error. |
 | `onStream(id: i64, offset: i64, buf: u8[], from: i32, length: i32, fin: boolean): i64` | A STREAM frame: `length` bytes of `buf` from `from`, at stream offset `offset`, and the FIN when `fin`. Answers 0, or the transport error that closes the connection: the stream's ID (see `locate`), a stream only this side sends on, the final size, or the credit. |
-| `onStreamDataBlocked(id: i64): i64` | STREAM_DATA_BLOCKED (§19.13): only the ID is checked; credit follows reading, not asking. |
-| `open(bidi: boolean): i64` | Opens a stream of this side's (§2.1): bidirectional when `bidi`, else unidirectional. Answers its ID, or `QUIC_STREAM_ERR_LIMIT` when the peer's limit is reached (STREAMS_BLOCKED is then owed) or every slot for this side's streams is taken. |
-| `openSlot(id: i64): i32` | Opens `id` in a free slot with its first credits; answers the slot, or -1 when none is free. |
-| `ownPools(): QuicStreamPools \| null` | The pools, made for this table alone on first use when nothing shared one: a table that never moves a byte makes none. `null` when the streams have no buffers at all. Pools of one connection make every buffer the table could hold at once, there and then, the footprint the table had when each slot owned its buffers: how many it holds turns on when the peer acknowledges, so a lazily grown private pool would go on allocating after any warm-up. A server's shared pools grow lazily. |
 | `prime(bytes: i32): void` | Readies the pools for a packet of `bytes` bytes, before the arena scope its frames are handled in: one buffer for every receive side it could start, which is no more than the sides holding none, nor than one per three bytes (the smallest STREAM frame carrying a byte, but for a last one without a length).<br><br>The peer's remaining stream credit is no tighter bound: an ACK earlier in the same packet can finish a stream, and `release` then raises the limit before a later STREAM frame opens past the old one. A bound that allows for every such release is one buffer per side holding none, which `idle` already is. Once warm the buffers a packet gives back refill the reserve for the next one, so this costs a handful of comparisons, not a take per side. |
-| `pushFree(k: i32): void` | Puts slot `k` on the free stack. |
-| `putNew(stream: QuicStream, k: i32, buf: u8[], at: i32, end: i32): i32` | One STREAM frame of `stream`'s new bytes within both credits. A stream held back by a credit owes the matching BLOCKED frame, once per limit. |
 | `putNextChunk(buf: u8[], at: i32, end: i32): i32` | Writes one STREAM frame into `buf[at .. end)` for the next stream, in turn, that has one to send: its lost bytes first, else as many new ones as fit and both credits allow, with the FIN when the rest fits. Answers the offset past it, with `lastId`, `lastOffset`, `lastLength` and `lastFin` describing it for the packet's record; or `at` when no stream has a frame that fits. |
-| `putNextControl(buf: u8[], at: i32, end: i32): i32` | Writes the next control frame owed, if it fits in `buf[at .. end)`: MAX_DATA, the MAX_STREAMS and BLOCKED frames, then each stream's MAX_STREAM_DATA, STREAM_DATA_BLOCKED, RESET_STREAM and STOP_SENDING. Answers the offset past it, with `lastKind` (a `QUIC_STREAM_CONTROL_*`) and `lastValue` (the stream it names, or 0) for the packet's record; or `at` when nothing owed fits. |
-| `putResend(stream: QuicStream, buf: u8[], at: i32, end: i32): i32` | One STREAM frame of what `stream` lost: its lost bytes, skipping those acknowledged since, with the FIN only when they run to the final size (§4.5); or, with no bytes left to send again, a lost FIN alone, as a frame of no bytes at the final size. |
-| `putStreamControl(stream: QuicStream, buf: u8[], at: i32, end: i32): i32` | The next control frame `stream` owes, if it fits; sets `lastKind`. |
-| `queue(k: i32): void` | Puts slot `k` on the event ring, unless it is there already. |
 | `read(id: i64, buf: u8[], at: i32, length: i32): i32` | Reads up to `length` bytes of stream `id` into `buf` from `at`. Answers how many it read; 0 when nothing is there yet; `QUIC_STREAM_END` once every byte up to the FIN was read; `QUIC_STREAM_ERR_RESET` once the peer reset it; or another `QUIC_STREAM_ERR_*`. Reading half a buffer gives the peer more credit. A stream's receiving side is done when a read answers `QUIC_STREAM_END` or `QUIC_STREAM_ERR_RESET`, so read until one does. After `QuicConnection.release`, a stream that still owed bytes answers `QUIC_STREAM_END` and copies nothing: its buffer went back to the pool. |
-| `release(k: i32): void` | Frees slot `k` once both of its stream's sides are done (§3.3). A stream the peer opened counts toward raising its limit: MAX_STREAMS is owed once half the configured number have finished since the last one. |
 | `reset(): void` | Frees every slot and puts every counter back, for a connection slot reused for another peer. Every buffer a stream still held goes back to its pool first. |
-| `resetSlot(k: i32, code: i64): void` | Abandons the sending side of slot `k` with `code` (§3.1, §19.4): what was not sent is dropped and RESET_STREAM is owed. |
 | `resetStream(id: i64, code: i64): i32` | Resets stream `id`'s sending side with `code`. Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. |
 | `setPeerLimits(maxData: i64, bidiLocal: i64, bidiRemote: i64, uni: i64, maxStreamsBidi: i64, maxStreamsUni: i64): void` | Takes the peer's transport parameters (RFC 9000 §18.2): its limits on the streams this side opens, the credit each kind of stream starts with, and the connection's. |
 | `share(pools: QuicStreamPools): void` | Borrows the stream buffers from `pools` from now on, in place of the table's own: how a server's connections share one set. Call it before any stream has borrowed, or after `reset`. Panics when the pools' buffers are not `bufferSize` bytes. |
 | `slotOf(id: i64): i32` | The slot of stream `id`, or -1 when it is not open. |
 | `stopSending(id: i64, code: i64): i32` | Asks the peer to stop sending on stream `id`, with `code` (STOP_SENDING, §3.5). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. |
-| `streamControlLost(kind: i32, id: i64): void` | A lost control frame of stream `id`. |
-| `takeFree(): i32` | Takes a free slot off the stack, or -1 when every slot is in use. |
 | `write(id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32` | Writes up to `length` bytes of `buf` from `from` to stream `id`, and its FIN when `fin` and every byte fit. Answers how many bytes it took — fewer than `length` when the send buffer is full, and the stream's event fires once acknowledgements free room — or a `QUIC_STREAM_ERR_*`. |
 
 ## Constants

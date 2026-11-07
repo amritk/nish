@@ -37,11 +37,14 @@ import {
 import { QuicTransportParameters, quicEncodeTransportParameters,
          quicParseTransportParameters } from "nish/net/quic-conn-params";
 
-const mine = new QuicTransportParameters();
-mine.initialMaxData = 65536;
-const bytes: u8[] = quicEncodeTransportParameters(mine);   // for TlsServerConfig
-const theirs = quicParseTransportParameters(clientBytes, false);
-if (theirs.error !== 0) { … close with theirs.error … }
+const mine: QuicTransportParameters = new QuicTransportParameters()
+mine.initialMaxData = 65536
+const bytes: u8[] = quicEncodeTransportParameters(mine)   // for TlsServerConfig
+// bytes is [0x04, 0x04, 0x80, 0x01, 0x00, 0x00]: initial_max_data, length 4, 65536
+const theirs: QuicTransportParameters = quicParseTransportParameters(bytes, false)
+if (theirs.error !== 0) {
+  // close the connection with theirs.error; theirs.errorParameter names the parameter
+}
 ```
 
 <scalar-grid cols="2">
@@ -78,19 +81,19 @@ One endpoint's transport parameters.
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="Defaults">
 
-A `QuicTransportParameters` starts at every parameter's default (§18.2),
-so a parse leaves a parameter the peer did not send at the value the RFC
+A `QuicTransportParameters` starts at every parameter's
+default (§18.2), so a parse leaves a parameter the peer did not send at the value the RFC
 says it then has. The encoder writes a parameter only when it differs from
 that default, plus the connection IDs, which have none.
 
-</scalar-callout>
+</scalar-detail>
 
 <scalar-callout type="warning">
 
-**What a parse refuses**, each a TRANSPORT_PARAMETER_ERROR (§7.4, §18.2):
-an ID or a length that does not fit, a parameter running past the bytes, a
+**What a parse refuses.** Each of these is a TRANSPORT_PARAMETER_ERROR
+(§7.4, §18.2): an ID or a length that does not fit, a parameter running past the bytes, a
 known parameter sent twice, a varint-valued parameter whose value is not
 exactly one varint, `disable_active_migration` with a value, a server-only
 parameter from a client (`original_destination_connection_id`,
@@ -106,9 +109,13 @@ connection's check, because it needs the packet the ID came in.
 
 </scalar-callout>
 
+<scalar-detail title="Provenance">
+
 Written from RFC 9000 §18, in this module's own structure; nothing here is
 ported from another implementation. Private names carry the
 `quicParams` prefix (`docs/wp26-stdlib.md` §3e).
+
+</scalar-detail>
 
 ## quicEncodeTransportParameters
 
@@ -128,11 +135,17 @@ function quicEncodeTransportParameters(
 #### Parameters
 
 <scalar-field name="p" type="QuicTransportParameters" required>
+
+This endpoint's parameters, only read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A new array holding the extension body; empty when every parameter is at its default.
+
 </scalar-field>
 
 ## quicEncodeTransportParametersInto
@@ -152,9 +165,15 @@ function quicEncodeTransportParametersInto(
 #### Parameters
 
 <scalar-field name="p" type="QuicTransportParameters" required>
+
+This endpoint's parameters, only read.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The array the extension body replaces the contents of.
+
 </scalar-field>
 
 ## quicParseTransportParameters
@@ -176,14 +195,23 @@ function quicParseTransportParameters(
 #### Parameters
 
 <scalar-field name="bytes" type="u8[]" required>
+
+The extension body as the peer sent it, only read.
+
 </scalar-field>
 
 <scalar-field name="fromServer" type="boolean" required>
+
+True when the peer is the server, so that the server-only parameters are allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicTransportParameters">
+
+A new `QuicTransportParameters`; read its `error` before any other field.
+
 </scalar-field>
 
 ## quicParseTransportParametersInto
@@ -204,17 +232,29 @@ function quicParseTransportParametersInto(
 #### Parameters
 
 <scalar-field name="p" type="QuicTransportParameters" required>
+
+The object to overwrite with the parsed parameters and the verdict in `error`.
+
 </scalar-field>
 
 <scalar-field name="bytes" type="u8[]" required>
+
+The extension body as the peer sent it, only read.
+
 </scalar-field>
 
 <scalar-field name="fromServer" type="boolean" required>
+
+True when the peer is the server, so that the server-only parameters are allowed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="QuicTransportParameters">
+
+`p` itself; read its `error` before any other field.
+
 </scalar-field>
 
 ## QuicTransportParameters
@@ -282,11 +322,16 @@ The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datag
 
 `QUIC_TP_ACK_DELAY_EXPONENT: i32`
 
+`ack_delay_exponent`: an ACK Delay field counts units of 2^this microseconds; at most 20, default 3.
+
 </scalar-card>
 
 <scalar-card title="0x0e" icon="phosphor/regular/hash">
 
 `QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT: i32`
+
+`active_connection_id_limit`: how many of the peer's connection IDs the sender keeps; at least 2, the
+default.
 
 </scalar-card>
 
@@ -294,11 +339,15 @@ The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datag
 
 `QUIC_TP_DISABLE_ACTIVE_MIGRATION: i32`
 
+`disable_active_migration`: present, with no value, when the sender takes no connection migration.
+
 </scalar-card>
 
 <scalar-card title="0x04" icon="phosphor/regular/hash">
 
 `QUIC_TP_INITIAL_MAX_DATA: i32`
+
+`initial_max_data`: the connection-wide flow-control limit, in bytes.
 
 </scalar-card>
 
@@ -306,11 +355,15 @@ The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datag
 
 `QUIC_TP_INITIAL_MAX_STREAMS_BIDI: i32`
 
+`initial_max_streams_bidi`: how many bidirectional streams the peer may open; at most 2^60.
+
 </scalar-card>
 
 <scalar-card title="0x09" icon="phosphor/regular/hash">
 
 `QUIC_TP_INITIAL_MAX_STREAMS_UNI: i32`
+
+`initial_max_streams_uni`: how many unidirectional streams the peer may open; at most 2^60.
 
 </scalar-card>
 
@@ -318,11 +371,17 @@ The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datag
 
 `QUIC_TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL: i32`
 
+`initial_max_stream_data_bidi_local`: the flow-control limit, in bytes, for bidirectional streams the
+sender opens.
+
 </scalar-card>
 
 <scalar-card title="0x06" icon="phosphor/regular/hash">
 
 `QUIC_TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE: i32`
+
+`initial_max_stream_data_bidi_remote`: the flow-control limit, in bytes, for bidirectional streams the peer
+opens.
 
 </scalar-card>
 
@@ -330,17 +389,23 @@ The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datag
 
 `QUIC_TP_INITIAL_MAX_STREAM_DATA_UNI: i32`
 
+`initial_max_stream_data_uni`: the flow-control limit, in bytes, for unidirectional streams the peer opens.
+
 </scalar-card>
 
 <scalar-card title="0x0f" icon="phosphor/regular/hash">
 
 `QUIC_TP_INITIAL_SCID: i32`
 
+`initial_source_connection_id`: the Source Connection ID of the sender's first Initial.
+
 </scalar-card>
 
 <scalar-card title="0x0b" icon="phosphor/regular/hash">
 
 `QUIC_TP_MAX_ACK_DELAY: i32`
+
+`max_ack_delay`: the longest the sender delays an acknowledgement, in milliseconds; below 2^14, default 25.
 
 </scalar-card>
 
@@ -357,11 +422,15 @@ and Length included, the sender takes; absent or 0, it takes none.
 
 `QUIC_TP_MAX_IDLE_TIMEOUT: i32`
 
+`max_idle_timeout`, in milliseconds; 0 or absent for no idle timeout.
+
 </scalar-card>
 
 <scalar-card title="0x03" icon="phosphor/regular/hash">
 
 `QUIC_TP_MAX_UDP_PAYLOAD_SIZE: i32`
+
+`max_udp_payload_size`: the largest UDP payload, in bytes, the sender takes; at least 1200, default 65527.
 
 </scalar-card>
 
@@ -369,11 +438,16 @@ and Length included, the sender takes; absent or 0, it takes none.
 
 `QUIC_TP_ORIGINAL_DCID: i32`
 
+`original_destination_connection_id`: the Destination Connection ID of the client's first Initial; server
+only.
+
 </scalar-card>
 
 <scalar-card title="0x0d" icon="phosphor/regular/hash">
 
 `QUIC_TP_PREFERRED_ADDRESS: i32`
+
+`preferred_address`: an address the server would have the client move to; server only.
 
 </scalar-card>
 
@@ -381,11 +455,16 @@ and Length included, the sender takes; absent or 0, it takes none.
 
 `QUIC_TP_RETRY_SCID: i32`
 
+`retry_source_connection_id`: the Source Connection ID of the server's Retry, when it sent one; server
+only.
+
 </scalar-card>
 
 <scalar-card title="0x02" icon="phosphor/regular/hash">
 
 `QUIC_TP_STATELESS_RESET_TOKEN: i32`
+
+`stateless_reset_token`: the 16-byte token for the server's first connection ID; server only.
 
 </scalar-card>
 

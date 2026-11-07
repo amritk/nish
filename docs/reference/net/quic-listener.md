@@ -33,6 +33,7 @@ import {
 
 ```ts
 import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT, QUIC_LISTENER_ANSWER_SIZE } from "nish/net/quic-listener";
+import { QuicConnection } from "nish/net/quic";
 
 const listener = new QuicListener(config, entropy);      // entropy: QUIC_LISTENER_ENTROPY_SIZE random bytes
 const answer = new QuicListenerAnswer(QUIC_LISTENER_ANSWER_SIZE);  // once, beside the listener
@@ -122,7 +123,7 @@ token, which ends the connection, to whoever sent it (RFC 9000 §21.11).
 
 <scalar-detail title="Retry tokens">
 
-**Retry tokens** (§8.1.4) are this server's own format: a marker byte, the
+**Retry tokens** (§8.1.4). They are this server's own format: a marker byte, the
 time the token was issued, and the client's original Destination
 Connection ID, then 16 bytes of HMAC-SHA256 under the configuration's
 `retryTokenKey` over all of that, the Retry's Source Connection ID (which
@@ -138,7 +139,7 @@ server issued, is treated as no token at all (§8.1.3).
 
 <scalar-detail title="Stateless resets">
 
-**Stateless resets** (§10.3) end in the token `quicStatelessResetToken`
+**Stateless resets** (§10.3). They end in the token `quicStatelessResetToken`
 derives (computed in place, by `quicConnResetTokenInto`) from the configuration's static key and the packet's connection
 ID, so a server that restarted with the same key can end the connections
 it lost. RFC 9000 §10.3 and §10.3.3 bound them, and each bound is held
@@ -155,7 +156,7 @@ unpredictable, from the listener's own generator.
 
 <scalar-detail title="Pacing">
 
-**Pacing** (RFC 9002 §7.7) is the carrier's send loop, so it is here
+**Pacing** (RFC 9002 §7.7). It is the carrier's send loop, so it is here
 beside the rest of what the carrier calls: `quicListenerTakePaced` takes a
 connection's next datagram only when its pacer has the credit for it, and
 `quicListenerPaceTime` says when it will. The pacer earns 5/4 of the
@@ -251,14 +252,23 @@ function quicListenerFlightTime(
 #### Parameters
 
 <scalar-field name="conn" type="QuicConnection" required>
+
+The connection to ask about.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The caller's time in milliseconds.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
+
 </scalar-field>
 
 ## quicListenerPaceTime
@@ -276,14 +286,23 @@ function quicListenerPaceTime(
 #### Parameters
 
 <scalar-field name="conn" type="QuicConnection" required>
+
+The connection to ask about.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The caller's time in milliseconds.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+A time in milliseconds, `now` or later. It says nothing of whether a datagram is due.
+
 </scalar-field>
 
 ## quicListenerReceiveSegments
@@ -307,26 +326,48 @@ function quicListenerReceiveSegments(
 #### Parameters
 
 <scalar-field name="conn" type="QuicConnection" required>
+
+The connection the datagrams belong to.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The receive buffer; read, not kept.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+The index in `buf` of the first byte received.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The bytes received.
+
 </scalar-field>
 
 <scalar-field name="segment" type="i32" required>
+
+The GRO segment size in bytes, or 0 (or less) for a single datagram.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The caller's time in milliseconds.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many datagrams were handed over: always 1 when `segment` is 0 or less, whatever `len`;
+  otherwise one per `segment` bytes of `len`, rounded up, which is 0 when `len` is 0 or less.
+
 </scalar-field>
 
 ## quicListenerTakeFlight
@@ -358,26 +399,48 @@ function quicListenerTakeFlight(
 #### Parameters
 
 <scalar-field name="conn" type="QuicConnection" required>
+
+The connection to send for.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The caller's time in milliseconds.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+Where the flight is written.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The index in `buf` of the flight's first byte.
+
 </scalar-field>
 
 <scalar-field name="cap" type="i32" required>
+
+The bytes of `buf` from `at` the flight may use; under `QUIC_CONN_DATAGRAM_SIZE` sends nothing.
+
 </scalar-field>
 
 <scalar-field name="flight" type="QuicFlight" required>
+
+Overwritten with the flight's datagram count, segment size and ECN codepoint; all 0
+  when nothing was written.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The flight's length in bytes, or 0 when the pacer holds it back or nothing is due.
+
 </scalar-field>
 
 ## quicListenerTakePaced
@@ -397,14 +460,23 @@ function quicListenerTakePaced(
 #### Parameters
 
 <scalar-field name="conn" type="QuicConnection" required>
+
+The connection to send for.
+
 </scalar-field>
 
 <scalar-field name="now" type="i64" required>
+
+The caller's time in milliseconds.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+A new datagram to send, the caller's; or `null` when the pacer holds it back or nothing is due.
+
 </scalar-field>
 
 ## QuicFlight
@@ -446,47 +518,21 @@ class QuicListener
 | Member | |
 | --- | --- |
 | `new QuicListener(config: QuicServerConfig, entropy: u8[])` | A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. |
-| `block: u8[]` | The counter's eight bytes, the generator's HMAC message. |
-| `config: QuicServerConfig` |  |
-| `counter: i64` |  |
-| `header: QuicHeader` | What `handleWindow` parses a datagram's header into, in place. |
 | `initialClient: u8[]` | The Initial secrets of an INVALID_TOKEN close, and its keys, both directions. |
 | `initialServer: u8[]` |  |
 | `kdf: HkdfScratch` | Every HMAC and HKDF the listener computes runs here; its `sha256` makes tokens, resets and the generator's blocks. |
-| `lengths: u8[]` | A Retry token MAC's length fields: the Retry SCID's one byte, the address's four. |
-| `none: u8[]` | An empty array: the INVALID_TOKEN close's token and reason. |
-| `now: i64` | The latest time the caller gave, in milliseconds; time never runs backwards here. |
-| `ownCid: u8[]` |  |
-| `packet: QuicPacket` |  |
-| `peerCid: u8[]` | The client's SCID and the DCID it sent to, copied out for `quicPutLongHeader`, which reads IDs from 0. |
 | `pool: u8[]` | Unpredictable bytes not yet used, from `poolHead`, and the counter the next block is made from. |
 | `poolHead: i32` |  |
 | `readSlot: QuicKeysSlot` |  |
-| `resetBudget: i32` |  |
-| `resetRefilled: i64` | When the reset budget was last topped up (-1: never yet), and the stateless resets that may go now. |
 | `resetsLimited: i32` |  |
 | `resetsSent: i32` | Stateless resets sent, and ones the rate limit held back. |
-| `retryKey: AesKey` | Version 1's fixed Retry key (RFC 9001 §5.8), expanded once. |
 | `seed: u8[]` |  |
 | `spare: QuicListenerAnswer` | What `handle` answers into before it copies the answer out. |
 | `tag: u8[]` | A full HMAC-SHA256 tag, wiped once its 16 bytes are used. |
-| `usable: boolean` | Whether the configuration and entropy were usable. |
 | `writeSlot: QuicKeysSlot` |  |
 | `handle(datagram: u8[], address: u8[], now: i64): QuicListenerAnswer` | `handleWindow` over the whole of `datagram`, into an answer of its own, made with exactly the room its reply takes: for a caller that keeps each answer, at the cost of one `QuicListenerAnswer` a datagram. A carrier makes one answer and calls `handleWindow`. |
 | `handleWindow(datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer): i32` | Decides what to answer a datagram whose first packet no connection owns, `datagram[at .. at + len)`, read where it lies, from `address` (the client's address as the caller's socket reports it, port included) at `now` (the caller's monotonic time in milliseconds), into `answer`, whose arrays are refilled in their own room. Answers `answer.kind`. See the module header for the rules; nothing a peer sends makes it panic, and nothing it does keeps arena memory. A window outside `datagram` is the caller's mistake, and panics. |
-| `invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void` | The answer to an Initial carrying an invalid Retry token (RFC 9000 §8.1.2), into `answer`: an Initial with CONNECTION_CLOSE and INVALID_TOKEN, under the Initial keys of the DCID the client sent to, from that DCID. It is sent only when the client's Initial authenticates, so it answers a client and not noise; it is far smaller than the datagram it answers. The keys are derived into the listener's own slots, the Initial is opened in an arena block, and the close is written and sealed in `reply`. |
-| `opens(read: QuicKeys, datagram: u8[], header: QuicHeader): boolean` | Whether the Initial `header` read in `datagram` opens under `read`; what opening it allocates goes with the arena block. |
-| `randomByte(): i32` | One unpredictable value in 0 to 255: the next byte of HMAC-SHA256 under the seed of a counter, a block at a time, each byte wiped once taken. |
-| `randomInto(out: u8[], at: i32, count: i32): void` | Writes `count` unpredictable bytes into `out` at `at`. |
-| `refill(): void` | The generator's next block, HMAC-SHA256 under the seed of the counter, into `pool`. |
 | `release(): void` | Ends the listener: wipes the seed and the generator's unused bytes, the tag and the HMAC and HKDF scratch, the INVALID_TOKEN close's Initial secrets and key slots, and `handle`'s spare answer, which holds the last one; `handle` and `handleWindow` then drop every datagram they are handed. The other methods still run, under the zeroed seed, and are the caller's not to call. What `handle` returned is the caller's to wipe. The configuration's keys are not the listener's to wipe: `Http3Server.stop` wipes them with the rest of the server. |
-| `retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void` | A Retry for the client's first Initial (RFC 9000 §8.1.2, §17.2.5) into `answer`: a new connection ID for the client to send to, and a token binding it, the original DCID and the client's address to now — a marker byte, the time, the DCID, then the MAC — under the integrity tag of RFC 9001 §5.8. Each part is written where it goes in `reply`. |
-| `retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean` | The Retry integrity tag (RFC 9001 §5.8) over the pseudo-packet — the original DCID `datagram[odcidAt .. odcidAt + odcidLength)`, its length first, then `reply[0 .. tagAt)` — written at `reply[tagAt]`: AES-128-GCM under the listener's copy of version 1's fixed key, over nothing. The pseudo-packet and the AEAD's temporaries go with the arena block. Answers whether it was made. |
-| `statelessReset(answer: QuicListenerAnswer, n: i32, datagram: u8[], dcidAt: i32, dcidLength: i32): void` | A stateless reset into `answer`, answering an `n`-byte datagram sent to the ID `datagram[dcidAt .. dcidAt + dcidLength)` (RFC 9000 §10.3): a short-header first byte, unpredictable bytes, and the token for that ID, computed in place by `quicConnResetTokenInto`. It is one byte shorter than a datagram of up to 43 bytes and between 43 bytes and one byte short of the datagram (at most 1200) otherwise, so it is always shorter; a datagram too short for that to leave 21 bytes, or one past the rate limit, gets nothing. |
-| `takeReset(): boolean` | Takes one stateless reset from the rate limit's budget, topping it up first. Answers whether one was there. |
-| `tokenMac(head: u8[], headAt: i32, headLength: i32, scid: u8[], scidAt: i32, scidLength: i32, address: u8[]): void` | The token MAC over `head[headAt .. headAt + headLength)`, the token's own bytes before its MAC, the ID the client is to send to (`scid[scidAt .. scidAt + scidLength)`) and its address, into `tag`: what makes a token good for one address and one connection only. Its first `QUIC_LISTENER_TOKEN_MAC_SIZE` bytes are the token's MAC; the caller wipes `tag` once it has used them. |
-| `tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean` | Whether the token `header` read is one this listener issued for the client at `address` that was told to send to the DCID `header` read, and still within its lifetime: the lengths add up, the MAC matches (compared in constant time), and it was issued no later than now and less than `retryTokenLifetime` ago. The token is read in `datagram`. |
-| `versionNegotiation(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void` | A Version Negotiation packet (RFC 9000 §17.2.1) into `answer`, answering a packet from the SCID `header` read to its DCID: the IDs swapped, version 0, and version 1 as the only one supported. A random byte fills the first byte's low six bits, under the 0x40 the RFC asks for so the packet looks like QUIC to a demultiplexer. Each ID is at most 255 bytes, so the packet is at most 521, inside `reply`'s room.<br><br>TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this belongs beside `quicRetryPacket` there, which this stage may not edit. |
 
 ## QuicListenerAnswer
 
@@ -508,14 +554,13 @@ class QuicListenerAnswer
 
 | Member | |
 | --- | --- |
-| `new QuicListenerAnswer(room: i32)` |  |
+| `new QuicListenerAnswer(room: i32)` | An empty answer with room for a reply of `room` bytes. |
 | `kind: i32` |  |
 | `originalDcid: u8[]` |  |
 | `reply: u8[]` |  |
 | `retried: boolean` |  |
 | `retryScid: u8[]` |  |
-| `room: i32` |  |
-| `wipe(): void` | Zeroes the last answer: `reply` across its whole room and each ID across its 20 bytes, so a Retry's token, a stateless reset's token and the IDs leave no copy beyond the arrays' lengths either. Each is left that long and all zero, `kind` a drop. An answer whose reply grew past its room keeps what lies beyond the longest length it is wiped at; one made with `QUIC_LISTENER_ANSWER_SIZE` never grows. |
+| `wipe(): void` | Zeroes the last answer: `reply` across its whole room and each ID across its 20 bytes, so a Retry's token, a stateless reset's token and the IDs leave no copy beyond the arrays' lengths either. Each is left that long and all zero, `kind` a drop. An answer whose reply grew past its room keeps what lies beyond the longest length it is wiped at; one made with `QUIC_LISTENER_ANSWER_SIZE` never grows. The caller's to call once it has sent the answer `QuicListener.handle` gave, and before it drops it. |
 
 ## Limits
 

@@ -53,11 +53,15 @@ import {
 
 ```ts
 import { QuicConnection, QuicServerConfig } from "nish/net/quic";
+import { tlsSignEcdsaP256 } from "nish/net/tls";
 
 const conn = new QuicConnection(config, entropy);   // entropy: QUIC_CONN_ENTROPY_SIZE random bytes
 conn.receiveWindow(buf, off, len, now);              // every datagram the client sends; now in ms
 const input: u8[] | null = conn.signatureInput();
-if (input !== null) { conn.sign(tlsSignEcdsaP256(key, input)); }
+if (input !== null) {
+  const signature: u8[] | null = tlsSignEcdsaP256(key, input);   // key: Secret<u8[]>
+  if (signature !== null) { conn.sign(signature); }
+}
 let n: i32 = conn.takeDatagramInto(out, 0, now);     // out: at least QUIC_CONN_DATAGRAM_SIZE bytes
 while (n > 0) { … send out[0 .. n) to the client … ; n = conn.takeDatagramInto(out, 0, now); }
 let id: i64 = conn.nextStreamEvent();                 // a stream with news: read it, write it
@@ -117,7 +121,7 @@ flight leaves.
 
 <scalar-detail title="Streams">
 
-**Streams** are `nish/net/quic-stream`'s: both kinds, opened by either
+They are `nish/net/quic-stream`'s: both kinds, opened by either
 side, with flow control per stream and for the connection raised as the
 application reads, and the stream limits raised as streams finish. The
 application sees them through a small surface: `nextStreamEvent` names a
@@ -143,7 +147,7 @@ arrived. Each way is a fixed ring (`nish/net/quic-datagram`).
 
 <scalar-detail title="Loss recovery">
 
-**Loss recovery** (RFC 9002) is `nish/net/quic-recovery`'s: every
+**Loss recovery** (RFC 9002). It is `nish/net/quic-recovery`'s: every
 ack-eliciting packet is recorded in its space's ring with what it carried
 (its CRYPTO range, its STREAM chunks, HANDSHAKE_DONE and the control
 frames), the client's ACKs give the RTT estimate and show what was lost by
@@ -350,24 +354,45 @@ function quicConnResetTokenInto(
 #### Parameters
 
 <scalar-field name="mac" type="HmacSha256Scratch" required>
+
+The connection's HMAC-SHA256 scratch, wiped on return.
+
 </scalar-field>
 
 <scalar-field name="key" type="u8[]" required>
+
+The server's static reset key, `QUIC_CONN_STATIC_KEY_SIZE` bytes.
+
 </scalar-field>
 
 <scalar-field name="cid" type="u8[]" required>
+
+The array holding the connection ID.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where the ID starts in `cid`.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+The ID's length in bytes, at most 20: the caller's to keep, as nothing checks it.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+Where the 16-byte token goes; bytes that would fall past its end are not written.
+
 </scalar-field>
 
 <scalar-field name="outAt" type="i32" required>
+
+Where in `out` the token starts.
+
 </scalar-field>
 
 ## quicStatelessResetToken
@@ -389,14 +414,24 @@ function quicStatelessResetToken(
 #### Parameters
 
 <scalar-field name="key" type="u8[]" required>
+
+The server's static reset key, `QUIC_CONN_STATIC_KEY_SIZE` bytes
+  (`QuicServerConfig.statelessResetKey`).
+
 </scalar-field>
 
 <scalar-field name="cid" type="u8[]" required>
+
+The connection ID the token is for, all of its bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[]">
+
+A fresh 16-byte token (`QUIC_RESET_TOKEN_SIZE`); the full MAC it was cut from is wiped.
+
 </scalar-field>
 
 ## QuicConnection
@@ -424,220 +459,97 @@ class QuicConnection
 | `addressValidated: boolean` | Whether the client's address is validated: a Handshake packet from it was processed. |
 | `alpn: string` | The ALPN protocol the handshake chose. |
 | `application: QuicConnSpace` |  |
-| `applicationTaken: boolean` | Whether `afterTls` has taken the application traffic secrets out of `TlsServer`. It takes them once: `wipeSecret` leaves them known, so a second take would derive the 1-RTT keys from the zeros it left. |
 | `appReadSlot: i32` | Which of the Application Data space's two read slots, and two write slots, hold the current keys. |
 | `appWriteSlot: i32` |  |
-| `arrivalOther: boolean` | Whether the datagram being read came from an address other than `pathCurrent`. |
 | `authFailures: i64` |  |
 | `bytesReceived: i64` | Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). |
 | `bytesSent: i64` |  |
-| `challengeCount: i32` | How many of `challengeData`'s slots hold a challenge sent on the path being validated. |
-| `challengeData: u8[]` | The last `QUIC_CONN_CHALLENGES` PATH_CHALLENGE data sent on the path being validated, eight bytes each, `challengeCount` of them, the latest at `(challengesDrawn - 1) % QUIC_CONN_CHALLENGES`: each drawn from the ID seed's HMAC under `QUIC_CONN_CHALLENGE_SEQUENCE`, so unguessable. |
-| `challengeOwed: boolean` | Whether a PATH_CHALLENGE is due in the next datagram, and whether the one being built carries a PATH_CHALLENGE or PATH_RESPONSE. |
 | `challengeResendAt: i64` | When the PATH_CHALLENGE goes again with fresh data, and when validation gives up (§8.2.4); -1 when not validating. |
 | `challengesDrawn: i64` |  |
 | `challengeUntil: i64` |  |
 | `cids: QuicCidTable` |  |
-| `cidScratch: u8[]` | A connection ID being issued and its stateless reset token, before the table copies them. |
 | `cidSeed: u8[]` |  |
-| `closeSent: boolean` | Whether the one CONNECTION_CLOSE this side owes has gone out. |
-| `closingUntil: i64` | When a closed connection's closing or draining period ends (RFC 9000 §10.2), and `runClocks` wipes every key it kept for it, or -1: before the close, while a close this side owes has not gone out, and once the keys are wiped. |
 | `confidentialityLimit: i64` | The AEAD limits this connection keeps (RFC 9001 §6.6): packets one 1-RTT write key seals, and packets that fail to authenticate over the connection. `afterTls` sets them from the suite when the 1-RTT keys arrive; until then they are AES-GCM's. They are fields so that a test can lower them after the handshake; nothing else should set them. |
-| `config: QuicServerConfig` |  |
-| `cryptoArrived: boolean` | Whether the packet just read brought CRYPTO bytes for TLS, or retired an ID that wants replacing. |
-| `cryptoIn: QuicConnReassembly` | The CRYPTO bytes the client sent, put back in order. |
 | `datagramEcn: i32` | ECN (RFC 9000 §13.4): `ecnMarking` is the carrier's to set when it sends this connection's datagrams with the ECN bits of `datagramEcn`, which each `takeDatagramInto` sets for the datagram it wrote: ECT(0) while loss recovery's `ecnCodepoint()` asks for it, 0 otherwise and always while `ecnMarking` is false. Every packet of a marked datagram is counted as marked, and an ACK_ECN's counts are validated against them. `reset` keeps `ecnMarking`, which is the carrier's, and clears the rest. |
 | `datagramsIn: QuicDatagramQueue` |  |
 | `datagramsOut: QuicDatagramQueue` | DATAGRAM payloads waiting to be sent, and those the client sent waiting to be read. |
-| `defaultParameters: QuicTransportParameters` | The defaults `peerParameters` starts from, made once and set back by `reset`. |
 | `dropped: i32` | Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. |
 | `earlyResends: i32` | Handshake data sent again early, against `QUIC_CONN_EARLY_RESENDS` (RFC 9002 §6.2.3). |
 | `ecnMarking: boolean` |  |
-| `elicitingSent: boolean` | Whether an ack-eliciting packet went out since the last packet was received. |
 | `readonly ephemeral: Secret<u8[]>` | The x25519 private key `begin` takes from the entropy, until the handshake hands it to `TlsServer`. |
 | `error: i64` | The error code the connection closed with: a transport error, `0x100 + alert`, or the application's code. |
-| `errorFrameType: i64` | For a transport error: the type of the frame that caused it, or 0. |
 | `errorIsApplication: boolean` | Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. |
-| `frame: QuicFrame` |  |
 | `handshake: QuicConnSpace` |  |
 | `handshakeComplete: boolean` | Whether the handshake is complete, which for a server is also confirmed (RFC 9001 §4.1.2). |
-| `handshakeDonePending: boolean` |  |
-| `header: QuicHeader` | The header and the packet numbers of the packet being read, reused for every one. |
-| `idleSince: i64` | When the idle timer last restarted (RFC 9000 §10.1), or -1 before the first packet. |
 | `initial: QuicConnSpace` |  |
 | `initialClient: u8[]` | The Initial secrets of RFC 9001 §5.2, the client's and the server's. |
 | `initialServer: u8[]` |  |
 | `integrityLimit: i64` |  |
-| `kdf: HkdfScratch` | Where every key derivation and HMAC of the connection runs. |
-| `keyRetainUntil: i64` | When the previous read keys go and the next are derived, or -1. |
 | `keyUpdates: i32` | Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. |
 | `localEncoded: u8[]` |  |
 | `localParameters: QuicTransportParameters` | The server's transport parameters, set for each connection, and their encoding. |
-| `localScid: u8[]` | The server's first connection ID, the SCID of every long-header packet it sends. |
-| `migrateOwed: boolean` |  |
 | `readonly nextReadSecret256: Secret<u8[]>` |  |
 | `readonly nextReadSecret384: Secret<u8[]>` |  |
 | `nextSkip: i64` | The next Application Data packet number skipped (RFC 9000 §21.4), or -1 before the 1-RTT keys; a test may set it to force one. `skipped` holds the last `QUIC_CONN_SKIP_RING` skipped, -1 where none, `skipHead` where the next goes, and `skipsDrawn` how many distances were drawn. |
-| `none: u8[]` | An empty array, which a cleared secret or ID is set to. |
-| `nonProbing: boolean` | Whether the packet being read carries a non-probing frame (§9.1), and whether a packet of the datagram moves the connection (§9.3). |
 | `now: i64` | The latest time the caller gave, in milliseconds; time never runs backwards here. |
-| `originalDcid: u8[]` | The DCID of the client's first Initial, which the Initial keys come from: its first `originalDcidLength` bytes. |
-| `originalDcidLength: i32` |  |
 | `otherIsNext: boolean` | Whether `otherReadKeys` are the next generation's rather than the previous one's. |
 | `otherReadKeys: QuicKeys \| null` | The other read keys of the Application Data space (RFC 9001 §6.3): the next generation's while `otherIsNext`, and for a probe timeout after an update the previous one's, for reordered packets (§6.5). |
-| `packet: QuicPacket` |  |
-| `parsedParameters: QuicTransportParameters` | The client's transport parameters, parsed into the slot's own object. |
-| `pathArrival: u8[]` |  |
 | `pathCount: i32` |  |
-| `pathCurrent: u8[]` | The client's address (RFC 9000 §9), each in `nish:net`'s 18-byte form, for a carrier that passes one to `receiveWindowFrom`: `pathCurrent` is where this connection's datagrams go now (`sendAddress`), and `pathValidated` the last address the client proved it receives at — the handshake's, or one a PATH_RESPONSE answered. `pathArrival` is the datagram being read's. Made once and overwritten in place. |
-| `pathData: u8[]` | PATH_CHALLENGE data to answer: a ring of four, eight bytes each, `pathCount` from `pathHead`. |
-| `pathFrameStaged: boolean` |  |
-| `pathHead: i32` |  |
 | `pathKnown: boolean` | Whether `pathCurrent` holds the client's address: the carrier passes addresses, and a first Initial gave one. |
 | `pathReceived: i64` | Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). |
 | `pathSent: i64` |  |
 | `pathValidated: u8[]` |  |
 | `pathValidating: boolean` | Whether `pathCurrent` is not validated yet: a PATH_CHALLENGE is out on it. |
-| `peerMaxDatagramFrame: i64` | The largest DATAGRAM frame the client takes (its `max_datagram_frame_size`), 0 for none. |
 | `peerParameters: QuicTransportParameters` | The client's transport parameters, once the handshake has checked them; until then, every default. |
-| `peerScid: u8[]` | The SCID of the client's first Initial: where long-header packets go, and what its transport parameters must name. |
-| `peerScidLength: i32` |  |
-| `phasePending: i64` | The packet number of a client key update read but not applied yet, or -1. |
 | `probeAddress: u8[]` | A PATH_CHALLENGE that came from another address in a datagram that moved nothing (§9.1): answered there by `takeProbeInto`, from `probeData`, within `probeBudget` bytes, three times what came from `probeAddress` (§8.1). Only the latest such challenge is kept. A response owed on `pathCurrent` when the connection moves goes back the same way (`sendResponsesBack`). |
-| `probeBudget: i64` |  |
-| `probeData: u8[]` |  |
 | `probeOwed: boolean` | Whether a PATH_RESPONSE is owed on `probeAddress`, and whether the datagram being read carried a challenge for it. |
-| `probeStaged: boolean` |  |
 | `readPhase: boolean` | The Key Phase bit of the current read keys, and of the current write keys. |
-| `readPhaseHighest: i64` |  |
-| `readPhaseLowest: i64` | The lowest and highest packet numbers opened with the current read keys, or -1. |
 | `readonly readSecret256: Secret<u8[]>` | The 1-RTT traffic secrets (RFC 9001 §6.1), one set of SHA-256's length and one of SHA-384's, the one the suite's hash picks in use: the current read secret, the next generation's, and the current write secret, which a key update ratchets in place. The write side keeps no next secret, because the server derives its next write keys only when it moves to them. |
 | `readonly readSecret384: Secret<u8[]>` |  |
 | `recovery: QuicRecovery` | Loss detection, the RTT estimate, the congestion window and the pacer (RFC 9002). |
-| `resendLevel: i32` | The level at which the packet just read showed the client lacks the server's handshake data, or -1. |
-| `retried: boolean` | Whether the connection was set up by `acceptRetry`. |
-| `retryOriginalDcid: u8[]` | For a connection `acceptRetry` set up: the DCID of the client's Initial before the Retry, and the Retry's SCID. |
-| `retryScid: u8[]` |  |
 | `sealedUnderKey: i64` | Packets sealed under the current 1-RTT write key, and packets that failed to authenticate, against those limits. |
-| `serverName: string` | The client's `server_name`, or empty. |
-| `serverRandom: u8[]` |  |
+| `serverName: string` | The client's `server_name` the handshake read, or empty when it sent none. |
 | `skipHead: i32` | Where the next skipped packet number goes in `skipped`. |
-| `skipped: i64[]` |  |
 | `skipsDrawn: i64` |  |
 | `state: i32` |  |
 | `streams: QuicStreams` | The streams, both ways (`nish/net/quic-stream`). |
 | `tls: TlsServer \| null` |  |
-| `tlsConfig: TlsServerConfig` | Its configuration, made once: the parameters it carries are `localEncoded`, rewritten for each connection. |
 | `tlsSlot: TlsServer \| null` | The slot's `TlsServer`, made by its first handshake and `restart`ed by every one after (QUIC-3). |
-| `tokenScratch: u8[]` |  |
-| `topUpOwed: boolean` |  |
 | `writePhase: boolean` |  |
-| `writePhaseFirst: i64` | The first packet number sent with the current write keys. |
 | `readonly writeSecret256: Secret<u8[]>` |  |
 | `readonly writeSecret384: Secret<u8[]>` |  |
 | `acceptRetry(originalDcid: u8[], retryScid: u8[]): boolean` | Sets up a connection whose client came back with a Retry token that `nish/net/quic-listener` checked (RFC 9000 §8.1.2): `originalDcid` is the DCID of the client's Initial before the Retry, and `retryScid` the Retry's SCID, which the client now sends to. The server's transport parameters then name both (§7.3), and the client's address counts as validated, so the anti-amplification limit does not apply. Call it before the first `receive`; answers whether it took: not once the connection has started, and not for an ID over 20 bytes. |
-| `ackDelayOf(field: i64): i64` | An ACK frame's ACK Delay in milliseconds: the field scaled by the client's `ack_delay_exponent` (RFC 9000 §19.3, §18.2). A value too large to scale is held at 2^40 microseconds first, which is still far past any `max_ack_delay` it is then bounded by (RFC 9002 §5.3). |
-| `acksSkipped(frame: QuicFrame): boolean` | Whether `frame` acknowledges a packet number the server skipped and still remembers (RFC 9000 §21.4): a client that does is acknowledging what it never received. Every range the frame stored is read; one past `QUIC_FRAME_MAX_ACK_RANGES` is not, and loss recovery does not act on it either. |
-| `addressedHere(buf: u8[], header: QuicHeader): boolean` | Whether `header`'s connection IDs are this connection's: a long header from the client's first SCID to the server's ID (or, for an Initial, the original DCID), a short header to an active local ID. Read in place from `buf`. |
-| `afterPath(counted: boolean, len: i32): void` | What a datagram of `len` bytes, now read, does to the paths: one from another address whose newest non-probing packet moved the connection moves it (§9.3), and a challenge it carried is answered on the new path; one that moved nothing has its challenge answered on its own path (`takeProbeInto`). A datagram that authenticated nothing does neither. What came from the path being validated adds to its limit. |
 | `afterTls(): void` | Whatever TLS's last step made due: its output moved into each level's CRYPTO stream, the keys of each level it now has secrets for, the client's transport parameters checked once it has read them, and, when the handshake completes, the Handshake keys discarded (RFC 9001 §4.9.2), HANDSHAKE_DONE queued (§4.1.2) and the client given more connection IDs. |
 | `amplificationBlocked(): boolean` | Whether the anti-amplification limit stops the server sending (RFC 9000 §8.1): the client's address is not validated and three times what it sent leaves no room for a whole datagram. |
-| `applyPhase(pn: i64): void` | Carries out the client's key update `notePhase` found in packet `pn` (RFC 9001 §6.2): the write keys follow, unless the server started this update, before anything acknowledges the packet; the read keys move on, and the previous ones are kept for a probe timeout. |
-| `beforeDatagram(): void` | What the next datagram's Application Data packet needs before it is built, outside the arena block because a key update stores the keys it derives. A datagram carries at most one such packet, so this runs once a packet. From three quarters of the confidentiality limit, each tries a key update, which goes when `updateKeys` allows (RFC 9001 §6.6). And the packet number due to be skipped is (RFC 9000 §21.4): remembered, never sealed nor recorded, and the next skip drawn. |
-| `begin(entropy: u8[]): void` | Takes `entropy` (and wipes it), or closes with INTERNAL_ERROR for entropy or a configuration that does not fit. |
-| `buildApplication(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32` | The 1-RTT frames beyond ACK, as many as fit in `out[at .. end)` and in the packet's record: `QUIC_CONN_PACKET_CONTROL` control frames and `QUIC_CONN_PACKET_STREAMS` STREAM frames, and every DATAGRAM that fits. |
-| `buildCrypto(space: QuicConnSpace, out: u8[], at: i32, end: i32): i32` | One CRYPTO frame into `out[at .. end)`: the bytes lost first, from the level's kept stream, then those not sent yet. The level's CRYPTO stream is kept whole, so a byte's index in `cryptoOut` is its offset. |
-| `buildDatagram(out: u8[], at: i32): i32` | `takeDatagramInto`'s datagram, built and sealed into `out` at `at`: one packet per space with something to carry, each written in place, the last padded when an Initial elicits, then each sealed where it lies. Answers the datagram's length, or 0 when no space had anything. |
-| `buildPathFrames(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32` | The path frames of a 1-RTT packet into `out[at .. end)`: every PATH_RESPONSE owed and the PATH_CHALLENGE on a path being validated. They go even when the congestion window holds everything else back (`buildPayloadInto`), so the first packet on a new path validates it (RFC 9000 §9.3); the path's own 3x limit still bounds them, and a challenge is drawn at most once a probe timeout. |
-| `buildPayloadInto(space: QuicConnSpace, out: u8[], start: i32, end: i32, elicit: boolean, pathFrames: boolean): i32` | The frames of one packet of `space`, written into `out[start .. end)`: an ACK when one is due, and, when `elicit` allows frames that elicit an acknowledgement, CRYPTO data (lost bytes first), at the application level HANDSHAKE_DONE, RETIRE_CONNECTION_ID, NEW_CONNECTION_ID, the path frames, the streams' control frames, DATAGRAMs and stream data, and for a probe with nothing else to carry a PING. Without `elicit`, the path frames still go when `pathFrames` says the packet can be recorded. Answers the offset past the last frame, `start` when nothing is due. What it carries is written to the space's staging row, and `stagedEliciting` says whether anything elicits an acknowledgement. |
-| `buildProbe(out: u8[], at: i32, size: i32): i32` | `takeProbeInto`'s packet, of `size` bytes at `out[at]`, built and sealed; 0 when it does not fit. |
-| `checkPeerParameters(tls: TlsServer): boolean` | The client's transport parameters (RFC 9000 §7.3, §7.4, §18.2): they must parse, and must name as `initial_source_connection_id` the SCID its first Initial came from. Missing, that is TRANSPORT_PARAMETER_ERROR; wrong, a PROTOCOL_VIOLATION. Answers whether they hold, closing the connection when they do not. The streams take the client's limits from them, and the datagrams its `max_datagram_frame_size`. |
 | `close(code: i64): void` | Closes the connection from the application, with its own error `code` (CONNECTION_CLOSE 0x1d; RFC 9000 §10.2). The next `takeDatagram` answers the close, and nothing after it. Closing twice, or after the client closed, does nothing. |
 | `closed(): boolean` | Whether the connection has closed, either way. |
 | `deadline(): i64` | When `handleTimer` is next due, in the caller's milliseconds: the idle timeout, loss recovery's timer (a time-threshold loss or the probe timeout), the end of a key update's probe timeout, or, while a path is validated, its PATH_CHALLENGE's resend or the end of its validation, whichever comes first; once the connection has closed, the end of its closing or draining period, when its keys are wiped. -1 when nothing is timed: before the first packet, while a closed connection's own close has not gone out (`takeDatagram` sends it), once a closed connection's keys are wiped, and with no idle timeout, nothing in flight, no update pending and no path being validated. |
-| `deriveConnectionId(sequence: i64): void` | The HMAC-SHA256 under the connection's seed of the sequence number `sequence`, whose first 8 bytes are the local connection ID of that number, into `cidScratch`: so the IDs are unlinkable to anyone without the seed and need no more entropy. It runs in the connection's HMAC scratch inside an arena block, and wipes the MAC and the scratch. |
-| `discard(space: QuicConnSpace): void` | Discards a space's keys and CRYPTO state (RFC 9001 §4.9), wiping the keys. |
-| `drain(code: i64, application: boolean): void` | The client closed the connection: enter the draining state, sending nothing more (RFC 9000 §10.2.2). |
-| `drawChallenge(): void` | Draws the next PATH_CHALLENGE's eight bytes from the ID seed's HMAC under `QUIC_CONN_CHALLENGE_SEQUENCE` (§8.2.1: unpredictable), keeps them with the two before, and owes the challenge; its resend is due a probe timeout later. |
-| `drop(): void` | Counts a dropped packet; the count stops at the largest `i32` rather than overflow. |
-| `endValidation(): void` | Stops validating a path: no challenge is owed, kept or timed. |
-| `establish(): void` | The rest of `start`, once the first Initial has opened: the first local connection ID, and the slot's `TlsServer` started with transport parameters that name both IDs (RFC 9000 §7.3), the Retry's when `acceptRetry` set one up, and the first ID's stateless reset token (§18.2). |
-| `fail(code: i64, frameType: i64): void` | Closes the connection with transport error `code`, caused by a frame of `frameType` (0 for none). |
-| `failOn(error: i64, type: i64): void` | Closes the connection with `error` from a stream frame of `type`, unless it is 0. |
-| `feedTls(): void` | Hands TLS what now continues the CRYPTO stream, from the buffer itself; an alert closes with CRYPTO_ERROR. |
-| `forgetPath(): void` | Clears every path field for a new connection, in the arrays the slot keeps. |
 | `handleTimer(now: i64): void` | Runs whatever is due by `now`, the caller's monotonic time in milliseconds; call it at `deadline()`, or any time. Past the idle timeout the connection closes silently (`QUIC_STATE_TIMED_OUT`, RFC 9000 §10.1): no CONNECTION_CLOSE, every key wiped. Past the closing or draining period of a connection that closed, every key is wiped (§10.2). Past a key update's probe timeout the previous read keys are wiped and the next generation's derived (RFC 9001 §6.5). Past loss recovery's timer, packets lost by the time threshold have their frames queued again, or a probe timeout queues every space's packets in flight and asks for a probe (RFC 9002 §6.1.2, §6.2.4): `takeDatagram` then sends it. `receive` and `takeDatagram` run it themselves. Time never runs backwards here: an earlier `now` than one already given counts as that one. |
 | `idleDeadline(): i64` | When the idle timeout passes, or -1 when there is none or the timer has not started. |
-| `idleTimeout(): i64` | The effective idle timeout in milliseconds (RFC 9000 §10.1): the smaller of the two sides' `max_idle_timeout`, or the one that is not 0, raised to `QUIC_CONN_IDLE_FLOOR` and to three probe timeouts; -1 when both are 0, for none. Until the client's transport parameters are read, the server's own alone. |
-| `keysFrom(slot: QuicKeysSlot, aead: i32, held: Secret<u8[]>): QuicKeys \| null` | A level's keys from a held traffic secret, derived into `slot` through the connection's own HKDF scratch, as `quicKeys` derives them: the derivation reads a plain copy made in an arena block, which is zeroed before it ends, so the call keeps nothing in the arena. Answers the slot's keys, or `null` for a secret of the wrong length. |
 | `maxDatagramPayload(): i32` | The largest DATAGRAM payload `sendDatagram` takes now: what fits the client's `max_datagram_frame_size` with the frame's type and Length, and a 1-RTT packet of `QUIC_CONN_DATAGRAM_SIZE` with the longest packet number; 0 when the client takes none, or the server sends none. |
-| `migrate(address: u8[]): boolean` | Moves the connection to `address` (RFC 9000 §9.3): its datagrams go there from now. Back to the last validated address, nothing more is needed, and a validation under way stops — which is how a forged source, a copy of the client's packet sent on from elsewhere, loses the connection to the client's next packet (§9.3.3). Anywhere else, the path is validated with a PATH_CHALLENGE, and until it is the server sends there only three times what it received from it (§9.3.1). The peer's connection ID is kept: the client chose not to change it, and a NAT rebinding never does (§9.5). Answers whether the challenge staged in `probeData` is already queued on the new path (`sendResponsesBack`). |
-| `nextKeys(slot: QuicKeysSlot, keys: QuicKeys, current: Secret<u8[]>, next: Secret<u8[]>): QuicKeys \| null` | The next generation of `keys` into `slot` (RFC 9001 §6.1): the next traffic secret, `quic ku` of `current`, and its packet key and IV, with the header-protection key and its schedule shared, as every generation shares them. The secret is written into `next`, which may be `current` and then ratchets it. The derivation reads plain copies made in an arena block, which are zeroed before it ends. Answers the slot's keys, or `null`, leaving `next` as it was, for keys `quicKeys` did not make. |
 | `nextStreamEvent(): i64` | The ID of the next stream with something new for the application — the client opened it, it has bytes or its FIN to read, it was reset or stopped, or it has room to write again after a short write — or -1 when there is none. Each stream comes up once however much happened; read and write it until it has nothing more to say. |
-| `notePath(address: u8[]): boolean` | Notes where the datagram about to be read came from, before any of it is: answers false for one to drop unread. The first Initial's address is the connection's, and validated by the handshake. Until the handshake is confirmed the client may not move (RFC 9000 §9), and a datagram from another address is dropped — so a forged Initial or Handshake packet from elsewhere cannot move the connection, nor take the server's flight. A carrier that passes no address leaves every path rule off. |
-| `notePathSent(n: i32): void` | Adds `n` bytes sent to the path being validated's count. |
-| `notePhase(pn: i64, other: boolean): boolean` | Checks a 1-RTT packet `pn` that opened under the current read keys, or, when `other`, under the other set (RFC 9001 §6.2, §6.4, §6.5). Under the next generation's it is a key update, which `applyPhase` carries out once the packet is read. Under the previous generation's it is a packet the network delayed. Either is KEY_UPDATE_ERROR when it breaks §6.4's order — a higher packet number under older keys than a lower one already had — and an update past `QUIC_CONN_MAX_KEY_UPDATES` is too. Answers whether the connection is still open. |
-| `openPacket(buf: u8[], header: QuicHeader, first: boolean): boolean` | Opens one packet of a connection already started, and acts on its frames. The opening and the frames run inside an arena block (`openScoped`), so their temporaries go when it ends; what may grow a buffer of the slot — a first Initial's `TlsServer` and parameters, a key update, TLS reading the CRYPTO bytes and what it answers — runs after it. Answers whether the packet was used. |
-| `openScoped(buf: u8[], header: QuicHeader, space: QuicConnSpace, keys: QuicKeys, first: boolean): boolean` | `openPacket`'s half inside the arena block: header protection off, the payload decrypted (with the other key generation's keys when the Key Phase bit says so), and every frame acted on. Nothing it calls stores an allocation, which is what lets the block release the packet's temporaries. Answers whether the packet was used rather than dropped. |
 | `openStream(bidirectional: boolean): i64` | Opens a stream of the server's (RFC 9000 §2.1): bidirectional when `bidirectional`, else unidirectional. Answers its ID, or `QUIC_STREAM_ERR_STATE` when not connected, or `QUIC_STREAM_ERR_LIMIT` when the client's MAX_STREAMS is reached (STREAMS_BLOCKED then goes out) or `localStreams` of the server's are open. |
-| `overhead(space: QuicConnSpace): i32` | The bytes a packet of `space` takes beyond its payload: the header with its packet number, and the AEAD tag. 0 when the space cannot send: no keys, discarded, or no packet number length for its next number. |
 | `ownsConnectionId(dcid: u8[]): boolean` | Whether a datagram whose first packet is sent to `dcid` belongs to this connection: one of its active connection IDs, or, until the handshake is done, the DCID of the client's first Initial. A closed connection still answers for its IDs; the caller drops it once it is done with it. |
 | `ownsConnectionIdAt(buf: u8[], at: i32, length: i32): boolean` | `ownsConnectionId` of the ID `buf[at .. at + length)`, read in place, so a carrier routes without a copy. |
-| `packetsLost(space: QuicConnSpace, sent: QuicSentPackets): void` | Every packet of `space` that loss recovery's last call declared lost: what each carried is queued again. |
-| `pathBudget(): i64` | What the path being validated still lets the server send: three times what came from it since the connection moved there, less what went (RFC 9000 §9.3.1, §8.1). Unlimited, as `QUIC_MAX_VARINT`, on a validated path. |
-| `pathConfirmed(): void` | The path being validated answered (§8.2.3): it is the validated address now. Congestion control and the RTT estimate start again on a new address, but not when only the port changed, which is the same network path behind a rebinding NAT (§9.4); ECN is tested again either way (§13.4.2). |
-| `prepareNextReadKeys(): void` | Derives the next generation's read secret and keys from the current ones, into `otherReadKeys`, wiping the previous generation's key and IV that sat there (RFC 9001 §6.3, §6.5). It runs when the 1-RTT keys are installed and a probe timeout after each update, never while a packet is being opened, so what a packet's Key Phase bit says shows in no timing. |
-| `probe(): void` | A probe timeout fired (RFC 9002 §6.2.4): in every space with packets in flight, everything they carry is queued again and the next packets are probes, sent whatever the window says, with a PING if nothing is left to carry. During the handshake that resends the Initial and the Handshake flight together, which is what a client that lost both needs, and does it twice (`QUIC_CONN_HANDSHAKE_PROBES`), so that one more lost datagram does not cost another, doubled, probe timeout. |
-| `queuePathResponse(data: u8[], from: i32): void` | Queues a PATH_RESPONSE of the eight bytes at `data[from]` on the current path. |
 | `readDatagram(buf: u8[], at: i32, cap: i32): i32` | Copies the oldest DATAGRAM payload the client sent into `buf` at `at`, at most `cap` bytes, and forgets it. Answers its length, `QUIC_DATAGRAM_NONE` when none is waiting, or `QUIC_DATAGRAM_ERR_ROOM`, keeping it, when it does not fit. |
 | `readStream(): QuicStreamData \| null` | The next run of stream data the client sent, or `null` when there is none: the all-at-once form of `nextStreamEvent` and `streamRead`, which allocates the run it answers. `fin` marks the last of its stream; a stream the client reset is passed over. |
 | `receive(datagram: u8[], now: i64): i64` | `receiveWindow` of a whole datagram. |
-| `receiveAck(space: QuicConnSpace, frame: QuicFrame): void` | An ACK frame: acknowledging a packet number this space never sent is a PROTOCOL_VIOLATION (§13.1). Otherwise loss recovery reads it (RFC 9002 §5, §6.1, §7): each packet it newly acknowledges releases what it carried, and each it shows lost has its frames queued again. |
-| `receiveCrypto(space: QuicConnSpace, frame: QuicFrame, payload: u8[]): void` | A CRYPTO frame: its data put back in order, for TLS to read once the packet is (`feedTls`). The buffer follows the level the client is sending at; data of a level it has moved past is a duplicate of what TLS already read, or, past that, a message TLS is not reading, which is its alert unexpected_message (RFC 9001 §4.8). A frame too far ahead is CRYPTO_BUFFER_EXCEEDED. |
-| `receiveDatagram(frame: QuicFrame, payload: u8[], frameStart: i32): void` | A DATAGRAM frame (RFC 9221 §4), which starts at `payload[frameStart]`: one the server did not offer to take, or larger than it offered, is a PROTOCOL_VIOLATION (§3); otherwise its payload waits for `readDatagram`, or is dropped when the ring is full. |
-| `receiveFrame(space: QuicConnSpace, frame: QuicFrame, payload: u8[], frameStart: i32, buf: u8[], header: QuicHeader): void` | One frame, which the packet type is allowed to carry: it starts at `payload[frameStart]`, and the packet's header is `header` in `buf`. |
-| `receiveFrames(space: QuicConnSpace, packetType: i32, payload: u8[], buf: u8[], header: QuicHeader): boolean` | Acts on every frame of a packet's payload, in order, and answers whether any asked for an acknowledgement. A payload with no frames, a frame that does not parse and a frame the packet type may not carry close the connection (RFC 9000 §12.4). |
-| `receivePacket(buf: u8[], header: QuicHeader): boolean` | One packet of a datagram. Answers whether the packet was used: whether it authenticated as this connection's. |
-| `receivePathChallenge(frame: QuicFrame, payload: u8[]): void` | A PATH_CHALLENGE (§8.2.2) on the current path: answered with the same eight bytes. Only the latest four are kept, so a burst of challenges cannot grow anything. |
-| `receivePathResponse(frame: QuicFrame, payload: u8[]): void` | A PATH_RESPONSE (§8.2.3): one matching a PATH_CHALLENGE still out validates the path, whichever path it came on. Once the server has sent a challenge, one matching none — late, or for a path given up — is ignored; before that, none can be expected, and it is a PROTOCOL_VIOLATION (§19.18). |
 | `receiveWindow(buf: u8[], off: i32, len: i32, now: i64): i64` | Takes one datagram from the client, `buf[off .. off + len)`, which arrived at `now` (the caller's monotonic time in milliseconds): every packet in it is opened and its frames acted on, in order. `buf` is read, never written, so a GRO receive buffer is handed over a datagram at a time. Answers 0, or the error the connection closed with — in which case `takeDatagramInto` writes the CONNECTION_CLOSE to send. A packet that cannot be used is dropped and counted (see the module header). Once the connection has closed, or its idle timeout has passed by `now`, every datagram is ignored. |
 | `receiveWindowFrom(buf: u8[], off: i32, len: i32, address: u8[], now: i64): i64` | `receiveWindow` of a datagram that came from `address`, an 18-byte `nish:net` address: the connection follows the client from one address to another (RFC 9000 §9) — see "Paths" in the module header. An address of any other length is no address, as `receiveWindow` gives. |
-| `recordSent(space: QuicConnSpace, pn: i64, size: i32): i32` | Hands an ack-eliciting packet just sealed to loss recovery (RFC 9002 §A.5), with what it carried copied from the staging row to its slot. A packet that elicits nothing (an ACK, a CONNECTION_CLOSE) is not recorded. `buildDatagram` builds nothing ack-eliciting into a space whose record is full, so recovery does not refuse one; if it ever did, what the packet carried is queued again at once, as though lost. Answers the slot recovery recorded it in, or -1. |
 | `release(): void` | Wipes everything secret the connection and its `TlsServer` still hold: every level's packet keys, the next generation's read keys, the traffic secrets and expected client Finished, the ephemeral key, the connection-ID seed and the stateless reset tokens (QUIC-2). Call it when the connection is done with (or `reset` the slot, which does the same first); the connection is closed after it and sends nothing more. Every stream buffer it borrowed goes back to its pool, zeroed: nothing is sent again from a closed connection. |
-| `requeue(space: QuicConnSpace, row: i32): void` | Queues again what the packet in row `row` of `space` carried (RFC 9000 §13.3): its CRYPTO range, its STREAM chunks with their FIN, HANDSHAKE_DONE, the NEW_CONNECTION_ID of an ID still active, the RETIRE_CONNECTION_ID of one not queued already, and each stream control frame that still says something. A DATAGRAM is never in a record, so it never goes again. |
-| `requeueControl(kind: i32, value: i64): void` | A lost control frame of kind `kind` (a sequence number or a stream in `value`), queued again unless it no longer matters. |
-| `resendEarly(level: i32): void` | Speeds up the handshake (RFC 9002 §6.2.3): the client showed at `level` that it lacks the server's handshake data there — an Initial with CRYPTO data the server already read, or an ack-eliciting Handshake packet — so, while the server's own packets at that level are in flight, the oldest one's CRYPTO data at that level and at Handshake goes again now, as one probe datagram, rather than at the probe timeout. It does so at most `QUIC_CONN_EARLY_RESENDS` times a connection, and not while an earlier probe is still owed, so each packet the client sends asks for one datagram at most. The anti-amplification limit holds it like any datagram (`takeDatagramInto`). |
 | `reset(entropy: u8[]): void` | Makes this slot a new connection for the next client, with `entropy` its `QUIC_CONN_ENTROPY_SIZE` fresh random bytes (wiped in the caller's array): every secret of the last connection is wiped first, as `release()` does, and every buffer is kept and emptied. The limits are the constructor's configuration's. A slot reset this way allocates nothing, and neither does the next handshake (QUIC-3 in `docs/security/quic.md`). |
-| `runClocks(now: i64): void` | `handleTimer`'s idle timeout, key retention and the end of the closing or draining period, which `receive` runs before it reads a datagram. |
-| `runPathClock(): void` | The path being validated's timers (RFC 9000 §8.2.4, §9.3.2): past `challengeUntil`, max(3 PTO, 6 kInitialRtt) after the move, validation has failed and the connection goes back to the last validated address; past `challengeResendAt`, a probe timeout after the last challenge, a fresh one is drawn and sent. A server's handshake validates the client's address and the handshake confirms the connection before any move, so there is always an address to go back to: the case where there is none, which RFC 9000 §9.3.2 closes silently, cannot arise. |
-| `runRecoveryTimer(): void` | Loss recovery's timer, if it is due (RFC 9002 §6.2, A.9). |
-| `scheduleSkip(from: i64): void` | Draws where the next Application Data packet number is skipped (RFC 9000 §21.4): `QUIC_CONN_SKIP_MIN` plus up to `QUIC_CONN_SKIP_SPREAD - 1` packets past `from`, the distance taken from the ID seed's HMAC under `QUIC_CONN_SKIP_SEQUENCE`, so a client that saw where the last gaps fell cannot tell where the next will. |
-| `sealAt(space: QuicConnSpace, out: u8[], start: i32, payloadEnd: i32): i32` | Seals the packet of `space` whose payload `buildDatagram` wrote from `start` plus its header to `payloadEnd`: the header written in front of it, the payload sealed where it lies, and the packet recorded. Answers the packet's length, or 0 when it could not be sealed, which only keys `quicKeys` did not make cause. |
 | `sendAddress(): u8[]` | Where this connection's datagrams go now: the 18-byte `nish:net` address `receiveWindowFrom` last moved it to, or the first Initial's. A carrier sends every datagram of `takeDatagramInto` here; it is empty (all zero) for a connection fed by `receiveWindow` alone. |
 | `sendDatagram(buf: u8[], from: i32, length: i32): i32` | Queues `buf[from .. from + length)` as a DATAGRAM (RFC 9221) for the next packet the congestion window allows; it is never sent again if lost. Answers `QUIC_DATAGRAM_OK`, `QUIC_DATAGRAM_ERR_DISABLED` when not connected, the client takes none, or the server takes none and so sends none, `QUIC_DATAGRAM_ERR_TOO_BIG` for a frame past the client's limit or a payload past `maxDatagramPayload()`, or `QUIC_DATAGRAM_ERR_FULL` while the ring holds `QUIC_CONN_DATAGRAM_QUEUE` waiting. |
-| `sendResponsesBack(): boolean` | Before `pathCurrent` changes: a PATH_RESPONSE still owed there answers a challenge that came from there, so it goes there, not to the new address (RFC 9000 §8.2.2) — the latest one, on the probe route (`takeProbeInto`), within what that path may still be sent: no limit once validated, else its own 3x (§8.1). The others are dropped, as a response may be. A challenge staged in `probeData` by the datagram being read swaps into the ring in its place, owed on the new address, and the answer is true; otherwise false. A response still owed on the probe route is never overwritten: the ring's are dropped instead. |
 | `sign(signature: u8[]): i64` | Hands the signature over `signatureInput()` to TLS, which writes the rest of the server's flight. Answers 0, or the CRYPTO_ERROR the connection closed with when TLS refused it (a call at the wrong time, or an empty signature: `internal_error`). |
 | `signatureInput(): u8[] \| null` | What CertificateVerify must sign while the handshake waits for it, else `null` (see `TlsServer.signatureInput`). |
-| `spaceAt(level: i32): QuicConnSpace` | The space of TLS level `level`. |
-| `spaceOf(type: i32): QuicConnSpace \| null` | The space of packets of `type`, or `null` for a 0-RTT or Retry packet. |
-| `stageProbe(frame: QuicFrame, payload: u8[]): void` | A PATH_CHALLENGE from another address: kept for `afterPath`, which answers it on the current path when the datagram moved the connection there, and on its own path (`takeProbeInto`) otherwise (§8.2.2, §9.1). Only the latest such challenge is kept, so a response still owed on `probeAddress` is dropped, as a response may be: its data is about to be overwritten. |
-| `start(buf: u8[], header: QuicHeader): boolean` | Starts the connection from the client's first Initial, `header`: the original DCID and the client's SCID, and the Initial keys (RFC 9001 §5.2). Answers whether it could: the client's DCID must be at least 8 bytes (§7.2). The rest of the connection — its first local ID and the `TlsServer` — is made by `establish` once the Initial has opened, so an Initial that does not authenticate costs only its keys. |
-| `startClosingPeriod(): void` | Starts the closing or draining period, three probe timeouts long (RFC 9000 §10.2), once nothing more is owed: when the client's CONNECTION_CLOSE arrives, when `takeCloseInto` sends this side's, or when `begin` closes before anything could be sent. The keys stay through it, as the period's state, and `runClocks` wipes them all at its end, which `deadline()` names, so that a connection nobody `release()`s does not keep them. |
 | `streamRead(id: i64, buf: u8[], at: i32, length: i32): i32` | Reads up to `length` bytes of stream `id` into `buf` from `at`. Answers how many it read, 0 when nothing more has arrived yet, `QUIC_STREAM_END` once every byte up to the FIN was read, `QUIC_STREAM_ERR_RESET` once the client reset the stream (its code is the stream's `resetCode`), or another `QUIC_STREAM_ERR_*`. Reading is what gives the client more credit. |
 | `streamReset(id: i64, code: i64): i32` | Abandons stream `id`'s sending side with application error `code` (RESET_STREAM). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. |
 | `streamStopSending(id: i64, code: i64): i32` | Asks the client to stop sending on stream `id`, with application error `code` (STOP_SENDING). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. |
 | `streamWrite(id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32` | Writes up to `length` bytes of `buf` from `from` to stream `id`, and finishes its sending side when `fin` and every byte fit. Answers how many bytes it took — fewer than `length` when the stream's buffer is full, in which case `nextStreamEvent` names it again once acknowledgements free room — or a `QUIC_STREAM_ERR_*`: not connected, an unknown stream, one only the client sends on, one already finished or reset, or one the client asked to stop (STOP_SENDING, which this side answered with RESET_STREAM). |
-| `takeCloseInto(out: u8[], at: i32): i32` | The one CONNECTION_CLOSE this side owes, written into `out` at `at`, then nothing (0). It goes in every space the server still has keys for, since the client may not yet have the newest (RFC 9000 §10.2.3); in an Initial or Handshake packet an application's close is sent as the transport close APPLICATION_ERROR, since those packets may not carry 0x1d (§12.4). Before the handshake is complete no 1-RTT packet carries it, because the client cannot yet read one. |
 | `takeDatagram(now: i64): u8[] \| null` | The next datagram to send, or `null` when nothing is due: the allocating form of `takeDatagramInto`, which a test or a recording uses. |
 | `takeDatagramInto(out: u8[], at: i32, now: i64): i32` | Writes the next datagram to send into `out` at `at`, which needs `QUIC_CONN_DATAGRAM_SIZE` bytes of room, and answers its length, or 0 when nothing is due (or the room is not there). Call it until it answers 0 after every `receive`, `sign`, write and `close`. It coalesces an Initial, a Handshake and a 1-RTT packet as each has something to carry, pads a datagram with an ack-eliciting Initial to 1200 bytes (RFC 9000 §14.1), and before the client's address is validated sends only while three times what was received allows (§8.1). After a close it writes the CONNECTION_CLOSE once, then nothing. While the handshake waits for a signature it writes nothing, so the server's flight leaves whole. Lost data goes before new data. While the congestion window is full (RFC 9002 §7), or a space's record of packets in flight is, a space sends only an ACK, unless a probe timeout asked it for a probe. `now` is the caller's time in milliseconds: a datagram that elicits an acknowledgement restarts the idle timer when it is the first since the client's last packet (RFC 9000 §10.1), and once the idle timeout has passed nothing goes out. The datagram is built and sealed in place, inside an arena block: nothing it does allocates past the call. This is not paced: a carrier that paces calls `nish/net/quic-listener`'s `quicListenerTakeFlight` instead. |
 | `takeProbeInto(out: u8[], at: i32, now: i64): i32` | Writes the PATH_RESPONSE owed on another path (§8.2.2, §9.1) into `out` at `at`, which needs `QUIC_CONN_DATAGRAM_SIZE` bytes of room, and answers its length, or 0 when none is owed: a 1-RTT packet with that frame alone, padded to 1200 bytes or to three times what came from the path (§8.1), whichever is less. The carrier sends it to `probeAddress`, before `takeDatagramInto`'s datagrams. It is answered once and never sent again (§13.3). |
-| `topUpConnectionIds(): void` | Issues local connection IDs until the client holds as many as it said it would take (its `active_connection_id_limit`), up to `QUIC_CONN_LOCAL_CIDS` at once and `QUIC_CONN_MAX_ISSUED_CIDS` in all; each goes out in a NEW_CONNECTION_ID frame with the stateless reset token the configuration's static key gives it. Each ID and token is made in the slot's scratch and copied into the table, so issuing keeps nothing (QUIC-3). |
-| `unstart(): void` | Undoes `start`, for a first Initial that turned out not to authenticate. |
-| `untrack(space: QuicConnSpace, row: i32): void` | An acknowledged packet in row `row`: each stream chunk and stream control frame it carried is settled. |
 | `updateKeys(): boolean` | Starts a key update from the server (RFC 9001 §6.1): the write keys move to the next generation and the Key Phase bit of every packet after toggles; the client follows when it reads one. Answers whether it did. It does not while it may not: before the handshake is confirmed, while an update is still in flight (the client has not answered the last one, or answered it less than a probe timeout ago, so the next read keys are not ready), and until the client has acknowledged a packet sent with the current keys. |
-| `updateWriteKeys(): boolean` | Moves the write keys to the next generation (RFC 9001 §6.1): the next secret by `quic ku`, its key and IV, the Key Phase bit toggled; the old key, IV and secret wiped. Answers whether it could, which it cannot only for keys `quicKeys` did not make. |
-| `wipe(): void` | Wipes the connection's `Secret` fields: the ephemeral key and both widths' 1-RTT read, next read and write secrets. `wipeAll` calls it, and so `release()`, `reset`, the idle timeout and the end of the closing or draining period. |
-| `wipeAll(): void` | Wipes every key and secret the connection holds and discards every level: `release()`'s work, the idle timeout's, the end of the closing or draining period's and `reset`'s. That takes in both sides' stateless reset tokens and `TlsServer`'s expected client Finished and resumption secret. |
 | `writeStream(id: i64, data: u8[], fin: boolean): i32` | Queues all of `data` on stream `id`, finishing its sending side when `fin`: the all-or-nothing form of `streamWrite`. Answers `QUIC_STREAM_OK`, or `QUIC_STREAM_ERR_*`: the connection is not connected, the stream is unknown, its side is already finished (or the client stopped it), or the data would pass the credit the client gave for the stream or the connection, or the room in the stream's buffer. |
 
 ## QuicServerConfig
@@ -679,7 +591,7 @@ class QuicStreamData
 
 | Member | |
 | --- | --- |
-| `new QuicStreamData(streamId: i64, data: u8[], fin: boolean)` |  |
+| `new QuicStreamData(streamId: i64, data: u8[], fin: boolean)` | A run as `readStream` hands it out. |
 | `data: u8[]` |  |
 | `fin: boolean` |  |
 | `streamId: i64` |  |
@@ -788,6 +700,26 @@ the next packet.
 
 </scalar-card>
 
+<scalar-card title="128" icon="phosphor/regular/hash">
+
+`QUIC_CONN_SKIP_MIN: i64`
+
+The fewest Application Data packets between two skipped packet numbers
+(RFC 9000 §21.4). Large enough that the gaps cost the client almost
+nothing in ACK ranges.
+
+</scalar-card>
+
+<scalar-card title="897" icon="phosphor/regular/hash">
+
+`QUIC_CONN_SKIP_SPREAD: i64`
+
+How many distances past `QUIC_CONN_SKIP_MIN` a skip may fall at: the next
+skipped number is `QUIC_CONN_SKIP_MIN` plus 0 to 896 past the number after
+the last skip, so skips fall 129 to 1025 numbers apart.
+
+</scalar-card>
+
 </scalar-grid>
 
 ## Constants
@@ -874,6 +806,10 @@ flight and two probes fill exactly. The Application Data space sends one.
 
 `QUIC_CONN_INTEGRITY_LIMIT_CHACHA: i64`
 
+ChaCha20-Poly1305's integrity limit (RFC 9001 §6.6), 2^36 packets that fail
+to authenticate over a connection, across every key, before it closes with
+AEAD_LIMIT_REACHED. The connection counts failures against the limit of the AEAD it negotiated.
+
 </scalar-card>
 
 <scalar-card title="4,503,599,627,370,496" icon="phosphor/regular/hash">
@@ -910,12 +846,6 @@ a probe timeout between two of them.
 
 </scalar-card>
 
-<scalar-card title="128" icon="phosphor/regular/hash">
-
-`QUIC_CONN_SKIP_MIN: i64`
-
-</scalar-card>
-
 <scalar-card title="8" icon="phosphor/regular/hash">
 
 `QUIC_CONN_SKIP_RING: i32`
@@ -925,12 +855,6 @@ ACK of any of the last this many closes the connection as an optimistic
 acknowledgement. One is skipped every `QUIC_CONN_SKIP_MIN` to
 `QUIC_CONN_SKIP_MIN + QUIC_CONN_SKIP_SPREAD - 1` packets, so the ring
 reaches back at least 7 × 129 = 903 packets.
-
-</scalar-card>
-
-<scalar-card title="897" icon="phosphor/regular/hash">
-
-`QUIC_CONN_SKIP_SPREAD: i64`
 
 </scalar-card>
 

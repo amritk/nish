@@ -10,6 +10,17 @@ import {
 } from "nish/net/quic-datagram";
 ```
 
+```ts
+import { QuicDatagramQueue } from "nish/net/quic-datagram";
+
+const outgoing: QuicDatagramQueue = new QuicDatagramQueue(16, 1200);  // 16 payloads, each 1200 bytes at most
+if (!outgoing.push(message, 0, toI32(message.length))) { … full or too big: dropped … }
+at = outgoing.putFrame(packet, at, packetEnd);                         // `at` again when nothing fit
+
+const incoming: QuicDatagramQueue = new QuicDatagramQueue(16, 1200);
+const length: i32 = incoming.pop(into, 0, toI32(into.length));         // -1 empty, -2 `into` too small
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="QuicDatagramQueue" icon="phosphor/regular/cube" href="#quicdatagramqueue">
@@ -45,7 +56,7 @@ class QuicDatagramQueue
 
 | Member | |
 | --- | --- |
-| `new QuicDatagramQueue(entries: i32, entrySize: i32)` |  |
+| `new QuicDatagramQueue(entries: i32, entrySize: i32)` | Makes an empty ring, allocating all of its storage now: `entries * entrySize` bytes of payload and a 4-byte length per entry. |
 | `count: i32` |  |
 | `data: u8[]` | Entry `k`'s bytes are `data[k * entrySize ..]`, `lengths[k]` of them. |
 | `dropped: i32` | Datagrams refused for want of room or for their size, which the peer's side counts as dropped. |
@@ -53,7 +64,6 @@ class QuicDatagramQueue
 | `head: i32` |  |
 | `lengths: i32[]` |  |
 | `capacity(): i32` | How many datagrams the ring holds at most. |
-| `drop(): void` | Forgets the oldest datagram. |
 | `peekLength(): i32` | The oldest datagram's length, or -1 when the ring is empty. |
 | `pop(buf: u8[], at: i32, cap: i32): i32` | Copies the oldest datagram into `buf` at `at` and forgets it. Answers its length, -1 when the ring is empty, or -2, keeping it, when it does not fit in `cap` bytes from `at` inside `buf`. |
 | `push(buf: u8[], from: i32, length: i32): boolean` | Copies `buf[from .. from + length)` in as the newest datagram. Answers whether it could: not when the ring is full, nor for a payload past `entrySize` or a window outside `buf`, each of which counts in `dropped`. |

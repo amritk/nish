@@ -188,20 +188,14 @@ class QuicRecovery
 | `spaces: QuicSentPackets[]` |  |
 | `ssthresh: i64` | ssthresh (B.2): unbounded (2^62 − 1) until the first congestion event. |
 | `timeoutSpace: i32` | The space the last `onTimeout` acted on, or -1. |
-| `boundAckDelay(ackDelay: i64): i64` | The peer's ACK delay in milliseconds as §5.3 counts it: at most max_ack_delay once the handshake is confirmed. |
 | `bytesInFlight(): i64` | bytes_in_flight (B.2): every space's packets in flight. |
 | `canSend(): boolean` | Whether the window has room for another full-sized datagram (B.4). The caller sends nothing ack-eliciting while it has not, except a probe. |
-| `congestionEvent(sentTime: i64, now: i64): void` | OnCongestionEvent (B.6): halve the window, once per recovery period. |
 | `deadline(amplificationBlocked: boolean): i64` | SetLossDetectionTimer (A.8): when `onTimeout` is next due — the earliest time-threshold loss, else the probe timeout — or -1 for none. With `amplificationBlocked`, when the server may send nothing until the client does (RFC 9000 §8.1), there is no probe timeout (§6.2.2.1). |
-| `detectLoss(sp: QuicSentPackets, now: i64): void` | DetectAndRemoveLostPackets (A.10): every packet in flight at or below the largest acknowledged is lost once it was sent a loss delay ago, or three numbers below the largest acknowledged; the first that is neither sets `lossTime`. |
 | `discardSpace(space: i32): void` | OnPacketNumberSpaceDiscarded (A.11): the space's keys are gone, so its packets leave flight uncounted, its timers stop, and the backoff resets. |
 | `ecnCodepoint(): i32` | The ECN codepoint to mark the next packet with (RFC 9000 A.4): ECT(0) for the first `QUIC_RECOVERY_ECN_TESTING_PACKETS` and, once the path is capable, for every one; 0, Not-ECT, while the testing packets wait to be validated and once validation failed. |
 | `evictOldest(space: i32): i32` | Gives up the oldest packet still in flight in space `space`, taking it out of flight without a congestion event, so that a probe can be recorded when the ring is full. The caller has already queued what the space had in flight again, which is what a probe sends. Answers the slot, or -1 when nothing is in flight there. |
 | `fineNow(now: i64): i64` | `now` on the pacer's clock: `micros` when it falls inside the millisecond `now` names, and `now × 1000` otherwise. |
-| `fineSample(now: i64, sent: i64): i64` | The pacer's RTT sample, in microseconds, for a packet sent at `sent` on its clock: at least a microsecond on a fine clock, and at least `QUIC_RECOVERY_GRANULARITY` on a millisecond one, where a sample of 0 says only that the round trip was under a millisecond. A packet sent while `micros` was stale is stamped `now × 1000`, so a fine sample for it runs long by up to a millisecond: only a carrier that calls `clock` on some sends and not others sees that. |
-| `inRecovery(sentTime: i64): boolean` | Whether a packet sent at `sentTime` was sent during the current recovery period (B.4). |
 | `lossDelay(): i64` | The loss delay (§6.1.2): 9/8 of the larger of the latest and the smoothed RTT, at least the granularity. |
-| `lossSpace(): i32` | The space with the earliest `lossTime`, or -1 when none is set. |
 | `onAck(space: i32, ranges: i64[], count: i32, ackDelay: i64, now: i64): i32` | An ACK frame for space `space` (A.7): `ranges` holds `count` `[smallest, largest]` pairs, highest first, as `QuicFrame.ackRanges` does, and `ackDelay` is the peer's ACK Delay in milliseconds. The packets newly acknowledged are listed in the space's `acked`, those it shows lost in `lost`; an RTT sample is taken when the largest acknowledged is newly acknowledged (§5.1), the window grows or shrinks (B.5, B.8), and the probe backoff resets. Answers how many packets were newly acknowledged, or -1, changing nothing, when the space does not exist or there is no range. A packet number the space never sent is the caller's to refuse (RFC 9000 §13.1): only it knows the packets that elicit no acknowledgement, which are not recorded here. |
 | `onAckEcn(space: i32, ranges: i64[], count: i32, ackDelay: i64, now: i64, ect0: i64, ect1: i64, ce: i64): i32` | `onAck` for an ACK frame that carries ECN counts, `ect0`, `ect1` and `ce` as ACK_ECN gives them (RFC 9000 §19.3.2), or -1 each for one that carries none. The counts are validated (RFC 9000 §13.4.2.1) and a rise in ECN-CE is a congestion event (§7.1, B.7) before loss is detected, as A.7 orders it. |
 | `onEctSent(space: i32, slot: i32): void` | A packet of space `space` went out marked ECT(0): `slot` is the one `onPacketSent` answered for it, or -1 for a packet that elicits no acknowledgement and so was not recorded. Every packet of a datagram marked counts, whatever `ecnCodepoint()` answers by the last of them. |
@@ -210,23 +204,10 @@ class QuicRecovery
 | `onTimeout(now: i64, amplificationBlocked: boolean): i32` | OnLossDetectionTimeout (A.9), at `now`. When a time-threshold loss is due, the space's packets are checked again and the lost ones listed in its `lost`: `QUIC_RECOVERY_TIMEOUT_LOSS`. Otherwise, when the probe timeout is due, the backoff doubles and the caller is to send a probe in `timeoutSpace`: `QUIC_RECOVERY_TIMEOUT_PTO`. Before either is due, or when nothing is timed, `QUIC_RECOVERY_TIMEOUT_NONE`. |
 | `pacerDelay(now: i64, size: i32): i64` | How many milliseconds after `now` the pacer lets a datagram of `size` bytes go: 0 when it may go now, else its wait in microseconds rounded up to whole milliseconds, so at least 1. The rate is 5/4 of the window per `pacerRtt` (§7.7's N of 1.25). |
 | `pacerQuantum(least: i32, most: i32): i32` | The credit a paced flight waits for before it starts, in bytes: what the pacer earns in a millisecond, at least `least` and at most `most`. A pacer that earns by the microsecond would otherwise let a fast connection out a datagram at a time, one send each; one that earns slowly still lets a datagram go as soon as it has the credit for it. |
-| `pacerRefill(now: i64): void` | Tops the pacer up to `now` (§7.7), on its clock: it earns 5/4 of the window per `pacerRtt`, and holds at most the initial window, which is the largest burst it allows. |
-| `pacerWindow(): i64` | The congestion window the pacer earns by: at most `QUIC_RECOVERY_PACER_WINDOW`. |
-| `packetAcked(sp: QuicSentPackets, s: i32, inUse: boolean): void` | OnPacketAcked (B.5) for slot `s`: in slow start the window grows by the packet's size, in congestion avoidance by 1200 × size / window; not at all for a packet sent during recovery, or when `inUse` says the window was not being used (§7.8). |
-| `packetsLost(sp: QuicSentPackets, now: i64): void` | OnPacketsLost (B.8) for what `detectLoss` just declared lost: one congestion event for the newest of them, and persistent congestion when they span long enough. |
-| `persistentCongestion(sp: QuicSentPackets): boolean` | Whether the packets just declared lost establish persistent congestion (§7.6.2): a run of lost ack-eliciting packets, all sent since the first RTT sample, with nothing acknowledged between the first and the last, spanning more than three probe timeouts with max_ack_delay, and holding at least one packet this call declared lost. |
 | `probeTimeout(): i64` | The probe timeout's period without backoff (§6.2.1): smoothed_rtt + max(4 × rttvar, kGranularity), plus the peer's max_ack_delay once the handshake is confirmed. It is also what a key update's old keys are kept for and what the idle timeout is at least three of. |
-| `processEcn(sp: QuicSentPackets, raised: boolean, ect0: i64, ect1: i64, ce: i64, later: i64, now: i64): void` | ECN validation (RFC 9000 §13.4.2.1) and ProcessECN (B.7) for the ACK `onAckEcn` just settled in `sp`, `raised` saying whether it raised the largest acknowledged. A failure stops ECN for the connection and its counts are not used; a pass makes the path capable once a marked packet is among those acknowledged, and a rise in ECN-CE halves the window from the send time of the largest packet newly acknowledged. With none newly acknowledged it is timed from `later`, a send time no earlier than the largest acknowledged packet's, which recovery did not record. |
-| `ptoBase(): i64` | smoothed_rtt + max(4 × rttvar, kGranularity): every probe timeout's period before max_ack_delay and the backoff. |
-| `ptoSpace(): i32` | The space whose probe timeout fires first, or -1 when no space may have one. |
-| `ptoTime(): i64` | GetPtoTimeAndSpace (A.8): when the probe timeout fires, the earliest over the spaces with an ack-eliciting packet in flight, with the backoff applied; the Application Data space counts only once the handshake is confirmed. Answers -1 with nothing in flight. `ptoSpace()` names the space it chose. |
-| `ptoTimeOf(space: i32): i64` | The probe timeout of space `space`, from its last ack-eliciting packet, with the backoff. |
+| `ptoTime(): i64` | GetPtoTimeAndSpace (A.8): when the probe timeout fires, the earliest over the spaces with an ack-eliciting packet in flight, with the backoff applied; the Application Data space counts only once the handshake is confirmed. Answers -1 with nothing in flight. |
 | `reset(): void` | Puts everything back as a new connection has it: every space empty, the RTT estimate and the window at their initial values. A connection slot reused for another peer calls it; the rings are kept. |
-| `resetPath(): void` | Starts the RTT estimate, the congestion window and the pacer again from their initial values, for a connection whose peer moved to a new address it has proved it holds (RFC 9000 §9.4): what was learnt of the old path says nothing about the new one. The packets in flight, the peer's `max_ack_delay` and the counters are kept. |
-| `restartEcn(): void` | Tests ECN again from the start, as on a new path (RFC 9000 §13.4.2). Every packet still in flight loses its mark: those sent on the old path, and those sent to the new one before it was validated, which went out under the old test. Their loss, or an ACK of them, says nothing of the new test, and only packets marked from here on count toward it. |
 | `space(space: i32): QuicSentPackets \| null` | Space `space`'s packets, or `null` for an index that names no space. |
-| `updatePacerRtt(sample: i64, ackDelay: i64, first: boolean): void` | UpdateRtt (§5.3) for the pacer's RTT, in microseconds: `sample` the sample, `ackDelay` the peer's delay in milliseconds, `first` whether it is the connection's first. min_rtt is the millisecond one, at most the true minimum, so a delay is taken off a little more readily than `updateRtt` takes it. |
-| `updateRtt(ackDelay: i64, now: i64): void` | UpdateRtt (§5.3, A.7) with a sample in `latestRtt`, `ackDelay` the peer's delay in milliseconds. |
 
 ## QuicSentPackets
 
@@ -243,18 +224,16 @@ class QuicSentPackets
 
 | Member | |
 | --- | --- |
-| `new QuicSentPackets(capacity: i32)` |  |
+| `new QuicSentPackets(capacity: i32)` | An empty ring; `QuicRecovery` makes one for each space. |
 | `acked: i32[]` | The slots the last `onAck` acknowledged, `ackedCount` of them, oldest first. |
 | `ackedCount: i32` |  |
 | `bytesInFlight: i64` | The bytes of this space's packets in flight. |
-| `capacity: i32` |  |
 | `ce: i64` |  |
 | `count: i32` |  |
 | `ect0: i64` | The ECN counts of the last ACK_ECN frame validated in this space (RFC 9000 §19.3.2). |
 | `ect1: i64` |  |
 | `ectSent: i64` | How many of this space's packets, recorded or not, were sent marked ECT(0). |
 | `fineSent: i64[]` | When each packet was sent on the pacer's clock, in microseconds. |
-| `head: i32` |  |
 | `inFlight: i32` | How many recorded packets are still in flight: neither acknowledged nor lost. |
 | `largestAcked: i64` | The largest packet number the peer acknowledged in this space, or -1. |
 | `lastAckEliciting: i64` | time_of_last_ack_eliciting_packet (A.3), or -1 before the first. |
@@ -267,22 +246,13 @@ class QuicSentPackets
 | `state: u8[]` | Each slot's state, with `QUIC_RECOVERY_MARKED` set if its packet was sent marked ECT(0). |
 | `timeSent: i64[]` |  |
 | `ackedSlot(k: i32): i32` | The `k`-th slot the last call acknowledged, or -1. |
-| `clear(): void` | Drops every packet, as when the space's keys are discarded (A.11). |
-| `clearResults(): void` | Forgets the results of the last call. |
-| `compact(): void` | Frees the oldest slots that are settled, acknowledged or lost. |
 | `fineAt(s: i32): i64` | When the packet in slot `s` was sent on the pacer's clock, in microseconds, or -1. |
 | `full(): boolean` | Whether every slot is taken, so nothing more can be recorded until a packet is settled. |
 | `inFlightAt(s: i32): boolean` | Whether slot `s` holds a packet still in flight. |
 | `lostSlot(k: i32): i32` | The `k`-th slot the last call declared lost, or -1. |
 | `markedAt(s: i32): boolean` | Whether the packet in slot `s` was sent marked ECT(0). |
-| `markLost(s: i32): void` | Settles packet `s` as lost and lists it in `lost`. |
 | `pnAt(s: i32): i64` | The packet number in slot `s`, or -1. |
-| `reset(): void` | Empties the ring and forgets every number, for a connection slot reused for another peer. |
-| `setMarked(s: i32, value: boolean): void` | Sets whether the packet in slot `s` was sent marked ECT(0). |
-| `setState(s: i32, value: i32): void` | Sets slot `s`'s state. |
-| `settle(s: i32, state: i32): void` | Takes packet `s` out of flight. |
 | `sizeAt(s: i32): i32` | The size of the packet in slot `s`, or 0. |
-| `slot(k: i32): i32` | The ring slot of the `k`-th packet kept, counting from the oldest. |
 | `stateAt(s: i32): i32` | The state of slot `s`, or free for a slot outside the ring. |
 | `timeAt(s: i32): i64` | When the packet in slot `s` was sent, or -1. |
 
@@ -357,11 +327,15 @@ The default max_ack_delay (RFC 9000 §18.2), in milliseconds, until the peer's t
 
 `QUIC_RECOVERY_ECN_CAPABLE: i32`
 
+The path is ECN-capable: a marked packet's counts validated, and every packet is marked from here on.
+
 </scalar-card>
 
 <scalar-card title="3" icon="phosphor/regular/hash">
 
 `QUIC_RECOVERY_ECN_FAILED: i32`
+
+Validation failed: nothing is marked again for the connection's life, unless `restartEcn` tests a new path.
 
 </scalar-card>
 
@@ -384,6 +358,9 @@ How many packets are marked while ECN is tested, before a marked one is acknowle
 <scalar-card title="1" icon="phosphor/regular/hash">
 
 `QUIC_RECOVERY_ECN_UNKNOWN: i32`
+
+ECN is unknown: the testing packets are sent, none is validated yet, and nothing more is marked
+until one is.
 
 </scalar-card>
 

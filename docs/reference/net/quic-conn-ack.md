@@ -14,9 +14,13 @@ import {
 ```ts
 import { QuicAckRanges } from "nish/net/quic-conn-ack";
 
-const received = new QuicAckRanges();
-if (!received.record(packetNumber, ackEliciting)) { … a duplicate: drop it … }
-if (received.ackPending) { received.pushAck(payload, 0); }
+const received: QuicAckRanges = new QuicAckRanges()
+const fresh: boolean = received.record(toI64(7), true)   // true: 7 is new and asks for an ACK
+const again: boolean = received.record(toI64(7), true)   // false: a duplicate, so drop the packet
+const payload: u8[] = []
+if (received.ackPending) {
+  received.pushAck(payload, toI64(0))                    // appends ACK [7, 7], clears ackPending
+}
 ```
 
 <scalar-grid cols="2">
@@ -43,16 +47,20 @@ and loses only very late packets.
 
 <scalar-detail title="When to acknowledge">
 
-**When to acknowledge** is the connection's choice; this module records
+That is the connection's choice; this module records
 whether something ack-eliciting arrived since the last ACK it wrote
 (`ackPending`). ACK frames carry an ACK Delay the caller supplies, and no
 ECN counts.
 
 </scalar-detail>
 
+<scalar-detail title="Provenance">
+
 Written from RFC 9000 §12.3, §13.2 and §19.3, not ported from another
 implementation. Private names carry the `quicAck` prefix
 (`docs/wp26-stdlib.md` §3e).
+
+</scalar-detail>
 
 ## QuicAckRanges
 
@@ -71,17 +79,14 @@ class QuicAckRanges
 | `count: i32` |  |
 | `floor: i64` | Every packet number at or below this is answered as already received; -1 until a range is dropped. |
 | `largest: i64` | The largest packet number received, or -1. |
-| `ranges: i64[]` |  |
 | `clear(): void` | Forgets every packet number, for a connection slot reused for another peer. |
 | `contains(pn: i64): boolean` | Whether `pn` was received, or is at or below the floor and so cannot be told apart from one that was. |
 | `high(k: i32): i64` | The largest packet number of range `k`. |
-| `insert(k: i32, pn: i64): void` | Inserts the one-number range `[pn, pn]` at position `k`. When every slot is taken the lowest range is dropped first and the floor raised over it; if `pn` itself would be that lowest range, it is the one dropped. |
 | `low(k: i32): i64` | The smallest packet number of range `k`, which the caller keeps below `count`. |
 | `pushAck(out: u8[], ackDelay: i64): boolean` | Appends an ACK frame for every range kept, with `ackDelay` (already scaled by this endpoint's ACK delay exponent), and clears `ackPending`. Answers `false`, appending nothing, when nothing has been received. |
 | `putAck(buf: u8[], at: i32, end: i32, ackDelay: i64): i32` | Writes the ACK frame `pushAck` appends into `buf` at `at`, before `end`, and clears `ackPending`. Answers the offset past it, or -1, writing nothing and leaving `ackPending` as it was, when nothing has been received or the frame does not fit. |
 | `record(pn: i64, ackEliciting: boolean): boolean` | Records `pn` as received, `ackEliciting` saying whether its frames ask for an acknowledgement. Answers `false`, changing nothing, for a packet number already received (or at or below the floor), or one that is not a packet number at all. |
-| `remove(k: i32): void` | Removes range `k`, moving the lower ones up. |
-| `set(k: i32, low: i64, high: i64): void` | Sets range `k` to `[low, high]`. |
+| `set(k: i32, low: i64, high: i64): void` | Sets range `k` to `[low, high]`. An index outside the storage changes nothing, and `count` is not moved: the caller keeps the ranges ordered and disjoint. |
 
 ## Limits
 

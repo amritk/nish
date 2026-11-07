@@ -297,9 +297,9 @@ One frame as `quicParseFrame` read it.
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="Coverage">
 
-**Every frame type of RFC 9000 is read**, 0x00 to 0x1e, and RFC 9221's
+Every frame type of RFC 9000 is read, 0x00 to 0x1e, and RFC 9221's
 DATAGRAM, 0x30 and 0x31, so a type outside those is the one parse error a
 well-formed packet cannot produce. What
 a frame *means* is `nish/net/quic`'s: this module checks only what §19 says
@@ -312,7 +312,7 @@ outside 1 to 20 bytes or a Retire Prior To above its own sequence number;
 it needs (§12.4). Every read is bounds-checked against the window the caller
 gives, so nothing a peer sends can make this module panic.
 
-</scalar-callout>
+</scalar-detail>
 
 <scalar-detail title="No copy of the bulk">
 
@@ -327,9 +327,9 @@ so a payload made inside an arena block can be read inside it.
 
 </scalar-detail>
 
-<scalar-detail title="The writers">
+<scalar-detail title="Writers">
 
-**The writers** come in two forms. A `put` writer writes one frame into a
+They come in two forms. A `put` writer writes one frame into a
 caller's buffer at an offset, before an end, and answers the offset past
 it, or -1 with nothing written; a `push` writer appends one to an array
 and answers whether it could, by growing the array and calling the `put`
@@ -362,17 +362,29 @@ function quicAckSize(
 #### Parameters
 
 <scalar-field name="ranges" type="i64[]" required>
+
+Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+
 </scalar-field>
 
 <scalar-field name="rangeCount" type="i32" required>
+
+How many pairs to read from the front of `ranges`; the rest of the array is ignored.
+
 </scalar-field>
 
 <scalar-field name="ackDelay" type="i64" required>
+
+The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The frame's size in bytes, or 0 when `quicPutAck` would refuse these arguments.
+
 </scalar-field>
 
 ## quicCryptoOverhead
@@ -390,14 +402,24 @@ function quicCryptoOverhead(
 #### Parameters
 
 <scalar-field name="offset" type="i64" required>
+
+The crypto stream offset, in bytes, of the frame's first data byte, up to 2^62 − 1.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many data bytes the frame carries.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The header's size in bytes, not counting the data, which is what a sender subtracts from a
+  packet's room to see how much data fits.
+
 </scalar-field>
 
 ## quicDatagramSize
@@ -413,11 +435,17 @@ function quicDatagramSize(length: i32): i32
 #### Parameters
 
 <scalar-field name="length" type="i32" required>
+
+The payload's size in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The whole frame's size in bytes.
+
 </scalar-field>
 
 ## quicFrameAckEliciting
@@ -432,11 +460,18 @@ function quicFrameAckEliciting(type: i32): boolean
 #### Parameters
 
 <scalar-field name="type" type="i32" required>
+
+The frame type as `quicParseFrame` answers it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when a packet holding this frame is ack-eliciting, which is what decides whether the
+  peer must acknowledge it promptly.
+
 </scalar-field>
 
 ## quicFrameAllowed
@@ -457,14 +492,26 @@ function quicFrameAllowed(
 #### Parameters
 
 <scalar-field name="type" type="i32" required>
+
+The frame type as `quicParseFrame` answers it in `QuicFrame.type`, every STREAM type as
+  `QUIC_FRAME_STREAM`.
+
 </scalar-field>
 
 <scalar-field name="packetType" type="i32" required>
+
+The packet's `QUIC_PACKET_*` type from `nish/net/quic-packet`, `QUIC_PACKET_SHORT`
+  for 1-RTT.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when §12.4 permits the frame there; false when it does not permit that frame in that
+  packet type, and for a packet type that carries no frames, such as Retry.
+
 </scalar-field>
 
 ## quicParseFrame
@@ -489,20 +536,38 @@ function quicParseFrame(
 #### Parameters
 
 <scalar-field name="frame" type="QuicFrame" required>
+
+The frame to fill, reused across frames and packets; its windows (`dataStart` and the
+  like) are offsets into `payload`, so they mean something only while `payload` is unchanged.
+
 </scalar-field>
 
 <scalar-field name="payload" type="u8[]" required>
+
+The decrypted packet payload, as the peer sent it; only read, never kept.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte, its type.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use, normally the payload's end; a frame reaching past
+  it is `QUIC_ERROR_FRAME_ENCODING`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+`QUIC_ERROR_NO_ERROR` (0) for a good frame, otherwise the `QUIC_ERROR_*` code to close the
+  connection with.
+
 </scalar-field>
 
 ## quicPushAck
@@ -521,25 +586,41 @@ function quicPushAck(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="ranges" type="i64[]" required>
+
+Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+
 </scalar-field>
 
 <scalar-field name="rangeCount" type="i32" required>
+
+How many pairs to read from the front of `ranges`.
+
 </scalar-field>
 
 <scalar-field name="ackDelay" type="i64" required>
+
+The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPushConnectionClose
 
-Appends the frame `quicPutConnectionClose` writes. Answers `false`, appending nothing, where it refuses.
+Appends the frame `quicPutConnectionClose` writes. Answers `false`, appending nothing, where it
+refuses.
 
 ```ts
 function quicPushConnectionClose(
@@ -554,23 +635,41 @@ function quicPushConnectionClose(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="application" type="boolean" required>
+
+Whether the close is the application's (0x1d) rather than the transport's (0x1c).
+
 </scalar-field>
 
 <scalar-field name="errorCode" type="i64" required>
+
+A `QUIC_ERROR_*` code for a transport close, the application's own code otherwise.
+
 </scalar-field>
 
 <scalar-field name="frameType" type="i64" required>
+
+The frame type that caused a transport error, 0 when none did; ignored when `application`.
+
 </scalar-field>
 
 <scalar-field name="reason" type="u8[]" required>
+
+The whole array is the reason phrase, UTF-8, possibly empty; copied, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPushCrypto
@@ -590,23 +689,41 @@ function quicPushCrypto(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="offset" type="i64" required>
+
+The crypto stream offset, in bytes, of the first byte carried.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The handshake bytes to take the window from; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The offset in `data` of the first byte to carry.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to carry.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPushNewConnectionId
@@ -628,23 +745,41 @@ function quicPushNewConnectionId(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="sequence" type="i64" required>
+
+The sequence number this endpoint gives the new connection ID.
+
 </scalar-field>
 
 <scalar-field name="retirePriorTo" type="i64" required>
+
+The peer is to retire every connection ID of a lower sequence number; 0 retires none.
+
 </scalar-field>
 
 <scalar-field name="connectionId" type="u8[]" required>
+
+The new ID, the whole array; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="resetToken" type="u8[]" required>
+
+The 16-byte stateless reset token tied to the ID; copied, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended; false, appending nothing, otherwise.
+
 </scalar-field>
 
 ## quicPushNewToken
@@ -662,14 +797,23 @@ function quicPushNewToken(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="token" type="u8[]" required>
+
+The whole array is the token the client is to present later; copied, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended; false, appending nothing, for an empty token.
+
 </scalar-field>
 
 ## quicPushPadding
@@ -686,9 +830,15 @@ function quicPushPadding(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to grow, such as a packet payload being built.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+How many bytes of padding to append.
+
 </scalar-field>
 
 ## quicPushPathData
@@ -707,20 +857,35 @@ function quicPushPathData(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_FRAME_PATH_CHALLENGE` or `QUIC_FRAME_PATH_RESPONSE`.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+Holds the eight bytes to carry.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The offset in `data` of the first of the eight bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPushStream
@@ -745,29 +910,53 @@ function quicPushStream(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i64" required>
+
+The stream the data belongs to.
+
 </scalar-field>
 
 <scalar-field name="offset" type="i64" required>
+
+The stream offset, in bytes, of the first byte carried.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The bytes to take the window from; copied, not kept, and not read as a ring.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The offset in `data` of the first byte to carry.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to carry; 0 for a frame that only carries FIN.
+
 </scalar-field>
 
 <scalar-field name="fin" type="boolean" required>
+
+Whether these bytes end the stream.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPushStreamError
@@ -786,20 +975,35 @@ function quicPushStreamError(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i64" required>
+
+The stream being reset or asked to stop.
+
 </scalar-field>
 
 <scalar-field name="errorCode" type="i64" required>
+
+The application's error code for why.
+
 </scalar-field>
 
 <scalar-field name="finalSize" type="i64" required>
+
+The stream's final size in bytes for RESET_STREAM, or -1 for STOP_SENDING.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPushStreamValue
@@ -818,20 +1022,35 @@ function quicPushStreamValue(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_FRAME_MAX_STREAM_DATA` or `QUIC_FRAME_STREAM_DATA_BLOCKED`.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i64" required>
+
+The stream the limit is for.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+The stream's limit in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPushTypeOnly
@@ -848,14 +1067,23 @@ function quicPushTypeOnly(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame's one byte to.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_FRAME_PING` or `QUIC_FRAME_HANDSHAKE_DONE`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended; false, appending nothing, for any other type.
+
 </scalar-field>
 
 ## quicPushValue
@@ -873,17 +1101,29 @@ function quicPushValue(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+One of the seven types `quicPutValue` writes.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+What the type carries: bytes, a count of streams or a sequence number, as for `quicPutValue`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
 </scalar-field>
 
 ## quicPutAck
@@ -908,26 +1148,48 @@ function quicPutAck(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="ranges" type="i64[]" required>
+
+Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+
 </scalar-field>
 
 <scalar-field name="rangeCount" type="i32" required>
+
+How many pairs to read from the front of `ranges`.
+
 </scalar-field>
 
 <scalar-field name="ackDelay" type="i64" required>
+
+The ACK Delay field, already scaled: microseconds shifted right by the exponent.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written. The frame is always type 0x02, without ECN
+  counts.
+
 </scalar-field>
 
 ## quicPutConnectionClose
@@ -953,29 +1215,53 @@ function quicPutConnectionClose(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="application" type="boolean" required>
+
+Whether the close is the application's (0x1d) rather than the transport's (0x1c).
+
 </scalar-field>
 
 <scalar-field name="errorCode" type="i64" required>
+
+A `QUIC_ERROR_*` code for a transport close, the application's own code otherwise.
+
 </scalar-field>
 
 <scalar-field name="frameType" type="i64" required>
+
+The frame type that caused a transport error, 0 when none did; ignored when `application`.
+
 </scalar-field>
 
 <scalar-field name="reason" type="u8[]" required>
+
+The whole array is the reason phrase; copied, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutCrypto
@@ -999,29 +1285,53 @@ function quicPutCrypto(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="offset" type="i64" required>
+
+The crypto stream offset, in bytes, of the first byte carried.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The handshake bytes to take the window from; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The offset in `data` of the first byte to carry.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to carry.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutDatagram
@@ -1043,26 +1353,47 @@ function quicPutDatagram(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The payload's bytes; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The offset in `data` of the payload's first byte.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+The payload's size in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutNewConnectionId
@@ -1088,32 +1419,59 @@ function quicPutNewConnectionId(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="sequence" type="i64" required>
+
+The sequence number this endpoint gives the new connection ID.
+
 </scalar-field>
 
 <scalar-field name="retirePriorTo" type="i64" required>
+
+The peer is to retire every connection ID of a lower sequence number; 0 retires none.
+
 </scalar-field>
 
 <scalar-field name="connectionId" type="u8[]" required>
+
+The bytes of the new ID, which may be a longer buffer; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="cidLength" type="i32" required>
+
+How many bytes of `connectionId` are the ID, 1 to 20.
+
 </scalar-field>
 
 <scalar-field name="resetToken" type="u8[]" required>
+
+The 16-byte stateless reset token tied to the ID; copied, not kept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutPadding
@@ -1132,17 +1490,30 @@ function quicPutPadding(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the first zero byte.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+How many zero bytes to write; fewer are written where `buf` ends first.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the last byte written, which is short of `at + count` when `buf` was too small and
+  `at` itself when nothing could be written.
+
 </scalar-field>
 
 ## quicPutPathData
@@ -1165,26 +1536,47 @@ function quicPutPathData(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_FRAME_PATH_CHALLENGE` or `QUIC_FRAME_PATH_RESPONSE`.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+Holds the eight bytes: fresh random ones for a challenge, the challenge's own for a response.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The offset in `data` of the first of the eight bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, nine bytes on, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutStream
@@ -1215,35 +1607,65 @@ function quicPutStream(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i64" required>
+
+The stream the data belongs to.
+
 </scalar-field>
 
 <scalar-field name="offset" type="i64" required>
+
+The stream offset, in bytes, of the first byte carried.
+
 </scalar-field>
 
 <scalar-field name="data" type="u8[]" required>
+
+The bytes to carry, read as a ring; copied, not kept.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+The index in `data` of the first byte to carry, inside the array when `length` is above zero.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many bytes to carry, at most `data.length`; 0 for a frame that only carries FIN.
+
 </scalar-field>
 
 <scalar-field name="fin" type="boolean" required>
+
+Whether these bytes end the stream, so that `offset + length` is its final size.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutStreamError
@@ -1265,26 +1687,48 @@ function quicPutStreamError(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i64" required>
+
+The stream being reset or asked to stop.
+
 </scalar-field>
 
 <scalar-field name="errorCode" type="i64" required>
+
+The application's error code for why.
+
 </scalar-field>
 
 <scalar-field name="finalSize" type="i64" required>
+
+For RESET_STREAM, the stream's final size: how many bytes of it were ever sent.
+  -1 asks for STOP_SENDING instead.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutStreamValue
@@ -1306,26 +1750,48 @@ function quicPutStreamValue(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_FRAME_MAX_STREAM_DATA` or `QUIC_FRAME_STREAM_DATA_BLOCKED`.
+
 </scalar-field>
 
 <scalar-field name="streamId" type="i64" required>
+
+The stream the limit is for.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+The stream's limit in bytes: the new one for MAX_STREAM_DATA, the one the sender is blocked at
+  for STREAM_DATA_BLOCKED.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutTypeOnly
@@ -1344,20 +1810,35 @@ function quicPutTypeOnly(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset to write the one byte at.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use, such as the end of the packet's room.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+`QUIC_FRAME_PING` or `QUIC_FRAME_HANDSHAKE_DONE`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`at + 1`, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicPutValue
@@ -1380,23 +1861,42 @@ function quicPutValue(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
 </scalar-field>
 
 <scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
 </scalar-field>
 
 <scalar-field name="type" type="i32" required>
+
+One of the seven `QUIC_FRAME_*` types above.
+
 </scalar-field>
 
 <scalar-field name="value" type="i64" required>
+
+What the type carries: a limit in bytes for MAX_DATA and DATA_BLOCKED, a count of streams for
+  the four stream-count types, a sequence number for RETIRE_CONNECTION_ID.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
+
 </scalar-field>
 
 ## quicStreamOverhead
@@ -1416,17 +1916,29 @@ function quicStreamOverhead(
 #### Parameters
 
 <scalar-field name="streamId" type="i64" required>
+
+The stream the frame is for; meaningful up to 2^62 − 1.
+
 </scalar-field>
 
 <scalar-field name="offset" type="i64" required>
+
+The stream offset, in bytes, of the frame's first data byte.
+
 </scalar-field>
 
 <scalar-field name="length" type="i32" required>
+
+How many data bytes the frame carries.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The header's size in bytes, not counting the data.
+
 </scalar-field>
 
 ## QuicFrame
@@ -1508,11 +2020,15 @@ but not stored. Loss recovery, which would read them, is WP34 Q3.
 
 `QUIC_ERROR_AEAD_LIMIT_REACHED: i64`
 
+AEAD_LIMIT_REACHED: the keys reached their confidentiality or integrity limit (RFC 9001 §6.6).
+
 </scalar-card>
 
 <scalar-card title="0x0c" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_APPLICATION: i64`
+
+APPLICATION_ERROR: the application closed, reported in a transport close where 0x1d may not be sent.
 
 </scalar-card>
 
@@ -1520,11 +2036,15 @@ but not stored. Loss recovery, which would read them, is WP34 Q3.
 
 `QUIC_ERROR_CONNECTION_ID_LIMIT: i64`
 
+CONNECTION_ID_LIMIT_ERROR: the peer gave more connection IDs than `active_connection_id_limit`.
+
 </scalar-card>
 
 <scalar-card title="0x02" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_CONNECTION_REFUSED: i64`
+
+CONNECTION_REFUSED: the server will not accept the connection.
 
 </scalar-card>
 
@@ -1540,11 +2060,15 @@ CRYPTO_ERROR is this plus the TLS alert description (RFC 9001 §4.8): 0x0100 to 
 
 `QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED: i64`
 
+CRYPTO_BUFFER_EXCEEDED: the peer sent more CRYPTO data than the endpoint buffers.
+
 </scalar-card>
 
 <scalar-card title="0x06" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_FINAL_SIZE: i64`
+
+FINAL_SIZE_ERROR: a stream's final size changed, or data arrived past it.
 
 </scalar-card>
 
@@ -1552,11 +2076,15 @@ CRYPTO_ERROR is this plus the TLS alert description (RFC 9001 §4.8): 0x0100 to 
 
 `QUIC_ERROR_FLOW_CONTROL: i64`
 
+FLOW_CONTROL_ERROR: the peer sent more data than the advertised limits allow.
+
 </scalar-card>
 
 <scalar-card title="0x07" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_FRAME_ENCODING: i64`
+
+FRAME_ENCODING_ERROR: a frame is badly formed, such as truncated or with a length past the packet.
 
 </scalar-card>
 
@@ -1564,11 +2092,15 @@ CRYPTO_ERROR is this plus the TLS alert description (RFC 9001 §4.8): 0x0100 to 
 
 `QUIC_ERROR_INTERNAL: i64`
 
+INTERNAL_ERROR: the endpoint broke on its own, not because of anything the peer sent.
+
 </scalar-card>
 
 <scalar-card title="0x0b" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_INVALID_TOKEN: i64`
+
+INVALID_TOKEN: a server received a client Initial whose Token field it cannot accept, from a Retry or NEW_TOKEN.
 
 </scalar-card>
 
@@ -1576,11 +2108,15 @@ CRYPTO_ERROR is this plus the TLS alert description (RFC 9001 §4.8): 0x0100 to 
 
 `QUIC_ERROR_KEY_UPDATE: i64`
 
+KEY_UPDATE_ERROR: the peer made a mistake in a key update (RFC 9001 §6).
+
 </scalar-card>
 
 <scalar-card title="0x00" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_NO_ERROR: i64`
+
+NO_ERROR: the connection closes without an error; also `quicParseFrame`'s answer for a good frame.
 
 </scalar-card>
 
@@ -1588,11 +2124,15 @@ CRYPTO_ERROR is this plus the TLS alert description (RFC 9001 §4.8): 0x0100 to 
 
 `QUIC_ERROR_NO_VIABLE_PATH: i64`
 
+NO_VIABLE_PATH: no network path is fit for QUIC, such as one whose MTU is too small.
+
 </scalar-card>
 
 <scalar-card title="0x0a" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_PROTOCOL_VIOLATION: i64`
+
+PROTOCOL_VIOLATION: the peer broke the protocol in a way no more specific code names.
 
 </scalar-card>
 
@@ -1600,17 +2140,23 @@ CRYPTO_ERROR is this plus the TLS alert description (RFC 9001 §4.8): 0x0100 to 
 
 `QUIC_ERROR_STREAM_LIMIT: i64`
 
+STREAM_LIMIT_ERROR: the peer opened a stream past the limit it was given.
+
 </scalar-card>
 
 <scalar-card title="0x05" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_STREAM_STATE: i64`
 
+STREAM_STATE_ERROR: a frame arrived for a stream not in a state that permits it.
+
 </scalar-card>
 
 <scalar-card title="0x08" icon="phosphor/regular/hash">
 
 `QUIC_ERROR_TRANSPORT_PARAMETER: i64`
+
+TRANSPORT_PARAMETER_ERROR: the peer's transport parameters are malformed or invalid.
 
 </scalar-card>
 
@@ -1650,6 +2196,8 @@ CONNECTION_CLOSE with an application error code, allowed only in 1-RTT packets.
 
 `QUIC_FRAME_CRYPTO: i32`
 
+CRYPTO (§19.6): TLS handshake bytes at an offset in one packet number space's crypto stream.
+
 </scalar-card>
 
 <scalar-card title="0x30" icon="phosphor/regular/hash">
@@ -1674,11 +2222,15 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 
 `QUIC_FRAME_DATA_BLOCKED: i32`
 
+DATA_BLOCKED (§19.12): the sender has data to send but the connection limit holds it back.
+
 </scalar-card>
 
 <scalar-card title="0x1e" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_HANDSHAKE_DONE: i32`
+
+HANDSHAKE_DONE (§19.20): the server confirms the handshake; only a server sends it.
 
 </scalar-card>
 
@@ -1686,11 +2238,15 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 
 `QUIC_FRAME_MAX_DATA: i32`
 
+MAX_DATA (§19.9): the connection's flow-control limit, in bytes across every stream.
+
 </scalar-card>
 
 <scalar-card title="0x12" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_MAX_STREAMS_BIDI: i32`
+
+MAX_STREAMS (§19.11) for bidirectional streams: how many the peer may open in all.
 
 </scalar-card>
 
@@ -1698,11 +2254,15 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 
 `QUIC_FRAME_MAX_STREAMS_UNI: i32`
 
+MAX_STREAMS (§19.11) for unidirectional streams: how many the peer may open in all.
+
 </scalar-card>
 
 <scalar-card title="0x11" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_MAX_STREAM_DATA: i32`
+
+MAX_STREAM_DATA (§19.10): one stream's flow-control limit, in bytes.
 
 </scalar-card>
 
@@ -1710,11 +2270,15 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 
 `QUIC_FRAME_NEW_CONNECTION_ID: i32`
 
+NEW_CONNECTION_ID (§19.15): another connection ID the peer may use, with its reset token.
+
 </scalar-card>
 
 <scalar-card title="0x07" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_NEW_TOKEN: i32`
+
+NEW_TOKEN (§19.7): a server's token for the client to present in a later connection's Initial.
 
 </scalar-card>
 
@@ -1722,11 +2286,15 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 
 `QUIC_FRAME_PADDING: i32`
 
+PADDING (§19.1): a single zero byte that means nothing, used to make a packet bigger.
+
 </scalar-card>
 
 <scalar-card title="0x1a" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_PATH_CHALLENGE: i32`
+
+PATH_CHALLENGE (§19.17): eight bytes the peer must echo in a PATH_RESPONSE to validate a path.
 
 </scalar-card>
 
@@ -1734,11 +2302,15 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 
 `QUIC_FRAME_PATH_RESPONSE: i32`
 
+PATH_RESPONSE (§19.18): the eight bytes of a PATH_CHALLENGE, echoed back.
+
 </scalar-card>
 
 <scalar-card title="0x01" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_PING: i32`
+
+PING (§19.2): the type alone, sent to get an acknowledgement or to keep a connection alive.
 
 </scalar-card>
 
@@ -1746,17 +2318,23 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 
 `QUIC_FRAME_RESET_STREAM: i32`
 
+RESET_STREAM (§19.4): the sender abandons a stream, with an error code and the final size.
+
 </scalar-card>
 
 <scalar-card title="0x19" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_RETIRE_CONNECTION_ID: i32`
 
+RETIRE_CONNECTION_ID (§19.16): the sender stops using the peer's connection ID of a sequence number.
+
 </scalar-card>
 
 <scalar-card title="0x05" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_STOP_SENDING: i32`
+
+STOP_SENDING (§19.5): asks the peer to stop sending on a stream, with an error code.
 
 </scalar-card>
 
@@ -1774,17 +2352,23 @@ every one of them as this type, with the three low bits read into
 
 `QUIC_FRAME_STREAMS_BLOCKED_BIDI: i32`
 
+STREAMS_BLOCKED (§19.14) for bidirectional streams: the sender wants to open more than it may.
+
 </scalar-card>
 
 <scalar-card title="0x17" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_STREAMS_BLOCKED_UNI: i32`
 
+STREAMS_BLOCKED (§19.14) for unidirectional streams: the sender wants to open more than it may.
+
 </scalar-card>
 
 <scalar-card title="0x15" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_STREAM_DATA_BLOCKED: i32`
+
+STREAM_DATA_BLOCKED (§19.13): the sender is held back by one stream's limit.
 
 </scalar-card>
 
