@@ -742,7 +742,7 @@ login that arrives while one process is running goes to another, as in (b),
 and the logins that arrive at a busy process fill its next batch, as in
 (c). It needs no change to the batcher or the thread surface; overlapping
 runs inside one process would need a task that outlives its `run`, which
-the thread surface declines ([wp29](../wp29-thread-surface.md) §4.2, §9).
+the thread surface declines ([wp29](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §4.2, §9).
 
 The run below is a different VM from the tables above, `Intel(R) Xeon(R)
 Processor @ 2.10GHz`, 4 vCPUs, three rounds after a warm-up; its (c) is not
