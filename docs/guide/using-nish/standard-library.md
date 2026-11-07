@@ -2217,8 +2217,8 @@ byte records in a region: `SpscRing` for one producer and one consumer,
 [Shared memory between processes](shared-memory.md).
 Records can also be rendered and sent in place (`reserve`, `commit`, `peek`,
 `Http1Connection.sendBody`, `release`):
-[wp47 §7](../../wp47-shared-memory.md#records-copied-or-in-place) measures it
-against copying.
+[wp47 §7](https://github.com/amritk/nish/blob/main/docs/wp47-shared-memory.md#records-copied-or-in-place)
+measures it against copying.
 
 ## `nish:secret`
 
