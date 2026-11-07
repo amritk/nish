@@ -164,7 +164,7 @@ import {
 } from "./emit-strings"
 import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
-import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
+import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
 import {
   AES_HW,
   AES_SEAM_NONE,
@@ -375,6 +375,8 @@ export class Emitter {
   stringRefs: string[]
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
+  /** WP50 S3: the module's panic sites on wasm32 (`PanicSiteTable`); null elsewhere. */
+  panicSites: PanicSiteTable | null
   /**
    * WP32: the libraries whose functions this module's code reaches are emitted
    * into this module as `internal` copies (`src/emit-map.ts`):
@@ -454,6 +456,7 @@ export class Emitter {
     this.strings = new StringMap()
     this.stringRefs = []
     this.debug = null
+    this.panicSites = isWasmBuild(opts) ? new PanicSiteTable() : null
     this.libraries = []
     this.jsonParts = []
     this.jsonPartNames = new StringSet()
@@ -532,6 +535,10 @@ export class Emitter {
       for (const flag of hardeningModuleFlags()) {
         this.module.addModuleFlag(flag)
       }
+    }
+    const sites = this.panicSites
+    if (sites !== null) {
+      return `${this.module.toText()}${sites.toText()}`
     }
     return this.module.toText()
   }
@@ -1285,12 +1292,15 @@ export class Emitter {
    */
   emitStatement(stmt: Node): void {
     const saved = this.enterLocation(stmt)
+    const savedSite = this.fn.siteAt
+    this.enterSite(stmt)
     if (this.current.loopScopes.length > 0 && this.current.scopesPass(stmt)) {
       this.emitPass(stmt)
     } else {
       this.emitStatementKind(stmt)
     }
     this.fn.setLocation(saved)
+    this.fn.siteAt = savedSite
   }
 
   /**
@@ -1529,6 +1539,8 @@ export class Emitter {
   /** `emitExpression`, with the range entry at `expr` checked only when `checkRange` says so. */
   emitEntering(expr: Node, checkRange: boolean): string {
     const saved = this.enterLocation(expr)
+    const savedSite = this.fn.siteAt
+    this.enterSite(expr)
     const value = this.emitRawExpression(expr)
     // A class value used as an interface it implements: the interface's fields
     // are its first fields, so the recorded conversion is a pointer bitcast.
@@ -1553,7 +1565,21 @@ export class Emitter {
       }
     }
     this.fn.setLocation(saved)
+    this.fn.siteAt = savedSite
     return result
+  }
+
+  /**
+   * WP50 S3, wasm32 only: make `node`'s start the site a panic emitted for it
+   * reports. The caller restores `fn.siteAt` as it restores the location.
+   */
+  enterSite(node: Node): void {
+    const sites = this.panicSites
+    if (sites !== null) {
+      const source = this.program.source
+      this.fn.sites = sites
+      this.fn.siteAt = `${source.path}:${source.lineOf(node.start)}:${source.columnOf(node.start)}`
+    }
   }
 
   /**

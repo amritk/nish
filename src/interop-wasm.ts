@@ -264,12 +264,6 @@ const wasmUnsignedOut = (table: TypeTable, t: i32, value: string): string => {
   return value
 }
 
-/** Whether `wasmUnsignedOut` has anything to do, which decides if the export needs a wrapper at all. */
-const wasmUnsignedResult = (table: TypeTable, t: i32): boolean => {
-  const kind = table.kindOf(t)
-  return kind === T_U8 || kind === T_U16 || kind === T_U32 || kind === T_U64
-}
-
 /** The JS type of one packed `Result` payload, or `""` when it cannot cross. */
 const wasmPayloadType = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
@@ -458,7 +452,9 @@ const wasmIsLoaderLocal = (name: string): boolean =>
   name === "arrayOut" ||
   name === "copyBack" ||
   name === "rangeIn" ||
-  name === "scoped" ||
+  name === "guarded" ||
+  name === "state" ||
+  name === "refuse" ||
   name === "result" ||
   name === "instance" ||
   name === "bytes"
@@ -526,18 +522,11 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
   const raw = wasmRaw(sig)
   const ret = typedView(table, sig.returnType)
   const views: (TypedView | null)[] = []
-  let anyConverted = false
   let i = 0
   while (i < sig.paramTypes.length) {
     views.push(typedView(table, sig.paramTypes[i]))
-    // A narrow unsigned argument is masked and a ranged one checked (WP31).
-    if (wasmUnsignedIn(table, sig.paramTypes[i]).length > 0 || table.isRanged(sig.paramTypes[i])) {
-      anyConverted = true
-    }
     i = i + 1
   }
-  const packed = wasmTakesPacked(table, sig)
-  const out = wasmUnsignedResult(table, sig.returnType)
   const lines: string[] = []
   const params: string[] = []
   i = 0
@@ -554,20 +543,17 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
   }
   if (!anyView) {
     // WP17/WP15: a packed `Result` and an unsigned width both need converting,
-    // and a ranged argument checking (WP31), but no arena scope — nothing was copied into the module for the call, so
-    // there is nothing to release.
-    if (packed || out || anyConverted) {
-      const operands: string[] = []
-      i = 0
-      while (i < sig.paramTypes.length) {
-        operands.push(wasmOperand(table, sig, params, i))
-        i = i + 1
-      }
-      const call = `${raw}(${operands.join(", ")})`
-      lines.push(`${name}: (${params.join(", ")}) => ${wasmReturned(table, sig, ret, call)},`)
-      return lines
+    // and a ranged argument checking (WP31). Nothing is copied in, but the
+    // call still runs inside `guarded` (WP50 S3), which refuses a dead or
+    // re-entered module and gives back whatever the call allocated.
+    const operands: string[] = []
+    i = 0
+    while (i < sig.paramTypes.length) {
+      operands.push(wasmOperand(table, sig, params, i))
+      i = i + 1
     }
-    lines.push(`${name}: ${raw},`)
+    const call = `${raw}(${operands.join(", ")})`
+    lines.push(`${name}: (${params.join(", ")}) => guarded(() => ${wasmReturned(table, sig, ret, call)}),`)
     return lines
   }
 
@@ -607,7 +593,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
       body.push("return result;")
     }
   }
-  lines.push(`${name}: (${params.join(", ")}) => scoped(() => {`)
+  lines.push(`${name}: (${params.join(", ")}) => guarded(() => {`)
   for (const line of body) {
     lines.push(`  ${line}`)
   }
@@ -634,9 +620,9 @@ const wasmRangeHelper = (table: TypeTable, bridged: ExternalFunction[]): string[
   }
   lines.push("  /** A ranged argument, judged as the number it is rather than after ToInt32 wraps it. */")
   lines.push("  const rangeIn = (value, lo, hi, what) => {")
-  lines.push('    if (typeof value !== "number") throw new TypeError(what + " must be a number");')
+  lines.push('    if (typeof value !== "number") throw refuse(new TypeError(what + " must be a number"));')
   lines.push("    if (!Number.isInteger(value) || value < lo || value > hi)")
-  lines.push('      throw new RangeError(what + " must be an integer in [" + lo + ", " + hi + "]");')
+  lines.push('      throw refuse(new RangeError(what + " must be an integer in [" + lo + ", " + hi + "]"));')
   lines.push("    return value;")
   lines.push("  };")
   return lines
@@ -661,7 +647,7 @@ const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[]): strin
   lines.push("  };")
   lines.push("  const resultIn = (r, writeValue, writeError) => {")
   lines.push('    if (r === null || typeof r !== "object" || typeof r.ok !== "boolean")')
-  lines.push('      throw new TypeError("expected { ok: true, value } or { ok: false, error }");')
+  lines.push('      throw refuse(new TypeError("expected { ok: true, value } or { ok: false, error }"));')
   lines.push(
     "    const payload = r.ok ? (writeValue === null ? 0n : writeValue(r.value)) : writeError(r.error);"
   )
@@ -680,6 +666,182 @@ const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[]): strin
     lines.push("    return BigInt(f32Words[0]);")
     lines.push("  };")
   }
+  return lines
+}
+
+// ---- WP50 S3: panics, death and re-entry -------------------------------------
+
+/**
+ * The loader's top level for panics (`docs/wp50-wasm-host.md` §6): the two
+ * error classes, the `refuse` tag for an argument the loader turns away
+ * before the module runs (which leaves it alive), the default reporter, the
+ * per-load `state`, and `panicOf`, the `nish.panic` import runtime-wasm.c
+ * calls under `--profile wasm-host` before it traps. The import formats the
+ * message runtime.c would print, marks the module dead before it calls
+ * `onPanic` (so a callback that calls back in meets a dead module, not a
+ * half-unwound one), and throws `NishPanic`, which unwinds the module's
+ * frames instead of the trap. `linkOf` is the import object of a program
+ * with no host module; `importsOf` adds the import beside `host`.
+ *
+ * A module built with `--profile wasm` imports nothing, so the extra entry
+ * in its import object is never read and its panics stay traps, which
+ * `guarded` turns into a dead module all the same.
+ */
+const panicLoader = (hosts: boolean): string[] => {
+  const lines: string[] = []
+  lines.push(
+    "/** A panic inside the module: `kind` names it, `site` indexes `<module>.wasm.sites.json`, or is -1. */"
+  )
+  lines.push("export class NishPanic extends Error {")
+  lines.push("  constructor(message, kind, site) {")
+  lines.push("    super(message);")
+  lines.push('    this.name = "NishPanic";')
+  lines.push("    this.kind = kind;")
+  lines.push("    this.site = site;")
+  lines.push("  }")
+  lines.push("}")
+  lines.push("")
+  lines.push(
+    "/** A call into the module while another call into it runs, refused before the module is touched. */"
+  )
+  lines.push("export class NishReentry extends Error {")
+  lines.push("  constructor(message) {")
+  lines.push("    super(message);")
+  lines.push('    this.name = "NishReentry";')
+  lines.push("  }")
+  lines.push("}")
+  lines.push("")
+  lines.push("/** Errors thrown for an argument before the module runs: they leave the module alive. */")
+  lines.push("const refused = new WeakSet();")
+  lines.push("const refuse = (error) => {")
+  lines.push("  refused.add(error);")
+  lines.push("  return error;")
+  lines.push("};")
+  lines.push("")
+  lines.push(
+    "/** The default `onPanic`: the reporter nish/page exports, inlined so this file imports nothing. */"
+  )
+  lines.push("const reportPanic = (panic) => {")
+  lines.push('  console.error("nish: " + panic.message);')
+  lines.push("};")
+  lines.push("")
+  lines.push("/** One load: dead once a panic, trap or exception left the module, busy while a call runs. */")
+  lines.push("const stateOf = (imports) => ({")
+  lines.push("  dead: null,")
+  lines.push("  busy: false,")
+  lines.push("  memory: null,")
+  lines.push(
+    '  onPanic: imports != null && typeof imports.onPanic === "function" ? imports.onPanic : reportPanic,'
+  )
+  lines.push("  sites: imports != null && Array.isArray(imports.sites) ? imports.sites : null,")
+  lines.push("});")
+  lines.push("")
+  lines.push('const panicKinds = ["panic", "index", "slice", "overflow", "memory", "exit"];')
+  lines.push("const arithmetic = [")
+  lines.push('  "attempt to add with overflow",')
+  lines.push('  "attempt to subtract with overflow",')
+  lines.push('  "attempt to multiply with overflow",')
+  lines.push('  "attempt to negate with overflow",')
+  lines.push('  "attempt to divide with overflow",')
+  lines.push('  "attempt to divide by zero",')
+  lines.push("];")
+  lines.push("")
+  lines.push("/** The words runtime.c prints for the panic, from the import's arguments. */")
+  lines.push("const panicText = (state, kind, msg, len, a, b) => {")
+  lines.push("  if (kind === 0) {")
+  lines.push("    // The module names its own message; one outside memory is not read.")
+  lines.push("    const size = state.memory === null ? 0 : state.memory.buffer.byteLength;")
+  lines.push("    const at = msg >>> 0;")
+  lines.push("    const n = len >>> 0;")
+  lines.push('    if (at > size || n > size - at) return "panic (its message is outside memory)";')
+  lines.push(
+    '    return new TextDecoder().decode(new Uint8Array(state.memory.buffer, at, n)).replace(/\\n$/, "");'
+  )
+  lines.push("  }")
+  lines.push('  if (kind === 1) return "index out of range: " + a + " >= " + b;')
+  lines.push(
+    '  if (kind === 2) return "slice out of range: [" + a + ", " + b + ") of length " + (len >>> 0);'
+  )
+  lines.push(
+    '  if (kind === 3) return arithmetic[a] === undefined ? "arithmetic panic " + a : arithmetic[a];'
+  )
+  lines.push('  if (kind === 4) return "out of memory";')
+  lines.push('  if (kind === 5) return "the program exited with code " + a;')
+  lines.push('  return "panic";')
+  lines.push("};")
+  lines.push("")
+  lines.push(
+    "/** The `nish.panic` import: mark the module dead, tell the page, and unwind out of the module. */"
+  )
+  lines.push("const panicOf = (state) => (kind, site, msg, len, a, b) => {")
+  lines.push("  const sites = state.sites;")
+  lines.push("  const at = sites !== null && site >= 0 && site < sites.length ? sites[site] : null;")
+  lines.push('  const name = kind === 3 && a >= 4 ? "divide" : (panicKinds[kind] ?? "panic");')
+  lines.push(
+    '  const where = at !== null && at !== undefined && typeof at.at === "string" ? " at " + at.at : "";'
+  )
+  lines.push("  const message = panicText(state, kind, msg, len, a, b) + where;")
+  lines.push("  const panic = new NishPanic(message, name, site);")
+  lines.push("  state.dead = panic;")
+  lines.push("  try {")
+  lines.push("    state.onPanic({ message, kind: name, site });")
+  lines.push("  } catch {")
+  lines.push("    // What unwinds the module is the panic, whatever the reporter threw.")
+  lines.push("  }")
+  lines.push("  throw panic;")
+  lines.push("};")
+  lines.push("")
+  if (!hosts) {
+    lines.push("/** The import object the module links against: the page's own, and the panic import. */")
+    lines.push("const linkOf = (imports, state) => ({ ...imports, nish: { panic: panicOf(state) } });")
+    lines.push("")
+  }
+  return lines
+}
+
+/**
+ * `guarded`, inside `exportsOf`: every export runs in it. A dead module is
+ * refused with a `NishPanic` and a busy one with a `NishReentry`, both before
+ * the module is touched; with the runtime linked, everything the call
+ * allocated in the arena is given back after the result has been read; and
+ * anything but a refused argument that escapes the call (a panic, a trap, or
+ * an exception out of a host function) leaves the module dead.
+ */
+const guardLoader = (needsRuntime: boolean): string[] => {
+  const lines: string[] = []
+  lines.push(
+    "  /** One call: refused on a dead or busy module; anything but a bad argument escaping it kills it. */"
+  )
+  lines.push("  const guarded = (call) => {")
+  lines.push("    const dead = state.dead;")
+  lines.push(
+    '    if (dead !== null) throw new NishPanic("the module is dead: " + dead.message, dead.kind, dead.site);'
+  )
+  lines.push("    if (state.busy)")
+  lines.push(
+    '      throw new NishReentry("a call into the module was made while another call into it was running");'
+  )
+  lines.push("    state.busy = true;")
+  if (needsRuntime) {
+    lines.push("    const mark = raw.nish_arena_mark();")
+  }
+  lines.push("    try {")
+  lines.push("      return call();")
+  lines.push("    } catch (e) {")
+  lines.push("      if (state.dead === null && !refused.has(e)) {")
+  lines.push(
+    '        const kind = e instanceof WebAssembly.RuntimeError ? "trap" : e instanceof NishReentry ? "reentry" : "exception";'
+  )
+  lines.push("        state.dead = new NishPanic(e instanceof Error ? e.message : String(e), kind, -1);")
+  lines.push("      }")
+  lines.push("      throw e;")
+  lines.push("    } finally {")
+  if (needsRuntime) {
+    lines.push("      if (state.dead === null) raw.nish_arena_release(mark);")
+  }
+  lines.push("      state.busy = false;")
+  lines.push("    }")
+  lines.push("  };")
   return lines
 }
 
@@ -709,15 +871,18 @@ export const generateWasmLoader = (
   lines.push(" */")
   // WP50 S2: with a host module the page owes `imports.host`, so there is no
   // default, and the object the module links against is `importsOf`'s.
+  // WP50 S3: every load has a `state` the panic import, the guard around
+  // each export and the re-entry flag share (`panicLoader`).
   const hosts = hostFunctions(compilation)
   const params = hosts.length > 0 ? "source, imports" : "source, imports = {}"
-  const linked = hosts.length > 0 ? "importsOf(imports)" : "imports"
+  const linked = hosts.length > 0 ? "importsOf(imports, state)" : "linkOf(imports, state)"
   lines.push(`export async function load(${params}) {`)
+  lines.push("  const state = stateOf(imports);")
   lines.push("  const instance =")
   lines.push("    source instanceof WebAssembly.Module")
   lines.push(`      ? await WebAssembly.instantiate(source, ${linked})`)
   lines.push(`      : (await WebAssembly.instantiate(source, ${linked})).instance;`)
-  lines.push("  return exportsOf(instance);")
+  lines.push("  return exportsOf(instance, state);")
   lines.push("}")
   lines.push("")
   lines.push("/**")
@@ -726,18 +891,22 @@ export const generateWasmLoader = (
   lines.push(" * thread; above that, call `load`, or compile the module in a worker and pass it here.")
   lines.push(" */")
   lines.push(`export function loadSync(${params}) {`)
+  lines.push("  const state = stateOf(imports);")
   lines.push(
     "  const module = source instanceof WebAssembly.Module ? source : new WebAssembly.Module(source);"
   )
-  lines.push(`  return exportsOf(new WebAssembly.Instance(module, ${linked}));`)
+  lines.push(`  return exportsOf(new WebAssembly.Instance(module, ${linked}), state);`)
   lines.push("}")
   lines.push("")
+  pushAll(lines, panicLoader(hosts.length > 0))
   if (hosts.length > 0) {
     pushAll(lines, hostImportsOf(table, hosts))
   }
   lines.push("/** The exports of one instance, arrays marshalled: the body `load` and `loadSync` share. */")
-  lines.push("function exportsOf(instance) {")
+  lines.push("function exportsOf(instance, state) {")
   lines.push("  const raw = instance.exports;")
+  lines.push("  state.memory = raw.memory;")
+  pushAll(lines, guardLoader(bridge.needsRuntime))
   if (bridge.needsRuntime) {
     lines.push("  const memory = raw.memory;")
     lines.push(
@@ -755,7 +924,7 @@ export const generateWasmLoader = (
     // interop-napi.ts carries the reason. `Uint8Array` takes `a`, the way
     // "a user" does.
     lines.push(
-      '    if (!(value instanceof Ctor)) throw new TypeError(what + " must be " + (/^[AEIO]/.test(Ctor.name) ? "an " : "a ") + Ctor.name);'
+      '    if (!(value instanceof Ctor)) throw refuse(new TypeError(what + " must be " + (/^[AEIO]/.test(Ctor.name) ? "an " : "a ") + Ctor.name));'
     )
     lines.push("    const hdr = raw.nish_alloc_array(BigInt(elemSize), BigInt(value.length));")
     lines.push("    new Ctor(memory.buffer, header(hdr).data, value.length).set(value);")
@@ -770,15 +939,6 @@ export const generateWasmLoader = (
     lines.push("  const copyBack = (hdr, value) => {")
     lines.push("    const { len, data } = header(hdr);")
     lines.push("    value.set(new value.constructor(memory.buffer, data, Math.min(len, value.length)));")
-    lines.push("  };")
-    lines.push("  /** Run `fn`, then release everything it allocated in the arena, even when it traps. */")
-    lines.push("  const scoped = (fn) => {")
-    lines.push("    const mark = raw.nish_arena_mark();")
-    lines.push("    try {")
-    lines.push("      return fn();")
-    lines.push("    } finally {")
-    lines.push("      raw.nish_arena_release(mark);")
-    lines.push("    }")
     lines.push("  };")
     pushAll(lines, wasmResultHelpers(table, bridge.bridged))
     pushAll(lines, wasmRangeHelper(table, bridge.bridged))
@@ -913,7 +1073,7 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
   lines.push(" * The import object the module links against: the page's host functions under")
   lines.push(" * `host`, each passed by reference, or wrapped once here where a value converts.")
   lines.push(" */")
-  lines.push("function importsOf(imports) {")
+  lines.push("function importsOf(imports, state) {")
   lines.push("  const host = imports === undefined || imports === null ? undefined : imports.host;")
   lines.push('  if (host === undefined || host === null || typeof host !== "object")')
   lines.push(
@@ -946,6 +1106,7 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
   }
   lines.push("  return {")
   lines.push("    ...imports,")
+  lines.push("    nish: { panic: panicOf(state) },")
   lines.push("    host: {")
   pushAll(lines, entries)
   lines.push("    },")

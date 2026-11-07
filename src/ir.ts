@@ -31,6 +31,76 @@
 import { StringBuilder } from "./strings"
 import { StringMap } from "./map"
 
+/**
+ * WP50 S3: the panic sites of a wasm32 module, numbered in the order the
+ * emitter first writes a call of the panic at each (kind, position). Each
+ * call is tagged `!nish.site !{i32 N}`, which code generation drops, so
+ * `--profile wasm` links the bytes it did; `scripts/build.sh --profile
+ * wasm-host` rewrites a tagged call into the runtime's `_at` variant that
+ * hands N to the page's `nish.panic` import, and writes the table, which the
+ * module ends with as `; nish.site` comments, to `<out>.sites.json`.
+ */
+export class PanicSiteTable {
+  kinds: string[]
+  ats: string[]
+
+  constructor() {
+    this.kinds = []
+    this.ats = []
+  }
+
+  /** The number of the site `kind` at `at` ("path:line:col"), given at its first call. */
+  add(kind: string, at: string): i32 {
+    let k = 0
+    while (k < this.kinds.length) {
+      if (this.kinds[k] === kind && this.ats[k] === at) {
+        return k
+      }
+      k = k + 1
+    }
+    this.kinds.push(kind)
+    this.ats.push(at)
+    return this.kinds.length - 1
+  }
+
+  /** The table as the comments the module ends with, one site a line; "" for none. */
+  toText(): string {
+    const out = new StringBuilder()
+    if (this.kinds.length > 0) {
+      out.add("\n")
+    }
+    let k = 0
+    while (k < this.kinds.length) {
+      out.add(`; nish.site ${k} ${this.kinds[k]} ${this.ats[k]}\n`)
+      k = k + 1
+    }
+    return out.toText()
+  }
+}
+
+/** The kind a site table records for a call of runtime panic `callee`, or "" for none. */
+export const panicCallKind = (instr: string): string => {
+  if (!instr.startsWith("call void @nish_panic")) {
+    return ""
+  }
+  if (instr.startsWith("call void @nish_panic(")) {
+    return "panic"
+  }
+  if (instr.startsWith("call void @nish_panic_index(")) {
+    return "index"
+  }
+  if (instr.startsWith("call void @nish_panic_slice(")) {
+    return "slice"
+  }
+  if (instr.startsWith("call void @nish_panic_div(")) {
+    return "divide"
+  }
+  if (instr.startsWith("call void @nish_panic_overflow(")) {
+    return "overflow"
+  }
+  return ""
+}
+
 /** One basic block: a label and the instructions under it. */
 export class IRBlock {
   label: string
@@ -158,6 +228,12 @@ export class IRFunction {
   linkage: string
   /** `!N` of the function's `DISubprogram` (`-g`); empty without debug info. */
   subprogram: string
+  /** WP50 S3: the module's panic sites on wasm32 (`PanicSiteTable`); null elsewhere, and nothing is tagged. */
+  sites: PanicSiteTable | null
+  /** The "path:line:col" a panic call emitted now is the site of; set with the location. */
+  siteAt: string
+  /** The `siteAt` of each overflow block, the first check's that branches to it. */
+  overflowSiteAts: string[]
   /**
    * `!N` of the `DILocation` to attach to every instruction emitted from now
    * on (`-g`). Empty means none: the emitter sets it when a statement or an
@@ -199,6 +275,9 @@ export class IRFunction {
     this.linkage = ""
     this.subprogram = ""
     this.dbgLocation = ""
+    this.sites = null
+    this.siteAt = ""
+    this.overflowSiteAts = []
     this.overflowFails = []
     this.overflowLocations = []
     this.overflowEdges = []
@@ -236,6 +315,7 @@ export class IRFunction {
     }
     this.overflowFails.push(this.newBlock("ovf.fail"))
     this.overflowLocations.push(location)
+    this.overflowSiteAts.push(this.siteAt)
     return this.overflowLocations.length - 1
   }
 
@@ -268,7 +348,9 @@ export class IRFunction {
       }
       const location = this.overflowLocations[owner]
       const dbg = location.length > 0 ? `, !dbg ${location}` : ""
-      block.instructions.push(`call void ${this.overflowCallee}(i32 ${argument})${dbg}`)
+      block.instructions.push(
+        `${this.tagSite(`call void ${this.overflowCallee}(i32 ${argument})`, this.overflowSiteAts[owner])}${dbg}`
+      )
       block.instructions.push("unreachable")
       out.add(owner === 0 ? "" : "\n\n")
       out.add(block.toText())
@@ -294,8 +376,25 @@ export class IRFunction {
     this.dbgLocation = ref
   }
 
+  /**
+   * `instr` with its `!nish.site` tag when it calls a runtime panic and the
+   * module numbers its sites (wasm32), the site being the panic at `at`.
+   */
+  tagSite(instr: string, at: string): string {
+    const sites = this.sites
+    if (sites === null) {
+      return instr
+    }
+    const kind = panicCallKind(instr)
+    if (kind.length === 0) {
+      return instr
+    }
+    return `${instr}, !nish.site !{i32 ${sites.add(kind, at)}}`
+  }
+
   /** Append an instruction that produces no value, with `, !dbg !N` while a location is active. */
-  emit(instr: string): void {
+  emit(raw: string): void {
+    const instr = this.tagSite(raw, this.siteAt)
     if (this.dbgLocation.length > 0) {
       this.current.instructions.push(`${instr}, !dbg ${this.dbgLocation}`)
     } else {
