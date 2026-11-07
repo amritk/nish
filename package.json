@@ -25,6 +25,10 @@
       "types": "./runtime/vite.d.ts",
       "default": "./runtime/vite.mjs"
     },
+    "./page": {
+      "types": "./runtime/page.d.ts",
+      "default": "./runtime/page.mjs"
+    },
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",
     "./*": "./std/*.ts"

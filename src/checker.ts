@@ -1592,7 +1592,7 @@ const declaredAlias = (target: CheckedProgram | null, name: string): AliasInfo |
  * WP33 R2: the typed-array name parameter `name` of `sig` is declared with,
  * or `""` — `this` and a signature with no parameter list of its own among them.
  */
-const parameterSpelling = (ctx: CheckContext, sig: FunctionSig, name: string): string => {
+export const parameterSpelling = (ctx: CheckContext, sig: FunctionSig, name: string): string => {
   const at = sig.decl.kind === N_CONSTRUCTOR ? 0 : 1
   if (sig.decl.children.length <= at || sig.decl.children[at].kind !== N_LIST) {
     return ""

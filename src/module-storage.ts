@@ -17,7 +17,10 @@
  *   are all of these — so the zero fill is a value of the type;
  * - **it never moves and never resizes**: no method runs on it and its length
  *   is never assigned;
- * - **its name is never a value**, so nothing aliases it, and **a record
+ * - **its name is never a value**, so nothing aliases it — the one exception
+ *   is an argument lent to a parameter declared with a typed-array name, which
+ *   has no `push`, `pop` or `length =`, or to a host function's buffer window
+ *   (`lendsStorage`) — and **a record
  *   element is a place, not a value**: `sim[i].x` reads and writes a field,
  *   `sim[i] = v` and `sim[i] = sim[j]` copy a whole element, and nothing binds,
  *   passes or returns one. Under `--emit-ts` the storage is one `ArrayBuffer`
@@ -25,6 +28,7 @@
  *   object a binding could hold.
  */
 
+import { parameterSpelling } from "./checker"
 import { CheckContext } from "./context"
 import { isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
 import {
@@ -42,7 +46,7 @@ import {
 } from "./nodes"
 import { ConstInfo, StructInfo, inlineElementStruct } from "./program"
 import { SORT_LOCAL } from "./std-modules"
-import { T_BOOL, isNumeric } from "./types"
+import { T_BOOL, isHostWindow, isNumeric } from "./types"
 
 /** The most elements one storage may hold: its byte size stays far below wasm's 4 GiB. */
 const STORAGE_MAX_LENGTH: i32 = 16777216
@@ -272,7 +276,7 @@ export const checkStorageUses = (ctx: CheckContext, node: Node): void => {
       if (info !== null) {
         ctx.error(
           node,
-          `Module storage \`${info.name}\` is a place, not a value: index it (\`${info.name}[i]\`) or read \`${info.name}.length\`, and never alias, pass, return or store the array itself`
+          `Module storage \`${info.name}\` is a place, not a value: index it (\`${info.name}[i]\`) or read \`${info.name}.length\`, lend it only to a parameter declared \`Int32Array\`, \`Float32Array\`, \`Float64Array\` or \`BigInt64Array\` or to a host function's buffer window, and never alias, return or store the array itself`
         )
       }
       return
@@ -393,7 +397,11 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
     pushesCopy = callee.text === "push" && storesInlineElements(ctx.program, ctx.table, callee.children[0])
   }
   checkStorageUses(ctx, callee)
-  for (const arg of args.children) {
+  for (let i = 0; i < args.children.length; i++) {
+    const arg = args.children[i]
+    if (lendsStorage(ctx, callee, i, arg)) {
+      continue
+    }
     const info = storageElementOf(ctx, arg)
     if (info !== null && storageHoldsRecords(ctx, info)) {
       checkStorageUses(ctx, unwrapParens(arg).children[1])
@@ -407,6 +415,30 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
     }
     checkStorageUses(ctx, arg)
   }
+}
+
+/**
+ * Whether argument `i`, `arg`, lends scalar module storage to a parameter
+ * that cannot move it: one declared with a typed-array name (`Int32Array`,
+ * `Float32Array`, ...), which has no `push`, `pop` or `length =`, or a host
+ * function's buffer window, which the page reads in place. Either reaches
+ * the static elements through the storage's own header, so the storage still
+ * never moves; a record element stays a place and is never lent.
+ */
+const lendsStorage = (ctx: CheckContext, callee: Node, i: i32, arg: Node): boolean => {
+  const info = storageNamed(ctx, unwrapParens(arg))
+  if (info === null || storageHoldsRecords(ctx, info) || callee.kind !== N_IDENT) {
+    return false
+  }
+  const sig = ctx.signature(callee.text)
+  if (sig === null || i >= sig.paramNames.length) {
+    return false
+  }
+  const origin = sig.origin
+  if (origin !== null && origin.host) {
+    return isHostWindow(ctx.table, sig.paramTypes[i])
+  }
+  return parameterSpelling(ctx, sig, sig.paramNames[i]) !== ""
 }
 
 const checkStorageAssignment = (ctx: CheckContext, node: Node): void => {
