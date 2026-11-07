@@ -119,7 +119,10 @@ export const YAML_ERR_BAD_IMPLICIT_KEY: i32 = 7
 export const YAML_ERR_BAD_INDENT: i32 = 8
 /** A `<<` merge whose value is not a map, an alias to one, or a sequence of those. */
 export const YAML_ERR_BAD_MERGE: i32 = 9
-/** A node with two anchors or two tags, or an alias with an anchor or tag. */
+/**
+ * A node with two anchors or two tags, an alias with an anchor or tag, or node properties written before a `?`
+ * explicit key indicator on its line.
+ */
 export const YAML_ERR_BAD_PROPERTY: i32 = 10
 /** A plain scalar that holds `: `, which only a key may. */
 export const YAML_ERR_BAD_SCALAR_CONTENT: i32 = 11
@@ -4981,8 +4984,9 @@ class YamlPathWalker {
  * @param stream The parsed stream.
  * @param root The node the path starts at, such as a `documentRoot`.
  * @param path The steps, outermost first.
- * @returns The node the last matching step reached: `root` itself for an empty path, and `-1` when
- *   a step lands on an empty value (`a:`).
+ * @returns The node the last matching step reached, as written (an alias is not followed): `root` itself
+ *   for an empty path, and `-1` when a step lands on an empty value (`a:`). A chain of more than
+ *   `YAML_ALIAS_HOPS` (100) aliases stops the walk at its first alias, which is returned, not `-1`.
  */
 export const pathNode = (stream: YamlStream, root: i32, path: string[]): i32 => {
   const walker: YamlPathWalker = new YamlPathWalker(stream)

@@ -22,8 +22,9 @@
  * start rather than panicking. `column` counts characters: every byte that is
  * not a UTF-8 continuation byte, so `é` is one column natively. `byteColumn`
  * counts bytes, which is what an editor that indexes lines by byte wants.
- * Under Node a string is UTF-16 and each unit counts, which is the same answer
- * for ASCII and the JavaScript answer otherwise.
+ * Under Node a string is UTF-16 and `column` still skips every unit from
+ * `0x80` to `0xBF`, so `©` or `µ` does not count: the column is exact for
+ * ASCII everywhere and for any text only natively.
  */
 
 const YAML_LINES_LF: i32 = 10
@@ -111,7 +112,8 @@ export class YamlLineIndex {
    *
    * @param offset A byte offset into the text; clamped to `[0, text.length]`.
    * @returns The 1-based column: one more than the characters between the line's start and
-   *   `offset`, a UTF-8 continuation byte not counting (under Node, UTF-16 units).
+   *   `offset`, a UTF-8 continuation byte not counting (under Node, a UTF-16 unit from `0x80` to `0xBF`
+   *   not counting either, so `©` is not a column).
    */
   column(offset: i32): i32 {
     const at: i32 = this.clamp(offset)

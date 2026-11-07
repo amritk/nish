@@ -366,7 +366,8 @@ export class TermProbe {
    * (`timedOut` calls it itself), and hand every later read to the program's own decoder.
    *
    * @param nowMs The time now, in milliseconds on the clock `sentAtMs` used.
-   * @returns The events that were not replies, in the order they came, as `heldEvents` gives them.
+   * @returns The events that were not replies, in the order they came: the probe's own array that `heldEvents` gives,
+   *   not a copy.
    */
   finish(nowMs: f64): TermEvent[] {
     this.take(this.decoder.pollEvents(nowMs + this.decoder.escapeTimeoutMs), nowMs)
@@ -376,7 +377,7 @@ export class TermProbe {
   /**
    * The events that were not replies — keys typed, a paste — in the order they came, for the program to handle.
    *
-   * @returns The held events, oldest first; complete only after `finish`.
+   * @returns The held events, oldest first; complete only after `finish`. The probe's own array, not a copy.
    */
   heldEvents(): TermEvent[] {
     return this.held
