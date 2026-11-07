@@ -4415,7 +4415,20 @@ declare module "nish:region" {
  *
  * The two are reached only through the import. Each argument is a direct call
  * to an `async` function, written where it is made, which the checker holds
- * it to (`src/async-check.ts`); `tsc` sees ordinary promises.
+ * it to (`src/async-check.ts`); `tsc` sees ordinary promises. A spawned
+ * call's arguments are numbers, `boolean`s, enums or `string`s (NL2673): the
+ * task outlives the function that spawned it.
+ *
+ * `sleep(ms)`, `readable(fd)` and `writable(fd)` are the waits a task makes
+ * on the executor, an epoll (kqueue on Darwin) loop that resumes ready tasks
+ * in the kernel's order and then expired timers by deadline:
+ *
+ *     import { readable, sleep } from "nish:async";
+ *
+ *     async function tick(): Promise<void> {
+ *       await sleep(10);
+ *       console.log("tick");
+ *     }
  *
  * There is no `async` in a wasm build: under a `wasm32` target or
  * `--profile wasi` an `async` function is NL2652.
@@ -4564,6 +4577,37 @@ declare module "nish:async" {
     g: Promise<G>,
     h: Promise<H>,
   ): Promise<[A, B, C, D, E, F, G, H]>;
+  /**
+   * Suspend the task for `ms` milliseconds while the executor runs the
+   * others. Written only as `await sleep(ms)` inside an `async` function
+   * (NL2671).
+   *
+   * @param ms The milliseconds to wait, an `i32`.
+   * @returns `true` once the time has passed; `false` at once for a negative
+   *   `ms`, which makes no wait.
+   */
+  export function sleep(ms: i32): Promise<boolean>;
+  /**
+   * Suspend the task until `fd` has bytes to read, or its peer has hung up,
+   * while the executor runs the others. Written only as
+   * `await readable(fd)` inside an `async` function (NL2671). Refused under
+   * `--emit-ts` (NL4017).
+   *
+   * @param fd An open descriptor: a socket, a pipe or a terminal.
+   * @returns `true` once `fd` is ready; `false` when the wait could not be
+   *   made (an `fd` that is not open). A regular file is always ready.
+   */
+  export function readable(fd: i32): Promise<boolean>;
+  /**
+   * Suspend the task until `fd` takes bytes without blocking, while the
+   * executor runs the others. Written only as `await writable(fd)` inside an
+   * `async` function (NL2671). Refused under `--emit-ts` (NL4017).
+   *
+   * @param fd An open descriptor: a socket, a pipe or a terminal.
+   * @returns `true` once `fd` is ready; `false` when the wait could not be
+   *   made (an `fd` that is not open). A regular file is always ready.
+   */
+  export function writable(fd: i32): Promise<boolean>;
 }
 
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------

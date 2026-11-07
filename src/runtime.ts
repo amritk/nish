@@ -241,6 +241,19 @@ export class RuntimeTable {
     this.add(plain("nish_region_enter", "declare i8* @nish_region_enter(i64 noundef)", EFFECT_WRITE))
     this.add(plain("nish_region_leave", "declare void @nish_region_leave(i64 noundef, i8*)", EFFECT_WRITE))
     this.add(plain("nish_region_free", "declare void @nish_region_free(i64 noundef)", EFFECT_WRITE))
+    // WP49 stage 5: the executor (runtime/runtime-async.c), linked only for IR
+    // that declares one of these (scripts/build.sh's `async_wanted`). Every
+    // one touches the executor's state, and `spawn` and the waits panic when
+    // memory or the poller runs out, so none is `willreturn`.
+    this.add(mayNotReturn("nish_async_spawn", "declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef)", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_enter", "declare i8* @nish_async_enter(i8* nonnull)", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_leave", "declare void @nish_async_leave(i8* nonnull, i8*)", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_done", "declare void @nish_async_done(i8* nonnull)", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_next", "declare i8* @nish_async_next()", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_sleep", "declare noundef i64 @nish_async_sleep(i32 noundef)", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_wait_fd", "declare noundef i64 @nish_async_wait_fd(i32 noundef, i32 noundef)", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_poll", "declare noundef i32 @nish_async_poll(i64 noundef)", EFFECT_WRITE))
+    this.add(mayNotReturn("nish_async_copy_str", "declare nonnull i8* @nish_async_copy_str(i8* nonnull)", EFFECT_WRITE))
     // `SharedRegion.lend` and `giveBack` (runtime/runtime-shm.c), each the body of
     // one of `std/sync/shm.ts`'s intrinsics (`src/emit-shm-window.ts`). A bad
     // handle or range panics, so neither is `willreturn`; `lend` answers a

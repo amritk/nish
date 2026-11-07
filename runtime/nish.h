@@ -153,6 +153,31 @@ void *nish_region_enter(uint64_t r);
 void nish_region_leave(uint64_t r, void *root);
 void nish_region_free(uint64_t r);
 
+/* ---- The async executor (runtime-async.c) --------------------------------
+ * Linked only into a program whose IR names `@nish_async_`
+ * (docs/wp49-async-server.md, "Stage 5, part 1"). `nish_async_spawn` answers
+ * a node for a task of `kind` whose frame is `bytes` long, the frame 32 bytes
+ * in, with a region of its own; `nish_async_enter` makes a node the running
+ * task and enters its region, answering the task it displaced, which
+ * `nish_async_leave` restores; `nish_async_done` frees a finished task's
+ * region and reuses its node. `nish_async_wait_fd` (`dir` 0 readable, 1
+ * writable) and `nish_async_sleep` answer a token `nish_async_poll` reads: -1
+ * pending, 1 ready, 0 failed. `nish_async_next` answers the next task to
+ * resume, blocking in the kernel until one is ready, or null when nothing is
+ * ready and nothing waits. `nish_async_stat` answers 0: nodes allocated, 1:
+ * completions dropped because their task had finished, 2: spawned tasks not yet
+ * finished. */
+void *nish_async_spawn(int32_t kind, uint64_t bytes);
+void *nish_async_enter(void *node);
+void nish_async_leave(void *node, void *prev);
+void nish_async_done(void *node);
+uint64_t nish_async_wait_fd(int32_t fd, int32_t dir);
+uint64_t nish_async_sleep(int32_t ms);
+int32_t nish_async_poll(uint64_t token);
+void *nish_async_next(void);
+void *nish_async_copy_str(const void *s);
+int32_t nish_async_stat(int32_t which);
+
 /* ---- String operations ------------------------------------------------- */
 /* Copy `len` bytes into a new arena string (`bytes` need not be terminated). */
 nish_str *nish_str_new(const char *bytes, uint64_t len);

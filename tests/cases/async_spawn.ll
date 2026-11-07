@@ -1,12 +1,13 @@
 %frame.report = type { i32, i32, i32, %frame.report.rest }
 %frame.report.rest = type { [0 x <2 x i64>], i32 }
 
-declare noalias i8* @malloc(i64)
-declare void @free(i8*)
-declare void @llvm.trap()
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
+declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef) #1
+declare i8* @nish_async_enter(i8* nonnull) #1
+declare void @nish_async_leave(i8* nonnull, i8*) #1
+declare void @nish_async_done(i8* nonnull) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
@@ -82,16 +83,9 @@ entry:
 define noundef i32 @nish_main() #1 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = call noalias i8* @malloc(i64 48)
-  %1 = icmp eq i8* %0, null
-  br i1 %1, label %spawn.oom, label %spawn.go
-
-spawn.oom:
-  call void @llvm.trap()
-  unreachable
-
-spawn.go:
-  %2 = getelementptr inbounds i8, i8* %0, i64 16
+  %0 = call i8* @nish_async_spawn(i32 0, i64 64)
+  %1 = call i8* @nish_async_enter(i8* %0)
+  %2 = getelementptr inbounds i8, i8* %0, i64 32
   %3 = bitcast i8* %2 to { i32, i32, i32 }*
   %4 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %3, i32 0, i32 0
   store i32 0, i32* %4
@@ -100,55 +94,36 @@ spawn.go:
   %6 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %3, i32 0, i32 2
   store i32 10, i32* %6
   %7 = call i1 @report.resume(i8* %2)
-  br i1 %7, label %spawn.done, label %spawn.queue
+  call void @nish_async_leave(i8* %0, i8* %1)
+  br i1 %7, label %spawn.done, label %spawn.join
 
 spawn.done:
-  call void @free(i8* %0)
-  br label %spawn.join
-
-spawn.queue:
-  %8 = getelementptr inbounds i8, i8* %0, i64 8
-  %9 = bitcast i8* %8 to i32*
-  store i32 0, i32* %9
-  call void @nish.async.enqueue(i8* %0)
+  call void @nish_async_done(i8* %0)
   br label %spawn.join
 
 spawn.join:
   call void @shout(i32 7)
-  %10 = call noalias i8* @malloc(i64 48)
-  %11 = icmp eq i8* %10, null
-  br i1 %11, label %spawn.oom.1, label %spawn.go.1
-
-spawn.oom.1:
-  call void @llvm.trap()
-  unreachable
-
-spawn.go.1:
-  %12 = getelementptr inbounds i8, i8* %10, i64 16
-  %13 = bitcast i8* %12 to { i32, i32, i32 }*
-  %14 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %13, i32 0, i32 0
-  store i32 0, i32* %14
-  %15 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %13, i32 0, i32 1
-  store i32 2, i32* %15
-  %16 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %13, i32 0, i32 2
-  store i32 21, i32* %16
-  %17 = call i1 @report.resume(i8* %12)
-  br i1 %17, label %spawn.done.1, label %spawn.queue.1
+  %8 = call i8* @nish_async_spawn(i32 0, i64 64)
+  %9 = call i8* @nish_async_enter(i8* %8)
+  %10 = getelementptr inbounds i8, i8* %8, i64 32
+  %11 = bitcast i8* %10 to { i32, i32, i32 }*
+  %12 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %11, i32 0, i32 0
+  store i32 0, i32* %12
+  %13 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %11, i32 0, i32 1
+  store i32 2, i32* %13
+  %14 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %11, i32 0, i32 2
+  store i32 21, i32* %14
+  %15 = call i1 @report.resume(i8* %10)
+  call void @nish_async_leave(i8* %8, i8* %9)
+  br i1 %15, label %spawn.done.1, label %spawn.join.1
 
 spawn.done.1:
-  call void @free(i8* %10)
-  br label %spawn.join.1
-
-spawn.queue.1:
-  %18 = getelementptr inbounds i8, i8* %10, i64 8
-  %19 = bitcast i8* %18 to i32*
-  store i32 0, i32* %19
-  call void @nish.async.enqueue(i8* %10)
+  call void @nish_async_done(i8* %8)
   br label %spawn.join.1
 
 spawn.join.1:
-  %20 = call i8* @nish_str_from_i32(i32 0)
-  call void @nish_print(i8* %20)
+  %16 = call i8* @nish_str_from_i32(i32 0)
+  call void @nish_print(i8* %16)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -173,87 +148,50 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !3 = !{i32 8, !"sign-return-address", i32 1}
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 
-@nish.async.head = internal global i8* null, align 8
-@nish.async.tail = internal global i8* null, align 8
+declare i8* @nish_async_next()
+declare void @llvm.trap()
 
-
-define hidden void @nish.async.enqueue(i8* %node) nounwind "probe-stack"="inline-asm" {
+define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
 entry:
-  %link = bitcast i8* %node to i8**
-  store i8* null, i8** %link, align 8
-  %tail = load i8*, i8** @nish.async.tail, align 8
-  %empty = icmp eq i8* %tail, null
-  br i1 %empty, label %first, label %append
-
-first:
-  store i8* %node, i8** @nish.async.head, align 8
-  br label %done
-
-append:
-  %prev = bitcast i8* %tail to i8**
-  store i8* %node, i8** %prev, align 8
-  br label %done
-
-done:
-  store i8* %node, i8** @nish.async.tail, align 8
-  ret void
-}
-
-define hidden i1 @nish.async.step() nounwind "probe-stack"="inline-asm" {
-entry:
-  %first = load i8*, i8** @nish.async.head, align 8
-  store i8* null, i8** @nish.async.head, align 8
-  store i8* null, i8** @nish.async.tail, align 8
   br label %loop
 
 loop:
-  %node = phi i8* [ %first, %entry ], [ %next, %advance ]
-  %progress = phi i1 [ false, %entry ], [ %progress.next, %advance ]
-  %more = icmp ne i8* %node, null
-  br i1 %more, label %run, label %out
+  %node = call i8* @nish_async_next()
+  %idle = icmp eq i8* %node, null
+  br i1 %idle, label %idle.out, label %got
 
-run:
-  %link = bitcast i8* %node to i8**
-  %next = load i8*, i8** %link, align 8
+idle.out:
+  ret i1 false
+
+got:
   %kind.at = getelementptr inbounds i8, i8* %node, i64 8
   %kind.ptr = bitcast i8* %kind.at to i32*
   %kind = load i32, i32* %kind.ptr, align 8
-  %frame = getelementptr inbounds i8, i8* %node, i64 16
+  %main = icmp slt i32 %kind, 0
+  br i1 %main, label %main.out, label %task
+
+main.out:
+  ret i1 true
+
+task:
+  %prev = call i8* @nish_async_enter(i8* %node)
+  %frame = getelementptr inbounds i8, i8* %node, i64 32
   %finished = call i1 @nish.async.resume(i32 %kind, i8* %frame)
-  br i1 %finished, label %release, label %again
+  call void @nish_async_leave(i8* %node, i8* %prev)
+  br i1 %finished, label %release, label %loop
 
 release:
-  call void @free(i8* %node)
-  br label %advance
-
-again:
-  call void @nish.async.enqueue(i8* %node)
-  br label %advance
-
-advance:
-  %progress.next = or i1 %progress, %finished
+  call void @nish_async_done(i8* %node)
   br label %loop
-
-out:
-  ret i1 %progress
 }
 
 define hidden void @nish.async.drain() nounwind "probe-stack"="inline-asm" {
 entry:
-  br label %check
+  br label %loop
 
-check:
-  %head = load i8*, i8** @nish.async.head, align 8
-  %empty = icmp eq i8* %head, null
-  br i1 %empty, label %done, label %step
-
-step:
-  %progress = call i1 @nish.async.step()
-  br i1 %progress, label %check, label %stuck
-
-stuck:
-  call void @llvm.trap()
-  unreachable
+loop:
+  %woke = call i1 @nish.async.run()
+  br i1 %woke, label %loop, label %done
 
 done:
   ret void

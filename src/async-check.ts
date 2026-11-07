@@ -17,7 +17,7 @@ import { unwrapParens } from "./emit-util"
 import { BuiltinExport } from "./nish-modules"
 import { AwaitEdge, FunctionSig } from "./program"
 import { Scope } from "./symbols"
-import { T_ERROR, T_VOID } from "./types"
+import { T_BOOL, T_ERROR, T_I32, T_STRING, T_VOID, isNumeric } from "./types"
 import {
   N_BINARY,
   N_BINDING_PATTERN,
@@ -149,6 +149,56 @@ const refuseAwaitHere = (ctx: CheckContext, expr: Node): boolean => {
   return false
 }
 
+/** A wait on the executor (`sleep`, `readable`, `writable`) written anywhere but `await wait(x)`. */
+const waitSiteMessage = (name: string): string =>
+  `\`${name}\` is a wait on the executor, written only where it is awaited: \`await sleep(ms)\`, \`await readable(fd)\` or \`await writable(fd)\`, inside an \`async\` function`
+
+/** A wait on the executor given other than one `i32`. */
+const waitArgumentMessage = (name: string): string =>
+  `\`${name}\` takes one \`i32\`: the milliseconds \`sleep\` waits, or the descriptor \`readable\` and \`writable\` wait on`
+
+/** Whether `name` is a `nish:async` wait on the executor. */
+const isKernelWait = (name: string): boolean => name === "sleep" || name === "readable" || name === "writable"
+
+/**
+ * The `nish:async` wait on the executor `call` makes, or null: its callee
+ * is a name no local shadows that the module imported from `nish:async`.
+ */
+const kernelWaitOf = (ctx: CheckContext, call: Node, scope: Scope): BuiltinExport | null => {
+  const name = call.children[0].text
+  const imported = ctx.program.builtinImport(name)
+  if (scope.lookup(name) !== null || imported === null || !isKernelWait(asyncBuiltinOf(imported))) {
+    return null
+  }
+  return imported
+}
+
+/**
+ * `await sleep(ms)`, `await readable(fd)`, `await writable(fd)`: a wait the
+ * executor makes for the task, which suspends the function as an await of a
+ * call does. It answers `true` once the wait is over, and `false` when it
+ * could not be made — a negative `ms`, a descriptor that is not open.
+ */
+const checkKernelWait = (ctx: CheckContext, call: Node, scope: Scope, imported: BuiltinExport): i32 => {
+  ctx.program.nodeBuiltins[call.id] = imported.canonical
+  const args = call.children[1].children
+  if (args.length !== 1) {
+    return ctx.errorType(call, waitArgumentMessage(imported.member))
+  }
+  const type = checkExpression(ctx, args[0], scope, T_I32)
+  if (type === T_ERROR) {
+    return T_ERROR
+  }
+  if (type !== T_I32) {
+    return ctx.errorType(args[0], waitArgumentMessage(imported.member))
+  }
+  const current = ctx.current
+  if (current !== null) {
+    current.waits = true
+  }
+  return T_BOOL
+}
+
 /**
  * `await f(args)`: the answer type of `f`, an async function, called
  * directly at an await site inside an async function.
@@ -160,6 +210,10 @@ export const checkAwait = (ctx: CheckContext, expr: Node, scope: Scope): i32 => 
   const call = directCall(expr.children[0])
   if (call === null) {
     return ctx.errorType(expr.children[0], directCallMessage("await"))
+  }
+  const wait = kernelWaitOf(ctx, call, scope)
+  if (wait !== null) {
+    return checkKernelWait(ctx, call, scope, wait)
   }
   const callee = checkTakenCall(ctx, call, scope, "await")
   if (callee === null) {
@@ -237,6 +291,9 @@ export const checkAsyncBuiltin = (
   if (what === "awaitAll") {
     return ctx.errorType(expr, AWAIT_ALL_FORM)
   }
+  if (isKernelWait(what)) {
+    return ctx.errorType(expr, waitSiteMessage(what))
+  }
   if (!insideAsync(ctx)) {
     return ctx.errorType(expr, outsideAsyncMessage(what))
   }
@@ -259,8 +316,25 @@ export const checkAsyncBuiltin = (
       `\`spawn\` drops its task's answer, and \`${call.children[0].text}\` answers ${ctx.table.typeName(answer)}: a spawned task answers \`void\` or a \`Result\` it reports itself`
     )
   }
+  for (const param of callee.paramTypes) {
+    if (!isSpawnable(ctx, param)) {
+      return ctx.errorType(
+        call,
+        `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(param)}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region`
+      )
+    }
+  }
   return T_VOID
 }
+
+/**
+ * WP49 stage 5, debt (b): whether a spawned task may take a `type` argument.
+ * The task outlives its spawner, whose region is freed when it returns, so
+ * an argument is a value the frame holds (a number, a `boolean`, an enum) or
+ * a `string` the task copies into its own region when it starts.
+ */
+const isSpawnable = (ctx: CheckContext, type: i32): boolean =>
+  type === T_ERROR || isNumeric(type) || type === T_BOOL || type === T_STRING || ctx.table.isEnum(type)
 
 /**
  * `const [a, b] = await awaitAll(f(x), g(y))`, read off the tree: a
