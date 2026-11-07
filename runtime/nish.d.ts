@@ -2665,17 +2665,19 @@ declare interface CPtr {
  * different kind, arithmetic, and a conversion to or from a number, an `as`
  * included, are refused, and only a host function that returns one makes one.
  *
- * A branded `number` here, so `tsc` refuses passing one kind where another is
- * declared, as `nish` does; it cannot refuse the arithmetic, which `nish` does.
- * The brand is optional and keyed `__nishHostKind`, the shape `--emit-ts`
- * declares for itself (`HOST_HANDLE_ALIAS` in `src/emit-ts-edits.ts`), so a
- * handle the TypeScript reading spells is the page's, and the `0` a handle
- * starts as is one.
+ * In TypeScript a branded `number` or `0`. `tsc` takes `0` (a handle's start,
+ * a field default, `h === 0`) and a handle of the same kind, and refuses any
+ * other number, a plain `number` and a handle of another kind, as `nish` does.
+ * It cannot refuse arithmetic on a handle or an `as` cast, which `nish` does;
+ * a handle stays assignable to `number`.
  */
-type HostHandle<K extends string> = __NishHostHandle<K>;
-
-/** The one definition both `HostHandle`s name, the global one and the `"nish"` module's. */
-type __NishHostHandle<K extends string> = number & { readonly __nishHostKind?: K };
+// The brand is keyed by the string `__nishHostKind`, not a `unique symbol`:
+// `--emit-ts` declares the same shape for itself (`HOST_HANDLE_ALIAS` in
+// `src/emit-ts-edits.ts`), and so does the `"nish"` module below, and two
+// declarations of a `unique symbol` would be two types, so the page's function
+// would refuse the reading's handle. With a string key the three declarations
+// are one type; keep them spelled alike.
+type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 0;
 
 /**
  * `"nish"`: what a host module (the page's TypeScript) imports its widths
@@ -2695,7 +2697,7 @@ declare module "nish" {
   export type f64 = number;
   /** A ranged integer, which the loader checks on the way in. */
   export type integer<Lo extends number, Hi extends number> = number;
-  export type HostHandle<K extends string> = __NishHostHandle<K>;
+  export type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 0;
 }
 
 // ---- `lib.es2022`'s receivers, documented ---------------------------------------

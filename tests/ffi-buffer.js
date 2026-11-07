@@ -1,6 +1,7 @@
 // WP40 B1.2's checks (docs/wp40-ffi-buffers-handles.md): a `u8[]` handed to a
-// `declare function`, its `ffi-length` site, and its wasm32 and freestanding
-// `--profile wasm` builds. They live beside `tests/run.js`, which calls
+// `declare function`, its `ffi-length` site, its `--target wasm32-wasi` build,
+// its refusal in a freestanding `--target wasm32` build (NL2666), and a
+// freestanding `--profile wasm` link of host IR. They live beside `tests/run.js`, which calls
 // `runFfiBufferChecks` with its own helpers, so that file stays under Biome's
 // size limit. A record cites each check by its exact name.
 import fs from "node:fs"

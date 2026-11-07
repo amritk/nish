@@ -6008,7 +6008,8 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
 **`HostHandle<K>` is a nominal `i32` for an object the page keeps**
 (`docs/wp50-wasm-host.md` §4). `K` is a string literal type, and
 `HostHandle<"a">` and `HostHandle<"b">` are different types, here and under
-`tsc`, where `runtime/nish.d.ts` brands a `number`. A handle supports `===` and
+`tsc`, where `runtime/nish.d.ts` makes it a branded `number` or `0`, so `tsc`
+also refuses any number but `0` where a handle is wanted. A handle supports `===` and
 `!==` against a handle of its kind or `0` ("none"), and is stored wherever a
 scalar is; it has no arithmetic and no conversion to or from a number, so it
 is made only by a host function that returns one. A field's or a parameter's

@@ -140,12 +140,14 @@ const WIDTH_TYPES: string =
 
 /**
  * What the output declares where the module spells the ambient `HostHandle`:
- * `nish/runtime` has none, and the program is already checked, so the brand
- * is optional. tsc then takes the `0` a handle starts as, and still refuses a
- * handle of one kind where another is wanted.
+ * `nish/runtime` has none. It is runtime/nish.d.ts's shape, keyed by a string
+ * and not a `unique symbol`, since two declarations of a `unique symbol` are
+ * two types and the page's host function would refuse the reading's handle.
+ * tsc takes `0` and a handle of the same kind, and refuses any other number
+ * and another kind, as nish does.
  */
 export const HOST_HANDLE_ALIAS: string =
-  "type HostHandle<K extends string> = number & { readonly __nishHostKind?: K }\n"
+  "type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 0\n"
 
 /** The message NL4011 carries; `src/codes.ts` keys the code on it. */
 export const SIGNAL_REFUSAL: string =

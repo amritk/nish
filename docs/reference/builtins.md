@@ -4894,6 +4894,26 @@ const crypto: { ... }
 | --- | --- |
 | `getRandomValues(bytes: u8[]): void` | Every byte of `bytes` from the kernel's CSPRNG (`getrandom(2)` on Linux, looping over `EINTR` and short reads; `getentropy(3)` in 256-byte chunks on macOS); at most 65,536 bytes a call. A `u8[]` only, where the Web API takes any integer typed array: the byte is the unit a key or a nonce is written in, and anything else is refused at compile time (NL2402). A statement, where the Web API also answers its argument, which the caller already holds. An empty array is filled with nothing. The array is written, so a `readonly u8[]` is refused (and, inside a `scope()` region, an array a task may read). More than 65,536 bytes is a panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is ever substituted. It is the source for a key. `crypto` has no other member (NL2403, for example `crypto.randomUUID`). Refused at compile time on wasm32 and the WASI profile (NL2404). Under Node the prelude fills a plain `u8[]` too and panics past 65,536 with the same words; without the prelude it takes only a typed array. Capability: entropy. |
 
+## HostHandle
+
+`HostHandle<"kind">`: an object the page holds (a canvas, a GPU buffer, a
+node), passed to and from a host module's functions as the small integer the
+page's table keys it by (docs/LANGUAGE.md -> Host modules). It is an `i32` in
+the wasm module. It may be stored anywhere a scalar goes and compared with
+`===` or `!==` against a handle of the same kind or the literal `0`; a
+different kind, arithmetic, and a conversion to or from a number, an `as`
+included, are refused, and only a host function that returns one makes one.
+
+In TypeScript a branded `number` or `0`. `tsc` takes `0` (a handle's start,
+a field default, `h === 0`) and a handle of the same kind, and refuses any
+other number, a plain `number` and a handle of another kind, as `nish` does.
+It cannot refuse arithmetic on a handle or an `as` cast, which `nish` does;
+a handle stays assignable to `number`.
+
+```ts
+type HostHandle<K extends string> = number & reflection | 0
+```
+
 ## Result
 
 The outcome of an operation that can fail. `T` may be `void` for an

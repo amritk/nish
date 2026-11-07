@@ -5741,8 +5741,9 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   32 bits there and the length check is the same 64-bit compare, but a C
   function whose count is a `size_t` takes 32 bits: declare its count `u64`
   only on a target where `size_t` is 64 bits, until a later release gives the
-  count a target-width type. The freestanding `--profile wasm` link resolves
-  the declaration against the C the link is given.
+  count a target-width type. A freestanding wasm build (`--target wasm32`)
+  refuses a `declare function`, so a buffer declaration is for `--profile
+  wasi` there (see "Host modules" below).
 
 #### A handle class: a class that owns a `CPtr`
 
@@ -5952,6 +5953,78 @@ does not hold for a source whose meaning is "whatever this C function does"
 ([wp27-ffi.md](https://github.com/amritk/nish/blob/main/docs/wp27-ffi.md) §5). The evidence for an FFI program is arranged the
 other way round: a golden `.ll`, an `llvm-as` pass, a native round trip against
 real libc, and the attribute assertions.
+
+#### Host modules: the functions a page supplies
+
+**A wasm module calls a function of the page that loads it by importing it
+from a host module**: a TypeScript file of the page's, named by `--host
+<file>` or by the root `package.json`'s `"nish": { "host": [...] }`
+(`tests/host-import`, `docs/wp50-wasm-host.md` §3). An import from any other
+file is an ordinary Nish import.
+
+```ts
+// host.ts, the page's
+import type { f64, u32 } from "nish";
+export type Canvas = HostHandle<"canvas">;
+export function fill(c: Canvas, rgb: u32): void { canvases[c].fill(rgb); }
+export function nowMs(): f64 { return performance.now(); }
+```
+
+```llvm
+declare void @fill(i32, i32) #1
+attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
+```
+
+- **Only the exported signatures are read.** Each `export function`'s
+  parameter and result types, each exported `enum`, and each
+  `export type X = HostHandle<"kind">`. A function body is skipped as a
+  balanced run of tokens, so it may use anything TypeScript has. Text the
+  lexer cannot skip, a regex literal or JSX, refuses the file with
+  `` move that code into a module the host file imports `` (NL3049); other
+  statements are skipped unread.
+- **What crosses.** The integer and float widths, `boolean`, a ranged integer,
+  an enum, a `HostHandle`, and `void` as a result. `i64` and `u64` are a
+  `bigint` on the page's side (`import type { i64 } from "nish"`). Refused,
+  each naming the explicit form: an object, a class, a function, `unknown` or
+  `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a typed
+  array (NL2664, a later stage's buffer window), a `string` parameter (NL2665,
+  a later stage's) and a `string` result (NL2667).
+- **Each host function is a declaration with the wasm import attributes**:
+  module `host`, its own name. It carries no other attribute, and its callers
+  lose `readnone` and `willreturn` as for a C declaration. `wasm-ld` makes it
+  an import with no `--allow-undefined`.
+- **A host module exists only in a freestanding wasm build.** A native or
+  `--target wasm32-wasi` build that imports one is refused (NL3050). A build
+  that makes a page module (`--target wasm32`, or `--emit-dts` with no
+  `--target`) refuses a `declare function` (NL2666): the module links no C, so
+  the declaration would be an import the page does not supply. `--target
+  wasm32-wasi --emit-dts` links C, so it keeps `declare function` legal.
+- **The loader and its types.** `--emit-dts` adds
+  `Imports = { host: typeof import("./host") }` to the `.d.ts`, and `load`
+  takes it. The loader passes a function through by reference when every
+  value crosses as it stands, and wraps it once, at `load`, when a value
+  converts. A `u32` or `u64` argument arrives signed and is read unsigned
+  (`>>> 0`, `BigInt.asUintN(64, …)`); a `u8` or `u16` argument needs nothing,
+  since the module zero-extends it. A `u8` or `u16` result is masked, a
+  `boolean` crosses as 0 or 1, and a ranged integer result is checked by the
+  loader's `rangeOut` (`RangeError` naming the function).
+- **`--emit-ts` keeps the import** as written, pointing at the host file, so
+  the TypeScript reading calls the same functions.
+- **A call to a host function is an `ffi` call**: `--deny ffi` refuses it and
+  `--emit-capabilities` names it.
+
+**`HostHandle<K>` is a nominal `i32` for an object the page keeps**
+(`docs/wp50-wasm-host.md` §4). `K` is a string literal type, and
+`HostHandle<"a">` and `HostHandle<"b">` are different types, here and under
+`tsc`, where `runtime/nish.d.ts` makes it a branded `number` or `0`, so `tsc`
+also refuses any number but `0` where a handle is wanted. A handle supports `===` and
+`!==` against a handle of its kind or `0` ("none"), and is stored wherever a
+scalar is; it has no arithmetic and no conversion to or from a number, so it
+is made only by a host function that returns one. A field's or a parameter's
+default may only be `0` (NL2670). A second type argument, or
+a kind that is not a string literal of letters, digits and `_`, is NL2669, and a string literal type
+anywhere but a `HostHandle`'s kind is NL2668. It lowers to
+`i32`, so a program with no host module emits nothing new.
 
 ## Statements
 
@@ -10334,7 +10407,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic` and `capabilities` — is NL3036
+  than `noPanic`, `capabilities` and `host` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as
@@ -11812,7 +11885,7 @@ performance warning about the same check is not printed beside the error.
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
 - **The root package's `"nish"` field is one object, written once, whose
-  keys are `noPanic` and `capabilities`, each written once**, and anything
+  keys are `noPanic`, `capabilities` and `host`, each written once**, and anything
   else is an error (NL3036) where `package.json` writes it: a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a

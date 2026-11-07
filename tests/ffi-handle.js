@@ -1,6 +1,7 @@
 // WP40 H1.2's wasm checks (docs/wp40-ffi-buffers-handles.md): the close a
-// `using` of a handle class emits, on a `--target wasm32` build and on the
-// `--profile wasi` route. They live beside `tests/run.js`, which
+// `using` of a handle class emits, on a `--target wasm32-wasi` build and on the
+// `--profile wasi` route, and the refusal of its `declare function` in a
+// freestanding `--target wasm32` build (NL2666). They live beside `tests/run.js`, which
 // calls `runFfiHandleChecks` with its own helpers, so that file stays under
 // Biome's size limit. A record cites each check by its exact name.
 import fs from "node:fs"

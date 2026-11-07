@@ -90,13 +90,12 @@ stays in the native build ([the record](../../security/secret.md), SECRET-6).
 A host module's import (`--host`, see [interop](interop.md#functions-the-page-supplies-host-modules))
 is kept as written and points at the page's own file, so the TypeScript calls
 the same functions the wasm build imports. A module that names `HostHandle`
-itself gets its own declaration of it in the output, with the brand optional,
-so `tsc` takes the `0` a handle starts as and still refuses a handle of one
-kind where another is wanted. A handle type imported from the host module
-keeps the page's definition, and there one line of Nish has no `tsc` reading:
-a handle given the literal `0` (`let c: Canvas = 0`, or a field default),
-since `tsc` sees a branded `number` and refuses the bare `0`. Comparing a
-handle with `0` passes both.
+itself gets its own declaration of it in the output, the same shape the
+page's has, `(number & { readonly __nishHostKind: K }) | 0`. `tsc` then takes
+the `0` a handle starts as and a handle of the same kind, and refuses any
+other number and a handle of another kind, as `nish` does; a handle imported
+from the host module keeps the page's definition, which is the same type.
+What `tsc` cannot refuse is arithmetic on a handle or an `as` cast.
 [The CLI page](cli.md#writing-typescript---emit-ts) lists every rewrite and
 the kinds of module that are refused (C functions, NL4010; signals and
 `nish:net`, NL4011; a compound assignment whose index would run twice,

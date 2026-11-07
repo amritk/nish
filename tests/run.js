@@ -29967,46 +29967,80 @@ if (!only || "host-import".includes(only)) {
     )
 
     // The reading declares its own `HostHandle`; tsc takes a handle it starts
-    // at `0` and hands to the page's host function only if that is the shape
+    // at `0` and hands to the page's host function only if that is the type
     // runtime/nish.d.ts gives the page's.
     const handleDir = at("emit-ts-handle")
     const handleReading = spawnSync(NISH, [at("reading-handle.ts"), "--host", at("host.ts"), "--emit-ts", handleDir], {
       cwd: root,
       encoding: "utf8",
     })
-    let handleTsc = { ok: false, output: shown(handleReading) }
-    if (handleReading.status === 0) {
-      const config = path.join(handleDir, "tsconfig.json")
+    const readingTsc = (name, files, options = {}) => {
+      const config = path.join(handleDir, `tsconfig.${name}.json`)
       fs.writeFileSync(
         config,
         JSON.stringify({
           extends: path.join(root, "tsconfig.json"),
           // The reading imports the host module by its `.ts` path, as Node runs it.
-          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true, allowImportingTsExtensions: true },
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true, allowImportingTsExtensions: true, ...options },
           include: [],
-          files: [path.join(root, "runtime", "nish.d.ts"), at("host.ts"), path.join(handleDir, "reading-handle.ts")],
+          files: [path.join(root, "runtime", "nish.d.ts"), ...files],
         })
       )
-      handleTsc = typeCheckProject(config, root)
+      return typeCheckProject(config, root)
     }
+    const handleTsc =
+      handleReading.status === 0
+        ? readingTsc("handle", [at("host.ts"), path.join(handleDir, "reading-handle.ts")])
+        : { ok: false, output: shown(handleReading) }
     check(
       "host-import: tsc takes the --emit-ts reading's HostHandle, started at 0, where the page's host function takes one",
       handleTsc.ok,
       handleTsc.output
     )
 
+    // The other direction: what nish refuses, tsc refuses too, through the
+    // reading's own `HostHandle`. The probe is plain TypeScript, which nish
+    // never compiles, and each of its last three lines is one refusal.
+    const probe = path.join(handleDir, "probe.ts")
+    fs.writeFileSync(
+      probe,
+      [
+        'import type { Canvas, Socket } from "./reading-handle.ts"',
+        `import { hSame } from ${JSON.stringify(at("host.ts"))}`,
+        "declare const n: number",
+        "declare const s: Socket",
+        "export const five: Canvas = 5",
+        "export const plain: Canvas = n",
+        "export const other: Canvas = hSame(s)",
+        "",
+      ].join("\n")
+    )
+    const probeTsc =
+      handleReading.status === 0
+        ? readingTsc("probe", [at("host.ts"), path.join(handleDir, "reading-handle.ts"), probe])
+        : { ok: false, output: shown(handleReading) }
+    const refusedAt = [...probeTsc.output.matchAll(/(\S+)\((\d+),\d+\): error (TS\d+)/g)].map(
+      (m) => `${path.basename(m[1])}:${m[2]}:${m[3]}`
+    )
+    check(
+      "host-import: tsc refuses, through the --emit-ts reading's HostHandle, a 5, a plain number and a handle of another kind where a handle is wanted",
+      !probeTsc.ok && refusedAt.join(" ") === "probe.ts:5:TS2322 probe.ts:6:TS2322 probe.ts:7:TS2345",
+      probeTsc.output
+    )
+
     // A reading with no import or export is a script to a tsc without
-    // `moduleDetection: "force"`, so its alias would be global: it says `export {}`.
+    // `moduleDetection: "force"`, so its alias would be global and meet
+    // runtime/nish.d.ts's own `HostHandle` (TS2300), unless it says `export {}`.
     const scriptDir = at("emit-ts-script")
     const scriptReading = spawnSync(NISH, [at("reading-script.ts"), "--emit-ts", scriptDir], { cwd: root, encoding: "utf8" })
-    const scriptText = scriptReading.status === 0 ? fs.readFileSync(path.join(scriptDir, "reading-script.ts"), "utf8") : ""
-    const moduleText = handleReading.status === 0 ? fs.readFileSync(path.join(handleDir, "reading-handle.ts"), "utf8") : ""
+    const scriptTsc =
+      scriptReading.status === 0
+        ? readingTsc("script", [path.join(scriptDir, "reading-script.ts")], { moduleDetection: "legacy" })
+        : { ok: false, output: shown(scriptReading) }
     check(
-      "host-import: an --emit-ts reading of a script that spells HostHandle keeps its alias the file's with `export {}`, and a module's needs none",
-      scriptText.includes("number & { readonly __nishHostKind?: K }\nexport {}\n") &&
-        moduleText.includes("__nishHostKind") &&
-        !moduleText.includes("export {}"),
-      scriptReading.status === 0 ? scriptText : shown(scriptReading)
+      "host-import: tsc without moduleDetection force takes an --emit-ts reading of a script that spells HostHandle beside runtime/nish.d.ts",
+      scriptTsc.ok,
+      scriptTsc.output
     )
   }
 }
