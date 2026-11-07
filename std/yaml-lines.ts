@@ -111,7 +111,7 @@ export class YamlLineIndex {
    *
    * @param offset A byte offset into the text; clamped to `[0, text.length]`.
    * @returns The 1-based column: one more than the characters between the line's start and
-   *   `offset`, a UTF-8 continuation byte not counting.
+   *   `offset`, a UTF-8 continuation byte not counting (under Node, UTF-16 units).
    */
   column(offset: i32): i32 {
     const at: i32 = this.clamp(offset)
@@ -135,7 +135,8 @@ export class YamlLineIndex {
    * Where an offset is on its line, in bytes.
    *
    * @param offset A byte offset into the text; clamped to `[0, text.length]`.
-   * @returns The 1-based column: one more than the bytes between the line's start and `offset`.
+   * @returns The 1-based column: one more than the bytes between the line's start and `offset`
+   *   (under Node, UTF-16 units).
    */
   byteColumn(offset: i32): i32 {
     const at: i32 = this.clamp(offset)

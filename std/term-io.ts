@@ -534,7 +534,8 @@ export class Terminal {
    * What the controller measured, with the backend the last frame actually
    * used.
    *
-   * @returns A fresh snapshot, for an overlay or a log.
+   * @returns The controller's own stats object, updated in place on every tick, not a copy: a
+   *   caller who keeps it past the next tick copies the fields it needs.
    */
   stats(): TermStats {
     const s: TermStats = this.rate.stats()
@@ -946,7 +947,10 @@ export class Frame {
   framebuffer: Framebuffer
   /** From 0 up to 1: how far past the last `update` step this frame is, to interpolate with. */
   alpha: f64
-  /** What the controller measured, when the frame was made. */
+  /**
+   * What the controller measured: its live stats object, which the next tick
+   * updates in place, so copy a field to keep it past this frame.
+   */
   stats: TermStats
   /** What the probe found the terminal can do. */
   caps: TermCaps

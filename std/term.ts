@@ -1589,7 +1589,6 @@ export class KeyState {
   private downMods: i32[]
   /**
    * Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on.
-   * @internal Used by `Terminal` in term-io.ts.
    */
   releasesAreSynthetic: boolean
   /** Whether silence is measured against `watermarkMs` rather than the clock; set by `delivered`, which the caller may clear when answers stop. */

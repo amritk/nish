@@ -361,14 +361,12 @@ export class RateController {
   rttMs: f64
   /**
    * The link's latency without bytes: the least, over the kept trips, of the round trip less the bytes' time.
-   * @internal Used by the tests in tests/link/std_term_rate.
    */
   baseRttMs: f64
   /** The latency as last worked out while the bandwidth was known, held once its samples age out. */
   private heldLatencyMs: f64
   /**
    * The round trips of the probe and of the latest frames sent onto an idle link, `rateTripCount` at most.
-   * @internal Used by the tests in tests/link/std_term_rate.
    */
   tripMs: f64[]
   /** Their byte counts, 0 for the probe. */
@@ -398,7 +396,6 @@ export class RateController {
   private measured: TermStats
   /**
    * The least tier detail is cut to keep: the floor tier under `RATE_FIRST`, 5 under `DETAIL_FIRST`.
-   * @internal Used by the tests in tests/link/std_term_rate.
    */
   floorFps: i32
   /**
@@ -408,12 +405,10 @@ export class RateController {
   minTier: i32
   /**
    * What gives way first, `RATE_FIRST` or `DETAIL_FIRST`, from the options.
-   * @internal Used by the tests in tests/link/std_term_rate.
    */
   prefer: i32
   /**
    * How many frames may await their acknowledgement at once: 1 or 2.
-   * @internal Used by the tests in tests/link/std_term_rate.
    */
   maxUnacked: i32
   /**
@@ -444,7 +439,6 @@ export class RateController {
   private paced: boolean
   /**
    * Whether a round trip, from the probe or an answer, is known.
-   * @internal Used by the tests in tests/link/std_term_rate.
    */
   haveRtt: boolean
   /** Whether a frame has been acknowledged, so decisions can start. */
@@ -454,7 +448,6 @@ export class RateController {
    * frame that waited behind another or two trips of different sizes, within
    * `rateFreshMs`. The answers' bytes over their round trips are only a lower
    * bound and never make it known.
-   * @internal Used by the tests in tests/link/std_term_rate.
    */
   haveRate: boolean
   /** Whether a frame has been sent, so cost and size are known. */

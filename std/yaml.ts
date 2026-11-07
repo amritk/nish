@@ -109,7 +109,7 @@ export const YAML_ERR_BAD_DIRECTIVE: i32 = 5
  * hex digits, or a code point past U+10FFFF.
  */
 export const YAML_ERR_BAD_ESCAPE: i32 = 6
-/** An implicit key that does not fit on one line, or runs more than 1024 characters before its `:`. */
+/** An implicit key that does not fit on one line, or runs more than 1024 bytes before its `:`. */
 export const YAML_ERR_BAD_IMPLICIT_KEY: i32 = 7
 /**
  * A quoted scalar or flow collection continued on a line not indented deeper
@@ -128,8 +128,9 @@ export const YAML_ERR_BAD_SCALAR_START: i32 = 12
 /** A tag that is empty or not well formed. */
 export const YAML_ERR_BAD_TAG: i32 = 13
 /**
- * Warning: a `!!` core tag that does not fit its node, or a value `!!int`,
- * `!!float`, `!!bool` or `!!null` cannot read; the node is kept as a string.
+ * Warning: a `!!` core tag on the wrong kind of node (`!!map` on a scalar, say),
+ * which only warns, or a scalar whose text its `!!int`, `!!float`, `!!bool` or
+ * `!!null` tag cannot read, which is kept as a string.
  */
 export const YAML_ERR_BAD_TAG_VALUE: i32 = 14
 /** Collections nested deeper than `maxDepth`; the parse stops there. */
@@ -411,7 +412,6 @@ export class YamlStream {
   mergeStep: i32 = 0
   /**
    * Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is.
-   * @internal Used by `YamlParser`, `yamlIsMergeKey`, `YamlPathWalker`, and `YamlJsonLoader` in yaml-json.ts.
    */
   merge: boolean = true
 
@@ -656,9 +656,11 @@ export class YamlStream {
   }
 
   /**
-   * A scalar's core-schema type. A quoted or block scalar is a string, and so
-   * is any tagged one the core schema does not describe; a `!!str` plain scalar
-   * is a string too.
+   * A scalar's core-schema type. Untagged, a plain scalar is typed from its
+   * text and a quoted or block scalar is a string. Under a `!!null`, `!!bool` or
+   * `!!int` tag it is that type when its text (decoded, for a quoted or block
+   * scalar) reads as one, and a string otherwise; under `!!float` an int or
+   * float text is a float. Any other tag, `!!str` included, makes it a string.
    *
    * @param n A scalar, or an alias to one.
    * @returns `YAML_NULL`, `YAML_BOOL`, `YAML_INT`, `YAML_FLOAT` or `YAML_STRING`; `-1` for a collection.
@@ -1832,7 +1834,10 @@ class YamlParser {
   private flowIndentReported: boolean = false
   private uniqueKeys: boolean = true
   private keepComments: boolean = false
-  /** @internal Nothing reads it. */
+  /**
+   * Whether only the first document is parsed, as `firstDocumentOnly` said.
+   * @internal Nothing reads it.
+   */
   firstOnly: boolean = false
   private yamlDirective: boolean = false
   private lineEof: boolean = false
@@ -4731,7 +4736,8 @@ const yamlKeyText = (stream: YamlStream, node: i32): string => {
  * @param node The key node.
  * @returns A scalar's decoded text (its source text for a number or a boolean, `""` for a null), an
  *   alias's target's text (`*name` when it names no anchor), or a collection written as one line of
- *   flow text, `{ a: 1 }` or `[ a, b ]`, cut to `…` past 4096 bytes at a character's start.
+ *   flow text, `{ a: 1 }` or `[ a, b ]`, cut to `…` past 4096 bytes at a character's start or
+ *   past nesting depth 64.
  */
 export const keyText = (stream: YamlStream, node: i32): string => yamlKeyText(stream, node)
 

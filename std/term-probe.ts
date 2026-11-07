@@ -48,8 +48,8 @@
  *   (`nish/term`), keeping the replies and holding back every other event (a
  *   key typed while the probe ran) for `heldEvents()`, in order. `done()` is
  *   true once DA1 is answered; `timedOut(nowMs)` once `timeoutMs` (250 by
- *   default) has passed since the send with no answer to DA1. Either way
- *   the program then calls `finish(nowMs)` once: it gives up whatever the
+ *   default) has passed since the send with no answer to DA1. `timedOut`
+ *   calls `finish(nowMs)` itself; after `done()` the program calls it once: it gives up whatever the
  *   decoder still holds (a key cut off at the end of the read with DA1, say)
  *   and returns `heldEvents()` complete, and later reads go to the program's
  *   own decoder. `rttMs()` is the time from the
@@ -362,8 +362,8 @@ export class TermProbe {
    * End the probe at `nowMs`: what the decoder still holds — an ESC or the
    * start of a key that came in the read with DA1, or an unfinished reply on a
    * timeout — is given up (the ESC as a key, the reply as nothing) and
-   * `heldEvents` returned complete. Call it once, when `done()` or `timedOut`
-   * ends the probe, and hand every later read to the program's own decoder.
+   * `heldEvents` returned complete. Call it once when `done()` ends the probe
+   * (`timedOut` calls it itself), and hand every later read to the program's own decoder.
    *
    * @param nowMs The time now, in milliseconds on the clock `sentAtMs` used.
    * @returns The events that were not replies, in the order they came, as `heldEvents` gives them.
