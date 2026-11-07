@@ -1,0 +1,91 @@
+{
+ "kind": "round",
+ "arm": "B",
+ "round": "1",
+ "nish": "0.35.0",
+ "machine": {
+  "label": "x86_64",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cpus": 4,
+  "kernel": "6.18.44-fc-v310",
+  "postgres": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+  "clk_tck": 100
+ },
+ "load": {
+  "users": 15000,
+  "think": "0.25",
+  "ramp": 60,
+  "measure": 120,
+  "tail": 5,
+  "window": [
+   70,
+   170
+  ]
+ },
+ "tracing": true,
+ "http_workers": 2,
+ "window_s": 100,
+ "requests": 1453711,
+ "errors": 0,
+ "rps": 14537.11,
+ "workers": {
+  "oncpu": 26910013371,
+  "utime": 1207,
+  "stime": 1483,
+  "vcsw": 441195,
+  "ivcsw": 129467
+ },
+ "others": {
+  "oncpu": 47361545330,
+  "utime": 4418,
+  "stime": 319,
+  "vcsw": 419259,
+  "ivcsw": 25278
+ },
+ "per_request": {
+  "oncpu_ns": 18511.25386751562,
+  "user_ns": 8305.978965833217,
+  "kernel_ns": 10205.274901682404,
+  "vcsw": 0.303495674174578,
+  "ivcsw": 0.08905965491077662
+ },
+ "trace": {
+  "source": "tracefs raw_syscalls + sched_switch (substitute, not a hardware counter)",
+  "seconds": 10,
+  "traced_ns": 10006327000,
+  "calls": {
+   "recvfrom": {
+    "n": 153167,
+    "cpu_ns": 139170000,
+    "wall_ns": 139170000
+   },
+   "sendto": {
+    "n": 182490,
+    "cpu_ns": 1094876000,
+    "wall_ns": 1094876000
+   },
+   "epoll_wait": {
+    "n": 61391,
+    "cpu_ns": 237472000,
+    "wall_ns": 16504955000
+   },
+   "epoll_ctl": {
+    "n": 252,
+    "cpu_ns": 642000,
+    "wall_ns": 642000
+   },
+   "nr12": {
+    "n": 27,
+    "cpu_ns": 298000,
+    "wall_ns": 298000
+   }
+  },
+  "switches": {
+   "epoll_wait/S": 42260,
+   "user/R": 10946,
+   "epoll_wait/R": 101
+  },
+  "switch_ins_inferred": 9817,
+  "requests": 145988
+ }
+}

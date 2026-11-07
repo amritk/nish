@@ -1,0 +1,52 @@
+{
+ "kind": "round",
+ "arm": "C",
+ "round": "3",
+ "nish": "0.35.0",
+ "machine": {
+  "label": "x86_64",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cpus": 4,
+  "kernel": "6.18.44-fc-v310",
+  "postgres": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+  "clk_tck": 100
+ },
+ "load": {
+  "users": 15000,
+  "think": "0.25",
+  "ramp": 60,
+  "measure": 120,
+  "tail": 5,
+  "window": [
+   70,
+   170
+  ]
+ },
+ "tracing": false,
+ "http_workers": 2,
+ "window_s": 100,
+ "requests": 1455578,
+ "errors": 0,
+ "rps": 14555.78,
+ "workers": {
+  "oncpu": 26143557698,
+  "utime": 1146,
+  "stime": 1468,
+  "vcsw": 437765,
+  "ivcsw": 128844
+ },
+ "others": {
+  "oncpu": 47944541782,
+  "utime": 4468,
+  "stime": 328,
+  "vcsw": 416553,
+  "ivcsw": 25378
+ },
+ "per_request": {
+  "oncpu_ns": 17960.94589091069,
+  "user_ns": 7874.232590276836,
+  "kernel_ns": 10086.713300633854,
+  "vcsw": 0.30074994263447236,
+  "ivcsw": 0.08851741370094904
+ }
+}

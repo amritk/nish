@@ -1,0 +1,11 @@
+--- a/src/worker.ts
++++ b/src/worker.ts
+@@ -1107,7 +1107,7 @@
+       conn.end()
+     } else if (!this.answerGzipped(conn, status, buf, len, coding)) {
+       conn.respond(status, this.jsonNames, this.jsonValues, len)
+-      conn.write(buf, 0, len)
++      conn.sendBody(buf, 0, len)
+       conn.end()
+     }
+     if (slot < toI32(this.slotAnswered.length)) {
