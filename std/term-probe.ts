@@ -276,13 +276,13 @@ export class TermProbe {
   /** How long to wait for the answer to DA1 (`TERM_PROBE_TIMEOUT_MS` by default). */
   timeoutMs: f64
   /** The decoder the terminal's bytes go through. */
-  decoder: KeyDecoder
+  private decoder: KeyDecoder
   /** The replies so far, in order. */
   replies: TermEvent[]
   /** Every other event so far, in order: what the user typed during the probe. */
-  held: TermEvent[]
+  private held: TermEvent[]
   /** When DA1 was answered; -1 before. */
-  answeredAtMs: f64
+  private answeredAtMs: f64
 
   /** A probe whose queries were written at `sentAtMs` to a window of `cols` by `rows` cells. */
   constructor(env: TermEnv, cols: i32, rows: i32, sentAtMs: f64) {
@@ -298,7 +298,7 @@ export class TermProbe {
   }
 
   /** Take in `events`: replies kept, DA1 marking the probe done, the rest held. */
-  take(events: TermEvent[], nowMs: f64): void {
+  private take(events: TermEvent[], nowMs: f64): void {
     for (const e of events) {
       if (e.type !== EVENT_REPLY) {
         this.held.push(e)

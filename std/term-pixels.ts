@@ -342,19 +342,39 @@ export class PixelBytes {
   bytes: u8[]
   /** How many bytes are written. */
   length: i32
-  /** One kitty chunk's RGB bytes. */
+  /**
+   * One kitty chunk's RGB bytes.
+   * @internal Used by `kittyFrame`.
+   */
   kittyRaw: u8[]
-  /** The framebuffer column and row each destination pixel samples. */
+  /**
+   * The framebuffer column and row each destination pixel samples.
+   * @internal Used by `sixelFrame`.
+   */
   sampleXs: i32[]
+  /** @internal Used by `sixelFrame`. */
   sampleYs: i32[]
-  /** Every destination pixel's Sixel register, row by row. */
+  /**
+   * Every destination pixel's Sixel register, row by row.
+   * @internal Used by `sixelFrame`.
+   */
   sixelReg: i32[]
-  /** Which registers a Sixel frame uses, 1 or 0. */
+  /**
+   * Which registers a Sixel frame uses, 1 or 0.
+   * @internal Used by `sixelFrame`.
+   */
   sixelUsed: u8[]
-  /** The first and last column of a band each register covers, -1 for none. */
+  /**
+   * The first and last column of a band each register covers, -1 for none.
+   * @internal Used by `sixelFrame`.
+   */
   sixelFirst: i32[]
+  /** @internal Used by `sixelFrame`. */
   sixelLast: i32[]
-  /** Each register's sixels across a band, all zero between bands. */
+  /**
+   * Each register's sixels across a band, all zero between bands.
+   * @internal Used by `sixelFrame`.
+   */
   sixelBits: i32[]
 
   /** An empty buffer with room for `capacity` bytes before it grows. */

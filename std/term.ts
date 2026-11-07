@@ -598,21 +598,21 @@ export class Screen {
   /** The frame's attributes, laid out as `glyphs`: `ATTR_BOLD` and `ATTR_INVERSE`, or'd. */
   attrs: i32[]
   /** The code points the terminal was last sent; -1 is a cell not yet sent. */
-  sentGlyphs: i32[]
+  private sentGlyphs: i32[]
   /** The foregrounds the terminal was last sent. */
-  sentFgs: i32[]
+  private sentFgs: i32[]
   /** The backgrounds the terminal was last sent. */
-  sentBgs: i32[]
+  private sentBgs: i32[]
   /** The attributes the terminal was last sent. */
-  sentAttrs: i32[]
+  private sentAttrs: i32[]
   /** The bytes `flush` builds, sized by `resize` and reused from frame to frame. */
-  out: u8[]
+  private out: u8[]
   /** Columns. */
   width: i32
   /** Rows. */
   height: i32
   /** How many of `out` the flush in progress has written. */
-  outLen: i32
+  private outLen: i32
   /** Whether colours go out as 256-colour palette indices rather than 24-bit RGB. */
   palette256: boolean
   /** Whether a `flush` that changes anything is wrapped in `beginSync` and `endSync`; off until set. */
@@ -729,13 +729,13 @@ export class Screen {
   }
 
   /** Append one byte to the flush in progress; `flush` has reserved the room. */
-  put(b: i32): void {
+  private put(b: i32): void {
     this.out[this.outLen] = toU8(b)
     this.outLen = this.outLen + 1
   }
 
   /** Append `v`, at least 0, in decimal: the three digits a colour channel has without recursing. */
-  putDecimal(v: i32): void {
+  private putDecimal(v: i32): void {
     if (v >= 100) {
       if (v >= 1000) {
         this.putDecimal((v / 1000) | 0)
@@ -749,7 +749,7 @@ export class Screen {
   }
 
   /** Append `ESC [ ? 2026` and `final`, which sets or resets synchronized output. */
-  putSyncMode(final: i32): void {
+  private putSyncMode(final: i32): void {
     this.put(TERM_ESC)
     this.put(TERM_BRACKET)
     this.put(TERM_PRIVATE)
@@ -763,7 +763,7 @@ export class Screen {
    * negative number — goes as U+FFFD, so a cell cannot move the cursor, open
    * an escape or send bytes that are not UTF-8.
    */
-  putGlyph(cp: i32): void {
+  private putGlyph(cp: i32): void {
     if (cp >= TERM_SPACE && cp < TERM_DELETE) {
       this.put(cp)
     } else if (cp >= 160 && cp < 2048) {
@@ -783,7 +783,7 @@ export class Screen {
   }
 
   /** Append the SGR parameters for colour `key` (an RGB or a palette index) on base 30 (foreground) or 40. */
-  putColour(base: i32, key: i32): void {
+  private putColour(base: i32, key: i32): void {
     if (key < 0) {
       this.putDecimal(base + 9)
       return
@@ -807,7 +807,7 @@ export class Screen {
   }
 
   /** The value a colour is sent as and compared by: itself, or its palette index under `palette256`. */
-  colourKey(colour: i32): i32 {
+  private colourKey(colour: i32): i32 {
     if (colour < 0) {
       return COLOR_DEFAULT
     }
@@ -1135,7 +1135,10 @@ export class Canvas {
     return column
   }
 
-  /** Redraw the screen cell at `col`, `row` from its two pixels. */
+  /**
+   * Redraw the screen cell at `col`, `row` from its two pixels.
+   * @internal Called by `drawHalfBlocks` in term-pixels.ts.
+   */
   paintCell(col: i32, row: i32): void {
     const top: i32 = this.pixel(col, row * 2)
     const bottom: i32 = this.pixel(col, row * 2 + 1)
@@ -1249,10 +1252,13 @@ export class KeyDecoder {
   /** How long a held ESC waits for the rest of a sequence, in milliseconds. */
   escapeTimeoutMs: f64
   /** The bytes of an unfinished sequence, carried to the next call. */
-  pending: u8[]
+  private pending: u8[]
   /** When the first held byte arrived (`feed`), or the last (`feedEvents`). */
-  pendingSince: f64
-  /** The bytes of the paste so far. */
+  private pendingSince: f64
+  /**
+   * The bytes of the paste so far.
+   * @internal Used by `termDecodePaste` and `termCsiEvent`.
+   */
   pasteBytes: u8[]
   /**
    * How many cursor position reports (`ESC [ 6 n`) are awaited. `ESC [ r ; c R`
@@ -1266,7 +1272,10 @@ export class KeyDecoder {
   cellHeightPx: i32
   /** Whether SGR mouse reports are in pixels (mode 1016), so `px` and `py` are set and `x`, `y` derived. */
   pixelMouse: boolean
-  /** Whether a bracketed paste has begun and not ended. */
+  /**
+   * Whether a bracketed paste has begun and not ended.
+   * @internal Used by `termDecodePaste`, `termCsiEvent` and `termDecodeEvents`.
+   */
   pasting: boolean
 
   /** A decoder that gives up on an unfinished sequence after `escapeTimeoutMs` (25–50 is usual). */
@@ -1351,7 +1360,7 @@ export class KeyDecoder {
   }
 
   /** The held bytes followed by `bytes[0, count)`. */
-  merged(bytes: u8[], count: i32): u8[] {
+  private merged(bytes: u8[], count: i32): u8[] {
     const held: i32 = toI32(this.pending.length)
     const n: i32 = termClamp(count, 0, toI32(bytes.length))
     const work: u8[] = new Array<u8>(held + n)
@@ -1366,7 +1375,7 @@ export class KeyDecoder {
   }
 
   /** Hold `work` from `used` on; when `restart` is set, the held bytes count as arriving at `nowMs`. */
-  keep(work: u8[], used: i32, restart: boolean, nowMs: f64): void {
+  private keep(work: u8[], used: i32, restart: boolean, nowMs: f64): void {
     const rest: u8[] = []
     for (let k: i32 = used; k < toI32(work.length); k++) {
       if (!(k >= 0)) {
@@ -1407,17 +1416,23 @@ export class KeyState {
   firstRepeatMs: f64
   /** The latest send time of an answered query that `delivered` was given: everything the terminal generated before it has arrived. */
   watermarkMs: f64
-  /** The keys down, each as `termKeyId` names it. */
+  /**
+   * The keys down, each as `termKeyId` names it.
+   * @internal Used by `Terminal` in term-io.ts.
+   */
   downKeys: i32[]
   /** When each key down last pressed or repeated. */
-  downSince: f64[]
+  private downSince: f64[]
   /** Whether each key down has repeated. */
-  downRepeated: boolean[]
+  private downRepeated: boolean[]
   /** The code each key down last came with, which its synthesized release carries. */
-  downCodes: i32[]
+  private downCodes: i32[]
   /** The `MOD_` bits each key down last came with, which its synthesized release carries. */
-  downMods: i32[]
-  /** Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on. */
+  private downMods: i32[]
+  /**
+   * Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on.
+   * @internal Used by `Terminal` in term-io.ts.
+   */
   releasesAreSynthetic: boolean
   /** Whether silence is measured against `watermarkMs` rather than the clock; set by `delivered`, which the caller may clear when answers stop. */
   watermarked: boolean
@@ -1515,7 +1530,7 @@ export class KeyState {
   }
 
   /** The releases due by `nowMs`, as `tick` makes them, for the keys no key event in `batch` names. */
-  releaseDue(nowMs: f64, batch: TermEvent[]): TermEvent[] {
+  private releaseDue(nowMs: f64, batch: TermEvent[]): TermEvent[] {
     const out: TermEvent[] = []
     if (!this.releasesAreSynthetic || !termFinite(nowMs)) {
       return out
@@ -1534,7 +1549,7 @@ export class KeyState {
   }
 
   /** Record key event `e` at `nowMs`; false for a release of a key not down, which `apply` drops. */
-  press(e: TermEvent, nowMs: f64): boolean {
+  private press(e: TermEvent, nowMs: f64): boolean {
     const at: i32 = this.find(termKeyId(e.key, e.code))
     if (e.action === ACTION_RELEASE) {
       this.releasesAreSynthetic = false
@@ -1570,7 +1585,7 @@ export class KeyState {
   }
 
   /** Let key `at` go, appending its release to `out`. */
-  release(at: i32, out: TermEvent[]): void {
+  private release(at: i32, out: TermEvent[]): void {
     const id: i32 = this.downKeys[at]
     const e: TermEvent = new TermEvent(EVENT_KEY)
     e.key = id >> 21
@@ -1582,7 +1597,7 @@ export class KeyState {
   }
 
   /** Where key `id` is in `downKeys`, or -1. */
-  find(id: i32): i32 {
+  private find(id: i32): i32 {
     for (let k: i32 = 0; k < toI32(this.downKeys.length); k++) {
       if (this.downKeys[k] === id) {
         return k
@@ -1592,7 +1607,7 @@ export class KeyState {
   }
 
   /** Drop key `at`, keeping the others in order. */
-  remove(at: i32): void {
+  private remove(at: i32): void {
     const last: i32 = toI32(this.downKeys.length) - 1
     for (let k: i32 = at; k < last; k++) {
       this.downKeys[k] = this.downKeys[k + 1]
@@ -1623,13 +1638,22 @@ export class KeyState {
 export class FixedStep {
   /** The length of one step, in milliseconds. */
   stepMs: f64
-  /** The time since the last step, in milliseconds, under one step after each `advance`. */
+  /**
+   * The time since the last step, in milliseconds, under one step after each `advance`.
+   * @internal Used by `termIoDue` in term-io.ts.
+   */
   carry: f64
-  /** The time the last `advance` was given. */
+  /**
+   * The time the last `advance` was given.
+   * @internal Used by `termIoDue` in term-io.ts.
+   */
   lastMs: f64
   /** The most steps one `advance` answers. */
   maxSteps: i32
-  /** Whether `advance` has been called, so `lastMs` is a time. */
+  /**
+   * Whether `advance` has been called, so `lastMs` is a time.
+   * @internal Used by `termIoWait` in term-io.ts.
+   */
   started: boolean
 
   /** A clock of `stepsPerSecond` steps a second (1 at least), running at most `maxSteps` (1 at least) per `advance`. */

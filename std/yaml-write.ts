@@ -224,9 +224,13 @@ const yamlWriteLength = (text: string, quoted: boolean): i32 => {
 
 /** Writes one JSON value as block YAML, byte by byte, into `out`. */
 class YamlWriter {
-  doc: JsonDocument
+  private doc: JsonDocument
+  /** @internal Used by `stringifyYaml`. */
   out: u8[]
-  /** Whether a collection nested past `JSON_WRITER_MAX_DEPTH`. */
+  /**
+   * Whether a collection nested past `JSON_WRITER_MAX_DEPTH`.
+   * @internal Used by `stringifyYaml`.
+   */
   tooDeep: boolean = false
 
   constructor(doc: JsonDocument) {
@@ -234,38 +238,38 @@ class YamlWriter {
     this.out = []
   }
 
-  byte(c: i32): void {
+  private byte(c: i32): void {
     this.out.push(toU8(c))
   }
 
   /** Writes the bytes of `text` from `from` up to `to`. */
-  bytes(text: string, from: i32, to: i32): void {
+  private bytes(text: string, from: i32, to: i32): void {
     for (let i: i32 = from; i < to; i += 1) {
       this.byte(yamlWriteByte(text, i))
     }
   }
 
-  text(text: string): void {
+  private text(text: string): void {
     const from: i32 = 0
     this.bytes(text, from, toI32(text.length))
   }
 
   /** Writes `count` spaces. */
-  spaces(count: i32): void {
+  private spaces(count: i32): void {
     for (let i: i32 = 0; i < count; i += 1) {
       this.byte(YAML_WRITE_SPACE)
     }
   }
 
   /** Writes `\xXX` for byte `c`. */
-  hex(c: i32): void {
+  private hex(c: i32): void {
     this.text("\\x")
     this.byte(yamlWriteByte(YAML_WRITE_HEX, c >> 4))
     this.byte(yamlWriteByte(YAML_WRITE_HEX, c & 15))
   }
 
   /** Writes the escape for the `length` bytes at `i`, a character yamlWriteEscapedLength names. */
-  escape(text: string, i: i32, length: i32): void {
+  private escape(text: string, i: i32, length: i32): void {
     const c: i32 = yamlWriteByte(text, i)
     const second: i32 = yamlWriteByte(text, i + 1)
     const third: i32 = yamlWriteByte(text, i + 2)
@@ -289,7 +293,7 @@ class YamlWriter {
   }
 
   /** Writes `text` as a double-quoted scalar on one line. */
-  quoted(text: string): void {
+  private quoted(text: string): void {
     const n: i32 = toI32(text.length)
     this.byte(YAML_WRITE_QUOTE)
     let i: i32 = 0
@@ -312,7 +316,7 @@ class YamlWriter {
   }
 
   /** Writes `text` as a scalar: plain when that reads back as the same string, double-quoted otherwise. */
-  string(text: string, quoted: boolean): void {
+  private string(text: string, quoted: boolean): void {
     if (quoted) {
       this.quoted(text)
     } else {
@@ -321,13 +325,13 @@ class YamlWriter {
   }
 
   /** Whether `v` is a collection with members, which takes lines of its own. */
-  isBlock(v: JsonValue): boolean {
+  private isBlock(v: JsonValue): boolean {
     const kind: i32 = this.doc.kind(v)
     return (kind === JSON_VALUE_ARRAY || kind === JSON_VALUE_OBJECT) && this.doc.length(v) > 0
   }
 
   /** Writes `v` on one line: a scalar, `{}` or `[]`. */
-  inline(v: JsonValue): void {
+  private inline(v: JsonValue): void {
     const doc: JsonDocument = this.doc
     const kind: i32 = doc.kind(v)
     if (kind === JSON_VALUE_NULL) {
@@ -349,6 +353,7 @@ class YamlWriter {
   /**
    * Writes `v` starting at column `indent`, where the line has already reached
    * it, and ends its last line; `depth` is how many collections hold it.
+   * @internal Called by `stringifyYaml`.
    */
   node(v: JsonValue, indent: i32, depth: i32): void {
     const doc: JsonDocument = this.doc

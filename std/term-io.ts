@@ -272,28 +272,31 @@ export class Terminal {
   keys: KeyState
   rate: RateController
   /** The events read during the probe, handed to the program first. */
-  held: TermEvent[]
+  private held: TermEvent[]
   /** The send times of the frames not yet acknowledged, a ring of `TERM_IO_ACKS`. */
-  ackSent: f64[]
-  ackHead: i32
+  private ackSent: f64[]
+  private ackHead: i32
   ackCount: i32
-  readBuf: u8[]
+  private readBuf: u8[]
   /** Where the framebuffer is drawn, for `rectCols × rectRows` cells and `rectBackend`. */
-  rect: PixelRect
+  private rect: PixelRect
   /** When the last frame acknowledgement arrived, or -1. */
-  lastAckMs: f64
+  private lastAckMs: f64
   /** The last acknowledged frame's own round trip, in milliseconds, which the controller's smoothed one trails. */
-  lastRttMs: f64
-  /** The program's work toward the next frame (its `update` and `render`), in nanoseconds, which `present` adds to the frame's cost. */
+  private lastRttMs: f64
+  /**
+   * The program's work toward the next frame (its `update` and `render`), in nanoseconds, which `present` adds to the frame's cost.
+   * @internal Used by `runTerminal`.
+   */
   workNs: f64
   /** When the last frame's write began, on the monotonic clock. */
-  sendStartNs: i64
+  private sendStartNs: i64
   /** The cells, backend and framebuffer size `rect` was fitted to. */
-  rectCols: i32
-  rectRows: i32
-  rectBackend: i32
-  rectWidth: i32
-  rectHeight: i32
+  private rectCols: i32
+  private rectRows: i32
+  private rectBackend: i32
+  private rectWidth: i32
+  private rectHeight: i32
   /** The best backend the terminal has, a `GRAPHICS_*`. */
   graphics: i32
   /** The backend the last frame used. */
@@ -301,22 +304,22 @@ export class Terminal {
   cellWidthPx: i32
   cellHeightPx: i32
   /** The size `terminalSize` last answered. */
-  sizeCols: i32
-  sizeRows: i32
+  private sizeCols: i32
+  private sizeRows: i32
   /** The size last given to the `Screen`, before it clamped it, which `checkResize` compares. */
-  shownCols: i32
-  shownRows: i32
+  private shownCols: i32
+  private shownRows: i32
   /** The mouse mode turned on, or 0. */
-  mouseMode: i32
-  open: boolean
-  kittyKeyboardOn: boolean
-  pixelMouseOn: boolean
-  pasteOn: boolean
-  focusOn: boolean
+  private mouseMode: i32
+  private open: boolean
+  private kittyKeyboardOn: boolean
+  private pixelMouseOn: boolean
+  private pasteOn: boolean
+  private focusOn: boolean
   /** Whether a kitty image may be on the screen, so closing deletes it. */
-  kittyImage: boolean
+  private kittyImage: boolean
   /** Whether the last frame sent pixels, so a framebuffer emptied since takes them off the screen. */
-  pixelsShown: boolean
+  private pixelsShown: boolean
   /** Whether `screen` was drawn in 256 colours last frame. */
   palette256: boolean
 
@@ -388,7 +391,7 @@ export class Terminal {
   }
 
   /** The bytes that undo everything turned on: what `close` writes and the runtime writes on a panic or signal. */
-  restoreString(): string {
+  private restoreString(): string {
     let s: string = "\x18\x1b[?2026l"
     if (this.kittyImage) {
       s = s + kittyDelete(TERM_IO_IMAGE_ID)
@@ -409,12 +412,15 @@ export class Terminal {
   }
 
   /** Set the runtime's restore string to `restoreString()`, then write `bytes`, which turn something on. */
-  turnOn(bytes: string): void {
+  private turnOn(bytes: string): void {
     setTerminalRestore(this.restoreString())
     write(bytes)
   }
 
-  /** Turn on what the options ask for and the terminal has, the restore string kept ahead of each. */
+  /**
+   * Turn on what the options ask for and the terminal has, the restore string kept ahead of each.
+   * @internal Called by `openTerminal`.
+   */
   enable(): void {
     const o: TerminalOptions = this.options
     if (o.kittyKeyboard && this.caps.kittyKeyboard) {
@@ -468,7 +474,7 @@ export class Terminal {
    * round trip's bound passes. Before any answer the probe's round trip is
    * the one known.
    */
-  drainAcks(): void {
+  private drainAcks(): void {
     let owed: i32 = this.rate.unacked() + this.rate.stale
     let rtt: f64 = this.rate.rttMs > this.lastRttMs ? this.rate.rttMs : this.lastRttMs
     rtt = rtt > this.caps.probeRttMs ? rtt : this.caps.probeRttMs
@@ -508,7 +514,7 @@ export class Terminal {
   }
 
   /** Read `terminalSize` into `sizeCols` and `sizeRows`; its array dies here. */
-  readSize(): void {
+  private readSize(): void {
     const size: i32[] = terminalSize()
     if (toI32(size.length) >= 2 && size[0] > 0 && size[1] > 0) {
       this.sizeCols = size[0]
@@ -537,7 +543,7 @@ export class Terminal {
   }
 
   /** Forget the send times of the frames the controller gave up on, oldest first, so the ring holds only frames it still waits for. */
-  dropLost(): void {
+  private dropLost(): void {
     while (this.ackCount > this.rate.unacked()) {
       this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
       this.ackCount = this.ackCount - 1
@@ -545,7 +551,7 @@ export class Terminal {
   }
 
   /** Remember that a frame acknowledgement was asked for at `nowMs`. */
-  ackPush(nowMs: f64): void {
+  private ackPush(nowMs: f64): void {
     if (this.ackCount === TERM_IO_ACKS) {
       this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
       this.ackCount = this.ackCount - 1
@@ -559,7 +565,7 @@ export class Terminal {
    * and, unless it is the late answer of a frame the controller gave up on,
    * marks its frame's send time delivered.
    */
-  acked(count: i32, nowMs: f64): void {
+  private acked(count: i32, nowMs: f64): void {
     for (let k: i32 = 0; k < count; k++) {
       this.dropLost()
       if (this.rate.stale === 0 && this.ackCount > 0) {
@@ -576,7 +582,7 @@ export class Terminal {
   }
 
   /** A reply other than an acknowledgement, which came after the probe: learn the cell size from it if the probe did not. */
-  lateReply(e: TermEvent): void {
+  private lateReply(e: TermEvent): void {
     if (
       this.cellWidthPx > 0 ||
       e.introducer !== 91 ||
@@ -617,7 +623,7 @@ export class Terminal {
    * `KeyState` into `out`, then the acknowledgements count. Every reply is
    * the terminal's and is taken here, a late cell size learned.
    */
-  take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void {
+  private take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void {
     let replies: i32 = 0
     for (const e of events) {
       if (e.type === EVENT_REPLY) {
@@ -693,7 +699,7 @@ export class Terminal {
   }
 
   /** Fit the framebuffer to the screen for `backend`, unless the sizes and backend are those of the last fit. */
-  fit(backend: i32): void {
+  private fit(backend: i32): void {
     const fb: Framebuffer = this.framebuffer
     if (
       this.rectCols === this.screen.width &&
@@ -727,7 +733,7 @@ export class Terminal {
    * began in `sendStartNs` and answers the bytes written. Its strings die
    * here, so a frame loop does not keep them.
    */
-  send(withPixels: boolean): i32 {
+  private send(withPixels: boolean): i32 {
     const body: string = this.screen.flush()
     const image: string = withPixels ? this.pixels.text() : ""
     const frame: string = this.caps.sync
