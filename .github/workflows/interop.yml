@@ -24,12 +24,12 @@
 #
 # Every tool is pinned: actions by commit, images by digest, the runner by
 # commit, h2spec by release and SHA-256, Python packages by hash
-# (tests/interop/*-requirements.txt), tshark by package version. The
-# simulator's run.sh is patched (tests/interop/simulator.dockerfile) so its
-# pcaps keep the packets of the case's last fraction of a second. Nothing here
-# turns a failure green: the one retry, a quic-interop-runner case run once
-# more after it fails, passes only if that second run succeeds, and the
-# verdict prints both.
+# (tests/interop/*-requirements.txt), tshark by package version and its PPA's
+# key by fingerprint. The simulator's run.sh is patched
+# (tests/interop/simulator.dockerfile) so its pcaps keep the packets of the
+# case's last fraction of a second. Nothing here turns a failure green: the
+# one retry, a quic-interop-runner case run once more after it fails, passes
+# only if that second run succeeds, and the verdict prints both.
 #
 # The image's seed is the newest published release (server.dockerfile).
 # release.yml also calls this workflow, from its `interop` job, once `release`
@@ -182,17 +182,46 @@ jobs:
       - name: Enable IPv6 in Docker networks
         run: sudo modprobe ip6table_filter
 
-      # tshark and its libraries are 26.5 MB, 23.7 MB of it libwireshark17t64.
+      # tshark and its libraries are some 25 MB, most of it libwireshark.
       # The Azure mirror sometimes served that at a trickle, never idle for
       # `APT_OPTS`'s thirty seconds, so the step's five-minute limit fired
       # before any case ran (main, and #854, in October 2026). The action
       # fetches from other mirrors, keeps the .debs in the Actions cache keyed
       # by runner image, and cuts a stalled download at a minute per attempt.
+      #
+      # The runner needs Wireshark 4.5 or later (its README). Ubuntu 24.04 ships
+      # 4.2.2, whose QUIC dissector cannot follow a server's packet on a new
+      # path when the client's connection ID is zero-length, as quic-go's is:
+      # 4.2 links a connection to a new 5-tuple only through the packet's own
+      # DCID, so the server's first packet after a rebinding, its PATH_CHALLENGE,
+      # reads as "Unknown QUIC connection" and rebind-port and rebind-addr fail
+      # whatever the server sent. 4.6 attaches the connection to the new tuple
+      # once the client's packet there matches its DCID. So tshark comes from
+      # the Wireshark developers' stable PPA, its signing key pinned by
+      # fingerprint and the package by version.
+      - name: Add the Wireshark stable PPA, its key pinned by fingerprint
+        timeout-minutes: 2
+        env:
+          WIRESHARK_KEY: A2E402B85A4B70CD78D8A3D9D875551314ECA0F0
+        run: |
+          key="$RUNNER_TEMP/wireshark-dev.gpg"
+          curl -sSf --retry 3 --max-time 30 \
+            "https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0x$WIRESHARK_KEY" |
+            gpg --dearmor > "$key"
+          got="$(gpg --show-keys --with-colons "$key" | awk -F: '$1 == "fpr" { print $10; exit }')"
+          if [ "$got" != "$WIRESHARK_KEY" ]; then
+            echo "::error::the keyserver returned key $got, not $WIRESHARK_KEY"
+            exit 1
+          fi
+          sudo install -D -m 644 "$key" /etc/apt/keyrings/wireshark-dev.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/wireshark-dev.gpg] https://ppa.launchpadcontent.net/wireshark-dev/stable/ubuntu noble main" |
+            sudo tee /etc/apt/sources.list.d/wireshark-dev.list > /dev/null
+
       - name: Install tshark, which the runner reads the traces with
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
-          packages: tshark=4.2.2-1.1build3
+          packages: tshark=4.6.9-1~ubuntu24.04.0~ppa1
 
       - name: Fetch the runner at its pinned commit
         timeout-minutes: 5

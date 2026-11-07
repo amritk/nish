@@ -755,8 +755,12 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * arrays a `QuicConnection` keeps for its current, validated, arriving and probed
  * addresses, the PATH_RESPONSE it owes on another path and its last three
  * PATH_CHALLENGEs, with their headers.
+ *
+ * Moved to **110,912 bytes** (-8) when `QuicConnection`'s path and ECN fields
+ * were declared widest first, which took out the padding the path fields had
+ * added to the object (NL9010).
  */
-export const HTTP3_SERVER_SLOT_BYTES = 110920
+export const HTTP3_SERVER_SLOT_BYTES = 110912
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

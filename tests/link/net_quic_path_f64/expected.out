@@ -38,6 +38,7 @@ PASS  the real packet, arriving second, is a duplicate and moves nothing
 PASS  the client's next packet takes the connection back at once (§9.3.3)
 PASS  so the stream data held back goes out, to the client
 PASS  a validation lasts at least max(3 PTO, 6 kInitialRtt) (§8.2.4)
+PASS  and no longer
 PASS  just before it ends, the new path is still being validated
 PASS  unanswered, it fails, and the connection goes back to the last validated address
 PASS  still connected
@@ -55,6 +56,16 @@ PASS  and once (§13.3)
 PASS  a small probe's answer stays within three times its size (§8.1)
 PASS  a challenge in a packet that moved the connection is answered on the new path
 PASS  with its data
+PASS  a challenge from the old address and a move in one receive: the move is followed
+PASS  and the response is owed to the old address
+PASS  nothing sent to the new address answers it
+PASS  the probe route does, with its data
+PASS  a validation that fails with a response owed on its path goes back
+PASS  and the response is still owed to that path
+PASS  within its three times (§8.1), with its data
+PASS  a challenge in the packet that moved it is answered on the new path
+PASS  and the old address's own challenge on the probe route, to it
+PASS  packets marked on the old path lose their mark when ECN is tested again
 PASS  fifty rebinds, each challenged and answered, keep no arena memory
 PASS  and the connection follows the last
-quic paths: 59 passed, 0 failed, 0 skipped
+quic paths: 70 passed, 0 failed, 0 skipped

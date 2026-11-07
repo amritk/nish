@@ -284,7 +284,9 @@ const forgedChecks = (t: Suite): void => {
   const start: i64 = q.c.now;
   pFrom(q, forger, pPing(q.c));
   const until: i64 = q.conn.challengeUntil;
-  t.ok("a validation lasts at least max(3 PTO, 6 kInitialRtt) (§8.2.4)", until - start >= n64(1998) && until - start >= q.conn.recovery.probeTimeout() * n64(3));
+  const span: i64 = q.conn.recovery.probeTimeout() * n64(3);
+  t.ok("a validation lasts at least max(3 PTO, 6 kInitialRtt) (§8.2.4)", until - start >= n64(1998) && until - start >= span);
+  t.ok("and no longer", until - start <= (span > n64(1998) ? span : n64(1998)) + n64(1));
   q.c.now = until - n64(1);
   q.conn.handleTimer(q.c.now);
   t.ok("just before it ends, the new path is still being validated", q.conn.pathValidating && pSendsTo(q.conn, forger));
@@ -363,6 +365,147 @@ const probeChecks = (t: Suite): void => {
   t.ok("with its data", toHex(qcData(answer)) === "2222222222222222");
 };
 
+/** The bytes of the probe route's datagram, taken now; empty if none is owed. */
+const pTakeProbe = (p: PPair): u8[] => {
+  const out: u8[] = new Array<u8>(1500);
+  const n: i32 = p.conn.takeProbeInto(out, n32(0), p.c.now);
+  const datagram: u8[] = [];
+  for (let k: i32 = 0; k < n; k++) {
+    datagram.push(out[k]);
+  }
+  return datagram;
+};
+
+/** The data of the first PATH_RESPONSE among the client's payloads from index `from` on. */
+const pResponseSince = (c: QcClient, from: i32): QcFound => {
+  const payloads: u8[][] = [];
+  for (let k: i32 = from; k < toI32(c.appPayloads.length); k++) {
+    payloads.push(c.appPayloads[k]);
+  }
+  return qcFind(payloads, QUIC_FRAME_PATH_RESPONSE);
+};
+
+/** `datagram` read from `address`, nothing taken after it. */
+const pReadOnly = (p: PPair, address: u8[], datagram: u8[]): void => {
+  p.conn.receiveWindowFrom(datagram, n32(0), toI32(datagram.length), address, p.c.now);
+};
+
+/**
+ * A PATH_RESPONSE goes to the address its challenge came from (§8.2.2),
+ * even when the connection moves before it is sent.
+ */
+const answerChecks = (t: Suite): void => {
+  const p: PPair = pPair();
+  const moved: u8[] = pAddr(n32(2), n32(4433));
+  pReadOnly(
+    p,
+    pHome(),
+    qcShort(p.c, pPadded(pPathFrame(QUIC_FRAME_PATH_CHALLENGE, fromHex("a1a1a1a1a1a1a1a1")), n32(1171))),
+  );
+  pReadOnly(p, moved, qcShort(p.c, pPing(p.c)));
+  t.ok(
+    "a challenge from the old address and a move in one receive: the move is followed",
+    pSendsTo(p.conn, moved) && p.conn.pathValidating,
+  );
+  t.ok(
+    "and the response is owed to the old address",
+    p.conn.probeOwed && toHex(p.conn.probeAddress) === toHex(pHome()),
+  );
+  const from: i32 = toI32(p.c.appPayloads.length);
+  qcDrain(p.conn, p.c);
+  t.ok(
+    "nothing sent to the new address answers it",
+    toI32(p.c.appPayloads.length) > from && !pResponseSince(p.c, from).found,
+  );
+  const back: u8[] = pTakeProbe(p);
+  qcReceive(p.c, back);
+  const response: QcFound = pResponseSince(p.c, from);
+  t.ok(
+    "the probe route does, with its data",
+    toI32(back.length) > 0 && response.found && toHex(qcData(response)) === "a1a1a1a1a1a1a1a1",
+  );
+
+  const q: PPair = pPair();
+  const forger: u8[] = pAddr(n32(66), n32(6666));
+  pFrom(q, forger, pPing(q.c));
+  pReadOnly(
+    q,
+    forger,
+    qcShort(q.c, pPadded(pPathFrame(QUIC_FRAME_PATH_CHALLENGE, fromHex("b2b2b2b2b2b2b2b2")), n32(1171))),
+  );
+  q.c.now = q.conn.challengeUntil;
+  q.conn.handleTimer(q.c.now);
+  t.ok(
+    "a validation that fails with a response owed on its path goes back",
+    pSendsTo(q.conn, pHome()) && !q.conn.pathValidating,
+  );
+  t.ok(
+    "and the response is still owed to that path",
+    q.conn.probeOwed && toHex(q.conn.probeAddress) === toHex(forger),
+  );
+  const fromQ: i32 = toI32(q.c.appPayloads.length);
+  const late: u8[] = pTakeProbe(q);
+  qcReceive(q.c, late);
+  const lateResponse: QcFound = pResponseSince(q.c, fromQ);
+  t.ok(
+    "within its three times (§8.1), with its data",
+    toI32(late.length) > 0 && lateResponse.found && toHex(qcData(lateResponse)) === "b2b2b2b2b2b2b2b2",
+  );
+
+  const r: PPair = pPair();
+  pReadOnly(
+    r,
+    pHome(),
+    qcShort(r.c, pPadded(pPathFrame(QUIC_FRAME_PATH_CHALLENGE, fromHex("c3c3c3c3c3c3c3c3")), n32(1171))),
+  );
+  const both: u8[] = pPathFrame(QUIC_FRAME_PATH_CHALLENGE, fromHex("d4d4d4d4d4d4d4d4"));
+  both.push(toU8(QUIC_FRAME_PING));
+  pReadOnly(r, moved, qcShort(r.c, pPadded(both, n32(1171))));
+  const fromR: i32 = toI32(r.c.appPayloads.length);
+  qcDrain(r.conn, r.c);
+  const there: QcFound = pResponseSince(r.c, fromR);
+  t.ok(
+    "a challenge in the packet that moved it is answered on the new path",
+    pSendsTo(r.conn, moved) && there.found && toHex(qcData(there)) === "d4d4d4d4d4d4d4d4",
+  );
+  const fromBack: i32 = toI32(r.c.appPayloads.length);
+  qcReceive(r.c, pTakeProbe(r));
+  const home: QcFound = pResponseSince(r.c, fromBack);
+  t.ok(
+    "and the old address's own challenge on the probe route, to it",
+    toHex(r.conn.probeAddress) === toHex(pHome()) && home.found && toHex(qcData(home)) === "c3c3c3c3c3c3c3c3",
+  );
+};
+
+/** How many packets in flight still carry an ECN mark. */
+const pMarked = (conn: QuicConnection): i32 => {
+  let n: i32 = 0;
+  for (const sp of conn.recovery.spaces) {
+    for (let s: i32 = 0; s < toI32(sp.state.length); s++) {
+      if (sp.inFlightAt(s) && sp.markedAt(s)) {
+        n++;
+      }
+    }
+  }
+  return n;
+};
+
+/** A new path tests ECN on its own packets alone (§13.4.2). */
+const ecnChecks = (t: Suite): void => {
+  const p: PPair = pPair();
+  p.conn.ecnMarking = true;
+  p.conn.writeStream(n64(0), new Array<u8>(3000), false);
+  qcDrain(p.conn, p.c);
+  const before: i32 = pMarked(p.conn);
+  const rebound: u8[] = pAddr(n32(1), n32(50002));
+  pFrom(p, rebound, pPing(p.c));
+  pAnswer(p, rebound);
+  t.ok(
+    "packets marked on the old path lose their mark when ECN is tested again",
+    before > 0 && pMarked(p.conn) === n32(0) && p.conn.recovery.ecnState === QUIC_RECOVERY_ECN_TESTING,
+  );
+};
+
 /** Repeated rebinds keep no arena memory once warm. */
 const arenaChecks = (t: Suite): void => {
   const p: PPair = pPair();
@@ -411,9 +554,15 @@ const windowChecks = (t: Suite): void => {
   pFrom(p, rebound, pPing(p.c));
   t.ok("a closed congestion window still lets the move's datagram go", toI32(p.c.appPayloads.length) > from);
   const first: QcFound = qcFind([p.c.appPayloads[from]], QUIC_FRAME_PATH_CHALLENGE);
-  t.ok("and the first packet on the new path carries the PATH_CHALLENGE", first.found && pSendsTo(p.conn, rebound));
+  t.ok(
+    "and the first packet on the new path carries the PATH_CHALLENGE",
+    first.found && pSendsTo(p.conn, rebound),
+  );
   pAnswer(p, rebound);
-  t.ok("which the client's answer validates, the window still closed", !p.conn.pathValidating && toHex(p.conn.pathValidated) === toHex(rebound));
+  t.ok(
+    "which the client's answer validates, the window still closed",
+    !p.conn.pathValidating && toHex(p.conn.pathValidated) === toHex(rebound),
+  );
 };
 
 /** Runs every check and answers the exit code. */
@@ -428,6 +577,8 @@ export const quicPathChecks = (): i32 => {
   orderChecks(t);
   handshakeChecks(t);
   probeChecks(t);
+  answerChecks(t);
+  ecnChecks(t);
   arenaChecks(t);
   return t.done();
 };

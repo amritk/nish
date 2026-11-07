@@ -97,15 +97,18 @@
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
- * `deadline()` says when `handleTimer` is next due. Four things run on it.
+ * `deadline()` says when `handleTimer` is next due. Five things run on it.
  * The idle timeout (RFC 9000 §10.1) is the smaller of the two sides'
  * `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR` or three probe
  * timeouts; once it passes with nothing received, the connection closes
  * silently (`QUIC_STATE_TIMED_OUT`) and wipes its keys. Loss recovery's
  * timer declares packets lost by the time threshold or fires the probe
- * timeout. And after a key update the previous read keys are kept for a
+ * timeout. After a key update the previous read keys are kept for a
  * probe timeout (`recovery.probeTimeout()`), for packets the network
- * reordered, before the next generation's are derived (RFC 9001 §6.5). Once
+ * reordered, before the next generation's are derived (RFC 9001 §6.5). And
+ * while a new path is validated, its PATH_CHALLENGE goes again a probe
+ * timeout after the last, and validation gives up max(3 PTO, 6 kInitialRtt)
+ * after the move (RFC 9000 §8.2.4, §9.3.2). Once
  * the connection has closed, by either side, its keys are kept through the
  * closing or draining period, three probe timeouts (RFC 9000 §10.2), and
  * wiped at its end; `deadline()` is that end, then -1. A close this side
@@ -1300,7 +1303,9 @@ export class QuicConnection {
    * A PATH_CHALLENGE that came from another address in a datagram that
    * moved nothing (§9.1): answered there by `takeProbeInto`, from
    * `probeData`, within `probeBudget` bytes, three times what came from
-   * `probeAddress` (§8.1). Only the latest such challenge is kept.
+   * `probeAddress` (§8.1). Only the latest such challenge is kept. A
+   * response owed on `pathCurrent` when the connection moves goes back
+   * the same way (`sendResponsesBack`).
    */
   probeAddress: u8[]
   probeData: u8[]
@@ -1319,7 +1324,6 @@ export class QuicConnection {
   challengeResendAt: i64 = -1
   challengeUntil: i64 = -1
   challengesDrawn: i64 = 0
-  challengeCount: i32 = 0
   frame: QuicFrame
   /** The header and the packet numbers of the packet being read, reused for every one. */
   header: QuicHeader
@@ -1370,17 +1374,6 @@ export class QuicConnection {
   sealedUnderKey: i64 = 0
   authFailures: i64 = 0
   /**
-   * ECN (RFC 9000 §13.4): `ecnMarking` is the carrier's to set when it sends
-   * this connection's datagrams with the ECN bits of `datagramEcn`, which
-   * each `takeDatagramInto` sets for the datagram it wrote: ECT(0) while
-   * loss recovery's `ecnCodepoint()` asks for it, 0 otherwise and always
-   * while `ecnMarking` is false. Every packet of a marked datagram is counted
-   * as marked, and an ACK_ECN's counts are validated against them. `reset`
-   * keeps `ecnMarking`, which is the carrier's, and clears the rest.
-   */
-  ecnMarking: boolean = false
-  datagramEcn: i32 = 0
-  /**
    * The next Application Data packet number skipped (RFC 9000 §21.4), or -1
    * before the 1-RTT keys; a test may set it to force one. `skipped` holds
    * the last `QUIC_CONN_SKIP_RING` skipped, -1 where none, `skipHead` where
@@ -1389,6 +1382,8 @@ export class QuicConnection {
   nextSkip: i64 = -1
   skipped: i64[]
   skipsDrawn: i64 = 0
+  /** How many of `challengeData`'s slots hold a challenge sent on the path being validated. */
+  challengeCount: i32 = 0
   originalDcidLength: i32 = 0
   peerScidLength: i32 = 0
   pathHead: i32 = 0
@@ -1407,6 +1402,17 @@ export class QuicConnection {
   earlyResends: i32 = 0
   /** The level at which the packet just read showed the client lacks the server's handshake data, or -1. */
   resendLevel: i32 = -1
+  /**
+   * ECN (RFC 9000 §13.4): `ecnMarking` is the carrier's to set when it sends
+   * this connection's datagrams with the ECN bits of `datagramEcn`, which
+   * each `takeDatagramInto` sets for the datagram it wrote: ECT(0) while
+   * loss recovery's `ecnCodepoint()` asks for it, 0 otherwise and always
+   * while `ecnMarking` is false. Every packet of a marked datagram is counted
+   * as marked, and an ACK_ECN's counts are validated against them. `reset`
+   * keeps `ecnMarking`, which is the carrier's, and clears the rest.
+   */
+  datagramEcn: i32 = 0
+  ecnMarking: boolean = false
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
   /** Whether the one CONNECTION_CLOSE this side owes has gone out. */
@@ -3157,12 +3163,14 @@ export class QuicConnection {
   /**
    * When `handleTimer` is next due, in the caller's milliseconds: the idle
    * timeout, loss recovery's timer (a time-threshold loss or the probe
-   * timeout), or the end of a key update's probe timeout, whichever comes
-   * first; once the connection has closed, the end of its closing or
+   * timeout), the end of a key update's probe timeout, or, while a path is
+   * validated, its PATH_CHALLENGE's resend or the end of its validation,
+   * whichever comes first; once the connection has closed, the end of its closing or
    * draining period, when its keys are wiped. -1 when nothing is timed:
    * before the first packet, while a closed connection's own close has not
    * gone out (`takeDatagram` sends it), once a closed connection's keys are
-   * wiped, and with no idle timeout, nothing in flight and no update pending.
+   * wiped, and with no idle timeout, nothing in flight, no update pending
+   * and no path being validated.
    */
   deadline(): i64 {
     if (this.closed()) {
@@ -3278,6 +3286,7 @@ export class QuicConnection {
       return
     }
     if (this.now >= this.challengeUntil) {
+      this.sendResponsesBack()
       quicConnCopyAt(this.pathCurrent, 0, this.pathValidated, 0, QUIC_CONN_ADDRESS_SIZE)
       this.endValidation()
       return
@@ -3341,8 +3350,8 @@ export class QuicConnection {
         }
         return
       }
-      this.migrate(this.pathArrival)
-      if (this.probeStaged) {
+      const swapped: boolean = this.migrate(this.pathArrival)
+      if (this.probeStaged && !swapped) {
         this.queuePathResponse(this.probeData, toI32(0))
       }
     }
@@ -3360,19 +3369,56 @@ export class QuicConnection {
    * path is validated with a PATH_CHALLENGE, and until it is the server
    * sends there only three times what it received from it (§9.3.1). The
    * peer's connection ID is kept: the client chose not to change it, and a
-   * NAT rebinding never does (§9.5).
+   * NAT rebinding never does (§9.5). Answers whether the challenge staged
+   * in `probeData` is already queued on the new path (`sendResponsesBack`).
    */
-  migrate(address: u8[]): void {
+  migrate(address: u8[]): boolean {
+    const swapped: boolean = this.sendResponsesBack()
     quicConnCopyAt(this.pathCurrent, 0, address, 0, QUIC_CONN_ADDRESS_SIZE)
     if (quicConnSameAddress(address, this.pathValidated, false)) {
       this.endValidation()
-      return
+      return swapped
     }
     this.endValidation()
     this.pathValidating = true
     const span: i64 = this.recovery.probeTimeout() * 3
     this.challengeUntil = this.now + (span > QUIC_CONN_VALIDATION_FLOOR ? span : QUIC_CONN_VALIDATION_FLOOR)
     this.drawChallenge()
+    return swapped
+  }
+
+  /**
+   * Before `pathCurrent` changes: a PATH_RESPONSE still owed there answers
+   * a challenge that came from there, so it goes there, not to the new
+   * address (RFC 9000 §8.2.2) — the latest one, on the probe route
+   * (`takeProbeInto`), within what that path may still be sent: no limit
+   * once validated, else its own 3x (§8.1). The others are dropped, as a
+   * response may be. A challenge staged in `probeData` by the datagram
+   * being read swaps into the ring in its place, owed on the new address,
+   * and the answer is true; otherwise false.
+   */
+  sendResponsesBack(): boolean {
+    if (this.pathCount <= 0) {
+      return false
+    }
+    const base: i32 = ((this.pathHead + this.pathCount - 1) % 4) * QUIC_PATH_DATA_SIZE
+    const swapped: boolean = this.probeStaged
+    for (let k: i32 = 0; k < QUIC_PATH_DATA_SIZE; k += 1) {
+      const kept: u8 = this.probeData[k]
+      this.probeData[k] = this.pathData[base + k]
+      this.pathData[base + k] = kept
+    }
+    this.pathHead = base / QUIC_PATH_DATA_SIZE
+    this.pathCount = swapped ? 1 : 0
+    quicConnCopyAt(this.probeAddress, 0, this.pathCurrent, 0, QUIC_CONN_ADDRESS_SIZE)
+    if (!this.pathValidating) {
+      this.probeBudget = toI64(QUIC_CONN_DATAGRAM_SIZE)
+    } else {
+      const left: i64 = this.pathReceived * 3 - this.pathSent
+      this.probeBudget = left > 0 ? left : 0
+    }
+    this.probeOwed = true
+    return swapped
   }
 
   /**

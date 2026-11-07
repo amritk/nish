@@ -469,8 +469,18 @@ export class QuicRecovery {
     this.pacerRtt = QUIC_RECOVERY_INITIAL_RTT * QUIC_RECOVERY_MICROS
   }
 
-  /** Tests ECN again from the start, as on a new path (RFC 9000 §13.4.2). */
+  /**
+   * Tests ECN again from the start, as on a new path (RFC 9000 §13.4.2).
+   * The packets still in flight were sent on the old path, so they lose
+   * their mark: their loss, or an ACK of them, says nothing of the new one,
+   * and only packets marked from here on count toward the new test.
+   */
   restartEcn(): void {
+    for (const sp of this.spaces) {
+      for (let s: i32 = 0; s < toI32(sp.state.length); s += 1) {
+        sp.setMarked(s, false)
+      }
+    }
     this.ecnState = QUIC_RECOVERY_ECN_TESTING
     this.ecnTestSent = 0
     this.ecnTestRecorded = 0

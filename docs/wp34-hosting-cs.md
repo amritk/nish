@@ -15,7 +15,10 @@ and certificate reload, one upstream socket per session, GSO and GRO both
 sides and a clean stop on a signal, proved across loopback in `npm test`
 (§5a), and N9's soak flat: 100,000 sessions measured at 0 bytes kept, arena
 and resident set alike, since the handshake (#492), its signature (#512) and the QUIC
-listener (#515) keep nothing. **Open:** #430;
+listener (#515) keep nothing. A client's NAT rebinding, port or address,
+is followed and the new path validated (RFC 9000 §8.2, §9.3), the interop
+runner's `rebind-port` and `rebind-addr` cases with it (#1210, in review);
+connection migration a client starts stays out (§9). **Open:** #430;
 and the cs side of A1 — the port of `services/relay` itself, `boot-check`'s
 wire pass and `bench:offload` against the Rust relay. 0.16.0 carried N1, N2,
 N3, N5 and N6 (less #402 and `tcpConnect`, #411) and K1–K6 (less
@@ -1098,7 +1101,7 @@ a named part of cs that cannot be written without it.
 | **N10.** `sort`, `toFixed`, and JavaScript's `String(x)` for `f64`; `split` | shader text, option parsers | `std` only |
 | **N11.** Typed JSON over a `std/json` tokenizer and writer | tokens, the match report, `/matches` | A1 needs a small hand-written case of this for the grant's payload, in phase one. **The writer is built** (#571): `JsonWriter` in `nish/json` writes any value into a caller-owned `u8[]`, allocating nothing per call except an `f64`'s digits (a temporary string the call gives back before it returns), byte for byte what `JSON.stringify` writes, and reports misuse and a full buffer through a sticky `JSON_WRITE_*` code (`tests/link/std_json_writer`, held to `JSON.stringify` under Node by `tests/run.js`; `bench/json-writer`). **The tokenizer is built** (#572): `nish/json-tokenizer` validates RFC 8259 JSON in a window of a `u8[]` with caller-owned buffers, enforced depth, string, number and total limits, and JSONTestSuite's `y_` and `n_` verdicts ([`docs/security/json.md`](security/json.md)). **Typed decoding is built** (#573), and N11 with it: `jsonDecode` and `jsonEncode` in `nish/json-typed` read one JSON object into a class and write it back, with code the compiler writes at each call from the class's fields, refusing unknown, duplicate, missing and mistyped fields with sticky codes and reusing a decoded object's storage ([`docs/LANGUAGE.md`](LANGUAGE.md#typed-json-nishjson-typed), `tests/link/std_json_typed`) |
 | **N12.** Non-blocking `spawn`, `kill` and `waitpid`; available parallelism and total memory | the master | runtime-os. **Built**: `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory`, globals and `nish:process` exports, in `runtime/runtime-os.c` ([`docs/LANGUAGE.md`](LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory); `tests/cases/os_spawn`, `os_kill`, `os_wait`, `os_cpu`, `os_memory`) |
-| **N13.** The client role of T1, against the web PKI | the account service: Postgres over TLS, HTTPS to Resend | Replaces the old plan's FFI route. S1 makes the C library unnecessary |
+| **N13.** The client role of T1, against the web PKI | the account service: Postgres over TLS, HTTPS to Resend | **Built (#480):** `nish/net/tls/client` and `nish/net/tls/record-client` speak the client side of TLS 1.3, `nish/net/tls/verify` checks the server's chain against the system's trust store, and `tlsConnect` in `nish/net/tls-tcp` puts it on TCP ([guide](guide/using-nish/tls-client.md), [`docs/security/tls.md`](security/tls.md)). It replaces the old plan's FFI route; S1 made the C library unnecessary. Postgres over TLS still waits on a carrier for `std/net/postgres.ts` (WP39) |
 | **N14.** Discriminated unions | the protocol's message families | Optional. A class with an enum tag and nullable payloads works until then |
 
 A server whose program is not the relay needs more than this list:
@@ -1113,8 +1116,12 @@ separate overlap flag, is withdrawn in its favour.
 
 ## 9. Not in the list, on purpose
 
-- **`async` and `await`.** N5's loop is the server's answer, as wp24 argued; the
-  browser's is N9's host-driven half.
+- **`async` and `await`.** Not for the relay: N5's loop is its answer, as
+  wp24 argued, and the browser's is N9's host-driven half. The language has
+  since gained `async` functions
+  ([LANGUAGE.md](LANGUAGE.md#async-functions-async-and-await)), from
+  [wp49](wp49-async-server.md), which reopened wp24's refusal for servers in
+  general; nothing in this note's stack depends on them.
 - **Closures and inheritance.** A protocol state machine is a struct and a
   `switch`, and the stack is written that way throughout.
 - **HTTP/2 WebTransport, 0-RTT and migration.** §3 says why each is out of
