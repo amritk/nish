@@ -83,11 +83,11 @@ const once = async (binary, mode, cores, pinned, rate, n, hold) => {
   const ns = String(start % 1_000_000_000n)
   const seed = String(1000 + rate)
   const pin = pinned ? ["taskset", "-c", "0"] : []
-  const argvOf = (kind, worker, workers) => [
+  const argvOf = (kind, worker, workers, tasks = cores) => [
     ...pin,
     binary,
     kind,
-    String(cores),
+    String(tasks),
     String(rate),
     String(n),
     seed,
@@ -98,10 +98,14 @@ const once = async (binary, mode, cores, pinned, rate, n, hold) => {
     String(workers),
     hash,
   ]
+  // (c) is one process over every core; (b) and (d) one a core, logins dealt
+  // round-robin, (d)'s each a one-core batcher.
   const procs =
     mode === "c"
       ? [argvOf("c", 0, 1)]
-      : Array.from({ length: mode === "a" ? 1 : cores }, (_, k) => argvOf("a", k, mode === "a" ? 1 : cores))
+      : mode === "d"
+        ? Array.from({ length: cores }, (_, k) => argvOf("c", k, cores, 1))
+        : Array.from({ length: mode === "a" ? 1 : cores }, (_, k) => argvOf("a", k, mode === "a" ? 1 : cores))
   const outs = await Promise.all(procs.map(runOne))
   let last = start
   const lat = new Array(n).fill(-1)
@@ -149,6 +153,7 @@ const modesOf = (cores) =>
         { name: "(b′) twin", binary: twin, mode: "b", hold: 0 },
         { name: "(c) hold 0", binary: exe, mode: "c", hold: 0 },
         { name: `(c) hold ${holdUs / 1000} ms`, binary: exe, mode: "c", hold: holdUs },
+        { name: "(d) hold 0", binary: exe, mode: "d", hold: 0 },
       ]
 
 const samples = new Map()
