@@ -619,8 +619,11 @@ export interface QuicServerConfig {
 
 /** One run of stream data the client sent, in order, as `readStream` answers it: `fin` when it ends the stream. */
 export class QuicStreamData {
+  /** The RFC 9000 stream ID the bytes arrived on. */
   streamId: i64 = 0
+  /** The bytes of the run, in stream order. */
   data: u8[]
+  /** Whether the run ends the stream: the client sends no bytes after it. */
   fin: boolean = false
 
   /**
@@ -1394,6 +1397,7 @@ export class QuicConnection {
   private tlsConfig: TlsServerConfig
   /** The server's transport parameters, set for each connection, and their encoding. */
   localParameters: QuicTransportParameters
+  /** `localParameters` encoded for the TLS extension the server sends. */
   localEncoded: u8[]
   /** The client's transport parameters, parsed into the slot's own object. */
   private parsedParameters: QuicTransportParameters
@@ -1401,6 +1405,7 @@ export class QuicConnection {
   private kdf: HkdfScratch
   /** The Initial secrets of RFC 9001 §5.2, the client's and the server's. */
   initialClient: u8[]
+  /** The server's Initial secret (RFC 9001 §5.2); see `initialClient`. */
   initialServer: u8[]
   /**
    * The 1-RTT traffic secrets (RFC 9001 §6.1), one set of SHA-256's length
@@ -1411,17 +1416,26 @@ export class QuicConnection {
    * it moves to them.
    */
   readonly readSecret256: Secret<u8[]>
+  /** The next generation's 1-RTT read secret under SHA-256; see `readSecret256`. */
   readonly nextReadSecret256: Secret<u8[]>
+  /** The current 1-RTT write secret under SHA-256; see `readSecret256`. */
   readonly writeSecret256: Secret<u8[]>
+  /** The current 1-RTT read secret under SHA-384; see `readSecret256`. */
   readonly readSecret384: Secret<u8[]>
+  /** The next generation's 1-RTT read secret under SHA-384; see `readSecret256`. */
   readonly nextReadSecret384: Secret<u8[]>
+  /** The current 1-RTT write secret under SHA-384; see `readSecret256`. */
   readonly writeSecret384: Secret<u8[]>
   /** A connection ID being issued and its stateless reset token, before the table copies them. */
   private cidScratch: u8[]
   private tokenScratch: u8[]
+  /** The Initial packet number space: its keys, packet numbers and acknowledgements (RFC 9000 §12.3). */
   initial: QuicConnSpace
+  /** The Handshake packet number space. */
   handshake: QuicConnSpace
+  /** The Application Data packet number space, which holds the 1-RTT keys. */
   application: QuicConnSpace
+  /** The connection IDs of both sides and their stateless reset tokens (`nish/net/quic-conn-cid`). */
   cids: QuicCidTable
   /** Loss detection, the RTT estimate, the congestion window and the pacer (RFC 9002). */
   recovery: QuicRecovery
@@ -1431,6 +1445,7 @@ export class QuicConnection {
   private defaultParameters: QuicTransportParameters
   /** Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). */
   bytesReceived: i64 = 0
+  /** Bytes sent, which may not pass three times `bytesReceived` before the address is validated. */
   bytesSent: i64 = 0
   /** The ALPN protocol the handshake chose. */
   alpn: string = ""
@@ -1440,6 +1455,7 @@ export class QuicConnection {
   streams: QuicStreams
   /** DATAGRAM payloads waiting to be sent, and those the client sent waiting to be read. */
   datagramsOut: QuicDatagramQueue
+  /** DATAGRAM payloads the client sent, waiting to be read; its `dropped` counts those that found it full. */
   datagramsIn: QuicDatagramQueue
   /** The CRYPTO bytes the client sent, put back in order. */
   private cryptoIn: QuicConnReassembly
@@ -1454,6 +1470,7 @@ export class QuicConnection {
    * datagram being read's. Made once and overwritten in place.
    */
   private pathCurrent: u8[]
+  /** The last address the client proved it receives at, in `nish:net`'s 18-byte form; see above. */
   pathValidated: u8[]
   private pathArrival: u8[]
   /**
@@ -1475,11 +1492,14 @@ export class QuicConnection {
   private challengeData: u8[]
   /** Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). */
   pathReceived: i64 = 0
+  /** Bytes sent to the path being validated, at most three times `pathReceived`. */
   pathSent: i64 = 0
   private probeBudget: i64 = 0
   /** When the PATH_CHALLENGE goes again with fresh data, and when validation gives up (§8.2.4); -1 when not validating. */
   challengeResendAt: i64 = -1
+  /** When path validation gives up, in milliseconds, or -1 when not validating. */
   challengeUntil: i64 = -1
+  /** How many PATH_CHALLENGE data have been drawn over the connection; see `challengeData`. */
   challengesDrawn: i64 = 0
   private frame: QuicFrame
   /** The header and the packet numbers of the packet being read, reused for every one. */
@@ -1526,9 +1546,11 @@ export class QuicConnection {
    * lower them after the handshake; nothing else should set them.
    */
   confidentialityLimit: i64 = 8388608
+  /** Packets that may fail to authenticate before the connection closes; see above. */
   integrityLimit: i64 = 4503599627370496
   /** Packets sealed under the current 1-RTT write key, and packets that failed to authenticate, against those limits. */
   sealedUnderKey: i64 = 0
+  /** Packets that failed to authenticate over the connection, against `integrityLimit`. */
   authFailures: i64 = 0
   /**
    * The next Application Data packet number skipped (RFC 9000 §21.4), or -1
@@ -1538,6 +1560,7 @@ export class QuicConnection {
    */
   nextSkip: i64 = -1
   private skipped: i64[]
+  /** How many skip distances have been drawn; see `nextSkip`. */
   skipsDrawn: i64 = 0
   /** How many of `challengeData`'s slots hold a challenge sent on the path being validated. */
   private challengeCount: i32 = 0
@@ -1557,6 +1580,7 @@ export class QuicConnection {
   skipHead: i32 = 0
   /** Which of the Application Data space's two read slots, and two write slots, hold the current keys. */
   appReadSlot: i32 = 0
+  /** Which of the Application Data space's two write slots holds the current keys, 0 or 1. */
   appWriteSlot: i32 = 0
   /** Handshake data sent again early, against `QUIC_CONN_EARLY_RESENDS` (RFC 9002 §6.2.3). */
   earlyResends: i32 = 0
@@ -1572,6 +1596,7 @@ export class QuicConnection {
    * keeps `ecnMarking`, which is the carrier's, and clears the rest.
    */
   datagramEcn: i32 = 0
+  /** Whether the carrier sends with the ECN bits of `datagramEcn`; the carrier sets it, and `reset` keeps it. */
   ecnMarking: boolean = false
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
@@ -1596,6 +1621,7 @@ export class QuicConnection {
   otherIsNext: boolean = false
   /** The Key Phase bit of the current read keys, and of the current write keys. */
   readPhase: boolean = false
+  /** The Key Phase bit of the current write keys. */
   writePhase: boolean = false
   /** Whether the packet just read brought CRYPTO bytes for TLS, or retired an ID that wants replacing. */
   private cryptoArrived: boolean = false
