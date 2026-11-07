@@ -3,7 +3,7 @@
 // `Http1Connection` that answers a keep-alive request with it, and on to a
 // reader process that drains the socket. Three processes on three cores:
 //
-//     bench <copy|inplace> <size> <n> <producer-cpu> <reader-cpu>
+//     bench <copy|inplace|consumer> <size> <n> <producer-cpu> <reader-cpu> [ring-bytes]
 //
 //   copy     the producer renders into a private buffer and `tryPush`es it;
 //            the consumer `tryPop`s it into a buffer of its own and hands it
@@ -11,6 +11,14 @@
 //   inplace  the producer renders into the window `reserve` lends and
 //            `commit`s it; the consumer `peek`s it, hands the ring's own
 //            bytes to `sendBody`, which sends them from there, and `release`s
+//   consumer the producer's half of copy and the consumer's half of inplace:
+//            render privately and `tryPush`, then `peek`, `sendBody`, `release`
+//
+// The ring holds `ring-bytes` of records, 16 MB (16777216) by default: a
+// power of two, at least twice the record and 8 more (`reserve`'s limit).
+// In consumer mode a record `tryPush` wrapped across the ring's end cannot
+// be lent, so `peek` answers none for it and `tryPop` copies it out, counted
+// in `copied` and in `wrapped`; in place no record wraps.
 //
 // The consumer is the parent: it answers `n` requests, timing each from the
 // request to the flush less any wait for the producer, and prints one line
@@ -18,13 +26,21 @@
 // the wall time per message (the whole pipeline's, waits and all), and the
 // bytes of body copied in user space over the run, counted here: `tryPush`,
 // `tryPop` and `write` in copy mode; in place, what `sendBody` copied of what
-// the socket did not take, and on how many messages (`tails`). Not counted, in
-// either mode: the response head, which `respond` writes into the output; the
+// the socket did not take, and on how many messages (`tails`); in consumer
+// mode, `tryPush`, the in-place consumer's, and the `tryPop` of each record
+// that wrapped. `stalls` counts the messages whose response head found no
+// room behind the last message's tail, so the consumer drained before
+// `respond`; that drain is inside the timed window. Not counted, in any mode: the response head, which `respond` writes into the output; the
 // kernel's copy into the socket; `Http1Connection`'s compaction of its output;
 // and the reader's `netRead`. The reader's byte count must equal what the
 // consumer sent, and its FNV-1a over the bodies it parses out of the stream
 // must equal the producer's over the records it rendered; run.mjs checks both.
-// Every wait has a deadline, and a child that fails fails the run.
+// Every wait in the three processes has a deadline of ten seconds (the
+// reader's counts from its start, then from its last byte; the connect
+// wait's is five), and a child that fails fails the run. The one exception
+// is the parent's `waitPid` on each child once the run is over: it has no
+// deadline of its own, and is bounded by the children's deadlines and by
+// run.mjs's timeout on the whole program.
 // The producer and the reader are this program again, under
 // `taskset -c <cpu>` when that is not -1; run.mjs pins the parent.
 import { kill, monotonicNanos, spawn, waitPid } from "nish:process"
@@ -51,8 +67,8 @@ import {
 import { attachSpscRing, initSpscRing, RING_EMPTY, spscRingBytes, SpscRing } from "nish/sync/ring"
 import { createRegion, openRegion, SEQ_CST, SharedRegion, unlinkRegion } from "nish/sync/shm"
 
-/** The ring: 16 MB of records. */
-const CAP: i32 = 16777216
+/** The ring's data bytes unless the command line says otherwise: 16 MB of records. */
+const DEFAULT_RING_BYTES: i32 = 16777216
 /** Set by the producer once it has attached. */
 const READY_AT: i32 = 0
 /** The bytes the producer copied, which it stores before it exits. */
@@ -64,8 +80,6 @@ const PRODUCER_SUM_AT: i32 = 24
 /** FNV-1a over every body the reader parsed out of the stream, in order. */
 const READ_SUM_AT: i32 = 32
 const RING_AT: i32 = 64
-/** The ring header, 256 bytes, then its data: `spscRingBytes(CAP)`, which `main` checks. */
-const BYTES: i32 = RING_AT + 256 + CAP
 /** Per-message times in 10 ns buckets up to 200 µs; a longer one counts in the last. */
 const BUCKETS: i32 = 20001
 const PINNED_MS: i64 = 1792138314000
@@ -127,15 +141,33 @@ const render = (w: JsonWriter, id: i32, size: i32): i32 => {
   return w.end
 }
 
-const producer = (region: SharedRegion, mode: string, size: i32, n: i32): i32 => {
+/**
+ * Whether `mode` is one this program runs. `main` and `producer` check it
+ * first, so past them `mode !== "inplace"` means the producer `tryPush`es and
+ * `mode !== "copy"` means the consumer `peek`s.
+ */
+const knownMode = (mode: string): boolean => mode === "copy" || mode === "inplace" || mode === "consumer"
+
+/** Whether `cap` is a ring capacity `size`-byte records can be reserved and pushed in. */
+const ringFits = (cap: i32, size: i32): boolean =>
+  cap >= 8 && (cap & (cap - 1)) === 0 && size >= 1 && size <= cap / 2 - 4
+
+const producer = (region: SharedRegion, mode: string, size: i32, n: i32, cap: i32): i32 => {
+  if (!knownMode(mode)) {
+    panic(`bench/ring-inplace: the producer has an unknown mode ${mode}`)
+  }
+  const pushes: boolean = mode !== "inplace"
   const ring: SpscRing = attachSpscRing(region, RING_AT).expect("attach")
+  if (ring.capacity !== cap) {
+    panic(`bench/ring-inplace: the ring holds ${ring.capacity} bytes, not the ${cap} asked for`)
+  }
   const own: u8[] = new Array<u8>(size)
   const w = new JsonWriter(own, 0)
   let copied: i64 = toI64(0)
   let sum: u32 = toU32(FNV_BASIS)
   region.storeI32(READY_AT, 1, SEQ_CST)
   for (let i: i32 = 0; i < n; i++) {
-    if (mode === "copy") {
+    if (pushes) {
       w.reset(own, 0)
       const len: i32 = render(w, i, size)
       sum = fnv(sum, own, 0, len)
@@ -227,9 +259,11 @@ const reader = (region: SharedRegion, port: i32): i32 => {
   let headEnd: i32 = 0
   let bodyLeft: i32 = 0
   let sum: u32 = toU32(FNV_BASIS)
+  let heard: i64 = monotonicNanos()
   while (true) {
     const got: i32 = netRead(fd, buf, 0, toI32(buf.length))
     if (got > 0) {
+      heard = monotonicNanos()
       total = total + toI64(got)
       let at: i32 = 0
       while (at < got) {
@@ -266,7 +300,11 @@ const reader = (region: SharedRegion, port: i32): i32 => {
       console.log(`reader: netRead answered ${got}`)
       break
     }
-    // -11: spin, the reader has a core of its own
+    // -11: spin, the reader has a core of its own, until nothing has come
+    // for as long as any wait may take
+    if (monotonicNanos() - heard > DEADLINE_NS) {
+      panic(`bench/ring-inplace: the reader heard nothing for ten seconds after ${total} bytes`)
+    }
   }
   netClose(fd)
   region.storeI64(READ_AT, total, SEQ_CST)
@@ -320,10 +358,14 @@ const child = (cpu: string, role: string, rest: string[]): i32 => {
   return spawn(argv)
 }
 
-/** Sends what the connection holds until it holds nothing. */
-const drain = (server: Http1Server, conn: Http1Connection): void => {
+/** Sends what the connection holds until it holds nothing; fails the run if that takes past the deadline. */
+const drain = (server: Http1Server, conn: Http1Connection, name: string, prod: i32, read: i32): void => {
   server.flush(0)
+  const since: i64 = monotonicNanos()
   while (conn.wantsWrite()) {
+    if (monotonicNanos() - since > DEADLINE_NS) {
+      fail(name, prod, read, "the reader stopped taking the output")
+    }
     server.flush(0)
   }
 }
@@ -334,14 +376,16 @@ const consumer = (
   mode: string,
   size: i32,
   n: i32,
+  cap: i32,
   pcpu: string,
   rcpu: string
 ): i32 => {
-  const ring: SpscRing = initSpscRing(region, RING_AT, CAP, false)
+  const peeks: boolean = mode !== "copy"
+  const ring: SpscRing = initSpscRing(region, RING_AT, cap, false)
   const listener: i32 = tcpListen("127.0.0.1", 0, 4)
   const server = new Http1Server(new Http1Config(), listener, 1)
   server.date.pin(PINNED_MS)
-  const prod: i32 = child(pcpu, "producer", [name, mode, `${size}`, `${n}`])
+  const prod: i32 = child(pcpu, "producer", [name, mode, `${size}`, `${n}`, `${cap}`])
   const read: i32 = child(rcpu, "reader", [name, `${netLocalPort(listener)}`])
   if (prod <= 0 || read <= 0) {
     fail(name, prod, read, `cannot start the children: ${prod} ${read}`)
@@ -366,6 +410,9 @@ const consumer = (
   let sum: i64 = toI64(0)
   let copied: i64 = toI64(0)
   let tails: i32 = 0
+  let wrapped: i32 = 0
+  let stalls: i32 = 0
+  let tailBytes: i64 = toI64(0)
   let sent: i64 = toI64(0)
   let bodies: i64 = toI64(0)
   let waited: i64 = toI64(0)
@@ -375,17 +422,17 @@ const consumer = (
     conn.feed(request, 0, toI32(request.length))
     let e: i32 = server.next(0)
     while (e !== H1_REQUEST) {
-      if (e < 0 || e === 0) {
+      if (e < 0 || e === 0 || monotonicNanos() - t0 > DEADLINE_NS) {
         fail(name, prod, read, `request ${i} answered event ${e}`)
       }
       e = server.next(0)
     }
     // The record. A wait for the producer is not the consumer's cost: the
     // time from the first attempt to the start of the one that found it
-    // comes off the message's time. In place, every record is one `commit`
-    // made, which never wraps, so `peek` lends each one and spinning on it
-    // is waiting; a record `peek` cannot lend (one `tryPush` wrapped) would
-    // be `tryPop`'s, copied and counted.
+    // comes off the message's time. When `peek` lends none, there is none
+    // (a wait), or there is one `tryPush` wrapped across the ring's end,
+    // which `peek` cannot lend: `tryPop` copies that one out, counted. In
+    // place, every record is one `commit`, which never wraps.
     let body: readonly u8[] = own
     let len: i32 = RING_EMPTY
     let lent: boolean = false
@@ -396,12 +443,22 @@ const consumer = (
       if (tried - first > DEADLINE_NS) {
         fail(name, prod, read, `no record ${i} from the producer`)
       }
-      if (mode === "inplace") {
+      if (peeks) {
         const r: readonly u8[] = ring.peek()
         if (r.length > 0) {
           body = r
           len = toI32(r.length)
           lent = true
+        } else if (ring.head !== ring.seenTail) {
+          // `peek` saw a record (the producer's position it loaded is past
+          // the consumer's) and would not lend it: one that wrapped. Without
+          // this check `tryPop` would also take records published since
+          // `peek` looked, which `peek` could have lent.
+          len = ring.tryPop(own, 0)
+          if (len >= 0) {
+            copied = copied + toI64(len)
+            wrapped = wrapped + 1
+          }
         }
       } else {
         len = ring.tryPop(own, 0)
@@ -413,19 +470,32 @@ const consumer = (
     waited = waited + (tried - first)
     // The head is what respond adds: the output may still hold the last
     // message's tail.
-    const queued: i32 = conn.outputEnd - conn.outputStart
-    if (conn.respond(200, names, values, len) !== 0) {
-      fail(name, prod, read, `respond answered short on ${i}`)
+    let queued: i32 = conn.outputEnd - conn.outputStart
+    let head: i32 = conn.respond(200, names, values, len)
+    // No room for the head behind that tail yet: send it, then answer.
+    const stalled: i64 = monotonicNanos()
+    if (head === H1_AGAIN) {
+      stalls = stalls + 1
+    }
+    while (head === H1_AGAIN) {
+      if (monotonicNanos() - stalled > DEADLINE_NS) {
+        fail(name, prod, read, `respond found no room on ${i}`)
+      }
+      drain(server, conn, name, prod, read)
+      queued = conn.outputEnd - conn.outputStart
+      head = conn.respond(200, names, values, len)
+    }
+    if (head !== 0) {
+      fail(name, prod, read, `respond answered ${head} on ${i}`)
     }
     sent = sent + toI64(conn.outputEnd - conn.outputStart - queued)
     bodies = bodies + toI64(len)
     let off: i32 = 0
     let tailed: boolean = false
     while (off < len) {
-      const took: i32 =
-        mode === "copy" ? conn.write(own, off, len - off) : conn.sendBody(body, off, len - off)
+      const took: i32 = peeks ? conn.sendBody(body, off, len - off) : conn.write(own, off, len - off)
       if (took > 0) {
-        if (mode === "copy") {
+        if (!peeks) {
           copied = copied + toI64(took)
         } else {
           // What sendBody copied: all it took when the socket took none of
@@ -433,6 +503,7 @@ const consumer = (
           const left: i32 = conn.outputEnd - conn.outputStart
           const tail: i32 = left < took ? left : took
           copied = copied + toI64(tail)
+          tailBytes = tailBytes + toI64(tail)
           if (tail > 0) {
             tailed = true
           }
@@ -443,13 +514,13 @@ const consumer = (
       }
       if (off < len) {
         // Short: send what is queued until the connection asks for more.
-        drain(server, conn)
+        drain(server, conn, name, prod, read)
         const short: i64 = monotonicNanos()
         while (server.next(0) !== H1_WRITE) {
           if (monotonicNanos() - short > DEADLINE_NS) {
             fail(name, prod, read, `the reader stopped taking at ${i}`)
           }
-          drain(server, conn)
+          drain(server, conn, name, prod, read)
         }
       }
     }
@@ -470,7 +541,7 @@ const consumer = (
       }
     }
   }
-  drain(server, conn)
+  drain(server, conn, name, prod, read)
   const wall: i64 = monotonicNanos() - start
   server.close(0)
   netClose(listener)
@@ -481,43 +552,51 @@ const consumer = (
   const made: i64 = region.loadI64(PRODUCER_SUM_AT, SEQ_CST)
   const parsed: i64 = region.loadI64(READ_SUM_AT, SEQ_CST)
   const timed: i32 = n - warm
+  // The mean body to two decimals, rounded: integer hundredths, then split.
+  const cents: i64 = (bodies * toI64(100) + toI64(n / 2)) / toI64(n)
+  const frac: i64 = cents % toI64(100)
   console.log(
-    `${mode} ${size} n ${n} body_bytes ${bodies / toI64(n)} p50_ns ${percentile(hist, timed, 50)} p99_ns ${percentile(hist, timed, 99)} mean_ns ${sum / toI64(timed)} wall_ns ${wall / toI64(n)} copied ${copied} tails ${tails} waited_ns ${waited / toI64(n)} sent ${sent + bodies} heard ${heard} made_sum ${made} read_sum ${parsed}`
+    `${mode} ${size} n ${n} ring ${cap} body_bytes ${cents / toI64(100)}.${frac < toI64(10) ? "0" : ""}${frac} p50_ns ${percentile(hist, timed, 50)} p99_ns ${percentile(hist, timed, 99)} mean_ns ${sum / toI64(timed)} wall_ns ${wall / toI64(n)} copied ${copied} tails ${tails} tail_bytes ${tailBytes} wrapped ${wrapped} stalls ${stalls} waited_ns ${waited / toI64(n)} sent ${sent + bodies} heard ${heard} made_sum ${made} read_sum ${parsed}`
   )
   return 0
 }
 
 export const main = (): i32 => {
   const args = process.argv
-  if (args.length > 5 && args[1] === "producer") {
+  if (args.length > 6 && args[1] === "producer") {
     return producer(
       openRegion(args[2]).expect("open"),
       args[3],
       toI32(Number(args[4])),
-      toI32(Number(args[5]))
+      toI32(Number(args[5])),
+      toI32(Number(args[6]))
     )
   }
   if (args.length > 3 && args[1] === "reader") {
     return reader(openRegion(args[2]).expect("open"), toI32(Number(args[3])))
   }
   if (args.length < 6) {
-    console.log("usage: bench <copy|inplace> <size> <n> <producer-cpu> <reader-cpu>")
+    console.log("usage: bench <copy|inplace|consumer> <size> <n> <producer-cpu> <reader-cpu> [ring-bytes]")
     return 2
   }
-  if (RING_AT + spscRingBytes(CAP) > BYTES) {
-    panic("bench/ring-inplace: the region is too small for the ring")
+  const mode: string = args[1]
+  if (!knownMode(mode)) {
+    console.log(`bench/ring-inplace: unknown mode ${mode}; the modes are copy, inplace and consumer`)
+    return 2
   }
+  const size: i32 = toI32(Number(args[2]))
+  const n: i32 = toI32(Number(args[3]))
+  const cap: i32 = args.length > 6 ? toI32(Number(args[6])) : DEFAULT_RING_BYTES
+  if (n < 1 || !ringFits(cap, size)) {
+    console.log(
+      `bench/ring-inplace: ${n} records of ${size} bytes in a ring of ${cap}: the ring is a power of two of at least twice the record and 8 more, and n at least 1`
+    )
+    return 2
+  }
+  const bytes: i32 = RING_AT + spscRingBytes(cap)
   const name: string = `nish-bench-inplace-${monotonicNanos() % toI64(1000000000)}`
-  const region = createRegion(name, BYTES).expect("create")
-  const rc: i32 = consumer(
-    region,
-    name,
-    args[1],
-    toI32(Number(args[2])),
-    toI32(Number(args[3])),
-    args[4],
-    args[5]
-  )
+  const region = createRegion(name, bytes).expect("create")
+  const rc: i32 = consumer(region, name, mode, size, n, cap, args[4], args[5])
   unlinkRegion(name).expect("unlink")
   return rc
 }
