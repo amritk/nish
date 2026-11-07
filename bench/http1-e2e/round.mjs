@@ -113,7 +113,7 @@ const machine = () => ({
   cpu: os.cpus()[0]?.model ?? "",
   cpus: os.availableParallelism(),
   kernel: os.release(),
-  postgres: spawnSync("psql", ["-XAtc", "SHOW server_version", "-d", "postgres"], {
+  postgres: spawnSync(env("PSQL", "psql"), ["-XAtc", "SHOW server_version", "-d", "postgres"], {
     encoding: "utf8",
   }).stdout.trim(),
   // biome-ignore lint/style/useNamingConvention: field names of the results JSON
