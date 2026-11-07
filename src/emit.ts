@@ -250,7 +250,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader } from "./target"
-import { accessAlign, isForeignBuffer, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
+import { accessAlign, isForeignBuffer, isHostWindow, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -1111,7 +1111,8 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      params.push(this.hostAbi(sig.paramTypes[i]))
+      // WP50 S3: a window passes the array's data pointer (`emitHostWindow`).
+      params.push(isHostWindow(this.table, sig.paramTypes[i]) ? "i8*" : this.hostAbi(sig.paramTypes[i]))
       i = i + 1
     }
     const group = this.module.attrGroupFor([

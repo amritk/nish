@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 830
+export const RULE_COUNT: i32 = 833
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -319,6 +319,8 @@ const diagnosticRules = (): string[] => [
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
   "NL2354",
+  ", and a buffer window lends only `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` or `f64[]` (or the typed array of each): copy the values into one of those",
+  "NL2681",
   "` is set again while it may still hold a `Secret`: a `Secret` field is set once, in its class's constructor, and the key it held would be lost unwiped",
   "NL2543",
   "` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { ",
@@ -361,6 +363,8 @@ const diagnosticRules = (): string[] => [
   "NL1062",
   "` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it",
   "NL2389",
+  "` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many",
+  "NL2682",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2440",
   ", and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count",
@@ -789,6 +793,8 @@ const diagnosticRules = (): string[] => [
   "NL2650",
   "` must be `readonly`, because the union tells its variants apart by it",
   "NL2535",
+  "`: a window's index and count are `u32`, the width of a wasm32 address",
+  "NL2683",
   "`: import `Secret`, `secret`, `expose`, `exposeWith` and `wipe` from `",
   "NL2453",
   "`main` must return void or an i32 number (the process exit code), not ",

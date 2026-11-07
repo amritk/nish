@@ -538,9 +538,12 @@ export class HostProblem {
  * The refusals a host module's exported signatures earn before any type is
  * resolved (WP50 §12): what the checker would otherwise refuse in words about
  * Nish code the page never wrote as Nish. A generic function is not one
- * import (NL2662), a `Promise` cannot be waited for (NL2663), a typed array is a
- * stage-3 buffer (NL2664) and a `string` parameter stage 4's (NL2665); every
- * other non-scalar is NL2661. A name the module declares — an enum or a
+ * import (NL2662), a `Promise` cannot be waited for (NL2663) and a `string`
+ * parameter is stage 4's (NL2665); every other non-scalar is NL2661. A buffer
+ * is a window (§5.3, stage 3): one of six elements (NL2681), followed by
+ * `at: u32, n: u32` (NL2682), never a wider index (NL2683); a typed array is
+ * rewritten here as the array the checker resolves. NL2664, which refused
+ * every buffer until stage 3, is retired. A name the module declares — an enum or a
  * `HostHandle` alias — is left for the checker.
  */
 export const hostSignatureProblems = (file: Node): HostProblem[] => {
@@ -577,7 +580,11 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
       )
       continue
     }
-    for (const param of stmt.children[1].children) {
+    const params = stmt.children[1].children
+    let k = 0
+    while (k < params.length) {
+      const param = params[k]
+      k = k + 1
       const type = unparen(param.children[1])
       const p = param.children[0].text
       if (type.kind === N_EMPTY) {
@@ -591,7 +598,22 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
           )
         )
       } else if (isBuffer(type, typed, scalars)) {
-        problems.push(bufferProblem(p, name, type))
+        if (windowElement(type) === "") {
+          problems.push(
+            new HostProblem(
+              `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, and a buffer window lends only \`u8[]\`, \`u16[]\`, \`u32[]\`, \`i32[]\`, \`f32[]\` or \`f64[]\` (or the typed array of each): copy the values into one of those`,
+              type
+            )
+          )
+          continue
+        }
+        const pair = windowPairProblem(params, k, p, name)
+        if (pair !== null) {
+          problems.push(pair)
+          continue
+        }
+        asWindow(type)
+        k = k + 2 // `at` and `n`, each a `u32` the pair check read
       } else if (!crosses(type, scalars, local)) {
         problems.push(typeProblem(`Parameter \`${p}\``, name, type))
       }
@@ -614,12 +636,98 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
   return problems
 }
 
-/** A parameter the page would lend as a buffer, which crosses only from stage 3. */
-const bufferProblem = (p: string, name: string, type: Node): HostProblem =>
+/**
+ * The element of a buffer window (WP50 §5.3): `u8`, `u16`, `u32`, `i32`, `f32`
+ * or `f64`, each the element of one of the loader's whole-memory views, or ""
+ * for a buffer of anything else. A typed array names its element in its own
+ * name; an array of scalars, readonly or not, names it in its element type.
+ */
+const windowElement = (type: Node): string => {
+  if (type.kind === N_TYPE_READONLY) {
+    return windowElement(unparen(type.children[0]))
+  }
+  let element = type
+  if (type.kind === N_TYPE_ARRAY) {
+    element = unparen(type.children[0])
+  } else if (type.text === "Array" || type.text === "ReadonlyArray") {
+    element = unparen(type.children[0].children[0])
+  } else {
+    return typedElement(type.text)
+  }
+  const t = element.text
+  return t === "u8" || t === "u16" || t === "u32" || t === "i32" || t === "f32" || t === "f64" ? t : ""
+}
+
+/** The window element a typed array's name spells, or "" for one no window lends. */
+const typedElement = (name: string): string => {
+  if (name === "Uint8Array") {
+    return "u8"
+  }
+  if (name === "Uint16Array") {
+    return "u16"
+  }
+  if (name === "Uint32Array") {
+    return "u32"
+  }
+  if (name === "Int32Array") {
+    return "i32"
+  }
+  if (name === "Float32Array") {
+    return "f32"
+  }
+  return name === "Float64Array" ? "f64" : ""
+}
+
+/**
+ * The refusal of a window whose `at: u32, n: u32` is not the two parameters
+ * after it (`next` is the first), or null. A `u64` or `i64` there is refused in
+ * its own words: the page's index is a wasm32 address's width, and a wider one
+ * would be one more conversion that can lose bits on every call.
+ */
+const windowPairProblem = (params: Node[], next: i32, p: string, name: string): HostProblem | null => {
+  let i = next
+  while (i < next + 2) {
+    if (i >= params.length) {
+      return windowMissing(p, name, params[next - 1])
+    }
+    const type = unparen(params[i].children[1])
+    if (isTypeNamed(type, "u64") || isTypeNamed(type, "i64")) {
+      const role = i === next ? "first element" : "element count"
+      return new HostProblem(
+        `Parameter \`${params[i].children[0].text}\` of host function \`${name}\` is \`${type.text}\`, the ${role} of the window \`${p}\`: a window's index and count are \`u32\`, the width of a wasm32 address`,
+        type
+      )
+    }
+    if (!isTypeNamed(type, "u32")) {
+      return windowMissing(p, name, params[next - 1])
+    }
+    i = i + 1
+  }
+  return null
+}
+
+const windowMissing = (p: string, name: string, param: Node): HostProblem =>
   new HostProblem(
-    `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, a buffer the page would lend wasm: buffer windows come in WP50 stage 3, so until then pass it through module storage`,
-    type
+    `Parameter \`${p}\` of host function \`${name}\` is a buffer window with no \`at: u32, n: u32\` after it: a window is the buffer followed by the first element the page may touch and how many`,
+    param
   )
+
+/**
+ * A typed array's type node rewritten in place as the array of its element,
+ * which is the type the checker resolves: `Float32Array` is an `f32[]` the
+ * page may write, as it is in the page's own reading. Every other spelling
+ * already names its element and is left as written.
+ */
+const asWindow = (type: Node): void => {
+  if (type.kind !== N_TYPE_REF || type.text === "Array" || type.text === "ReadonlyArray") {
+    return
+  }
+  const element = new Node(N_TYPE_REF, type.start, type.end)
+  element.text = typedElement(type.text)
+  type.kind = N_TYPE_ARRAY
+  type.text = ""
+  type.children = [element]
+}
 
 /** A parameter or result whose type is none a wasm import carries. */
 const typeProblem = (where: string, name: string, type: Node): HostProblem =>

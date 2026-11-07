@@ -54,6 +54,7 @@ import { basename, dirname, relativePath, resolvePath } from "./paths"
 import { elementStride, FunctionSig, inlineElementStruct } from "./program"
 import {
   K_ARRAY,
+  isHostWindow,
   K_RESULT,
   T_BOOL,
   T_F32,
@@ -1100,6 +1101,26 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
     lines.push("    return value;")
     lines.push("  };")
   }
+  if (hostsLendWindows(table, hosts)) {
+    lines.push("  /** Whole-memory views a window indexes, made again only when memory grows. */")
+    lines.push("  let windowBuffer = null;")
+    lines.push("  let windows = null;")
+    lines.push("  const win = () => {")
+    lines.push("    const b = state.memory.buffer;")
+    lines.push("    if (b !== windowBuffer) {")
+    lines.push("      windowBuffer = b;")
+    lines.push("      windows = {")
+    lines.push("        u8: new Uint8Array(b),")
+    lines.push("        u16: new Uint16Array(b),")
+    lines.push("        u32: new Uint32Array(b),")
+    lines.push("        i32: new Int32Array(b),")
+    lines.push("        f32: new Float32Array(b),")
+    lines.push("        f64: new Float64Array(b),")
+    lines.push("      };")
+    lines.push("    }")
+    lines.push("    return windows;")
+    lines.push("  };")
+  }
   const entries: string[] = []
   for (const sig of hosts) {
     pushHostEntry(table, sig, lines, entries)
@@ -1127,6 +1148,18 @@ const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entr
   let i = 0
   while (i < sig.paramTypes.length) {
     args.push(`a${i}`)
+    const window = windowView(table, sig.paramTypes[i])
+    if (window !== "" && i + 1 < sig.paramTypes.length) {
+      // WP50 S3 (§5.3): the page indexes a view of all memory, so the data
+      // pointer becomes an element index and `at` is counted from it.
+      args.push(`a${i + 1}`)
+      passed.push(`win().${window}`)
+      passed.push(
+        `(a${i} >>> ${windowShift(window)}) + ${hostArgument(table, sig.paramTypes[i + 1], `a${i + 1}`)}`
+      )
+      i = i + 2
+      continue
+    }
     passed.push(hostArgument(table, sig.paramTypes[i], `a${i}`))
     i = i + 1
   }
@@ -1138,6 +1171,50 @@ const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entr
   }
   lines.push(`  const host_${sig.name} = hostFn("${sig.name}");`)
   entries.push(`      ${sig.name}: (${args.join(", ")}) => ${body},`)
+}
+
+/** Whether any host function takes a buffer window (`win` is emitted only then). */
+const hostsLendWindows = (table: TypeTable, hosts: FunctionSig[]): boolean => {
+  for (const sig of hosts) {
+    for (const t of sig.paramTypes) {
+      if (isHostWindow(table, t)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/** The `win()` view a window of type `t` indexes, or empty for any other type. */
+const windowView = (table: TypeTable, t: i32): string => {
+  if (!isHostWindow(table, t)) {
+    return ""
+  }
+  const e = table.refOf(t)
+  if (e === T_U8) {
+    return "u8"
+  }
+  if (e === T_U16) {
+    return "u16"
+  }
+  if (e === T_U32) {
+    return "u32"
+  }
+  if (e === T_I32) {
+    return "i32"
+  }
+  return e === T_F32 ? "f32" : "f64"
+}
+
+/** log2 of a window view's element size: the shift from a byte address to its index. */
+const windowShift = (view: string): i32 => {
+  if (view === "u8") {
+    return 0
+  }
+  if (view === "u16") {
+    return 1
+  }
+  return view === "f64" ? 3 : 2
 }
 
 // ---- WP50 S3: the layout of module storage ------------------------------------

@@ -28,6 +28,7 @@ NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`
 NL2040  retired: inheritance, removed
 NL2042  retired: the long form of the WP15 §8 allocation warning; the live one is NL9001
 NL2047  retired: inheritance, removed
+NL2664  retired: a typed-array parameter of a host function refused until buffer windows landed (WP50 S3); a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683
 NL2049  retired: inheritance, removed
 NL2050  retired: inheritance, removed
 NL2051  retired: inheritance, removed

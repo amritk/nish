@@ -102,6 +102,21 @@ export const isForeignBuffer = (table: TypeTable, t: i32): boolean =>
   t >= 0 && table.kindOf(t) === K_ARRAY && table.refOf(t) === T_U8
 
 /**
+ * A buffer window a host function takes (WP50 S3, `docs/wp50-wasm-host.md`
+ * §5.3): an array of `u8`, `u16`, `u32`, `i32`, `f32` or `f64`, readonly or
+ * not, which the page reads through the loader's whole-memory view of its
+ * element from `at` for `n` elements. It crosses as its data pointer, and the
+ * two `u32` after it are held to its length (`hostSignatureProblems`).
+ */
+export const isHostWindow = (table: TypeTable, t: i32): boolean => {
+  if (t < 0 || table.kindOf(t) !== K_ARRAY) {
+    return false
+  }
+  const e = table.refOf(t)
+  return e === T_U8 || e === T_U16 || e === T_U32 || e === T_I32 || e === T_F32 || e === T_F64
+}
+
+/**
  * A type a host function's signature carries (WP50 S2): a scalar, a ranged
  * integer or an enum, each one wasm value, and a `HostHandle`, an `i32`.
  * `void` passes, as a result; a parameter is refused it by its caller.
