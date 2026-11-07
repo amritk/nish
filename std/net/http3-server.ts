@@ -5,6 +5,7 @@
  * program that owns its readiness loop.
  *
  *     import { pollAdd, pollCreate, pollWait, udpBind } from "nish:net";
+ *     import { monotonicNanos } from "nish:process";
  *     import { secret, wipe } from "nish:secret";
  *     import { H3_ERROR, H3_NEED_MORE, Http3Config, Http3Connection } from "nish/net/http3";
  *     import { Http3Server } from "nish/net/http3-server";
@@ -353,7 +354,7 @@ export class Http3Wheel {
   private head: i32[]
   private nextOf: i32[]
   private prevOf: i32[]
-  /** The bucket a slot is filed in, or -1, and the deadline it was filed for. */
+  /** The bucket a slot is filed in, or -1. */
   private bucketOf: i32[]
   /** Per slot, the deadline in milliseconds `file` last filed it for, before any clamp to the horizon. */
   dueAt: i64[]
@@ -527,8 +528,8 @@ export class Http3Server {
   /**
    * Where each slot sends now: its client's address as the first datagram
    * came from, then wherever the connection follows the client to
-   * (`QuicConnection.sendAddress`, copied here by `flush` before each slot's flight). Not
-   * validated until `quic(slot).addressValidated` is set (RFC 9000 §8.1): a
+   * (`QuicConnection.sendAddress`, copied here by `flush` before each slot's flight once
+   * `quic(slot).pathKnown`). Not validated until `quic(slot).addressValidated` is set (RFC 9000 §8.1): a
    * Retry token the listener checked, with `quicConfig.retry` on, or a Handshake packet
    * from the client. Before then it is the source of one UDP datagram, which
    * anyone can forge, so a cap or an allow-list keyed on it waits for that.

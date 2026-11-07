@@ -308,7 +308,7 @@ export class Http2TlsServer {
    * @param slot The slot to read, as `accept` answered it.
    * @returns The connection's next event, `H2_REQUEST` to `H2_GOAWAY` of `nish/net/http2`, read from
    *   `connection(slot)`; `H2_NEED_MORE` once it needs more input or its output to drain, after the
-   *   output has gone to TLS; or `H2_ERROR`, final, for a connection that failed, a free slot, a slot
+   *   output has gone to TLS; or `H2_ERROR` for a connection that failed, a free slot, a slot
    *   whose HTTP/2 connection was never made, or one whose ALPN was not `h2`.
    */
   next(slot: i32): i32 {

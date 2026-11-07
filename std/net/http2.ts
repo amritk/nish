@@ -481,7 +481,8 @@ export class Http2Connection {
   private peerInitialWindow: i64 = 65535
   /**
    * The peer's SETTINGS_MAX_HEADER_LIST_SIZE, advisory; -1 until it sends one.
-   * @internal Unused: written from the peer's SETTINGS, and nothing reads it.
+   * @internal Unused: written from the peer's SETTINGS, and nothing reads it; tsc's noUnusedLocals
+   *   refuses it as private.
    */
   peerMaxHeaderList: i64 = -1
   /** The window a new stream starts with on the receiving side. */
@@ -789,7 +790,11 @@ export class Http2Connection {
 
   // ---- Bytes in and out ---------------------------------------------------------
 
-  /** @internal Unused: the room `feed` would find in the input buffer; nothing calls it. */
+  /**
+   * The room `feed` would find in the input buffer, counting the space its move to the front would free.
+   * @returns Bytes `feed` could take now, 0 to `maxFrameSize` plus the 9-byte frame header.
+   * @internal Unused: nothing calls it, and tsc's noUnusedLocals refuses a private member nothing reads.
+   */
   inputRoom(): i32 {
     return this.config.maxFrameSize + H2_FRAME_HEADER_SIZE - (this.inputEnd - this.inputStart)
   }

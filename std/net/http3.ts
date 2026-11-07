@@ -543,8 +543,8 @@ export class Http3Connection {
   /** 0 while the connection is open; 1 once it failed (H3_ERROR), which only `restart` undoes. */
   state: i32 = 0
   /**
-   * Requests open, taken and not yet finished both ways, plus the WebTransport streams held after this
-   * side's GOAWAY for a session below it.
+   * Requests open, taken and not yet finished both ways, plus the bidirectional WebTransport streams held
+   * after this side's GOAWAY for a session below it.
    */
   live: i32 = 0
   /**
@@ -553,7 +553,10 @@ export class Http3Connection {
    * because their session's is.
    */
   rejected: i32 = 0
-  /** Requests whose field section was past `maxFieldSectionSize` and that were answered with a 431. */
+  /**
+   * Requests whose field section was past `maxFieldSectionSize`: answered with a 431, or reset when the 431
+   * did not fit.
+   */
   tooLarge: i32 = 0
   /**
    * Requests reset for breaking a rule (a stream error, §8): a malformed message, a body that disagrees
@@ -842,8 +845,6 @@ export class Http3Connection {
   }
 
   /**
-   * @internal Called by `http3-server.ts` when it builds a slot.
-   *
    * Lends this connection its server's pools in place of its own, giving
    * back to the old pools whatever it holds. Panics unless their buffers are
    * `bodyChunk` and `maxFieldSectionSize` bytes long, as this connection's
@@ -851,6 +852,7 @@ export class Http3Connection {
    *
    * @param data The pool H3_DATA's buffer is borrowed from from now on; kept, not copied.
    * @param section The pool a HEADERS payload's buffer is borrowed from from now on; kept, not copied.
+   * @internal Called by `http3-server.ts` when it builds a slot; not for callers.
    */
   share(data: BufferPool, section: BufferPool): void {
     if (data.size !== this.config.bodyChunk || section.size !== this.config.maxFieldSectionSize) {

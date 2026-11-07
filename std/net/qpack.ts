@@ -769,7 +769,7 @@ export class QpackDecoder {
   maxFieldSectionSize: i32
   /**
    * Which rule the connection error broke, a `QPACK_REASON_*`; `QPACK_REASON_NONE` until a call
-   * answers QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR.
+   * answers QPACK_DECOMPRESSION_FAILED or QPACK_ENCODER_STREAM_ERROR. Reset by `http3.ts`'s `restart`.
    */
   reason: i32
   /** How many Set Dynamic Table Capacity 0 instructions the encoder stream carried, saturating at 2^31 - 1. */
@@ -1075,7 +1075,7 @@ export class QpackEncoder {
   failed: i64
   /**
    * Which rule the decoder stream broke, a `QPACK_REASON_*`; `QPACK_REASON_NONE` until
-   * `receiveDecoderStream` answers QPACK_DECODER_STREAM_ERROR.
+   * `receiveDecoderStream` answers QPACK_DECODER_STREAM_ERROR. Reset by `http3.ts`'s `restart`.
    */
   reason: i32
   /** How many Stream Cancellations the decoder stream carried, saturating at 2^31 - 1. */

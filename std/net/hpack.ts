@@ -1131,7 +1131,7 @@ export class HpackDecoder {
   private huffman: HpackHuffman
   /**
    * The SETTINGS_HEADER_TABLE_SIZE in force, in octets: a size update above it is refused. Set by the
-   * constructor and `setSettingsLimit`.
+   * constructor and `setSettingsLimit`, and put back to 4096 by `http2.ts`'s `restart`.
    */
   settingsLimit: i32
   /**

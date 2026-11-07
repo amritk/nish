@@ -513,7 +513,8 @@ export class WebTransport {
   bidirectional: boolean = false
   /**
    * Whether the last WT_CLOSED came from the client: its CLOSE capsule, its FIN, or a reset the
-   * client sent; false when this side ended the session.
+   * client sent; false when this side ended the session, including when it reset the stream for a
+   * malformed capsule or a FIN inside one.
    */
   closedByPeer: boolean = false
 
