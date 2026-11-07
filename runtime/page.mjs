@@ -14,8 +14,11 @@
  * out again by a later `add`, so a stale handle the program kept names the
  * newer object; it can reach only what the table holds.
  */
+/** What a slot holds when no object is in it: the free list is never searched. */
+const EMPTY = Symbol("empty");
+
 export class HostTable {
-  #slots = [undefined];
+  #slots = [EMPTY];
   #free = [];
 
   /** Stores `value` and answers its handle, never 0. */
@@ -38,7 +41,7 @@ export class HostTable {
   take(handle) {
     const at = this.#check(handle);
     const value = this.#slots[at];
-    this.#slots[at] = undefined;
+    this.#slots[at] = EMPTY;
     this.#free.push(at);
     return value;
   }
@@ -53,7 +56,7 @@ export class HostTable {
       !Number.isInteger(handle) ||
       handle <= 0 ||
       handle >= this.#slots.length ||
-      this.#free.includes(handle)
+      this.#slots[handle] === EMPTY
     ) {
       throw new RangeError(`nish: no host object has handle ${handle}`);
     }

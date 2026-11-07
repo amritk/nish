@@ -493,11 +493,30 @@ const vectorZero = (walk: Walk, node: Node): string => {
 }
 
 /** `new Array<T>(n)` or `new Float64Array(n)` as a checked, zero-filled `newArray`, or `null`. */
+/**
+ * Module storage's `new` (WP50 §5.4): the view `nish-storage.ts` exports for
+ * it, which that file types `any`, cast to the array the module wrote, so
+ * `tsc` reads every access to it as it reads an access to the array.
+ */
+const storageRow = (walk: Walk, node: Node, text: string): string => {
+  const callee = node.children[0]
+  const typeArgs = node.children[1].children
+  if (typeArgs.length === 1) {
+    return `(${text} as ${walk.spanOf(typeArgs[0])}[])`
+  }
+  const element = callee.kind === N_IDENT ? typedArrayWidth(callee.text) : ""
+  if (element === "") {
+    return text
+  }
+  walk.widths.add(element)
+  return `(${text} as ${element}[])`
+}
+
 const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const stored = walk.storageIds.indexOf(node.id)
   if (stored >= 0) {
     walk.usesStorage = true
-    return walk.storageTexts[stored]
+    return storageRow(walk, node, walk.storageTexts[stored])
   }
   const callee = node.children[0]
   if (callee.kind !== N_IDENT || node.children[2].children.length !== 1) {

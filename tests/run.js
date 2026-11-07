@@ -30377,6 +30377,34 @@ if (!only || "wasm-host-panic".includes(only)) {
           exit.lines[0] === "NishPanic(exit) the program exited with code 3" && exit.lines[1] === "seen exit -1 the program exited with code 3",
           shown(exit.res)
         )
+        // The page cannot reach `nish.panic`, but a module could hand it any
+        // (msg, len): one reaching past memory, or wrapping it, is not read.
+        fs.writeFileSync(
+          at("forged.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import * as loader from "./main.mjs"',
+            "const Real = WebAssembly.Instance",
+            "let linked = null",
+            "WebAssembly.Instance = function (module, imports) { linked = imports; return new Real(module, imports) }",
+            "const m = loader.loadSync(readFileSync(process.argv[2]), { onPanic: () => {} })",
+            "const size = m.memory.buffer.byteLength",
+            "const message = (msg, len) => { try { linked.nish.panic(0, -1, msg, len, 0, 0) } catch (e) { return e.message } }",
+            "console.log(message(size - 4, 8))",
+            "console.log(message(-16, 32))",
+            "console.log(message(16, -1))",
+            "console.log(JSON.stringify(message(size, 0)))",
+            "",
+          ].join("\n")
+        )
+        const forged = spawnSync(process.execPath, [at("forged.mjs"), at("main.wasm")], { cwd: dir, encoding: "utf8" })
+        check(
+          "panic: a panic message the module places past the end of memory, or wrapping it, is not read",
+          forged.status === 0 &&
+            forged.stdout ===
+              "panic (its message is outside memory)\npanic (its message is outside memory)\npanic (its message is outside memory)\n\"\"\n",
+          shown(forged)
+        )
         const nested = drive("main.wasm", "nested")
         check(
           "panic: an import that calls back into an export throws NishReentry, and the inner call never ran",
@@ -30487,6 +30515,31 @@ if (!only || "wasm-host-page".includes(only)) {
         shown(res)
       )
     }
+    // HostTable's check reads the slot, never the free list: with 200,000
+    // slots taken, 200,000 gets would be 4e10 steps if it searched.
+    fs.writeFileSync(
+      at("table-cost.mjs"),
+      [
+        'import { HostTable } from "./nish-page.mjs"',
+        "const t = new HostTable()",
+        "const hs = []",
+        "for (let i = 0; i < 400000; i++) hs.push(t.add(i))",
+        "for (let i = 0; i < 400000; i += 2) t.take(hs[i])",
+        "const start = performance.now()",
+        "let sum = 0",
+        "for (let i = 1; i < 400000; i += 2) sum += t.get(hs[i])",
+        "let refused = 0",
+        "for (let i = 0; i < 400000; i += 2) { try { t.get(hs[i]) } catch { refused++ } }",
+        "console.log(sum, refused, t.size, performance.now() - start < 1000)",
+        "",
+      ].join("\n")
+    )
+    const cost = spawnSync(process.execPath, [at("table-cost.mjs")], { cwd: dir, encoding: "utf8" })
+    check(
+      "page: HostTable's check reads the slot, not the free list: 400,000 gets beside 200,000 taken slots take under a second",
+      cost.status === 0 && cost.stdout.trim() === "40000000000 200000 200000 true",
+      shown(cost)
+    )
     // The same page against the TypeScript reading (§5.4): `--emit-ts` writes
     // nish-storage.ts, whose `memory` and `layout` stand where the wasm
     // instance's do, so a loader made of them and the module's exports is all
