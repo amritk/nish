@@ -138,6 +138,15 @@ const AMBIENT_NAMES: string =
 const WIDTH_TYPES: string =
   " i32 i64 u8 u16 u32 u64 f32 f64 integer Int32Array Float32Array Float64Array BigInt64Array "
 
+/**
+ * What the output declares where the module spells the ambient `HostHandle`:
+ * `nish/runtime` has none, and the program is already checked, so the brand
+ * is optional. tsc then takes the `0` a handle starts as, and still refuses a
+ * handle of one kind where another is wanted.
+ */
+export const HOST_HANDLE_ALIAS: string =
+  "type HostHandle<K extends string> = number & { readonly __nishHostKind?: K }\n"
+
 /** The message NL4011 carries; `src/codes.ts` keys the code on it. */
 export const SIGNAL_REFUSAL: string =
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)"
@@ -231,6 +240,8 @@ export class Walk {
   helpers: StringSet
   /** Every width type the module spells, in first-use order. */
   widths: StringSet
+  /** Whether the module spells the ambient `HostHandle`, which the output declares for itself (`HOST_HANDLE_ALIAS`). */
+  hostHandle: boolean
   /** Every identifier the module spells but an ambient call's callee: the names a helper must not be imported as. */
   names: StringSet
   /**
@@ -288,6 +299,7 @@ export class Walk {
     this.choiceTexts = []
     this.helpers = new StringSet()
     this.widths = new StringSet()
+    this.hostHandle = false
     this.names = new StringSet()
     this.typeNames = new StringSet()
     for (const imp of program.imports) {
@@ -560,6 +572,10 @@ const ambientCallee = (walk: Walk, node: Node): string => {
 const observe = (walk: Walk, node: Node): string => {
   if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
     walk.widths.add(node.text)
+    return ""
+  }
+  if (node.kind === N_TYPE_REF && node.text === "HostHandle") {
+    walk.hostHandle = true
     return ""
   }
   if (node.kind !== N_CALL || node.children.length === 0 || node.children[0].kind !== N_IDENT) {
@@ -837,6 +853,9 @@ const bodyIndex = (node: Node): i32 => {
 const observeWidths = (walk: Walk, node: Node): void => {
   if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
     walk.widths.add(node.text)
+  }
+  if (node.kind === N_TYPE_REF && node.text === "HostHandle") {
+    walk.hostHandle = true
   }
   for (const child of node.children) {
     observeWidths(walk, child)

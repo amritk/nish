@@ -26,7 +26,14 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
+import {
+  applyModuleEdits,
+  emitModule,
+  HOST_HANDLE_ALIAS,
+  REGION_REFUSAL,
+  SIGNAL_REFUSAL,
+  Walk,
+} from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { scriptMain } from "./script"
@@ -383,7 +390,10 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       compilation.sink.reportPortability(unit.source, node.start, node.end, walk.stubWarnings[r])
       r = r + 1
     }
-    const header = runtimeImport("import", walk.helpers) + runtimeImport("import type", walk.widths)
+    const header =
+      runtimeImport("import", walk.helpers) +
+      runtimeImport("import type", walk.widths) +
+      (walk.hostHandle ? HOST_HANDLE_ALIAS : "")
     if (header.length > 0) {
       const at = importOffset(unit.source.text)
       // An import line is an edit like any other, so it goes in source order:
