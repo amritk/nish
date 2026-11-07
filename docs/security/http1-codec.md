@@ -413,8 +413,8 @@ at `98c4f9a7`). `Http1Parser`'s fields are ordered hot first (its buffers, the
 window and scan state, the flags, then the request's numbers, the caps and,
 last, what only a `keepText` parser or a response reads), and it makes its
 `spans` before its other arrays, so a request on a cold slot touches fewer
-lines; `Http1Connection` makes its parser before its `HttpDate`. Its size
-stays 200 bytes and no slot holds a new buffer. `unpark` first compares a
+lines; `Http1Connection` makes its parser before its `HttpDate`.
+`Http1Parser`'s size stays 200 bytes and no slot holds a new buffer. `unpark` first compares a
 buffer with the slot's `noOutput`, which `park` put in its place, and only
 then runs the length test it ran before. The comparison is a speed-up and has
 no behaviour of its own: `noOutput` is empty, so the length test alone takes

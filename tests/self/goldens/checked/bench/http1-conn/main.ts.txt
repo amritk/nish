@@ -34379,22 +34379,22 @@ function idle(shape: string, requests: i32, count: i32, batches: i32, evictMib: 
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via idle
-  calls: Bench.constructor Bench.serve idle llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64
+  calls: Bench.constructor Bench.serve idle llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64
   stackSites=1 stackLocals=1
   local +0:9 shape: string (const)
   local +1:9 requests: i32 (const)
   local +2:7 count: i32 (let)
   local +3:9 batches: i32 (const)
   local +4:9 evictMib: i32 (const)
-  callee +6:12 idle -> @idle
-  local +11:9 b: Bench (const)
-  callee +11:20 new Bench -> @Bench.constructor
-  local +14:12 i: i32 (let)
-  callee +15:5 Bench.serve -> @Bench.serve
-  local +20:7 best: i64 (let)
-  local +21:7 at: i32 (let)
-  local +22:12 batch: i32 (let)
-  local +23:11 started: i64 (const)
-  local +24:14 k: i32 (let)
-  callee +25:7 Bench.serve -> @Bench.serve
-  local +31:11 ns: i64 (const)
+  callee +10:12 idle -> @idle
+  local +15:9 b: Bench (const)
+  callee +15:20 new Bench -> @Bench.constructor
+  local +18:12 i: i32 (let)
+  callee +19:5 Bench.serve -> @Bench.serve
+  local +24:7 best: i64 (let)
+  local +25:7 at: i32 (let)
+  local +26:12 batch: i32 (let)
+  local +27:11 started: i64 (const)
+  local +28:14 k: i32 (let)
+  callee +29:7 Bench.serve -> @Bench.serve
+  local +35:11 ns: i64 (const)

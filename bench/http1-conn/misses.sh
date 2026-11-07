@@ -21,11 +21,25 @@ out="$root/build/bench/http1-conn/misses"
 old_nish="$root/build/bench/http1-conn/old-package/bin/nish"
 new_nish="$root/build/nish"
 [ -x "$new_nish" ] || new_nish="$root/build/seed/bin/nish"
-if [ ! -x "$old_nish" ]; then
+base_file="$root/build/bench/http1-conn/old-package/BASE"
+if [ ! -x "$old_nish" ] || [ ! -f "$base_file" ]; then
   echo "misses.sh: run node bench/http1-conn/run.mjs first, for $old_nish" >&2
   exit 1
 fi
+# The old column is whichever --base the last run.mjs built the package from.
+echo "old: std/ at $(cat "$base_file"); new: the working tree"
 mkdir -p "$out"
+# Runs a command with its output to a log, and on failure prints the log and
+# stops the script.
+logged() {
+  local log="$1"
+  shift
+  if ! "$@" > "$log" 2>&1; then
+    echo "misses.sh: failed: $*" >&2
+    cat "$log" >&2
+    exit 1
+  fi
+}
 for build in old new; do
   nish="$new_nish"
   src="$root"
@@ -36,7 +50,7 @@ for build in old new; do
   dir="$out/$build"
   mkdir -p "$dir"
   cp "$root/bench/http1-conn/main.ts" "$dir/main.ts"
-  "$nish" "$dir/main.ts" -o "$dir/" --profile speed -g --link "$dir/conn" > /dev/null 2>&1
+  logged "$dir/compile.log" "$nish" "$dir/main.ts" -o "$dir/" --profile speed -g --link "$dir/conn"
   for shape in idle direct idle-dram direct-dram; do
     mode="${shape%-dram}"
     n="$requests"
@@ -46,16 +60,16 @@ for build in old new; do
       extra=("$evict")
     fi
     for count in 0 "$n"; do
-      valgrind --tool=cachegrind --cache-sim=yes \
+      logged "$dir/$shape-$count.log" valgrind --tool=cachegrind --cache-sim=yes \
         --cachegrind-out-file="$dir/$shape-$count.cg" \
-        "$dir/conn" "$mode" "$count" "$connections" 1 "${extra[@]}" > /dev/null 2>&1
+        "$dir/conn" "$mode" "$count" "$connections" 1 "${extra[@]}"
     done
     # cg_annotate's diff of the two runs: N requests, setup cancelled.
     (cd "$dir" && cg_annotate --diff --show=Dr,D1mr,DLmr,Dw,D1mw,DLmw --sort=D1mr \
       --no-annotate --no-show-percs "$shape-0.cg" "$shape-$n.cg") > "$out/$build-$shape.txt"
     # The source paths are relative to where the compiler read std/ from.
     (cd "$src" && cg_annotate --diff --show=Dr,D1mr,DLmr,Dw,D1mw,DLmw --sort=D1mr \
-      --annotate --no-show-percs --context 0 "$dir/$shape-0.cg" "$dir/$shape-$n.cg") > "$out/$build-$shape-lines.txt" 2>&1 || true
+      --annotate --no-show-percs --context 0 "$dir/$shape-0.cg" "$dir/$shape-$n.cg") > "$out/$build-$shape-lines.txt"
     echo "$build $shape: $n requests, $out/$build-$shape.txt"
   done
 done

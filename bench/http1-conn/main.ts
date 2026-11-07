@@ -516,6 +516,10 @@ export const main = (): i32 => {
   let count: i32 = process.argv.length > 3 ? parseInt(process.argv[3]) : 50000
   const batches: i32 = process.argv.length > 4 ? parseInt(process.argv[4]) : 5
   const evictMib: i32 = process.argv.length > 5 ? parseInt(process.argv[5]) : 0
+  // The ring is evictMib * 1048576 bytes in an i32: 2048 MiB is past it.
+  if (evictMib < 0 || evictMib > 2047) {
+    panic("bench: the eviction ring must be 0 to 2047 MiB")
+  }
   if (shape === "idle" || shape === "direct" || shape === "rss") {
     return idle(shape, requests, count, batches, evictMib)
   }

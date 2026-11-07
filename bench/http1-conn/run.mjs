@@ -53,6 +53,11 @@ const requests = flag("--requests", "200000")
 const connections = flag("--connections", "50000")
 const batches = flag("--batches", "5")
 const evict = flag("--evict", "1024")
+// main.ts sizes the ring in an i32 of bytes.
+if (!(Number(evict) >= 0 && Number(evict) <= 2047)) {
+  process.stderr.write(`--evict ${evict}: the eviction ring must be 0 to 2047 MiB\n`)
+  process.exit(1)
+}
 const dramRequests = flag("--dram-requests", "20000")
 const built = path.join(root, "build", "nish")
 const compiler = path.resolve(
@@ -95,6 +100,8 @@ if (untar.status !== 0) {
 const oldCompiler = path.join(oldPackage, "bin", "nish")
 fs.copyFileSync(compiler, oldCompiler)
 fs.chmodSync(oldCompiler, 0o755)
+// misses.sh reads which base the package holds.
+fs.writeFileSync(path.join(oldPackage, "BASE"), `${base}\n`)
 const compilers = { old: oldCompiler, new: compiler }
 const binaries = []
 for (const [label, nish] of Object.entries(compilers)) {

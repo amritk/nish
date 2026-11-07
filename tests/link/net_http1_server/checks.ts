@@ -1166,7 +1166,9 @@ export const serverChecks = (): i32 => {
   ll.settle();
   t.ok("the first part of a request split across reads takes a lent buffer back", lc.parser.buf !== lc.noOutput && toI32(lc.parser.buf.length) === HTTP1_FIRST_INPUT && ll.plain.inputs.free.length === 0);
   ll.sendRange(l1, split, toI32(9), toI32(split.length));
-  t.ok("and the rest of it is answered, the buffer lent again after", ll.response(l1, false).text() === hello.text() && ll.plain.inputs.made === 1);
+  const splitRest = ll.response(l1, false);
+  ll.settle();
+  t.ok("and the rest of it is answered, the buffer lent again after", splitRest.text() === hello.text() && ll.plain.inputs.made === 1 && lc.parser.buf === lc.noOutput);
   // A request read whole in one feed that is longer than the lent input
   // buffer: the parser grows its own past it, and lends the grown one next.
   const longValue: string[] = [];
