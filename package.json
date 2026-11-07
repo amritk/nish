@@ -18,6 +18,10 @@
       "types": "./runtime/browser.d.ts",
       "default": "./runtime/browser.mjs"
     },
+    "./vite": {
+      "types": "./runtime/vite.d.ts",
+      "default": "./runtime/vite.mjs"
+    },
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",
     "./*": "./std/*.ts"

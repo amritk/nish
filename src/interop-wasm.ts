@@ -1,6 +1,7 @@
 // The companion of `--emit-dts` (stage0's `src/interop/wasm.ts`, WP8): a small ES
-// module, `<stem>.mjs` next to the `.d.ts`, whose `load(bytes)` instantiates
-// the wasm build and wraps every export that takes or returns an array.
+// module, `<stem>.mjs` next to the `.d.ts`, whose `load(source, imports)` and
+// `loadSync(source, imports)` instantiate the wasm build and wrap every export
+// that takes or returns an array.
 //
 // A raw wasm export sees an array as an `i32` pointer to the arena header
 // `{ i64 len, i64 cap, i8* data }` (24 bytes on wasm32 too: the 4-byte data
@@ -689,15 +690,39 @@ export const generateWasmLoader = (
   lines.push(`// Loader for the wasm build; ${basename(dtsFile)} declares it. Build the module with`)
   lines.push(
     bridge.needsRuntime
-      ? "//   scripts/build.sh <module.ll> runtime/runtime-wasm.c -o <module>.wasm --profile wasm"
-      : "//   scripts/build.sh <module.ll> -o <module>.wasm --profile wasm"
+      ? "//   scripts/build.sh <module.ll> runtime/runtime-wasm.c -o <module>.wasm --profile wasm-host"
+      : "//   scripts/build.sh <module.ll> -o <module>.wasm --profile wasm-host"
   )
   lines.push("// Typed-array arguments are copied into the module's arena for the duration")
   lines.push("// of the call and results are copied out, so the arrays you hold stay yours.")
+  lines.push("// The file imports nothing and reads no URL, so a bundler can inline it as it is.")
   lines.push("")
-  lines.push("/** Instantiate the module and return its exports, arrays marshalled. */")
-  lines.push("export async function load(bytes) {")
-  lines.push("  const { instance } = await WebAssembly.instantiate(bytes, {});")
+  lines.push("/**")
+  lines.push(" * Instantiate the module and return its exports, arrays marshalled. `source` is")
+  lines.push(" * the module's bytes (a BufferSource) or a compiled WebAssembly.Module.")
+  lines.push(" */")
+  lines.push("export async function load(source, imports = {}) {")
+  lines.push("  const instance =")
+  lines.push("    source instanceof WebAssembly.Module")
+  lines.push("      ? await WebAssembly.instantiate(source, imports)")
+  lines.push("      : (await WebAssembly.instantiate(source, imports)).instance;")
+  lines.push("  return exportsOf(instance);")
+  lines.push("}")
+  lines.push("")
+  lines.push("/**")
+  lines.push(" * `load` without a promise, for a page that needs the exports before its first")
+  lines.push(" * await. Chromium refuses to compile bytes over 8 MB synchronously on the main")
+  lines.push(" * thread; above that, call `load`, or compile the module in a worker and pass it here.")
+  lines.push(" */")
+  lines.push("export function loadSync(source, imports = {}) {")
+  lines.push(
+    "  const module = source instanceof WebAssembly.Module ? source : new WebAssembly.Module(source);"
+  )
+  lines.push("  return exportsOf(new WebAssembly.Instance(module, imports));")
+  lines.push("}")
+  lines.push("")
+  lines.push("/** The exports of one instance, arrays marshalled: the body `load` and `loadSync` share. */")
+  lines.push("function exportsOf(instance) {")
   lines.push("  const raw = instance.exports;")
   if (bridge.needsRuntime) {
     lines.push("  const memory = raw.memory;")
