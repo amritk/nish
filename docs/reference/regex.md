@@ -229,7 +229,6 @@ class Regex
 
 | Member | |
 | --- | --- |
-| `new Regex(source: string, flags: string)` | A pattern not compiled yet: call `regexCompile`, which builds its program. |
 | `readonly flags: string` | The flags as written. |
 | `groups: i32` | Capture groups, the whole match included. |
 | `readonly source: string` | The pattern as written. |
