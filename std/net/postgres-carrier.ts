@@ -1,9 +1,51 @@
 /**
- * nish/net/postgres-carrier: `PgCarrier`, a `PgPool`'s queries on an
+ * `nish/net/postgres-carrier` — `PgCarrier`, a `PgPool`'s queries on an
  * `HttpHandler`'s loop, so a route handler queries PostgreSQL without
  * blocking its worker.
  *
- * `nish/net/postgres` reads no socket, clock or entropy source; this module is
+ *     import { HttpRequest } from "nish/net/handler"
+ *     import { PgConnection, pgTarget } from "nish/net/postgres"
+ *     import {
+ *       PG_CARRIER_BUILD, PG_CARRIER_DONE, PG_CARRIER_FAILED, PG_CARRIER_FULL,
+ *       PG_CARRIER_MISSING, PG_CARRIER_NONE, PG_CARRIER_ROW, PgCarrier, PgCarrierLimits,
+ *     } from "nish/net/postgres-carrier"
+ *
+ *     // `pool` registered "article"; `handler` serves the routes.
+ *     const carrier = new PgCarrier(new PgCarrierLimits(), pool, pgTarget("127.0.0.1", 5432), handler)
+ *     const answered: boolean[] = new Array<boolean>(256)  // one per query number
+ *     while (running) {
+ *       handler.wait(50)  // a timeout, so the connect timeout is checked
+ *       while (handler.ready()) {
+ *         const req: HttpRequest = handler.take()
+ *         if (carrier.run(req, ARTICLE) === PG_CARRIER_FULL) {
+ *           handler.send(req, 503, text, none, 0, 0)
+ *         }
+ *       }
+ *       let event: i32 = carrier.next()
+ *       while (event !== PG_CARRIER_NONE) {
+ *         if (event === PG_CARRIER_BUILD) {
+ *           const conn: PgConnection = carrier.connection()
+ *           conn.bindStart("article")
+ *           conn.paramInt(toI64(carrier.request().paramDecimal(0)))
+ *           conn.bindEnd()
+ *           carrier.send()
+ *         } else if (event === PG_CARRIER_ROW && !answered[carrier.query]) {
+ *           const conn: PgConnection = carrier.connection()
+ *           handler.send(carrier.request(), 200, text, conn.inputBuffer(), conn.colStart(0), conn.colLength(0))
+ *           answered[carrier.query] = true
+ *         } else if (event === PG_CARRIER_DONE || event === PG_CARRIER_MISSING || event === PG_CARRIER_FAILED) {
+ *           if (!answered[carrier.query]) {
+ *             handler.send(carrier.request(), event === PG_CARRIER_FAILED ? 503 : 404, text, none, 0, 0)
+ *           }
+ *           answered[carrier.query] = false
+ *         }
+ *         event = carrier.next()
+ *       }
+ *     }
+ *     carrier.close()
+ *     pool.dispose()
+ *
+ * **Why a module of its own.** `nish/net/postgres` reads no socket, clock or entropy source; this module is
  * the one that does, and it is kept apart so that one stays sans-IO. The
  * carrier's sockets sit in an epoll set the handler watches (`HttpHandler.watch`), a
  * route handler hands a request to `run` (or to `runInt` and `runText` for an
@@ -13,6 +55,26 @@
  * `request()` the `HttpRequest` to answer. It connects its pool's slots
  * itself, gives up on one that has not answered in `connectTimeoutMs`, and
  * sizes every table from `PgCarrierLimits` at construction.
+ *
+ * **Lifetime.** A query number from `run`, `runInt` or `runText`, with its
+ * `tag` and `request()`, holds until the `next()` after its final event,
+ * which frees the number for reuse; a row's bytes on `connection()` hold
+ * only until the next call. The carrier never answers a request itself: the
+ * program answers each one once, on its first row or on its final event.
+ *
+ * **Limits.** Every cap is fixed at construction (`PgCarrierLimits`), so a
+ * full carrier answers `PG_CARRIER_FULL` rather than grow, and once the
+ * connections are up nothing is allocated per query. There is no deadline on
+ * a query once its connection is up; bound a slow statement with the
+ * server's `statement_timeout`.
+ *
+ * **Errors.** A connection that is refused, reset, closed or past its connect
+ * timeout fails every query on it with `PG_CARRIER_FAILED`, `failure` the
+ * connection's `PG_ERR_*` and `socketError` the socket's negative errno
+ * (`-110` for the timeout). A statement the server refuses answers
+ * `PG_CARRIER_ERROR`, then `PG_CARRIER_FAILED` with `failure` `PG_ERR_NONE`.
+ * Programming errors (a cap out of range, an unknown batcher id, `send()`
+ * with no build open) panic.
  *
  * `tests/link/std_postgres_carrier` runs one against a loopback backend;
  * `tests/postgres/carrier.ts` against a live server. Caps and findings:
@@ -216,7 +278,16 @@ export class PgCarrier {
   /**
    * A carrier for `pool`'s connections to `target`, its descriptor watched on
    * `handler` as `limits.watch`. Panics on a cap or watch id out of range,
-   * or a target that failed or is not a numeric address.
+   * a target that failed or is not a numeric address, or a poll set the
+   * system will not create. It allocates every table here and opens its poll
+   * set, but connects nothing until the first `next()`.
+   *
+   * @param limits The caps, read once; changing them later changes nothing.
+   * @param pool The pool whose slots the carrier connects and drives. It
+   *   stays the program's, to `dispose()` after `close()`.
+   * @param target Where to connect: a Unix socket, or a numeric address and
+   *   port, as `pgTarget` parsed it; a host name panics.
+   * @param handler The handler whose `wait` watches the carrier's sockets.
    */
   constructor(limits: PgCarrierLimits, pool: PgPool, target: PgTarget, handler: HttpHandler) {
     const queries: i32 = limits.queries
@@ -296,7 +367,11 @@ export class PgCarrier {
    * Registers `batcher`'s statement on the pool and answers its id for
    * `runInt` and `runText`. Panics past 8 batchers, and wherever
    * `PgPool.register` refuses: once the pool has connected, on a NUL in the
-   * batcher's name or SQL, or past 256 statements.
+   * batcher's name or SQL, or past 256 statements. Attach every batcher
+   * before the first `next()`, which starts connecting.
+   *
+   * @param batcher The batcher to route keys to; the carrier keeps it.
+   * @returns The batcher's id, 0 for the first attached and counting up.
    */
   attach(batcher: PgBatcher): i32 {
     const id: i32 = toI32(this.batchers.length)
@@ -315,6 +390,13 @@ export class PgCarrier {
    * answers its number; `PG_CARRIER_BUILD` comes for it once a connection
    * has room. `PG_CARRIER_FULL` when `queries` are waiting, the pool's
    * queue is full or the carrier is closed. Returns at once.
+   *
+   * @param req The request the query answers, handed back by `request()`;
+   *   null for a query of the program's own.
+   * @param tag The program's own number for what was asked, handed back as
+   *   `tag` on every event of the query.
+   * @returns The query's number, 0 up to `queries - 1` and reused once its
+   *   final event has passed, or `PG_CARRIER_FULL`.
    */
   run(req: HttpRequest | null, tag: i32): i32 {
     const q: i32 = this.take(req, tag)
@@ -331,7 +413,19 @@ export class PgCarrier {
     return q
   }
 
-  /** Queues `req`'s int8 `key` on batcher `batcher`, as `run` does a plain query; `PG_CARRIER_FULL` also when the batcher's queue is. */
+  /**
+   * Queues `req`'s int8 `key` on batcher `batcher`, as `run` does a plain
+   * query: the carrier sends it with the other keys waiting on that batcher
+   * in one execution, and answers its rows to this query alone. Panics on an
+   * id `attach` never gave, or a batcher whose key is text.
+   *
+   * @param req The request the key answers; null for the program's own.
+   * @param batcher The id `attach` answered.
+   * @param key The key to look up.
+   * @param tag The program's own number, handed back as `tag`.
+   * @returns The query's number, or `PG_CARRIER_FULL` when `queries` are
+   *   waiting, the batcher's queue is full or the carrier is closed.
+   */
   runInt(req: HttpRequest | null, batcher: i32, key: i64, tag: i32): i32 {
     const b: PgBatcher = this.batcher(batcher)
     const q: i32 = this.take(req, tag)
@@ -345,7 +439,24 @@ export class PgCarrier {
     return q
   }
 
-  /** Queues `req`'s text key `bytes[start, start + length)` on batcher `batcher`, as `runInt` does; also `PG_CARRIER_FULL` when `PgBatcher.addText` refuses the key. */
+  /**
+   * Queues `req`'s text key `bytes[start, start + length)` on batcher
+   * `batcher`, as `runInt` does an int8 key. The key is copied into the
+   * batcher's own store, so `bytes` may change once this returns. Panics on
+   * an id `attach` never gave, a batcher whose key is int8, or a window
+   * outside `bytes`.
+   *
+   * @param req The request the key answers; null for the program's own.
+   * @param batcher The id `attach` answered.
+   * @param bytes The buffer holding the key, such as the request's own bytes.
+   * @param start Where the key starts in `bytes`, in bytes.
+   * @param length The key's length in bytes.
+   * @param tag The program's own number, handed back as `tag`.
+   * @returns The query's number, or `PG_CARRIER_FULL` when `queries` are
+   *   waiting, the carrier is closed, or `PgBatcher.addText` refuses the key:
+   *   one that is not UTF-8 or holds a NUL, a full queue or key store, or a
+   *   key too long for one execution.
+   */
   runText(req: HttpRequest | null, batcher: i32, bytes: u8[], start: i32, length: i32, tag: i32): i32 {
     const b: PgBatcher = this.batcher(batcher)
     const q: i32 = this.take(req, tag)
@@ -359,7 +470,13 @@ export class PgCarrier {
     return q
   }
 
-  /** The request `query` was run for. Panics when it was run with none, or no event named a query. */
+  /**
+   * The request `query` was run for. Panics when it was run with none, or no
+   * event named a query.
+   *
+   * @returns The request handed to `run`, `runInt` or `runText`, valid until
+   *   the `next()` after the query's final event.
+   */
   request(): HttpRequest {
     const q: i32 = this.query
     const req: HttpRequest | null = q >= 0 && q < toI32(this.qRequests.length) ? this.qRequests[q] : null
@@ -369,7 +486,14 @@ export class PgCarrier {
     return req
   }
 
-  /** The connection the last `PG_CARRIER_BUILD` or row is on. Panics before any. */
+  /**
+   * The connection the last `PG_CARRIER_BUILD` or row is on. Panics before
+   * any.
+   *
+   * @returns The pool's connection, to bind a query on after
+   *   `PG_CARRIER_BUILD` or read a row from after `PG_CARRIER_ROW`; its row
+   *   holds only until the next call to `next()`.
+   */
   connection(): PgConnection {
     const conn: PgConnection | null = this.conn
     if (conn === null) {
@@ -383,6 +507,10 @@ export class PgCarrier {
    * and answers whether it went. A bind left open is dropped, and the query
    * fails; one with nothing written fails at once, on the next `next()`.
    * Panics when no build is open.
+   *
+   * @returns True when bytes for the group go to the server, even when the
+   *   query itself was dropped and will end `PG_CARRIER_FAILED`; false when
+   *   nothing was written and the query fails.
    */
   send(): boolean {
     const q: i32 = this.building
@@ -418,6 +546,10 @@ export class PgCarrier {
    * connect timeout is checked here, so the program's `wait` timeout bounds
    * how late it fires. Panics while a `PG_CARRIER_BUILD` is unsent.
    * `PG_CARRIER_NONE` once the carrier is closed, which connects nothing.
+   * The call first frees the query whose final event it answered last.
+   *
+   * @returns One of the `PG_CARRIER_*` events, `PG_CARRIER_NONE` to stop
+   *   calling until the handler's next turn.
    */
   next(): i32 {
     if (this.closed) {

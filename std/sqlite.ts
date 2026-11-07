@@ -1,5 +1,6 @@
 /**
- * `std/sqlite` — SQLite, the database in a file, from a Nish program.
+ * `nish/sqlite` (the file `std/sqlite.ts`) — SQLite, the database in a file,
+ * from a Nish program.
  *
  *     import { openDatabase, OPEN_READWRITE, OPEN_CREATE } from "nish/sqlite"
  *
@@ -10,6 +11,15 @@
  *     insert.step().expect("insert")
  *     insert.reset().expect("reset")
  *
+ *     const rows = db.prepare("SELECT id, name FROM t ORDER BY id").expect("prepare")
+ *     const buf = new Array<u8>(64)
+ *     while (rows.step().expect("step")) {
+ *       const n = rows.columnInto(1, buf, 0).expect("name")
+ *       // n > buf.length means nothing was copied: grow buf and read again
+ *       console.log(`${rows.columnI64(0)} ${String.fromBytes(buf, 0, n)}`)
+ *     }
+ *     db.close().expect("close")  // finalizes `insert` and `rows` too
+ *
  * It is the SQLite C library, vendored in `runtime/sqlite/` and linked into a
  * program that imports this module (`scripts/build.sh`), with one small C
  * adapter beside it (`runtime/sqlite/nish-sqlite.c`). A connection and a
@@ -18,9 +28,9 @@
  * `finalize` answers `MISUSE` instead of reaching freed memory.
  *
  * **The loop allocates nothing.** Every call a row makes — bind, `step`,
- * `reset`, `columnI64`, `columnF64`, `columnInto` — answers a `Result` of two
- * scalars, which travels as one machine word, and copies nothing but what it
- * is asked for: `columnInto` copies a text or blob column into the caller's
+ * `reset`, `columnI64`, `columnF64`, `columnInto` — answers a bare scalar or a
+ * `Result` of two scalars, which travels as one machine word, and copies
+ * nothing but what it is asked for: `columnInto` copies a text or blob column into the caller's
  * `u8[]` with one `memcpy`. `columnText` is the convenience that allocates a
  * string. Building a `SqliteError` allocates, which is why the hot calls answer
  * the bare result code and `error(code)` builds the message only for the
@@ -29,7 +39,10 @@
  * **Results are SQLite's own codes**, extended (`SQLITE_CONSTRAINT_UNIQUE`
  * rather than `SQLITE_CONSTRAINT`), so a program can compare them with the
  * constants below or with SQLite's documentation. `SqliteError.code` is the
- * primary code, the low byte.
+ * primary code, the low byte. `openDatabase` and `prepare` answer a built
+ * `SqliteError`, since they run once and the caller nearly always wants the
+ * message; every other call answers `Err` with the bare extended code, and
+ * `Database.error` or `Statement.error` turns it into a `SqliteError`.
  *
  * **Closing is explicit.** `close` finalizes every statement the connection
  * still has, so a statement never outlives its database; `finalize` frees one
@@ -151,7 +164,11 @@ export const OPEN_MEMORY: i32 = 0x80
 /** Refuse a path whose last component is a symbolic link. */
 export const OPEN_NOFOLLOW: i32 = 0x01000000
 
-/** The SQLite version linked in, such as `3.50.4`. */
+/**
+ * The version of the SQLite library linked into this program.
+ *
+ * @returns The version string, such as `3.50.4`.
+ */
 export const sqliteVersion = (): string => sqlite3_libversion()
 
 /** A failure, with SQLite's message for it. Built only when asked for, by `error(code)`. */
@@ -163,6 +180,13 @@ export class SqliteError {
   /** SQLite's message, such as `UNIQUE constraint failed: t.id`. */
   message: string
 
+  /**
+   * Builds the error from an extended code, keeping its low byte as `code`.
+   *
+   * @param extendedCode The extended result code, such as 2067 for
+   *   `SQLITE_CONSTRAINT_UNIQUE`; a primary code is its own extended code.
+   * @param message The text to report, usually SQLite's message for the code.
+   */
   constructor(extendedCode: i32, message: string) {
     this.code = extendedCode & 0xff
     this.extendedCode = extendedCode
@@ -197,7 +221,12 @@ const messageFor = (code: i32, connection: string): string => {
  * `OPEN_READWRITE` or `OPEN_READWRITE | OPEN_CREATE`, with any of `OPEN_URI`,
  * `OPEN_MEMORY` and `OPEN_NOFOLLOW`; anything else is `SQLITE_MISUSE`. The
  * path `:memory:` is a database of its own that lives as long as the
- * connection.
+ * connection. A failed open leaves nothing open behind it.
+ *
+ * @param path The file to open, a `file:` URI under `OPEN_URI`, or `:memory:`.
+ * @param flags The `OPEN_*` bits, combined with `|`.
+ * @returns The connection, or a `SqliteError` with SQLite's code and message,
+ *   such as `SQLITE_CANTOPEN` for a file that cannot be opened.
  */
 export const openDatabase = (path: string, flags: i32): Result<Database, SqliteError> => {
   const h: i32 = nishsqlite_open(path, flags)
@@ -212,26 +241,53 @@ export class Database {
   /** The adapter's handle; 0 names nothing. */
   private handle: i32
 
+  /**
+   * Wraps an adapter handle. A program gets a `Database` from `openDatabase`
+   * rather than building one; a handle that names no connection makes every
+   * call answer `SQLITE_MISUSE`.
+   *
+   * @param handle The adapter's connection handle.
+   */
   constructor(handle: i32) {
     this.handle = handle
   }
 
-  /** Runs every statement of `sql` in turn, discarding any rows. */
+  /**
+   * Runs every statement of `sql` in turn, discarding any rows. It stops at
+   * the first statement that fails, so the ones before it have run.
+   *
+   * @param sql One or more SQL statements, separated by `;`.
+   * @returns `Ok()`, or `Err` with the extended result code of the failure.
+   */
   exec(sql: string): Result<void, i32> {
     return done(nishsqlite_exec(this.handle, sql))
   }
 
-  /** `exec("BEGIN")`. */
+  /**
+   * Starts a transaction: `exec("BEGIN")`.
+   *
+   * @returns `Ok()`, or `Err` with the extended result code, such as
+   *   `SQLITE_ERROR` inside a transaction already.
+   */
   begin(): Result<void, i32> {
     return this.exec("BEGIN")
   }
 
-  /** `exec("COMMIT")`. */
+  /**
+   * Commits the open transaction: `exec("COMMIT")`.
+   *
+   * @returns `Ok()`, or `Err` with the extended result code, such as
+   *   `SQLITE_BUSY` when another connection holds the lock.
+   */
   commit(): Result<void, i32> {
     return this.exec("COMMIT")
   }
 
-  /** `exec("ROLLBACK")`. */
+  /**
+   * Undoes the open transaction: `exec("ROLLBACK")`.
+   *
+   * @returns `Ok()`, or `Err` with the extended result code.
+   */
   rollback(): Result<void, i32> {
     return this.exec("ROLLBACK")
   }
@@ -239,7 +295,12 @@ export class Database {
   /**
    * Compiles the first statement of `sql`, to be bound, stepped and reset as
    * often as wanted; text after it is ignored. Text with no statement in it is
-   * `SQLITE_MISUSE`.
+   * `SQLITE_MISUSE`. The statement belongs to this connection, and `close`
+   * finalizes it.
+   *
+   * @param sql The statement, with `?` or `?N` for each parameter.
+   * @returns The statement, or a `SqliteError` with the code and message, such
+   *   as a syntax error's `SQLITE_ERROR`.
    */
   prepare(sql: string): Result<Statement, SqliteError> {
     const s: i32 = nishsqlite_prepare(this.handle, sql)
@@ -249,22 +310,46 @@ export class Database {
     return Ok(new Statement(s))
   }
 
-  /** The error for `code`, which this connection's last call answered. Ask before the next call. */
+  /**
+   * The error for `code`, which this connection's last call answered. Ask
+   * before the next call, since the next call replaces the connection's
+   * message. Allocates the `SqliteError`.
+   *
+   * @param code The extended result code an `Err` carried.
+   * @returns The error, with SQLite's message for it.
+   */
   error(code: i32): SqliteError {
     return new SqliteError(code, messageFor(code, nishsqlite_errmsg(this.handle)))
   }
 
-  /** The rowid of the last row an INSERT on this connection made, 0 before any. */
+  /**
+   * The rowid of the last row an INSERT on this connection made.
+   *
+   * @returns The rowid, or 0 before any INSERT and for a closed connection.
+   */
   lastInsertRowid(): i64 {
     return nishsqlite_last_insert_rowid(this.handle)
   }
 
-  /** The rows the last INSERT, UPDATE or DELETE changed. */
+  /**
+   * How many rows the last INSERT, UPDATE or DELETE on this connection
+   * changed.
+   *
+   * @returns The row count, or 0 for a closed connection.
+   */
   changes(): i64 {
     return nishsqlite_changes(this.handle)
   }
 
-  /** Finalizes every statement of this connection and closes it; the handles name nothing after. */
+  /**
+   * Finalizes every statement of this connection and closes it; the handles
+   * name nothing after. A close that fails has still finalized the
+   * statements, but leaves the connection open, its message readable through
+   * `error`.
+   *
+   * @returns `Ok()`, or `Err` with the extended result code, such as
+   *   `SQLITE_MISUSE` for a connection already closed.
+   */
   close(): Result<void, i32> {
     return done(nishsqlite_close(this.handle))
   }
@@ -278,46 +363,109 @@ export class Statement {
   /** The adapter's handle. */
   private handle: i32
 
+  /**
+   * Wraps an adapter handle. A program gets a `Statement` from
+   * `Database.prepare` rather than building one; a handle that names no
+   * statement makes every call answer `SQLITE_MISUSE` or a NULL column.
+   *
+   * @param handle The adapter's statement handle.
+   */
   constructor(handle: i32) {
     this.handle = handle
   }
 
-  /** Binds an integer to parameter `i`. */
+  /**
+   * Binds an integer to parameter `i`.
+   *
+   * @param i The parameter's index, from 1.
+   * @param v The value.
+   * @returns `Ok()`, or `Err` with `SQLITE_RANGE` for an index the statement
+   *   has no parameter at, `SQLITE_MISUSE` for a finalized statement or one
+   *   mid-run (step it to the end or `reset` it first).
+   */
   bindI64(i: i32, v: i64): Result<void, i32> {
     return done(nishsqlite_bind_i64(this.handle, i, v))
   }
 
-  /** Binds a floating-point value to parameter `i`. */
+  /**
+   * Binds a floating-point value to parameter `i`.
+   *
+   * @param i The parameter's index, from 1.
+   * @param v The value.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   */
   bindF64(i: i32, v: f64): Result<void, i32> {
     return done(nishsqlite_bind_f64(this.handle, i, v))
   }
 
-  /** Binds SQL NULL to parameter `i`. */
+  /**
+   * Binds SQL NULL to parameter `i`.
+   *
+   * @param i The parameter's index, from 1.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   */
   bindNull(i: i32): Result<void, i32> {
     return done(nishsqlite_bind_null(this.handle, i))
   }
 
-  /** Binds `text` to parameter `i`; SQLite copies it. */
+  /**
+   * Binds `text` to parameter `i`; SQLite copies it, so the string need not
+   * outlive the call. The text ends at its first NUL.
+   *
+   * @param i The parameter's index, from 1.
+   * @param text The value.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   */
   bindText(i: i32, text: string): Result<void, i32> {
     return done(nishsqlite_bind_text(this.handle, i, text))
   }
 
-  /** Binds `buf[off, off + len)` as text, copied; a window outside `buf` is `SQLITE_MISUSE`. */
+  /**
+   * Binds `buf[off, off + len)` as text, copied, so `buf` may change after
+   * the call; a window outside `buf` is `SQLITE_MISUSE`. The bytes should be
+   * UTF-8 and may hold a NUL.
+   *
+   * @param i The parameter's index, from 1.
+   * @param buf The bytes to read from.
+   * @param off Where the text starts in `buf`, in bytes.
+   * @param len The text's length in bytes.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   */
   bindTextBytes(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32> {
     return done(nishsqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 0))
   }
 
-  /** Binds `buf[off, off + len)` as a blob, copied; a window outside `buf` is `SQLITE_MISUSE`. */
+  /**
+   * Binds `buf[off, off + len)` as a blob, copied, so `buf` may change after
+   * the call; a window outside `buf` is `SQLITE_MISUSE`.
+   *
+   * @param i The parameter's index, from 1.
+   * @param buf The bytes to read from.
+   * @param off Where the blob starts in `buf`, in bytes.
+   * @param len The blob's length in bytes.
+   * @returns `Ok()`, or `Err` with the code, as for `bindI64`.
+   */
   bindBlob(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32> {
     return done(nishsqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 1))
   }
 
-  /** Clears every parameter back to NULL. */
+  /**
+   * Clears every parameter back to NULL. `reset` keeps the bindings, so this
+   * is the call for a run that must not see the last one's values.
+   *
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for a finalized statement.
+   */
   clearBindings(): Result<void, i32> {
     return done(nishsqlite_clear_bindings(this.handle))
   }
 
-  /** Runs the statement to its next row: `true` with a row to read, `false` when it has finished. */
+  /**
+   * Runs the statement to its next row. Call `reset` to run it again from
+   * the start, with the same bindings.
+   *
+   * @returns `true` with a row to read, `false` when it has finished, or `Err`
+   *   with the extended result code, such as `SQLITE_CONSTRAINT_UNIQUE`.
+   */
   step(): Result<boolean, i32> {
     const rc: i32 = nishsqlite_step(this.handle)
     if (rc === SQLITE_ROW) {
@@ -329,42 +477,94 @@ export class Statement {
     return Err(rc)
   }
 
-  /** Rewinds the statement to run again, keeping its bindings. */
+  /**
+   * Rewinds the statement to run again, keeping its bindings. A failure of
+   * the last `step` is not answered again here: `step` already answered it.
+   *
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for a finalized statement.
+   */
   reset(): Result<void, i32> {
     return done(nishsqlite_reset(this.handle))
   }
 
-  /** Frees the statement; its handle names nothing after. */
+  /**
+   * Frees the statement early; its handle names nothing after. Without this,
+   * `Database.close` frees it.
+   *
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for a statement already
+   *   finalized or whose connection is closed.
+   */
   finalize(): Result<void, i32> {
     return done(nishsqlite_finalize(this.handle))
   }
 
-  /** The number of columns a row has. */
+  /**
+   * The number of columns a row of this statement has, known from `prepare`
+   * on, before the first `step`.
+   *
+   * @returns The column count, or 0 for a statement that returns no rows (an
+   *   INSERT, say) and for a finalized one.
+   */
   columnCount(): i32 {
     return nishsqlite_column_count(this.handle)
   }
 
-  /** The type of column `c` in this row, `SQLITE_INTEGER` to `SQLITE_NULL`; `SQLITE_NULL` for a column that is not there. */
+  /**
+   * The type of column `c` in the current row.
+   *
+   * @param c The column's index, from 0.
+   * @returns One of `SQLITE_INTEGER` to `SQLITE_NULL`; `SQLITE_NULL` for a
+   *   column that is not there or when no row is current.
+   */
   columnType(c: i32): i32 {
     return nishsqlite_column_type(this.handle, c)
   }
 
-  /** Column `c` as an integer, converted as SQLite converts; 0 for NULL or a column that is not there. */
+  /**
+   * Column `c` of the current row as an integer, converted as SQLite
+   * converts (text `"12abc"` is 12, a float is truncated).
+   *
+   * @param c The column's index, from 0.
+   * @returns The value; 0 for NULL, a column that is not there, or when no
+   *   row is current.
+   */
   columnI64(c: i32): i64 {
     return nishsqlite_column_i64(this.handle, c)
   }
 
-  /** Column `c` as a floating-point value; 0 for NULL or a column that is not there. */
+  /**
+   * Column `c` of the current row as a floating-point value, converted as
+   * SQLite converts.
+   *
+   * @param c The column's index, from 0.
+   * @returns The value; 0 for NULL, a column that is not there, or when no
+   *   row is current.
+   */
   columnF64(c: i32): f64 {
     return nishsqlite_column_f64(this.handle, c)
   }
 
-  /** The bytes `columnInto` would copy for column `c`. */
+  /**
+   * How many bytes `columnInto` would copy for column `c`: a blob's length,
+   * or anything else's length as text. Ask it to size a buffer before the
+   * copy.
+   *
+   * @param c The column's index, from 0.
+   * @returns The length in bytes, without a terminating NUL; 0 for NULL, a
+   *   column that is not there, or when no row is current.
+   */
   columnBytes(c: i32): i32 {
     return nishsqlite_column_bytes(this.handle, c)
   }
 
-  /** Column `c` as a new string, cut at its first NUL; `null` for NULL or a column that is not there. Allocates. */
+  /**
+   * Column `c` of the current row as a new string, cut at its first NUL.
+   * Allocates on every call; `columnInto` is the call for a hot loop.
+   *
+   * @param c The column's index, from 0.
+   * @returns The text, or `null` for NULL, a column that is not there, or
+   *   when no row is current.
+   */
   columnText(c: i32): string | null {
     return nishsqlite_column_text(this.handle, c)
   }
@@ -375,6 +575,13 @@ export class Statement {
    * a length larger than `buf.length - at` means nothing was written and
    * says how much room is needed. `SQLITE_RANGE` for a column that is not
    * there, `SQLITE_MISUSE` for an `at` outside `0..buf.length`.
+   *
+   * @param c The column's index, from 0.
+   * @param buf The caller's buffer, written in place.
+   * @param at Where in `buf` the copy starts, in bytes.
+   * @returns The column's length in bytes (0 for NULL, or when no row is
+   *   current), or `Err` with `SQLITE_RANGE`, `SQLITE_MISUSE`, or
+   *   `SQLITE_NOMEM` when SQLite cannot convert the value to text.
    */
   columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32> {
     const n: i32 = nishsqlite_column_into(this.handle, c, buf, toU64(buf.length), at)
@@ -384,7 +591,14 @@ export class Statement {
     return Ok(n)
   }
 
-  /** The error for `code`, which this statement's last call answered. Ask before the next call. */
+  /**
+   * The error for `code`, which this statement's last call answered. Ask
+   * before the next call, since the next call on the connection replaces its
+   * message. Allocates the `SqliteError`.
+   *
+   * @param code The extended result code an `Err` carried.
+   * @returns The error, with SQLite's message for it.
+   */
   error(code: i32): SqliteError {
     return new SqliteError(code, messageFor(code, nishsqlite_stmt_errmsg(this.handle)))
   }
