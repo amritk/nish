@@ -583,7 +583,8 @@ select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord)
 ```
 
 `<select>` is the query for one key, which it reads as `q.key`:
-`select a.title from articles a where a.slug = q.key`. Each distinct key is
+`select a.title from articles a where a.slug = q.key`. (Under [`sorted` false](#skipping-the-ordinal-sort), the `order by q.ord`
+goes.) Each distinct key is
 bound once however many requests ask for it, and each row goes back to every
 one of them. The one exception is keys chosen to collide in the batcher's
 table: past 1024 slots of probing a key is bound again rather than found,
@@ -646,6 +647,37 @@ execution failed (the rows it had may be incomplete). Call it until it answers
 `PG_BATCH_NONE` after every `row`, `end` and `fail`, before the connection's
 next event: a row's columns are read from the connection, where they last only
 until then.
+
+### Skipping the ordinal sort
+
+The `order by q.ord` is what lets a request's last event come early: once a
+row for a later key arrives, every earlier key is finished. It costs the
+server a Sort node over the whole result. Set `sorted` to `false` and the
+statement has no `order by` at all, or ` order by <orderBy>` alone when
+`orderBy` is set:
+
+```sql
+select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord)
+  cross join lateral (<select>) as t[ order by <orderBy>]
+```
+
+```ts
+config.sorted = false; // the default is true: ordered by q.ord, as above
+```
+
+Rows then come in whatever order the plan gives them, and each is answered
+at once, a `PG_BATCH_ROW` for every request of its key. No last event comes
+before the execution ends: after `end`, each request gets `PG_BATCH_DONE` if
+its key had a row or `PG_BATCH_MISSING` if not, in key order, then request
+order. A `fail` gives every request one `PG_BATCH_FAILED`, those whose key
+already had rows too. So a request holds its rows until the whole batch is
+done; choose this when the batch is answered as a whole anyway, or the sort
+is what dominates the execution.
+
+A non-empty `orderBy` still sorts the whole result by it, so the Sort node
+stays. To drop every sort, leave `orderBy` empty and order a key's rows
+yourself, as they arrive. The live suite's `explain` scenario
+(`tests/postgres/live`) checks that the plan has no Sort node.
 
 - **Caps.** `maxRequests` (32, at most 65536) bounds the requests one execution answers;
   `maxBytes` (32 KiB) the key array's text; `queueSize` (1024) the requests

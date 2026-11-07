@@ -81,6 +81,16 @@ reverse does not hold: `nish` is the authority, as the reference's
 but `Math.min`, `max` and `hypot` take exactly two arguments, and the float
 functions want an `f64`, as [Types](../language/types.md#math) shows.
 
+Functions carry over with more of TypeScript than the program above shows.
+A parameter may have a default (`by: i32 = 2`) and the last one may be a
+rest parameter (`...xs: i32[]`); an arrow written as a call's argument may
+read the `const` locals and parameters around it; `async` functions and
+`await` compile, as long as each call is awaited where it is made; and an
+entry file may skip `main` and write its statements at the top level. See
+[Functions](../language/functions.md),
+[Async functions](../language/async.md) and
+[Your first program](first-program.md#without-main).
+
 Each refusal below gives the error code the compiler reports.
 
 ## `number` is an integer

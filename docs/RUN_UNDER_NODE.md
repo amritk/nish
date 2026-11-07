@@ -27,16 +27,28 @@ host — see the guide's [Back to TypeScript](guide/using-nish/to-typescript.md)
 
 ```bash
 node --experimental-strip-types --import ./runtime/nish.mjs \
-  -e 'const m = await import("./prog.ts"); process.exit(m.main())'
+  -e 'const m = await import("./prog.ts"); const code = await m.main();
+      await (await import("nish:async")).settleTasks(); process.exit(code)'
 ```
 
 The `-e` is needed because an Nish program exports `main` rather than
 running anything at top level: `node … prog.ts` would load the module, never
 call `main`, print nothing and exit 0. The one-liner imports the module and calls
 `main` itself, which is what the native binary's entry point does, and exits
-with what `main` returns (0 for a `main` that returns `void`). It is the form
-`tests/differential/unmodified.js` runs. The import path is resolved from the
-current directory, so keep the `./`.
+with what `main` returns (0 for a `main` that returns `void`). An `async`
+`main` answers a promise, so the one-liner awaits it, and then waits for every
+task `spawn` started (`settleTasks`, from `nish:async` as the hook answers it),
+as the native driver drains its queue before the process exits; for a plain
+`main` both are no-ops. It is the form `tests/differential/unmodified.js`
+runs. The import path is resolved from the current directory, so keep the
+`./`.
+
+An async program runs on Node's own async/await, so its tasks resume in
+Node's order, not the native one: an `await` always yields to the microtask
+queue, and `spawn(f(x))` runs `f` only to its first `await`, where the native
+build runs it until it first waits on the outside world. A program whose output
+depends on that interleaving (`tests/cases/async_spawn`) prints the same lines
+in another order; see `docs/LANGUAGE.md`, "Where it is not Node".
 
 The program must be an ES module to Node, which an Nish program always
 is — the language has `import`/`export` and no CommonJS at all. This package is
