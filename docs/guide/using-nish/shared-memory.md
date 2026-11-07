@@ -15,7 +15,7 @@ on a different core without a socket or a system call per message.
 | to sleep until another process says there is work | [`popWait`, or `waitI32` and `wake`](#sleeping-until-there-is-work) |
 
 The rules are in the reference,
-[Shared memory between processes](../../LANGUAGE.md#shared-memory-between-processes-nishsyncshm-and-nishsyncring).
+[Shared memory between processes](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#shared-memory-between-processes-nishsyncshm-and-nishsyncring).
 Both modules are native only, and a program that imports neither is
 unchanged.
 
@@ -48,7 +48,7 @@ export const main = (): i32 => {
 - **The name outlives the processes.** It stays (in `/dev/shm` on Linux) until
   `unlinkRegion`, even if every process has exited, so a program killed
   before it unlinks leaves it behind. Unlink a stale one before creating, as
-  [`examples/prefork-jobs.ts`](../../../examples/prefork-jobs.ts) does. The
+  [`examples/prefork-jobs.ts`](https://github.com/amritk/nish/blob/main/examples/prefork-jobs.ts) does. The
   mapping itself goes away with `close()` or when the process exits.
 - **A name somebody else made is refused.** `createRegion` fails with
   `SHM_EXISTS` when the name exists, whoever made it; `openRegion` fails with
@@ -138,7 +138,7 @@ export const main = (): i32 => {
   their kin in [`nish/bytes`](standard-library.md) read and write fields.
 
 The repository's
-[`examples/prefork-jobs.ts`](../../../examples/prefork-jobs.ts) puts it
+[`examples/prefork-jobs.ts`](https://github.com/amritk/nish/blob/main/examples/prefork-jobs.ts) puts it
 together: four prefork workers send jobs to a fifth on one `MpscRing`, and
 each gets its answers back on an `SpscRing` of its own.
 

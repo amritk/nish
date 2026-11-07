@@ -5,7 +5,7 @@ function that can fail says so in its return type by returning a
 `Result<T, E>`, and the compiler makes every caller decide what happens to the
 failure before it can touch the success value. The rules here are defined in
 the reference under
-[Result and error handling](../../LANGUAGE.md#result-and-error-handling).
+[Result and error handling](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#result-and-error-handling).
 
 ## A function that can fail
 
@@ -221,7 +221,7 @@ and `orReturn()` cover what they are for.
 ## It still type-checks as TypeScript
 
 Every program on this page is valid TypeScript. With the declarations in
-[`runtime/nish.d.ts`](../../../runtime/nish.d.ts) on the include path, `tsc`
+[`runtime/nish.d.ts`](https://github.com/amritk/nish/blob/main/runtime/nish.d.ts) on the include path, `tsc`
 and your editor model `Result` as a tagged union and refuse `r.value` before a
 test, just as `nish` does. `nish` stays the authority: `tsc` cannot see that a
 `Result` was dropped, or that `orReturn()` returns early.

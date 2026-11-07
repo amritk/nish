@@ -101,7 +101,7 @@ is freestanding — no C library — so functions that take or return strings, o
 do I/O, are not callable from it; the generated `.d.ts` lists them as
 comments. A whole program that does need them can be built for WASI instead,
 with `nish app.ts --link app.wasm --profile wasi` (which needs a WASI sysroot;
-see [INSTALL.md](../../INSTALL.md#wasi-optional-for---profile-wasi)), and run
+see [INSTALL.md](https://github.com/amritk/nish/blob/main/docs/INSTALL.md#wasi-optional-for---profile-wasi)), and run
 under any WASI host.
 
 **Cross the boundary once per batch, not once per element.** A call into a
@@ -152,7 +152,7 @@ a buffer of your own.
 
 A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
-[Interop](../../LANGUAGE.md#interop) for which `Result`s each host takes.
+[Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
 
 ## Calling C from Nish: `declare function`
 
@@ -424,10 +424,10 @@ then releases the arenas. A panic or `process.exit` ends
 the process without the close; the operating system takes the descriptor
 back, but a bounds panic does not flush what C still buffers, so call
 `fflush` on a `FILE *` you wrote before code that may panic. The rules are in
-[A handle class](../../LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
+[A handle class](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
 
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and
 everything that calls it. The rules are in
-[Calling C](../../LANGUAGE.md#calling-c).
+[Calling C](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#calling-c).

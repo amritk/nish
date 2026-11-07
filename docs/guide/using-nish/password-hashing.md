@@ -6,7 +6,7 @@ PHP's `password_hash` and the bcrypt packages for Node, Python and Go all read
 and write. A hash made here verifies there, and the other way round, but for
 the few unusual passwords [below](#what-bcrypt-reads-of-a-password).
 
-The password is a `Secret<u8[]>` ([Secrets](../../LANGUAGE.md#secrets-nishsecret)),
+The password is a `Secret<u8[]>` ([Secrets](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret)),
 so the compiler keeps it out of logs and templates. The hash is computed inside
 `exposeWith`, and the Blowfish state it builds (about 4 KB) is wiped before the
 function returns. A verify compares the two hashes in constant time.
@@ -93,7 +93,7 @@ implementations answer otherwise for a few passwords: one with a NUL byte, one
 over 72 bytes, or one whose 8-bit bytes each follow only 0xff bytes in their
 four-byte key word (such as `\xff\xff\xa3`) under `$2a$`. A hash another implementation made of such a
 password may not verify here; the
-[interoperability table](../../security/crypto-bcrypt.md#interoperability) in
+[interoperability table](https://github.com/amritk/nish/blob/main/docs/security/crypto-bcrypt.md#interoperability) in
 the security record says which, implementation by implementation. Text in
 UTF-8 never holds the third kind. A `$2x$` hash
 comes from a known-buggy implementation and is refused: such a hash cannot be
@@ -193,7 +193,7 @@ up to four passwords, with 64 bytes of salts.
 How many lanes are fastest per hash depends on the core: a core that issues
 more instructions a cycle gains from wider batches, and on one Xeon five and
 six lanes were no faster than four while on a newer one six were fastest
-([the measurements](../../security/crypto-bcrypt.md#bmi2-and-x86-64-v3-measured-not-built)).
+([the measurements](https://github.com/amritk/nish/blob/main/docs/security/crypto-bcrypt.md#bmi2-and-x86-64-v3-measured-not-built)).
 So measure it rather than pick a number. `bcryptCalibrate()` times
 each width from one to six on throwaway passwords and returns the fastest. It
 takes a few tens of milliseconds and keeps nothing, so call it once, at
@@ -212,7 +212,7 @@ export const main = (): i32 => {
 
 A task may call the batch too: the `Secret` it makes its state in comes from
 an array the call made, so its wipe is the task's own scratch
-([BCRYPT-9](../../security/crypto-bcrypt.md#findings)).
+([BCRYPT-9](https://github.com/amritk/nish/blob/main/docs/security/crypto-bcrypt.md#findings)).
 
 ## A login batcher
 
@@ -298,7 +298,7 @@ one, so the batches fill by themselves; at light load each login runs alone
 on a core, as a task per login would.
 
 The hold lets a part batch wait up to `holdNanos` to fill before it goes. In
-[the measurements](../../security/crypto-bcrypt.md#the-login-batcher-measured)
+[the measurements](https://github.com/amritk/nish/blob/main/docs/security/crypto-bcrypt.md#the-login-batcher-measured)
 a 5 ms hold beat a hold of 0 nowhere and added its 5 ms to light-load
 latency, since under load the logins that arrive during one run fill the next.
 Start from 0.
@@ -316,4 +316,4 @@ bursts or at your servers' limit, batch them.
 `run` blocks its thread until every task has finished, about one batch: run
 the batcher on a thread other than the event loop's. A request is wiped only
 once it has run, so call `run` until `pending()` is 0 before dropping a
-batcher ([BCRYPT-11](../../security/crypto-bcrypt.md#findings)).
+batcher ([BCRYPT-11](https://github.com/amritk/nish/blob/main/docs/security/crypto-bcrypt.md#findings)).

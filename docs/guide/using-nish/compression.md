@@ -6,7 +6,7 @@ gzip (RFC 1952), zlib (RFC 1950) and the raw DEFLATE stream (RFC 1951) inside
 both. `nish/compress/checksum` holds their checksums, CRC-32 and Adler-32.
 `nish/net/http-compress` puts gzip on an HTTP response. They are written in
 Nish and imported like any other library module
-([`export` and `import`](../../LANGUAGE.md#export-and-import)); what they
+([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)); what they
 write, Node's `zlib`, browsers and `gunzip` read, and what those write, they
 read.
 
@@ -305,7 +305,7 @@ holds a CSRF token or a session id and also echoes text from the request lets
 an attacker who can make requests learn the secret from the compressed length,
 a byte at a time (the BREACH attack). Compress responses that carry no secret,
 or none that sits beside attacker-controlled text; the record is
-[docs/security/compress.md](../../security/compress.md).
+[docs/security/compress.md](https://github.com/amritk/nish/blob/main/docs/security/compress.md).
 
 ## Checksums
 

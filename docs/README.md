@@ -103,6 +103,14 @@ who write programs in Nish. A page there follows these rules:
   that section does not say; where the two disagree, the guide is wrong.
 - **No links to the compiler's records**: not to `wp*.md`,
   `MASTER_PLAN.md` or `.claude/`.
+- **Outside the guide is a GitHub link.** The site serves the guide's pages
+  and nothing else: a relative link to any other file of the repository —
+  the reference, `INSTALL.md`, a security record, a source file — downloads
+  that file there instead of opening it. So a guide page links one as
+  `https://github.com/amritk/nish/blob/main/<path>` (`tree/main/` for a
+  directory), anchor and all, and links other guide pages relatively.
+  `node docs/check-links.mjs` checks those URLs against the files here and
+  refuses a relative link out of the guide.
 - **Every page has a route.** The site's navigation is
   [`scalar.config.json`](../scalar.config.json) at the repository root, read
   by [Scalar Docs](https://scalar.com/products/docs); a new page gets a route
@@ -113,6 +121,8 @@ who write programs in Nish. A page there follows these rules:
 
 - `docs/cookbook/regen.sh` rebuilds every IR listing in IR_COOKBOOK.md from
   `docs/cookbook/*.ts`; `--check` fails when the doc is stale.
-- `node docs/check-links.mjs` verifies every relative link and heading
-  anchor in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`, and that
+- `node docs/check-links.mjs` verifies every relative link, every link to
+  this repository at `github.com/amritk/nish/blob/main/`, and their heading
+  anchors in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`; that no guide
+  page links out of `docs/guide/` relatively; and that
   `scalar.config.json`'s routes and the pages under `docs/guide/` match.

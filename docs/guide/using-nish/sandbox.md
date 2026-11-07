@@ -9,7 +9,7 @@ reach — for your Nish code, your dependencies, every C function you call and
 every C constructor alike.
 
 The rules are in the reference, under
-[The sandbox](../../LANGUAGE.md#the-sandbox).
+[The sandbox](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-sandbox).
 
 ## Building a sandboxed program
 
@@ -137,7 +137,7 @@ with exit status 2. A directory with a comma in its name cannot be named.
 
 A dependency under `node_modules` needs your `package.json` to grant it
 `fs.read`, `fs.write`, `net`, `process.spawn`, `ffi` or `unsafe` (see
-[A dependency's capabilities](../../LANGUAGE.md#a-dependencys-capabilities)).
+[A dependency's capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-dependencys-capabilities)).
 The grant can name what it is for, after an `=`: a directory for `fs.read`
 and `fs.write`, a program for `process.spawn`, an IP address (or a Unix
 socket's absolute path, such as `net=/run/app.sock`) for `net`.

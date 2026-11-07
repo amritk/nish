@@ -12,6 +12,16 @@
 // to approximate it). A bare `#fragment` refers to the current file. Absolute
 // paths and directories are allowed as targets.
 //
+// A link to this repository on github.com at `main`
+// (`https://github.com/amritk/nish/blob/main/<path>`, or `tree/main/` for a
+// directory) is checked as the relative link to `<path>` would be: the file
+// must exist here and its `#fragment` must name a heading.
+//
+// The user guide is published on its own site, which serves only the guide's
+// pages and hands any other file it is linked to back as a download. So a
+// guide page links a file outside docs/guide/ by its GitHub URL, and a relative
+// link from a guide page that leaves docs/guide/ is reported.
+//
 // It also reads scalar.config.json, the navigation of the user guide's site:
 // every route's `filepath` must be an existing .md file, and every page under
 // docs/guide/ must be reached by some route, so a page cannot be written and
@@ -113,6 +123,10 @@ const slugsOf = (file) => {
 const INLINE = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const REFDEF = /^\s*\[[^\]]+\]:\s*(\S+)/
 
+// This repository's files on github.com, at main.
+const REPO_URL = /^https:\/\/github\.com\/amritk\/nish\/(?:blob|tree)\/main\/([^#?]*)(#.*)?$/
+const guideDir = path.join(root, "docs", "guide") + path.sep
+
 const problems = []
 let checked = 0
 for (const file of files) {
@@ -128,15 +142,26 @@ for (const file of files) {
     }
     for (let target of targets) {
       target = target.replace(/^<|>$/g, "")
-      if (/^(https?:|mailto:|tel:)/i.test(target)) {
+      const repo = REPO_URL.exec(target)
+      if (repo === null && /^(https?:|mailto:|tel:)/i.test(target)) {
         continue
       }
       checked++
-      const [pathPart, fragment] = target.split("#")
+      const [pathPart, fragment] = repo === null ? target.split("#") : [repo[1], repo[2]?.slice(1)]
       const where = `${path.relative(root, file)}:${index + 1}`
       let resolved = file
       if (pathPart) {
-        resolved = path.resolve(path.dirname(file), decodeURIComponent(pathPart))
+        resolved =
+          repo === null
+            ? path.resolve(path.dirname(file), decodeURIComponent(pathPart))
+            : path.join(root, decodeURIComponent(pathPart))
+        if (repo === null && file.startsWith(guideDir) && !resolved.startsWith(guideDir)) {
+          const rel = path.relative(root, resolved).split(path.sep).join("/")
+          problems.push(
+            `${where}: \`${target}\` leaves the user guide, whose site serves only guide pages; link https://github.com/amritk/nish/blob/main/${rel}${fragment !== undefined ? `#${fragment}` : ""} instead`
+          )
+          continue
+        }
         if (!fs.existsSync(resolved)) {
           problems.push(
             `${where}: broken link \`${target}\` (no such file: ${path.relative(root, resolved)})`
@@ -181,7 +206,6 @@ const walkRoutes = (routes, prefix) => {
   }
 }
 walkRoutes(JSON.parse(fs.readFileSync(scalarConfig, "utf8")).navigation.routes, "")
-const guideDir = path.join(root, "docs", "guide") + path.sep
 for (const page of files.filter((f) => f.startsWith(guideDir))) {
   if (!routed.has(page)) {
     problems.push(`${path.relative(root, page)}: no route in scalar.config.json reaches this guide page`)

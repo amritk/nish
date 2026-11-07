@@ -3,7 +3,7 @@
 Nish comes as one prebuilt compiler, the `nish` command. On its own it checks a
 program and writes LLVM IR. Building a native binary also needs LLVM, which is
 `clang` and the `lld` linker; LLVM 18 is the recommended version. This page
-installs both and checks that they work. [INSTALL.md](../../INSTALL.md) covers
+installs both and checks that they work. [INSTALL.md](https://github.com/amritk/nish/blob/main/docs/INSTALL.md) covers
 everything else: release tarballs, WebAssembly, building the compiler from
 source, and platforms with no prebuilt binary.
 
@@ -48,7 +48,7 @@ xcode-select --install
 
 Xcode's command-line tools are enough to build native binaries. For the
 WebAssembly targets, install Homebrew's LLVM instead, as
-[INSTALL.md](../../INSTALL.md#macos) describes.
+[INSTALL.md](https://github.com/amritk/nish/blob/main/docs/INSTALL.md#macos) describes.
 
 ## 2. Install the compiler
 
@@ -83,7 +83,7 @@ it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
 Nish is pre-alpha and changes between minor releases, so you may want to pin
 an exact version: end the install script's command with `| sh -s 0.20.0`,
 or run `npm install -g nish@0.20.0`. Read the
-[changelog](../../../CHANGELOG.md) before you upgrade.
+[changelog](https://github.com/amritk/nish/blob/main/CHANGELOG.md) before you upgrade.
 
 ### Checking where the download came from
 

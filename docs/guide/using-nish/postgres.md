@@ -6,7 +6,7 @@ the server's answers from an input buffer you fill, and tells you what
 happened, one event at a time. Your program owns the socket
 ([`nish:net`](networking.md)) and the loop, so one loop can drive many
 connections next to everything else it serves. It is imported like any other
-library module ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
+library module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
 It speaks protocol 3.0, which every PostgreSQL since 7.4 understands, and it is
 tested against exchanges recorded from PostgreSQL 18.
@@ -355,7 +355,7 @@ first binary parameter makes `bindEnd()` write a code for every parameter,
 two bytes each, which the bind keeps free under `maxOutput` from then on.
 
 Binary pays wherever the array is long. On PostgreSQL 18, with seven runs of
-[`bench/postgres/arrays.mjs`](../../../bench/postgres/arrays.mjs) (median, at
+[`bench/postgres/arrays.mjs`](https://github.com/amritk/nish/blob/main/bench/postgres/arrays.mjs) (median, at
 1,000 elements):
 
 | measure | type | text | binary | cut |
@@ -445,7 +445,7 @@ uses it ([below](#authentication)).
 
 ## Authentication
 
-The password is a `Secret<u8[]>` ([`nish:secret`](../../LANGUAGE.md#secrets-nishsecret)):
+The password is a `Secret<u8[]>` ([`nish:secret`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret)):
 the connection keeps its own copy, so the caller wipes theirs at once, and it
 wipes the copy once the proof is computed, or when the connection fails or is
 disposed. The nonce is 18 random bytes from
@@ -737,7 +737,7 @@ if (due && !asked && pool.request() >= 0) {
 // And pass min(timeout, the window left) to pollWait, so the loop wakes for it.
 ```
 
-[`tests/postgres/live/live.ts`](../../../tests/postgres/live/live.ts)'s
+[`tests/postgres/live/live.ts`](https://github.com/amritk/nish/blob/main/tests/postgres/live/live.ts)'s
 `batch` scenario drives three batchers through a pool against a live server.
 
 ### When to take: `PgBatchClock`
@@ -804,7 +804,7 @@ slot calls `started(slot, size, now)` or `release(slot)`, then
 `finished(slot, now)` when its batch is done.
 
 The fixed window stays the default until measurements against a live server
-say otherwise. [`bench/pg-batch-clock.ts`](../../../bench/pg-batch-clock.ts)
+say otherwise. [`bench/pg-batch-clock.ts`](https://github.com/amritk/nish/blob/main/bench/pg-batch-clock.ts)
 models a pool at three loads; there, the adaptive settings above match the
 better of a 10 ms and a 30 ms window at each.
 
@@ -920,7 +920,7 @@ batcher's name or SQL, or past 256 statements; `runInt` and
 request; `connection()` before an event named one; `send()` with no build
 open; and `next()` with one still open.
 
-[`tests/postgres/carrier.ts`](../../../tests/postgres/carrier.ts) is a whole
+[`tests/postgres/carrier.ts`](https://github.com/amritk/nish/blob/main/tests/postgres/carrier.ts) is a whole
 program that serves HTTP while a query sleeps on a live server.
 
 ## What it does not do

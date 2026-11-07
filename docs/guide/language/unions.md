@@ -5,7 +5,7 @@ interfaces, and a tag that says which. In Nish each variant records its tag in
 its first field, a `readonly` field of an
 [enum member type](types.md#enum-member-types), and the union reads that tag.
 The normative rules are in the reference's
-[Discriminated unions](../../LANGUAGE.md#discriminated-unions) section.
+[Discriminated unions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#discriminated-unions) section.
 
 ```ts nish:ok
 enum Kind {
