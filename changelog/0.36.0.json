@@ -1,0 +1,443 @@
+{
+  "version": "0.36.0",
+  "date": "2026-11-07",
+  "tag": "v0.36.0",
+  "range": {
+    "from": "v0.35.0",
+    "to": "720dda17"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-35-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.35.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "389de12"
+      ],
+      "pr": 1241,
+      "author": "github-actions[bot]",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "echo-webtransport-streams-after-the-client-s-address",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "echo WebTransport streams after the client's address changes",
+      "body": "Before this, a real-socket test carried stream data after a NAT rebinding only when the client's port changed. When its address changed, only datagrams were tested. The net_loopback WebTransport carrier now rebinds twice mid-session. First it moves to a new port on 127.0.0.1, then to 127.0.0.2. After each move it echoes eight rounds of a datagram and a new bidirectional stream. It then checks four things. The server validated the new path with a PATH_CHALLENGE. The server slot's whole 18-byte address, its address bytes and its port, equals the client's new address. The server's arena kept 0 bytes over the move. Nothing went to the old socket. The per-session 2 KiB arena band is unchanged. docs/wp34-hosting-cs.md now records #1210 as merged in #1218 and shipped in 0.35.0.\n\nFixes #1226",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_loopback",
+        "tests/link/net_loopback_f64"
+      ],
+      "commits": [
+        "33d93fa"
+      ],
+      "pr": 1239,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "benchmark-a-consumer-only-in-place-ring-mode",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "benchmark a consumer-only in-place ring mode",
+      "body": "`bench/ring-inplace` gains a third mode, `consumer`. It splits the in-place path into its two halves: the producer renders into a private buffer and calls `tryPush`, as `copy` does, and the consumer lends the record with `peek`, `sendBody` and `release`, as `inplace` does. The consumer pops a record only when it has wrapped round the end of the ring, since `peek` cannot lend one.\n\nThe mode is now checked once in `main` and again in the producer, and an unknown mode exits non-zero. `run.mjs` reports bands and comparison rows for all three modes, and a new `--ring-bytes` option sets the ring size.\n\nThe bench also has these fixes:\n- Every wait inside the run has a ten-second deadline. The drain and the reader had none.\n- A response head that finds the previous tail still queued now drains and retries. Before, it failed the run.\n- `body_bytes` prints to 2 decimals.\n- A `stalls` counter records those retries. It read 0 in both quick runs, but stalls do happen in full runs, and how often there was not measured.\n\nWhich half of the in-place path is worth adopting:\n- **The consumer half, at 10 KB.** It cuts consumer p50 by 14.8% with the 16 MiB ring and by 18.7% with the 1 MiB ring, with no measured pipeline difference. At 1 and 4 KB it makes no measured difference, apart from one 4 KB p99.\n- **The producer half, at no size measured.** With the 16 MiB ring, in place is slower than copied over the pipeline at every size. Its cost is inferred from consumer against in place, which differ only in the producer half.\n\nThe cache explanation is undecided at 4 and 10 KB. The 1 MiB ring, small enough for one core's 2 MiB L2, brings the in-place gap inside its band, but no band covers a change across ring sizes. At 1 KB the explanation is not supported. No cache misses were counted.",
+      "metrics": [
+        "consumer p50, consumer vs copied: +7.5% (±7.7%) / -3.2% (±9.0%) / -14.8% (±9.9%) at 1 / 4 / 10 KB with the 16 MiB ring, and +7.3% (±9.2%) / -7.3% (±13.5%) / -18.7% (±4.8%) with the 1 MiB ring. Pipeline, in place vs copied: +5.9% (±2.7%) / +3.8% (±2.5%) / +6.2% (±4.1%) at 16 MiB, and +7.8% (±5.3%) / +0.3% (±2.1%) / -0.8% (±2.0%) at 1 MiB. Pipeline, consumer vs in place at 16 MiB: -7.9% (±5.9%) / -2.8% (±1.9%) / -6.5% (±4.1%). 5 rounds x 2 runs x 50,000 messages per ring size. Intel Xeon @ 2.30 GHz, 4 CPUs, L2 2 MiB per core, L3 260 MiB. Consumer on CPU 0, producer on CPU 1, reader on CPU 2."
+      ],
+      "refs": [
+        "#1209",
+        "docs/wp47-shared-memory.md#records-copied-or-in-place"
+      ],
+      "tests": [
+        "node bench/ring-inplace/run.mjs --quick",
+        "node bench/ring-inplace/run.mjs --quick --ring-bytes 1048576"
+      ],
+      "commits": [
+        "1709792"
+      ],
+      "pr": 1237,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "mark-regex-internals-private-and-document-its-api",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark regex internals private and document its API",
+      "body": "`std/regex.ts` now shows only its API to the library reference. Of 220 class members, 169 that only their own class reads are `private`. 29 that another part of the module reads, such as the parser fields `Regex` compiles from and `Regex.build`, carry an `@internal` tag. The 22 public members are `Regex`'s `source`, `flags`, `groups`, `groupCount`, `groupIndex`, `test`, `exec`, `find`, `findAll`, `count`, `replace`, `replaceAll` and `split`, plus `RegexMatch`'s accessors.\n\nEvery public method, both constructors, `regexCompile` and `regexEscape` now say what each parameter and return value means: byte offsets, the -1 or \"\" a group that took no part gives, what `exec` leaves untouched on a miss, and the `regex: … at byte N` error. The six limit constants say that exceeding them is a compile error.\n\nThe compiler ignores visibility keywords, so no generated code changes. The one regenerated golden moves six `uncheckedGet` source positions, and its node ids and content are unchanged.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c5af49d"
+      ],
+      "pr": 1240,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-06"
+    },
+    {
+      "id": "mark-http-client-internals-private-and-document-its",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark http client internals private and document its API",
+      "body": "The HTTP client modules (`std/net/fetch.ts`, `http1-client-codec.ts`, `upstream.ts`, `outbound.ts`, `url.ts` and `websocket.ts`) now show only their API in the library reference. 92 members that only their own class uses are `private`. 55 that another part of the module or another std module reads, such as the response parser state the `http1Client*` helpers drive and the `WsDecoder` fields the websocket helpers read, carry an `@internal` tag. Members a guide page uses, such as `HttpBodyReader.client`, and limits users set, such as `UpstreamLimits.maxHeaderBytes`, stay public.\n\n91 doc gaps are filled: constructors, methods, fields and the `WS_OP_*` and `WS_CLOSE_*` constants now say what each parameter and return value means. `Upstream.get` now says its path must be origin-form, starting with `/`. Otherwise the call ends with `UPSTREAM_E_REQUEST`, while `get` itself returns `UPSTREAM_E_NONE`.\n\nOnly comments and visibility keywords change. The compiler ignores visibility keywords, and no golden moved.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "dc9b24a"
+      ],
+      "pr": 1246,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-http-server-internals-private-and-document-its",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark http server internals private and document its API",
+      "body": "The HTTP/1.1 server modules (`std/net/http1-server.ts`, `http1-codec.ts`, `http-fields.ts`, `http-compress.ts`, `handler.ts`, `router.ts`, `prefork.ts` and `buffer-pool.ts`) now show only their API in the library reference. 169 members that only their own class reads are `private`. Plumbing that another class or std module reaches into carries an `@internal` note naming the reader. Examples are the parser cursors `Http1Server` resets, the `Router` method spans `HttpHandler` reads, and the `BufferPool` fields the QUIC and HTTP/3 code uses. What the api-server guide shows users stays public: `HttpRequest.methodIs`, `pathIs`, `param`, `header` and the rest, and every `HandlerLimits` field, `jsonBytes` included.\n\nAbout 150 functions and methods now say what each parameter and return value means. `HttpHandler`'s constructor says that `slots`, `jsonBytes`, `maxEvents` and `bodyTimeout` are read once, while `http` is kept by the carrier and read live. The `start` and `send` family name both causes of `HANDLER_DROPPED`: the connection closed, or the carrier's output is over half full. Three module-header examples are corrected to the real API: `http-compress` called a nonexistent `h2.write`, and `http1-codec` and `prefork` used names they did not import.\n\nOnly comments and visibility keywords change. The compiler ignores visibility keywords. Eight checked goldens move two `wrappingAdd` source positions each, with node ids and columns unchanged.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a00e58f"
+      ],
+      "pr": 1248,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "document-the-global-builtins-in-nish-d-ts",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "document the global builtins in nish.d.ts",
+      "body": "Every global builtin in `runtime/nish.d.ts` now has a doc comment holding its whole reference: what it returns, its special cases and deviations from JavaScript, its errnos, its panic messages, its argument and position rules, the capability a call needs, and examples. An editor's hover and the generated library reference now say what `docs/LANGUAGE.md` → Builtins says. `Math`, the array and string receivers, `ReadonlyArray`, `Map` and `Set` gain merged interface declarations that carry their docs. They keep lib.es2022's exact signatures, so `tsc` accepts every program it accepted before.\n\nThe `nish/json-typed` exports document `jsonDecode`, `jsonEncode`, `JsonDecoder` and the error codes the same way, and their code is unchanged. `docs/LANGUAGE.md` stays the normative spec and loses no text. Each of its 12 builtin subsections links to the declarations.\n\nRefs: docs/LANGUAGE.md#builtins\nPart of #1234",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b8da87c"
+      ],
+      "pr": 1245,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "link-a-wasm-module-for-a-page-and",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "link a wasm module for a page and load it without fetch (WP50 stage 1)",
+      "body": "`scripts/build.sh --profile wasm-host` links a freestanding wasm module for a page to drive. It exports only the program's exported functions, `memory`, and the arena entry points the generated loader calls, where `--profile wasm` exports everything. `--memory <MiB>` fixes the initial and maximum memory at one size so the page's views never detach, and the stack is fixed at 64 KiB. `wasm-opt -Oz` runs when binaryen is on PATH, and the build line says whether it did. `--inline <file.mjs>` writes the module's bytes as `export const bytes = new Uint8Array([...])`. The other profiles refuse `--memory` and `--inline` with exit 2. `--profile wasm` is unchanged, byte for byte.\n\nThe `--emit-dts` loader now exports `load(source, imports)` and `loadSync(source, imports)`, and each takes bytes or a compiled `WebAssembly.Module`. The loader imports nothing and reads no URL, so a bundler can inline it as it stands. One-argument `load(bytes)` callers keep working. `nish/vite` is a Vite plugin: in `vite build` it compiles each configured entry, links it under `wasm-host --inline`, and answers the page's import of the entry with the module's exports, instantiated synchronously. Host imports and module storage are later WP50 stages.",
+      "metrics": [
+        "add.wasm 316 -> 102 B raw (233 -> 111 gzip, 211 -> 87 brotli); arrays.wasm 2827 -> 2091 B raw (1479 -> 1092 gzip, 1302 -> 970 brotli); exact byte counts on linux-x64 without wasm-opt, guarded by the wasm-size block"
+      ],
+      "refs": [
+        "docs/wp50-wasm-host.md#14-stages"
+      ],
+      "tests": [
+        "tests/run.js wasm-host",
+        "vite",
+        "wasm-size"
+      ],
+      "commits": [
+        "12af379"
+      ],
+      "pr": 1243,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-json-internals-private-and-document-its-api",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark json internals private and document its API",
+      "body": "The JSON modules (`std/json.ts`, `json-tokenizer.ts`, `json-value.ts`, `json-typed.ts`, `json-number.ts`, `json-format.ts`, `json-pointer.ts`, `json-equal.ts`), the global `Map` and `Set` in `std/collections.ts`, `nish/map` and `Pair` now show only their API in the library reference. 114 members that only their own class reads are `private`. Plumbing reached from outside its class carries an `@internal` note naming the reader. Examples are the `JsonDecoder` hooks the compiler-written decoder calls by name, the `Map` and `Set` table hooks `src/emit-map.ts` emits, and the `JsonDocument` members `std/yaml-json.ts` builds through. The typed-JSON array readers and writers stay public as a family, because tests call them directly and `docs/LANGUAGE.md` documents them.\n\nEvery exported function, public method and exported constant now says what its parameters and results mean. Several contracts are now stated against the code:\n- the default string limit counts raw bytes between the quotes, escapes counted as written;\n- `stringArray` reuses only its container, and a changed element is a new string;\n- `keyLength`, `key` and `keyByte` answer `-1` or `\"\"` when the token is neither a key nor a string;\n- an `*Array` reader leaves `xs` untouched only when the value is not an array, and its contents are unspecified after a failure inside the array.\n\n`std/collections` and `nish/map` gain module headers with a usage example.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of every touched file is identical to the base. Four debug-info goldens that point into `std/collections.ts` move only `line:` and `scopeLine:` fields.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f414c37"
+      ],
+      "pr": 1247,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "recommend-one-bcrypt-batcher-per-process-on-several",
+      "type": "docs",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "recommend one bcrypt batcher per process on several cores",
+      "body": "A single login batcher spanning every core cannot start a run while one is going, so at light load a login waits on the run in progress while other cores idle. A prefork server with one `cores: 1` batcher per worker overlaps the workers' runs instead. The bcrypt bench gains this as mode (d), and the security record, the password-hashing guide page and the bcrypt-batch module doc recommend it.",
+      "metrics": [
+        "4-vCPU Xeon, cost 10, 3 rounds, medians; p99 at 60 logins/s 123.1 ms against 139.4 ms for one batcher over all cores, burst throughput 246 against 223 logins/s; noise band 2% logins/s, 4% p50, 11% p99"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md"
+      ],
+      "tests": [
+        "bench/crypto/bcrypt/batcher.mjs"
+      ],
+      "commits": [
+        "6018168"
+      ],
+      "pr": 1256,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-quic-internals-private-and-document-its-api",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark quic internals private and document its API",
+      "body": "The QUIC modules (`std/net/quic.ts` and the nine `quic-*.ts` files) now show only their API in the library reference. 236 members that only their own class reads are `private`. Plumbing another class or std module reaches into carries an `@internal` note naming the reader. Examples are the stream-table hooks `QuicConnection` drives, the `QuicStream` fields `http3.ts` reads, and `QuicConnection.fail` and the original-DCID fields the HTTP/3 server uses. Members the docs offer to callers stay public: `QuicListenerAnswer.wipe`, which the caller of `handle` must call, and `QuicConnection.serverName`, which the class doc names as readable.\n\nEvery module opens with a header and a usage example written against the real API. Every export and public method says what its parameters and results mean. Several contracts are stated against the code:\n- a `QuicKeys` built by hand stays unusable, and only the `quicKeys*` functions fill its AES schedules;\n- `quicKeysWipe` zeroes the schedules and nothing refuses the keys afterwards;\n- `ackedSlot`/`lostSlot` stay valid only until the next call that sends or settles in that space;\n- `quicListenerReceiveSegments` returns 1 for any length when `segment <= 0`;\n- `ownsLocalAt` compares each active slot of the same length in constant time, and does not stop at a match;\n- the quic-stream example primes its shared pools before the first `onStream`.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of all ten files is identical to the base, and no golden moved.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "482715d"
+      ],
+      "pr": 1251,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-tls-internals-private-and-document-its-api",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark tls internals private and document its API",
+      "body": "The TLS modules (`std/net/tls.ts`, `std/net/tls-tcp.ts` and `std/net/tls/`: the client, the codec, the record layer and both its sides, the key schedule, tickets and certificate verification) now show only their API in the library reference. Members only their own class reads are `private`. Plumbing another class or std module reaches into carries an `@internal` note naming the reader. Examples are the server's output buffers the record layer and QUIC drain, and the transcript methods the client and server share.\n\nMembers the docs present to callers stay public: `TlsServer.held`, `TlsServer.wipeResumption` (a carrier's duty when a connection ends without a ticket), `TlsTcpServer.peer` (where `accept` leaves the peer's address), `TlsRecordClient.padding` (as on the server), and `TlsTcpServer.build`, which tests call.\n\nEvery export and public method says what its parameters and results mean. Several contracts are stated against the code:\n- `TlsServer.receive` and `resume` answer the recorded alert once the server has failed;\n- `known` stays true after `wipeSecret`, except for the to-be-signed and handshake secrets, which `sign` and the client Finished clear;\n- the record server's `sign` and `resume` answer 0 for a sealed flight, or for a connection that failed without an alert (truncation, a peer alert, `abort`), and `state` tells them apart;\n- `write` answers 0 for an empty write only on an open connection.\n\nNo comment changes a stated wipe, constant-time, verification or bounds property. Only comments and visibility keywords change: the comment-free syntax tree of every touched file is identical to the base, and no golden moved.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3cf2d30"
+      ],
+      "pr": 1253,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-postgres-dns-and-sqlite-internals-private-and",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark postgres, dns and sqlite internals private and document their API",
+      "body": "The Postgres client and carrier (`std/net/postgres.ts`, `postgres-carrier.ts`), the DNS modules (`std/net/dns.ts`, `dns-config.ts`, `dns-message.ts`, `dns-resolver.ts`) and `std/sqlite.ts` now show only their API in the library reference. Members only their own class reads are `private`. Plumbing another class or module reaches into carries an `@internal` note naming the reader, such as the `PgBatcher` cap and `shed` the carrier uses and the resolver tables `DnsClient` drives. What the guides document stays public, including `PgConfig.minIterations`/`maxIterations` and `PgCarrier.runText`.\n\nEvery module opens with a header and a usage example, and every export and public method now says what its parameters and results mean. Several contracts are stated against the code:\n- a SQLite statement stepped since its last `reset`, finished or not, refuses binds until `reset`;\n- `PgCarrier` reports a refused plain query as `PG_CARRIER_ERROR` then `PG_CARRIER_FAILED`, and a refused batched query only as `PG_CARRIER_FAILED` with `PG_ERR_NONE`;\n- `dnsParseReply` panics on a malformed query only after the reply passes its ID, QR, opcode and question-count checks;\n- `DNS_RESOLVE_NOT_FOUND` also covers a search list whose every candidate is too long.\n\nOld comments the code had outgrown are corrected: the header now imports `nish/sqlite`, `PgArrayWalker` documents `begin`, `serverFailures` counts timeouts, and a missing `/etc/hosts` means no entries.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of all seven files is identical to the base. The dns and sqlite capability goldens and one sqlite error golden move only `std/...ts` positions.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1513ebb"
+      ],
+      "pr": 1255,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-elliptic-curve-crypto-internals-private-and-document",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark elliptic-curve crypto internals private and document their API",
+      "body": "The elliptic-curve modules (`std/crypto/p256.ts`, `p384.ts`, `ed25519.ts`, `x25519.ts`) now show only their API in the library reference. The fields of every point and scratch class are read by the module's free functions, so they carry an `@internal` note rather than `private`. The same goes for the seventeen `f25519*` field helpers, which `nish/crypto/ed25519` imports. `P256SignScratch` stays exported, because `nish/net/tls` and the tests construct it, and its fields are `@internal`.\n\nEvery exported function now says what its parameters and results mean. `ed25519` and `x25519` gain header examples, and the `p256` and `p384` examples are replaced with ones that compile as written (the old ones called an undefined `readKey` and used an unimported `sha256`). The `x25519` doc no longer says nothing in the tree refuses an all-zero shared secret: `nish/net/tls` refuses it on both sides of the handshake, and any other caller must still check it. No stated wipe, constant-time, clamping or point-validation property changes.\n\nOnly comments change: the comment-free syntax tree of all four files is identical to the base, and no golden moved.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0c43804"
+      ],
+      "pr": 1258,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-yaml-and-term-internals-private-and-document",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark yaml and term internals private and document their API",
+      "body": "The YAML modules (`std/yaml.ts`, `yaml-json.ts`, `yaml-lines.ts`, `yaml-write.ts`) and the terminal modules (`std/term.ts`, `term-io.ts`, `term-rate.ts`, `term-pixels.ts`, `term-probe.ts`) now show only their API in the library reference. Members only their own class reads are `private`. Plumbing another class or module reaches into carries an `@internal` note naming the reader. Members tests read or set directly stay public: `YamlStream.merge`, `KeyState.releasesAreSynthetic`, and the `RateController` measurements.\n\nEvery export and public method now says what its parameters and results mean. Several contracts are stated against the code:\n- `Terminal.stats()` and `Frame.stats` are the rate controller's live object, updated in place, not a snapshot;\n- a quoted or block scalar under a fitting core tag (`!!int \"5\"`) resolves to that type;\n- the implicit-key limit is 1024 bytes;\n- `YamlLineIndex.column` is exact for native byte strings, and under Node it skips UTF-16 units 0x80 to 0xBF;\n- `TermProbe.finish` and `heldEvents` return the probe's own array.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of all nine files is identical to the base. Two checked goldens move only source positions.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b7f2a1a"
+      ],
+      "pr": 1260,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-http2-and-http3-internals-private-and-document",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark http2 and http3 internals private and document their API",
+      "body": "The HTTP/2 and HTTP/3 modules (`std/net/http2*.ts`, `hpack.ts`, `http3*.ts`, `qpack.ts`, `webtransport.ts`) now show only their API in the library reference. Members only their own class reads are `private`. Plumbing another class or module reaches into carries an `@internal` note naming the reader, such as the HPACK Huffman tables `qpack.ts` decodes with and the connection hooks `http2-tls.ts` and `webtransport.ts` drive. Members tests or the security records present to callers stay public, for example `HpackTable.nameStart` and `Http2Settings.headerTableSize`.\n\nEvery export and public method now says what its parameters and results mean. Docs found false against the code are corrected:\n- the HTTP/2 per-type writers can still send a payload over the peer's SETTINGS_MAX_FRAME_SIZE, and `http2WriteHeader` checks no type's rules;\n- `Http2Frame`'s errorCode, lastStreamId, increment and promisedId keep their last value between frames;\n- `h3PutSettings` and `h3PutIdFrame` may have written the frame header before answering -1;\n- `WT_CLOSED` no longer names fields that do not exist, and WebTransport `accept` and `close` can also answer H3_TOO_LARGE;\n- every module-header example type-checks as written.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of all nine files is identical to the base, and no golden moved.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b7b82b1"
+      ],
+      "pr": 1261,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-symmetric-crypto-and-hash-internals-private-and",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark symmetric crypto and hash internals private and document their API",
+      "body": "The symmetric crypto and hash modules (`std/crypto/aes.ts`, `chacha20poly1305.ts`, `hmac.ts`, `hkdf.ts`, `sha1.ts`, `sha256.ts`, `sha512.ts`, `bcrypt.ts`, `bcrypt-batch.ts`, `base64url.ts`, `ct.ts`) now show only their API in the library reference. Members only their own class reads are `private`, such as the HMAC scratch pads and the `BcryptBatcher` queue. The hash state `nish/crypto/hmac`, `nish/net/postgres` and `nish/crypto/ed25519` reach into carries an `@internal` note naming the reader. The `AesKey` fields and the SHA `state`, `block` and `schedule` arrays stay public because tests build or read them.\n\nEvery export and public method now says what its parameters and results mean, with each security contract stated on the function it governs: nonce and IV reuse, key lengths, `null` on a failed tag with no plaintext produced, and what the caller still wipes. Two docs are corrected against the code:\n- `BcryptBatcher.run` does not answer in arrival order: bad-salt answers come first, then verifies grouped by cost, then hashes, so callers match answers by `ticket`;\n- `hkdfExpandInto` panics, before writing anything, on a hash length other than 32 or 48 or an output window outside `out`.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of all eleven files is identical to the base, and no golden moved.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b0a32fb"
+      ],
+      "pr": 1263,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-pki-x509-rsa-and-jwt-internals-private",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark pki, x509, rsa and jwt internals private and document their API",
+      "body": "The certificate and token modules (`std/crypto/x509.ts`, `x509-random.ts`, `pki.ts`, `pki-roots.ts`, `rsa.ts`, `jwt.ts`) now show only their API in the library reference. The `JwtVerifier` and `JwtJson` scratch state is `private`. The `JwtKey` fields, the path-search state in `pki.ts` and the DER helpers in `x509.ts` carry an `@internal` note naming the reader. `JwtVerifier.sig`, the `JwtKey` constructor and `jwtAlgName` stay public because a bench and the tests use them.\n\nEvery export and public method now says what its parameters and results mean, including whether a returned object is new or shared with the caller and that a `Secret` passed in stays the caller's to wipe. Several docs are corrected against the code:\n- `JwtVerifier.verify` spells out its full refusal order (it checks `aud` before `sub`, which the old doc had the other way round), and a missing `exp` is refused only while `requireExp` is set;\n- `JwtVerifier.sig` keeps an earlier token's bytes after a refusal that comes before the signature is decoded;\n- `pkiLoadRootsFor` ignores its default directories and bundles once `SSL_CERT_FILE` or `SSL_CERT_DIR` is set;\n- the `jwt.ts`, `pki.ts` and `rsa.ts` header examples now define every name they use.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of all six files is identical to the base, and no golden moved.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "093d15d"
+      ],
+      "pr": 1262,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "generate-the-library-reference-from-source-1242",
+      "type": "docs",
+      "breaking": false,
+      "title": "generate the library reference from source",
+      "body": "`node scripts/gen-reference.mjs` now writes one Scalar page per module into `docs/reference/` from the doc comments of `std/**` and `runtime/nish.d.ts`, together with their routes in `scalar.config.json`. Each `std/` module gets a `nish/<path>` page, and each builtin module gets a `nish:<name>` page. `nish:region` and `nish:secret` are made from their `std/` source, and their pages use the specifier the compiler accepts. The globals go to `builtins.md`, `docs/LANGUAGE.md` is served as the Reference group's language page, and the header's \"Language reference\" link now opens that page instead of GitHub's copy.\n\nTypeDoc 0.28.20 runs in-process and its JSON is rendered by the script itself: no markdown plugin is used. The `scripts/typedoc-nish-widths.mjs` plugin keeps each type as the source spells it, so pages show `i32` where TypeScript would erase it to `number`.\n\nA page follows a fixed order:\n- the lead;\n- an import block, then the module's usage example;\n- a card per function and class;\n- the module prose, as info and warning callouts and bold-titled details;\n- each function with its parameters and return;\n- member tables for classes and interfaces;\n- constants under Limits or Constants, each titled by its value.\n\nThe doc-comment convention that decides which prose becomes what is in `docs/README.md` under \"The library reference\".\n\nThe pages are generated and never edited by hand. `--check` writes nothing and fails on a stale, missing or extra page and on a stale route or header link. CI's lint job runs it next to `docs/check-links.mjs`. A change to `std/`, `runtime/nish.d.ts` or `docs/LANGUAGE.md` now regenerates `docs/reference/` in the same PR (CLAUDE.md).\n\nRefs: docs/README.md#the-library-reference\nPart of #1233",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "dcafb63"
+      ],
+      "pr": 1242,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "document-the-nish-modules-in-jsdoc-on-nish",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "document the nish: modules in JSDoc on nish.d.ts",
+      "body": "Each `declare module \"nish:*\"` block in runtime/nish.d.ts now carries its module's reference documentation, so the pages `node scripts/gen-reference.mjs` generates under docs/reference/ carry it as well. The blocks are fs, process, net, unsafe, simd, io, term, secret, region and async. Each module comment has a one-sentence lead, an indented usage example, then paragraphs. Each export has a description, plus `@param` and `@returns` where they apply. Signatures are unchanged.\n\ndocs/LANGUAGE.md remains the normative spec. Its Builtins subsections keep the type rules, refusals and diagnostics, panics, platform differences, and ownership and security rules. What each function takes and returns, the examples and the per-function notes moved to the JSDoc, and each subsection now links its reference page. Headings and anchors are unchanged. Every fact removed from the spec appears in the JSDoc.\n\nThe nish-secret and nish-region pages are generated from std/secret.ts and std/region.ts, so the JSDoc on those two module blocks shows in editors but not on those pages.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#builtins",
+        "docs/reference/"
+      ],
+      "tests": [
+        "node tests/run.js dts",
+        "node tests/run.js runtime-hosts",
+        "node scripts/gen-reference.mjs --check",
+        "node docs/check-links.mjs"
+      ],
+      "commits": [
+        "6a85da2"
+      ],
+      "pr": 1244,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "mark-core-std-internals-private-and-document-their",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark core std internals private and document their API",
+      "body": "The core std modules (`std/cli*.ts`, `threads.ts`, `testing.ts`, `random.ts`, `math.ts`, `sort.ts`, `base64.ts`, `bytes.ts`, `text.ts`, `region.ts`, `secret.ts`, `std/compress/*` and `std/sync/*`) now show only their API in the library reference. Members only their own class reads are `private`. The CLI parse model, the flag table, the Huffman scratch and the `Deflater` stream calls that gzip and zlib drive carry an `@internal` note naming the reader. `Inflater.inflate`, `inPos`, `outPos` and `reset` are documented API, since the exported `INFLATE_*` constants describe them and a caller resuming a stream in pieces needs them.\n\nEvery export and public method now says what its parameters and results mean, and each module header has a lead sentence and a usage example. Several docs are corrected against the code:\n- bytes after the last gzip member are read as another member's header: two or more without the `1f 8b` magic are `GZIP_ERR_HEADER`, while a single byte, or fewer than 10 that start with `1f 8b`, is `DEFLATE_ERR_TRUNCATED`;\n- an `Inflater` allocates about 28 KB;\n- `Rng` seeds are starting points on one 2^32 cycle, so `seed + k * 0x9E3779B9` is the same stream `k` steps later;\n- `tanF64` returns `x` itself for any `|x| < 2^-27`, and `nearF64` fails two equal infinities;\n- the `secret.ts` and `sync/ring.ts` header examples now compile.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of all nineteen files is identical to the base. The goldens that record std line numbers move by position only, and the 19 reference pages are regenerated.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f40c0b2"
+      ],
+      "pr": 1265,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "import-a-wasm-module-s-host-functions-from",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "import a wasm module's host functions from the page's TypeScript (WP50 stage 2)",
+      "body": "A Nish module built for a page can import the functions the page supplies\nstraight from the page's own TypeScript. The compiler reads a host module,\nnamed by `--host <file>` or by `\"nish\": { \"host\": [...] }` in the root\npackage.json, for its exported signatures and skips each body unparsed. Each\nimported function becomes a wasm import from module `host`\n(`\"wasm-import-module\"=\"host\"`), costed and pessimised like a C call and\ncarrying the `ffi` capability. The generated loader passes an\n`i32`/`f32`/`f64`-only function straight through and wraps the rest once, at\nload. `--emit-dts` types what the page owes as `Imports`, `--emit-ts` keeps\nthe import line, and `nish/vite` passes the host modules itself.\n\nA host object crosses as `HostHandle<\"kind\">`, a nominal `i32` that only an\nimport makes. It compares only with its own kind and `0`, and has no\narithmetic or number conversion. tsc reads the same type,\n`(number & { readonly __nishHostKind: K }) | 0`, so both checkers refuse a\nwrong kind or a forged number.\n\nEvery crossing that would copy or allocate in secret is refused, and each\nrefusal names the explicit form. That covers a string result; an object,\nclass, function, Promise, `unknown` or `any`; and, until stages 4 and 3, a\nstring or typed-array parameter. A `declare function` is now refused in a\nbuild that makes a page module (`--target wasm32`, or `--emit-dts` on a\nnative target), because wasm-ld would let a C definition replace an import.\nIt stays legal natively and under WASI. A host module is refused in a native\nor WASI build.\n\nMeasured: an import entry is 7 B plus its name, about 20 B for a name like\n  `hCanvas`; the stage-1 wasm-size rows are unchanged, and a program with no\n  host module is byte-identical (of 1449 checked goldens only the six emit-ts\n  modules of src/ moved, for Walk's new field)",
+      "metrics": [],
+      "refs": [
+        "docs/wp50-wasm-host.md#3-w1-imports-an-import-from-the-pages-own-typescript",
+        "docs/LANGUAGE.md (Host modules)"
+      ],
+      "tests": [
+        "tests/host-import",
+        "tests/cases/host_import_call",
+        "tests/cases/host_handle_native",
+        "tests/wordings/nl2661_* to nl2670_*",
+        "nl3049_*",
+        "nl3050_*"
+      ],
+      "commits": [
+        "42155b9"
+      ],
+      "pr": 1264,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "close-the-std-api-visibility-acceptance-gaps-1268",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "close the std API-visibility acceptance gaps",
+      "body": "The last gaps in std's public documentation are closed.\n\nEvery exported function in `std/net/url.ts`, `websocket.ts`, `outbound.ts`, `fetch.ts` and `http1-client-codec.ts` now has an `@param` per parameter and an `@returns`. Each gives the function's sentinels, refusals and panics. Nineteen public constructors in the DNS, TLS, QUIC and P-256 modules gain a description, and four `QuicConnection` fields gain one too.\n\nThe library reference no longer shows the `Regex` constructor, which only `regexCompile` calls, or the two `QuicStreams` counters that only their own class reads.\n\nTwo docs are stated against the code:\n- **P-256 signing:** the `P256SignScratch` and `TlsP256Signer` scratch makes the base-point multiplication work in reused arrays, and a signature keeps nothing after the call. It does not make signing allocation-free.\n- **HTTP/1 request heads:** the `names` must hold exactly one `Host`, the caller's own field, which is written first.\n\nOnly comments and visibility keywords change: the comment-free syntax tree of every touched file is identical to the base. Two goldens move by position only, and the reference pages are regenerated.\n\nPart of #1236",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "720dda1"
+      ],
+      "pr": 1268,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    }
+  ]
+}
