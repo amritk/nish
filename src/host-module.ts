@@ -726,6 +726,7 @@ const asWindow = (type: Node, parser: Parser): void => {
   // From the parser, so the element has an id inside the checker's tables.
   const element = parser.node(N_TYPE_REF, type.start, type.end)
   element.text = typedElement(type.text)
+  element.children = [parser.list()] // a reference's type arguments, none here
   type.kind = N_TYPE_ARRAY
   type.text = ""
   type.children = [element]
