@@ -137,15 +137,15 @@ export class QuicCidTable {
   local: QuicCidEntry[]
   peer: QuicCidEntry[]
   /** Peer sequence numbers this side must send RETIRE_CONNECTION_ID for, oldest first, as a ring of `retireCount` from `retireHead`. */
-  retirePending: i64[]
+  private retirePending: i64[]
   /** The next local sequence number to issue. */
   nextLocal: i64 = 0
   /** The peer's highest Retire Prior To so far. */
-  peerRetirePriorTo: i64 = 0
-  limit: i64 = 2
+  private peerRetirePriorTo: i64 = 0
+  private limit: i64 = 2
   /** The index in `peer` of the ID this side sends to, or -1 before the peer gave one. */
-  current: i32 = -1
-  retireHead: i32 = 0
+  private current: i32 = -1
+  private retireHead: i32 = 0
   retireCount: i32 = 0
 
   /** A table for an advertised `limit` (2 to 8 in practice) with `localCapacity` slots for this side's IDs. */

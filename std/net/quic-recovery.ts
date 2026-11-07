@@ -193,8 +193,8 @@ export class QuicSentPackets {
   lastAckEliciting: i64 = -1
   /** The bytes of this space's packets in flight. */
   bytesInFlight: i64 = 0
-  capacity: i32 = 0
-  head: i32 = 0
+  private capacity: i32 = 0
+  private head: i32 = 0
   count: i32 = 0
   /** How many recorded packets are still in flight: neither acknowledged nor lost. */
   inFlight: i32 = 0
@@ -218,7 +218,10 @@ export class QuicSentPackets {
     this.lost = new Array<i32>(capacity)
   }
 
-  /** The ring slot of the `k`-th packet kept, counting from the oldest. */
+  /**
+   * The ring slot of the `k`-th packet kept, counting from the oldest.
+   * @internal Read by quic.ts, and in quic-recovery.ts outside the class.
+   */
   slot(k: i32): i32 {
     return (this.head + k) % this.capacity
   }
@@ -231,7 +234,10 @@ export class QuicSentPackets {
     return toI32(this.state[s]) & (QUIC_RECOVERY_MARKED - 1)
   }
 
-  /** Sets slot `s`'s state. */
+  /**
+   * Sets slot `s`'s state.
+   * @internal Read in quic-recovery.ts outside the class.
+   */
   setState(s: i32, value: i32): void {
     if (s >= 0 && s < toI32(this.state.length)) {
       this.state[s] = toU8((toI32(this.state[s]) & QUIC_RECOVERY_MARKED) | value)
@@ -263,7 +269,10 @@ export class QuicSentPackets {
     return s >= 0 && s < toI32(this.state.length) && (toI32(this.state[s]) & QUIC_RECOVERY_MARKED) !== 0
   }
 
-  /** Sets whether the packet in slot `s` was sent marked ECT(0). */
+  /**
+   * Sets whether the packet in slot `s` was sent marked ECT(0).
+   * @internal Read in quic-recovery.ts outside the class.
+   */
   setMarked(s: i32, value: boolean): void {
     if (s >= 0 && s < toI32(this.state.length)) {
       this.state[s] = toU8(this.stateAt(s) | (value ? QUIC_RECOVERY_MARKED : 0))
@@ -291,7 +300,10 @@ export class QuicSentPackets {
     return this.count >= this.capacity
   }
 
-  /** Frees the oldest slots that are settled, acknowledged or lost. */
+  /**
+   * Frees the oldest slots that are settled, acknowledged or lost.
+   * @internal Read by quic.ts, and in quic-recovery.ts outside the class.
+   */
   compact(): void {
     while (this.count > 0 && this.stateAt(this.head) !== QUIC_RECOVERY_SENT) {
       this.setState(this.head, QUIC_RECOVERY_FREE)
@@ -303,20 +315,29 @@ export class QuicSentPackets {
     }
   }
 
-  /** Forgets the results of the last call. */
+  /**
+   * Forgets the results of the last call.
+   * @internal Read in quic-recovery.ts outside the class.
+   */
   clearResults(): void {
     this.ackedCount = 0
     this.lostCount = 0
   }
 
-  /** Takes packet `s` out of flight. */
+  /**
+   * Takes packet `s` out of flight.
+   * @internal Read in quic-recovery.ts outside the class.
+   */
   settle(s: i32, state: i32): void {
     this.setState(s, state)
     this.inFlight = this.inFlight - 1
     this.bytesInFlight = this.bytesInFlight - toI64(this.sizeAt(s))
   }
 
-  /** Settles packet `s` as lost and lists it in `lost`. */
+  /**
+   * Settles packet `s` as lost and lists it in `lost`.
+   * @internal Read in quic-recovery.ts outside the class.
+   */
   markLost(s: i32): void {
     this.settle(s, QUIC_RECOVERY_LOST_NOW)
     if (this.lostCount < toI32(this.lost.length)) {
@@ -325,7 +346,10 @@ export class QuicSentPackets {
     }
   }
 
-  /** Drops every packet, as when the space's keys are discarded (A.11). */
+  /**
+   * Drops every packet, as when the space's keys are discarded (A.11).
+   * @internal Read in quic-recovery.ts outside the class.
+   */
   clear(): void {
     for (let s: i32 = 0; s < toI32(this.state.length); s += 1) {
       this.state[s] = toU8(QUIC_RECOVERY_FREE)
@@ -339,7 +363,10 @@ export class QuicSentPackets {
     this.clearResults()
   }
 
-  /** Empties the ring and forgets every number, for a connection slot reused for another peer. */
+  /**
+   * Empties the ring and forgets every number, for a connection slot reused for another peer.
+   * @internal Read in quic-recovery.ts outside the class.
+   */
   reset(): void {
     this.clear()
     this.largestAcked = -1
@@ -454,6 +481,7 @@ export class QuicRecovery {
    * address it has proved it holds (RFC 9000 §9.4): what was learnt of the
    * old path says nothing about the new one. The packets in flight, the
    * peer's `max_ack_delay` and the counters are kept.
+   * @internal Read by quic.ts.
    */
   resetPath(): void {
     this.latestRtt = 0
@@ -476,6 +504,7 @@ export class QuicRecovery {
    * went out under the old test. Their loss, or an ACK of them, says
    * nothing of the new test, and only packets marked from here on count
    * toward it.
+   * @internal Read by quic.ts.
    */
   restartEcn(): void {
     for (const sp of this.spaces) {
@@ -699,7 +728,7 @@ export class QuicRecovery {
    * acknowledged it is timed from `later`, a send time no earlier than the
    * largest acknowledged packet's, which recovery did not record.
    */
-  processEcn(
+  private processEcn(
     sp: QuicSentPackets,
     raised: boolean,
     ect0: i64,
@@ -756,7 +785,7 @@ export class QuicRecovery {
   }
 
   /** UpdateRtt (§5.3, A.7) with a sample in `latestRtt`, `ackDelay` the peer's delay in milliseconds. */
-  updateRtt(ackDelay: i64, now: i64): void {
+  private updateRtt(ackDelay: i64, now: i64): void {
     const latest: i64 = this.latestRtt
     if (this.firstSampleTime < 0) {
       this.minRtt = latest
@@ -780,7 +809,7 @@ export class QuicRecovery {
   }
 
   /** The peer's ACK delay in milliseconds as §5.3 counts it: at most max_ack_delay once the handshake is confirmed. */
-  boundAckDelay(ackDelay: i64): i64 {
+  private boundAckDelay(ackDelay: i64): i64 {
     return this.handshakeConfirmed && ackDelay > this.maxAckDelay ? this.maxAckDelay : ackDelay
   }
 
@@ -802,7 +831,7 @@ export class QuicRecovery {
    * runs long by up to a millisecond: only a carrier that calls `clock` on
    * some sends and not others sees that.
    */
-  fineSample(now: i64, sent: i64): i64 {
+  private fineSample(now: i64, sent: i64): i64 {
     const at: i64 = this.fineNow(now)
     const floor: i64 = at === this.micros ? 1 : QUIC_RECOVERY_GRANULARITY * QUIC_RECOVERY_MICROS
     return quicRecoveryMax(at - sent, floor)
@@ -815,7 +844,7 @@ export class QuicRecovery {
    * true minimum, so a delay is taken off a little more readily than
    * `updateRtt` takes it.
    */
-  updatePacerRtt(sample: i64, ackDelay: i64, first: boolean): void {
+  private updatePacerRtt(sample: i64, ackDelay: i64, first: boolean): void {
     if (first) {
       this.pacerRtt = sample
       return
@@ -840,7 +869,7 @@ export class QuicRecovery {
    * three numbers below the largest acknowledged; the first that is neither
    * sets `lossTime`.
    */
-  detectLoss(sp: QuicSentPackets, now: i64): void {
+  private detectLoss(sp: QuicSentPackets, now: i64): void {
     sp.lossTime = -1
     const delay: i64 = this.lossDelay()
     const lostSendTime: i64 = now - delay
@@ -869,7 +898,7 @@ export class QuicRecovery {
    * congestion event for the newest of them, and persistent congestion
    * when they span long enough.
    */
-  packetsLost(sp: QuicSentPackets, now: i64): void {
+  private packetsLost(sp: QuicSentPackets, now: i64): void {
     if (sp.lostCount === 0) {
       return
     }
@@ -906,7 +935,7 @@ export class QuicRecovery {
    * spanning more than three probe timeouts with max_ack_delay, and holding
    * at least one packet this call declared lost.
    */
-  persistentCongestion(sp: QuicSentPackets): boolean {
+  private persistentCongestion(sp: QuicSentPackets): boolean {
     if (this.firstSampleTime < 0) {
       return false
     }
@@ -937,12 +966,12 @@ export class QuicRecovery {
   }
 
   /** Whether a packet sent at `sentTime` was sent during the current recovery period (B.4). */
-  inRecovery(sentTime: i64): boolean {
+  private inRecovery(sentTime: i64): boolean {
     return this.recoveryStart >= 0 && sentTime <= this.recoveryStart
   }
 
   /** OnCongestionEvent (B.6): halve the window, once per recovery period. */
-  congestionEvent(sentTime: i64, now: i64): void {
+  private congestionEvent(sentTime: i64, now: i64): void {
     if (this.inRecovery(sentTime)) {
       return
     }
@@ -958,7 +987,7 @@ export class QuicRecovery {
    * all for a packet sent during recovery, or when `inUse` says the window
    * was not being used (§7.8).
    */
-  packetAcked(sp: QuicSentPackets, s: i32, inUse: boolean): void {
+  private packetAcked(sp: QuicSentPackets, s: i32, inUse: boolean): void {
     if (!inUse || this.inRecovery(sp.timeAt(s))) {
       return
     }
@@ -983,7 +1012,7 @@ export class QuicRecovery {
   }
 
   /** smoothed_rtt + max(4 × rttvar, kGranularity): every probe timeout's period before max_ack_delay and the backoff. */
-  ptoBase(): i64 {
+  private ptoBase(): i64 {
     return this.smoothedRtt + quicRecoveryMax(4 * this.rttVar, QUIC_RECOVERY_GRANULARITY)
   }
 
@@ -1003,7 +1032,7 @@ export class QuicRecovery {
   }
 
   /** The probe timeout of space `space`, from its last ack-eliciting packet, with the backoff. */
-  ptoTimeOf(space: i32): i64 {
+  private ptoTimeOf(space: i32): i64 {
     const sp: QuicSentPackets | null = this.space(space)
     if (sp === null || sp.lastAckEliciting < 0) {
       return -1
@@ -1017,7 +1046,7 @@ export class QuicRecovery {
   }
 
   /** The space whose probe timeout fires first, or -1 when no space may have one. */
-  ptoSpace(): i32 {
+  private ptoSpace(): i32 {
     let best: i32 = -1
     let bestTime: i64 = -1
     for (let space: i32 = 0; space < toI32(this.spaces.length); space += 1) {
@@ -1035,7 +1064,7 @@ export class QuicRecovery {
   }
 
   /** The space with the earliest `lossTime`, or -1 when none is set. */
-  lossSpace(): i32 {
+  private lossSpace(): i32 {
     let best: i32 = -1
     let bestTime: i64 = -1
     for (let space: i32 = 0; space < toI32(this.spaces.length); space += 1) {
@@ -1135,7 +1164,7 @@ export class QuicRecovery {
   }
 
   /** The congestion window the pacer earns by: at most `QUIC_RECOVERY_PACER_WINDOW`. */
-  pacerWindow(): i64 {
+  private pacerWindow(): i64 {
     return this.congestionWindow < QUIC_RECOVERY_PACER_WINDOW
       ? this.congestionWindow
       : QUIC_RECOVERY_PACER_WINDOW
@@ -1146,7 +1175,7 @@ export class QuicRecovery {
    * window per `pacerRtt`, and holds at most the initial window, which is the
    * largest burst it allows.
    */
-  pacerRefill(now: i64): void {
+  private pacerRefill(now: i64): void {
     const at: i64 = this.fineNow(now)
     if (this.pacerTime < 0 || at < this.pacerTime) {
       this.pacerTime = at

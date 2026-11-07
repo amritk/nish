@@ -212,8 +212,11 @@ export class QuicFrame {
  * read inside it.
  */
 class QuicFrameReader {
+  /** @internal Read in quic-frame.ts outside the class. */
   at: i32
+  /** @internal Read in quic-frame.ts outside the class. */
   end: i32
+  /** @internal Read in quic-frame.ts outside the class. */
   failed: boolean = false
 
   constructor(at: i32, end: i32) {

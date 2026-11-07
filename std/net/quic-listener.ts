@@ -227,7 +227,7 @@ export class QuicListenerAnswer {
   retryScid: u8[]
   kind: i32 = 0
   retried: boolean = false
-  room: i32 = 0
+  private room: i32 = 0
 
   constructor(room: i32) {
     this.room = room > 0 ? room : 0
@@ -243,6 +243,7 @@ export class QuicListenerAnswer {
    * and all zero, `kind` a drop. An answer whose reply grew past its room
    * keeps what lies beyond the longest length it is wiped at; one made with
    * `QUIC_LISTENER_ANSWER_SIZE` never grows.
+   * @internal Read by http3-server.ts, and in quic-listener.ts outside the class.
    */
   wipe(): void {
     quicListenerWipeRoom(this.reply, this.room)
@@ -332,47 +333,47 @@ const quicListenerWindowFits = (length: i32, at: i32, len: i32): boolean =>
  * `handleWindow` reads the datagram where it lies and keeps nothing.
  */
 export class QuicListener {
-  config: QuicServerConfig
+  private config: QuicServerConfig
   seed: u8[]
   /** Unpredictable bytes not yet used, from `poolHead`, and the counter the next block is made from. */
   pool: u8[]
   /** The counter's eight bytes, the generator's HMAC message. */
-  block: u8[]
+  private block: u8[]
   /** What `handleWindow` parses a datagram's header into, in place. */
-  header: QuicHeader
+  private header: QuicHeader
   /** Every HMAC and HKDF the listener computes runs here; its `sha256` makes tokens, resets and the generator's blocks. */
   kdf: HkdfScratch
   /** A full HMAC-SHA256 tag, wiped once its 16 bytes are used. */
   tag: u8[]
   /** A Retry token MAC's length fields: the Retry SCID's one byte, the address's four. */
-  lengths: u8[]
+  private lengths: u8[]
   /** The Initial secrets of an INVALID_TOKEN close, and its keys, both directions. */
   initialClient: u8[]
   initialServer: u8[]
   readSlot: QuicKeysSlot
   writeSlot: QuicKeysSlot
-  packet: QuicPacket
+  private packet: QuicPacket
   /** The client's SCID and the DCID it sent to, copied out for `quicPutLongHeader`, which reads IDs from 0. */
-  peerCid: u8[]
-  ownCid: u8[]
+  private peerCid: u8[]
+  private ownCid: u8[]
   /** An empty array: the INVALID_TOKEN close's token and reason. */
-  none: u8[]
+  private none: u8[]
   /** Version 1's fixed Retry key (RFC 9001 §5.8), expanded once. */
-  retryKey: AesKey
+  private retryKey: AesKey
   /** What `handle` answers into before it copies the answer out. */
   spare: QuicListenerAnswer
-  counter: i64 = 0
+  private counter: i64 = 0
   /** The latest time the caller gave, in milliseconds; time never runs backwards here. */
-  now: i64 = 0
+  private now: i64 = 0
   /** When the reset budget was last topped up (-1: never yet), and the stateless resets that may go now. */
-  resetRefilled: i64 = -1
-  resetBudget: i32 = 0
+  private resetRefilled: i64 = -1
+  private resetBudget: i32 = 0
   poolHead: i32 = 0
   /** Stateless resets sent, and ones the rate limit held back. */
   resetsSent: i32 = 0
   resetsLimited: i32 = 0
   /** Whether the configuration and entropy were usable. */
-  usable: boolean = false
+  private usable: boolean = false
 
   /** A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. */
   constructor(config: QuicServerConfig, entropy: u8[]) {
@@ -434,7 +435,7 @@ export class QuicListener {
    * One unpredictable value in 0 to 255: the next byte of HMAC-SHA256 under
    * the seed of a counter, a block at a time, each byte wiped once taken.
    */
-  randomByte(): i32 {
+  private randomByte(): i32 {
     if (this.poolHead >= QUIC_LISTENER_POOL) {
       this.refill()
     }
@@ -448,7 +449,7 @@ export class QuicListener {
   }
 
   /** Writes `count` unpredictable bytes into `out` at `at`. */
-  randomInto(out: u8[], at: i32, count: i32): void {
+  private randomInto(out: u8[], at: i32, count: i32): void {
     for (let k: i32 = 0; k < count; k += 1) {
       const b: i32 = this.randomByte()
       if (at + k >= 0 && at + k < toI32(out.length)) {
@@ -458,7 +459,7 @@ export class QuicListener {
   }
 
   /** The generator's next block, HMAC-SHA256 under the seed of the counter, into `pool`. */
-  refill(): void {
+  private refill(): void {
     quicListenerPutNumber(this.block, 0, this.counter, QUIC_LISTENER_BLOCK)
     this.counter = this.counter + 1
     const mac: HmacSha256Scratch = this.kdf.sha256
@@ -580,7 +581,7 @@ export class QuicListener {
    * TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this
    * belongs beside `quicRetryPacket` there, which this stage may not edit.
    */
-  versionNegotiation(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
+  private versionNegotiation(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
     const unused: i32 = this.randomByte()
     const dcidLength: i32 = header.dcidLength
     const scidLength: i32 = header.scidLength
@@ -605,7 +606,7 @@ export class QuicListener {
    * first `QUIC_LISTENER_TOKEN_MAC_SIZE` bytes are the token's MAC; the
    * caller wipes `tag` once it has used them.
    */
-  tokenMac(
+  private tokenMac(
     head: u8[],
     headAt: i32,
     headLength: i32,
@@ -640,7 +641,7 @@ export class QuicListener {
    * (compared in constant time), and it was issued no later than now and
    * less than `retryTokenLifetime` ago. The token is read in `datagram`.
    */
-  tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean {
+  private tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean {
     const tokenAt: i32 = header.tokenStart
     const length: i32 = header.tokenLength
     if (length < QUIC_LISTENER_TOKEN_HEAD + QUIC_LISTENER_TOKEN_MAC_SIZE) {
@@ -677,7 +678,7 @@ export class QuicListener {
    * marker byte, the time, the DCID, then the MAC — under the integrity tag
    * of RFC 9001 §5.8. Each part is written where it goes in `reply`.
    */
-  retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void {
+  private retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void {
     const scidLength: i32 = header.scidLength
     const odcidLength: i32 = header.dcidLength
     const retryScidAt: i32 = 7 + scidLength
@@ -714,7 +715,7 @@ export class QuicListener {
    * pseudo-packet and the AEAD's temporaries go with the arena block.
    * Answers whether it was made.
    */
-  retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean {
+  private retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean {
     using _scope = arena()
     const pseudo: u8[] = new Array<u8>(1 + odcidLength + tagAt)
     quicListenerPutNumber(pseudo, 0, toI64(odcidLength), 1)
@@ -739,7 +740,7 @@ export class QuicListener {
    * own slots, the Initial is opened in an arena block, and the close is
    * written and sealed in `reply`.
    */
-  invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
+  private invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
     const secrets: boolean = quicInitialSecretsInto(
       this.kdf,
       datagram,
@@ -815,7 +816,7 @@ export class QuicListener {
   }
 
   /** Whether the Initial `header` read in `datagram` opens under `read`; what opening it allocates goes with the arena block. */
-  opens(read: QuicKeys, datagram: u8[], header: QuicHeader): boolean {
+  private opens(read: QuicKeys, datagram: u8[], header: QuicHeader): boolean {
     using _scope = arena()
     const packet: QuicPacket = this.packet
     const clear: u8[] = quicUnprotectHeader(read, datagram, header, -1, packet)
@@ -824,7 +825,7 @@ export class QuicListener {
   }
 
   /** Takes one stateless reset from the rate limit's budget, topping it up first. Answers whether one was there. */
-  takeReset(): boolean {
+  private takeReset(): boolean {
     if (this.resetRefilled < 0) {
       this.resetRefilled = this.now
       this.resetBudget = QUIC_LISTENER_RESET_BURST
@@ -854,7 +855,13 @@ export class QuicListener {
    * shorter; a datagram too short for that to leave 21 bytes, or one past
    * the rate limit, gets nothing.
    */
-  statelessReset(answer: QuicListenerAnswer, n: i32, datagram: u8[], dcidAt: i32, dcidLength: i32): void {
+  private statelessReset(
+    answer: QuicListenerAnswer,
+    n: i32,
+    datagram: u8[],
+    dcidAt: i32,
+    dcidLength: i32
+  ): void {
     if (n <= QUIC_LISTENER_MIN_RESET || !this.takeReset()) {
       return
     }

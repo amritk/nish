@@ -42,7 +42,7 @@ export class QuicAckRanges {
   largest: i64 = -1
   /** Every packet number at or below this is answered as already received; -1 until a range is dropped. */
   floor: i64 = -1
-  ranges: i64[]
+  private ranges: i64[]
   count: i32 = 0
   /** Whether an ack-eliciting packet arrived since the last `pushAck`. */
   ackPending: boolean = false
@@ -138,7 +138,7 @@ export class QuicAckRanges {
   }
 
   /** Removes range `k`, moving the lower ones up. */
-  remove(k: i32): void {
+  private remove(k: i32): void {
     for (let j: i32 = k; j + 1 < this.count; j += 1) {
       this.set(j, this.low(j + 1), this.high(j + 1))
     }
@@ -150,7 +150,7 @@ export class QuicAckRanges {
    * is taken the lowest range is dropped first and the floor raised over it;
    * if `pn` itself would be that lowest range, it is the one dropped.
    */
-  insert(k: i32, pn: i64): void {
+  private insert(k: i32, pn: i64): void {
     if (this.count === QUIC_ACK_MAX_RANGES) {
       if (k === this.count) {
         this.floor = pn

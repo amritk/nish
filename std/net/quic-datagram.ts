@@ -85,7 +85,7 @@ export class QuicDatagramQueue {
   }
 
   /** Forgets the oldest datagram. */
-  drop(): void {
+  private drop(): void {
     if (this.count > 0) {
       this.head = (this.head + 1) % this.capacity()
       this.count = this.count - 1

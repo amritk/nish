@@ -620,11 +620,19 @@ export class QuicStreamData {
  * before the Handshake one starts.
  */
 class QuicConnReassembly {
+  /** @internal Read in quic.ts outside the class. */
   ring: u8[]
+  /** @internal Kept with `ring`, its family, which quic.ts's free functions read. */
   have: u8[]
-  /** The level whose bytes the ring holds. */
+  /**
+   * The level whose bytes the ring holds.
+   * @internal Read in quic.ts outside the class.
+   */
   level: i32 = 0
-  /** How many bytes of the level have been handed to TLS. */
+  /**
+   * How many bytes of the level have been handed to TLS.
+   * @internal Read in quic.ts outside the class.
+   */
   delivered: i64 = 0
 
   constructor(capacity: i32) {
@@ -632,26 +640,32 @@ class QuicConnReassembly {
     this.have = new Array<u8>((capacity + 7) >> 3)
   }
 
-  /** Empties the ring for level `level`. */
+  /**
+   * Empties the ring for level `level`.
+   * @internal Read in quic.ts outside the class.
+   */
   reset(level: i32): void {
     this.level = level
     this.delivered = 0
     this.have.fill(toU8(0))
   }
 
-  /** The ring slot of stream offset `offset`. */
+  /**
+   * The ring slot of stream offset `offset`.
+   * @internal Read in quic.ts outside the class.
+   */
   slot(offset: i64): i32 {
     const capacity: i32 = toI32(this.ring.length)
     return capacity > 0 ? toI32(offset % toI64(capacity)) : 0
   }
 
   /** Whether the byte in ring slot `s` arrived and is not yet handed out. */
-  arrived(s: i32): boolean {
+  private arrived(s: i32): boolean {
     return quicStreamBit(this.have, s)
   }
 
   /** Marks ring slot `s` as holding a byte, or not. */
-  mark(s: i32, on: boolean): void {
+  private mark(s: i32, on: boolean): void {
     quicStreamSetBit(this.have, s, on)
   }
 
@@ -659,6 +673,7 @@ class QuicConnReassembly {
    * Takes `data[from .. from + length)`, which sits at stream offset
    * `offset`. Answers `false`, taking nothing, when it reaches `capacity` or
    * more past what was delivered. Bytes already delivered are skipped.
+   * @internal Read in quic.ts outside the class.
    */
   insert(offset: i64, data: u8[], from: i32, length: i32): boolean {
     const capacity: i32 = toI32(this.ring.length)
@@ -679,7 +694,10 @@ class QuicConnReassembly {
     return true
   }
 
-  /** How many bytes from `delivered` have arrived without a gap, up to the end of the ring's array. */
+  /**
+   * How many bytes from `delivered` have arrived without a gap, up to the end of the ring's array.
+   * @internal Read in quic.ts outside the class.
+   */
   run(): i32 {
     const capacity: i32 = toI32(this.ring.length)
     const start: i32 = this.slot(this.delivered)
@@ -690,7 +708,10 @@ class QuicConnReassembly {
     return n
   }
 
-  /** Hands out the `n` bytes `run` counted: their bits cleared, `delivered` moved past them. */
+  /**
+   * Hands out the `n` bytes `run` counted: their bits cleared, `delivered` moved past them.
+   * @internal Read in quic.ts outside the class.
+   */
   consume(n: i32): void {
     const start: i32 = this.slot(this.delivered)
     for (let k: i32 = 0; k < n; k += 1) {
@@ -718,6 +739,7 @@ class QuicConnSpace {
   nextPn: i64 = 0
   /** The largest packet number the client acknowledged here, or -1. */
   largestAcked: i64 = -1
+  /** @internal Read in quic.ts outside the class. */
   received: QuicAckRanges
   /**
    * Every CRYPTO byte TLS wrote at this level, from stream offset 0, its
@@ -725,8 +747,10 @@ class QuicConnSpace {
    * a lost range can be sent again; the array is reused by the next
    * connection in the slot. The bytes from `cryptoOutHead` (offset
    * `cryptoOutOffset`) are not sent yet.
+   * @internal Read in quic.ts outside the class.
    */
   cryptoOut: u8[]
+  /** @internal Read in quic.ts outside the class. */
   cryptoOutLength: i32 = 0
   /**
    * How many ack-eliciting probe packets this space still owes, which the
@@ -734,25 +758,45 @@ class QuicConnSpace {
    * §6.2.4), or an early resend (§6.2.3).
    */
   probes: i32 = 0
+  /** @internal Read in quic.ts outside the class. */
   cryptoOutOffset: i64 = 0
-  /** How many CRYPTO bytes the client sent here that were handed to TLS, for a duplicate arriving after the next level started. */
+  /**
+   * How many CRYPTO bytes the client sent here that were handed to TLS, for a duplicate arriving after the next level started.
+   * @internal Read in quic.ts outside the class.
+   */
   cryptoInDelivered: i64 = 0
-  /** CRYPTO bytes declared lost, to send before new ones: `[cryptoResendLow, cryptoResendHigh)`, or -1. */
+  /**
+   * CRYPTO bytes declared lost, to send before new ones: `[cryptoResendLow, cryptoResendHigh)`, or -1.
+   * @internal Read in quic.ts outside the class.
+   */
   cryptoResendLow: i64 = -1
+  /** @internal Read in quic.ts outside the class. */
   cryptoResendHigh: i64 = -1
   /** Each packet's CRYPTO frame (offset, and length 0 for none), and its `QUIC_CONN_SENT_*` bits. */
-  sentCryptoOffset: i64[]
-  sentCryptoLength: i32[]
-  sentFlags: u8[]
-  /** Each packet's STREAM chunks, `QUIC_CONN_PACKET_STREAMS` to a row: how many, then each one's stream, offset, length and FIN. */
+  private sentCryptoOffset: i64[]
+  private sentCryptoLength: i32[]
+  private sentFlags: u8[]
+  /**
+   * Each packet's STREAM chunks, `QUIC_CONN_PACKET_STREAMS` to a row: how many, then each one's stream, offset, length and FIN.
+   * @internal Kept with `sentStreamId`, its family, which quic.ts's free functions read.
+   */
   sentStreamCount: i32[]
+  /** @internal Read in quic.ts outside the class. */
   sentStreamId: i64[]
+  /** @internal Read in quic.ts outside the class. */
   sentStreamOffset: i64[]
+  /** @internal Read in quic.ts outside the class. */
   sentStreamLength: i32[]
+  /** @internal Read in quic.ts outside the class. */
   sentStreamFin: u8[]
-  /** Each packet's control frames, `QUIC_CONN_PACKET_CONTROL` to a row: their kind and value (a sequence number or a stream). */
+  /**
+   * Each packet's control frames, `QUIC_CONN_PACKET_CONTROL` to a row: their kind and value (a sequence number or a stream).
+   * @internal Kept with `sentControlKind`, its family, which quic.ts's free functions read.
+   */
   sentControlCount: i32[]
+  /** @internal Read in quic.ts outside the class. */
   sentControlKind: u8[]
+  /** @internal Read in quic.ts outside the class. */
   sentControlValue: i64[]
   /**
    * Where this space's packet keys live, made once for the slot (QUIC-3):
@@ -760,17 +804,31 @@ class QuicConnSpace {
    * second of each, which a key update derives the next generation into.
    */
   keySlots: QuicKeysSlot[]
-  /** `TLS_LEVEL_INITIAL`, `_HANDSHAKE` or `_APPLICATION`, which is also the space's index. */
+  /**
+   * `TLS_LEVEL_INITIAL`, `_HANDSHAKE` or `_APPLICATION`, which is also the space's index.
+   * @internal Read in quic.ts outside the class.
+   */
   level: i32 = 0
+  /** @internal Read in quic.ts outside the class. */
   cryptoOutHead: i32 = 0
-  /** The packet `buildDatagram` is putting together here: where it starts in the datagram, or -1 for none, and its payload's end. */
+  /**
+   * The packet `buildDatagram` is putting together here: where it starts in the datagram, or -1 for none, and its payload's end.
+   * @internal Read in quic.ts outside the class.
+   */
   builtStart: i32 = -1
+  /** @internal Read in quic.ts outside the class. */
   builtEnd: i32 = 0
-  /** The row the packet being built is described in: one past the last slot. */
+  /**
+   * The row the packet being built is described in: one past the last slot.
+   * @internal Read in quic.ts outside the class.
+   */
   staging: i32 = 0
   /** Whether the keys were discarded (RFC 9001 §4.9): nothing is sent or received here again. */
   discarded: boolean = false
-  /** Whether the packet being built elicits an acknowledgement, and so is recorded. */
+  /**
+   * Whether the packet being built elicits an acknowledgement, and so is recorded.
+   * @internal Read in quic.ts outside the class.
+   */
   stagedEliciting: boolean = false
 
   constructor(level: i32) {
@@ -801,7 +859,10 @@ class QuicConnSpace {
     this.sentControlValue = new Array<i64>(chunkRows * QUIC_CONN_PACKET_CONTROL)
   }
 
-  /** Puts the space back as a new connection has it, keeping its arrays, for a slot reused for another peer. */
+  /**
+   * Puts the space back as a new connection has it, keeping its arrays, for a slot reused for another peer.
+   * @internal Read in quic.ts outside the class.
+   */
   reset(): void {
     this.readKeys = null
     this.writeKeys = null
@@ -823,6 +884,7 @@ class QuicConnSpace {
    * Appends `bytes[0 .. length)` to the CRYPTO stream kept, writing into the
    * array's old room before growing it: TLS's output buffer is read in
    * place, so its flight is not copied on the way.
+   * @internal Read in quic.ts outside the class.
    */
   appendCrypto(bytes: u8[], length: i32): void {
     for (let k: i32 = 0; k < length && k < toI32(bytes.length); k += 1) {
@@ -846,39 +908,60 @@ class QuicConnSpace {
     return this.keySlots[at]
   }
 
-  /** Zeroes every key this space's slots hold, the AES schedules included. */
+  /**
+   * Zeroes every key this space's slots hold, the AES schedules included.
+   * @internal Read in quic.ts outside the class.
+   */
   wipeKeySlots(): void {
     for (const slot of this.keySlots) {
       slot.wipe()
     }
   }
 
-  /** The number of STREAM chunks row `row` holds, or 0. */
+  /**
+   * The number of STREAM chunks row `row` holds, or 0.
+   * @internal Read in quic.ts outside the class.
+   */
   streamCount(row: i32): i32 {
     return row >= 0 && row < toI32(this.sentStreamCount.length) ? this.sentStreamCount[row] : 0
   }
 
-  /** The number of control frames row `row` holds, or 0. */
+  /**
+   * The number of control frames row `row` holds, or 0.
+   * @internal Read in quic.ts outside the class.
+   */
   controlCount(row: i32): i32 {
     return row >= 0 && row < toI32(this.sentControlCount.length) ? this.sentControlCount[row] : 0
   }
 
-  /** The CRYPTO frame's length in row `row`, or 0. */
+  /**
+   * The CRYPTO frame's length in row `row`, or 0.
+   * @internal Read in quic.ts outside the class.
+   */
   cryptoLength(row: i32): i32 {
     return row >= 0 && row < toI32(this.sentCryptoLength.length) ? this.sentCryptoLength[row] : 0
   }
 
-  /** The CRYPTO frame's offset in row `row`, or 0. */
+  /**
+   * The CRYPTO frame's offset in row `row`, or 0.
+   * @internal Read in quic.ts outside the class.
+   */
   cryptoOffset(row: i32): i64 {
     return row >= 0 && row < toI32(this.sentCryptoOffset.length) ? this.sentCryptoOffset[row] : 0
   }
 
-  /** The `QUIC_CONN_SENT_*` bits of row `row`. */
+  /**
+   * The `QUIC_CONN_SENT_*` bits of row `row`.
+   * @internal Read in quic.ts outside the class.
+   */
   flags(row: i32): i32 {
     return row >= 0 && row < toI32(this.sentFlags.length) ? toI32(this.sentFlags[row]) : 0
   }
 
-  /** Empties the staging row, for the next packet. */
+  /**
+   * Empties the staging row, for the next packet.
+   * @internal Read in quic.ts outside the class.
+   */
   clearStaged(): void {
     this.stagedEliciting = false
     this.setCrypto(this.staging, QUIC_CONN_NONE, QUIC_CONN_FROM)
@@ -887,14 +970,17 @@ class QuicConnSpace {
   }
 
   /** Sets row `row`'s CRYPTO frame. */
-  setCrypto(row: i32, offset: i64, length: i32): void {
+  private setCrypto(row: i32, offset: i64, length: i32): void {
     if (row >= 0 && row < toI32(this.sentCryptoOffset.length) && row < toI32(this.sentCryptoLength.length)) {
       this.sentCryptoOffset[row] = offset
       this.sentCryptoLength[row] = length
     }
   }
 
-  /** Sets row `row`'s bits. */
+  /**
+   * Sets row `row`'s bits.
+   * @internal Read in quic.ts outside the class.
+   */
   setFlags(row: i32, flags: i32): void {
     if (row >= 0 && row < toI32(this.sentFlags.length)) {
       this.sentFlags[row] = toU8(flags)
@@ -902,7 +988,7 @@ class QuicConnSpace {
   }
 
   /** Sets how many STREAM chunks and control frames row `row` holds. */
-  setCounts(row: i32, streams: i32, control: i32): void {
+  private setCounts(row: i32, streams: i32, control: i32): void {
     if (row >= 0 && row < toI32(this.sentStreamCount.length) && row < toI32(this.sentControlCount.length)) {
       this.sentStreamCount[row] = streams
       this.sentControlCount[row] = control
@@ -910,7 +996,7 @@ class QuicConnSpace {
   }
 
   /** Sets STREAM chunk `j` of row `row`. */
-  setChunk(row: i32, j: i32, id: i64, offset: i64, length: i32, fin: boolean): void {
+  private setChunk(row: i32, j: i32, id: i64, offset: i64, length: i32, fin: boolean): void {
     const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
     if (
       at >= 0 &&
@@ -927,7 +1013,7 @@ class QuicConnSpace {
   }
 
   /** Sets control frame `j` of row `row`. */
-  setControl(row: i32, j: i32, kind: i32, value: i64): void {
+  private setControl(row: i32, j: i32, kind: i32, value: i64): void {
     const at: i32 = row * QUIC_CONN_PACKET_CONTROL + j
     if (at >= 0 && at < toI32(this.sentControlKind.length) && at < toI32(this.sentControlValue.length)) {
       this.sentControlKind[at] = toU8(kind)
@@ -935,13 +1021,19 @@ class QuicConnSpace {
     }
   }
 
-  /** Stages a CRYPTO frame at `offset`, `length` bytes, in the packet being built. */
+  /**
+   * Stages a CRYPTO frame at `offset`, `length` bytes, in the packet being built.
+   * @internal Read in quic.ts outside the class.
+   */
   stageCrypto(offset: i64, length: i32): void {
     this.setCrypto(this.staging, offset, length)
     this.stagedEliciting = true
   }
 
-  /** Stages a STREAM chunk in the packet being built; the caller keeps under `QUIC_CONN_PACKET_STREAMS`. */
+  /**
+   * Stages a STREAM chunk in the packet being built; the caller keeps under `QUIC_CONN_PACKET_STREAMS`.
+   * @internal Read in quic.ts outside the class.
+   */
   stageChunk(id: i64, offset: i64, length: i32, fin: boolean): void {
     const streams: i32 = this.streamCount(this.staging)
     this.setChunk(this.staging, streams, id, offset, length, fin)
@@ -949,7 +1041,10 @@ class QuicConnSpace {
     this.stagedEliciting = true
   }
 
-  /** Stages a control frame in the packet being built; the caller keeps under `QUIC_CONN_PACKET_CONTROL`. */
+  /**
+   * Stages a control frame in the packet being built; the caller keeps under `QUIC_CONN_PACKET_CONTROL`.
+   * @internal Read in quic.ts outside the class.
+   */
   stageControl(kind: i32, value: i64): void {
     const control: i32 = this.controlCount(this.staging)
     this.setControl(this.staging, control, kind, value)
@@ -957,7 +1052,10 @@ class QuicConnSpace {
     this.stagedEliciting = true
   }
 
-  /** Copies the staging row to row `row`, the slot of the packet just sealed. */
+  /**
+   * Copies the staging row to row `row`, the slot of the packet just sealed.
+   * @internal Read in quic.ts outside the class.
+   */
   commitStaged(row: i32): void {
     const from: i32 = this.staging
     this.setCrypto(row, this.cryptoOffset(from), this.cryptoLength(from))
@@ -992,7 +1090,10 @@ class QuicConnSpace {
     }
   }
 
-  /** Queues CRYPTO bytes `[offset, offset + length)` to be sent again, merged with what is queued already. */
+  /**
+   * Queues CRYPTO bytes `[offset, offset + length)` to be sent again, merged with what is queued already.
+   * @internal Read in quic.ts outside the class.
+   */
   resendCrypto(offset: i64, length: i32): void {
     if (length <= 0 || this.discarded) {
       return
@@ -1011,7 +1112,10 @@ class QuicConnSpace {
     }
   }
 
-  /** How many CRYPTO bytes are waiting to be sent. */
+  /**
+   * How many CRYPTO bytes are waiting to be sent.
+   * @internal Read in quic.ts outside the class.
+   */
   cryptoUnsent(): i32 {
     return this.cryptoOutLength - this.cryptoOutHead
   }
@@ -1215,33 +1319,36 @@ const quicConnConfigFits = (config: QuicServerConfig): boolean =>
  * that runs many connections routes datagrams by (`ownsConnectionId`).
  */
 export class QuicConnection {
-  config: QuicServerConfig
+  private config: QuicServerConfig
   /** The error code the connection closed with: a transport error, `0x100 + alert`, or the application's code. */
   error: i64 = 0
   /** For a transport error: the type of the frame that caused it, or 0. */
-  errorFrameType: i64 = 0
-  serverRandom: u8[]
+  private errorFrameType: i64 = 0
+  private serverRandom: u8[]
   /** The x25519 private key `begin` takes from the entropy, until the handshake hands it to `TlsServer`. */
   readonly ephemeral: Secret<u8[]>
   cidSeed: u8[]
-  /** The DCID of the client's first Initial, which the Initial keys come from: its first `originalDcidLength` bytes. */
+  /**
+   * The DCID of the client's first Initial, which the Initial keys come from: its first `originalDcidLength` bytes.
+   * @internal Read by http3-server.ts.
+   */
   originalDcid: u8[]
   /** The SCID of the client's first Initial: where long-header packets go, and what its transport parameters must name. */
-  peerScid: u8[]
+  private peerScid: u8[]
   /** The server's first connection ID, the SCID of every long-header packet it sends. */
-  localScid: u8[]
+  private localScid: u8[]
   tls: TlsServer | null = null
   /** The slot's `TlsServer`, made by its first handshake and `restart`ed by every one after (QUIC-3). */
   tlsSlot: TlsServer | null = null
   /** Its configuration, made once: the parameters it carries are `localEncoded`, rewritten for each connection. */
-  tlsConfig: TlsServerConfig
+  private tlsConfig: TlsServerConfig
   /** The server's transport parameters, set for each connection, and their encoding. */
   localParameters: QuicTransportParameters
   localEncoded: u8[]
   /** The client's transport parameters, parsed into the slot's own object. */
-  parsedParameters: QuicTransportParameters
+  private parsedParameters: QuicTransportParameters
   /** Where every key derivation and HMAC of the connection runs. */
-  kdf: HkdfScratch
+  private kdf: HkdfScratch
   /** The Initial secrets of RFC 9001 §5.2, the client's and the server's. */
   initialClient: u8[]
   initialServer: u8[]
@@ -1260,8 +1367,8 @@ export class QuicConnection {
   readonly nextReadSecret384: Secret<u8[]>
   readonly writeSecret384: Secret<u8[]>
   /** A connection ID being issued and its stateless reset token, before the table copies them. */
-  cidScratch: u8[]
-  tokenScratch: u8[]
+  private cidScratch: u8[]
+  private tokenScratch: u8[]
   initial: QuicConnSpace
   handshake: QuicConnSpace
   application: QuicConnSpace
@@ -1271,13 +1378,16 @@ export class QuicConnection {
   /** The client's transport parameters, once the handshake has checked them; until then, every default. */
   peerParameters: QuicTransportParameters
   /** The defaults `peerParameters` starts from, made once and set back by `reset`. */
-  defaultParameters: QuicTransportParameters
+  private defaultParameters: QuicTransportParameters
   /** Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). */
   bytesReceived: i64 = 0
   bytesSent: i64 = 0
   /** The ALPN protocol the handshake chose. */
   alpn: string = ""
-  /** The client's `server_name`, or empty. */
+  /**
+   * The client's `server_name`, or empty.
+   * @internal Nothing reads it.
+   */
   serverName: string = ""
   /** The streams, both ways (`nish/net/quic-stream`). */
   streams: QuicStreams
@@ -1285,9 +1395,9 @@ export class QuicConnection {
   datagramsOut: QuicDatagramQueue
   datagramsIn: QuicDatagramQueue
   /** The CRYPTO bytes the client sent, put back in order. */
-  cryptoIn: QuicConnReassembly
+  private cryptoIn: QuicConnReassembly
   /** PATH_CHALLENGE data to answer: a ring of four, eight bytes each, `pathCount` from `pathHead`. */
-  pathData: u8[]
+  private pathData: u8[]
   /**
    * The client's address (RFC 9000 §9), each in `nish:net`'s 18-byte form,
    * for a carrier that passes one to `receiveWindowFrom`: `pathCurrent` is
@@ -1296,9 +1406,9 @@ export class QuicConnection {
    * handshake's, or one a PATH_RESPONSE answered. `pathArrival` is the
    * datagram being read's. Made once and overwritten in place.
    */
-  pathCurrent: u8[]
+  private pathCurrent: u8[]
   pathValidated: u8[]
-  pathArrival: u8[]
+  private pathArrival: u8[]
   /**
    * A PATH_CHALLENGE that came from another address in a datagram that
    * moved nothing (§9.1): answered there by `takeProbeInto`, from
@@ -1308,35 +1418,35 @@ export class QuicConnection {
    * the same way (`sendResponsesBack`).
    */
   probeAddress: u8[]
-  probeData: u8[]
+  private probeData: u8[]
   /**
    * The last `QUIC_CONN_CHALLENGES` PATH_CHALLENGE data sent on the path
    * being validated, eight bytes each, `challengeCount` of them, the latest
    * at `(challengesDrawn - 1) % QUIC_CONN_CHALLENGES`: each drawn from the
    * ID seed's HMAC under `QUIC_CONN_CHALLENGE_SEQUENCE`, so unguessable.
    */
-  challengeData: u8[]
+  private challengeData: u8[]
   /** Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). */
   pathReceived: i64 = 0
   pathSent: i64 = 0
-  probeBudget: i64 = 0
+  private probeBudget: i64 = 0
   /** When the PATH_CHALLENGE goes again with fresh data, and when validation gives up (§8.2.4); -1 when not validating. */
   challengeResendAt: i64 = -1
   challengeUntil: i64 = -1
   challengesDrawn: i64 = 0
-  frame: QuicFrame
+  private frame: QuicFrame
   /** The header and the packet numbers of the packet being read, reused for every one. */
-  header: QuicHeader
-  packet: QuicPacket
+  private header: QuicHeader
+  private packet: QuicPacket
   /** For a connection `acceptRetry` set up: the DCID of the client's Initial before the Retry, and the Retry's SCID. */
-  retryOriginalDcid: u8[]
-  retryScid: u8[]
+  private retryOriginalDcid: u8[]
+  private retryScid: u8[]
   /** An empty array, which a cleared secret or ID is set to. */
-  none: u8[]
+  private none: u8[]
   /** The latest time the caller gave, in milliseconds; time never runs backwards here. */
   now: i64 = 0
   /** When the idle timer last restarted (RFC 9000 §10.1), or -1 before the first packet. */
-  idleSince: i64 = -1
+  private idleSince: i64 = -1
   /**
    * The other read keys of the Application Data space (RFC 9001 §6.3):
    * the next generation's while `otherIsNext`, and for a probe timeout
@@ -1344,23 +1454,23 @@ export class QuicConnection {
    */
   otherReadKeys: QuicKeys | null = null
   /** The lowest and highest packet numbers opened with the current read keys, or -1. */
-  readPhaseLowest: i64 = -1
-  readPhaseHighest: i64 = -1
+  private readPhaseLowest: i64 = -1
+  private readPhaseHighest: i64 = -1
   /** The first packet number sent with the current write keys. */
-  writePhaseFirst: i64 = 0
+  private writePhaseFirst: i64 = 0
   /** When the previous read keys go and the next are derived, or -1. */
-  keyRetainUntil: i64 = -1
+  private keyRetainUntil: i64 = -1
   /**
    * When a closed connection's closing or draining period ends (RFC 9000
    * §10.2), and `runClocks` wipes every key it kept for it, or -1: before
    * the close, while a close this side owes has not gone out, and once the
    * keys are wiped.
    */
-  closingUntil: i64 = -1
+  private closingUntil: i64 = -1
   /** The packet number of a client key update read but not applied yet, or -1. */
-  phasePending: i64 = -1
+  private phasePending: i64 = -1
   /** The largest DATAGRAM frame the client takes (its `max_datagram_frame_size`), 0 for none. */
-  peerMaxDatagramFrame: i64 = 0
+  private peerMaxDatagramFrame: i64 = 0
   /**
    * The AEAD limits this connection keeps (RFC 9001 §6.6): packets one 1-RTT
    * write key seals, and packets that fail to authenticate over the
@@ -1380,13 +1490,14 @@ export class QuicConnection {
    * the next goes, and `skipsDrawn` how many distances were drawn.
    */
   nextSkip: i64 = -1
-  skipped: i64[]
+  private skipped: i64[]
   skipsDrawn: i64 = 0
   /** How many of `challengeData`'s slots hold a challenge sent on the path being validated. */
-  challengeCount: i32 = 0
+  private challengeCount: i32 = 0
+  /** @internal Read by http3-server.ts. */
   originalDcidLength: i32 = 0
-  peerScidLength: i32 = 0
-  pathHead: i32 = 0
+  private peerScidLength: i32 = 0
+  private pathHead: i32 = 0
   pathCount: i32 = 0
   state: i32 = 0
   /** Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. */
@@ -1401,7 +1512,7 @@ export class QuicConnection {
   /** Handshake data sent again early, against `QUIC_CONN_EARLY_RESENDS` (RFC 9002 §6.2.3). */
   earlyResends: i32 = 0
   /** The level at which the packet just read showed the client lacks the server's handshake data, or -1. */
-  resendLevel: i32 = -1
+  private resendLevel: i32 = -1
   /**
    * ECN (RFC 9000 §13.4): `ecnMarking` is the carrier's to set when it sends
    * this connection's datagrams with the ECN bits of `datagramEcn`, which
@@ -1416,45 +1527,45 @@ export class QuicConnection {
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
   /** Whether the one CONNECTION_CLOSE this side owes has gone out. */
-  closeSent: boolean = false
+  private closeSent: boolean = false
   /** Whether the client's address is validated: a Handshake packet from it was processed. */
   addressValidated: boolean = false
   /** Whether the handshake is complete, which for a server is also confirmed (RFC 9001 §4.1.2). */
   handshakeComplete: boolean = false
-  handshakeDonePending: boolean = false
+  private handshakeDonePending: boolean = false
   /**
    * Whether `afterTls` has taken the application traffic secrets out of
    * `TlsServer`. It takes them once: `wipeSecret` leaves them known, so a
    * second take would derive the 1-RTT keys from the zeros it left.
    */
-  applicationTaken: boolean = false
+  private applicationTaken: boolean = false
   /** Whether the connection was set up by `acceptRetry`. */
-  retried: boolean = false
+  private retried: boolean = false
   /** Whether an ack-eliciting packet went out since the last packet was received. */
-  elicitingSent: boolean = false
+  private elicitingSent: boolean = false
   /** Whether `otherReadKeys` are the next generation's rather than the previous one's. */
   otherIsNext: boolean = false
   /** The Key Phase bit of the current read keys, and of the current write keys. */
   readPhase: boolean = false
   writePhase: boolean = false
   /** Whether the packet just read brought CRYPTO bytes for TLS, or retired an ID that wants replacing. */
-  cryptoArrived: boolean = false
-  topUpOwed: boolean = false
+  private cryptoArrived: boolean = false
+  private topUpOwed: boolean = false
   /** Whether `pathCurrent` holds the client's address: the carrier passes addresses, and a first Initial gave one. */
   pathKnown: boolean = false
   /** Whether the datagram being read came from an address other than `pathCurrent`. */
-  arrivalOther: boolean = false
+  private arrivalOther: boolean = false
   /** Whether `pathCurrent` is not validated yet: a PATH_CHALLENGE is out on it. */
   pathValidating: boolean = false
   /** Whether a PATH_CHALLENGE is due in the next datagram, and whether the one being built carries a PATH_CHALLENGE or PATH_RESPONSE. */
-  challengeOwed: boolean = false
-  pathFrameStaged: boolean = false
+  private challengeOwed: boolean = false
+  private pathFrameStaged: boolean = false
   /** Whether a PATH_RESPONSE is owed on `probeAddress`, and whether the datagram being read carried a challenge for it. */
   probeOwed: boolean = false
-  probeStaged: boolean = false
+  private probeStaged: boolean = false
   /** Whether the packet being read carries a non-probing frame (§9.1), and whether a packet of the datagram moves the connection (§9.3). */
-  nonProbing: boolean = false
-  migrateOwed: boolean = false
+  private nonProbing: boolean = false
+  private migrateOwed: boolean = false
 
   /**
    * A connection under `config`, with `entropy` its `QUIC_CONN_ENTROPY_SIZE`
@@ -1620,7 +1731,7 @@ export class QuicConnection {
   }
 
   /** Takes `entropy` (and wipes it), or closes with INTERNAL_ERROR for entropy or a configuration that does not fit. */
-  begin(entropy: u8[]): void {
+  private begin(entropy: u8[]): void {
     quicCidCopy(this.serverRandom, entropy, 0, 32)
     exposeWith(this.ephemeral, entropy, quicConnEphemeralIn)
     quicCidCopy(this.localScid, entropy, 64, QUIC_CONN_CID_LENGTH)
@@ -1636,7 +1747,7 @@ export class QuicConnection {
   }
 
   /** Counts a dropped packet; the count stops at the largest `i32` rather than overflow. */
-  drop(): void {
+  private drop(): void {
     if (this.dropped < 2147483647) {
       this.dropped += 1
     }
@@ -1675,7 +1786,10 @@ export class QuicConnection {
     return true
   }
 
-  /** Closes the connection with transport error `code`, caused by a frame of `frameType` (0 for none). */
+  /**
+   * Closes the connection with transport error `code`, caused by a frame of `frameType` (0 for none).
+   * @internal Read by http3.ts.
+   */
   fail(code: i64, frameType: i64): void {
     if (this.closed()) {
       return
@@ -1711,12 +1825,12 @@ export class QuicConnection {
    * `deadline()` names, so that a connection nobody `release()`s does not
    * keep them.
    */
-  startClosingPeriod(): void {
+  private startClosingPeriod(): void {
     this.closingUntil = this.now + this.recovery.probeTimeout() * 3
   }
 
   /** The space of packets of `type`, or `null` for a 0-RTT or Retry packet. */
-  spaceOf(type: i32): QuicConnSpace | null {
+  private spaceOf(type: i32): QuicConnSpace | null {
     if (type === QUIC_PACKET_INITIAL) {
       return this.initial
     }
@@ -1730,7 +1844,7 @@ export class QuicConnection {
   }
 
   /** The space of TLS level `level`. */
-  spaceAt(level: i32): QuicConnSpace {
+  private spaceAt(level: i32): QuicConnSpace {
     if (level === TLS_LEVEL_INITIAL) {
       return this.initial
     }
@@ -1844,7 +1958,7 @@ export class QuicConnection {
    * `TlsServer` — is made by `establish` once the Initial has opened, so an
    * Initial that does not authenticate costs only its keys.
    */
-  start(buf: u8[], header: QuicHeader): boolean {
+  private start(buf: u8[], header: QuicHeader): boolean {
     if (
       header.dcidLength < 8 ||
       header.dcidLength > QUIC_MAX_CID_LENGTH ||
@@ -1890,7 +2004,7 @@ export class QuicConnection {
    * `acceptRetry` set one up, and the first ID's stateless reset token
    * (§18.2).
    */
-  establish(): void {
+  private establish(): void {
     const none: u8[] = this.none
     const token: u8[] = this.tokenScratch
     quicConnResetTokenInto(
@@ -1979,7 +2093,7 @@ export class QuicConnection {
    * One packet of a datagram. Answers whether the packet was used: whether it
    * authenticated as this connection's.
    */
-  receivePacket(buf: u8[], header: QuicHeader): boolean {
+  private receivePacket(buf: u8[], header: QuicHeader): boolean {
     const type: i32 = header.type
     const first: boolean = this.state === QUIC_STATE_WAIT_INITIAL
     if (first && (type !== QUIC_PACKET_INITIAL || !this.start(buf, header))) {
@@ -1996,7 +2110,7 @@ export class QuicConnection {
   }
 
   /** Undoes `start`, for a first Initial that turned out not to authenticate. */
-  unstart(): void {
+  private unstart(): void {
     this.state = QUIC_STATE_WAIT_INITIAL
     this.addressValidated = false
     this.idleSince = -1
@@ -2014,7 +2128,7 @@ export class QuicConnection {
    * the CRYPTO bytes and what it answers — runs after it. Answers whether
    * the packet was used.
    */
-  openPacket(buf: u8[], header: QuicHeader, first: boolean): boolean {
+  private openPacket(buf: u8[], header: QuicHeader, first: boolean): boolean {
     const type: i32 = header.type
     const space: QuicConnSpace | null = this.spaceOf(type)
     if (space === null || !this.addressedHere(buf, header)) {
@@ -2085,7 +2199,13 @@ export class QuicConnection {
    * an allocation, which is what lets the block release the packet's
    * temporaries. Answers whether the packet was used rather than dropped.
    */
-  openScoped(buf: u8[], header: QuicHeader, space: QuicConnSpace, keys: QuicKeys, first: boolean): boolean {
+  private openScoped(
+    buf: u8[],
+    header: QuicHeader,
+    space: QuicConnSpace,
+    keys: QuicKeys,
+    first: boolean
+  ): boolean {
     const packet: QuicPacket = this.packet
     // Every key generation shares the header-protection key (RFC 9001 §6),
     // so the current keys take it off whatever the Key Phase bit says.
@@ -2157,7 +2277,7 @@ export class QuicConnection {
    * already had — and an update past `QUIC_CONN_MAX_KEY_UPDATES` is too.
    * Answers whether the connection is still open.
    */
-  notePhase(pn: i64, other: boolean): boolean {
+  private notePhase(pn: i64, other: boolean): boolean {
     if (other && !this.otherIsNext) {
       if (this.readPhaseLowest >= 0 && pn > this.readPhaseLowest) {
         this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
@@ -2192,7 +2312,7 @@ export class QuicConnection {
    * update, before anything acknowledges the packet; the read keys move on,
    * and the previous ones are kept for a probe timeout.
    */
-  applyPhase(pn: i64): void {
+  private applyPhase(pn: i64): void {
     if (this.writePhase === this.readPhase) {
       this.keyUpdates = this.keyUpdates + 1
       if (!this.updateWriteKeys()) {
@@ -2224,7 +2344,7 @@ export class QuicConnection {
    * key, IV and secret wiped. Answers whether it could, which it cannot only
    * for keys `quicKeys` did not make.
    */
-  updateWriteKeys(): boolean {
+  private updateWriteKeys(): boolean {
     const keys: QuicKeys | null = this.application.writeKeys
     if (keys === null) {
       return false
@@ -2253,7 +2373,7 @@ export class QuicConnection {
    * before it ends, so the call keeps nothing in the arena. Answers the
    * slot's keys, or `null` for a secret of the wrong length.
    */
-  keysFrom(slot: QuicKeysSlot, aead: i32, held: Secret<u8[]>): QuicKeys | null {
+  private keysFrom(slot: QuicKeysSlot, aead: i32, held: Secret<u8[]>): QuicKeys | null {
     let made: boolean = false
     {
       using _scope = arena()
@@ -2273,7 +2393,12 @@ export class QuicConnection {
    * block, which are zeroed before it ends. Answers the slot's keys, or
    * `null`, leaving `next` as it was, for keys `quicKeys` did not make.
    */
-  nextKeys(slot: QuicKeysSlot, keys: QuicKeys, current: Secret<u8[]>, next: Secret<u8[]>): QuicKeys | null {
+  private nextKeys(
+    slot: QuicKeysSlot,
+    keys: QuicKeys,
+    current: Secret<u8[]>,
+    next: Secret<u8[]>
+  ): QuicKeys | null {
     let made: boolean = false
     {
       using _scope = arena()
@@ -2298,7 +2423,7 @@ export class QuicConnection {
    * installed and a probe timeout after each update, never while a packet is
    * being opened, so what a packet's Key Phase bit says shows in no timing.
    */
-  prepareNextReadKeys(): void {
+  private prepareNextReadKeys(): void {
     const keys: QuicKeys | null = this.application.readKeys
     quicConnWipePacketKey(this.otherReadKeys)
     this.otherReadKeys = null
@@ -2321,7 +2446,7 @@ export class QuicConnection {
    * the original DCID), a short header to an active local ID. Read in place
    * from `buf`.
    */
-  addressedHere(buf: u8[], header: QuicHeader): boolean {
+  private addressedHere(buf: u8[], header: QuicHeader): boolean {
     if (header.type === QUIC_PACKET_SHORT) {
       return this.cids.ownsLocalAt(buf, header.dcidStart, header.dcidLength)
     }
@@ -2350,7 +2475,7 @@ export class QuicConnection {
    * does not parse and a frame the packet type may not carry close the
    * connection (RFC 9000 §12.4).
    */
-  receiveFrames(
+  private receiveFrames(
     space: QuicConnSpace,
     packetType: i32,
     payload: u8[],
@@ -2387,7 +2512,7 @@ export class QuicConnection {
   }
 
   /** Closes the connection with `error` from a stream frame of `type`, unless it is 0. */
-  failOn(error: i64, type: i64): void {
+  private failOn(error: i64, type: i64): void {
     if (error !== QUIC_ERROR_NO_ERROR) {
       this.fail(error, type)
     }
@@ -2397,7 +2522,7 @@ export class QuicConnection {
    * One frame, which the packet type is allowed to carry: it starts at
    * `payload[frameStart]`, and the packet's header is `header` in `buf`.
    */
-  receiveFrame(
+  private receiveFrame(
     space: QuicConnSpace,
     frame: QuicFrame,
     payload: u8[],
@@ -2507,7 +2632,7 @@ export class QuicConnection {
   }
 
   /** The client closed the connection: enter the draining state, sending nothing more (RFC 9000 §10.2.2). */
-  drain(code: i64, application: boolean): void {
+  private drain(code: i64, application: boolean): void {
     this.state = QUIC_STATE_DRAINING
     this.error = code
     this.errorIsApplication = application
@@ -2521,7 +2646,7 @@ export class QuicConnection {
    * §5, §6.1, §7): each packet it newly acknowledges releases what it
    * carried, and each it shows lost has its frames queued again.
    */
-  receiveAck(space: QuicConnSpace, frame: QuicFrame): void {
+  private receiveAck(space: QuicConnSpace, frame: QuicFrame): void {
     if (frame.largest >= space.nextPn || (space.level === TLS_LEVEL_APPLICATION && this.acksSkipped(frame))) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(frame.type))
       return
@@ -2565,7 +2690,7 @@ export class QuicConnection {
    * `QUIC_FRAME_MAX_ACK_RANGES` is not, and loss recovery does not act on
    * it either.
    */
-  acksSkipped(frame: QuicFrame): boolean {
+  private acksSkipped(frame: QuicFrame): boolean {
     const ranges: i64[] = frame.ackRanges
     for (let k: i32 = 0; k < toI32(this.skipped.length); k += 1) {
       const pn: i64 = this.skipped[k]
@@ -2584,7 +2709,7 @@ export class QuicConnection {
    * to scale is held at 2^40 microseconds first, which is still far past any
    * `max_ack_delay` it is then bounded by (RFC 9002 §5.3).
    */
-  ackDelayOf(field: i64): i64 {
+  private ackDelayOf(field: i64): i64 {
     let exponent: i64 = this.peerParameters.ackDelayExponent
     if (exponent < 0 || exponent > 20) {
       exponent = 3
@@ -2595,7 +2720,7 @@ export class QuicConnection {
   }
 
   /** Every packet of `space` that loss recovery's last call declared lost: what each carried is queued again. */
-  packetsLost(space: QuicConnSpace, sent: QuicSentPackets): void {
+  private packetsLost(space: QuicConnSpace, sent: QuicSentPackets): void {
     for (let k: i32 = 0; k < sent.lostCount; k += 1) {
       this.requeue(space, sent.lostSlot(k))
     }
@@ -2608,7 +2733,7 @@ export class QuicConnection {
    * one not queued already, and each stream control frame that still says
    * something. A DATAGRAM is never in a record, so it never goes again.
    */
-  requeue(space: QuicConnSpace, row: i32): void {
+  private requeue(space: QuicConnSpace, row: i32): void {
     space.resendCrypto(space.cryptoOffset(row), space.cryptoLength(row))
     if ((space.flags(row) & QUIC_CONN_SENT_HANDSHAKE_DONE) !== 0) {
       this.handshakeDonePending = true
@@ -2641,7 +2766,7 @@ export class QuicConnection {
   }
 
   /** A lost control frame of kind `kind` (a sequence number or a stream in `value`), queued again unless it no longer matters. */
-  requeueControl(kind: i32, value: i64): void {
+  private requeueControl(kind: i32, value: i64): void {
     if (kind === QUIC_CONN_CONTROL_NEW_CID) {
       for (const entry of this.cids.local) {
         if (entry.used && entry.sequence === value) {
@@ -2666,7 +2791,7 @@ export class QuicConnection {
    * it twice (`QUIC_CONN_HANDSHAKE_PROBES`), so that one more lost datagram
    * does not cost another, doubled, probe timeout.
    */
-  probe(): void {
+  private probe(): void {
     for (let level: i32 = 0; level < 3; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
       const sent: QuicSentPackets | null = this.recovery.space(level)
@@ -2698,7 +2823,7 @@ export class QuicConnection {
    * one datagram at most. The anti-amplification limit holds it like any
    * datagram (`takeDatagramInto`).
    */
-  resendEarly(level: i32): void {
+  private resendEarly(level: i32): void {
     if (
       this.earlyResends >= QUIC_CONN_EARLY_RESENDS ||
       this.initial.probes > 0 ||
@@ -2740,7 +2865,7 @@ export class QuicConnection {
    * its alert unexpected_message (RFC 9001 §4.8). A frame too far ahead is
    * CRYPTO_BUFFER_EXCEEDED.
    */
-  receiveCrypto(space: QuicConnSpace, frame: QuicFrame, payload: u8[]): void {
+  private receiveCrypto(space: QuicConnSpace, frame: QuicFrame, payload: u8[]): void {
     const reassembly: QuicConnReassembly = this.cryptoIn
     if (space.level < reassembly.level) {
       if (frame.offset + toI64(frame.dataLength) > space.cryptoInDelivered) {
@@ -2765,7 +2890,7 @@ export class QuicConnection {
   }
 
   /** Hands TLS what now continues the CRYPTO stream, from the buffer itself; an alert closes with CRYPTO_ERROR. */
-  feedTls(): void {
+  private feedTls(): void {
     const tls: TlsServer | null = this.tls
     const reassembly: QuicConnReassembly = this.cryptoIn
     if (tls === null) {
@@ -2797,7 +2922,7 @@ export class QuicConnection {
    * PROTOCOL_VIOLATION (§3); otherwise its payload waits for
    * `readDatagram`, or is dropped when the ring is full.
    */
-  receiveDatagram(frame: QuicFrame, payload: u8[], frameStart: i32): void {
+  private receiveDatagram(frame: QuicFrame, payload: u8[], frameStart: i32): void {
     const size: i64 = toI64(frame.end - frameStart)
     if (this.config.maxDatagramFrameSize === 0 || size > this.config.maxDatagramFrameSize) {
       // `fin` is how the frame says it was 0x31, the type with a Length.
@@ -2815,12 +2940,12 @@ export class QuicConnection {
    * eight bytes. Only the latest four are kept, so a burst of challenges
    * cannot grow anything.
    */
-  receivePathChallenge(frame: QuicFrame, payload: u8[]): void {
+  private receivePathChallenge(frame: QuicFrame, payload: u8[]): void {
     this.queuePathResponse(payload, frame.dataStart)
   }
 
   /** Queues a PATH_RESPONSE of the eight bytes at `data[from]` on the current path. */
-  queuePathResponse(data: u8[], from: i32): void {
+  private queuePathResponse(data: u8[], from: i32): void {
     if (this.pathCount >= 4) {
       this.pathHead = 0
       this.pathCount = 0
@@ -2843,7 +2968,7 @@ export class QuicConnection {
    * `probeAddress` is dropped, as a response may be: its data is about to
    * be overwritten.
    */
-  stageProbe(frame: QuicFrame, payload: u8[]): void {
+  private stageProbe(frame: QuicFrame, payload: u8[]): void {
     quicConnCopyAt(this.probeData, 0, payload, frame.dataStart, QUIC_PATH_DATA_SIZE)
     this.probeOwed = false
     this.probeStaged = true
@@ -2856,7 +2981,7 @@ export class QuicConnection {
    * ignored; before that, none can be expected, and it is a
    * PROTOCOL_VIOLATION (§19.18).
    */
-  receivePathResponse(frame: QuicFrame, payload: u8[]): void {
+  private receivePathResponse(frame: QuicFrame, payload: u8[]): void {
     if (this.challengesDrawn === 0) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(QUIC_FRAME_PATH_RESPONSE))
       return
@@ -2991,7 +3116,7 @@ export class QuicConnection {
    * when they do not. The streams take the client's limits from them, and
    * the datagrams its `max_datagram_frame_size`.
    */
-  checkPeerParameters(tls: TlsServer): boolean {
+  private checkPeerParameters(tls: TlsServer): boolean {
     const p: QuicTransportParameters = quicParseTransportParametersInto(
       this.parsedParameters,
       tls.clientTransportParameters,
@@ -3023,7 +3148,7 @@ export class QuicConnection {
   }
 
   /** Discards a space's keys and CRYPTO state (RFC 9001 §4.9), wiping the keys. */
-  discard(space: QuicConnSpace): void {
+  private discard(space: QuicConnSpace): void {
     if (space.discarded) {
       return
     }
@@ -3049,7 +3174,7 @@ export class QuicConnection {
    * the seed and need no more entropy. It runs in the connection's HMAC
    * scratch inside an arena block, and wipes the MAC and the scratch.
    */
-  deriveConnectionId(sequence: i64): void {
+  private deriveConnectionId(sequence: i64): void {
     const mac: HmacSha256Scratch = this.kdf.sha256
     using _scope = arena()
     const counter: u8[] = new Array<u8>(8)
@@ -3080,7 +3205,7 @@ export class QuicConnection {
    * in the slot's scratch and copied into the table, so issuing keeps
    * nothing (QUIC-3).
    */
-  topUpConnectionIds(): void {
+  private topUpConnectionIds(): void {
     if (!this.handshakeComplete) {
       return
     }
@@ -3143,7 +3268,7 @@ export class QuicConnection {
    * for none. Until the client's transport parameters are read, the server's
    * own alone.
    */
-  idleTimeout(): i64 {
+  private idleTimeout(): i64 {
     const local: i64 = this.config.maxIdleTimeout
     const peer: i64 = this.peerParameters.maxIdleTimeout
     let timeout: i64 = local
@@ -3220,7 +3345,7 @@ export class QuicConnection {
    * what came from it since the connection moved there, less what went
    * (RFC 9000 §9.3.1, §8.1). Unlimited, as `QUIC_MAX_VARINT`, on a validated path.
    */
-  pathBudget(): i64 {
+  private pathBudget(): i64 {
     return this.pathValidating ? this.pathReceived * 3 - this.pathSent : QUIC_MAX_VARINT
   }
 
@@ -3247,7 +3372,7 @@ export class QuicConnection {
    * `handleTimer`'s idle timeout, key retention and the end of the closing
    * or draining period, which `receive` runs before it reads a datagram.
    */
-  runClocks(now: i64): void {
+  private runClocks(now: i64): void {
     if (now > this.now) {
       this.now = now
     }
@@ -3287,7 +3412,7 @@ export class QuicConnection {
    * move, so there is always an address to go back to: the case where
    * there is none, which RFC 9000 §9.3.2 closes silently, cannot arise.
    */
-  runPathClock(): void {
+  private runPathClock(): void {
     if (!this.pathValidating) {
       return
     }
@@ -3311,7 +3436,7 @@ export class QuicConnection {
    * from elsewhere cannot move the connection, nor take the server's
    * flight. A carrier that passes no address leaves every path rule off.
    */
-  notePath(address: u8[]): boolean {
+  private notePath(address: u8[]): boolean {
     this.arrivalOther = false
     this.migrateOwed = false
     this.probeStaged = false
@@ -3343,7 +3468,7 @@ export class QuicConnection {
    * (`takeProbeInto`). A datagram that authenticated nothing does neither.
    * What came from the path being validated adds to its limit.
    */
-  afterPath(counted: boolean, len: i32): void {
+  private afterPath(counted: boolean, len: i32): void {
     if (!counted) {
       return
     }
@@ -3378,7 +3503,7 @@ export class QuicConnection {
    * NAT rebinding never does (§9.5). Answers whether the challenge staged
    * in `probeData` is already queued on the new path (`sendResponsesBack`).
    */
-  migrate(address: u8[]): boolean {
+  private migrate(address: u8[]): boolean {
     const swapped: boolean = this.sendResponsesBack()
     quicConnCopyAt(this.pathCurrent, 0, address, 0, QUIC_CONN_ADDRESS_SIZE)
     if (quicConnSameAddress(address, this.pathValidated, false)) {
@@ -3404,7 +3529,7 @@ export class QuicConnection {
    * and the answer is true; otherwise false. A response still owed on the
    * probe route is never overwritten: the ring's are dropped instead.
    */
-  sendResponsesBack(): boolean {
+  private sendResponsesBack(): boolean {
     if (this.pathCount <= 0) {
       return false
     }
@@ -3438,7 +3563,7 @@ export class QuicConnection {
    * them with the two before, and owes the challenge; its resend is due a
    * probe timeout later.
    */
-  drawChallenge(): void {
+  private drawChallenge(): void {
     this.deriveConnectionId(QUIC_CONN_CHALLENGE_SEQUENCE + this.challengesDrawn)
     const slot: i32 = toI32(this.challengesDrawn % toI64(QUIC_CONN_CHALLENGES))
     quicConnCopyAt(this.challengeData, slot * QUIC_PATH_DATA_SIZE, this.cidScratch, 0, QUIC_PATH_DATA_SIZE)
@@ -3458,7 +3583,7 @@ export class QuicConnection {
    * network path behind a rebinding NAT (§9.4); ECN is tested again either
    * way (§13.4.2).
    */
-  pathConfirmed(): void {
+  private pathConfirmed(): void {
     const portOnly: boolean = quicConnSameAddress(this.pathCurrent, this.pathValidated, true)
     quicConnCopyAt(this.pathValidated, 0, this.pathCurrent, 0, QUIC_CONN_ADDRESS_SIZE)
     this.endValidation()
@@ -3469,7 +3594,7 @@ export class QuicConnection {
   }
 
   /** Stops validating a path: no challenge is owed, kept or timed. */
-  endValidation(): void {
+  private endValidation(): void {
     this.pathValidating = false
     this.challengeOwed = false
     this.challengeCount = 0
@@ -3480,14 +3605,14 @@ export class QuicConnection {
   }
 
   /** Adds `n` bytes sent to the path being validated's count. */
-  notePathSent(n: i32): void {
+  private notePathSent(n: i32): void {
     if (this.pathValidating) {
       this.pathSent = this.pathSent + toI64(n)
     }
   }
 
   /** Clears every path field for a new connection, in the arrays the slot keeps. */
-  forgetPath(): void {
+  private forgetPath(): void {
     quicConnZeroAt(this.pathCurrent)
     quicConnZeroAt(this.pathValidated)
     quicConnZeroAt(this.pathArrival)
@@ -3551,7 +3676,7 @@ export class QuicConnection {
   }
 
   /** `takeProbeInto`'s packet, of `size` bytes at `out[at]`, built and sealed; 0 when it does not fit. */
-  buildProbe(out: u8[], at: i32, size: i32): i32 {
+  private buildProbe(out: u8[], at: i32, size: i32): i32 {
     const space: QuicConnSpace = this.application
     const overhead: i32 = this.overhead(space)
     if (overhead === 0 || size < overhead + 1 + QUIC_PATH_DATA_SIZE) {
@@ -3575,7 +3700,7 @@ export class QuicConnection {
   }
 
   /** Loss recovery's timer, if it is due (RFC 9002 §6.2, A.9). */
-  runRecoveryTimer(): void {
+  private runRecoveryTimer(): void {
     if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
       return
     }
@@ -3620,7 +3745,7 @@ export class QuicConnection {
    * `QUIC_CONN_SKIP_SEQUENCE`, so a client that saw where the last gaps fell
    * cannot tell where the next will.
    */
-  scheduleSkip(from: i64): void {
+  private scheduleSkip(from: i64): void {
     this.deriveConnectionId(QUIC_CONN_SKIP_SEQUENCE + this.skipsDrawn)
     this.skipsDrawn = this.skipsDrawn + 1
     let draw: i64 = 0
@@ -3908,7 +4033,7 @@ export class QuicConnection {
    * the packet number due to be skipped is (RFC 9000 §21.4): remembered,
    * never sealed nor recorded, and the next skip drawn.
    */
-  beforeDatagram(): void {
+  private beforeDatagram(): void {
     const limit: i64 = this.confidentialityLimit
     if (this.sealedUnderKey >= limit - limit / 4) {
       this.updateKeys()
@@ -3931,7 +4056,7 @@ export class QuicConnection {
    * last padded when an Initial elicits, then each sealed where it lies.
    * Answers the datagram's length, or 0 when no space had anything.
    */
-  buildDatagram(out: u8[], at: i32): i32 {
+  private buildDatagram(out: u8[], at: i32): i32 {
     let remaining: i32 = QUIC_CONN_DATAGRAM_SIZE
     // A path being validated has its own 3x limit (§9.3.1), which the
     // datagram may not pass; `amplificationBlocked` kept it above the floor.
@@ -4031,7 +4156,7 @@ export class QuicConnection {
    * its packet number, and the AEAD tag. 0 when the space cannot send: no
    * keys, discarded, or no packet number length for its next number.
    */
-  overhead(space: QuicConnSpace): i32 {
+  private overhead(space: QuicConnSpace): i32 {
     if (space.writeKeys === null || space.discarded) {
       return 0
     }
@@ -4062,7 +4187,7 @@ export class QuicConnection {
    * written to the space's staging row, and `stagedEliciting` says whether
    * anything elicits an acknowledgement.
    */
-  buildPayloadInto(
+  private buildPayloadInto(
     space: QuicConnSpace,
     out: u8[],
     start: i32,
@@ -4101,7 +4226,7 @@ export class QuicConnection {
    * level's kept stream, then those not sent yet. The level's CRYPTO stream
    * is kept whole, so a byte's index in `cryptoOut` is its offset.
    */
-  buildCrypto(space: QuicConnSpace, out: u8[], at: i32, end: i32): i32 {
+  private buildCrypto(space: QuicConnSpace, out: u8[], at: i32, end: i32): i32 {
     if (space.cryptoResendLow >= 0) {
       const low: i64 = space.cryptoResendLow
       const want: i32 = toI32(space.cryptoResendHigh - low)
@@ -4157,7 +4282,7 @@ export class QuicConnection {
    * (RFC 9000 §9.3); the path's own 3x limit still bounds them, and a
    * challenge is drawn at most once a probe timeout.
    */
-  buildPathFrames(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
+  private buildPathFrames(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
     let at: i32 = start
     while (this.pathCount > 0 && end - at >= 9) {
       const next: i32 = quicPutPathData(
@@ -4205,7 +4330,7 @@ export class QuicConnection {
    * the packet's record: `QUIC_CONN_PACKET_CONTROL` control frames and
    * `QUIC_CONN_PACKET_STREAMS` STREAM frames, and every DATAGRAM that fits.
    */
-  buildApplication(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
+  private buildApplication(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
     let at: i32 = start
     if (this.handshakeDonePending && at < end) {
       at = quicPutTypeOnly(out, at, end, QUIC_FRAME_HANDSHAKE_DONE)
@@ -4281,7 +4406,7 @@ export class QuicConnection {
    * the packet's length, or 0 when it could not be sealed, which only keys
    * `quicKeys` did not make cause.
    */
-  sealAt(space: QuicConnSpace, out: u8[], start: i32, payloadEnd: i32): i32 {
+  private sealAt(space: QuicConnSpace, out: u8[], start: i32, payloadEnd: i32): i32 {
     // RFC 9001 §6.6: at the confidentiality limit, with no key update made
     // (`beforeDatagram`), the connection closes, and no packet, its
     // CONNECTION_CLOSE included, is sealed under the key again.
@@ -4347,7 +4472,7 @@ export class QuicConnection {
    * what the packet carried is queued again at once, as though lost.
    * Answers the slot recovery recorded it in, or -1.
    */
-  recordSent(space: QuicConnSpace, pn: i64, size: i32): i32 {
+  private recordSent(space: QuicConnSpace, pn: i64, size: i32): i32 {
     if (!space.stagedEliciting) {
       return -1
     }
@@ -4371,7 +4496,7 @@ export class QuicConnection {
   }
 
   /** An acknowledged packet in row `row`: each stream chunk and stream control frame it carried is settled. */
-  untrack(space: QuicConnSpace, row: i32): void {
+  private untrack(space: QuicConnSpace, row: i32): void {
     const streams: i32 = space.streamCount(row)
     for (let j: i32 = 0; j < streams; j += 1) {
       const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
@@ -4408,7 +4533,7 @@ export class QuicConnection {
    * 0x1d (§12.4). Before the handshake is complete no 1-RTT packet carries
    * it, because the client cannot yet read one.
    */
-  takeCloseInto(out: u8[], at: i32): i32 {
+  private takeCloseInto(out: u8[], at: i32): i32 {
     if (this.closeSent) {
       return 0
     }
@@ -4486,7 +4611,7 @@ export class QuicConnection {
    * reset tokens and `TlsServer`'s expected client Finished and resumption
    * secret.
    */
-  wipeAll(): void {
+  private wipeAll(): void {
     this.discard(this.initial)
     this.discard(this.handshake)
     this.discard(this.application)
@@ -4523,7 +4648,7 @@ export class QuicConnection {
    * and so `release()`, `reset`, the idle timeout and the end of the
    * closing or draining period.
    */
-  wipe(): void {
+  private wipe(): void {
     wipe(this.ephemeral)
     wipe(this.readSecret256)
     wipe(this.nextReadSecret256)
