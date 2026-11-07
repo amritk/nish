@@ -29,6 +29,82 @@
  * of these, or a string, class, array or map `| null`; anything else is
  * refused at the call, naming the field (docs/LANGUAGE.md, "Typed JSON").
  *
+ * **Call shapes.** `jsonDecode(d, out)` reads the one JSON object `d` holds
+ * into `out`, a declared class, and answers `d.failed`: `JSON_DECODE_OK` (0)
+ * or the first error's code. `jsonEncode(w, value)` writes `value` to the
+ * writer `w` as one JSON object and answers nothing; the writer's own sticky
+ * code reports a failure. The decoder is a `JsonDecoder`, a `JsonTokenizer`
+ * over the input and a sticky error, and the encoder is the `JsonWriter` the
+ * call is given, so the encoding is written in the writer's modes: a writer
+ * set with `setIndent(2)` encodes what `JSON.stringify(v, null, 2)` writes,
+ * and a `setStrict(true)` writer fails a NaN or infinite `f64` field with
+ * `JSON_WRITE_NON_FINITE`.
+ *
+ * **What a field may be**, and how each maps:
+ *
+ *     Field type                    JSON                          Decoded with    Encoded with
+ *     i32, u32, i64                 an integer, no fraction or    d.i32(),        w.i32, w.u32,
+ *                                   exponent, in the type's       d.u32(),        w.i64
+ *                                   range                         d.i64()
+ *     u64                           digits alone, no sign,        d.u64()         jsonEncodeU64
+ *                                   fraction or exponent, up to
+ *                                   2^64 - 1
+ *     numeric enum E                the number of one of E's      d.i32(), then   w.i32
+ *                                   members                       a switch
+ *     f64 (number in f64 mode)      any number; past the double   d.f64()         w.f64
+ *                                   range an infinity, which the
+ *                                   writer writes as null
+ *     boolean                       true, false                   d.boolean()     w.boolean
+ *     string, string | null         a string, and null for the    d.string(cur)   w.string,
+ *                                   second                        jsonEncodeStringOrNull
+ *     class C, C | null             an object, and null for the   C's own         C's own
+ *                                   second                        decoding, into  encoding
+ *                                                                 the object the
+ *                                                                 field holds
+ *     T[], T[] | null              an array, and null for the    d.i32Array(cur) jsonEncodeI32Array
+ *                                   second                        and its kin, or and its kin, or
+ *                                                                 C's or E's per  C's or E's per
+ *                                                                 element         element
+ *     Map<string, V>, or | null     an object whose keys are the  keys in order,  entries in the
+ *                                   map's, each value a V         each value set  map's order
+ *     JsonNumber                    any number, kept as the text  d.number(n)     jsonEncodeNumber
+ *                                   it is written in
+ *
+ * A `Map`'s `V` is any type in this list, `| null` or not, a `Map` included;
+ * `JsonNumber` may stand alone, be `| null`, be an array's element or be a
+ * `Map`'s value. The code written for a nested class, an array's element
+ * class, a `| null` field's class and a `Map`'s values is the same code, so it
+ * recurses as the data does. Anything else is refused at the call's argument,
+ * naming the class and the field (NL2485 for a field type, such as an `f32`,
+ * an `i32[][]`, a `Level[][]`, a `Set`, an array of maps, a `Map` not keyed by
+ * `string` (an enum key included) or a `Map` whose values cannot be written,
+ * and a generic class of the program's own). An enum whose members are strings
+ * or a mix is not one the language declares (NL1043), and a `const enum` is
+ * refused where it is declared (NL2285). A value that is not a declared class
+ * (an interface, a generic class or any other type) is NL2486; decoding into an
+ * interface is left for a later version. A call inside a generic function is
+ * checked for each class an instantiation binds.
+ *
+ * **Reading the class.** A class the decoder has to make itself, an array's
+ * element past the end, a `| null` field that holds `null` or a map's value,
+ * is made with `new C()`, so its constructor takes no parameters (NL2488).
+ * Decoding assigns every field, so a `readonly` one is refused (NL2487). A
+ * decode stores what it makes into the object it fills, so a call inside a
+ * `using a = arena()` block is refused (NL2424); an encoding only reads the
+ * object and keeps nothing, so it may run inside one. Two fields holding one
+ * object are decoded into it twice, the second winning.
+ *
+ * **Finding the field.** The code written for a class of three or more fields
+ * switches on the key's length in bytes, so a key is compared only with the
+ * names of that length. Where three or more names share a length, it switches
+ * once more, on the key's byte at the one position where those names differ
+ * most, and calls `keyIs` for each name with that byte there, in declaration
+ * order; a byte none of them has is an unknown key at once. One or two names
+ * are compared in turn with `keyIs`. A key with an escape has no byte to switch
+ * on there and is compared with every name of its length, so `"id"` is
+ * the field `id`; a field name that is not ASCII is dispatched by its UTF-8
+ * bytes like any other.
+ *
  * **The decoding rules.** A JSON object's keys are the class's field names,
  * byte for byte, or the keys its options give them, found by the key's length
  * and then, among three or more names of that length, by one of its bytes:
@@ -41,18 +117,93 @@
  * The compiler reads that literal; it is not a field. Every field is required
  * but an optional one, whose missing key sets it to its initializer, a key
  * may appear once, and a key that names no field is an error unless
- * `ignoreUnknown` is set, when its value is stepped over. A number must fit its field: an integer field takes
+ * `ignoreUnknown` is set, when its value is stepped over, checked but not
+ * kept. A number must fit its field: an integer field takes
  * an integer written without a fraction or an exponent and in the field's
  * range, and `f64` takes any number. `null` is accepted only by a field whose
  * type is `| null`. Fields are written to `out` as they are read, in the
  * input's order: a nested object is decoded into the object the field already
- * holds, an array's elements into the elements it already has (so a reused
- * object reuses its arrays and objects, and `Arena.used()` stays flat), and a
- * string field keeps the string it holds when the input's is equal.
+ * holds, an array's elements into the elements it already has, with new ones
+ * made past its end and the rest dropped (so a reused
+ * object reuses its arrays and objects, and `Arena.used()` stays flat: it is
+ * flat over 1,000 decodes of a three-level object), and a
+ * string field keeps the string it holds when the input's is equal. A string
+ * that changes is a new string, made by one `String.fromBytes`, straight from
+ * the input when it has no escape and from its unescaped bytes when it has one.
  * A class the decoder has to make — an array element past the array's end, a
  * `| null` field that holds `null`, or a map's value — is made with `new C()`.
- * A map is emptied and filled in the input's order, and every map of one
- * decoding takes at most `maxMapKeys` keys between them.
+ * A map is emptied once the object opens, then each key is read as a new
+ * string and its value as a `V` made fresh for the key (a zero, `""`, the
+ * enum's first member, `null`, or a new object, array or map) and `set`, so
+ * the entries are the input's, in the input's order. A key the object gave
+ * already is `JSON_DECODE_DUPLICATE` before its value is read, however either
+ * is escaped. A value whose read fails is not `set`, so a map never holds a
+ * value the input did not give. Unlike the rest of a decode, a map's entries
+ * are made anew each time, so decoding into a map allocates its keys and
+ * values. Every map of one decoding takes at most `maxMapKeys` keys between
+ * them (4,096 unless set), the keys of a map inside another map included; the
+ * key past it is `JSON_DECODE_MAP_LIMIT` before it is read, and `reset`
+ * starts the count again. At `0` or below no map may take a key, and `{}` is
+ * the one map value accepted. Encoding writes the entries in the map's own
+ * order, which is insertion order. That differs from a JavaScript object in
+ * one case: a key that reads as an array index (`"1"`) keeps its place, where
+ * `JSON.parse` would move it first.
+ *
+ * **A class's options** are one `static readonly json` object literal written
+ * in the class, which the compiler reads when it writes the class's code. It
+ * is not a field: it has no slot, the class's layout is what it would be
+ * without it, and the program cannot read it. It is the one `static` member a
+ * class may declare. A class without it is decoded exactly as before. Its
+ * options are checked where the class is declared, whether or not any call
+ * decodes the class. There are three, each a literal and none a default
+ * other than being absent:
+ *
+ *  - `rename`, an object mapping a field to its key on the wire, a string
+ *    literal of any bytes. `{"user_id":7}` is decoded into `userId` and
+ *    `userId` is encoded as `"user_id"`; the field's own name is then a key
+ *    no field has. The key is dispatched like any other, escapes and
+ *    non-ASCII included. Without it a field's key is its name.
+ *  - `optional`, an array of field names whose key may be missing. A missing
+ *    one sets the field to its initializer, on a fresh object and on one
+ *    decoded into again, so a reused object keeps nothing an earlier input
+ *    gave it, and allocates nothing to do it. An optional field needs an
+ *    initializer. A key that is given is read like any other: once, and of
+ *    its field's type. Without it every field is required and a missing key is
+ *    `JSON_DECODE_MISSING`.
+ *  - `presence`, described below. Without it nothing is recorded.
+ *
+ * Each misuse has its own diagnostic:
+ *
+ *     NL2492  `static json` without `readonly` but with a type, `static
+ *             readonly json` with a type annotation, or on a generic class
+ *     NL2493  options, `rename`, a key or an `optional` entry not written as
+ *             the literal it must be (a module constant, an array for the
+ *             object, a string for `optional`'s array); `presence` or one of
+ *             its entries not an object literal of string literals
+ *     NL2494  an option other than `rename`, `optional` and `presence`
+ *     NL2495  a name that is not one of the class's fields; `presence` naming
+ *             a field or a presence field the class does not declare
+ *     NL2496  a rename to a value that is not a string
+ *     NL2497  two fields with one key (a rename to another field's own name
+ *             included), or a field renamed or made optional twice
+ *     NL2498  an optional field with no initializer
+ *     NL2499  a rename to a key that is not valid UTF-8, a lone surrogate such
+ *             as `"\ud800"` included, which no input could give
+ *     NL2592  a presence field that is not a `boolean`, is `readonly`, is the
+ *             field it records, records two fields, is recorded by a presence
+ *             field of its own or is renamed or made optional; a field
+ *             recorded twice
+ *
+ * A spread or a computed key in the literal is refused as it is anywhere
+ * (NL1061, NL1041), a subclass by `extends`, and a second `static readonly
+ * json` is a duplicate member. The options are not a value: `User.json` names
+ * a class where a value is due, and is refused as any class name there is.
+ * Only `static readonly json` may leave out its type: written `static json =
+ * { ... }`, or as an instance field, it is an ordinary field to the parser and
+ * needs one, and an instance field called `json` with a type is an ordinary
+ * field, read and written under its own name. A field or a method called
+ * `json` may come before or after the options. Under Node the literal is a
+ * static property of the class that nothing reads.
  *
  * **Which keys were given.** An optional field's missing key and a key given
  * the field's initializer leave the same value; the `presence` option tells
@@ -93,18 +244,68 @@
  * or the tokenizer's own `JSON_TOK_ERR_*` code when the text is not JSON or
  * crosses one of its `JsonLimits` — and `errorAt` to the byte offset of the
  * token it was found at. Every later call does nothing, and `jsonDecode`
- * answers `failed`. Nothing an input holds panics. After an error, `out` holds
- * a value of its type in every field, some of them decoded and some as they
- * were.
+ * answers `failed`; `reset` starts over. Nothing an input holds panics. After
+ * an error, `out` holds a value of its type in every field, some of them
+ * decoded and some as they were: an enum field or element never holds a number
+ * that is no member's, because such a number is not stored. The codes:
+ *
+ *     Code                     Value  Condition                       errorAt
+ *     JSON_DECODE_OK              0   nothing has failed
+ *     JSON_DECODE_TYPE          -20   a value of the wrong JSON type  the value
+ *     JSON_DECODE_RANGE         -21   a number its field cannot hold  the number
+ *     JSON_DECODE_UNKNOWN       -22   a key that names no field       the key
+ *     JSON_DECODE_DUPLICATE     -23   a key given twice               the second
+ *     JSON_DECODE_MISSING       -24   a field the object lacks        the object's `}`
+ *     JSON_DECODE_MAP_LIMIT     -25   more than maxMapKeys map keys   the first key past it
+ *     JSON_TOK_ERR_*        -1 to -13 text that is not JSON, or past  the tokenizer's
+ *                                     a JsonLimits limit
+ *
+ * **Limits.** The recursion is the data's, so the tokenizer's depth limit
+ * bounds it: the caller's `JsonLimits.maxDepth`, 128 by default. Each level is
+ * one native frame, so a limit raised into the hundreds of thousands can run
+ * off the stack, and one kept to a few thousand cannot. The writer refuses a
+ * 65th open container (`JSON_WRITER_MAX_DEPTH`), so a value decoded from
+ * deeper than 64 levels encodes as `JSON_WRITE_TOO_DEEP`, as does an object
+ * that holds itself; the encoding stops at the first failure. A full buffer
+ * is the writer's `JSON_WRITE_FULL`. A duplicate of a key `ignoreUnknown`
+ * steps over is not detected, because its value is never read. A map is
+ * bounded by `maxMapKeys`, and a number's length by `JsonLimits.maxNumberBytes`.
+ *
+ * **An enum is its number.** A numeric enum is read with `d.i32()`, so a
+ * number that is not an `i32` integer is that field's `JSON_DECODE_RANGE`, and
+ * an integer that is not the value of one of its members is
+ * `JSON_DECODE_TYPE`; a member's name, `"High"`, is a string and a type error
+ * too. Two members of one value are one number. It is written as `w.i32` of
+ * its value, as `JSON.stringify` writes a TypeScript numeric enum.
+ *
+ * **A `u64` is exact to 2^64 - 1.** It is read through the tokenizer's
+ * `numberU64`, so `18446744073709551615` decodes and `18446744073709551616`,
+ * `-1`, `-0` and `1.5` are `JSON_DECODE_RANGE`. It is written as its digits,
+ * which `JSON.stringify` cannot do for a number past 2^53.
+ *
+ * **A `JsonNumber` is a number's text.** A field of it decodes and encodes any
+ * number byte for byte: an integer wider than a `u64`, a fraction with more
+ * digits than an `f64` holds, `1E+400` and `-0` alike. It is read as a number
+ * whole, not as an object, so anything but a number is `JSON_DECODE_TYPE`, and
+ * its length is bounded by `JsonLimits.maxNumberBytes` like any number's.
+ * Decoding into one reuses its bytes, so `Arena.used()` stays flat over
+ * decodes into one object.
  *
  * **Encoding** writes the fields in declaration order, each through the
  * writer method of its type, so the text is what `JSON.stringify` writes for
- * the same object; the writer's own sticky code reports a full buffer.
+ * the same object; the writer's own sticky code reports a full buffer. A
+ * presence field is left out. The keys come back in the order they were
+ * written when the object is decoded from text whose keys are in that order.
  *
  * **Under Node** the types are erased, so there is no layout to generate the
  * code from: `jsonDecode` and `jsonEncode` end the program with a panic
  * naming this, rather than guessing a type from whatever value a field holds
- * (docs/LANGUAGE.md, "Typed JSON", class C). Everything else here runs there.
+ * (docs/LANGUAGE.md, "Typed JSON", class C). Everything else here runs there,
+ * so a program may run the decoder's readers and the writer under Node and
+ * get the lines the native program gets; the translation of a class is a
+ * function per class of the same calls into `JsonDecoder` and `JsonWriter`. A
+ * program that imports `std/json-typed.ts` by path rather than as
+ * `nish/json-typed` is compiled as written and gets those bodies natively too.
  *
  * Every name here is `json`-prefixed, as `std/json.ts` explains, and every
  * code is an `i32`, so the module is the same under `--number-mode f64`.
@@ -177,7 +378,10 @@ const JSON_TYPED_ERASED: string =
  *
  * A new one holds `0`. Decoding into one reuses its bytes, so an object
  * decoded again with numbers no longer than before allocates nothing for
- * them.
+ * them. Its length is bounded by `JsonLimits.maxNumberBytes` like any
+ * number's, and anything but a number read into it is `JSON_DECODE_TYPE`.
+ * `setText(t)` sets it when `t` is one JSON number and answers whether it was.
+ * Its methods run under Node.
  */
 export class JsonNumber {
   /** The text is `bytes[0, count)`, one JSON number; the bytes past it are room. */
@@ -1130,7 +1334,12 @@ export class JsonDecoder {
  * Decodes the JSON object `d` holds, the whole input, into `out`. The
  * compiler writes the code from `T`'s fields at every call, in the module that
  * makes it; under Node this body ends the program with a panic, because the
- * types are erased.
+ * types are erased. Called as `jsonDecode(d, out)`, with `T` the class of `out`;
+ * every field of every class it reaches must be a type the module header lists,
+ * and a class the decoder makes must have a constructor with no parameters.
+ * The top-level value must be an object, or the answer is `JSON_DECODE_TYPE`,
+ * and nothing but blanks may follow it. A call inside a `using a = arena()`
+ * block is refused (NL2424).
  *
  * @param _d The decoder over the input; its `failed` and `errorAt` say what
  *   went wrong, and `reset` starts it over.
