@@ -732,7 +732,8 @@ const hkdfExpandWindow = (
  * @param at Where the output starts in `out`.
  * @param length How many bytes to derive, 0 to 255 × `hashLength`.
  * @returns `true` once the bytes are written; `false`, with `out` untouched,
- *   for bad input.
+ *   for bad input. A `hashLength` other than 32 or 48, or an output window
+ *   outside `out`, panics instead, before anything is written.
  */
 export const hkdfExpandInto = (
   s: HkdfScratch,

@@ -67,8 +67,9 @@
  * then verifies each of that batch's lanes alone, so only the damaged row
  * answers the `Err` and the rest answer as they would have. A `hash` whose
  * salt is not 16 bytes is answered with its `Err` at the next `run`, without
- * being batched. The answers of a run come back in the order their requests
- * were taken; match them to requests by `ticket`.
+ * being batched. A run does not answer in arrival order: bad-salt answers
+ * come first, then verifies grouped by cost, then hashes, so match answers to
+ * requests by `ticket`.
  *
  * Names carry the `bcryptBatch` prefix because a `std/` module's private
  * functions share the importing program's flat symbol namespace
@@ -591,8 +592,10 @@ export class BcryptBatcher {
    * finished, with the copy of each password it ran wiped.
    *
    * @param now The time of the call, from `monotonicNanos()`.
-   * @returns A fresh array of the answers this call made, possibly empty, in
-   *   the order their requests were taken.
+   * @returns A fresh array of the answers this call made, possibly empty:
+   *   bad-salt answers first, then the verifies grouped by cost, lowest
+   *   first, then the hashes. Match answers to requests by `ticket`, not by
+   *   position.
    */
   run(now: i64): BcryptAnswer[] {
     const answers: BcryptAnswer[] = []

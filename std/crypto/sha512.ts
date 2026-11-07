@@ -291,6 +291,7 @@ class Sha512Engine {
   count: u64 = 0
   /** @internal Set by `nish/crypto/hmac` when it wipes, copies or restarts a hasher. */
   filled: i32 = 0
+  /** @internal Set by `nish/crypto/hmac` when it wipes, copies or restarts a hasher. */
   finished: boolean = false
 
   constructor(initial: u64[]) {
