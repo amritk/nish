@@ -655,7 +655,9 @@ const wasmRangeHelper = (table: TypeTable, bridged: ExternalFunction[], guard: b
   }
   lines.push("  /** A ranged argument, judged as the number it is rather than after ToInt32 wraps it. */")
   lines.push("  const rangeIn = (value, lo, hi, what) => {")
-  lines.push(`    if (typeof value !== "number") throw ${refused(guard, 'new TypeError(what + " must be a number")')};`)
+  lines.push(
+    `    if (typeof value !== "number") throw ${refused(guard, 'new TypeError(what + " must be a number")')};`
+  )
   lines.push("    if (!Number.isInteger(value) || value < lo || value > hi)")
   lines.push(
     `      throw ${refused(guard, 'new RangeError(what + " must be an integer in [" + lo + ", " + hi + "]")')};`
@@ -926,7 +928,10 @@ export const generateWasmLoader = (
   const hosts = hostFunctions(compilation)
   const guard = loaderGuarded(compilation)
   const params = hosts.length > 0 ? "source, imports" : "source, imports = {}"
-  const linked = !guard ? "imports" : hosts.length > 0 ? "importsOf(imports, state)" : "linkOf(imports, state)"
+  let linked = "imports"
+  if (guard) {
+    linked = hosts.length > 0 ? "importsOf(imports, state)" : "linkOf(imports, state)"
+  }
   const bound = guard ? ", state" : ""
   lines.push(`export async function load(${params}) {`)
   if (guard) {

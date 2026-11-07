@@ -174,13 +174,13 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push(" * `arrayBuffer()` in browsers. The companion `.mjs` next to this file")
   lines.push(" * implements it (examples/node-host.mjs shows the plain, scalar-only form).")
   lines.push(" */")
-  lines.push(
-    specifiers.length > 0
-      ? "export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;"
-      : guard
-        ? "export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;"
-        : "export function load(bytes: BufferSource): Promise<Exports>;"
-  )
+  if (specifiers.length > 0) {
+    lines.push("export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;")
+  } else if (guard) {
+    lines.push("export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;")
+  } else {
+    lines.push("export function load(bytes: BufferSource): Promise<Exports>;")
+  }
   if (guard) {
     lines.push("/** `load` without the wait, for bytes already in hand: a worker, a test, a small module. */")
     lines.push(

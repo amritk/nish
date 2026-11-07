@@ -192,7 +192,13 @@ const FAULT_NESTED: i32 = 4
  * Whether `elem` is a type whose zero fill is one of its values and holds no
  * pointer; reports against `at`, spelling the element `spelled`, when not.
  */
-const checkStorageElement = (ctx: CheckContext, info: ConstInfo, at: Node, elem: i32, spelled: string): boolean => {
+const checkStorageElement = (
+  ctx: CheckContext,
+  info: ConstInfo,
+  at: Node,
+  elem: i32,
+  spelled: string
+): boolean => {
   const table = ctx.table
   const fault = storageElementFault(ctx, info, elem)
   if (fault === FAULT_NONE) {
@@ -221,7 +227,8 @@ const checkStorageElement = (ctx: CheckContext, info: ConstInfo, at: Node, elem:
   }
   const field = record.fields[bad]
   // A field that is itself a record is a pointer to it, so it is refused as nested.
-  const nested = inner === FAULT_HOLD && scope !== null && inlineElementStruct(scope, table, field.type) !== null
+  const nested =
+    inner === FAULT_HOLD && scope !== null && inlineElementStruct(scope, table, field.type) !== null
   const label = `${spelled}.${field.name} (${table.typeName(field.type)})`
   return storageFaultReport(ctx, info, at, nested ? FAULT_NESTED : inner, label)
 }
@@ -242,7 +249,13 @@ const storageElementFault = (ctx: CheckContext, info: ConstInfo, elem: i32): i32
 }
 
 /** Report `fault` for the element spelled `spelled`, and answer false. */
-const storageFaultReport = (ctx: CheckContext, info: ConstInfo, at: Node, fault: i32, spelled: string): boolean => {
+const storageFaultReport = (
+  ctx: CheckContext,
+  info: ConstInfo,
+  at: Node,
+  fault: i32,
+  spelled: string
+): boolean => {
   if (fault === FAULT_ZERO) {
     storageReport(
       ctx,
@@ -677,7 +690,13 @@ const homeContext = (ctx: CheckContext, sig: FunctionSig): CheckContext | null =
  * `sig`'s body, so its callee is resolved in the scope of `sig`'s module,
  * which a std function lending on (`ringSize` to `ringCapacity`) needs.
  */
-const lentOnStays = (ctx: CheckContext, sig: FunctionSig, call: Node, use: Node, queue: LendQueue): boolean => {
+const lentOnStays = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  call: Node,
+  use: Node,
+  queue: LendQueue
+): boolean => {
   const callee = call.children[0]
   const home = homeContext(ctx, sig)
   if (callee.kind !== N_IDENT || home === null) {
