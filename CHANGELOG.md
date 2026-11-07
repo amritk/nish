@@ -26,6 +26,53 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-07
+
+### Added
+
+- checker: Async and await, the checker (WP49 stage 4, part 1) ([#1160](https://github.com/amritk/nish/pull/1160))
+- checker: Run an entry module's top-level code as `main` ([#1203](https://github.com/amritk/nish/pull/1203))
+- codegen: Lower async functions to frame state machines (WP49 stage 4, part 2) ([#1202](https://github.com/amritk/nish/pull/1202))
+- checker: Allow null as the default of a nullable parameter ([#1205](https://github.com/amritk/nish/pull/1205))
+- interop: Let a PgBatcher skip the ordinal sort ([#1207](https://github.com/amritk/nish/pull/1207))
+- interop: Emit async functions as TypeScript async/await (WP49 stage 4, part 3) ([#1212](https://github.com/amritk/nish/pull/1212))
+- runtime: Shared-region windows and a two-buffer netWrite ([#1214](https://github.com/amritk/nish/pull/1214))
+- runtime: Follow a QUIC peer's address change with path validation ([#1218](https://github.com/amritk/nish/pull/1218))
+- runtime: Send an Http1Connection body from a caller's buffer ([#1223](https://github.com/amritk/nish/pull/1223))
+- runtime: Reserve, commit, peek and release on SpscRing ([#1224](https://github.com/amritk/nish/pull/1224))
+
+### Fixed
+
+- runtime: Let Http1Connection.sendBody take a readonly u8[] ([#1227](https://github.com/amritk/nish/pull/1227))
+
+### Performance
+
+- codegen: Read an arrow's captures as arguments to it ([#1215](https://github.com/amritk/nish/pull/1215))
+- net: Fewer cache misses per request on cold Http1Server keep-alive connections ([#1211](https://github.com/amritk/nish/pull/1211))
+- runtime: Benchmark ring records copied versus in place ([#1229](https://github.com/amritk/nish/pull/1229))
+
+### Documentation
+
+- Bring the docs up to date with captures, async, top-level code and defaults ([#1216](https://github.com/amritk/nish/pull/1216))
+- Add WP50, a WebAssembly module a TypeScript page drives ([#1213](https://github.com/amritk/nish/pull/1213))
+- Show every guide section in the Scalar sidebar ([#1220](https://github.com/amritk/nish/pull/1220))
+- runtime: Complete the SpscRing in-place notes ([#1228](https://github.com/amritk/nish/pull/1228))
+- Publish the install, library and security pages on the docs site ([#1222](https://github.com/amritk/nish/pull/1222))
+
+### Tests
+
+- cli: Bound the wide-tree parse by a same-process ratio, and show stdout when a runner case exits wrong ([#1198](https://github.com/amritk/nish/pull/1198))
+- interop: Fix the std_dns port collision, postgres-live's ready line and a stale emit-ts row ([#1217](https://github.com/amritk/nish/pull/1217))
+
+### Build
+
+- Regenerate package-lock.json for v0.34.1 ([#1197](https://github.com/amritk/nish/pull/1197))
+
+### CI
+
+- self: Deal the suite's tail eight ways to keep each shard near ten minutes ([#1200](https://github.com/amritk/nish/pull/1200))
+
+
 ## [0.34.1] - 2026-11-04
 
 ### Performance
@@ -1620,3 +1667,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.33.0]: https://github.com/amritk/nish/releases/tag/v0.33.0
 [0.34.0]: https://github.com/amritk/nish/releases/tag/v0.34.0
 [0.34.1]: https://github.com/amritk/nish/releases/tag/v0.34.1
+[0.35.0]: https://github.com/amritk/nish/releases/tag/v0.35.0
