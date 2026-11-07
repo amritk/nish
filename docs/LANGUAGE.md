@@ -5733,8 +5733,9 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   32 bits there and the length check is the same 64-bit compare, but a C
   function whose count is a `size_t` takes 32 bits: declare its count `u64`
   only on a target where `size_t` is 64 bits, until a later release gives the
-  count a target-width type. The freestanding `--profile wasm` link resolves
-  the declaration against the C the link is given.
+  count a target-width type. A freestanding wasm build (`--target wasm32`)
+  refuses a `declare function`, so a buffer declaration is for `--profile
+  wasi` there (see "Host modules" below).
 
 #### A handle class: a class that owns a `CPtr`
 
@@ -5944,6 +5945,72 @@ does not hold for a source whose meaning is "whatever this C function does"
 ([wp27-ffi.md](wp27-ffi.md) §5). The evidence for an FFI program is arranged the
 other way round: a golden `.ll`, an `llvm-as` pass, a native round trip against
 real libc, and the attribute assertions.
+
+#### Host modules: the functions a page supplies
+
+**A wasm module calls a function of the page that loads it by importing it
+from a host module**: a TypeScript file of the page's, named by `--host
+<file>` or by the root `package.json`'s `"nish": { "host": [...] }`
+(`tests/host-import`, `docs/wp50-wasm-host.md` §3). An import from any other
+file is an ordinary Nish import.
+
+```ts
+// host.ts, the page's
+import type { f64, u32 } from "nish";
+export type Canvas = HostHandle<"canvas">;
+export function fill(c: Canvas, rgb: u32): void { canvases[c].fill(rgb); }
+export function nowMs(): f64 { return performance.now(); }
+```
+
+```llvm
+declare void @fill(i32, i32) #1
+attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
+```
+
+- **Only the exported signatures are read.** Each `export function`'s
+  parameter and result types, each exported `enum`, and each
+  `export type X = HostHandle<"kind">`. A function body is skipped as a
+  balanced run of tokens, so it may use anything TypeScript has. Text the
+  lexer cannot skip, a regex literal or JSX, refuses the file with
+  `` move that code into a module the host file imports `` (NL3049); other
+  statements are skipped unread.
+- **What crosses.** The integer and float widths, `boolean`, a ranged integer,
+  an enum, a `HostHandle`, and `void` as a result. `i64` and `u64` are a
+  `bigint` on the page's side (`import type { i64 } from "nish"`). Refused,
+  each naming the explicit form: an object, a class, a function, `unknown` or
+  `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a typed
+  array (NL2664, a later stage's buffer window), a `string` parameter (NL2665,
+  a later stage's) and a `string` result (NL2667).
+- **Each host function is a declaration with the wasm import attributes**:
+  module `host`, its own name. It carries no other attribute, and its callers
+  lose `readnone` and `willreturn` as for a C declaration. `wasm-ld` makes it
+  an import with no `--allow-undefined`.
+- **A host module exists only in a wasm build.** A native build that imports
+  one is refused (NL3050), and a `--target wasm32` build refuses a `declare
+  function` (NL2666): it links no C, so the declaration would be an import the
+  page does not supply.
+- **The loader and its types.** `--emit-dts` adds
+  `Imports = { host: typeof import("./host") }` to the `.d.ts`, and `load`
+  takes it. The loader passes a function through by reference when every
+  value crosses as it stands, and wraps it once, at `load`, when a value
+  converts: `u8`, `u16` and `u32` arguments and results, a `boolean` (0 or 1
+  in wasm), and a ranged integer result, whose range is checked
+  (`RangeError` naming the function).
+- **`--emit-ts` keeps the import** as written, pointing at the host file, so
+  the TypeScript reading calls the same functions.
+- **A call to a host function is an `ffi` call**: `--deny ffi` refuses it and
+  `--emit-capabilities` names it.
+
+**`HostHandle<K>` is a nominal `i32` for an object the page keeps**
+(`docs/wp50-wasm-host.md` §4). `K` is a string literal type, and
+`HostHandle<"a">` and `HostHandle<"b">` are different types, here and under
+`tsc`, where `runtime/nish.d.ts` brands a `number`. A handle supports `===` and
+`!==` against a handle of its kind or `0` ("none"), and is stored wherever a
+scalar is; it has no arithmetic and no conversion to or from a number, so it
+is made only by a host function that returns one. A second type argument or
+a kind that is not a string literal is NL2669, and a string literal type
+anywhere but a `HostHandle`'s kind is NL2668. It lowers to
+`i32`, so a program with no host module emits nothing new.
 
 ## Statements
 

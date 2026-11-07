@@ -1,10 +1,15 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stage 1 built.** The owner accepted every
+**Status: accepted, 2026-11-06; stages 1 and 2 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
-loader's `loadSync` and `nish/vite`; stage 2 is the next. The anchors below are at `39a87b3b`.
+loader's `loadSync` and `nish/vite`. Stage 2 is built: host modules
+(`--host`, `nish.host`, `src/host-module.ts`), their import attributes,
+`HostHandle<K>`, `Imports` in the `.d.ts`, the loader's adapters, the kept
+`import` under `--emit-ts`, the refusals NL2661–NL2669, NL3049 and NL3050, and
+the plugin's `host` option (`tests/run.js`, section `host-import`); stage 3 is
+the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design, and `npm test` compiles none of them yet.
 
@@ -107,11 +112,11 @@ export function gpuWrite(b: GpuBuffer, offset: u32, data: Float32Array, at: u32,
 
 ```ts
 // client.ts: the Nish module
-import { type GpuBuffer, gpuWrite, hostLog, nowMs } from "../web/host.ts";
+import { GpuBuffer, gpuWrite, hostLog, nowMs } from "../web/host.ts";
 ```
 
 ```llvm
-declare void @hostLog(i32 zeroext, i32) #2
+declare void @hostLog(i32, i32) #2
 declare double @nowMs() #3
 attributes #2 = { "wasm-import-module"="host" "wasm-import-name"="hostLog" }
 attributes #3 = { "wasm-import-module"="host" "wasm-import-name"="nowMs" }

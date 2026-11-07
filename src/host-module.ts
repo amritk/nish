@@ -503,8 +503,8 @@ export class HostProblem {
 /**
  * The refusals a host module's exported signatures earn before any type is
  * resolved (WP50 §12): what the checker would otherwise refuse in words about
- * Nish code the page never wrote as Nish. A `string` result has no way back
- * (NL2662), a `Promise` cannot be waited for (NL2663), a typed array is a
+ * Nish code the page never wrote as Nish. A generic function is not one
+ * import (NL2662), a `Promise` cannot be waited for (NL2663), a typed array is a
  * stage-3 buffer (NL2664) and a `string` parameter stage 4's (NL2665); every
  * other non-scalar is NL2661. A name the module declares — an enum or a
  * `HostHandle` alias — is left for the checker.

@@ -1480,6 +1480,12 @@ export const main = (): i32 => {
 ```
 
 - **No body, and it cannot be `export`ed.**
+- **Not in a `--target wasm32` build** (NL2666): there a function the page
+  supplies is imported from a host module, the page's own TypeScript file
+  named by `--host`, and becomes a wasm import from module `host`. Only
+  scalars, enums and `HostHandle<"kind">` (a nominal `i32` for an object the
+  page keeps) cross; `import { Canvas, fill } from "./host.ts"`, no `type`
+  modifier.
 - **A class with a `CPtr` field is a handle class: open one with `using`.**
   `using f = new File(p)` closes `f` once at every exit of its block (falling
   off the end, `return`, `break`, `continue`, `orReturn()`), so never call the
