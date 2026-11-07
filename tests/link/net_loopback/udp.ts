@@ -484,14 +484,15 @@ export class UdpLoop {
 
   /**
    * The client's NAT rebinds: its datagrams leave from a new socket, a new
-   * port, from here on. The old socket leaves the loop but stays open, so
-   * the caller can count what the server still sends there; answers it.
+   * port on `host`, from here on. The old socket leaves the loop but stays
+   * open, so the caller can count what the server still sends there;
+   * answers it.
    */
-  rebind(): i32 {
+  rebind(host: string): i32 {
     const cl: UdpClient = this.client;
     const old: i32 = cl.fd;
     pollRemove(this.loop, old);
-    cl.fd = udpBind("127.0.0.1", n32(0), n32(0));
+    cl.fd = udpBind(host, n32(0), n32(0));
     pollAdd(this.loop, cl.fd, n32(1), CLIENT);
     return old;
   }
