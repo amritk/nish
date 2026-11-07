@@ -1,6 +1,26 @@
 /**
  * `nish/crypto/x25519` — the X25519 Diffie-Hellman function of RFC 7748.
  *
+ *     import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519";
+ *     import { timingSafeEqual } from "nish/crypto/ct";
+ *     import { Secret, expose, secret, wipe } from "nish:secret";
+ *
+ *     const isZero = (s: u8[]): boolean => timingSafeEqual(s, new Array<u8>(X25519_SIZE))
+ *
+ *     const raw: u8[] = new Array<u8>(X25519_SIZE)
+ *     crypto.getRandomValues(raw)                              // any 32 bytes are a private key
+ *     const mine: Secret<u8[]> = secret(raw)
+ *     const myPublic: u8[] | null = x25519Base(mine)           // 32 bytes, sent to the peer
+ *     const peerPublic: u8[] = new Array<u8>(X25519_SIZE)      // the peer's 32 bytes, received
+ *     const shared: Secret<u8[]> | null = x25519(mine, peerPublic)
+ *     wipe(mine)
+ *     if (shared !== null) {
+ *       if (!expose(shared, isZero)) {                         // a low-order peer key gives zero
+ *         // derive keys from `shared` inside `expose`
+ *       }
+ *       wipe(shared)
+ *     }
+ *
  * Written from the specification (RFC 7748 §4.1, §5 and §6.1), in this
  * module's own structure: nothing here is ported from another implementation.
  * The radix-2^25.5 limbs and the shape of the inversion chain are the ideas
@@ -84,18 +104,39 @@ export const X25519_SIZE: i32 = 32
 const X25519_A24: i64 = 121665
 
 /**
- * `a + b`, `a - b` and `a * b` on limbs: the `u64` arithmetic, read back as
- * `i64`. Every bound this module states keeps the true result inside `i64`,
- * so the answer is the signed one bit for bit; the arithmetic is unsigned
- * because signed arithmetic is checked for an overflow, and a check is a
- * branch on a secret limb. Each is one instruction once LLVM inlines it.
+ * `a + b` on limbs: the `u64` sum, read back as `i64`; `f25519Sub64` and
+ * `f25519Mul64` are its difference and product. Every bound this module states
+ * keeps the true result inside `i64`, so the answer is the signed one bit for
+ * bit; the arithmetic is unsigned because signed arithmetic is checked for an
+ * overflow, and a check is a branch on a secret limb. Each is one
+ * instruction once LLVM inlines it.
+ *
+ * @param a The first limb.
+ * @param b The second limb.
+ * @returns The sum, which the caller's bounds keep inside `i64`.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Add64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
-/** @internal Imported by `nish/crypto/ed25519`, which works over the same field. */
+/**
+ * `a - b` on limbs, unsigned and read back as `i64`, as `f25519Add64` explains.
+ *
+ * @param a The limb subtracted from.
+ * @param b The limb subtracted.
+ * @returns The difference, which the caller's bounds keep inside `i64`.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ */
 export const f25519Sub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
-/** @internal Imported by `nish/crypto/ed25519`, which works over the same field. */
+/**
+ * `a * b` on limbs, unsigned and read back as `i64`, as `f25519Add64` explains.
+ *
+ * @param a The first limb.
+ * @param b The second limb.
+ * @returns The product, which the caller's bounds keep inside `i64`.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ */
 export const f25519Mul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
 
 /** The width of limb `i`: 26 bits for an even limb, 25 for an odd one. */
@@ -110,6 +151,8 @@ const f25519LimbMask = (i: i32): i64 => f25519Sub64(toI64(1) << f25519Width(i), 
 /**
  * A fresh field element, zero.
  *
+ * @returns A new ten-limb element, every limb zero.
+ *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Zero = (): i64[] => {
@@ -119,6 +162,9 @@ export const f25519Zero = (): i64[] => {
 
 /**
  * A fresh field element holding the small constant `n`.
+ *
+ * @param n The constant, held in limb 0.
+ * @returns A new element whose value is `n`.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -130,6 +176,9 @@ export const f25519Small = (n: i64): i64[] => {
 
 /**
  * `out = f`, limb by limb.
+ *
+ * @param out Where the limbs go.
+ * @param f The element copied.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -174,6 +223,8 @@ const f25519CarryChain = (h: i64[]): void => {
  * `h & (2^width - 1)`, which is the matching non-negative remainder for a
  * negative limb too, without shifting a negative number left.
  *
+ * @param h The element, carried in place.
+ *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Carry = (h: i64[]): void => {
@@ -193,6 +244,10 @@ export const f25519Carry = (h: i64[]): void => {
  * `out = f + g`, not carried. With both reduced (limbs below 2^26 in
  * magnitude) the sum's limbs are below 2^27, which `f25519Mul` accepts.
  *
+ * @param out Where the sum goes; it may be `f` or `g`.
+ * @param f The first addend, reduced.
+ * @param g The second addend, reduced.
+ *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
@@ -208,6 +263,10 @@ export const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
  * `out = f - g`, not carried. Signed limbs need no bias to stay positive; with
  * both reduced the difference's limbs are below 2^27 in magnitude, which
  * `f25519Mul` accepts.
+ *
+ * @param out Where the difference goes; it may be `f` or `g`.
+ * @param f The element subtracted from, reduced.
+ * @param g The element subtracted, reduced.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -235,6 +294,10 @@ export const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
  * own, so no intermediate is larger. Giving `f25519Mul` anything wider — two unreduced
  * sums added again, say — breaks this bound, which is why every caller carries
  * or multiplies before it adds a second time.
+ *
+ * @param out Where the product goes; it may be `f` or `g`.
+ * @param f The first factor.
+ * @param g The second factor.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -272,6 +335,9 @@ export const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
 /**
  * `out = f * f`, reduced; the same bounds as `f25519Mul`.
  *
+ * @param out Where the square goes; it may be `f`.
+ * @param f The element squared.
+ *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Square = (out: i64[], f: i64[]): void => {
@@ -280,6 +346,10 @@ export const f25519Square = (out: i64[], f: i64[]): void => {
 
 /**
  * `out = f` squared `n` times in a row (`n` at least 1), reduced.
+ *
+ * @param out Where the result goes; it may be `f`.
+ * @param f The element squared.
+ * @param n How many squarings.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -312,6 +382,10 @@ const f25519MulA24 = (out: i64[], f: i64[]): void => {
  * 5, 10, 20, 40, 50, 100, 200 and 250 from the rule
  * `z^(2^(a+b) - 1) = (z^(2^a - 1))^(2^b) * z^(2^b - 1)`: 251 squarings and 11
  * multiplications, the same for every `z`. `out` and `z11` may not be `z`.
+ *
+ * @param out Where `z^(2^250 - 1)` goes.
+ * @param z11 Where `z^11` goes.
+ * @param z The base, reduced.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -357,6 +431,9 @@ export const f25519Pow250 = (out: i64[], z11: i64[], z: i64[]): void => {
  * multiplication by `z^11` — 256 squarings and 12 multiplications, the same
  * for every `z`.
  *
+ * @param out Where the inverse goes.
+ * @param z The element inverted, reduced.
+ *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Invert = (out: i64[], z: i64[]): void => {
@@ -372,6 +449,10 @@ export const f25519Invert = (out: i64[], z: i64[]): void => {
  * Swaps `f` and `g` when `bit` is 1 and leaves them when it is 0, with the
  * same instructions either way: the mask is all ones or all zeros, and the
  * swap is the masked xor of the two.
+ *
+ * @param f The first element, swapped in place.
+ * @param g The second element, swapped in place.
+ * @param bit 1 to swap, 0 to leave; a secret, so no branch reads it.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -395,6 +476,9 @@ export const f25519Swap = (f: i64[], g: i64[], bit: i64): void => {
  * lands in `[0, 2^width)` and the element is reduced. A value in
  * `[p, 2^255)` is neither refused nor adjusted: §5 has it processed as its
  * residue, and the arithmetic does that by itself.
+ *
+ * @param bytes The 32-byte little-endian encoding.
+ * @returns A new reduced element, or zero for fewer than 32 bytes.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -438,6 +522,9 @@ export const f25519Decode = (bytes: u8[]): i64[] => {
  * carry out of bit 255 tells the two apart without a branch — it is 1 exactly
  * when the value is at least p — so the element adds `19 * q` and drops bit
  * 255, which is subtracting `p * q`.
+ *
+ * @param f The element, reduced.
+ * @returns Its 32 canonical little-endian bytes.
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
@@ -596,10 +683,16 @@ const x25519Exposed = (scalar: u8[], u: u8[]): u8[] | null => {
  *
  * Answers `null` unless both arguments are exactly `X25519_SIZE` bytes. An
  * all-zero answer is **returned, not refused**: it is what a low-order `u`
- * gives, and RFC 7748 §6.1 leaves checking for it to the protocol. Nothing in
- * this tree makes that check for you yet (TLS 1.3, WP34 T1, is planned to), so
- * every caller doing a key exchange must refuse an all-zero answer itself —
- * inside `expose`, with `timingSafeEqual` against 32 zero bytes.
+ * gives, and RFC 7748 §6.1 leaves checking for it to the protocol.
+ * `nish/net/tls` makes that check on both sides of its handshake; any other
+ * caller doing a key exchange must refuse an all-zero answer itself — inside
+ * `expose`, with `timingSafeEqual` against 32 zero bytes, as the module's
+ * example does.
+ *
+ * @param scalar The private key, 32 bytes, clamped on a copy.
+ * @param u The peer's u-coordinate (its public key), 32 bytes.
+ * @returns The shared secret, 32 bytes and possibly all zero, or `null` for an
+ *   argument of the wrong length.
  */
 export const x25519 = (scalar: Secret<u8[]>, u: u8[]): Secret<u8[]> | null => {
   const shared: u8[] | null = exposeWith(scalar, u, x25519Exposed)
@@ -613,6 +706,9 @@ export const x25519 = (scalar: Secret<u8[]>, u: u8[]): Secret<u8[]> | null => {
  * `x25519(scalar, 9)`: the public key for the private key `scalar`, since 9 is
  * curve25519's base point (RFC 7748 §4.1, §6.1), and public, so plain bytes.
  * Answers `null` unless `scalar` is `X25519_SIZE` bytes.
+ *
+ * @param scalar The private key, 32 bytes.
+ * @returns The public key, 32 bytes, or `null` for a key of the wrong length.
  */
 export const x25519Base = (scalar: Secret<u8[]>): u8[] | null => {
   const base: u8[] = new Array<u8>(32)
