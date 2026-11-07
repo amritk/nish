@@ -1234,7 +1234,7 @@ const bandZero = (text) => {
     if (!shared) {
       throw new Error(`${codesSource}:${i + 1}: ${m[1]} has no doc comment to render`)
     }
-    out.push({ code: m[2], prose: shared.trim() })
+    out.push({ code: m[2], name: m[1], prose: shared.trim() })
   }
   return out
 }
@@ -1258,10 +1258,24 @@ const wordingExamples = () => {
       continue
     }
     const base = path.join(dir, name.slice(0, -3))
-    const read = (ext) => (fs.existsSync(base + ext) ? fs.readFileSync(base + ext, "utf8").trim() : "")
+    // Each file word for word, less the newline that ends it; only `.args` is optional.
+    const read = (ext, optional) => {
+      if (!fs.existsSync(base + ext)) {
+        if (optional) {
+          return ""
+        }
+        throw new Error(`${wordingsDir}/${name}: no ${path.basename(base + ext)} beside it`)
+      }
+      return fs.readFileSync(base + ext, "utf8").replace(/\r?\n$/, "")
+    }
     const code = `NL${m[1]}`
     const list = out.get(code) ?? []
-    list.push({ file: `${wordingsDir}/${name}`, source: read(".ts"), err: read(".err"), args: read(".args") })
+    list.push({
+      file: `${wordingsDir}/${name}`,
+      source: read(".ts"),
+      err: read(".err"),
+      args: read(".args", true).trim(),
+    })
     out.set(code, list)
   }
   return out
@@ -1270,9 +1284,9 @@ const wordingExamples = () => {
 /**
  * A rule's fragment as matched text: a fragment is a substring of the message,
  * so `…` marks an end that is cut. The examples say exactly where the message
- * starts and ends; with none, a start is whole when it is capitalised or opens
- * on code, and an end is cut when it stops on a space or on punctuation that
- * expects more.
+ * starts and ends; with none, the markers are a guess: a start is whole when
+ * it is capitalised or opens on code, and an end is cut when it stops on a
+ * space or on punctuation that expects more.
  */
 const fragmentText = (fragment, examples) => {
   const errs = examples.map((e) => e.err).filter((e) => e.includes(fragment))
@@ -1326,7 +1340,11 @@ const renderDiagnostics = (link) => {
   })
   const kindAt = (code) => {
     const at = new RegExp(`^\\s*"${code}",?$`, "m").exec(text).index
-    return starts.filter((s) => s.at < at).at(-1).kind
+    const before = starts.filter((s) => s.at < at)
+    if (before.length === 0) {
+      throw new Error(`${codesSource}: ${code} sits before every rule table`)
+    }
+    return before.reduce((a, b) => (b.at > a.at ? b : a)).kind
   }
   const rules = parseCodesRegistry(text, codesSource).map(({ fragment, code }) => ({
     code,
@@ -1336,7 +1354,7 @@ const renderDiagnostics = (link) => {
   const zero = bandZero(text)
   const unreachable = unreachableCodes(fs.readFileSync(path.join(root, unreachableSource), "utf8"))
   const examples = wordingExamples()
-  const all = [...zero.map((z) => ({ code: z.code, prose: z.prose })), ...rules].sort((a, b) =>
+  const all = [...zero.map((z) => ({ code: z.code, name: z.name, prose: z.prose })), ...rules].sort((a, b) =>
     byText(a.code, b.code)
   )
   const page = diagnosticsPage
@@ -1370,7 +1388,7 @@ const renderDiagnostics = (link) => {
       const seen = examples.get(r.code) ?? []
       out.push(`### ${r.code}`, "")
       if (r.prose) {
-        out.push(escapeProse(r.prose), "")
+        out.push(`\`${r.name}\` in \`${codesSource}\`. ${escapeProse(r.prose)}`, "")
       } else {
         out.push(
           `The message of ${r.kind} contains:`,
@@ -1471,9 +1489,24 @@ const helpCalls = () => {
     throw new Error(`${helpSource}: no \`const helpText = (...) => { ... }\``)
   }
   const calls = []
+  // How many arguments each rendered `menu` method takes.
+  const arity = { usage: 2, section: 1, row: 3, note: 1 }
+  const at = (node) => `${helpSource}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`
+  // Every statement is a declaration, the `return`, a `menu.*` call, or the
+  // agents-only `if (guide.length > 0) { ... }`; anything else could hide a
+  // row from the page, so it fails the run.
   const visit = (statements, agent) => {
     for (const s of statements) {
-      if (ts.isIfStatement(s) && ts.isBlock(s.thenStatement) && !s.elseStatement) {
+      if (ts.isVariableStatement(s) || ts.isReturnStatement(s)) {
+        continue
+      }
+      if (
+        !agent &&
+        ts.isIfStatement(s) &&
+        s.expression.getText(sf) === "guide.length > 0" &&
+        ts.isBlock(s.thenStatement) &&
+        !s.elseStatement
+      ) {
         visit(s.thenStatement.statements, true)
         continue
       }
@@ -1484,7 +1517,9 @@ const helpCalls = () => {
         !ts.isPropertyAccessExpression(call.expression) ||
         call.expression.expression.getText(sf) !== "menu"
       ) {
-        continue
+        throw new Error(
+          `${at(s)}: helpText holds a statement this page cannot read; only \`menu.*\` calls are rendered`
+        )
       }
       const method = call.expression.name.text
       if (method === "title" || method === "line") {
@@ -1493,6 +1528,14 @@ const helpCalls = () => {
       if (method === "value" && call.arguments.length === 1 && call.arguments[0].getText(sf) === "guide") {
         calls.push({ method: "guide", args: [], agent })
         continue
+      }
+      if (!(method in arity)) {
+        throw new Error(`${at(s)}: helpText calls menu.${method}, which this page does not render`)
+      }
+      if (call.arguments.length !== arity[method]) {
+        throw new Error(
+          `${at(s)}: menu.${method} takes ${arity[method]} arguments here, not ${call.arguments.length}`
+        )
       }
       calls.push({ method, args: call.arguments.map((a) => helpString(a, sf, cli)), agent })
     }

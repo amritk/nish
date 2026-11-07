@@ -10,21 +10,21 @@ A rule is matched by a fragment of its message: the longest literal run of the m
 
 ### NL0000
 
-No rule matched: the diagnostic has no code yet.
+`UNCODED` in `src/codes.ts`. No rule matched: the diagnostic has no code yet.
 
 ### NL0001
 
-Every syntax error shares one code: stage0 takes that text from the `typescript` package.
+`SYNTAX` in `src/codes.ts`. Every syntax error shares one code: stage0 takes that text from the `typescript` package.
 
 ### NL0002
 
-Band 0 is what is wrong with the *run* rather than with the program: the C
+`TOOLCHAIN` in `src/codes.ts`. Band 0 is what is wrong with the *run* rather than with the program: the C
 toolchain `--link` needs could not be used (exit 3), and an internal compiler
 error (exit 70). Neither has a source location.
 
 ### NL0003
 
-Band 0 is what is wrong with the *run* rather than with the program: the C
+`INTERNAL` in `src/codes.ts`. Band 0 is what is wrong with the *run* rather than with the program: the C
 toolchain `--link` needs could not be used (exit 3), and an internal compiler
 error (exit 70). Neither has a source location.
 
