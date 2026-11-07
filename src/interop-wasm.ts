@@ -51,7 +51,7 @@ import {
 import { takesRange } from "./emit-builtins"
 import { StringSet } from "./map"
 import { basename, dirname, relativePath, resolvePath } from "./paths"
-import { FunctionSig } from "./program"
+import { elementStride, FunctionSig, inlineElementStruct } from "./program"
 import {
   K_ARRAY,
   K_RESULT,
@@ -690,6 +690,7 @@ export const generateWasmLoader = (
 ): string => {
   const table = compilation.table
   const bridge = wasmBridged(table, fns, structsHoldingVectors(compilation))
+  const layouts = storageLayouts(compilation)
   const lines: string[] = []
   lines.push(banner(compilation, "--emit-dts", "// "))
   lines.push(`// Loader for the wasm build; ${basename(dtsFile)} declares it. Build the module with`)
@@ -781,6 +782,9 @@ export const generateWasmLoader = (
     lines.push("  };")
     pushAll(lines, wasmResultHelpers(table, bridge.bridged))
     pushAll(lines, wasmRangeHelper(table, bridge.bridged))
+    if (layouts.length > 0) {
+      pushAll(lines, layoutLoader(layouts, "memory"))
+    }
     lines.push("  return {")
     lines.push("    memory,")
     lines.push("    nish_reset_arena: raw.nish_reset_arena,")
@@ -788,8 +792,15 @@ export const generateWasmLoader = (
   } else {
     pushAll(lines, wasmResultHelpers(table, bridge.bridged))
     pushAll(lines, wasmRangeHelper(table, bridge.bridged))
+    if (layouts.length > 0) {
+      pushAll(lines, layoutLoader(layouts, "raw.memory"))
+    }
     lines.push("  return {")
     lines.push("    memory: raw.memory,")
+  }
+  if (layouts.length > 0) {
+    lines.push("    layout,")
+    lines.push("    views,")
   }
   for (const fn of bridge.bridged) {
     lines.push(tsSignatureLine(table, fn.sig, `    /** ${fn.unit.name}: `, " */"))
@@ -966,4 +977,216 @@ const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entr
   }
   lines.push(`  const host_${sig.name} = hostFn("${sig.name}");`)
   entries.push(`      ${sig.name}: (${args.join(", ")}) => ${body},`)
+}
+
+// ---- WP50 S3: the layout of module storage ------------------------------------
+
+/** One field of a record storage's element: its name, byte offset and type. */
+export class StorageField {
+  name: string
+  offset: i32
+  type: string
+
+  constructor(name: string, offset: i32, type: string) {
+    this.name = name
+    this.offset = offset
+    this.type = type
+  }
+}
+
+/**
+ * One module storage as the page sees it (`docs/wp50-wasm-host.md` §5.2): the
+ * key `layout` names it by, the symbol whose `.data` the link exports, its
+ * length and stride, and either the typed array one element reads as or the
+ * fields of a record element.
+ */
+export class StorageLayout {
+  key: string
+  symbol: string
+  length: i32
+  stride: i32
+  /** `Float32Array` and the like for a scalar element; empty for a record. */
+  view: string
+  fields: StorageField[]
+
+  constructor(key: string, symbol: string, length: i32, stride: i32, view: string) {
+    this.key = key
+    this.symbol = symbol
+    this.length = length
+    this.stride = stride
+    this.view = view
+    this.fields = []
+  }
+}
+
+/**
+ * The typed array that reads one slot of `t`, by its LLVM width and
+ * signedness: a `boolean` is the byte, an enum or range the signed `i32`, and
+ * a `HostHandle` the unsigned `u32` slot the page indexes its table with.
+ */
+const storageView = (table: TypeTable, t: i32): string => {
+  const llvm = table.llvmType(t)
+  if (llvm === "float") {
+    return "Float32Array"
+  }
+  if (llvm === "double") {
+    return "Float64Array"
+  }
+  const unsigned =
+    t === T_U8 || t === T_U16 || t === T_U32 || t === T_U64 || t === T_BOOL || table.isHostHandle(t)
+  if (llvm === "i8" || llvm === "i1") {
+    return unsigned ? "Uint8Array" : "Int8Array"
+  }
+  if (llvm === "i16") {
+    return unsigned ? "Uint16Array" : "Int16Array"
+  }
+  if (llvm === "i64") {
+    return unsigned ? "BigUint64Array" : "BigInt64Array"
+  }
+  return unsigned ? "Uint32Array" : "Int32Array"
+}
+
+/**
+ * Every module storage of the program, in module order then declaration
+ * order: what `--emit-dts` spells as `Layout` and the loader fills. A name two
+ * modules both use keeps the first and spells the second by its symbol. Empty
+ * for a program with no storage, which is what keeps its sidecars as they were.
+ */
+export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
+  const table = compilation.table
+  const out: StorageLayout[] = []
+  const keys = new StringSet()
+  for (const unit of compilation.modules) {
+    const program = unit.checker.program
+    for (const info of program.constantList) {
+      if (!info.storage || info.origin !== program.source || info.storageElem < 0) {
+        continue
+      }
+      const key = keys.has(info.name) ? info.storageSymbol : info.name
+      keys.add(key)
+      const length = toI32(info.intValue)
+      const stride = elementStride(program, table, info.storageElem)
+      const record = inlineElementStruct(program, table, info.storageElem)
+      const layout = new StorageLayout(
+        key,
+        info.storageSymbol,
+        length,
+        stride,
+        record === null ? storageView(table, info.storageElem) : ""
+      )
+      if (record !== null) {
+        for (const field of record.fields) {
+          layout.fields.push(new StorageField(field.name, field.offset, storageView(table, field.type)))
+        }
+      }
+      out.push(layout)
+    }
+  }
+  return out
+}
+
+/** The whole-memory typed arrays `views()` answers, by key, each one the page indexes by byte address over its width. */
+const heapViews = (): string[] => [
+  "u8:Uint8Array",
+  "i8:Int8Array",
+  "u16:Uint16Array",
+  "i16:Int16Array",
+  "u32:Uint32Array",
+  "i32:Int32Array",
+  "f32:Float32Array",
+  "f64:Float64Array",
+  "i64:BigInt64Array",
+  "u64:BigUint64Array",
+]
+
+/** `Layout` and `Views` for the `.d.ts` (§5.2): the literal-typed layout of every storage. */
+export const layoutTypes = (layouts: StorageLayout[]): string[] => {
+  const lines: string[] = []
+  lines.push("/**")
+  lines.push(" * Where module storage lives in `memory` (WP50 §5.2). `length`, `stride` and")
+  lines.push(" * each field's byte offset are literal types, so a page that hard-codes one")
+  lines.push(" * fails `tsc` once the layout changes. `at` is the byte address of the data,")
+  lines.push(" * read from the instance at load; it never moves.")
+  lines.push(" */")
+  lines.push("export interface Layout {")
+  for (const s of layouts) {
+    if (s.fields.length === 0) {
+      lines.push(`  ${s.key}: { at: number; length: ${s.length}; stride: ${s.stride} };`)
+      continue
+    }
+    const fields: string[] = []
+    for (const f of s.fields) {
+      fields.push(`${f.name}: ${f.offset}`)
+    }
+    lines.push(
+      `  ${s.key}: { at: number; length: ${s.length}; stride: ${s.stride}; fields: { ${fields.join("; ")} } };`
+    )
+  }
+  lines.push("}")
+  lines.push("")
+  lines.push("/**")
+  lines.push(" * Typed arrays over the current `memory.buffer`: one per width over the whole")
+  lines.push(" * memory, indexed by byte address over the width (`f32[(at + i * stride + off) >> 2]`),")
+  lines.push(" * and one per scalar storage, indexed by element. `views()` answers the same")
+  lines.push(" * object until memory grows; compare `buffer` with `memory.buffer` to know.")
+  lines.push(" */")
+  lines.push("export interface Views {")
+  lines.push("  readonly buffer: ArrayBuffer;")
+  for (const entry of heapViews()) {
+    const colon = entry.indexOf(":")
+    lines.push(`  readonly ${entry.substring(0, colon)}: ${entry.substring(colon + 1)};`)
+  }
+  lines.push("  readonly storage: {")
+  for (const s of layouts) {
+    if (s.fields.length === 0) {
+      lines.push(`    readonly ${s.key}: ${s.view};`)
+    }
+  }
+  lines.push("  };")
+  lines.push("}")
+  lines.push("")
+  return lines
+}
+
+/**
+ * The loader's half of §5.2, inside `exportsOf`: `layout` with each `at` read
+ * from the exported `<symbol>.data` global, and `views()`, rebuilt only when
+ * a grow replaced `memory.buffer`.
+ */
+export const layoutLoader = (layouts: StorageLayout[], memory: string): string[] => {
+  const lines: string[] = []
+  lines.push("  const layout = {")
+  for (const s of layouts) {
+    const fields: string[] = []
+    for (const f of s.fields) {
+      fields.push(`${f.name}: ${f.offset}`)
+    }
+    const tail = fields.length > 0 ? `, fields: { ${fields.join(", ")} }` : ""
+    lines.push(
+      `    ${s.key}: { at: raw["${s.symbol}.data"].value, length: ${s.length}, stride: ${s.stride}${tail} },`
+    )
+  }
+  lines.push("  };")
+  lines.push("  let cached = null;")
+  lines.push("  /** Typed arrays over the current buffer; the same object until memory grows. */")
+  lines.push("  const views = () => {")
+  lines.push(`    const buffer = ${memory}.buffer;`)
+  lines.push("    if (cached !== null && cached.buffer === buffer) return cached;")
+  lines.push("    cached = {")
+  lines.push("      buffer,")
+  for (const entry of heapViews()) {
+    const colon = entry.indexOf(":")
+    lines.push(`      ${entry.substring(0, colon)}: new ${entry.substring(colon + 1)}(buffer),`)
+  }
+  lines.push("      storage: {")
+  for (const s of layouts) {
+    if (s.fields.length === 0) {
+      lines.push(`        ${s.key}: new ${s.view}(buffer, layout.${s.key}.at, ${s.length}),`)
+    }
+  }
+  lines.push("      },")
+  lines.push("    };")
+  lines.push("    return cached;")
+  lines.push("  };")
+  return lines
 }

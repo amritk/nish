@@ -811,7 +811,13 @@ case "$profile" in
               exports+=("-Wl,--export=$name")
             done < <(grep -E '^define ' "$i" \
               | grep -Ev '^define (internal|private|linkonce|linkonce_odr|weak|weak_odr|available_externally|extern_weak|common|hidden|protected) ' \
-              | sed -nE 's/^[^@]*@"?([^"(]+)"?\(.*/\1/p') ;;
+              | sed -nE 's/^[^@]*@"?([^"(]+)"?\(.*/\1/p')
+            # Module storage (WP50 stage 3): each `@<name>.data` global is
+            # exported, and wasm-ld exports a data symbol as a global holding
+            # its address, which the loader reads into `layout.<name>.at`.
+            while IFS= read -r name; do
+              exports+=("-Wl,--export=$name")
+            done < <(sed -nE 's/^@"?([^" =]+\.data)"? = global .*/\1/p' "$i") ;;
         esac
       done
       if [ "$runtime_linked" = 1 ]; then

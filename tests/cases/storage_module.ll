@@ -1,11 +1,11 @@
 %struct.Sim = type { double, i32, i1 }
 %struct.nish_array = type { i64, i64, i8* }
 
-@sim.data = internal global [4 x %struct.Sim] zeroinitializer, align 16
+@sim.data = global [4 x %struct.Sim] zeroinitializer, align 16
 @sim = global %struct.nish_array { i64 4, i64 4, i8* bitcast ([4 x %struct.Sim]* @sim.data to i8*) }, align 8
-@totals.data = internal global [8 x double] zeroinitializer, align 16
+@totals.data = global [8 x double] zeroinitializer, align 16
 @totals = global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x double]* @totals.data to i8*) }, align 8
-@marks.data = internal global [3 x i8] zeroinitializer, align 16
+@marks.data = global [3 x i8] zeroinitializer, align 16
 @marks = global %struct.nish_array { i64 3, i64 3, i8* bitcast ([3 x i8]* @marks.data to i8*) }, align 8
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8

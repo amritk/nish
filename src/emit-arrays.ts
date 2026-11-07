@@ -2051,13 +2051,15 @@ const bytePointer = (emitter: Emitter, arr: string, at: string): string => {
  * elements, zero-filled, and a header that points at them. Both are static,
  * so no code runs to build the storage and the header is the `%struct.nish_array`
  * every array is, which every indexing path already reads. `len` and `cap` are
- * the length, and nothing may change either.
+ * the length, and nothing may change either. The data has external linkage
+ * so a `--profile wasm-host` link can export its address (`--export=<symbol>.data`,
+ * `docs/wp50-wasm-host.md` §5.2); a local symbol cannot be exported.
  */
 export const storageGlobals = (emitter: Emitter, info: ConstInfo): void => {
   const slot = elementLLVMType(emitter.program, emitter.table, info.storageElem)
   const data = `[${info.intValue} x ${slot}]`
   emitter.declareType(ARRAY_TYPE)
-  emitter.declareGlobal(`@${info.storageSymbol}.data = internal global ${data} zeroinitializer, align 16`)
+  emitter.declareGlobal(`@${info.storageSymbol}.data = global ${data} zeroinitializer, align 16`)
   emitter.declareGlobal(
     `@${info.storageSymbol} = global ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
   )

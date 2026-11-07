@@ -30064,6 +30064,128 @@ if (!only || "host-import".includes(only)) {
   }
 }
 
+// ---- WP50 stage 3: module storage a wasm page reads and writes in place --------
+//
+// tests/module-storage holds a program whose exported storage is an array of
+// records, an array of u32 and a Float64Array, and a page that writes the world
+// through the views the loader's `layout` places, steps the module, and reads
+// it back. `--emit-dts` types each length, stride and offset as its literal, so
+// tsc refuses a page written for another stride; the link exports each
+// `<name>.data`, and the loader fills `layout.<name>.at` from it.
+if (!only || "module-storage".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`module-storage: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "module-storage")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "module-storage"))) {
+      fs.copyFileSync(path.join(root, "tests", "module-storage", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("module-storage: a program with exported storage compiles for wasm32 with --emit-dts", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const dts = fs.readFileSync(at("main.d.ts"), "utf8")
+      check(
+        "module-storage: --emit-dts types each storage's length, stride and field offsets as literals",
+        dts.includes("bodies: { at: number; length: 8; stride: 16; fields: { x: 0; vx: 4; hits: 8; alive: 12 } }") &&
+          dts.includes("input: { at: number; length: 4; stride: 4 }") &&
+          dts.includes("scale: { at: number; length: 2; stride: 8 }") &&
+          dts.includes("readonly memory: WebAssembly.Memory;") &&
+          dts.includes("readonly layout: Layout;") &&
+          dts.includes("export type Module = Exports;"),
+        dts
+      )
+      const runtimeWasm = path.join(root, "runtime", "runtime-wasm.c")
+      const grown = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      const fixed = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("fixed.wasm"), "--profile", "wasm-host", "--memory", "1"])
+      check("module-storage: the program links under --profile wasm-host, growing and with --memory 1", grown.status === 0 && fixed.status === 0, shown(grown) + shown(fixed))
+      if (grown.status === 0 && fixed.status === 0) {
+        const exported = WebAssembly.Module.exports(new WebAssembly.Module(fs.readFileSync(at("main.wasm"))))
+          .filter((e) => e.kind === "global")
+          .map((e) => e.name)
+          .sort()
+        check(
+          "module-storage: the wasm-host link exports each storage's `.data` global",
+          exported.join(",") === "bodies.data,input.data,scale.data",
+          exported.join(",")
+        )
+        fs.writeFileSync(
+          at("drive.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import { loadSync } from "./main.mjs"',
+            'import { run } from "./page.ts"',
+            "const [wasm, grow] = process.argv.slice(2)",
+            'console.log(run(loadSync(readFileSync(wasm)), grow === "grow"))',
+            "",
+          ].join("\n")
+        )
+        const drive = (wasm) =>
+          spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
+            cwd: dir,
+            encoding: "utf8",
+          })
+        // Two steps: body 2 (the page woke it) moves 1.5 twice and is hit 3 a
+        // step; body 5 (the module woke it) moves -2 twice; scale[1] gains
+        // scale[0] twice. Each side reads what the other wrote.
+        const growing = drive("main.wasm")
+        check(
+          "module-storage: the page writes storage through views, the module reads and writes it, and the page reads it back",
+          growing.status === 0 && growing.stdout.startsWith("2,2 3 -4 6 -4 0.5 "),
+          shown(growing)
+        )
+        check(
+          "module-storage: growing memory detaches the old views, and views() answers new ones over the same storage",
+          growing.status === 0 && growing.stdout.trim().endsWith("0.5 true true 0.5"),
+          shown(growing)
+        )
+        const pinned = drive("fixed.wasm")
+        check(
+          "module-storage: with --memory the buffer never grows, so the views are never detached",
+          pinned.status === 0 && pinned.stdout.trim() === "2,2 3 -4 6 -4 0.5 fixed true true",
+          shown(pinned)
+        )
+      }
+
+      // The page sees the module through main.d.ts alone, so it is checked in
+      // a directory without main.ts.
+      const pageDir = at("page")
+      fs.mkdirSync(pageDir)
+      for (const name of ["main.d.ts", "page.ts", "page-stride.ts"]) {
+        fs.copyFileSync(at(name), path.join(pageDir, name))
+      }
+      const typeCheckPage = (name, files) => {
+        const config = path.join(pageDir, `tsconfig.${name}.json`)
+        fs.writeFileSync(
+          config,
+          JSON.stringify({
+            extends: path.join(root, "tsconfig.json"),
+            compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+            include: [],
+            files: files.map((f) => path.join(pageDir, f)),
+          })
+        )
+        return typeCheckProject(config, root)
+      }
+      const page = typeCheckPage("page", ["main.d.ts", "page.ts"])
+      check("module-storage: the page type-checks against main.d.ts under tsc --strict", page.ok, page.output)
+      const stride = typeCheckPage("stride", ["main.d.ts", "page-stride.ts"])
+      check(
+        "module-storage: tsc refuses a page written for another stride",
+        !stride.ok && stride.output.includes("page-stride.ts") && stride.output.includes("'16'") && stride.output.includes("'12'"),
+        stride.output
+      )
+    }
+  }
+}
+
 if (!only || "wasm-size".includes(only)) {
   // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
   const host = `${process.platform}-${process.arch}`

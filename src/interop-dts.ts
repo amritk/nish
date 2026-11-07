@@ -44,7 +44,15 @@ import {
   structsHoldingVectors,
   tsSignatureLine,
 } from "./interop-abi"
-import { hostFunctions, hostSpecifiers, wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
+import {
+  hostFunctions,
+  hostSpecifiers,
+  layoutTypes,
+  storageLayouts,
+  wasmBridged,
+  wasmSkipReason,
+  wasmType,
+} from "./interop-wasm"
 import { FunctionSig } from "./program"
 import { T_I64, T_U64, TypeTable } from "./types"
 
@@ -97,9 +105,20 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push("/** A wasm i1 result: JS receives 0 or 1, never `true` / `false`. */")
   lines.push("export type WasmBool = 0 | 1;")
   lines.push("")
+  // WP50 S3: with module storage the page builds its views from `layout`.
+  const layouts = storageLayouts(compilation)
+  if (layouts.length > 0) {
+    pushAll(lines, layoutTypes(layouts))
+  }
   lines.push("export interface Exports {")
   lines.push("  /** Linear memory of the instance (the arena and string constants live here). */")
   lines.push("  readonly memory: WebAssembly.Memory;")
+  if (layouts.length > 0) {
+    lines.push("  /** Where each module storage lives in `memory`. */")
+    lines.push("  readonly layout: Layout;")
+    lines.push("  /** Typed arrays over `memory.buffer`, rebuilt only after memory grew. */")
+    lines.push("  views(): Views;")
+  }
   if (bridge.needsRuntime) {
     lines.push(
       "  /** runtime-wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */"
@@ -155,6 +174,10 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
       ? "export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;"
       : "export function load(bytes: BufferSource): Promise<Exports>;"
   )
+  if (layouts.length > 0) {
+    lines.push("/** The instance `load` answers: its memory, its storage layout and its exports. */")
+    lines.push("export type Module = Exports;")
+  }
   lines.push("")
   return lines.join("\n")
 }
