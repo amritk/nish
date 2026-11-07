@@ -29569,7 +29569,7 @@ if (!only || "vite".includes(only)) {
   } else {
     // The plugin's hooks driven as Vite would, with no Vite: through the package's own
     // `nish/vite` export, the compiler under test, and an app directory of one entry.
-    const { nish, default: byDefault } = await import("nish/vite")
+    const { default: nish } = await import("nish/vite")
     const app = path.join(buildDir, "vite-app")
     fs.rmSync(app, { recursive: true, force: true })
     fs.mkdirSync(path.join(app, "src"), { recursive: true })
@@ -29577,8 +29577,8 @@ if (!only || "vite".includes(only)) {
     const main = path.join(app, "src", "main.ts")
     const plugin = nish({ compiler: NISH, entries: ["src/arrays.ts"] })
     check(
-      "vite: nish/vite exports the plugin by name and by default, enforced before Vite's own",
-      byDefault === nish && plugin.name === "nish" && plugin.enforce === "pre"
+      "vite: nish/vite's default export is the plugin, enforced before Vite's own",
+      typeof nish === "function" && plugin.name === "nish" && plugin.enforce === "pre"
     )
     plugin.configResolved({ root: app, command: "serve", cacheDir: path.join(app, ".cache") })
     const served = await plugin.resolveId("./arrays.ts", main)

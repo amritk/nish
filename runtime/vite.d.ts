@@ -21,5 +21,4 @@ export interface NishVitePlugin {
   load(id: string): Promise<string | null>;
 }
 
-export function nish(options?: NishViteOptions): NishVitePlugin;
-export default nish;
+export default function nish(options?: NishViteOptions): NishVitePlugin;

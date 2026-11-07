@@ -51,7 +51,7 @@ function exportNames(dts) {
 }
 
 /** The plugin. `compiler` and `buildScript` default to the ones in this package. */
-export function nish(options = {}) {
+export default function nish(options = {}) {
   const compiler = options.compiler ?? path.join(packageDir, "bin", "nish");
   const buildScript = options.buildScript ?? path.join(packageDir, "scripts", "build.sh");
   const runtimeWasm = path.join(packageDir, "runtime", "runtime-wasm.c");
@@ -124,5 +124,3 @@ export function nish(options = {}) {
     },
   };
 }
-
-export default nish;
