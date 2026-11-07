@@ -1,0 +1,1 @@
+A string literal type `"x"` is only allowed as the kind of a `HostHandle<"kind">`

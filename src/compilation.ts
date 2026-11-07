@@ -898,7 +898,11 @@ export class Compilation {
         failedDecl = imp.decl
         continue
       }
-      if (!buildsPageModule(this.opts) && this.hostIdentities.has(this.identityOf(target))) {
+      if (
+        !buildsPageModule(this.opts) &&
+        this.opts.emitTs.length === 0 &&
+        this.hostIdentities.has(this.identityOf(target))
+      ) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           `\`${imp.specifier}\` is a host module, and only a freestanding wasm build imports one: build with \`--target wasm32\` or \`--emit-dts\``

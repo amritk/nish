@@ -33,7 +33,7 @@ import { scriptMain } from "./script"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
 import { FLAG_ASYNC, N_IMPORT, Node } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
-import { dirname, normalizePath, relativePath } from "./paths"
+import { dirname, joinPath, normalizePath, relativePath, resolvePath } from "./paths"
 import { StringBuilder } from "./strings"
 
 /** The specifier every emitted module imports the runtime by. */
@@ -115,9 +115,14 @@ const commonDirectory = (a: string, b: string): string => {
 /**
  * Where `unit` is written, relative to the output directory, or the empty
  * string for a module that is not written: a dependency package's, which the
- * program imports from where it is installed.
+ * program imports from where it is installed, or a host module.
  */
 const outputPathOf = (unit: ModuleUnit, base: string): string => {
+  // A host module is the page's own TypeScript (WP50 §3), imported from where
+  // it is rather than copied, as the wasm loader passes it.
+  if (unit.source.host) {
+    return ""
+  }
   if (unit.packageName === ROOT_PACKAGE) {
     return relativePath(base, unit.path)
   }
@@ -265,7 +270,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   const entry = compilation.entry()
   let base = dirname(normalizePath(entry.path))
   for (const unit of modules) {
-    if (unit.packageName === ROOT_PACKAGE) {
+    if (unit.packageName === ROOT_PACKAGE && !unit.source.host) {
       base = commonDirectory(base, dirname(normalizePath(unit.path)))
     }
   }
@@ -334,7 +339,17 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       }
       const target = unit.resolved.get(stmt.text, -1)
       const dest = target >= 0 && target < outputs.length ? outputs[target] : ""
-      if (dest.length > 0) {
+      if (target >= 0 && target < modules.length && modules[target].source.host) {
+        // The page's module, named from where this file is written.
+        const at = compilation.workingDir
+        walk.specifierFrom.push(stmt.text)
+        walk.specifierTo.push(
+          relativeSpecifier(
+            resolvePath(at, joinPath([compilation.opts.emitTs, out])),
+            resolvePath(at, modules[target].source.path)
+          )
+        )
+      } else if (dest.length > 0) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(relativeSpecifier(out, dest))
       }

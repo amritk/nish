@@ -50,7 +50,7 @@ import {
 } from "./interop-abi"
 import { takesRange } from "./emit-builtins"
 import { StringSet } from "./map"
-import { basename } from "./paths"
+import { basename, dirname, relativePath, resolvePath } from "./paths"
 import { FunctionSig } from "./program"
 import {
   K_ARRAY,
@@ -111,6 +111,11 @@ export const wasmType = (table: TypeTable, t: i32, position: i32): string => {
   // an argument against the range (`wasmRangeIn`), and a result is already in it.
   if (table.isRanged(t)) {
     return "number"
+  }
+  // WP50 S2: a host handle is an `i32`, read by the page's `tsc` as the
+  // branded number `nish`'s root types declare (`HostHandle` in runtime/nish.d.ts).
+  if (table.isHostHandle(t)) {
+    return table.typeName(t)
   }
   switch (table.kindOf(t)) {
     // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
@@ -701,11 +706,16 @@ export const generateWasmLoader = (
   lines.push(" * Instantiate the module and return its exports, arrays marshalled. `source` is")
   lines.push(" * the module's bytes (a BufferSource) or a compiled WebAssembly.Module.")
   lines.push(" */")
-  lines.push("export async function load(source, imports = {}) {")
+  // WP50 S2: with a host module the page owes `imports.host`, so there is no
+  // default, and the object the module links against is `importsOf`'s.
+  const hosts = hostFunctions(compilation)
+  const params = hosts.length > 0 ? "source, imports" : "source, imports = {}"
+  const linked = hosts.length > 0 ? "importsOf(imports)" : "imports"
+  lines.push(`export async function load(${params}) {`)
   lines.push("  const instance =")
   lines.push("    source instanceof WebAssembly.Module")
-  lines.push("      ? await WebAssembly.instantiate(source, imports)")
-  lines.push("      : (await WebAssembly.instantiate(source, imports)).instance;")
+  lines.push(`      ? await WebAssembly.instantiate(source, ${linked})`)
+  lines.push(`      : (await WebAssembly.instantiate(source, ${linked})).instance;`)
   lines.push("  return exportsOf(instance);")
   lines.push("}")
   lines.push("")
@@ -714,13 +724,16 @@ export const generateWasmLoader = (
   lines.push(" * await. Chromium refuses to compile bytes over 8 MB synchronously on the main")
   lines.push(" * thread; above that, call `load`, or compile the module in a worker and pass it here.")
   lines.push(" */")
-  lines.push("export function loadSync(source, imports = {}) {")
+  lines.push(`export function loadSync(${params}) {`)
   lines.push(
     "  const module = source instanceof WebAssembly.Module ? source : new WebAssembly.Module(source);"
   )
-  lines.push("  return exportsOf(new WebAssembly.Instance(module, imports));")
+  lines.push(`  return exportsOf(new WebAssembly.Instance(module, ${linked}));`)
   lines.push("}")
   lines.push("")
+  if (hosts.length > 0) {
+    pushAll(lines, hostImportsOf(table, hosts))
+  }
   lines.push("/** The exports of one instance, arrays marshalled: the body `load` and `loadSync` share. */")
   lines.push("function exportsOf(instance) {")
   lines.push("  const raw = instance.exports;")
@@ -788,4 +801,160 @@ export const generateWasmLoader = (
   lines.push("}")
   lines.push("")
   return lines.join("\n")
+}
+
+/**
+ * Every function a host module exports (WP50 S2, `docs/wp50-wasm-host.md`
+ * §3), in module order: each is a wasm import from module `host`, which the
+ * loader fills from the page's `imports.host`. Empty for a program that
+ * imports no host module, which is what keeps that program's sidecars as
+ * they were.
+ */
+export const hostFunctions = (compilation: Compilation): FunctionSig[] => {
+  const out: FunctionSig[] = []
+  for (const unit of compilation.modules) {
+    const program = unit.checker.program
+    if (!program.source.host) {
+      continue
+    }
+    for (const sig of program.functions) {
+      if (sig.definedIn(program.source)) {
+        out.push(sig)
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * The host modules a `.d.ts` at `dtsFile` names in `Imports`, each as a
+ * specifier from the declaration's directory, `.ts` dropped, which is how
+ * a bundler's or `tsc`'s `bundler` resolution spells a sibling module.
+ */
+export const hostSpecifiers = (compilation: Compilation, dtsFile: string): string[] => {
+  const out: string[] = []
+  const from = dirname(resolvePath(compilation.workingDir, dtsFile))
+  for (const unit of compilation.modules) {
+    const source = unit.checker.program.source
+    if (!source.host) {
+      continue
+    }
+    const target = relativePath(from, resolvePath(compilation.workingDir, source.path))
+    const stem = target.endsWith(".ts") ? target.substring(0, target.length - 3) : target
+    out.push(stem.startsWith("../") ? stem : `./${stem}`)
+  }
+  return out
+}
+
+/**
+ * A host function's argument as the page should see it, from the i32 or i64
+ * the module passes: a `boolean` is the `i1` the caller zero-extended, so
+ * `!== 0` reads it; a `u32` or `u64` is the full width but arrives signed, so
+ * it is read unsigned as an export's result is (`wasmUnsignedOut`). A `u8` and
+ * a `u16` need nothing: the declaration's `zeroext` makes the module widen
+ * them, so the number is already in range.
+ */
+const hostArgument = (table: TypeTable, t: i32, value: string): string => {
+  const kind = table.kindOf(t)
+  if (kind === T_BOOL) {
+    return `${value} !== 0`
+  }
+  if (kind === T_U32 || kind === T_U64) {
+    return wasmUnsignedOut(table, t, value)
+  }
+  return value
+}
+
+/**
+ * A host function's result as the module may assume it: a `boolean` as `1` or
+ * `0` and a `u8` or `u16` masked, since the declaration promises the module a
+ * zero-extended value; a ranged integer checked, since the module assumes its
+ * range. Every other width crosses as ToInt32, ToBigInt64 or a float
+ * conversion makes it, which is the language's wrapping already.
+ */
+const hostResult = (table: TypeTable, sig: FunctionSig, call: string): string => {
+  const t = sig.returnType
+  if (table.isRanged(t)) {
+    return `rangeOut(${call}, ${table.rangeLo(t)}, ${table.rangeHi(t)}, "host.${sig.name}")`
+  }
+  const kind = table.kindOf(t)
+  if (kind === T_BOOL) {
+    return `${call} ? 1 : 0`
+  }
+  if (kind === T_U8 || kind === T_U16) {
+    return `${call} & ${wasmUnsignedIn(table, t)}`
+  }
+  return call
+}
+
+/**
+ * `importsOf`, the loader's half of a host module: the import object the
+ * module links against, with the page's functions under `host`. A function
+ * whose values all cross as they stand is passed by reference, so a call is
+ * the page's function and nothing else; any other is wrapped in one closure,
+ * made here, once per load, which converts and allocates nothing on a call.
+ * A missing or non-function export is a `TypeError` at load, before the
+ * module runs, rather than a call that fails later.
+ */
+const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
+  const lines: string[] = []
+  lines.push("/**")
+  lines.push(" * The import object the module links against: the page's host functions under")
+  lines.push(" * `host`, each passed by reference, or wrapped once here where a value converts.")
+  lines.push(" */")
+  lines.push("function importsOf(imports) {")
+  lines.push("  const host = imports === undefined || imports === null ? undefined : imports.host;")
+  lines.push('  if (host === undefined || host === null || typeof host !== "object")')
+  lines.push(
+    '    throw new TypeError("imports.host must be the host module: import * as host from it and pass { host }");'
+  )
+  lines.push("  const hostFn = (name) => {")
+  lines.push("    const fn = host[name];")
+  lines.push(
+    '    if (typeof fn !== "function") throw new TypeError("imports.host." + name + " must be a function");'
+  )
+  lines.push("    return fn;")
+  lines.push("  };")
+  let ranged = false
+  for (const sig of hosts) {
+    if (table.isRanged(sig.returnType)) {
+      ranged = true
+    }
+  }
+  if (ranged) {
+    lines.push("  /** A ranged result, which the module assumes is in its range. */")
+    lines.push("  const rangeOut = (value, lo, hi, what) => {")
+    lines.push("    if (!Number.isInteger(value) || value < lo || value > hi)")
+    lines.push('      throw new RangeError(what + " must return an integer in [" + lo + ", " + hi + "]");')
+    lines.push("    return value;")
+    lines.push("  };")
+  }
+  const entries: string[] = []
+  for (const sig of hosts) {
+    const args: string[] = []
+    const passed: string[] = []
+    let i = 0
+    while (i < sig.paramTypes.length) {
+      args.push(`a${i}`)
+      passed.push(hostArgument(table, sig.paramTypes[i], `a${i}`))
+      i = i + 1
+    }
+    const call = `host_${sig.name}(${passed.join(", ")})`
+    const body = hostResult(table, sig, call)
+    if (body === `host_${sig.name}(${args.join(", ")})`) {
+      entries.push(`      ${sig.name}: hostFn("${sig.name}"),`)
+      continue
+    }
+    lines.push(`  const host_${sig.name} = hostFn("${sig.name}");`)
+    entries.push(`      ${sig.name}: (${args.join(", ")}) => ${body},`)
+  }
+  lines.push("  return {")
+  lines.push("    ...imports,")
+  lines.push("    host: {")
+  pushAll(lines, entries)
+  lines.push("    },")
+  lines.push("  };")
+  lines.push("}")
+  lines.push("")
+  return lines
 }

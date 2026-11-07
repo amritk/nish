@@ -1,0 +1,1 @@
+Parameter `s` of host function `log` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length

@@ -1,0 +1,1 @@
+`declare function c_abs` declares a C function, and a freestanding wasm build links no C: export `c_abs` from a host module the page provides (`--host`) and import it from there

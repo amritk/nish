@@ -2656,6 +2656,47 @@ declare interface CPtr {
   readonly __nishForeignPointer: unique symbol;
 }
 
+/**
+ * The brand that makes a `HostHandle` nominal per kind. It is never a value:
+ * `declare` makes it a type-level symbol only, so the name costs nothing at run time.
+ */
+declare const __nishHostKind: unique symbol;
+
+/**
+ * `HostHandle<"kind">`: an object the page holds (a canvas, a GPU buffer, a
+ * node), passed to and from a host module's functions as the small integer the
+ * page's table keys it by (docs/LANGUAGE.md -> Host modules). It is an `i32` in
+ * the wasm module. It may be stored anywhere a scalar goes and compared with
+ * `===` or `!==` against a handle of the same kind or the literal `0`; a
+ * different kind, arithmetic, and a conversion to or from a number, an `as`
+ * included, are refused, and only a host function that returns one makes one.
+ *
+ * A branded `number` here, so `tsc` refuses passing one kind where another is
+ * declared, as `nish` does; it cannot refuse the arithmetic, which `nish` does.
+ */
+type HostHandle<K extends string> = number & { readonly [__nishHostKind]: K };
+
+/**
+ * `"nish"`: what a host module (the page's TypeScript) imports its widths
+ * from, `import type { f64, i32, HostHandle } from "nish"`. The package's
+ * root `types` entry is this file, which is how the page's `tsc` finds the
+ * module. The widths are the page's reading of them, which is the loader's:
+ * an `i64` or `u64` crosses as a `bigint`, every other width as a `number`.
+ */
+declare module "nish" {
+  export type i32 = number;
+  export type i64 = bigint;
+  export type u8 = number;
+  export type u16 = number;
+  export type u32 = number;
+  export type u64 = bigint;
+  export type f32 = number;
+  export type f64 = number;
+  /** A ranged integer, which the loader checks on the way in. */
+  export type integer<Lo extends number, Hi extends number> = number;
+  export type HostHandle<K extends string> = number & { readonly [__nishHostKind]: K };
+}
+
 // ---- `lib.es2022`'s receivers, documented ---------------------------------------
 //
 // The interfaces below merge into `lib.es2022`'s. Each member is lib's own

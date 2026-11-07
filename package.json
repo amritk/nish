@@ -5,6 +5,9 @@
   "license": "MIT",
   "type": "module",
   "exports": {
+    ".": {
+      "types": "./runtime/nish.d.ts"
+    },
     "./package.json": "./package.json",
     "./runtime": {
       "types": "./runtime/core.d.ts",

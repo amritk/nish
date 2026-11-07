@@ -157,6 +157,11 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
     if (program.packageName !== ROOT_PACKAGE) {
       continue
     }
+    // WP50 S2: a host module's functions are the page's, imported by the
+    // module, never exported from it.
+    if (program.source.host) {
+      continue
+    }
     for (const sig of program.functions) {
       if (!sig.definedIn(program.source)) {
         continue

@@ -29652,6 +29652,49 @@ if (!only || "vite".includes(only)) {
       check("vite: an entry exporting `bytes` and `loadSync` gets both, named and on the default export", false, clashFailure)
     }
     check("vite: load leaves every other id to Vite", (await plugin.load(path.join(app, "src", "main.ts"))) === null)
+
+    // WP50 stage 2: an entry importing a host module is instantiated with it. The
+    // generated module imports the host file whole and passes it as `host`, so the
+    // page passes nothing, and Node's type stripping runs the host file as it is.
+    const hostFile = path.join(app, "src", "page.ts")
+    fs.writeFileSync(
+      hostFile,
+      'import type { f64 } from "nish"\nexport function twice(x: f64): f64 {\n  return x * 2\n}\n'
+    )
+    fs.writeFileSync(
+      path.join(app, "src", "quad.ts"),
+      'import { twice } from "./page"\nexport function quad(x: f64): f64 {\n  return twice(twice(x)) + 1\n}\n'
+    )
+    const hosted = nish({ compiler: NISH, entries: ["src/quad.ts"], host: ["src/page.ts"] })
+    hosted.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
+    let hostCode = null
+    let hostFailure = ""
+    try {
+      const id = await hosted.resolveId("./quad.ts", main)
+      hostCode = typeof id === "string" ? await hosted.load(id) : null
+    } catch (e) {
+      hostFailure = String(e.stderr ?? e)
+    }
+    const hostName = "vite: an entry importing a host module gets it as `host`, and its exports call the page's function"
+    if (typeof hostCode === "string") {
+      const generated = path.join(app, "generated-host.mjs")
+      fs.writeFileSync(generated, hostCode)
+      let quad = null
+      try {
+        quad = (await import(pathToFileURL(generated).href)).quad(5)
+      } catch (e) {
+        hostFailure = String(e)
+      }
+      check(
+        hostName,
+        hostCode.includes(`import * as __nishHost0 from ${JSON.stringify(hostFile)};`) &&
+          hostCode.includes("__nishLoadSync(__nishBytes, { host: __nishHost0 })") &&
+          quad === 21,
+        `${hostFailure}\n${hostCode}`
+      )
+    } else {
+      check(hostName, false, hostFailure)
+    }
   }
 }
 

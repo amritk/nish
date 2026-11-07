@@ -40,11 +40,13 @@ import {
   jsExportName,
   POS_PARAM,
   POS_RETURN,
+  pushAll,
   structsHoldingVectors,
   tsSignatureLine,
 } from "./interop-abi"
-import { wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
-import { TypeTable } from "./types"
+import { hostFunctions, hostSpecifiers, wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
+import { FunctionSig } from "./program"
+import { T_I64, T_U64, TypeTable } from "./types"
 
 /**
  * ` Throws a RangeError unless day is an integer in [1, 7].`: the ranges the
@@ -67,7 +69,7 @@ const rangeNote = (table: TypeTable, fn: ExternalFunction): string => {
 const docComment = (table: TypeTable, fn: ExternalFunction): string =>
   tsSignatureLine(table, fn.sig, `  /** ${fn.unit.name}: `, `${rangeNote(table, fn)} */`)
 
-export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): string => {
+export const generateDts = (compilation: Compilation, fns: ExternalFunction[], dtsFile: string): string => {
   const table = compilation.table
   const vectored = structsHoldingVectors(compilation)
   const bridge = wasmBridged(table, fns, vectored)
@@ -86,6 +88,12 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
   lines.push("// String functions are not callable from the freestanding wasm profile and")
   lines.push("// are listed below as comments.")
   lines.push("")
+  // WP50 S2: an export that takes or answers a host handle spells it as the
+  // page's `tsc` reads one, so the type comes from the package's root types.
+  if (bridgesHandle(table, bridge.bridged)) {
+    lines.push('import type { HostHandle } from "nish";')
+    lines.push("")
+  }
   lines.push("/** A wasm i1 result: JS receives 0 or 1, never `true` / `false`. */")
   lines.push("export type WasmBool = 0 | 1;")
   lines.push("")
@@ -131,6 +139,10 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
   }
   lines.push("}")
   lines.push("")
+  const specifiers = hostSpecifiers(compilation, dtsFile)
+  if (specifiers.length > 0) {
+    pushAll(lines, importsType(compilation, specifiers))
+  }
 
   lines.push("/**")
   lines.push(" * Instantiate the module and return its typed exports. `bytes` is the")
@@ -138,7 +150,74 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
   lines.push(" * `arrayBuffer()` in browsers. The companion `.mjs` next to this file")
   lines.push(" * implements it (examples/node-host.mjs shows the plain, scalar-only form).")
   lines.push(" */")
-  lines.push("export function load(bytes: BufferSource): Promise<Exports>;")
+  lines.push(
+    specifiers.length > 0
+      ? "export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;"
+      : "export function load(bytes: BufferSource): Promise<Exports>;"
+  )
   lines.push("")
   return lines.join("\n")
+}
+
+/** Whether some export on the bridge takes or answers a `HostHandle`. */
+const bridgesHandle = (table: TypeTable, bridged: ExternalFunction[]): boolean => {
+  for (const fn of bridged) {
+    if (table.isHostHandle(fn.sig.returnType)) {
+      return true
+    }
+    for (const t of fn.sig.paramTypes) {
+      if (table.isHostHandle(t)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * `Imports` (WP50 S2): what the page owes `load`, the host modules this
+ * program imports under `host`, typed as the modules themselves, so the
+ * page's `tsc` refuses a host module that lost a function the program calls.
+ * A function with an `i64` or `u64` in its signature is named, because each
+ * call makes a bigint, which is an allocation on the page.
+ */
+const importsType = (compilation: Compilation, specifiers: string[]): string[] => {
+  const table = compilation.table
+  const lines: string[] = []
+  lines.push("/**")
+  lines.push(" * What the page passes `load`: its host modules under `host`, e.g.")
+  lines.push(` * \`import * as host from "${specifiers[0]}"\` and \`load(bytes, { host })\`. Each function`)
+  lines.push(" * is a wasm import from module `host`; one whose values all cross as they stand")
+  lines.push(" * is called directly, any other through one adapter the loader makes at load.")
+  for (const sig of hostFunctions(compilation)) {
+    if (namesBigint(table, sig)) {
+      lines.push(` * \`${sig.name}\` allocates per call: an i64 or u64 crosses as a bigint.`)
+    }
+  }
+  lines.push(" */")
+  const modules: string[] = []
+  for (const specifier of specifiers) {
+    modules.push(`typeof import("${specifier}")`)
+  }
+  lines.push(`export type Imports = { host: ${modules.join(" & ")} };`)
+  lines.push("")
+  return lines
+}
+
+/** Whether a parameter or the result of `sig` is an `i64` or a `u64`. */
+const namesBigint = (table: TypeTable, sig: FunctionSig): boolean => {
+  if (isBigintWidth(table, sig.returnType)) {
+    return true
+  }
+  for (const t of sig.paramTypes) {
+    if (isBigintWidth(table, t)) {
+      return true
+    }
+  }
+  return false
+}
+
+const isBigintWidth = (table: TypeTable, t: i32): boolean => {
+  const kind = table.kindOf(t)
+  return kind === T_I64 || kind === T_U64
 }

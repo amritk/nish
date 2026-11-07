@@ -2709,7 +2709,7 @@ const writeSidecars = (compilation: Compilation, fns: ExternalFunction[]): boole
     if (!makeDirectoryFor(opts.emitDts)) {
       return false
     }
-    writeFileSync(opts.emitDts, generateDts(compilation, fns))
+    writeFileSync(opts.emitDts, generateDts(compilation, fns, opts.emitDts))
     console.error(`wrote ${opts.emitDts}`)
     const loader = wasmLoaderPath(opts.emitDts)
     writeFileSync(loader, generateWasmLoader(compilation, fns, opts.emitDts))

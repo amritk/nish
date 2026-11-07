@@ -1,0 +1,1 @@
+Host function `title` returns a `string`, which wasm cannot receive: return the text by writing it into a module-storage u8[] the module names, and return its length

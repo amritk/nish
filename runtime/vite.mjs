@@ -12,9 +12,11 @@
  * re-exports each export by name. The page fetches nothing and awaits nothing.
  * In `vite serve` the import is left to Vite, which serves the TypeScript.
  *
- * Two seams are left for later stages of docs/wp50-wasm-host.md and implement
- * nothing yet: `importsFor`, the import object an entry's host modules will
- * build, and the `.nish` client specifier in `resolveId`.
+ * An entry that imports host modules (WP50 stage 2) is instantiated with
+ * them: the generated module imports each one the `.d.ts` names in `Imports`
+ * and passes them as `host`, so the page passes nothing. One seam is left for
+ * a later stage of docs/wp50-wasm-host.md: the `.nish` client specifier in
+ * `resolveId`.
  *
  * The plugin drives only the hooks Vite and Rollup share (`configResolved`,
  * `resolveId`, `load`), so `tests/run.js` calls them directly, with no Vite.
@@ -30,11 +32,26 @@ const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PREFIX = "\0nish-entry:";
 
 /**
- * The import object an entry is instantiated with. Stage 1 links no host
- * import, so it is empty; the host modules of a later stage fill it here.
+ * The host modules an entry imports, as absolute paths: the
+ * `typeof import("...")` members of the `.d.ts`'s `Imports` type, each a
+ * specifier from the `.d.ts`'s directory written without its `.ts`, which is
+ * put back so the import names the file. None when there is no `Imports`.
  */
-function importsFor(_entry) {
-  return "{}";
+function hostModules(dts, dir) {
+  const line = dts.split("\n").find((l) => l.startsWith("export type Imports = "));
+  if (line === undefined) return [];
+  return [...line.matchAll(/typeof import\("([^"]+)"\)/g)].map((m) => `${path.resolve(dir, m[1])}.ts`);
+}
+
+/**
+ * The import lines and the import object an entry is instantiated with: each
+ * host module imported whole and passed under `host`, or `{}` with none.
+ */
+function importsFor(hosts) {
+  const lines = hosts.map((h, i) => `import * as __nishHost${i} from ${JSON.stringify(h)};`);
+  if (hosts.length === 0) return { lines, object: "{}" };
+  const host = hosts.length === 1 ? "__nishHost0" : `{ ${hosts.map((_, i) => `...__nishHost${i}`).join(", ")} }`;
+  return { lines, object: `{ host: ${host} }` };
 }
 
 /**
@@ -75,7 +92,8 @@ export default function nish(options = {}) {
     mkdirSync(dir, { recursive: true });
     const ll = path.join(dir, `${stem}.ll`);
     const dts = path.join(dir, `${stem}.d.ts`);
-    await run(compiler, [entry, "--target", "wasm32", "--emit-dts", dts, "-o", ll], { cwd: root });
+    const host = (options.host ?? []).flatMap((h) => ["--host", path.resolve(root, h)]);
+    await run(compiler, [entry, "--target", "wasm32", ...host, "--emit-dts", dts, "-o", ll], { cwd: root });
     const loader = path.join(dir, `${stem}.mjs`);
     const ir = readFileSync(ll, "utf8");
     // runtime-wasm.c is linked when the IR needs a runtime function (a weak
@@ -89,7 +107,8 @@ export default function nish(options = {}) {
     await run("bash", [buildScript, ...inputs, "-o", path.join(dir, `${stem}.wasm`), "--profile", "wasm-host", "--inline", inline], {
       cwd: root,
     });
-    return { loader, inline, names: exportNames(readFileSync(dts, "utf8")) };
+    const types = readFileSync(dts, "utf8");
+    return { loader, inline, names: exportNames(types), hosts: hostModules(types, dir) };
   };
 
   return {
@@ -112,13 +131,15 @@ export default function nish(options = {}) {
     async load(id) {
       if (!id.startsWith(PREFIX)) return null;
       const entry = id.slice(PREFIX.length);
-      const { loader, inline, names } = await buildEntry(entry);
+      const { loader, inline, names, hosts } = await buildEntry(entry);
+      const imports = importsFor(hosts);
       // The module's own bindings are prefixed, so an export named `bytes`,
       // `loadSync` or `exports` does not redeclare one of them.
       const lines = [
         `import { loadSync as __nishLoadSync } from ${JSON.stringify(loader)};`,
         `import { bytes as __nishBytes } from ${JSON.stringify(inline)};`,
-        `const __nishExports = __nishLoadSync(__nishBytes, ${importsFor(entry)});`,
+        ...imports.lines,
+        `const __nishExports = __nishLoadSync(__nishBytes, ${imports.object});`,
         "export default __nishExports;",
       ];
       if (names.length > 0) lines.push(`export const { ${names.join(", ")} } = __nishExports;`);
