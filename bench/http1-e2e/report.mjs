@@ -75,13 +75,22 @@ const verdicts = [];
 
 for (const m of machines) {
   const dir = path.join(root, m);
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
-  const rounds = files
-    .filter((f) => !f.startsWith("cg-"))
-    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
-  const cgs = files
-    .filter((f) => f.startsWith("cg-"))
-    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
+  // <machine>/*.json: step 1 rounds and cg-*; trace/: step 4; knobs/: the knob arms.
+  const load = (sub, keep) => {
+    const d = path.join(dir, sub);
+    if (!fs.existsSync(d)) return [];
+    return fs
+      .readdirSync(d)
+      .filter((f) => f.endsWith(".json") && keep(f))
+      .sort()
+      .map((f) => JSON.parse(fs.readFileSync(path.join(d, f), "utf8")));
+  };
+  const rounds = [
+    ...load(".", (f) => !f.startsWith("cg-")),
+    ...load("trace", () => true),
+  ];
+  const cgs = load(".", (f) => f.startsWith("cg-"));
+  const knobs = load("knobs", () => true);
   const byArm = new Map();
   for (const r of rounds.filter((r) => r.kind === "round" && !r.tracing)) {
     if (!byArm.has(r.arm)) byArm.set(r.arm, []);
@@ -339,6 +348,33 @@ for (const m of machines) {
               .join(", ")}`,
         )
         .join("; ")}.`,
+    );
+    say();
+  }
+  // Step 4's knobs: each against arm B, interleaved B K-x K-y ... per round.
+  if (knobs.length) {
+    const by = new Map();
+    for (const r of knobs) by.set(r.arm, [...(by.get(r.arm) ?? []), r]);
+    const base = median(by.get("B")?.map((r) => r.per_request.oncpu_ns) ?? []);
+    say(
+      "Step 4, the knobs, one at a time on arm B (on-CPU ns per request, schedstat; interleaved rounds):",
+    );
+    say();
+    say(
+      table(
+        ["arm", "rounds", "median", "against B", "user/kernel ns"],
+        [...by.entries()].map(([arm, rs]) => {
+          const on = rs.map((r) => r.per_request.oncpu_ns);
+          const med = median(on);
+          return [
+            arm,
+            on.map(f0).join(", "),
+            f0(med),
+            arm === "B" ? "" : signed(med - base),
+            `${f0(median(rs.map((r) => r.per_request.user_ns)))}/${f0(median(rs.map((r) => r.per_request.kernel_ns)))}`,
+          ];
+        }),
+      ),
     );
     say();
   }
