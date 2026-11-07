@@ -450,17 +450,18 @@ the last byte it read. The wait for the reader to connect has five
 seconds. The one wait without a deadline of its own is the consumer's
 `waitPid` on each child after the run, bounded by the children's
 deadlines and by `run.mjs`'s timeout on the whole program. A child that
-exits with an error fails the run. (An earlier version of this
-section claimed the ten seconds for every wait when the drain and the
-reader had none, so a reader that stopped could hang the run.)
+exits with an error fails the run.
 
 A message whose response head finds no room behind the last message's
 tail makes the consumer drain before `respond`, inside the timed window,
 and how often that happens can differ by mode. The bench counts these as
 `stalls`, and `run.mjs` prints the most any run had. The counter came
 after the full runs above: in the `--quick` runs at both ring sizes
-(3,000 messages a run) it was 0 for every size and mode; the full runs
-did not record it.
+(3,000 messages a run) it was 0 for every size and mode. Stalls do happen
+in full runs (the first full run at the default ring stalled in place at
+10 KB, message 25,298), but how often is unmeasured there, and they could
+account for part of the in-place pipeline cost assigned below to the
+producer half.
 
 Each round runs every size and mode twice, in a seeded shuffled order, with
 50,000 messages a run. A figure is the median over 5 rounds × 2 runs, with
@@ -470,8 +471,9 @@ one mode in a round. A difference between two modes is set against the
 wider of their two bands, and one inside it is no measured difference.
 
 The ring is measured at two sizes. At the default 16 MiB it is larger than
-any core's L2 and fits in the L3. At 1 MiB (`--ring-bytes 1048576`) it fits
-in the L2 of one core.
+any core's L2 and fits in the L3. At 1 MiB (`--ring-bytes 1048576`) it is
+small enough to fit in one core's 2 MiB L2; the ring is touched from two
+cores, and cache misses were not counted.
 
 **16 MiB ring** (`node bench/ring-inplace/run.mjs`):
 
@@ -545,7 +547,7 @@ What this says, and only as far as the bands allow:
   copy, plus the wrapped records it pops: a median of 2, 12 and 30 a run
   of 50,000 at 1, 4 and 10 KB with the 16 MiB ring, and 45, 193 and 486
   with the 1 MiB ring. At 4 and 10 KB that is about sixteen times as many,
-  as the ring is a sixteenth the size; at 1 KB it is 22.5 times.
+  with a ring a sixteenth the size; at 1 KB it is 22.5 times.
 - **The pipeline with the 16 MiB ring** is slower in place than copied at
   every size: +5.9 % (band ±2.7 %), +3.8 % (±2.5 %) and +6.2 % (±4.1 %).
   Consumer makes no measured difference to copied at any size (-2.4 %,
@@ -556,15 +558,17 @@ What this says, and only as far as the bands allow:
   in-place producer differs in more than where it renders: it also skips
   `tryPush`'s copy and renders into a window `reserve` lends rather than a
   private buffer, so these runs do not say which of those is the cost.
-- **The small ring and the cache explanation.** An earlier version of this
-  section guessed that in place's pipeline was slower because the producer
-  renders into ring memory the consumer reads from. With the 1 MiB ring,
-  which fits in L2, the in-place pipeline makes no measured difference to
+  Respond stalls are another candidate: their frequency in the full runs
+  is unmeasured.
+- **The small ring and the cache explanation.** The cache explanation is
+  that in place's pipeline is slower because the producer renders into ring
+  memory the consumer reads from. With the 1 MiB ring, small enough to fit
+  in one core's L2, the in-place pipeline makes no measured difference to
   copied at 4 KB (+0.3 %, band ±2.1 %) and 10 KB (-0.8 %, band ±2.0 %),
   where at 16 MiB it was outside its band at both. At 1 KB the gap stays:
   +7.8 % (band ±5.3 %), and consumer is still faster than in place there
-  (-6.0 %, band ±3.4 %). That is consistent with the cache explanation at
-  4 and 10 KB, not shown, and not consistent with it at 1 KB. No band
+  (-6.0 %, band ±3.4 %). So the cache explanation is undecided at 4 and
+  10 KB (consistent with it, not shown) and not supported at 1 KB. No band
   covers the change between ring sizes itself: it is a difference of two
   differences, and the in-place pipeline's ranges at the two ring sizes
   overlap (4 KB: 10,887 to 12,451 against 10,169 to 11,983; 10 KB: 26,784

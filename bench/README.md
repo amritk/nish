@@ -1608,8 +1608,11 @@ timeout bound it. A child that exits with an error fails the run.
 `stalls` counts the messages whose response head had to wait for the last
 message's tail to drain, inside the timed window; it was added after the
 full runs and was 0 for every size and mode in the `--quick` runs at both
-ring sizes. The sums are one byte at a time on the producer's and the
-reader's cores, so they raise the pipeline and p99 figures.
+ring sizes. Stalls do happen in full runs (the first full default run
+stalled in place at 10 KB, message 25,298); how often there is unmeasured,
+and they could account for part of the in-place pipeline cost. The sums
+are one byte at a time on the producer's and the reader's cores, so they
+raise the pipeline and p99 figures.
 
 On 2026-11-07, 5 rounds × 2 runs × 50,000 messages, on an Intel Xeon
 Processor @ 2.30 GHz (4 cores; 48 KiB L1d and 2 MiB L2 a core, 260 MiB L3
@@ -1641,7 +1644,7 @@ shared), consumer on CPU 0, producer on 1, reader on 2, Linux 6.18:
 | 10 KB | consumer vs copied | -14.8% (band ±9.9%, outside) | -4.9% (band ±10.1%, inside) | -0.7% (band ±1.9%, inside) |
 | 10 KB | consumer vs in place | +1.2% (band ±3.3%, inside) | -1.1% (band ±10.1%, inside) | -6.5% (band ±4.1%, outside) |
 
-**1 MiB ring** (`--ring-bytes 1048576`, inside a core's L2):
+**1 MiB ring** (`--ring-bytes 1048576`, small enough to fit in one core's 2 MiB L2):
 
 | record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | messages with a tail | wrapped records popped | noise band p50 / p99 / pipeline |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -1674,10 +1677,10 @@ difference, and at 1 and 4 KB makes no measured difference but a 4 KB p99
 worth adopting at no size measured, being slower over the pipeline at every
 size with the 16 MiB ring (inferred from consumer against in place, which
 differ only in the producer half). With the 1 MiB ring the in-place
-pipeline gap falls inside its band at 4 and 10 KB but not at 1 KB. That is
-consistent with the cache explanation (the producer renders into ring
-memory the consumer reads) at 4 and 10 KB, not shown, and not consistent
-with it at 1 KB: no band covers the change between ring sizes, and
+pipeline gap falls inside its band at 4 and 10 KB but not at 1 KB. So the
+cache explanation (the producer renders into ring memory the consumer
+reads) is undecided at 4 and 10 KB (consistent with it, not shown) and not
+supported at 1 KB: no band covers the change between ring sizes, and
 neither run measured cache misses. wp47 §7 has the reasoning and every
 exception.
 
