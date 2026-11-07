@@ -8,7 +8,7 @@
 #   bash bench/http1-e2e/run.sh seed               # the full seed database (conduit_seed), once
 #   bash bench/http1-e2e/run.sh round <arm> <n>    # one measured round -> results/<machine>/<arm>-<n>.json
 #   bash bench/http1-e2e/run.sh rounds "<arms>" <n>  # n rounds of each arm, interleaved A B C A B C ...
-#   bash bench/http1-e2e/run.sh cachegrind <arm>   # one HTTP worker under cachegrind -> results/<machine>/cg-<arm>.json
+#   bash bench/http1-e2e/run.sh cachegrind <arm>   # one HTTP worker under cachegrind -> results/<machine>/<arm>-cg.json
 #
 # An arm is a nish version plus patches: A (0.34.1, the submission as pushed),
 # B (0.35.0, the same source), C (0.35.0, patches/arm-c-sendbody.patch), and the
@@ -17,7 +17,7 @@
 # arm's compiler.
 #
 # Environment: WORK (scratch, default ~/http1-e2e-work), MACHINE (results
-# label, default uname -m), PGHOST/PGPORT/PGUSER/PGPASSWORD (a Postgres
+# label, default uname -m in kebab-case), PGHOST/PGPORT/PGUSER/PGPASSWORD (a Postgres
 # superuser), USERS THINK RAMP MEASURE TAIL SKIP (the load; SKIP seconds are
 # dropped at each end of the measure window), PERF=1 (perf-stat.sh over the
 # window), TRACE=<seconds> (tracefs syscall and sched_switch trace of the HTTP
@@ -28,7 +28,7 @@ WORK="${WORK:-$HOME/http1-e2e-work}"
 CHALLENGE_REPO="${CHALLENGE_REPO:-https://github.com/amritk/multicore-server-challenge}"
 CHALLENGE_REF="${CHALLENGE_REF:-ccr-54288e72-j5sj3b}"
 SUB=submissions/nish-std-amritk
-export MACHINE="${MACHINE:-$(uname -m)}"
+export MACHINE="${MACHINE:-$(uname -m | tr _ -)}"
 export PGHOST="${PGHOST:-127.0.0.1}" PGPORT="${PGPORT:-5432}" PGUSER="${PGUSER:-postgres}"
 PSQL=(psql -X -q -v ON_ERROR_STOP=1 -d postgres)
 mkdir -p "$WORK"
@@ -124,7 +124,7 @@ cmd_cachegrind() {
   fresh_db
   node "$HERE/round.mjs" --arm "$arm" --round cg --dir "$WORK/arm-$arm" \
     --loadgen "$WORK/loadgen" --nish "$(arm_nish "$arm")" --cachegrind "$WORK/cg-$arm" \
-    --out "${RESULTS:-$HERE/results/$MACHINE}/cg-$arm.json"
+    --out "${RESULTS:-$HERE/results/$MACHINE}/$arm-cg.json"
 }
 
 case "${1:-}" in

@@ -67,10 +67,14 @@ const portOpen = () =>
 const descendants = (root) => {
   const kids = new Map()
   for (const d of fs.readdirSync("/proc")) {
-    if (!/^\d+$/.test(d)) continue
+    if (!/^\d+$/.test(d)) {
+      continue
+    }
     const st = read(`/proc/${d}/stat`)
     const ppid = Number(st.slice(st.lastIndexOf(")") + 2).split(" ")[1])
-    if (!kids.has(ppid)) kids.set(ppid, [])
+    if (!kids.has(ppid)) {
+      kids.set(ppid, [])
+    }
     kids.get(ppid).push(Number(d))
   }
   const out = []
@@ -112,6 +116,7 @@ const machine = () => ({
   postgres: spawnSync("psql", ["-XAtc", "SHOW server_version", "-d", "postgres"], {
     encoding: "utf8",
   }).stdout.trim(),
+  // biome-ignore lint/style/useNamingConvention: field names of the results JSON
   clk_tck: Number(spawnSync("getconf", ["CLK_TCK"], { encoding: "utf8" }).stdout.trim()),
 })
 
@@ -152,12 +157,18 @@ const startServer = (logFile, valgrindDir) => {
 const stopServer = async (child) => {
   try {
     process.kill(-child.pid, "SIGTERM")
-  } catch {}
+  } catch {
+    // the group has already exited
+  }
   const t = Date.now()
-  while (child.exitCode === null && child.signalCode === null && Date.now() - t < 60000) await sleep(200)
+  while (child.exitCode === null && child.signalCode === null && Date.now() - t < 60000) {
+    await sleep(200)
+  }
   try {
     process.kill(-child.pid, "SIGKILL")
-  } catch {}
+  } catch {
+    // the group has already exited
+  }
   // valgrind writes its files as each process exits
   await sleep(1000)
 }
@@ -165,17 +176,23 @@ const stopServer = async (child) => {
 const waitReady = async (child, limitMs) => {
   const t = Date.now()
   while (Date.now() - t < limitMs) {
-    if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}`)
+    if (child.exitCode !== null) {
+      throw new Error(`server exited ${child.exitCode}`)
+    }
     if (await portOpen()) {
       const kids = descendants(child.pid).filter((k) => k.index >= 0)
-      if (kids.length > HTTP_WORKERS && kids.some((k) => k.index === 0)) return kids
+      if (kids.length > HTTP_WORKERS && kids.some((k) => k.index === 0)) {
+        return kids
+      }
     }
     await sleep(500)
   }
   // Leave nothing holding the ports for the next round.
   try {
     process.kill(-child.pid, "SIGKILL")
-  } catch {}
+  } catch {
+    // the group has already exited
+  }
   throw new Error("server not ready")
 }
 
@@ -213,8 +230,11 @@ const runLoadgen = (startAt, outFile, users, measure) =>
 
 const exited = (child) =>
   new Promise((resolve) => {
-    if (child.exitCode !== null) resolve(child.exitCode)
-    else child.on("exit", (code) => resolve(code))
+    if (child.exitCode !== null) {
+      resolve(child.exitCode)
+    } else {
+      child.on("exit", (code) => resolve(code))
+    }
   })
 
 /** Requests (and errors) loadgen counted as completed in seconds [from, to). */
@@ -285,7 +305,9 @@ const measuredRound = async () => {
   const sideOut = Object.assign({}, ...(await Promise.all(side)))
   const code = await exited(lg)
   await stopServer(server)
-  if (code !== 0) throw new Error(`loadgen exited ${code}`)
+  if (code !== 0) {
+    throw new Error(`loadgen exited ${code}`)
+  }
   const lgJson = JSON.parse(fs.readFileSync(lgOut, "utf8"))
   const win = countWindow(lgJson, from, to)
   const zero = { oncpu: 0, utime: 0, stime: 0, vcsw: 0, ivcsw: 0 }
@@ -299,19 +321,26 @@ const measuredRound = async () => {
     round: args.round,
     nish: args.nish,
     machine: machine(),
+    // biome-ignore lint/style/useNamingConvention: field names of the results JSON
     load: { users: USERS, think: THINK, ramp: RAMP, measure: MEASURE, tail: TAIL, window: [from, to] },
     // A round that traces or samples is slower: report.mjs keeps it out of step 1.
     tracing: TRACE > 0 || PERF_RECORD > 0,
+    // biome-ignore lint/style/useNamingConvention: field names of the results JSON
     http_workers: http.length,
+    // biome-ignore lint/style/useNamingConvention: field names of the results JSON
     window_s: to - from,
     requests: win.completed,
     errors: win.errors,
     rps: win.completed / (to - from),
     workers: w,
     others: sum(others),
+    // biome-ignore lint/style/useNamingConvention: field names of the results JSON
     per_request: {
+      // biome-ignore lint/style/useNamingConvention: field names of the results JSON
       oncpu_ns: per(w.oncpu),
+      // biome-ignore lint/style/useNamingConvention: field names of the results JSON
       user_ns: per(ticks ? (w.oncpu * w.utime) / ticks : 0),
+      // biome-ignore lint/style/useNamingConvention: field names of the results JSON
       kernel_ns: per(ticks ? (w.oncpu * w.stime) / ticks : 0),
       vcsw: per(w.vcsw),
       ivcsw: per(w.ivcsw),
@@ -348,7 +377,9 @@ const spawnPromise = (cmd, argv, key) =>
       } catch {
         v = { error: `${path.basename(argv[0])} exited ${code}` }
       }
-      if (code !== 0 && !v.error) v.error = `exited ${code}`
+      if (code !== 0 && !v.error) {
+        v.error = `exited ${code}`
+      }
       resolve({ [key]: v })
     })
   })
@@ -366,7 +397,9 @@ const cachegrindRound = async () => {
   const lg = runLoadgen(startAt, lgOut, USERS, MEASURE)
   const code = await exited(lg)
   await stopServer(server)
-  if (code !== 0) throw new Error(`loadgen exited ${code}`)
+  if (code !== 0) {
+    throw new Error(`loadgen exited ${code}`)
+  }
   const lgJson = JSON.parse(fs.readFileSync(lgOut, "utf8"))
   const all = countWindow(lgJson, -1e9, 1e9)
   // The same start with no load, for the cost of starting and stopping.
@@ -387,6 +420,7 @@ const cachegrindRound = async () => {
     arm: args.arm,
     nish: args.nish,
     machine: machine(),
+    // biome-ignore lint/style/useNamingConvention: field names of the results JSON
     load: { users: USERS, think: THINK, ramp: RAMP, measure: MEASURE, tail: TAIL, http_workers: 1 },
     requests: all.completed,
     errors: all.errors,

@@ -12,12 +12,18 @@ export const parseCachegrind = (file) => {
   let fl = ""
   let cur = null
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    if (line === "") continue
+    if (line === "") {
+      continue
+    }
     const c = line.charCodeAt(0)
     if (c >= 48 && c <= 57) {
-      if (!cur) continue
+      if (!cur) {
+        continue
+      }
       const f = line.split(" ")
-      for (let i = 1; i < f.length; i++) cur[i - 1] += Number(f[i])
+      for (let i = 1; i < f.length; i++) {
+        cur[i - 1] += Number(f[i])
+      }
     } else if (line.startsWith("fn=")) {
       const key = `${fl}:${line.slice(3)}`
       cur = fns[key] ??= events.map(() => 0)
