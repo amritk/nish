@@ -31,6 +31,12 @@ Read CLAUDE.md, .claude/orientation.md, .claude/comments.md and .claude/typescri
    Note that the new @internal comment lines DO move line numbers. If a golden records a std file:line for your files (tests/link/*/expected.caps.json, tests/link/std_sqlite_deny_ffi/expected.err, tests/wordings/nl2458_deny_panics_call.err, the dbg_* / map_dbg / enum_member_type_slots .ll goldens for std/collections.ts), put every @internal on an existing comment line, or put commit A's @internal additions in commit B instead, so commit A stays zero-diff and proves the keyword changes no IR.
 2. Commit B, documentation: module header, descriptions, @param, @returns. Regenerate the goldens again. In this commit, the only golden changes allowed are file:line positions and debug-info line fields. Read the diff and say in the PR body what moved.
 
+## Lessons from wave 1 (read before marking anything)
+- **Check the guide before every `@internal`.** A free function in the module reading a member does not make it internal. Grep docs/guide/, docs/AI.md, docs/cookbook/ and examples/ for the member name. Anything a guide page or an example shows a user calling or setting is API: public, untagged, fully documented. Wave 1 tagged `HttpRequest.methodIs` and `HandlerLimits.jsonBytes` `@internal`, and both are in the api-server guide page.
+- **Treat a sibling family as one decision.** Methods like `i32Array`/`u64Array`/... or the fields of one limits object get the same visibility, unless a specific member has a specific reason, which you name.
+- **Check every doc claim about units and lifetimes against the code.** For example, whether a limit counts raw or decoded bytes, or whether a config object is read once or kept by reference and read live. Wave 1 shipped one of each wrong.
+- Put each `@internal` inside the JSDoc directly above the member it describes.
+
 ## Definition of done
 1. The stage's todos are implemented, and no hand-written file outside your Owns globs changed. In std/, only comments and visibility keywords change: no behaviour, no renames, no moved or deleted code.
 2. The full suite passes on your PR's head. CI runs it on every push in eight `test (…, shard N/8)` shards, so open the PR on targeted tests and let CI's run be the full one. A red result comes back to you with the round's review.
