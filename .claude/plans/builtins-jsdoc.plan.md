@@ -1,10 +1,10 @@
 ---
 name: Document the global builtins in JSDoc on runtime/nish.d.ts
-overview: Move the API reference for Nish's global builtins out of docs/LANGUAGE.md → Builtins and onto their declarations in runtime/nish.d.ts (and typed JSON's onto std/json-typed.ts), so TypeDoc can generate the library reference from source. LANGUAGE.md keeps the normative rules and links to the reference.
+overview: Document every global builtin in JSDoc on its declaration in runtime/nish.d.ts (and typed JSON on std/json-typed.ts), carrying everything docs/LANGUAGE.md → Builtins says about it, so TypeDoc can generate the library reference from source. LANGUAGE.md is not trimmed; nothing is removed from it.
 stages:
   - id: globals
     title: "docs(runtime): document the global builtins in nish.d.ts"
-    goal: Every global declaration in runtime/nish.d.ts and every export of std/json-typed.ts carries its reference documentation as JSDoc, and the listed LANGUAGE.md subsections keep only their rules plus a link to the reference
+    goal: Every global declaration in runtime/nish.d.ts and every export of std/json-typed.ts is fully documented in JSDoc, with every fact LANGUAGE.md gives about it, and LANGUAGE.md loses no text
     verification: npm run check && npm run lint && node docs/check-links.mjs && node tests/run.js dts && node tests/run.js runtime-hosts && node tests/run.js json && node tests/self/goldens.js
     todos:
       - id: widths
@@ -17,19 +17,19 @@ stages:
         content: Name each builtin's capability (or none) in its JSDoc, from LANGUAGE.md → Capabilities, which stays the normative table — see Declarations
       - id: json-typed
         content: JSDoc on std/json-typed.ts's exports (jsonDecode, jsonEncode, JsonDecoder, …) with the reference material of LANGUAGE.md → Typed JSON — see Typed JSON
-      - id: trim-language
-        content: In each listed LANGUAGE.md subsection, remove only reference material now carried by JSDoc, keep every rule, and add a link to the reference — see What moves and what stays
-      - id: pointers
-        content: Grep src/, tests/, docs/, std/, .claude/ and CLAUDE.md for anchors and quotes of every removed passage and move each pointer in the same PR — see Pointers
+      - id: no-trim
+        content: Copy, never move — LANGUAGE.md keeps every line it has; its only edit is one added reference link per listed subsection — see What is documented
+      - id: completeness
+        content: Walk every global declaration against its LANGUAGE.md subsection (the 12 listed and the others — File I/O, the clock, spawn, net, term, unsafe, constant time, …) and confirm each fact about it is in its JSDoc — see What is documented
       - id: reference-link
         content: Point the subsections' reference link at the generated page if the generator has merged, else at runtime/nish.d.ts; regenerate the pages and inspect them if it has merged — see Reference link
 ---
 
 ## Stage: globals
 
-**Owns:** `runtime/nish.d.ts` (top-level declarations only — never a line inside a `declare module "nish:*" { … }` block), `std/json-typed.ts`, `docs/LANGUAGE.md`, `tests/self/goldens/checked/**` (regenerated only), and pointer-only edits in `docs/**/*.md` (not `docs/reference/**`), `std/README.md`, `.claude/*.md`, `CLAUDE.md`, comments in `src/**` and `tests/**`.
+**Owns:** `runtime/nish.d.ts` (top-level declarations only — never a line inside a `declare module "nish:*" { … }` block), `std/json-typed.ts`, `docs/LANGUAGE.md`, `tests/self/goldens/checked/**` and `docs/reference/**` (regenerated only). No other file.
 
-One stage, one PR: the JSDoc and the LANGUAGE.md trim must land together, or a fact lives in neither place (or in both, drifting).
+One stage, one PR: the JSDoc for the whole global surface, plus the reference links.
 
 ## Context
 
@@ -50,25 +50,20 @@ One stage, one PR: the JSDoc and the LANGUAGE.md trim must land together, or a f
 
 ## Lib-provided surfaces
 
-Add `interface Math { … }`, `interface Array<T> { … }` (beside the existing `fill`), `interface ReadonlyArray<T>`, `interface String`, `interface Map<K, V>` and `interface Set<T>` declarations that merge into lib's, each member declared with **Nish's** signature (for example `min<T extends number>(a: T, b: T): T`) and its doc. They are extra overloads to `tsc`, never narrower than lib's, so a program `tsc` accepted before is still accepted. Prove that with `node tests/run.js dts`, plus one throwaway `tsc --strict` probe that is not committed. Declare only what Nish supports. The surface Nish defers (`entries`, `forEach`, …) stays undeclared, and the restrictions `tsc` cannot express stay in LANGUAGE.md. Rewrite the header's Map/Set paragraph to say what is declared now and why. If a merged declaration breaks `tsc` or the `runtime-hosts` check in a way that cannot be fixed inside these rules, leave that surface's docs in LANGUAGE.md and say so in the PR body. Do not weaken a test.
+Add `interface Math { … }`, `interface Array<T> { … }` (beside the existing `fill`), `interface ReadonlyArray<T>`, `interface String`, `interface Map<K, V>` and `interface Set<T>` declarations that merge into lib's, each member declared with **Nish's** signature (for example `min<T extends number>(a: T, b: T): T`) and its doc. They are extra overloads to `tsc`, never narrower than lib's, so a program `tsc` accepted before is still accepted. Prove that with `node tests/run.js dts`, plus one throwaway `tsc --strict` probe that is not committed. Declare only what Nish supports. The surface Nish defers (`entries`, `forEach`, …) stays undeclared, and the restrictions `tsc` cannot express stay in LANGUAGE.md. Rewrite the header's Map/Set paragraph to say what is declared now and why. If a merged declaration breaks `tsc` or the `runtime-hosts` check in a way that cannot be fixed inside these rules, leave that surface undeclared and say so in the PR body. Do not weaken a test.
 
 ## Typed JSON
 
-JSDoc every export of `std/json-typed.ts` with `@param`/`@returns`, and move the subsection's reference material (the call shapes, what each returns, the `static readonly json` options as an API, examples) into those docs or the module comment. Keep the module's existing header comment's voice. Regenerate `tests/self/goldens/checked/` with `node tests/self/goldens.js --update` after the edit (`--seed build/seed/bin/nish` without `build/nish`) and read the diff, even if you expect none.
+JSDoc every export of `std/json-typed.ts` with `@param`/`@returns`, and copy the subsection's reference material (the call shapes, what each returns, the `static readonly json` options as an API, examples) into those docs or the module comment. Keep the module's existing header comment's voice. Regenerate `tests/self/goldens/checked/` with `node tests/self/goldens.js --update` after the edit (`--seed build/seed/bin/nish` without `build/nish`) and read the diff, even if you expect none.
 
-## What moves and what stays
+## What is documented
 
-The subsections: `console`, `Math`, "Numeric conversions", `process`, "Arrays and strings as receivers", "Bulk writes: `set` and `fill`", "Readonly arrays", "Typed-array names have no `push` or `pop`", `Arena`, "`Map` and `Set`", "Typed JSON: `nish/json-typed`", "Capabilities". **No other LANGUAGE.md subsection is edited.** The `nish:` subsections and File I/O, the clock, and so on belong to the other session or to no one.
+**Nothing is trimmed.** The human changed this after sign-off: LANGUAGE.md loses no line. `git diff origin/main -- docs/LANGUAGE.md` shows only added lines, and the only additions are one reference link per listed subsection. LANGUAGE.md stays the normative spec. The JSDoc is a complete copy of the reference, so a reader of the generated page never needs LANGUAGE.md to learn what a builtin does.
 
-- **Stays (normative):** type rules, what the checker rejects and its diagnostics, panics and their messages, which receivers and positions the checker allows, lowering and IR facts, effect labels, the test-name columns, the Capabilities table, deviations from JavaScript.
-- **Moves (reference):** signatures as documentation, what each function or method returns, examples, prose describing an API's use.
-- **When a row mixes both,** the row stays and loses only its reference half. When in doubt, it stays, and the JSDoc repeats the fact. A fact may be in both places. A fact in neither place is a defect.
-- Every heading stays as it is, so every `LANGUAGE.md#…` anchor keeps resolving.
-- Each subsection gains one line linking to the reference (see Reference link).
-
-## Pointers
-
-Before removing any passage, grep `src/`, `tests/`, `docs/`, `std/`, `.claude/` and `CLAUDE.md` for its heading's anchor and for distinctive phrases from it. `tests/run.js` checks some LANGUAGE.md text literally, so grep it for every table row you change. Known anchor users today: `docs/AI.md`, `docs/IR_COOKBOOK.md`, `docs/RUN_UNDER_NODE.md`, `docs/guide/language/arrays-and-strings.md`, `docs/guide/language/maps-and-sets.md`, `docs/guide/using-nish/{cli,standard-library,terminal}.md`, `docs/wp*.md`, `std/README.md`. A pointer that quoted the removed text, or sent a reader to it for a signature, is repointed to the reference in the same commit.
+- **Everything about a declaration goes in its JSDoc:** what it returns, every special case and deviation from JavaScript, errno values, panics and their messages, positions and argument rules, and examples. Leave out only compiler-internal detail (IR lowering, test names) unless a user can observe it.
+- **Every global is covered,** not only the 12 subsections the reference link goes into. A global whose subsection is File I/O, the clock, spawn, `nish:net`, `nish:term`, `nish:unsafe`, constant time and so on gets the same completeness from that subsection, which is itself not edited.
+- **Facts are copied exactly.** Quote numbers, messages and ranges from LANGUAGE.md word for word. Do not paraphrase them into something weaker.
+- The listed subsections are: `console`, `Math`, "Numeric conversions", `process`, "Arrays and strings as receivers", "Bulk writes: `set` and `fill`", "Readonly arrays", "Typed-array names have no `push` or `pop`", `Arena`, "`Map` and `Set`", "Typed JSON: `nish/json-typed`", "Capabilities". Each gains one line linking to the reference (see Reference link). Headings stay as they are.
 
 ## Reference link
 
@@ -83,6 +78,7 @@ npm run check && npm run lint && node docs/check-links.mjs
 rm -rf build/test && node tests/run.js dts && node tests/run.js runtime-hosts && node tests/run.js json
 node tests/self/goldens.js
 git diff origin/main -- runtime/nish.d.ts | grep '^@@'   # no hunk inside a declare module block
+git diff origin/main -- docs/LANGUAGE.md | grep -c '^-[^-]'  # 0: nothing removed
 ```
 
 Read each run's exit status, never a piped tail. CI's eight `test` shards are the full-suite gate. This repo has no coverage command; the Done list plus green shards is the gate.
