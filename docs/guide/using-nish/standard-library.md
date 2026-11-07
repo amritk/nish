@@ -2502,7 +2502,8 @@ an idle connection costs a few KiB, not `outputSize`. Over plain TCP,
 straight from your array, in one `sendmsg` with whatever output is queued
 before it, and copies only what the socket did not take; it answers as `write`
 does and keeps no hold on `buf`, so the array is yours again once it returns.
-A chunked or compressed response, an `Http1TlsServer` slot, and a write still
+`buf` is a `readonly u8[]`, as `write`'s is, so a view you may only read, such
+as a ring's `peek`, is handed over as it is. A chunked or compressed response, an `Http1TlsServer` slot, and a write still
 held back are copied as `write` copies them. Set
 `Http1Config.idleInput` and a slot lends its input and head buffers back too,
 whenever it has answered a request and holds no byte of the next: a server

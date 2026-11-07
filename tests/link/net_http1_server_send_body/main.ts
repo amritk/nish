@@ -21,7 +21,7 @@ import {
   tcpListen,
 } from "nish:net";
 import { HTTP_CODING_IDENTITY, HttpCompressor } from "nish/net/http-compress";
-import { HTTP1_CHUNKED } from "nish/net/http1-codec";
+import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import {
   H1_AGAIN,
   H1_CLOSED,
@@ -172,12 +172,12 @@ class Pair {
 }
 
 /** Hands `body[from .. from + n)` over the way `mode` names. */
-const hand = (conn: Http1Connection, mode: i32, body: u8[], from: i32, n: i32): i32 =>
+const hand = (conn: Http1Connection, mode: i32, body: readonly u8[], from: i32, n: i32): i32 =>
   mode === SEND_BODY ? conn.sendBody(body, from, n) : conn.write(body, from, n);
 
 /**
- * One `Connection: close` request answered with `body` under `framing` (its
- * length, or `HTTP1_CHUNKED`), handed over by `mode` again on each `H1_WRITE`
+ * One `Connection: close` request answered `status` with `body` under
+ * `framing` (its length, `HTTP1_CHUNKED` or `HTTP1_NO_BODY`), handed over by `mode` again on each `H1_WRITE`
  * until all of it is taken; answers what the client read. `sendBuffer` > 0
  * shrinks the server's send buffer and holds the client's reads until the
  * first hand-over has answered.
@@ -191,7 +191,7 @@ class Exchange {
   again: i32 = 0;
   completed: boolean = false;
 
-  constructor(config: Http1Config, method: string, framing: i32, body: u8[], mode: i32, sendBuffer: i32) {
+  constructor(config: Http1Config, method: string, status: i32, framing: i32, body: readonly u8[], mode: i32, sendBuffer: i32) {
     const p = new Pair(config);
     p.ask(`${method} / HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n`);
     const conn = p.conn();
@@ -200,7 +200,7 @@ class Exchange {
       netSetOption(p.server.fd(p.slot), NET_SO_SNDBUF, sendBuffer);
     }
     const total: i32 = toI32(body.length);
-    let ok: boolean = p.until(H1_REQUEST) === H1_REQUEST && conn.respond(200, none, none, framing) === 0;
+    let ok: boolean = p.until(H1_REQUEST) === H1_REQUEST && conn.respond(status, none, none, framing) === 0;
     let taken: i32 = hand(conn, mode, body, ZERO, total);
     this.first = taken;
     this.queuedAfter = conn.wantsWrite();
@@ -258,8 +258,8 @@ export const main = (): i32 => {
 
   // A full send: the head and the body leave together, nothing is copied.
   const small: u8[] = pattern(3000, 1);
-  const writeSmall = new Exchange(config, "GET", 3000, small, WRITE, 0);
-  const sendSmall = new Exchange(config, "GET", 3000, small, SEND_BODY, 0);
+  const writeSmall = new Exchange(config, "GET", 200, 3000, small, WRITE, 0);
+  const sendSmall = new Exchange(config, "GET", 200, 3000, small, SEND_BODY, 0);
   t.ok("write copies the body into the output", writeSmall.first === 3000 && writeSmall.queuedAfter);
   t.ok("sendBody sends the head and the body in one call, leaving nothing queued", sendSmall.first === 3000 && !sendSmall.queuedAfter);
   t.ok("both exchanges complete", writeSmall.completed && sendSmall.completed);
@@ -271,8 +271,8 @@ export const main = (): i32 => {
   const tight = new Http1Config();
   tight.outputSize = 1024;
   const big: u8[] = pattern(4194304, 3);
-  const writeBig = new Exchange(tight, "GET", 4194304, big, WRITE, 4096);
-  const sendBig = new Exchange(tight, "GET", 4194304, big, SEND_BODY, 4096);
+  const writeBig = new Exchange(tight, "GET", 200, 4194304, big, WRITE, 4096);
+  const sendBig = new Exchange(tight, "GET", 200, 4194304, big, SEND_BODY, 4096);
   t.ok("under a small send buffer sendBody answers short", sendBig.first > 0 && sendBig.first < 4194304);
   t.ok("having sent more than the output could hold", sendBig.first > tight.outputSize);
   t.ok("write answers no more than the output holds", writeBig.first > 0 && writeBig.first < tight.outputSize);
@@ -282,14 +282,28 @@ export const main = (): i32 => {
   t.ok("and the client reads the same bytes", same(writeBig.heard, sendBig.heard) && endsWith(sendBig.heard, toI32(sendBig.heard.length), big));
 
   // The fallbacks: a chunked body, and a HEAD whose body is dropped.
-  const writeChunked = new Exchange(config, "GET", HTTP1_CHUNKED, small, WRITE, 0);
-  const sendChunked = new Exchange(config, "GET", HTTP1_CHUNKED, small, SEND_BODY, 0);
+  const writeChunked = new Exchange(config, "GET", 200, HTTP1_CHUNKED, small, WRITE, 0);
+  const sendChunked = new Exchange(config, "GET", 200, HTTP1_CHUNKED, small, SEND_BODY, 0);
   t.ok("a chunked sendBody copies as write does", sendChunked.first === 3000 && sendChunked.queuedAfter);
   t.ok("with the same bytes on the wire", sendChunked.completed && same(writeChunked.heard, sendChunked.heard));
-  const writeHead = new Exchange(config, "HEAD", 3000, small, WRITE, 0);
-  const sendHead = new Exchange(config, "HEAD", 3000, small, SEND_BODY, 0);
+  const writeHead = new Exchange(config, "HEAD", 200, 3000, small, WRITE, 0);
+  const sendHead = new Exchange(config, "HEAD", 200, 3000, small, SEND_BODY, 0);
   t.ok("a HEAD's sendBody takes everything and sends nothing", sendHead.first === 3000);
   t.ok("with the same bytes on the wire", sendHead.completed && same(writeHead.heard, sendHead.heard));
+  const writeNoContent = new Exchange(config, "GET", 204, HTTP1_NO_BODY, small, WRITE, 0);
+  const sendNoContent = new Exchange(config, "GET", 204, HTTP1_NO_BODY, small, SEND_BODY, 0);
+  t.ok("a 204's sendBody takes everything and sends nothing", sendNoContent.first === 3000 && writeNoContent.first === 3000);
+  t.ok("with the same bytes on the wire, and no body", sendNoContent.completed && same(writeNoContent.heard, sendNoContent.heard) && !endsWith(sendNoContent.heard, toI32(sendNoContent.heard.length), small));
+
+  // A `readonly u8[]` (a ring's `peek`, say) is handed over as it is: a full
+  // send, and the chunked fallback through `write`'s copy.
+  const frozen: readonly u8[] = small;
+  const sendFrozen = new Exchange(config, "GET", 200, 3000, frozen, SEND_BODY, 0);
+  t.ok("a readonly body is sent whole, nothing queued", sendFrozen.first === 3000 && !sendFrozen.queuedAfter);
+  t.ok("with the bytes write sends", sendFrozen.completed && same(writeSmall.heard, sendFrozen.heard));
+  const sendFrozenChunked = new Exchange(config, "GET", 200, HTTP1_CHUNKED, frozen, SEND_BODY, 0);
+  t.ok("a readonly chunked body is copied as write copies it", sendFrozenChunked.first === 3000 && sendFrozenChunked.queuedAfter);
+  t.ok("with the same bytes on the wire", sendFrozenChunked.completed && same(writeChunked.heard, sendFrozenChunked.heard));
 
   // A pipelined response already queued: the second response's head and its
   // body go out behind it, in order, in the same call.
@@ -320,7 +334,9 @@ export const main = (): i32 => {
   t.ok("and the client reads the same bytes, in order", same(heardPipelined[0], heardPipelined[1]));
 
   // A compressed response is whole once `respondEncoded` returns, so a body
-  // after it is refused alike.
+  // after it is refused alike, and both send the same compressed response.
+  const heardEncoded: u8[][] = [];
+  const encodedOk: boolean[] = [];
   for (let mode: i32 = 0; mode < 2; mode++) {
     const p = new Pair(config);
     p.ask("GET / HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
@@ -329,8 +345,10 @@ export const main = (): i32 => {
     p.until(H1_REQUEST);
     const encoded: i32 = conn.respondEncoded(200, none, none, small, ZERO, 3000, enc, HTTP_CODING_IDENTITY);
     t.ok(`after respondEncoded, mode ${mode} answers H1_CLOSED`, encoded === 0 && hand(conn, mode, small, ZERO, 10) === H1_CLOSED);
-    p.finish();
+    encodedOk.push(p.finish());
+    heardEncoded.push(p.heard);
   }
+  t.ok("the compressed responses complete with the same bytes on the wire", encodedOk[0] && encodedOk[1] && heardEncoded[0].length > 0 && same(heardEncoded[0], heardEncoded[1]));
 
   // More than the response owes, and no body at all.
   const p = new Pair(config);

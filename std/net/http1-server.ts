@@ -249,7 +249,7 @@ const http1ServerCheckCap = (name: string, value: i32, low: i32, high: i32): voi
 }
 
 /** Panics unless `buf[off .. off + len)` is inside `buf`: a window past its buffer is the caller's mistake. */
-const http1ServerCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
+const http1ServerCheckWindow = (what: string, buf: readonly u8[], off: i32, len: i32): void => {
   const size: i32 = toI32(buf.length)
   if (off < 0 || len < 0 || off > size || len > size - off) {
     panic(`${what}: the window is outside the buffer`)
@@ -257,7 +257,7 @@ const http1ServerCheckWindow = (what: string, buf: u8[], off: i32, len: i32): vo
 }
 
 /** Copies `src[off .. off + n)` to `out` at `at`, which the caller has made sure holds it, and answers where it ends. */
-const http1ServerCopy = (out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 => {
+const http1ServerCopy = (out: u8[], at: i32, src: readonly u8[], off: i32, n: i32): i32 => {
   if (n > 0 && at >= 0 && off >= 0 && at <= toI32(out.length) - n && off <= toI32(src.length) - n) {
     // Both windows fit, as they do for every caller: one move, not a byte loop.
     copyBytes(out, at, src, off, n)
@@ -1233,7 +1233,7 @@ export class Http1Connection {
    * nothing. `H1_CLOSED` with no response under way. A window outside `buf`
    * panics.
    */
-  write(buf: u8[], off: i32, len: i32): i32 {
+  write(buf: readonly u8[], off: i32, len: i32): i32 {
     http1ServerCheckWindow("Http1Connection.write", buf, off, len)
     if (this.response !== H1_R_BODY || this.state !== H1_S_HTTP) {
       return H1_CLOSED
@@ -1289,7 +1289,7 @@ export class Http1Connection {
    * when the socket failed during the send, which aborts the connection. A
    * window outside `buf` panics.
    */
-  sendBody(buf: u8[], off: i32, len: i32): i32 {
+  sendBody(buf: readonly u8[], off: i32, len: i32): i32 {
     http1ServerCheckWindow("Http1Connection.sendBody", buf, off, len)
     if (
       this.fd < 0 ||
@@ -1310,6 +1310,7 @@ export class Http1Connection {
       return H1_CLOSED
     }
     let sent: i32 = 0
+    // pending + len > 0 here (len > 0 above), so netWrite2 never answers 0: it is a count, H1_AGAIN or a failure.
     if (n > 0) {
       this.lastActive = monotonicNanos()
       this.consume(n)
