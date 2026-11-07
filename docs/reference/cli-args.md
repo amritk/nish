@@ -100,17 +100,30 @@ function finish(
 #### Parameters
 
 <scalar-field name="r" type="ParseResult" required>
+
+the answer of `Cli.parse`
+
 </scalar-field>
 
 <scalar-field name="outStyle" type="Style" required>
+
+how help on standard output is painted
+
 </scalar-field>
 
 <scalar-field name="errStyle" type="Style" required>
+
+how the hint's `<path> --help` on standard error is
+  painted
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0, and only for `PARSE_OK`: every other kind exits instead
+
 </scalar-field>
 
 ## Cli
@@ -126,82 +139,19 @@ class Cli
 | Member | |
 | --- | --- |
 | `new Cli(name: string, version: string, description: string)` | A tree with only its root, the program `name` at `version`, for `description`. |
-| `aliasName: string[]` |  |
-| `aliasOwner: i32[]` |  |
-| `argDesc: string[]` |  |
-| `argIndex: i32[]` |  |
-| `argName: string[]` |  |
-| `argNext: i32[]` |  |
-| `argOwner: i32[]` |  |
-| `argRequired: boolean[]` |  |
-| `argVariadic: boolean[]` |  |
-| `children: Map<string, i32>` |  |
-| `cmdAliases: string[]` |  |
-| `cmdDesc: string[]` |  |
-| `cmdEpilog: string[]` |  |
-| `cmdFirstArg: i32[]` |  |
-| `cmdGroup: boolean[]` |  |
-| `cmdId: i32[]` |  |
-| `cmdLastArg: i32[]` |  |
-| `cmdName: string[]` |  |
-| `cmdOptionalArg: boolean[]` |  |
-| `cmdParent: i32[]` |  |
-| `cmdPath: string[]` |  |
-| `cmdRequired: i32[][]` |  |
-| `cmdVariadic: boolean[]` |  |
-| `description: string` |  |
-| `flagDefault: string[]` |  |
-| `flagDesc: string[]` |  |
-| `flagHasDefault: boolean[]` |  |
-| `flagLong: string[]` |  |
-| `flagMeta: string[]` |  |
-| `flagNegatable: boolean[]` |  |
-| `flagNegated: boolean[]` |  |
-| `flagOwner: i32[]` |  |
-| `flagRepeatable: boolean[]` |  |
-| `flagRequired: boolean[]` |  |
-| `flags: Map<string, i32>` |  |
-| `flagShort: string[]` |  |
-| `flagValue: i32[]` |  |
-| `globalRequired: i32[]` |  |
-| `ids: Map<string, i32>` |  |
-| `name: string` |  |
-| `negations: Map<string, i32>` |  |
-| `version: string` |  |
-| `addCommand(call: string, parent: i32, name: string, id: i32, description: string, group: boolean): i32` | A new child of `parent`; `call` names the declaration in a panic. |
-| `addFlag(call: string, scope: i32, spec: string, description: string): i32` | A new flag in `scope` from `spec`; `call` names the declaration in a panic. |
 | `alias(handle: i32, name: string): void` | Another name for the command or group `handle`, in the same scope. |
-| `answersTo(f: i32, name: string): boolean` | Whether flag `f` answers to `--name`, as itself or, negatable, as its negation. |
 | `argument(cmd: i32, spec: string, description: string): i32` | A positional argument of the command `cmd`: `<name>` required, `[name]` optional, `<name...>` or `[name...]` taking every one left, last only. |
-| `checkArgument(call: string, handle: i32): i32` | The argument `handle`, or a panic naming `call` when there is none. |
-| `checkCommand(call: string, handle: i32): i32` | The command `handle`, or a panic naming `call` when there is none. |
-| `checkFlag(call: string, handle: i32): i32` | The flag `handle`, or a panic naming `call` when there is none. |
-| `childNames(cmd: i32, withAliases: boolean): string[]` | The names `cmd`'s children answer to, in declaration order, then their aliases when `withAliases`. |
 | `command(parent: i32, name: string, id: i32, description: string): i32` | A command under `parent` that the program runs, answered by `id` in `ParseResult.id`: not negative, which is a group's, and no other command's. |
 | `defaultValue(f: i32, value: string): void` | The value flag `f` answers when it is not given. |
 | `epilog(handle: i32, text: string): void` | Text shown at the end of the help of `handle` (a command or group), as given. |
 | `flag(cmd: i32, spec: string, description: string): i32` | A flag the command or group `cmd` takes, and no other. |
-| `flagLabel(f: i32): string` | A help row's flag column for `f`: `-s, --long`, with `--[no-]x` for a negatable one. |
-| `flagRows(rows: HelpRow[], section: string, owner: i32): void` | Adds a `section` row to `rows` for every flag `owner` (a command, or `GLOBAL`) declares. |
-| `flagText(f: i32): string` | A help row's description for `f`, with what it is: repeatable, its default, required. |
 | `globalFlag(spec: string, description: string): i32` | A flag every command takes, before, between or after the command names. |
 | `group(parent: i32, name: string, description: string): i32` | A group under `parent`: it holds commands, and naming it without one is an error. |
 | `helpText(handle: i32, style: Style): string` | The help of the command or group `handle`, painted with `style`. |
-| `isGroup(handle: i32): boolean` | Whether `handle` holds commands rather than running: a group, or a root given children. |
-| `longFlag(r: ParseResult, argv: string[], next: i32, token: string): i32` | Records `--name`, `--name=value`, `--name value` or `--no-name` from `token`; answers the next index. |
-| `longNames(cmd: i32): string[]` | Every long flag `cmd` answers to, for a did-you-mean. |
-| `lookup(table: Map<string, i32>, cmd: i32, name: string): i32` | The flag `name` (dashes included) names in `table` at `cmd`: its own, then a global; -1 for none. `table` is `flags`, or `negations` for `--no-x`. |
 | `negatable(f: i32): void` | Adds `--no-x` to the boolean flag `--x`, which turns it back off. |
 | `parse(argv: string[], start: i32): ParseResult` | Parses `argv` from index `start` (1 for `process.argv`, past the program's path) in one walk over it. |
-| `pathOf(handle: i32): string` | The command line that names `handle`: the program, then each command down to it. |
 | `repeatable(f: i32): void` | Makes `f` gather every value it is given, in order, for `ParseResult.values`. |
 | `required(f: i32): void` | Makes `f` an error to leave out, for the command that owns it (every command, for a global); a group's flag cannot be, as no parse ends at one. |
-| `scopeHas(scope: i32, spec: FlagSpec): boolean` | Whether `scope` already answers to any of `--long`, its negation (for `--no-x`), or `-short`. |
-| `shortFlags(r: ParseResult, argv: string[], next: i32, token: string): i32` | Records the cluster `-abc` (or `-l5`, `-l=5`, `-l 5`) from `token`; answers the next index. |
-| `spelling(f: i32): string` | How `f` is spelled on the command line: its long name, or `--no-x` for one declared that way. |
-| `taken(scope: i32, key: string): boolean` | Whether a flag of `scope` (a command, or `GLOBAL`) answers to `key`, as itself or as a negation. |
-| `takeValue(r: ParseResult, argv: string[], next: i32, f: i32, attached: string): i32` | Records flag `f` as given, with `attached` (from `-l5`) as its value when not empty, or else the token at `next` when the flag's value takes it; answers the index after whatever it took. |
-| `unknownCommand(r: ParseResult, token: string): void` | Records `token` as no command `r`'s group holds, with the nearest one that it does. |
 
 ## ParseResult
 
@@ -215,34 +165,20 @@ class ParseResult
 
 | Member | |
 | --- | --- |
-| `new ParseResult(cli: Cli)` |  |
-| `badCommand: boolean` | Whether a word named no command, which `help <path>` does not forgive. |
-| `cli: Cli` |  |
+| `new ParseResult(cli: Cli)` | An answer that has read nothing: kind `PARSE_OK` at `ROOT` with no values. `Cli.parse` makes one and fills it in; a program gets its answer from there rather than building one. |
 | `command: i32` | The handle of the deepest command the arguments reached. |
 | `errorPath: string` | The command line of the command an error was found at; empty without one. |
 | `exitCode: i32` | The status to exit with: 2 for an error, 0 otherwise. |
-| `helpWord: boolean` | Whether help was asked for by the word `help`, which a path follows. |
 | `hint: string` | The line after an error that says where the usage is; empty without one. |
 | `id: i32` | That command's id, or -1 for a group. |
 | `kind: i32` | `PARSE_OK`, `PARSE_HELP`, `PARSE_VERSION` or `PARSE_ERROR`. |
 | `message: string` | The error line for `PARSE_ERROR`, the version line for `PARSE_VERSION`, else empty. |
 | `path: string` | The command line that names it: `api users keys list`. |
-| `positionalValues: string[]` |  |
-| `restValues: string[]` |  |
-| `setFlags: i32[]` |  |
-| `setValues: string[]` |  |
-| `wantHelp: boolean` |  |
-| `wantVersion: boolean` |  |
-| `fail(cmd: i32, text: string): void` | Records `text` as the error found at `cmd`, unless one is already recorded: the first wins. |
-| `finishWalk(): void` | Settles the kind once the walk is over: help (unless `help <path>` named no command), then the version, then an error, then the checks only a whole command line can fail. |
-| `firstMissing(required: i32[]): i32` | The first of the `required` flags the arguments did not set, else -1. |
 | `flag(f: i32): boolean` | Whether flag `f` is on: a boolean's value (true by default for one declared `--no-x`), or for a flag with a value, whether it was given. |
 | `help(style: Style): string` | The help of the command the arguments reached, painted with `style`. |
-| `lastSet(f: i32): i32` | Where the last value of flag `f` is in `setValues`, or -1 when it was not given: a scan of the flags the arguments set, so bounded by their count. |
 | `positional(a: i32): string \| null` | The argument `a`'s value, or null when it was not given or belongs to another command. |
 | `positionals(a: i32): string[]` | Every value from argument `a` on: all a variadic one took, or the one value of any other. |
-| `rest(): string[]` | The tokens after `--`, in order. |
-| `set(f: i32, value: string): void` | Records flag `f` as given `value`. |
+| `rest(): string[]` | The tokens after `--`, in order. They are positionals too, so an argument may also have taken them. |
 | `source(f: i32): i32` | Where flag `f`'s value came from: `SOURCE_ARGV`, `SOURCE_DEFAULT` or `SOURCE_UNSET`. |
 | `value(f: i32): string \| null` | The value of flag `f`: the last one given (empty for `[value]` given none), else its default, else null. |
 | `values(f: i32): string[]` | Every value of flag `f` in order for a repeatable one, the last alone for any other, else its default alone, else none. |

@@ -13,9 +13,12 @@ import {
 ```ts
 import { Rng } from "nish/random";
 
-const r = new Rng(42);
-const die: i32 = r.nextInt(1, 6); // 1 to 6, each with equal chance
-const u: f64 = r.nextF64(); // in [0, 1)
+export const main = (): i32 => {
+  const r = new Rng(42);
+  const die: i32 = r.nextInt(1, 6); // 1 to 6, each with equal chance
+  const u: f64 = r.nextF64(); // in [0, 1)
+  return die;
+};
 ```
 
 <scalar-grid cols="2">
@@ -28,9 +31,9 @@ A generator of pseudo-random numbers: a Weyl sequence from its seed, each state 
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="The state is one 32-bit integer">
 
-The state is one 32-bit integer. Each step adds the odd constant
+Each step adds the odd constant
 0x9E3779B9 (2^32 divided by the golden ratio) to it, wrapping, so the
 states walk all 2^32 values before any repeats, whatever the seed — 0
 included. Each answer is MurmurHash3's 32-bit finaliser applied to the new
@@ -41,7 +44,7 @@ answer three unrelated sequences. That pairing of a Weyl sequence with a
 mixing function is the shape of SplitMix (Steele, Lea and Flood, "Fast
 splittable pseudorandom number generators", OOPSLA 2014), on 32 bits.
 
-</scalar-callout>
+</scalar-detail>
 
 <scalar-detail title="The same bits under Node">
 
@@ -59,14 +62,22 @@ Node is the one it prints compiled (docs/RUN_UNDER_NODE.md).
 
 </scalar-detail>
 
-It is not for cryptography: a key or a nonce comes from
+<scalar-detail title="It is not for cryptography">
+
+a key or a nonce comes from
 `crypto.getRandomValues`.
 
-An `Rng` is an ordinary object, so a parallel body or a task that makes one
+</scalar-detail>
+
+<scalar-detail title="An `Rng` is an ordinary object">
+
+**An `Rng` is an ordinary object**, so a parallel body or a task that makes one
 of its own may step it as it likes: what a function allocates is its own
 memory (docs/LANGUAGE.md, "Data parallelism"). One shared by several tasks
 would be a write their caller can see, and is refused as any such write is;
 give each task its own, seeded from its index.
+
+</scalar-detail>
 
 ## Rng
 
@@ -79,7 +90,6 @@ class Rng
 | Member | |
 | --- | --- |
 | `new Rng(seed: i32)` | A generator whose sequence `seed` decides: two made from one seed answer the same numbers. |
-| `state: i32` | Where the walk is: the seed plus the increment times the steps taken, wrapped. |
 | `nextF64(): f64` | The next number in [0, 1), from two steps: the high 27 bits of one and the high 26 of the next make a 53-bit integer, which a double holds exactly, scaled by 2^-53. |
 | `nextI32(): i32` | The next 32 bits, as an `i32`: over 2^32 steps each value is answered exactly once. |
 | `nextInt(lo: i32, hi: i32): i32` | An integer in [lo, hi], both ends included, each with equal chance; `nextInt(1, 6)` is a die. It panics when `lo` is greater than `hi`, and the whole `i32` range, `nextInt(-2147483648, 2147483647)`, is one `nextI32()`.<br><br>There is no modulo bias: where the span `hi - lo + 1`, an unsigned count up to 2^32, does not divide 2^32 evenly, a draw among the lowest 2^32 mod span is refused and drawn again, and what is left holds every answer equally often. Fewer than half the draws are ever refused, so an answer takes one `nextI32()` step usually and fewer than two on average, and a sequence is still the seed's. |

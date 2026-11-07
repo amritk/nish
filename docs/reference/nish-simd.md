@@ -2,7 +2,7 @@
 
 # `nish:simd`
 
-The `nish:simd` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+Sixteen-byte vectors of one lane type, and the lane-wise operations on them, each lowered to target-independent LLVM vector IR.
 
 ```ts
 import {
@@ -83,284 +83,501 @@ import {
 } from "nish:simd";
 ```
 
+```ts
+import { u32x4, loadI32x4, store, extract, replace, addWrapping, xor, rotl } from "nish:simd";
+
+export const bumpFirst = (xs: i32[], at: i32): i32 => {
+  const v = loadI32x4(xs, at);
+  store(replace(v, 0, extract(v, 0) + 1), xs, at);
+  return extract(v, 3);
+};
+
+// One ChaCha20 quarter-round step on four blocks at once: lane k is block k.
+export const step = (a: u32x4, b: u32x4, d: u32x4): u32 => {
+  const a2 = addWrapping(a, b);
+  return extract(rotl(xor(d, a2), 16), 0);
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="abs" icon="phosphor/regular/function" href="#abs">
+
+Each float lane's absolute value, `llvm.fabs`: the sign bit cleared.
+
 </scalar-card>
 
 <scalar-card title="add" icon="phosphor/regular/function" href="#add">
 
-Float lane arithmetic, lane by lane.
+The lane-wise sum of two float vectors, `fadd` with no fast-math flags.
 
 </scalar-card>
 
 <scalar-card title="addWrapping" icon="phosphor/regular/function" href="#addwrapping">
 
-Integer lane arithmetic, wrapping at the lane width.
+The lane-wise sum of two integer vectors, `add` with no `nsw` or `nuw`: each lane wraps at the lane width.
 
 </scalar-card>
 
 <scalar-card title="all" icon="phosphor/regular/function" href="#all">
+
+Whether every lane of `m` is set, `llvm.vector.reduce.and`.
+
 </scalar-card>
 
 <scalar-card title="and" icon="phosphor/regular/function" href="#and">
 
-Bitwise, on integer lanes or lane by lane on two masks.
+Bitwise `and`, on integer lanes or lane by lane on two masks.
 
 </scalar-card>
 
 <scalar-card title="any" icon="phosphor/regular/function" href="#any">
 
-Whether any lane, or every lane, is set.
+Whether any lane of `m` is set, `llvm.vector.reduce.or`.
 
 </scalar-card>
 
 <scalar-card title="asF32x4" icon="phosphor/regular/function" href="#asf32x4">
+
+The same sixteen bytes read as an `f32x4`, one `bitcast`.
+
 </scalar-card>
 
 <scalar-card title="asF64x2" icon="phosphor/regular/function" href="#asf64x2">
+
+The same sixteen bytes read as an `f64x2`, one `bitcast`.
+
 </scalar-card>
 
 <scalar-card title="asI32x4" icon="phosphor/regular/function" href="#asi32x4">
+
+The same sixteen bytes read as an `i32x4`, one `bitcast`.
+
 </scalar-card>
 
 <scalar-card title="asU16x8" icon="phosphor/regular/function" href="#asu16x8">
+
+The same sixteen bytes read as a `u16x8`, one `bitcast`.
+
 </scalar-card>
 
 <scalar-card title="asU32x4" icon="phosphor/regular/function" href="#asu32x4">
+
+The same sixteen bytes read as a `u32x4`, one `bitcast`.
+
 </scalar-card>
 
 <scalar-card title="asU8x16" icon="phosphor/regular/function" href="#asu8x16">
 
-The same sixteen bytes read as another vector type.
+The same sixteen bytes read as a `u8x16`, one `bitcast`.
 
 </scalar-card>
 
 <scalar-card title="bitmask" icon="phosphor/regular/function" href="#bitmask">
 
-Lane `k`'s flag in bit `k`.
+The mask as bits: a `bitcast` of `<N x i1>` to `iN`, zero-extended.
 
 </scalar-card>
 
 <scalar-card title="div" icon="phosphor/regular/function" href="#div">
+
+The lane-wise quotient of two float vectors, `fdiv` with no fast-math flags.
+
 </scalar-card>
 
 <scalar-card title="eq" icon="phosphor/regular/function" href="#eq">
 
-Lane-wise compares, answering the vector's mask.
+Whether each lane of `a` is equal to the lane of `b`: `icmp`, unsigned on a `u*` lane, or on float lanes `fcmp oeq`.
 
 </scalar-card>
 
 <scalar-card title="extract" icon="phosphor/regular/function" href="#extract">
 
-Lane `k`, an integer literal in range.
+Lane `k` of `v`, one `extractelement` at a constant.
 
 </scalar-card>
 
 <scalar-card title="f32x4" icon="phosphor/regular/function" href="#f32x4">
+
+An `f32x4` of 4 lanes, one argument per lane, lane 0 first.
+
 </scalar-card>
 
 <scalar-card title="f64x2" icon="phosphor/regular/function" href="#f64x2">
+
+An `f64x2` of 2 lanes, one argument per lane, lane 0 first.
+
 </scalar-card>
 
 <scalar-card title="ge" icon="phosphor/regular/function" href="#ge">
+
+Whether each lane of `a` is at least the lane of `b`: `icmp`, unsigned on a `u*` lane, or on float lanes ordered `fcmp`.
+
 </scalar-card>
 
 <scalar-card title="gt" icon="phosphor/regular/function" href="#gt">
+
+Whether each lane of `a` is greater than the lane of `b`: `icmp`, unsigned on a `u*` lane, or on float lanes ordered `fcmp`.
+
 </scalar-card>
 
 <scalar-card title="i32x4" icon="phosphor/regular/function" href="#i32x4">
+
+An `i32x4` of 4 lanes, one argument per lane, lane 0 first.
+
 </scalar-card>
 
 <scalar-card title="le" icon="phosphor/regular/function" href="#le">
+
+Whether each lane of `a` is at most the lane of `b`: `icmp`, unsigned on a `u*` lane, or on float lanes ordered `fcmp`.
+
 </scalar-card>
 
 <scalar-card title="loadF32x4" icon="phosphor/regular/function" href="#loadf32x4">
+
+`xs[i]` to `xs[i + 3]` as one `f32x4`, bounds-checked once for the whole vector: a load whose last lane is past the end panics before it reads, naming a lane past the end (the first when it is out of range, else the last) and the length, as `xs[i]` does.
+
 </scalar-card>
 
 <scalar-card title="loadF64x2" icon="phosphor/regular/function" href="#loadf64x2">
+
+`xs[i]` to `xs[i + 1]` as one `f64x2`, bounds-checked once for the whole vector: a load whose last lane is past the end panics before it reads, naming a lane past the end (the first when it is out of range, else the last) and the length, as `xs[i]` does.
+
 </scalar-card>
 
 <scalar-card title="loadI32x4" icon="phosphor/regular/function" href="#loadi32x4">
+
+`xs[i]` to `xs[i + 3]` as one `i32x4`, bounds-checked once for the whole vector: a load whose last lane is past the end panics before it reads, naming a lane past the end (the first when it is out of range, else the last) and the length, as `xs[i]` does.
+
 </scalar-card>
 
 <scalar-card title="loadU16x8" icon="phosphor/regular/function" href="#loadu16x8">
+
+`xs[i]` to `xs[i + 7]` as one `u16x8`, bounds-checked once for the whole vector: a load whose last lane is past the end panics before it reads, naming a lane past the end (the first when it is out of range, else the last) and the length, as `xs[i]` does.
+
 </scalar-card>
 
 <scalar-card title="loadU32x4" icon="phosphor/regular/function" href="#loadu32x4">
+
+`xs[i]` to `xs[i + 3]` as one `u32x4`, bounds-checked once for the whole vector: a load whose last lane is past the end panics before it reads, naming a lane past the end (the first when it is out of range, else the last) and the length, as `xs[i]` does.
+
 </scalar-card>
 
 <scalar-card title="loadU8x16" icon="phosphor/regular/function" href="#loadu8x16">
 
-`xs[i]` to `xs[i + N - 1]`, bounds-checked once for the whole vector.
+`xs[i]` to `xs[i + 15]` as one `u8x16`, bounds-checked once for the whole vector: a load whose last lane is past the end panics before it reads, naming a lane past the end (the first when it is out of range, else the last) and the length, as `xs[i]` does.
 
 </scalar-card>
 
 <scalar-card title="lt" icon="phosphor/regular/function" href="#lt">
+
+Whether each lane of `a` is less than the lane of `b`: `icmp`, unsigned on a `u*` lane, or on float lanes ordered `fcmp`.
+
 </scalar-card>
 
 <scalar-card title="max" icon="phosphor/regular/function" href="#max">
+
+The greater of each pair of lanes: `llvm.umax` or `llvm.smax` on integer lanes, `llvm.maximum` on float lanes, where a NaN lane answers NaN and -0 is below +0, as `Math.max`.
+
 </scalar-card>
 
 <scalar-card title="min" icon="phosphor/regular/function" href="#min">
 
-The lesser and the greater lane: a float NaN lane answers NaN.
+The lesser of each pair of lanes: `llvm.umin` or `llvm.smin` on integer lanes, `llvm.minimum` on float lanes, where a NaN lane answers NaN and -0 is below +0, as `Math.min`.
 
 </scalar-card>
 
 <scalar-card title="mul" icon="phosphor/regular/function" href="#mul">
+
+The lane-wise product of two float vectors, `fmul` with no fast-math flags.
+
 </scalar-card>
 
 <scalar-card title="mulWrapping" icon="phosphor/regular/function" href="#mulwrapping">
+
+The lane-wise product of two integer vectors, `mul` with no `nsw` or `nuw`: each lane wraps at the lane width.
+
 </scalar-card>
 
 <scalar-card title="ne" icon="phosphor/regular/function" href="#ne">
+
+Whether each lane of `a` is not equal to the lane of `b`: `icmp`, unsigned on a `u*` lane, or on float lanes `fcmp une`, unordered, so a NaN lane is not equal.
+
 </scalar-card>
 
 <scalar-card title="neg" icon="phosphor/regular/function" href="#neg">
 
-Negation and absolute value of float lanes: the sign bit.
+Each float lane negated, `fneg`: the sign bit flipped.
 
 </scalar-card>
 
 <scalar-card title="not" icon="phosphor/regular/function" href="#not">
+
+Every bit flipped, `xor` with all-ones, on integer lanes or a mask.
+
 </scalar-card>
 
 <scalar-card title="or" icon="phosphor/regular/function" href="#or">
+
+Bitwise `or`, on integer lanes or lane by lane on two masks.
+
 </scalar-card>
 
 <scalar-card title="replace" icon="phosphor/regular/function" href="#replace">
 
-A new vector: `v` with lane `k` set to `x`.
+A new vector: `v` with lane `k` set to `x`, one `insertelement` at a constant.
 
 </scalar-card>
 
 <scalar-card title="rotl" icon="phosphor/regular/function" href="#rotl">
+
+Each lane rotated left by `count`, `llvm.fshl` with `v` as both halves.
+
 </scalar-card>
 
 <scalar-card title="rotr" icon="phosphor/regular/function" href="#rotr">
+
+Each lane rotated right by `count`, `llvm.fshr` with `v` as both halves.
+
 </scalar-card>
 
 <scalar-card title="select" icon="phosphor/regular/function" href="#select">
 
-Lane `k` of `a` where lane `k` of `m` is set, else of `b`.
+Lane `k` of `a` where lane `k` of `m` is set, else lane `k` of `b`, one `select`.
 
 </scalar-card>
 
 <scalar-card title="shl" icon="phosphor/regular/function" href="#shl">
 
-Shifts and rotates by an integer-literal count below the lane width: `shr` is logical on an unsigned lane and arithmetic on an `i32` lane.
+Each lane shifted left by `count`, `shl`.
 
 </scalar-card>
 
 <scalar-card title="shr" icon="phosphor/regular/function" href="#shr">
+
+Each lane shifted right by `count`: `lshr`, logical, on `u8x16`, `u16x8` and `u32x4`, and `ashr`, copying the sign, on `i32x4`.
+
 </scalar-card>
 
 <scalar-card title="shuffle" icon="phosphor/regular/function" href="#shuffle">
 
-Lanes picked from `a` then `b` by integer-literal indices, one per lane.
+Lanes picked from `a` then `b`, one `shufflevector`.
 
 </scalar-card>
 
 <scalar-card title="splatF32x4" icon="phosphor/regular/function" href="#splatf32x4">
+
+`x` in all 4 lanes: one `insertelement` and a `shufflevector` with a `zeroinitializer` mask.
+
 </scalar-card>
 
 <scalar-card title="splatF64x2" icon="phosphor/regular/function" href="#splatf64x2">
+
+`x` in all 2 lanes: one `insertelement` and a `shufflevector` with a `zeroinitializer` mask.
+
 </scalar-card>
 
 <scalar-card title="splatI32x4" icon="phosphor/regular/function" href="#splati32x4">
+
+`x` in all 4 lanes: one `insertelement` and a `shufflevector` with a `zeroinitializer` mask.
+
 </scalar-card>
 
 <scalar-card title="splatU16x8" icon="phosphor/regular/function" href="#splatu16x8">
+
+`x` in all 8 lanes: one `insertelement` and a `shufflevector` with a `zeroinitializer` mask.
+
 </scalar-card>
 
 <scalar-card title="splatU32x4" icon="phosphor/regular/function" href="#splatu32x4">
+
+`x` in all 4 lanes: one `insertelement` and a `shufflevector` with a `zeroinitializer` mask.
+
 </scalar-card>
 
 <scalar-card title="splatU8x16" icon="phosphor/regular/function" href="#splatu8x16">
 
-`x` in every lane.
+`x` in all 16 lanes: one `insertelement` and a `shufflevector` with a `zeroinitializer` mask.
 
 </scalar-card>
 
 <scalar-card title="sqrt" icon="phosphor/regular/function" href="#sqrt">
+
+The square root of each float lane, `llvm.sqrt`.
+
 </scalar-card>
 
 <scalar-card title="store" icon="phosphor/regular/function" href="#store">
 
-The lanes of `v` into `xs[i]` to `xs[i + N - 1]`, checked once.
+The lanes of `v` into `xs[i]` to `xs[i + N - 1]`, `N` the lane count, under the same single check as a load, then one `store`; a statement.
 
 </scalar-card>
 
 <scalar-card title="sub" icon="phosphor/regular/function" href="#sub">
+
+The lane-wise difference of two float vectors, `fsub` with no fast-math flags.
+
 </scalar-card>
 
 <scalar-card title="subWrapping" icon="phosphor/regular/function" href="#subwrapping">
+
+The lane-wise difference of two integer vectors, `sub` with no `nsw` or `nuw`: each lane wraps at the lane width.
+
 </scalar-card>
 
 <scalar-card title="sum" icon="phosphor/regular/function" href="#sum">
 
-The lanes added: a `u8x16` or `u16x8` in an `i32`, a float vector in lane order.
+The lanes of a `u8x16` or `u16x8` added in an `i32`, `zext` then `llvm.vector.reduce.add`: exact, since it cannot overflow.
 
 </scalar-card>
 
 <scalar-card title="sumWrapping" icon="phosphor/regular/function" href="#sumwrapping">
+
+The lanes of an `i32x4` added, `llvm.vector.reduce.add`, wrapping as the lanes do.
+
 </scalar-card>
 
 <scalar-card title="u16x8" icon="phosphor/regular/function" href="#u16x8">
+
+A `u16x8` of 8 lanes, one argument per lane, lane 0 first.
+
 </scalar-card>
 
 <scalar-card title="u32x4" icon="phosphor/regular/function" href="#u32x4">
+
+A `u32x4` of 4 lanes, one argument per lane, lane 0 first.
+
 </scalar-card>
 
 <scalar-card title="u8x16" icon="phosphor/regular/function" href="#u8x16">
 
-One value per lane, lane 0 first.
+A `u8x16` of sixteen lanes: one `insertelement` per lane, which `opt` folds to a constant vector when every lane is one.
 
 </scalar-card>
 
 <scalar-card title="xor" icon="phosphor/regular/function" href="#xor">
+
+Bitwise `xor`, on integer lanes or lane by lane on two masks.
+
 </scalar-card>
 
 <scalar-card title="f32x4" icon="phosphor/regular/cube" href="#f32x4-1">
+
+Sixteen bytes as 4 `f32` lanes, an LLVM `<4 x float>`.
+
 </scalar-card>
 
 <scalar-card title="f64x2" icon="phosphor/regular/cube" href="#f64x2-1">
+
+Sixteen bytes as 2 `f64` lanes, an LLVM `<2 x double>`.
+
 </scalar-card>
 
 <scalar-card title="i32x4" icon="phosphor/regular/cube" href="#i32x4-1">
+
+Sixteen bytes as 4 `i32` lanes, an LLVM `<4 x i32>`.
+
 </scalar-card>
 
 <scalar-card title="mask16x8" icon="phosphor/regular/cube" href="#mask16x8">
+
+One boolean per lane of 8, an LLVM `<8 x i1>`, which a lane-wise compare of `u16x8` answers.
+
 </scalar-card>
 
 <scalar-card title="mask32x4" icon="phosphor/regular/cube" href="#mask32x4">
+
+One boolean per lane of 4, an LLVM `<4 x i1>`, which a lane-wise compare of `i32x4`, `u32x4` and `f32x4` answers.
+
 </scalar-card>
 
 <scalar-card title="mask64x2" icon="phosphor/regular/cube" href="#mask64x2">
+
+One boolean per lane of 2, an LLVM `<2 x i1>`, which a lane-wise compare of `f64x2` answers.
+
 </scalar-card>
 
 <scalar-card title="mask8x16" icon="phosphor/regular/cube" href="#mask8x16">
 
-One boolean per lane, which a lane-wise compare answers.
+One boolean per lane of 16, an LLVM `<16 x i1>`, which a lane-wise compare of `u8x16` answers.
 
 </scalar-card>
 
 <scalar-card title="u16x8" icon="phosphor/regular/cube" href="#u16x8-1">
+
+Sixteen bytes as 8 `u16` lanes, an LLVM `<8 x i16>`.
+
 </scalar-card>
 
 <scalar-card title="u32x4" icon="phosphor/regular/cube" href="#u32x4-1">
+
+Sixteen bytes as 4 `u32` lanes, an LLVM `<4 x i32>`.
+
 </scalar-card>
 
 <scalar-card title="u8x16" icon="phosphor/regular/cube" href="#u8x16-1">
 
-A sixteen-byte vector of lanes.
+Sixteen bytes as 16 `u8` lanes, an LLVM `<16 x i8>`.
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+A vector is a value: copied by assignment, passed and returned in
+registers, held in a local, a class field or an array. Every operation is a
+free function, because TypeScript cannot overload `+`, and the operand
+types pick the lowering. Nothing names a target: no golden holds
+`llvm.x86.` or `llvm.aarch64.`, and LLVM picks the instructions.
+
+</scalar-callout>
+
+Every name is used only through an import of `nish:simd` (NL2578). A
+vector has no operators and no comparison: `+`, a truthiness test and
+printing a whole vector are refused, and `===` and `<` are NL2581; compare
+with `eq` and the rest and ask the mask `all` or `any`. Every operand of one call is
+one vector type (NL2623, NL2638). A lane index, a shift count and a
+shuffle index are integer literals in range (NL2580, NL2583, NL2630 to
+NL2635). A mask is held only in a local, a parameter or a return of a
+function the module keeps (NL2622). A vector is not a `Map` key, not
+`Secret`, not nullable, and does not cross the interop boundary yet.
+
+<scalar-detail title="Layout">
+
+In an object or an array a vector is sixteen bytes aligned to
+sixteen, as clang lays out `__attribute__((vector_size(16)))`; an array of
+vectors steps by sixteen. A load or store is aligned to the lane, not to
+sixteen.
+
+</scalar-detail>
+
+<scalar-detail title="Integer lanes wrap, and the names say so">
+
+`add` is float arithmetic;
+an integer lane's form is `addWrapping`, because making a lane trap as
+scalar `+` does would cost the speed the type is for. A `sum` that could
+overflow is `sumWrapping`.
+
+</scalar-detail>
+
+<scalar-detail title="Under Node">
+
+`runtime/nish.mjs` answers the import with
+`runtime/core.mjs`, where a vector is a fresh typed array of its lanes,
+made once and never written after, whose element type does the lane's
+arithmetic; a mask is an array of booleans, and a rotate is two shifts and
+an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
+outputs to one.
+
+</scalar-detail>
+
+Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors
+and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-lane-operations-and-masks
+
 ## abs
+
+Each float lane's absolute value, `llvm.fabs`: the sign bit cleared.
 
 ```ts
 function abs<V extends FloatVector>(a: V): V
@@ -369,16 +586,22 @@ function abs<V extends FloatVector>(a: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An `f32x4` or `f64x2`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The vector of absolute values.
+
 </scalar-field>
 
 ## add
 
-Float lane arithmetic, lane by lane. An integer lane's form wraps.
+The lane-wise sum of two float vectors, `fadd` with no fast-math flags. An integer vector is refused (NL2623): its form is `addWrapping`.
 
 ```ts
 function add<V extends FloatVector>(a: V, b: V): V
@@ -387,19 +610,29 @@ function add<V extends FloatVector>(a: V, b: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An `f32x4` or `f64x2`.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's sum.
+
 </scalar-field>
 
 ## addWrapping
 
-Integer lane arithmetic, wrapping at the lane width.
+The lane-wise sum of two integer vectors, `add` with no `nsw` or
+`nuw`: each lane wraps at the lane width.
 
 ```ts
 function addWrapping<V extends IntegerVector>(
@@ -411,17 +644,28 @@ function addWrapping<V extends IntegerVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's sum, wrapped.
+
 </scalar-field>
 
 ## all
+
+Whether every lane of `m` is set, `llvm.vector.reduce.and`.
 
 ```ts
 function all(m: SimdMask): boolean
@@ -430,16 +674,22 @@ function all(m: SimdMask): boolean
 #### Parameters
 
 <scalar-field name="m" type="SimdMask" required>
+
+A mask.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when no lane is clear.
+
 </scalar-field>
 
 ## and
 
-Bitwise, on integer lanes or lane by lane on two masks.
+Bitwise `and`, on integer lanes or lane by lane on two masks.
 
 ```ts
 function and<V extends IntegerVector | SimdMask>(
@@ -451,19 +701,28 @@ function and<V extends IntegerVector | SimdMask>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An integer vector or a mask.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector or mask of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The bitwise `and`, of `a`'s type.
+
 </scalar-field>
 
 ## any
 
-Whether any lane, or every lane, is set.
+Whether any lane of `m` is set, `llvm.vector.reduce.or`.
 
 ```ts
 function any(m: SimdMask): boolean
@@ -472,14 +731,22 @@ function any(m: SimdMask): boolean
 #### Parameters
 
 <scalar-field name="m" type="SimdMask" required>
+
+A mask.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when one lane or more is set.
+
 </scalar-field>
 
 ## asF32x4
+
+The same sixteen bytes read as an `f32x4`, one `bitcast`.
 
 ```ts
 function asF32x4(v: SimdVector): f32x4
@@ -488,14 +755,22 @@ function asF32x4(v: SimdVector): f32x4
 #### Parameters
 
 <scalar-field name="v" type="SimdVector" required>
+
+Any vector.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f32x4">
+
+The bytes as 4 `f32` lanes.
+
 </scalar-field>
 
 ## asF64x2
+
+The same sixteen bytes read as an `f64x2`, one `bitcast`.
 
 ```ts
 function asF64x2(v: SimdVector): f64x2
@@ -504,14 +779,22 @@ function asF64x2(v: SimdVector): f64x2
 #### Parameters
 
 <scalar-field name="v" type="SimdVector" required>
+
+Any vector.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64x2">
+
+The bytes as 2 `f64` lanes.
+
 </scalar-field>
 
 ## asI32x4
+
+The same sixteen bytes read as an `i32x4`, one `bitcast`.
 
 ```ts
 function asI32x4(v: SimdVector): i32x4
@@ -520,14 +803,22 @@ function asI32x4(v: SimdVector): i32x4
 #### Parameters
 
 <scalar-field name="v" type="SimdVector" required>
+
+Any vector.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32x4">
+
+The bytes as 4 `i32` lanes.
+
 </scalar-field>
 
 ## asU16x8
+
+The same sixteen bytes read as a `u16x8`, one `bitcast`.
 
 ```ts
 function asU16x8(v: SimdVector): u16x8
@@ -536,14 +827,22 @@ function asU16x8(v: SimdVector): u16x8
 #### Parameters
 
 <scalar-field name="v" type="SimdVector" required>
+
+Any vector.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u16x8">
+
+The bytes as 8 `u16` lanes.
+
 </scalar-field>
 
 ## asU32x4
+
+The same sixteen bytes read as a `u32x4`, one `bitcast`.
 
 ```ts
 function asU32x4(v: SimdVector): u32x4
@@ -552,16 +851,22 @@ function asU32x4(v: SimdVector): u32x4
 #### Parameters
 
 <scalar-field name="v" type="SimdVector" required>
+
+Any vector.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32x4">
+
+The bytes as 4 `u32` lanes.
+
 </scalar-field>
 
 ## asU8x16
 
-The same sixteen bytes read as another vector type.
+The same sixteen bytes read as a `u8x16`, one `bitcast`.
 
 ```ts
 function asU8x16(v: SimdVector): u8x16
@@ -570,16 +875,23 @@ function asU8x16(v: SimdVector): u8x16
 #### Parameters
 
 <scalar-field name="v" type="SimdVector" required>
+
+Any vector.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8x16">
+
+The bytes as 16 `u8` lanes.
+
 </scalar-field>
 
 ## bitmask
 
-Lane `k`'s flag in bit `k`.
+The mask as bits: a `bitcast` of `<N x i1>` to `iN`, zero-extended.
+Storable where the mask is not.
 
 ```ts
 function bitmask(m: SimdMask): i32
@@ -588,14 +900,22 @@ function bitmask(m: SimdMask): i32
 #### Parameters
 
 <scalar-field name="m" type="SimdMask" required>
+
+A mask.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+An `i32` with bit `k` set when lane `k` is.
+
 </scalar-field>
 
 ## div
+
+The lane-wise quotient of two float vectors, `fdiv` with no fast-math flags. An integer vector is refused (NL2623).
 
 ```ts
 function div<V extends FloatVector>(a: V, b: V): V
@@ -604,19 +924,29 @@ function div<V extends FloatVector>(a: V, b: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An `f32x4` or `f64x2`.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's quotient.
+
 </scalar-field>
 
 ## eq
 
-Lane-wise compares, answering the vector's mask. A float compare is ordered (`ne` unordered).
+Whether each lane of `a` is equal to the lane of `b`: `icmp`, unsigned on a
+`u*` lane, or on float lanes `fcmp oeq`.
 
 ```ts
 function eq<V extends SimdVector>(
@@ -628,19 +958,29 @@ function eq<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector (NL2638 for a scalar).
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V[&quot;__mask&quot;]">
+
+The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
+  or `mask64x2`.
+
 </scalar-field>
 
 ## extract
 
-Lane `k`, an integer literal in range.
+Lane `k` of `v`, one `extractelement` at a constant.
 
 ```ts
 function extract<V extends SimdVector>(
@@ -652,17 +992,29 @@ function extract<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="v" type="V" required>
+
+The vector (NL2582 when it is not one).
+
 </scalar-field>
 
 <scalar-field name="k" type="i32" required>
+
+An integer literal from 0 to one less than the lane count
+  (NL2580 for a variable, NL2583 for a literal past the end).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V[&quot;__lane&quot;]">
+
+The lane, of the lane type.
+
 </scalar-field>
 
 ## f32x4
+
+An `f32x4` of 4 lanes, one argument per lane, lane 0 first.
 
 ```ts
 function f32x4(
@@ -676,6 +1028,9 @@ function f32x4(
 #### Parameters
 
 <scalar-field name="a0" type="f32" required>
+
+Lane 0, an `f32`; `a1` to `a3` are lanes 1 to 3 in order.
+
 </scalar-field>
 
 <scalar-field name="a1" type="f32" required>
@@ -690,9 +1045,14 @@ function f32x4(
 #### Returns
 
 <scalar-field name="returns" type="f32x4">
+
+The vector.
+
 </scalar-field>
 
 ## f64x2
+
+An `f64x2` of 2 lanes, one argument per lane, lane 0 first.
 
 ```ts
 function f64x2(a0: f64, a1: f64): f64x2
@@ -701,6 +1061,9 @@ function f64x2(a0: f64, a1: f64): f64x2
 #### Parameters
 
 <scalar-field name="a0" type="f64" required>
+
+Lane 0, an `f64`; `a1` is lane 1.
+
 </scalar-field>
 
 <scalar-field name="a1" type="f64" required>
@@ -709,9 +1072,15 @@ function f64x2(a0: f64, a1: f64): f64x2
 #### Returns
 
 <scalar-field name="returns" type="f64x2">
+
+The vector.
+
 </scalar-field>
 
 ## ge
+
+Whether each lane of `a` is at least the lane of `b`: `icmp`, unsigned on a
+`u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
 function ge<V extends SimdVector>(
@@ -723,17 +1092,30 @@ function ge<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector (NL2638 for a scalar).
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V[&quot;__mask&quot;]">
+
+The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
+  or `mask64x2`.
+
 </scalar-field>
 
 ## gt
+
+Whether each lane of `a` is greater than the lane of `b`: `icmp`, unsigned on a
+`u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
 function gt<V extends SimdVector>(
@@ -745,17 +1127,29 @@ function gt<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector (NL2638 for a scalar).
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V[&quot;__mask&quot;]">
+
+The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
+  or `mask64x2`.
+
 </scalar-field>
 
 ## i32x4
+
+An `i32x4` of 4 lanes, one argument per lane, lane 0 first.
 
 ```ts
 function i32x4(
@@ -769,6 +1163,9 @@ function i32x4(
 #### Parameters
 
 <scalar-field name="a0" type="i32" required>
+
+Lane 0, an `i32`; `a1` to `a3` are lanes 1 to 3 in order.
+
 </scalar-field>
 
 <scalar-field name="a1" type="i32" required>
@@ -783,9 +1180,15 @@ function i32x4(
 #### Returns
 
 <scalar-field name="returns" type="i32x4">
+
+The vector.
+
 </scalar-field>
 
 ## le
+
+Whether each lane of `a` is at most the lane of `b`: `icmp`, unsigned on a
+`u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
 function le<V extends SimdVector>(
@@ -797,17 +1200,32 @@ function le<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector (NL2638 for a scalar).
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V[&quot;__mask&quot;]">
+
+The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
+  or `mask64x2`.
+
 </scalar-field>
 
 ## loadF32x4
+
+`xs[i]` to `xs[i + 3]` as one `f32x4`, bounds-checked once for the whole
+vector: a load whose last lane is past the end panics before it reads,
+naming a lane past the end (the first when it is out of range, else the
+last) and the length, as `xs[i]` does.
 
 ```ts
 function loadF32x4(
@@ -819,17 +1237,32 @@ function loadF32x4(
 #### Parameters
 
 <scalar-field name="xs" type="readonly f32[]" required>
+
+An `f32[]`, exactly the lane type (NL2579 otherwise); a
+  `readonly` array may be loaded from.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index of lane 0, an `i32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f32x4">
+
+The vector.
+
 </scalar-field>
 
 ## loadF64x2
+
+`xs[i]` to `xs[i + 1]` as one `f64x2`, bounds-checked once for the whole
+vector: a load whose last lane is past the end panics before it reads,
+naming a lane past the end (the first when it is out of range, else the
+last) and the length, as `xs[i]` does.
 
 ```ts
 function loadF64x2(
@@ -841,17 +1274,32 @@ function loadF64x2(
 #### Parameters
 
 <scalar-field name="xs" type="readonly f64[]" required>
+
+An `f64[]`, exactly the lane type (NL2579 otherwise); a
+  `readonly` array may be loaded from.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index of lane 0, an `i32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64x2">
+
+The vector.
+
 </scalar-field>
 
 ## loadI32x4
+
+`xs[i]` to `xs[i + 3]` as one `i32x4`, bounds-checked once for the whole
+vector: a load whose last lane is past the end panics before it reads,
+naming a lane past the end (the first when it is out of range, else the
+last) and the length, as `xs[i]` does.
 
 ```ts
 function loadI32x4(
@@ -863,17 +1311,32 @@ function loadI32x4(
 #### Parameters
 
 <scalar-field name="xs" type="readonly i32[]" required>
+
+An `i32[]`, exactly the lane type (NL2579 otherwise); a
+  `readonly` array may be loaded from.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index of lane 0, an `i32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32x4">
+
+The vector.
+
 </scalar-field>
 
 ## loadU16x8
+
+`xs[i]` to `xs[i + 7]` as one `u16x8`, bounds-checked once for the whole
+vector: a load whose last lane is past the end panics before it reads,
+naming a lane past the end (the first when it is out of range, else the
+last) and the length, as `xs[i]` does.
 
 ```ts
 function loadU16x8(
@@ -885,17 +1348,32 @@ function loadU16x8(
 #### Parameters
 
 <scalar-field name="xs" type="readonly u16[]" required>
+
+A `u16[]`, exactly the lane type (NL2579 otherwise); a
+  `readonly` array may be loaded from.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index of lane 0, an `i32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u16x8">
+
+The vector.
+
 </scalar-field>
 
 ## loadU32x4
+
+`xs[i]` to `xs[i + 3]` as one `u32x4`, bounds-checked once for the whole
+vector: a load whose last lane is past the end panics before it reads,
+naming a lane past the end (the first when it is out of range, else the
+last) and the length, as `xs[i]` does.
 
 ```ts
 function loadU32x4(
@@ -907,19 +1385,32 @@ function loadU32x4(
 #### Parameters
 
 <scalar-field name="xs" type="readonly u32[]" required>
+
+A `u32[]`, exactly the lane type (NL2579 otherwise); a
+  `readonly` array may be loaded from.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index of lane 0, an `i32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32x4">
+
+The vector.
+
 </scalar-field>
 
 ## loadU8x16
 
-`xs[i]` to `xs[i + N - 1]`, bounds-checked once for the whole vector.
+`xs[i]` to `xs[i + 15]` as one `u8x16`, bounds-checked once for the whole
+vector: a load whose last lane is past the end panics before it reads,
+naming a lane past the end (the first when it is out of range, else the
+last) and the length, as `xs[i]` does.
 
 ```ts
 function loadU8x16(
@@ -931,17 +1422,30 @@ function loadU8x16(
 #### Parameters
 
 <scalar-field name="xs" type="readonly u8[]" required>
+
+A `u8[]`, exactly the lane type (NL2579 otherwise); a
+  `readonly` array may be loaded from.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index of lane 0, an `i32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8x16">
+
+The vector.
+
 </scalar-field>
 
 ## lt
+
+Whether each lane of `a` is less than the lane of `b`: `icmp`, unsigned on a
+`u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
 function lt<V extends SimdVector>(
@@ -953,17 +1457,31 @@ function lt<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector (NL2638 for a scalar).
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V[&quot;__mask&quot;]">
+
+The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
+  or `mask64x2`.
+
 </scalar-field>
 
 ## max
+
+The greater of each pair of lanes: `llvm.umax` or `llvm.smax` on integer
+lanes, `llvm.maximum` on float lanes, where a NaN lane answers NaN and -0
+is below +0, as `Math.max`.
 
 ```ts
 function max<V extends SimdVector>(a: V, b: V): V
@@ -972,19 +1490,30 @@ function max<V extends SimdVector>(a: V, b: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type (NL2623 otherwise).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's greater.
+
 </scalar-field>
 
 ## min
 
-The lesser and the greater lane: a float NaN lane answers NaN.
+The lesser of each pair of lanes: `llvm.umin` or `llvm.smin` on integer
+lanes, `llvm.minimum` on float lanes, where a NaN lane answers NaN and -0
+is below +0, as `Math.min`.
 
 ```ts
 function min<V extends SimdVector>(a: V, b: V): V
@@ -993,17 +1522,28 @@ function min<V extends SimdVector>(a: V, b: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type (NL2623 otherwise).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's lesser.
+
 </scalar-field>
 
 ## mul
+
+The lane-wise product of two float vectors, `fmul` with no fast-math flags. An integer vector is refused (NL2623): its form is `mulWrapping`.
 
 ```ts
 function mul<V extends FloatVector>(a: V, b: V): V
@@ -1012,17 +1552,29 @@ function mul<V extends FloatVector>(a: V, b: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An `f32x4` or `f64x2`.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's product.
+
 </scalar-field>
 
 ## mulWrapping
+
+The lane-wise product of two integer vectors, `mul` with no `nsw` or
+`nuw`: each lane wraps at the lane width.
 
 ```ts
 function mulWrapping<V extends IntegerVector>(
@@ -1034,17 +1586,30 @@ function mulWrapping<V extends IntegerVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's product, wrapped.
+
 </scalar-field>
 
 ## ne
+
+Whether each lane of `a` is not equal to the lane of `b`: `icmp`, unsigned
+on a `u*` lane, or on float lanes `fcmp une`, unordered, so a NaN lane is
+not equal.
 
 ```ts
 function ne<V extends SimdVector>(
@@ -1056,19 +1621,29 @@ function ne<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+Any vector (NL2638 for a scalar).
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V[&quot;__mask&quot;]">
+
+The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
+  or `mask64x2`.
+
 </scalar-field>
 
 ## neg
 
-Negation and absolute value of float lanes: the sign bit.
+Each float lane negated, `fneg`: the sign bit flipped.
 
 ```ts
 function neg<V extends FloatVector>(a: V): V
@@ -1077,14 +1652,22 @@ function neg<V extends FloatVector>(a: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An `f32x4` or `f64x2`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The negated vector.
+
 </scalar-field>
 
 ## not
+
+Every bit flipped, `xor` with all-ones, on integer lanes or a mask.
 
 ```ts
 function not<V extends IntegerVector | SimdMask>(
@@ -1095,14 +1678,22 @@ function not<V extends IntegerVector | SimdMask>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An integer vector or a mask.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The complement, of `a`'s type.
+
 </scalar-field>
 
 ## or
+
+Bitwise `or`, on integer lanes or lane by lane on two masks.
 
 ```ts
 function or<V extends IntegerVector | SimdMask>(
@@ -1114,19 +1705,29 @@ function or<V extends IntegerVector | SimdMask>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An integer vector or a mask.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector or mask of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The bitwise `or`, of `a`'s type.
+
 </scalar-field>
 
 ## replace
 
-A new vector: `v` with lane `k` set to `x`.
+A new vector: `v` with lane `k` set to `x`, one `insertelement` at a
+constant. `v` is unchanged; under Node `replace` copies.
 
 ```ts
 function replace<V extends SimdVector>(
@@ -1139,20 +1740,34 @@ function replace<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="v" type="V" required>
+
+The vector.
+
 </scalar-field>
 
 <scalar-field name="k" type="i32" required>
+
+An integer literal lane index in range, as `extract` takes.
+
 </scalar-field>
 
 <scalar-field name="x" type="V[&quot;__lane&quot;]" required>
+
+The new lane, of the lane type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The new vector.
+
 </scalar-field>
 
 ## rotl
+
+Each lane rotated left by `count`, `llvm.fshl` with `v` as both halves.
 
 ```ts
 function rotl<V extends IntegerVector>(
@@ -1164,17 +1779,29 @@ function rotl<V extends IntegerVector>(
 #### Parameters
 
 <scalar-field name="v" type="V" required>
+
+A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+An integer literal below the lane width: 0 to 7, 15 or 31
+  (NL2630 for a variable, NL2631 for the width or more).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The vector of rotated lanes.
+
 </scalar-field>
 
 ## rotr
+
+Each lane rotated right by `count`, `llvm.fshr` with `v` as both halves.
 
 ```ts
 function rotr<V extends IntegerVector>(
@@ -1186,19 +1813,30 @@ function rotr<V extends IntegerVector>(
 #### Parameters
 
 <scalar-field name="v" type="V" required>
+
+A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+An integer literal below the lane width: 0 to 7, 15 or 31
+  (NL2630 for a variable, NL2631 for the width or more).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The vector of rotated lanes.
+
 </scalar-field>
 
 ## select
 
-Lane `k` of `a` where lane `k` of `m` is set, else of `b`.
+Lane `k` of `a` where lane `k` of `m` is set, else lane `k` of `b`, one
+`select`.
 
 ```ts
 function select<V extends SimdVector>(
@@ -1211,23 +1849,35 @@ function select<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="m" type="V[&quot;__mask&quot;]" required>
+
+The mask of `a`'s lane width, the one a compare of two such
+  vectors answers (NL2629 otherwise).
+
 </scalar-field>
 
 <scalar-field name="a" type="V" required>
+
+The vector lanes come from where `m` is set.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type, for the lanes where `m` is clear.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The blended vector.
+
 </scalar-field>
 
 ## shl
 
-Shifts and rotates by an integer-literal count below the lane width:
-`shr` is logical on an unsigned lane and arithmetic on an `i32` lane.
+Each lane shifted left by `count`, `shl`.
 
 ```ts
 function shl<V extends IntegerVector>(
@@ -1239,17 +1889,30 @@ function shl<V extends IntegerVector>(
 #### Parameters
 
 <scalar-field name="v" type="V" required>
+
+A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+An integer literal below the lane width: 0 to 7, 15 or 31
+  (NL2630 for a variable, NL2631 for the width or more).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The vector of shifted lanes.
+
 </scalar-field>
 
 ## shr
+
+Each lane shifted right by `count`: `lshr`, logical, on `u8x16`, `u16x8`
+and `u32x4`, and `ashr`, copying the sign, on `i32x4`.
 
 ```ts
 function shr<V extends IntegerVector>(
@@ -1261,19 +1924,29 @@ function shr<V extends IntegerVector>(
 #### Parameters
 
 <scalar-field name="v" type="V" required>
+
+A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+An integer literal below the lane width: 0 to 7, 15 or 31
+  (NL2630 for a variable, NL2631 for the width or more).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The vector of shifted lanes.
+
 </scalar-field>
 
 ## shuffle
 
-Lanes picked from `a` then `b` by integer-literal indices, one per lane.
+Lanes picked from `a` then `b`, one `shufflevector`.
 
 ```ts
 function shuffle<V extends SimdVector>(
@@ -1286,20 +1959,37 @@ function shuffle<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+The vector whose lanes are indices 0 to N-1.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type, whose lanes are indices N to 2N-1.
+
 </scalar-field>
 
 <scalar-field name="...lanes" type="i32[]" required>
+
+One integer literal per lane of the answer, each from 0 to
+  2N-1; a wrong count, a variable or an index past the end is refused
+  (NL2632 to NL2635).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The vector of the picked lanes, lane 0 first.
+
 </scalar-field>
 
 ## splatF32x4
+
+`x` in all 4 lanes: one `insertelement` and a `shufflevector` with a
+`zeroinitializer` mask.
 
 ```ts
 function splatF32x4(x: f32): f32x4
@@ -1308,14 +1998,23 @@ function splatF32x4(x: f32): f32x4
 #### Parameters
 
 <scalar-field name="x" type="f32" required>
+
+The lane value, an `f32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f32x4">
+
+The vector.
+
 </scalar-field>
 
 ## splatF64x2
+
+`x` in all 2 lanes: one `insertelement` and a `shufflevector` with a
+`zeroinitializer` mask.
 
 ```ts
 function splatF64x2(x: f64): f64x2
@@ -1324,14 +2023,23 @@ function splatF64x2(x: f64): f64x2
 #### Parameters
 
 <scalar-field name="x" type="f64" required>
+
+The lane value, an `f64`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64x2">
+
+The vector.
+
 </scalar-field>
 
 ## splatI32x4
+
+`x` in all 4 lanes: one `insertelement` and a `shufflevector` with a
+`zeroinitializer` mask.
 
 ```ts
 function splatI32x4(x: i32): i32x4
@@ -1340,14 +2048,23 @@ function splatI32x4(x: i32): i32x4
 #### Parameters
 
 <scalar-field name="x" type="i32" required>
+
+The lane value, an `i32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32x4">
+
+The vector.
+
 </scalar-field>
 
 ## splatU16x8
+
+`x` in all 8 lanes: one `insertelement` and a `shufflevector` with a
+`zeroinitializer` mask.
 
 ```ts
 function splatU16x8(x: u16): u16x8
@@ -1356,14 +2073,23 @@ function splatU16x8(x: u16): u16x8
 #### Parameters
 
 <scalar-field name="x" type="u16" required>
+
+The lane value, a `u16`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u16x8">
+
+The vector.
+
 </scalar-field>
 
 ## splatU32x4
+
+`x` in all 4 lanes: one `insertelement` and a `shufflevector` with a
+`zeroinitializer` mask.
 
 ```ts
 function splatU32x4(x: u32): u32x4
@@ -1372,16 +2098,23 @@ function splatU32x4(x: u32): u32x4
 #### Parameters
 
 <scalar-field name="x" type="u32" required>
+
+The lane value, a `u32`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32x4">
+
+The vector.
+
 </scalar-field>
 
 ## splatU8x16
 
-`x` in every lane.
+`x` in all 16 lanes: one `insertelement` and a `shufflevector` with a
+`zeroinitializer` mask.
 
 ```ts
 function splatU8x16(x: u8): u8x16
@@ -1390,14 +2123,22 @@ function splatU8x16(x: u8): u8x16
 #### Parameters
 
 <scalar-field name="x" type="u8" required>
+
+The lane value, a `u8`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8x16">
+
+The vector.
+
 </scalar-field>
 
 ## sqrt
+
+The square root of each float lane, `llvm.sqrt`.
 
 ```ts
 function sqrt<V extends FloatVector>(a: V): V
@@ -1406,16 +2147,23 @@ function sqrt<V extends FloatVector>(a: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An `f32x4` or `f64x2`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's square root.
+
 </scalar-field>
 
 ## store
 
-The lanes of `v` into `xs[i]` to `xs[i + N - 1]`, checked once.
+The lanes of `v` into `xs[i]` to `xs[i + N - 1]`, `N` the lane count,
+under the same single check as a load, then one `store`; a statement.
 
 ```ts
 function store<V extends SimdVector>(
@@ -1428,15 +2176,26 @@ function store<V extends SimdVector>(
 #### Parameters
 
 <scalar-field name="v" type="V" required>
+
+The vector.
+
 </scalar-field>
 
 <scalar-field name="xs" type="V[&quot;__lane&quot;][]" required>
+
+An array of exactly `v`'s lane type, not `readonly`.
+
 </scalar-field>
 
 <scalar-field name="i" type="i32" required>
+
+The index lane 0 goes to, an `i32`.
+
 </scalar-field>
 
 ## sub
+
+The lane-wise difference of two float vectors, `fsub` with no fast-math flags. An integer vector is refused (NL2623): its form is `subWrapping`.
 
 ```ts
 function sub<V extends FloatVector>(a: V, b: V): V
@@ -1445,17 +2204,29 @@ function sub<V extends FloatVector>(a: V, b: V): V
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An `f32x4` or `f64x2`.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's difference.
+
 </scalar-field>
 
 ## subWrapping
+
+The lane-wise difference of two integer vectors, `sub` with no `nsw` or
+`nuw`: each lane wraps at the lane width.
 
 ```ts
 function subWrapping<V extends IntegerVector>(
@@ -1467,20 +2238,30 @@ function subWrapping<V extends IntegerVector>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+Each lane's difference, wrapped.
+
 </scalar-field>
 
 ## sum
 
-The lanes added: a `u8x16` or `u16x8` in an `i32`, a float vector in lane
-order. An `i32x4` or `u32x4` total is `sumWrapping`.
+The lanes of a `u8x16` or `u16x8` added in an `i32`, `zext` then
+`llvm.vector.reduce.add`: exact, since it cannot overflow. An `i32x4` or
+`u32x4` can, and is refused (NL2636): its total is `sumWrapping`.
 
 ```ts
 function sum(v: u8x16 | u16x8): i32
@@ -1489,12 +2270,22 @@ function sum(v: u8x16 | u16x8): i32
 #### Parameters
 
 <scalar-field name="v" type="u8x16 | u16x8" required>
+
+A `u8x16` or `u16x8`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The exact total.
+
 </scalar-field>
+
+The lanes of an `f32x4` added from lane 0 to lane 3,
+`llvm.vector.reduce.fadd` without `reassoc`, so the bits are the same on
+every target.
 
 ```ts
 function sum(v: f32x4): f32
@@ -1503,12 +2294,20 @@ function sum(v: f32x4): f32
 #### Parameters
 
 <scalar-field name="v" type="f32x4" required>
+
+An `f32x4`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f32">
+
+The total, an `f32`.
+
 </scalar-field>
+
+The lanes of an `f64x2` added, lane 0 first, likewise in order.
 
 ```ts
 function sum(v: f64x2): f64
@@ -1517,14 +2316,23 @@ function sum(v: f64x2): f64
 #### Parameters
 
 <scalar-field name="v" type="f64x2" required>
+
+An `f64x2`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64">
+
+The total, an `f64`.
+
 </scalar-field>
 
 ## sumWrapping
+
+The lanes of an `i32x4` added, `llvm.vector.reduce.add`, wrapping as the
+lanes do.
 
 ```ts
 function sumWrapping(v: i32x4): i32
@@ -1533,12 +2341,20 @@ function sumWrapping(v: i32x4): i32
 #### Parameters
 
 <scalar-field name="v" type="i32x4" required>
+
+An `i32x4`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The wrapped total, an `i32`.
+
 </scalar-field>
+
+The lanes of a `u32x4` added, wrapping.
 
 ```ts
 function sumWrapping(v: u32x4): u32
@@ -1547,14 +2363,22 @@ function sumWrapping(v: u32x4): u32
 #### Parameters
 
 <scalar-field name="v" type="u32x4" required>
+
+A `u32x4`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32">
+
+The wrapped total, a `u32`.
+
 </scalar-field>
 
 ## u16x8
+
+A `u16x8` of 8 lanes, one argument per lane, lane 0 first.
 
 ```ts
 function u16x8(
@@ -1572,6 +2396,9 @@ function u16x8(
 #### Parameters
 
 <scalar-field name="a0" type="u16" required>
+
+Lane 0, a `u16`; `a1` to `a7` are lanes 1 to 7 in order.
+
 </scalar-field>
 
 <scalar-field name="a1" type="u16" required>
@@ -1598,9 +2425,14 @@ function u16x8(
 #### Returns
 
 <scalar-field name="returns" type="u16x8">
+
+The vector.
+
 </scalar-field>
 
 ## u32x4
+
+A `u32x4` of 4 lanes, one argument per lane, lane 0 first.
 
 ```ts
 function u32x4(
@@ -1614,6 +2446,9 @@ function u32x4(
 #### Parameters
 
 <scalar-field name="a0" type="u32" required>
+
+Lane 0, a `u32`; `a1` to `a3` are lanes 1 to 3 in order.
+
 </scalar-field>
 
 <scalar-field name="a1" type="u32" required>
@@ -1628,11 +2463,15 @@ function u32x4(
 #### Returns
 
 <scalar-field name="returns" type="u32x4">
+
+The vector.
+
 </scalar-field>
 
 ## u8x16
 
-One value per lane, lane 0 first.
+A `u8x16` of sixteen lanes: one `insertelement` per lane, which `opt`
+folds to a constant vector when every lane is one.
 
 ```ts
 function u8x16(
@@ -1658,6 +2497,9 @@ function u8x16(
 #### Parameters
 
 <scalar-field name="a0" type="u8" required>
+
+Lane 0, a `u8`; `a1` to `a15` are lanes 1 to 15 in order.
+
 </scalar-field>
 
 <scalar-field name="a1" type="u8" required>
@@ -1708,9 +2550,14 @@ function u8x16(
 #### Returns
 
 <scalar-field name="returns" type="u8x16">
+
+The vector.
+
 </scalar-field>
 
 ## xor
+
+Bitwise `xor`, on integer lanes or lane by lane on two masks.
 
 ```ts
 function xor<V extends IntegerVector | SimdMask>(
@@ -1722,17 +2569,28 @@ function xor<V extends IntegerVector | SimdMask>(
 #### Parameters
 
 <scalar-field name="a" type="V" required>
+
+An integer vector or a mask.
+
 </scalar-field>
 
 <scalar-field name="b" type="V" required>
+
+A vector or mask of `a`'s type.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="V">
+
+The bitwise `xor`, of `a`'s type.
+
 </scalar-field>
 
 ## f32x4
+
+Sixteen bytes as 4 `f32` lanes, an LLVM `<4 x float>`. Opaque, as `u8x16` is.
 
 ```ts
 interface f32x4
@@ -1740,11 +2598,13 @@ interface f32x4
 
 | Member | |
 | --- | --- |
-| `readonly __lane: f32` |  |
-| `readonly __mask: mask32x4` |  |
-| `readonly __nishSimd: "f32x4"` |  |
+| `readonly __lane: f32` | The lane type, `f32`, for signatures to name. Not a field. |
+| `readonly __mask: mask32x4` | The mask a compare of two `f32x4` answers, `mask32x4`, for signatures to name. Not a field. |
+| `readonly __nishSimd: "f32x4"` | The type's brand, which keeps the six vector types apart. Not a field: it has no value. |
 
 ## f64x2
+
+Sixteen bytes as 2 `f64` lanes, an LLVM `<2 x double>`. Opaque, as `u8x16` is.
 
 ```ts
 interface f64x2
@@ -1752,11 +2612,13 @@ interface f64x2
 
 | Member | |
 | --- | --- |
-| `readonly __lane: f64` |  |
-| `readonly __mask: mask64x2` |  |
-| `readonly __nishSimd: "f64x2"` |  |
+| `readonly __lane: f64` | The lane type, `f64`, for signatures to name. Not a field. |
+| `readonly __mask: mask64x2` | The mask a compare of two `f64x2` answers, `mask64x2`, for signatures to name. Not a field. |
+| `readonly __nishSimd: "f64x2"` | The type's brand, which keeps the six vector types apart. Not a field: it has no value. |
 
 ## i32x4
+
+Sixteen bytes as 4 `i32` lanes, an LLVM `<4 x i32>`. Opaque, as `u8x16` is.
 
 ```ts
 interface i32x4
@@ -1764,11 +2626,14 @@ interface i32x4
 
 | Member | |
 | --- | --- |
-| `readonly __lane: i32` |  |
-| `readonly __mask: mask32x4` |  |
-| `readonly __nishSimd: "i32x4"` |  |
+| `readonly __lane: i32` | The lane type, `i32`, for signatures to name. Not a field. |
+| `readonly __mask: mask32x4` | The mask a compare of two `i32x4` answers, `mask32x4`, for signatures to name. Not a field. |
+| `readonly __nishSimd: "i32x4"` | The type's brand, which keeps the six vector types apart. Not a field: it has no value. |
 
 ## mask16x8
+
+One boolean per lane of 8, an LLVM `<8 x i1>`, which a lane-wise
+compare of `u16x8` answers. Held and made as `mask8x16` is.
 
 ```ts
 interface mask16x8
@@ -1776,9 +2641,12 @@ interface mask16x8
 
 | Member | |
 | --- | --- |
-| `readonly __nishMask: "mask16x8"` |  |
+| `readonly __nishMask: "mask16x8"` | The type's brand, which keeps the four mask types apart. Not a field. |
 
 ## mask32x4
+
+One boolean per lane of 4, an LLVM `<4 x i1>`, which a lane-wise
+compare of `i32x4`, `u32x4` and `f32x4` answers. Held and made as `mask8x16` is.
 
 ```ts
 interface mask32x4
@@ -1786,9 +2654,12 @@ interface mask32x4
 
 | Member | |
 | --- | --- |
-| `readonly __nishMask: "mask32x4"` |  |
+| `readonly __nishMask: "mask32x4"` | The type's brand, which keeps the four mask types apart. Not a field. |
 
 ## mask64x2
+
+One boolean per lane of 2, an LLVM `<2 x i1>`, which a lane-wise
+compare of `f64x2` answers. Held and made as `mask8x16` is.
 
 ```ts
 interface mask64x2
@@ -1796,14 +2667,15 @@ interface mask64x2
 
 | Member | |
 | --- | --- |
-| `readonly __nishMask: "mask64x2"` |  |
+| `readonly __nishMask: "mask64x2"` | The type's brand, which keeps the four mask types apart. Not a field. |
 
 ## mask8x16
 
-One boolean per lane, which a lane-wise compare answers. Under Node an
-array of booleans. `nish` keeps a mask in a local, a parameter or a
-return of a function the module keeps, and nowhere else; it has no
-constructor.
+One boolean per lane of 16, an LLVM `<16 x i1>`, which a lane-wise
+compare of `u8x16` answers.
+Under Node an array of booleans. `nish` keeps a mask in a local, a
+parameter or a return of a function the module keeps, and nowhere else;
+it has no constructor.
 
 ```ts
 interface mask8x16
@@ -1811,9 +2683,11 @@ interface mask8x16
 
 | Member | |
 | --- | --- |
-| `readonly __nishMask: "mask8x16"` |  |
+| `readonly __nishMask: "mask8x16"` | The type's brand, which keeps the four mask types apart. Not a field. |
 
 ## u16x8
+
+Sixteen bytes as 8 `u16` lanes, an LLVM `<8 x i16>`. Opaque, as `u8x16` is.
 
 ```ts
 interface u16x8
@@ -1821,11 +2695,13 @@ interface u16x8
 
 | Member | |
 | --- | --- |
-| `readonly __lane: u16` |  |
-| `readonly __mask: mask16x8` |  |
-| `readonly __nishSimd: "u16x8"` |  |
+| `readonly __lane: u16` | The lane type, `u16`, for signatures to name. Not a field. |
+| `readonly __mask: mask16x8` | The mask a compare of two `u16x8` answers, `mask16x8`, for signatures to name. Not a field. |
+| `readonly __nishSimd: "u16x8"` | The type's brand, which keeps the six vector types apart. Not a field: it has no value. |
 
 ## u32x4
+
+Sixteen bytes as 4 `u32` lanes, an LLVM `<4 x i32>`. Opaque, as `u8x16` is.
 
 ```ts
 interface u32x4
@@ -1833,15 +2709,16 @@ interface u32x4
 
 | Member | |
 | --- | --- |
-| `readonly __lane: u32` |  |
-| `readonly __mask: mask32x4` |  |
-| `readonly __nishSimd: "u32x4"` |  |
+| `readonly __lane: u32` | The lane type, `u32`, for signatures to name. Not a field. |
+| `readonly __mask: mask32x4` | The mask a compare of two `u32x4` answers, `mask32x4`, for signatures to name. Not a field. |
+| `readonly __nishSimd: "u32x4"` | The type's brand, which keeps the six vector types apart. Not a field: it has no value. |
 
 ## u8x16
 
-A sixteen-byte vector of lanes. Opaque: TypeScript refuses `+` on one, as
-`nish` does, but lets `===` and `<` through, which `nish` refuses. Under
-Node it is a typed array made once and never written after.
+Sixteen bytes as 16 `u8` lanes, an LLVM `<16 x i8>`.
+Opaque: TypeScript refuses `+` on one, as `nish` does, but lets `===` and
+`<` through, which `nish` refuses. Under Node it is a typed array made
+once and never written after.
 
 ```ts
 interface u8x16
@@ -1849,9 +2726,9 @@ interface u8x16
 
 | Member | |
 | --- | --- |
-| `readonly __lane: u8` |  |
-| `readonly __mask: mask8x16` |  |
-| `readonly __nishSimd: "u8x16"` |  |
+| `readonly __lane: u8` | The lane type, `u8`, for signatures to name. Not a field. |
+| `readonly __mask: mask8x16` | The mask a compare of two `u8x16` answers, `mask8x16`, for signatures to name. Not a field. |
+| `readonly __nishSimd: "u8x16"` | The type's brand, which keeps the six vector types apart. Not a field: it has no value. |
 
 ## FloatVector
 
@@ -1871,7 +2748,7 @@ type IntegerVector = u8x16 | u16x8 | i32x4 | u32x4
 
 ## SimdMask
 
-Any of the four.
+Any of the four mask types.
 
 ```ts
 type SimdMask = mask8x16 | mask16x8 | mask32x4 | mask64x2
@@ -1879,7 +2756,7 @@ type SimdMask = mask8x16 | mask16x8 | mask32x4 | mask64x2
 
 ## SimdVector
 
-Any of the six.
+Any of the six vector types.
 
 ```ts
 type SimdVector = u8x16 | u16x8 | i32x4 | u32x4 | f32x4 | f64x2

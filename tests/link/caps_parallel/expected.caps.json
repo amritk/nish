@@ -171,8 +171,8 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/threads.ts:167:5", "callee": "dstTooShort", "via": "panic" },
-                { "kind": "call", "at": "std/threads.ts:169:3", "callee": "mapRange<i32, i32, square>", "via": "overflow" }
+                { "kind": "call", "at": "std/threads.ts:190:5", "callee": "dstTooShort", "via": "panic" },
+                { "kind": "call", "at": "std/threads.ts:192:3", "callee": "mapRange<i32, i32, square>", "via": "overflow" }
               ]
             },
             {
@@ -181,7 +181,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "oom", "at": "std/threads.ts:346:41", "allowed": true }
+                { "kind": "oom", "at": "std/threads.ts:407:41", "allowed": true }
               ]
             },
             {
@@ -190,8 +190,8 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "panic", "at": "std/threads.ts:366:5", "proven": false },
-                { "kind": "oom", "at": "std/threads.ts:366:11", "allowed": true }
+                { "kind": "panic", "at": "std/threads.ts:432:5", "proven": false },
+                { "kind": "oom", "at": "std/threads.ts:432:11", "allowed": true }
               ]
             }
           ]

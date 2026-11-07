@@ -20,16 +20,17 @@ import {
 ```
 
 ```ts
-import { createRegion, unlinkRegion } from "nish/sync/shm"
+import { createRegion, openRegion } from "nish/sync/shm"
 import { initSpscRing, attachSpscRing, spscRingBytes } from "nish/sync/ring"
 
 const region = createRegion("jobs", spscRingBytes(65536)).expect("region")
 const ring = initSpscRing(region, 0, 65536, true)
-ring.tryPush(job, 0, job.length) // false when full
+ring.tryPush(job, 0, toI32(job.length)) // false when full
 
-// The other process, with the region opened by name:
-const ring = attachSpscRing(region, 0).expect("ring")
-const n = ring.popWait(buf, 0, 1000) // the record's length, or RING_EMPTY
+// The other process opens the region by name and attaches:
+const view = openRegion("jobs").expect("open")
+const rx = attachSpscRing(view, 0).expect("ring")
+const n = rx.popWait(buf, 0, 1000) // the record's length, or RING_EMPTY
 ```
 
 <scalar-grid cols="2">
@@ -60,13 +61,13 @@ Writes an `SpscRing`'s header at `base` and answers the ring: `capacity` data by
 
 <scalar-card title="mpscRingBytes" icon="phosphor/regular/function" href="#mpscringbytes">
 
-The bytes an `MpscRing` of `slots` slots of `slotBytes` takes from its base.
+The bytes an `MpscRing` of `slots` slots of `slotBytes` takes from its base: the 256-byte header and each slot's 16-byte head and payload.
 
 </scalar-card>
 
 <scalar-card title="spscRingBytes" icon="phosphor/regular/function" href="#spscringbytes">
 
-The bytes an `SpscRing` of `capacity` data bytes takes from its base.
+The bytes an `SpscRing` of `capacity` data bytes takes from its base: the 256-byte header and the data.
 
 </scalar-card>
 
@@ -193,7 +194,9 @@ Private helpers share the importing program's flat symbol namespace
 
 ## attachMpscRing
 
-The `MpscRing` an `initMpscRing` wrote at `base`; an error when there is none.
+The `MpscRing` an `initMpscRing` wrote at `base`; an error when there is
+none. The magic is loaded `ACQUIRE`, which pairs with the `RELEASE` store
+of it that the init function makes last.
 
 ```ts
 function attachMpscRing(
@@ -205,19 +208,34 @@ function attachMpscRing(
 #### Parameters
 
 <scalar-field name="region" type="SharedRegion" required>
+
+the region the ring lives in, as this process mapped it
+
 </scalar-field>
 
 <scalar-field name="base" type="i32" required>
+
+the byte offset of the ring's header, a multiple of 64 inside
+  the region; anything else panics, and so does a ring whose slots would
+  run past the region's end
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;MpscRing, string&gt;">
+
+a new `MpscRing` that starts from the consumer's position as the
+  header holds it now, or the reason there is no ring at `base`: no MPSC
+  magic, or a shape no `initMpscRing` writes
+
 </scalar-field>
 
 ## attachSpscRing
 
-The `SpscRing` an `initSpscRing` wrote at `base`; an error when there is none.
+The `SpscRing` an `initSpscRing` wrote at `base`; an error when there is
+none. The magic is loaded `ACQUIRE`, which pairs with the `RELEASE` store
+of it that the init function makes last.
 
 ```ts
 function attachSpscRing(
@@ -229,21 +247,38 @@ function attachSpscRing(
 #### Parameters
 
 <scalar-field name="region" type="SharedRegion" required>
+
+the region the ring lives in, as this process mapped it
+
 </scalar-field>
 
 <scalar-field name="base" type="i32" required>
+
+the byte offset of the ring's header, a multiple of 64 inside
+  the region; anything else panics, and so does a ring whose data would run
+  past the region's end
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;SpscRing, string&gt;">
+
+a new `SpscRing` that starts from both positions as the header
+  holds them now, or the reason there is no ring at `base`: no SPSC magic,
+  or a capacity no `initSpscRing` writes
+
 </scalar-field>
 
 ## initMpscRing
 
 Writes an `MpscRing`'s header at `base` and answers the ring: `slots`
 slots, a power of two from 2, of `slotBytes` each, a multiple of 8 from 8,
-and `doorbell` for `popWait`. A ring already there is reset.
+and `doorbell` for `popWait`. A ring already there is reset. The header and
+every slot's sequence number are stored `RELAXED` and the magic last with
+`RELEASE`, so an attach whose `ACQUIRE` load reads that store sees them
+all. A reset ring had the magic already, so an attach racing a reset has
+no such promise.
 
 ```ts
 function initMpscRing(
@@ -258,30 +293,58 @@ function initMpscRing(
 #### Parameters
 
 <scalar-field name="region" type="SharedRegion" required>
+
+the region the ring lives in
+
 </scalar-field>
 
 <scalar-field name="base" type="i32" required>
+
+the byte offset of the ring's header, a multiple of 64 with
+  `mpscRingBytes(slots, slotBytes)` bytes of the region from it; anything
+  else panics
+
 </scalar-field>
 
 <scalar-field name="slots" type="i32" required>
+
+how many records the ring holds at once, a power of two from
+  2; anything else panics
+
 </scalar-field>
 
 <scalar-field name="slotBytes" type="i32" required>
+
+the longest record, in bytes, a multiple of 8 from 8;
+  anything else panics
+
 </scalar-field>
 
 <scalar-field name="doorbell" type="boolean" required>
+
+whether a consumer's `popWait` may sleep on Linux's futex,
+  at the cost of a `SEQ_CST` store and load on every push
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="MpscRing">
+
+a new `MpscRing` on the empty ring, for this process's producer
+  or consumer
+
 </scalar-field>
 
 ## initSpscRing
 
 Writes an `SpscRing`'s header at `base` and answers the ring: `capacity`
 data bytes, a power of two from 8, and `doorbell` for `popWait`. The
-memory is the creator's to give; a ring already there is reset.
+memory is the creator's to give; a ring already there is reset. The header
+is stored `RELAXED` and its magic last with `RELEASE`, so an attach whose
+`ACQUIRE` load reads that store sees the header stored before it. A reset
+ring had the magic already, so an attach racing a reset has no such
+promise.
 
 ```ts
 function initSpscRing(
@@ -295,25 +358,47 @@ function initSpscRing(
 #### Parameters
 
 <scalar-field name="region" type="SharedRegion" required>
+
+the region the ring lives in
+
 </scalar-field>
 
 <scalar-field name="base" type="i32" required>
+
+the byte offset of the ring's header, a multiple of 64 with
+  `spscRingBytes(capacity)` bytes of the region from it; anything else
+  panics
+
 </scalar-field>
 
 <scalar-field name="capacity" type="i32" required>
+
+the ring's data bytes, a power of two from 8 (anything else
+  panics); a record costs its length rounded up to 4, plus 4
+
 </scalar-field>
 
 <scalar-field name="doorbell" type="boolean" required>
+
+whether a consumer's `popWait` may sleep on Linux's futex,
+  at the cost of a `SEQ_CST` store and load on every push
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="SpscRing">
+
+a new `SpscRing` on the empty ring, for this process's producer
+  or consumer
+
 </scalar-field>
 
 ## mpscRingBytes
 
-The bytes an `MpscRing` of `slots` slots of `slotBytes` takes from its base.
+The bytes an `MpscRing` of `slots` slots of `slotBytes` takes from its base:
+the 256-byte header and each slot's 16-byte head and payload. Nothing is
+checked here; `initMpscRing` refuses a shape it cannot make.
 
 ```ts
 function mpscRingBytes(
@@ -325,19 +410,32 @@ function mpscRingBytes(
 #### Parameters
 
 <scalar-field name="slots" type="i32" required>
+
+how many records the ring holds at once, as `initMpscRing`
+  will be given it
+
 </scalar-field>
 
 <scalar-field name="slotBytes" type="i32" required>
+
+the longest record, in bytes, as `initMpscRing` will be
+  given it
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+how many bytes from the ring's base the region must hold
+
 </scalar-field>
 
 ## spscRingBytes
 
-The bytes an `SpscRing` of `capacity` data bytes takes from its base.
+The bytes an `SpscRing` of `capacity` data bytes takes from its base: the
+256-byte header and the data. Nothing is checked here; `initSpscRing`
+refuses a capacity that is not a power of two from 8.
 
 ```ts
 function spscRingBytes(capacity: i32): i32
@@ -346,11 +444,17 @@ function spscRingBytes(capacity: i32): i32
 #### Parameters
 
 <scalar-field name="capacity" type="i32" required>
+
+the ring's data bytes, as `initSpscRing` will be given them
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+how many bytes from the ring's base the region must hold
+
 </scalar-field>
 
 ## MpscRing
@@ -364,17 +468,12 @@ class MpscRing
 
 | Member | |
 | --- | --- |
-| `new MpscRing(region: SharedRegion, base: i32)` |  |
-| `base: i32` | Its header's offset in the region. |
-| `doorbell: boolean` | Whether a push rings the consumer's doorbell. |
+| `new MpscRing(region: SharedRegion, base: i32)` | Reads the header of the ring at `base`: its shape, its doorbell and the consumer's position (an `ACQUIRE` load). It checks nothing; a program gets its ring from `initMpscRing` or `attachMpscRing`, which check the place and the magic first. |
 | `head: i64` | The consumer's position: records ever popped (this object's, as the consumer). |
-| `region: SharedRegion` | The region the ring lives in. |
-| `slotBytes: i32` | Each slot's payload bytes, a multiple of 8. |
-| `slots: i32` | Slots, a power of two. |
-| `popBatch(dst: u8[], lens: i32[]): i32` | Moves up to `lens.length` records into `dst`, back to back from 0, while they fit, and sets `lens[i]` to each one's length: how many it moved. |
-| `popWait(dst: u8[], off: i32, timeoutMs: i32): i32` | `SpscRing.popWait`, for this ring. |
-| `tryPop(dst: u8[], off: i32): i32` | Moves the next record into `dst` from `off` and answers its length: `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued) when it is longer than `dst.length - off`. |
-| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Queues `src[off, off + len)` as one record: false when every slot is taken now. A record longer than a slot panics. |
+| `popBatch(dst: u8[], lens: i32[]): i32` | Moves up to `lens.length` records into `dst`, back to back from 0, while they fit, and sets `lens[i]` to each one's length: how many it moved. Unlike `SpscRing.popBatch` it costs what as many `tryPop`s would: an `ACQUIRE` load and a `RELEASE` store per record. |
+| `popWait(dst: u8[], off: i32, timeoutMs: i32): i32` | `SpscRing.popWait`, for this ring: `tryPop`, but on an empty ring it polls briefly and then sleeps until a push rings the doorbell, for at most `timeoutMs`, checked between rounds of polling. A ring without a doorbell, or one off Linux, answers `SHM_UNSUPPORTED` after a round that finds nothing. |
+| `tryPop(dst: u8[], off: i32): i32` | Moves the next record into `dst` from `off` and answers its length: `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued) when it is longer than `dst.length - off`. The slot's sequence number is loaded `ACQUIRE`, and the slot is freed for the producers with a `RELEASE` store of it. |
+| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Queues `src[off, off + len)` as one record: false when every slot is taken now. A record longer than a slot panics. The producer claims a slot with a `RELAXED` compare-exchange on the enqueue position, after an `ACQUIRE` load of the slot's sequence number; it copies the record in and publishes it with one store of that number, `RELEASE`, or `SEQ_CST` followed by the doorbell check on a doorbell ring. |
 
 ## SpscRing
 
@@ -390,30 +489,19 @@ class SpscRing
 
 | Member | |
 | --- | --- |
-| `new SpscRing(region: SharedRegion, base: i32)` |  |
-| `base: i32` | Its header's offset in the region. |
+| `new SpscRing(region: SharedRegion, base: i32)` | Reads the header of the ring at `base`: its capacity and doorbell, and both positions (each an `ACQUIRE` load). It checks nothing; a program gets its ring from `initSpscRing` or `attachSpscRing`, which check the place and the magic first. |
 | `capacity: i32` | Data bytes, a power of two. |
-| `doorbell: boolean` | Whether a push rings the consumer's doorbell. |
-| `found: i64` | The position of the record `lengthAt` last read, past any skip marker. |
 | `head: i64` | The consumer's position: bytes ever popped (this object's, as a consumer). |
-| `peekedEnd: i64` | The position past the record `peek` lent, or -1 for none. |
-| `region: SharedRegion` | The region the ring lives in. |
-| `reserved: i32` | The open reservation's bytes, or -1 for none. |
-| `reservedPad: i32` | The padding the open reservation skips at the tail. |
-| `seenHead: i64` | The other side's position, as last loaded. |
-| `seenTail: i64` |  |
-| `tail: i64` | The producer's position: bytes ever pushed (this object's, as a producer). |
-| `view: u8[] \| null` | `peek`'s window, likewise. |
-| `wnd: u8[] \| null` | `reserve`'s window, re-pointed by each call; null until the first. |
+| `seenTail: i64` | The producer's position as this object, consuming, last loaded it: the cache a pop compares `head` with before it loads the producer's counter again. A snapshot, possibly behind the shared counter. |
 | `abandon(): void` | Drops the open reservation, publishing nothing; panics without one. |
 | `commit(len: i32): void` | Publishes the reserved window's first `len` bytes as one record, the store `tryPush` makes. The window is given back, so it is empty after. Panics without a reservation, for `len` outside `[0, n]`, or when a `push` moved the window out of the ring. |
-| `peek(): readonly u8[]` | The next record, lent in place as the ring's own bytes, without copying or blocking; `release` frees it for the producer. Empty (length 0) when there is none, and also for a record peek cannot lend: one `tryPush` wrapped across the end of the ring, or one of length 0. On an empty answer nothing is lent, and `tryPop` takes the record if there is one. Panics while a record is lent. |
-| `popBatch(dst: u8[], lens: i32[]): i32` | Moves up to `lens.length` records into `dst`, back to back from 0, while they fit, and sets `lens[i]` to each one's length: how many it moved. One load of the producer's position and one store of the consumer's, however many records it moves. Panics while `peek` has a record lent. |
-| `popWait(dst: u8[], off: i32, timeoutMs: i32): i32` | `tryPop`, but on an empty ring it polls briefly and then sleeps until a push rings the doorbell, for at most `timeoutMs` in all (negative: no limit): `RING_EMPTY` only once that has passed. `SHM_UNSUPPORTED` for a ring without a doorbell, or off Linux, where the caller polls `tryPop`. Panics while `peek` has a record lent, from `tryPop`, so the message names `tryPop`. |
+| `peek(): readonly u8[]` | The next record, lent in place as the ring's own bytes, without copying or blocking; `release` frees it for the producer. Empty (length 0) when there is none, and also for a record peek cannot lend: one `tryPush` wrapped across the end of the ring, or one of length 0. On an empty answer nothing is lent, and `tryPop` takes the record if there is one. Panics while a record is lent. The producer's position is loaded `ACQUIRE` when the cache says the ring is empty. |
+| `popBatch(dst: u8[], lens: i32[]): i32` | Moves up to `lens.length` records into `dst`, back to back from 0, while they fit, and sets `lens[i]` to each one's length: how many it moved. One load of the producer's position and one store of the consumer's, however many records it moves. Panics while `peek` has a record lent. The load is `ACQUIRE` and the store, made only when a record moved, is `RELEASE`. |
+| `popWait(dst: u8[], off: i32, timeoutMs: i32): i32` | `tryPop`, but on an empty ring it polls briefly and then sleeps until a push rings the doorbell, for at most `timeoutMs` in all (negative: no limit): `RING_EMPTY` only once that has passed. `SHM_UNSUPPORTED` for a ring without a doorbell, or off Linux, where the caller polls `tryPop`. Panics while `peek` has a record lent, from `tryPop`, so the message names `tryPop`. The deadline is checked between rounds of polling, so a wait can run past it by one round; a ring without a doorbell still polls one round before it answers `SHM_UNSUPPORTED`. |
 | `release(): void` | Frees the record `peek` lent, the store `tryPop` makes, and gives the window back, so it is empty after. Panics when no record is lent. |
 | `reserve(n: i32): u8[]` | A window of `n` bytes of the ring's own memory to write a record into, contiguous, without blocking: empty (length 0) when the ring has no room for it now. Nothing is published until `commit`; `abandon` drops it. `n` is from 1 (a window of 0 could not be told from no room; `tryPush` takes an empty record) to `capacity / 2 - 4`, so an empty ring always has room for one; outside that, or while a reservation is open, it panics. A ring of 8 has no such `n` and always panics; one of 16 allows 4. The bytes are not zeroed: they hold whatever the ring last held there. |
-| `tryPop(dst: u8[], off: i32): i32` | Moves the next record into `dst` from `off` and answers its length: `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued) when it is longer than `dst.length - off`. Panics while `peek` has a record lent. |
-| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Appends `src[off, off + len)` as one record: false when the ring has no room for it now. A record longer than the ring could ever hold panics, and so does a call while a reservation is open. |
+| `tryPop(dst: u8[], off: i32): i32` | Moves the next record into `dst` from `off` and answers its length: `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued) when it is longer than `dst.length - off`. Panics while `peek` has a record lent. The producer's position is loaded `ACQUIRE` (only when the cache says the ring is empty), and the freed space is handed back with a `RELEASE` store of the consumer's position. |
+| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Appends `src[off, off + len)` as one record: false when the ring has no room for it now. A record longer than the ring could ever hold panics, and so does a call while a reservation is open. The bytes are plain copies, published to the consumer by one store of the producer's position: `RELEASE`, or `SEQ_CST` followed by the doorbell check on a doorbell ring. |
 
 ## Constants
 

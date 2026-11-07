@@ -1,5 +1,5 @@
 /**
- * `std/cli` — a command-line tool's help menu: whether a stream gets colour,
+ * `nish/cli` — a command-line tool's help menu: whether a stream gets colour,
  * the escapes that paint it, and the rows a `--help` is made of.
  *
  *     import { HelpMenu, agentDriven, styleFor } from "nish/cli";
@@ -64,43 +64,81 @@ const PALETTE_MONO: i32 = 2
  * spelling the numbers. The first sixteen are the colours a theme redefines:
  * the eight basic ones and their bright twins.
  */
+/** The SGR parameter for the theme's black as the text colour. */
 export const SGR_BLACK: string = "30"
+/** The SGR parameter for the theme's red as the text colour. */
 export const SGR_RED: string = "31"
+/** The SGR parameter for the theme's green as the text colour. */
 export const SGR_GREEN: string = "32"
+/** The SGR parameter for the theme's yellow as the text colour. */
 export const SGR_YELLOW: string = "33"
+/** The SGR parameter for the theme's blue as the text colour. */
 export const SGR_BLUE: string = "34"
+/** The SGR parameter for the theme's magenta as the text colour. */
 export const SGR_MAGENTA: string = "35"
+/** The SGR parameter for the theme's cyan as the text colour. */
 export const SGR_CYAN: string = "36"
+/** The SGR parameter for the theme's white as the text colour. */
 export const SGR_WHITE: string = "37"
+/** The SGR parameter for the theme's bright black (gray) as the text colour. */
 export const SGR_BRIGHT_BLACK: string = "90"
+/** The SGR parameter for the theme's bright red as the text colour. */
 export const SGR_BRIGHT_RED: string = "91"
+/** The SGR parameter for the theme's bright green as the text colour. */
 export const SGR_BRIGHT_GREEN: string = "92"
+/** The SGR parameter for the theme's bright yellow as the text colour. */
 export const SGR_BRIGHT_YELLOW: string = "93"
+/** The SGR parameter for the theme's bright blue as the text colour. */
 export const SGR_BRIGHT_BLUE: string = "94"
+/** The SGR parameter for the theme's bright magenta as the text colour. */
 export const SGR_BRIGHT_MAGENTA: string = "95"
+/** The SGR parameter for the theme's bright cyan as the text colour. */
 export const SGR_BRIGHT_CYAN: string = "96"
+/** The SGR parameter for the theme's bright white as the text colour. */
 export const SGR_BRIGHT_WHITE: string = "97"
+/** The SGR parameter for the theme's black as the background. */
 export const SGR_BG_BLACK: string = "40"
+/** The SGR parameter for the theme's red as the background. */
 export const SGR_BG_RED: string = "41"
+/** The SGR parameter for the theme's green as the background. */
 export const SGR_BG_GREEN: string = "42"
+/** The SGR parameter for the theme's yellow as the background. */
 export const SGR_BG_YELLOW: string = "43"
+/** The SGR parameter for the theme's blue as the background. */
 export const SGR_BG_BLUE: string = "44"
+/** The SGR parameter for the theme's magenta as the background. */
 export const SGR_BG_MAGENTA: string = "45"
+/** The SGR parameter for the theme's cyan as the background. */
 export const SGR_BG_CYAN: string = "46"
+/** The SGR parameter for the theme's white as the background. */
 export const SGR_BG_WHITE: string = "47"
+/** The SGR parameter for the theme's bright black as the background. */
 export const SGR_BG_BRIGHT_BLACK: string = "100"
+/** The SGR parameter for the theme's bright red as the background. */
 export const SGR_BG_BRIGHT_RED: string = "101"
+/** The SGR parameter for the theme's bright green as the background. */
 export const SGR_BG_BRIGHT_GREEN: string = "102"
+/** The SGR parameter for the theme's bright yellow as the background. */
 export const SGR_BG_BRIGHT_YELLOW: string = "103"
+/** The SGR parameter for the theme's bright blue as the background. */
 export const SGR_BG_BRIGHT_BLUE: string = "104"
+/** The SGR parameter for the theme's bright magenta as the background. */
 export const SGR_BG_BRIGHT_MAGENTA: string = "105"
+/** The SGR parameter for the theme's bright cyan as the background. */
 export const SGR_BG_BRIGHT_CYAN: string = "106"
+/** The SGR parameter for the theme's bright white as the background. */
 export const SGR_BG_BRIGHT_WHITE: string = "107"
+/** The SGR parameter for bold, or increased intensity. */
 export const SGR_BOLD: string = "1"
+/** The SGR parameter for faint, or decreased intensity. */
 export const SGR_FAINT: string = "2"
+/** The SGR parameter for italic, which some terminals do not show. */
 export const SGR_ITALIC: string = "3"
+/** The SGR parameter for underline. */
 export const SGR_UNDERLINE: string = "4"
+/** The SGR parameter for inverse: foreground and background swapped. */
 export const SGR_INVERSE: string = "7"
+/** The SGR parameter for struck through. */
 export const SGR_STRIKETHROUGH: string = "9"
 
 /**
@@ -115,19 +153,70 @@ export const SGR_STRIKETHROUGH: string = "9"
  * plain.
  */
 export class Style {
-  on: boolean
-  colour: boolean
+  private on: boolean
+  private colour: boolean
+  /**
+   * The SGR list `heading` paints a section heading with when the terminal
+   * has colours: bold magenta (`"1;35"`) unless the program sets another.
+   */
   headingThemed: string
+  /**
+   * The SGR list `heading` paints a section heading with on the failsafe,
+   * where the terminal has no colours: bold (`SGR_BOLD`) unless set.
+   */
   headingMono: string
+  /**
+   * The SGR list `name` paints the tool's own name with when the terminal has
+   * colours: bold magenta (`"1;35"`) unless the program sets another.
+   */
   nameThemed: string
+  /**
+   * The SGR list `name` paints the tool's own name with on the failsafe,
+   * where the terminal has no colours: bold (`SGR_BOLD`) unless set.
+   */
   nameMono: string
+  /**
+   * The SGR list `flag` paints a flag or command with when the terminal has
+   * colours: cyan (`SGR_CYAN`) unless the program sets another.
+   */
   flagThemed: string
+  /**
+   * The SGR list `flag` paints a flag or command with on the failsafe, where
+   * the terminal has no colours: bold (`SGR_BOLD`) unless set.
+   */
   flagMono: string
+  /**
+   * The SGR list `meta` paints a placeholder with when the terminal has
+   * colours: yellow (`SGR_YELLOW`) unless the program sets another.
+   */
   metaThemed: string
+  /**
+   * The SGR list `meta` paints a placeholder with on the failsafe, where the
+   * terminal has no colours: underline (`SGR_UNDERLINE`) unless set.
+   */
   metaMono: string
+  /**
+   * The SGR list `dim` paints descriptions and notes with when the terminal
+   * has colours: faint (`SGR_FAINT`) unless the program sets another.
+   */
   dimThemed: string
+  /**
+   * The SGR list `dim` paints descriptions and notes with on the failsafe,
+   * where the terminal has no colours: empty, so plain, unless set.
+   */
   dimMono: string
 
+  /**
+   * A style with every role at its default pair. `styleFor` builds the right
+   * one for a stream; a program calls this to decide for itself.
+   *
+   * @param on whether to mark the text up at all; `false` makes every painter
+   *   give its text back unchanged, whatever `colour` says.
+   * @param colour whether the terminal has colours: `true` paints the roles'
+   *   `…Themed` lists and lets the colour painters and `sgr` paint; `false`
+   *   is the failsafe, which paints the `…Mono` lists and the attributes and
+   *   leaves the colour painters and `sgr` plain.
+   */
   constructor(on: boolean, colour: boolean) {
     this.on = on
     this.colour = colour
@@ -152,7 +241,7 @@ export class Style {
    * `text` unchanged when marking up is off or the chosen list is empty, so a
    * caller never has to ask.
    */
-  paint(text: string, themed: string, mono: string): string {
+  private paint(text: string, themed: string, mono: string): string {
     const code = this.colour ? themed : mono
     if (!this.on || text.length === 0 || code.length === 0) {
       return text
@@ -160,7 +249,14 @@ export class Style {
     return `${CSI}${code}m${text}${CSI}0m`
   }
 
-  /** A section heading, in `headingThemed` or `headingMono`. */
+  /**
+   * A section heading, in `headingThemed` or `headingMono`.
+   *
+   * @param text the words to paint, as they appear in the menu.
+   * @returns `text` wrapped in the heading role's escape and a reset, or `text`
+   *   unchanged when marking up is off, `text` is empty, or the list this
+   *   style uses for the role is empty.
+   */
   heading(text: string): string {
     return this.paint(text, this.headingThemed, this.headingMono)
   }
@@ -168,6 +264,11 @@ export class Style {
   /**
    * The tool's own name where it opens a line, in `nameThemed` or
    * `nameMono`.
+   *
+   * @param text the words to paint, as they appear in the menu.
+   * @returns `text` wrapped in the name role's escape and a reset, or `text`
+   *   unchanged when marking up is off, `text` is empty, or the list this
+   *   style uses for the role is empty.
    */
   name(text: string): string {
     return this.paint(text, this.nameThemed, this.nameMono)
@@ -176,6 +277,11 @@ export class Style {
   /**
    * A flag, or a command a person would type, in `flagThemed` or
    * `flagMono`.
+   *
+   * @param text the words to paint, as they appear in the menu.
+   * @returns `text` wrapped in the flag role's escape and a reset, or `text`
+   *   unchanged when marking up is off, `text` is empty, or the list this
+   *   style uses for the role is empty.
    */
   flag(text: string): string {
     return this.paint(text, this.flagThemed, this.flagMono)
@@ -184,6 +290,11 @@ export class Style {
   /**
    * A placeholder the person fills in, such as `<file.ts>` or `speed|size`, in
    * `metaThemed` or `metaMono`.
+   *
+   * @param text the words to paint, as they appear in the menu.
+   * @returns `text` wrapped in the meta role's escape and a reset, or `text`
+   *   unchanged when marking up is off, `text` is empty, or the list this
+   *   style uses for the role is empty.
    */
   meta(text: string): string {
     return this.paint(text, this.metaThemed, this.metaMono)
@@ -192,6 +303,11 @@ export class Style {
   /**
    * Text that explains rather than names, such as descriptions and notes, in
    * `dimThemed` or `dimMono`.
+   *
+   * @param text the words to paint, as they appear in the menu.
+   * @returns `text` wrapped in the dim role's escape and a reset, or `text`
+   *   unchanged when marking up is off, `text` is empty, or the list this
+   *   style uses for the role is empty.
    */
   dim(text: string): string {
     return this.paint(text, this.dimThemed, this.dimMono)
@@ -203,6 +319,13 @@ export class Style {
    * 256-colour and truecolor, which ignore the reader's theme, so they stay
    * the caller's explicit choice. The failsafe paints nothing, since the list
    * may name a colour a monochrome terminal cannot show.
+   *
+   * @param text the words to paint.
+   * @param codes the SGR parameters, separated by `;`, without the CSI before
+   *   them or the `m` after; an empty list leaves `text` plain.
+   * @returns `text` wrapped in the escape for `codes` and a reset, or `text`
+   *   unchanged when colour is off (the failsafe included), `text` is empty,
+   *   or `codes` is.
    */
   sgr(text: string, codes: string): string {
     return this.paint(text, codes, "")
@@ -212,192 +335,422 @@ export class Style {
   // colours to show, paints none of them; the attribute painters paint under
   // both.
 
-  /** `text` in the theme's black. */
+  /**
+   * `text` in the theme's black (`SGR_BLACK`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   black(text: string): string {
     return this.sgr(text, SGR_BLACK)
   }
 
-  /** `text` in the theme's red. */
+  /**
+   * `text` in the theme's red (`SGR_RED`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   red(text: string): string {
     return this.sgr(text, SGR_RED)
   }
 
-  /** `text` in the theme's green. */
+  /**
+   * `text` in the theme's green (`SGR_GREEN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   green(text: string): string {
     return this.sgr(text, SGR_GREEN)
   }
 
-  /** `text` in the theme's yellow. */
+  /**
+   * `text` in the theme's yellow (`SGR_YELLOW`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   yellow(text: string): string {
     return this.sgr(text, SGR_YELLOW)
   }
 
-  /** `text` in the theme's blue. */
+  /**
+   * `text` in the theme's blue (`SGR_BLUE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   blue(text: string): string {
     return this.sgr(text, SGR_BLUE)
   }
 
-  /** `text` in the theme's magenta. */
+  /**
+   * `text` in the theme's magenta (`SGR_MAGENTA`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   magenta(text: string): string {
     return this.sgr(text, SGR_MAGENTA)
   }
 
-  /** `text` in the theme's cyan. */
+  /**
+   * `text` in the theme's cyan (`SGR_CYAN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   cyan(text: string): string {
     return this.sgr(text, SGR_CYAN)
   }
 
-  /** `text` in the theme's white. */
+  /**
+   * `text` in the theme's white (`SGR_WHITE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   white(text: string): string {
     return this.sgr(text, SGR_WHITE)
   }
 
-  /** `text` in the theme's bright black (gray). */
+  /**
+   * `text` in the theme's bright black, a gray (`SGR_BRIGHT_BLACK`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightBlack(text: string): string {
     return this.sgr(text, SGR_BRIGHT_BLACK)
   }
 
-  /** `text` in the theme's bright red. */
+  /**
+   * `text` in the theme's bright red (`SGR_BRIGHT_RED`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightRed(text: string): string {
     return this.sgr(text, SGR_BRIGHT_RED)
   }
 
-  /** `text` in the theme's bright green. */
+  /**
+   * `text` in the theme's bright green (`SGR_BRIGHT_GREEN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightGreen(text: string): string {
     return this.sgr(text, SGR_BRIGHT_GREEN)
   }
 
-  /** `text` in the theme's bright yellow. */
+  /**
+   * `text` in the theme's bright yellow (`SGR_BRIGHT_YELLOW`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightYellow(text: string): string {
     return this.sgr(text, SGR_BRIGHT_YELLOW)
   }
 
-  /** `text` in the theme's bright blue. */
+  /**
+   * `text` in the theme's bright blue (`SGR_BRIGHT_BLUE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightBlue(text: string): string {
     return this.sgr(text, SGR_BRIGHT_BLUE)
   }
 
-  /** `text` in the theme's bright magenta. */
+  /**
+   * `text` in the theme's bright magenta (`SGR_BRIGHT_MAGENTA`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightMagenta(text: string): string {
     return this.sgr(text, SGR_BRIGHT_MAGENTA)
   }
 
-  /** `text` in the theme's bright cyan. */
+  /**
+   * `text` in the theme's bright cyan (`SGR_BRIGHT_CYAN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightCyan(text: string): string {
     return this.sgr(text, SGR_BRIGHT_CYAN)
   }
 
-  /** `text` in the theme's bright white. */
+  /**
+   * `text` in the theme's bright white (`SGR_BRIGHT_WHITE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   brightWhite(text: string): string {
     return this.sgr(text, SGR_BRIGHT_WHITE)
   }
 
-  /** `text` on the theme's black. */
+  /**
+   * `text` on the theme's black (`SGR_BG_BLACK`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBlack(text: string): string {
     return this.sgr(text, SGR_BG_BLACK)
   }
 
-  /** `text` on the theme's red. */
+  /**
+   * `text` on the theme's red (`SGR_BG_RED`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgRed(text: string): string {
     return this.sgr(text, SGR_BG_RED)
   }
 
-  /** `text` on the theme's green. */
+  /**
+   * `text` on the theme's green (`SGR_BG_GREEN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgGreen(text: string): string {
     return this.sgr(text, SGR_BG_GREEN)
   }
 
-  /** `text` on the theme's yellow. */
+  /**
+   * `text` on the theme's yellow (`SGR_BG_YELLOW`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgYellow(text: string): string {
     return this.sgr(text, SGR_BG_YELLOW)
   }
 
-  /** `text` on the theme's blue. */
+  /**
+   * `text` on the theme's blue (`SGR_BG_BLUE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBlue(text: string): string {
     return this.sgr(text, SGR_BG_BLUE)
   }
 
-  /** `text` on the theme's magenta. */
+  /**
+   * `text` on the theme's magenta (`SGR_BG_MAGENTA`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgMagenta(text: string): string {
     return this.sgr(text, SGR_BG_MAGENTA)
   }
 
-  /** `text` on the theme's cyan. */
+  /**
+   * `text` on the theme's cyan (`SGR_BG_CYAN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgCyan(text: string): string {
     return this.sgr(text, SGR_BG_CYAN)
   }
 
-  /** `text` on the theme's white. */
+  /**
+   * `text` on the theme's white (`SGR_BG_WHITE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgWhite(text: string): string {
     return this.sgr(text, SGR_BG_WHITE)
   }
 
-  /** `text` on the theme's bright black. */
+  /**
+   * `text` on the theme's bright black (`SGR_BG_BRIGHT_BLACK`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightBlack(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_BLACK)
   }
 
-  /** `text` on the theme's bright red. */
+  /**
+   * `text` on the theme's bright red (`SGR_BG_BRIGHT_RED`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightRed(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_RED)
   }
 
-  /** `text` on the theme's bright green. */
+  /**
+   * `text` on the theme's bright green (`SGR_BG_BRIGHT_GREEN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightGreen(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_GREEN)
   }
 
-  /** `text` on the theme's bright yellow. */
+  /**
+   * `text` on the theme's bright yellow (`SGR_BG_BRIGHT_YELLOW`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightYellow(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_YELLOW)
   }
 
-  /** `text` on the theme's bright blue. */
+  /**
+   * `text` on the theme's bright blue (`SGR_BG_BRIGHT_BLUE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightBlue(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_BLUE)
   }
 
-  /** `text` on the theme's bright magenta. */
+  /**
+   * `text` on the theme's bright magenta (`SGR_BG_BRIGHT_MAGENTA`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightMagenta(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_MAGENTA)
   }
 
-  /** `text` on the theme's bright cyan. */
+  /**
+   * `text` on the theme's bright cyan (`SGR_BG_BRIGHT_CYAN`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightCyan(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_CYAN)
   }
 
-  /** `text` on the theme's bright white. */
+  /**
+   * `text` on the theme's bright white (`SGR_BG_BRIGHT_WHITE`).
+   *
+   * @param text the words to colour.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when colour is off (the failsafe included) or `text` is empty.
+   */
   bgBrightWhite(text: string): string {
     return this.sgr(text, SGR_BG_BRIGHT_WHITE)
   }
 
-  /** `text` bold. */
+  /**
+   * `text` bold (`SGR_BOLD`), under the failsafe too.
+   *
+   * @param text the words to mark up.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when marking up is off or `text` is empty.
+   */
   bold(text: string): string {
     return this.paint(text, SGR_BOLD, SGR_BOLD)
   }
 
-  /** `text` faint. */
+  /**
+   * `text` faint (`SGR_FAINT`), under the failsafe too.
+   *
+   * @param text the words to mark up.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when marking up is off or `text` is empty.
+   */
   faint(text: string): string {
     return this.paint(text, SGR_FAINT, SGR_FAINT)
   }
 
-  /** `text` italic, where the terminal has it. */
+  /**
+   * `text` italic (`SGR_ITALIC`), where the terminal has it, under the
+   * failsafe too.
+   *
+   * @param text the words to mark up.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when marking up is off or `text` is empty.
+   */
   italic(text: string): string {
     return this.paint(text, SGR_ITALIC, SGR_ITALIC)
   }
 
-  /** `text` underlined. */
+  /**
+   * `text` underlined (`SGR_UNDERLINE`), under the failsafe too.
+   *
+   * @param text the words to mark up.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when marking up is off or `text` is empty.
+   */
   underline(text: string): string {
     return this.paint(text, SGR_UNDERLINE, SGR_UNDERLINE)
   }
 
-  /** `text` with foreground and background swapped. */
+  /**
+   * `text` with foreground and background swapped (`SGR_INVERSE`), under
+   * the failsafe too.
+   *
+   * @param text the words to mark up.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when marking up is off or `text` is empty.
+   */
   inverse(text: string): string {
     return this.paint(text, SGR_INVERSE, SGR_INVERSE)
   }
 
-  /** `text` struck through. */
+  /**
+   * `text` struck through (`SGR_STRIKETHROUGH`), under the failsafe too.
+   *
+   * @param text the words to mark up.
+   * @returns `text` wrapped in the escape and a reset, or `text` unchanged
+   *   when marking up is off or `text` is empty.
+   */
   strikethrough(text: string): string {
     return this.paint(text, SGR_STRIKETHROUGH, SGR_STRIKETHROUGH)
   }
@@ -478,6 +831,9 @@ const styleOfPalette = (palette: i32): Style => {
  * value for yes. Without it, the variables the agents that set one put in
  * their commands' environment (Claude Code's `CLAUDECODE`, Gemini CLI's
  * `GEMINI_CLI`) say yes.
+ *
+ * @returns `true` when an agent is judged to be at the keyboard, the answer
+ *   `styleFor`'s `agent` takes; it reads the environment afresh each call.
  */
 export const agentDriven = (): boolean => {
   if (envIsSet("NISH_AGENT")) {
@@ -496,6 +852,14 @@ export const agentDriven = (): boolean => {
  * colour is the theme's, asked of nothing: the reader is a pager or an editor
  * that renders the escapes itself (Emacs's shell sets `TERM=dumb` and paints
  * ANSI colour), so `TERM` does not describe it, and forcing forks nothing.
+ *
+ * @param fd the descriptor the painted text is written to, 1 for standard
+ *   output or 2 for standard error; only the terminal check reads it.
+ * @param agent whether the reader is an agent, as `agentDriven` answered;
+ *   `true` gives plain text, whatever forces colour.
+ * @returns a new `Style` each call, the caller's to keep and recolour: one
+ *   that paints the theme, one that paints the failsafe, or one that paints
+ *   nothing.
  */
 export const styleFor = (fd: i32, agent: boolean): Style => {
   const level = getenv("FORCE_COLOR")
@@ -544,13 +908,27 @@ const padTo = (width: i32, column: i32): string => spaces(width + 2 <= column ? 
  * up whether or not `style` paints, as long as the text is ASCII.
  */
 export class HelpMenu {
-  style: Style
-  program: string
-  column: i32
-  usageColumn: i32
-  lines: string[]
-  usages: i32
+  private style: Style
+  private program: string
+  private column: i32
+  private usageColumn: i32
+  private lines: string[]
+  private usages: i32
 
+  /**
+   * An empty menu; nothing is written until `text` is asked for.
+   *
+   * @param style the painter for every line the menu builds. The menu keeps
+   *   this same `Style`, not a copy, so a role recoloured on it later paints
+   *   the lines added after.
+   * @param program the tool's name, which opens the title line and every
+   *   usage line.
+   * @param column how many plain columns come before a row's description,
+   *   counted from the start of the line; a row whose flag and placeholder
+   *   reach within two columns of it gets two spaces instead.
+   * @param usageColumn the same for a usage line's description, counted from
+   *   the start of `usage:`; set it past the longest command shape.
+   */
   constructor(style: Style, program: string, column: i32, usageColumn: i32) {
     this.style = style
     this.program = program
@@ -560,7 +938,14 @@ export class HelpMenu {
     this.usages = 0
   }
 
-  /** The opening line, the program's name, `version` and a one-line `summary`, and a blank after it. */
+  /**
+   * The opening line, the program's name, `version` and a one-line `summary`,
+   * and a blank after it.
+   *
+   * @param version the version shown after the name, faint, such as `1.0.0`.
+   * @param summary what the tool is for, in a few words, faint, two spaces
+   *   after the version.
+   */
   header(version: string, summary: string): void {
     this.title(version, summary)
     this.lines.push("")
@@ -569,6 +954,9 @@ export class HelpMenu {
   /**
    * The opening line alone, without `header`'s blank after it, for a menu that
    * puts something under its title (`line`) before the blank.
+   *
+   * @param version the version shown after the name, faint.
+   * @param summary what the tool is for, faint, two spaces after the version.
    */
   title(version: string, summary: string): void {
     const style = this.style
@@ -578,6 +966,9 @@ export class HelpMenu {
   /**
    * A line exactly as given, painted (or not) by the caller with the menu's
    * `style`: a rule, a banner, a blank. Its width is the caller's to keep.
+   *
+   * @param text the whole line, with any escapes already in it; `""` adds a
+   *   blank line.
    */
   line(text: string): void {
     this.lines.push(text)
@@ -587,6 +978,11 @@ export class HelpMenu {
    * A usage line: the command `shape` after the program's name, and what it
    * is for (`description` may be empty). The first opens with `usage:` and
    * the rest are indented under it.
+   *
+   * @param shape the arguments and flags that follow the program's name, such
+   *   as `<file.ts> [flags]`, painted as a flag.
+   * @param description what this form of the command does, faint, starting at
+   *   `usageColumn`; `""` ends the line after `shape`.
    */
   usage(shape: string, description: string): void {
     const style = this.style
@@ -597,7 +993,11 @@ export class HelpMenu {
     this.usages = this.usages + 1
   }
 
-  /** A section: a blank line, then `title` as a heading. */
+  /**
+   * A section: a blank line, then `title` as a heading.
+   *
+   * @param title the section's name, such as `Flags`, as it is shown.
+   */
   section(title: string): void {
     this.lines.push("")
     this.lines.push(this.style.heading(title))
@@ -606,6 +1006,12 @@ export class HelpMenu {
   /**
    * One row: the `flag` (or a command), its placeholder `meta` (may be
    * empty), and what it does, the description starting at `column`.
+   *
+   * @param flag the flag or command a person types, painted as a flag after
+   *   a two-space indent.
+   * @param meta the placeholder for the flag's value, such as `<n>`, after
+   *   one space; `""` for a flag that takes none.
+   * @param description what the flag does, faint.
    */
   row(flag: string, meta: string, description: string): void {
     const style = this.style
@@ -616,17 +1022,32 @@ export class HelpMenu {
     )
   }
 
-  /** An indented line of prose, faint. */
+  /**
+   * An indented line of prose, faint.
+   *
+   * @param text the prose, shown after two spaces.
+   */
   note(text: string): void {
     this.lines.push(`  ${this.style.dim(text)}`)
   }
 
-  /** An indented line the reader fills in or opens, a path or a value, as a placeholder. */
+  /**
+   * An indented line the reader fills in or opens, a path or a value, as a
+   * placeholder.
+   *
+   * @param text the path or value, shown after two spaces.
+   */
   value(text: string): void {
     this.lines.push(`  ${this.style.meta(text)}`)
   }
 
-  /** The menu so far, its lines joined by newlines, with no newline after the last. */
+  /**
+   * The menu so far, its lines joined by newlines, with no newline after the
+   * last.
+   *
+   * @returns a new string each call; the menu keeps its lines, so a later
+   *   call also has what was added since.
+   */
   text(): string {
     return this.lines.join("\n")
   }

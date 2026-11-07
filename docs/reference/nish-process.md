@@ -2,7 +2,7 @@
 
 # `nish:process`
 
-The `nish:process` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+The process and its host: exit, the environment, children, signals, the clocks, scheduling, and the size of the machine.
 
 ```ts
 import {
@@ -30,11 +30,22 @@ import {
 } from "nish:process";
 ```
 
+```ts
+import { spawn, waitPid, kill, availableParallelism } from "nish:process";
+
+const pid = spawn(["sleep", "5"]);
+if (pid > 0) {
+  kill(pid, 15);
+  const done = waitPid(pid, 0);
+}
+const workers = availableParallelism();
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="availableParallelism" icon="phosphor/regular/function" href="#availableparallelism">
 
-How many CPUs the program may use, at least 1.
+How many CPUs the program may use: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number, which can lower the count and never raise it.
 
 </scalar-card>
 
@@ -46,61 +57,61 @@ The global `process.exit`: a terminator, which `never` is how `tsc` spells it.
 
 <scalar-card title="getenv" icon="phosphor/regular/function" href="#getenv">
 
-One environment variable, as the call runs.
+The value of environment variable `name` as the call runs.
 
 </scalar-card>
 
 <scalar-card title="kill" icon="phosphor/regular/function" href="#kill">
 
-Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22.
+Send `sig` to `pid`.
 
 </scalar-card>
 
 <scalar-card title="monotonicNanos" icon="phosphor/regular/function" href="#monotonicnanos">
 
-A monotonic clock in nanoseconds.
+`CLOCK_MONOTONIC` in nanoseconds.
 
 </scalar-card>
 
 <scalar-card title="readSignal" icon="phosphor/regular/function" href="#readsignal">
 
-Block until SIGTERM or SIGINT arrives: 15 or 2, or -1 for a descriptor that is not `signalFd()`'s.
+Block until SIGTERM or SIGINT arrives.
 
 </scalar-card>
 
 <scalar-card title="setCpuAffinity" icon="phosphor/regular/function" href="#setcpuaffinity">
 
-Pin this process to CPU `cpu` alone: 0, -22 for a CPU outside the current mask (narrow-only), or -95 off Linux.
+Pin the calling process to the one CPU `cpu` with `sched_setaffinity`.
 
 </scalar-card>
 
 <scalar-card title="setIdlePriority" icon="phosphor/regular/function" href="#setidlepriority">
 
-Move this process to `SCHED_IDLE`: 0, a negative errno, or -95 off Linux.
+Move this process to `SCHED_IDLE`, which runs it only when nothing else wants the CPU.
 
 </scalar-card>
 
 <scalar-card title="setNice" icon="phosphor/regular/function" href="#setnice">
 
-Set this process's nice value, 0..19 only: 0, -22 outside it, or -13 below the current value (lower-only, even as root).
+Set the nice value with `setpriority(PRIO_PROCESS, 0, n)`.
 
 </scalar-card>
 
 <scalar-card title="signalFd" icon="phosphor/regular/function" href="#signalfd">
 
-A descriptor readable when SIGTERM or SIGINT arrives; the same one every call, or -1.
+A descriptor that becomes readable when SIGTERM or SIGINT arrives: the read end of a pipe a `sigaction` handler writes one byte to per signal, so the signals' default action never runs, whichever thread a signal lands on.
 
 </scalar-card>
 
 <scalar-card title="spawn" icon="phosphor/regular/function" href="#spawn">
 
-Start a child without waiting: its pid, or a negative errno.
+Start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does (the same vector, environment, streams and working directory), without waiting.
 
 </scalar-card>
 
 <scalar-card title="spawnPiped" icon="phosphor/regular/function" href="#spawnpiped">
 
-The same run with `stdin` written to the child and its stdout and stderr appended to the two arrays: the status, or -2 past 16 MiB on a stream.
+The same run as `spawnSync`, with every stream a pipe: the child reads `stdin`'s bytes and then end of file, and whatever it writes to its stdout and stderr is appended to `stdout` and `stderr`, which keep what they held.
 
 </scalar-card>
 
@@ -112,39 +123,78 @@ Run `argv[0]`, searched on `PATH`, with `argv` as its argument vector, and wait 
 
 <scalar-card title="spawnSyncTo" icon="phosphor/regular/function" href="#spawnsyncto">
 
-The same run with each non-empty path receiving that stream, created or truncated; an empty string leaves that stream inherited.
+The same run as `spawnSync`, with each stream sent to a file rather than inherited.
 
 </scalar-card>
 
 <scalar-card title="spawnWithFds" icon="phosphor/regular/function" href="#spawnwithfds">
 
-`spawn` with the child holding `fds[i]` as descriptor `3 + i`: its pid, or a negative errno; -22 more than 64 descriptors or a negative one, -9 one that is not open, -24 (or -22 above the descriptor limit) a scratch descriptor the system cannot give.
+`spawn`, with the child holding `fds[i]` as descriptor `3 + i`, close-on-exec cleared there.
 
 </scalar-card>
 
 <scalar-card title="totalMemory" icon="phosphor/regular/function" href="#totalmemory">
 
-Bytes of physical memory, or -1.
+The machine's physical memory: `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on Darwin.
 
 </scalar-card>
 
 <scalar-card title="waitPid" icon="phosphor/regular/function" href="#waitpid">
 
-`[pid, status]` for a child that exited, `[0, 0]` under WNOHANG (flag 1) with none, or `[-errno, 0]`.
+Reap a child.
 
 </scalar-card>
 
 <scalar-card title="wallClockNanos" icon="phosphor/regular/function" href="#wallclocknanos">
 
-The wall clock in nanoseconds since the Unix epoch; it steps when the system time is set.
+`CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC: `Date.now`'s clock at a nanosecond's grain.
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+Each export is the global of the same name, renamed: the compiler emits the
+same IR for either spelling. A call that can fail answers a value, a
+negative errno or `-1` or `null`, rather than exiting, because the language
+has no exceptions and a caller has to be able to turn the failure into its
+own diagnostic.
+
+</scalar-callout>
+
+A `wasm32` target has no processes and no host to ask, so the checker
+refuses `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`,
+`totalMemory`, the scheduling calls, `signalFd` and `readSignal` there;
+a WASI build answers `-1` from `spawnSync`,
+`spawnSyncTo` and `spawnPiped`. `spawn`, `kill`, `waitPid` and the scheduling
+calls write state outside the program, so a scope's task or a parallel body
+that calls one is refused as any shared write is.
+
+<scalar-detail title="A supervisor polls">
+
+A blocking `waitPid(pid, 0)` cannot be woken by
+SIGTERM once `signalFd()` is installed, so a supervisor that must answer a
+signal while its children run reaps with flag 1 (WNOHANG) on each tick of a
+`pollWait` loop that also watches the signal descriptor, and stops its
+children with `kill` when `readSignal` answers.
+
+</scalar-detail>
+
+The rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#directories-and-subprocesses,
+https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-environment,
+https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-clock,
+https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals,
+https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory
+and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#scheduling-setnice-setidlepriority-setcpuaffinity
+
 ## availableParallelism
 
-How many CPUs the program may use, at least 1.
+How many CPUs the program may use: the smallest of the CPUs online, the
+ones its thread may run on (an affinity mask, a container's cpuset), a
+cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a
+positive number, which can lower the count and never raise it. It needs no
+`--threads`, and a task may call it.
 
 ```ts
 function availableParallelism(): i32
@@ -153,11 +203,15 @@ function availableParallelism(): i32
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count, at least 1.
+
 </scalar-field>
 
 ## exit
 
-The global `process.exit`: a terminator, which `never` is how `tsc` spells it.
+The global `process.exit`: a terminator, which `never` is how `tsc`
+spells it.
 
 ```ts
 function exit(code: i32): never
@@ -166,25 +220,27 @@ function exit(code: i32): never
 #### Parameters
 
 <scalar-field name="code" type="i32" required>
+
+The exit status.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="never">
+
+Never: the program ends.
+
 </scalar-field>
 
 ## getenv
 
-One environment variable, as the call runs. The value is what `getenv(3)`
-answers, so it is bytes: a variable holding something that is not valid
-UTF-8 comes back as those bytes, as `readFileSync` does, and every offset
-into it is a byte offset. The bytes are copied into the arena, so the result
-is an ordinary string that outlives any later change to the environment, and
-it is narrowed with `if (cc !== null)` like any other nullable. It is a call
-and not `process.env.CC`, because a member access on a key chosen at runtime
-is forbidden. Two reads of one variable are two calls: a `setenv` from linked
-C may change the answer between them. Also exported by `nish:process`.
-Capability: env.
+The value of environment variable `name` as the call runs. The bytes are
+copied into the arena, so the result is an ordinary string that outlives
+any later change to the environment, and it is bytes: a value that is not
+valid UTF-8 comes back as those bytes. Two reads are two calls, never
+folded into one, because linked C may change the environment between
+them. There is no `setenv`.
 
 ```ts
 function getenv(name: string): string | null
@@ -194,7 +250,7 @@ function getenv(name: string): string | null
 
 <scalar-field name="name" type="string" required>
 
-the variable's name.
+The variable's name.
 
 </scalar-field>
 
@@ -202,14 +258,18 @@ the variable's name.
 
 <scalar-field name="returns" type="string | null">
 
-its value, or `null` when it is unset (an empty value, as `CC=`, is a
-  set variable and answers a zero-length string).
+The value, a zero-length string for a variable set to nothing
+  (`CC=`), or `null` when the variable is unset; narrow it with
+  `if (cc !== null)`.
 
 </scalar-field>
 
 ## kill
 
-Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22.
+Send `sig` to `pid`. Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are
+taken, whose numbers are the same on Linux and Darwin, so a number means
+the same signal on every host. A positive pid may be any process of this
+user, not only a child.
 
 ```ts
 function kill(pid: i32, sig: i32): i32
@@ -218,20 +278,34 @@ function kill(pid: i32, sig: i32): i32
 #### Parameters
 
 <scalar-field name="pid" type="i32" required>
+
+The process, above 0.
+
 </scalar-field>
 
 <scalar-field name="sig" type="i32" required>
+
+0, 2, 9 or 15.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or a negative errno: `-22` for any other `sig` or a `pid` of
+  0 or below (which `kill(2)` reads as a process group or every
+  process), `-3` ESRCH when no process has the pid (a child already reaped
+  included), `-1` EPERM when it is another user's.
+
 </scalar-field>
 
 ## monotonicNanos
 
-A monotonic clock in nanoseconds. The origin is arbitrary, so only the
-difference between two reads is meaningful.
+`CLOCK_MONOTONIC` in nanoseconds. The origin is arbitrary, so only the
+difference between two reads means anything: it is not comparable between
+two processes or two machines, and it is not a date. Two reads with work
+between them never fold into one.
 
 ```ts
 function monotonicNanos(): i64
@@ -240,11 +314,14 @@ function monotonicNanos(): i64
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The clock's reading.
+
 </scalar-field>
 
 ## readSignal
 
-Block until SIGTERM or SIGINT arrives: 15 or 2, or -1 for a descriptor that is not `signalFd()`'s.
+Block until SIGTERM or SIGINT arrives. It can wait forever.
 
 ```ts
 function readSignal(fd: i32): i32
@@ -253,16 +330,27 @@ function readSignal(fd: i32): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+The descriptor `signalFd()` answered; an `i32` in both number
+  modes, and an `f64`, `i64` or string is refused rather than converted.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+15 or 2, or `-1` for a descriptor that is not `signalFd()`'s and
+  for a read that fails.
+
 </scalar-field>
 
 ## setCpuAffinity
 
-Pin this process to CPU `cpu` alone: 0, -22 for a CPU outside the current mask (narrow-only), or -95 off Linux.
+Pin the calling process to the one CPU `cpu` with `sched_setaffinity`.
+Narrow-only: it never moves a process onto a CPU it was kept off.
+`availableParallelism()` answers 1 afterwards, and children started
+afterwards inherit the mask.
 
 ```ts
 function setCpuAffinity(cpu: i32): i32
@@ -271,18 +359,28 @@ function setCpuAffinity(cpu: i32): i32
 #### Parameters
 
 <scalar-field name="cpu" type="i32" required>
+
+The CPU's index.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`; `-22` with no change for a `cpu` below 0, at or past
+  `CPU_SETSIZE`, or outside the CPUs the process may already run on; `-95`
+  on Darwin and under Node, which have no affinity call.
+
 </scalar-field>
 
 ## setIdlePriority
 
-Move this process to `SCHED_IDLE`: 0, a negative errno, or -95 off Linux.
-An unprivileged process can never leave it, and an idle process can starve
-on a saturated machine, so a caller keeps a normal-priority fallback.
+Move this process to `SCHED_IDLE`, which runs it only when nothing else
+wants the CPU. An unprivileged process can never leave it, and an idle
+process can starve on a saturated machine, so a caller keeps a
+normal-priority fallback (`setNice(19)`, or a deadline) for work that must
+finish. Per thread, as `setNice` is.
 
 ```ts
 function setIdlePriority(): i32
@@ -291,11 +389,18 @@ function setIdlePriority(): i32
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, a negative errno, or `-95` on Darwin, which has no such
+  policy.
+
 </scalar-field>
 
 ## setNice
 
-Set this process's nice value, 0..19 only: 0, -22 outside it, or -13 below the current value (lower-only, even as root).
+Set the nice value with `setpriority(PRIO_PROCESS, 0, n)`. Lower-only, even
+as root: the priority never rises. It sets the calling thread's value and
+every thread's started after it, so it belongs at the top of `main`;
+children started afterwards inherit it.
 
 ```ts
 function setNice(n: i32): i32
@@ -304,16 +409,27 @@ function setNice(n: i32): i32
 #### Parameters
 
 <scalar-field name="n" type="i32" required>
+
+The nice value, 0..19.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, or a negative errno: `-22` EINVAL outside 0..19 and `-13`
+  EACCES below the current value, both with no system call.
+
 </scalar-field>
 
 ## signalFd
 
-A descriptor readable when SIGTERM or SIGINT arrives; the same one every call, or -1.
+A descriptor that becomes readable when SIGTERM or SIGINT arrives: the
+read end of a pipe a `sigaction` handler writes one byte to per signal, so
+the signals' default action never runs, whichever thread a signal lands
+on. Installing the handler overrides a disposition the process started
+with, so a signal its parent ignored is heard. Made once.
 
 ```ts
 function signalFd(): i32
@@ -322,11 +438,18 @@ function signalFd(): i32
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The same descriptor every call, or `-1` when it cannot be made.
+
 </scalar-field>
 
 ## spawn
 
-Start a child without waiting: its pid, or a negative errno.
+Start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does (the same
+vector, environment, streams and working directory), without waiting. The
+child is this process's until `waitPid` reaps it; one never reaped stays a
+zombie until the program exits, as in C. Test `pid > 0` before handing the
+answer on: a failure such as `-1` passed to `waitPid` reads as "any child".
 
 ```ts
 function spawn(argv: string[]): i32
@@ -335,17 +458,33 @@ function spawn(argv: string[]): i32
 #### Parameters
 
 <scalar-field name="argv" type="string[]" required>
+
+The program and its arguments.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The child's pid, or a negative errno: `-22` EINVAL for an empty
+  vector or an argument holding a NUL, `posix_spawnp`'s own error
+  otherwise, so a program that is not there is `-2` ENOENT.
+
 </scalar-field>
 
 ## spawnPiped
 
-The same run with `stdin` written to the child and its stdout and stderr
-appended to the two arrays: the status, or -2 past 16 MiB on a stream.
+The same run as `spawnSync`, with every stream a pipe: the child reads
+`stdin`'s bytes and then end of file, and whatever it writes to its stdout
+and stderr is appended to `stdout` and `stderr`, which keep what they
+held. It is the run for a child that takes a secret on stdin, which `ps`
+and `/proc` do not show. A child that exits without reading its stdin is
+not a failure. The child inherits the environment and working directory,
+and no descriptor of the program but its three streams; it starts with
+SIGPIPE as the program had it, and the program's own SIGPIPE from writing
+to a child that stopped reading is absorbed. One `poll` loop writes and
+drains, so a child that fills one pipe cannot deadlock the parent.
 
 ```ts
 function spawnPiped(
@@ -359,30 +498,48 @@ function spawnPiped(
 #### Parameters
 
 <scalar-field name="argv" type="string[]" required>
+
+The program and its arguments.
+
 </scalar-field>
 
 <scalar-field name="stdin" type="readonly u8[]" required>
+
+The bytes the child reads.
+
 </scalar-field>
 
 <scalar-field name="stdout" type="u8[]" required>
+
+Grows by the child's stdout; neither `readonly` nor a typed
+  array, since the runtime pushes onto it.
+
 </scalar-field>
 
 <scalar-field name="stderr" type="u8[]" required>
+
+Grows by the child's stderr, under the same rule.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The status or `128 + n` as `spawnSync` answers; `-1` for an empty
+  vector, a child that cannot be started, a pipe or `poll` that fails, and
+  a WASI build; `-2` when a stream passes 16 MiB (`NISH_PIPED_CAP`), which
+  kills the child with `SIGKILL` and leaves that array holding the first
+  16 MiB.
+
 </scalar-field>
 
 ## spawnSync
 
 Run `argv[0]`, searched on `PATH`, with `argv` as its argument vector, and
 wait for it. The child inherits this process's environment, streams and
-working directory. The argument is checked down to its element type: an
-`i32[]` is an array but not a command line. Arguments are passed as bytes, so
-an embedded NUL truncates one. A `wasm32` build and a WASI build have no
-processes, and a WASI build always answers `-1`. Capability: process.spawn.
+working directory. The runtime keeps each element's bytes pointer for the
+child, so the array escapes; an embedded NUL truncates an argument.
 
 ```ts
 function spawnSync(argv: string[]): number
@@ -392,7 +549,7 @@ function spawnSync(argv: string[]): number
 
 <scalar-field name="argv" type="string[]" required>
 
-the program and its arguments.
+The program and its arguments.
 
 </scalar-field>
 
@@ -400,17 +557,20 @@ the program and its arguments.
 
 <scalar-field name="returns" type="number">
 
-the exit status, or `128 + n` when signal `n` killed it (the shell's
-  convention), or `-1` when the vector is empty — there is no `argv[0]` to
-  run — and whenever the child cannot be started or cannot be waited for.
+The child's exit status, `128 + n` when signal `n` killed it, or
+  `-1` when the vector is empty, when the child cannot be started or waited
+  for, and always on WASI.
 
 </scalar-field>
 
 ## spawnSyncTo
 
-The same run with each non-empty path receiving that stream, created or
-truncated; an empty string leaves that stream inherited. A symbolic link
-at either path is refused, and the answer is -1.
+The same run as `spawnSync`, with each stream sent to a file rather than
+inherited. Each path is created or truncated at `0644`, as `writeFileSync`
+does, and an empty path leaves that stream inherited, so one call can
+capture stdout and let stderr through. The two paths must not name one
+file: each is opened separately, with its own offset, so the streams
+would overwrite rather than interleave.
 
 ```ts
 function spawnSyncTo(
@@ -423,25 +583,42 @@ function spawnSyncTo(
 #### Parameters
 
 <scalar-field name="argv" type="string[]" required>
+
+The program and its arguments.
+
 </scalar-field>
 
 <scalar-field name="stdoutPath" type="string" required>
+
+The file for the child's stdout, or `""` to inherit it.
+
 </scalar-field>
 
 <scalar-field name="stderrPath" type="string" required>
+
+The file for the child's stderr, or `""` to inherit it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="number">
+
+Every answer `spawnSync` gives, and `-1` when a symbolic link is
+  the last component of either path.
+
 </scalar-field>
 
 ## spawnWithFds
 
-`spawn` with the child holding `fds[i]` as descriptor `3 + i`: its pid, or
-a negative errno; -22 more than 64 descriptors or a negative one, -9 one
-that is not open, -24 (or -22 above the descriptor limit) a scratch
-descriptor the system cannot give.
+`spawn`, with the child holding `fds[i]` as descriptor `3 + i`,
+close-on-exec cleared there. Its streams 0 to 2 are this process's, and no
+other descriptor of this process reaches it but one opened without
+close-on-exec, which nothing the runtime opens is. Any order works: `fds`
+may list a descriptor that is already its own target (`[3]`), another
+entry's target (`[4, 3]`), or the same one twice. The child shares each
+descriptor's open file, its offset and its status flags, `O_NONBLOCK`
+among them, and this process keeps its own. Reap the pid with `waitPid`.
 
 ```ts
 function spawnWithFds(
@@ -453,19 +630,35 @@ function spawnWithFds(
 #### Parameters
 
 <scalar-field name="argv" type="string[]" required>
+
+The program and its arguments.
+
 </scalar-field>
 
 <scalar-field name="fds" type="readonly i32[]" required>
+
+The descriptors the child receives from 3 onward; an empty
+  array is `spawn` exactly.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The child's pid, or a negative errno: `-22` for more than 64
+  descriptors or a negative one (before anything is opened or started),
+  `-9` for one that is not open, `-24` (or `-22` above the descriptor
+  limit) for a scratch descriptor the system cannot give, and `spawn`'s
+  errors.
+
 </scalar-field>
 
 ## totalMemory
 
-Bytes of physical memory, or -1.
+The machine's physical memory: `_SC_PHYS_PAGES` times the page size on
+Linux, `hw.memsize` on Darwin. The machine's, not a cgroup's limit. A task
+may call it.
 
 ```ts
 function totalMemory(): i64
@@ -474,11 +667,15 @@ function totalMemory(): i64
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The bytes, or `-1` where the host does not say.
+
 </scalar-field>
 
 ## waitPid
 
-`[pid, status]` for a child that exited, `[0, 0]` under WNOHANG (flag 1) with none, or `[-errno, 0]`.
+Reap a child. The status is `spawnSync`'s: the exit code, or `128 + n`
+when signal `n` ended it. An array because the language has no tuple.
 
 ```ts
 function waitPid(pid: i32, flags: i32): i32[]
@@ -487,19 +684,34 @@ function waitPid(pid: i32, flags: i32): i32[]
 #### Parameters
 
 <scalar-field name="pid" type="i32" required>
+
+A child's pid, or `-1` for any child.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`0` to block, or `1` for WNOHANG.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32[]">
+
+A fresh `[pid, status]`; `[0, 0]` for a WNOHANG wait with a child
+  left and none exited; `[-10, 0]` ECHILD with no child to wait for,
+  `[-4, 0]` EINTR when a signal interrupted the wait (after `signalFd()` a
+  blocking wait restarts and never sees it), `[-22, 0]` for any other flag
+  bit or a pid that is neither `-1` nor positive.
+
 </scalar-field>
 
 ## wallClockNanos
 
-The wall clock in nanoseconds since the Unix epoch; it steps when the system time is set.
+`CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC: `Date.now`'s clock
+at a nanosecond's grain. It steps, and can go backwards, when the system
+time is set, so a duration is `monotonicNanos`'s job. Not refused on wasm.
 
 ```ts
 function wallClockNanos(): i64
@@ -508,6 +720,9 @@ function wallClockNanos(): i64
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The timestamp.
+
 </scalar-field>
 
 ## Constants

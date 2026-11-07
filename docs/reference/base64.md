@@ -12,6 +12,18 @@ import {
 } from "nish/base64";
 ```
 
+```ts
+import { base64Encode, base64EncodeInto, base64EncodedLength } from "nish/base64";
+
+export const main = (): i32 => {
+  const hi: u8[] = [72, 105];                    // "Hi"
+  const text: string = base64Encode(hi);         // "SGk="
+  const out: u8[] = new Array<u8>(base64EncodedLength(2) + 1);
+  const end: i32 = base64EncodeInto(hi, 0, 2, out, 1); // out[1..5) is "SGk=", end is 5
+  return end;
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="base64Encode" icon="phosphor/regular/function" href="#base64encode">
@@ -34,9 +46,9 @@ The characters `n` bytes encode to: four for every three, a short final group co
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="The alphabet is `A-Z a-z 0-9 + /`">
 
-The alphabet is `A-Z a-z 0-9 + /`. Every three bytes become four characters,
+Every three bytes become four characters,
 and a final group of one or two bytes becomes two or three characters filled
 out to four with `=` (RFC 4648 §4, the padding rules of §3.2), so the text is
 always a multiple of four long.
@@ -47,21 +59,30 @@ always a multiple of four long.
   can be encoded chunk by chunk straight into its output buffer.
 - `base64Encode(bytes)` is the whole array as a string.
 
-</scalar-callout>
+</scalar-detail>
 
-This module only encodes: what it is for writes base64 and never reads it
+<scalar-detail title="This module only encodes">
+
+what it is for writes base64 and never reads it
 back. It is not the strict decoder of `nish/crypto/base64url`, which is a
 different alphabet without padding and is written not to branch on the data;
 what goes through here is pixels, not secrets, so a sextet becomes its
 character by indexing the alphabet. The output is ASCII, so the string is
 the same bytes natively and under Node.
 
-Private helpers share the importing program's flat symbol namespace
-(`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
+</scalar-detail>
+
+<scalar-detail title="Private helpers carry the module's name">
+
+**Private helpers carry the module's name** because they share the
+importing program's flat symbol namespace (`docs/wp26-stdlib.md` §3e).
+
+</scalar-detail>
 
 ## base64Encode
 
-`bytes` as padded base64. Panics past 1,610,612,733 bytes, whose encoding would not fit a string.
+`bytes` as padded base64. Panics past 1,610,612,733 bytes, whose encoding
+would not fit a string.
 
 ```ts
 function base64Encode(bytes: u8[]): string
@@ -70,11 +91,17 @@ function base64Encode(bytes: u8[]): string
 #### Parameters
 
 <scalar-field name="bytes" type="u8[]" required>
+
+The bytes to encode, all of them; an empty array answers `""`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+A fresh string holding the padded encoding.
+
 </scalar-field>
 
 ## base64EncodeInto
@@ -98,23 +125,43 @@ function base64EncodeInto(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The bytes to encode from; only `src[off..off+len)` is read.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `src` the bytes to encode start.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes of `src` to encode; zero writes nothing and
+  answers `at`.
+
 </scalar-field>
 
 <scalar-field name="dst" type="u8[]" required>
+
+The buffer the characters are written into, one ASCII byte per
+  character; bytes outside the written range are left as they were.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `dst` the first character goes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `dst` just past the last character written.
+
 </scalar-field>
 
 ## base64EncodedLength
@@ -130,9 +177,16 @@ function base64EncodedLength(n: i32): i32
 #### Parameters
 
 <scalar-field name="n" type="i32" required>
+
+How many bytes are to be encoded; zero answers zero.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The number of base64 characters, padding included, that `n` bytes
+  encode to: always a multiple of four.
+
 </scalar-field>

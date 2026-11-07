@@ -2,7 +2,7 @@
 
 # `nish:async`
 
-The `nish:async` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+Tasks for `async` functions: start one and go on, or await two to eight at once.
 
 ```ts
 import {
@@ -11,25 +11,66 @@ import {
 } from "nish:async";
 ```
 
+```ts
+import { awaitAll, spawn } from "nish:async";
+
+async function double(x: i32): Promise<i32> {
+  return x * 2;
+}
+
+async function log(x: i32): Promise<void> {
+  console.log(x);
+}
+
+async function run(): Promise<void> {
+  const [c, d] = await awaitAll(double(1), double(2));
+  spawn(log(c + d));
+}
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="awaitAll" icon="phosphor/regular/function" href="#awaitall">
 
-Await every call at once; the answers come in the order the calls are written.
+Wait for two calls at once.
 
 </scalar-card>
 
 <scalar-card title="spawn" icon="phosphor/regular/function" href="#spawn">
 
-Start `task` and go on without its answer; it runs until it first waits.
+Start `task` as a task of its own and go on without waiting for it.
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+The two are reached only through the import. Each argument is a direct call
+to an `async` function, written where it is made, which the checker holds
+it to (`src/async-check.ts`); `tsc` sees ordinary promises.
+
+</scalar-callout>
+
+There is no `async` in a wasm build: under a `wasm32` target or
+`--profile wasi` an `async` function is NL2652.
+
+<scalar-detail title="Under `--emit-ts`">
+
+`nish:async` is `nish/runtime/async.mjs`: `awaitAll`
+is `Promise.all` over its calls, and `spawn` starts its task without
+awaiting it and keeps it, for the launcher to wait on before it exits. The
+output resumes in Node's order, not the native one.
+
+</scalar-detail>
+
+Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#async-functions-async-and-await
+
 ## awaitAll
 
-Await every call at once; the answers come in the order the calls are written.
+Wait for two calls at once. It is awaited into one name per call,
+`const [a, b] = await awaitAll(...)`; one call, or an `awaitAll` not so
+destructured, is NL2647.
 
 ```ts
 function awaitAll<A, B>(
@@ -41,15 +82,28 @@ function awaitAll<A, B>(
 #### Parameters
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
+
+The first direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="b" type="Promise&lt;B&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Promise&lt;[A, B]&gt;">
+
+The answers, in the order the calls are written.
+
 </scalar-field>
+
+Wait for three calls at once. It is awaited into one name per call,
+`const [a, b, c] = await awaitAll(...)`; one call, or an `awaitAll` not so
+destructured, is NL2647.
 
 ```ts
 function awaitAll<A, B, C>(
@@ -62,18 +116,34 @@ function awaitAll<A, B, C>(
 #### Parameters
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
+
+The first direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="b" type="Promise&lt;B&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="c" type="Promise&lt;C&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C]&gt;">
+
+The answers, in the order the calls are written.
+
 </scalar-field>
+
+Wait for four calls at once. It is awaited into one name per call,
+`const [a, b, c, d] = await awaitAll(...)`; one call, or an `awaitAll` not so
+destructured, is NL2647.
 
 ```ts
 function awaitAll<A, B, C, D>(
@@ -87,21 +157,40 @@ function awaitAll<A, B, C, D>(
 #### Parameters
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
+
+The first direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="b" type="Promise&lt;B&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="c" type="Promise&lt;C&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="d" type="Promise&lt;D&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D]&gt;">
+
+The answers, in the order the calls are written.
+
 </scalar-field>
+
+Wait for five calls at once. It is awaited into one name per call,
+`const [a, b, c, d, e] = await awaitAll(...)`; one call, or an `awaitAll` not so
+destructured, is NL2647.
 
 ```ts
 function awaitAll<A, B, C, D, E>(
@@ -116,24 +205,46 @@ function awaitAll<A, B, C, D, E>(
 #### Parameters
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
+
+The first direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="b" type="Promise&lt;B&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="c" type="Promise&lt;C&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="d" type="Promise&lt;D&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="e" type="Promise&lt;E&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E]&gt;">
+
+The answers, in the order the calls are written.
+
 </scalar-field>
+
+Wait for six calls at once. It is awaited into one name per call,
+`const [a, b, c, d, e, f] = await awaitAll(...)`; one call, or an `awaitAll` not so
+destructured, is NL2647.
 
 ```ts
 function awaitAll<A, B, C, D, E, F>(
@@ -149,27 +260,52 @@ function awaitAll<A, B, C, D, E, F>(
 #### Parameters
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
+
+The first direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="b" type="Promise&lt;B&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="c" type="Promise&lt;C&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="d" type="Promise&lt;D&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="e" type="Promise&lt;E&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="f" type="Promise&lt;F&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E, F]&gt;">
+
+The answers, in the order the calls are written.
+
 </scalar-field>
+
+Wait for seven calls at once. It is awaited into one name per call,
+`const [a, b, c, d, e, f, g] = await awaitAll(...)`; one call, or an `awaitAll` not so
+destructured, is NL2647.
 
 ```ts
 function awaitAll<A, B, C, D, E, F, G>(
@@ -186,30 +322,58 @@ function awaitAll<A, B, C, D, E, F, G>(
 #### Parameters
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
+
+The first direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="b" type="Promise&lt;B&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="c" type="Promise&lt;C&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="d" type="Promise&lt;D&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="e" type="Promise&lt;E&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="f" type="Promise&lt;F&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="g" type="Promise&lt;G&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E, F, G]&gt;">
+
+The answers, in the order the calls are written.
+
 </scalar-field>
+
+Wait for eight calls at once. It is awaited into one name per call,
+`const [a, b, c, d, e, f, g, h] = await awaitAll(...)`; one call, or an `awaitAll` not so
+destructured, is NL2647.
 
 ```ts
 function awaitAll<A, B, C, D, E, F, G, H>(
@@ -227,37 +391,66 @@ function awaitAll<A, B, C, D, E, F, G, H>(
 #### Parameters
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
+
+The first direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="b" type="Promise&lt;B&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="c" type="Promise&lt;C&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="d" type="Promise&lt;D&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="e" type="Promise&lt;E&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="f" type="Promise&lt;F&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="g" type="Promise&lt;G&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 <scalar-field name="h" type="Promise&lt;H&gt;" required>
+
+The next direct call to an `async` function.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Promise&lt;[A, B, C, D, E, F, G, H]&gt;">
+
+The answers, in the order the calls are written.
+
 </scalar-field>
 
 ## spawn
 
-Start `task` and go on without its answer; it runs until it first waits.
+Start `task` as a task of its own and go on without waiting for it. It
+runs at once until it first waits on the outside world, then `spawn`
+returns; a task that never waits has finished before `spawn` returns.
 
 ```ts
 function spawn(task: Promise<void>): void
@@ -266,4 +459,9 @@ function spawn(task: Promise<void>): void
 #### Parameters
 
 <scalar-field name="task" type="Promise&lt;void&gt;" required>
+
+A direct call to an `async` function (NL2644). Nothing reads
+  its answer, so it answers `void` or a `Result` it reports itself
+  (NL2646).
+
 </scalar-field>

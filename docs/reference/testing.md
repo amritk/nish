@@ -11,12 +11,12 @@ import {
 ```
 
 ```ts
-import { Suite } from "../std/testing";
+import { Suite } from "nish/testing";
 
-export const main = (): number => {
+export const main = (): i32 => {
   const t = new Suite("arrays");
   const a: i32[] = [1, 2, 3];
-  if (!t.eqI32("length", a.length, 3)) {
+  if (!t.eqI32("length", toI32(a.length), 3)) {
     return t.done();          // a[2] below would panic, not fail
   }
   t.eqI32("last", a[2], 3);
@@ -34,18 +34,21 @@ One run of checks, and the tally it reports.
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="It is the other half of `tests/run.js`">
 
-The repository's own suite is `tests/run.js`, a Node program: it compiles the
-corpus, assembles it, links it and diffs the result against a golden, so it
-has to be able to spawn a compiler and read a directory. This module answers
-the other half of the question — a *program* that checks its own behaviour
-and reports it — and it answers it in the language, with no Node anywhere.
+The repository's own suite is
+`tests/run.js`, a Node program: it compiles the corpus, assembles it, links
+it and diffs the result against a golden, so it has to be able to spawn a
+compiler and read a directory. This module answers the other half of the
+question — a *program* that checks its own behaviour and reports it — and it
+answers it in the language, with no Node anywhere.
 
-</scalar-callout>
+</scalar-detail>
 
-Five language rules shape the API, and each of them removes a shape that a
-JavaScript test framework would have reached for first:
+<scalar-detail title="Five language rules shape the API">
+
+**Five language rules shape the API**, and each of them removes a shape that
+a JavaScript test framework would have reached for first:
 
 1. **A function is not a value** ([LANGUAGE.md](language.md) §
    Functions), so there is no `test("name", () => { ... })`. A suite is an
@@ -70,14 +73,23 @@ JavaScript test framework would have reached for first:
 5. **There are no optional or default parameters**, so every assertion
    takes its name and its detail in full.
 
-The output is deliberately the shape `tests/run.js` prints — `PASS  <name>`,
-`FAIL  <name>` with an indented detail line, `SKIP  <name> (<reason>)`, and a
-summary that ends `N passed, M failed, K skipped` — so a Nish test program
-reads like the rest of the suite and a skip is counted rather than merely
-mentioned. A green run that skipped half its checks should look different
-from one that proved everything.
+</scalar-detail>
 
-The widths are spelled explicitly (`i32`, `i64`, `f64`) rather than as
+<scalar-detail title="The output is deliberately the shape `tests/run.js` prints">
+
+**The output is deliberately the shape `tests/run.js` prints** —
+`PASS  <name>`, `FAIL  <name>` with an indented detail line,
+`SKIP  <name> (<reason>)`, and a summary that ends
+`N passed, M failed, K skipped` — so a Nish test program reads like the rest
+of the suite and a skip is counted rather than merely mentioned. A green run
+that skipped half its checks should look different from one that proved
+everything.
+
+</scalar-detail>
+
+<scalar-detail title="The widths are spelled explicitly">
+
+**The widths are spelled explicitly** (`i32`, `i64`, `f64`) rather than as
 `number`, so the module means the same thing under `--number-mode f64` as it
 does by default, exactly as `examples/arrays.ts` does — and every length this
 module reads from a builtin is converted with `toI32`, because `.length`
@@ -86,6 +98,8 @@ sufficient (`docs/wp26-stdlib.md` §4). Without the conversion the two
 comparisons against a length below would lower to `fcmp` on an `f64` in that
 mode and to `icmp` on an `i32` here, which is the same module compiling to
 two different programs.
+
+</scalar-detail>
 
 ## Suite
 
@@ -101,23 +115,18 @@ class Suite
 
 | Member | |
 | --- | --- |
-| `new Suite(name: string)` |  |
-| `failed: i32` |  |
-| `failures: string[]` | The names of the checks that failed, recapped by `done`. The detail of each was printed when it happened; this is the list a reader wants after a hundred lines of output have scrolled the failures off the screen. |
-| `name: string` | Names the summary line, so several suites in one program stay apart. |
-| `passed: i32` |  |
-| `skipped: i32` |  |
+| `new Suite(name: string)` | An empty suite: nothing passed, failed or skipped yet. |
 | `contains(name: string, haystack: string, needle: string): boolean` | Whether `needle` occurs anywhere in `haystack`, which is the assertion a check over captured output makes: the message a compiler prints is pinned by the sentence it has to contain and not by the whole stream, because the rest of that stream is a version line and a file path that change for reasons the check is not about.<br><br>The detail quotes the needle in full and the haystack only to `TESTING_EXCERPT` bytes: the needle is what a reader compares, and the haystack is what they have already got. |
 | `containsAll(name: string, haystack: string, needles: string[]): boolean` | Whether every one of `needles` occurs in `haystack` — one check for an expectation file that holds a fragment per line, which is the shape `tests/cases/<name>.err` and `tests/link/<name>/expected.ir` both have.<br><br>An empty needle is ignored, so the blank lines of such a file cost the caller no filtering, and a list with nothing in it passes: an expectation that says nothing is met by anything. The detail names the first fragment that is missing and how many are, because a detail that quoted all of them would bury the one a reader fixes first. |
 | `done(): i32` | Prints the recap and the summary, and answers the exit code: 0 when nothing failed, 1 otherwise. A skip is not a failure, so it does not move the code — it moves the count on the summary line, which is the whole reason the count is printed. |
-| `eqBool(name: string, actual: boolean, expected: boolean): boolean` |  |
+| `eqBool(name: string, actual: boolean, expected: boolean): boolean` | Passes when `actual` equals `expected`; a failure prints both. |
 | `eqF64(name: string, actual: f64, expected: f64): boolean` | Exact `f64` equality, which is `fcmp oeq`: `NaN` is equal to nothing, so a check of a computation that can produce one fails rather than passing by accident. Use `nearF64` for anything that went through arithmetic. |
-| `eqI32(name: string, actual: i32, expected: i32): boolean` |  |
-| `eqI64(name: string, actual: i64, expected: i64): boolean` |  |
+| `eqI32(name: string, actual: i32, expected: i32): boolean` | Passes when `actual` equals `expected`; a failure prints both. |
+| `eqI64(name: string, actual: i64, expected: i64): boolean` | Passes when `actual` equals `expected`; a failure prints both. |
 | `eqLines(name: string, actual: string[], expected: string[]): boolean` | Line-by-line equality of two texts already split into lines, reporting the first line that differs.<br><br>It is `eqStr`'s answer for the case `eqStr` reports badly: a golden of four hundred lines against an emitted four hundred and one prints two walls of text under `expected ... got ...`, and the reader's next move is to diff them by hand. `<end of input>` is the side that ran out, which is what a missing or an extra line at the end looks like from here, and the line number is the one an editor takes. |
 | `eqStr(name: string, actual: string, expected: string): boolean` | String equality by content (`nish_str_eq`), which is what `===` on two strings already means. The values are quoted in the message so that a trailing space or an empty string is visible in the diff. |
 | `fail(name: string, detail: string): boolean` | Records a failure, with `detail` on its own indented line when there is one. An empty `detail` prints no second line, which is what a check whose name already says everything wants. |
 | `nearF64(name: string, actual: f64, expected: f64, tolerance: f64): boolean` | `f64` equality within `tolerance`, the absolute difference. The tolerance is a parameter rather than a constant here because the right epsilon belongs to the computation, not to the harness. |
-| `ok(name: string, condition: boolean): boolean` |  |
+| `ok(name: string, condition: boolean): boolean` | Passes when `condition` is true. |
 | `pass(name: string): boolean` | Records a pass. Public because a program with a check of its own shape still wants the tally. |
 | `skip(name: string, reason: string): void` | Records a check that did not run, and why. It answers `void` rather than a `boolean` because there is no outcome to branch on: the caller has already decided to skip, the way `tests/run.js` decides when `llvm-as` is missing. |

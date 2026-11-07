@@ -2,7 +2,7 @@
 
 # `nish:term`
 
-The `nish:term` builtin module: the globals of the same names, importable. Its members are declared in `runtime/nish.d.ts`; [the language reference](language.md#builtin-modules-nish) is the normative list.
+Terminal input for a full-screen program: read a key the moment it is pressed, wait for one with a timeout that doubles as a frame clock, and ask the terminal whether it is one, how big it is, and to stop echoing.
 
 ```ts
 import {
@@ -15,49 +15,114 @@ import {
 } from "nish:term";
 ```
 
+```ts
+import { readStdin, setRawMode, waitStdin } from "nish:term";
+
+export const main = (): number => {
+  setRawMode(true);
+  const keys: u8[] = new Array<u8>(16);
+  let running = true;
+  while (running) {
+    if (waitStdin(16)) {
+      const n = readStdin(keys, 0, keys.length);
+      if (n === 0 || (n < 0 && n !== -11)) {
+        running = false; // stdin ended, or reading it failed
+      }
+      for (let i = 0; i < n && i < keys.length; i++) {
+        if (keys[i] === 113) {
+          running = false; // q
+        }
+      }
+    }
+    // advance and draw one frame
+  }
+  setRawMode(false);
+  return 0;
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="isTerminal" icon="phosphor/regular/function" href="#isterminal">
 
-Whether descriptor `fd` is a terminal (`isatty`).
+Whether a descriptor is a terminal, `isatty`; under Node `tty.isatty`.
 
 </scalar-card>
 
 <scalar-card title="readStdin" icon="phosphor/regular/function" href="#readstdin">
 
-Up to `len` bytes of stdin into `buf` from `off`, never blocking: the count, 0 at end of stream, or -11 when nothing is waiting.
+Up to `len` bytes of stdin into `buf`, without waiting: it asks `select` with a zero timeout before it reads.
 
 </scalar-card>
 
 <scalar-card title="setRawMode" icon="phosphor/regular/function" href="#setrawmode">
 
-Raw mode on stdin's terminal (0), or the mode it had back; -25 when stdin is not a terminal.
+Put stdin's terminal in raw mode, or back as it was.
 
 </scalar-card>
 
 <scalar-card title="setTerminalRestore" icon="phosphor/regular/function" href="#setterminalrestore">
 
-Bytes the runtime writes to the terminal on stdout at exit, on a panic and on every signal that ends the program (SIGKILL aside), before termios is restored.
+Keep a copy of `bytes` for the runtime to write to the terminal on stdout as the program ends, before termios is restored: the escapes that leave an alternate screen, show the cursor or turn mouse reporting off.
 
 </scalar-card>
 
 <scalar-card title="terminalSize" icon="phosphor/regular/function" href="#terminalsize">
 
-`[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one, `[0, 0]` when it has no size set.
+The size of the terminal on stdout, or on stderr when stdout is not one, read fresh on each call: read it again each frame to follow a resize.
 
 </scalar-card>
 
 <scalar-card title="waitStdin" icon="phosphor/regular/function" href="#waitstdin">
 
-Wait up to `timeoutMs` (negative: forever) for stdin to be readable (its end and an error count): `true` when it is, `false` when the time passed.
+Wait until stdin is readable or the time passes.
 
 </scalar-card>
 
 </scalar-grid>
 
+<scalar-callout type="info">
+
+Each export is the global of the same name, renamed. The six carry the
+`tty` capability, not `net`, and are C in `runtime/runtime-term.c`, which
+section GC leaves out of a program that calls none of them. Errors are
+numbers in `nish:net`'s shape: `>= 0` is success and a negative number the
+errno, negated; `-11` (nothing is waiting) and `-25` (not a terminal) are
+the same on every platform. stdin is never made non-blocking, because
+`O_NONBLOCK` would be shared with the shell.
+
+</scalar-callout>
+
+Linux and Darwin only, and WASI with differences: there `readStdin` waits
+for its bytes (call `waitStdin` first), a `waitStdin` waits at least 10 ms,
+and there is no terminal. A freestanding `--target wasm32` build refuses all
+six. Under Node `readStdin`, `waitStdin`, `setRawMode` and
+`setTerminalRestore` throw, each naming itself; in a browser so do they, and
+there `isTerminal` answers `false` and `terminalSize` `[-25, 0]`.
+
+<scalar-detail title="Raw mode">
+
+It is `cfmakeraw`'s input side without its output side: echo,
+line editing, CR-to-NL, flow control and parity stripping are off, and a key
+arrives as its bytes (an arrow as `ESC [ A`). `ISIG` stays on, so Ctrl-C is
+still SIGINT; `OPOST` stays on, so `"\n"` needs no `"\r"`.
+
+</scalar-detail>
+
+<scalar-detail title="The terminal is always put back">
+
+on `setRawMode(false)`, when `main`
+returns or `process.exit` is called, on every panic, and on every signal
+whose default action ends the program, SIGKILL aside. Ctrl-Z restores it
+while the program is stopped and enters raw mode again on `fg`.
+
+</scalar-detail>
+
+Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishterm-terminal-input
+
 ## isTerminal
 
-Whether descriptor `fd` is a terminal (`isatty`).
+Whether a descriptor is a terminal, `isatty`; under Node `tty.isatty`.
 
 ```ts
 function isTerminal(fd: i32): boolean
@@ -66,16 +131,25 @@ function isTerminal(fd: i32): boolean
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+The descriptor, `0` for stdin, `1` stdout, `2` stderr.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` for a terminal; `false` for a pipe, a file, and always
+  under WASI.
+
 </scalar-field>
 
 ## readStdin
 
-Up to `len` bytes of stdin into `buf` from `off`, never blocking: the count, 0 at end of stream, or -11 when nothing is waiting.
+Up to `len` bytes of stdin into `buf`, without waiting: it asks `select`
+with a zero timeout before it reads. Under `--profile wasi` it waits for
+its bytes instead.
 
 ```ts
 function readStdin(
@@ -88,22 +162,42 @@ function readStdin(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+A writable `u8[]`.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the first byte goes. The range `[off, off + len)` is
+  checked as `netRead`'s is.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The most bytes to read. A `len` of `0` answers `0`, so ask for
+  at least one.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The count, `0` at the end of the stream, `-11` when nothing is
+  waiting, or another negative errno.
+
 </scalar-field>
 
 ## setRawMode
 
-Raw mode on stdin's terminal (0), or the mode it had back; -25 when stdin is not a terminal. Restored at exit, on a panic and on every signal that ends the program, SIGKILL aside.
+Put stdin's terminal in raw mode, or back as it was. Each switch into raw
+mode saves the termios that was there; asking for the mode it is already
+in changes nothing, so `setRawMode(false)` is always safe. The terminal is
+restored at exit, on a panic and on every signal that ends the program,
+SIGKILL aside. A program started in the background is stopped by SIGTTOU
+here until `fg`.
 
 ```ts
 function setRawMode(on: boolean): i32
@@ -112,16 +206,29 @@ function setRawMode(on: boolean): i32
 #### Parameters
 
 <scalar-field name="on" type="boolean" required>
+
+`true` for raw mode, `false` for the mode it had.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`, `-25` when stdin is not a terminal (and `0` for `false`
+  there), or the host's `-errno` when the terminal refuses.
+
 </scalar-field>
 
 ## setTerminalRestore
 
-Bytes the runtime writes to the terminal on stdout at exit, on a panic and on every signal that ends the program (SIGKILL aside), before termios is restored. Replaces the previous string; "" clears it. 0, -25 when stdout is not a terminal, -7 (E2BIG) past NISH_TERM_RESTORE_MAX bytes.
+Keep a copy of `bytes` for the runtime to write to the terminal on stdout
+as the program ends, before termios is restored: the escapes that leave an
+alternate screen, show the cursor or turn mouse reporting off. They go out
+once, with `write` alone, when `main` returns or `process.exit` is called,
+on every panic and on every signal whose default ends the program, raw
+mode or not; Ctrl-Z and `setRawMode(false)` write nothing. Set them again
+with each change, last the set that undoes them all.
 
 ```ts
 function setTerminalRestore(bytes: string): i32
@@ -130,16 +237,26 @@ function setTerminalRestore(bytes: string): i32
 #### Parameters
 
 <scalar-field name="bytes" type="string" required>
+
+The bytes to keep, replacing what was kept before; `""`
+  keeps nothing.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`0`; `-25` when stdout is not a terminal and `-7` (E2BIG) past
+  `NISH_TERM_RESTORE_MAX`, 4096 bytes, both keeping what was there.
+
 </scalar-field>
 
 ## terminalSize
 
-`[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one, `[0, 0]` when it has no size set.
+The size of the terminal on stdout, or on stderr when stdout is not one,
+read fresh on each call: read it again each frame to follow a resize.
+Under Node, its `columns` and `rows`.
 
 ```ts
 function terminalSize(): i32[]
@@ -148,11 +265,21 @@ function terminalSize(): i32[]
 #### Returns
 
 <scalar-field name="returns" type="i32[]">
+
+A new `[columns, rows]`; `[-errno, 0]` when neither stream is a
+  terminal, `[-25, 0]` for "not a terminal", and `[0, 0]` for a terminal no
+  one set a size for.
+
 </scalar-field>
 
 ## waitStdin
 
-Wait up to `timeoutMs` (negative: forever) for stdin to be readable (its end and an error count): `true` when it is, `false` when the time passed.
+Wait until stdin is readable or the time passes. Readable includes its end
+and an error, so the read after it answers at once, with `0` or a negative
+errno that is not `-11`, which a loop treats as the end. A Ctrl-Z and
+`fg` after `setRawMode(true)` does not end the wait early: it goes on for
+what is left of the timeout. Before raw mode Linux goes on and Darwin ends
+the wait. Not `willreturn`.
 
 ```ts
 function waitStdin(timeoutMs: i32): boolean
@@ -161,9 +288,17 @@ function waitStdin(timeoutMs: i32): boolean
 #### Parameters
 
 <scalar-field name="timeoutMs" type="i32" required>
+
+The most milliseconds to wait; negative waits for ever.
+  Under WASI a wait is at least 10 ms.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when stdin is readable, `false` when the time ran out
+  first or a signal ended the wait.
+
 </scalar-field>

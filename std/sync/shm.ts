@@ -139,6 +139,12 @@ export class ShmError {
   /** What it means, such as `File exists`. */
   message: string
 
+  /**
+   * The error for one errno, with its text: `strerror`'s, except that 95
+   * (`SHM_UNSUPPORTED` negated) reads "not supported on this platform".
+   * @param code the errno the runtime answered, positive (the negation of a
+   *   failed call's result), such as `SHM_EXISTS`
+   */
   constructor(code: i32) {
     this.code = code
     this.message = code === 95 ? "not supported on this platform" : strerror(code)
@@ -156,6 +162,15 @@ const shmDone = (rc: i32): Result<void, ShmError> => {
 /**
  * Creates the region `name`, `bytes` long and zeroed, mode 0600, and maps it.
  * `SHM_EXISTS` when the name is taken: unlink a stale one first.
+ * @param name the region's name, 1 to 30 of `A-Z a-z 0-9 . _ -`, not
+ *   starting with `.`; anything else is `SHM_INVALID`
+ * @param bytes the region's length, from 1 to 1 GiB; outside that is
+ *   `SHM_INVALID`
+ * @returns a new `SharedRegion` mapping the fresh region, which this thread
+ *   alone can use and which stays mapped until its `close` or the process
+ *   ends; or the `ShmError`: `SHM_EXISTS`, `SHM_INVALID`, `SHM_TOO_MANY`
+ *   when this thread has 63 regions open, code 95 on wasi, or the errno the
+ *   system gave
  */
 export const createRegion = (name: string, bytes: i32): Result<SharedRegion, ShmError> => {
   const h: i32 = nishshm_create(name, bytes)
@@ -168,6 +183,15 @@ export const createRegion = (name: string, bytes: i32): Result<SharedRegion, Shm
 /**
  * Maps the region `name` that some process of this user created. Its size is
  * the region's (on Darwin, rounded up to a page).
+ * @param name the name the region was created under, with `createRegion`'s
+ *   rules (`SHM_INVALID` otherwise)
+ * @returns a new `SharedRegion` on the same bytes every other mapping of the
+ *   name sees, which this thread alone can use until its `close`; or the
+ *   `ShmError`: `SHM_NOT_FOUND`, `SHM_ACCESS` for a region another user owns,
+ *   that others may read or write, or (on Linux) that is not a regular file
+ *   or has a second hard link, `SHM_INVALID` for a bad name or a region of
+ *   size 0 or over 1 GiB, `SHM_TOO_MANY`, code 95 on wasi, or the errno the
+ *   system gave
  */
 export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
   const h: i32 = nishshm_open(name)
@@ -180,10 +204,21 @@ export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
 /**
  * Removes the name, so no process can open it again; every mapping of it
  * stays valid until it is closed. `SHM_NOT_FOUND` when there is none.
+ * @param name the region's name, with `createRegion`'s rules (`SHM_INVALID`
+ *   otherwise)
+ * @returns `Ok()` once the name is gone, or the `ShmError`: `SHM_NOT_FOUND`,
+ *   `SHM_INVALID`, code 95 on wasi, or the errno the system gave
  */
 export const unlinkRegion = (name: string): Result<void, ShmError> => shmDone(nishshm_unlink(name))
 
-/** A fence of `order`, for the accesses around it. */
+/**
+ * A fence of `order`, for the accesses around it: C11's
+ * `atomic_thread_fence`, so it orders the calling thread's accesses, to
+ * regions and to its own memory, exactly as that fence does; `RELAXED` is no
+ * fence at all.
+ * @param order `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL` or `SEQ_CST`; any
+ *   other value panics
+ */
 export const fence = (order: i32): void => {
   nishshm_fence(order)
 }
@@ -194,33 +229,72 @@ export const fence = (order: i32): void => {
  */
 export class SharedRegion {
   /** The runtime's handle; it names nothing after `close`. */
-  handle: i32
+  private handle: i32
 
+  /**
+   * Wraps a handle the runtime answered. A program gets a region from
+   * `createRegion` or `openRegion` instead; a handle that names no region
+   * open on this thread makes every access panic, and `close` answer code 9.
+   * @param handle the runtime's handle for a mapped region, as
+   *   `nishshm_create` or `nishshm_open` answered it
+   */
   constructor(handle: i32) {
     this.handle = handle
   }
 
-  /** The region's length in bytes. */
+  /**
+   * The region's length in bytes.
+   * @returns the mapped length: what `createRegion` was given, or what
+   *   `openRegion` found (on Darwin, rounded up to a page)
+   */
   size(): i32 {
     return nishshm_size(this.handle)
   }
 
-  /** The 32-bit slot at `at`. */
+  /**
+   * Loads the 32-bit slot at `at`, one atomic load.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   4 with the whole slot inside the region; anything else panics
+   * @param order `RELAXED`, `ACQUIRE` or `SEQ_CST`; another panics
+   * @returns the value the slot held
+   */
   loadI32(at: i32, order: i32): i32 {
     return nishshm_load_i32(this.handle, at, order)
   }
 
-  /** Sets the 32-bit slot at `at` to `value`. */
+  /**
+   * Sets the 32-bit slot at `at` to `value`, one atomic store.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   4 with the whole slot inside the region; anything else panics
+   * @param value what the slot holds after
+   * @param order `RELAXED`, `RELEASE` or `SEQ_CST`; another panics
+   */
   storeI32(at: i32, value: i32, order: i32): void {
     nishshm_store_i32(this.handle, at, value, order)
   }
 
-  /** Adds `delta` to the 32-bit slot at `at`, wrapping, and answers the value before. */
+  /**
+   * Adds `delta` to the 32-bit slot at `at`, wrapping, and answers the value
+   * before, as one atomic read-modify-write.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   4 with the whole slot inside the region; anything else panics
+   * @param delta what is added; negative subtracts
+   * @param order any of the five orderings; another value panics
+   * @returns the value the slot held just before the add
+   */
   addI32(at: i32, delta: i32, order: i32): i32 {
     return nishshm_add_i32(this.handle, at, delta, order)
   }
 
-  /** Sets the 32-bit slot at `at` to `value` and answers the value before. */
+  /**
+   * Sets the 32-bit slot at `at` to `value` and answers the value before, as
+   * one atomic read-modify-write.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   4 with the whole slot inside the region; anything else panics
+   * @param value what the slot holds after
+   * @param order any of the five orderings; another value panics
+   * @returns the value the slot held just before
+   */
   exchangeI32(at: i32, value: i32, order: i32): i32 {
     return nishshm_exchange_i32(this.handle, at, value, order)
   }
@@ -228,27 +302,65 @@ export class SharedRegion {
   /**
    * Sets the 32-bit slot at `at` to `desired` if it holds `expected`, and
    * answers what it held: the exchange happened when that is `expected`.
+   * It never fails spuriously (a strong compare-exchange).
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   4 with the whole slot inside the region; anything else panics
+   * @param expected the value the slot must hold for the store to happen
+   * @param desired what the slot holds after, when it held `expected`
+   * @param order the ordering of a successful exchange, any of the five
+   *   (another value panics); a failed one is a load ordered as C++ derives
+   *   it (`ACQ_REL` fails `ACQUIRE`, `RELEASE` fails `RELAXED`, the others
+   *   fail as themselves)
+   * @returns what the slot held: `expected` when the exchange happened
    */
   compareExchangeI32(at: i32, expected: i32, desired: i32, order: i32): i32 {
     return nishshm_cas_i32(this.handle, at, expected, desired, order)
   }
 
-  /** The 64-bit slot at `at`. */
+  /**
+   * Loads the 64-bit slot at `at`, one atomic load.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   8 with the whole slot inside the region; anything else panics
+   * @param order `RELAXED`, `ACQUIRE` or `SEQ_CST`; another panics
+   * @returns the value the slot held
+   */
   loadI64(at: i32, order: i32): i64 {
     return nishshm_load_i64(this.handle, at, order)
   }
 
-  /** Sets the 64-bit slot at `at` to `value`. */
+  /**
+   * Sets the 64-bit slot at `at` to `value`, one atomic store.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   8 with the whole slot inside the region; anything else panics
+   * @param value what the slot holds after
+   * @param order `RELAXED`, `RELEASE` or `SEQ_CST`; another panics
+   */
   storeI64(at: i32, value: i64, order: i32): void {
     nishshm_store_i64(this.handle, at, value, order)
   }
 
-  /** Adds `delta` to the 64-bit slot at `at`, wrapping, and answers the value before. */
+  /**
+   * Adds `delta` to the 64-bit slot at `at`, wrapping, and answers the value
+   * before, as one atomic read-modify-write.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   8 with the whole slot inside the region; anything else panics
+   * @param delta what is added; negative subtracts
+   * @param order any of the five orderings; another value panics
+   * @returns the value the slot held just before the add
+   */
   addI64(at: i32, delta: i64, order: i32): i64 {
     return nishshm_add_i64(this.handle, at, delta, order)
   }
 
-  /** Sets the 64-bit slot at `at` to `value` and answers the value before. */
+  /**
+   * Sets the 64-bit slot at `at` to `value` and answers the value before, as
+   * one atomic read-modify-write.
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   8 with the whole slot inside the region; anything else panics
+   * @param value what the slot holds after
+   * @param order any of the five orderings; another value panics
+   * @returns the value the slot held just before
+   */
   exchangeI64(at: i32, value: i64, order: i32): i64 {
     return nishshm_exchange_i64(this.handle, at, value, order)
   }
@@ -256,17 +368,45 @@ export class SharedRegion {
   /**
    * Sets the 64-bit slot at `at` to `desired` if it holds `expected`, and
    * answers what it held: the exchange happened when that is `expected`.
+   * It never fails spuriously (a strong compare-exchange).
+   * @param at the slot's byte offset from the region's start, a multiple of
+   *   8 with the whole slot inside the region; anything else panics
+   * @param expected the value the slot must hold for the store to happen
+   * @param desired what the slot holds after, when it held `expected`
+   * @param order the ordering of a successful exchange, any of the five
+   *   (another value panics); a failed one is a load ordered as C++ derives
+   *   it (`ACQ_REL` fails `ACQUIRE`, `RELEASE` fails `RELAXED`, the others
+   *   fail as themselves)
+   * @returns what the slot held: `expected` when the exchange happened
    */
   compareExchangeI64(at: i32, expected: i64, desired: i64, order: i32): i64 {
     return nishshm_cas_i64(this.handle, at, expected, desired, order)
   }
 
-  /** Copies `len` bytes of the region at `at` into `dst[off, off + len)`. */
+  /**
+   * Copies `len` bytes of the region at `at` into `dst[off, off + len)`. A
+   * plain copy, not atomic: a writer in another process racing it can tear
+   * what it reads, and only the atomics around it order it.
+   * @param at where in the region the copy starts, in bytes
+   * @param dst the buffer the bytes land in
+   * @param off where in `dst` the first byte goes
+   * @param len how many bytes to copy; the range must fit both the region from
+   *   `at` and `dst` from `off`, or it panics
+   */
   read(at: i32, dst: u8[], off: i32, len: i32): void {
     nishshm_read(this.handle, at, dst, toU64(dst.length), toU64(off), toU64(len))
   }
 
-  /** Copies `src[off, off + len)` into the region at `at`. */
+  /**
+   * Copies `src[off, off + len)` into the region at `at`. A plain copy, not
+   * atomic: publish it to another process with a `RELEASE` (or `SEQ_CST`)
+   * store after it.
+   * @param at where in the region the first byte goes
+   * @param src the bytes to copy
+   * @param off where in `src` the copy starts
+   * @param len how many bytes to copy; the range must fit both `src` from `off`
+   *   and the region from `at`, or it panics
+   */
   write(at: i32, src: readonly u8[], off: i32, len: i32): void {
     nishshm_write(this.handle, at, src, toU64(src.length), toU64(off), toU64(len))
   }
@@ -274,7 +414,17 @@ export class SharedRegion {
   /**
    * Sleeps while the 32-bit slot at `at` holds `expected`, at most
    * `timeoutMs` (negative: no limit): `SHM_WOKEN`, `SHM_NOT_EQUAL`,
-   * `SHM_TIMED_OUT`, or `SHM_UNSUPPORTED` off Linux.
+   * `SHM_TIMED_OUT`, or `SHM_UNSUPPORTED` off Linux. It promises no
+   * ordering: load the slot again, with the ordering the caller needs, after
+   * it returns.
+   * @param at the 32-bit slot's byte offset, a multiple of 4 inside the
+   *   region; anything else panics, off Linux too
+   * @param expected the value the slot must still hold for the call to sleep
+   * @param timeoutMs the longest sleep, in milliseconds; negative for no limit
+   * @returns `SHM_WOKEN` when woken, interrupted by a signal or for no reason
+   *   the caller can see; `SHM_NOT_EQUAL` when the slot did not hold
+   *   `expected`; `SHM_TIMED_OUT`; `SHM_UNSUPPORTED` off Linux; or another
+   *   negated errno the futex gave
    */
   waitI32(at: i32, expected: i32, timeoutMs: i32): i32 {
     return nishshm_wait_i32(this.handle, at, expected, timeoutMs)
@@ -283,6 +433,11 @@ export class SharedRegion {
   /**
    * Wakes at most `count` of the processes sleeping on the 32-bit slot at
    * `at`: how many it woke, or `SHM_UNSUPPORTED` off Linux.
+   * @param at the 32-bit slot's byte offset, a multiple of 4 inside the
+   *   region; anything else panics, off Linux too
+   * @param count the most sleepers to wake; negative wakes none
+   * @returns how many it woke, in any process; `SHM_UNSUPPORTED` off Linux, or
+   *   another negated errno the futex gave
    */
   wake(at: i32, count: i32): i32 {
     return nishshm_wake(this.handle, at, count)
@@ -296,17 +451,40 @@ export class SharedRegion {
    * memory, after which it is no window and `giveBack` panics. Pass a window
    * already given back as `reuse` to lend it again without a new header: each
    * lend without one keeps a few bytes for the life of the process.
+   * @param at where in the region the window starts, in bytes
+   * @param len the window's length in bytes; `[at, at + len)` must lie inside
+   *   the region, or it panics
+   * @param reuse null for a new window, or a window this region lent and that
+   *   was given back, to re-point; any other array panics
+   * @returns the window: `reuse` itself when one was passed, otherwise a new
+   *   array. Its bytes are the region's, shared with every process that maps
+   *   it, until `giveBack` or `close`
    */
   lend(at: i32, len: i32, reuse: u8[] | null = null): u8[] {
     return shmLend(this.handle, at, len, reuse)
   }
 
-  /** Empties `window`, which this region lent, and answers the length it had. */
+  /**
+   * Empties `window`, which this region lent, and answers the length it had.
+   * After it the array has length 0 and may be passed to `lend` as `reuse`.
+   * @param window a window this region lent and that is still lent; one given
+   *   back already, lent by another region, or moved off the region by a
+   *   `push` panics
+   * @returns the window's length just before (a `pop` may have shortened it)
+   */
   giveBack(window: u8[]): i32 {
     return shmGiveBack(this.handle, window)
   }
 
-  /** Unmaps the region; the handle names nothing after. The name stays until `unlinkRegion`. */
+  /**
+   * Unmaps the region; the handle names nothing after. The name stays until
+   * `unlinkRegion`. Every window still lent from it is emptied first, so an
+   * index into one after this panics rather than reading unmapped memory (a
+   * window a `push` moved off the region is the program's own array, and is
+   * left alone); any other access through this object panics too.
+   * @returns `Ok()` once it is unmapped, or a `ShmError` of code 9 when it was
+   *   closed already (or on wasi, where no region opens)
+   */
   close(): Result<void, ShmError> {
     return shmDone(nishshm_close(this.handle))
   }

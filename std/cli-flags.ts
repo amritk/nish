@@ -75,11 +75,27 @@ export const FLAG_ERR_UNKNOWN_COMMAND: i32 = 6
 
 /** One declared flag: its name without the `--`, its `FLAG_*` kind and its help. */
 export class FlagSpec {
+  /** @internal Used by `FlagTable`. */
   name: string
+  /** @internal Used by `FlagTable` and `ParsedFlags`. */
   kind: i32
+  /** @internal Used by `FlagTable`. */
   meta: string
+  /** @internal Used by `FlagTable`. */
   description: string
 
+  /**
+   * A flag record as `FlagTable` stores it. A program declares flags through
+   * the table's `string`, `number`, `boolean` and `repeatable` instead, which
+   * check the name first; this constructor checks nothing.
+   *
+   * @param name what follows `--` on the command line, such as `"output"`
+   * @param kind which `FLAG_*` kind the flag is, deciding whether it takes a
+   *   value and which reader returns it
+   * @param meta the placeholder the help row shows for its value, such as
+   *   `"<file>"`; empty for a boolean
+   * @param description the flag's line of help
+   */
   constructor(name: string, kind: i32, meta: string, description: string) {
     this.name = name
     this.kind = kind
@@ -93,11 +109,27 @@ export class FlagSpec {
  * split once so that matching does not split them per parse, and its help.
  */
 export class CommandSpec {
+  /** @internal Used by `FlagTable` and `ParsedFlags`. */
   path: string
+  /** @internal Used by `FlagTable`. */
   words: string[]
+  /** @internal Used by `FlagTable` and `ParsedFlags`. */
   shape: string
+  /** @internal Used by `FlagTable`. */
   description: string
 
+  /**
+   * A command record as `FlagTable` stores it. A program declares commands
+   * through `FlagTable.command` instead, which splits and checks the path;
+   * this constructor checks nothing.
+   *
+   * @param path the command's words joined by single spaces, such as
+   *   `"remote add"`
+   * @param words the same words one per element, kept as given, not copied
+   * @param shape what the help row shows after the path, such as
+   *   `"<name> <url>"`; may be empty
+   * @param description the command's line of help
+   */
   constructor(path: string, words: string[], shape: string, description: string) {
     this.path = path
     this.words = words
@@ -174,17 +206,27 @@ const isFlagName = (name: string): boolean => {
  * program's own text and a mistake there is a bug.
  */
 export class FlagTable {
+  /** @internal Used by `ParsedFlags`. */
   program: string
+  /** @internal Used by `ParsedFlags`. */
   flags: FlagSpec[]
+  /** @internal Used by `ParsedFlags`. */
   commands: CommandSpec[]
 
+  /**
+   * An empty table: no flags and no commands until the declaring methods add
+   * them.
+   *
+   * @param program the program's name as usage errors and their usage line
+   *   show it, such as `"git-lite"`
+   */
   constructor(program: string) {
     this.program = program
     this.flags = []
     this.commands = []
   }
 
-  /** The index of the flag `name` (without `--`), or `-1`. */
+  /** @internal Called by `ParsedFlags`. The index of the flag `name` (without `--`), or `-1`. */
   indexOf(name: string): i32 {
     for (let i: i32 = 0; i < toI32(this.flags.length); i++) {
       if (this.flags[i].name === name) {
@@ -195,7 +237,7 @@ export class FlagTable {
   }
 
   /** A flag of `kind`, after the checks every declaring method shares. */
-  declare(name: string, kind: i32, meta: string, description: string): void {
+  private declare(name: string, kind: i32, meta: string, description: string): void {
     if (!isFlagName(name)) {
       panic(
         `nish/cli-flags: a flag name is not empty and has no leading '-', '=' or whitespace, got "${name}"`
@@ -219,6 +261,13 @@ export class FlagTable {
    * A command: `path` is one or more words (`"remote add"`), `shape` what
    * follows them in the help (`"<name> <url>"`, may be empty). Declaring any
    * command makes leading words that spell none a usage error.
+   *
+   * @param path the words a person types to choose the command, separated by
+   *   whitespace; runs of whitespace collapse to one space. Panics when it has
+   *   no word, a word starts with `-`, or the path is already declared
+   * @param shape what the help and the usage hint show after the path, such
+   *   as `"<name> <url>"`; empty for none
+   * @param description the command's line in the `Commands` help section
    */
   command(path: string, shape: string, description: string): void {
     const words = splitWhitespace(path)
@@ -239,7 +288,16 @@ export class FlagTable {
     this.commands.push(new CommandSpec(joined, words, shape, description))
   }
 
-  /** A string flag: `--name value` or `--name=value`, once. */
+  /**
+   * A string flag: `--name value` or `--name=value`, once.
+   *
+   * @param name what follows `--`, such as `"output"`; panics on a name no
+   *   command line could match, one already declared, or a `no-x` beside a
+   *   declared boolean `x`
+   * @param meta the placeholder the help row and the missing-value message
+   *   show, such as `"<file>"`; when empty the message says "a value"
+   * @param description the flag's line in the `Flags` help section
+   */
   string(name: string, meta: string, description: string): void {
     this.declare(name, FLAG_STRING, meta, description)
   }
@@ -248,17 +306,41 @@ export class FlagTable {
    * A number flag, read as an `f64`: a finite decimal (`-2.5`, `1e3`, `.5`),
    * the same on every target. Hex, binary, `Infinity`, padding and `""` are
    * usage errors.
+   *
+   * @param name what follows `--`, such as `"jobs"`; panics on a name no
+   *   command line could match, one already declared, or a `no-x` beside a
+   *   declared boolean `x`
+   * @param meta the placeholder the help row and the missing-value message
+   *   show, such as `"<n>"`; when empty the message says "a value"
+   * @param description the flag's line in the `Flags` help section
    */
   number(name: string, meta: string, description: string): void {
     this.declare(name, FLAG_NUMBER, meta, description)
   }
 
-  /** A boolean flag: `--name` sets it, `--no-name` clears it, once. */
+  /**
+   * A boolean flag: `--name` sets it, `--no-name` clears it, once.
+   *
+   * @param name what follows `--`, such as `"verbose"`; panics on a name no
+   *   command line could match, one already declared, one whose `no-`
+   *   form is itself a declared flag, or a `no-x` beside a declared boolean
+   *   `x`
+   * @param description the flag's line in the `Flags` help section
+   */
   boolean(name: string, description: string): void {
     this.declare(name, FLAG_BOOLEAN, "", description)
   }
 
-  /** A flag given any number of times, each with a value. */
+  /**
+   * A flag given any number of times, each with a value.
+   *
+   * @param name what follows `--`, such as `"include"`; panics on a name no
+   *   command line could match, one already declared, or a `no-x` beside a
+   *   declared boolean `x`
+   * @param meta the placeholder the help row and the missing-value message
+   *   show, such as `"<dir>"`; when empty the message says "a value"
+   * @param description the flag's line in the `Flags` help section
+   */
   repeatable(name: string, meta: string, description: string): void {
     this.declare(name, FLAG_REPEATABLE, meta, description)
   }
@@ -268,7 +350,7 @@ export class FlagTable {
    * `-1`. A path spelled by a prefix of `words` counts; the words after it
    * are the positionals.
    */
-  matchCommand(words: string[]): i32 {
+  private matchCommand(words: string[]): i32 {
     let best: i32 = -1
     let bestLength: i32 = 0
     for (let i: i32 = 0; i < toI32(this.commands.length); i++) {
@@ -287,7 +369,7 @@ export class FlagTable {
    * including the first that no declared path continues with, so
    * `remote rename x` against `remote add` is `"remote rename"`.
    */
-  unknownCommand(words: string[]): string {
+  private unknownCommand(words: string[]): string {
     let known: i32 = 0
     for (const c of this.commands) {
       let k: i32 = 0
@@ -305,7 +387,14 @@ export class FlagTable {
     return shown.join(" ")
   }
 
-  /** `args` read against the table, every one of them an argument: `parseFrom(args, 0)`. */
+  /**
+   * `args` read against the table, every one of them an argument:
+   * `parseFrom(args, 0)`.
+   *
+   * @param args the command line's words, without the program's own path
+   * @returns a fresh answer the caller owns: the usage error, or every
+   *   flag's value, the command and the positionals
+   */
   parse(args: string[]): ParsedFlags {
     return this.parseFrom(args, toI32(0))
   }
@@ -315,6 +404,12 @@ export class FlagTable {
    * passes `process.argv` and `1` to skip its own path. Stops at the first
    * usage error, which the answer then carries; the command is still matched
    * on the words read before it, so the usage hint can name it.
+   *
+   * @param args the command line's words, such as `process.argv`
+   * @param first how many leading elements of `args` to skip unread; `0`
+   *   reads them all, and one at or past the end reads none
+   * @returns a fresh answer the caller owns: the usage error, or every
+   *   flag's value, the command and the positionals
    */
   parseFrom(args: string[], first: i32): ParsedFlags {
     const got = new ParsedFlags(this)
@@ -409,6 +504,9 @@ export class FlagTable {
    * declared (its path, shape and description), then a `Flags` section, each
    * in declaration order. The menu's header and usage lines are the caller's,
    * written before this.
+   *
+   * @param menu the help being written, which gains the rows; nothing is
+   *   written for an empty table
    */
   writeHelp(menu: HelpMenu): void {
     if (this.commands.length > 0) {
@@ -436,20 +534,47 @@ export class FlagTable {
  * given as such.
  */
 export class ParsedFlags {
-  table: FlagTable
+  private table: FlagTable
+  /** Whether the parse found no usage error; `false` means `code` names one. */
   ok: boolean
+  /** `FLAG_OK`, or the `FLAG_ERR_*` kind of the first usage error. */
   code: i32
+  /** The usage error in words, such as `unknown flag --x`; `""` when `ok`. */
   message: string
+  /**
+   * The argument the error was found in, as given (`--x=1` whole), or for a
+   * number flag the bad value alone and for an unknown command the words
+   * shown in the message; `""` when `ok`.
+   */
   argument: string
+  /** The path of the command the leading words chose, or `""` for none. */
   command: string
+  /** @internal Used by `FlagTable`. */
   commandAt: i32
+  /**
+   * The words that are not flags, values or the command's path, in order,
+   * then every argument after `--`. On a usage error, only those among the
+   * arguments read before the parse stopped.
+   */
   positionals: string[]
+  /** How many times each flag was given, indexed like the table's `flags`. */
   counts: i32[]
+  /** Each string or number flag's value as written, `""` when not given. */
   texts: string[]
+  /** Each number flag's value, `0` when not given. */
   numbers: f64[]
+  /** Each boolean flag's value, `false` when not given. */
   bools: boolean[]
+  /** Each repeatable flag's values in the order given; empty when not given. */
   lists: string[][]
 
+  /**
+   * An answer with no error and every flag unset, which `FlagTable.parseFrom`
+   * then fills in. A program gets one from `parse` rather than building it.
+   *
+   * @param table the table whose flags this answer holds a value for each
+   *   of; it is kept, not copied, and should not gain flags afterwards
+   */
   constructor(table: FlagTable) {
     this.table = table
     this.ok = true
@@ -474,7 +599,7 @@ export class ParsedFlags {
     }
   }
 
-  /** Records the first usage error; a parse stops at it. */
+  /** @internal Called by `FlagTable`. Records the first usage error; a parse stops at it. */
   fail(code: i32, message: string, argument: string): void {
     this.ok = false
     this.code = code
@@ -482,7 +607,7 @@ export class ParsedFlags {
     this.argument = argument
   }
 
-  /** Stores `value` for the flag at `at`, spelled `flag` in `arg`, or fails as its kind requires. */
+  /** @internal Called by `FlagTable`. Stores `value` for the flag at `at`, spelled `flag` in `arg`, or fails as its kind requires. */
   take(at: i32, flag: string, value: string, arg: string): void {
     const kind = this.table.flags[at].kind
     if (kind === FLAG_REPEATABLE) {
@@ -510,7 +635,7 @@ export class ParsedFlags {
   }
 
   /** The index of the flag `name` of `kind`; a name the table does not declare so is a bug, and panics. */
-  slot(name: string, kind: i32): i32 {
+  private slot(name: string, kind: i32): i32 {
     const at = this.table.indexOf(name)
     if (at < 0 || this.table.flags[at].kind !== kind) {
       panic(`nish/cli-flags: ${this.table.program} declares no such flag --${name} of that kind`)
@@ -518,22 +643,49 @@ export class ParsedFlags {
     return at
   }
 
-  /** A string flag's value, or `""` when it was not given. */
+  /**
+   * A string flag's value, or `""` when it was not given.
+   *
+   * @param name the flag as declared, without `--`; panics when the table
+   *   declares no string flag of that name
+   * @returns the value as it appeared on the command line
+   */
   str(name: string): string {
     return this.texts[this.slot(name, FLAG_STRING)]
   }
 
-  /** A number flag's value, or `0` when it was not given. */
+  /**
+   * A number flag's value, or `0` when it was not given.
+   *
+   * @param name the flag as declared, without `--`; panics when the table
+   *   declares no number flag of that name
+   * @returns the finite value the command line gave
+   */
   num(name: string): f64 {
     return this.numbers[this.slot(name, FLAG_NUMBER)]
   }
 
-  /** A boolean flag's value: true for `--name`, false for `--no-name` or when it was not given. */
+  /**
+   * A boolean flag's value: true for `--name`, false for `--no-name` or when
+   * it was not given.
+   *
+   * @param name the flag as declared, without `--` or `no-`; panics when the
+   *   table declares no boolean flag of that name
+   * @returns whether the flag is set
+   */
   bool(name: string): boolean {
     return this.bools[this.slot(name, FLAG_BOOLEAN)]
   }
 
-  /** Every value a repeatable flag was given, in order, as a fresh array; empty when it was not given. */
+  /**
+   * Every value a repeatable flag was given, in order; empty when it was not
+   * given.
+   *
+   * @param name the flag as declared, without `--`; panics when the table
+   *   declares no repeatable flag of that name
+   * @returns a fresh array the caller owns; changing it leaves the answer as
+   *   it was
+   */
   all(name: string): string[] {
     const out: string[] = []
     for (const v of this.lists[this.slot(name, FLAG_REPEATABLE)]) {
@@ -542,7 +694,14 @@ export class ParsedFlags {
     return out
   }
 
-  /** Whether the flag `name`, of any kind, was given at all (`--no-name` counts). */
+  /**
+   * Whether the flag `name`, of any kind, was given at all (`--no-name`
+   * counts).
+   *
+   * @param name the flag as declared, without `--`; panics when the table
+   *   declares no flag of that name
+   * @returns `true` when the command line gave it at least once
+   */
   has(name: string): boolean {
     const at = this.table.indexOf(name)
     if (at < 0) {
@@ -556,7 +715,7 @@ export class ParsedFlags {
    * shape, or `<command>` when the table has commands and none matched, then
    * `[flags]`.
    */
-  usageLine(): string {
+  private usageLine(): string {
     const table = this.table
     if (this.commandAt >= 0) {
       const c = table.commands[this.commandAt]
@@ -569,7 +728,13 @@ export class ParsedFlags {
     return `usage: ${table.program} [flags]`
   }
 
-  /** What `exitUsage` prints: `<program>: <message>` and the usage line, each ending in a newline. */
+  /**
+   * What `exitUsage` prints: `<program>: <message>` and the usage line, each
+   * ending in a newline.
+   *
+   * @returns a fresh string; on a parse that succeeded its message part is
+   *   empty
+   */
   usageError(): string {
     return `${this.table.program}: ${this.message}\n${this.usageLine()}\n`
   }
