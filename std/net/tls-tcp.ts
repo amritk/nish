@@ -183,11 +183,11 @@ const TLS_TCP_NANOS_PER_MS: i64 = 1000000
  * `fd(slot)`.
  */
 export class TlsTcpServer {
-  config: TlsServerConfig
+  private config: TlsServerConfig
   /**
    * The connections built so far, slot `k`'s at `k`: one per slot ever
    * accepted into. `connection` never adds to it; a slot never built reads
-   * `vacant` instead.
+   * one shared vacant connection instead.
    */
   connections: TlsRecordServer[]
   /**
@@ -201,7 +201,7 @@ export class TlsTcpServer {
    * over, then how many bytes it has thrown away while it waits for the
    * client's end of stream, then `TLS_TCP_LINGERED` once it is done.
    */
-  lingered: i32[]
+  private lingered: i32[]
   /**
    * The slots closed since they were used, a stack whose top `accept` takes
    * before it builds a slot past the high-water mark, so finding one costs
@@ -209,11 +209,11 @@ export class TlsTcpServer {
    */
   free: i32[]
   /** Where the socket is read into before a connection takes the bytes: the largest record. */
-  scratch: u8[]
+  private scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
   peer: u8[]
   /** Signs every slot's CertificateVerify in `signP256`, one for the pool, keeping nothing per signature. */
-  signer: TlsP256Signer
+  private signer: TlsP256Signer
   /**
    * Each slot's own copy of its connection's server random: `TlsServer`
    * keeps the array it is given and writes it into the ServerHello only once
@@ -224,9 +224,9 @@ export class TlsTcpServer {
    */
   randoms: u8[][]
   /** How many slots the pool may hold, which `size` answers. */
-  slots: i32 = 1
+  private slots: i32 = 1
   /** Whether `enableTickets` has run, so a slot built after it resumes too. */
-  tickets: boolean = false
+  private tickets: boolean = false
   /**
    * What `connection` answers for every slot never built: one failed
    * connection no slot holds and every such slot shares, so the slot reads
@@ -234,7 +234,7 @@ export class TlsTcpServer {
    * session. Its first read allocates it, once per server; it has no
    * tickets, and a caller must not change it.
    */
-  vacant: TlsRecordServer | null = null
+  private vacant: TlsRecordServer | null = null
   /**
    * The pools every slot borrows its record buffers from, each with a
    * ceiling of one per slot: `lent()` is 0 once every connection has ended,
@@ -242,7 +242,7 @@ export class TlsTcpServer {
    */
   pools: TlsRecordPools
   /** The listening socket, which the program made with `tcpListen` and still owns. */
-  listener: i32 = -1
+  private listener: i32 = -1
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`, a
@@ -251,6 +251,10 @@ export class TlsTcpServer {
    * kept, and its record buffers are borrowed from `pools` while a
    * connection uses them, so a pool sized for a peak costs at start-up only
    * the read scratch, the signer and the empty pools.
+   *
+   * @param config What every slot serves: certificate chain, ALPN and the rest; every slot shares it.
+   * @param listener The listening socket from `tcpListen`; the program still owns it and closes it.
+   * @param size How many connections may be open at once; anything below 1 is taken as 1.
    */
   constructor(config: TlsServerConfig, listener: i32, size: i32) {
     this.config = config
@@ -273,6 +277,8 @@ export class TlsTcpServer {
    * entry must sit at index `k` of `connections` and `randoms`. Its handshake
    * is never given a ClientHello: `accept` restarts it for a connection with
    * real randomness, and every later connection reuses its state.
+   *
+   * @returns The new slot's connection, failed until `accept` restarts it, already pushed onto `connections`.
    */
   build(): TlsRecordServer {
     const random: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
@@ -290,7 +296,7 @@ export class TlsTcpServer {
    * alert, so a stray call on it fails closed, and that borrows no buffer
    * until a connection moves bytes through it.
    */
-  make(random: u8[]): TlsRecordServer {
+  private make(random: u8[]): TlsRecordServer {
     // A placeholder key for a first handshake, which never runs.
     const zeros: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
     const conn: TlsRecordServer = new TlsRecordServer(new TlsServer(this.config, random, zeros))
@@ -299,12 +305,20 @@ export class TlsTcpServer {
     return conn
   }
 
-  /** How many slots the pool has, built or not. */
+  /**
+   * How many slots the pool has, built or not.
+   *
+   * @returns The slot count the constructor settled on, at least 1.
+   */
   size(): i32 {
     return this.slots
   }
 
-  /** How many slots hold a connection. */
+  /**
+   * How many slots hold a connection.
+   *
+   * @returns The number of slots with an open descriptor, lingering ones included; 0 to `size()`.
+   */
   busy(): i32 {
     let n: i32 = 0
     for (const fd of this.fds) {
@@ -315,12 +329,23 @@ export class TlsTcpServer {
     return n
   }
 
-  /** Whether `slot` is a slot of this pool that holds a connection. */
+  /**
+   * Whether `slot` is a slot of this pool that holds a connection.
+   *
+   * @param slot A slot number, as `accept` answered it; any value is safe to ask about.
+   * @returns True when `slot` is in range and holds a descriptor, lingering or live.
+   */
   holds(slot: i32): boolean {
     return slot >= 0 && slot < toI32(this.fds.length) && this.fds[slot] >= 0
   }
 
-  /** The descriptor of `slot`, for `pollAdd`; -1 for a free or unknown slot. */
+  /**
+   * The descriptor of `slot`, for `pollAdd`; -1 for a free or unknown slot.
+   *
+   * @param slot A slot number, as `accept` answered it.
+   * @returns The socket descriptor, which the pool still owns and closes in `close`; -1 when `slot`
+   *   holds none.
+   */
   fd(slot: i32): i32 {
     return this.holds(slot) ? this.fds[slot] : -1
   }
@@ -328,9 +353,13 @@ export class TlsTcpServer {
   /**
    * The connection in `slot`: its state, its handshake (`tls`: suite, ALPN,
    * server name) and the alerts sent and received. A free slot answers the
-   * last connection it held. A slot never accepted into answers `vacant`,
-   * failed, as a free slot does, and builds no slot; a slot out of range
+   * last connection it held. A slot never accepted into answers one shared
+   * vacant connection, failed, as a free slot does, and builds no slot; a slot out of range
    * names slot 0's.
+   *
+   * @param slot A slot number, as `accept` answered it.
+   * @returns The slot's connection, for reading; the pool keeps it and reuses it for the slot's next
+   *   connection.
    */
   connection(slot: i32): TlsRecordServer {
     const index: i32 = slot >= 0 && slot < this.slots ? slot : 0
@@ -357,6 +386,11 @@ export class TlsTcpServer {
    * closed), or `tcpAccept`'s own failure; and `TLS_RECORD_INVALID` (-22),
    * before any connection is taken, for a random or key that is not 32
    * bytes. On any answer but a slot both arrays are left as they were.
+   *
+   * @param serverRandom 32 fresh random bytes for the ServerHello's random; copied, not kept.
+   * @param ephemeralPrivate 32 fresh random bytes for this handshake's key share; when a slot is answered it
+   *   has been copied into the slot's own `Secret` and this array wiped.
+   * @returns The slot, 0 or more, that now holds the connection; or one of the negative failures above.
    */
   accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32 {
     if (
@@ -407,7 +441,11 @@ export class TlsTcpServer {
    * The socket of `slot` is readable: reads it until it would block or the
    * connection has no room, handing each read to the connection, then sends
    * what that produced. Answers the connection's `interest`, or, while the
-   * slot lingers, what `drain` answers; a free slot answers `TLS_RECORD_DONE`.
+   * slot lingers (`lingering`), `TLS_RECORD_WANT_READ` until its linger is
+   * over and then `TLS_RECORD_DONE`; a free slot answers `TLS_RECORD_DONE`.
+   *
+   * @param slot The slot whose socket `pollWait` reported readable.
+   * @returns The slot's interest: `TLS_RECORD_*` bits saying what to wait for next.
    */
   readable(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -438,7 +476,12 @@ export class TlsTcpServer {
     return this.flush(slot)
   }
 
-  /** The socket of `slot` is writable: sends what the connection holds. Answers its `interest`. */
+  /**
+   * The socket of `slot` is writable: sends what the connection holds. Answers its `interest`.
+   *
+   * @param slot The slot whose socket `pollWait` reported writable.
+   * @returns The slot's interest; `TLS_RECORD_DONE` for a free slot.
+   */
   writable(slot: i32): i32 {
     if (!this.holds(slot)) {
       return TLS_RECORD_DONE
@@ -449,8 +492,12 @@ export class TlsTcpServer {
   /**
    * Writes the connection's output until the socket would block or it is all
    * sent, and answers its `interest`; once the connection is over and the
-   * program has read what the client sent, the slot lingers (`linger`). A
+   * program has read what the client sent, the slot lingers (`lingering`). A
    * free slot answers `TLS_RECORD_DONE`.
+   *
+   * @param slot The slot whose output to send.
+   * @returns The slot's interest; once the connection is over, `TLS_RECORD_WANT_READ` while the slot
+   *   lingers and `TLS_RECORD_DONE` after.
    */
   flush(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -466,7 +513,7 @@ export class TlsTcpServer {
   }
 
   /** Writes `slot`'s output until the socket would block or it is all sent; answers the connection's `interest`. */
-  send(slot: i32): i32 {
+  private send(slot: i32): i32 {
     const fd: i32 = this.fds[slot]
     const conn: TlsRecordServer = this.connections[slot]
     while (conn.outputEnd > conn.outputStart) {
@@ -489,7 +536,7 @@ export class TlsTcpServer {
    * every record buffer given back, and what the client sends is drained
    * (`drain`). Any other is done.
    */
-  linger(slot: i32): i32 {
+  private linger(slot: i32): i32 {
     const conn: TlsRecordServer = this.connections[slot]
     if (
       conn.state !== TLS_RECORD_STATE_CLOSED ||
@@ -512,7 +559,7 @@ export class TlsTcpServer {
    * socket fails or more than `TLS_TCP_LINGER_LIMIT` bytes came
    * (`TLS_RECORD_DONE`).
    */
-  drain(slot: i32): i32 {
+  private drain(slot: i32): i32 {
     while (this.lingered[slot] >= 0) {
       const n: i32 = netRead(this.fds[slot], this.scratch, TLS_TCP_FROM, toI32(this.scratch.length))
       if (n === TLS_RECORD_AGAIN) {
@@ -528,17 +575,25 @@ export class TlsTcpServer {
    * Whether `slot` lingers: its connection is over and it waits for the
    * client to hang up. A carrier's idle clock does not move for what a
    * lingering slot drains, so its idle timeout bounds the wait.
+   *
+   * @param slot A slot number, as `accept` answered it.
+   * @returns True while the slot holds a connection that is draining its client before `close`.
    */
   lingering(slot: i32): boolean {
     return this.holds(slot) && this.lingered[slot] >= 0
   }
 
   /** A lingering `slot`'s interest: to be read, or `TLS_RECORD_DONE` once its linger is over. */
-  lingerInterest(slot: i32): i32 {
+  private lingerInterest(slot: i32): i32 {
     return this.lingered[slot] >= 0 ? TLS_RECORD_WANT_READ : TLS_RECORD_DONE
   }
 
-  /** What `slot`'s connection wants now, without touching the socket; `TLS_RECORD_DONE` for a free slot. */
+  /**
+   * What `slot`'s connection wants now, without touching the socket; `TLS_RECORD_DONE` for a free slot.
+   *
+   * @param slot A slot number, as `accept` answered it.
+   * @returns The slot's `TLS_RECORD_*` interest bits; the low two are the events for `pollModify`.
+   */
   interest(slot: i32): i32 {
     if (!this.holds(slot)) {
       return TLS_RECORD_DONE
@@ -548,12 +603,25 @@ export class TlsTcpServer {
       : this.connections[slot].interest()
   }
 
-  /** What `slot`'s CertificateVerify signs, while its `interest` says `TLS_RECORD_SIGN`; `null` otherwise. */
+  /**
+   * What `slot`'s CertificateVerify signs, while its `interest` says `TLS_RECORD_SIGN`; `null` otherwise.
+   *
+   * @param slot A slot number, as `accept` answered it.
+   * @returns The bytes to sign with the certificate's private key, or `null` for a free slot or one not
+   *   waiting for a signature.
+   */
   signatureInput(slot: i32): u8[] | null {
     return this.holds(slot) ? this.connections[slot].signatureInput() : null
   }
 
-  /** Hands `slot` the signature over `signatureInput(slot)`, seals the rest of its flight and sends it. Answers its `interest`. */
+  /**
+   * Hands `slot` the signature over `signatureInput(slot)`, seals the rest of its flight and sends it.
+   * Answers its `interest`.
+   *
+   * @param slot The slot whose interest says `TLS_RECORD_SIGN`.
+   * @param signature The signature the certificate's private key made over `signatureInput(slot)`.
+   * @returns The slot's interest after sending; `TLS_RECORD_DONE` for a free slot.
+   */
   sign(slot: i32, signature: u8[]): i32 {
     if (!this.holds(slot)) {
       return TLS_RECORD_DONE
@@ -568,6 +636,10 @@ export class TlsTcpServer {
    * handshake's signature keeps nothing. The key is borrowed: the caller made
    * the `Secret`, and wipes it. A malformed key fails the connection with
    * `internal_error`.
+   *
+   * @param slot The slot whose interest says `TLS_RECORD_SIGN`.
+   * @param key The certificate's P-256 private key; borrowed, still the caller's to wipe.
+   * @returns The slot's interest after sending; the current interest when the slot wants no signature.
    */
   signP256(slot: i32, key: Secret<u8[]>): i32 {
     const input: u8[] | null = this.signatureInput(slot)
@@ -602,6 +674,15 @@ export class TlsTcpServer {
    * the flight that answers the hello, resumed or in full
    * (`TlsRecordServer.resume`). The keys and the register are borrowed for
    * the call. Answers the slot's interest.
+   *
+   * @param slot The slot whose interest says `TLS_RECORD_TICKET` during its handshake.
+   * @param current The ticket key that seals new tickets; borrowed, still the caller's to wipe.
+   * @param currentInfo The public record of `current`: its id, when it was drawn and how much it has sealed.
+   * @param previous The key before `current`, so tickets sealed under it still resume; borrowed.
+   * @param previousInfo The public record of `previous`.
+   * @param strikes The register of tickets already resumed, so a ticket resumes at most once.
+   * @param now The time now, in `monotonicNanos()`, which key windows and ticket ages are judged against.
+   * @returns The slot's interest after sending; `TLS_RECORD_DONE` for a free slot.
    */
   resume(
     slot: i32,
@@ -623,6 +704,12 @@ export class TlsTcpServer {
    * While `slot`'s interest says `TLS_RECORD_TICKET` on an open connection:
    * seals one ticket under the borrowed `key` and sends its
    * NewSessionTicket (`TlsRecordServer.issue`). Answers the slot's interest.
+   *
+   * @param slot The slot whose interest says `TLS_RECORD_TICKET` on an open connection.
+   * @param key The ticket key to seal under; borrowed, still the caller's to wipe.
+   * @param info The public record of `key`, whose sealed count the ticket adds to.
+   * @param now The time now, in `monotonicNanos()`, sealed into the ticket as its issue time.
+   * @returns The slot's interest after sending; `TLS_RECORD_DONE` for a free slot.
    */
   issue(slot: i32, key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): i32 {
     if (!this.holds(slot)) {
@@ -639,6 +726,12 @@ export class TlsTcpServer {
    * room, and the records that were waiting for it may be handled and
    * answered (a KeyUpdate), which is sent here; the connection may then want
    * the socket read again, so re-arm it with `interest(slot)`.
+   *
+   * @param slot The slot to read from.
+   * @param buf The program's buffer the plaintext is copied into.
+   * @param off Where in `buf` the first byte goes.
+   * @param len The most bytes to take.
+   * @returns The bytes copied, or 0, -11 or -104 as above; `TLS_RECORD_INVALID` (-22) for a free slot.
    */
   read(slot: i32, buf: u8[], off: i32, len: i32): i32 {
     if (!this.holds(slot)) {
@@ -654,6 +747,13 @@ export class TlsTcpServer {
    * much as fits and sends what the socket takes, and answers how much was
    * taken, -11 when nothing fits yet or the handshake is under way, -32 once
    * the server has closed, as `TlsRecordServer.write` says.
+   *
+   * @param slot The slot to write to.
+   * @param data The program's plaintext; it is sealed into the connection's own buffer, not kept.
+   * @param off Where in `data` the bytes to send start.
+   * @param len How many bytes, from `off`, to send.
+   * @returns The bytes taken, fewer than `len` when the rest does not fit yet, or -11 or -32 as above;
+   *   `TLS_RECORD_INVALID` (-22) for a free slot.
    */
   write(slot: i32, data: u8[], off: i32, len: i32): i32 {
     if (!this.holds(slot)) {
@@ -664,7 +764,15 @@ export class TlsTcpServer {
     return n
   }
 
-  /** Sends a KeyUpdate on `slot`, asking the client for one too when `requestPeer`; answers as `TlsRecordServer.keyUpdate`. */
+  /**
+   * Sends a KeyUpdate on `slot`, asking the client for one too when `requestPeer`; answers as
+   * `TlsRecordServer.keyUpdate`.
+   *
+   * @param slot The slot whose sending keys to update.
+   * @param requestPeer True to ask the client to update its sending keys as well (§4.6.3).
+   * @returns 0 once the KeyUpdate is sealed, or a negative `TLS_RECORD_*` failure as
+   *   `TlsRecordServer.keyUpdate` says; `TLS_RECORD_INVALID` (-22) for a free slot.
+   */
   keyUpdate(slot: i32, requestPeer: boolean): i32 {
     if (!this.holds(slot)) {
       return TLS_RECORD_INVALID
@@ -678,9 +786,13 @@ export class TlsTcpServer {
    * Closes the server's side of `slot`'s connection (§6.1): a `close_notify`
    * after whatever is already written, sent as the socket takes it. The slot
    * stays the program's until its interest says `TLS_RECORD_DONE` — every
-   * byte is sent and, once the slot lingers (`linger`), the client has hung
+   * byte is sent and, once the slot lingers (`lingering`), the client has hung
    * up — and the program calls `close`. Meanwhile the interest asks for the
    * socket to be read. Answers the interest.
+   *
+   * @param slot The slot whose connection to close.
+   * @returns The slot's interest; `TLS_RECORD_DONE` for a free slot, or once there is nothing left to
+   *   wait for.
    */
   shutdown(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -697,6 +809,8 @@ export class TlsTcpServer {
    * out of every loop. A program that must know every byte and the
    * `close_notify` arrived calls `shutdown` instead, and `close` once the
    * slot's interest says `TLS_RECORD_DONE`.
+   *
+   * @param slot The slot to free; a free or unknown slot is left alone.
    */
   close(slot: i32): void {
     if (!this.holds(slot)) {
@@ -746,29 +860,37 @@ export class TlsTcpServer {
  * The socket is still connecting when the constructor returns, so the first
  * interest is writable alone; the first event on it, writable or a hang-up,
  * says how the connection went (`connectResult`), and a socket that did not
- * connect leaves the client done, its failure in `connectError`.
+ * connect leaves the client done, its failure in `failure()`.
  */
 export class TlsTcpClient {
   conn: TlsRecordClient
-  trust: TlsClientTrust
+  private trust: TlsClientTrust
   /** The socket, -1 once `close` has run or when `tcpConnect` refused at once. */
-  socket: i32 = -1
+  private socket: i32 = -1
   /** Whether the socket has yet to say how its connection went. */
-  connecting: boolean = true
+  private connecting: boolean = true
   /**
    * Why the connection failed below TLS, or 0: `tcpConnect`'s or
    * `connectResult`'s failure, or what ended `tlsConnect`'s wait — its
    * timeout (`TLS_TCP_TIMED_OUT`) or its loop's failure.
+   *
+   * @internal Read by the free functions of this module.
    */
   connectError: i32 = 0
   /** Where the socket is read into before the connection takes the bytes: the largest record. */
-  scratch: u8[]
+  private scratch: u8[]
 
   /**
    * A connection to the server at `addr` (`nish:net`'s 18-byte form, which
    * `netAddress` writes) under `config`, authenticated against `trust`. The
    * name the certificate must carry is `config.serverName`, never one taken
    * from `addr`. The ClientHello is sealed here and waits for the socket.
+   *
+   * @param addr The server's address and port in `nish:net`'s 18-byte form; a shorter array fails the
+   *   client with `failure()` -22 and nothing dialled.
+   * @param config The server name, ALPN protocols and the rest of the ClientHello; a config `TlsClient`
+   *   refuses leaves the client failed before any socket is made.
+   * @param trust The roots and policy the server's certificate chain is checked against.
    */
   constructor(addr: u8[], config: TlsClientConfig, trust: TlsClientTrust) {
     const random: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
@@ -797,22 +919,41 @@ export class TlsTcpClient {
     this.socket = fd
   }
 
-  /** The socket, for `pollAdd`; -1 when there is none. */
+  /**
+   * The socket, for `pollAdd`; -1 when there is none.
+   *
+   * @returns The socket descriptor, which the client still owns and closes in `close`; -1 when there is none.
+   */
   fd(): i32 {
     return this.socket
   }
 
-  /** Whether the handshake is done and the server authenticated, so application data flows. */
+  /**
+   * Whether the handshake is done and the server authenticated, so application data flows.
+   *
+   * @returns True from the server's Finished until the connection fails or `shutdown` or `close` closes it.
+   */
   open(): boolean {
     return this.conn.state === TLS_RECORD_STATE_OPEN
   }
 
-  /** Why a failed connection failed: `connectError` when TCP did not connect, else the alert (`TlsRecordClient.failure`). */
+  /**
+   * Why a failed connection failed: the TCP failure when TCP did not connect, else the alert
+   * (`TlsRecordClient.failure`).
+   *
+   * @returns A negative `nish:net` failure or `TLS_TCP_TIMED_OUT` when the trouble was below TLS,
+   *   otherwise what `TlsRecordClient.failure` answers.
+   */
   failure(): i32 {
     return this.connectError !== 0 ? this.connectError : this.conn.failure()
   }
 
-  /** What the connection wants now, as `TLS_RECORD_*` bits, without touching the socket. */
+  /**
+   * What the connection wants now, as `TLS_RECORD_*` bits, without touching the socket.
+   *
+   * @returns The interest bits; the low two are the events for `pollModify`, and `TLS_RECORD_DONE` once
+   *   there is no socket.
+   */
   interest(): i32 {
     if (this.socket < 0) {
       return TLS_RECORD_DONE
@@ -825,7 +966,7 @@ export class TlsTcpClient {
    * did not leaves the client failed with nothing sent, its reason in
    * `connectError`.
    */
-  connected(): boolean {
+  private connected(): boolean {
     this.connecting = false
     const result: i32 = connectResult(this.socket)
     if (result !== 0) {
@@ -840,6 +981,9 @@ export class TlsTcpClient {
    * The socket is readable, or hung up: reads it until it would block or the
    * connection has no room, handing each read to the connection, then sends
    * what that produced. Answers the `interest`.
+   *
+   * @returns The interest after reading and sending; `TLS_RECORD_DONE` when there is no socket or it
+   *   did not connect.
    */
   readable(): i32 {
     if (this.socket < 0) {
@@ -869,7 +1013,12 @@ export class TlsTcpClient {
     return this.flush()
   }
 
-  /** The socket is writable: on the first event, how the connection went; then sends what the connection holds. Answers the `interest`. */
+  /**
+   * The socket is writable: on the first event, how the connection went; then sends what the
+   * connection holds. Answers the `interest`.
+   *
+   * @returns The interest after sending; `TLS_RECORD_DONE` when there is no socket or it did not connect.
+   */
   writable(): i32 {
     if (this.socket < 0) {
       return TLS_RECORD_DONE
@@ -885,7 +1034,7 @@ export class TlsTcpClient {
    * connection's output until the socket would block or it is all sent, and
    * answers the `interest`.
    */
-  flush(): i32 {
+  private flush(): i32 {
     if (this.socket < 0) {
       return TLS_RECORD_DONE
     }
@@ -915,6 +1064,11 @@ export class TlsTcpClient {
    * connection has failed, as `TlsRecordClient.read` says, and -32 once
    * `close` has run. What reading makes room for is answered and sent here;
    * re-arm with `interest()`.
+   *
+   * @param buf The program's buffer the plaintext is copied into.
+   * @param off Where in `buf` the first byte goes.
+   * @param len The most bytes to take.
+   * @returns The bytes copied, or 0, -11, -104 or -32 as above.
    */
   read(buf: u8[], off: i32, len: i32): i32 {
     if (this.socket < 0) {
@@ -926,7 +1080,7 @@ export class TlsTcpClient {
   }
 
   /** What a call on a client that is done answers: -104 when it failed, else -32. */
-  ended(): i32 {
+  private ended(): i32 {
     return this.conn.state === TLS_RECORD_STATE_FAILED ? TLS_RECORD_RESET : TLS_RECORD_PIPE
   }
 
@@ -937,6 +1091,12 @@ export class TlsTcpClient {
    * nothing came in time (the connection stays usable), -104 once it has
    * failed, -32 once it is done otherwise, or the loop's failure. It drives
    * the handshake too, so it may follow `new TlsTcpClient` directly.
+   *
+   * @param buf The program's buffer the plaintext is copied into.
+   * @param off Where in `buf` the first byte goes.
+   * @param len The most bytes to take.
+   * @param timeoutMs How long to wait, in milliseconds on the monotonic clock, from the call.
+   * @returns The bytes copied, or 0, `TLS_TCP_TIMED_OUT`, -104, -32 or the loop's failure as above.
    */
   readWait(buf: u8[], off: i32, len: i32, timeoutMs: i32): i32 {
     const end: i64 = tlsTcpDeadline(timeoutMs)
@@ -978,6 +1138,12 @@ export class TlsTcpClient {
    * sent, and the same bytes written again would reach the server twice:
    * once the handshake is done, a timeout leaves the stream unusable, and
    * the client is for `close`.
+   *
+   * @param data The program's plaintext; it is sealed into the connection's own buffer, not kept.
+   * @param off Where in `data` the bytes to send start.
+   * @param len How many bytes, from `off`, to send.
+   * @param timeoutMs How long to wait for all of it, in milliseconds on the monotonic clock, from the call.
+   * @returns `len` once the socket has taken every byte, or one of the negative failures above.
    */
   writeAll(data: u8[], off: i32, len: i32, timeoutMs: i32): i32 {
     const end: i64 = tlsTcpDeadline(timeoutMs)
@@ -1020,12 +1186,20 @@ export class TlsTcpClient {
     return result < 0 ? result : done
   }
 
-  /** Whether sealed bytes are still waiting for the socket. */
+  /**
+   * Whether sealed bytes are still waiting for the socket.
+   *
+   * @returns True while the connection's output holds bytes the socket has not taken yet.
+   */
   sending(): boolean {
     return this.conn.outputEnd > this.conn.outputStart
   }
 
-  /** A readiness loop of the client's own holding its socket, for the waiting calls, or the loop's failure. */
+  /**
+   * A readiness loop of the client's own holding its socket, for the waiting calls, or the loop's failure.
+   *
+   * @internal Read by the free functions of this module.
+   */
   ownLoop(): i32 {
     const loop: i32 = pollCreate()
     if (loop >= 0) {
@@ -1039,6 +1213,8 @@ export class TlsTcpClient {
    * until `end` on the monotonic clock, and handles what came. Answers 0,
    * `TLS_RECORD_DONE` once the connection wants nothing more,
    * `TLS_TCP_TIMED_OUT`, or the loop's failure.
+   *
+   * @internal Read by the free functions of this module.
    */
   turn(loop: i32, end: i64): i32 {
     const wants: i32 = this.interest()
@@ -1074,6 +1250,12 @@ export class TlsTcpClient {
    * as fits and sends what the socket takes, and answers how much was taken,
    * -11 when nothing fits yet or the handshake is under way, -32 once the
    * client has closed, as `TlsRecordClient.write` says.
+   *
+   * @param data The program's plaintext; it is sealed into the connection's own buffer, not kept.
+   * @param off Where in `data` the bytes to send start.
+   * @param len How many bytes, from `off`, to send.
+   * @returns The bytes taken, fewer than `len` when the rest does not fit yet, or a negative failure as
+   *   `TlsRecordClient.write` says.
    */
   write(data: u8[], off: i32, len: i32): i32 {
     const n: i32 = this.conn.write(data, off, len)
@@ -1081,7 +1263,13 @@ export class TlsTcpClient {
     return n
   }
 
-  /** Sends a KeyUpdate, asking the server for one too when `requestPeer`; answers as `TlsRecordClient.keyUpdate`. */
+  /**
+   * Sends a KeyUpdate, asking the server for one too when `requestPeer`; answers as
+   * `TlsRecordClient.keyUpdate`.
+   *
+   * @param requestPeer True to ask the server to update its sending keys as well (§4.6.3).
+   * @returns 0 once the KeyUpdate is sealed, or a negative failure as `TlsRecordClient.keyUpdate` says.
+   */
   keyUpdate(requestPeer: boolean): i32 {
     const r: i32 = this.conn.keyUpdate(requestPeer)
     this.flush()
@@ -1095,6 +1283,8 @@ export class TlsTcpClient {
    * still reads, and once the `close_notify` is sent the interest says
    * `TLS_RECORD_DONE` and `readWait` answers -32; call `close` then.
    * Answers the interest.
+   *
+   * @returns The interest after sending what the socket takes; `TLS_RECORD_DONE` once nothing is left.
    */
   shutdown(): i32 {
     this.conn.close()
@@ -1138,13 +1328,28 @@ const tlsTcpDeadline = (timeoutMs: i32): i64 => monotonicNanos() + toI64(timeout
  * program adds it to its own, or uses `writeAll` and `readWait`. The roots
  * are read on every call; a program that connects often reads them once with
  * `tlsClientSystemTrust` and passes them to `tlsConnectWith`.
+ *
+ * @param addr The server's address and port in `nish:net`'s 18-byte form.
+ * @param serverName The name the server's certificate must carry, sent as `server_name` unless it is an
+ *   IP literal.
+ * @param alpn The ALPN protocols to offer, most preferred first, each 1 to 255 bytes; empty offers none.
+ * @param timeoutMs How long the whole connect may take, in milliseconds on the monotonic clock.
+ * @returns The client, open or failed; the caller owns it and calls `close` when done with it.
  */
 export const tlsConnect = (addr: u8[], serverName: string, alpn: string[], timeoutMs: i32): TlsTcpClient => {
   const end: i64 = tlsTcpDeadline(timeoutMs)
   return tlsConnectBy(addr, new TlsClientConfig(serverName, alpn), tlsClientSystemTrust(), end)
 }
 
-/** `tlsConnect` under a `config` and `trust` of the caller's. */
+/**
+ * `tlsConnect` under a `config` and `trust` of the caller's.
+ *
+ * @param addr The server's address and port in `nish:net`'s 18-byte form.
+ * @param config The server name, ALPN protocols and the rest of the ClientHello.
+ * @param trust The roots the server's chain is checked against, such as one `tlsClientSystemTrust` read.
+ * @param timeoutMs How long the whole connect may take, in milliseconds on the monotonic clock.
+ * @returns The client, open or failed; the caller owns it and calls `close` when done with it.
+ */
 export const tlsConnectWith = (
   addr: u8[],
   config: TlsClientConfig,

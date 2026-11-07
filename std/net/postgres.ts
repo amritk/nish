@@ -4,12 +4,17 @@
  * messages into an output buffer and reads the backend's from an input
  * buffer, for a program that owns its socket (`nish:net`) and its loop.
  *
+ *     import { PG_FAILED, PG_NEED_MORE, PgConfig, PgConnection } from "nish/net/postgres";
+ *     import { secret, wipe } from "nish:secret";
+ *
  *     const config = new PgConfig();
  *     config.user = "app";
  *     config.database = "app";
  *     const nonce = new Array<u8>(18);
  *     crypto.getRandomValues(nonce);
+ *     const password = secret(passwordBytes); // a u8[] the program read from its secret store
  *     const conn = new PgConnection(config, password, nonce);
+ *     wipe(password); // the connection keeps its own copy
  *     // write conn.outputBuffer()[conn.outputStart() .. conn.outputEnd()), then conn.sent(n)
  *     // read into conn.inputBuffer() at conn.inputEnd(), up to conn.inputRoom() bytes, then conn.received(n)
  *     let event: i32 = conn.next();
@@ -334,7 +339,11 @@ export class PgConfig {
 
 /** A server's ErrorResponse or NoticeResponse: the fields a program acts on. */
 export class PgError {
-  /** ERROR, FATAL or PANIC; WARNING, NOTICE, DEBUG, INFO or LOG for a notice. Never localised. */
+  /**
+   * ERROR, FATAL or PANIC; WARNING, NOTICE, DEBUG, INFO or LOG for a notice.
+   * Never localised, unless the server sent no `V` field (before 9.6) and the
+   * localised `S` field stands in for it.
+   */
   readonly severity: string
   /** The SQLSTATE, five characters: `23505` is a unique violation. */
   readonly code: string
@@ -349,6 +358,19 @@ export class PgError {
   /** The 1-based character position in the statement's text, or "". */
   readonly position: string
 
+  /**
+   * Builds the record from the fields of one ErrorResponse or
+   * NoticeResponse; a program reads it from `lastError` or `lastNotice`
+   * rather than building one.
+   * @param severity The `V` field, never localised; the `S` field, which may be
+   *   localised, when the server sent no `V` (servers before 9.6).
+   * @param code The SQLSTATE, the `C` field.
+   * @param message The primary message, the `M` field.
+   * @param detail The `D` field, or "" when the server sent none.
+   * @param hint The `H` field, or "".
+   * @param constraint The `n` field, or "".
+   * @param position The `P` field, a 1-based character position as text, or "".
+   */
   constructor(
     severity: string,
     code: string,
@@ -390,19 +412,25 @@ const pgAllZero = (bytes: u8[]): boolean => {
  * The holder outlives the wipe, so that `wiped()` reads the very bytes.
  */
 class PgPassword {
+  /** @internal Used by `PgConnection.scramContinue` and `PgPool.connect` in this module. */
   readonly bytes: Secret<u8[]>
-  /** Whether `wipe()` has run; the bytes are no longer a password. */
+  /**
+   * Whether `wipe()` has run; the bytes are no longer a password.
+   * @internal Used by `PgConnection.dispose`, `PgConnection.scramContinue`, `PgPool.connect` and `PgPool.dispose` in this module.
+   */
   gone: boolean = false
 
   constructor(password: Secret<u8[]>) {
     this.bytes = secret(expose(password, pgCopyBytes))
   }
 
+  /** @internal Used by `PgConnection.dispose` and `PgPool.dispose` in this module. */
   wipe(): void {
     wipe(this.bytes)
     this.gone = true
   }
 
+  /** @internal Used by `PgConnection.passwordWiped` and `PgPool.passwordWiped` in this module. */
   wiped(): boolean {
     return expose(this.bytes, pgAllZero)
   }
@@ -669,7 +697,15 @@ export class PgText {
     this.failed = false
   }
 
-  /** An `int2`, `int4` or `int8` column: an optional `-` and 1 to 19 digits; 0 and `failed` otherwise, and on overflow. */
+  /**
+   * An `int2`, `int4` or `int8` column: an optional `-` and its digits, in
+   * place. Leading zeros are allowed; a value outside `i64` is an overflow.
+   * @param b The buffer the column lies in, usually `conn.inputBuffer()`.
+   * @param start The column's first byte, as `colStart(c)` gives it.
+   * @param length The column's length in bytes; NULL's -1 is refused.
+   * @returns The value, or 0 with `failed` set for an empty or out-of-range
+   *   window, a byte that is not a digit, or an overflow.
+   */
   int(b: u8[], start: i32, length: i32): i64 {
     const end: i32 = start + length
     if (length <= 0 || start < 0 || end < start || end > toI32(b.length)) {
@@ -707,7 +743,13 @@ export class PgText {
     return negative ? acc : -acc
   }
 
-  /** A `bool` column: `t` or `f`; false and `failed` otherwise. */
+  /**
+   * A `bool` column: `t` or `f`, in place.
+   * @param b The buffer the column lies in.
+   * @param start The column's first byte.
+   * @param length The column's length in bytes; anything but 1 is refused.
+   * @returns True for `t`, false for `f`; false with `failed` set otherwise.
+   */
   bool(b: u8[], start: i32, length: i32): boolean {
     if (length === 1 && start >= 0 && start < toI32(b.length)) {
       const c: i32 = toI32(b[start])
@@ -728,7 +770,14 @@ export class PgText {
    * `timestamp` column (the same without `+00`), written to `out[at, at + 24)`
    * as `2024-01-02T03:04:05.123Z`, the fraction cut to milliseconds. Answers
    * 24, or -1 and `failed` for anything else: a year outside 0001–9999, BC,
-   * `infinity`, an offset other than `+00`.
+   * `infinity`, an offset other than `+00`. Nothing is allocated.
+   * @param b The buffer the column lies in.
+   * @param start The column's first byte.
+   * @param length The column's length in bytes, at least 19.
+   * @param out The buffer to write the 24 ISO 8601 bytes into; the caller owns it.
+   * @param at Where in `out` the time starts; `out` needs 24 bytes from there.
+   * @returns 24, the bytes written; -1 with `failed` set, and `out` untouched,
+   *   for a column it does not read or no room in `out`.
    */
   timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32 {
     if (
@@ -854,6 +903,10 @@ export class PgBinary {
    * bytes, big-endian two's complement); 0 and `failed` for any other length,
    * NULL's -1 among them. A `timestamptz` or `timestamp` reads as an `int8`:
    * microseconds since 2000-01-01 00:00:00 UTC, which `iso` writes out.
+   * @param b The buffer the column lies in, usually `conn.inputBuffer()`.
+   * @param start The column's first byte, as `colStart(c)` gives it.
+   * @param length The column's length in bytes: 2, 4 or 8.
+   * @returns The value, sign-extended to 64 bits, or 0 with `failed` set.
    */
   int(b: u8[], start: i32, length: i32): i64 {
     if ((length !== 2 && length !== 4 && length !== 8) || !this.inside(b, start, length)) {
@@ -870,7 +923,13 @@ export class PgBinary {
     return toI64(v >= 32768 ? v - 65536 : v)
   }
 
-  /** A `bool` column: one byte, 1 or 0; false and `failed` otherwise. */
+  /**
+   * A `bool` column: one byte, 1 or 0.
+   * @param b The buffer the column lies in.
+   * @param start The column's first byte.
+   * @param length The column's length in bytes; anything but 1 is refused.
+   * @returns True for 1, false for 0; false with `failed` set otherwise.
+   */
   bool(b: u8[], start: i32, length: i32): boolean {
     if (length === 1 && this.inside(b, start, length)) {
       const c: i32 = toI32(b[start])
@@ -885,7 +944,15 @@ export class PgBinary {
     return false
   }
 
-  /** A `float8` column: eight bytes, IEEE 754 big-endian; 0 and `failed` otherwise. */
+  /**
+   * A `float8` column: eight bytes, IEEE 754 big-endian. A `float4` (four
+   * bytes) is refused.
+   * @param b The buffer the column lies in.
+   * @param start The column's first byte.
+   * @param length The column's length in bytes; anything but 8 is refused.
+   * @returns The value, NaN and the infinities included; 0 with `failed` set
+   *   for a column that is not eight bytes inside `b`.
+   */
   float(b: u8[], start: i32, length: i32): f64 {
     if (length !== 8 || !this.inside(b, start, length)) {
       this.failed = true
@@ -898,6 +965,12 @@ export class PgBinary {
    * A `timestamptz` or `timestamp` column, written to `out[at, at + 24)` as
    * `iso` writes it. Answers 24, or -1 and `failed` for a column that is not
    * eight bytes or a time `iso` refuses.
+   * @param b The buffer the column lies in.
+   * @param start The column's first byte.
+   * @param length The column's length in bytes; anything but 8 is refused.
+   * @param out The buffer to write the 24 ISO 8601 bytes into; the caller owns it.
+   * @param at Where in `out` the time starts; `out` needs 24 bytes from there.
+   * @returns 24, the bytes written, or -1 with `failed` set.
    */
   timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32 {
     if (length !== 8 || !this.inside(b, start, length)) {
@@ -913,6 +986,11 @@ export class PgBinary {
    * not rounded, to milliseconds, as `PgText.timestamp` cuts the same time.
    * Answers 24, or -1 and `failed` with `out` untouched for a year outside
    * 0001–9999 (`infinity` and `-infinity` among them) or no room in `out`.
+   * Nothing is allocated.
+   * @param micros Microseconds since 2000-01-01 00:00:00 UTC; negative is before 2000.
+   * @param out The buffer to write into; the caller owns it.
+   * @param at Where in `out` the time starts; `out` needs 24 bytes from there.
+   * @returns 24, the bytes written, or -1 with `failed` set.
    */
   iso(micros: i64, out: u8[], at: i32): i32 {
     if (at < 0 || at > toI32(out.length) - 24) {
@@ -980,9 +1058,9 @@ export class PgBinaryArray {
   /** The element type's OID, 20, 21 or 23, once `begin` has read a header it accepts. */
   elementOid: i32 = 0
   /** The current element's first byte in the buffer. */
-  start: i32 = 0
+  private start: i32 = 0
   /** The current element's length: its type's size, or 0 for a NULL. */
-  length: i32 = 0
+  private length: i32 = 0
   private binary: PgBinary
   private b: u8[]
   private pos: i32 = 0
@@ -992,12 +1070,26 @@ export class PgBinaryArray {
   private hasNull: boolean = false
   private bad: boolean = true
 
+  /**
+   * A walker with nothing begun; `next()` answers `PG_ARRAY_BAD` until `begin`.
+   * @param binary The decoders `int()` reads through and whose `failed` every
+   *   refusal sets; usually `conn.binary`.
+   */
   constructor(binary: PgBinary) {
     this.binary = binary
     this.b = []
   }
 
-  /** Starts a walk over `b[start, start + length)`; a header this walker does not read is refused. */
+  /**
+   * Starts a walk over `b[start, start + length)`, reading its header; a
+   * header this walker does not read is refused, which sets `binary.failed`
+   * and makes `next()` answer `PG_ARRAY_BAD`. The walker keeps `b` and reads
+   * it until the next `begin`, so the window must stay valid that long: for a
+   * column, until the connection's next `next()`.
+   * @param b The buffer the column lies in, usually `conn.inputBuffer()`.
+   * @param start The column's first byte, as `colStart(c)` gives it.
+   * @param length The column's length in bytes; NULL's -1 is refused.
+   */
   begin(b: u8[], start: i32, length: i32): void {
     this.b = b
     this.count = 0
@@ -1050,7 +1142,13 @@ export class PgBinaryArray {
     return PG_ARRAY_BAD
   }
 
-  /** The next element: `PG_ARRAY_ELEMENT`, `PG_ARRAY_NULL`, `PG_ARRAY_END` or `PG_ARRAY_BAD`. */
+  /**
+   * Steps to the next element, which `int()` then reads.
+   * @returns `PG_ARRAY_ELEMENT`, `PG_ARRAY_NULL`, `PG_ARRAY_END` once all
+   *   `count` elements have been read and the column ends there, or
+   *   `PG_ARRAY_BAD` (with `binary.failed` set) for a layout it refuses; a
+   *   refused walk answers `PG_ARRAY_BAD` from then on.
+   */
   next(): i32 {
     if (this.bad) {
       return PG_ARRAY_BAD
@@ -1084,7 +1182,13 @@ export class PgBinaryArray {
     return PG_ARRAY_ELEMENT
   }
 
-  /** The current element as an integer, through `PgBinary.int`; a NULL, or a walk that was refused, sets `binary.failed`. */
+  /**
+   * The current element as an integer, through `PgBinary.int`; a NULL, or a
+   * walk that was refused, sets `binary.failed`.
+   * @returns The element, sign-extended to 64 bits, or 0 when this call is
+   *   refused, which sets `binary.failed`. The flag is sticky and shared, so
+   *   an earlier refusal leaves it set without making this call answer 0.
+   */
   int(): i64 {
     if (this.bad) {
       this.binary.failed = true
@@ -1095,7 +1199,7 @@ export class PgBinaryArray {
 }
 
 /**
- * A walk over a one-dimensional `text[]` column in place: `start` the
+ * A walk over a one-dimensional `text[]` column in place: `begin` the
  * column, then `next()` until `PG_ARRAY_END` or `PG_ARRAY_BAD`. Each element
  * is the window `[start, start + length)` of the column's buffer; a quoted
  * element with a backslash escape in it has `escaped` set, and `copy` writes
@@ -1115,11 +1219,20 @@ export class PgArrayWalker {
   private bad: boolean = false
   private b: u8[]
 
+  /** A walker with nothing begun; `next()` answers `PG_ARRAY_END` until `begin`. */
   constructor() {
     this.b = []
   }
 
-  /** Starts a walk over `b[start, start + length)`. */
+  /**
+   * Starts a walk over `b[start, start + length)`, which must be a `{...}`
+   * literal; anything else makes `next()` answer `PG_ARRAY_BAD`. The walker
+   * keeps `b` and reads it until the next `begin`, so for a column the walk
+   * must end before the connection's next `next()`.
+   * @param b The buffer the column lies in, usually `conn.inputBuffer()`.
+   * @param start The column's first byte, as `colStart(c)` gives it.
+   * @param length The column's length in bytes, braces included.
+   */
   begin(b: u8[], start: i32, length: i32): void {
     this.b = b
     this.first = true
@@ -1136,7 +1249,12 @@ export class PgArrayWalker {
     return PG_ARRAY_BAD
   }
 
-  /** The next element: `PG_ARRAY_ELEMENT`, `PG_ARRAY_NULL`, `PG_ARRAY_END` or `PG_ARRAY_BAD`. */
+  /**
+   * Steps to the next element, setting `start`, `length` and `escaped`.
+   * @returns `PG_ARRAY_ELEMENT`, `PG_ARRAY_NULL`, `PG_ARRAY_END` or
+   *   `PG_ARRAY_BAD`; once `PG_ARRAY_BAD`, the walk answers it until the next
+   *   `begin`.
+   */
   next(): i32 {
     if (this.bad) {
       return PG_ARRAY_BAD
@@ -1210,7 +1328,14 @@ export class PgArrayWalker {
     return PG_ARRAY_ELEMENT
   }
 
-  /** Writes the current element, unescaped, to `out[at, ...)`; answers its length, or -1 when it does not fit. */
+  /**
+   * Writes the current element, unescaped (each backslash dropped and the
+   * byte after it kept), to `out[at, ...)`. Nothing is allocated.
+   * @param out The buffer to write into; the caller owns it.
+   * @param at Where in `out` the element starts.
+   * @returns The bytes written, at most `length`; -1 when it does not fit,
+   *   in which case `out` may hold part of it.
+   */
   copy(out: u8[], at: i32): i32 {
     const b: u8[] = this.b
     let n: i32 = 0
@@ -1307,7 +1432,14 @@ export class PgConnection {
    * A connection that has queued its startup message. `password` is copied,
    * so the caller may wipe its own; `nonce` must be at least 18 bytes from a
    * cryptographic random source (`crypto.getRandomValues`), and is fixed only
-   * in a test.
+   * in a test. Panics on a `PgConfig` that is a mistake (no user, a cap out
+   * of range, a NUL in a startup parameter) or a nonce shorter than 18 bytes.
+   * @param config The caps and startup parameters; kept, and read for the
+   *   connection's life, so do not change it afterwards.
+   * @param password The role's password as UTF-8 bytes, without SASLprep;
+   *   copied into a holder the connection wipes once the SCRAM proof is
+   *   computed, or when it fails or is disposed. It may be empty for `trust`.
+   * @param nonce The client nonce: its first 18 bytes are used, base64-encoded.
    */
   constructor(config: PgConfig, password: Secret<u8[]>, nonce: u8[]) {
     if (toI32(nonce.length) < PG_NONCE_BYTES) {
@@ -1354,22 +1486,38 @@ export class PgConnection {
 
   // --- Buffers -----------------------------------------------------------------
 
-  /** The input buffer: read from the socket into it at `inputEnd()`. */
+  /**
+   * The input buffer: read from the socket into it at `inputEnd()`. The
+   * connection owns it, and `next()` may replace it with a larger one, so
+   * fetch it again after every `next()`.
+   * @returns The buffer itself, not a copy.
+   */
   inputBuffer(): u8[] {
     return this.input
   }
 
-  /** Where the next byte read goes. */
+  /**
+   * Where the next byte read goes.
+   * @returns An index into `inputBuffer()`.
+   */
   inputEnd(): i32 {
     return this.inEnd
   }
 
-  /** How many bytes may be read into the input buffer now. */
+  /**
+   * How many bytes may be read into the input buffer now.
+   * @returns The bytes free from `inputEnd()` to the buffer's end; 0 when it
+   *   is full, which `next()` mends by compacting or growing it.
+   */
   inputRoom(): i32 {
     return toI32(this.input.length) - this.inEnd
   }
 
-  /** Records that `n` bytes were read into the input buffer at `inputEnd()`. */
+  /**
+   * Records that `n` bytes were read into the input buffer at `inputEnd()`.
+   * Panics on a negative `n` or one past `inputRoom()`.
+   * @param n The bytes the read wrote, from 0 to `inputRoom()`.
+   */
   received(n: i32): void {
     if (n < 0 || n > this.inputRoom()) {
       panic("nish/net/postgres: received more than inputRoom()")
@@ -1377,7 +1525,16 @@ export class PgConnection {
     this.inEnd += n
   }
 
-  /** Copies what fits of `src[start, start + length)` into the input buffer; answers how much. */
+  /**
+   * Copies what fits of `src[start, start + length)` into the input buffer at
+   * `inputEnd()`, for a program whose bytes arrive in a buffer of its own.
+   * Panics on a window outside `src`.
+   * @param src The bytes to take; the caller keeps them.
+   * @param start The window's first byte in `src`.
+   * @param length The window's length in bytes.
+   * @returns The bytes copied, at most `inputRoom()`; the rest are the
+   *   caller's to give again after `next()`.
+   */
   receive(src: u8[], start: i32, length: i32): i32 {
     if (start < 0 || length < 0 || length > toI32(src.length) - start) {
       panic("nish/net/postgres: receive() outside its source")
@@ -1389,22 +1546,39 @@ export class PgConnection {
     return n
   }
 
-  /** The output buffer: write `[outputStart(), outputEnd())` to the socket. */
+  /**
+   * The output buffer: write `[outputStart(), outputEnd())` to the socket.
+   * The connection owns it, and a builder call or `sent` may grow or compact
+   * it, so fetch it again after each.
+   * @returns The buffer itself, not a copy.
+   */
   outputBuffer(): u8[] {
     return this.out
   }
 
-  /** The first byte not yet sent. */
+  /**
+   * The first byte not yet sent.
+   * @returns An index into `outputBuffer()`.
+   */
   outputStart(): i32 {
     return this.outStart
   }
 
-  /** One past the last byte that may be sent: a Bind still open is held back until `bindEnd()` has written its lengths. */
+  /**
+   * One past the last byte that may be sent: a Bind still open is held back
+   * until `bindEnd()` has written its lengths.
+   * @returns An index into `outputBuffer()`; equal to `outputStart()` when
+   *   there is nothing to send.
+   */
   outputEnd(): i32 {
     return this.bindAt >= 0 ? this.bindAt : this.outEnd
   }
 
-  /** Records that `n` bytes from `outputStart()` were written to the socket. */
+  /**
+   * Records that `n` bytes from `outputStart()` were written to the socket.
+   * Panics on a negative `n` or one past `outputEnd() - outputStart()`.
+   * @param n The bytes the write took.
+   */
   sent(n: i32): void {
     if (n < 0 || n > this.outputEnd() - this.outStart) {
       panic("nish/net/postgres: sent more than was queued")
@@ -1418,7 +1592,12 @@ export class PgConnection {
     }
   }
 
-  /** Reports the end of the stream: unless it already has, the connection fails with `PG_ERR_CLOSED`. */
+  /**
+   * Reports the end of the stream (a read of 0 bytes, or a socket error):
+   * unless it already has, the connection fails with `PG_ERR_CLOSED`, which
+   * wipes the password. Input already received and not yet read is dropped.
+   * @returns `PG_FAILED`, as every later `next()` does.
+   */
   closed(): i32 {
     if (this.state !== PG_STATE_FAILED) {
       return this.fail(PG_ERR_CLOSED)
@@ -1431,12 +1610,17 @@ export class PgConnection {
    * once the proof is computed, the connection has failed or `dispose()` has
    * run (and for an empty password). It reads the copy itself, so a test can
    * see the wipe happen; a program has no use for it.
+   * @returns True when the copy holds only zero bytes.
    */
   passwordWiped(): boolean {
     return this.password.wiped()
   }
 
-  /** Wipes the password if the connection still holds it. A program that drops a connection before it is ready calls this. */
+  /**
+   * Wipes the password if the connection still holds it. A program that drops
+   * a connection before it is ready calls this. It does not close anything or
+   * queue a Terminate: that is `terminate()`, and the socket is the program's.
+   */
   dispose(): void {
     if (!this.password.gone) {
       this.password.wipe()
@@ -1445,7 +1629,16 @@ export class PgConnection {
 
   // --- Reading -----------------------------------------------------------------
 
-  /** The next event from the input. */
+  /**
+   * Reads input until it has an event to answer. Each call may move the
+   * unread input to the start of the buffer or replace the buffer, which ends
+   * the windows the last event gave (`colStart`, the tag) and calls for a
+   * fresh `inputBuffer()`.
+   * @returns `PG_NEED_MORE` when it needs more input; `PG_READY`, `PG_ROW`,
+   *   `PG_COMPLETE`, `PG_ERROR`, `PG_GROUP_DONE`, `PG_NOTICE` or
+   *   `PG_DESCRIBED` (the module header says what each means); or `PG_FAILED`,
+   *   final, with `failure` saying why.
+   */
   next(): i32 {
     while (true) {
       if (this.state === PG_STATE_FAILED) {
@@ -2106,7 +2299,12 @@ export class PgConnection {
     setI32BE(this.out, at + 1, this.outEnd - at - 1)
   }
 
-  /** Whether another group may start, or the open one take another message. */
+  /**
+   * Whether another group may start, or the open one take another message.
+   * @returns True once the connection is ready (after `PG_READY`, until
+   *   `PG_FAILED`) and either a group is open or fewer than `maxInFlight`
+   *   wait for their answers. Room under `maxOutput` is not part of it.
+   */
   canSend(): boolean {
     return this.state === PG_STATE_READY && (this.groupOpen || this.inFlight < this.config.maxInFlight)
   }
@@ -2128,8 +2326,16 @@ export class PgConnection {
    * unnamed one), its parameters' types given by `paramTypes` (OIDs, 0 to let
    * the server infer one, and parameters past the array are inferred too).
    * The server answers `PG_DESCRIBED`. False, and nothing written, when
-   * `canSend()` is false, a bind is open, `name` or `sql` holds a NUL, or the
-   * message would pass `maxOutput`.
+   * `canSend()` is false, a bind is open, `name` or `sql` holds a NUL, more
+   * than 65535 types are given, or the message would pass `maxOutput`. It
+   * opens a group when none is open; `sync()` ends it.
+   * @param name The statement's name; a named statement lasts until
+   *   `closeStatement` or the connection's end, the unnamed one until the next
+   *   `prepare("")`.
+   * @param sql The statement's text, `$1`, `$2`, ... for its parameters.
+   * @param paramTypes The parameters' type OIDs (23 `int4`, 20 `int8`, 25
+   *   `text`), or 0 for one the server infers; read, not kept.
+   * @returns True when the Parse and Describe were queued.
    */
   prepare(name: string, sql: string, paramTypes: i32[]): boolean {
     const nameLength: i32 = toI32(name.length)
@@ -2156,7 +2362,13 @@ export class PgConnection {
     return true
   }
 
-  /** Close: forgets the prepared statement `name`. False as `prepare` is. */
+  /**
+   * Close: forgets the prepared statement `name` on the server. False, and
+   * nothing written, as `prepare` is. It opens a group when none is open.
+   * @param name The statement to close; closing one that does not exist is
+   *   not an error to the server.
+   * @returns True when the Close was queued.
+   */
   closeStatement(name: string): boolean {
     if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(7 + toI32(name.length))) {
       return false
@@ -2170,7 +2382,12 @@ export class PgConnection {
 
   /**
    * Starts a Bind of the prepared statement `name`; its parameters follow, in
-   * order, then `bindEnd()`. False as `prepare` is.
+   * order, then `bindEnd()`. False, and nothing written, as `prepare` is. It
+   * opens a group when none is open. Until `bindEnd()` or `bindCancel()`,
+   * `outputEnd()` holds the Bind's bytes back.
+   * @param name A statement prepared on this connection, in this group or an
+   *   earlier one.
+   * @returns True when the Bind was opened.
    */
   bindStart(name: string): boolean {
     return this.openBind(name, false)
@@ -2188,6 +2405,8 @@ export class PgConnection {
    * with this when its `binary` is set, and reads their routing ordinals with
    * `binaryInt`. Its `bindEnd()` writes two bytes more, kept free under
    * `maxOutput` from here on. False as `prepare` is.
+   * @param name A statement prepared on this connection.
+   * @returns True when the Bind was opened.
    */
   bindStartBinary(name: string): boolean {
     return this.openBind(name, true)
@@ -2271,7 +2490,12 @@ export class PgConnection {
   // open, the bind has 65535 parameters already, or the parameter would pass
   // `maxOutput`; a program that checked `bindStart()` meets only the last.
 
-  /** A text parameter. */
+  /**
+   * A text parameter: the string's bytes as they are. Panics while an array
+   * parameter is open.
+   * @param value The parameter's text; "" is an empty string, not NULL.
+   * @returns True when it was written; false as every `param...` call is.
+   */
   paramText(value: string): boolean {
     const at: i32 = this.startParam(toI32(value.length))
     if (at < 0) {
@@ -2282,7 +2506,16 @@ export class PgConnection {
     return true
   }
 
-  /** A text parameter from `bytes[start, start + length)`, UTF-8; false too when the window is not inside `bytes`. */
+  /**
+   * A text parameter from `bytes[start, start + length)`, UTF-8, copied into
+   * the Bind so the caller may reuse `bytes` at once. Panics while an array
+   * parameter is open.
+   * @param bytes The buffer the text lies in.
+   * @param start The text's first byte.
+   * @param length The text's length in bytes.
+   * @returns True when it was written; false as every `param...` call is, and
+   *   when the window is not inside `bytes`.
+   */
   paramBytes(bytes: u8[], start: i32, length: i32): boolean {
     this.noArrayOpen()
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
@@ -2299,7 +2532,11 @@ export class PgConnection {
     return true
   }
 
-  /** A NULL parameter. */
+  /**
+   * A NULL parameter, of whatever type the statement gives it. Panics while
+   * an array parameter is open.
+   * @returns True when it was written; false as every `param...` call is.
+   */
   paramNull(): boolean {
     if (this.startParam(toI32(0)) < 0) {
       return false
@@ -2308,7 +2545,14 @@ export class PgConnection {
     return true
   }
 
-  /** An integer parameter, in decimal. */
+  /**
+   * An integer parameter, in decimal text, which the server reads as the
+   * statement's type (`int2`, `int4`, `int8`, `numeric`, ...). Panics while an
+   * array parameter is open.
+   * @param value The integer; one outside the parameter's type is the
+   *   server's error (22003) for that execution.
+   * @returns True when it was written; false as every `param...` call is.
+   */
   paramInt(value: i64): boolean {
     const at: i32 = this.startParam(toI32(20))
     if (at < 0) {
@@ -2327,8 +2571,14 @@ export class PgConnection {
   }
 
   /**
-   * An `int8[]` parameter from `values[start, start + count)`, in decimal;
-   * panics when the range is not inside `values`.
+   * An `int8[]` parameter from `values[start, start + count)`, in decimal
+   * text (`{1,2,3}`, or `{}` for none); panics when the range is not inside
+   * `values`, or while an array parameter is open.
+   * @param values The integers; read now, not kept.
+   * @param start The first element of the window.
+   * @param count The elements to send, 0 for an empty array.
+   * @returns True when it was written; false, and nothing written, as every
+   *   `param...` call is.
    */
   paramIntArray(values: i64[], start: i32, count: i32): boolean {
     if (start < 0 || count < 0 || count > toI32(values.length) - start) {
@@ -2361,7 +2611,14 @@ export class PgConnection {
     return true
   }
 
-  /** A `text[]` parameter: every element quoted, `"` and `\` escaped. */
+  /**
+   * A `text[]` parameter: every element quoted, `"` and `\` escaped, so no
+   * element reads as NULL (build one with `arrayNull` for that). Panics while
+   * an array parameter is open.
+   * @param items The elements, in order; read now, not kept. Empty sends `{}`.
+   * @returns True when it was written; false, and nothing written, as every
+   *   `param...` call is.
+   */
   paramTextArray(items: string[]): boolean {
     // Its exact size first, so that room is asked for once and a refusal writes nothing.
     let size: i64 = 2
@@ -2415,7 +2672,12 @@ export class PgConnection {
   /**
    * An `int4[]` parameter in binary from `values[start, start + count)`;
    * false as the `param...` calls are. Panics, writing nothing, when the
-   * window is not inside `values` or an element is outside `int4`.
+   * window is not inside `values` or an element is outside `int4`, and while
+   * an array parameter is open.
+   * @param values The integers, each within -2^31..2^31-1; read now, not kept.
+   * @param start The first element of the window.
+   * @param count The elements to send, 0 for an empty array.
+   * @returns True when it was written.
    */
   paramInt4Array(values: i64[], start: i32, count: i32): boolean {
     pgIntWindow(values, start, count)
@@ -2431,7 +2693,11 @@ export class PgConnection {
   /**
    * An `int8[]` parameter in binary from `values[start, start + count)`;
    * false as the `param...` calls are. Panics when the window is not inside
-   * `values`.
+   * `values`, and while an array parameter is open.
+   * @param values The integers; read now, not kept.
+   * @param start The first element of the window.
+   * @param count The elements to send, 0 for an empty array.
+   * @returns True when it was written.
    */
   paramInt8Array(values: i64[], start: i32, count: i32): boolean {
     pgIntWindow(values, start, count)
@@ -2485,7 +2751,13 @@ export class PgConnection {
   // with none open and a second `arrayStart()`; `sync()`, `prepare`,
   // `closeStatement` and `bindStart` answer false, the bind being open.
 
-  /** Opens an array parameter, `{}` so far; false as the `param...` calls are. */
+  /**
+   * Opens a text array parameter, `{}` so far, which `arrayElement`,
+   * `arrayInt` and `arrayNull` fill and `arrayEnd()` closes. Panics while an
+   * array is open.
+   * @returns True when it was opened; false, and nothing written, as the
+   *   `param...` calls are.
+   */
   arrayStart(): boolean {
     if (this.arrayAt >= 0) {
       panic("nish/net/postgres: arrayStart() while an array is open")
@@ -2519,7 +2791,12 @@ export class PgConnection {
   /**
    * A text element from `bytes[start, start + length)`, UTF-8, quoted with
    * `"` and `\` escaped; false, and nothing written, when there is no room.
-   * Panics when no array is open or the window is not inside `bytes`.
+   * Panics when no text array is open or the window is not inside `bytes`.
+   * @param bytes The buffer the element lies in; copied, so it may be reused at once.
+   * @param start The element's first byte.
+   * @param length The element's length in bytes; 0 is the empty string.
+   * @returns True when it was written; false leaves the array open with the
+   *   elements it has.
    */
   arrayElement(bytes: u8[], start: i32, length: i32): boolean {
     this.arrayOpen()
@@ -2557,7 +2834,11 @@ export class PgConnection {
     return true
   }
 
-  /** A NULL element; false, and nothing written, when there is no room. Panics when no array is open. */
+  /**
+   * A NULL element of the open text array. Panics when no text array is open.
+   * @returns True when it was written; false, and nothing written, when there
+   *   is no room.
+   */
   arrayNull(): boolean {
     this.arrayOpen()
     if (!this.elementRoom(toI64(4))) {
@@ -2575,7 +2856,13 @@ export class PgConnection {
     this.arrayCount += 1
   }
 
-  /** An integer element, in decimal; false, and nothing written, when there is no room. Panics when no array is open. */
+  /**
+   * An integer element of the open text array, in decimal. Panics when no
+   * text array is open.
+   * @param value The element.
+   * @returns True when it was written; false, and nothing written, when there
+   *   is no room.
+   */
   arrayInt(value: i64): boolean {
     this.arrayOpen()
     if (!this.elementRoom(toI64(pgDecimalLength(value)))) {
@@ -2592,7 +2879,14 @@ export class PgConnection {
   // The text builder's rules hold, and a text element in a binary array, or a
   // binary element in a text one, panics.
 
-  /** Opens a binary array parameter of `elementOid`'s elements; false as the `param...` calls are. Panics on another OID, or while an array is open. */
+  /**
+   * Opens a binary array parameter of `elementOid`'s elements, which
+   * `binaryArrayInt` and `binaryArrayNull` fill and `arrayEnd()` closes.
+   * Panics on another OID, or while an array is open.
+   * @param elementOid 23 for an `int4[]`, 20 for an `int8[]`.
+   * @returns True when it was opened; false, and nothing written, as the
+   *   `param...` calls are.
+   */
   binaryArrayStart(elementOid: i32): boolean {
     if (this.arrayAt >= 0) {
       panic("nish/net/postgres: binaryArrayStart() while an array is open")
@@ -2624,6 +2918,8 @@ export class PgConnection {
    * An integer element of the open binary array; false, and nothing written,
    * when there is no room. Panics when no binary array is open, or when it is
    * an `int4[]` and `value` is outside `int4`.
+   * @param value The element: four bytes in an `int4[]`, eight in an `int8[]`.
+   * @returns True when it was written.
    */
   binaryArrayInt(value: i64): boolean {
     this.binaryArrayOpen()
@@ -2646,7 +2942,12 @@ export class PgConnection {
     return true
   }
 
-  /** A NULL element of the open binary array, length -1; false, and nothing written, when there is no room. Panics when no binary array is open. */
+  /**
+   * A NULL element of the open binary array, length -1. Panics when no binary
+   * array is open.
+   * @returns True when it was written; false, and nothing written, when there
+   *   is no room.
+   */
   binaryArrayNull(): boolean {
     this.binaryArrayOpen()
     if (!this.room(toI32(4))) {
@@ -2658,7 +2959,11 @@ export class PgConnection {
     return true
   }
 
-  /** Ends the open array parameter, text or binary; never refused for room, which its elements kept. Panics when no array is open. */
+  /**
+   * Ends the open array parameter, text or binary; never refused for room,
+   * which its elements kept. An array with no elements is sent as the empty
+   * array. Panics when no array is open.
+   */
   arrayEnd(): void {
     if (this.arrayAt < 0) {
       panic("nish/net/postgres: arrayEnd() with no arrayStart()")
@@ -2686,7 +2991,9 @@ export class PgConnection {
    * Ends the Bind (every result column in text, or in binary after
    * `bindStartBinary`) and queues its Execute, for every row. False, and
    * nothing written, when no bind is open; never for room, which the calls
-   * before it kept.
+   * before it kept. Panics while an array parameter is open. The Bind's bytes
+   * count toward `outputEnd()` from here on.
+   * @returns True when the Bind and Execute were queued.
    */
   bindEnd(): boolean {
     if (this.bindAt < 0) {
@@ -2723,6 +3030,7 @@ export class PgConnection {
    * Drops the open bind, and the array open in it, unsent, so that a program
    * whose parameter was refused for room can send the group without it; a
    * group the bind opened is closed again. False when no bind is open.
+   * @returns True when an open bind was dropped.
    */
   bindCancel(): boolean {
     if (this.bindAt < 0) {
@@ -2766,7 +3074,12 @@ export class PgConnection {
     this.paramCountAt = from + codes
   }
 
-  /** Sync: ends the open group, which the server answers with `PG_GROUP_DONE`. False when no group is open or a bind is; never for room. */
+  /**
+   * Sync: ends the open group, which the server answers with
+   * `PG_GROUP_DONE`; the group stays in `inFlight` until then.
+   * @returns True when the Sync was queued; false when no group is open or a
+   *   bind is; never for room.
+   */
   sync(): boolean {
     if (!this.groupOpen || this.bindAt >= 0) {
       return false
@@ -2778,7 +3091,11 @@ export class PgConnection {
     return true
   }
 
-  /** Terminate: tells the server the connection is ending; close the socket once it is sent. A bind still open is dropped unsent. */
+  /**
+   * Terminate: tells the server the connection is ending; close the socket
+   * once it is sent. A bind still open is dropped unsent. It is queued in any
+   * state, and is never refused for room.
+   */
   terminate(): void {
     if (this.bindAt >= 0) {
       this.dropBind()
@@ -2790,22 +3107,39 @@ export class PgConnection {
 
   // --- Results -----------------------------------------------------------------
 
-  /** Column `c`'s first byte in `inputBuffer()`. */
+  /**
+   * Column `c`'s first byte in `inputBuffer()`, valid until the next `next()`.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns An index into `inputBuffer()`.
+   */
   colStart(c: i32): i32 {
     return this.colStarts[c]
   }
 
-  /** Column `c`'s length, -1 for NULL. */
+  /**
+   * Column `c`'s length.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns The length in bytes, or -1 for NULL.
+   */
   colLength(c: i32): i32 {
     return this.colLengths[c]
   }
 
-  /** Whether column `c` is NULL. */
+  /**
+   * Whether column `c` of the current row is NULL.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns True when the column is NULL.
+   */
   isNull(c: i32): boolean {
     return this.colLengths[c] < 0
   }
 
-  /** Column `c` as a string; the one result read that allocates. "" for NULL. */
+  /**
+   * Column `c` as a string; the one result read that allocates, and the string
+   * outlives the row.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns The column's bytes as a string; "" for NULL and for an empty value.
+   */
   columnText(c: i32): string {
     const length: i32 = this.colLengths[c]
     if (length <= 0) {
@@ -2815,37 +3149,70 @@ export class PgConnection {
     return String.fromBytes(this.input, start, start + length)
   }
 
-  /** Column `c` of the statement just described: its type's OID (23 is `int4`, 25 `text`). */
+  /**
+   * Column `c` of the statement just described, after `PG_DESCRIBED`.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns Its type's OID (23 is `int4`, 25 `text`).
+   */
   columnType(c: i32): i32 {
     return this.colTypes[c]
   }
 
-  /** Column `c` as an integer; NULL or a bad value sets `text.failed`. */
+  /**
+   * Text column `c` as an integer, through `text.int`; NULL or a bad value
+   * sets `text.failed`.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns The value, or 0 when it sets `text.failed`.
+   */
   int(c: i32): i64 {
     return this.text.int(this.input, this.colStarts[c], this.colLengths[c])
   }
 
-  /** Column `c` as a boolean; NULL or a bad value sets `text.failed`. */
+  /**
+   * Text column `c` as a boolean, through `text.bool`; NULL or a bad value
+   * sets `text.failed`.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns True for `t`; false for `f`, and when it sets `text.failed`.
+   */
   bool(c: i32): boolean {
     return this.text.bool(this.input, this.colStarts[c], this.colLengths[c])
   }
 
-  /** Binary column `c`, an `int2`, `int4`, `int8` or a time's microseconds, as an integer; NULL or another length sets `binary.failed`. */
+  /**
+   * Binary column `c`, an `int2`, `int4`, `int8` or a time's microseconds
+   * since 2000, as an integer; NULL or another length sets `binary.failed`.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns The value, or 0 when it sets `binary.failed`.
+   */
   binaryInt(c: i32): i64 {
     return this.binary.int(this.input, this.colStarts[c], this.colLengths[c])
   }
 
-  /** Binary column `c` as a boolean; NULL or a bad value sets `binary.failed`. */
+  /**
+   * Binary column `c` as a boolean; NULL or a bad value sets `binary.failed`.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns True for 1; false for 0, and when it sets `binary.failed`.
+   */
   binaryBool(c: i32): boolean {
     return this.binary.bool(this.input, this.colStarts[c], this.colLengths[c])
   }
 
-  /** Binary column `c`, a `float8`, as an f64; NULL or another length sets `binary.failed`. */
+  /**
+   * Binary column `c`, a `float8`; NULL or another length sets `binary.failed`.
+   * @param c The column, 0 to `columns - 1`.
+   * @returns The value, or 0 when it sets `binary.failed`.
+   */
   binaryFloat(c: i32): f64 {
     return this.binary.float(this.input, this.colStarts[c], this.colLengths[c])
   }
 
-  /** Whether the tag of the execution just completed starts with the word `word` (`INSERT`, `SELECT`, ...). */
+  /**
+   * Whether the tag of the execution just completed starts with the word
+   * `word`, read after `PG_COMPLETE` and before the next `next()`.
+   * @param word The command word, as the server spells it (`INSERT`,
+   *   `SELECT`, `UPDATE`, ...); case matters, and `INS` does not match `INSERT`.
+   * @returns True when the tag is `word` or begins with `word` and a space.
+   */
   tagIs(word: string): boolean {
     const n: i32 = toI32(word.length)
     if (n > this.tagLength || !pgBytesAre(this.input, this.tagStart, n, word)) {
@@ -2854,7 +3221,13 @@ export class PgConnection {
     return n === this.tagLength || toI32(this.input[this.tagStart + n]) === 32
   }
 
-  /** The row count the tag ends with (`INSERT 0 3` is 3, `SELECT 5` is 5), or -1 when it has none or it does not fit an i64. */
+  /**
+   * The row count the tag of the execution just completed ends with, read
+   * after `PG_COMPLETE` and before the next `next()`; `text.failed` is left
+   * as it was.
+   * @returns The count (`INSERT 0 3` is 3, `SELECT 5` is 5), or -1 when the
+   *   tag has none (`BEGIN`) or it does not fit an i64.
+   */
   tagRows(): i64 {
     const end: i32 = this.tagStart + this.tagLength
     let p: i32 = end
@@ -2904,15 +3277,27 @@ const PG_SLOT_DRAINING: i32 = 4
 
 /** One of a pool's connections, and the groups it has in flight. */
 class PgPoolSlot {
+  /** @internal Used by `PgPool.dispatch`, `PgPool.wanted`, `PgPool.connect`, `PgPool.next` and `PgPool.anyReady` in this module. */
   state: i32 = 0
+  /** @internal Used by `PgPool.dispatch`, `PgPool.connect`, `PgPool.connection` and `PgPool.dispose` in this module. */
   conn: PgConnection | null = null
-  /** How many registered statements this connection has queued, and how many the server has described. */
+  /**
+   * How many registered statements this connection has queued, and how many the server has described.
+   * @internal Used by `PgPool.dispatch`, `PgPool.connect` and `PgPool.next` in this module.
+   */
   queued: i32 = 0
+  /** @internal Used by `PgPool.connect` and `PgPool.next` in this module. */
   described: i32 = 0
-  /** The groups in flight, oldest first, in a ring: each one's ticket, and how many of the pool's own prepares lead it. */
+  /**
+   * The groups in flight, oldest first, in a ring: each one's ticket, and how many of the pool's own prepares lead it.
+   * @internal Used by `PgPool.next` in this module.
+   */
   readonly tickets: i32[]
+  /** @internal Used by `PgPool.next` in this module. */
   readonly leads: i32[]
+  /** @internal Used by `PgPool.connect` and `PgPool.next` in this module. */
   head: i32 = 0
+  /** @internal Used by `PgPool.inFlight`, `PgPool.send`, `PgPool.connect` and `PgPool.next` in this module. */
   count: i32 = 0
 
   constructor(ring: i32) {
@@ -2920,6 +3305,7 @@ class PgPoolSlot {
     this.leads = new Array<i32>(ring)
   }
 
+  /** @internal Used by `PgPool.dispatch` and `PgPool.next` in this module. */
   push(ticket: i32, leads: i32): void {
     const at: i32 = (this.head + this.count) % toI32(this.tickets.length)
     this.tickets[at] = ticket
@@ -2927,6 +3313,7 @@ class PgPoolSlot {
     this.count += 1
   }
 
+  /** @internal Used by `PgPool.next` in this module. */
   pop(): void {
     this.head = (this.head + 1) % toI32(this.tickets.length)
     this.count -= 1
@@ -2975,6 +3362,12 @@ export class PgPool {
    * waiting requests (1 to 2^20). `password` is copied and kept until
    * `dispose()`, since a connection is made again after a failure. Panics as
    * `PgConnection` does on `config`, and on a `maxInFlight` over 1024.
+   *
+   * @param config The settings every connection of the pool is made with; kept, not copied.
+   * @param password The password every connection authenticates with. The pool keeps its
+   *   own copy, so the caller may wipe this one as soon as the constructor returns.
+   * @param size The most connections the pool makes, from 1 to 1024.
+   * @param queueSize The most requests that may wait for a connection, from 1 to 2^20.
    */
   constructor(config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32) {
     pgCheckConfig(config)
@@ -3004,6 +3397,11 @@ export class PgPool {
    * Registers a statement for every connection to prepare before its first
    * request. False when a connection has been made already, `name` or `sql`
    * holds a NUL, or 256 are registered.
+   *
+   * @param name The statement's name, which the program's binds use; no NUL.
+   * @param sql The statement's text, with `$1`, `$2`... for its parameters; no NUL.
+   * @param paramTypes The type OID of each parameter, 0 to let the server infer it; copied.
+   * @returns True when the statement was registered.
    */
   register(name: string, sql: string, paramTypes: i32[]): boolean {
     if (
@@ -3024,7 +3422,12 @@ export class PgPool {
     return true
   }
 
-  /** Queues a request and answers its ticket, or `PG_POOL_FULL` when `queueSize` are waiting. */
+  /**
+   * Queues a request and answers its ticket, or `PG_POOL_FULL` when `queueSize` are waiting.
+   *
+   * @returns The request's ticket, from 0 to 2^31-1 and counting up from 0, wrapping to 0
+   *   after 2^31-1; or `PG_POOL_FULL`.
+   */
   request(): i32 {
     const room: i32 = toI32(this.queue.length)
     if (this.queueCount === room) {
@@ -3037,12 +3440,21 @@ export class PgPool {
     return ticket
   }
 
-  /** The number of requests waiting for a connection. */
+  /**
+   * How many requests wait for a connection.
+   *
+   * @returns The requests queued and not yet given a connection.
+   */
   waiting(): i32 {
     return this.queueCount
   }
 
-  /** The number of groups in flight on every connection, sent and not yet done: the `inFlight` a `PgBatchClock` reads. */
+  /**
+   * How many groups are in flight across every connection: the `inFlight` a
+   * `PgBatchClock` reads.
+   *
+   * @returns The groups sent and not yet done, summed over every connection.
+   */
   inFlight(): i32 {
     let n: i32 = 0
     for (const slot of this.slots) {
@@ -3061,6 +3473,8 @@ export class PgPool {
    * waiting requests that the connections already starting cannot take. A
    * request handed out is the program's to end with `send()`: until then no
    * other is handed out.
+   *
+   * @returns The slot the request was handed to, from 0 to `size - 1`, or `PG_POOL_NONE`.
    */
   dispatch(): i32 {
     if (this.building >= 0 || this.queueCount === 0) {
@@ -3117,6 +3531,8 @@ export class PgPool {
    * is none; when a bind is still open, so finish it and call again; and
    * when no message of the group was written, so the request is dropped and
    * gets no events (`PG_LOST` if its connection has failed).
+   *
+   * @returns True when the group's Sync was written and the request is in flight.
    */
   send(): boolean {
     const s: i32 = this.building
@@ -3140,7 +3556,11 @@ export class PgPool {
     return false
   }
 
-  /** A slot that needs a socket, or `PG_POOL_NONE`: connect it, then call `connect(slot, nonce)`. */
+  /**
+   * A slot that needs a socket, or `PG_POOL_NONE`: connect it, then call `connect(slot, nonce)`.
+   *
+   * @returns The lowest wanted slot, or `PG_POOL_NONE` when no slot is wanted.
+   */
   wanted(): i32 {
     for (let s: i32 = 0; s < this.size; s++) {
       if (this.slots[s].state === PG_SLOT_WANTED) {
@@ -3155,6 +3575,10 @@ export class PgPool {
    * send its output once the socket is connected, and if the socket fails,
    * call `connection(slot).closed()`. Panics when `slot` is not wanted or the
    * pool is disposed.
+   *
+   * @param slot The slot `wanted()` answered.
+   * @param nonce At least 18 fresh random bytes for the SCRAM client nonce, as the
+   *   `PgConnection` constructor takes them; a new one for every connection.
    */
   connect(slot: i32, nonce: u8[]): void {
     if (slot < 0 || slot >= this.size || this.slots[slot].state !== PG_SLOT_WANTED) {
@@ -3173,7 +3597,13 @@ export class PgPool {
     this.started = true
   }
 
-  /** The connection in `slot`, its buffers the carrier's to fill and drain; the last one made after it fails. Panics when none was made. */
+  /**
+   * The connection in `slot`, its buffers the carrier's to fill and drain; the last one made
+   * after it fails. Panics when none was made.
+   *
+   * @param slot The slot, from 0 to `size - 1`.
+   * @returns The slot's connection, owned by the pool: a later `connect` on the slot replaces it.
+   */
   connection(slot: i32): PgConnection {
     const conn: PgConnection | null = slot < 0 || slot >= this.size ? null : this.slots[slot].conn
     if (conn === null) {
@@ -3193,6 +3623,9 @@ export class PgPool {
    * server that cannot be reached empties the queue rather than holds it.
    * `PG_NEED_MORE` once `PG_FAILED` was answered, until `connect` builds the
    * slot again. Panics as `connection(slot)` does.
+   *
+   * @param slot The slot whose input the carrier has just filled, from 0 to `size - 1`.
+   * @returns A `PG_` event; `ticket` names the request it is about.
    */
   next(slot: i32): i32 {
     const conn: PgConnection = this.connection(slot)
@@ -3249,7 +3682,13 @@ export class PgPool {
     return false
   }
 
-  /** Whether every byte of the pool's copy of the password is zero, as `PgConnection.passwordWiped()` reads its own. */
+  /**
+   * Whether every byte of the pool's copy of the password is zero, as
+   * `PgConnection.passwordWiped()` reads its own: true once it is wiped, and
+   * for an empty password before any wipe.
+   *
+   * @returns True once the pool's copy is wiped; the connections' copies are not read.
+   */
   passwordWiped(): boolean {
     return this.password.wiped()
   }
@@ -3365,23 +3804,46 @@ export class PgBatchConfig {
 
 /** One execution's requests, grouped by key, and how far its rows have been routed. */
 class PgBatchRun {
-  /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch. */
+  /**
+   * Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch.
+   * @internal Used by `PgBatcher.take`, `PgBatcher.emit`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module.
+   */
   tags: i32[]
+  /** @internal Used by `PgBatcher.take`, `PgBatcher.emit` and `PgBatcher.nextUnsorted` in this module. */
   first: i32[]
-  /** Under `sorted` false, whether key `k` has had a row; grown by `take` with `tags`, and empty when sorted. */
+  /**
+   * Under `sorted` false, whether key `k` has had a row; grown by `take` with `tags`, and empty when sorted.
+   * @internal Used by `PgBatcher.take`, `PgBatcher.row` and `PgBatcher.nextUnsorted` in this module.
+   */
   had: boolean[]
+  /** @internal Used by `PgBatcher.row`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   keys: i32 = 0
-  /** The key rows are being read for, whether it has had one, and the next of its requests to answer. */
+  /**
+   * The key rows are being read for, whether it has had one, and the next of its requests to answer.
+   * @internal Used by `PgBatcher.row`, `PgBatcher.emit`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module.
+   */
   cur: i32 = 0
+  /** @internal Used by `PgBatcher.next` in this module. */
   curRows: boolean = false
+  /** @internal Used by `PgBatcher.emit`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   at: i32 = 0
-  /** The key whose `PG_BATCH_ROW` events are owed for the connection's current row; -1 for none. */
+  /**
+   * The key whose `PG_BATCH_ROW` events are owed for the connection's current row; -1 for none.
+   * @internal Used by `PgBatcher.quietRun`, `PgBatcher.row`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module.
+   */
   target: i32 = -1
-  /** The handle `take` gave for the run's execution, and how many takes it has had, mod `PG_BATCH_USES`. */
+  /**
+   * The handle `take` gave for the run's execution, and how many takes it has had, mod `PG_BATCH_USES`.
+   * @internal Used by `PgBatcher.take` and `PgBatcher.run` in this module.
+   */
   handle: i32 = -1
+  /** @internal Used by `PgBatcher.take` in this module. */
   uses: i32 = 0
+  /** @internal Used by `PgBatcher.take`, `PgBatcher.run`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   open: boolean = false
+  /** @internal Used by `PgBatcher.quietRun`, `PgBatcher.end`, `PgBatcher.fail`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   ended: boolean = false
+  /** @internal Used by `PgBatcher.row`, `PgBatcher.fail`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   failed: boolean = false
 
   constructor() {
@@ -3390,7 +3852,10 @@ class PgBatchRun {
     this.had = []
   }
 
-  /** Opens the run for `keys` keys, none of whose rows have been read. */
+  /**
+   * Opens the run for `keys` keys, none of whose rows have been read.
+   * @internal Used by `PgBatcher.take` in this module.
+   */
   reset(keys: i32): void {
     this.open = true
     this.keys = keys
@@ -3471,7 +3936,10 @@ export class PgBatcher {
   refused: i32 = 0
   /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored, stopping at 2^31 - 1. */
   stray: i32 = 0
-  /** The most requests one execution takes, from `PgBatchConfig.maxRequests`. */
+  /**
+   * The most requests one execution takes, from `PgBatchConfig.maxRequests`.
+   * @internal Used by `PgCarrier.routeBatch` in std/net/postgres-carrier.ts.
+   */
   readonly maxRequests: i32
   private readonly keyType: i32
   private readonly maxBytes: i32
@@ -3481,7 +3949,14 @@ export class PgBatcher {
   private head: i32 = 0
   private count: i32 = 0
 
-  /** A batcher for `config`; panics when a name or query is empty or holds a NUL, or a cap is out of range. */
+  /**
+   * A batcher for `config`; panics when a name or query is empty or holds a NUL, or a cap is out
+   * of range.
+   *
+   * @param config The statement shape and caps, read once here: later changes to it do nothing.
+   *   `maxRequests` is 1 to 65536, `maxBytes` at least 22, `queueSize` 1 to 2^20, `runs` 1 to
+   *   1024, and `queueBytes` at least 0 (a text batcher with 0 can queue only empty keys).
+   */
   constructor(config: PgBatchConfig) {
     const keyType: i32 = config.keyType
     if (keyType !== PG_BATCH_INT && keyType !== PG_BATCH_TEXT) {
@@ -3547,15 +4022,21 @@ export class PgBatcher {
     }
   }
 
-  /** The number of requests waiting for `take`. */
+  /**
+   * How many requests wait for `take`.
+   *
+   * @returns The requests queued and not yet taken into a batch.
+   */
   waiting(): i32 {
     return this.count
   }
 
   /**
-   * Drops the oldest waiting request and answers its tag, or -1 when none
-   * waits: for a program that cannot reach the server to fail requests
-   * rather than hold them.
+   * Drops the oldest waiting request, so that a carrier that cannot reach the
+   * server fails its requests rather than holds them.
+   *
+   * @returns The dropped request's tag, or -1 when none waits.
+   * @internal Used by `PgCarrier.next` in std/net/postgres-carrier.ts.
    */
   shed(): i32 {
     if (this.count === 0) {
@@ -3570,7 +4051,15 @@ export class PgBatcher {
     return tag
   }
 
-  /** Queues a request for the int8 `key`; false when `queueSize` are waiting. Panics on a text batcher. */
+  /**
+   * Queues a request for the int8 `key`; false when `queueSize` are waiting. Panics on a text
+   * batcher.
+   *
+   * @param key The key the statement's `q.key` is bound to.
+   * @param tag The caller's own number for the request, which `tag` holds when `next(run)`
+   *   answers an event about it; best not -1, which `tag` holds for none.
+   * @returns True when the request was queued.
+   */
   addInt(key: i64, tag: i32): boolean {
     if (this.keyType !== PG_BATCH_INT) {
       panic("nish/net/postgres: PgBatcher.addInt on a text batcher")
@@ -3591,6 +4080,14 @@ export class PgBatcher {
    * the key would not fit in `queueBytes` beside those waiting, or it is too
    * long for one execution's `maxBytes`. Panics on an int8 batcher, or when
    * the window is not inside `bytes`.
+   *
+   * @param bytes The buffer holding the key; only the window is read, and the caller may reuse
+   *   the buffer as soon as the call returns.
+   * @param start The index of the key's first byte in `bytes`.
+   * @param length The key's length in bytes, 0 for the empty key.
+   * @param tag The caller's own number for the request, which `tag` holds when `next(run)`
+   *   answers an event about it; best not -1, which `tag` holds for none.
+   * @returns True when the request was queued.
    */
   addText(bytes: u8[], start: i32, length: i32, tag: i32): boolean {
     if (this.keyType !== PG_BATCH_TEXT) {
@@ -3684,6 +4181,12 @@ export class PgBatcher {
    * answers -1. The program calls `clock.arrived(now)` for each request it
    * adds. Panics when the clock's waiting count is not this batcher's, or its
    * `maxCount` is below `maxRequests`.
+   *
+   * @param conn The free connection to bind the batch on, as `take` takes it.
+   * @param clock The clock that mirrors this batcher's queue, one `arrived` per request added.
+   * @param nowUs The time now, in the clock's microseconds.
+   * @param inFlight The program's executions or groups still running, for the idle bypass.
+   * @returns The run handle `take` answered, or -1 when no batch was taken.
    */
   takeDue(conn: PgConnection, clock: PgBatchClock, nowUs: i64, inFlight: i32): i32 {
     if (clock.waiting() !== this.count || clock.maxCount < this.maxRequests) {
@@ -3709,6 +4212,10 @@ export class PgBatcher {
    * the connection's `maxOutput`; those not taken stay queued. -1, and
    * nothing written, when none waits, every run is in flight, or `conn`
    * refused the bind or the first key.
+   *
+   * @param conn A connection with no bind open, on which `sql` has been prepared under `name`.
+   * @returns The run handle, from 0 to `runs` * 2^20 - 1, to pass to `row`, `end`, `fail` and
+   *   `next` for this execution's events; or -1.
    */
   take(conn: PgConnection): i32 {
     if (this.count === 0) {
@@ -3892,6 +4399,10 @@ export class PgBatcher {
    * one before the key the last row was for): that counts in `refused` and
    * fails the run; and on a spent handle, which counts in `stray`. Panics on a handle
    * `take` cannot give, or when the run's events are not all answered.
+   *
+   * @param r The run handle `take` answered for the execution the row belongs to.
+   * @param conn The connection whose `next()` has just answered `PG_ROW` for that execution.
+   * @returns True when the row was routed, and `next(r)` answers its `PG_BATCH_ROW` events.
    */
   row(r: i32, conn: PgConnection): boolean {
     const run: PgBatchRun | null = this.quietRun(r, "row")
@@ -3935,7 +4446,12 @@ export class PgBatcher {
     return true
   }
 
-  /** Ends run `r`'s execution, on its `PG_COMPLETE`: `next(r)` then closes every request left. Ignores a spent handle, and panics, as `row` does. */
+  /**
+   * Ends run `r`'s execution, on its `PG_COMPLETE`: `next(r)` then closes every request left.
+   * Ignores a spent handle, and panics, as `row` does.
+   *
+   * @param r The run handle `take` answered for the execution.
+   */
   end(r: i32): void {
     const run: PgBatchRun | null = this.quietRun(r, "end")
     if (run !== null) {
@@ -3943,7 +4459,12 @@ export class PgBatcher {
     }
   }
 
-  /** Fails run `r`'s execution, on its `PG_ERROR` or `PG_LOST`: `next(r)` then answers `PG_BATCH_FAILED` for every request left. Ignores a spent handle, and panics, as `row` does. */
+  /**
+   * Fails run `r`'s execution, on its `PG_ERROR` or `PG_LOST`: `next(r)` then answers
+   * `PG_BATCH_FAILED` for every request left. Ignores a spent handle, and panics, as `row` does.
+   *
+   * @param r The run handle `take` answered for the execution.
+   */
   fail(r: i32): void {
     const run: PgBatchRun | null = this.quietRun(r, "fail")
     if (run !== null) {
@@ -3969,6 +4490,9 @@ export class PgBatcher {
    * Once `end` or `fail` has had all its events the run is over, free for
    * `take` again, and its handle spent: `PG_BATCH_NONE` ever after. Panics
    * on a handle `take` cannot give.
+   *
+   * @param r The run handle `take` answered for the execution.
+   * @returns A `PG_BATCH_*` event: call again until it is `PG_BATCH_NONE`.
    */
   next(r: i32): i32 {
     const found: PgBatchRun | null = this.run(r)
@@ -4120,6 +4644,7 @@ export class PgBatchClock {
   lastReason: i32 = 0
   /** How long the oldest item of the last batch waited, in microseconds. */
   lastWaitUs: i64 = 0
+  /** @internal Used by `PgBatcher.takeDue` in this module. */
   readonly maxCount: i32
   private readonly minCount: i32
   private readonly factor: f64
@@ -4138,7 +4663,12 @@ export class PgBatchClock {
   private last: i64 = 0
   private due: i32 = 0
 
-  /** A clock for `config`; panics when a setting is out of the range its field names. */
+  /**
+   * A clock for `config`; panics when a setting is out of the range its field names, or
+   * `minCount` is above `maxCount`.
+   *
+   * @param config The settings, read once here: later changes to it do nothing.
+   */
   constructor(config: PgBatchClockConfig) {
     const factor: f64 = config.factor
     const weight: f64 = config.weight
@@ -4171,7 +4701,11 @@ export class PgBatchClock {
     this.starts = new Array<i64>(5)
   }
 
-  /** The number of items waiting. */
+  /**
+   * How many items wait for a batch.
+   *
+   * @returns The items queued and not yet started in a batch.
+   */
   waiting(): i32 {
     return this.count
   }
@@ -4180,6 +4714,9 @@ export class PgBatchClock {
    * Records an item queued at `nowUs`; false when `queueSize` are waiting. A
    * time before the last one given counts as the last one, so a clock that
    * steps back cannot make an item older than its neighbours.
+   *
+   * @param nowUs The time the item was queued, in microseconds from the program's fixed point.
+   * @returns True when the item was recorded.
    */
   arrived(nowUs: i64): boolean {
     const ring: i32 = toI32(this.times.length)
@@ -4201,7 +4738,11 @@ export class PgBatchClock {
     return true
   }
 
-  /** The count that starts a batch now: the larger of `minCount` and the average times `factor`, at most `maxCount`. */
+  /**
+   * The count that starts a batch now.
+   *
+   * @returns The larger of `minCount` and the average times `factor`, at most `maxCount`.
+   */
   target(): i32 {
     const scaled: f64 = Math.ceil(this.average * this.factor)
     let target: i32 = this.minCount
@@ -4215,6 +4756,12 @@ export class PgBatchClock {
    * The reason a batch should start at `nowUs`, with `inFlight` batches (or
    * groups) still running, or `PG_CLOCK_WAIT`. It only says; the program
    * starts the batch when a connection is free, then calls `started`.
+   *
+   * @param nowUs The time now, in the clock's microseconds.
+   * @param inFlight The batches or groups still running; 0 or less lets the idle bypass fire.
+   * @returns `PG_CLOCK_COUNT`, `PG_CLOCK_AVERAGE`, `PG_CLOCK_TIMER`, `PG_CLOCK_IDLE`, or
+   *   `PG_CLOCK_WAIT`, always `PG_CLOCK_WAIT` when nothing waits. The next `started` records it
+   *   as `lastReason`.
    */
   check(nowUs: i64, inFlight: i32): i32 {
     let reason: i32 = PG_CLOCK_WAIT
@@ -4232,7 +4779,11 @@ export class PgBatchClock {
     return reason
   }
 
-  /** When the oldest waiting item has waited `maxWaitUs`, in the caller's microseconds; -1 when none waits. */
+  /**
+   * When the oldest waiting item will have waited `maxWaitUs`.
+   *
+   * @returns That time in the caller's microseconds, or -1 when none waits.
+   */
   deadline(): i64 {
     if (this.count === 0) {
       return -1
@@ -4244,6 +4795,10 @@ export class PgBatchClock {
    * Records a batch of the `size` oldest items started at `nowUs`, and moves
    * the average toward it; the first batch sets it. Panics when `size` is
    * below 1 or more than are waiting or than `maxCount`.
+   *
+   * @param size The number of items the batch took, oldest first.
+   * @param nowUs The time the batch started, in the clock's microseconds; `lastWaitUs` is
+   *   measured to it, and is 0 when it is before the oldest item's arrival.
    */
   started(size: i32, nowUs: i64): void {
     if (size < 1 || size > this.count || size > this.maxCount) {
@@ -4263,7 +4818,13 @@ export class PgBatchClock {
     this.due = PG_CLOCK_WAIT
   }
 
-  /** How many batches have started for `reason`, one of the `PG_CLOCK_*` (`PG_CLOCK_WAIT` counts those started without a due `check`). */
+  /**
+   * How many batches have started for `reason`, one of the `PG_CLOCK_*` (`PG_CLOCK_WAIT` counts
+   * those started without a due `check`). Panics on any other `reason`.
+   *
+   * @param reason `PG_CLOCK_WAIT` to `PG_CLOCK_IDLE`.
+   * @returns The count since the clock was made.
+   */
   startsFor(reason: i32): i64 {
     if (reason < 0 || reason > PG_CLOCK_IDLE) {
       panic("nish/net/postgres: PgBatchClock.startsFor with a reason out of range")
@@ -4312,12 +4873,18 @@ export class PgBatchTurns {
   /** The clock the turns read and record into. */
   readonly clock: PgBatchClock
   /** The number of slots. */
-  readonly size: i32
+  private readonly size: i32
   private readonly busy: boolean[]
   private running: i32 = 0
   private woken: i32 = -1
 
-  /** Turns over `size` slots (1 to 1024), all free; panics on a size out of range. */
+  /**
+   * Turns over `size` slots (1 to 1024), all free; panics on a size out of range.
+   *
+   * @param clock The clock the program's batches are formed by; kept. `push` and `started`
+   *   record into it, so the program does not call its `arrived` or `started` itself.
+   * @param size The number of connections, numbered 0 to `size - 1`.
+   */
   constructor(clock: PgBatchClock, size: i32) {
     if (size < 1 || size > PG_POOL_MAX_SLOTS) {
       panic("nish/net/postgres: a PgBatchTurns size out of range")
@@ -4327,7 +4894,11 @@ export class PgBatchTurns {
     this.busy = new Array<boolean>(size)
   }
 
-  /** The slot that collects: the lowest-numbered free one, or `PG_TURNS_NONE` when every slot holds a batch. */
+  /**
+   * The slot that collects the next batch.
+   *
+   * @returns The lowest-numbered free slot, or `PG_TURNS_NONE` when every slot holds a batch.
+   */
   collector(): i32 {
     for (let i: i32 = 0; i < this.size; i++) {
       if (!this.busy[i]) {
@@ -4337,17 +4908,31 @@ export class PgBatchTurns {
     return PG_TURNS_NONE
   }
 
-  /** The number of slots holding a batch. */
+  /**
+   * How many slots hold a batch.
+   *
+   * @returns The slots whose batch has `started` and not yet `finished`.
+   */
   inFlight(): i32 {
     return this.running
   }
 
-  /** When the collector's timer fires, `PgBatchClock.deadline()`; -1 when nothing waits. */
+  /**
+   * When the collector's timer fires, as `PgBatchClock.deadline()` gives it.
+   *
+   * @returns That time in the caller's microseconds, or -1 when nothing waits.
+   */
   deadline(): i64 {
     return this.clock.deadline()
   }
 
-  /** Records an item queued at `nowUs` and answers the slot to wake, or `PG_TURNS_FULL` when the clock is full. */
+  /**
+   * Records an item queued at `nowUs` and answers the slot to wake, or `PG_TURNS_FULL` when the
+   * clock is full.
+   *
+   * @param nowUs The time the item was queued, in the clock's microseconds.
+   * @returns The slot to wake, `PG_TURNS_NONE` when none is to be woken, or `PG_TURNS_FULL`.
+   */
   push(nowUs: i64): i32 {
     if (!this.clock.arrived(nowUs)) {
       return PG_TURNS_FULL
@@ -4355,7 +4940,12 @@ export class PgBatchTurns {
     return this.poll(nowUs)
   }
 
-  /** The slot to wake at `nowUs`, when a batch is due and no slot is named already. */
+  /**
+   * The slot to wake at `nowUs`, when a batch is due and no slot is named already.
+   *
+   * @param nowUs The time now, in the clock's microseconds; call at `deadline()`.
+   * @returns The collector's slot, or `PG_TURNS_NONE`.
+   */
   poll(nowUs: i64): i32 {
     if (this.woken >= 0) {
       return PG_TURNS_NONE
@@ -4368,7 +4958,17 @@ export class PgBatchTurns {
     return slot
   }
 
-  /** Records `slot` starting a batch of `size` items at `nowUs`, and answers the next slot to wake. Panics on a slot out of range or holding a batch already, or as `PgBatchClock.started`. */
+  /**
+   * Records `slot` starting a batch of `size` items at `nowUs`, and answers the next slot to
+   * wake. Panics on a slot out of range or holding a batch already, or as
+   * `PgBatchClock.started`.
+   *
+   * @param slot The slot that took the batch, from 0 to `size - 1`; it holds the batch until
+   *   `finished`.
+   * @param size The number of items the batch took.
+   * @param nowUs The time the batch started, in the clock's microseconds.
+   * @returns The slot to wake, or `PG_TURNS_NONE`.
+   */
   started(slot: i32, size: i32, nowUs: i64): i32 {
     this.free(slot)
     this.clock.started(size, nowUs)
@@ -4380,7 +4980,14 @@ export class PgBatchTurns {
     return this.poll(nowUs)
   }
 
-  /** Records `slot`'s batch done at `nowUs`, and answers the slot to wake. Panics on a slot out of range or holding no batch. */
+  /**
+   * Records `slot`'s batch done at `nowUs`, and answers the slot to wake. Panics on a slot out
+   * of range or holding no batch.
+   *
+   * @param slot The slot whose batch is done, from 0 to `size - 1`.
+   * @param nowUs The time now, in the clock's microseconds.
+   * @returns The slot to wake, or `PG_TURNS_NONE`.
+   */
   finished(slot: i32, nowUs: i64): i32 {
     if (slot < 0 || slot >= this.size || !this.busy[slot]) {
       panic("nish/net/postgres: PgBatchTurns.finished on a slot holding no batch")
@@ -4390,7 +4997,12 @@ export class PgBatchTurns {
     return this.poll(nowUs)
   }
 
-  /** Gives back a wake that started nothing, so the next push or poll can wake a slot again. */
+  /**
+   * Gives back a wake that started nothing, so the next push or poll can wake a slot again.
+   * Panics on a slot out of range or holding a batch.
+   *
+   * @param slot The slot that was woken and took no batch.
+   */
   release(slot: i32): void {
     this.free(slot)
     if (this.woken === slot) {
@@ -4462,6 +5074,11 @@ const pgTargetFailed = (failure: i32): PgTarget => {
  * empty host, a `,` (more than one host) or a NUL byte is refused, and so is
  * a socket path over 107 bytes (an `@` name over 107 after its `@`), never
  * cut short.
+ *
+ * @param host The host, a socket directory starting with `/`, or an abstract name starting
+ *   with `@`; taken as it is, not percent-decoded.
+ * @param port The TCP port, or the number in the socket's name, from 1 to 65535.
+ * @returns The target; read `failure` before anything else.
  */
 export const pgTarget = (host: string, port: i32): PgTarget => {
   if (port < 1 || port > 65535) {
@@ -4533,6 +5150,9 @@ const pgPortValue = (text: string): i32 => {
  * would use its default socket directory. An empty port or query value is
  * refused, where libpq would take it as unset.
  * The decoded host is then resolved as `pgTarget` resolves one.
+ *
+ * @param url The URL; any user or password it holds is not kept in the target.
+ * @returns The target; read `failure` before anything else.
  */
 export const pgTargetUrl = (url: string): PgTarget => {
   let at: i32 = 0

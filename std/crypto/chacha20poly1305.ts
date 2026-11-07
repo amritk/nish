@@ -310,6 +310,14 @@ const chacha20CounterFits = (counter: u32, len: i32): boolean => {
  * word positions `a`, `b`, `c` and `d`, which is what §2.1.1 and §2.2.1 test.
  * `chacha20Core` does the same on locals. Answers `null`
  * when a position is not inside `state`.
+ *
+ * @param state The words to start from; it is read, not changed.
+ * @param a The first word position.
+ * @param b The second word position.
+ * @param c The third word position.
+ * @param d The fourth word position.
+ * @returns A fresh copy of `state` with the quarter round applied, or `null`
+ *   for a position outside it.
  */
 export const chacha20QuarterRound = (state: u32[], a: i32, b: i32, c: i32, d: i32): u32[] | null => {
   const n: i32 = toI32(state.length)
@@ -335,6 +343,13 @@ export const chacha20QuarterRound = (state: u32[], a: i32, b: i32, c: i32, d: i3
  * The ChaCha20 block function (RFC 8439 §2.3): the 64 bytes of keystream for
  * block `counter` under `key` and `nonce`. Answers `null` unless `key` is
  * `CHACHA20_KEY_SIZE` bytes and `nonce` is `CHACHA20POLY1305_NONCE_SIZE`.
+ *
+ * @param key The 32-byte key; it is read, not kept, and the caller still wipes
+ *   it.
+ * @param counter The block number.
+ * @param nonce The 12-byte nonce.
+ * @returns 64 fresh bytes of keystream, secret like the key, or `null` for a
+ *   bad key or nonce length.
  */
 export const chacha20Block = (key: u8[], counter: u32, nonce: u8[]): u8[] | null => {
   if (toI32(key.length) !== CHACHA20_KEY_SIZE || toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE) {
@@ -353,6 +368,13 @@ export const chacha20Block = (key: u8[], counter: u32, nonce: u8[]): u8[] | null
  * `key` is `CHACHA20_KEY_SIZE` bytes and `nonce` is
  * `CHACHA20POLY1305_NONCE_SIZE`, and `null` when `data` would run the 32-bit
  * counter past its last value rather than repeat the keystream.
+ *
+ * @param key The 32-byte key; it is read, not kept, and the caller still wipes
+ *   it.
+ * @param counter The block number the keystream starts at.
+ * @param nonce The 12-byte nonce.
+ * @param data The bytes to encrypt or decrypt; it is read, not changed.
+ * @returns A fresh array of `data.length` bytes, or `null` for bad input.
  */
 export const chacha20 = (key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[] | null => {
   const len: i32 = toI32(data.length)
@@ -571,6 +593,11 @@ const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPa
  * `key`, `r` then `s`. A key must never authenticate two messages; the AEAD
  * below makes a fresh one per nonce. Answers `null` unless `key` is
  * `POLY1305_KEY_SIZE` bytes.
+ *
+ * @param key The 32-byte one-time key, `r` then `s`; it is read, not kept, and
+ *   the caller still wipes it.
+ * @param msg The message to authenticate.
+ * @returns A fresh 16-byte tag, or `null` for a bad key length.
  */
 export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
   if (toI32(key.length) !== POLY1305_KEY_SIZE) {
@@ -592,6 +619,12 @@ export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
  * ChaCha20 block with counter 0 under the AEAD's key and nonce. Answers
  * `null` unless `key` is `CHACHA20_KEY_SIZE` bytes and `nonce` is
  * `CHACHA20POLY1305_NONCE_SIZE`.
+ *
+ * @param key The 32-byte key; it is read, not kept, and the caller still wipes
+ *   it.
+ * @param nonce The 12-byte nonce.
+ * @returns A fresh 32-byte one-time key, which the caller wipes, or `null` for
+ *   a bad key or nonce length.
  */
 export const poly1305KeyGen = (key: u8[], nonce: u8[]): u8[] | null => {
   if (toI32(key.length) !== CHACHA20_KEY_SIZE || toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE) {
@@ -665,6 +698,14 @@ const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
  * never be used twice with one key. Answers `null` unless `key` is
  * `CHACHA20_KEY_SIZE` bytes and `nonce` is `CHACHA20POLY1305_NONCE_SIZE`, or
  * when the sealed message would not fit in an array.
+ *
+ * @param key The 32-byte key; it is read, not kept, and the caller still wipes
+ *   it.
+ * @param nonce The 12-byte nonce; it must never repeat under one key.
+ * @param aad Data authenticated but not encrypted; may be empty.
+ * @param plaintext The message to encrypt; it is read, not kept.
+ * @returns A fresh array of ciphertext then tag, `plaintext.length + 16` bytes,
+ *   or `null` for bad input.
  */
 export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]): u8[] | null => {
   const len: i32 = toI32(plaintext.length)
@@ -700,6 +741,14 @@ export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintex
  * time before a byte is decrypted, so a forgery gets `null` and nothing else.
  * Answers `null` too unless `key` is `CHACHA20_KEY_SIZE` bytes and `nonce` is
  * `CHACHA20POLY1305_NONCE_SIZE`, and when `sealed` is shorter than a tag.
+ *
+ * @param key The 32-byte key; it is read, not kept, and the caller still wipes
+ *   it.
+ * @param nonce The 12-byte nonce the message was sealed with.
+ * @param aad The data authenticated with it; must match what was sealed.
+ * @param sealed The ciphertext followed by its 16-byte tag.
+ * @returns A fresh array holding the plaintext, or `null` if the tag fails or
+ *   the input is bad.
  */
 export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null => {
   const total: i32 = toI32(sealed.length)
@@ -740,6 +789,10 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
  * `sample` (little-endian) and whose nonce is the other twelve, under the
  * header-protection key `hpKey`. Answers `null` unless `hpKey` is
  * `CHACHA20_KEY_SIZE` bytes and `sample` is `CHACHA20_HEADER_SAMPLE_SIZE`.
+ *
+ * @param hpKey The 32-byte header-protection key; it is read, not kept.
+ * @param sample The 16 bytes sampled from the packet's ciphertext.
+ * @returns A fresh 5-byte mask, or `null` for a bad key or sample length.
  */
 export const chacha20HeaderMask = (hpKey: u8[], sample: u8[]): u8[] | null => {
   if (toI32(hpKey.length) !== CHACHA20_KEY_SIZE || toI32(sample.length) !== CHACHA20_HEADER_SAMPLE_SIZE) {

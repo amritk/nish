@@ -12,6 +12,9 @@
  *
  *     import { HpackDecoder, HpackEncoder, HPACK_INDEX_INCREMENTAL, HPACK_OK } from "nish/net/hpack";
  *
+ *     const name: u8[] = [58, 112, 97, 116, 104];   // ":path"
+ *     const value: u8[] = [47];                     // "/"
+ *
  *     const enc = new HpackEncoder(4096);
  *     const block: u8[] = [];
  *     enc.encodeField(block, name, value, HPACK_INDEX_INCREMENTAL, true);
@@ -407,24 +410,44 @@ const hpackCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => 
  *
  * Canonical means that the codes of one length are consecutive integers in
  * symbol order, and that the first code of a length is one past the last code
- * of the length before, shifted left by the difference. So `firstCode[L]` and
- * `countAt[L]` say which `L`-bit integers are codes, and `symbols` lists the
- * symbols in code order, `baseRank[L]` being where length `L` starts in it.
+ * of the length before, shifted left by the difference. So the first code of
+ * each length and how many codes it has say which `L`-bit integers are codes,
+ * and a list of the symbols in code order, with where each length starts in
+ * it, turns such a code into its symbol: decoding needs no tree.
  */
 export class HpackHuffman {
-  /** The code of each symbol, aligned on its least significant bit. */
+  /**
+   * The code of each symbol, aligned on its least significant bit.
+   * @internal Read by `hpackHuffmanEncode`; not for callers.
+   */
   codes: i32[]
-  /** The length of each symbol's code, in bits. */
+  /**
+   * The length of each symbol's code, in bits.
+   * @internal Read by `hpackHuffmanLength` and `hpackHuffmanEncode`; not for callers.
+   */
   lengths: i32[]
-  /** The symbols in code order. */
+  /**
+   * The symbols in code order.
+   * @internal Read by `hpackHuffmanDecode`; not for callers.
+   */
   symbols: i32[]
-  /** The first code of each length, by length (0 to 30). */
+  /**
+   * The first code of each length, by length (0 to 30).
+   * @internal Read by `hpackHuffmanDecode` and by `qpack.ts`'s Huffman decoder; not for callers.
+   */
   firstCode: i32[]
-  /** How many codes each length has, by length. */
+  /**
+   * How many codes each length has, by length.
+   * @internal Read by `hpackHuffmanDecode` and by `qpack.ts`'s Huffman decoder; not for callers.
+   */
   countAt: i32[]
-  /** Where each length's symbols start in `symbols`, by length. */
+  /**
+   * Where each length's symbols start in `symbols`, by length.
+   * @internal Read by `hpackHuffmanDecode`; not for callers.
+   */
   baseRank: i32[]
 
+  /** Rebuilds the code from Appendix B's 257 code lengths. Build one and reuse it: each build allocates. */
   constructor() {
     this.codes = new Array<i32>(257)
     this.lengths = new Array<i32>(257)
@@ -454,7 +477,15 @@ export class HpackHuffman {
   }
 }
 
-/** The length of `src[off, off + len)` once Huffman-coded, in bytes. */
+/**
+ * The length of `src[off, off + len)` once Huffman-coded, in bytes, padding included. A window outside
+ * `src` panics, as does a coded length past 2^31 - 1 bytes.
+ * @param h The code to measure with.
+ * @param src The octets to measure; only read.
+ * @param off Where the window starts, an index into `src`.
+ * @param len How many octets from `off` on to measure.
+ * @returns The number of bytes `hpackHuffmanEncode` would append for the same window, 0 for an empty one.
+ */
 export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i32): i32 => {
   hpackCheckWindow("hpackHuffmanLength", src, off, len)
   let bits: i64 = 0
@@ -478,6 +509,12 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
  *
  * The accumulator holds fewer than eight waiting bits between symbols, and a
  * code is at most 30, so it never needs more than 37 bits.
+ * A window outside `src` panics.
+ * @param h The code to encode with.
+ * @param src The octets to encode; only read.
+ * @param off Where the window starts, an index into `src`.
+ * @param len How many octets from `off` on to encode.
+ * @param out Where the coded bytes go: appended after what it holds, `hpackHuffmanLength` of them.
  */
 export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): void => {
   hpackCheckWindow("hpackHuffmanEncode", src, off, len)
@@ -510,6 +547,16 @@ export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i3
  * thirty bits always are. What is left when the input ends is padding, which
  * §5.2 requires to be a prefix of EOS — all ones — and shorter than a byte.
  * `out` keeps what was decoded before an error; a caller discards it.
+ * A window outside `src` panics.
+ * @param h The code to decode with.
+ * @param src The coded bytes, the peer's; only read.
+ * @param off Where the window starts, an index into `src`.
+ * @param len How many bytes from `off` on to decode; every one is read unless an EOS comes first.
+ * @param out Where the decoded octets go, appended after what it holds: at most `len * 8 / 5` of them,
+ *   since every code is at least five bits long.
+ * @returns `HPACK_OK` when the window decoded whole and ended in valid padding; `HPACK_ERR_HUFFMAN_EOS` when
+ *   a complete code was the EOS symbol, at the point it was read; `HPACK_ERR_HUFFMAN_PADDING` when the bits
+ *   left after the last symbol are more than seven or not all ones.
  */
 export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): i32 => {
   hpackCheckWindow("hpackHuffmanDecode", src, off, len)
@@ -546,11 +593,26 @@ export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i3
  * and where the block ends. The primitives below advance `pos`.
  */
 export class HpackCursor {
+  /** @internal The block being read; read by this module's decoders, not for callers. */
   buf: u8[]
+  /**
+   * Where the next read starts, as an index into the cursor's buffer. `hpackDecodeInteger` and
+   * `hpackDecodeString` move it past what they read; after a negative answer it is wherever the read
+   * stopped, which a caller should not rely on.
+   */
   pos: i32
+  /**
+   * One past the last byte the cursor may read.
+   * @internal Read by this module's decoders; not for callers.
+   */
   end: i32
 
-  /** A cursor over `buf[off, off + len)`, which must lie inside `buf`. */
+  /**
+   * A cursor over `buf[off, off + len)`, which must lie inside `buf`: a window outside it panics.
+   * @param buf The block to read; kept by reference, not copied, so it must not change while it is read.
+   * @param off Where the first read starts, an index into `buf`.
+   * @param len How many bytes from `off` on the cursor may read.
+   */
   constructor(buf: u8[], off: i32, len: i32) {
     hpackCheckWindow("HpackCursor", buf, off, len)
     this.buf = buf
@@ -558,7 +620,10 @@ export class HpackCursor {
     this.end = off + len
   }
 
-  /** Points the cursor at `buf[off, off + len)` instead, which must lie inside `buf`. */
+  /**
+   * Points the cursor at `buf[off, off + len)` instead, which must lie inside `buf`.
+   * @internal Called by `HpackDecoder.decode` for each block; not for callers.
+   */
   reset(buf: u8[], off: i32, len: i32): void {
     hpackCheckWindow("HpackCursor", buf, off, len)
     this.buf = buf
@@ -572,6 +637,12 @@ export class HpackCursor {
  * first byte's high bits being `flags` (the representation's pattern).
  * A negative value, or a prefix outside 1 to 8 bits, panics: both are the
  * program's choice.
+ * @param out Where the integer's bytes go, appended after what it holds: one byte when `value` fits the
+ *   prefix, else the prefix byte and one to five continuation bytes.
+ * @param flags The first byte's bits above the prefix; it must leave the low `prefixBits` bits clear, since
+ *   they are or-ed with it.
+ * @param prefixBits How many low bits of the first byte the integer starts in, 1 to 8.
+ * @param value The integer, 0 to 2^31 - 1.
  */
 export const hpackEncodeInteger = (out: u8[], flags: i32, prefixBits: i32, value: i32): void => {
   if (prefixBits < 1 || prefixBits > 8 || value < 0) {
@@ -600,6 +671,11 @@ export const hpackEncodeInteger = (out: u8[], flags: i32, prefixBits: i32, value
  * An `i32` needs at most five continuation bytes after a full prefix, so a
  * sixth is refused even when its bits are zero; otherwise a run of `0x80`
  * bytes would be read for as long as the peer cared to send it.
+ * @param c Where to read; its position moves past every byte read, also when the answer is an error.
+ * @param prefixBits How many low bits of the first byte hold the prefix, 1 to 8; the bits above are not read.
+ * @returns The integer, 0 to 2^31 - 1; `HPACK_ERR_TRUNCATED` when the cursor has no byte left before the
+ *   integer ends, at the first byte or at a continuation byte; `HPACK_ERR_INTEGER_OVERFLOW` when the value
+ *   passes 2^31 - 1, or when the fifth continuation byte still has its continuation bit set.
  */
 export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
   if (prefixBits < 1 || prefixBits > 8) {
@@ -636,6 +712,11 @@ export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
  * Appends `data` as a §5.2 string literal: Huffman-coded when `huffman` is
  * true, else raw. A caller who wants the shorter of the two compares
  * `hpackHuffmanLength` with the raw length.
+ * @param h The code to encode with when `huffman` is true.
+ * @param out Where the literal goes, appended after what it holds: its length with a 7-bit prefix and the
+ *   H bit, then the octets.
+ * @param data The octets to write, all of them; only read.
+ * @param huffman Whether to Huffman-code them, even when that is longer than raw.
  */
 export const hpackEncodeString = (h: HpackHuffman, out: u8[], data: u8[], huffman: boolean): void => {
   const n: i32 = toI32(data.length)
@@ -654,6 +735,16 @@ export const hpackEncodeString = (h: HpackHuffman, out: u8[], data: u8[], huffma
  * Reads a §5.2 string literal at the cursor and appends its octets to `out`,
  * answering `HPACK_OK` or a negative `HPACK_ERR_*` code. The length is checked
  * against what the block has left before anything is read.
+ * @param h The code to decode a Huffman-coded literal with.
+ * @param c Where to read; on `HPACK_OK` its position is just past the literal. On an error it is wherever
+ *   the read stopped.
+ * @param out Where the string's octets go, appended after what it holds; on an error it keeps whatever was
+ *   appended before the error, which a caller discards. The literal's length is bounded only by what the
+ *   block has left, and a Huffman-coded one decodes to at most 8/5 of its coded length.
+ * @returns `HPACK_OK` when the literal was read whole; `HPACK_ERR_TRUNCATED` when the cursor has no byte
+ *   left, the length integer ends early, or the length is more than the block has left after it;
+ *   `HPACK_ERR_INTEGER_OVERFLOW` when the length passes 2^31 - 1 or is padded past five continuation bytes;
+ *   `HPACK_ERR_HUFFMAN_EOS` or `HPACK_ERR_HUFFMAN_PADDING` from `hpackHuffmanDecode` for a Huffman-coded one.
  */
 export const hpackDecodeString = (h: HpackHuffman, c: HpackCursor, out: u8[]): i32 => {
   if (c.pos >= c.end) {
@@ -683,11 +774,11 @@ export const hpackDecodeString = (h: HpackHuffman, c: HpackCursor, out: u8[]): i
  * whose size — every entry's name and value plus 32 — never passes `maxSize`.
  *
  * Every entry's octets live in one store, `bytes`: its name, then its value,
- * oldest entry first. `entries` says where each entry sits, two numbers to an
+ * oldest entry first. An index says where each entry sits, two numbers to an
  * entry — where it starts in `bytes` and how long its name is; its value runs
  * to where the next one starts — oldest first from entry `first` on, so that
  * adding one is two `push`es and evicting one moves `first`. The evicted
- * prefix of `entries`, and of `bytes`, is shifted out in place once it is half
+ * prefix of the index, and of `bytes`, is shifted out in place once it is half
  * of either, which keeps both amortised constant time without a ring's index
  * arithmetic. Shifting and popping keep an array's storage, and `bytes` never
  * holds more than three times `maxSize`, so a table the peer fills and empties
@@ -696,12 +787,28 @@ export const hpackDecodeString = (h: HpackHuffman, c: HpackCursor, out: u8[]): i
  * last.
  */
 export class HpackTable {
+  /**
+   * Every entry's octets, its name then its value, oldest first, after any evicted entries' octets not yet
+   * shifted out. Any change to the table may move what it holds.
+   */
   bytes: u8[]
-  entries: i32[]
+  private entries: i32[]
+  /**
+   * How many evicted entries the table still records before its oldest live one: eviction moves it up,
+   * and shifting the evicted ones out returns it to 0.
+   */
   first: i32
+  /**
+   * The table's size as §4.1 counts it, in octets: every entry's name and value plus 32; at most `maxSize`.
+   */
   size: i32
+  /** The most `size` may be, in octets (§4.2); set by the constructor and `resize`. */
   maxSize: i32
 
+  /**
+   * An empty table.
+   * @param maxSize The most its size may be, in octets as §4.1 counts them; a negative one panics.
+   */
   constructor(maxSize: i32) {
     if (maxSize < 0) {
       panic(`HpackTable: a maximum size of ${maxSize}`)
@@ -714,75 +821,105 @@ export class HpackTable {
   }
 
   /** How many entries `entries` describes, evicted ones included. */
-  slots(): i32 {
+  private slots(): i32 {
     return toI32(this.entries.length) >> 1
   }
 
-  /** How many entries the table holds. */
+  /**
+   * How many entries the table holds.
+   * @returns The live entry count: dynamic indexes 1 to it are in range; 0 when the table is empty.
+   */
   count(): i32 {
     return this.slots() - this.first
   }
 
   /** Where dynamic entry `i`, 1 being the newest, sits in `entries`; `i` must be in range. */
-  slot(i: i32): i32 {
+  private slot(i: i32): i32 {
     return this.slots() - i
   }
 
   /** Where entry `k` of `entries` starts in `bytes`. */
-  startOf(k: i32): i32 {
+  private startOf(k: i32): i32 {
     return this.entries[k * 2]
   }
 
   /** Where entry `k` of `entries` ends in `bytes`: where the next starts, or the end of `bytes`. */
-  endOf(k: i32): i32 {
+  private endOf(k: i32): i32 {
     return k + 1 < this.slots() ? this.entries[k * 2 + 2] : toI32(this.bytes.length)
   }
 
   /** What entry `k` of `entries` costs (§4.1); it fits an `i32` because the table holds it. */
-  costOf(k: i32): i32 {
+  private costOf(k: i32): i32 {
     return this.endOf(k) - this.startOf(k) + HPACK_ENTRY_OVERHEAD
   }
 
-  /** Where the name of dynamic entry `i` starts in `bytes`. */
+  /**
+   * Where the name of dynamic entry `i` starts in `bytes`.
+   * @param i The dynamic index, 1 being the newest; it must be from 1 to `count()` and is not checked.
+   * @returns The offset in `bytes`, valid until the table next changes.
+   */
   nameStart(i: i32): i32 {
     return this.startOf(this.slot(i))
   }
 
-  /** How many octets the name of dynamic entry `i` has. */
+  /**
+   * How many octets the name of dynamic entry `i` has.
+   * @internal Read by this module's decoder and encoder; not for callers.
+   */
   nameLength(i: i32): i32 {
     return this.entries[this.slot(i) * 2 + 1]
   }
 
-  /** Where the value of dynamic entry `i` starts in `bytes`, straight after its name. */
+  /**
+   * Where the value of dynamic entry `i` starts in `bytes`, straight after its name.
+   * @internal Read by this module's decoder and encoder; not for callers.
+   */
   valueStart(i: i32): i32 {
     return this.nameStart(i) + this.nameLength(i)
   }
 
-  /** How many octets the value of dynamic entry `i` has. */
+  /**
+   * How many octets the value of dynamic entry `i` has.
+   * @internal Read by this module's decoder and encoder; not for callers.
+   */
   valueLength(i: i32): i32 {
     return this.endOf(this.slot(i)) - this.valueStart(i)
   }
 
-  /** What dynamic entry `i` costs (§4.1). */
+  /**
+   * What dynamic entry `i` costs (§4.1).
+   * @internal Read by `HpackDecoder`; not for callers.
+   */
   entrySize(i: i32): i32 {
     return this.costOf(this.slot(i))
   }
 
-  /** A fresh copy of the name of dynamic entry `i`. It allocates; the codec reads the window instead. */
+  /**
+   * A fresh copy of the name of dynamic entry `i`. It allocates; the codec reads the window instead.
+   * @param i The dynamic index, 1 being the newest; it must be from 1 to `count()` and is not checked.
+   * @returns A new array, the caller's to keep.
+   */
   name(i: i32): u8[] {
     const out: u8[] = []
     hpackAppend(out, this.bytes, this.nameStart(i), this.nameLength(i))
     return out
   }
 
-  /** A fresh copy of the value of dynamic entry `i`, as `name` makes the name. */
+  /**
+   * A fresh copy of the value of dynamic entry `i`, as `name` makes the name.
+   * @param i The dynamic index, 1 being the newest; it must be from 1 to `count()` and is not checked.
+   * @returns A new array, the caller's to keep.
+   */
   value(i: i32): u8[] {
     const out: u8[] = []
     hpackAppend(out, this.bytes, this.valueStart(i), this.valueLength(i))
     return out
   }
 
-  /** Evicts the oldest entries until the size is at most `limit` (§4.4). */
+  /**
+   * Evicts the oldest entries until the size is at most `limit` (§4.4).
+   * @internal Called by `add`, `resize` and `HpackDecoder`; not for callers.
+   */
   evictTo(limit: i32): void {
     while (toI64(this.size) > toI64(limit) && this.count() > 0) {
       this.size -= this.costOf(this.first)
@@ -792,7 +929,7 @@ export class HpackTable {
   }
 
   /** Shifts the evicted prefix out of `entries`, and out of `bytes`, once it is half of either. */
-  compact(): void {
+  private compact(): void {
     const end: i32 = toI32(this.bytes.length)
     const start: i32 = this.count() > 0 ? this.startOf(this.first) : end
     const n: i32 = this.slots()
@@ -826,6 +963,11 @@ export class HpackTable {
    * added (§4.4): that is not an error. Neither array may be `bytes` itself,
    * since eviction may move what it holds. Returns the octets it pushed into
    * `bytes`: none for an entry it did not add.
+   * @param name The entry's name; copied in, not kept.
+   * @param value The entry's value; copied in, not kept.
+   * @returns How many octets it pushed into `bytes`, the name's and the value's together: 0 when the entry
+   *   was larger than `maxSize` and the table was emptied instead, and also for an added entry whose name
+   *   and value are both empty.
    */
   add(name: u8[], value: u8[]): i32 {
     const cost: i64 = hpackEntrySize(name, value)
@@ -850,7 +992,10 @@ export class HpackTable {
     return pushed
   }
 
-  /** Sets the maximum size, evicting what no longer fits (§4.3). */
+  /**
+   * Sets the maximum size, evicting what no longer fits (§4.3).
+   * @param maxSize The new maximum, in octets as §4.1 counts them; a negative one panics.
+   */
   resize(maxSize: i32): void {
     if (maxSize < 0) {
       panic(`HpackTable.resize: a maximum size of ${maxSize}`)
@@ -898,11 +1043,15 @@ const HPACK_FIELD_CLASSES: i32 = 24
  * class, each class made when first needed.
  */
 export class HpackWork {
+  /** @internal The read position, reset for each block by `HpackDecoder.decode`; not for callers. */
   cursor: HpackCursor
+  /** @internal A literal's new name as it is read, by `HpackDecoder`; not for callers. */
   nameScratch: u8[]
+  /** @internal A literal's value as it is read, by `HpackDecoder`; not for callers. */
   valueScratch: u8[]
-  pools: u8[][][]
+  private pools: u8[][][]
 
+  /** Empty scratch arrays, a cursor over nothing, and no pools until a field needs one. */
   constructor() {
     this.nameScratch = []
     this.valueScratch = []
@@ -911,7 +1060,10 @@ export class HpackWork {
     this.pools = []
   }
 
-  /** The smallest size class with room for `length` octets: the first `j` with 2^j past it, at most the last. */
+  /**
+   * The smallest size class with room for `length` octets: the first `j` with 2^j past it, at most the last.
+   * @internal Called by `HpackDecoder` as it gives fields back; not for callers.
+   */
   classOf(length: i32): i32 {
     let j: i32 = 0
     while (j < HPACK_FIELD_CLASSES - 1 && 1 << j <= length) {
@@ -920,7 +1072,10 @@ export class HpackWork {
     return j
   }
 
-  /** The pool of class `j`, made the first time a field needs it. */
+  /**
+   * The pool of class `j`, made the first time a field needs it.
+   * @internal Called by `HpackDecoder` as it gives fields back; not for callers.
+   */
   pool(j: i32): u8[][] {
     while (toI32(this.pools.length) <= j) {
       const fresh: u8[][] = []
@@ -933,6 +1088,7 @@ export class HpackWork {
    * An empty array with room for `length` octets: one an earlier block gave
    * back, emptied, to its class's pool, or, once the pool is empty, a new one made with
    * the class's room.
+   * @internal Called by `HpackDecoder` for each field it answers; not for callers.
    */
   take(length: i32): u8[] {
     const j: i32 = this.classOf(length)
@@ -970,29 +1126,58 @@ export class HpackWork {
  * as SETTINGS_MAX_HEADER_LIST_SIZE does (RFC 9113 §6.5.2).
  */
 export class HpackDecoder {
+  /** The dynamic table, as the blocks decoded so far have left it. */
   table: HpackTable
-  huffman: HpackHuffman
+  private huffman: HpackHuffman
+  /**
+   * The SETTINGS_HEADER_TABLE_SIZE in force, in octets: a size update above it is refused. Set by the
+   * constructor and `setSettingsLimit`, and put back to 4096 by `http2.ts`'s `restart`.
+   */
   settingsLimit: i32
+  /**
+   * The header-list limit, in octets counted as RFC 9113 §6.5.2 counts them: the field that takes the
+   * block's running total past it, and every one after, is dropped and `decode` answers
+   * `HPACK_LIST_TOO_LARGE`.
+   */
   maxHeaderListSize: i32
-  /** The smallest limit set since the last size update, or -1 when none is owed. */
+  /**
+   * The smallest limit set since the last size update, or -1 when none is owed.
+   * @internal Cleared by `http2.ts` when a connection restarts; not for callers.
+   */
   owedUpdate: i32
-  /** The fatal error a decode met, which every later decode answers; 0 until then. */
+  /**
+   * The fatal error a decode met, which every later decode answers; 0 until then.
+   * @internal Cleared by `http2.ts` when a connection restarts; not for callers.
+   */
   failed: i32
+  /**
+   * The names of the last block's fields, in order: the fields before the list passed its limit, and none
+   * after a negative answer. Each array is the decoder's, valid until the next `decode`.
+   */
   names: u8[][]
+  /** The values of the last block's fields, by the same position as `names`, and valid as long. */
   values: u8[][]
+  /** Whether each field of the last block came never indexed (§6.2.3), by the same position as `names`. */
   neverIndexed: boolean[]
   /** The storage a block is decoded with, made by the first `decode`, so an idle connection holds none. */
-  work: HpackWork | null = null
+  private work: HpackWork | null = null
   /**
    * The octets the decoder has moved through its dynamic table, counted where
-   * they move: each name or value `appendNameAt` and `appendValueAt` copy out
-   * of the table, and each octet `table.add` pushes in. The budget
+   * they move: each name or value it copies out of the dynamic table (a static
+   * entry's do not count), and each octet `table.add` pushes in. The budget
    * (`HPACK_COPY_FACTOR`) is charged before a literal's copies, from the
    * sizes it will copy; this counts what was copied, so that tests can hold
    * the two equal. It is public so that tests can read it.
    */
   tableCopied: i64 = 0
 
+  /**
+   * A decoder with an empty table, holding no working storage until the first `decode`.
+   * @param settingsLimit The SETTINGS_HEADER_TABLE_SIZE in force, in octets; the table starts at it, and a
+   *   negative one panics.
+   * @param maxHeaderListSize The header-list limit, in octets as RFC 9113 §6.5.2 counts them; a negative one
+   *   panics.
+   */
   constructor(settingsLimit: i32, maxHeaderListSize: i32) {
     if (maxHeaderListSize < 0) {
       panic(`HpackDecoder: a header-list limit of ${maxHeaderListSize}`)
@@ -1009,7 +1194,7 @@ export class HpackDecoder {
   }
 
   /** The decoder's working storage, made the first time it is asked for. */
-  working(): HpackWork {
+  private working(): HpackWork {
     const work: HpackWork | null = this.work
     if (work !== null) {
       return work
@@ -1024,6 +1209,8 @@ export class HpackDecoder {
    * A limit below the table's current maximum obliges the peer's encoder to
    * begin its next block with an update to at most the smallest limit set
    * since its last one (§4.2); the decoder holds it to that.
+   * @param limit The acknowledged limit, in octets; a negative one panics. The table's own maximum does not
+   *   change until the peer's size update.
    */
   setSettingsLimit(limit: i32): void {
     if (limit < 0) {
@@ -1036,7 +1223,7 @@ export class HpackDecoder {
   }
 
   /** Appends the name at static or dynamic index `index`, which must be in range, to `out`. */
-  appendNameAt(index: i32, out: u8[]): void {
+  private appendNameAt(index: i32, out: u8[]): void {
     if (index <= HPACK_STATIC_LENGTH) {
       hpackAppendText(out, hpackStaticName(index))
       return
@@ -1047,7 +1234,7 @@ export class HpackDecoder {
   }
 
   /** Appends the value at `index` to `out`, as `appendNameAt` does the name. */
-  appendValueAt(index: i32, out: u8[]): void {
+  private appendValueAt(index: i32, out: u8[]): void {
     if (index <= HPACK_STATIC_LENGTH) {
       hpackAppendText(out, hpackStaticValue(index))
       return
@@ -1058,7 +1245,7 @@ export class HpackDecoder {
   }
 
   /** How many octets the name at `index` has. */
-  nameLengthAt(index: i32): i32 {
+  private nameLengthAt(index: i32): i32 {
     if (index <= HPACK_STATIC_LENGTH) {
       return toI32(hpackStaticName(index).length)
     }
@@ -1066,7 +1253,7 @@ export class HpackDecoder {
   }
 
   /** What the entry at `index` counts towards a header list, without building it. */
-  sizeAt(index: i32): i64 {
+  private sizeAt(index: i32): i64 {
     if (index <= HPACK_STATIC_LENGTH) {
       return (
         toI64(hpackStaticName(index).length) +
@@ -1078,12 +1265,12 @@ export class HpackDecoder {
   }
 
   /** Whether `index` names an entry of either table. */
-  hasIndex(index: i32): boolean {
+  private hasIndex(index: i32): boolean {
     return index >= 1 && index <= HPACK_STATIC_LENGTH + this.table.count()
   }
 
   /** Empties the fields and gives each one's array back, emptied, to its class's pool, for the next block. */
-  clear(): void {
+  private clear(): void {
     while (toI32(this.names.length) > 0) {
       const work: HpackWork = this.working()
       const last: i32 = toI32(this.names.length) - 1
@@ -1105,6 +1292,13 @@ export class HpackDecoder {
    * `HPACK_OK`, `HPACK_LIST_TOO_LARGE` or a negative `HPACK_ERR_*` code; the
    * module comment lists what each means. After a negative answer the fields
    * are empty and the decoder is spent.
+   * @param block The bytes holding the block; only read during the call, since every field is copied out.
+   * @param off Where the block starts in `block`.
+   * @param len How many bytes the block has. A window outside `block` panics, unless the decoder has failed.
+   * @returns `HPACK_OK`; `HPACK_LIST_TOO_LARGE` when the list passed `maxHeaderListSize`; or one of
+   *   `HPACK_ERR_TRUNCATED`, `HPACK_ERR_INTEGER_OVERFLOW`, `HPACK_ERR_INDEX`, `HPACK_ERR_HUFFMAN_PADDING`,
+   *   `HPACK_ERR_HUFFMAN_EOS`, `HPACK_ERR_TABLE_SIZE`, `HPACK_ERR_SIZE_UPDATE_POSITION`,
+   *   `HPACK_ERR_SIZE_UPDATE_MISSING` or `HPACK_ERR_COPY_BUDGET`, which every later call answers again.
    */
   decode(block: u8[], off: i32, len: i32): i32 {
     this.clear()
@@ -1141,7 +1335,7 @@ export class HpackDecoder {
    * copied into the pools, which the limit bounds; nothing is allocated once
    * those have grown to the largest block and list seen.
    */
-  decodeFields(c: HpackCursor): i32 {
+  private decodeFields(c: HpackCursor): i32 {
     let listSize: i64 = 0
     let tooLarge: boolean = false
     let sawField: boolean = false
@@ -1270,7 +1464,7 @@ export class HpackDecoder {
   }
 
   /** A pooled copy of `bytes`, for the caller. */
-  copyOf(bytes: u8[]): u8[] {
+  private copyOf(bytes: u8[]): u8[] {
     const out: u8[] = this.working().take(toI32(bytes.length))
     for (const b of bytes) {
       out.push(b)
@@ -1287,11 +1481,21 @@ export class HpackDecoder {
  * HTTP/2's 4096 until SETTINGS say otherwise — so no update is sent for it.
  */
 export class HpackEncoder {
+  /** The dynamic table, which `encodeField` adds to and `setMaxTableSize` resizes. */
   table: HpackTable
+  /** @internal Read by `http2.ts` to size a field's strings with `hpackHuffmanLength`; not for callers. */
   huffman: HpackHuffman
-  /** The smallest size set since the last block, or -1 when no update is owed. */
+  /**
+   * The smallest size set since the last block, or -1 when no update is owed.
+   * @internal Cleared by `http2.ts` when a connection restarts; not for callers.
+   */
   owedMinimum: i32
 
+  /**
+   * An encoder with an empty table, owing no size update.
+   * @param maxSize The table's maximum size, in octets, which both ends already agree on; a negative one
+   *   panics.
+   */
   constructor(maxSize: i32) {
     this.table = new HpackTable(maxSize)
     this.huffman = new HpackHuffman()
@@ -1304,6 +1508,7 @@ export class HpackEncoder {
    * the caller's to keep. Call it between blocks: the next `encodeField`
    * begins with the update, or with two when the size went down and then up
    * again, the smallest first (§4.2).
+   * @param maxSize The new maximum, in octets; a negative one panics.
    */
   setMaxTableSize(maxSize: i32): void {
     if (this.owedMinimum < 0 || maxSize < this.owedMinimum) {
@@ -1317,7 +1522,7 @@ export class HpackEncoder {
    * table has one. The static table is searched first, then the dynamic one
    * from the newest entry.
    */
-  findField(name: u8[], value: u8[]): i32 {
+  private findField(name: u8[], value: u8[]): i32 {
     for (let i: i32 = 1; i <= HPACK_STATIC_LENGTH; i += 1) {
       if (hpackSameAsText(name, hpackStaticName(i)) && hpackSameAsText(value, hpackStaticValue(i))) {
         return i
@@ -1337,7 +1542,7 @@ export class HpackEncoder {
   }
 
   /** The lowest index whose entry has `name`, or 0 when neither table has one. */
-  findName(name: u8[]): i32 {
+  private findName(name: u8[]): i32 {
     for (let i: i32 = 1; i <= HPACK_STATIC_LENGTH; i += 1) {
       if (hpackSameAsText(name, hpackStaticName(i))) {
         return i
@@ -1357,6 +1562,11 @@ export class HpackEncoder {
    * and `indexing` is not `HPACK_INDEX_NEVER`, else as a literal of the kind
    * `indexing` names, its name by index when a table has it and its strings
    * Huffman-coded when `huffman` is true. Any other `indexing` panics.
+   * @param out The block being built; the field, after any size update owed, is appended to it.
+   * @param name The field's name; read, and copied into the table under incremental indexing, not kept.
+   * @param value The field's value, treated as `name` is.
+   * @param indexing `HPACK_INDEX_INCREMENTAL`, `HPACK_INDEX_WITHOUT` or `HPACK_INDEX_NEVER`.
+   * @param huffman Whether a literal's strings are Huffman-coded; a field sent by index ignores it.
    */
   encodeField(out: u8[], name: u8[], value: u8[], indexing: i32, huffman: boolean): void {
     if (indexing < HPACK_INDEX_INCREMENTAL || indexing > HPACK_INDEX_NEVER) {

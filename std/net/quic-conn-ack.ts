@@ -5,9 +5,13 @@
  *
  *     import { QuicAckRanges } from "nish/net/quic-conn-ack";
  *
- *     const received = new QuicAckRanges();
- *     if (!received.record(packetNumber, ackEliciting)) { … a duplicate: drop it … }
- *     if (received.ackPending) { received.pushAck(payload, 0); }
+ *     const received: QuicAckRanges = new QuicAckRanges()
+ *     const fresh: boolean = received.record(toI64(7), true)   // true: 7 is new and asks for an ACK
+ *     const again: boolean = received.record(toI64(7), true)   // false: a duplicate, so drop the packet
+ *     const payload: u8[] = []
+ *     if (received.ackPending) {
+ *       received.pushAck(payload, toI64(0))                    // appends ACK [7, 7], clears ackPending
+ *     }
  *
  * **Bounded.** At most `QUIC_ACK_MAX_RANGES` ranges are kept, highest first.
  * A new range past that drops the lowest, and everything at or below what it
@@ -17,12 +21,12 @@
  * peer that sends packet numbers full of holes costs a fixed amount of memory
  * and loses only very late packets.
  *
- * **When to acknowledge** is the connection's choice; this module records
+ * **When to acknowledge.** That is the connection's choice; this module records
  * whether something ack-eliciting arrived since the last ACK it wrote
  * (`ackPending`). ACK frames carry an ACK Delay the caller supplies, and no
  * ECN counts.
  *
- * Written from RFC 9000 §12.3, §13.2 and §19.3, not ported from another
+ * **Provenance.** Written from RFC 9000 §12.3, §13.2 and §19.3, not ported from another
  * implementation. Private names carry the `quicAck` prefix
  * (`docs/wp26-stdlib.md` §3e).
  */
@@ -42,7 +46,7 @@ export class QuicAckRanges {
   largest: i64 = -1
   /** Every packet number at or below this is answered as already received; -1 until a range is dropped. */
   floor: i64 = -1
-  ranges: i64[]
+  private ranges: i64[]
   count: i32 = 0
   /** Whether an ack-eliciting packet arrived since the last `pushAck`. */
   ackPending: boolean = false
@@ -51,7 +55,12 @@ export class QuicAckRanges {
     this.ranges = new Array<i64>(QUIC_ACK_MAX_RANGES * 2)
   }
 
-  /** The smallest packet number of range `k`, which the caller keeps below `count`. */
+  /**
+   * The smallest packet number of range `k`, which the caller keeps below `count`.
+   *
+   * @param k The range's index, 0 for the highest range.
+   * @returns The range's smallest packet number, or -1 for an index outside the storage.
+   */
   low(k: i32): i64 {
     const at: i32 = k * 2
     if (at < 0 || at >= toI32(this.ranges.length)) {
@@ -60,7 +69,12 @@ export class QuicAckRanges {
     return this.ranges[at]
   }
 
-  /** The largest packet number of range `k`. */
+  /**
+   * The largest packet number of range `k`.
+   *
+   * @param k The range's index, 0 for the highest range; the caller keeps it below `count`.
+   * @returns The range's largest packet number, or -1 for an index outside the storage.
+   */
   high(k: i32): i64 {
     const at: i32 = k * 2 + 1
     if (at < 0 || at >= toI32(this.ranges.length)) {
@@ -69,7 +83,14 @@ export class QuicAckRanges {
     return this.ranges[at]
   }
 
-  /** Sets range `k` to `[low, high]`. */
+  /**
+   * Sets range `k` to `[low, high]`. An index outside the storage changes nothing, and `count` is
+   * not moved: the caller keeps the ranges ordered and disjoint.
+   *
+   * @param k The range's index, 0 for the highest range.
+   * @param low The range's smallest packet number.
+   * @param high The range's largest packet number, at least `low`.
+   */
   set(k: i32, low: i64, high: i64): void {
     const at: i32 = k * 2
     const next: i32 = at + 1
@@ -80,7 +101,12 @@ export class QuicAckRanges {
     this.ranges[next] = high
   }
 
-  /** Whether `pn` was received, or is at or below the floor and so cannot be told apart from one that was. */
+  /**
+   * Whether `pn` was received, or is at or below the floor and so cannot be told apart from one that was.
+   *
+   * @param pn The full (decoded) packet number to look up.
+   * @returns True when `pn` must be treated as already processed.
+   */
   contains(pn: i64): boolean {
     if (pn <= this.floor) {
       return true
@@ -101,6 +127,11 @@ export class QuicAckRanges {
    * an acknowledgement. Answers `false`, changing nothing, for a packet number
    * already received (or at or below the floor), or one that is not a packet
    * number at all.
+   *
+   * @param pn The full (decoded) packet number, which must be in 0..2^62-1 to count.
+   * @param ackEliciting Whether the packet held a frame other than ACK, PADDING or
+   *   CONNECTION_CLOSE, so that it sets `ackPending`.
+   * @returns True when `pn` was new and is now recorded; false for a duplicate or an out-of-range number.
    */
   record(pn: i64, ackEliciting: boolean): boolean {
     if (pn < 0 || pn > QUIC_MAX_VARINT || this.contains(pn)) {
@@ -138,7 +169,7 @@ export class QuicAckRanges {
   }
 
   /** Removes range `k`, moving the lower ones up. */
-  remove(k: i32): void {
+  private remove(k: i32): void {
     for (let j: i32 = k; j + 1 < this.count; j += 1) {
       this.set(j, this.low(j + 1), this.high(j + 1))
     }
@@ -150,7 +181,7 @@ export class QuicAckRanges {
    * is taken the lowest range is dropped first and the floor raised over it;
    * if `pn` itself would be that lowest range, it is the one dropped.
    */
-  insert(k: i32, pn: i64): void {
+  private insert(k: i32, pn: i64): void {
     if (this.count === QUIC_ACK_MAX_RANGES) {
       if (k === this.count) {
         this.floor = pn
@@ -170,6 +201,11 @@ export class QuicAckRanges {
    * Appends an ACK frame for every range kept, with `ackDelay` (already
    * scaled by this endpoint's ACK delay exponent), and clears `ackPending`.
    * Answers `false`, appending nothing, when nothing has been received.
+   *
+   * @param out The packet payload being built; the frame is appended to its end.
+   * @param ackDelay The ACK Delay field's value: the time since the largest packet arrived, in
+   *   microseconds divided by 2^ack_delay_exponent.
+   * @returns True when the frame was appended; false, leaving `out` and `ackPending` alone, otherwise.
    */
   pushAck(out: u8[], ackDelay: i64): boolean {
     if (this.count === 0 || !quicPushAck(out, this.ranges, this.count, ackDelay)) {
@@ -184,6 +220,13 @@ export class QuicAckRanges {
    * and clears `ackPending`. Answers the offset past it, or -1, writing
    * nothing and leaving `ackPending` as it was, when nothing has been
    * received or the frame does not fit.
+   *
+   * @param buf The packet buffer to write into.
+   * @param at The byte offset in `buf` where the frame starts.
+   * @param end The byte offset the frame must end at or before.
+   * @param ackDelay The ACK Delay field's value: the time since the largest packet arrived, in
+   *   microseconds divided by 2^ack_delay_exponent.
+   * @returns The byte offset one past the frame, or -1 when nothing was written.
    */
   putAck(buf: u8[], at: i32, end: i32, ackDelay: i64): i32 {
     if (this.count === 0) {

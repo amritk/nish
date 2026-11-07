@@ -100,6 +100,9 @@ const sha1Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
  * An array longer than 2^31 - 1 bytes panics, for the reason `sha256` gives:
  * under `--number-mode f64`, `toI32` of a longer length saturates, and the
  * answer would be the digest of a prefix.
+ *
+ * @param data The whole message; it is read, not changed.
+ * @returns A fresh 20-byte digest.
  */
 export const sha1 = (data: u8[]): u8[] => {
   if (data.length > 2147483647) {

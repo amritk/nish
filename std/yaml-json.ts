@@ -159,7 +159,12 @@ const YAML_JSON_DOT: i32 = 46
 const YAML_JSON_ZERO: i32 = 48
 const YAML_JSON_LT: i32 = 60
 
-/** A `YAML_JSON_ERR_*` code's name, without the prefix; `""` for any other code. */
+/**
+ * A load failure's name, for a message.
+ *
+ * @param code A `YAML_JSON_ERR_*` code, as `failed` holds it.
+ * @returns The code's name without the `YAML_JSON_ERR_` prefix, such as `"DEPTH"`; `""` for any other code.
+ */
 export const yamlJsonErrorName = (code: i32): string => {
   const names: string[] = ["DOCUMENT", "YAML", "NOT_FINITE", "EXPANSION", "DEPTH", "NUMBER", "MERGE"]
   const i: i32 = YAML_JSON_ERR_DOCUMENT - code
@@ -167,54 +172,56 @@ export const yamlJsonErrorName = (code: i32): string => {
 }
 
 /**
- * Loads documents of a `YamlStream` into a `JsonDocument`. Keeps its scratch
- * from one load to the next. Its fields and its "Internal" methods are
- * reachable, as every member in Nish is; use `load` and the result fields.
+ * Loads documents of a `YamlStream` into a `JsonDocument`. Keeps its scratch,
+ * in private fields, from one load to the next; use `load` and the result
+ * fields.
  */
 export class YamlJsonLoader {
   /** How deeply collections may nest, counting copies; `JSON_WRITER_MAX_DEPTH` so the result can be written. */
   maxDepth: i32 = 0
   /** The last `load`'s code: `0`, a `YAML_JSON_ERR_*` code or a `JSON_VALUE_ERR_*` code. */
   failed: i32 = 0
-  /** The byte range the error is about, and `-1` until one. */
+  /** The first byte the failure is about; `-1` after a load that succeeds. */
   errorStart: i32 = -1
+  /** One past the last byte the failure is about; `-1` after a load that succeeds. */
   errorEnd: i32 = -1
 
-  /** Internal: the stream and document of the load in progress. */
-  stream: YamlStream
-  doc: JsonDocument
-  /** Internal: per node, the values it expands to (`0` not counted yet, `-1` being counted). */
-  sizes: i32[]
-  /** Internal: the nodes the last count set a size on, the first `countedTop` of them: all a count clears. */
-  counted: i32[]
-  countedTop: i32 = 0
-  /** Internal: the count's own stack of nodes. */
-  pending: i32[]
-  /** Internal: the most values the document may hold; a size saturates one past it. */
-  cap: i32 = 0
-  /** Internal: the alias with the largest copy, and its size. */
-  bigAlias: i32 = -1
-  bigSize: i32 = 0
-  /** Internal: the outermost alias being copied (`-1` for none), and the text the document may store. */
-  copying: i32 = -1
-  byteCap: i32 = 0
-  /** Internal: where the next map member goes in the `entry` arrays. */
-  entryTop: i32 = 0
+  /** The stream and document of the load in progress. */
+  private stream: YamlStream
+  private doc: JsonDocument
+  /** Per node, the values it expands to (`0` not counted yet, `-1` being counted). */
+  private sizes: i32[]
+  /** The nodes the last count set a size on, the first `countedTop` of them: all a count clears. */
+  private counted: i32[]
+  private countedTop: i32 = 0
+  /** The count's own stack of nodes. */
+  private pending: i32[]
+  /** The most values the document may hold; a size saturates one past it. */
+  private cap: i32 = 0
+  /** The alias with the largest copy, and its size. */
+  private bigAlias: i32 = -1
+  private bigSize: i32 = 0
+  /** The outermost alias being copied (`-1` for none), and the text the document may store. */
+  private copying: i32 = -1
+  private byteCap: i32 = 0
+  /** Where the next map member goes in the `entry` arrays. */
+  private entryTop: i32 = 0
   /**
-   * Internal: the members of the maps being built, one map's after another's:
+   * The members of the maps being built, one map's after another's:
    * each one's key text and pair, and the value node it holds (`-1` for none).
    */
-  entryKeys: string[]
-  entryPairs: i32[]
-  entryValues: i32[]
-  /** Internal: a large map's key texts, to their entry. */
-  seen: Map<string, i32>
-  /** Internal: per node, the stamp of the last map it was merged into; and that map's stamp. */
-  mergeMarks: i32[]
-  mergeStamp: i32 = 0
-  /** Internal: the merged pairs the load may still visit. */
-  mergeBudget: i32 = 0
+  private entryKeys: string[]
+  private entryPairs: i32[]
+  private entryValues: i32[]
+  /** A large map's key texts, to their entry. */
+  private seen: Map<string, i32>
+  /** Per node, the stamp of the last map it was merged into; and that map's stamp. */
+  private mergeMarks: i32[]
+  private mergeStamp: i32 = 0
+  /** The merged pairs the load may still visit. */
+  private mergeBudget: i32 = 0
 
+  /** A loader that holds collections to `JSON_WRITER_MAX_DEPTH`, so whatever it loads can be written back out. */
   constructor() {
     this.maxDepth = JSON_WRITER_MAX_DEPTH
     this.stream = parseYaml("")
@@ -230,9 +237,14 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Clears `doc` and loads document `d` of `stream` into it. Answers the root
-   * value, or a negative code, which is also in `failed`, with the range in
-   * `errorStart` and `errorEnd`; nothing is kept from a load that fails.
+   * Clears `doc` and loads document `d` of `stream` into it. Nothing is kept
+   * from a load that fails.
+   *
+   * @param stream The parsed stream, with the options it was parsed under; its `merge` decides whether `<<` keys merge.
+   * @param d The document's 0-based index in `stream`.
+   * @param doc Where the values go; cleared first, and cleared again when the load fails.
+   * @returns The root value, or a negative code that is also in `failed`, with the range in
+   *   `errorStart` and `errorEnd`.
    */
   load(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue {
     this.stream = stream
@@ -269,8 +281,8 @@ export class YamlJsonLoader {
     return this.build(root, origin)
   }
 
-  /** Internal: records a failed load, clearing the document, and answers `code`. */
-  fail(code: i32, start: i32, end: i32): i32 {
+  /** Records a failed load, clearing the document, and answers `code`. */
+  private fail(code: i32, start: i32, end: i32): i32 {
     this.failed = code
     this.errorStart = start
     this.errorEnd = end
@@ -279,8 +291,8 @@ export class YamlJsonLoader {
     return code
   }
 
-  /** Internal: `v`, given the range `[start, end)`, or the failure the document answers. */
-  ranged(v: JsonValue, start: i32, end: i32): JsonValue {
+  /** `v`, given the range `[start, end)`, or the failure the document answers. */
+  private ranged(v: JsonValue, start: i32, end: i32): JsonValue {
     if (v < 0) {
       return this.fail(v, start, end)
     }
@@ -288,21 +300,21 @@ export class YamlJsonLoader {
     return code < 0 ? this.fail(code, start, end) : v
   }
 
-  /** Internal: a null with the empty range at `at`. */
-  nullAt(at: i32): JsonValue {
+  /** A null with the empty range at `at`. */
+  private nullAt(at: i32): JsonValue {
     return this.ranged(this.doc.newNull(), at, at)
   }
 
   // ---- Counting ------------------------------------------------------------------
 
   /**
-   * Internal: how many values node `root` expands to, saturating at `cap + 1`.
+   * How many values node `root` expands to, saturating at `cap + 1`.
    * Each node is counted once and its count kept, on a stack of its own
    * rather than by recursion, because a chain of aliases can be as long as
    * the text. Sets `bigAlias`. Clears only the sizes the last count set, so a
    * stream of many documents is not cleared whole for each.
    */
-  count(root: i32, cap: i32): i32 {
+  private count(root: i32, cap: i32): i32 {
     const stream: YamlStream = this.stream
     const nodes: i32 = toI32(stream.kinds.length)
     const sizes: i32[] = this.sizes
@@ -349,8 +361,8 @@ export class YamlJsonLoader {
     return sizes[root]
   }
 
-  /** Internal: pushes node `n` onto the count's stack unless it is counted; answers the new top. */
-  pushNode(top: i32, n: i32): i32 {
+  /** Pushes node `n` onto the count's stack unless it is counted; answers the new top. */
+  private pushNode(top: i32, n: i32): i32 {
     if (n < 0 || this.sizes[n] !== 0) {
       return top
     }
@@ -362,8 +374,8 @@ export class YamlJsonLoader {
     return top + 1
   }
 
-  /** Internal: pushes the nodes node `n`'s count is the sum of. */
-  pushParts(top: i32, n: i32): i32 {
+  /** Pushes the nodes node `n`'s count is the sum of. */
+  private pushParts(top: i32, n: i32): i32 {
     const stream: YamlStream = this.stream
     const kind: i32 = stream.kind(n)
     let t: i32 = top
@@ -383,10 +395,10 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Internal: node `n`'s count from its parts' counts, all of them kept by
+   * Node `n`'s count from its parts' counts, all of them kept by
    * now; a part still being counted is a cycle, which counts as too many.
    */
-  sizeOf(n: i32): i32 {
+  private sizeOf(n: i32): i32 {
     const stream: YamlStream = this.stream
     const kind: i32 = stream.kind(n)
     if (kind === YAML_ALIAS) {
@@ -422,8 +434,8 @@ export class YamlJsonLoader {
     return total
   }
 
-  /** Internal: a counted part's size: `1` for a missing node, too many for one still being counted. */
-  partSize(n: i32): i32 {
+  /** A counted part's size: `1` for a missing node, too many for one still being counted. */
+  private partSize(n: i32): i32 {
     if (n < 0) {
       return 1
     }
@@ -431,16 +443,16 @@ export class YamlJsonLoader {
     return size < 0 ? this.cap + 1 : size
   }
 
-  /** Internal: `a + b`, saturating at `cap + 1`; both are at most that, so the sum fits. */
-  plus(a: i32, b: i32): i32 {
+  /** `a + b`, saturating at `cap + 1`; both are at most that, so the sum fits. */
+  private plus(a: i32, b: i32): i32 {
     const sum: i32 = a + b
     return sum > this.cap ? this.cap + 1 : sum
   }
 
   // ---- Building ------------------------------------------------------------------
 
-  /** Internal: builds node `n`, nested `depth` collections deep, with `n`'s range on the value it answers. */
-  build(n: i32, depth: i32): JsonValue {
+  /** Builds node `n`, nested `depth` collections deep, with `n`'s range on the value it answers. */
+  private build(n: i32, depth: i32): JsonValue {
     const stream: YamlStream = this.stream
     const at: i32 = stream.resolved(n)
     const kind: i32 = stream.kind(at)
@@ -470,8 +482,8 @@ export class YamlJsonLoader {
     return this.ranged(v, stream.start(n), stream.end(n))
   }
 
-  /** Internal: the failure for text past `byteCap`, stored for node `n`. */
-  tooMuchText(n: i32): i32 {
+  /** The failure for text past `byteCap`, stored for node `n`. */
+  private tooMuchText(n: i32): i32 {
     const stream: YamlStream = this.stream
     const a: i32 = this.copying
     if (a >= 0) {
@@ -480,8 +492,8 @@ export class YamlJsonLoader {
     return this.fail(JSON_TOK_ERR_TOTAL_LIMIT, stream.start(n), stream.end(n))
   }
 
-  /** Internal: a scalar's value, by its core-schema type. */
-  buildScalar(at: i32): JsonValue {
+  /** A scalar's value, by its core-schema type. */
+  private buildScalar(at: i32): JsonValue {
     const stream: YamlStream = this.stream
     const doc: JsonDocument = this.doc
     const type: i32 = stream.type(at)
@@ -504,8 +516,8 @@ export class YamlJsonLoader {
     return doc.newString(stream.text(at))
   }
 
-  /** Internal: a sequence's array, each entry built in turn. */
-  buildSeq(at: i32, depth: i32): JsonValue {
+  /** A sequence's array, each entry built in turn. */
+  private buildSeq(at: i32, depth: i32): JsonValue {
     const stream: YamlStream = this.stream
     const doc: JsonDocument = this.doc
     const a: JsonValue = doc.newArray()
@@ -527,10 +539,10 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Internal: a map's object. Its members are gathered first, own keys then
+   * A map's object. Its members are gathered first, own keys then
    * merged ones, with repeats settled; then each value is built and added.
    */
-  buildMap(at: i32, depth: i32): JsonValue {
+  private buildMap(at: i32, depth: i32): JsonValue {
     const stream: YamlStream = this.stream
     const doc: JsonDocument = this.doc
     const base: i32 = this.entryTop
@@ -582,11 +594,11 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Internal: adds the merge keys' maps of map `at` to the entries from
+   * Adds the merge keys' maps of map `at` to the entries from
    * `base`, each key only if it is not there yet: every map a merge key
    * names, in order, its own keys first and then its merge keys', `hops` deep.
    */
-  mergeInto(base: i32, at: i32, hops: i32): i32 {
+  private mergeInto(base: i32, at: i32, hops: i32): i32 {
     const stream: YamlStream = this.stream
     for (let i: i32 = 0; i < stream.count(at); i += 1) {
       const pair: i32 = stream.child(at, i)
@@ -627,11 +639,11 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Internal: merges map `m`'s own keys, then its merge keys' maps, for the
+   * Merges map `m`'s own keys, then its merge keys' maps, for the
    * merge key `pair`; nothing if `m` is merged into this map already, since
    * a second merge would find every key taken.
    */
-  mergeMap(base: i32, pair: i32, m: i32, hops: i32): i32 {
+  private mergeMap(base: i32, pair: i32, m: i32, hops: i32): i32 {
     const stream: YamlStream = this.stream
     if (!this.markMerged(m)) {
       return 0
@@ -649,8 +661,8 @@ export class YamlJsonLoader {
     return this.mergeInto(base, m, hops)
   }
 
-  /** Internal: starts a map's merges, so no node is marked as merged into it yet. */
-  newMergeStamp(): void {
+  /** Starts a map's merges, so no node is marked as merged into it yet. */
+  private newMergeStamp(): void {
     const nodes: i32 = toI32(this.stream.kinds.length)
     const marks: i32[] = this.mergeMarks
     while (toI32(marks.length) < nodes) {
@@ -666,8 +678,8 @@ export class YamlJsonLoader {
     }
   }
 
-  /** Internal: marks node `n` as merged into the current map; `false` if it already was. */
-  markMerged(n: i32): boolean {
+  /** Marks node `n` as merged into the current map; `false` if it already was. */
+  private markMerged(n: i32): boolean {
     const marks: i32[] = this.mergeMarks
     if (n < 0 || n >= toI32(marks.length) || marks[n] === this.mergeStamp) {
       return false
@@ -677,11 +689,11 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Internal: adds pair `pair` to the entries of the map from `base`. A key
+   * Adds pair `pair` to the entries of the map from `base`. A key
    * already there is skipped for a merged pair; for an own pair it follows
    * the document's `duplicates`, keeping the first key and its place.
    */
-  addEntry(base: i32, pair: i32, own: boolean): i32 {
+  private addEntry(base: i32, pair: i32, own: boolean): i32 {
     const stream: YamlStream = this.stream
     const keyNode: i32 = stream.key(pair)
     const key: string = keyNode < 0 ? "" : keyText(stream, keyNode)
@@ -715,10 +727,10 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Internal: the entry from `base` whose key is `key`, or `-1`. The first
+   * The entry from `base` whose key is `key`, or `-1`. The first
    * `YAML_JSON_SCAN_KEYS` are compared one by one; the rest are in `seen`.
    */
-  findEntry(base: i32, key: string): i32 {
+  private findEntry(base: i32, key: string): i32 {
     const top: i32 = this.entryTop
     const scanned: i32 = top - base < YAML_JSON_SCAN_KEYS ? top : base + YAML_JSON_SCAN_KEYS
     for (let e: i32 = base; e < scanned; e += 1) {
@@ -734,11 +746,11 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Internal: whether `key` is a merge key, as the stream reads one: a plain
+   * Whether `key` is a merge key, as the stream reads one: a plain
    * `<<`, untagged or `!!merge`. Keep in step with `yamlIsMergeKey` in
    * `std/yaml.ts`, which is not exported.
    */
-  isMergeKey(key: i32): boolean {
+  private isMergeKey(key: i32): boolean {
     const stream: YamlStream = this.stream
     if (!stream.merge || key < 0 || stream.kind(key) !== YAML_SCALAR || stream.style(key) !== YAML_PLAIN) {
       return false
