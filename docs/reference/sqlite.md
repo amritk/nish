@@ -199,7 +199,7 @@ class Database
 | `error(code: i32): SqliteError` | The error for `code`, which this connection's last call answered. Ask before the next call. |
 | `exec(sql: string): Result<void, i32>` | Runs every statement of `sql` in turn, discarding any rows. |
 | `lastInsertRowid(): i64` | The rowid of the last row an INSERT on this connection made, 0 before any. |
-| `prepare( sql: string, ): Result<Statement, SqliteError>` | Compiles the first statement of `sql`, to be bound, stepped and reset as often as wanted; text after it is ignored. Text with no statement in it is `SQLITE_MISUSE`. |
+| `prepare(sql: string): Result<Statement, SqliteError>` | Compiles the first statement of `sql`, to be bound, stepped and reset as often as wanted; text after it is ignored. Text with no statement in it is `SQLITE_MISUSE`. |
 | `rollback(): Result<void, i32>` | `exec("ROLLBACK")`. |
 
 ## SqliteError
@@ -212,7 +212,7 @@ class SqliteError
 
 | Member | |
 | --- | --- |
-| `new SqliteError( extendedCode: i32, message: string, )` |  |
+| `new SqliteError(extendedCode: i32, message: string)` |  |
 | `code: i32` | The primary result code, such as `SQLITE_CONSTRAINT`. |
 | `extendedCode: i32` | The extended code, such as `SQLITE_CONSTRAINT_UNIQUE` (2067). |
 | `message: string` | SQLite's message, such as `UNIQUE constraint failed: t.id`. |
@@ -230,18 +230,18 @@ class Statement
 | --- | --- |
 | `new Statement(handle: i32)` |  |
 | `handle: i32` | The adapter's handle. |
-| `bindBlob( i: i32, buf: readonly u8[], off: i32, len: i32, ): Result<void, i32>` | Binds `buf[off, off + len)` as a blob, copied; a window outside `buf` is `SQLITE_MISUSE`. |
+| `bindBlob(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32>` | Binds `buf[off, off + len)` as a blob, copied; a window outside `buf` is `SQLITE_MISUSE`. |
 | `bindF64(i: i32, v: f64): Result<void, i32>` | Binds a floating-point value to parameter `i`. |
 | `bindI64(i: i32, v: i64): Result<void, i32>` | Binds an integer to parameter `i`. |
 | `bindNull(i: i32): Result<void, i32>` | Binds SQL NULL to parameter `i`. |
 | `bindText(i: i32, text: string): Result<void, i32>` | Binds `text` to parameter `i`; SQLite copies it. |
-| `bindTextBytes( i: i32, buf: readonly u8[], off: i32, len: i32, ): Result<void, i32>` | Binds `buf[off, off + len)` as text, copied; a window outside `buf` is `SQLITE_MISUSE`. |
+| `bindTextBytes(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32>` | Binds `buf[off, off + len)` as text, copied; a window outside `buf` is `SQLITE_MISUSE`. |
 | `clearBindings(): Result<void, i32>` | Clears every parameter back to NULL. |
 | `columnBytes(c: i32): i32` | The bytes `columnInto` would copy for column `c`. |
 | `columnCount(): i32` | The number of columns a row has. |
 | `columnF64(c: i32): f64` | Column `c` as a floating-point value; 0 for NULL or a column that is not there. |
 | `columnI64(c: i32): i64` | Column `c` as an integer, converted as SQLite converts; 0 for NULL or a column that is not there. |
-| `columnInto( c: i32, buf: u8[], at: i32, ): Result<i32, i32>` | Copies column `c` — a blob's bytes, anything else as text — into `buf` at `at`, and answers its length. It copies only when all of it fits, so a length larger than `buf.length - at` means nothing was written and says how much room is needed. `SQLITE_RANGE` for a column that is not there, `SQLITE_MISUSE` for an `at` outside `0..buf.length`. |
+| `columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32>` | Copies column `c` — a blob's bytes, anything else as text — into `buf` at `at`, and answers its length. It copies only when all of it fits, so a length larger than `buf.length - at` means nothing was written and says how much room is needed. `SQLITE_RANGE` for a column that is not there, `SQLITE_MISUSE` for an `at` outside `0..buf.length`. |
 | `columnText(c: i32): string \| null` | Column `c` as a new string, cut at its first NUL; `null` for NULL or a column that is not there. Allocates. |
 | `columnType(c: i32): i32` | The type of column `c` in this row, `SQLITE_INTEGER` to `SQLITE_NULL`; `SQLITE_NULL` for a column that is not there. |
 | `error(code: i32): SqliteError` | The error for `code`, which this statement's last call answered. Ask before the next call. |

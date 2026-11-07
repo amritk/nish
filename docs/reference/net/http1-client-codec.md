@@ -2,7 +2,7 @@
 
 # nish/net/http1-client-codec
 
-the client side of HTTP/1.1, sans-IO: a request writer and an incremental response parser, bytes in, events and bytes out, and no socket anywhere. `nish/net/http1-codec` is the server side; the event constants and the chunk writers are shared and imported from there.
+The client side of HTTP/1.1, sans-IO: a request writer and an incremental response parser, bytes in, events and bytes out, and no socket anywhere. `nish/net/http1-codec` is the server side; the event constants and the chunk writers are shared and imported from there.
 
 ```ts
 import {
@@ -302,7 +302,7 @@ class Http1ResponseParser
 
 | Member | |
 | --- | --- |
-| `new Http1ResponseParser( maxStatusLine: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i64, maxTrailerBytes: i32, )` | Each `i32` limit is clamped into 0 to 2^30 and `maxBody` into 0 to 2^53, so that the sums the parser makes of them cannot overflow. |
+| `new Http1ResponseParser(maxStatusLine: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i64, maxTrailerBytes: i32)` | Each `i32` limit is clamped into 0 to 2^30 and `maxBody` into 0 to 2^53, so that the sums the parser makes of them cannot overflow. |
 | `body: u8[]` | The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. |
 | `bodyLen: i32` |  |
 | `bodyOff: i32` |  |
@@ -345,7 +345,7 @@ class Http1ResponseParser
 | `wasHead: boolean` | What `expect` said of the request this response answers. |
 | `wasUpgrade: boolean` | Whether `expectUpgrade` said the request asked to switch protocols. |
 | `buffered(): i32` | How many bytes were fed and not consumed yet. |
-| `expect( methodWasHead: boolean, wasConnect: boolean, ): void` | Says what the request this response answers was: a response to HEAD has no body, and a 2xx to CONNECT is a tunnel. It takes effect only while the parser waits for a response's first status line, and the parser forgets it after that response's `HTTP1_END`; anywhere else it does nothing, so a pipelining caller says it once per response, after the last one's end. |
+| `expect(methodWasHead: boolean, wasConnect: boolean): void` | Says what the request this response answers was: a response to HEAD has no body, and a 2xx to CONNECT is a tunnel. It takes effect only while the parser waits for a response's first status line, and the parser forgets it after that response's `HTTP1_END`; anywhere else it does nothing, so a pipelining caller says it once per response, after the last one's end. |
 | `expectUpgrade(): void` | Says the request this response answers asked to switch protocols (it was written by `http1UpgradeRequestHead`), so a 101 is that switch: the parser answers `HTTP1_HEAD` with its status and fields readable, `HTTP1_END`, and then `HTTP1_UPGRADE`, and `tunnelBytes()` answers what was fed past the head. Any other status is read as it would be without it. It is said after `expect`, which clears it, and like `expect` it takes effect only while the parser waits for a response's first status line. Without it a 101 is refused with `HTTP1_E_SWITCH`: a server may not switch a connection whose client never asked. |
 | `feed(data: u8[], off: i32, len: i32): void` | Appends `data[off .. off + len)` to the input. A window outside `data` panics. After `finish()`, or once the parser has closed or refused, the input is dropped; in a tunnel it is kept for `tunnelBytes()`. |
 | `fieldName(i: i32): string` | Field `i`'s name, in lowercase, as a fresh string; "" past the last field. |

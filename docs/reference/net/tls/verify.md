@@ -2,7 +2,7 @@
 
 # nish/net/tls/verify
 
-the TLS client's one authentication seam: whether the server a `TlsRecordClient` reached is the one its `serverName` says, decided at `TLS_RECORD_AUTH` and handed to the connection as its verdict.
+The TLS client's one authentication seam: whether the server a `TlsRecordClient` reached is the one its `serverName` says, decided at `TLS_RECORD_AUTH` and handed to the connection as its verdict.
 
 ```ts
 import {
@@ -57,7 +57,7 @@ Whether `signature`, as a CertificateVerify carries it under `scheme`, verifies 
 
 </scalar-card>
 
-<scalar-card title="TlsClientTrust" icon="phosphor/regular/cube" href="#tlsclienttrust">
+<scalar-card title="TlsClientTrust" icon="phosphor/regular/cube" href="#tlsclienttrust-1">
 
 The roots a client trusts, indexed once and shared by every connection made with them.
 

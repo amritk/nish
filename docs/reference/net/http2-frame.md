@@ -2,7 +2,7 @@
 
 # nish/net/http2-frame
 
-the frames of HTTP/2 (RFC 9113 §4 and §6): the nine-byte header, every one of the ten frame types read and written, and the size, flag, padding and stream-identifier rules each one carries.
+The frames of HTTP/2 (RFC 9113 §4 and §6): the nine-byte header, every one of the ten frame types read and written, and the size, flag, padding and stream-identifier rules each one carries.
 
 ```ts
 import {

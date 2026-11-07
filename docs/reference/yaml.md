@@ -2,7 +2,7 @@
 
 # nish/yaml
 
-a YAML 1.2 parser that keeps where everything came from.
+A YAML 1.2 parser that keeps where everything came from.
 
 ```ts
 import {
@@ -456,10 +456,10 @@ class YamlStream
 | `key(pair: i32): i32` | A pair's key node, or `-1` for a node that is not a pair. |
 | `kind(n: i32): i32` | Node `n`'s `YAML_*` kind, or `0` for `-1` and any handle that is not a node. |
 | `moveDiagnostic(from: i32, to: i32): void` | Internal: copies diagnostic `from` over diagnostic `to`. |
-| `newNode( kind: i32, style: i32, start: i32, end: i32, ): i32` | Internal: a new node of `kind` and `style` over `[start, end)`, its other fields empty. |
+| `newNode(kind: i32, style: i32, start: i32, end: i32): i32` | Internal: a new node of `kind` and `style` over `[start, end)`, its other fields empty. |
 | `newProps(): i32` | Internal: a new, empty property slot. |
 | `pushKid(n: i32): i32` | Internal: appends `n` to `kids`, growing it by doubling; answers its slot. |
-| `report( code: i32, warning: boolean, message: string, start: i32, end: i32, document: i32, ): void` | Internal: records a diagnostic. |
+| `report(code: i32, warning: boolean, message: string, start: i32, end: i32, document: i32): void` | Internal: records a diagnostic. |
 | `resolved(n: i32): i32` | Node `n` itself, or the node it names when it is an alias. |
 | `sortDiagnostics(): void` | Internal: sorts the diagnostics by start, keeping the order of those that start together. |
 | `start(n: i32): i32` | The first byte of node `n`'s source, its properties not included, or `-1`. |

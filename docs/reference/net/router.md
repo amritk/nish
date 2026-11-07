@@ -2,7 +2,7 @@
 
 # nish/net/router
 
-a method and path router for HTTP servers, independent of the carrier: the same table answers an HTTP/1 request line and an HTTP/2 or HTTP/3 `:path`.
+A method and path router for HTTP servers, independent of the carrier: the same table answers an HTTP/1 request line and an HTTP/2 or HTTP/3 `:path`.
 
 ```ts
 import {
@@ -47,7 +47,7 @@ What a `Router` holds and refuses past.
 
 <scalar-callout type="info">
 
-```ts
+```text
 const HOME: i32 = 0   // module constants, in the order the routes are added
 const USER: i32 = 1
 const router = new Router(new RouterLimits())
@@ -189,7 +189,7 @@ class Router
 | `childFor(node: i32, pattern: string, k: i32): i32` | The child of `node` that pattern segment `k` leads to, or -1. |
 | `endpointFor(node: i32): i32` | The route of the wanted method ending at `node`, or -1, noting a route of another method there. |
 | `lastVisited(): i32` | How many nodes the last `match` visited. |
-| `match( method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[], ): i32` | The route `method[mStart .. mEnd)` and `target[tStart .. tEnd)` reach, or a negative `ROUTER_*` code. On a route, its parameters are written to `params` as `[start, end)` offsets into `target`, two slots each, in the pattern's order, and a final `*` as one more pair; on a refusal `params` is untouched. Panics on a range outside its array. |
+| `match(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32` | The route `method[mStart .. mEnd)` and `target[tStart .. tEnd)` reach, or a negative `ROUTER_*` code. On a route, its parameters are written to `params` as `[start, end)` offsets into `target`, two slots each, in the pattern's order, and a final `*` as one more pair; on a refusal `params` is untouched. Panics on a range outside its array. |
 | `methodIndex(method: string): i32` | The index of `method` among the methods the table knows, or -1. |
 | `nodeCount(): i32` | How many nodes the tree has, the root included: the most one `match` visits. |
 | `paramCount(route: i32): i32` | How many `[start, end)` pairs `route` answers: its parameters, and one more for a final `*`. |

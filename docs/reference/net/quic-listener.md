@@ -2,7 +2,7 @@
 
 # nish/net/quic-listener
 
-what a QUIC version 1 server answers to a datagram no connection owns: Version Negotiation for a version it does not speak (RFC 9000 §6, §17.2.1), a Retry that asks a client to prove its address before any connection state exists (§8.1.2, §17.2.5), and a stateless reset for a packet sent to a connection the server no longer has (§10.3). Sans-IO, like the rest of `nish/net`, and stateless in the sense the RFC means: nothing it answers depends on any connection.
+What a QUIC version 1 server answers to a datagram no connection owns: Version Negotiation for a version it does not speak (RFC 9000 §6, §17.2.1), a Retry that asks a client to prove its address before any connection state exists (§8.1.2, §17.2.5), and a stateless reset for a packet sent to a connection the server no longer has (§10.3). Sans-IO, like the rest of `nish/net`, and stateless in the sense the RFC means: nothing it answers depends on any connection.
 
 ```ts
 import {
@@ -31,7 +31,7 @@ import {
 } from "nish/net/quic-listener";
 ```
 
-```ts
+```text
 import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT, QUIC_LISTENER_ANSWER_SIZE } from "nish/net/quic-listener";
 
 const listener = new QuicListener(config, entropy);      // entropy: QUIC_LISTENER_ENTROPY_SIZE random bytes
@@ -163,7 +163,7 @@ congestion window per smoothed RTT and lets a burst of at most the initial
 window go at once, so a flight leaves spread over the round trip instead
 of in one burst that overruns a queue on the path.
 
-```ts
+```text
 let out: u8[] | null = quicListenerTakePaced(conn, now);
 while (out !== null) { … send it with conn.datagramEcn … ; out = quicListenerTakePaced(conn, now); }
 … and wake at the earlier of conn.deadline() and quicListenerPaceTime(conn, now)
@@ -445,7 +445,7 @@ class QuicListener
 
 | Member | |
 | --- | --- |
-| `new QuicListener( config: QuicServerConfig, entropy: u8[], )` | A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. |
+| `new QuicListener(config: QuicServerConfig, entropy: u8[])` | A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. |
 | `block: u8[]` | The counter's eight bytes, the generator's HMAC message. |
 | `config: QuicServerConfig` |  |
 | `counter: i64` |  |
@@ -472,21 +472,21 @@ class QuicListener
 | `tag: u8[]` | A full HMAC-SHA256 tag, wiped once its 16 bytes are used. |
 | `usable: boolean` | Whether the configuration and entropy were usable. |
 | `writeSlot: QuicKeysSlot` |  |
-| `handle( datagram: u8[], address: u8[], now: i64, ): QuicListenerAnswer` | `handleWindow` over the whole of `datagram`, into an answer of its own, made with exactly the room its reply takes: for a caller that keeps each answer, at the cost of one `QuicListenerAnswer` a datagram. A carrier makes one answer and calls `handleWindow`. |
-| `handleWindow( datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer, ): i32` | Decides what to answer a datagram whose first packet no connection owns, `datagram[at .. at + len)`, read where it lies, from `address` (the client's address as the caller's socket reports it, port included) at `now` (the caller's monotonic time in milliseconds), into `answer`, whose arrays are refilled in their own room. Answers `answer.kind`. See the module header for the rules; nothing a peer sends makes it panic, and nothing it does keeps arena memory. A window outside `datagram` is the caller's mistake, and panics. |
-| `invalidToken( answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, ): void` | The answer to an Initial carrying an invalid Retry token (RFC 9000 §8.1.2), into `answer`: an Initial with CONNECTION_CLOSE and INVALID_TOKEN, under the Initial keys of the DCID the client sent to, from that DCID. It is sent only when the client's Initial authenticates, so it answers a client and not noise; it is far smaller than the datagram it answers. The keys are derived into the listener's own slots, the Initial is opened in an arena block, and the close is written and sealed in `reply`. |
-| `opens( read: QuicKeys, datagram: u8[], header: QuicHeader, ): boolean` | Whether the Initial `header` read in `datagram` opens under `read`; what opening it allocates goes with the arena block. |
+| `handle(datagram: u8[], address: u8[], now: i64): QuicListenerAnswer` | `handleWindow` over the whole of `datagram`, into an answer of its own, made with exactly the room its reply takes: for a caller that keeps each answer, at the cost of one `QuicListenerAnswer` a datagram. A carrier makes one answer and calls `handleWindow`. |
+| `handleWindow(datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer): i32` | Decides what to answer a datagram whose first packet no connection owns, `datagram[at .. at + len)`, read where it lies, from `address` (the client's address as the caller's socket reports it, port included) at `now` (the caller's monotonic time in milliseconds), into `answer`, whose arrays are refilled in their own room. Answers `answer.kind`. See the module header for the rules; nothing a peer sends makes it panic, and nothing it does keeps arena memory. A window outside `datagram` is the caller's mistake, and panics. |
+| `invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void` | The answer to an Initial carrying an invalid Retry token (RFC 9000 §8.1.2), into `answer`: an Initial with CONNECTION_CLOSE and INVALID_TOKEN, under the Initial keys of the DCID the client sent to, from that DCID. It is sent only when the client's Initial authenticates, so it answers a client and not noise; it is far smaller than the datagram it answers. The keys are derived into the listener's own slots, the Initial is opened in an arena block, and the close is written and sealed in `reply`. |
+| `opens(read: QuicKeys, datagram: u8[], header: QuicHeader): boolean` | Whether the Initial `header` read in `datagram` opens under `read`; what opening it allocates goes with the arena block. |
 | `randomByte(): i32` | One unpredictable value in 0 to 255: the next byte of HMAC-SHA256 under the seed of a counter, a block at a time, each byte wiped once taken. |
 | `randomInto(out: u8[], at: i32, count: i32): void` | Writes `count` unpredictable bytes into `out` at `at`. |
 | `refill(): void` | The generator's next block, HMAC-SHA256 under the seed of the counter, into `pool`. |
 | `release(): void` | Ends the listener: wipes the seed and the generator's unused bytes, the tag and the HMAC and HKDF scratch, the INVALID_TOKEN close's Initial secrets and key slots, and `handle`'s spare answer, which holds the last one; `handle` and `handleWindow` then drop every datagram they are handed. The other methods still run, under the zeroed seed, and are the caller's not to call. What `handle` returned is the caller's to wipe. The configuration's keys are not the listener's to wipe: `Http3Server.stop` wipes them with the rest of the server. |
-| `retry( answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[], ): void` | A Retry for the client's first Initial (RFC 9000 §8.1.2, §17.2.5) into `answer`: a new connection ID for the client to send to, and a token binding it, the original DCID and the client's address to now — a marker byte, the time, the DCID, then the MAC — under the integrity tag of RFC 9001 §5.8. Each part is written where it goes in `reply`. |
-| `retryTag( reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32, ): boolean` | The Retry integrity tag (RFC 9001 §5.8) over the pseudo-packet — the original DCID `datagram[odcidAt .. odcidAt + odcidLength)`, its length first, then `reply[0 .. tagAt)` — written at `reply[tagAt]`: AES-128-GCM under the listener's copy of version 1's fixed key, over nothing. The pseudo-packet and the AEAD's temporaries go with the arena block. Answers whether it was made. |
-| `statelessReset( answer: QuicListenerAnswer, n: i32, datagram: u8[], dcidAt: i32, dcidLength: i32, ): void` | A stateless reset into `answer`, answering an `n`-byte datagram sent to the ID `datagram[dcidAt .. dcidAt + dcidLength)` (RFC 9000 §10.3): a short-header first byte, unpredictable bytes, and the token for that ID, computed in place by `quicConnResetTokenInto`. It is one byte shorter than a datagram of up to 43 bytes and between 43 bytes and one byte short of the datagram (at most 1200) otherwise, so it is always shorter; a datagram too short for that to leave 21 bytes, or one past the rate limit, gets nothing. |
+| `retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void` | A Retry for the client's first Initial (RFC 9000 §8.1.2, §17.2.5) into `answer`: a new connection ID for the client to send to, and a token binding it, the original DCID and the client's address to now — a marker byte, the time, the DCID, then the MAC — under the integrity tag of RFC 9001 §5.8. Each part is written where it goes in `reply`. |
+| `retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean` | The Retry integrity tag (RFC 9001 §5.8) over the pseudo-packet — the original DCID `datagram[odcidAt .. odcidAt + odcidLength)`, its length first, then `reply[0 .. tagAt)` — written at `reply[tagAt]`: AES-128-GCM under the listener's copy of version 1's fixed key, over nothing. The pseudo-packet and the AEAD's temporaries go with the arena block. Answers whether it was made. |
+| `statelessReset(answer: QuicListenerAnswer, n: i32, datagram: u8[], dcidAt: i32, dcidLength: i32): void` | A stateless reset into `answer`, answering an `n`-byte datagram sent to the ID `datagram[dcidAt .. dcidAt + dcidLength)` (RFC 9000 §10.3): a short-header first byte, unpredictable bytes, and the token for that ID, computed in place by `quicConnResetTokenInto`. It is one byte shorter than a datagram of up to 43 bytes and between 43 bytes and one byte short of the datagram (at most 1200) otherwise, so it is always shorter; a datagram too short for that to leave 21 bytes, or one past the rate limit, gets nothing. |
 | `takeReset(): boolean` | Takes one stateless reset from the rate limit's budget, topping it up first. Answers whether one was there. |
-| `tokenMac( head: u8[], headAt: i32, headLength: i32, scid: u8[], scidAt: i32, scidLength: i32, address: u8[], ): void` | The token MAC over `head[headAt .. headAt + headLength)`, the token's own bytes before its MAC, the ID the client is to send to (`scid[scidAt .. scidAt + scidLength)`) and its address, into `tag`: what makes a token good for one address and one connection only. Its first `QUIC_LISTENER_TOKEN_MAC_SIZE` bytes are the token's MAC; the caller wipes `tag` once it has used them. |
-| `tokenValid( datagram: u8[], header: QuicHeader, address: u8[], ): boolean` | Whether the token `header` read is one this listener issued for the client at `address` that was told to send to the DCID `header` read, and still within its lifetime: the lengths add up, the MAC matches (compared in constant time), and it was issued no later than now and less than `retryTokenLifetime` ago. The token is read in `datagram`. |
-| `versionNegotiation( answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, ): void` | A Version Negotiation packet (RFC 9000 §17.2.1) into `answer`, answering a packet from the SCID `header` read to its DCID: the IDs swapped, version 0, and version 1 as the only one supported. A random byte fills the first byte's low six bits, under the 0x40 the RFC asks for so the packet looks like QUIC to a demultiplexer. Each ID is at most 255 bytes, so the packet is at most 521, inside `reply`'s room.<br><br>TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this belongs beside `quicRetryPacket` there, which this stage may not edit. |
+| `tokenMac(head: u8[], headAt: i32, headLength: i32, scid: u8[], scidAt: i32, scidLength: i32, address: u8[]): void` | The token MAC over `head[headAt .. headAt + headLength)`, the token's own bytes before its MAC, the ID the client is to send to (`scid[scidAt .. scidAt + scidLength)`) and its address, into `tag`: what makes a token good for one address and one connection only. Its first `QUIC_LISTENER_TOKEN_MAC_SIZE` bytes are the token's MAC; the caller wipes `tag` once it has used them. |
+| `tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean` | Whether the token `header` read is one this listener issued for the client at `address` that was told to send to the DCID `header` read, and still within its lifetime: the lengths add up, the MAC matches (compared in constant time), and it was issued no later than now and less than `retryTokenLifetime` ago. The token is read in `datagram`. |
+| `versionNegotiation(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void` | A Version Negotiation packet (RFC 9000 §17.2.1) into `answer`, answering a packet from the SCID `header` read to its DCID: the IDs swapped, version 0, and version 1 as the only one supported. A random byte fills the first byte's low six bits, under the 0x40 the RFC asks for so the packet looks like QUIC to a demultiplexer. Each ID is at most 255 bytes, so the packet is at most 521, inside `reply`'s room.<br><br>TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this belongs beside `quicRetryPacket` there, which this stage may not edit. |
 
 ## QuicListenerAnswer
 

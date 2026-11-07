@@ -2,7 +2,7 @@
 
 # nish/crypto/pki
 
-whether the certificate chain a TLS server sent leads to a root the program trusts and names the host it dialled: RFC 5280 §6 path validation and RFC 6125 §6 hostname matching, at the instant the caller gives.
+Whether the certificate chain a TLS server sent leads to a root the program trusts and names the host it dialled: RFC 5280 §6 path validation and RFC 6125 §6 hostname matching, at the instant the caller gives.
 
 ```ts
 import {
@@ -92,7 +92,7 @@ What `pkiVerifyServer` found.
 
 </scalar-card>
 
-<scalar-card title="PkiTrustStore" icon="phosphor/regular/cube" href="#pkitruststore">
+<scalar-card title="PkiTrustStore" icon="phosphor/regular/cube" href="#pkitruststore-1">
 
 The roots a program trusts, indexed by their subject Name.
 

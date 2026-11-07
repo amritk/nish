@@ -2,7 +2,7 @@
 
 # nish/threads
 
-data parallelism, a scope for heterogeneous tasks, and a lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
+Data parallelism, a scope for heterogeneous tasks, and a lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
 
 ```ts
 import {
@@ -369,12 +369,14 @@ A channel of scalars or strings between a scope's tasks (docs/wp29-thread-surfac
 receiver's at the loop: `send` from the tasks that produce, `for (const x of ch)` in the one
 that consumes, or in the parent once the scope has joined.
 
-    const ch = new Channel&lt;i32>()
-    {
-      using s = scope()
-      s.spawn(produce, new Pipe(ch, 100), done, 0) // every sender first
-      s.spawn(consume, new Pipe(ch, 0), sums, 0)   // then the one receiver
-    }
+```ts
+const ch = new Channel<i32>()
+{
+  using s = scope()
+  s.spawn(produce, new Pipe(ch, 100), done, 0) // every sender first
+  s.spawn(consume, new Pipe(ch, 0), sums, 0)   // then the one receiver
+}
+```
 
 Nobody closes a channel: it closes when its scope has started to join and
 every task that may send on it has returned (docs/LANGUAGE.md, "Channels").
@@ -398,7 +400,7 @@ class Channel<T>
 | `head: i32` | Under Node: how many of `queue`'s values a loop has taken. |
 | `queue: T[]` | Under Node: every value sent, in the order it was sent. |
 | `state: i64` | Natively: the runtime's handle on the channel (runtime/runtime-parallel.c), 0 until the channel is first used. Nothing written here reads or writes it. |
-| `[iterator](): ChannelWalk<T>` | What `for (const x of ch)` asks for under Node: a walk that takes each value as it reaches it, so a second loop over the channel finds it empty, as it does natively. |
+| `[Symbol.iterator](): ChannelWalk<T>` | What `for (const x of ch)` asks for under Node: a walk that takes each value as it reaches it, so a second loop over the channel finds it empty, as it does natively. |
 | `ready(): boolean` | Whether a value is waiting, under Node, where nothing is sent while a loop runs. |
 | `send(x: T): void` | Hand `x` to the receiver. It never waits: a channel holds as many values as are sent. |
 | `take(): T` | The next value, for a loop that has found one waiting (`ChannelWalk`). Natively the loop is the compiler's, which takes a value with the runtime instead, and nothing calls this. |
@@ -445,7 +447,7 @@ class MutexGuard<T>
 | `new MutexGuard<T>(value: T)` |  |
 | `value: T` | The data the lock owns. |
 | `word: i32` | The lock word: 0 when the lock is free, 1 while a guard's block holds it. Nothing written here reads or writes it. Natively the compiler takes it with an acquire compare-and-swap in `lock()` and gives it back with a release store at every exit of the guard's block (`src/emit-parallel.ts`); under Node one task runs at a time and there is nothing to exclude. |
-| `[dispose](): void` | What `using` calls when the guard's block ends. Natively the compiler emits the release itself at every exit of the block, and under Node nothing was taken, so there is nothing to give back. |
+| `[Symbol.dispose](): void` | What `using` calls when the guard's block ends. Natively the compiler emits the release itself at every exit of the block, and under Node nothing was taken, so there is nothing to give back. |
 
 ## ThreadScope
 
@@ -462,7 +464,7 @@ class ThreadScope
 | --- | --- |
 | `new ThreadScope()` |  |
 | `tag: i32` | The stack, in bytes, of each thread the scope's tasks run on, or 0 for the platform's default. Only `scopeWithStack` writes it, and only `nish_scope_join` (runtime/runtime-parallel.c) reads it, as the scope's first word. It also makes each scope an object of its own, whose address is what the runtime files the scope's tasks under. |
-| `[dispose](): void` | What `using` calls when the block ends. Natively the compiler emits the join itself at every exit of the block, and under Node every task has already run by the time this is reached, so there is nothing left to do. |
-| `spawn<A, R>( entry: (arg: A) => R, arg: A, dst: R[], at: i32, ): void` | Run `entry(arg)` on a thread of its own and store its answer in `dst[at]` when the scope closes. `at` is checked here, before the task is taken, and again when its answer is stored. |
+| `[Symbol.dispose](): void` | What `using` calls when the block ends. Natively the compiler emits the join itself at every exit of the block, and under Node every task has already run by the time this is reached, so there is nothing left to do. |
+| `spawn<A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void` | Run `entry(arg)` on a thread of its own and store its answer in `dst[at]` when the scope closes. `at` is checked here, before the task is taken, and again when its answer is stored. |
 | `spawnThunk<R>(entry: () => R): void` | `s.spawn(() => work(xs))` as the compiler reads it: run the arrow, whose captured `const` locals are its arguments, on a thread of its own when the scope closes, and store nothing. Only the compiler names this method, and a program that names it is refused as `spawnWith`'s is (NL2389). |
-| `spawnWith<A, R>( entry: (arg: A) => R, arg: A, ): void` | `s.spawn(entry, arg)` as the compiler reads it: run `entry(arg)` on a thread of its own when the scope closes, and store nothing. `entry` answers `void`. Only the compiler names this method (see `slotWritten`): a scope is only ever the receiver of a `spawn` statement, so `s.spawnWith(...)` written in a program is refused by that rule (NL2389), as passing the scope would be. |
+| `spawnWith<A, R>(entry: (arg: A) => R, arg: A): void` | `s.spawn(entry, arg)` as the compiler reads it: run `entry(arg)` on a thread of its own when the scope closes, and store nothing. `entry` answers `void`. Only the compiler names this method (see `slotWritten`): a scope is only ever the receiver of a `spawn` statement, so `s.spawnWith(...)` written in a program is refused by that rule (NL2389), as passing the scope would be. |

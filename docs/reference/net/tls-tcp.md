@@ -45,7 +45,7 @@ A pool of TLS 1.3 server connections on one listening socket.
 
 <scalar-callout type="info">
 
-```ts
+```text
 const listener = tcpListen("0.0.0.0", 8443, 128);
 const tls = new TlsTcpServer(config, listener, 64);
 pollAdd(loop, listener, 1, LISTENER);
@@ -241,13 +241,15 @@ One TLS 1.3 client connection over TCP: a `TlsRecordClient` driving a
 `TlsClient` on a socket `tcpConnect` opened, for a program that owns its
 readiness loop, as `TlsTcpServer` is for a server.
 
-    const client = new TlsTcpClient(addr, new TlsClientConfig("example.com", ["h2"]), trust);
-    pollAdd(loop, client.fd(), client.interest() & 3, TOKEN);
-    // when the token comes back:
-    let wants: i32 = (events & 5) !== 0 ? client.readable() : client.writable();
-    if ((wants & TLS_RECORD_DATA) !== 0) { client.read(buf, 0, buf.length); ... }
-    if ((wants & TLS_RECORD_DONE) !== 0) { client.close(); }
-    else { pollModify(loop, client.fd(), wants & 3, TOKEN); }
+```text
+const client = new TlsTcpClient(addr, new TlsClientConfig("example.com", ["h2"]), trust);
+pollAdd(loop, client.fd(), client.interest() & 3, TOKEN);
+// when the token comes back:
+let wants: i32 = (events & 5) !== 0 ? client.readable() : client.writable();
+if ((wants & TLS_RECORD_DATA) !== 0) { client.read(buf, 0, buf.length); ... }
+if ((wants & TLS_RECORD_DONE) !== 0) { client.close(); }
+else { pollModify(loop, client.fd(), wants & 3, TOKEN); }
+```
 
 **The server is always authenticated.** When the handshake reaches the
 server's certificate chain and CertificateVerify, the client gives its own
@@ -273,7 +275,7 @@ class TlsTcpClient
 
 | Member | |
 | --- | --- |
-| `new TlsTcpClient( addr: u8[], config: TlsClientConfig, trust: TlsClientTrust, )` | A connection to the server at `addr` (`nish:net`'s 18-byte form, which `netAddress` writes) under `config`, authenticated against `trust`. The name the certificate must carry is `config.serverName`, never one taken from `addr`. The ClientHello is sealed here and waits for the socket. |
+| `new TlsTcpClient(addr: u8[], config: TlsClientConfig, trust: TlsClientTrust)` | A connection to the server at `addr` (`nish:net`'s 18-byte form, which `netAddress` writes) under `config`, authenticated against `trust`. The name the certificate must carry is `config.serverName`, never one taken from `addr`. The ClientHello is sealed here and waits for the socket. |
 | `conn: TlsRecordClient` |  |
 | `connectError: i32` | Why the connection failed below TLS, or 0: `tcpConnect`'s or `connectResult`'s failure, or what ended `tlsConnect`'s wait — its timeout (`TLS_TCP_TIMED_OUT`) or its loop's failure. |
 | `connecting: boolean` | Whether the socket has yet to say how its connection went. |
@@ -292,13 +294,13 @@ class TlsTcpClient
 | `ownLoop(): i32` | A readiness loop of the client's own holding its socket, for the waiting calls, or the loop's failure. |
 | `read(buf: u8[], off: i32, len: i32): i32` | Application data from the server into `buf[off .. off + len)`: the count, 0 at the end of its stream, -11 when nothing is waiting, -104 once the connection has failed, as `TlsRecordClient.read` says, and -32 once `close` has run. What reading makes room for is answered and sent here; re-arm with `interest()`. |
 | `readable(): i32` | The socket is readable, or hung up: reads it until it would block or the connection has no room, handing each read to the connection, then sends what that produced. Answers the `interest`. |
-| `readWait( buf: u8[], off: i32, len: i32, timeoutMs: i32, ): i32` | Application data from the server, waiting for it up to `timeoutMs` milliseconds in a loop of the client's own, for a program with no loop: the count, 0 at the end of the server's stream, `TLS_TCP_TIMED_OUT` when nothing came in time (the connection stays usable), -104 once it has failed, -32 once it is done otherwise, or the loop's failure. It drives the handshake too, so it may follow `new TlsTcpClient` directly. |
+| `readWait(buf: u8[], off: i32, len: i32, timeoutMs: i32): i32` | Application data from the server, waiting for it up to `timeoutMs` milliseconds in a loop of the client's own, for a program with no loop: the count, 0 at the end of the server's stream, `TLS_TCP_TIMED_OUT` when nothing came in time (the connection stays usable), -104 once it has failed, -32 once it is done otherwise, or the loop's failure. It drives the handshake too, so it may follow `new TlsTcpClient` directly. |
 | `sending(): boolean` | Whether sealed bytes are still waiting for the socket. |
 | `shutdown(): i32` | Closes the client's side (§6.1): a `close_notify` after whatever is already written, sent as the socket takes it. The client does not wait for the server's own `close_notify`: data already read off the socket still reads, and once the `close_notify` is sent the interest says `TLS_RECORD_DONE` and `readWait` answers -32; call `close` then. Answers the interest. |
 | `turn(loop: i32, end: i64): i32` | One turn of `loop` (from `ownLoop`): waits until the socket is ready, or until `end` on the monotonic clock, and handles what came. Answers 0, `TLS_RECORD_DONE` once the connection wants nothing more, `TLS_TCP_TIMED_OUT`, or the loop's failure. |
 | `writable(): i32` | The socket is writable: on the first event, how the connection went; then sends what the connection holds. Answers the `interest`. |
 | `write(data: u8[], off: i32, len: i32): i32` | Application data for the server, `data[off .. off + len)`: seals as much as fits and sends what the socket takes, and answers how much was taken, -11 when nothing fits yet or the handshake is under way, -32 once the client has closed, as `TlsRecordClient.write` says. |
-| `writeAll( data: u8[], off: i32, len: i32, timeoutMs: i32, ): i32` | Writes all of `data[off .. off + len)` and waits up to `timeoutMs` milliseconds, in a loop of the client's own, until the socket has taken every byte of it: `len`, or — some of it perhaps sent — `TLS_TCP_TIMED_OUT`, -32 when the client had closed or failed before the call, -104 when the connection fails during it, -22 for a window outside `data`, or the loop's failure. It drives the handshake too, so it may follow `new TlsTcpClient` directly. A timed-out call does not say how much was sent, and the same bytes written again would reach the server twice: once the handshake is done, a timeout leaves the stream unusable, and the client is for `close`. |
+| `writeAll(data: u8[], off: i32, len: i32, timeoutMs: i32): i32` | Writes all of `data[off .. off + len)` and waits up to `timeoutMs` milliseconds, in a loop of the client's own, until the socket has taken every byte of it: `len`, or — some of it perhaps sent — `TLS_TCP_TIMED_OUT`, -32 when the client had closed or failed before the call, -104 when the connection fails during it, -22 for a window outside `data`, or the loop's failure. It drives the handshake too, so it may follow `new TlsTcpClient` directly. A timed-out call does not say how much was sent, and the same bytes written again would reach the server twice: once the handshake is done, a timeout leaves the stream unusable, and the client is for `close`. |
 
 ## TlsTcpServer
 
@@ -313,7 +315,7 @@ class TlsTcpServer
 
 | Member | |
 | --- | --- |
-| `new TlsTcpServer( config: TlsServerConfig, listener: i32, size: i32, )` | A pool of `size` slots, at least one, serving `config` on `listener`, a socket `tcpListen` made. No slot is built here: a slot's handshake state and its server random are allocated by the first `accept` into it and kept, and its record buffers are borrowed from `pools` while a connection uses them, so a pool sized for a peak costs at start-up only the read scratch, the signer and the empty pools. |
+| `new TlsTcpServer(config: TlsServerConfig, listener: i32, size: i32)` | A pool of `size` slots, at least one, serving `config` on `listener`, a socket `tcpListen` made. No slot is built here: a slot's handshake state and its server random are allocated by the first `accept` into it and kept, and its record buffers are borrowed from `pools` while a connection uses them, so a pool sized for a peak costs at start-up only the read scratch, the signer and the empty pools. |
 | `config: TlsServerConfig` |  |
 | `connections: TlsRecordServer[]` | The connections built so far, slot `k`'s at `k`: one per slot ever accepted into. `connection` never adds to it; a slot never built reads `vacant` instead. |
 | `fds: i32[]` | Each slot's descriptor, or -1 while the slot is free, for the slots accepted into so far: its length is the high-water mark, and a slot past it has never been used. |
@@ -328,7 +330,7 @@ class TlsTcpServer
 | `slots: i32` | How many slots the pool may hold, which `size` answers. |
 | `tickets: boolean` | Whether `enableTickets` has run, so a slot built after it resumes too. |
 | `vacant: TlsRecordServer \| null` | What `connection` answers for every slot never built: one failed connection no slot holds and every such slot shares, so the slot reads as a free one does (no ALPN, not open) and never as another slot's live session. Its first read allocates it, once per server; it has no tickets, and a caller must not change it. |
-| `accept( serverRandom: u8[], ephemeralPrivate: u8[], ): i32` | Accepts the next waiting connection into a free slot and starts its handshake with `serverRandom` and `ephemeralPrivate` (32 bytes each), and answers the slot. The peer's address is in `peer`. Both arrays are copied into the slot, which reads them only when the ClientHello arrives, and the key's array is then wiped, so the program may refill one buffer of each for every call. Answers -11 when no connection is waiting, `TLS_TCP_POOL_FULL` when one was but every slot is busy (it is closed), or `tcpAccept`'s own failure; and `TLS_RECORD_INVALID` (-22), before any connection is taken, for a random or key that is not 32 bytes. On any answer but a slot both arrays are left as they were. |
+| `accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32` | Accepts the next waiting connection into a free slot and starts its handshake with `serverRandom` and `ephemeralPrivate` (32 bytes each), and answers the slot. The peer's address is in `peer`. Both arrays are copied into the slot, which reads them only when the ClientHello arrives, and the key's array is then wiped, so the program may refill one buffer of each for every call. Answers -11 when no connection is waiting, `TLS_TCP_POOL_FULL` when one was but every slot is busy (it is closed), or `tcpAccept`'s own failure; and `TLS_RECORD_INVALID` (-22), before any connection is taken, for a random or key that is not 32 bytes. On any answer but a slot both arrays are left as they were. |
 | `build(): TlsRecordServer` | The next slot's connection and server random, for the slot built next. Called by `accept` alone, as the pool's high-water mark rises: slot `k`'s entry must sit at index `k` of `connections` and `randoms`. Its handshake is never given a ClientHello: `accept` restarts it for a connection with real randomness, and every later connection reuses its state. |
 | `busy(): i32` | How many slots hold a connection. |
 | `close(slot: i32): void` | Ends `slot`'s connection and frees the slot at once: a `close_notify` unless the connection already failed or closed, one attempt to send what is left, every key wiped, and the descriptor closed, which also takes it out of every loop. A program that must know every byte and the `close_notify` arrived calls `shutdown` instead, and `close` once the slot's interest says `TLS_RECORD_DONE`. |
@@ -339,15 +341,15 @@ class TlsTcpServer
 | `flush(slot: i32): i32` | Writes the connection's output until the socket would block or it is all sent, and answers its `interest`; once the connection is over and the program has read what the client sent, the slot lingers (`linger`). A free slot answers `TLS_RECORD_DONE`. |
 | `holds(slot: i32): boolean` | Whether `slot` is a slot of this pool that holds a connection. |
 | `interest(slot: i32): i32` | What `slot`'s connection wants now, without touching the socket; `TLS_RECORD_DONE` for a free slot. |
-| `issue( slot: i32, key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64, ): i32` | While `slot`'s interest says `TLS_RECORD_TICKET` on an open connection: seals one ticket under the borrowed `key` and sends its NewSessionTicket (`TlsRecordServer.issue`). Answers the slot's interest. |
+| `issue(slot: i32, key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): i32` | While `slot`'s interest says `TLS_RECORD_TICKET` on an open connection: seals one ticket under the borrowed `key` and sends its NewSessionTicket (`TlsRecordServer.issue`). Answers the slot's interest. |
 | `keyUpdate(slot: i32, requestPeer: boolean): i32` | Sends a KeyUpdate on `slot`, asking the client for one too when `requestPeer`; answers as `TlsRecordServer.keyUpdate`. |
 | `linger(slot: i32): i32` | `slot`'s connection is over and everything is sent. One the server closed, whose client has neither sent its `close_notify` nor ended its stream, lingers: the socket's write side is shut, every key wiped and every record buffer given back, and what the client sends is drained (`drain`). Any other is done. |
 | `lingering(slot: i32): boolean` | Whether `slot` lingers: its connection is over and it waits for the client to hang up. A carrier's idle clock does not move for what a lingering slot drains, so its idle timeout bounds the wait. |
 | `lingerInterest(slot: i32): i32` | A lingering `slot`'s interest: to be read, or `TLS_RECORD_DONE` once its linger is over. |
 | `make(random: u8[]): TlsRecordServer` | A connection over `random` that is marked failed without sealing an alert, so a stray call on it fails closed, and that borrows no buffer until a connection moves bytes through it. |
-| `read( slot: i32, buf: u8[], off: i32, len: i32, ): i32` | Application data from `slot`'s client into `buf[off .. off + len)`: the count, 0 at the end of its stream, -11 when nothing is waiting, -104 once the connection has failed, as `TlsRecordServer.read` says. Reading makes room, and the records that were waiting for it may be handled and answered (a KeyUpdate), which is sent here; the connection may then want the socket read again, so re-arm it with `interest(slot)`. |
+| `read(slot: i32, buf: u8[], off: i32, len: i32): i32` | Application data from `slot`'s client into `buf[off .. off + len)`: the count, 0 at the end of its stream, -11 when nothing is waiting, -104 once the connection has failed, as `TlsRecordServer.read` says. Reading makes room, and the records that were waiting for it may be handled and answered (a KeyUpdate), which is sent here; the connection may then want the socket read again, so re-arm it with `interest(slot)`. |
 | `readable(slot: i32): i32` | The socket of `slot` is readable: reads it until it would block or the connection has no room, handing each read to the connection, then sends what that produced. Answers the connection's `interest`, or, while the slot lingers, what `drain` answers; a free slot answers `TLS_RECORD_DONE`. |
-| `resume( slot: i32, current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64, ): i32` | While `slot`'s interest says `TLS_RECORD_TICKET` in the handshake: reads its ClientHello's tickets under `current` and `previous`, with what each `info` says of them, records the one it resumes in `strikes`, and sends the flight that answers the hello, resumed or in full (`TlsRecordServer.resume`). The keys and the register are borrowed for the call. Answers the slot's interest. |
+| `resume(slot: i32, current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32` | While `slot`'s interest says `TLS_RECORD_TICKET` in the handshake: reads its ClientHello's tickets under `current` and `previous`, with what each `info` says of them, records the one it resumes in `strikes`, and sends the flight that answers the hello, resumed or in full (`TlsRecordServer.resume`). The keys and the register are borrowed for the call. Answers the slot's interest. |
 | `send(slot: i32): i32` | Writes `slot`'s output until the socket would block or it is all sent; answers the connection's `interest`. |
 | `shutdown(slot: i32): i32` | Closes the server's side of `slot`'s connection (§6.1): a `close_notify` after whatever is already written, sent as the socket takes it. The slot stays the program's until its interest says `TLS_RECORD_DONE` — every byte is sent and, once the slot lingers (`linger`), the client has hung up — and the program calls `close`. Meanwhile the interest asks for the socket to be read. Answers the interest. |
 | `sign(slot: i32, signature: u8[]): i32` | Hands `slot` the signature over `signatureInput(slot)`, seals the rest of its flight and sends it. Answers its `interest`. |
@@ -355,7 +357,7 @@ class TlsTcpServer
 | `signP256(slot: i32, key: Secret<u8[]>): i32` | Signs `slot`'s CertificateVerify with the P-256 private key `key` and hands it over, as `sign` does, through the pool's `TlsP256Signer`, so a handshake's signature keeps nothing. The key is borrowed: the caller made the `Secret`, and wipes it. A malformed key fails the connection with `internal_error`. |
 | `size(): i32` | How many slots the pool has, built or not. |
 | `writable(slot: i32): i32` | The socket of `slot` is writable: sends what the connection holds. Answers its `interest`. |
-| `write( slot: i32, data: u8[], off: i32, len: i32, ): i32` | Application data for `slot`'s client, `data[off .. off + len)`: seals as much as fits and sends what the socket takes, and answers how much was taken, -11 when nothing fits yet or the handshake is under way, -32 once the server has closed, as `TlsRecordServer.write` says. |
+| `write(slot: i32, data: u8[], off: i32, len: i32): i32` | Application data for `slot`'s client, `data[off .. off + len)`: seals as much as fits and sends what the socket takes, and answers how much was taken, -11 when nothing fits yet or the handshake is under way, -32 once the server has closed, as `TlsRecordServer.write` says. |
 
 ## Constants
 

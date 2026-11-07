@@ -2,7 +2,7 @@
 
 # nish/crypto/bcrypt-batch
 
-a login batcher: it queues bcrypt verifies and hashes as they arrive, sends them as `bcryptVerifyN` / `bcryptHashN` batches, and runs the batches on `std/threads` tasks, one per core.
+A login batcher: it queues bcrypt verifies and hashes as they arrive, sends them as `bcryptVerifyN` / `bcryptHashN` batches, and runs the batches on `std/threads` tasks, one per core.
 
 ```ts
 import {
@@ -47,7 +47,7 @@ How a batcher sends its work: see `bcryptBatcher`.
 
 </scalar-card>
 
-<scalar-card title="BcryptBatcher" icon="phosphor/regular/cube" href="#bcryptbatcher">
+<scalar-card title="BcryptBatcher" icon="phosphor/regular/cube" href="#bcryptbatcher-1">
 
 A queue of bcrypt requests and the policy that sends them: made by `bcryptBatcher`.
 
@@ -158,7 +158,7 @@ class BcryptAnswer
 
 | Member | |
 | --- | --- |
-| `new BcryptAnswer( ticket: i32, ok: boolean, hash: string, error: string, )` |  |
+| `new BcryptAnswer(ticket: i32, ok: boolean, hash: string, error: string)` |  |
 | `error: string` | "" unless the request is an `Err`, as `bcryptVerify` or `bcryptHash` words it. |
 | `hash: string` | A hash request's `$2b$` hash; "" for a verify and for an error. |
 | `ok: boolean` | A verify: whether the password is the hash's. A hash: whether it was made. False with an error. |
@@ -206,10 +206,10 @@ class BcryptBatcher
 | `tickets: i32[]` |  |
 | `width: i32` |  |
 | `compact(): void` | Drops the requests before `head` once they are most of the queue, so a long-lived batcher's arrays stay small. |
-| `enqueue( password: Secret<u8[]>, kind: i32, hash: string, salt: u8[], ticket: i32, now: i64, ): void` | Appends one request to the queue. |
-| `hash( password: Secret<u8[]>, salt: u8[], now: i64, ): i32` | Queues a new hash of `password` under `salt` (16 bytes, fresh from `crypto.getRandomValues`) at the batcher's cost, which arrived at `now`, and answers its ticket. The batcher queues a copy of `password` and wipes the copy once the hash is made; a salt of another length is answered with its `Err` by the next `run`, and no copy is made. |
+| `enqueue(password: Secret<u8[]>, kind: i32, hash: string, salt: u8[], ticket: i32, now: i64): void` | Appends one request to the queue. |
+| `hash(password: Secret<u8[]>, salt: u8[], now: i64): i32` | Queues a new hash of `password` under `salt` (16 bytes, fresh from `crypto.getRandomValues`) at the batcher's cost, which arrived at `now`, and answers its ticket. The batcher queues a copy of `password` and wipes the copy once the hash is made; a salt of another length is answered with its `Err` by the next `run`, and no copy is made. |
 | `orderOf(taken: i32): i32[]` | The queue indices of the `taken` oldest requests, verifies by the cost their hash names and then hashes, each group in arrival order. |
 | `pending(): i32` | How many requests are queued or answered and not yet handed out by `run`. |
 | `run(now: i64): BcryptAnswer[]` | Sends what is due and answers it: nothing (bar answers made without a batch) until `waitNanos(now)` is 0, then up to `width × cores` of the oldest requests, spread evenly over up to `cores` tasks, each running its share as batches of up to `width`. Returns once every task has finished, with the copy of each password it ran wiped. |
-| `verify( password: Secret<u8[]>, hash: string, now: i64, ): i32` | Queues a verify of `password` against `hash`, which arrived at `now` (`monotonicNanos()`), and answers its ticket. The batcher queues a copy of `password` and wipes the copy once the verify has run; the caller wipes its own. |
+| `verify(password: Secret<u8[]>, hash: string, now: i64): i32` | Queues a verify of `password` against `hash`, which arrived at `now` (`monotonicNanos()`), and answers its ticket. The batcher queues a copy of `password` and wipes the copy once the verify has run; the caller wipes its own. |
 | `waitNanos(now: i64): i64` | Nanoseconds from `now` until a `run` is due: 0 when it is due now (a full batch is queued, the oldest request has waited `holdNanos`, or an answer is waiting), -1 when nothing is queued. |

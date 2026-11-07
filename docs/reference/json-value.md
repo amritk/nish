@@ -2,7 +2,7 @@
 
 # nish/json-value
 
-any JSON document as a tree a program can read, build and write back, with every number kept as the text it was written in.
+Any JSON document as a tree a program can read, build and write back, with every number kept as the text it was written in.
 
 ```ts
 import {
@@ -279,7 +279,7 @@ class JsonDocument
 | `top: i32` | How many values are in use: the handles are `0 .. top - 1`. |
 | `unsignedFits: boolean` | Whether the last `unsigned` read a number that fits a `u64`. |
 | `adoptable(c: i32, v: i32): i32` | Internal: whether the value at index `v` may go into the container at index `c`: it is a value, it is in no container, and it is not `c` or a container `c` is inside. Through `push` and `set`, that is what keeps every tree finite. |
-| `append( c: i32, v: i32, keyAt: i32, keyLength: i32, ): void` | Internal: adds index `v`, with the key `bytes[keyAt, keyAt + keyLength)`, after the last member of index `c`, unchecked: `push` and `set` check first. A container whose slots are full moves them to the end of the slot arrays with twice the room, unless they are at the end already, where they grow in place; the slots it leaves are not reused until `clear`. |
+| `append(c: i32, v: i32, keyAt: i32, keyLength: i32): void` | Internal: adds index `v`, with the key `bytes[keyAt, keyAt + keyLength)`, after the last member of index `c`, unchecked: `push` and `set` check first. A container whose slots are full moves them to the end of the slot arrays with twice the room, unless they are at the end already, where they grow in place; the slots it leaves are not reused until `clear`. |
 | `at(v: JsonValue, i: i32): JsonValue` | Element `i` of an array, or the value of member `i` of an object, in order; `-1` when there is none. |
 | `boolean(v: JsonValue): boolean` | A boolean's value; `false` for any other value. |
 | `bytesEqual(at: i32, n: i32, s: string): boolean` | Internal: whether `bytes[at, at + n)` are exactly `s`'s bytes. |
@@ -326,16 +326,16 @@ class JsonDocument
 | `ownRanges(): void` | Internal: before a setter writes a range, forgets an earlier generation's, so that none of them reads as this one's. |
 | `parse(src: u8[], off: i32, len: i32): JsonValue` | Clears the document and parses `src[off, off + len)` into it. Answers the root value, or a negative code — the tokenizer's `JSON_TOK_ERR_*` or `JSON_VALUE_ERR_DUPLICATE` — which is also in `failed`, with the byte offset in `errorAt`. Nothing is kept from a parse that fails. Keeps no source ranges; `parseRanged` does.<br><br>Keep in step with `parseRanged`, the same loop plus the ranges. |
 | `parseFailed(code: i32, at: i32): i32` | Internal: Records a failed parse and forgets what it built. |
-| `parseRanged( src: u8[], off: i32, len: i32, ): JsonValue` | `parse`, and every value and member key keeps the range of bytes it was read from, for `start`, `end`, `keyStart` and `keyEnd`. The same answer, code and `errorAt` as `parse` on the same bytes.<br><br>A loop of its own rather than a flag `parse` tests, so that `parse` runs the loop it ran before ranges existed: a dispatch inside `parse` let this loop inline there and cost the plain loop more instructions. A program that links both can still see the plain loop's code laid out differently (`docs/BENCHMARKS.md`). Keep in step with `parse`. |
+| `parseRanged(src: u8[], off: i32, len: i32): JsonValue` | `parse`, and every value and member key keeps the range of bytes it was read from, for `start`, `end`, `keyStart` and `keyEnd`. The same answer, code and `errorAt` as `parse` on the same bytes.<br><br>A loop of its own rather than a flag `parse` tests, so that `parse` runs the loop it ran before ranges existed: a dispatch inside `parse` let this loop inline there and cost the plain loop more instructions. A program that links both can still see the plain loop's code laid out differently (`docs/BENCHMARKS.md`). Keep in step with `parse`. |
 | `parseText(s: string): JsonValue` | `parse` over the bytes of `s`, copied into an array the document reuses; `errorAt` is a byte offset in `s`. Keep in step with `parseTextRanged`. |
 | `parseTextRanged(s: string): JsonValue` | `parseRanged` over the bytes of `s`, as `parseText` is `parse`'s; its offsets are byte offsets in `s`. Keep in step with `parseText`. |
 | `push(a: JsonValue, v: JsonValue): i32` | Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. |
 | `rangeArrays(): JsonValueRanges` | Internal: the range arrays, made the first time a parse or setter writes a range. |
 | `readNumber(x: i32): boolean` | Internal: points the number tokenizer at index `x`'s text and reads its one token; `false` when it is not a number. |
-| `repeat( head: i32, later: i32, firstRepeat: i32, ): i32` | Internal: Pending member `later` repeats the key of the earlier `head`: under `JSON_VALUE_DUPLICATE_LAST` `head` takes its value and it is marked gone. Answers the smallest source offset of a repeating key seen so far. |
+| `repeat(head: i32, later: i32, firstRepeat: i32): i32` | Internal: Pending member `later` repeats the key of the earlier `head`: under `JSON_VALUE_DUPLICATE_LAST` `head` takes its value and it is marked gone. Answers the smallest source offset of a repeating key seen so far. |
 | `samePendingKey(a: i32, b: i32): boolean` | Internal: Whether pending members `a` and `b` have the same key bytes. |
 | `set(o: JsonValue, key: string, v: JsonValue): i32` | Sets member `key` of object `o` to `v`: in place, keeping its position, when `o` has the key, and appended last when it does not, as assigning a property of a JavaScript object does. The value it replaces leaves the object and is in no container afterwards. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. |
-| `setKeyRange( o: JsonValue, i: i32, start: i32, end: i32, ): i32` | Gives the key of member `i` of object `o` the range `[start, end)`, as `setRange` does a value's. `JSON_VALUE_ERR_HANDLE` when `o` is not an object or has no member `i`. |
+| `setKeyRange(o: JsonValue, i: i32, start: i32, end: i32): i32` | Gives the key of member `i` of object `o` the range `[start, end)`, as `setRange` does a value's. `JSON_VALUE_ERR_HANDLE` when `o` is not an object or has no member `i`. |
 | `setRange(v: JsonValue, start: i32, end: i32): i32` | Gives `v` the range `[start, end)`, for a loader that builds a document from another text with the `new*` methods and keeps where each value came from. `JSON_VALUE_OK`, `JSON_VALUE_ERR_HANDLE`, or `JSON_VALUE_ERR_RANGE` when `0 <= start <= end` does not hold. |
 | `slotAt(x: i32, i: i32): i32` | Internal: the slot of member or element `i` of the container at index `x`, or `-1`. |
 | `sortPending(base: i32, n: i32): i32[]` | Internal: The pending indices `base .. base + n - 1` sorted by key, ties in index order: a bottom-up merge sort between the two sort arrays, which answers whichever of them holds the result. Keep in step with `sortPendingRanged`. |

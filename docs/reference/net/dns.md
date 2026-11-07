@@ -2,7 +2,7 @@
 
 # nish/net/dns
 
-the stub resolver of `nish/net/dns-resolver` driven over `nish:net` sockets on the caller's own readiness loop, and `resolveHost`, which runs a loop of its own for a program that has none.
+The stub resolver of `nish/net/dns-resolver` driven over `nish:net` sockets on the caller's own readiness loop, and `resolveHost`, which runs a loop of its own for a program that has none.
 
 ```ts
 import {
@@ -163,7 +163,7 @@ class DnsClient
 
 | Member | |
 | --- | --- |
-| `new DnsClient( resolver: DnsResolver, loop: i32, tokenBase: i32, )` | A client for `resolver` whose sockets join the loop `loop` under tokens from `tokenBase`. Panics when `tokenBase` is negative. |
+| `new DnsClient(resolver: DnsResolver, loop: i32, tokenBase: i32)` | A client for `resolver` whose sockets join the loop `loop` under tokens from `tokenBase`. Panics when `tokenBase` is negative. |
 | `buf: u8[]` |  |
 | `fds: i32[]` | Each query's socket, or -1. |
 | `fdState: i32[]` | What each query's socket is doing, a `DNS_FD_*`. |
@@ -186,7 +186,7 @@ class DnsClient
 | `nextOutgoing(): i32` | The core's next piece of work, with a random ID no send has used: one is drawn only after the last went out, so an empty call or a close costs no `getRandomValues`. |
 | `owns(token: i32): boolean` | Whether `token` is one of the client's. |
 | `pump(nowNanos: i64): void` | Carries out everything the core has queued: opens, sends and closes sockets. |
-| `ready( token: i32, events: i32, nowNanos: i64, ): void` | The pair `token`, `events` that `pollWait` reported at `nowNanos`, for a token `owns` answers true for: reads the datagrams (at most `DNS_CLIENT_MAX_DATAGRAMS`) or stream bytes that are waiting, finishes a connection or a write, and sends whatever the core asks next. Panics for a token that is not the client's. |
+| `ready(token: i32, events: i32, nowNanos: i64): void` | The pair `token`, `events` that `pollWait` reported at `nowNanos`, for a token `owns` answers true for: reads the datagrams (at most `DNS_CLIENT_MAX_DATAGRAMS`) or stream bytes that are waiting, finishes a connection or a write, and sends whatever the core asks next. Panics for a token that is not the client's. |
 | `result(lookup: i32, out: u8[], ttls: i32[]): i32` | `DnsResolver.result`; a finished lookup's sockets are already closed. |
 | `start(name: string, port: i32, nowNanos: i64): i32` | `DnsResolver.start`, with its first packets sent: the lookup, or a negative error. |
 | `tick(nowNanos: i64): void` | `DnsResolver.tick`, then whatever it asks to send. |

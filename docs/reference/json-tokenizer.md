@@ -2,7 +2,7 @@
 
 # nish/json-tokenizer
 
-a validating, streaming tokenizer for RFC 8259 JSON held in a window of a `u8[]`.
+A validating, streaming tokenizer for RFC 8259 JSON held in a window of a `u8[]`.
 
 ```ts
 import {
@@ -217,7 +217,7 @@ class JsonTokenizer
 
 | Member | |
 | --- | --- |
-| `new JsonTokenizer( src: u8[], off: i32, len: i32, limits: JsonLimits, )` |  |
+| `new JsonTokenizer(src: u8[], off: i32, len: i32, limits: JsonLimits)` |  |
 | `depth: i32` | Containers open after the current token. |
 | `end: i32` |  |
 | `errorAt: i32` | The byte offset in `src` the error was found at, and `-1` until one. Read it only once `failed` is set: a `JSON_TOK_ERR_WINDOW` records the `off` the caller passed, which may itself be negative or past the end of `src`. |

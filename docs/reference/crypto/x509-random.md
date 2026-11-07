@@ -2,7 +2,7 @@
 
 # nish/crypto/x509-random
 
-the private key and the serial number `nish/crypto/x509`'s `x509MintSelfSigned` needs, drawn from the operating system's CSPRNG, and the mint that draws its own serial.
+The private key and the serial number `nish/crypto/x509`'s `x509MintSelfSigned` needs, drawn from the operating system's CSPRNG, and the mint that draws its own serial.
 
 ```ts
 import {

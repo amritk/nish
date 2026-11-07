@@ -479,7 +479,7 @@ class HpackDecoder
 
 | Member | |
 | --- | --- |
-| `new HpackDecoder( settingsLimit: i32, maxHeaderListSize: i32, )` |  |
+| `new HpackDecoder(settingsLimit: i32, maxHeaderListSize: i32)` |  |
 | `failed: i32` | The fatal error a decode met, which every later decode answers; 0 until then. |
 | `huffman: HpackHuffman` |  |
 | `maxHeaderListSize: i32` |  |
@@ -521,7 +521,7 @@ class HpackEncoder
 | `huffman: HpackHuffman` |  |
 | `owedMinimum: i32` | The smallest size set since the last block, or -1 when no update is owed. |
 | `table: HpackTable` |  |
-| `encodeField( out: u8[], name: u8[], value: u8[], indexing: i32, huffman: boolean, ): void` | Appends one field to the block in `out`: by index when a table holds it and `indexing` is not `HPACK_INDEX_NEVER`, else as a literal of the kind `indexing` names, its name by index when a table has it and its strings Huffman-coded when `huffman` is true. Any other `indexing` panics. |
+| `encodeField(out: u8[], name: u8[], value: u8[], indexing: i32, huffman: boolean): void` | Appends one field to the block in `out`: by index when a table holds it and `indexing` is not `HPACK_INDEX_NEVER`, else as a literal of the kind `indexing` names, its name by index when a table has it and its strings Huffman-coded when `huffman` is true. Any other `indexing` panics. |
 | `findField(name: u8[], value: u8[]): i32` | The index of an entry holding both `name` and `value`, or 0 when neither table has one. The static table is searched first, then the dynamic one from the newest entry. |
 | `findName(name: u8[]): i32` | The lowest index whose entry has `name`, or 0 when neither table has one. |
 | `setMaxTableSize(maxSize: i32): void` | Sets the table's maximum size, which must not pass the peer's SETTINGS_HEADER_TABLE_SIZE; the encoder cannot know that limit, so it is the caller's to keep. Call it between blocks: the next `encodeField` begins with the update, or with two when the size went down and then up again, the smallest first (§4.2). |

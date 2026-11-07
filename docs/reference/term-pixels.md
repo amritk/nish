@@ -2,7 +2,7 @@
 
 # nish/term-pixels
 
-a framebuffer of pixels, and the encoders that draw it to a terminal with the best backend the terminal has: kitty graphics, Sixel, half-block cells or ASCII.
+A framebuffer of pixels, and the encoders that draw it to a terminal with the best backend the terminal has: kitty graphics, Sixel, half-block cells or ASCII.
 
 ```ts
 import {
@@ -471,7 +471,7 @@ class PixelRect
 
 | Member | |
 | --- | --- |
-| `new PixelRect( col: i32, row: i32, cols: i32, rows: i32, width: i32, height: i32, scale: f64, )` | A rect of the given cells and size; `fitFramebuffer` is how one is usually made. |
+| `new PixelRect(col: i32, row: i32, cols: i32, rows: i32, width: i32, height: i32, scale: f64)` | A rect of the given cells and size; `fitFramebuffer` is how one is usually made. |
 | `col: i32` | The first column covered, from 0. |
 | `cols: i32` | The columns covered. |
 | `height: i32` | The image's height in the backend's pixels. |

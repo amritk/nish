@@ -2,7 +2,7 @@
 
 # nish/net/outbound
 
-the policy for a program that fetches URLs it did not choose: a webhook sender, a link previewer, an importer that takes a URL from a form. Without one, such a program is a proxy into its own network for whoever supplies the URL (server-side request forgery): a URL naming `127.0.0.1`, `169.254.169.254` or a name that resolves to either reaches services that trust the program's address.
+The policy for a program that fetches URLs it did not choose: a webhook sender, a link previewer, an importer that takes a URL from a form. Without one, such a program is a proxy into its own network for whoever supplies the URL (server-side request forgery): a URL naming `127.0.0.1`, `169.254.169.254` or a name that resolves to either reaches services that trust the program's address.
 
 ```ts
 import {

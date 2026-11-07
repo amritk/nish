@@ -2,7 +2,7 @@
 
 # nish/net/prefork
 
-run a server on every core: a supervisor process that starts one worker process per core, restarts one that dies, and stops them all on SIGTERM or SIGINT (`docs/wp42-multicore-server.md` §2.3).
+Run a server on every core: a supervisor process that starts one worker process per core, restarts one that dies, and stops them all on SIGTERM or SIGINT (`docs/wp42-multicore-server.md` §2.3).
 
 ```ts
 import {

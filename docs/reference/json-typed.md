@@ -2,7 +2,7 @@
 
 # nish/json-typed
 
-decode a JSON object into a class, and encode a class back, with code the compiler writes from the class's fields.
+Decode a JSON object into a class, and encode a class back, with code the compiler writes from the class's fields.
 
 ```ts
 import {
@@ -161,7 +161,7 @@ A JSON object's keys are the class's field names,
 byte for byte, or the keys its options give them, found by the key's length
 and then, among three or more names of that length, by one of its bytes:
 
-```ts
+```text
 class Account {
   static readonly json = { rename: { userId: "user_id" }, optional: ["tags"] };
   ...
@@ -618,7 +618,7 @@ class JsonDecoder
 
 | Member | |
 | --- | --- |
-| `new JsonDecoder( src: u8[], off: i32, len: i32, limits: JsonLimits, )` |  |
+| `new JsonDecoder(src: u8[], off: i32, len: i32, limits: JsonLimits)` |  |
 | `errorAt: i32` | The byte offset in the input of the token the error was found at; `-1` until one. |
 | `failed: i32` | `JSON_DECODE_OK`, or the first `JSON_DECODE_*` or `JSON_TOK_ERR_*` code. |
 | `held: boolean` | Whether the tokenizer's current token is a value nothing has read yet: the first token of an array element, read to see whether the array had ended, or a value `takeNull` found was not `null`. |
@@ -630,7 +630,7 @@ class JsonDecoder
 | `beginObject(): boolean` | The next value opens an object; anything else is `JSON_DECODE_TYPE`. |
 | `boolean(): boolean` |  |
 | `booleanArray(xs: boolean[]): boolean[]` |  |
-| `booleanArrayOrNull( xs: boolean[] \| null, ): boolean[] \| null` |  |
+| `booleanArrayOrNull(xs: boolean[] \| null): boolean[] \| null` |  |
 | `duplicateField(): void` | The current key names a field the object already gave. |
 | `f64(): f64` |  |
 | `f64Array(xs: f64[]): f64[]` |  |
@@ -656,7 +656,7 @@ class JsonDecoder
 | `reset(src: u8[], off: i32, len: i32): void` | Starts over on `src[off, off + len)`, keeping the limits, `ignoreUnknown` and `maxMapKeys`, and clearing any error and the count of map keys taken. |
 | `string(cur: string): string` | The next value as a string: `cur` itself when the input's string is equal to it, which allocates nothing, and a new string otherwise; `cur` with an error. |
 | `stringArray(xs: string[]): string[]` |  |
-| `stringArrayOrNull( xs: string[] \| null, ): string[] \| null` |  |
+| `stringArrayOrNull(xs: string[] \| null): string[] \| null` |  |
 | `take(): i32` | The kind of the next value's first token, or a negative code; the held token first, when there is one. |
 | `takeNull(): boolean` | Whether the next value is `null`, read if so; otherwise it is held for the read that follows. |
 | `text(): string` | The current key or string as a new string, made by one `String.fromBytes`: straight from the input when it has no escape, and from its unescaped bytes when it has one. `""` when the current token is neither. |

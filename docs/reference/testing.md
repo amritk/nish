@@ -2,7 +2,7 @@
 
 # nish/testing
 
-a test runner for Nish programs, written in Nish.
+A test runner for Nish programs, written in Nish.
 
 ```ts
 import {
@@ -109,17 +109,17 @@ class Suite
 | `name: string` | Names the summary line, so several suites in one program stay apart. |
 | `passed: i32` |  |
 | `skipped: i32` |  |
-| `contains( name: string, haystack: string, needle: string, ): boolean` | Whether `needle` occurs anywhere in `haystack`, which is the assertion a check over captured output makes: the message a compiler prints is pinned by the sentence it has to contain and not by the whole stream, because the rest of that stream is a version line and a file path that change for reasons the check is not about.<br><br>The detail quotes the needle in full and the haystack only to `TESTING_EXCERPT` bytes: the needle is what a reader compares, and the haystack is what they have already got. |
-| `containsAll( name: string, haystack: string, needles: string[], ): boolean` | Whether every one of `needles` occurs in `haystack` — one check for an expectation file that holds a fragment per line, which is the shape `tests/cases/<name>.err` and `tests/link/<name>/expected.ir` both have.<br><br>An empty needle is ignored, so the blank lines of such a file cost the caller no filtering, and a list with nothing in it passes: an expectation that says nothing is met by anything. The detail names the first fragment that is missing and how many are, because a detail that quoted all of them would bury the one a reader fixes first. |
+| `contains(name: string, haystack: string, needle: string): boolean` | Whether `needle` occurs anywhere in `haystack`, which is the assertion a check over captured output makes: the message a compiler prints is pinned by the sentence it has to contain and not by the whole stream, because the rest of that stream is a version line and a file path that change for reasons the check is not about.<br><br>The detail quotes the needle in full and the haystack only to `TESTING_EXCERPT` bytes: the needle is what a reader compares, and the haystack is what they have already got. |
+| `containsAll(name: string, haystack: string, needles: string[]): boolean` | Whether every one of `needles` occurs in `haystack` — one check for an expectation file that holds a fragment per line, which is the shape `tests/cases/<name>.err` and `tests/link/<name>/expected.ir` both have.<br><br>An empty needle is ignored, so the blank lines of such a file cost the caller no filtering, and a list with nothing in it passes: an expectation that says nothing is met by anything. The detail names the first fragment that is missing and how many are, because a detail that quoted all of them would bury the one a reader fixes first. |
 | `done(): i32` | Prints the recap and the summary, and answers the exit code: 0 when nothing failed, 1 otherwise. A skip is not a failure, so it does not move the code — it moves the count on the summary line, which is the whole reason the count is printed. |
-| `eqBool( name: string, actual: boolean, expected: boolean, ): boolean` |  |
-| `eqF64( name: string, actual: f64, expected: f64, ): boolean` | Exact `f64` equality, which is `fcmp oeq`: `NaN` is equal to nothing, so a check of a computation that can produce one fails rather than passing by accident. Use `nearF64` for anything that went through arithmetic. |
-| `eqI32( name: string, actual: i32, expected: i32, ): boolean` |  |
-| `eqI64( name: string, actual: i64, expected: i64, ): boolean` |  |
-| `eqLines( name: string, actual: string[], expected: string[], ): boolean` | Line-by-line equality of two texts already split into lines, reporting the first line that differs.<br><br>It is `eqStr`'s answer for the case `eqStr` reports badly: a golden of four hundred lines against an emitted four hundred and one prints two walls of text under `expected ... got ...`, and the reader's next move is to diff them by hand. `<end of input>` is the side that ran out, which is what a missing or an extra line at the end looks like from here, and the line number is the one an editor takes. |
-| `eqStr( name: string, actual: string, expected: string, ): boolean` | String equality by content (`nish_str_eq`), which is what `===` on two strings already means. The values are quoted in the message so that a trailing space or an empty string is visible in the diff. |
+| `eqBool(name: string, actual: boolean, expected: boolean): boolean` |  |
+| `eqF64(name: string, actual: f64, expected: f64): boolean` | Exact `f64` equality, which is `fcmp oeq`: `NaN` is equal to nothing, so a check of a computation that can produce one fails rather than passing by accident. Use `nearF64` for anything that went through arithmetic. |
+| `eqI32(name: string, actual: i32, expected: i32): boolean` |  |
+| `eqI64(name: string, actual: i64, expected: i64): boolean` |  |
+| `eqLines(name: string, actual: string[], expected: string[]): boolean` | Line-by-line equality of two texts already split into lines, reporting the first line that differs.<br><br>It is `eqStr`'s answer for the case `eqStr` reports badly: a golden of four hundred lines against an emitted four hundred and one prints two walls of text under `expected ... got ...`, and the reader's next move is to diff them by hand. `<end of input>` is the side that ran out, which is what a missing or an extra line at the end looks like from here, and the line number is the one an editor takes. |
+| `eqStr(name: string, actual: string, expected: string): boolean` | String equality by content (`nish_str_eq`), which is what `===` on two strings already means. The values are quoted in the message so that a trailing space or an empty string is visible in the diff. |
 | `fail(name: string, detail: string): boolean` | Records a failure, with `detail` on its own indented line when there is one. An empty `detail` prints no second line, which is what a check whose name already says everything wants. |
-| `nearF64( name: string, actual: f64, expected: f64, tolerance: f64, ): boolean` | `f64` equality within `tolerance`, the absolute difference. The tolerance is a parameter rather than a constant here because the right epsilon belongs to the computation, not to the harness. |
+| `nearF64(name: string, actual: f64, expected: f64, tolerance: f64): boolean` | `f64` equality within `tolerance`, the absolute difference. The tolerance is a parameter rather than a constant here because the right epsilon belongs to the computation, not to the harness. |
 | `ok(name: string, condition: boolean): boolean` |  |
 | `pass(name: string): boolean` | Records a pass. Public because a program with a check of its own shape still wants the tally. |
 | `skip(name: string, reason: string): void` | Records a check that did not run, and why. It answers `void` rather than a `boolean` because there is no outcome to branch on: the caller has already decided to skip, the way `tests/run.js` decides when `llvm-as` is missing. |

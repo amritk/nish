@@ -2,7 +2,7 @@
 
 # nish/term-io
 
-opening a terminal, drawing frames, reading events and leaving it as it was: the one entry point that uses the other term modules and does the I/O.
+Opening a terminal, drawing frames, reading events and leaving it as it was: the one entry point that uses the other term modules and does the I/O.
 
 ```ts
 import {
@@ -237,7 +237,7 @@ class Terminal
 
 | Member | |
 | --- | --- |
-| `new Terminal( options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[], )` |  |
+| `new Terminal(options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[])` |  |
 | `ackCount: i32` |  |
 | `ackHead: i32` |  |
 | `ackSent: f64[]` | The send times of the frames not yet acknowledged, a ring of `TERM_IO_ACKS`. |
@@ -295,7 +295,7 @@ class Terminal
 | `restoreString(): string` | The bytes that undo everything turned on: what `close` writes and the runtime writes on a panic or signal. |
 | `send(withPixels: boolean): i32` | Write one frame as a single write: the screen's changes, then the pixels' bytes when `withPixels`, wrapped in synchronized output when the terminal has it, then the DSR 5 query that acknowledges it. Records when the write began in `sendStartNs` and answers the bytes written. Its strings die here, so a frame loop does not keep them. |
 | `stats(): TermStats` | What the controller measured, with the backend the last frame actually used. |
-| `take( events: TermEvent[], nowMs: f64, out: TermEvent[], ): void` | Take decoded `events`, read at `nowMs`: the program's go through `KeyState` into `out`, then the acknowledgements count. Every reply is the terminal's and is taken here, a late cell size learned. |
+| `take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void` | Take decoded `events`, read at `nowMs`: the program's go through `KeyState` into `out`, then the acknowledgements count. Every reply is the terminal's and is taken here, a late cell size learned. |
 | `turnOn(bytes: string): void` | Set the runtime's restore string to `restoreString()`, then write `bytes`, which turn something on. |
 
 ## TerminalOptions

@@ -2,7 +2,7 @@
 
 # nish/crypto/bcrypt
 
-bcrypt password hashing, `$2b$` out and `$2a$`, `$2b$`, `$2y$` in. It makes the hash libxcrypt's `crypt_r` and crypt_blowfish make, and verifies as they do but for `$2x$` and a digest character outside the alphabet. Where OpenBSD's `bcrypt.c` and Go's `x/crypto` answer otherwise is the interoperability table in docs/security/crypto-bcrypt.md.
+Bcrypt password hashing, `$2b$` out and `$2a$`, `$2b$`, `$2y$` in. It makes the hash libxcrypt's `crypt_r` and crypt_blowfish make, and verifies as they do but for `$2x$` and a digest character outside the alphabet. Where OpenBSD's `bcrypt.c` and Go's `x/crypto` answer otherwise is the interoperability table in docs/security/crypto-bcrypt.md.
 
 ```ts
 import {

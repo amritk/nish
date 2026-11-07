@@ -43,7 +43,10 @@ export const load = (app) => {
       ts.isPropertySignature(d) ||
       ts.isVariableDeclaration(d) ||
       ts.isTypeAliasDeclaration(d)
-    if (typed && d.type) {
+    // An object-literal type keeps TypeDoc's reading, whose members the
+    // reference lists one by one (and whose own types this plugin spells).
+    const literal = ts.isVariableDeclaration(d) && d.type && ts.isTypeLiteralNode(d.type)
+    if (typed && d.type && !literal) {
       refl.type = text(d.type)
     }
     if (ts.isTypeAliasDeclaration(d) || ts.isClassDeclaration(d) || ts.isInterfaceDeclaration(d)) {

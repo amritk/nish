@@ -2,7 +2,7 @@
 
 # nish/net/buffer-pool
 
-fixed-size byte buffers a server's connections borrow and give back, so the memory a server holds follows the connections that are moving bytes, not the slots it was sized for.
+Fixed-size byte buffers a server's connections borrow and give back, so the memory a server holds follows the connections that are moving bytes, not the slots it was sized for.
 
 ```ts
 import {
@@ -69,7 +69,7 @@ class BufferPool
 
 | Member | |
 | --- | --- |
-| `new BufferPool( name: string, size: i32, ceiling: i32, )` | An empty pool: it makes nothing until the first `take`. `name` is what its panics print (the owner's type and field reads best, `"Http2TlsServer.output"`). Panics, naming the pool, unless `size` is above 0 and `ceiling` at least 1: a pool of neither makes a buffer nobody can use or none at all. |
+| `new BufferPool(name: string, size: i32, ceiling: i32)` | An empty pool: it makes nothing until the first `take`. `name` is what its panics print (the owner's type and field reads best, `"Http2TlsServer.output"`). Panics, naming the pool, unless `size` is above 0 and `ceiling` at least 1: a pool of neither makes a buffer nobody can use or none at all. |
 | `ceiling: i32` | The most buffers the pool will ever make. |
 | `free: u8[][]` | The buffers given back and not yet taken again; the last one is lent next. |
 | `made: i32` | How many buffers the pool has made: its high-water mark, since it never frees one. |

@@ -2,7 +2,7 @@
 
 # nish/base64
 
-standard base64 (RFC 4648 §4) with `=` padding, the encoding kitty graphics frames are sent in.
+Standard base64 (RFC 4648 §4) with `=` padding, the encoding kitty graphics frames are sent in.
 
 ```ts
 import {

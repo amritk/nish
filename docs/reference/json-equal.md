@@ -2,7 +2,7 @@
 
 # nish/json-equal
 
-whether two JSON values are equal by JSON Schema's rule, a canonical text and a hash that agree with it, and the first repeated element of an array, which is what `const`, `enum` and `uniqueItems` ask.
+Whether two JSON values are equal by JSON Schema's rule, a canonical text and a hash that agree with it, and the first repeated element of an array, which is what `const`, `enum` and `uniqueItems` ask.
 
 ```ts
 import {

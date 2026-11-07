@@ -2,7 +2,7 @@
 
 # nish/cli-args
 
-a command tree for a large command-line tool: declared once with a builder, parsed in one walk over the arguments, and answered as the matched command's id and every value with where it came from.
+A command tree for a large command-line tool: declared once with a builder, parsed in one walk over the arguments, and answered as the matched command's id and every value with where it came from.
 
 ```ts
 import {
@@ -125,7 +125,7 @@ class Cli
 
 | Member | |
 | --- | --- |
-| `new Cli( name: string, version: string, description: string, )` | A tree with only its root, the program `name` at `version`, for `description`. |
+| `new Cli(name: string, version: string, description: string)` | A tree with only its root, the program `name` at `version`, for `description`. |
 | `aliasName: string[]` |  |
 | `aliasOwner: i32[]` |  |
 | `argDesc: string[]` |  |
@@ -168,40 +168,40 @@ class Cli
 | `name: string` |  |
 | `negations: Map<string, i32>` |  |
 | `version: string` |  |
-| `addCommand( call: string, parent: i32, name: string, id: i32, description: string, group: boolean, ): i32` | A new child of `parent`; `call` names the declaration in a panic. |
-| `addFlag( call: string, scope: i32, spec: string, description: string, ): i32` | A new flag in `scope` from `spec`; `call` names the declaration in a panic. |
+| `addCommand(call: string, parent: i32, name: string, id: i32, description: string, group: boolean): i32` | A new child of `parent`; `call` names the declaration in a panic. |
+| `addFlag(call: string, scope: i32, spec: string, description: string): i32` | A new flag in `scope` from `spec`; `call` names the declaration in a panic. |
 | `alias(handle: i32, name: string): void` | Another name for the command or group `handle`, in the same scope. |
 | `answersTo(f: i32, name: string): boolean` | Whether flag `f` answers to `--name`, as itself or, negatable, as its negation. |
-| `argument( cmd: i32, spec: string, description: string, ): i32` | A positional argument of the command `cmd`: `<name>` required, `[name]` optional, `<name...>` or `[name...]` taking every one left, last only. |
+| `argument(cmd: i32, spec: string, description: string): i32` | A positional argument of the command `cmd`: `<name>` required, `[name]` optional, `<name...>` or `[name...]` taking every one left, last only. |
 | `checkArgument(call: string, handle: i32): i32` | The argument `handle`, or a panic naming `call` when there is none. |
 | `checkCommand(call: string, handle: i32): i32` | The command `handle`, or a panic naming `call` when there is none. |
 | `checkFlag(call: string, handle: i32): i32` | The flag `handle`, or a panic naming `call` when there is none. |
-| `childNames( cmd: i32, withAliases: boolean, ): string[]` | The names `cmd`'s children answer to, in declaration order, then their aliases when `withAliases`. |
-| `command( parent: i32, name: string, id: i32, description: string, ): i32` | A command under `parent` that the program runs, answered by `id` in `ParseResult.id`: not negative, which is a group's, and no other command's. |
+| `childNames(cmd: i32, withAliases: boolean): string[]` | The names `cmd`'s children answer to, in declaration order, then their aliases when `withAliases`. |
+| `command(parent: i32, name: string, id: i32, description: string): i32` | A command under `parent` that the program runs, answered by `id` in `ParseResult.id`: not negative, which is a group's, and no other command's. |
 | `defaultValue(f: i32, value: string): void` | The value flag `f` answers when it is not given. |
 | `epilog(handle: i32, text: string): void` | Text shown at the end of the help of `handle` (a command or group), as given. |
-| `flag( cmd: i32, spec: string, description: string, ): i32` | A flag the command or group `cmd` takes, and no other. |
+| `flag(cmd: i32, spec: string, description: string): i32` | A flag the command or group `cmd` takes, and no other. |
 | `flagLabel(f: i32): string` | A help row's flag column for `f`: `-s, --long`, with `--[no-]x` for a negatable one. |
-| `flagRows( rows: HelpRow[], section: string, owner: i32, ): void` | Adds a `section` row to `rows` for every flag `owner` (a command, or `GLOBAL`) declares. |
+| `flagRows(rows: HelpRow[], section: string, owner: i32): void` | Adds a `section` row to `rows` for every flag `owner` (a command, or `GLOBAL`) declares. |
 | `flagText(f: i32): string` | A help row's description for `f`, with what it is: repeatable, its default, required. |
 | `globalFlag(spec: string, description: string): i32` | A flag every command takes, before, between or after the command names. |
-| `group( parent: i32, name: string, description: string, ): i32` | A group under `parent`: it holds commands, and naming it without one is an error. |
+| `group(parent: i32, name: string, description: string): i32` | A group under `parent`: it holds commands, and naming it without one is an error. |
 | `helpText(handle: i32, style: Style): string` | The help of the command or group `handle`, painted with `style`. |
 | `isGroup(handle: i32): boolean` | Whether `handle` holds commands rather than running: a group, or a root given children. |
-| `longFlag( r: ParseResult, argv: string[], next: i32, token: string, ): i32` | Records `--name`, `--name=value`, `--name value` or `--no-name` from `token`; answers the next index. |
+| `longFlag(r: ParseResult, argv: string[], next: i32, token: string): i32` | Records `--name`, `--name=value`, `--name value` or `--no-name` from `token`; answers the next index. |
 | `longNames(cmd: i32): string[]` | Every long flag `cmd` answers to, for a did-you-mean. |
-| `lookup( table: Map<string, i32>, cmd: i32, name: string, ): i32` | The flag `name` (dashes included) names in `table` at `cmd`: its own, then a global; -1 for none. `table` is `flags`, or `negations` for `--no-x`. |
+| `lookup(table: Map<string, i32>, cmd: i32, name: string): i32` | The flag `name` (dashes included) names in `table` at `cmd`: its own, then a global; -1 for none. `table` is `flags`, or `negations` for `--no-x`. |
 | `negatable(f: i32): void` | Adds `--no-x` to the boolean flag `--x`, which turns it back off. |
 | `parse(argv: string[], start: i32): ParseResult` | Parses `argv` from index `start` (1 for `process.argv`, past the program's path) in one walk over it. |
 | `pathOf(handle: i32): string` | The command line that names `handle`: the program, then each command down to it. |
 | `repeatable(f: i32): void` | Makes `f` gather every value it is given, in order, for `ParseResult.values`. |
 | `required(f: i32): void` | Makes `f` an error to leave out, for the command that owns it (every command, for a global); a group's flag cannot be, as no parse ends at one. |
 | `scopeHas(scope: i32, spec: FlagSpec): boolean` | Whether `scope` already answers to any of `--long`, its negation (for `--no-x`), or `-short`. |
-| `shortFlags( r: ParseResult, argv: string[], next: i32, token: string, ): i32` | Records the cluster `-abc` (or `-l5`, `-l=5`, `-l 5`) from `token`; answers the next index. |
+| `shortFlags(r: ParseResult, argv: string[], next: i32, token: string): i32` | Records the cluster `-abc` (or `-l5`, `-l=5`, `-l 5`) from `token`; answers the next index. |
 | `spelling(f: i32): string` | How `f` is spelled on the command line: its long name, or `--no-x` for one declared that way. |
 | `taken(scope: i32, key: string): boolean` | Whether a flag of `scope` (a command, or `GLOBAL`) answers to `key`, as itself or as a negation. |
-| `takeValue( r: ParseResult, argv: string[], next: i32, f: i32, attached: string, ): i32` | Records flag `f` as given, with `attached` (from `-l5`) as its value when not empty, or else the token at `next` when the flag's value takes it; answers the index after whatever it took. |
-| `unknownCommand( r: ParseResult, token: string, ): void` | Records `token` as no command `r`'s group holds, with the nearest one that it does. |
+| `takeValue(r: ParseResult, argv: string[], next: i32, f: i32, attached: string): i32` | Records flag `f` as given, with `attached` (from `-l5`) as its value when not empty, or else the token at `next` when the flag's value takes it; answers the index after whatever it took. |
+| `unknownCommand(r: ParseResult, token: string): void` | Records `token` as no command `r`'s group holds, with the nearest one that it does. |
 
 ## ParseResult
 

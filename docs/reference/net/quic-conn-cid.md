@@ -2,7 +2,7 @@
 
 # nish/net/quic-conn-cid
 
-a QUIC connection's connection-ID table (RFC 9000 §5.1): the IDs this endpoint issued, which a datagram is routed by, and the ones the peer issued, which this endpoint sends to.
+A QUIC connection's connection-ID table (RFC 9000 §5.1): the IDs this endpoint issued, which a datagram is routed by, and the ones the peer issued, which this endpoint sends to.
 
 ```ts
 import {
@@ -156,15 +156,15 @@ class QuicCidTable
 | `activeLocal(): i32` | How many local IDs are active: a retired one leaves its slot. |
 | `activePeer(): i32` | How many peer IDs are active: retired ones leave their slots. |
 | `addLocal(cid: u8[], resetToken: u8[]): i64` | Issues the first `length` bytes of `cid` as the next local ID, with its 16-byte reset token (or none, empty, for sequence 0), and answers its sequence number; -1 when every local slot is taken. |
-| `addPeer( sequence: i64, retirePriorTo: i64, cid: u8[], resetToken: u8[], ): i64` | `addPeerAt` of whole arrays: `resetToken` empty for none. |
-| `addPeerAt( sequence: i64, retirePriorTo: i64, cid: u8[], cidAt: i32, cidLength: i32, token: u8[], tokenAt: i32, hasToken: boolean, ): i64` | Takes a peer ID, `cid[cidAt .. cidAt + cidLength)`, with the 16-byte token at `token[tokenAt]` when `hasToken` (its first packet's SCID is sequence 0, with none; a NEW_CONNECTION_ID frame's has one). Answers `QUIC_ERROR_NO_ERROR`, `QUIC_ERROR_PROTOCOL_VIOLATION` for a sequence number reused with another ID or token or an ID reused under another sequence number, or `QUIC_ERROR_CONNECTION_ID_LIMIT` when the active IDs or the queued retirements would pass what §5.1 allows, in which case the table is left as it was. The tokens are compared in constant time, since a token is what a stateless reset is checked against. |
+| `addPeer(sequence: i64, retirePriorTo: i64, cid: u8[], resetToken: u8[]): i64` | `addPeerAt` of whole arrays: `resetToken` empty for none. |
+| `addPeerAt(sequence: i64, retirePriorTo: i64, cid: u8[], cidAt: i32, cidLength: i32, token: u8[], tokenAt: i32, hasToken: boolean): i64` | Takes a peer ID, `cid[cidAt .. cidAt + cidLength)`, with the 16-byte token at `token[tokenAt]` when `hasToken` (its first packet's SCID is sequence 0, with none; a NEW_CONNECTION_ID frame's has one). Answers `QUIC_ERROR_NO_ERROR`, `QUIC_ERROR_PROTOCOL_VIOLATION` for a sequence number reused with another ID or token or an ID reused under another sequence number, or `QUIC_ERROR_CONNECTION_ID_LIMIT` when the active IDs or the queued retirements would pass what §5.1 allows, in which case the table is left as it was. The tokens are compared in constant time, since a token is what a stateless reset is checked against. |
 | `currentPeer(): u8[]` | A copy of the peer ID this side sends to, or empty before the peer gave any. |
 | `currentPeerEntry(): QuicCidEntry \| null` | The peer ID this side sends to: its slot, or `null` before the peer gave any. |
 | `nextUnannounced(): QuicCidEntry \| null` | The first local ID still to be announced in a NEW_CONNECTION_ID frame, oldest first, or `null`. |
 | `ownsLocal(dcid: u8[]): boolean` | Whether `dcid` is an active local ID: whether a packet sent to it is this connection's. |
-| `ownsLocalAt( buf: u8[], at: i32, length: i32, ): boolean` | Whether `buf[at .. at + length)` is an active local ID. Every slot is compared, each in constant time. |
+| `ownsLocalAt(buf: u8[], at: i32, length: i32): boolean` | Whether `buf[at .. at + length)` is an active local ID. Every slot is compared, each in constant time. |
 | `prune(): void` | Points `current` at the oldest active peer ID, or -1 when none is. |
 | `queueRetire(sequence: i64): void` | Queues a RETIRE_CONNECTION_ID for peer sequence `sequence`, unless it is queued already or the ring is full. |
 | `reset(): void` | Empties the table, for a connection slot reused for another peer; the slots and their bytes are kept, zeroed. |
-| `retireLocal( sequence: i64, buf: u8[], at: i32, length: i32, ): i64` | The peer retires local ID `sequence` (RETIRE_CONNECTION_ID), in a packet sent to `buf[at .. at + length)`. Answers `QUIC_ERROR_NO_ERROR`, or `QUIC_ERROR_PROTOCOL_VIOLATION` for a sequence number never issued or the ID the packet itself was sent to (§19.16). Retiring one twice is fine. A retired ID leaves its slot, so a peer that retires one ID after another cannot grow the table. |
+| `retireLocal(sequence: i64, buf: u8[], at: i32, length: i32): i64` | The peer retires local ID `sequence` (RETIRE_CONNECTION_ID), in a packet sent to `buf[at .. at + length)`. Answers `QUIC_ERROR_NO_ERROR`, or `QUIC_ERROR_PROTOCOL_VIOLATION` for a sequence number never issued or the ID the packet itself was sent to (§19.16). Retiring one twice is fine. A retired ID leaves its slot, so a peer that retires one ID after another cannot grow the table. |
 | `takeRetire(): i64` | The oldest queued retirement, or -1 when none is queued. Taking it removes it. |

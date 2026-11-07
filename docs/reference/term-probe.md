@@ -2,7 +2,7 @@
 
 # nish/term-probe
 
-what the terminal a program runs in can do (its colours, keyboard protocol, graphics and size), asked of it once at start and read from its answer.
+What the terminal a program runs in can do (its colours, keyboard protocol, graphics and size), asked of it once at start and read from its answer.
 
 ```ts
 import {
@@ -212,7 +212,7 @@ class TermProbe
 
 | Member | |
 | --- | --- |
-| `new TermProbe( env: TermEnv, cols: i32, rows: i32, sentAtMs: f64, )` | A probe whose queries were written at `sentAtMs` to a window of `cols` by `rows` cells. |
+| `new TermProbe(env: TermEnv, cols: i32, rows: i32, sentAtMs: f64)` | A probe whose queries were written at `sentAtMs` to a window of `cols` by `rows` cells. |
 | `answeredAtMs: f64` | When DA1 was answered; -1 before. |
 | `cols: i32` | The window's width in cells, to turn `CSI 14 t` into a cell width. |
 | `decoder: KeyDecoder` | The decoder the terminal's bytes go through. |

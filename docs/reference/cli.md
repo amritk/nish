@@ -2,7 +2,7 @@
 
 # nish/cli
 
-a command-line tool's help menu: whether a stream gets colour, the escapes that paint it, and the rows a `--help` is made of.
+A command-line tool's help menu: whether a stream gets colour, the escapes that paint it, and the rows a `--help` is made of.
 
 ```ts
 import {
@@ -207,7 +207,7 @@ class HelpMenu
 
 | Member | |
 | --- | --- |
-| `new HelpMenu( style: Style, program: string, column: i32, usageColumn: i32, )` |  |
+| `new HelpMenu(style: Style, program: string, column: i32, usageColumn: i32)` |  |
 | `column: i32` |  |
 | `lines: string[]` |  |
 | `program: string` |  |
@@ -217,7 +217,7 @@ class HelpMenu
 | `header(version: string, summary: string): void` | The opening line, the program's name, `version` and a one-line `summary`, and a blank after it. |
 | `line(text: string): void` | A line exactly as given, painted (or not) by the caller with the menu's `style`: a rule, a banner, a blank. Its width is the caller's to keep. |
 | `note(text: string): void` | An indented line of prose, faint. |
-| `row( flag: string, meta: string, description: string, ): void` | One row: the `flag` (or a command), its placeholder `meta` (may be empty), and what it does, the description starting at `column`. |
+| `row(flag: string, meta: string, description: string): void` | One row: the `flag` (or a command), its placeholder `meta` (may be empty), and what it does, the description starting at `column`. |
 | `section(title: string): void` | A section: a blank line, then `title` as a heading. |
 | `text(): string` | The menu so far, its lines joined by newlines, with no newline after the last. |
 | `title(version: string, summary: string): void` | The opening line alone, without `header`'s blank after it, for a menu that puts something under its title (`line`) before the blank. |
@@ -293,7 +293,7 @@ class Style
 | `magenta(text: string): string` | `text` in the theme's magenta. |
 | `meta(text: string): string` | A placeholder the person fills in, such as `<file.ts>` or `speed\|size`, in `metaThemed` or `metaMono`. |
 | `name(text: string): string` | The tool's own name where it opens a line, in `nameThemed` or `nameMono`. |
-| `paint( text: string, themed: string, mono: string, ): string` | `text` wrapped in the escape for `themed` (an SGR parameter list in the theme's basic colours) or `mono` (attributes only), and a reset after it; `text` unchanged when marking up is off or the chosen list is empty, so a caller never has to ask. |
+| `paint(text: string, themed: string, mono: string): string` | `text` wrapped in the escape for `themed` (an SGR parameter list in the theme's basic colours) or `mono` (attributes only), and a reset after it; `text` unchanged when marking up is off or the chosen list is empty, so a caller never has to ask. |
 | `red(text: string): string` | `text` in the theme's red. |
 | `sgr(text: string, codes: string): string` | `text` painted with any SGR parameter list (`"1;31"`, `"38;5;208"`, `"38;2;255;128;0"`) when colour is on, and unchanged otherwise: the way to 256-colour and truecolor, which ignore the reader's theme, so they stay the caller's explicit choice. The failsafe paints nothing, since the list may name a colour a monochrome terminal cannot show. |
 | `strikethrough(text: string): string` | `text` struck through. |

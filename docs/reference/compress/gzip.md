@@ -2,7 +2,7 @@
 
 # nish/compress/gzip
 
-the gzip file format (RFC 1952) around `nish/compress/deflate`: a ten-byte header, the DEFLATE stream, and a trailer of the CRC-32 and the length of the data mod 2^32. What an HTTP `Content-Encoding: gzip` body is.
+The gzip file format (RFC 1952) around `nish/compress/deflate`: a ten-byte header, the DEFLATE stream, and a trailer of the CRC-32 and the length of the data mod 2^32. What an HTTP `Content-Encoding: gzip` body is.
 
 ```ts
 import {
@@ -232,7 +232,7 @@ class GzipCompressor
 | `new GzipCompressor(level: i32)` | A compressor at `level`, 0 to 9 (`DEFLATE_FAST`, `DEFLATE_DEFAULT`, ...); another level panics. |
 | `readonly crc: Crc32` |  |
 | `readonly deflater: Deflater` |  |
-| `compress( src: u8[], off: i32, len: i32, out: u8[], at: i32, ): i32` | Compresses `src[off .. off + len)` into `out` from `at` as one gzip member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out` cannot hold it; `compressBound(len)` bytes always can. A window outside its array panics. Allocates nothing. |
+| `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Compresses `src[off .. off + len)` into `out` from `at` as one gzip member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out` cannot hold it; `compressBound(len)` bytes always can. A window outside its array panics. Allocates nothing. |
 
 ## GzipDecompressor
 
@@ -248,7 +248,7 @@ class GzipDecompressor
 | `new GzipDecompressor()` | Builds the tables. |
 | `readonly crc: Crc32` |  |
 | `readonly inflater: Inflater` |  |
-| `decompress( src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32, ): i32` | Decompresses every member of `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends; or `DEFLATE_ERR_OUTPUT_LIMIT` when the data is longer, `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE`, `DEFLATE_ERR_TRUNCATED` or another `DEFLATE_ERR_*` for a malformed stream. An empty input is truncated. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
+| `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses every member of `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends; or `DEFLATE_ERR_OUTPUT_LIMIT` when the data is longer, `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE`, `DEFLATE_ERR_TRUNCATED` or another `DEFLATE_ERR_*` for a malformed stream. An empty input is truncated. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
 
 ## GzipFixedCompressor
 
@@ -265,7 +265,7 @@ class GzipFixedCompressor
 | `new GzipFixedCompressor()` | Builds the tables. |
 | `readonly crc: Crc32` |  |
 | `readonly deflater: FixedDeflater` |  |
-| `compress( src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32, ): i32` | Compresses `src[off .. off + len)` into `out[at .. at + room)` as one gzip member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) as soon as it would need more than `room` bytes, so a caller passing the most it will take stops early on an input that does not shrink. `gzipFixedBound(len)` always fits. A window outside its array panics. Allocates nothing. |
+| `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32` | Compresses `src[off .. off + len)` into `out[at .. at + room)` as one gzip member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) as soon as it would need more than `room` bytes, so a caller passing the most it will take stops early on an input that does not shrink. `gzipFixedBound(len)` always fits. A window outside its array panics. Allocates nothing. |
 
 ## GzipReader
 
@@ -351,7 +351,7 @@ class GzipWriter
 | `flush(out: u8[], at: i32): i32` | Compresses everything pending and ends with an empty stored block, so a reader can decode every byte written so far (zlib's `Z_SYNC_FLUSH`). Answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. |
 | `header(out: u8[], at: i32): i32` | Writes the header into `out` at `at` if it has not been; answers the new position. |
 | `start(): void` | Begins a new body: the next output starts with a header. |
-| `write( src: u8[], off: i32, len: i32, out: u8[], at: i32, ): i32` | Takes `src[off .. off + len)` and answers where the output it produced in `out` from `at` ends (often `at`: input waits until 64 KB are pending), or `DEFLATE_NO_ROOM` when `out` has less than `bound(len)` bytes from `at`. Writing after `finish` panics, as does a window outside its array. |
+| `write(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Takes `src[off .. off + len)` and answers where the output it produced in `out` from `at` ends (often `at`: input waits until 64 KB are pending), or `DEFLATE_NO_ROOM` when `out` has less than `bound(len)` bytes from `at`. Writing after `finish` panics, as does a window outside its array. |
 
 ## Constants
 

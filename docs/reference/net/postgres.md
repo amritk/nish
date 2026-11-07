@@ -2,7 +2,7 @@
 
 # nish/net/postgres
 
-the client side of PostgreSQL's frontend/backend protocol, version 3.0: a sans-IO connection that writes the frontend's messages into an output buffer and reads the backend's from an input buffer, for a program that owns its socket (`nish:net`) and its loop.
+The client side of PostgreSQL's frontend/backend protocol, version 3.0: a sans-IO connection that writes the frontend's messages into an output buffer and reads the backend's from an input buffer, for a program that owns its socket (`nish:net`) and its loop.
 
 ```ts
 import {
@@ -158,7 +158,7 @@ A pool of connections to one server, sans-IO like `PgConnection`: it makes no so
 
 </scalar-card>
 
-<scalar-card title="PgTarget" icon="phosphor/regular/cube" href="#pgtarget">
+<scalar-card title="PgTarget" icon="phosphor/regular/cube" href="#pgtarget-1">
 
 Where a connection goes, from libpq's `host` and `port` or a `postgres://` URL: `pgTarget` and `pgTargetUrl` make one, reading no socket and no file.
 
@@ -663,14 +663,14 @@ class PgBatcher
 | `stray: i32` | The number of `row`, `end` and `fail` calls on a spent handle, each ignored, stopping at 2^31 - 1. |
 | `tag: i32` | The request the last `next(run)` answered about; -1 for none. |
 | `addInt(key: i64, tag: i32): boolean` | Queues a request for the int8 `key`; false when `queueSize` are waiting. Panics on a text batcher. |
-| `addText( bytes: u8[], start: i32, length: i32, tag: i32, ): boolean` | Queues a request for the text key `bytes[start, start + length)`, which is copied; false when the key is not UTF-8 or holds a NUL (the server would fail the whole execution over it), `queueSize` are waiting, the key would not fit in `queueBytes` beside those waiting, or it is too long for one execution's `maxBytes`. Panics on an int8 batcher, or when the window is not inside `bytes`. |
+| `addText(bytes: u8[], start: i32, length: i32, tag: i32): boolean` | Queues a request for the text key `bytes[start, start + length)`, which is copied; false when the key is not UTF-8 or holds a NUL (the server would fail the whole execution over it), `queueSize` are waiting, the key would not fit in `queueBytes` beside those waiting, or it is too long for one execution's `maxBytes`. Panics on an int8 batcher, or when the window is not inside `bytes`. |
 | `end(r: i32): void` | Ends run `r`'s execution, on its `PG_COMPLETE`: `next(r)` then closes every request left. Ignores a spent handle, and panics, as `row` does. |
 | `fail(r: i32): void` | Fails run `r`'s execution, on its `PG_ERROR` or `PG_LOST`: `next(r)` then answers `PG_BATCH_FAILED` for every request left. Ignores a spent handle, and panics, as `row` does. |
 | `next(r: i32): i32` | The next event `row`, `end` or `fail` owes on run `r`, with `tag` the request it is about; `PG_BATCH_NONE`, and `tag` -1, when there is none. Once `end` or `fail` has had all its events the run is over, free for `take` again, and its handle spent: `PG_BATCH_NONE` ever after. Panics on a handle `take` cannot give. |
 | `row(r: i32, conn: PgConnection): boolean` | Routes `conn`'s current row, of run `r`'s execution, by the ordinal in its last column: `next(r)` then answers `PG_BATCH_ROW` for each request of its key, after the last events of the keys before it (with `sorted` false, at once: no last event comes before `end`). False, and the row dropped, when the run has failed; and when the ordinal is NULL, not an integer, or names no key still open (one out of range, or, sorted, one before the key the last row was for): that counts in `refused` and fails the run; and on a spent handle, which counts in `stray`. Panics on a handle `take` cannot give, or when the run's events are not all answered. |
 | `shed(): i32` | Drops the oldest waiting request and answers its tag, or -1 when none waits: for a program that cannot reach the server to fail requests rather than hold them. |
 | `take(conn: PgConnection): i32` | Binds the oldest waiting requests on `conn` as one execution of `sql`, prepared there already, and answers its run's handle, which names this execution and no later one of the same run; the caller ends the group (`sync()`, or `PgPool.send()`). It takes up to `maxRequests` requests, oldest first, and stops at the first whose key would pass `maxBytes` or the connection's `maxOutput`; those not taken stay queued. -1, and nothing written, when none waits, every run is in flight, or `conn` refused the bind or the first key. |
-| `takeDue( conn: PgConnection, clock: PgBatchClock, nowUs: i64, inFlight: i32, ): i32` | `take(conn)` when `clock` says a batch is due at `nowUs`, with `inFlight` of the program's executions or groups running (`PgPool.inFlight()`), and the batch taken recorded in `clock`; -1 when it is not due or `take` answers -1. The program calls `clock.arrived(now)` for each request it adds. Panics when the clock's waiting count is not this batcher's, or its `maxCount` is below `maxRequests`. |
+| `takeDue(conn: PgConnection, clock: PgBatchClock, nowUs: i64, inFlight: i32): i32` | `take(conn)` when `clock` says a batch is due at `nowUs`, with `inFlight` of the program's executions or groups running (`PgPool.inFlight()`), and the batch taken recorded in `clock`; -1 when it is not due or `take` answers -1. The program calls `clock.arrived(now)` for each request it adds. Panics when the clock's waiting count is not this batcher's, or its `maxCount` is below `maxRequests`. |
 | `waiting(): i32` | The number of requests waiting for `take`. |
 
 ## PgBinary
@@ -693,7 +693,7 @@ class PgBinary
 | `int(b: u8[], start: i32, length: i32): i64` | An `int2`, `int4` or `int8` column, told apart by its length (2, 4 or 8 bytes, big-endian two's complement); 0 and `failed` for any other length, NULL's -1 among them. A `timestamptz` or `timestamp` reads as an `int8`: microseconds since 2000-01-01 00:00:00 UTC, which `iso` writes out. |
 | `iso(micros: i64, out: u8[], at: i32): i32` | `micros`, microseconds since 2000-01-01 00:00:00 UTC, written to `out[at, at + 24)` as `2024-01-02T03:04:05.123Z`: the microseconds cut, not rounded, to milliseconds, as `PgText.timestamp` cuts the same time. Answers 24, or -1 and `failed` with `out` untouched for a year outside 0001–9999 (`infinity` and `-infinity` among them) or no room in `out`. |
 | `reset(): void` | Clears `failed`. |
-| `timestamp( b: u8[], start: i32, length: i32, out: u8[], at: i32, ): i32` | A `timestamptz` or `timestamp` column, written to `out[at, at + 24)` as `iso` writes it. Answers 24, or -1 and `failed` for a column that is not eight bytes or a time `iso` refuses. |
+| `timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32` | A `timestamptz` or `timestamp` column, written to `out[at, at + 24)` as `iso` writes it. Answers 24, or -1 and `failed` for a column that is not eight bytes or a time `iso` refuses. |
 
 ## PgBinaryArray
 
@@ -759,7 +759,7 @@ class PgConnection
 
 | Member | |
 | --- | --- |
-| `new PgConnection( config: PgConfig, password: Secret<u8[]>, nonce: u8[], )` | A connection that has queued its startup message. `password` is copied, so the caller may wipe its own; `nonce` must be at least 18 bytes from a cryptographic random source (`crypto.getRandomValues`), and is fixed only in a test. |
+| `new PgConnection(config: PgConfig, password: Secret<u8[]>, nonce: u8[])` | A connection that has queued its startup message. `password` is copied, so the caller may wipe its own; `nonce` must be at least 18 bytes from a cryptographic random source (`crypto.getRandomValues`), and is fixed only in a test. |
 | `backendPid: i32` | The server's process id, from BackendKeyData. |
 | `readonly binary: PgBinary` | The decoders `binaryInt`, `binaryBool` and `binaryFloat` use, for a bind `bindStartBinary` opened; `binary.failed` as `text.failed`. |
 | `columns: i32` | The columns of the current row, or of the statement just described. |
@@ -772,7 +772,7 @@ class PgConnection
 | `serverVersion: string` | The server's `server_version` parameter. |
 | `readonly text: PgText` | The decoders `int`, `bool` and `isNull` use; `text.failed` says whether one was given a column it could not read. |
 | `txStatus: i32` | The transaction status the last `PG_GROUP_DONE` reported: `I` idle, `T` in a transaction, `E` in a failed one (as a byte). |
-| `arrayElement( bytes: u8[], start: i32, length: i32, ): boolean` | A text element from `bytes[start, start + length)`, UTF-8, quoted with `"` and `\` escaped; false, and nothing written, when there is no room. Panics when no array is open or the window is not inside `bytes`. |
+| `arrayElement(bytes: u8[], start: i32, length: i32): boolean` | A text element from `bytes[start, start + length)`, UTF-8, quoted with `"` and `\` escaped; false, and nothing written, when there is no room. Panics when no array is open or the window is not inside `bytes`. |
 | `arrayEnd(): void` | Ends the open array parameter, text or binary; never refused for room, which its elements kept. Panics when no array is open. |
 | `arrayInt(value: i64): boolean` | An integer element, in decimal; false, and nothing written, when there is no room. Panics when no array is open. |
 | `arrayNull(): boolean` | A NULL element; false, and nothing written, when there is no room. Panics when no array is open. |
@@ -805,16 +805,16 @@ class PgConnection
 | `outputBuffer(): u8[]` | The output buffer: write `[outputStart(), outputEnd())` to the socket. |
 | `outputEnd(): i32` | One past the last byte that may be sent: a Bind still open is held back until `bindEnd()` has written its lengths. |
 | `outputStart(): i32` | The first byte not yet sent. |
-| `paramBytes( bytes: u8[], start: i32, length: i32, ): boolean` | A text parameter from `bytes[start, start + length)`, UTF-8; false too when the window is not inside `bytes`. |
+| `paramBytes(bytes: u8[], start: i32, length: i32): boolean` | A text parameter from `bytes[start, start + length)`, UTF-8; false too when the window is not inside `bytes`. |
 | `paramInt(value: i64): boolean` | An integer parameter, in decimal. |
-| `paramInt4Array( values: i64[], start: i32, count: i32, ): boolean` | An `int4[]` parameter in binary from `values[start, start + count)`; false as the `param...` calls are. Panics, writing nothing, when the window is not inside `values` or an element is outside `int4`. |
-| `paramInt8Array( values: i64[], start: i32, count: i32, ): boolean` | An `int8[]` parameter in binary from `values[start, start + count)`; false as the `param...` calls are. Panics when the window is not inside `values`. |
-| `paramIntArray( values: i64[], start: i32, count: i32, ): boolean` | An `int8[]` parameter from `values[start, start + count)`, in decimal; panics when the range is not inside `values`. |
+| `paramInt4Array(values: i64[], start: i32, count: i32): boolean` | An `int4[]` parameter in binary from `values[start, start + count)`; false as the `param...` calls are. Panics, writing nothing, when the window is not inside `values` or an element is outside `int4`. |
+| `paramInt8Array(values: i64[], start: i32, count: i32): boolean` | An `int8[]` parameter in binary from `values[start, start + count)`; false as the `param...` calls are. Panics when the window is not inside `values`. |
+| `paramIntArray(values: i64[], start: i32, count: i32): boolean` | An `int8[]` parameter from `values[start, start + count)`, in decimal; panics when the range is not inside `values`. |
 | `paramNull(): boolean` | A NULL parameter. |
 | `paramText(value: string): boolean` | A text parameter. |
 | `paramTextArray(items: string[]): boolean` | A `text[]` parameter: every element quoted, `"` and `` escaped. |
 | `passwordWiped(): boolean` | Whether every byte of the connection's copy of the password is zero: true once the proof is computed, the connection has failed or `dispose()` has run (and for an empty password). It reads the copy itself, so a test can see the wipe happen; a program has no use for it. |
-| `prepare( name: string, sql: string, paramTypes: i32[], ): boolean` | Parse and Describe: prepares `sql` as the statement `name` ("" is the unnamed one), its parameters' types given by `paramTypes` (OIDs, 0 to let the server infer one, and parameters past the array are inferred too). The server answers `PG_DESCRIBED`. False, and nothing written, when `canSend()` is false, a bind is open, `name` or `sql` holds a NUL, or the message would pass `maxOutput`. |
+| `prepare(name: string, sql: string, paramTypes: i32[]): boolean` | Parse and Describe: prepares `sql` as the statement `name` ("" is the unnamed one), its parameters' types given by `paramTypes` (OIDs, 0 to let the server infer one, and parameters past the array are inferred too). The server answers `PG_DESCRIBED`. False, and nothing written, when `canSend()` is false, a bind is open, `name` or `sql` holds a NUL, or the message would pass `maxOutput`. |
 | `receive(src: u8[], start: i32, length: i32): i32` | Copies what fits of `src[start, start + length)` into the input buffer; answers how much. |
 | `received(n: i32): void` | Records that `n` bytes were read into the input buffer at `inputEnd()`. |
 | `sent(n: i32): void` | Records that `n` bytes from `outputStart()` were written to the socket. |
@@ -833,7 +833,7 @@ class PgError
 
 | Member | |
 | --- | --- |
-| `new PgError( severity: string, code: string, message: string, detail: string, hint: string, constraint: string, position: string, )` |  |
+| `new PgError(severity: string, code: string, message: string, detail: string, hint: string, constraint: string, position: string)` |  |
 | `readonly code: string` | The SQLSTATE, five characters: `23505` is a unique violation. |
 | `readonly constraint: string` | The constraint that was violated, or "". |
 | `readonly detail: string` | The detail, or "". |
@@ -866,7 +866,7 @@ class PgPool
 
 | Member | |
 | --- | --- |
-| `new PgPool( config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32, )` | A pool of up to `size` connections (1 to 1024) and up to `queueSize` waiting requests (1 to 2^20). `password` is copied and kept until `dispose()`, since a connection is made again after a failure. Panics as `PgConnection` does on `config`, and on a `maxInFlight` over 1024. |
+| `new PgPool(config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32)` | A pool of up to `size` connections (1 to 1024) and up to `queueSize` waiting requests (1 to 2^20). `password` is copied and kept until `dispose()`, since a connection is made again after a failure. Panics as `PgConnection` does on `config`, and on a `maxInFlight` over 1024. |
 | `readonly size: i32` | The number of slots, the most connections the pool makes. |
 | `ticket: i32` | The request the last `dispatch()`, or event from `next(slot)`, is about; -1 for none. |
 | `connect(slot: i32, nonce: u8[]): void` | Makes the wanted `slot`'s connection, `nonce` as `PgConnection` takes it: send its output once the socket is connected, and if the socket fails, call `connection(slot).closed()`. Panics when `slot` is not wanted or the pool is disposed. |
@@ -876,7 +876,7 @@ class PgPool
 | `inFlight(): i32` | The number of groups in flight on every connection, sent and not yet done: the `inFlight` a `PgBatchClock` reads. |
 | `next(slot: i32): i32` | The next event from `slot`'s input, as `PgConnection.next()` answers it, `ticket` naming the request it is about (-1 for `PG_READY`, `PG_FAILED`, and a notice while no request is in flight). The `PG_DESCRIBED` of a registered statement is the pool's and is not answered. When the connection fails, `PG_LOST` comes for each request in flight on it, oldest first, then `PG_FAILED`: close its socket. A connection that fails before it is ready, while no other is, takes the oldest waiting request with it, so that a server that cannot be reached empties the queue rather than holds it. `PG_NEED_MORE` once `PG_FAILED` was answered, until `connect` builds the slot again. Panics as `connection(slot)` does. |
 | `passwordWiped(): boolean` | Whether every byte of the pool's copy of the password is zero, as `PgConnection.passwordWiped()` reads its own. |
-| `register( name: string, sql: string, paramTypes: i32[], ): boolean` | Registers a statement for every connection to prepare before its first request. False when a connection has been made already, `name` or `sql` holds a NUL, or 256 are registered. |
+| `register(name: string, sql: string, paramTypes: i32[]): boolean` | Registers a statement for every connection to prepare before its first request. False when a connection has been made already, `name` or `sql` holds a NUL, or 256 are registered. |
 | `request(): i32` | Queues a request and answers its ticket, or `PG_POOL_FULL` when `queueSize` are waiting. |
 | `send(): boolean` | Ends the group of the request `dispatch()` handed out. False when there is none; when a bind is still open, so finish it and call again; and when no message of the group was written, so the request is dropped and gets no events (`PG_LOST` if its connection has failed). |
 | `waiting(): i32` | The number of requests waiting for a connection. |
@@ -923,7 +923,7 @@ class PgText
 | `bool(b: u8[], start: i32, length: i32): boolean` | A `bool` column: `t` or `f`; false and `failed` otherwise. |
 | `int(b: u8[], start: i32, length: i32): i64` | An `int2`, `int4` or `int8` column: an optional `-` and 1 to 19 digits; 0 and `failed` otherwise, and on overflow. |
 | `reset(): void` | Clears `failed`. |
-| `timestamp( b: u8[], start: i32, length: i32, out: u8[], at: i32, ): i32` | A `timestamptz` column, as the connection's `DateStyle=ISO` and `TimeZone=UTC` spell it (`2024-01-02 03:04:05.123456+00`), or a `timestamp` column (the same without `+00`), written to `out[at, at + 24)` as `2024-01-02T03:04:05.123Z`, the fraction cut to milliseconds. Answers 24, or -1 and `failed` for anything else: a year outside 0001–9999, BC, `infinity`, an offset other than `+00`. |
+| `timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32` | A `timestamptz` column, as the connection's `DateStyle=ISO` and `TimeZone=UTC` spell it (`2024-01-02 03:04:05.123456+00`), or a `timestamp` column (the same without `+00`), written to `out[at, at + 24)` as `2024-01-02T03:04:05.123Z`, the fraction cut to milliseconds. Answers 24, or -1 and `failed` for anything else: a year outside 0001–9999, BC, `infinity`, an offset other than `+00`. |
 
 ## Constants
 

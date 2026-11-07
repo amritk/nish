@@ -2,7 +2,7 @@
 
 # nish/yaml-write
 
-a JSON value written as YAML text that `parseYaml` reads back as the same tree.
+A JSON value written as YAML text that `parseYaml` reads back as the same tree.
 
 ```ts
 import {

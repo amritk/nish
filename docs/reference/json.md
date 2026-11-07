@@ -2,7 +2,7 @@
 
 # nish/json
 
-the value of a field, or of several, of one flat JSON object; and `JsonWriter`, which writes any JSON value into a byte buffer.
+The value of a field, or of several, of one flat JSON object; and `JsonWriter`, which writes any JSON value into a byte buffer.
 
 ```ts
 import {
@@ -287,14 +287,16 @@ A JSON text written into a byte buffer the caller owns: `buf[start ..)`,
 up to `buf.length`, with `end` the cursor. Every comma and colon is the
 writer's, so the caller says only what the value is:
 
-    const w = new JsonWriter(out, 0)
-    w.beginObject()
-    w.key("message")
-    w.string("Hello, World!")
-    w.endObject()
-    if (w.complete()) {
-      // out[0 .. w.end) is {"message":"Hello, World!"}
-    }
+```ts
+const w = new JsonWriter(out, 0)
+w.beginObject()
+w.key("message")
+w.string("Hello, World!")
+w.endObject()
+if (w.complete()) {
+  // out[0 .. w.end) is {"message":"Hello, World!"}
+}
+```
 
 No call allocates except `f64` (whose digits are a string the call
 releases before it returns) and `text`: a writer reset onto the same buffer

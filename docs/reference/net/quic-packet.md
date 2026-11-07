@@ -77,7 +77,7 @@ import {
 } from "nish/net/quic-packet";
 ```
 
-```ts
+```text
 import { quicInitialSecrets, quicKeys, quicParseHeader, quicOpenPacket, QuicKeysSlot,
          QUIC_AEAD_AES_128_GCM, QUIC_PACKET_OK } from "nish/net/quic-packet";
 import { Secret, secret, wipe } from "nish:secret";
@@ -333,13 +333,13 @@ One packet's header as `quicParseHeader` read it from a datagram.
 
 </scalar-card>
 
-<scalar-card title="QuicInitialSecrets" icon="phosphor/regular/cube" href="#quicinitialsecrets">
+<scalar-card title="QuicInitialSecrets" icon="phosphor/regular/cube" href="#quicinitialsecrets-1">
 
 The two Initial secrets RFC 9001 §5.2 derives from the client's first Destination Connection ID.
 
 </scalar-card>
 
-<scalar-card title="QuicKeys" icon="phosphor/regular/cube" href="#quickeys">
+<scalar-card title="QuicKeys" icon="phosphor/regular/cube" href="#quickeys-1">
 
 One packet's protection keys (RFC 9001 §5.1): the AEAD's key and IV, and the header-protection key, all derived from one traffic secret by `quicKeys`.
 
@@ -1883,7 +1883,7 @@ class QuicKeys
 
 | Member | |
 | --- | --- |
-| `new QuicKeys( aead: i32, key: u8[], iv: u8[], hp: u8[], )` |  |
+| `new QuicKeys(aead: i32, key: u8[], iv: u8[], hp: u8[])` |  |
 | `aead: i32` | `QUIC_AEAD_AES_128_GCM`, `_AES_256_GCM` or `_CHACHA20_POLY1305`. |
 | `hp: u8[]` | The header-protection key, the same length as `key`. |
 | `hpAes: AesKey \| null` | `hp` expanded, for the AES suites; `null` for ChaCha20-Poly1305. |

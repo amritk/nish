@@ -2,7 +2,7 @@
 
 # nish/net/handler
 
-complete requests and their responses over the HTTP/1.1 carrier, so that a server answers requests instead of driving `Http1Server`'s events by hand.
+Complete requests and their responses over the HTTP/1.1 carrier, so that a server answers requests instead of driving `Http1Server`'s events by hand.
 
 ```ts
 import {
@@ -40,7 +40,7 @@ One request, whole: its head copied out of the carrier and its body.
 
 <scalar-callout type="info">
 
-```ts
+```text
 const HOME: i32 = 0   // module constants, in the order the routes are added
 const USER: i32 = 1
 const router = new Router(new RouterLimits())
@@ -169,7 +169,7 @@ class HttpHandler
 
 | Member | |
 | --- | --- |
-| `new HttpHandler( limits: HandlerLimits, listener: i32, router: Router, )` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. |
+| `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. |
 | `acceptRestUntil: i64` | When an accept failed for want of a resource (EMFILE, ENFILE, ENOMEM): the listener is out of the loop until then, which it would otherwise wake every turn while its connection waits. 0 while it is in the loop. |
 | `allowBytes: u8[][]` |  |
 | `allowMasks: i64[]` | Each `Allow` value made, by the bit mask of the methods it lists: made once a mask and kept. |
@@ -214,17 +214,17 @@ class HttpHandler
 | `end(r: HttpRequest): i32` | Ends `r`'s response. `r` is the handler's again: it goes back once the carrier has taken every byte, and the connection's next request is read. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
 | `enqueue(r: HttpRequest): void` |  |
 | `expireBodies(now: i64): void` | Closes every connection whose request has been reading its body for longer than `bodyTimeout` at `now`. |
-| `finish( r: HttpRequest, conn: Http1Connection, ): void` | Ends `r`'s response once nothing is pending, and hands `r` back; otherwise leaves it flushing. |
+| `finish(r: HttpRequest, conn: Http1Connection): void` | Ends `r`'s response once nothing is pending, and hands `r` back; otherwise leaves it flushing. |
 | `fired(id: i32): boolean` | Whether watched descriptor `id` was ready in the last `wait`. |
 | `forget(slot: i32): void` | The bookkeeping of a slot the carrier has closed. |
 | `gather(slot: i32, conn: Http1Connection): void` | Body bytes: appended to the request's body, which the carrier's cap bounds. |
 | `json(): JsonWriter` | The JSON writer, reset onto the handler's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
-| `keep( r: HttpRequest, buf: u8[], off: i32, len: i32, ): void` | Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. |
+| `keep(r: HttpRequest, buf: u8[], off: i32, len: i32): void` | Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. |
 | `live(r: HttpRequest): boolean` | Whether `r`'s connection is the one it was read on, still open. |
 | `obtain(): HttpRequest` | A free request, or a new one. |
 | `pooled(): i32` | How many requests the pool has made: the most ever in flight at once. |
-| `problem( r: HttpRequest, status: i32, title: string, detail: string, ): i32` | Answers `r` with an RFC 9457 problem: `application/problem+json` with `type` `about:blank`, `title` (the status's reason, for that type), `status` and, when not empty, `detail`, a sentence for a person about this occurrence. Nothing of the request is echoed, so a detail is the program's own words. |
-| `pushPending( r: HttpRequest, conn: Http1Connection, ): void` | Hands the carrier as much of `r`'s pending bytes as it takes. |
+| `problem(r: HttpRequest, status: i32, title: string, detail: string): i32` | Answers `r` with an RFC 9457 problem: `application/problem+json` with `type` `about:blank`, `title` (the status's reason, for that type), `status` and, when not empty, `detail`, a sentence for a person about this occurrence. Nothing of the request is echoed, so a detail is the program's own words. |
+| `pushPending(r: HttpRequest, conn: Http1Connection): void` | Hands the carrier as much of `r`'s pending bytes as it takes. |
 | `ready(): boolean` | Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here. |
 | `refuse(r: HttpRequest): i32` | Answers a request the router refused, by its `route`: 405 with an `Allow` field naming the methods the path has (RFC 9110 §15.5.6), and 404 for anything else. A parameter's malformed escape is the program's to refuse, when it decodes the parameter. |
 | `release(r: HttpRequest): void` |  |
@@ -232,18 +232,18 @@ class HttpHandler
 | `resume(slot: i32, conn: Http1Connection): void` | `H1_WRITE`: the carrier has room again for the response under way. |
 | `roomy(conn: Http1Connection): boolean` | Whether `conn`'s output holds at most half its size unsent, so a response head fits behind it. |
 | `route(r: HttpRequest): void` | Routes `r` through the router. A HEAD that only a GET route matches takes that route, since a GET resource answers HEAD (RFC 9110 §9.3.2) and the carrier sends no body for it. |
-| `send( r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32, ): i32` | Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call. |
-| `sendFields( r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32, ): i32` | Answers `r` with `status`, the fields `names[k]`: `values[k]` and the body `body[off .. off + len)`, in one call. |
+| `send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call. |
+| `sendFields(r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, the fields `names[k]`: `values[k]` and the body `body[off .. off + len)`, in one call. |
 | `sendJson(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and the value `json`'s writer holds, as `application/json`. A value the writer refused or did not finish — it outgrew `jsonBytes`, say — is answered as a 500 problem instead. |
-| `start( r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32, ): i32` | Starts `r`'s response: `status` (200 to 599), the fields `names[k]`: `values[k]`, and a body of `bodyLength` bytes or `HTTP1_CHUNKED`; then `write` the body and `end`. Answers `HANDLER_SENT`, or `HANDLER_DROPPED` when `r`'s connection has closed — every later `write` and `end` for it then does nothing, and `end` hands it back. |
+| `start(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32` | Starts `r`'s response: `status` (200 to 599), the fields `names[k]`: `values[k]`, and a body of `bodyLength` bytes or `HTTP1_CHUNKED`; then `write` the body and `end`. Answers `HANDLER_SENT`, or `HANDLER_DROPPED` when `r`'s connection has closed — every later `write` and `end` for it then does nothing, and `end` hands it back. |
 | `sweep(): void` | Every slot the carrier's `expire` closed. |
 | `take(): HttpRequest` | The next whole request, which the program now owes an answer. Panics when none is `ready`. |
 | `wait(timeoutMs: i32): i32` | One turn of the loop: waits up to `timeoutMs` (-1 for no limit) for a socket to be ready, accepts, reads and writes what is, closes the connections past their timeouts, and answers how many whole requests are waiting for `take`. |
 | `watch(fd: i32, id: i32): void` | Watches `fd` for reading beside the handler's sockets, as `id` (0 to `HANDLER_MAX_WATCHED - 1`): `fired(id)` says whether it was ready in the last `wait`. For a program's own descriptors — `signalFd()` for a graceful stop, a pipe from another thread. |
 | `whole(slot: i32, conn: Http1Connection): void` | The request is whole: queued for `take`, or parked while the response before it is still mostly unsent. |
-| `write( r: HttpRequest, buf: u8[], off: i32, len: i32, ): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
-| `writeProblem( status: i32, title: string, detail: string, ): i32` | Writes a problem object into the scratch buffer and answers its length. One too large for it is written without its detail, and then without its title, which leaves room enough in the least `jsonBytes`. |
-| `writeProblemObject( status: i32, title: string, detail: string, ): i32` | `writeProblem`'s one try: the object's length, or -1 when it did not fit. |
+| `write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
+| `writeProblem(status: i32, title: string, detail: string): i32` | Writes a problem object into the scratch buffer and answers its length. One too large for it is written without its detail, and then without its title, which leaves room enough in the least `jsonBytes`. |
+| `writeProblemObject(status: i32, title: string, detail: string): i32` | `writeProblem`'s one try: the object's length, or -1 when it did not fit. |
 
 ## HttpRequest
 

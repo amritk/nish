@@ -2,7 +2,7 @@
 
 # nish/net/url
 
-the request target's path and query, split and percent-decoded in place, and its query string read as key/value pairs; and whole URLs, parsed into their parts and references resolved against them.
+The request target's path and query, split and percent-decoded in place, and its query string read as key/value pairs; and whole URLs, parsed into their parts and references resolved against them.
 
 ```ts
 import {

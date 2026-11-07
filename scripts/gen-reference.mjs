@@ -25,6 +25,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { Application } from "typedoc"
+import ts from "typescript"
 
 const root = path.resolve(import.meta.dirname, "..")
 const outDir = "docs/reference"
@@ -93,12 +94,69 @@ const attr = (s) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
 
-/** Apply `f` to the prose of a line, never to its `code spans`. */
+/**
+ * Apply `f` to the prose of Markdown text, never to a fenced block or a code
+ * span. A span closes at the next run of as many backticks as opened it, so
+ * ``` `` $` `` ``` is one span; a run that never closes is prose.
+ */
 const outsideCode = (s, f) =>
   s
-    .split(/(`+[^`]*`+)/)
-    .map((piece, i) => (i % 2 === 1 ? piece : f(piece)))
+    .split(/(^[ \t]*```[\s\S]*?^[ \t]*```[ \t]*$)/m)
+    .map((piece, i) => {
+      if (i % 2 === 1) {
+        return piece
+      }
+      let out = ""
+      let from = 0
+      const open = /`+/g
+      for (let m = open.exec(piece); m; m = open.exec(piece)) {
+        const close = new RegExp(`(?<!\`)${m[0]}(?!\`)`, "g")
+        close.lastIndex = m.index + m[0].length
+        const c = close.exec(piece)
+        if (c) {
+          out += f(piece.slice(from, m.index)) + piece.slice(m.index, close.lastIndex)
+          from = close.lastIndex
+          open.lastIndex = from
+        }
+      }
+      return out + f(piece.slice(from))
+    })
     .join("")
+
+/** A code block's fence language: `ts` when TypeScript parses it, `text` for a diagram or a table. */
+const fenceLang = (code) =>
+  ts.transpileModule(code, { reportDiagnostics: true }).diagnostics.length === 0 ? "ts" : "text"
+
+const fence = (lines) => `\`\`\`${fenceLang(lines.join("\n"))}\n${lines.join("\n")}\n\`\`\``
+
+/**
+ * A doc comment's indented code blocks (four spaces, after a blank line) as
+ * fenced ones, so escaping, table cells and highlighting all see them as code.
+ */
+const fenceIndented = (s) => {
+  const lines = s.split("\n")
+  const out = []
+  let inFence = false
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*```/.test(lines[i])) {
+      inFence = !inFence
+    }
+    if (inFence || !/^ {4}\S/.test(lines[i]) || (i > 0 && lines[i - 1].trim())) {
+      out.push(lines[i])
+      continue
+    }
+    let end = i
+    while (end < lines.length && (/^ {4}/.test(lines[end]) || !lines[end].trim())) {
+      end++
+    }
+    while (!lines[end - 1].trim()) {
+      end--
+    }
+    out.push(fence(lines.slice(i, end).map((l) => l.slice(4))))
+    i = end - 1
+  }
+  return out.join("\n")
+}
 
 /** `<` before a letter or `/` would open an HTML tag. */
 const escapeProse = (s) => s.replace(/<(?=[A-Za-z/!?])/g, "&lt;")
@@ -131,13 +189,13 @@ const headings = (text) => {
     return n > 0 ? `${slug}-${n}` : slug
   }
   const out = []
-  let fence = false
+  let inFence = false
   for (const [index, line] of text.split("\n").entries()) {
     if (/^\s*(```|~~~)/.test(line)) {
-      fence = !fence
+      inFence = !inFence
       continue
     }
-    const m = fence ? null : /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
+    const m = inFence ? null : /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
     if (m) {
       const level = m[1].length
       out.push({
@@ -236,6 +294,8 @@ const relinkProse = (s, link, source, page) =>
 // ---- TypeDoc comments to Markdown -----------------------------------------
 
 const MISSING = "\u0001"
+/** A card's anchor before the page's headings are numbered. */
+const CARD = "\u0002"
 
 /** A TypeDoc comment's display parts as Markdown. */
 const partsToMd = (parts, ctx) => {
@@ -254,10 +314,7 @@ const partsToMd = (parts, ctx) => {
   }
   // The prose between code spans and fences: escape what Markdown would read
   // as HTML, and the brackets of a link whose target is not a file.
-  return s
-    .split(/(```[\s\S]*?```|`+[^`]*`+)/)
-    .map((piece, i) => (i % 2 === 1 ? piece : escapeProse(piece)))
-    .join("")
+  return outsideCode(fenceIndented(s), escapeProse)
     .replace(new RegExp(`\\[([^\\]\\n]*)\\]\\(${MISSING}([^)]*)\\)`, "g"), "[$1]\\($2)")
     .replaceAll(MISSING, "")
     .trim()
@@ -314,12 +371,12 @@ const paramText = (p) =>
   }`
 
 /** `head(params): ret`, one parameter per line when the one-line form runs long. */
-const signatureText = (head, sig, withReturn = true) => {
+const signatureText = (head, sig, withReturn = true, wrap = true) => {
   const params = (sig.parameters ?? []).map(paramText)
   const ret = withReturn ? `: ${typeText(sig.type)}` : ""
   const tps = typeParams(sig.typeParameters)
   const one = `${head}${tps}(${params.join(", ")})${ret}`
-  if (one.length <= 50 || params.length === 0) {
+  if (!wrap || one.length <= 50 || params.length === 0) {
     return one
   }
   return `${head}${tps}(\n${params.map((p) => `  ${p},`).join("\n")}\n)${ret}`
@@ -362,12 +419,14 @@ const moduleProse = (comment, prose) => {
     .filter((b) => b.some((l) => l.trim()))
   const isCode = (b) => indentOf(b[0]) >= 2 && !listItem.test(b[0].trim())
   const isList = (b) => !isCode(b) && listItem.test(b[0].trim())
-  const code = (b) => `\`\`\`ts\n${dedent(b).join("\n")}\n\`\`\``
+  const code = (b) => fence(dedent(b))
   const lead = blocks.length > 0 && !isCode(blocks[0]) ? blocks.shift() : []
   const leadText = lead
     .join(" ")
     .replace(/^\s*`?(?:nish|std)[/:][\w/.-]*`?\s*(?:—|--|-|:)\s*/, "")
     .trim()
+    // "nish/regex — regular expressions ..." leads with a lowercase word once the name is gone.
+    .replace(/^[a-z]/, (c) => c.toUpperCase())
   const usageAt = blocks.findIndex((b) => isCode(b) && /^\s*import\b[\s\S]*from\s+"nish\//.test(b.join("\n")))
   // The usage example, with the indented blocks that directly follow it.
   let usage = ""
@@ -426,6 +485,9 @@ const sortByName = (xs) => [...xs].sort((a, b) => byText(a.name, b.name))
 
 const formatNumber = (v) => (/^-?\d+$/.test(v) ? Number(v).toLocaleString("en-US") : null)
 
+/** A member's name; TypeDoc names a well-known-symbol key `[dispose]`, the source `[Symbol.dispose]`. */
+const memberName = (name) => name.replace(/^\[(\w+)\]$/, "[Symbol.$1]")
+
 /** The table row of one class or interface member. */
 const memberRow = (m, owner, ctx) => {
   const stat = m.flags?.isStatic ? "static " : ""
@@ -433,14 +495,14 @@ const memberRow = (m, owner, ctx) => {
   const rows = []
   if (m.kind === Kind.ctor) {
     for (const sig of m.signatures ?? []) {
-      rows.push([signatureText(`new ${owner}`, sig, false).replace(/\n\s*/g, " ").replace(/,\)/, ")"), sig])
+      rows.push([signatureText(`new ${owner}`, sig, false, false), sig])
     }
   } else if (m.signatures) {
     for (const sig of m.signatures) {
-      rows.push([`${stat}${signatureText(m.name, sig).replace(/\n\s*/g, " ").replace(/,\)/, ")")}`, sig])
+      rows.push([`${stat}${signatureText(memberName(m.name), sig, true, false)}`, sig])
     }
   } else {
-    rows.push([`${stat}${ro}${m.name}${m.flags?.isOptional ? "?" : ""}: ${typeText(m.type)}`, m])
+    rows.push([`${stat}${ro}${memberName(m.name)}${m.flags?.isOptional ? "?" : ""}: ${typeText(m.type)}`, m])
   }
   return rows.map(([sig, c]) => `| \`${sig.replace(/\|/g, "\\|")}\` | ${cell(summary(c.comment, ctx))} |`)
 }
@@ -506,6 +568,20 @@ const renderClass = (c, ctx) => {
   return out.join("\n\n")
 }
 
+const renderObject = (o, ctx) => {
+  const out = [`## ${o.name}`]
+  const desc = summary(o.comment, ctx)
+  if (desc) {
+    out.push(desc)
+  }
+  out.push(`\`\`\`ts\nconst ${o.name}: { ... }\n\`\`\``)
+  const rows = (o.type.declaration?.children ?? []).flatMap((m) => memberRow(m, o.name, ctx))
+  if (rows.length > 0) {
+    out.push(["| Member | |", "| --- | --- |", ...rows].join("\n"))
+  }
+  return out.join("\n\n")
+}
+
 const renderConstants = (vars, ctx) => {
   const cards = vars.map((v) => {
     const value = v.defaultValue === undefined ? null : formatNumber(v.defaultValue)
@@ -524,21 +600,18 @@ const renderConstants = (vars, ctx) => {
  */
 const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }, link) => {
   const ctx = { link, source, page }
-  const prose = (s) =>
-    s
-      .split(/(```[\s\S]*?```)/)
-      .map((piece, i) =>
-        i % 2 === 1 ? piece : outsideCode(piece, (p) => relinkProse(escapeProse(p), link, source, page))
-      )
-      .join("")
+  const prose = (s) => outsideCode(s, (p) => relinkProse(escapeProse(p), link, source, page))
   const members = (mod.children ?? []).filter((c) => c.kind !== Kind.module)
   const of = (...kinds) => sortByName(members.filter((m) => kinds.includes(m.kind)))
   const funcs = of(Kind.func)
   const classes = of(Kind.klass, Kind.iface)
   const types = of(Kind.alias)
-  const vars = of(Kind.variable)
+  // A constant typed as an object literal (`Arena`, `crypto`) is shown as its members.
+  const objects = of(Kind.variable).filter((v) => v.type?.type === "reflection")
+  const vars = of(Kind.variable).filter((v) => v.type?.type !== "reflection")
   const { lead, usage, body } = moduleProse(comment, prose)
-  const out = [header(source), `# ${title}`]
+  // Scalar cuts a heading at a bare colon (`# nish:fs` renders as "nish"); a code span keeps it whole.
+  const out = [header(source), title.includes(":") ? `# \`${title}\`` : `# ${title}`]
   if (lead || intro) {
     out.push(lead || intro)
   }
@@ -554,13 +627,15 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }
       ? (m.signatures[0].comment ?? fallback?.get(m.name)?.signatures?.[0]?.comment)
       : m.comment
     const first = firstSentence(summary(doc, ctx).split(/\n\s*\n/)[0] ?? "")
+    // The anchor is filled in once the page's headings are known (see below).
     return tag(
       "scalar-card",
-      `title="${attr(m.name)}" icon="phosphor/regular/${icon}" href="#${slugOf(m.name)}"`,
+      `title="${attr(m.name)}" icon="phosphor/regular/${icon}" href="#${CARD}"`,
       first
     )
   }
-  const cards = [...funcs.map((f) => cardOf(f, "function")), ...classes.map((c) => cardOf(c, "cube"))]
+  const sections = [...funcs, ...classes, ...objects]
+  const cards = sections.map((m) => cardOf(m, m.kind === Kind.func ? "function" : "cube"))
   if (cards.length > 0) {
     out.push(tag("scalar-grid", 'cols="2"', cards.join("\n\n")))
   }
@@ -573,24 +648,36 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }
   for (const c of classes) {
     out.push(renderClass(c, ctx))
   }
+  for (const o of objects) {
+    out.push(renderObject(o, ctx))
+  }
   for (const t of types) {
     out.push(renderType(t, ctx))
   }
   if (vars.length > 0) {
     out.push(renderConstants(vars, ctx))
   }
-  const text = `${out.join("\n\n")}\n`
-  // Every card's anchor must name a heading of the page it is on, on both sites.
-  const hs = headings(text)
-  for (const m of text.matchAll(/ href="#([^"]+)"/g)) {
-    if (!hs.some((h) => h.github === m[1] && h.site === m[1])) {
-      throw new Error(`${page}: card anchor #${m[1]} names no heading`)
+  const draft = `${out.join("\n\n")}\n`
+  // Each card links to its member's own `## name` heading, the first one
+  // after the previous card's: `sha256` and `Sha256` share a slug, and the
+  // second is numbered (`#sha256-1`), the same on GitHub and the docs site.
+  const lines = draft.split("\n")
+  const hs = headings(draft)
+  let at = 0
+  const anchors = sections.map((m) => {
+    while (at < hs.length && lines[hs[at].index] !== `## ${m.name}`) {
+      at++
     }
-  }
+    const h = hs[at++]
+    if (!h || h.github !== h.site) {
+      throw new Error(`${page}: no heading both sites give one anchor for the card of ${m.name}`)
+    }
+    return h.github
+  })
+  let n = 0
+  const text = draft.replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`)
   return { text, lead: lead || intro }
 }
-
-const slugOf = (name) => slugOfHeading(name, false)
 
 /** The overview page: every module, linked, with its lead sentence. */
 const renderIndex = (pages) => {
@@ -614,17 +701,34 @@ const renderIndex = (pages) => {
 const collectPages = (project) => {
   const pages = []
   const runtime = project.children.find((m) => m.name === "runtime/nish")
-  const globals = new Map(
-    (runtime?.children ?? []).filter((c) => c.kind !== Kind.module).map((c) => [c.name, c])
-  )
-  const dts = fs.readFileSync(path.join(root, "runtime/nish.d.ts"), "utf8")
+  // A global nish.d.ts merges into one of TypeScript's own (`Array`,
+  // `StringConstructor`) keeps only what nish.d.ts declares; one it does not
+  // declare at all (`Array`'s constructor variable) is left out.
+  const dtsLines = fs.readFileSync(path.join(root, "runtime/nish.d.ts"), "utf8").split("\n")
+  // A variable's sources include the interfaces merged with it, so it counts
+  // as declared here only on a `var`/`const`/`let` line of this file.
+  const own = (r) =>
+    r.sources?.some(
+      (s) =>
+        s.fileName === "runtime/nish.d.ts" &&
+        (r.kind !== Kind.variable || /^\s*(?:declare\s+)?(?:var|const|let)\b/.test(dtsLines[s.line - 1]))
+    )
+  const ownOnly = (r) => ({
+    ...r,
+    children: r.children
+      ?.filter(own)
+      .map((c) => (c.signatures ? { ...c, signatures: c.signatures.filter(own) } : c))
+      .filter((c) => !c.signatures || c.signatures.length > 0),
+  })
+  const globalList = (runtime?.children ?? []).filter((c) => c.kind !== Kind.module && own(c)).map(ownOnly)
+  const globals = new Map(globalList.filter((c) => c.kind === Kind.func).map((c) => [c.name, c]))
   pages.push({
-    mod: { children: [...globals.values()] },
+    mod: { children: globalList },
     spec: null,
     title: "Globals",
     source: "runtime/nish.d.ts",
     page: `${outDir}/builtins.md`,
-    comment: leadingComment(dts),
+    comment: leadingComment(dtsLines.join("\n")),
     intro: "",
   })
   for (const m of runtime?.children ?? []) {
@@ -717,13 +821,20 @@ const libraryRoutes = (pages) => {
   }
 }
 
+const oneLine = (v) => {
+  if (Array.isArray(v)) {
+    return `[${v.map(oneLine).join(", ")}]`
+  }
+  if (v === null || typeof v !== "object") {
+    return JSON.stringify(v)
+  }
+  const kv = Object.entries(v).map(([k, x]) => `${JSON.stringify(k)}: ${oneLine(x)}`)
+  return kv.length > 0 ? `{ ${kv.join(", ")} }` : "{}"
+}
+
 /** JSON in the file's layout: an object or array on one line when it fits in `width`. */
 const printJson = (value, indent, prefix, suffix) => {
-  const one = JSON.stringify(value, null, 1)
-    .replace(/\n\s*/g, " ")
-    .replace(/\{ /g, "{ ")
-    .replace(/\[ /g, "[")
-    .replace(/ \]/g, "]")
+  const one = oneLine(value)
   if (
     typeof value !== "object" ||
     value === null ||
@@ -757,6 +868,11 @@ const configText = (text, pages) => {
       children["/language"] = { type: "page", title: "Language reference", filepath: languagePage }
       children["/library"] = libraryRoutes(pages)
     }
+  }
+  if (!("/standard-library" in children)) {
+    throw new Error(
+      `${configFile}: /reference has no /standard-library route to place /language and /library after`
+    )
   }
   reference.children = children
   const lines = text.split("\n")
@@ -804,15 +920,15 @@ const renderLanguage = (link) => {
       "Do not edit by hand: change that file and run `node scripts/gen-reference.mjs`. -->",
     "",
   ]
-  let fence = false
+  let inFence = false
   for (const [i, line] of lines.entries()) {
     if (/^\s*(```|~~~)/.test(line)) {
-      fence = !fence
+      inFence = !inFence
     }
     if (anchors.has(i)) {
       out.push(`<a id="${anchors.get(i)}" style="scroll-margin-top: 65px"></a>`, "")
     }
-    if (fence) {
+    if (inFence) {
       out.push(line)
       continue
     }

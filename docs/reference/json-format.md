@@ -2,7 +2,7 @@
 
 # nish/json-format
 
-the string formats of JSON Schema draft 2020-12 (§7.3 of the validation vocabulary), each a predicate, and one dispatcher that answers valid, invalid or unknown for a format named in a schema.
+The string formats of JSON Schema draft 2020-12 (§7.3 of the validation vocabulary), each a predicate, and one dispatcher that answers valid, invalid or unknown for a format named in a schema.
 
 ```ts
 import {

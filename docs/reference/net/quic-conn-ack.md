@@ -2,7 +2,7 @@
 
 # nish/net/quic-conn-ack
 
-the packet numbers one QUIC packet number space has received, kept as ranges, which is what duplicate detection reads (RFC 9000 §12.3) and what an ACK frame is written from (§13.2, §19.3).
+The packet numbers one QUIC packet number space has received, kept as ranges, which is what duplicate detection reads (RFC 9000 §12.3) and what an ACK frame is written from (§13.2, §19.3).
 
 ```ts
 import {
@@ -11,7 +11,7 @@ import {
 } from "nish/net/quic-conn-ack";
 ```
 
-```ts
+```text
 import { QuicAckRanges } from "nish/net/quic-conn-ack";
 
 const received = new QuicAckRanges();
@@ -78,7 +78,7 @@ class QuicAckRanges
 | `insert(k: i32, pn: i64): void` | Inserts the one-number range `[pn, pn]` at position `k`. When every slot is taken the lowest range is dropped first and the floor raised over it; if `pn` itself would be that lowest range, it is the one dropped. |
 | `low(k: i32): i64` | The smallest packet number of range `k`, which the caller keeps below `count`. |
 | `pushAck(out: u8[], ackDelay: i64): boolean` | Appends an ACK frame for every range kept, with `ackDelay` (already scaled by this endpoint's ACK delay exponent), and clears `ackPending`. Answers `false`, appending nothing, when nothing has been received. |
-| `putAck( buf: u8[], at: i32, end: i32, ackDelay: i64, ): i32` | Writes the ACK frame `pushAck` appends into `buf` at `at`, before `end`, and clears `ackPending`. Answers the offset past it, or -1, writing nothing and leaving `ackPending` as it was, when nothing has been received or the frame does not fit. |
+| `putAck(buf: u8[], at: i32, end: i32, ackDelay: i64): i32` | Writes the ACK frame `pushAck` appends into `buf` at `at`, before `end`, and clears `ackPending`. Answers the offset past it, or -1, writing nothing and leaving `ackPending` as it was, when nothing has been received or the frame does not fit. |
 | `record(pn: i64, ackEliciting: boolean): boolean` | Records `pn` as received, `ackEliciting` saying whether its frames ask for an acknowledgement. Answers `false`, changing nothing, for a packet number already received (or at or below the floor), or one that is not a packet number at all. |
 | `remove(k: i32): void` | Removes range `k`, moving the lower ones up. |
 | `set(k: i32, low: i64, high: i64): void` | Sets range `k` to `[low, high]`. |

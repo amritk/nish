@@ -135,7 +135,7 @@ An HMAC key absorbed once: the inner and outer chaining values after the key's p
 
 </scalar-card>
 
-<scalar-card title="HmacSha256" icon="phosphor/regular/cube" href="#hmacsha256">
+<scalar-card title="HmacSha256" icon="phosphor/regular/cube" href="#hmacsha256-1">
 
 HMAC-SHA-256 in progress (RFC 2104 with RFC 4231's SHA-256): feed the message with `update`, as many windows as it takes, and take the 32-byte tag with `digest`.
 
@@ -147,7 +147,7 @@ HMAC-SHA-256 over hashers the caller owns: allocate one, then for each tag `begi
 
 </scalar-card>
 
-<scalar-card title="HmacSha384" icon="phosphor/regular/cube" href="#hmacsha384">
+<scalar-card title="HmacSha384" icon="phosphor/regular/cube" href="#hmacsha384-1">
 
 HMAC-SHA-384 in progress (RFC 2104 with RFC 4231's SHA-384), with `HmacSha256`'s methods.
 
@@ -159,7 +159,7 @@ HMAC-SHA-384 over hashers the caller owns, with `HmacSha256Scratch`'s methods.
 
 </scalar-card>
 
-<scalar-card title="HmacSha512" icon="phosphor/regular/cube" href="#hmacsha512">
+<scalar-card title="HmacSha512" icon="phosphor/regular/cube" href="#hmacsha512-1">
 
 HMAC-SHA-512 in progress (RFC 2104 with RFC 4231's SHA-512), with `HmacSha256`'s methods.
 
@@ -169,7 +169,7 @@ HMAC-SHA-512 in progress (RFC 2104 with RFC 4231's SHA-512), with `HmacSha256`'s
 
 <scalar-callout type="info">
 
-```ts
+```text
 H(K XOR opad, H(K XOR ipad, text))
 ```
 
@@ -586,7 +586,9 @@ PBKDF2-HMAC-SHA256(P, S, c, dkLen) as RFC 8018 §5.2 defines it: the
 `dkLen`-byte key derived from the password `password` and the salt `salt`
 over `iterations` rounds, as a `Secret`.
 
-    const salted: Secret&lt;u8[]> | null = pbkdf2HmacSha256(password, salt, 4096, 32);
+```ts
+const salted: Secret<u8[]> | null = pbkdf2HmacSha256(password, salt, 4096, 32);
+```
 
 Bad input answers `null` and never panics: an iteration count or a length
 below 1, or a password or salt longer than 2^31 - 1 bytes. The password is
@@ -634,10 +636,12 @@ key's pad blocks (RFC 2104 §4), held as a `Secret<u64[]>`. Every tag it
 makes or checks starts from them, so a tag costs the message's blocks and
 two finishing blocks, and never the key's two again.
 
-    const key = new HmacKey(HMAC_SHA256, secretKey);   // once
-    hmacKeyedInto(key, data, 0, data.length, tag, 0);  // per message
-    const ok: boolean = hmacKeyedVerify(key, data, 0, data.length, tag, 0);
-    key.wipe();                                        // when done
+```ts
+const key = new HmacKey(HMAC_SHA256, secretKey);   // once
+hmacKeyedInto(key, data, 0, data.length, tag, 0);  // per message
+const ok: boolean = hmacKeyedVerify(key, data, 0, data.length, tag, 0);
+key.wipe();                                        // when done
+```
 
 The tags are `hmacSha256`'s, `hmacSha384`'s and `hmacSha512`'s for the same
 key. The key itself is read only inside `exposeWith`, and the hashers that
@@ -689,10 +693,12 @@ HMAC-SHA-256 over hashers the caller owns: allocate one, then for each tag
 `begin` with the key, `update` with the message, and `finishInto` the
 caller's array. The tag is the one `hmacSha256` answers.
 
-    const mac = new HmacSha256Scratch();          // once, outside the loop
-    mac.begin(key, 0, key.length);
-    mac.update(message, 0, message.length);
-    mac.finishInto(tag, 0);                       // 32 bytes at tag[0]
+```ts
+const mac = new HmacSha256Scratch();          // once, outside the loop
+mac.begin(key, 0, key.length);
+mac.update(message, 0, message.length);
+mac.finishInto(tag, 0);                       // 32 bytes at tag[0]
+```
 
 The key block is wiped with `secureZero` once both hashers have absorbed
 it, and so is every digest on the way; `wipe` zeroes the hashers too, for a

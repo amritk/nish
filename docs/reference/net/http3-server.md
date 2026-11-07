@@ -40,7 +40,7 @@ Slots filed by the millisecond of their next deadline: `head[b]` is a bucket's f
 
 <scalar-callout type="info">
 
-```ts
+```text
 const fd = udpBind("0.0.0.0", 4433, 0);
 const server = new Http3Server(quicConfig, new Http3Config(), fd, 64, listenerEntropy);
 // quicConfig.alpn is ["h3"]; pollAdd(loop, fd, 1, 0)
@@ -169,8 +169,8 @@ class Http3CidIndex
 | `table: i32[]` |  |
 | `bucket(buf: u8[], at: i32, length: i32): i32` | The bucket the ID `buf[at .. at + length)` starts its probe at. |
 | `find(buf: u8[], at: i32, length: i32): i32` | The slot owning the ID `buf[at .. at + length)`, or -1. |
-| `holds( e: i32, buf: u8[], at: i32, length: i32, ): boolean` | Whether entry `e` holds the ID `buf[at .. at + length)`. |
-| `insert( e: i32, buf: u8[], at: i32, length: i32, ): void` | Files entry `e` as the ID `buf[at .. at + length)`; an ID already filed under another entry is left there. |
+| `holds(e: i32, buf: u8[], at: i32, length: i32): boolean` | Whether entry `e` holds the ID `buf[at .. at + length)`. |
+| `insert(e: i32, buf: u8[], at: i32, length: i32): void` | Files entry `e` as the ID `buf[at .. at + length)`; an ID already filed under another entry is left there. |
 | `remove(e: i32): void` | Takes entry `e` out, moving later entries of its probe run back so none is lost. |
 
 ## Http3Server
@@ -184,7 +184,7 @@ class Http3Server
 
 | Member | |
 | --- | --- |
-| `new Http3Server( quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[], )` | A pool of `size` slots serving HTTP/3 under `config` over QUIC under `quicConfig` on the UDP socket `fd`. `listenerEntropy` is the listener's `QUIC_LISTENER_ENTROPY_SIZE` random bytes, whose first eight also key the connection-ID index (wiped in the caller's array, as the listener does). No slot's connections are made here: each slot's are built on the first Initial accepted into it. From here on `quicConfig`'s `statelessResetKey` and `retryTokenKey` are the server's: `stop` wipes them, so the configuration is this server's alone. |
+| `new Http3Server(quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[])` | A pool of `size` slots serving HTTP/3 under `config` over QUIC under `quicConfig` on the UDP socket `fd`. `listenerEntropy` is the listener's `QUIC_LISTENER_ENTROPY_SIZE` random bytes, whose first eight also key the connection-ID index (wiped in the caller's array, as the listener does). No slot's connections are made here: each slot's are built on the first Initial accepted into it. From here on `quicConfig`'s `statelessResetKey` and `retryTokenKey` are the server's: `stop` wipes them, so the configuration is this server's alone. |
 | `accepted: i32` | Counters for a log or a test, saturating: connections accepted, Initials dropped for want of a slot, datagrams past the answer budget, sends that failed. |
 | `addresses: u8[][]` | Where each slot sends now: its client's address as the first datagram came from, then wherever the connection follows the client to (`QuicConnection.sendAddress`, copied here by `flushSlot`). Not validated until `quic(slot).addressValidated` is set (RFC 9000 §8.1): a Retry token the listener checked, with `retry` on, or a Handshake packet from the client. Before then it is the source of one UDP datagram, which anyone can forge, so a cap or an allow-list keyed on it waits for that. After the handshake it changes when the client's address does (a NAT rebinding, §9.3), first to an address not yet validated, so a cap keyed on the address a session started from keeps its own copy. |
 | `answer: QuicListenerAnswer` | What the listener answers into, made once: its reply and IDs are refilled in their own room. |
@@ -231,7 +231,7 @@ class Http3Server
 | `busy(): i32` | How many slots hold a connection. |
 | `clock(micros: i64): void` | Gives the server the caller's monotonic clock in microseconds: the instant the `now` of the calls that follow names, `monotonicNanos() / 1000` where `now` is `monotonicNanos() / 1000000`. The pacer counts it; every timer still counts `now`. One that is not inside `now`'s millisecond is not read. |
 | `connection(slot: i32): Http3Connection` | The HTTP/3 connection of `slot`, its `date` brought up to now; a slot out of range names the first. A slot not built yet is built here, with every slot before it, so a program that binds something to each slot's connection up front gets the one its slot keeps. |
-| `datagram( buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>, ): void` | One datagram, `buf[at .. at + len)`, from `address`: to the slot that owns its first packet's Destination Connection ID, or to the listener. |
+| `datagram(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void` | One datagram, `buf[at .. at + len)`, from `address`: to the slot that owns its first packet's Destination Connection ID, or to the listener. |
 | `dirty(slot: i32): void` | Puts `slot` on the dirty stack, for `flush`. |
 | `flush(now: i64): void` | Sends what every touched slot has, as far as its pacer lets it, closes a slot whose HTTP/3 side is done after GOAWAY, frees a slot whose connection has closed, and files each in the wheel under its next deadline. |
 | `flushSlot(slot: i32, now: i64): void` | `flush` of one slot. |
@@ -242,8 +242,8 @@ class Http3Server
 | `receive(now: i64, key: Secret<u8[]>): i32` | Reads every datagram waiting on the socket, at most `H3_SERVER_RECEIVE_BURST`, and hands each to its slot or the listener, signing a handshake's CertificateVerify with `key` (ECDSA P-256) when one asks. A GRO receive is cut into its datagrams in place. Answers how many datagrams it read. |
 | `refile(slot: i32): void` | Files `slot`'s connection IDs in the index again when they changed. |
 | `release(slot: i32): void` | Frees `slot`: its IDs leave the index and its timer the wheel. |
-| `send( buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32, ): boolean` | Sends `buf[at .. at + len)` to `to` with the ECN codepoint `ecn`, cut into `segment`-byte datagrams when it is above 0; answers whether it went. |
-| `serve( slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>, ): void` | Hands `slot`'s connection a datagram from `address`, signs when the handshake asks, and refiles its IDs and timer. The connection decides from the address whether the client moved (RFC 9000 §9.3); an address that is not 18 bytes long leaves it where it is. |
+| `send(buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean` | Sends `buf[at .. at + len)` to `to` with the ECN codepoint `ecn`, cut into `segment`-byte datagrams when it is above 0; answers whether it went. |
+| `serve(slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void` | Hands `slot`'s connection a datagram from `address`, signs when the handshake asks, and refiles its IDs and timer. The connection decides from the address whether the client moved (RFC 9000 §9.3); an address that is not 18 bytes long leaves it where it is. |
 | `size(): i32` | How many slots the pool has, built or not. |
 | `slotAt(slot: i32): i32` | `slot` when it is one of the pool's, built with every slot before it if it was not; 0 when it is out of range. |
 | `stop(): void` | Stops the server for good and wipes the keys it holds: every built slot's connection is released (`QuicConnection.release`, which sends nothing), as is one built after, by `connection` or `quic`; the listener is released; and the configuration's `statelessResetKey` and `retryTokenKey`, the index's salt, the connections' entropy scratch and the listener's last answer (a Retry's or a reset's token) are zeroed. From then on every datagram is dropped and no connection is accepted. The configuration's two keys are the server's once it is made with them: a program that keeps a copy of either, to start the next server with, wipes its own copy. The keys are zeroed in place, so give each server a `QuicServerConfig` of its own: any other listener, connection or server made with the same one would go on MACing Retry tokens and deriving stateless reset tokens under an all-zero key, which anyone can forge. |
@@ -253,8 +253,8 @@ class Http3Server
 | `touch(slot: i32): void` | Puts `slot` on the ready ring and the dirty stack, unless it is on them. |
 | `unindex(slot: i32): void` | Takes every one of `slot`'s connection IDs out of the index. |
 | `unmark(): void` | The platform sends no ECN: no slot's connection marks from now on. |
-| `unowned( buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>, ): void` | A datagram no slot owns: the listener decides, reading it where it lies in `buf` and answering into `answer`, and may make a connection in a free slot, which reads the same window. Nothing is copied (H3-3). |
-| `worthListening( buf: u8[], at: i32, len: i32, now: i64, ): boolean` | Whether the listener could answer `buf[at .. at + len)` at all, read from its first bytes: what it would drop without a word is dropped here, before the listener parses it. That is a short header too short for a stateless reset; a long one shorter than a full Initial, which neither Version Negotiation nor a new connection answers (RFC 9000 §14.1, §6.1); version 0; a version 1 packet that is not an Initial, or whose DCID is under 8 bytes (§7.2); and an Initial when no slot is free, which is counted in `refused`. A stateless reset and a Version Negotiation packet, the answers that do not start a connection, are also held to `takeAnswer`'s budget. |
+| `unowned(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void` | A datagram no slot owns: the listener decides, reading it where it lies in `buf` and answering into `answer`, and may make a connection in a free slot, which reads the same window. Nothing is copied (H3-3). |
+| `worthListening(buf: u8[], at: i32, len: i32, now: i64): boolean` | Whether the listener could answer `buf[at .. at + len)` at all, read from its first bytes: what it would drop without a word is dropped here, before the listener parses it. That is a short header too short for a stateless reset; a long one shorter than a full Initial, which neither Version Negotiation nor a new connection answers (RFC 9000 §14.1, §6.1); version 0; a version 1 packet that is not an Initial, or whose DCID is under 8 bytes (§7.2); and an Initial when no slot is free, which is counted in `refused`. A stateless reset and a Version Negotiation packet, the answers that do not start a connection, are also held to `takeAnswer`'s budget. |
 
 ## Http3Wheel
 

@@ -149,18 +149,22 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
   text is its description; a member without one is shown with its type
   only. A `nish:` module's member without a comment of its own takes the
   comment of the global of the same name, whose signature it shares.
+  A global that merges with a TypeScript lib declaration (`Array`,
+  `String`, `Symbol`) shows only the members `runtime/nish.d.ts` declares.
 
 A module's page is read from the `/** ... */` comment that opens its file:
 
 1. **The lead**, the first paragraph, opens the page. A leading
    `` `nish/x` — `` (or `nish/x:`) naming the module is dropped, since the
-   title says it. Its first sentence is the module's line in `index.md`.
+   title says it, and the first letter left is capitalised. Its first
+   sentence is the module's line in `index.md`.
 2. **The usage example** is the first code block (lines indented two spaces
    or more, not a list) that imports from `"nish/`, together with any code
-   blocks right after it. It is shown after the import line, as TypeScript.
+   blocks right after it. It is shown after the import line.
 3. A list or code block belongs to the paragraph before it.
-4. **The first other paragraph** not opening with bold text is the
-   summary, shown as an info callout.
+4. **The paragraph after the lead** is the summary, shown as an info
+   callout, unless it opens with bold text; then the page has no summary
+   and the paragraph follows rule 5.
 5. **A paragraph opening with bold text** is a collapsible detail titled
    with that text. `**Title.** Body` or `**Title**: body` uses the rest as
    the body; otherwise the whole paragraph is the body. When the title says

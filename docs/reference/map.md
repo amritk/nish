@@ -2,7 +2,7 @@
 
 # nish/map
 
-two operations on the global `Map` that JavaScript's does not have, written so that a program using them still runs unmodified under Node (docs/wp32-map.md §9.2).
+Two operations on the global `Map` that JavaScript's does not have, written so that a program using them still runs unmodified under Node (docs/wp32-map.md §9.2).
 
 ```ts
 import {

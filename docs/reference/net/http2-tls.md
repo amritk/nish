@@ -109,13 +109,13 @@ class Http2TlsServer
 
 | Member | |
 | --- | --- |
-| `new Http2TlsServer( tlsConfig: TlsServerConfig, config: Http2Config, listener: i32, size: i32, )` | A pool of `size` slots, at least one, serving HTTP/2 under `config` over TLS under `tlsConfig` on `listener`. Only slot 0's connection is made here, so a config it refuses panics now, with its words; every other slot's is made by the first `accept` into it and kept. Frame buffers are borrowed from `pools` as a connection needs them. |
+| `new Http2TlsServer(tlsConfig: TlsServerConfig, config: Http2Config, listener: i32, size: i32)` | A pool of `size` slots, at least one, serving HTTP/2 under `config` over TLS under `tlsConfig` on `listener`. Only slot 0's connection is made here, so a config it refuses panics now, with its words; every other slot's is made by the first `accept` into it and kept. Frame buffers are borrowed from `pools` as a connection needs them. |
 | `config: Http2Config` | The caps every slot's connection is made under. |
 | `connections: Http2Connection[]` | The connections made so far, slot `k`'s at `k`: slot 0's, made by the constructor, and one for each slot accepted into since. |
 | `date: HttpDate` | The `date` every slot's responses carry, formatted once a second for all of them: each slot's `Http2Connection.date` is its bytes, refreshed by `connection` and `next`. `date.pin` fixes its clock. |
 | `readonly pools: Http2Pools` | The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. |
 | `tls: TlsTcpServer` |  |
-| `accept( serverRandom: u8[], ephemeralPrivate: u8[], ): i32` | Accepts the next waiting connection into a free slot, as `TlsTcpServer.accept` does, and gives it a fresh HTTP/2 connection whose SETTINGS go out once the handshake is done: the slot's own, restarted, or one made now if this is the first accept into it. Answers the slot, or what `TlsTcpServer.accept` answers. |
+| `accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32` | Accepts the next waiting connection into a free slot, as `TlsTcpServer.accept` does, and gives it a fresh HTTP/2 connection whose SETTINGS go out once the handshake is done: the slot's own, restarted, or one made now if this is the first accept into it. Answers the slot, or what `TlsTcpServer.accept` answers. |
 | `alpn(slot: i32): string` | The ALPN protocol `slot`'s handshake chose, or empty. |
 | `build(): void` | Makes the next slot's connection, on this pool's buffers and `date`. |
 | `busy(): i32` | How many slots hold a connection. |

@@ -171,7 +171,7 @@ What the `*Into` functions compute in: an HMAC scratch for each hash, the previo
 
 Two steps, each its own function, because TLS 1.3 calls them separately:
 
-```ts
+```text
 PRK = HKDF-Extract(salt, IKM)  = HMAC-Hash(salt, IKM)                    (§2.2)
 OKM = HKDF-Expand(PRK, info, L) = T(1) | T(2) | … truncated to L bytes   (§2.3)
 T(i) = HMAC-Hash(PRK, T(i-1) | info | i),  T(0) empty,  i one byte
@@ -192,7 +192,7 @@ HKDF-Expand-Label is TLS 1.3's wrapper around `expand` (RFC 8446 §7.1), and
 QUIC derives its packet keys with it too (RFC 9001 §5.1), so it is here once
 for both rather than in each:
 
-```ts
+```text
 HKDF-Expand-Label(Secret, Label, Context, Length) =
     HKDF-Expand(Secret, HkdfLabel, Length)
 struct {

@@ -2,7 +2,7 @@
 
 # nish/net/http1-codec
 
-an incremental HTTP/1.1 request parser and a response writer, sans-IO: bytes in, events and bytes out, and no socket anywhere.
+An incremental HTTP/1.1 request parser and a response writer, sans-IO: bytes in, events and bytes out, and no socket anywhere.
 
 ```ts
 import {
@@ -699,7 +699,7 @@ class Http1Parser
 
 | Member | |
 | --- | --- |
-| `new Http1Parser( maxTarget: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i32, )` | Each limit is clamped into 0 to 2^30, so that the sums the parser makes of them (a request line is the method, the target and ten bytes more) cannot overflow an `i32`. |
+| `new Http1Parser(maxTarget: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i32)` | Each limit is clamped into 0 to 2^30, so that the sums the parser makes of them (a request line is the method, the target and ten bytes more) cannot overflow an `i32`. |
 | `body: u8[]` | The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. |
 | `bodyLen: i32` |  |
 | `bodyOff: i32` |  |

@@ -648,7 +648,7 @@ class WsDecoder
 
 | Member | |
 | --- | --- |
-| `new WsDecoder( expectMasked: boolean, maxMessage: i32, )` |  |
+| `new WsDecoder(expectMasked: boolean, maxMessage: i32)` |  |
 | `buf: u8[]` | The bytes fed and not yet consumed are `buf[start .. end)`. |
 | `closeCode: i32` | The peer's status code after `WS_CLOSE` (`WS_CLOSE_NO_STATUS` when it sent none), or the one to send after `WS_ERROR`. |
 | `closeReason: string` | The peer's close reason after `WS_CLOSE`, or what was wrong after `WS_ERROR`. |

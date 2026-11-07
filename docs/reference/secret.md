@@ -2,7 +2,7 @@
 
 # nish/secret
 
-key material, and the rules that keep it in (docs/LANGUAGE.md, "Secrets").
+Key material, and the rules that keep it in (docs/LANGUAGE.md, "Secrets").
 
 ```ts
 import {
@@ -40,7 +40,7 @@ Zero every byte of `target`'s storage: a `Secret`'s value, or an array or record
 
 </scalar-card>
 
-<scalar-card title="Secret" icon="phosphor/regular/cube" href="#secret">
+<scalar-card title="Secret" icon="phosphor/regular/cube" href="#secret-1">
 
 Key material: an array of integers (`u8[]`, `u32[]`, ...) or a record whose every field is an integer.
 

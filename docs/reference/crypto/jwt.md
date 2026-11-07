@@ -514,7 +514,7 @@ class JwtKey
 
 | Member | |
 | --- | --- |
-| `new JwtKey( alg: i32, hmac: HmacKey \| null, rsa: RsaPublicKey \| null, pub: u8[], priv: Secret<u8[]>, canSign: boolean, )` |  |
+| `new JwtKey(alg: i32, hmac: HmacKey \| null, rsa: RsaPublicKey \| null, pub: u8[], priv: Secret<u8[]>, canSign: boolean)` |  |
 | `readonly alg: i32` | The one algorithm this key verifies, `JWT_ALG_*`. |
 | `readonly canSign: boolean` | Whether `jwtSign` signs with this key. |
 | `readonly hmac: HmacKey \| null` | An HS key's pads, keyed once; `null` for any other. |
@@ -560,9 +560,9 @@ class JwtVerifier
 | `typ: string \| null` | The header `typ` a token must carry (RFC 8725 §3.11), or `null` for any. |
 | `checkClaims(len: i32, now: i64): i32` | The payload in `claims[0 .. len)` parsed and checked at `now`. |
 | `checkHeader(key: JwtKey, len: i32): i32` | The header in `part[0 .. len)` checked against `key`'s algorithm and the verifier's `typ`. |
-| `peekKid( src: u8[], off: i32, len: i32, out: u8[], ): i32` | The header's `kid` of the token `src[off .. off + len)`, written at `out[0 ..)`: its length, or -1 when the token is malformed, has no `kid` or its `kid` does not fit `out`. This reads the header **before** any signature is checked, so it only chooses which key to verify with; the `kid` proves nothing until `verify` answers `JWT_OK` under that key. |
-| `verify( key: JwtKey, src: u8[], off: i32, len: i32, now: i64, ): i32` | Verifies the token `src[off .. off + len)` under `key` and checks its claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*` that applies, in the order the module comment lists. |
-| `verifyString( key: JwtKey, token: string, now: i64, ): i32` | `verify` on the bytes of `token`, copied into the verifier's own buffer first (a string's UTF-8 bytes); a token longer than `maxToken` is refused before the copy. |
+| `peekKid(src: u8[], off: i32, len: i32, out: u8[]): i32` | The header's `kid` of the token `src[off .. off + len)`, written at `out[0 ..)`: its length, or -1 when the token is malformed, has no `kid` or its `kid` does not fit `out`. This reads the header **before** any signature is checked, so it only chooses which key to verify with; the `kid` proves nothing until `verify` answers `JWT_OK` under that key. |
+| `verify(key: JwtKey, src: u8[], off: i32, len: i32, now: i64): i32` | Verifies the token `src[off .. off + len)` under `key` and checks its claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*` that applies, in the order the module comment lists. |
+| `verifyString(key: JwtKey, token: string, now: i64): i32` | `verify` on the bytes of `token`, copied into the verifier's own buffer first (a string's UTF-8 bytes); a token longer than `maxToken` is refused before the copy. |
 
 ## Constants
 

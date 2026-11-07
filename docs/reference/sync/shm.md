@@ -2,7 +2,7 @@
 
 # nish/sync/shm
 
-memory that several processes map at once, and the atomics that order what they write to it.
+Memory that several processes map at once, and the atomics that order what they write to it.
 
 ```ts
 import {
@@ -253,21 +253,21 @@ class SharedRegion
 | `addI32(at: i32, delta: i32, order: i32): i32` | Adds `delta` to the 32-bit slot at `at`, wrapping, and answers the value before. |
 | `addI64(at: i32, delta: i64, order: i32): i64` | Adds `delta` to the 64-bit slot at `at`, wrapping, and answers the value before. |
 | `close(): Result<void, ShmError>` | Unmaps the region; the handle names nothing after. The name stays until `unlinkRegion`. |
-| `compareExchangeI32( at: i32, expected: i32, desired: i32, order: i32, ): i32` | Sets the 32-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. |
-| `compareExchangeI64( at: i32, expected: i64, desired: i64, order: i32, ): i64` | Sets the 64-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. |
+| `compareExchangeI32(at: i32, expected: i32, desired: i32, order: i32): i32` | Sets the 32-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. |
+| `compareExchangeI64(at: i32, expected: i64, desired: i64, order: i32): i64` | Sets the 64-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. |
 | `exchangeI32(at: i32, value: i32, order: i32): i32` | Sets the 32-bit slot at `at` to `value` and answers the value before. |
 | `exchangeI64(at: i32, value: i64, order: i32): i64` | Sets the 64-bit slot at `at` to `value` and answers the value before. |
 | `giveBack(window: u8[]): i32` | Empties `window`, which this region lent, and answers the length it had. |
-| `lend( at: i32, len: i32, reuse: u8[] \| null = null, ): u8[]` | A `u8[]` of length `len` whose bytes are the region's `[at, at + len)`, not a copy: an index or `copyBytes` into it reads and writes the region. A range outside the region panics. `giveBack` or `close` empties it (length 0), so an index after either panics. A `push` moves it into this process's own memory, after which it is no window and `giveBack` panics. Pass a window already given back as `reuse` to lend it again without a new header: each lend without one keeps a few bytes for the life of the process. |
+| `lend(at: i32, len: i32, reuse: u8[] \| null = null): u8[]` | A `u8[]` of length `len` whose bytes are the region's `[at, at + len)`, not a copy: an index or `copyBytes` into it reads and writes the region. A range outside the region panics. `giveBack` or `close` empties it (length 0), so an index after either panics. A `push` moves it into this process's own memory, after which it is no window and `giveBack` panics. Pass a window already given back as `reuse` to lend it again without a new header: each lend without one keeps a few bytes for the life of the process. |
 | `loadI32(at: i32, order: i32): i32` | The 32-bit slot at `at`. |
 | `loadI64(at: i32, order: i32): i64` | The 64-bit slot at `at`. |
 | `read(at: i32, dst: u8[], off: i32, len: i32): void` | Copies `len` bytes of the region at `at` into `dst[off, off + len)`. |
 | `size(): i32` | The region's length in bytes. |
 | `storeI32(at: i32, value: i32, order: i32): void` | Sets the 32-bit slot at `at` to `value`. |
 | `storeI64(at: i32, value: i64, order: i32): void` | Sets the 64-bit slot at `at` to `value`. |
-| `waitI32( at: i32, expected: i32, timeoutMs: i32, ): i32` | Sleeps while the 32-bit slot at `at` holds `expected`, at most `timeoutMs` (negative: no limit): `SHM_WOKEN`, `SHM_NOT_EQUAL`, `SHM_TIMED_OUT`, or `SHM_UNSUPPORTED` off Linux. |
+| `waitI32(at: i32, expected: i32, timeoutMs: i32): i32` | Sleeps while the 32-bit slot at `at` holds `expected`, at most `timeoutMs` (negative: no limit): `SHM_WOKEN`, `SHM_NOT_EQUAL`, `SHM_TIMED_OUT`, or `SHM_UNSUPPORTED` off Linux. |
 | `wake(at: i32, count: i32): i32` | Wakes at most `count` of the processes sleeping on the 32-bit slot at `at`: how many it woke, or `SHM_UNSUPPORTED` off Linux. |
-| `write( at: i32, src: readonly u8[], off: i32, len: i32, ): void` | Copies `src[off, off + len)` into the region at `at`. |
+| `write(at: i32, src: readonly u8[], off: i32, len: i32): void` | Copies `src[off, off + len)` into the region at `at`. |
 
 ## ShmError
 

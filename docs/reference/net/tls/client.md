@@ -2,7 +2,7 @@
 
 # nish/net/tls/client
 
-the client side of a TLS 1.3 handshake (RFC 8446), from its ClientHello to its Finished, carrier-agnostic and sans-IO: the mirror of `nish/net/tls`'s `TlsServer`.
+The client side of a TLS 1.3 handshake (RFC 8446), from its ClientHello to its Finished, carrier-agnostic and sans-IO: the mirror of `nish/net/tls`'s `TlsServer`.
 
 ```ts
 import {
@@ -159,7 +159,7 @@ class TlsClient
 
 | Member | |
 | --- | --- |
-| `new TlsClient( config: TlsClientConfig, clientRandom: u8[], x25519Private: u8[], p256Private: u8[], )` | A client for one connection under `config`, with the 32-byte client random and the 32-byte x25519 and P-256 private keys drawn for it; both keys are copied in and the caller's arrays zeroed. A random or key of another length, or a configuration it cannot offer, leaves the client failed with `internal_error` before it writes anything. |
+| `new TlsClient(config: TlsClientConfig, clientRandom: u8[], x25519Private: u8[], p256Private: u8[])` | A client for one connection under `config`, with the 32-byte client random and the 32-byte x25519 and P-256 private keys drawn for it; both keys are copied in and the caller's arrays zeroed. A random or key of another length, or a configuration it cannot offer, leaves the client failed with `internal_error` before it writes anything. |
 | `alert: i32` | The alert the client failed with, or 0. |
 | `alpnChosen: string` | The ALPN protocol the server chose, one of the configuration's, or empty. |
 | `certificates: u8[][]` | The server's DER certificates, leaf first, once its Certificate is read. |
@@ -211,7 +211,7 @@ class TlsClient
 | `known(index: i32): boolean` | Whether the handshake has derived secret `index` (`TLS_SECRET_*`). |
 | `peerCertificates(): u8[][]` | The server's DER certificates, leaf first; empty before its Certificate is read. |
 | `readKnown(level: i32): boolean` | Whether the secret the client *reads* `level` under — the server's, `serverHandshake` or `serverApplication` — is known yet. |
-| `receive( level: i32, data: u8[], off: i32, len: i32, ): i32` | Takes the handshake bytes `data[off .. off + len)` the server sent at `level`, a whole message, part of one or several, and reads every message they complete. Answers 0, or the alert the client fails with.<br><br>A level other than the one the state expects is `unexpected_message`, as is a byte left over once a message ends the server's flight at its level (a ServerHello, a HelloRetryRequest or a Finished): RFC 8446 §5.1 forbids a message to straddle a key change. A window outside `data` is `internal_error`. At `TLS_CLIENT_STATE_WAIT_AUTH` the bytes are held until `authenticate`. Once connected, the Application level takes NewSessionTickets, which are checked and dropped; anything else there is `unexpected_message`, KeyUpdate being the record layer's. |
+| `receive(level: i32, data: u8[], off: i32, len: i32): i32` | Takes the handshake bytes `data[off .. off + len)` the server sent at `level`, a whole message, part of one or several, and reads every message they complete. Answers 0, or the alert the client fails with.<br><br>A level other than the one the state expects is `unexpected_message`, as is a byte left over once a message ends the server's flight at its level (a ServerHello, a HelloRetryRequest or a Finished): RFC 8446 §5.1 forbids a message to straddle a key change. A window outside `data` is `internal_error`. At `TLS_CLIENT_STATE_WAIT_AUTH` the bytes are held until `authenticate`. Once connected, the Application level takes NewSessionTickets, which are checked and dropped; anything else there is `unexpected_message`, KeyUpdate being the record layer's. |
 | `reject(alert: i32): i32` | Refuses the server at `TLS_CLIENT_STATE_WAIT_AUTH` with `alert`, the caller's reason (`bad_certificate`, `certificate_expired`, `unknown_ca`, `decrypt_error`…): the client fails with it and answers it. An alert outside 1 to 255 is taken as `bad_certificate`. In any other state the client fails with `internal_error`. |
 | `reserveInput(need: i32): void` | Makes `input` hold at least `need` bytes, keeping the ones it holds; it doubles, and never grows past one largest message. |
 | `reserveOutput(need: i32): void` | Makes the Initial output hold at least `need` bytes, keeping the ones it holds. |
@@ -242,7 +242,7 @@ class TlsClientConfig
 
 | Member | |
 | --- | --- |
-| `new TlsClientConfig( serverName: string, alpn: string[], )` |  |
+| `new TlsClientConfig(serverName: string, alpn: string[])` |  |
 | `alpn: string[]` | The ALPN protocols offered, most preferred first; empty sends no ALPN. Each is 1 to 255 bytes. |
 | `groups: i32[]` | The groups offered in `supported_groups`: a non-empty subset of x25519 and secp256r1. |
 | `serverName: string` | The host the client means to reach: sent as `server_name` unless it is an IP literal, and the name the caller authenticates. |

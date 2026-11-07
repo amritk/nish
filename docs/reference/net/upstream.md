@@ -2,7 +2,7 @@
 
 # nish/net/upstream
 
-outbound HTTP/1.1 calls from a route handler that never block its worker: a pool of keep-alive connections to one origin, registered on the `HttpHandler`'s own poll loop and read through the `nish/net/http1-client-codec` codec.
+Outbound HTTP/1.1 calls from a route handler that never block its worker: a pool of keep-alive connections to one origin, registered on the `HttpHandler`'s own poll loop and read through the `nish/net/http1-client-codec` codec.
 
 ```ts
 import {
@@ -150,7 +150,7 @@ class Upstream
 
 | Member | |
 | --- | --- |
-| `new Upstream( h: HttpHandler, origin: string, limits: UpstreamLimits, )` | Parses `origin`, looks its host up once (this blocks for at most `limits.lookupMs`), and makes every slot and connection buffer. Panics when a cap is below 1 or the watch ids run past the handler's. An unusable origin is not a panic: `error` says why, and every call fails with it. |
+| `new Upstream(h: HttpHandler, origin: string, limits: UpstreamLimits)` | Parses `origin`, looks its host up once (this blocks for at most `limits.lookupMs`), and makes every slot and connection buffer. Panics when a cap is below 1 or the watch ids run past the handler's. An unusable origin is not a panic: `error` says why, and every call fails with it. |
 | `address: u8[]` | The one address the pool connects to, checked against the policy if there is one. |
 | `calls: UpstreamResponse[]` |  |
 | `connections: UpstreamConnection[]` |  |
@@ -226,7 +226,7 @@ class UpstreamResponse
 
 | Member | |
 | --- | --- |
-| `new UpstreamResponse( index: i32, headRoom: i32, placeholder: HttpRequest, )` |  |
+| `new UpstreamResponse(index: i32, headRoom: i32, placeholder: HttpRequest)` |  |
 | `body: u8[]` | The body, in `body[0 .. length)`; the buffer is reused, so read `length`, not `body.length`. |
 | `deadline: i64` | When the call fails `UPSTREAM_E_TIMEOUT`, on `monotonicNanos`'s clock. |
 | `error: i32` | `UPSTREAM_E_NONE`, an `HTTP1_E_` refusal of the codec, or an `UPSTREAM_E_` code. |

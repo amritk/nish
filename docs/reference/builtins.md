@@ -573,6 +573,9 @@ The file's contents replaced by `data`, created at 0644 when missing.
 
 </scalar-card>
 
+<scalar-card title="Array" icon="phosphor/regular/cube" href="#array">
+</scalar-card>
+
 <scalar-card title="CPtr" icon="phosphor/regular/cube" href="#cptr">
 
 `CPtr` (WP27 S2): the address a `declare function` hands back, opaque and eight bytes wide.
@@ -600,6 +603,12 @@ Returns a new unique Symbol value.
 
 </scalar-card>
 
+<scalar-card title="Arena" icon="phosphor/regular/cube" href="#arena-1">
+</scalar-card>
+
+<scalar-card title="crypto" icon="phosphor/regular/cube" href="#crypto">
+</scalar-card>
+
 </scalar-grid>
 
 <scalar-callout type="info">
@@ -611,7 +620,7 @@ makes it legal TypeScript *semantics* too: reference it from a `tsconfig.json`
 your language server all accept `Result<T, E>`, `Ok(...)`, `i32` and the rest
 without a red squiggle.
 
-```ts
+```text
 { "include": ["src/**/*.ts", "node_modules/nish/runtime/nish.d.ts"] }
 ```
 
@@ -2875,6 +2884,16 @@ function writeFileSyncMode(
 <scalar-field name="returns" type="i32">
 </scalar-field>
 
+## Array
+
+```ts
+interface Array<T>
+```
+
+| Member | |
+| --- | --- |
+| `set(source: readonly T[], offset?: number): void` |  |
+
 ## CPtr
 
 `CPtr` (WP27 S2): the address a `declare function` hands back, opaque and
@@ -2915,7 +2934,7 @@ interface Disposable
 
 | Member | |
 | --- | --- |
-| `[dispose](): void` |  |
+| `[Symbol.dispose](): void` |  |
 
 ## Process
 
@@ -2956,12 +2975,7 @@ interface StringConstructor
 
 | Member | |
 | --- | --- |
-| `new StringConstructor(value?: any)` |  |
-| `readonly prototype: String` |  |
-| `fromBytes( bytes: readonly u8[], start: number, end: number, ): string` | The bytes of `bytes[start..end)` as one string; panics unless `0 <= start <= end <= bytes.length`. |
-| `fromCharCode(...codes: number[]): string` |  |
-| `fromCodePoint(...codePoints: number[]): string` | Return the String value whose elements are, in order, the elements in the List elements. If length is 0, the empty string is returned. |
-| `raw( template: { raw: readonly string[] \| ArrayLike<string>; }, ...substitutions: any[], ): string` | String.raw is usually used as a tag function of a Tagged Template String. When called as such, the first argument will be a well formed template call site object and the rest parameter will contain the substitution values. It can also be called directly, for example, to interleave strings and values from your own tag function, and in this case the only thing it needs from the first argument is the raw property. |
+| `fromBytes(bytes: readonly u8[], start: number, end: number): string` | The bytes of `bytes[start..end)` as one string; panics unless `0 <= start <= end <= bytes.length`. |
 
 ## SymbolConstructor
 
@@ -2977,23 +2991,28 @@ interface SymbolConstructor
 
 | Member | |
 | --- | --- |
-| `readonly asyncIterator: unique symbol` | A method that returns the default async iterator for an object. Called by the semantics of the for-await-of statement. |
 | `readonly dispose: unique symbol` |  |
-| `readonly hasInstance: unique symbol` | A method that determines if a constructor object recognizes an object as one of the constructor’s instances. Called by the semantics of the instanceof operator. |
-| `readonly isConcatSpreadable: unique symbol` | A Boolean value that if true indicates that an object should flatten to its array elements by Array.prototype.concat. |
-| `readonly iterator: unique symbol` | A method that returns the default iterator for an object. Called by the semantics of the for-of statement. |
-| `readonly match: unique symbol` | A regular expression method that matches the regular expression against a string. Called by the String.prototype.match method. |
-| `readonly matchAll: unique symbol` | A regular expression method that matches the regular expression against a string. Called by the String.prototype.matchAll method. |
-| `readonly prototype: Symbol` | A reference to the prototype. |
-| `readonly replace: unique symbol` | A regular expression method that replaces matched substrings of a string. Called by the String.prototype.replace method. |
-| `readonly search: unique symbol` | A regular expression method that returns the index within a string that matches the regular expression. Called by the String.prototype.search method. |
-| `readonly species: unique symbol` | A function valued property that is the constructor function that is used to create derived objects. |
-| `readonly split: unique symbol` | A regular expression method that splits a string at the indices that match the regular expression. Called by the String.prototype.split method. |
-| `readonly toPrimitive: unique symbol` | A method that converts an object to a corresponding primitive value. Called by the ToPrimitive abstract operation. |
-| `readonly toStringTag: unique symbol` | A String value that is used in the creation of the default string description of an object. Called by the built-in method Object.prototype.toString. |
-| `readonly unscopables: unique symbol` | An Object whose truthy properties are properties that are excluded from the 'with' environment bindings of the associated objects. |
-| `for(key: string): symbol` | Returns a Symbol object from the global symbol registry matching the given key if found. Otherwise, returns a new symbol with this key. |
-| `keyFor(sym: symbol): string \| undefined` | Returns a key from the global symbol registry matching the given Symbol if found. Otherwise, returns a undefined. |
+
+## Arena
+
+```ts
+const Arena: { ... }
+```
+
+| Member | |
+| --- | --- |
+| `mark(): i64` | The current bump address. |
+| `used(): i64` | Bytes bumped in the current chunk. |
+
+## crypto
+
+```ts
+const crypto: { ... }
+```
+
+| Member | |
+| --- | --- |
+| `getRandomValues(bytes: u8[]): void` | Every byte of `bytes` from the system's CSPRNG; at most 65,536 bytes a call. |
 
 ## Result
 
@@ -3116,23 +3135,6 @@ type u8 = number
 
 <scalar-grid cols="2">
 
-<scalar-card title="Arena" icon="phosphor/regular/hash">
-
-`Arena: {
-  /** The current bump address. */
-  mark(): i64;
-  /** Bytes bumped in the current chunk. */
-  used(): i64;
-}`
-
-</scalar-card>
-
-<scalar-card title="Array" icon="phosphor/regular/hash">
-
-`Array: ArrayConstructor`
-
-</scalar-card>
-
 <scalar-card title="NET_SO_KEEPALIVE" icon="phosphor/regular/hash">
 
 `NET_SO_KEEPALIVE: i32`
@@ -3202,15 +3204,6 @@ so a server that wants a mode sets it again after every response.
 <scalar-card title="console" icon="phosphor/regular/hash">
 
 `console: Console`
-
-</scalar-card>
-
-<scalar-card title="crypto" icon="phosphor/regular/hash">
-
-`crypto: {
-  /** Every byte of `bytes` from the system's CSPRNG; at most 65,536 bytes a call. */
-  getRandomValues(bytes: u8[]): void;
-}`
 
 </scalar-card>
 

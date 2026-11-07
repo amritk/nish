@@ -2,7 +2,7 @@
 
 # nish/net/quic-datagram
 
-a fixed ring of QUIC DATAGRAM payloads (RFC 9221), one each way per connection: what the application queued to send, waiting for room in a packet and in the congestion window, and what the peer sent, waiting for the application to read it. Sans-IO, like the rest of `nish/net`; `nish/net/quic`'s `QuicConnection` owns both rings and the application reaches them through its `sendDatagram` and `readDatagram`.
+A fixed ring of QUIC DATAGRAM payloads (RFC 9221), one each way per connection: what the application queued to send, waiting for room in a packet and in the congestion window, and what the peer sent, waiting for the application to read it. Sans-IO, like the rest of `nish/net`; `nish/net/quic`'s `QuicConnection` owns both rings and the application reaches them through its `sendDatagram` and `readDatagram`.
 
 ```ts
 import {
@@ -45,7 +45,7 @@ class QuicDatagramQueue
 
 | Member | |
 | --- | --- |
-| `new QuicDatagramQueue( entries: i32, entrySize: i32, )` |  |
+| `new QuicDatagramQueue(entries: i32, entrySize: i32)` |  |
 | `count: i32` |  |
 | `data: u8[]` | Entry `k`'s bytes are `data[k * entrySize ..]`, `lengths[k]` of them. |
 | `dropped: i32` | Datagrams refused for want of room or for their size, which the peer's side counts as dropped. |

@@ -2,7 +2,7 @@
 
 # nish/net/tls/codec
 
-the TLS 1.3 handshake messages a server and a client read and write (RFC 8446 §4), as bytes.
+The TLS 1.3 handshake messages a server and a client read and write (RFC 8446 §4), as bytes.
 
 ```ts
 import {

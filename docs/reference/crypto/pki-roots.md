@@ -2,7 +2,7 @@
 
 # nish/crypto/pki-roots
 
-the root certificates a program should trust, read from where OpenSSL and Go look for them: the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system's bundle.
+The root certificates a program should trust, read from where OpenSSL and Go look for them: the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system's bundle.
 
 ```ts
 import {

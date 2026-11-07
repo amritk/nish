@@ -2,7 +2,7 @@
 
 # nish/net/fetch
 
-a blocking HTTP/1.1 client for command-line programs: `fetchSync(request, options)` dials, sends, and answers the response's head with a reader for its body, and a `FetchSyncClient` does the same while keeping one connection alive between fetches.
+A blocking HTTP/1.1 client for command-line programs: `fetchSync(request, options)` dials, sends, and answers the response's head with a reader for its body, and a `FetchSyncClient` does the same while keeping one connection alive between fetches.
 
 ```ts
 import {
@@ -370,7 +370,7 @@ class FetchSyncClient
 | `dial(host: string, port: i32): i32` | Looks `host` up and connects to its addresses in turn, every step within `connectTimeoutMs` together: the connected fd, or -1 with the error set. |
 | `drain(): void` | Reads past a redirect's body so the connection can carry the next request; a body too long to be worth reading, or any failure, closes it. |
 | `drop(): void` | Closes the connection, if any, and forgets the open body. |
-| `exchange( url: Url, method: string, names: string[], values: string[], body: u8[] \| null, ): HttpResponse \| null` | One request and its response's head, on the kept connection when it leads to the same place, once more on a fresh one when a kept connection turns out to be gone (see the module comment). |
+| `exchange(url: Url, method: string, names: string[], values: string[], body: u8[] \| null): HttpResponse \| null` | One request and its response's head, on the kept connection when it leads to the same place, once more on a fresh one when a kept connection turns out to be gone (see the module comment). |
 | `fail(code: i32, text: string): void` |  |
 | `failTls(conn: TlsRecordClient): void` | Sets the error for the failed TLS connection `conn`, saying how it failed. |
 | `failWait(code: i32, text: string): void` | Sets the error for a wait that ended with `code`, `text` saying what timed out. |
@@ -385,19 +385,19 @@ class FetchSyncClient
 | `overdue(): boolean` | Fails with `HTTP_E_TOTAL_TIMEOUT` once the fetch's deadline has passed: a server that always has the next byte ready never lets a wait see it. |
 | `pump(): i32` | The parser's next event, reading from the socket as it needs; -1 with the error set. |
 | `quiet(): boolean` | Whether the kept connection has said nothing since its last response ended: no byte and no close waiting on the socket, none held unread. A server that spoke while idle answered nothing yet asked, and is closing or out of step, so the connection is not reused. |
-| `readBody( generation: i32, buf: u8[], off: i32, n: i32, ): i32` | `HttpBodyReader.read` for the response numbered `generation`. |
+| `readBody(generation: i32, buf: u8[], off: i32, n: i32): i32` | `HttpBodyReader.read` for the response numbered `generation`. |
 | `readDeadline(): i64` | When the wait for the server's next byte ends: `readTimeoutMs` from now. |
 | `readRaw(want: i32): i32` | One read of up to `want` bytes from `fd` into `rbuf`, waiting up to `readTimeoutMs`: the count, 0 at the end of the stream, or -1 with the error set. |
 | `receiveTls(conn: TlsRecordClient): boolean` | One read of the socket into the TLS connection `conn`, waiting up to `readTimeoutMs`; false with the error set. |
-| `refuse( code: i32, text: string, ): HttpResponse \| null` | Refuses a redirect: closes the connection, whose response is left unread, and fails. |
+| `refuse(code: i32, text: string): HttpResponse \| null` | Refuses a redirect: closes the connection, whose response is left unread, and fails. |
 | `refuseBody(limit: i32): void` | `readAll`'s refusal: the body passed the caller's limit. |
 | `release(): void` | Closes the connection a body is done with, and `fetchSync`'s whole client with it. |
 | `secure(host: string, early: u8[]): boolean` | Runs a TLS 1.3 handshake for `host` over the fresh `fd`, `early` being what the proxy sent past its CONNECT answer. The server's chain and CertificateVerify are checked under the client's roots at the wall clock's time before its Finished is read. True once the connection is open and the client's last flight sent; false with the error set. |
-| `send( url: Url, method: string, names: string[], values: string[], body: u8[] \| null, ): HttpResponse \| null` | Writes the request on `fd` and reads its response's head. |
-| `setProxies( httpProxy: string, httpsProxy: string, noProxy: string, ): void` | Replaces the proxy settings, as the three variables would set them; "" for none. |
-| `tunnel( host: string, port: i32, proxy: Url, ): boolean` | Asks `proxy`, on the fresh `fd`, for a tunnel to `host:port`. True once the proxy answers 2xx, every byte after its head belonging to the tunnel. |
+| `send(url: Url, method: string, names: string[], values: string[], body: u8[] \| null): HttpResponse \| null` | Writes the request on `fd` and reads its response's head. |
+| `setProxies(httpProxy: string, httpsProxy: string, noProxy: string): void` | Replaces the proxy settings, as the three variables would set them; "" for none. |
+| `tunnel(host: string, port: i32, proxy: Url): boolean` | Asks `proxy`, on the fresh `fd`, for a tunnel to `host:port`. True once the proxy answers 2xx, every byte after its head belonging to the tunnel. |
 | `unwatch(fd: i32): void` | Takes `fd` out of the poll loop before it is closed. |
-| `wait( fd: i32, events: i32, until: i64, code: i32, ): i32` | Waits for `events` on `fd` until `until`, or the fetch's deadline if that comes first: `HTTP_E_NONE` when it is ready, `code` or `HTTP_E_TOTAL_TIMEOUT` for whichever deadline passed, `HTTP_E_IO` when the poll loop cannot be made. |
+| `wait(fd: i32, events: i32, until: i64, code: i32): i32` | Waits for `events` on `fd` until `until`, or the fetch's deadline if that comes first: `HTTP_E_NONE` when it is ready, `code` or `HTTP_E_TOTAL_TIMEOUT` for whichever deadline passed, `HTTP_E_IO` when the poll loop cannot be made. |
 | `watch(fd: i32, events: i32): boolean` | Puts `fd` in the poll loop, waiting for `events`: false when the loop cannot be made. |
 | `writeAll(bytes: u8[], off: i32, len: i32): boolean` | Writes `bytes[off, off + len)` on the connection, through TLS for an https origin; false with the error set. |
 | `writeRaw(bytes: u8[], off: i32, len: i32): boolean` | Writes `bytes[off, off + len)` to `fd`, waiting up to `readTimeoutMs` each time it is full. |
@@ -415,7 +415,7 @@ class HttpBodyReader
 
 | Member | |
 | --- | --- |
-| `new HttpBodyReader( client: FetchSyncClient, generation: i32, )` |  |
+| `new HttpBodyReader(client: FetchSyncClient, generation: i32)` |  |
 | `client: FetchSyncClient` |  |
 | `generation: i32` |  |
 | `read(buf: u8[], off: i32, n: i32): i32` | Up to `n` body bytes into `buf[off ..]`: how many (at least one), 0 at the end of the body, or a negated `HTTP_E_*` code, the client's `errorText` saying why. It waits for at least one byte, no more, so an event stream is read event by event. A window outside `buf` panics; an empty one answers 0 at once, reading nothing, so 0 means the end only when `n` is positive. |

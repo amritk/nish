@@ -2,7 +2,7 @@
 
 # nish/net/tls/schedule
 
-the TLS 1.3 key schedule and transcript hash (RFC 8446 §4.4.1, §7.1, §7.3) for the three cipher suites `nish/net/tls` negotiates.
+The TLS 1.3 key schedule and transcript hash (RFC 8446 §4.4.1, §7.1, §7.3) for the three cipher suites `nish/net/tls` negotiates.
 
 ```ts
 import {
@@ -240,7 +240,7 @@ The schedule is a chain of HKDF steps over the suite's hash, SHA-256 for
 `TLS_AES_128_GCM_SHA256` and `TLS_CHACHA20_POLY1305_SHA256` and SHA-384 for
 `TLS_AES_256_GCM_SHA384`. Without a PSK it runs:
 
-```ts
+```text
 early      = HKDF-Extract(0, 0)
 handshake  = HKDF-Extract(Derive-Secret(early, "derived", ""), ECDHE)
 c/s hs traffic = Derive-Secret(handshake, "c hs traffic" / "s hs traffic", CH..SH)
@@ -253,7 +253,7 @@ c/s ap traffic, exporter = Derive-Secret(master, "c ap traffic" / "s ap traffic"
 A resumed handshake (RFC 8446 §2.2) starts from the ticket's PSK instead,
 and binds the ClientHello to it before anything else is derived:
 
-```ts
+```text
 PSK        = HKDF-Expand-Label(resumption master, "resumption", ticket_nonce, HashLen)
 early      = HKDF-Extract(0, PSK)
 binder key = Derive-Secret(early, "res binder", "")

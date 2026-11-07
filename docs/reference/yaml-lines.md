@@ -2,7 +2,7 @@
 
 # nish/yaml-lines
 
-byte offsets turned into the `line:column` a person reads.
+Byte offsets turned into the `line:column` a person reads.
 
 ```ts
 import {

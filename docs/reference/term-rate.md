@@ -2,7 +2,7 @@
 
 # nish/term-rate
 
-how fast the link to the terminal is, measured from frames sent and acknowledged, and the frame rate and drawing detail a program keeps to under it.
+How fast the link to the terminal is, measured from frames sent and acknowledged, and the frame rate and drawing detail a program keeps to under it.
 
 ```ts
 import {
@@ -277,7 +277,7 @@ class RateController
 | `decision(): RateDecision` | How to draw the next frame, as of the last `tick`. |
 | `fasterTier(fps: i32): i32` | The slowest allowed tier faster than `fps`, or `fps` at the top. |
 | `fixedPart(rtt: f64, scale: f64): f64` | The part of a round trip of `rtt` that a detail change scaling the bytes by `scale` leaves alone: the latency once the bandwidth is known. While it is not, the guess is the cautious one each way: less detail shortens no more than the round trip's excess over the quickest trip kept, which is at least the latency, so detail is not cut for a gain that may not be there; more lengthens all of it, so detail is not restored on a link that may not carry it. |
-| `frameSent( bytes: i32, costNs: f64, nowMs: f64, ): void` | A frame of `bytes` bytes, which took `costNs` nanoseconds to build, was sent at `nowMs`. A call whose time is not a finite number is ignored; a cost that is not a finite number or is negative is not measured, and negative bytes count as none. |
+| `frameSent(bytes: i32, costNs: f64, nowMs: f64): void` | A frame of `bytes` bytes, which took `costNs` nanoseconds to build, was sent at `nowMs`. A call whose time is not a finite number is ignored; a cost that is not a finite number or is negative is not measured, and negative bytes count as none. |
 | `leastLatency(): f64` | The latency: the least, over the kept trips, of the round trip less its bytes' time at the measured bandwidth. While the bandwidth is not known only an empty trip, the probe's, says anything; with none it is the latency held from when the bandwidth was last known, or 0 before that: a lower bound, which is what telling a waited frame from a trip needs, and one that a probe trip rolled out of the kept trips does not drop to 0, or every frame sent before the answer ahead of it would look waited. The bandwidth never comes from the latency on an idle link, so neither can drag the other down. |
 | `load(fps: i32, level: i32, nowMs: f64): f64` | The worst of the three loads (cost, bytes, round trip) at `fps` frames a second and detail step `level`, against the 70% budgets: at most 1 fits. A step other than the current one is predicted from the measured frame; `nowMs` lets a frame long unanswered count as a round trip at least that long. A load not yet measured counts as 0. |
 | `mayDraw(nowMs: f64): boolean` | Whether a frame may be drawn at `nowMs`: one is due at the tier's pace and fewer than `maxUnacked` frames await their acknowledgement. The first call starts the pace and answers a frame at once. A due frame refused for the limit, or while the answers to frames given up on may still come, is counted as dropped, and the next waits for the next step. A time that is not a finite number is refused. |

@@ -2,7 +2,7 @@
 
 # nish/net/tls/record-client
 
-a TLS 1.3 client over a byte stream: the record layer of `nish/net/tls/record` wrapped around `nish/net/tls/client`'s `TlsClient`, sans-IO. Bytes the server sent go in, bytes to send come out, and once the handshake is done application data flows both ways. The mirror of `nish/net/tls/record-server`.
+A TLS 1.3 client over a byte stream: the record layer of `nish/net/tls/record` wrapped around `nish/net/tls/client`'s `TlsClient`, sans-IO. Bytes the server sent go in, bytes to send come out, and once the handshake is done application data flows both ways. The mirror of `nish/net/tls/record-server`.
 
 ```ts
 import {
@@ -167,7 +167,7 @@ class TlsRecordClient
 | `failure(): i32` | Why a failed connection failed, never 0: the alert the client sent, else the server's error alert, else `internal_error` for a failure with no alert of its own (truncation, `abort`, `close_notify` mid-handshake). |
 | `handleAlert(length: i32): i32` | An alert, `scratch[0 .. length)` (§6): two bytes, or `decode_error`. `close_notify` once the handshake is done ends the server's stream and wipes the read direction, `user_canceled` is passed over, and any other description — `close_notify` during the handshake among them, so a connection that never authenticated cannot end like one that did — ends the connection with nothing more sent and every key wiped. |
 | `handleApplicationRecord(length: i32): i32` | A record under the server's application keys, its `length` bytes of content in `scratch`: application data for the caller, an alert, or post-handshake handshake bytes, which nothing else may interrupt (§5.1). |
-| `handleChangeCipherSpec( buf: u8[], off: i32, length: i32, ): i32` | The server's compatibility record (§5, §D.4): one byte of 1, in the clear, after its first handshake record and before its Finished, and not between the records of one handshake message. Dropped; anything else is `unexpected_message`. |
+| `handleChangeCipherSpec(buf: u8[], off: i32, length: i32): i32` | The server's compatibility record (§5, §D.4): one byte of 1, in the clear, after its first handshake record and before its Finished, and not between the records of one handshake message. Dropped; anything else is `unexpected_message`. |
 | `handleHandshake(length: i32): i32` | Handshake bytes, `scratch[0 .. length)`, for `TlsClient` at the level they were read at; an empty fragment is `unexpected_message` (§5.1). |
 | `handlePostHandshake(length: i32): i32` | Post-handshake handshake bytes, `scratch[0 .. length)`, which may continue a message an earlier record began. A NewSessionTicket goes to `TlsClient` as it arrives, which reads and drops it. A KeyUpdate is this module's: a length other than 1 is `decode_error`, a `request_update` other than 0 or 1 `illegal_parameter`, and one that does not end its record `unexpected_message`, since the keys change after it (§4.6.3, §5.1). Any other type is `unexpected_message`. Each message counts against the idle limit. |
 | `handleRecord(buf: u8[], off: i32, n: i32): i32` | One whole record, `buf[off .. off + n)`: a `change_cipher_spec` is judged on its own; anything else is opened under the read protection into `scratch`, and its content goes to `handleApplicationRecord` once the server's Finished is read, to the handshake before. Answers 0 or the alert. |
@@ -188,8 +188,8 @@ class TlsRecordClient
 | `sealChangeCipherSpec(): boolean` | The compatibility `change_cipher_spec` (§D.4), in the clear whatever the write side is under, once a connection. False when `output` has no room. |
 | `sealClose(): void` | Seals the `close_notify` `close` owes once `output` has room, then wipes the write direction. |
 | `sealQueue(queue: u8[], at: i32, length: i32): i32` | Seals as much of `queue[at .. length)` as fits, in records of at most `maxChunk()` bytes, and answers where it stopped. A padding that leaves no room for content fails the connection with `internal_error`. |
-| `sealRecord( type: i32, data: u8[], off: i32, len: i32, ): boolean` | `sealWith` under the write protection. |
-| `sealWith( protection: TlsRecordProtection, type: i32, data: u8[], off: i32, len: i32, ): boolean` | Seals one record of `type` from `data[off .. off + len)` onto `output` under `protection`. False, writing nothing, when it does not fit; a refusal from `seal` itself fails the connection. |
+| `sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean` | `sealWith` under the write protection. |
+| `sealWith(protection: TlsRecordProtection, type: i32, data: u8[], off: i32, len: i32): boolean` | Seals one record of `type` from `data[off .. off + len)` onto `output` under `protection`. False, writing nothing, when it does not fit; a refusal from `seal` itself fails the connection. |
 | `sendAlert(level: i32, description: i32): boolean` | Seals an alert record of `level` and `description`; false, sending nothing, when `output` has no room for it. |
 | `sendKeyUpdate(request: boolean): boolean` | Seals a KeyUpdate under the current write keys and moves the write side to the next secret (§4.6.3, §7.2), the old one wiped. False, sending nothing, when it does not fit in `output` yet. |
 | `space(): i32` | How many bytes `receive` would take now: what the socket should read at most. |

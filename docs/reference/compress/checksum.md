@@ -2,7 +2,7 @@
 
 # nish/compress/checksum
 
-the two checksums the compressed formats carry: CRC-32 (ISO 3309, the polynomial gzip's trailer uses, RFC 1952 §8) and Adler-32 (zlib's trailer, RFC 1950 §9).
+The two checksums the compressed formats carry: CRC-32 (ISO 3309, the polynomial gzip's trailer uses, RFC 1952 §8) and Adler-32 (zlib's trailer, RFC 1950 §9).
 
 ```ts
 import {
@@ -41,7 +41,7 @@ The CRC-32 of `buf[off .. off + len)`.
 
 </scalar-card>
 
-<scalar-card title="Crc32" icon="phosphor/regular/cube" href="#crc32">
+<scalar-card title="Crc32" icon="phosphor/regular/cube" href="#crc32-1">
 
 CRC-32's lookup tables, built once and read by every `update`.
 
@@ -178,4 +178,4 @@ class Crc32
 | `new Crc32()` | Builds the eight tables and their braided form. |
 | `readonly braid: u32[]` | `braid[k * 256 + b]`: the same, followed by the 32 bytes of the other four braids' words as well, which a braid steps over. |
 | `readonly table: u32[]` | `table[k * 256 + b]`: the CRC of byte `b` followed by `k` zero bytes. |
-| `update( crc: u32, buf: u8[], off: i32, len: i32, ): u32` | The CRC-32 of the bytes `crc` was the CRC of, followed by `buf[off .. off + len)`. Start a new checksum from 0. A window outside `buf` panics. |
+| `update(crc: u32, buf: u8[], off: i32, len: i32): u32` | The CRC-32 of the bytes `crc` was the CRC of, followed by `buf[off .. off + len)`. Start a new checksum from 0. A window outside `buf` panics. |

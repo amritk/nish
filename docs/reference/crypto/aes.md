@@ -84,7 +84,7 @@ GHASH's multiply (SP 800-38D §6.3), `y = y · H` in GF(2^128), with `y` as two 
 
 </scalar-card>
 
-<scalar-card title="AesKey" icon="phosphor/regular/cube" href="#aeskey">
+<scalar-card title="AesKey" icon="phosphor/regular/cube" href="#aeskey-1">
 
 An AES key, expanded: the round keys already bitsliced, and GCM's hash key H = E(K, 0^128), so a key used for many messages is expanded once.
 

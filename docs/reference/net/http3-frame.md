@@ -2,7 +2,7 @@
 
 # nish/net/http3-frame
 
-the frames and stream types of HTTP/3 (RFC 9114 §6.2, §7): frame headers, SETTINGS, the one-identifier frames (GOAWAY, MAX_PUSH_ID, CANCEL_PUSH), and which types are HTTP/2's reserved ones or unknown. Sans-IO: every reader takes a byte window `(buf, off, len)` and reads it in place, and every writer writes into the caller's buffer at an offset, before an end, and answers the offset past what it wrote, or -1 with nothing written. Nothing here allocates.
+The frames and stream types of HTTP/3 (RFC 9114 §6.2, §7): frame headers, SETTINGS, the one-identifier frames (GOAWAY, MAX_PUSH_ID, CANCEL_PUSH), and which types are HTTP/2's reserved ones or unknown. Sans-IO: every reader takes a byte window `(buf, off, len)` and reads it in place, and every writer writes into the caller's buffer at an offset, before an end, and answers the offset past what it wrote, or -1 with nothing written. Nothing here allocates.
 
 ```ts
 import {

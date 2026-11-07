@@ -2,7 +2,7 @@
 
 # nish/net/quic-frame
 
-the frames of QUIC version 1 (RFC 9000 §19) and RFC 9221's DATAGRAM, read from a decrypted packet payload and written into one, and the transport error codes a connection closes with (§20.1).
+The frames of QUIC version 1 (RFC 9000 §19) and RFC 9221's DATAGRAM, read from a decrypted packet payload and written into one, and the transport error codes a connection closes with (§20.1).
 
 ```ts
 import {
@@ -88,7 +88,7 @@ import {
 } from "nish/net/quic-frame";
 ```
 
-```ts
+```text
 import { QuicFrame, quicParseFrame, quicPushAck, QUIC_FRAME_CRYPTO } from "nish/net/quic-frame";
 
 const frame = new QuicFrame();                       // one per connection, reused

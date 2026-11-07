@@ -2,7 +2,7 @@
 
 # nish/region
 
-memory a program frees when it says so (docs/LANGUAGE.md, "Regions").
+Memory a program frees when it says so (docs/LANGUAGE.md, "Regions").
 
 ```ts
 import {
@@ -47,7 +47,7 @@ A new region, whose root is what `f` answers; everything `f` allocates is in it.
 
 </scalar-card>
 
-<scalar-card title="Region" icon="phosphor/regular/cube" href="#region">
+<scalar-card title="Region" icon="phosphor/regular/cube" href="#region-1">
 
 A region whose root is a `T`.
 

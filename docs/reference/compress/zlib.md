@@ -2,7 +2,7 @@
 
 # nish/compress/zlib
 
-the zlib format (RFC 1950) around `nish/compress/deflate`: a two-byte header, the DEFLATE stream and the Adler-32 of the data, big-endian. What HTTP's `Content-Encoding: deflate` means (RFC 9110 §8.4.1.2), and what PNG and many protocols carry.
+The zlib format (RFC 1950) around `nish/compress/deflate`: a two-byte header, the DEFLATE stream and the Adler-32 of the data, big-endian. What HTTP's `Content-Encoding: deflate` means (RFC 9110 §8.4.1.2), and what PNG and many protocols carry.
 
 ```ts
 import {
@@ -159,7 +159,7 @@ class ZlibCompressor
 | --- | --- |
 | `new ZlibCompressor(level: i32)` | A compressor at `level`, 0 to 9; another level panics. |
 | `readonly deflater: Deflater` |  |
-| `compress( src: u8[], off: i32, len: i32, out: u8[], at: i32, ): i32` | Compresses `src[off .. off + len)` into `out` from `at` as one zlib stream and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out` cannot hold it; `compressBound(len)` bytes always can. A window outside its array panics. Allocates nothing. |
+| `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Compresses `src[off .. off + len)` into `out` from `at` as one zlib stream and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out` cannot hold it; `compressBound(len)` bytes always can. A window outside its array panics. Allocates nothing. |
 
 ## ZlibDecompressor
 
@@ -173,7 +173,7 @@ class ZlibDecompressor
 | --- | --- |
 | `new ZlibDecompressor()` | Builds the tables. |
 | `readonly inflater: Inflater` |  |
-| `decompress( src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32, ): i32` | Decompresses the zlib stream `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends, or a negative `ZLIB_ERR_*` or `DEFLATE_ERR_*`. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
+| `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses the zlib stream `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends, or a negative `ZLIB_ERR_*` or `DEFLATE_ERR_*`. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
 
 ## Constants
 

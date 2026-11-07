@@ -2,7 +2,7 @@
 
 # nish/random
 
-a seeded generator of pseudo-random numbers whose every answer is the same natively and under Node.
+A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node.
 
 ```ts
 import {

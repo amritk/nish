@@ -2,7 +2,7 @@
 
 # nish/sync/ring
 
-bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores.
+Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores.
 
 ```ts
 import {
@@ -374,7 +374,7 @@ class MpscRing
 | `popBatch(dst: u8[], lens: i32[]): i32` | Moves up to `lens.length` records into `dst`, back to back from 0, while they fit, and sets `lens[i]` to each one's length: how many it moved. |
 | `popWait(dst: u8[], off: i32, timeoutMs: i32): i32` | `SpscRing.popWait`, for this ring. |
 | `tryPop(dst: u8[], off: i32): i32` | Moves the next record into `dst` from `off` and answers its length: `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued) when it is longer than `dst.length - off`. |
-| `tryPush( src: readonly u8[], off: i32, len: i32, ): boolean` | Queues `src[off, off + len)` as one record: false when every slot is taken now. A record longer than a slot panics. |
+| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Queues `src[off, off + len)` as one record: false when every slot is taken now. A record longer than a slot panics. |
 
 ## SpscRing
 
@@ -413,7 +413,7 @@ class SpscRing
 | `release(): void` | Frees the record `peek` lent, the store `tryPop` makes, and gives the window back, so it is empty after. Panics when no record is lent. |
 | `reserve(n: i32): u8[]` | A window of `n` bytes of the ring's own memory to write a record into, contiguous, without blocking: empty (length 0) when the ring has no room for it now. Nothing is published until `commit`; `abandon` drops it. `n` is from 1 (a window of 0 could not be told from no room; `tryPush` takes an empty record) to `capacity / 2 - 4`, so an empty ring always has room for one; outside that, or while a reservation is open, it panics. A ring of 8 has no such `n` and always panics; one of 16 allows 4. The bytes are not zeroed: they hold whatever the ring last held there. |
 | `tryPop(dst: u8[], off: i32): i32` | Moves the next record into `dst` from `off` and answers its length: `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued) when it is longer than `dst.length - off`. Panics while `peek` has a record lent. |
-| `tryPush( src: readonly u8[], off: i32, len: i32, ): boolean` | Appends `src[off, off + len)` as one record: false when the ring has no room for it now. A record longer than the ring could ever hold panics, and so does a call while a reservation is open. |
+| `tryPush(src: readonly u8[], off: i32, len: i32): boolean` | Appends `src[off, off + len)` as one record: false when the ring has no room for it now. A record longer than the ring could ever hold panics, and so does a call while a reservation is open. |
 
 ## Constants
 

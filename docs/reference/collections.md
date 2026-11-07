@@ -2,7 +2,7 @@
 
 # nish/collections
 
-the global `Map` and `Set` (docs/wp32-map.md).
+The global `Map` and `Set` (docs/wp32-map.md).
 
 ```ts
 import {
@@ -46,7 +46,7 @@ Entries sit in insertion order in parallel arrays,
 full 32-bit hash of each. The bucket table `slots` is open addressing with
 linear probing, and a bucket is one `u32`:
 
-```ts
+```text
 bits 31..24   the top eight bits of the key's hash (the fingerprint)
 bits 23..0    the entry's index plus one
 ```

@@ -2,7 +2,7 @@
 
 # nish/net/http-fields
 
-the header model HTTP/2 and HTTP/3 share: what a field name and a field value may hold, the pseudo-header fields and the order and count they come in, the connection-specific fields neither version carries, and the shapes of a request, a response and a trailer section.
+The header model HTTP/2 and HTTP/3 share: what a field name and a field value may hold, the pseudo-header fields and the order and count they come in, the connection-specific fields neither version carries, and the shapes of a request, a response and a trailer section.
 
 ```ts
 import {
@@ -397,9 +397,9 @@ class HttpFields
 | `clear(): void` | Empties every field, so the next read starts from nothing. |
 | `get(name: string): u8[] \| null` | The value of the first regular field named `name` (lowercase), or `null`. |
 | `isConnect(): boolean` | Whether the method is CONNECT, plain (RFC 9113 §8.5) or extended (RFC 8441). |
-| `readRequest( names: u8[][], values: u8[][], extendedConnect: boolean, ): i32` | Reads a request's field section (RFC 9113 §8.3.1, RFC 9114 §4.3.1). Every request has `:method`. A CONNECT without `:protocol` has `:authority` and neither `:scheme` nor `:path` (RFC 9113 §8.5). An extended CONNECT — `:protocol` present, which only `extendedConnect` allows, the version having sent SETTINGS_ENABLE_CONNECT_PROTOCOL — has all four of the others (RFC 8441 §4). Any other request has `:scheme` and `:path`. A `:path` that does not start with `/` is OPTIONS's `*` or refused, and a `host` field must name `:authority` when both are there. |
+| `readRequest(names: u8[][], values: u8[][], extendedConnect: boolean): i32` | Reads a request's field section (RFC 9113 §8.3.1, RFC 9114 §4.3.1). Every request has `:method`. A CONNECT without `:protocol` has `:authority` and neither `:scheme` nor `:path` (RFC 9113 §8.5). An extended CONNECT — `:protocol` present, which only `extendedConnect` allows, the version having sent SETTINGS_ENABLE_CONNECT_PROTOCOL — has all four of the others (RFC 8441 §4). Any other request has `:scheme` and `:path`. A `:path` that does not start with `/` is OPTIONS's `*` or refused, and a `host` field must name `:authority` when both are there. |
 | `readResponse(names: u8[][], values: u8[][]): i32` | Reads a response's field section: exactly one `:status`, and no other pseudo-header (RFC 9113 §8.3.2). |
-| `readSection( names: u8[][], values: u8[][], allowed: i32, ): i32` | Reads `names` and `values` as a section whose pseudo-headers are those `allowed` names, recording them and the regular fields. The shape's own rules — which pseudo-headers are required — are the caller's. Answers the mask of pseudo-headers seen, or a negative refusal. |
+| `readSection(names: u8[][], values: u8[][], allowed: i32): i32` | Reads `names` and `values` as a section whose pseudo-headers are those `allowed` names, recording them and the regular fields. The shape's own rules — which pseudo-headers are required — are the caller's. Answers the mask of pseudo-headers seen, or a negative refusal. |
 | `readTrailers(names: u8[][], values: u8[][]): i32` | Reads a trailer section: regular fields only (RFC 9113 §8.1). |
 | `takePseudo(pseudo: i32, value: u8[]): i32` | Records the pseudo-header `pseudo` as `value`, checking its syntax. |
 

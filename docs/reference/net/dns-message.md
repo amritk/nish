@@ -2,7 +2,7 @@
 
 # nish/net/dns-message
 
-a DNS query for one A or AAAA question written into the caller's buffer, and the reply to it read back into addresses.
+A DNS query for one A or AAAA question written into the caller's buffer, and the reply to it read back into addresses.
 
 ```ts
 import {

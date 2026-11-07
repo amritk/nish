@@ -2,7 +2,7 @@
 
 # nish/text
 
-the string operations a program has to write itself.
+The string operations a program has to write itself.
 
 ```ts
 import {

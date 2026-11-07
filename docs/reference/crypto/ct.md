@@ -2,7 +2,7 @@
 
 # nish/crypto/ct
 
-comparing secrets without telling the clock where they differ.
+Comparing secrets without telling the clock where they differ.
 
 ```ts
 import {

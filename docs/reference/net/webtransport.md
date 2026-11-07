@@ -244,7 +244,7 @@ class WebTransport
 
 | Member | |
 | --- | --- |
-| `new WebTransport( config: WebTransportConfig, h3: Http3Connection, )` | The WebTransport layer of `h3`, whose `Http3Config` must have `webtransportSessions` above 0. A cap out of range panics. |
+| `new WebTransport(config: WebTransportConfig, h3: Http3Connection)` | The WebTransport layer of `h3`, whose `Http3Config` must have `webtransportSessions` above 0. A cap out of range panics. |
 | `acceptNames: u8[][]` | The response fields of an accepted session, and of a refusal. |
 | `acceptValues: u8[][]` |  |
 | `adoptCount: i32` |  |
@@ -306,8 +306,8 @@ class WebTransport
 | `asked(id: i64): i32` | An extended CONNECT arrived on `id`: a session when it is one this side takes, answered here when not. |
 | `capsule(s: i32, type: i64): i32` | A whole capsule of `type` on session `s`'s CONNECT stream. |
 | `capsules(): i32` | Reads the capsules of the DATA window `h3.data[capAt .. capEnd)` of session `capSession`'s CONNECT stream, and answers the first event they make, or H3_NEED_MORE once the window is read. |
-| `close( id: i64, code: i64, buf: u8[], off: i32, len: i32, ): i32` | Closes session `id` (draft-02 §5): CLOSE_WEBTRANSPORT_SESSION with the application's `code` and the reason `buf[off .. off + len)`, at most 1024 bytes of UTF-8, then the FIN; every stream of the session is reset with WT_SESSION_GONE. Answers 0; H3_INVALID for a reason too long; H3_AGAIN while the CONNECT stream has no room for the capsule, and WT_WRITABLE then names it; or H3_CLOSED. |
-| `closedEvent( s: i32, code: i64, length: i32, byPeer: boolean, ): i32` | WT_CLOSED for session `s` with `code` and the reason `reason[s * 1028 + 4 ..][0 .. length)`. |
+| `close(id: i64, code: i64, buf: u8[], off: i32, len: i32): i32` | Closes session `id` (draft-02 §5): CLOSE_WEBTRANSPORT_SESSION with the application's `code` and the reason `buf[off .. off + len)`, at most 1024 bytes of UTF-8, then the FIN; every stream of the session is reset with WT_SESSION_GONE. Answers 0; H3_INVALID for a reason too long; H3_AGAIN while the CONNECT stream has no room for the capsule, and WT_WRITABLE then names it; or H3_CLOSED. |
+| `closedEvent(s: i32, code: i64, length: i32, byPeer: boolean): i32` | WT_CLOSED for session `s` with `code` and the reason `reason[s * 1028 + 4 ..][0 .. length)`. |
 | `codes(code: i64): void` | Sets `errorCode` to `code` and `appCode` to what it maps to. |
 | `connectEvent(s: i32, event: i32): i32` | An event of session `s`'s CONNECT stream. |
 | `current(): void` | Restarts this layer when its connection restarted since the last call. |
@@ -328,13 +328,13 @@ class WebTransport
 | `resetStream(id: i64, code: i64): i32` | Resets this side of session stream `id` with the application's `code` (mapped, `wtCodeToHttp3`). Answers 0 or H3_CLOSED. |
 | `restart(): void` | Forgets every session and stream, for the connection's next peer; `next` calls it when `h3` restarted. |
 | `route(event: i32): i32` | What an `Http3Connection` event means here: a `WT_*` event, the same event passed through, or H3_NEED_MORE. |
-| `sendDatagram( id: i64, buf: u8[], off: i32, len: i32, ): i32` | Sends `buf[off .. off + len)` as an HTTP datagram of session `id` (RFC 9297 §2.1): its quarter stream ID, then the payload, one QUIC DATAGRAM frame, never sent again if lost. Answers 0; H3_TOO_LARGE past `maxDatagramPayload`; H3_AGAIN while QUIC's queue is full; or H3_CLOSED for a session not accepted. |
+| `sendDatagram(id: i64, buf: u8[], off: i32, len: i32): i32` | Sends `buf[off .. off + len)` as an HTTP datagram of session `id` (RFC 9297 §2.1): its quarter stream ID, then the payload, one QUIC DATAGRAM frame, never sent again if lost. Answers 0; H3_TOO_LARGE past `maxDatagramPayload`; H3_AGAIN while QUIC's queue is full; or H3_CLOSED for a session not accepted. |
 | `sessionOf(id: i64): i32` | The index of the session whose CONNECT stream is `id`, or -1: one probe of QUIC's stream index. |
 | `settle(k: i32, bits: i32): void` | Marks `bits` done on the stream in slot `k`, and takes it off its session once both sides are. |
 | `stopSending(id: i64, code: i64): i32` | Asks the client to stop its side of session stream `id` with the application's `code`, and drops what it sends. Answers 0 or H3_CLOSED. |
 | `streamSlot(id: i64): i32` | The QUIC slot of a session's stream `id` that this layer tracks, or -1. |
 | `unlink(k: i32): void` | Takes the stream in slot `k` off its session's list. |
-| `write( id: i64, buf: u8[], off: i32, len: i32, fin: boolean, ): i32` | Writes up to `len` bytes of `buf` from `off` to session stream `id`, with its FIN when `fin` and all were taken. Answers how many it took, or H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`). |
+| `write(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32` | Writes up to `len` bytes of `buf` from `off` to session stream `id`, with its FIN when `fin` and all were taken. Answers how many it took, or H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`). |
 
 ## WebTransportConfig
 

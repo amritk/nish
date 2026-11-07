@@ -85,7 +85,7 @@ class PgCarrier
 
 | Member | |
 | --- | --- |
-| `new PgCarrier( limits: PgCarrierLimits, pool: PgPool, target: PgTarget, handler: HttpHandler, )` | A carrier for `pool`'s connections to `target`, its descriptor watched on `handler` as `limits.watch`. Panics on a cap or watch id out of range, or a target that failed or is not a numeric address. |
+| `new PgCarrier(limits: PgCarrierLimits, pool: PgPool, target: PgTarget, handler: HttpHandler)` | A carrier for `pool`'s connections to `target`, its descriptor watched on `handler` as `limits.watch`. Panics on a cap or watch id out of range, or a target that failed or is not a numeric address. |
 | `failure: i32` | Behind a `PG_CARRIER_FAILED`: the connection's `PG_ERR_*` failure when it was lost, else `PG_ERR_NONE` (the server's error, or a bind with no room). |
 | `query: i32` | The query the last event is about, as `run` answered it; -1 for none. |
 | `socketError: i32` | Behind a `PG_CARRIER_FAILED` for a lost connection: the socket error that ended it (`-110` for a connect timeout), or 0. |
@@ -96,8 +96,8 @@ class PgCarrier
 | `next(): i32` | The next event, resuming where the last call stopped: the events the pool's connections read, then the queries handed to connections (`PG_CARRIER_BUILD`), then `PG_CARRIER_NONE` once their bytes are written and nothing more can happen until the handler's next turn. The connect timeout is checked here, so the program's `wait` timeout bounds how late it fires. Panics while a `PG_CARRIER_BUILD` is unsent. `PG_CARRIER_NONE` once the carrier is closed, which connects nothing. |
 | `request(): HttpRequest` | The request `query` was run for. Panics when it was run with none, or no event named a query. |
 | `run(req: HttpRequest \| null, tag: i32): i32` | Queues a plain query for `req` (null for one of the program's own) and answers its number; `PG_CARRIER_BUILD` comes for it once a connection has room. `PG_CARRIER_FULL` when `queries` are waiting, the pool's queue is full or the carrier is closed. Returns at once. |
-| `runInt( req: HttpRequest \| null, batcher: i32, key: i64, tag: i32, ): i32` | Queues `req`'s int8 `key` on batcher `batcher`, as `run` does a plain query; `PG_CARRIER_FULL` also when the batcher's queue is. |
-| `runText( req: HttpRequest \| null, batcher: i32, bytes: u8[], start: i32, length: i32, tag: i32, ): i32` | Queues `req`'s text key `bytes[start, start + length)` on batcher `batcher`, as `runInt` does; also `PG_CARRIER_FULL` when `PgBatcher.addText` refuses the key. |
+| `runInt(req: HttpRequest \| null, batcher: i32, key: i64, tag: i32): i32` | Queues `req`'s int8 `key` on batcher `batcher`, as `run` does a plain query; `PG_CARRIER_FULL` also when the batcher's queue is. |
+| `runText(req: HttpRequest \| null, batcher: i32, bytes: u8[], start: i32, length: i32, tag: i32): i32` | Queues `req`'s text key `bytes[start, start + length)` on batcher `batcher`, as `runInt` does; also `PG_CARRIER_FULL` when `PgBatcher.addText` refuses the key. |
 | `send(): boolean` | Ends the query `PG_CARRIER_BUILD` handed out, as `PgPool.send` does, and answers whether it went. A bind left open is dropped, and the query fails; one with nothing written fails at once, on the next `next()`. Panics when no build is open. |
 
 ## PgCarrierLimits

@@ -2,7 +2,7 @@
 
 # nish/cli-flags
 
-a command line's flags, declared once as data and read back by name, with the same declaration writing the `--help` rows.
+A command line's flags, declared once as data and read back by name, with the same declaration writing the `--help` rows.
 
 ```ts
 import {
@@ -116,7 +116,7 @@ class CommandSpec
 
 | Member | |
 | --- | --- |
-| `new CommandSpec( path: string, words: string[], shape: string, description: string, )` |  |
+| `new CommandSpec(path: string, words: string[], shape: string, description: string)` |  |
 | `description: string` |  |
 | `path: string` |  |
 | `shape: string` |  |
@@ -132,7 +132,7 @@ class FlagSpec
 
 | Member | |
 | --- | --- |
-| `new FlagSpec( name: string, kind: i32, meta: string, description: string, )` |  |
+| `new FlagSpec(name: string, kind: i32, meta: string, description: string)` |  |
 | `description: string` |  |
 | `kind: i32` |  |
 | `meta: string` |  |
@@ -157,15 +157,15 @@ class FlagTable
 | `flags: FlagSpec[]` |  |
 | `program: string` |  |
 | `boolean(name: string, description: string): void` | A boolean flag: `--name` sets it, `--no-name` clears it, once. |
-| `command( path: string, shape: string, description: string, ): void` | A command: `path` is one or more words (`"remote add"`), `shape` what follows them in the help (`"<name> <url>"`, may be empty). Declaring any command makes leading words that spell none a usage error. |
-| `declare( name: string, kind: i32, meta: string, description: string, ): void` | A flag of `kind`, after the checks every declaring method shares. |
+| `command(path: string, shape: string, description: string): void` | A command: `path` is one or more words (`"remote add"`), `shape` what follows them in the help (`"<name> <url>"`, may be empty). Declaring any command makes leading words that spell none a usage error. |
+| `declare(name: string, kind: i32, meta: string, description: string): void` | A flag of `kind`, after the checks every declaring method shares. |
 | `indexOf(name: string): i32` | The index of the flag `name` (without `--`), or `-1`. |
 | `matchCommand(words: string[]): i32` | The index of the command `words` spell the longest declared path of, or `-1`. A path spelled by a prefix of `words` counts; the words after it are the positionals. |
-| `number( name: string, meta: string, description: string, ): void` | A number flag, read as an `f64`: a finite decimal (`-2.5`, `1e3`, `.5`), the same on every target. Hex, binary, `Infinity`, padding and `""` are usage errors. |
+| `number(name: string, meta: string, description: string): void` | A number flag, read as an `f64`: a finite decimal (`-2.5`, `1e3`, `.5`), the same on every target. Hex, binary, `Infinity`, padding and `""` are usage errors. |
 | `parse(args: string[]): ParsedFlags` | `args` read against the table, every one of them an argument: `parseFrom(args, 0)`. |
 | `parseFrom(args: string[], first: i32): ParsedFlags` | `args` from index `first` on read against the table, so that a program passes `process.argv` and `1` to skip its own path. Stops at the first usage error, which the answer then carries; the command is still matched on the words read before it, so the usage hint can name it. |
-| `repeatable( name: string, meta: string, description: string, ): void` | A flag given any number of times, each with a value. |
-| `string( name: string, meta: string, description: string, ): void` | A string flag: `--name value` or `--name=value`, once. |
+| `repeatable(name: string, meta: string, description: string): void` | A flag given any number of times, each with a value. |
+| `string(name: string, meta: string, description: string): void` | A string flag: `--name value` or `--name=value`, once. |
 | `unknownCommand(words: string[]): string` | The words an unknown command is reported as: the leading words up to and including the first that no declared path continues with, so `remote rename x` against `remote add` is `"remote rename"`. |
 | `writeHelp(menu: HelpMenu): void` | The table as help rows: a `Commands` section when any command is declared (its path, shape and description), then a `Flags` section, each in declaration order. The menu's header and usage lines are the caller's, written before this. |
 
@@ -202,12 +202,12 @@ class ParsedFlags
 | `all(name: string): string[]` | Every value a repeatable flag was given, in order, as a fresh array; empty when it was not given. |
 | `bool(name: string): boolean` | A boolean flag's value: true for `--name`, false for `--no-name` or when it was not given. |
 | `exitUsage(): void` | The usage error on stderr, then exit status 2. On a parse that succeeded it panics: there is no error to report. |
-| `fail( code: i32, message: string, argument: string, ): void` | Records the first usage error; a parse stops at it. |
+| `fail(code: i32, message: string, argument: string): void` | Records the first usage error; a parse stops at it. |
 | `has(name: string): boolean` | Whether the flag `name`, of any kind, was given at all (`--no-name` counts). |
 | `num(name: string): f64` | A number flag's value, or `0` when it was not given. |
 | `slot(name: string, kind: i32): i32` | The index of the flag `name` of `kind`; a name the table does not declare so is a bug, and panics. |
 | `str(name: string): string` | A string flag's value, or `""` when it was not given. |
-| `take( at: i32, flag: string, value: string, arg: string, ): void` | Stores `value` for the flag at `at`, spelled `flag` in `arg`, or fails as its kind requires. |
+| `take(at: i32, flag: string, value: string, arg: string): void` | Stores `value` for the flag at `at`, spelled `flag` in `arg`, or fails as its kind requires. |
 | `usageError(): string` | What `exitUsage` prints: `<program>: <message>` and the usage line, each ending in a newline. |
 | `usageLine(): string` | The usage line the error's hint shows: the matched command's path and shape, or `<command>` when the table has commands and none matched, then `[flags]`. |
 

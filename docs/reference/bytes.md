@@ -2,7 +2,7 @@
 
 # nish/bytes
 
-fixed-width integers and doubles read from, and written into, a byte array at an offset, in either byte order.
+Fixed-width integers and doubles read from, and written into, a byte array at an offset, in either byte order.
 
 ```ts
 import {

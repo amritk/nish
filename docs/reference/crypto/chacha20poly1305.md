@@ -2,7 +2,7 @@
 
 # nish/crypto/chacha20poly1305
 
-the ChaCha20 stream cipher, the Poly1305 one-time authenticator and the AEAD built from the two, as RFC 8439 defines them, plus the ChaCha20 header-protection mask of RFC 9001 §5.4.4.
+The ChaCha20 stream cipher, the Poly1305 one-time authenticator and the AEAD built from the two, as RFC 8439 defines them, plus the ChaCha20 header-protection mask of RFC 9001 §5.4.4.
 
 ```ts
 import {

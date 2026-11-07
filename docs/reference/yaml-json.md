@@ -2,7 +2,7 @@
 
 # nish/yaml-json
 
-one YAML document loaded into a `JsonDocument`, with every value's and key's source range, so that one validator and one `YamlLineIndex` serve a JSON text and a YAML text alike:
+One YAML document loaded into a `JsonDocument`, with every value's and key's source range, so that one validator and one `YamlLineIndex` serve a JSON text and a YAML text alike:
 
 ```ts
 import {
@@ -217,17 +217,17 @@ class YamlJsonLoader
 | `fail(code: i32, start: i32, end: i32): i32` | Internal: records a failed load, clearing the document, and answers `code`. |
 | `findEntry(base: i32, key: string): i32` | Internal: the entry from `base` whose key is `key`, or `-1`. The first `YAML_JSON_SCAN_KEYS` are compared one by one; the rest are in `seen`. |
 | `isMergeKey(key: i32): boolean` | Internal: whether `key` is a merge key, as the stream reads one: a plain `<<`, untagged or `!!merge`. Keep in step with `yamlIsMergeKey` in `std/yaml.ts`, which is not exported. |
-| `load( stream: YamlStream, d: i32, doc: JsonDocument, ): JsonValue` | Clears `doc` and loads document `d` of `stream` into it. Answers the root value, or a negative code, which is also in `failed`, with the range in `errorStart` and `errorEnd`; nothing is kept from a load that fails. |
+| `load(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue` | Clears `doc` and loads document `d` of `stream` into it. Answers the root value, or a negative code, which is also in `failed`, with the range in `errorStart` and `errorEnd`; nothing is kept from a load that fails. |
 | `markMerged(n: i32): boolean` | Internal: marks node `n` as merged into the current map; `false` if it already was. |
 | `mergeInto(base: i32, at: i32, hops: i32): i32` | Internal: adds the merge keys' maps of map `at` to the entries from `base`, each key only if it is not there yet: every map a merge key names, in order, its own keys first and then its merge keys', `hops` deep. |
-| `mergeMap( base: i32, pair: i32, m: i32, hops: i32, ): i32` | Internal: merges map `m`'s own keys, then its merge keys' maps, for the merge key `pair`; nothing if `m` is merged into this map already, since a second merge would find every key taken. |
+| `mergeMap(base: i32, pair: i32, m: i32, hops: i32): i32` | Internal: merges map `m`'s own keys, then its merge keys' maps, for the merge key `pair`; nothing if `m` is merged into this map already, since a second merge would find every key taken. |
 | `newMergeStamp(): void` | Internal: starts a map's merges, so no node is marked as merged into it yet. |
 | `nullAt(at: i32): JsonValue` | Internal: a null with the empty range at `at`. |
 | `partSize(n: i32): i32` | Internal: a counted part's size: `1` for a missing node, too many for one still being counted. |
 | `plus(a: i32, b: i32): i32` | Internal: `a + b`, saturating at `cap + 1`; both are at most that, so the sum fits. |
 | `pushNode(top: i32, n: i32): i32` | Internal: pushes node `n` onto the count's stack unless it is counted; answers the new top. |
 | `pushParts(top: i32, n: i32): i32` | Internal: pushes the nodes node `n`'s count is the sum of. |
-| `ranged( v: JsonValue, start: i32, end: i32, ): JsonValue` | Internal: `v`, given the range `[start, end)`, or the failure the document answers. |
+| `ranged(v: JsonValue, start: i32, end: i32): JsonValue` | Internal: `v`, given the range `[start, end)`, or the failure the document answers. |
 | `sizeOf(n: i32): i32` | Internal: node `n`'s count from its parts' counts, all of them kept by now; a part still being counted is a cycle, which counts as too many. |
 | `tooMuchText(n: i32): i32` | Internal: the failure for text past `byteCap`, stored for node `n`. |
 
