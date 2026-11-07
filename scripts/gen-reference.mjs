@@ -6,7 +6,10 @@
 //                                                      page, a stale route and each documentation
 //                                                      gap scripts/undocumented.txt disagrees with;
 //                                                      write nothing
-//   node scripts/gen-reference.mjs --update-baseline   also rewrite scripts/undocumented.txt
+//   node scripts/gen-reference.mjs --update-baseline   also rewrite scripts/undocumented.txt,
+//                                                      refusing to add a line to it
+//   node scripts/gen-reference.mjs --grow-baseline     the same, adding lines: only for a change
+//                                                      to the rule itself
 //
 // A public declaration of std/ or nish.d.ts needs a doc comment, a `@param` per
 // parameter and a `@returns` for a return other than `void` or `never`
@@ -90,6 +93,7 @@ const readProject = async () => {
       requiredToBeDocumented: [
         "Function",
         "Class",
+        "Constructor",
         "Interface",
         "Method",
         "Property",
@@ -150,9 +154,11 @@ const readProject = async () => {
  * Every public declaration that lacks its documentation, as the sorted keys
  * of scripts/undocumented.txt: `module.Name.member` for a declaration with no
  * doc comment (TypeDoc's notDocumented names, passed in as `undocumented`),
- * `module.Name#param:p` for a parameter of a function or method with no
- * `@param`, and `module.Name#returns` for a signature returning other than
- * `void` or `never` with no `@returns`.
+ * `module.Name#param:p` for a parameter with no `@param`, and
+ * `module.Name#returns` for a signature returning other than `void` or `never`
+ * with no `@returns`. The signatures read are a function's or method's, a
+ * constructor's, an accessor's and an interface's call signatures; a
+ * constructor or setter returns nothing to document.
  *
  * A member TypeScript's own lib declares is not ours to document: nish.d.ts
  * merges into lib interfaces such as `Array`, and TypeDoc then names lib
@@ -183,9 +189,15 @@ const findGaps = (project, undocumented) => {
       gaps.add(name)
     }
   }
-  for (const r of project.getReflectionsByKind(ReflectionKind.FunctionOrMethod)) {
+  const signed =
+    ReflectionKind.FunctionOrMethod |
+    ReflectionKind.Constructor |
+    ReflectionKind.Accessor |
+    ReflectionKind.Interface
+  for (const r of project.getReflectionsByKind(signed)) {
     const name = r.getFriendlyFullName()
-    for (const sig of r.signatures ?? []) {
+    const sigs = [...(r.signatures ?? []), r.getSignature, r.setSignature].filter(Boolean)
+    for (const sig of sigs) {
       if (fromLib(sig)) {
         continue
       }
@@ -195,7 +207,10 @@ const findGaps = (project, undocumented) => {
         }
       }
       // scripts/typedoc-nish-widths.mjs keeps a return type as its source text.
-      const silent = ["void", "never"].includes(String(sig.type))
+      const silent =
+        ["void", "never"].includes(String(sig.type)) ||
+        sig.kind === ReflectionKind.ConstructorSignature ||
+        sig.kind === ReflectionKind.SetSignature
       if (!silent && !(sig.comment ?? r.comment)?.getTag("@returns")) {
         gaps.add(`${name}#returns`)
       }
@@ -1732,7 +1747,8 @@ const baselineHeader = `# Public declarations of std/ and runtime/nish.d.ts that
 #
 # This list only shrinks. \`node scripts/gen-reference.mjs --check\` fails on a gap
 # it does not list and on a line that is no longer a gap: document the
-# declaration and delete its line. Only \`--update-baseline\` rewrites the file.
+# declaration and delete its line. \`--update-baseline\` rewrites the file and
+# refuses to add a line; \`--grow-baseline\` adds them, only for a change to the rule.
 # docs/README.md -> "The library reference" states the rule.
 #
 #   module.Name.member     the declaration has no doc comment
@@ -1742,11 +1758,23 @@ const baselineHeader = `# Public declarations of std/ and runtime/nish.d.ts that
 
 const baselineText = (gaps) => `${baselineHeader}\n${gaps.map((g) => `${g}\n`).join("")}`
 
+const baselineRead = () => {
+  const full = path.join(root, baselineFile)
+  return fs.existsSync(full) ? fs.readFileSync(full, "utf8") : ""
+}
+
+/** The gaps the baseline lists. */
+const baselineLines = () =>
+  new Set(
+    baselineRead()
+      .split("\n")
+      .filter((l) => l.trim() && !l.startsWith("#"))
+  )
+
 /** The baseline's disagreements with the gaps found, one line each. */
 const baselineProblems = (gaps) => {
-  const full = path.join(root, baselineFile)
-  const text = fs.existsSync(full) ? fs.readFileSync(full, "utf8") : ""
-  const listed = new Set(text.split("\n").filter((l) => l.trim() && !l.startsWith("#")))
+  const text = baselineRead()
+  const listed = baselineLines()
   const found = new Set(gaps)
   const problems = []
   for (const g of gaps) {
@@ -1771,16 +1799,36 @@ const baselineProblems = (gaps) => {
 
 const main = async () => {
   const args = process.argv.slice(2)
-  const unknown = args.filter((a) => a !== "--check" && a !== "--update-baseline")
+  const flags = ["--check", "--update-baseline", "--grow-baseline"]
+  const unknown = args.filter((a) => !flags.includes(a))
   const check = args.includes("--check")
-  const updateBaseline = args.includes("--update-baseline")
+  const grow = args.includes("--grow-baseline")
+  const updateBaseline = grow || args.includes("--update-baseline")
   if (unknown.length > 0 || (check && updateBaseline)) {
     console.error(
-      `gen-reference: ${unknown.length > 0 ? `unknown argument ${unknown.join(" ")}` : "--check writes nothing"}; the flags are --check or --update-baseline`
+      `gen-reference: ${unknown.length > 0 ? `unknown argument ${unknown.join(" ")}` : "--check writes nothing"}; the flags are --check, --update-baseline or --grow-baseline`
     )
     process.exit(2)
   }
   const { project, gaps } = await readProject()
+  // The baseline only shrinks: --update-baseline drops lines and refuses to
+  // add one. --grow-baseline adds them, for a change to the rule itself, and
+  // names each so the reviewer reads them.
+  if (updateBaseline) {
+    const added = gaps.filter((g) => !baselineLines().has(g))
+    if (added.length > 0 && !grow) {
+      for (const g of added) {
+        console.error(`gen-reference: undocumented: ${g}: document it; ${baselineFile} only shrinks`)
+      }
+      console.error(
+        "gen-reference: --update-baseline adds no line; only a change to the rule itself may pass --grow-baseline, and its PR shows each added line"
+      )
+      process.exit(1)
+    }
+    for (const g of added) {
+      console.log(`gen-reference: grows ${baselineFile}: ${g}`)
+    }
+  }
   const pages = collectPages(project)
   const configBefore = fs.readFileSync(path.join(root, configFile), "utf8")
   const configAfter = configText(configBefore, pages)

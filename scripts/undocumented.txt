@@ -2,7 +2,8 @@
 #
 # This list only shrinks. `node scripts/gen-reference.mjs --check` fails on a gap
 # it does not list and on a line that is no longer a gap: document the
-# declaration and delete its line. Only `--update-baseline` rewrites the file.
+# declaration and delete its line. `--update-baseline` rewrites the file and
+# refuses to add a line; `--grow-baseline` adds them, only for a change to the rule.
 # docs/README.md -> "The library reference" states the rule.
 #
 #   module.Name.member     the declaration has no doc comment

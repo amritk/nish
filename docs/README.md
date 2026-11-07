@@ -140,18 +140,22 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
 `scripts/typedoc-nish-widths.mjs` keeps each type as the source spells it
 (`i32`, not `number`).
 
-**Every public declaration is documented.** A function, class, interface,
-method, property, accessor, variable, type, enum or enum member that `std/`
-exports or `runtime/nish.d.ts` declares needs a doc comment, a `@param` for
-each parameter, and a `@returns` when it returns anything but `void` or
-`never`. `--check` fails on each that lacks one, naming it as
+**Every public declaration is documented.** A function, class, constructor,
+interface, method, property, accessor, variable, type, enum or enum member that
+`std/` exports or `runtime/nish.d.ts` declares needs a doc comment, a `@param`
+for each parameter (a constructor's, a setter's and a call signature's
+included), and a `@returns` when it returns anything but `void` or `never` (a
+getter's included; a constructor's is not asked for). `--check` fails on each that lacks one, naming it as
 `module.Name.member` (no doc comment), `module.Name#param:p` or
 `module.Name#returns`. The gaps that predate the rule are listed in
 [`scripts/undocumented.txt`](https://github.com/amritk/nish/blob/main/scripts/undocumented.txt),
 which only shrinks: `--check` also fails on a line that is no longer a gap.
-To clear a line, document the declaration and delete the line. Do not add
-one; `node scripts/gen-reference.mjs --update-baseline` rewrites the file
-from the sources, and a new line in its diff is a gap to document instead.
+To clear a line, document the declaration and delete the line, or run
+`node scripts/gen-reference.mjs --update-baseline`, which rewrites the file
+from the sources and refuses to add a line: it names each new gap, to be
+documented instead. Only a change to the rule itself, one that finds gaps
+that already existed, runs `--grow-baseline` to add them; its PR lists the
+added lines and the reviewer reads each.
 Members TypeScript's `lib` merges into a `runtime/nish.d.ts` global are not
 checked.
 
