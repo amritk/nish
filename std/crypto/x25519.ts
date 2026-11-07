@@ -89,9 +89,13 @@ const X25519_A24: i64 = 121665
  * so the answer is the signed one bit for bit; the arithmetic is unsigned
  * because signed arithmetic is checked for an overflow, and a check is a
  * branch on a secret limb. Each is one instruction once LLVM inlines it.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Add64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+/** @internal Imported by `nish/crypto/ed25519`, which works over the same field. */
 export const f25519Sub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+/** @internal Imported by `nish/crypto/ed25519`, which works over the same field. */
 export const f25519Mul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
 
 /** The width of limb `i`: 26 bits for an even limb, 25 for an odd one. */
@@ -103,20 +107,32 @@ const f25519Width = (i: i32): i64 => {
 /** The mask of limb `i`'s bits, `2^width - 1`. */
 const f25519LimbMask = (i: i32): i64 => f25519Sub64(toI64(1) << f25519Width(i), toI64(1))
 
-/** A fresh field element, zero. */
+/**
+ * A fresh field element, zero.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ */
 export const f25519Zero = (): i64[] => {
   const f: i64[] = new Array<i64>(10)
   return f
 }
 
-/** A fresh field element holding the small constant `n`. */
+/**
+ * A fresh field element holding the small constant `n`.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ */
 export const f25519Small = (n: i64): i64[] => {
   const f: i64[] = f25519Zero()
   f[0] = n
   return f
 }
 
-/** `out = f`, limb by limb. */
+/**
+ * `out = f`, limb by limb.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ */
 export const f25519Copy = (out: i64[], f: i64[]): void => {
   if (toI32(out.length) < 10 || toI32(f.length) < 10) {
     return
@@ -157,6 +173,8 @@ const f25519CarryChain = (h: i64[]): void => {
  * Each carry is `h >> width` (arithmetic, so a floor) and each remainder is
  * `h & (2^width - 1)`, which is the matching non-negative remainder for a
  * negative limb too, without shifting a negative number left.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Carry = (h: i64[]): void => {
   if (toI32(h.length) < 10) {
@@ -174,6 +192,8 @@ export const f25519Carry = (h: i64[]): void => {
 /**
  * `out = f + g`, not carried. With both reduced (limbs below 2^26 in
  * magnitude) the sum's limbs are below 2^27, which `f25519Mul` accepts.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
   if (toI32(out.length) < 10 || toI32(f.length) < 10 || toI32(g.length) < 10) {
@@ -188,6 +208,8 @@ export const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
  * `out = f - g`, not carried. Signed limbs need no bias to stay positive; with
  * both reduced the difference's limbs are below 2^27 in magnitude, which
  * `f25519Mul` accepts.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
   if (toI32(out.length) < 10 || toI32(f.length) < 10 || toI32(g.length) < 10) {
@@ -213,6 +235,8 @@ export const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
  * own, so no intermediate is larger. Giving `f25519Mul` anything wider — two unreduced
  * sums added again, say — breaks this bound, which is why every caller carries
  * or multiplies before it adds a second time.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
   if (toI32(f.length) < 10 || toI32(g.length) < 10) {
@@ -245,12 +269,20 @@ export const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
   f25519Copy(out, h)
 }
 
-/** `out = f * f`, reduced; the same bounds as `f25519Mul`. */
+/**
+ * `out = f * f`, reduced; the same bounds as `f25519Mul`.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ */
 export const f25519Square = (out: i64[], f: i64[]): void => {
   f25519Mul(out, f, f)
 }
 
-/** `out = f` squared `n` times in a row (`n` at least 1), reduced. */
+/**
+ * `out = f` squared `n` times in a row (`n` at least 1), reduced.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
+ */
 export const f25519SquareTimes = (out: i64[], f: i64[], n: i32): void => {
   f25519Square(out, f)
   for (let i: i32 = 1; i < n; i++) {
@@ -280,6 +312,8 @@ const f25519MulA24 = (out: i64[], f: i64[]): void => {
  * 5, 10, 20, 40, 50, 100, 200 and 250 from the rule
  * `z^(2^(a+b) - 1) = (z^(2^a - 1))^(2^b) * z^(2^b - 1)`: 251 squarings and 11
  * multiplications, the same for every `z`. `out` and `z11` may not be `z`.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Pow250 = (out: i64[], z11: i64[], z: i64[]): void => {
   const z2: i64[] = f25519Zero()
@@ -322,6 +356,8 @@ export const f25519Pow250 = (out: i64[], z11: i64[], z: i64[]): void => {
  * followed by `01011`: `f25519Pow250`, then five squarings and a
  * multiplication by `z^11` — 256 squarings and 12 multiplications, the same
  * for every `z`.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Invert = (out: i64[], z: i64[]): void => {
   const z11: i64[] = f25519Zero()
@@ -336,6 +372,8 @@ export const f25519Invert = (out: i64[], z: i64[]): void => {
  * Swaps `f` and `g` when `bit` is 1 and leaves them when it is 0, with the
  * same instructions either way: the mask is all ones or all zeros, and the
  * swap is the masked xor of the two.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Swap = (f: i64[], g: i64[], bit: i64): void => {
   if (toI32(f.length) < 10 || toI32(g.length) < 10) {
@@ -357,6 +395,8 @@ export const f25519Swap = (f: i64[], g: i64[], bit: i64): void => {
  * lands in `[0, 2^width)` and the element is reduced. A value in
  * `[p, 2^255)` is neither refused nor adjusted: §5 has it processed as its
  * residue, and the arithmetic does that by itself.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Decode = (bytes: u8[]): i64[] => {
   const f: i64[] = new Array<i64>(10)
@@ -398,6 +438,8 @@ export const f25519Decode = (bytes: u8[]): i64[] => {
  * carry out of bit 255 tells the two apart without a branch — it is 1 exactly
  * when the value is at least p — so the element adds `19 * q` and drops bit
  * 255, which is subtracting `p * q`.
+ *
+ * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Encode = (f: i64[]): u8[] => {
   const h: i64[] = new Array<i64>(10)

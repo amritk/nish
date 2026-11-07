@@ -5708,8 +5708,11 @@ const p384ScalarInvert = (out: u32[], a: u32[]): void => {
  * Z = 0 is the identity, which the complete formulas take like any other point.
  */
 class P384ProjectivePoint {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   x: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   y: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z: u32[]
 
   /** The identity, (0 : 1 : 0). */
@@ -5727,12 +5730,19 @@ class P384ProjectivePoint {
  * formulas multiply by.
  */
 class P384PointScratch {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t0: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t1: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t2: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t3: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t4: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   sum: P384ProjectivePoint
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   b: u32[]
 
   constructor() {

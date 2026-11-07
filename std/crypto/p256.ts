@@ -4055,8 +4055,11 @@ const p256ScalarInverse = (out: u32[], a: u32[]): void => {
  * Z = 0 is the identity, which the complete formulas take like any other point.
  */
 class P256ProjectivePoint {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   x: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   y: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z: u32[]
 
   /** The identity, (0 : 1 : 0). */
@@ -4074,13 +4077,21 @@ class P256ProjectivePoint {
  * selects into, and the curve's `b`, which the formulas multiply by.
  */
 class P256PointScratch {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t0: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t1: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t2: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t3: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t4: u32[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   sum: P256ProjectivePoint
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   entry: P256ProjectivePoint
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   b: u32[]
 
   constructor() {
@@ -5653,32 +5664,77 @@ const p256WindowFits = (length: i32, at: i32, len: i32): boolean => at >= 0 && l
  *     const ok: boolean = p256SignSha256Into(scratch, priv, msg, 0, msg.length, sig, 0);
  */
 export class P256SignScratch {
-  /** FIPS 180-4 §4.2.2's round constants. */
+  /**
+   * FIPS 180-4 §4.2.2's round constants.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   kt: u32[]
-  /** A SHA-256 hash value, schedule and padded tail. */
+  /**
+   * A SHA-256 hash value, schedule and padded tail.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   hash: u32[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   schedule: u32[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   tail: u8[]
-  /** An HMAC key block and the message after it. */
+  /**
+   * An HMAC key block and the message after it.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   block: u8[]
-  /** `V || sep`, where every key update's message starts (RFC 6979 §3.2 steps d, f and h.3). */
+  /**
+   * `V || sep`, where every key update's message starts (RFC 6979 §3.2 steps d, f and h.3).
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   message: u8[]
-  /** RFC 6979's `K` and `V`; the last `V` is the nonce. */
+  /**
+   * RFC 6979's `K` and `V`; the last `V` is the nonce.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   k: u8[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   v: u8[]
-  /** The message's digest, then int2octets of it mod n: RFC 6979's `h1`. */
+  /**
+   * The message's digest, then int2octets of it mod n: RFC 6979's `h1`.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   h1: u8[]
-  /** The digest mod n, `r`, the nonce point's affine x, and `k^-1` in the Montgomery domain. */
+  /**
+   * The digest mod n, `r`, the nonce point's affine x, and `k^-1` in the Montgomery domain.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   z: u32[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   r: u32[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   x: u32[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   kM: u32[]
-  /** The order n and R^2 mod n. */
+  /**
+   * The order n and R^2 mod n.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   n: u32[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   r2: u32[]
-  /** The nonce's multiple of G, the comb table of G and point scratch. */
+  /**
+   * The nonce's multiple of G, the comb table of G and point scratch.
+   *
+   * @internal Read and written by `p256SignSha256Into` and its steps alone.
+   */
   point: P256ProjectivePoint
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   table: u32[]
+  /** @internal Read and written by `p256SignSha256Into` and its steps alone. */
   points: P256PointScratch
 
   constructor() {

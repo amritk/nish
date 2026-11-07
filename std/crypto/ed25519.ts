@@ -152,9 +152,13 @@ const ed25519Order = (): u64[] => [
 
 /** A point (X : Y : Z : T) in extended coordinates. */
 class Ed25519Point {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   x: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   y: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t: i64[]
 
   /** The identity, (0 : 1 : 1 : 0). */
@@ -168,9 +172,13 @@ class Ed25519Point {
 
 /** A point in the form the addition reads: (Y + X, Y - X, 2 d T, 2 Z), each carried. */
 class Ed25519Cached {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   ypx: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   ymx: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   t2d: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   z2: i64[]
 
   /** The identity, (1, 1, 0, 2). */
@@ -188,16 +196,27 @@ class Ed25519Cached {
  * is built in; and 2 d, which the cached form multiplies by.
  */
 class Ed25519Scratch {
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   a: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   b: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   c: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   d: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   e: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   f: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   g: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   h: i64[]
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   entry: Ed25519Cached
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   sum: Ed25519Point
+  /** @internal Read and written by this module's point functions; the class is not exported. */
   d2: i64[]
 
   constructor() {
