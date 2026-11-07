@@ -6,13 +6,16 @@
  *     import { QuicTransportParameters, quicEncodeTransportParameters,
  *              quicParseTransportParameters } from "nish/net/quic-conn-params";
  *
- *     const mine = new QuicTransportParameters();
- *     mine.initialMaxData = 65536;
- *     const bytes: u8[] = quicEncodeTransportParameters(mine);   // for TlsServerConfig
- *     const theirs = quicParseTransportParameters(clientBytes, false);
- *     if (theirs.error !== 0) { … close with theirs.error … }
+ *     const mine: QuicTransportParameters = new QuicTransportParameters()
+ *     mine.initialMaxData = 65536
+ *     const bytes: u8[] = quicEncodeTransportParameters(mine)   // for TlsServerConfig
+ *     // bytes is [0x04, 0x04, 0x80, 0x01, 0x00, 0x00]: initial_max_data, length 4, 65536
+ *     const theirs: QuicTransportParameters = quicParseTransportParameters(bytes, false)
+ *     if (theirs.error !== 0) {
+ *       // close the connection with theirs.error; theirs.errorParameter names the parameter
+ *     }
  *
- * A `QuicTransportParameters` starts at every parameter's default (§18.2),
+ * **A `QuicTransportParameters` starts at every parameter's default** (§18.2),
  * so a parse leaves a parameter the peer did not send at the value the RFC
  * says it then has. The encoder writes a parameter only when it differs from
  * that default, plus the connection IDs, which have none.
@@ -32,7 +35,7 @@
  * Whether `initial_source_connection_id` is present and right is the
  * connection's check, because it needs the packet the ID came in.
  *
- * Written from RFC 9000 §18, in this module's own structure; nothing here is
+ * **Written from RFC 9000 §18**, in this module's own structure; nothing here is
  * ported from another implementation. Private names carry the
  * `quicParams` prefix (`docs/wp26-stdlib.md` §3e).
  */
@@ -51,22 +54,60 @@ import {
 
 // ---- Parameter IDs (RFC 9000 §18.2) ---------------------------------------------
 
+/**
+ * `original_destination_connection_id`: the Destination Connection ID of the client's first Initial; server
+ * only.
+ */
 export const QUIC_TP_ORIGINAL_DCID: i32 = 0x00
+/** `max_idle_timeout`, in milliseconds; 0 or absent for no idle timeout. */
 export const QUIC_TP_MAX_IDLE_TIMEOUT: i32 = 0x01
+/** `stateless_reset_token`: the 16-byte token for the server's first connection ID; server only. */
 export const QUIC_TP_STATELESS_RESET_TOKEN: i32 = 0x02
+/**
+ * `max_udp_payload_size`: the largest UDP payload, in bytes, the sender takes; at least 1200, default 65527.
+ */
 export const QUIC_TP_MAX_UDP_PAYLOAD_SIZE: i32 = 0x03
+/** `initial_max_data`: the connection-wide flow-control limit, in bytes. */
 export const QUIC_TP_INITIAL_MAX_DATA: i32 = 0x04
+/**
+ * `initial_max_stream_data_bidi_local`: the flow-control limit, in bytes, for bidirectional streams the
+ * sender opens.
+ */
 export const QUIC_TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL: i32 = 0x05
+/**
+ * `initial_max_stream_data_bidi_remote`: the flow-control limit, in bytes, for bidirectional streams the peer
+ * opens.
+ */
 export const QUIC_TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE: i32 = 0x06
+/**
+ * `initial_max_stream_data_uni`: the flow-control limit, in bytes, for unidirectional streams the peer opens.
+ */
 export const QUIC_TP_INITIAL_MAX_STREAM_DATA_UNI: i32 = 0x07
+/** `initial_max_streams_bidi`: how many bidirectional streams the peer may open; at most 2^60. */
 export const QUIC_TP_INITIAL_MAX_STREAMS_BIDI: i32 = 0x08
+/** `initial_max_streams_uni`: how many unidirectional streams the peer may open; at most 2^60. */
 export const QUIC_TP_INITIAL_MAX_STREAMS_UNI: i32 = 0x09
+/** `ack_delay_exponent`: an ACK Delay field counts units of 2^this microseconds; at most 20, default 3. */
 export const QUIC_TP_ACK_DELAY_EXPONENT: i32 = 0x0a
+/**
+ * `max_ack_delay`: the longest the sender delays an acknowledgement, in milliseconds; below 2^14, default 25.
+ */
 export const QUIC_TP_MAX_ACK_DELAY: i32 = 0x0b
+/** `disable_active_migration`: present, with no value, when the sender takes no connection migration. */
 export const QUIC_TP_DISABLE_ACTIVE_MIGRATION: i32 = 0x0c
+/** `preferred_address`: an address the server would have the client move to; server only. */
 export const QUIC_TP_PREFERRED_ADDRESS: i32 = 0x0d
+/**
+ * `active_connection_id_limit`: how many of the peer's connection IDs the sender keeps; at least 2, the
+ * default.
+ */
 export const QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT: i32 = 0x0e
+/** `initial_source_connection_id`: the Source Connection ID of the sender's first Initial. */
 export const QUIC_TP_INITIAL_SCID: i32 = 0x0f
+/**
+ * `retry_source_connection_id`: the Source Connection ID of the server's Retry, when it sent one; server
+ * only.
+ */
 export const QUIC_TP_RETRY_SCID: i32 = 0x10
 /**
  * `max_datagram_frame_size` (RFC 9221 §3): the largest DATAGRAM frame, type
@@ -191,6 +232,9 @@ const quicParamsPushBytes = (out: u8[], id: i32, bytes: u8[], present: boolean):
  * default, every byte-valued one only when its `has*` flag is set, and
  * `disable_active_migration` only when true. Nothing is checked: these are
  * this endpoint's own values, and a value no varint holds is left out.
+ *
+ * @param p This endpoint's parameters, only read.
+ * @returns A new array holding the extension body; empty when every parameter is at its default.
  */
 export const quicEncodeTransportParameters = (p: QuicTransportParameters): u8[] => {
   const out: u8[] = []
@@ -203,6 +247,9 @@ export const quicEncodeTransportParameters = (p: QuicTransportParameters): u8[] 
  * encoding is pushed into the room the array already has, so a connection
  * slot that keeps one array for its parameters grows it only when they
  * outgrow every earlier connection's.
+ *
+ * @param p This endpoint's parameters, only read.
+ * @param out The array the extension body replaces the contents of.
  */
 export const quicEncodeTransportParametersInto = (p: QuicTransportParameters, out: u8[]): void => {
   quicParamsEmpty(out)
@@ -387,6 +434,10 @@ const quicParamsIsVarint = (id: i32): boolean =>
  * `QUIC_ERROR_TRANSPORT_PARAMETER` for any of the breaks the module header
  * lists, with `errorParameter` naming the parameter; on an error the other
  * fields hold what was read so far and are not to be used.
+ *
+ * @param bytes The extension body as the peer sent it, only read.
+ * @param fromServer True when the peer is the server, so that the server-only parameters are allowed.
+ * @returns A new `QuicTransportParameters`; read its `error` before any other field.
  */
 export const quicParseTransportParameters = (bytes: u8[], fromServer: boolean): QuicTransportParameters => {
   const p: QuicTransportParameters = new QuicTransportParameters()
@@ -399,6 +450,11 @@ export const quicParseTransportParameters = (bytes: u8[], fromServer: boolean): 
  * default first, its byte-valued fields emptied and refilled in the room
  * their arrays have: a connection slot parses each client's parameters into
  * one object of its own. Answers `p`.
+ *
+ * @param p The object to overwrite with the parsed parameters and the verdict in `error`.
+ * @param bytes The extension body as the peer sent it, only read.
+ * @param fromServer True when the peer is the server, so that the server-only parameters are allowed.
+ * @returns `p` itself; read its `error` before any other field.
  */
 export const quicParseTransportParametersInto = (
   p: QuicTransportParameters,

@@ -5,25 +5,35 @@
  * Initial secrets, AEAD packet protection, header protection and the Retry
  * integrity tag.
  *
- *     import { quicInitialSecrets, quicKeys, quicParseHeader, quicOpenPacket, QuicKeysSlot,
- *              QUIC_AEAD_AES_128_GCM, QUIC_PACKET_OK } from "nish/net/quic-packet";
- *     import { Secret, secret, wipe } from "nish:secret";
+ *     import { QuicHeader, QuicInitialSecrets, QuicKeys, QuicKeysSlot, QuicPacket, quicInitialSecrets,
+ *              quicKeys, quicLongHeader, quicOpenPacket, quicParseHeader, quicSealPacket,
+ *              QUIC_AEAD_AES_128_GCM, QUIC_PACKET_INITIAL, QUIC_PACKET_OK } from "nish/net/quic-packet"
+ *     import { Secret, secret, wipe } from "nish:secret"
  *
- *     const secrets = quicInitialSecrets(clientDcid);            // RFC 9001 §5.2
- *     if (secrets === null) { … a DCID over 20 bytes … }
- *     const client: u8[] = new Array<u8>(secrets.client.length); // public, so a copy
- *     client.set(secrets.client);
- *     const held: Secret<u8[]> = secret(client);
- *     const slot = new QuicKeysSlot();                           // ours, so ours to wipe
- *     const keys = quicKeys(slot, QUIC_AEAD_AES_128_GCM, held);
- *     wipe(held);
- *     if (keys === null) { … }
- *     const header = quicParseHeader(datagram, 0, 8);            // 8: our short-header DCID length
- *     const packet = quicOpenPacket(keys, datagram, header, largestReceived);
- *     if (packet.error === QUIC_PACKET_OK) { … packet.payload holds the frames … }
- *     slot.wipe();                                               // once the level is done
+ *     const dcid: u8[] = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08]
+ *     const secrets: QuicInitialSecrets | null = quicInitialSecrets(dcid)   // RFC 9001 §5.2
+ *     if (secrets !== null) {
+ *       const client: u8[] = new Array<u8>(32)                              // public, so a copy
+ *       client.set(secrets.client)
+ *       const held: Secret<u8[]> = secret(client)
+ *       const slot: QuicKeysSlot = new QuicKeysSlot()                       // ours, so ours to wipe
+ *       const keys: QuicKeys | null = quicKeys(slot, QUIC_AEAD_AES_128_GCM, held)
+ *       wipe(held)
+ *       const header: u8[] | null = quicLongHeader(QUIC_PACKET_INITIAL, dcid, [], [], 0, 4, 20)
+ *       if (keys !== null && header !== null) {
+ *         const datagram: u8[] | null = quicSealPacket(keys, header, 0, new Array<u8>(20))
+ *         if (datagram !== null) {
+ *           const parsed: QuicHeader = quicParseHeader(datagram, 0, 8)      // 8: our short DCID length
+ *           const packet: QuicPacket = quicOpenPacket(keys, datagram, parsed, -1)
+ *           if (packet.error === QUIC_PACKET_OK) {
+ *             // packet.payload holds the 20 bytes of frames sealed above
+ *           }
+ *         }
+ *       }
+ *       slot.wipe()                                                         // once the level is done
+ *     }
  *
- * The module is sans-IO: bytes in, bytes out, no socket and no clock. It
+ * **The module is sans-IO**: bytes in, bytes out, no socket and no clock. It
  * frames and protects packets and stops there, so it knows nothing of frames,
  * of a connection's state or of which keys a level is on; that is
  * `nish/net/quic` (WP34 Q2). Only version 1 (`0x00000001`) is spoken. A long
@@ -84,12 +94,12 @@
  * who holds the header-protection key, and RFC 9001 §5.4.1 protects it against
  * observers, not timing), and whether a payload authenticated.
  *
- * Written from RFC 9000 and RFC 9001, in this module's own structure: nothing
+ * **Written from RFC 9000 and RFC 9001**, in this module's own structure: nothing
  * here is ported from another implementation. The packet-number decoding
  * follows the arithmetic of RFC 9000 §A.3 and the length choice the rule of
  * §A.2, neither line by line.
  *
- * Private names carry the `quicPacket` prefix because a `std/` module's
+ * **Private names carry the `quicPacket` prefix** because a `std/` module's
  * private functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
@@ -274,6 +284,15 @@ export class QuicKeys {
   /** `hp` expanded, for the AES suites; `null` for ChaCha20-Poly1305. */
   hpAes: AesKey | null = null
 
+  /**
+   * Wraps keys already derived; the arrays are kept, not copied, so they stay the owner's to wipe.
+   * `packetAes` and `hpAes` start `null`, and `quicKeys` fills them for the AES suites.
+   *
+   * @param aead The suite, one of the `QUIC_AEAD_*` constants.
+   * @param key The packet-protection key: 16 bytes for AES-128-GCM, 32 for the others.
+   * @param iv The 12-byte packet IV.
+   * @param hp The header-protection key, the same length as `key`.
+   */
   constructor(aead: i32, key: u8[], iv: u8[], hp: u8[]) {
     this.aead = aead
     this.key = key
@@ -289,6 +308,12 @@ export class QuicInitialSecrets {
   /** `server_initial_secret`: what protects the server's. */
   server: u8[]
 
+  /**
+   * Pairs two secrets already derived, keeping the arrays rather than copying them.
+   *
+   * @param client The 32-byte `client_initial_secret`.
+   * @param server The 32-byte `server_initial_secret`.
+   */
   constructor(client: u8[], server: u8[]) {
     this.client = client
     this.server = server
@@ -362,6 +387,9 @@ const quicPacketAppend = (out: u8[], bytes: u8[]): void => {
 /**
  * The bytes a variable-length integer needs (RFC 9000 §16): 1, 2, 4 or 8, or
  * 0 for a value that has no encoding, below zero or past 2^62 - 1.
+ *
+ * @param value The integer to encode.
+ * @returns The encoded length in bytes, or 0 when `value` has no encoding.
  */
 export const quicVarintSize = (value: i64): i32 => {
   if (value < 0 || value > QUIC_MAX_VARINT) {
@@ -385,6 +413,12 @@ export const quicVarintSize = (value: i64): i32 => {
  * allows that, and a Length field written before its packet is complete uses
  * it). Answers `at + size`, or -1, writing nothing, when `size` is not 1, 2,
  * 4 or 8, is too short for `value`, or does not fit in `buf` from `at`.
+ *
+ * @param buf The buffer to write into; it is not grown.
+ * @param at The byte offset of the integer's first byte.
+ * @param value The integer, 0 to 2^62 - 1.
+ * @param size The encoded length in bytes: 1, 2, 4 or 8, at least `quicVarintSize(value)`.
+ * @returns The byte offset one past the integer, or -1 when nothing was written.
  */
 export const quicVarintPut = (buf: u8[], at: i32, value: i64, size: i32): i32 => {
   const needed: i32 = quicVarintSize(value)
@@ -418,6 +452,9 @@ export const quicVarintPut = (buf: u8[], at: i32, value: i64, size: i32): i32 =>
 /**
  * Appends `count` zero bytes to `out`, which a writer then fills in place
  * with the `put` form of what it appends: one encoder serves both.
+ *
+ * @param out The array to lengthen.
+ * @param count How many zero bytes to append; 0 or less appends none.
  */
 export const quicPacketGrow = (out: u8[], count: i32): void => {
   for (let k: i32 = 0; k < count; k += 1) {
@@ -429,6 +466,11 @@ export const quicPacketGrow = (out: u8[], count: i32): void => {
  * Appends `value` to `out` as a variable-length integer of exactly `size`
  * bytes, as `quicVarintPut` writes it. Answers `false`, appending nothing,
  * when `size` is not 1, 2, 4 or 8 or is too short for `value`.
+ *
+ * @param out The array to append to.
+ * @param value The integer, 0 to 2^62 - 1.
+ * @param size The encoded length in bytes: 1, 2, 4 or 8, at least `quicVarintSize(value)`.
+ * @returns True when the integer was appended.
  */
 export const quicVarintPushSized = (out: u8[], value: i64, size: i32): boolean => {
   const needed: i32 = quicVarintSize(value)
@@ -444,6 +486,10 @@ export const quicVarintPushSized = (out: u8[], value: i64, size: i32): boolean =
  * Appends `value` to `out` as a variable-length integer in the fewest bytes
  * (RFC 9000 §16). Answers `false`, appending nothing, for a value below zero
  * or past 2^62 - 1.
+ *
+ * @param out The array to append to.
+ * @param value The integer, 0 to 2^62 - 1.
+ * @returns True when the integer was appended.
  */
 export const quicVarintPush = (out: u8[], value: i64): boolean =>
   quicVarintPushSized(out, value, quicVarintSize(value))
@@ -452,6 +498,10 @@ export const quicVarintPush = (out: u8[], value: i64): boolean =>
  * The length of the variable-length integer whose first byte is at
  * `bytes[at]`, read from its two-bit prefix: 1, 2, 4 or 8. Answers 0 when
  * `at` is outside `bytes`.
+ *
+ * @param bytes The bytes holding the integer.
+ * @param at The byte offset of the integer's first byte.
+ * @returns The integer's length in bytes, which may run past the end of `bytes`; or 0.
  */
 export const quicVarintLength = (bytes: u8[], at: i32): i32 => {
   if (at < 0 || at >= toI32(bytes.length)) {
@@ -465,6 +515,11 @@ export const quicVarintLength = (bytes: u8[], at: i32): i32 => {
  * from `bytes[at .. end)`. Answers -1, which no varint holds, when it does not
  * fit in that window or the window is not inside `bytes`. Advance past it by
  * `quicVarintLength(bytes, at)`.
+ *
+ * @param bytes The bytes holding the integer.
+ * @param at The byte offset of the integer's first byte.
+ * @param end The byte offset the integer must end at or before, at most `bytes.length`.
+ * @returns The integer, 0 to 2^62 - 1, or -1 when it cannot be read.
  */
 export const quicVarintRead = (bytes: u8[], at: i32, end: i32): i64 => {
   const size: i32 = quicVarintLength(bytes, at)
@@ -484,6 +539,10 @@ export const quicVarintRead = (bytes: u8[], at: i32, end: i32): i64 => {
  * or -1 if none: enough that twice the unacknowledged range fits, 1 to 4.
  * Answers 0 when no length will do — `fullPn` not above `largestAcked`, not a
  * packet number, or more than 2^31 packets unacknowledged.
+ *
+ * @param fullPn The packet number about to be sent, 0 to 2^62 - 1.
+ * @param largestAcked The largest packet number the peer has acknowledged in this space, or -1 for none.
+ * @returns The packet-number length in bytes, 1 to 4, or 0 when none will do.
  */
 export const quicPacketNumberLength = (fullPn: i64, largestAcked: i64): i32 => {
   if (fullPn < 0 || fullPn > QUIC_MAX_VARINT || largestAcked < -1 || fullPn <= largestAcked) {
@@ -508,6 +567,11 @@ export const quicPacketNumberLength = (fullPn: i64, largestAcked: i64): i32 => {
  * that space, or -1 for none (RFC 9000 §17.1, §A.3): the one closest to
  * `largestPn + 1` whose low bytes are `truncatedPn`. Answers -1 when
  * `pnLength` is not 1 to 4 or `truncatedPn` does not fit in it.
+ *
+ * @param largestPn The largest packet number processed in this space, or -1 for none.
+ * @param truncatedPn The packet number's low bytes as the header carried them, below 2^(8 × `pnLength`).
+ * @param pnLength The packet number's length on the wire, 1 to 4 bytes.
+ * @returns The full packet number, 0 to 2^62 - 1, or -1 for an argument out of range.
  */
 export const quicPacketNumberDecode = (largestPn: i64, truncatedPn: i64, pnLength: i32): i64 => {
   if (pnLength < 1 || pnLength > 4 || largestPn < -1 || largestPn > QUIC_MAX_VARINT) {
@@ -543,7 +607,16 @@ const quicPacketCidFits = (cid: u8[]): boolean => toI32(cid.length) <= QUIC_MAX_
 const quicPacketCidWindowFits = (cid: u8[], length: i32): boolean =>
   length >= 0 && length <= QUIC_MAX_CID_LENGTH && length <= toI32(cid.length)
 
-/** Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows. */
+/**
+ * Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows.
+ * A byte outside either window is skipped rather than written, so a wrong window cannot panic.
+ *
+ * @param buf The buffer to write into; it is not grown.
+ * @param at The byte offset in `buf` of the first byte written.
+ * @param bytes The bytes to copy from.
+ * @param from The byte offset in `bytes` of the first byte copied.
+ * @param length How many bytes to copy.
+ */
 export const quicPacketCopy = (buf: u8[], at: i32, bytes: u8[], from: i32, length: i32): void => {
   for (let k: i32 = 0; k < length; k += 1) {
     if (at + k >= 0 && at + k < toI32(buf.length) && from + k >= 0 && from + k < toI32(bytes.length)) {
@@ -601,6 +674,16 @@ const quicPacketPutNumber = (buf: u8[], at: i32, packetNumber: i64, pnLength: i3
 /**
  * The size of the long header `quicPutLongHeader` writes for these
  * arguments, or 0 when it would refuse them (see `quicLongHeader`).
+ *
+ * @param type `QUIC_PACKET_INITIAL`, `QUIC_PACKET_ZERO_RTT` or `QUIC_PACKET_HANDSHAKE`.
+ * @param dcidLength The Destination Connection ID's length in bytes, 0 to 20.
+ * @param scidLength The Source Connection ID's length in bytes, 0 to 20.
+ * @param tokenLength The token's length in bytes; 0 for anything but an Initial.
+ * @param packetNumber The full packet number, 0 to 2^62 - 1; only range-checked, as the size does not
+ *   depend on it.
+ * @param pnLength The packet number's length on the wire, 1 to 4 bytes.
+ * @param payloadLength The plaintext payload's length in bytes, without the AEAD tag.
+ * @returns The header's length in bytes, packet number included, or 0 for an argument out of range.
  */
 export const quicLongHeaderSize = (
   type: i32,
@@ -638,6 +721,20 @@ export const quicLongHeaderSize = (
  * bytes of `dcid` and `scid`, and answers the offset past it: where the
  * payload goes. Answers -1, writing nothing, where `quicLongHeader` answers
  * `null`, and for a header that does not fit in `buf` from `at`.
+ *
+ * @param buf The buffer to write into; it is not grown.
+ * @param at The byte offset in `buf` where the packet starts.
+ * @param type `QUIC_PACKET_INITIAL`, `QUIC_PACKET_ZERO_RTT` or `QUIC_PACKET_HANDSHAKE`.
+ * @param dcid The bytes holding the Destination Connection ID at their start.
+ * @param dcidLength How many bytes of `dcid` are the ID, 0 to 20.
+ * @param scid The bytes holding the Source Connection ID at their start.
+ * @param scidLength How many bytes of `scid` are the ID, 0 to 20.
+ * @param token The whole of an Initial's token; empty for the other types.
+ * @param packetNumber The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+ * @param pnLength The packet number's length on the wire, 1 to 4 bytes.
+ * @param payloadLength The plaintext payload's length in bytes, without the AEAD tag.
+ * @returns The byte offset one past the packet number, where the payload goes, or -1 when nothing was
+ *   written.
  */
 export const quicPutLongHeader = (
   buf: u8[],
@@ -703,6 +800,15 @@ export const quicPutLongHeader = (
  * on a non-Initial packet, a `pnLength` outside 1 to 4, a packet number that
  * is not one, a negative `payloadLength`, or a Length past 16383, the most two
  * bytes hold and far more than a datagram carries.
+ *
+ * @param type `QUIC_PACKET_INITIAL`, `QUIC_PACKET_ZERO_RTT` or `QUIC_PACKET_HANDSHAKE`.
+ * @param dcid The Destination Connection ID, 0 to 20 bytes.
+ * @param scid The Source Connection ID, 0 to 20 bytes.
+ * @param token An Initial's token, or empty.
+ * @param packetNumber The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+ * @param pnLength The packet number's length on the wire, 1 to 4 bytes.
+ * @param payloadLength The plaintext payload's length in bytes, without the AEAD tag.
+ * @returns A new array holding the header, or `null` for an argument out of range.
  */
 export const quicLongHeader = (
   type: i32,
@@ -753,6 +859,18 @@ export const quicLongHeader = (
  * answers, with the Destination Connection ID the first `dcidLength` bytes of
  * `dcid`, and answers the offset past it. Answers -1, writing nothing, where
  * `quicShortHeader` answers `null`, and for a header that does not fit.
+ *
+ * @param buf The buffer to write into; it is not grown.
+ * @param at The byte offset in `buf` where the packet starts.
+ * @param dcid The bytes holding the Destination Connection ID at their start.
+ * @param dcidLength How many bytes of `dcid` are the ID, 0 to 20.
+ * @param spin The latency spin bit (RFC 9000 §17.4).
+ * @param keyPhase The Key Phase bit, which says which generation of 1-RTT keys protects the packet
+ *   (RFC 9001 §6).
+ * @param packetNumber The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+ * @param pnLength The packet number's length on the wire, 1 to 4 bytes.
+ * @returns The byte offset one past the packet number, where the payload goes, or -1 when nothing was
+ *   written.
  */
 export const quicPutShortHeader = (
   buf: u8[],
@@ -789,6 +907,14 @@ export const quicPutShortHeader = (
  * and the packet number in `pnLength` bytes. Answers `null` for a connection
  * ID over 20 bytes, a `pnLength` outside 1 to 4 or a packet number that is
  * not one.
+ *
+ * @param dcid The Destination Connection ID, 0 to 20 bytes.
+ * @param spin The latency spin bit (RFC 9000 §17.4).
+ * @param keyPhase The Key Phase bit, which says which generation of 1-RTT keys protects the packet
+ *   (RFC 9001 §6).
+ * @param packetNumber The full packet number, 0 to 2^62 - 1; its low `pnLength` bytes are written.
+ * @param pnLength The packet number's length on the wire, 1 to 4 bytes.
+ * @returns A new array holding the header, or `null` for an argument out of range.
  */
 export const quicShortHeader = (
   dcid: u8[],
@@ -836,6 +962,13 @@ const quicPacketCidLength = (bytes: u8[], at: i32, end: i32): i32 => {
  * as they were. The datagram is `datagram[at .. limit)`, so one buffer can
  * hold several (a GRO receive); a `limit` past the array reads as its length.
  * See `quicParseHeader` for what is read and refused.
+ *
+ * @param header The header to overwrite; its windows index into `datagram`.
+ * @param datagram The received bytes, only read.
+ * @param at The byte offset where the packet starts.
+ * @param limit The byte offset one past the datagram's end.
+ * @param shortDcidLength The length in bytes of the connection IDs this endpoint hands out, 0 to 20.
+ * @returns `QUIC_PACKET_OK`, or the `QUIC_ERR_*` that stopped the parse.
  */
 export const quicParseHeaderInto = (
   header: QuicHeader,
@@ -957,6 +1090,11 @@ export const quicParseHeaderInto = (
  * answer's arrays; `quicParseHeaderInto` reads the same without a copy.
  *
  * The answer's `error` says what stopped it; nothing a peer sends panics.
+ *
+ * @param datagram The received bytes, only read; the datagram runs to the array's end.
+ * @param at The byte offset where the packet starts.
+ * @param shortDcidLength The length in bytes of the connection IDs this endpoint hands out, 0 to 20.
+ * @returns A new `QuicHeader`; read its `error` before any other field.
  */
 export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): QuicHeader => {
   const header: QuicHeader = new QuicHeader()
@@ -975,6 +1113,9 @@ export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): 
  * ID, `dcid`: `initial_secret` is HKDF-Extract under version 1's salt, and the
  * client's and the server's are expanded from it with the labels `client in`
  * and `server in`. Answers `null` for a `dcid` over 20 bytes.
+ *
+ * @param dcid The Destination Connection ID of the client's first Initial, 0 to 20 bytes.
+ * @returns The two 32-byte secrets as plain arrays, which are not secret, or `null`.
  */
 export const quicInitialSecrets = (dcid: u8[]): QuicInitialSecrets | null => {
   if (!quicPacketCidFits(dcid)) {
@@ -1063,6 +1204,12 @@ const quicPacketKeysUsable = (keys: QuicKeys): boolean => {
  * this module does not know or a secret that is not that hash's length. The
  * Initial secrets are public (RFC 9001 §5.2), so a caller deriving Initial
  * keys wraps a copy of one in `secret`, or uses `quicKeysInto`.
+ *
+ * @param slot The caller's slot to derive into; its earlier keys are overwritten.
+ * @param aead The negotiated suite, one of the `QUIC_AEAD_*` constants.
+ * @param trafficSecret The level's traffic secret, 32 bytes (48 for AES-256-GCM); borrowed: it is
+ *   not wiped here, and the caller wipes it once no more keys come from it.
+ * @returns `slot.keys`, valid until the slot is derived into again or wiped, or `null`.
  */
 export const quicKeys = (slot: QuicKeysSlot, aead: i32, trafficSecret: Secret<u8[]>): QuicKeys | null => {
   if (!quicPacketHeldFits(aead, trafficSecret)) {
@@ -1084,6 +1231,10 @@ export const quicKeys = (slot: QuicKeysSlot, aead: i32, trafficSecret: Secret<u8
  * answered as a `Secret` the caller wipes. The header-protection key does
  * not change with it (§6), so the new keys are `quicKeysUpdate` of the old
  * keys and this. Answers `null` where `quicKeys` would.
+ *
+ * @param aead The negotiated suite, one of the `QUIC_AEAD_*` constants.
+ * @param trafficSecret The current generation's traffic secret; borrowed, and left for the caller to wipe.
+ * @returns The next generation's secret, a new `Secret` the caller owns and wipes, or `null`.
  */
 export const quicKeyUpdateSecret = (aead: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> | null => {
   if (!quicPacketHeldFits(aead, trafficSecret)) {
@@ -1103,6 +1254,11 @@ export const quicKeyUpdateSecret = (aead: i32, trafficSecret: Secret<u8[]>): Sec
  * schedule, in the slot, so wiping one generation leaves the other usable.
  * Answers the slot's keys, or `null`, deriving nothing, for keys `quicKeys`
  * did not make, keys that live in `slot`, or a secret of the wrong length.
+ *
+ * @param slot The caller's slot for the next generation; a different slot from the one `keys` live in.
+ * @param keys The current generation's keys, whose header-protection key is copied; left unchanged.
+ * @param nextSecret The next generation's traffic secret; borrowed, and left for the caller to wipe.
+ * @returns `slot.keys`, valid until the slot is derived into again or wiped, or `null`.
  */
 export const quicKeysUpdate = (
   slot: QuicKeysSlot,
@@ -1136,6 +1292,8 @@ export const quicKeysUpdate = (
  * kernels' powers of H included) and H itself. It zeroes the arrays `keys`
  * points at now; a slot's arrays of the other lengths are
  * `QuicKeysSlot.wipe`'s, which zeroes them all.
+ *
+ * @param keys The keys to zero; unusable afterwards until derived into again.
  */
 export const quicKeysWipe = (keys: QuicKeys): void => {
   secureZero(keys.key)
@@ -1245,6 +1403,13 @@ const quicPacketDeriveInto = (kdf: HkdfScratch, keys: QuicKeys, secret: u8[]): v
  * `kdf`, with the AES schedules expanded in place. Answers the slot's keys,
  * or `null`, deriving nothing, where `quicKeys` answers `null`. The keys
  * are the slot's: the next derivation into it overwrites them.
+ *
+ * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param slot The caller's slot to derive into; its earlier keys are overwritten.
+ * @param aead The negotiated suite, one of the `QUIC_AEAD_*` constants.
+ * @param secret The traffic secret as a plain array, 32 bytes (48 for AES-256-GCM); only read, and not
+ *   wiped, so a caller passing a non-Initial secret wipes it.
+ * @returns `slot.keys`, valid until the slot is derived into again or wiped, or `null`.
  */
 export const quicKeysInto = (
   kdf: HkdfScratch,
@@ -1286,6 +1451,15 @@ export const quicKeysInto = (
  * the next generation's packet key and IV from `nextSecret`, and `keys`'
  * header-protection key shared, as every generation shares it (RFC 9001
  * §6). Answers the slot's keys, or `null` where `quicKeysUpdate` does.
+ * Unlike `quicKeysUpdate` the header-protection key and its schedule are the
+ * same arrays as `keys`', not a copy, so wiping either generation zeroes the
+ * header-protection key both use.
+ *
+ * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param slot The caller's slot for the next generation; a different slot from the one `keys` live in.
+ * @param keys The current generation's keys, whose header-protection arrays are shared; left unchanged.
+ * @param nextSecret The next generation's traffic secret as a plain array; only read, and not wiped.
+ * @returns `slot.keys`, valid until the slot is derived into again or wiped, or `null`.
  */
 export const quicKeysUpdateInto = (
   kdf: HkdfScratch,
@@ -1308,6 +1482,12 @@ export const quicKeysUpdateInto = (
  * `quicKeyUpdateSecret` into `out`, which must be exactly the secret's
  * length and not `secret` itself. Answers whether it derived, which it does
  * where `quicKeyUpdateSecret` answers a secret.
+ *
+ * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param aead The negotiated suite, one of the `QUIC_AEAD_*` constants.
+ * @param secret The current traffic secret as a plain array; only read, and not wiped.
+ * @param out The array the next secret is written over, 32 bytes (48 for AES-256-GCM).
+ * @returns True when `out` holds the next secret; false, `out` untouched, for a wrong length or `aead`.
  */
 export const quicKeyUpdateSecretInto = (kdf: HkdfScratch, aead: i32, secret: u8[], out: u8[]): boolean => {
   const length: i32 = quicPacketSecretLength(aead)
@@ -1326,6 +1506,11 @@ export const quicKeyUpdateSecretInto = (kdf: HkdfScratch, aead: i32, secret: u8[
  * the plain output of each derivation wiped, and the AES schedules expanded
  * in place inside an arena block. Answers the slot's keys, or `null`,
  * deriving nothing, where `quicKeys` answers `null`.
+ *
+ * @param slot The caller's slot to derive into; its earlier keys are overwritten.
+ * @param aead The negotiated suite, one of the `QUIC_AEAD_*` constants.
+ * @param secret The traffic secret, 32 bytes (48 for AES-256-GCM); borrowed, and left for the caller to wipe.
+ * @returns `slot.keys`, valid until the slot is derived into again or wiped, or `null`.
  */
 export const quicKeysHeldInto = (slot: QuicKeysSlot, aead: i32, secret: Secret<u8[]>): QuicKeys | null => {
   if (!quicPacketHeldFits(aead, secret)) {
@@ -1357,6 +1542,10 @@ export const quicKeysHeldInto = (slot: QuicKeysSlot, aead: i32, secret: Secret<u
  * bytes in place, under SHA-384 for a 48-byte secret and SHA-256 for a
  * 32-byte one. `dst` may be `src`, which ratchets it. Answers whether it
  * derived: not unless both hold 32 bytes or both 48.
+ *
+ * @param dst The secret overwritten with the next generation's; the caller's, and the caller wipes it.
+ * @param src The current generation's secret; borrowed, and not wiped here unless it is `dst`.
+ * @returns True when `dst` holds the next secret; false, both untouched, for mismatched or wrong lengths.
  */
 export const quicKeyUpdateSecretHeldInto = (dst: Secret<u8[]>, src: Secret<u8[]>): boolean => {
   const length: i32 = expose(src, quicPacketBytesLength)
@@ -1377,6 +1566,14 @@ export const quicKeyUpdateSecretHeldInto = (dst: Secret<u8[]>, src: Secret<u8[]>
  * length)`, read in place, into `client` and `server`, 32 bytes each.
  * Answers whether it derived: not for an ID over 20 bytes, a window outside
  * `buf`, or an output of another length.
+ *
+ * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param buf The bytes holding the client's first Destination Connection ID, such as the datagram.
+ * @param at The byte offset in `buf` where the ID starts.
+ * @param length The ID's length in bytes, 0 to 20.
+ * @param client The 32-byte array `client_initial_secret` is written over.
+ * @param server The 32-byte array `server_initial_secret` is written over.
+ * @returns True when both secrets were written; false, both untouched, otherwise.
  */
 export const quicInitialSecretsInto = (
   kdf: HkdfScratch,
@@ -1472,6 +1669,14 @@ const quicPacketOpen = (keys: QuicKeys, nonce: u8[], aad: u8[], sealed: u8[]): u
  * `buf` not to be sent, for anything `quicSealPacket` refuses and for a tag
  * that does not fit in `buf`. The AEAD's temporaries are released before it
  * answers, so sealing allocates nothing that outlives the call.
+ *
+ * @param keys The level's keys, as `quicKeys` or one of its `Into` forms made them.
+ * @param buf The buffer holding the packet; it is not grown, so it needs 16 bytes of room past the payload.
+ * @param start The byte offset in `buf` where the packet starts.
+ * @param headerLength The header's length in bytes, packet number included.
+ * @param payloadLength The plaintext payload's length in bytes; with the packet number, at least 4.
+ * @param packetNumber The full packet number the header carries, 0 to 2^62 - 1.
+ * @returns The byte offset one past the AEAD tag, or -1 when the packet is not to be sent.
  */
 export const quicSealInPlace = (
   keys: QuicKeys,
@@ -1568,6 +1773,12 @@ export const quicSealInPlace = (
  * must be at least 4 bytes; a shorter payload has to be padded first (RFC 9001
  * §5.4.2). Answers `null` for any of those, for a header too short for its
  * packet-number length, and for keys `quicKeys` did not make.
+ *
+ * @param keys The level's keys, as `quicKeys` or one of its `Into` forms made them.
+ * @param header The unprotected header, only read.
+ * @param packetNumber The full packet number the header carries, 0 to 2^62 - 1.
+ * @param payload The plaintext frames, only read.
+ * @returns A new array holding the protected packet, 16 bytes longer than header and payload, or `null`.
  */
 export const quicSealPacket = (
   keys: QuicKeys,
@@ -1594,6 +1805,13 @@ export const quicSealPacket = (
  * associated data: empty when `error` is not `QUIC_PACKET_OK`. Only numbers
  * are stored into `packet`, so a connection reuses one for every packet and
  * the answer is its own to let go. See `quicRemoveHeaderProtection`.
+ *
+ * @param keys The level's keys, as `quicKeys` or one of its `Into` forms made them.
+ * @param datagram The received bytes `header` was parsed from, only read.
+ * @param header The packet's parsed header.
+ * @param largestPn The largest packet number processed in the packet's space, or -1 for none.
+ * @param packet The result to overwrite; its `header` and `payload` arrays are not touched.
+ * @returns A new array holding the header in the clear, or an empty one when `packet.error` is set.
  */
 export const quicUnprotectHeader = (
   keys: QuicKeys,
@@ -1686,6 +1904,12 @@ export const quicUnprotectHeader = (
  * `error` is the header's own for a header that did not parse,
  * `QUIC_ERR_NOT_PROTECTED` for a Retry, `QUIC_ERR_KEYS` for keys `quicKeys`
  * did not make, and `QUIC_ERR_SAMPLE` for a packet too short to sample.
+ *
+ * @param keys The level's keys; only the header-protection key is used.
+ * @param datagram The received bytes `header` was parsed from, only read.
+ * @param header The packet's parsed header.
+ * @param largestPn The largest packet number processed in the packet's space, or -1 for none.
+ * @returns A new `QuicPacket` with no payload yet; read its `error` before any other field.
  */
 export const quicRemoveHeaderProtection = (
   keys: QuicKeys,
@@ -1704,6 +1928,13 @@ export const quicRemoveHeaderProtection = (
  * changing `datagram`. Sets `packet.error` as `quicDecryptPacket` does and
  * answers the plaintext frames, or `null` when they did not authenticate
  * (or `packet` was already in error). Only numbers are stored into `packet`.
+ *
+ * @param keys The level's keys, as `quicKeys` or one of its `Into` forms made them.
+ * @param datagram The received bytes `header` was parsed from, only read.
+ * @param header The packet's parsed header.
+ * @param clear What `quicUnprotectHeader` answered for this packet: the AEAD's associated data.
+ * @param packet The result `quicUnprotectHeader` filled for this packet; only its `error` is changed.
+ * @returns A new array holding the frames, also for `QUIC_ERR_RESERVED_BITS`, or `null`.
  */
 export const quicDecryptPayload = (
   keys: QuicKeys,
@@ -1748,6 +1979,13 @@ export const quicDecryptPayload = (
  * does but the header's reserved bits are not zero (RFC 9000 §17.2, §17.3.1),
  * which the caller is to close the connection over. Answers whether the
  * payload authenticated. A packet already in error is left as it is.
+ *
+ * @param keys The level's keys, as `quicKeys` or one of its `Into` forms made them.
+ * @param datagram The received bytes `header` was parsed from, only read.
+ * @param header The packet's parsed header.
+ * @param packet What `quicRemoveHeaderProtection` answered for this packet.
+ * @returns True when the payload authenticated, `QUIC_ERR_RESERVED_BITS` included, so read
+ *   `packet.error` too.
  */
 export const quicDecryptPacket = (
   keys: QuicKeys,
@@ -1769,6 +2007,12 @@ export const quicDecryptPacket = (
  * payload decrypted. The answer's `error` is `QUIC_PACKET_OK` with `payload`
  * holding the frames, or the `QUIC_ERR_*` of the step that failed — see
  * `quicRemoveHeaderProtection` and `quicDecryptPacket`.
+ *
+ * @param keys The level's keys, as `quicKeys` or one of its `Into` forms made them.
+ * @param datagram The received bytes `header` was parsed from, only read.
+ * @param header The packet's parsed header.
+ * @param largestPn The largest packet number processed in the packet's space, or -1 for none.
+ * @returns A new `QuicPacket`; read its `error` before any other field.
  */
 export const quicOpenPacket = (
   keys: QuicKeys,
@@ -1787,6 +2031,10 @@ export const quicOpenPacket = (
  * `odcid`'s length and bytes, then the Retry packet up to its tag — as the
  * associated data. `odcid` is the Destination Connection ID of the client's
  * Initial the Retry answers. Answers `null` for an `odcid` over 20 bytes.
+ *
+ * @param odcid The Destination Connection ID of the client's first Initial, 0 to 20 bytes.
+ * @param retryWithoutTag The Retry packet from its first byte to just before the tag, only read.
+ * @returns The 16-byte tag as a new array, or `null`.
  */
 export const quicRetryIntegrityTag = (odcid: u8[], retryWithoutTag: u8[]): u8[] | null => {
   const key: AesKey | null = aesKey(quicPacketRetryKey())
@@ -1808,6 +2056,13 @@ export const quicRetryIntegrityTag = (odcid: u8[], retryWithoutTag: u8[]): u8[] 
  * DCID the client's Initial was sent to. Answers `null` for a connection ID
  * over 20 bytes, an empty token (a client discards that Retry, §17.2.5.2) or
  * `unused` outside 0 to 15.
+ *
+ * @param dcid The client's Source Connection ID, which the Retry is sent to; 0 to 20 bytes.
+ * @param scid The server's new Source Connection ID, 0 to 20 bytes.
+ * @param token The address-validation token the client is to echo; at least one byte.
+ * @param odcid The Destination Connection ID of the client's first Initial, 0 to 20 bytes.
+ * @param unused The first byte's four low bits, 0 to 15.
+ * @returns A new array holding the whole Retry, tag included, or `null`.
  */
 export const quicRetryPacket = (
   dcid: u8[],
@@ -1843,6 +2098,13 @@ export const quicRetryPacket = (
  * `odcid`, the DCID of the Initial this client sent (RFC 9001 §5.8). The tag
  * is recomputed over the datagram's bytes and compared in constant time.
  * Answers `false` for a header that is not a Retry that parsed.
+ *
+ * @param odcid The Destination Connection ID of the Initial this client sent.
+ * @param datagram The received bytes `header` was parsed from, only read.
+ * @param header The Retry's header from `quicParseHeader`, which copies out `retryTag`;
+ *   `quicParseHeaderInto` leaves that array as it was.
+ * @returns True when the integrity tag is valid for `odcid`: the packet was not altered and answers the
+ *   Initial that carried that DCID. It authenticates nothing more (RFC 9001 §5.8).
  */
 export const quicRetryVerify = (odcid: u8[], datagram: u8[], header: QuicHeader): boolean => {
   if (header.error !== QUIC_PACKET_OK || header.type !== QUIC_PACKET_RETRY) {
