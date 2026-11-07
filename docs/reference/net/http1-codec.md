@@ -160,13 +160,13 @@ One connection's request parser, from the first byte to the close: requests on a
 
 </scalar-grid>
 
-<scalar-detail title="The parser">
+<scalar-callout type="info">
 
 **The parser** is a push-pull machine. A caller `feed`s whatever slice the
 socket gave it, of any length and cut anywhere, and then calls `next()`
 until it answers `HTTP1_NEED_MORE`:
 
-</scalar-detail>
+</scalar-callout>
 
 The events are `HTTP1_HEAD` (the request line and header section are in),
 `HTTP1_BODY` (some body bytes, de-chunked), `HTTP1_END` (the message is
@@ -757,6 +757,20 @@ class Http1Parser
 | `upgradeBytes(): u8[]` | After `HTTP1_UPGRADE`: every byte fed past the request, as a fresh array. |
 | `upgradeIs(protocol: string): boolean` | Whether the request asked to switch to exactly `protocol` (any case): one `Upgrade` field holding that one token, with `upgrade` in `Connection`. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="32" icon="phosphor/regular/hash">
+
+`HTTP1_MAX_METHOD: i32`
+
+The longest method this parser reads; a longer one is a 400.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -825,14 +839,6 @@ The input buffer a parser makes on its first feed, the smallest it grows from.
 `HTTP1_HEAD: i32`
 
 `next()`: a request line and header section were read.
-
-</scalar-card>
-
-<scalar-card title="32" icon="phosphor/regular/hash">
-
-`HTTP1_MAX_METHOD: i32`
-
-The longest method this parser reads; a longer one is a 400.
 
 </scalar-card>
 

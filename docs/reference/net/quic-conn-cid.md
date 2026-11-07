@@ -43,7 +43,7 @@ Both sides of one connection's IDs.
 
 </scalar-grid>
 
-<scalar-detail title="Local IDs">
+<scalar-callout type="info">
 
 **Local IDs** are the ones this side handed out: sequence 0 is the Source
 Connection ID of its first packet, and each later one goes out in a
@@ -52,7 +52,7 @@ retires one with RETIRE_CONNECTION_ID: a sequence number never issued, or
 the one the retiring packet was itself sent to, is a PROTOCOL_VIOLATION
 (§19.16).
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Peer IDs">
 

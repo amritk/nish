@@ -237,6 +237,20 @@ class QpackEncoder
 | `receiveDecoderStream(buf: u8[], off: i32, len: i32): i64` | Reads the decoder stream's next bytes, `buf[off, off + len)`, and answers `QPACK_OK` or QPACK_DECODER_STREAM_ERROR. A Stream Cancellation is accepted and counted, its stream ID read across calls when the bytes split it. A Section Acknowledgment and an Insert Count Increment are refused on their first byte: this encoder sent no section that needs acknowledging and inserted nothing to count. |
 | `refuse(reason: i32): i64` | Records `reason` and answers QPACK_DECODER_STREAM_ERROR, which sticks. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="QPACK_SETTINGS_MAX_TABLE_CAPACITY" icon="phosphor/regular/hash">
+
+`QPACK_SETTINGS_MAX_TABLE_CAPACITY: i64`
+
+SETTINGS_QPACK_MAX_TABLE_CAPACITY's identifier (§5); this module's value is 0.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -415,14 +429,6 @@ and not fatal: HTTP/3 answers the request with a 431.
 `QPACK_SETTINGS_BLOCKED_STREAMS: i64`
 
 SETTINGS_QPACK_BLOCKED_STREAMS's identifier (§5); with no table nothing blocks, so 0.
-
-</scalar-card>
-
-<scalar-card title="QPACK_SETTINGS_MAX_TABLE_CAPACITY" icon="phosphor/regular/hash">
-
-`QPACK_SETTINGS_MAX_TABLE_CAPACITY: i64`
-
-SETTINGS_QPACK_MAX_TABLE_CAPACITY's identifier (§5); this module's value is 0.
 
 </scalar-card>
 

@@ -564,6 +564,28 @@ class JwtVerifier
 | `verify(key: JwtKey, src: u8[], off: i32, len: i32, now: i64): i32` | Verifies the token `src[off .. off + len)` under `key` and checks its claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*` that applies, in the order the module comment lists. |
 | `verifyString(key: JwtKey, token: string, now: i64): i32` | `verify` on the bytes of `token`, copied into the verifier's own buffer first (a string's UTF-8 bytes); a token longer than `maxToken` is refused before the copy. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="8,192" icon="phosphor/regular/hash">
+
+`JWT_MAX_TOKEN: i32`
+
+The longest token a default `JwtVerifier` takes, in bytes.
+
+</scalar-card>
+
+<scalar-card title="1,048,576" icon="phosphor/regular/hash">
+
+`JWT_MAX_TOKEN_LIMIT: i32`
+
+The longest token any `JwtVerifier` takes: 1 MiB.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -741,22 +763,6 @@ The token is longer than the verifier takes, or its window is outside its array.
 `JWT_ERR_TYPE: i32`
 
 The header's `typ` is not the verifier's `typ`.
-
-</scalar-card>
-
-<scalar-card title="8,192" icon="phosphor/regular/hash">
-
-`JWT_MAX_TOKEN: i32`
-
-The longest token a default `JwtVerifier` takes, in bytes.
-
-</scalar-card>
-
-<scalar-card title="1,048,576" icon="phosphor/regular/hash">
-
-`JWT_MAX_TOKEN_LIMIT: i32`
-
-The longest token any `JwtVerifier` takes: 1 MiB.
 
 </scalar-card>
 

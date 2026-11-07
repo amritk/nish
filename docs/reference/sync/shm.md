@@ -82,7 +82,7 @@ Why a region could not be created, opened, unlinked or closed.
 
 </scalar-grid>
 
-<scalar-detail title="A region is a named POSIX shared-memory object">
+<scalar-callout type="info">
 
 **A region is a named POSIX shared-memory object** (`/dev/shm/<name>` on
 Linux, `shm_open("/<name>")` on Darwin) mapped shared, so every process that
@@ -95,7 +95,7 @@ second hard link (`SHM_ACCESS`). The name stays until `unlinkRegion`,
 even after every process has exited, which is how a process that starts later
 finds it; the mapping goes away with `close` or with the process.
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Why named, and no anonymous region made before fork">
 

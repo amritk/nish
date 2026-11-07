@@ -103,7 +103,7 @@ The streams of one connection: their slots, the index by ID, the limits both way
 
 </scalar-grid>
 
-<scalar-detail title="IDs">
+<scalar-callout type="info">
 
 **IDs** (§2.1). The low bit says who opened a stream (0 the client, 1 the
 server) and the next one whether it carries data both ways (0) or only
@@ -116,7 +116,7 @@ STREAM_DATA_BLOCKED on the server's unidirectional stream; MAX_STREAM_DATA
 or STOP_SENDING on the client's) is STREAM_STATE_ERROR (§19.4-§19.13). A
 client's stream opens every lower one of its type with it (§3.2).
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Fixed slots">
 
@@ -530,6 +530,44 @@ class QuicStreams
 | `takeFree(): i32` | Takes a free slot off the stack, or -1 when every slot is in use. |
 | `write(id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32` | Writes up to `length` bytes of `buf` from `from` to stream `id`, and its FIN when `fin` and every byte fit. Answers how many bytes it took — fewer than `length` when the send buffer is full, and the stream's event fires once acknowledgements free room — or a `QUIC_STREAM_ERR_*`. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="3" icon="phosphor/regular/hash">
+
+`QUIC_STREAM_CONTROL_MAX_DATA: i32`
+
+MAX_DATA, the connection's credit.
+
+</scalar-card>
+
+<scalar-card title="5" icon="phosphor/regular/hash">
+
+`QUIC_STREAM_CONTROL_MAX_STREAMS_BIDI: i32`
+
+MAX_STREAMS for bidirectional streams.
+
+</scalar-card>
+
+<scalar-card title="6" icon="phosphor/regular/hash">
+
+`QUIC_STREAM_CONTROL_MAX_STREAMS_UNI: i32`
+
+MAX_STREAMS for unidirectional streams.
+
+</scalar-card>
+
+<scalar-card title="4" icon="phosphor/regular/hash">
+
+`QUIC_STREAM_CONTROL_MAX_STREAM_DATA: i32`
+
+MAX_STREAM_DATA for the stream the record's value names.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -651,38 +689,6 @@ Data written, not all of it sent with the FIN (§3.1 "Send").
 `QUIC_STREAM_CONTROL_DATA_BLOCKED: i32`
 
 DATA_BLOCKED.
-
-</scalar-card>
-
-<scalar-card title="3" icon="phosphor/regular/hash">
-
-`QUIC_STREAM_CONTROL_MAX_DATA: i32`
-
-MAX_DATA, the connection's credit.
-
-</scalar-card>
-
-<scalar-card title="5" icon="phosphor/regular/hash">
-
-`QUIC_STREAM_CONTROL_MAX_STREAMS_BIDI: i32`
-
-MAX_STREAMS for bidirectional streams.
-
-</scalar-card>
-
-<scalar-card title="6" icon="phosphor/regular/hash">
-
-`QUIC_STREAM_CONTROL_MAX_STREAMS_UNI: i32`
-
-MAX_STREAMS for unidirectional streams.
-
-</scalar-card>
-
-<scalar-card title="4" icon="phosphor/regular/hash">
-
-`QUIC_STREAM_CONTROL_MAX_STREAM_DATA: i32`
-
-MAX_STREAM_DATA for the stream the record's value names.
 
 </scalar-card>
 

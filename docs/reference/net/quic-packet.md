@@ -1941,6 +1941,30 @@ class QuicPacket
 | `payload: u8[]` | The decrypted frames. |
 | `pnLength: i32` | The packet number's length on the wire, 1 to 4 bytes. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="20" icon="phosphor/regular/hash">
+
+`QUIC_MAX_CID_LENGTH: i32`
+
+The longest connection ID version 1 allows (RFC 9000 §17.2).
+
+</scalar-card>
+
+<scalar-card title="QUIC_MAX_VARINT" icon="phosphor/regular/hash">
+
+`QUIC_MAX_VARINT: i64`
+
+The largest value a variable-length integer holds, 2^62 - 1 (RFC 9000 §16),
+and so the largest packet number. Spelled as 2^30 × 2^32 - 1 because an
+`i64` literal past 2^53 is refused (`docs/LANGUAGE.md`, numeric literals).
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -2054,24 +2078,6 @@ The header runs past the end of the datagram.
 `QUIC_ERR_VERSION: i32`
 
 A long header of a version other than 1; `version`, `dcid` and `scid` are still filled in (RFC 8999 §5.1).
-
-</scalar-card>
-
-<scalar-card title="20" icon="phosphor/regular/hash">
-
-`QUIC_MAX_CID_LENGTH: i32`
-
-The longest connection ID version 1 allows (RFC 9000 §17.2).
-
-</scalar-card>
-
-<scalar-card title="QUIC_MAX_VARINT" icon="phosphor/regular/hash">
-
-`QUIC_MAX_VARINT: i64`
-
-The largest value a variable-length integer holds, 2^62 - 1 (RFC 9000 §16),
-and so the largest packet number. Spelled as 2^30 × 2^32 - 1 because an
-`i64` literal past 2^53 is refused (`docs/LANGUAGE.md`, numeric literals).
 
 </scalar-card>
 

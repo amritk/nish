@@ -267,7 +267,7 @@ class JsonTokenizer
 | `unsignedScan(): boolean` | Reads the integral number's digits into `unsignedValue` and answers whether it is unsigned and fits a `u64`. RFC 8259 allows no leading zero, so a number of up to 19 digits is below 10^19 and always fits, and one of 21 or more never does. One of 20 fits exactly when it is a `1` and then 19 digits no greater than 2^64 - 1's last 19, 8446744073709551615, so the sum never wraps and needs no divide. |
 | `value(at: i32): i32` | A value at `at`. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 
@@ -299,6 +299,12 @@ over; and a body of 16 MiB is past what an HTTP server should buffer anyway.
 `JSON_DEFAULT_MAX_TOTAL_BYTES: i32`
 
 </scalar-card>
+
+</scalar-grid>
+
+## Constants
+
+<scalar-grid cols="2">
 
 <scalar-card title="3" icon="phosphor/regular/hash">
 

@@ -231,6 +231,23 @@ class YamlJsonLoader
 | `sizeOf(n: i32): i32` | Internal: node `n`'s count from its parts' counts, all of them kept by now; a part still being counted is a cycle, which counts as too many. |
 | `tooMuchText(n: i32): i32` | Internal: the failure for text past `byteCap`, stored for node `n`. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="256" icon="phosphor/regular/hash">
+
+`YAML_JSON_MAX_RADIX_DIGITS: i32`
+
+The most digits a `0x` or `0o` integer may have, which is
+`JSON_DEFAULT_MAX_NUMBER_BYTES`: writing one in decimal costs its digit count
+times its decimal length, so a limit keeps a long one from costing the square
+of the text.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -290,17 +307,6 @@ A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits.
 `YAML_JSON_ERR_YAML: i32`
 
 The document has an error diagnostic; the range is the first one's.
-
-</scalar-card>
-
-<scalar-card title="256" icon="phosphor/regular/hash">
-
-`YAML_JSON_MAX_RADIX_DIGITS: i32`
-
-The most digits a `0x` or `0o` integer may have, which is
-`JSON_DEFAULT_MAX_NUMBER_BYTES`: writing one in decimal costs its digit count
-times its decimal length, so a limit keeps a long one from costing the square
-of the text.
 
 </scalar-card>
 

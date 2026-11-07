@@ -83,7 +83,7 @@ class QuicAckRanges
 | `remove(k: i32): void` | Removes range `k`, moving the lower ones up. |
 | `set(k: i32, low: i64, high: i64): void` | Sets range `k` to `[low, high]`. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 

@@ -271,6 +271,27 @@ class TlsRecordServer
 | `write(data: u8[], off: i32, len: i32): i32` | Application data for the client, `data[off .. off + len)`: seals as much as fits, in records of at most 2^14 bytes, and answers how much that was, as a socket write does. A KeyUpdate goes first when the key has protected `recordLimit` records, or the client asked for one. `TLS_RECORD_AGAIN` while the handshake is under way or nothing fits, `TLS_RECORD_PIPE` once the server has closed or the connection failed, and `TLS_RECORD_INVALID` for a window outside `data`. |
 | `writePadding(): i32` | The padding the next record carries: `padding` once records are protected, none in the clear. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`TLS_RECORD_MAX_KEY_UPDATES: i32`
+
+How many KeyUpdates one connection takes from its client before refusing
+the next with `unexpected_message`. Each costs one key install, two when
+the server answers, which leave nothing in the arena; the cap bounds the
+work a client can ask for, as `TLS_RECORD_IDLE_LIMIT` does in a row. A
+client that
+updates when RFC 8446 §5.5 asks, once per 2^24 records, reaches it after
+2^30 records; §4.6.3 itself sets no limit, so one that updates on a clock of
+its own is cut off at the sixty-fifth, a trade-off TLS-3 records.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -318,21 +339,6 @@ starts the count again.
 `TLS_RECORD_INVALID: i32`
 
 What `read` and `write` answer for a window outside the caller's array: Linux's EINVAL.
-
-</scalar-card>
-
-<scalar-card title="64" icon="phosphor/regular/hash">
-
-`TLS_RECORD_MAX_KEY_UPDATES: i32`
-
-How many KeyUpdates one connection takes from its client before refusing
-the next with `unexpected_message`. Each costs one key install, two when
-the server answers, which leave nothing in the arena; the cap bounds the
-work a client can ask for, as `TLS_RECORD_IDLE_LIMIT` does in a row. A
-client that
-updates when RFC 8446 §5.5 asks, once per 2^24 records, reaches it after
-2^30 records; §4.6.3 itself sets no limit, so one that updates on a clock of
-its own is cut off at the sixty-fifth, a trade-off TLS-3 records.
 
 </scalar-card>
 

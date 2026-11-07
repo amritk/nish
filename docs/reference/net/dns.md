@@ -193,7 +193,7 @@ class DnsClient
 | `timeoutMs(nowNanos: i64, ownMs: i32): i32` | The `pollWait` timeout for a caller who would otherwise wait `ownMs` (negative for ever): the smaller of it and the milliseconds, rounded up, to the core's next deadline after `nowNanos`. |
 | `tokens(): i32` | How many tokens, from `tokenBase`, the client's sockets use. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 

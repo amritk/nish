@@ -98,7 +98,7 @@ What `QuicListener.handleWindow` decided about one datagram: `kind` is a `QUIC_L
 
 </scalar-grid>
 
-<scalar-detail title="Nothing is kept per datagram">
+<scalar-callout type="info">
 
 **Nothing is kept per datagram** (H3-3 in `docs/security/http3.md`).
 `handleWindow` reads the datagram where it lies, its header parsed in
@@ -108,7 +108,7 @@ computed in scratch the listener made at start-up. `handle` is the same
 over a whole array, into an answer of its own each time, for a caller
 that keeps them.
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Routing is the caller's">
 
@@ -517,6 +517,37 @@ class QuicListenerAnswer
 | `room: i32` |  |
 | `wipe(): void` | Zeroes the last answer: `reply` across its whole room and each ID across its 20 bytes, so a Retry's token, a stateless reset's token and the IDs leave no copy beyond the arrays' lengths either. Each is left that long and all zero, `kind` a drop. An answer whose reply grew past its room keeps what lies beyond the longest length it is wiped at; one made with `QUIC_LISTENER_ANSWER_SIZE` never grows. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`QUIC_LISTENER_FLIGHT_MAX: i32`
+
+The most datagrams one GSO send carries: Linux's `UDP_MAX_SEGMENTS`.
+
+</scalar-card>
+
+<scalar-card title="60,000" icon="phosphor/regular/hash">
+
+`QUIC_LISTENER_MAX_TOKEN_LIFETIME: i64`
+
+The longest a Retry token may be accepted for, in milliseconds: a client returns one within a round trip.
+
+</scalar-card>
+
+<scalar-card title="21" icon="phosphor/regular/hash">
+
+`QUIC_LISTENER_MIN_RESET: i32`
+
+The smallest stateless reset (RFC 9000 §10.3): a first byte, at least 38
+unpredictable bits after the fixed ones, and the 16-byte token.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -540,36 +571,11 @@ How many random bytes the constructor takes: the seed of every unpredictable byt
 
 </scalar-card>
 
-<scalar-card title="64" icon="phosphor/regular/hash">
-
-`QUIC_LISTENER_FLIGHT_MAX: i32`
-
-The most datagrams one GSO send carries: Linux's `UDP_MAX_SEGMENTS`.
-
-</scalar-card>
-
 <scalar-card title="4,800" icon="phosphor/regular/hash">
 
 `QUIC_LISTENER_FLIGHT_QUANTUM: i32`
 
 The most credit a paced flight waits for before it starts: four datagrams.
-
-</scalar-card>
-
-<scalar-card title="60,000" icon="phosphor/regular/hash">
-
-`QUIC_LISTENER_MAX_TOKEN_LIFETIME: i64`
-
-The longest a Retry token may be accepted for, in milliseconds: a client returns one within a round trip.
-
-</scalar-card>
-
-<scalar-card title="21" icon="phosphor/regular/hash">
-
-`QUIC_LISTENER_MIN_RESET: i32`
-
-The smallest stateless reset (RFC 9000 §10.3): a first byte, at least 38
-unpredictable bits after the fixed ones, and the 16-byte token.
 
 </scalar-card>
 

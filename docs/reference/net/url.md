@@ -708,6 +708,20 @@ class UrlQueryLimits
 | `new UrlQueryLimits()` |  |
 | `maxPairs: i32` | The most pairs one query yields, `URL_DEFAULT_MAX_PAIRS` (a field starts at a literal); past it `next()` answers `URL_QUERY_ERR_PAIRS` and stays spent. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="100" icon="phosphor/regular/hash">
+
+`URL_DEFAULT_MAX_PAIRS: i32`
+
+The default for `UrlQueryLimits.maxPairs`.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -757,14 +771,6 @@ A `%` not followed by two hex digits: `%zz`, or `%4` or `%` at the end of the wi
 `URL_DECODE_LENIENT: i32`
 
 A `%` not followed by two hex digits is copied as it stands rather than refused (WHATWG percent-decode).
-
-</scalar-card>
-
-<scalar-card title="100" icon="phosphor/regular/hash">
-
-`URL_DEFAULT_MAX_PAIRS: i32`
-
-The default for `UrlQueryLimits.maxPairs`.
 
 </scalar-card>
 

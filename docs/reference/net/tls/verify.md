@@ -291,6 +291,20 @@ class TlsClientTrust
 | `new TlsClientTrust(roots: X509Certificate[])` |  |
 | `store: PkiTrustStore` | The roots, as `pkiVerifyServer` looks them up. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="2,048" icon="phosphor/regular/hash">
+
+`TLS_VERIFY_MIN_RSA_BITS: i32`
+
+The smallest RSA modulus a CertificateVerify is checked under, in bits: the Web PKI's floor.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -308,14 +322,6 @@ class TlsClientTrust
 `TLS_ALERT_UNKNOWN_CA: i32`
 
 `unknown_ca` (RFC 8446 §6.2): no path from the chain reaches a root the client trusts.
-
-</scalar-card>
-
-<scalar-card title="2,048" icon="phosphor/regular/hash">
-
-`TLS_VERIFY_MIN_RSA_BITS: i32`
-
-The smallest RSA modulus a CertificateVerify is checked under, in bits: the Web PKI's floor.
 
 </scalar-card>
 

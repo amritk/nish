@@ -253,6 +253,52 @@ class DnsReply
 | `truncated: boolean` | The TC bit: the reply was cut to fit a datagram, and no record of it was read. |
 | `ttls: i32[]` | The TTL of each kept address, in seconds; one above 2^31 - 1 reads as 0 (RFC 2181 §8). |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="8" icon="phosphor/regular/hash">
+
+`DNS_MAX_ANSWERS: i32`
+
+How many addresses one reply keeps; the rest are counted in `DnsReply.dropped`.
+
+</scalar-card>
+
+<scalar-card title="63" icon="phosphor/regular/hash">
+
+`DNS_MAX_LABEL_BYTES: i32`
+
+The longest label (RFC 1035 §2.3.4).
+
+</scalar-card>
+
+<scalar-card title="255" icon="phosphor/regular/hash">
+
+`DNS_MAX_NAME_BYTES: i32`
+
+The longest name in wire form, its root byte included (RFC 1035 §2.3.4).
+
+</scalar-card>
+
+<scalar-card title="16" icon="phosphor/regular/hash">
+
+`DNS_MAX_POINTER_HOPS: i32`
+
+How many compression pointers one name may follow.
+
+</scalar-card>
+
+<scalar-card title="DNS_QUERY_MAX_BYTES" icon="phosphor/regular/hash">
+
+`DNS_QUERY_MAX_BYTES: i32`
+
+The longest query `dnsBuildQuery` writes: the header, the longest name, the type and class.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -425,38 +471,6 @@ A name or a record's fixed fields run past the end of the reply.
 
 </scalar-card>
 
-<scalar-card title="8" icon="phosphor/regular/hash">
-
-`DNS_MAX_ANSWERS: i32`
-
-How many addresses one reply keeps; the rest are counted in `DnsReply.dropped`.
-
-</scalar-card>
-
-<scalar-card title="63" icon="phosphor/regular/hash">
-
-`DNS_MAX_LABEL_BYTES: i32`
-
-The longest label (RFC 1035 §2.3.4).
-
-</scalar-card>
-
-<scalar-card title="255" icon="phosphor/regular/hash">
-
-`DNS_MAX_NAME_BYTES: i32`
-
-The longest name in wire form, its root byte included (RFC 1035 §2.3.4).
-
-</scalar-card>
-
-<scalar-card title="16" icon="phosphor/regular/hash">
-
-`DNS_MAX_POINTER_HOPS: i32`
-
-How many compression pointers one name may follow.
-
-</scalar-card>
-
 <scalar-card title="0" icon="phosphor/regular/hash">
 
 `DNS_NOERROR: i32`
@@ -470,14 +484,6 @@ The server answered: the name exists, and its addresses, if any, are in the repl
 `DNS_NXDOMAIN: i32`
 
 The name does not exist (RCODE 3).
-
-</scalar-card>
-
-<scalar-card title="DNS_QUERY_MAX_BYTES" icon="phosphor/regular/hash">
-
-`DNS_QUERY_MAX_BYTES: i32`
-
-The longest query `dnsBuildQuery` writes: the header, the longest name, the type and class.
 
 </scalar-card>
 

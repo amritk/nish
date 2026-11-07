@@ -32,6 +32,8 @@ const outDir = "docs/reference"
 const configFile = "scalar.config.json"
 const repoUrl = "https://github.com/amritk/nish/blob/main"
 const languageRoute = "/reference/language"
+// Not "Language reference", the header link's title, nor "The language", the guide's group.
+const languageTitle = "Language specification"
 const languageSource = "docs/LANGUAGE.md"
 const languagePage = `${outDir}/language.md`
 const width = 110
@@ -58,8 +60,14 @@ const readProject = async () => {
       excludePrivate: true,
       excludeInternal: true,
       disableGit: true,
+      // TypeDoc keeps each reflection's `sources` (read below) only with a
+      // template under disableGit. No page prints the line link: it would move
+      // with every edit above the declaration, and a page should change only
+      // when its declarations or their comments do.
       sourceLinkTemplate: `${repoUrl}/{path}#L{line}`,
       logLevel: "Warn",
+      // A `{@link}` that names nothing fails the run; the rest is not checked.
+      validation: { invalidLink: true, notExported: false, notDocumented: false, rewrittenLink: false },
       // tsconfig.json's options for std/, without its `include`, so the run
       // checks only what it documents. An empty reader list keeps TypeDoc from
       // reading tsconfig.json or typedoc.json itself.
@@ -75,9 +83,25 @@ const readProject = async () => {
     },
     []
   )
+  // TypeDoc only warns of a `{@link}` it cannot resolve; here it fails the
+  // run. (Its other warnings, such as a `[text](-A)` it takes for a relative
+  // path, stay warnings.)
+  const unresolved = []
+  const warn = app.logger.validationWarning.bind(app.logger)
+  app.logger.validationWarning = (message, ...rest) => {
+    if (String(message).startsWith("Failed to resolve link")) {
+      unresolved.push(String(message))
+    }
+    warn(message, ...rest)
+  }
   const project = await app.convert()
   if (!project || app.logger.errorCount > 0) {
     console.error(`gen-reference: TypeDoc reported ${app.logger.errorCount} error(s)`)
+    process.exit(1)
+  }
+  app.validate(project)
+  if (unresolved.length > 0) {
+    console.error(`gen-reference: a \`{@link}\` names nothing:\n${unresolved.join("\n")}`)
     process.exit(1)
   }
   return app.serializer.projectToObject(project, root)
@@ -208,14 +232,32 @@ const headings = (text) => {
   return out
 }
 
-/** The first sentence of a paragraph, ending at a `.` outside code before a capital or the end. */
+// Words whose dot ends no sentence.
+const abbreviation = /\b(?:e\.g|i\.e|vs|etc|cf|approx|resp|No|Fig)$/
+
+/**
+ * The first sentence of a paragraph, ending at a `.` outside code before a
+ * capital or the end. A code span opens with a run of backticks and closes at
+ * the next run of the same length, so ``` `` a`b `` ``` is one span.
+ */
 const firstSentence = (para) => {
   const flat = para.replace(/\s+/g, " ").trim()
-  let inCode = false
+  let span = 0
   for (let i = 0; i < flat.length; i++) {
     if (flat[i] === "`") {
-      inCode = !inCode
-    } else if (!inCode && flat[i] === "." && (i + 1 === flat.length || /^ [A-Z`*]/.test(flat.slice(i + 1)))) {
+      const run = /^`+/.exec(flat.slice(i))[0].length
+      if (span === 0) {
+        span = run
+      } else if (run === span) {
+        span = 0
+      }
+      i += run - 1
+    } else if (
+      span === 0 &&
+      flat[i] === "." &&
+      (i + 1 === flat.length || /^ [A-Z`*]/.test(flat.slice(i + 1))) &&
+      !abbreviation.test(flat.slice(0, i))
+    ) {
       return flat.slice(0, i + 1)
     }
   }
@@ -398,6 +440,24 @@ const leadingComment = (src) => {
     .replace(/^\n+|\n+$/g, "")
 }
 
+/** The `/** … *\/` comment that ends on the line before `lines[at]`, as leadingComment reads it; "" for none. */
+const commentAbove = (lines, at) => {
+  let end = at - 1
+  while (end >= 0 && !lines[end].trim()) {
+    end--
+  }
+  if (end < 0 || !lines[end].trim().endsWith("*/")) {
+    return ""
+  }
+  let start = end
+  while (start >= 0 && !lines[start].trimStart().startsWith("/*")) {
+    start--
+  }
+  return start >= 0 && lines[start].trimStart().startsWith("/**")
+    ? leadingComment(lines.slice(start, end + 1).join("\n"))
+    : ""
+}
+
 const listItem = /^(?:[-*+]|\d+[.)])\s/
 
 const indentOf = (line) => /^ */.exec(line)[0].length
@@ -452,24 +512,52 @@ const moduleProse = (comment, prose) => {
       units.push([body])
     }
   }
-  const out = []
-  for (const [i, unit] of units.entries()) {
-    const text = unit.map(prose).join("\n\n")
+  // A unit without a warning. The first after the lead is the info callout
+  // unless it opens with a bold title (`**Title.** rest`, `**Title**: rest`);
+  // a bold phrase that runs on into its sentence (`**The syntax is
+  // JavaScript's**, with …`) does not stop it. Any other unit that opens with
+  // bold is a detail under that title, a titled one with the rest as its body.
+  const classify = (unit, i) => {
+    if (unit.length === 0) {
+      return []
+    }
     const bold = /^\*\*(.+?)\*\*/.exec(unit[0])
-    if (!bold) {
-      out.push(i === 0 ? tag("scalar-callout", 'type="info"', text) : text)
-      continue
+    const titled = bold !== null && (/[.:]$/.test(bold[1]) || /^[.:]/.test(unit[0].slice(bold[0].length)))
+    if (!titled && (i === 0 || !bold)) {
+      const text = unit.map(prose).join("\n\n")
+      return [i === 0 ? tag("scalar-callout", 'type="info"', text) : text]
     }
     const title = bold[1].replace(/`/g, "").replace(/[.:]$/, "")
-    if (/\b(refus|limit|caps?\b)/i.test(title)) {
-      out.push(tag("scalar-callout", 'type="warning"', text))
+    const head = titled ? unit[0].slice(bold[0].length).replace(/^[.:]/, "").trim() : unit[0]
+    const body = [head, ...unit.slice(1)].map(prose).join("\n\n").trim()
+    return [tag("scalar-detail", `title="${attr(title)}"`, body)]
+  }
+  const warns = (title) => /\b(refus|limit|caps?\b)/i.test(title.replace(/`/g, ""))
+  // Where a sentence opening with a warning's bold phrase starts, outside code; -1 for none.
+  const warningAt = (para) => {
+    for (const m of para.matchAll(/(^|[.!?]\s+)\*\*([^*]+)\*\*/g)) {
+      const at = m.index + m[1].length
+      if (warns(m[2]) && (para.slice(0, at).match(/`/g) ?? []).length % 2 === 0) {
+        return at
+      }
+    }
+    return -1
+  }
+  const out = []
+  for (const [i, unit] of units.entries()) {
+    // A warning sentence and the rest of its unit are split from the prose before it.
+    const at = warningAt(unit[0])
+    let head = unit
+    if (at >= 0) {
+      head = at > 0 ? [unit[0].slice(0, at).trim()] : []
+    }
+    if (at >= 0) {
+      out.push(
+        ...classify(head, i),
+        tag("scalar-callout", 'type="warning"', [unit[0].slice(at), ...unit.slice(1)].map(prose).join("\n\n"))
+      )
     } else {
-      // `**Title.** rest` gives the rest as the body; a bold phrase that runs
-      // on into its sentence stays in it.
-      const titled = /[.:]$/.test(bold[1]) || /^[.:]/.test(unit[0].slice(bold[0].length))
-      const head = titled ? unit[0].slice(bold[0].length).replace(/^[.:]/, "").trim() : unit[0]
-      const body = [head, ...unit.slice(1)].map(prose).join("\n\n").trim()
-      out.push(tag("scalar-detail", `title="${attr(title)}"`, body))
+      out.push(...classify(head, i))
     }
   }
   return { lead: prose(leadText), usage, body: out.join("\n\n") }
@@ -483,7 +571,11 @@ const header = (source) =>
 const byText = (a, b) => Number(a > b) - Number(a < b)
 const sortByName = (xs) => [...xs].sort((a, b) => byText(a.name, b.name))
 
-const formatNumber = (v) => (/^-?\d+$/.test(v) ? Number(v).toLocaleString("en-US") : null)
+/** An integer literal with its digits grouped in threes (`100,000`), exact past 2^53; null for anything else. */
+const formatNumber = (v) => {
+  const m = /^(-?)(\d+)$/.exec(v)
+  return m ? `${m[1]}${m[2].replace(/\B(?=(\d{3})+$)/g, ",")}` : null
+}
 
 /** A member's name; TypeDoc names a well-known-symbol key `[dispose]`, the source `[Symbol.dispose]`. */
 const memberName = (name) => name.replace(/^\[(\w+)\]$/, "[Symbol.$1]")
@@ -582,14 +674,17 @@ const renderObject = (o, ctx) => {
   return out.join("\n\n")
 }
 
-const renderConstants = (vars, ctx) => {
+/** A constant whose name has a `MAX` or `MIN` word (`REGEX_MAX_DEPTH`) is a limit, listed under `## Limits`. */
+const isLimit = (v) => v.name.split("_").some((w) => w === "MAX" || w === "MIN")
+
+const renderConstants = (heading, vars, ctx) => {
   const cards = vars.map((v) => {
     const value = v.defaultValue === undefined ? null : formatNumber(v.defaultValue)
     const desc = summary(v.comment, ctx)
     const body = [`\`${v.name}: ${typeText(v.type)}\``, desc].filter(Boolean).join("\n\n")
     return tag("scalar-card", `title="${attr(value ?? v.name)}" icon="phosphor/regular/hash"`, body)
   })
-  return `## Constants\n\n${tag("scalar-grid", 'cols="2"', cards.join("\n\n"))}`
+  return `## ${heading}\n\n${tag("scalar-grid", 'cols="2"', cards.join("\n\n"))}`
 }
 
 /**
@@ -654,8 +749,13 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, fallback }
   for (const t of types) {
     out.push(renderType(t, ctx))
   }
-  if (vars.length > 0) {
-    out.push(renderConstants(vars, ctx))
+  const limits = vars.filter(isLimit)
+  const constants = vars.filter((v) => !isLimit(v))
+  if (limits.length > 0) {
+    out.push(renderConstants("Limits", limits, ctx))
+  }
+  if (constants.length > 0) {
+    out.push(renderConstants("Constants", constants, ctx))
   }
   const draft = `${out.join("\n\n")}\n`
   // Each card links to its member's own `## name` heading, the first one
@@ -736,13 +836,15 @@ const collectPages = (project) => {
       continue
     }
     const name = m.name.replace(/^nish:/, "")
+    const at = dtsLines.findIndex((l) => l.startsWith(`declare module ${JSON.stringify(m.name)}`))
     pages.push({
       mod: m,
       spec: m.name,
       title: m.name,
       source: "runtime/nish.d.ts",
       page: `${outDir}/nish-${name}.md`,
-      comment: "",
+      // A `/** … */` above `declare module "nish:x"` is the page's module comment.
+      comment: at < 0 ? "" : commentAbove(dtsLines, at),
       intro:
         `The \`${m.name}\` builtin module: the globals of the same names, importable. ` +
         "Its members are declared in `runtime/nish.d.ts`; " +
@@ -856,37 +958,85 @@ const printJson = (value, indent, prefix, suffix) => {
   return `${pad}${prefix}${open}\n${lines.join("\n")}\n${pad}${close}${suffix}`
 }
 
-/** scalar.config.json with /reference's routes and the header's language link regenerated. */
+/** The line range `[open, close]` of the object `"key": {` that opens at or after `from`. */
+const objectLines = (lines, key, from) => {
+  const open = lines.findIndex((l, i) => i >= from && l.trimStart().startsWith(`${JSON.stringify(key)}: {`))
+  if (open < 0) {
+    throw new Error(`${configFile}: no ${JSON.stringify(key)} object to regenerate`)
+  }
+  const indent = indentOf(lines[open])
+  if (/\}\s*,?$/.test(lines[open])) {
+    return [open, open]
+  }
+  const close = lines.findIndex((l, i) => i > open && indentOf(l) === indent && /^\s*\},?$/.test(l))
+  return [open, close]
+}
+
+/**
+ * scalar.config.json with /reference's /language and /library routes and the
+ * header's "Language reference" link regenerated. Every other line, the
+ * hand-written /reference children included, is kept byte for byte.
+ */
 const configText = (text, pages) => {
   const config = JSON.parse(text)
   const reference = config.navigation.routes["/"].children["/reference"]
-  const kept = Object.entries(reference.children).filter(([k]) => k !== "/language" && k !== "/library")
-  const children = {}
-  for (const [k, v] of kept) {
-    children[k] = v
-    if (k === "/standard-library") {
-      children["/language"] = { type: "page", title: "Language reference", filepath: languagePage }
-      children["/library"] = libraryRoutes(pages)
-    }
+  const link = config.navigation.header.find((h) => h.title === "Language reference")
+  if (!link) {
+    throw new Error(`${configFile}: the header has no "Language reference" link to point at ${languageRoute}`)
   }
-  if (!("/standard-library" in children)) {
+  const made = {
+    "/language": { type: "page", title: languageTitle, filepath: languagePage },
+    "/library": libraryRoutes(pages),
+  }
+  const keys = Object.keys(reference.children).filter((k) => !(k in made))
+  const at = keys.indexOf("/standard-library")
+  if (at < 0) {
     throw new Error(
       `${configFile}: /reference has no /standard-library route to place /language and /library after`
     )
   }
-  reference.children = children
+  keys.splice(at + 1, 0, ...Object.keys(made))
   const lines = text.split("\n")
-  const start = lines.findIndex((l) => /^\s*"\/reference": \{$/.test(l))
-  const indent = indentOf(lines[start])
-  const end = lines.findIndex((l, i) => i > start && indentOf(l) === indent && /^\s*\},?$/.test(l))
-  const comma = lines[end].trim().endsWith(",") ? "," : ""
-  const block = printJson(reference, indent, '"/reference": ', comma)
-  let out = [...lines.slice(0, start), block, ...lines.slice(end + 1)].join("\n")
-  // The header's "Language reference" link opens the routed page.
-  out = out.replace(
-    /\{\s*"type": "link",\s*"title": "Language reference",\s*"to": "[^"]*"(?:,\s*"newTab": true)?\s*\}/,
-    `{ "type": "link", "title": "Language reference", "to": "${languageRoute}" }`
-  )
+  const [refOpen, refClose] = objectLines(lines, "/reference", 0)
+  const [open, close] = objectLines(lines, "children", refOpen)
+  if (close > refClose) {
+    throw new Error(`${configFile}: /reference has no children object`)
+  }
+  // Each existing child's own lines, without the comma that separates it.
+  const own = new Map()
+  for (let i = open + 1; i < close; ) {
+    const key = /^\s*"([^"]+)": /.exec(lines[i])?.[1]
+    const [, end] = objectLines(lines, key, i)
+    own.set(
+      key,
+      lines
+        .slice(i, end + 1)
+        .join("\n")
+        .replace(/,$/, "")
+    )
+    i = end + 1
+  }
+  const indent = indentOf(lines[open]) + 2
+  const children = keys.map((k, i) => {
+    const comma = i < keys.length - 1 ? "," : ""
+    return k in made ? printJson(made[k], indent, `${JSON.stringify(k)}: `, comma) : `${own.get(k)}${comma}`
+  })
+  let out = [...lines.slice(0, open + 1), ...children, ...lines.slice(close)].join("\n")
+  if (link.to !== languageRoute) {
+    const line = /("title": "Language reference",\s*"to": )"[^"]*"/
+    if (!line.test(out)) {
+      throw new Error(
+        `${configFile}: the header's "Language reference" link is not written as { "type", "title", "to" }`
+      )
+    }
+    out = out.replace(line, `$1"${languageRoute}"`)
+  }
+  // What was spliced as text must parse to what was meant.
+  reference.children = Object.fromEntries(keys.map((k) => [k, made[k] ?? reference.children[k]]))
+  link.to = languageRoute
+  if (JSON.stringify(JSON.parse(out)) !== JSON.stringify(config)) {
+    throw new Error(`${configFile}: the regenerated routes do not parse back to the routes meant`)
+  }
   return out
 }
 

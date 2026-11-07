@@ -260,7 +260,7 @@ class QuicTransportParameters
 | `retryScid: u8[]` |  |
 | `statelessResetToken: u8[]` |  |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 
@@ -269,24 +269,6 @@ class QuicTransportParameters
 `QUIC_MIN_UDP_PAYLOAD: i64`
 
 The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datagram (RFC 9000 §14).
-
-</scalar-card>
-
-<scalar-card title="QUIC_TP_ACK_DELAY_EXPONENT" icon="phosphor/regular/hash">
-
-`QUIC_TP_ACK_DELAY_EXPONENT: i32`
-
-</scalar-card>
-
-<scalar-card title="QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT" icon="phosphor/regular/hash">
-
-`QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT: i32`
-
-</scalar-card>
-
-<scalar-card title="QUIC_TP_DISABLE_ACTIVE_MIGRATION" icon="phosphor/regular/hash">
-
-`QUIC_TP_DISABLE_ACTIVE_MIGRATION: i32`
 
 </scalar-card>
 
@@ -326,12 +308,6 @@ The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datag
 
 </scalar-card>
 
-<scalar-card title="QUIC_TP_INITIAL_SCID" icon="phosphor/regular/hash">
-
-`QUIC_TP_INITIAL_SCID: i32`
-
-</scalar-card>
-
 <scalar-card title="QUIC_TP_MAX_ACK_DELAY" icon="phosphor/regular/hash">
 
 `QUIC_TP_MAX_ACK_DELAY: i32`
@@ -356,6 +332,36 @@ and Length included, the sender takes; absent or 0, it takes none.
 <scalar-card title="QUIC_TP_MAX_UDP_PAYLOAD_SIZE" icon="phosphor/regular/hash">
 
 `QUIC_TP_MAX_UDP_PAYLOAD_SIZE: i32`
+
+</scalar-card>
+
+</scalar-grid>
+
+## Constants
+
+<scalar-grid cols="2">
+
+<scalar-card title="QUIC_TP_ACK_DELAY_EXPONENT" icon="phosphor/regular/hash">
+
+`QUIC_TP_ACK_DELAY_EXPONENT: i32`
+
+</scalar-card>
+
+<scalar-card title="QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT" icon="phosphor/regular/hash">
+
+`QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT: i32`
+
+</scalar-card>
+
+<scalar-card title="QUIC_TP_DISABLE_ACTIVE_MIGRATION" icon="phosphor/regular/hash">
+
+`QUIC_TP_DISABLE_ACTIVE_MIGRATION: i32`
+
+</scalar-card>
+
+<scalar-card title="QUIC_TP_INITIAL_SCID" icon="phosphor/regular/hash">
+
+`QUIC_TP_INITIAL_SCID: i32`
 
 </scalar-card>
 

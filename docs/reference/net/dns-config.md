@@ -325,7 +325,7 @@ class DnsHosts
 | `scratch: u8[]` | Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing. |
 | `skippedLines: i32` | Lines longer than `DNS_CONFIG_MAX_LINE`, skipped whole. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 
@@ -334,30 +334,6 @@ class DnsHosts
 `DNS_CONFIG_MAX_LINE: i32`
 
 The longest line either parser reads; a longer one is skipped whole.
-
-</scalar-card>
-
-<scalar-card title="2" icon="phosphor/regular/hash">
-
-`DNS_DEFAULT_ATTEMPTS: i32`
-
-The `attempts` without an option.
-
-</scalar-card>
-
-<scalar-card title="1" icon="phosphor/regular/hash">
-
-`DNS_DEFAULT_NDOTS: i32`
-
-The `ndots` without an option: a name with a dot is tried as it stands first.
-
-</scalar-card>
-
-<scalar-card title="5" icon="phosphor/regular/hash">
-
-`DNS_DEFAULT_TIMEOUT: i32`
-
-The `timeout` without an option, in seconds.
 
 </scalar-card>
 
@@ -438,6 +414,36 @@ How many `nameserver` lines are kept; glibc's MAXNS.
 `DNS_MAX_TIMEOUT: i32`
 
 The highest `timeout:n` kept, in seconds; the lowest is 1.
+
+</scalar-card>
+
+</scalar-grid>
+
+## Constants
+
+<scalar-grid cols="2">
+
+<scalar-card title="2" icon="phosphor/regular/hash">
+
+`DNS_DEFAULT_ATTEMPTS: i32`
+
+The `attempts` without an option.
+
+</scalar-card>
+
+<scalar-card title="1" icon="phosphor/regular/hash">
+
+`DNS_DEFAULT_NDOTS: i32`
+
+The `ndots` without an option: a name with a dot is tried as it stands first.
+
+</scalar-card>
+
+<scalar-card title="5" icon="phosphor/regular/hash">
+
+`DNS_DEFAULT_TIMEOUT: i32`
+
+The `timeout` without an option, in seconds.
 
 </scalar-card>
 

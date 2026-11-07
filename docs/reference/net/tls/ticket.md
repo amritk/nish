@@ -362,6 +362,28 @@ class TlsTicketStrikes
 | `live(now: i64): i32` | How many entries are held at `now`. |
 | `take(id: u8[], expiresAt: i64, now: i64): boolean` | Records `id` until `min(expiresAt, now + 7200 s)` and answers true; false when `id` is still held, or when no entry is free, which is counted in `refusedFull`. The probe chain is scanned for a live entry of `id` as far as `longest`, the farthest any id has been recorded from its home, before an expired slot on it is reused, so an expired entry ahead of the id's live one cannot let it be recorded twice. Past that bound the scan only looks for a free slot and stops at the first, so a `take` costs the longest probe so far, not the capacity. An id of another length than a nonce is refused, uncounted. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="48" icon="phosphor/regular/hash">
+
+`TLS_TICKET_PSK_MAX: i32`
+
+The longest resumption PSK: SHA-384's length.
+
+</scalar-card>
+
+<scalar-card title="255" icon="phosphor/regular/hash">
+
+`TLS_TICKET_SERVER_NAME_MAX: i32`
+
+The longest server name a ticket carries: a session with a longer one is issued none.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -414,14 +436,6 @@ How long after its draw a key opens tickets: its issue window and one lifetime m
 
 </scalar-card>
 
-<scalar-card title="48" icon="phosphor/regular/hash">
-
-`TLS_TICKET_PSK_MAX: i32`
-
-The longest resumption PSK: SHA-384's length.
-
-</scalar-card>
-
 <scalar-card title="1,073,741,824" icon="phosphor/regular/hash">
 
 `TLS_TICKET_SEAL_CAP: i64`
@@ -435,14 +449,6 @@ How many tickets a key seals before `tlsTicketSeal` refuses it: 2^30.
 `TLS_TICKET_SEAL_WINDOW: i64`
 
 A key's issue window: 12 hours of awake time after its draw, in nanoseconds.
-
-</scalar-card>
-
-<scalar-card title="255" icon="phosphor/regular/hash">
-
-`TLS_TICKET_SERVER_NAME_MAX: i32`
-
-The longest server name a ticket carries: a session with a longer one is issued none.
 
 </scalar-card>
 

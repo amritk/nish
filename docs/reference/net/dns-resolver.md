@@ -140,17 +140,9 @@ class DnsResolver
 | `start(name: string, port: i32, nowNanos: i64): i32` | Begins a lookup of `name`, whose addresses will carry `port`, at `nowNanos` on the caller's monotonic clock, and answers its id, or a negative code: `DNS_RESOLVE_BUSY` when every slot is in use, or the `DNS_ERR_*` `dnsBuildQuery` gives a name that is not one.<br><br>`localhost` and any name under it answer 127.0.0.1 and ::1 (RFC 6761 §6.3), an address literal answers itself, and a name in `hosts` answers its entries, each at once and with no packet: `result` has them now. Panics when `port` is not 16 bits. |
 | `tick(nowNanos: i64): void` | Moves every query whose try has run past its deadline at `nowNanos` to the next server. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
-
-<scalar-card title="3" icon="phosphor/regular/hash">
-
-`DNS_CLOSE: i32`
-
-`nextOutgoing`'s `meta[0]`: close the socket the query held, if any.
-
-</scalar-card>
 
 <scalar-card title="DNS_OUTGOING_MAX_BYTES" icon="phosphor/regular/hash">
 
@@ -176,6 +168,36 @@ The most lookups one resolver holds at once.
 
 </scalar-card>
 
+<scalar-card title="DNS_RESOLVE_MAX_ADDRESSES" icon="phosphor/regular/hash">
+
+`DNS_RESOLVE_MAX_ADDRESSES: i32`
+
+The most addresses one lookup answers: `DNS_MAX_ANSWERS` A and as many AAAA.
+
+</scalar-card>
+
+<scalar-card title="16,384" icon="phosphor/regular/hash">
+
+`DNS_TCP_MAX_REPLY: i32`
+
+The longest reply read over TCP; a longer length prefix fails the server.
+
+</scalar-card>
+
+</scalar-grid>
+
+## Constants
+
+<scalar-grid cols="2">
+
+<scalar-card title="3" icon="phosphor/regular/hash">
+
+`DNS_CLOSE: i32`
+
+`nextOutgoing`'s `meta[0]`: close the socket the query held, if any.
+
+</scalar-card>
+
 <scalar-card title="-44" icon="phosphor/regular/hash">
 
 `DNS_RESOLVE_BUSY: i32`
@@ -191,14 +213,6 @@ The most lookups one resolver holds at once.
 The CNAME chain loops across queries back to a name already asked, or needs
 more than `DNS_RESOLVER_MAX_CNAME_HOPS` queries. A loop closed inside one
 reply is `DNS_RESOLVE_NOT_FOUND`, as that reply names no address.
-
-</scalar-card>
-
-<scalar-card title="DNS_RESOLVE_MAX_ADDRESSES" icon="phosphor/regular/hash">
-
-`DNS_RESOLVE_MAX_ADDRESSES: i32`
-
-The most addresses one lookup answers: `DNS_MAX_ANSWERS` A and as many AAAA.
 
 </scalar-card>
 
@@ -247,14 +261,6 @@ No server gave an answer: each timed out, failed or was refused, `attempts` roun
 `DNS_SEND_UDP: i32`
 
 `nextOutgoing`'s `meta[0]`: send `out` as one datagram to `to` from a new socket.
-
-</scalar-card>
-
-<scalar-card title="16,384" icon="phosphor/regular/hash">
-
-`DNS_TCP_MAX_REPLY: i32`
-
-The longest reply read over TCP; a longer length prefix fails the server.
 
 </scalar-card>
 

@@ -238,7 +238,7 @@ class PkiRoots
 | `skipped: i32` | The PEM blocks that were not a root, and the files too large or past the cap to read. |
 | `sources: string[]` | Every file that was read, in order, whether or not it held a root. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 
@@ -265,6 +265,12 @@ The largest file read as roots: 16 MiB, some eighty times a full Mozilla bundle.
 The most roots one load keeps; a certificate past it counts as one skip.
 
 </scalar-card>
+
+</scalar-grid>
+
+## Constants
+
+<scalar-grid cols="2">
 
 <scalar-card title="PKI_SYSTEM_DIR" icon="phosphor/regular/hash">
 

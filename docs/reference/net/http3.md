@@ -387,6 +387,28 @@ class Http3Connection
 | `wtSlot(id: i64): i32` | The slot of WebTransport stream `id` when it is known here, else -1. |
 | `wtStep(k: i32, id: i64): i32` | The next event of WebTransport stream `id` in slot `k`: its session ID (a unidirectional stream's), then its bytes as H3_DATA, H3_END at its FIN and H3_RESET at the client's RESET_STREAM; H3_STOPPED once for the client's STOP_SENDING; and H3_WRITABLE. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="1,024" icon="phosphor/regular/hash">
+
+`H3_CONTROL_FRAME_MAX: i32`
+
+The largest control-stream frame read whole: SETTINGS, GOAWAY, MAX_PUSH_ID, CANCEL_PUSH.
+
+</scalar-card>
+
+<scalar-card title="256" icon="phosphor/regular/hash">
+
+`H3_MAX_SESSIONS: i32`
+
+The most WebTransport sessions a configuration may advertise.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -412,14 +434,6 @@ The ALPN protocol identifier of HTTP/3 (RFC 9114 §3.1).
 `H3_CLOSED: i32`
 
 A write to a stream that is not an open request: Linux's EPIPE.
-
-</scalar-card>
-
-<scalar-card title="1,024" icon="phosphor/regular/hash">
-
-`H3_CONTROL_FRAME_MAX: i32`
-
-The largest control-stream frame read whole: SETTINGS, GOAWAY, MAX_PUSH_ID, CANCEL_PUSH.
 
 </scalar-card>
 
@@ -470,14 +484,6 @@ The client sent GOAWAY: `lastStreamId`, its push ID.
 `H3_INVALID: i32`
 
 A write of fields or a status the program may not send, or out of order: Linux's EINVAL.
-
-</scalar-card>
-
-<scalar-card title="256" icon="phosphor/regular/hash">
-
-`H3_MAX_SESSIONS: i32`
-
-The most WebTransport sessions a configuration may advertise.
 
 </scalar-card>
 

@@ -248,7 +248,7 @@
               },
               "/language": {
                 "type": "page",
-                "title": "Language reference",
+                "title": "Language specification",
                 "filepath": "docs/reference/language.md"
               },
               "/library": {
@@ -861,7 +861,11 @@
                 "title": "Running under Node",
                 "filepath": "docs/RUN_UNDER_NODE.md"
               },
-              "/benchmarks": { "type": "page", "title": "Benchmarks", "filepath": "docs/BENCHMARKS.md" },
+              "/benchmarks": {
+                "type": "page",
+                "title": "Benchmarks",
+                "filepath": "docs/BENCHMARKS.md"
+              },
               "/changelog": { "type": "page", "title": "Changelog", "filepath": "CHANGELOG.md" }
             }
           },

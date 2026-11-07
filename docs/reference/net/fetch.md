@@ -112,7 +112,7 @@ A response's head, as the server sent it, and a reader for its body.
 
 </scalar-grid>
 
-<scalar-detail title="It blocks the thread">
+<scalar-callout type="info">
 
 **It blocks the thread** at every step, the way a CLI wants it to: the
 lookup, the connect, each write and each read. A server, which must not
@@ -123,7 +123,7 @@ has), `readTimeoutMs` for each wait on the peer, and `totalTimeoutMs`, when
 set, for the whole fetch, redirects and body included, so a server that
 drips one byte a second cannot hold a fetch forever.
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Framing is the parser's">
 

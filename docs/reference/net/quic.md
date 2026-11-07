@@ -684,6 +684,81 @@ class QuicStreamData
 | `fin: boolean` |  |
 | `streamId: i64` |  |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="1,500" icon="phosphor/regular/hash">
+
+`QUIC_CONN_MAX_DATAGRAM_FRAME: i64`
+
+The largest `maxDatagramFrameSize` a configuration may advertise: 1500
+bytes, an Ethernet path's whole UDP payload, past which no DATAGRAM frame
+reaches a server on a real path. Each of the receive ring's entries is
+sized to what is advertised, so every frame taken is held.
+
+</scalar-card>
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`QUIC_CONN_MAX_ISSUED_CIDS: i64`
+
+How many connection IDs a connection issues in all, its first included.
+The client retiring one asks for a replacement (§5.1.1, a SHOULD), and
+each costs two HMACs whose temporaries stay in the arena, so this bounds
+what a client can make the server derive by retiring IDs over and over;
+past it, a retired ID is not replaced.
+
+</scalar-card>
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`QUIC_CONN_MAX_KEY_UPDATES: i32`
+
+How many key updates a connection takes from its client (RFC 9001 §6).
+Each costs two key derivations of work, though none of their memory, so
+the cap bounds what a client can make the server derive (QUIC-4); the next one
+closes the connection with KEY_UPDATE_ERROR. A client also has to wait
+a probe timeout between two of them.
+
+</scalar-card>
+
+<scalar-card title="1,024" icon="phosphor/regular/hash">
+
+`QUIC_CONN_MAX_STREAMS: i64`
+
+The most streams of one kind a configuration may let the client open at once, or open itself.
+
+</scalar-card>
+
+<scalar-card title="67,108,864" icon="phosphor/regular/hash">
+
+`QUIC_CONN_MAX_STREAM_BUFFERS: i64`
+
+The most bytes of stream buffer a configuration may let each connection
+hold: every stream slot (`maxStreamsBidi + maxStreamsUni + localStreams`)
+may borrow `maxStreamData` bytes each way, and the pools are sized so all
+of them can at once, so a configuration past 64 MiB of them is refused
+rather than allowed to allocate it.
+
+</scalar-card>
+
+<scalar-card title="1,048,576" icon="phosphor/regular/hash">
+
+`QUIC_CONN_MAX_STREAM_DATA: i64`
+
+The largest per-stream credit a configuration may advertise, which is also each stream's buffer each way.
+
+</scalar-card>
+
+<scalar-card title="128" icon="phosphor/regular/hash">
+
+`QUIC_CONN_SKIP_MIN: i64`
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -819,69 +894,6 @@ The most connection IDs the server keeps active for the client to use, its own f
 
 </scalar-card>
 
-<scalar-card title="1,500" icon="phosphor/regular/hash">
-
-`QUIC_CONN_MAX_DATAGRAM_FRAME: i64`
-
-The largest `maxDatagramFrameSize` a configuration may advertise: 1500
-bytes, an Ethernet path's whole UDP payload, past which no DATAGRAM frame
-reaches a server on a real path. Each of the receive ring's entries is
-sized to what is advertised, so every frame taken is held.
-
-</scalar-card>
-
-<scalar-card title="64" icon="phosphor/regular/hash">
-
-`QUIC_CONN_MAX_ISSUED_CIDS: i64`
-
-How many connection IDs a connection issues in all, its first included.
-The client retiring one asks for a replacement (§5.1.1, a SHOULD), and
-each costs two HMACs whose temporaries stay in the arena, so this bounds
-what a client can make the server derive by retiring IDs over and over;
-past it, a retired ID is not replaced.
-
-</scalar-card>
-
-<scalar-card title="64" icon="phosphor/regular/hash">
-
-`QUIC_CONN_MAX_KEY_UPDATES: i32`
-
-How many key updates a connection takes from its client (RFC 9001 §6).
-Each costs two key derivations of work, though none of their memory, so
-the cap bounds what a client can make the server derive (QUIC-4); the next one
-closes the connection with KEY_UPDATE_ERROR. A client also has to wait
-a probe timeout between two of them.
-
-</scalar-card>
-
-<scalar-card title="1,024" icon="phosphor/regular/hash">
-
-`QUIC_CONN_MAX_STREAMS: i64`
-
-The most streams of one kind a configuration may let the client open at once, or open itself.
-
-</scalar-card>
-
-<scalar-card title="67,108,864" icon="phosphor/regular/hash">
-
-`QUIC_CONN_MAX_STREAM_BUFFERS: i64`
-
-The most bytes of stream buffer a configuration may let each connection
-hold: every stream slot (`maxStreamsBidi + maxStreamsUni + localStreams`)
-may borrow `maxStreamData` bytes each way, and the pools are sized so all
-of them can at once, so a configuration past 64 MiB of them is refused
-rather than allowed to allocate it.
-
-</scalar-card>
-
-<scalar-card title="1,048,576" icon="phosphor/regular/hash">
-
-`QUIC_CONN_MAX_STREAM_DATA: i64`
-
-The largest per-stream credit a configuration may advertise, which is also each stream's buffer each way.
-
-</scalar-card>
-
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `QUIC_CONN_PACKET_CONTROL: i32`
@@ -901,12 +913,6 @@ go over the next few.
 The most STREAM frames one packet carries, which is how many chunks a
 packet's record keeps for retransmission; the rest of the streams go in
 the next packet.
-
-</scalar-card>
-
-<scalar-card title="128" icon="phosphor/regular/hash">
-
-`QUIC_CONN_SKIP_MIN: i64`
 
 </scalar-card>
 

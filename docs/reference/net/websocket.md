@@ -683,6 +683,20 @@ class WsHandshake
 | `error: i32` |  |
 | `protocol: string` | The subprotocol the server chose, or `""` when it chose none. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="125" icon="phosphor/regular/hash">
+
+`WS_MAX_CONTROL: i32`
+
+The longest payload a control frame may carry (§5.5).
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -828,14 +842,6 @@ The status is not 101; the parser's `status` says what it is. No redirect is fol
 `WS_HS_VERSION: i32`
 
 The response is not HTTP/1.1.
-
-</scalar-card>
-
-<scalar-card title="125" icon="phosphor/regular/hash">
-
-`WS_MAX_CONTROL: i32`
-
-The longest payload a control frame may carry (§5.5).
 
 </scalar-card>
 

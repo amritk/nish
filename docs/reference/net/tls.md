@@ -579,6 +579,23 @@ interface TlsServerConfig
 | `quicTransportParameters: u8[]` | The server's transport parameters, opaque, sent in EncryptedExtensions only when `quic`. |
 | `signatureScheme: i32` | The signature scheme the caller's key signs with, sent in CertificateVerify: `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256` for a P-256 key. A client that does not list it is refused with `handshake_failure`. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="65,536" icon="phosphor/regular/hash">
+
+`TLS_MAX_HANDSHAKE_MESSAGE: i32`
+
+The longest handshake message accepted, in bytes. A ClientHello carrying a
+post-quantum share is a few kilobytes; nothing a client sends a TLS 1.3
+server comes near this, and the cap is what bounds the buffer a peer can
+make the server hold.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -604,17 +621,6 @@ Under the handshake traffic secrets: EncryptedExtensions through both Finished m
 `TLS_LEVEL_INITIAL: i32`
 
 Cleartext: ClientHello, HelloRetryRequest and ServerHello (QUIC's Initial packets).
-
-</scalar-card>
-
-<scalar-card title="65,536" icon="phosphor/regular/hash">
-
-`TLS_MAX_HANDSHAKE_MESSAGE: i32`
-
-The longest handshake message accepted, in bytes. A ClientHello carrying a
-post-quantum share is a few kilobytes; nothing a client sends a TLS 1.3
-server comes near this, and the cap is what bounds the buffer a peer can
-make the server hold.
 
 </scalar-card>
 

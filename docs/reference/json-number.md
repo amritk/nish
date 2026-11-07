@@ -183,6 +183,28 @@ function jsonNumberMultipleOf(
 <scalar-field name="returns" type="i32">
 </scalar-field>
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="1,000,000,000,000,000" icon="phosphor/regular/hash">
+
+`JSON_NUMBER_MAX_EXPONENT: i64`
+
+The largest exponent, in size, a text may write: 10^15, so a sum of two stays far inside `i64`.
+
+</scalar-card>
+
+<scalar-card title="1,048,576" icon="phosphor/regular/hash">
+
+`JSON_NUMBER_MAX_STEPS: i64`
+
+The most digit steps one `jsonNumberMultipleOf` may take, 2^20 (the module header says what a step costs).
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -216,22 +238,6 @@ The text's exponent is larger in size than `JSON_NUMBER_MAX_EXPONENT`.
 `JSON_NUMBER_ERR_SYNTAX: i32`
 
 The text is not a JSON number.
-
-</scalar-card>
-
-<scalar-card title="1,000,000,000,000,000" icon="phosphor/regular/hash">
-
-`JSON_NUMBER_MAX_EXPONENT: i64`
-
-The largest exponent, in size, a text may write: 10^15, so a sum of two stays far inside `i64`.
-
-</scalar-card>
-
-<scalar-card title="1,048,576" icon="phosphor/regular/hash">
-
-`JSON_NUMBER_MAX_STEPS: i64`
-
-The most digit steps one `jsonNumberMultipleOf` may take, 2^20 (the module header says what a step costs).
 
 </scalar-card>
 

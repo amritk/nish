@@ -176,7 +176,7 @@ The peer's SETTINGS as `h3ReadSettings` read them.
 
 </scalar-grid>
 
-<scalar-detail title="Frames">
+<scalar-callout type="info">
 
 **Frames** (§7.1) are a type and a length, each a QUIC variable-length
 integer, and then that many bytes of payload. On a QUIC stream a frame may
@@ -185,7 +185,7 @@ integers are in the window (`h3ReadFrameHeader` answers 0 until then) and a
 payload is the caller's to count down. The varints are
 `nish/net/quic-packet`'s, which QUIC and HTTP/3 share.
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Types">
 
@@ -686,6 +686,52 @@ class Http3Settings
 | `take(id: i64, value: i64): i64` | Records one pair; answers `H3_SETTINGS_OK` or H3_SETTINGS_ERROR for a reserved or repeated identifier. |
 | `unknown(id: i64): i64` | The value of an identifier this module does not understand, or -1 when the frame did not carry it (or carried it past the kept ones). |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="16" icon="phosphor/regular/hash">
+
+`H3_FRAME_HEADER_MAX: i32`
+
+The largest frame header: two eight-byte varints.
+
+</scalar-card>
+
+<scalar-card title="H3_FRAME_MAX_PUSH_ID" icon="phosphor/regular/hash">
+
+`H3_FRAME_MAX_PUSH_ID: i64`
+
+MAX_PUSH_ID (§7.2.7): the largest push ID a client lets a server use.
+
+</scalar-card>
+
+<scalar-card title="H3_SETTINGS_MAX_FIELD_SECTION_SIZE" icon="phosphor/regular/hash">
+
+`H3_SETTINGS_MAX_FIELD_SECTION_SIZE: i64`
+
+SETTINGS_MAX_FIELD_SECTION_SIZE: the largest field section the sender takes, as §4.2.2 counts it.
+
+</scalar-card>
+
+<scalar-card title="H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY" icon="phosphor/regular/hash">
+
+`H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY: i64`
+
+SETTINGS_QPACK_MAX_TABLE_CAPACITY.
+
+</scalar-card>
+
+<scalar-card title="H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS" icon="phosphor/regular/hash">
+
+`H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS: i64`
+
+SETTINGS_WEBTRANSPORT_MAX_SESSIONS of draft-ietf-webtrans-http3-07 §3.1, which `wtransport` 0.7 sends beside the draft-02 one.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -751,22 +797,6 @@ GOAWAY (§7.2.6): a stream ID from a server, a push ID from a client.
 `H3_FRAME_HEADERS: i64`
 
 HEADERS (§7.2.2): a QPACK-encoded field section.
-
-</scalar-card>
-
-<scalar-card title="16" icon="phosphor/regular/hash">
-
-`H3_FRAME_HEADER_MAX: i32`
-
-The largest frame header: two eight-byte varints.
-
-</scalar-card>
-
-<scalar-card title="H3_FRAME_MAX_PUSH_ID" icon="phosphor/regular/hash">
-
-`H3_FRAME_MAX_PUSH_ID: i64`
-
-MAX_PUSH_ID (§7.2.7): the largest push ID a client lets a server use.
 
 </scalar-card>
 
@@ -894,14 +924,6 @@ How many identifiers `Http3Settings` keeps that it does not understand.
 
 </scalar-card>
 
-<scalar-card title="H3_SETTINGS_MAX_FIELD_SECTION_SIZE" icon="phosphor/regular/hash">
-
-`H3_SETTINGS_MAX_FIELD_SECTION_SIZE: i64`
-
-SETTINGS_MAX_FIELD_SECTION_SIZE: the largest field section the sender takes, as §4.2.2 counts it.
-
-</scalar-card>
-
 <scalar-card title="0" icon="phosphor/regular/hash">
 
 `H3_SETTINGS_OK: i64`
@@ -915,22 +937,6 @@ What `h3ReadSettings` answers for a payload it read whole.
 `H3_SETTINGS_QPACK_BLOCKED_STREAMS: i64`
 
 SETTINGS_QPACK_BLOCKED_STREAMS.
-
-</scalar-card>
-
-<scalar-card title="H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY" icon="phosphor/regular/hash">
-
-`H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY: i64`
-
-SETTINGS_QPACK_MAX_TABLE_CAPACITY.
-
-</scalar-card>
-
-<scalar-card title="H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS" icon="phosphor/regular/hash">
-
-`H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS: i64`
-
-SETTINGS_WEBTRANSPORT_MAX_SESSIONS of draft-ietf-webtrans-http3-07 §3.1, which `wtransport` 0.7 sends beside the draft-02 one.
 
 </scalar-card>
 

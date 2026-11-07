@@ -63,7 +63,7 @@ One match: the input it was found in and the byte offsets of every group.
 
 </scalar-grid>
 
-<scalar-detail title="The syntax is JavaScript's">
+<scalar-callout type="info">
 
 **The syntax is JavaScript's**, with the `u` flag's strictness: literals,
 `.`, classes `[a-z]` and `[^…]`, `\d \w \s` and their negations, `\b \B ^
@@ -81,14 +81,20 @@ which changes nothing. `i` folds A-Z to a-z, and above ASCII follows
 Unicode's simple case folding, so `σ` matches `Σ` and `ς` and `[α-ω]` the
 capitals; unlike JavaScript nothing folds across ASCII, so the Kelvin sign
 and `ſ` match no `k` or `s`, though under `i` both are word characters to
-`\w`, `\W`, `\b` and `\B`, as with JavaScript's `iu`. **Backreferences and
+`\w`, `\W`, `\b` and `\B`, as with JavaScript's `iu`.
+
+</scalar-callout>
+
+<scalar-callout type="warning">
+
+**Backreferences and
 lookaround are refused at compile time**: they are what makes a matcher
 backtrack, and this one never does. A repeat count is at most 1,000, a
 pattern at most 100,000 instructions once its repeats are written out,
 1,024 capturing groups and 10,000 ranges in one class, and its property
 escapes and case folding add at most 100,000 ranges to its classes.
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Matching never backtracks">
 
@@ -380,7 +386,7 @@ class RegexMatch
 | `start(): i32` | Where the match starts. |
 | `text(): string` | The matched text. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 

@@ -304,6 +304,36 @@ class TlsRecordReader
 | `reset(): void` | Forgets every byte, for a connection that starts again in the same slot, and gives the buffer back. |
 | `space(): i32` | How many bytes `push` would take now. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="16,640" icon="phosphor/regular/hash">
+
+`TLS_MAX_CIPHERTEXT: i32`
+
+The longest body a protected record may have: 2^14 + 256 bytes (§5.2).
+
+</scalar-card>
+
+<scalar-card title="16,384" icon="phosphor/regular/hash">
+
+`TLS_MAX_PLAINTEXT: i32`
+
+The most content one record carries: 2^14 bytes (§5.1).
+
+</scalar-card>
+
+<scalar-card title="16,645" icon="phosphor/regular/hash">
+
+`TLS_MAX_RECORD: i32`
+
+The longest whole record, header included.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -414,30 +444,6 @@ it, and one rule for all three suites keeps the writer simple.
 The sequence number no record is sealed or opened at: 2^53 − 1. The counter
 must never wrap (§5.3), and stopping here, at a number no connection
 reaches, keeps the `i64` it is held in far from its own overflow.
-
-</scalar-card>
-
-<scalar-card title="16,640" icon="phosphor/regular/hash">
-
-`TLS_MAX_CIPHERTEXT: i32`
-
-The longest body a protected record may have: 2^14 + 256 bytes (§5.2).
-
-</scalar-card>
-
-<scalar-card title="16,384" icon="phosphor/regular/hash">
-
-`TLS_MAX_PLAINTEXT: i32`
-
-The most content one record carries: 2^14 bytes (§5.1).
-
-</scalar-card>
-
-<scalar-card title="16,645" icon="phosphor/regular/hash">
-
-`TLS_MAX_RECORD: i32`
-
-The longest whole record, header included.
 
 </scalar-card>
 

@@ -133,7 +133,7 @@ who write programs in Nish. A page there follows these rules:
 `docs/reference/` is generated, never edited by hand: change the source's doc
 comments and run `node scripts/gen-reference.mjs`, which rewrites every page
 and the `/reference/library` and `/reference/language` routes in
-`scalar.config.json`. CI runs it with `--check`, which writes nothing and
+`scalar.config.json`, leaving every other line of that file as written. CI runs it with `--check`, which writes nothing and
 exits 1 naming each stale, missing or extra page and a stale route; each page
 opens with a comment saying so. TypeDoc reads the sources in-process, and
 `scripts/typedoc-nish-widths.mjs` keeps each type as the source spells it
@@ -152,7 +152,19 @@ opens with a comment saying so. TypeDoc reads the sources in-process, and
   A global that merges with a TypeScript lib declaration (`Array`,
   `String`, `Symbol`) shows only the members `runtime/nish.d.ts` declares.
 
-A module's page is read from the `/** ... */` comment that opens its file:
+- **Constants.** A constant whose name has a `MAX` or `MIN` word
+  (`REGEX_MAX_DEPTH`, `BCRYPT_MIN_COST`) is a limit, listed under
+  `## Limits`; every other constant is under `## Constants`. A limit is
+  named for what it bounds, so the name is the rule; a constant that bounds
+  something under another name is renamed, not special-cased here.
+- **Links.** A `{@link}` that names nothing fails the run, `--check`
+  included.
+
+A module's page is read from the `/** ... */` comment that opens its file.
+For a `nish:` module it is the `/** ... */` comment right above its
+`declare module "nish:x"` in `runtime/nish.d.ts`; a module without one (a
+`//` comment does not count) opens with a fixed line naming the module
+instead.
 
 1. **The lead**, the first paragraph, opens the page. A leading
    `` `nish/x` — `` (or `nish/x:`) naming the module is dropped, since the
@@ -162,15 +174,21 @@ A module's page is read from the `/** ... */` comment that opens its file:
    or more, not a list) that imports from `"nish/`, together with any code
    blocks right after it. It is shown after the import line.
 3. A list or code block belongs to the paragraph before it.
-4. **The paragraph after the lead** is the summary, shown as an info
-   callout, unless it opens with bold text; then the page has no summary
-   and the paragraph follows rule 5.
-5. **A paragraph opening with bold text** is a collapsible detail titled
-   with that text. `**Title.** Body` or `**Title**: body` uses the rest as
-   the body; otherwise the whole paragraph is the body. When the title says
+4. **A warning** starts at any sentence that opens with bold text saying
    the module refuses, limits or caps something (`refus`, `limit`, `cap`),
-   it is a warning callout instead, so a limit is not folded away.
-6. Every other paragraph is shown as written.
+   at the start of a paragraph or within one, and runs to the end of that
+   paragraph and its lists and code blocks. It is a warning callout, split
+   from the text before it, so a limit is never folded away. Rules 5 and 6
+   apply to what precedes it.
+5. **The paragraph after the lead** is the summary, shown as an info
+   callout, unless it opens with a bold title (`**Title.** Body` or
+   `**Title**: body`); then the page has no summary and the paragraph
+   follows rule 6. A bold phrase that runs on into its sentence
+   (`**The syntax is JavaScript's**, with …`) is not a title.
+6. **A later paragraph opening with bold text** is a collapsible detail
+   titled with that text. `**Title.** Body` or `**Title**: body` uses the
+   rest as the body; otherwise the whole paragraph is the body.
+7. Every other paragraph is shown as written.
 
 ## Tooling for these docs
 

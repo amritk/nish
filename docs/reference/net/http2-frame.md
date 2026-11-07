@@ -936,6 +936,50 @@ class Http2Frame
 | `weight: i32` | The weight, 1 to 256. |
 | `has(bit: i32): boolean` | Whether the flag `bit` is set. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="16,384" icon="phosphor/regular/hash">
+
+`H2_DEFAULT_MAX_FRAME: i32`
+
+SETTINGS_MAX_FRAME_SIZE's initial value, which is also its least, and its greatest (§6.5.2).
+
+</scalar-card>
+
+<scalar-card title="16,777,215" icon="phosphor/regular/hash">
+
+`H2_MAX_FRAME_LIMIT: i32`
+
+</scalar-card>
+
+<scalar-card title="2,147,483,647" icon="phosphor/regular/hash">
+
+`H2_MAX_WINDOW: i32`
+
+</scalar-card>
+
+<scalar-card title="3" icon="phosphor/regular/hash">
+
+`H2_SETTINGS_MAX_CONCURRENT_STREAMS: i32`
+
+</scalar-card>
+
+<scalar-card title="5" icon="phosphor/regular/hash">
+
+`H2_SETTINGS_MAX_FRAME_SIZE: i32`
+
+</scalar-card>
+
+<scalar-card title="6" icon="phosphor/regular/hash">
+
+`H2_SETTINGS_MAX_HEADER_LIST_SIZE: i32`
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -955,14 +999,6 @@ class Http2Frame
 <scalar-card title="10" icon="phosphor/regular/hash">
 
 `H2_CONNECT_ERROR: i32`
-
-</scalar-card>
-
-<scalar-card title="16,384" icon="phosphor/regular/hash">
-
-`H2_DEFAULT_MAX_FRAME: i32`
-
-SETTINGS_MAX_FRAME_SIZE's initial value, which is also its least, and its greatest (§6.5.2).
 
 </scalar-card>
 
@@ -1118,18 +1154,6 @@ The size of a frame header: a 24-bit length, a type, flags and a 31-bit stream i
 
 </scalar-card>
 
-<scalar-card title="16,777,215" icon="phosphor/regular/hash">
-
-`H2_MAX_FRAME_LIMIT: i32`
-
-</scalar-card>
-
-<scalar-card title="2,147,483,647" icon="phosphor/regular/hash">
-
-`H2_MAX_WINDOW: i32`
-
-</scalar-card>
-
 <scalar-card title="0" icon="phosphor/regular/hash">
 
 `H2_NO_ERROR: i32`
@@ -1173,24 +1197,6 @@ The settings of §6.5.2, and RFC 8441's.
 <scalar-card title="4" icon="phosphor/regular/hash">
 
 `H2_SETTINGS_INITIAL_WINDOW_SIZE: i32`
-
-</scalar-card>
-
-<scalar-card title="3" icon="phosphor/regular/hash">
-
-`H2_SETTINGS_MAX_CONCURRENT_STREAMS: i32`
-
-</scalar-card>
-
-<scalar-card title="5" icon="phosphor/regular/hash">
-
-`H2_SETTINGS_MAX_FRAME_SIZE: i32`
-
-</scalar-card>
-
-<scalar-card title="6" icon="phosphor/regular/hash">
-
-`H2_SETTINGS_MAX_HEADER_LIST_SIZE: i32`
 
 </scalar-card>
 

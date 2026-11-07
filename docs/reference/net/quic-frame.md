@@ -297,7 +297,7 @@ One frame as `quicParseFrame` read it.
 
 </scalar-grid>
 
-<scalar-detail title="Every frame type of RFC 9000 is read">
+<scalar-callout type="info">
 
 **Every frame type of RFC 9000 is read**, 0x00 to 0x1e, and RFC 9221's
 DATAGRAM, 0x30 and 0x31, so a type outside those is the one parse error a
@@ -312,7 +312,7 @@ outside 1 to 20 bytes or a Retire Prior To above its own sequence number;
 it needs (§12.4). Every read is bounds-checked against the window the caller
 gives, so nothing a peer sends can make this module panic.
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="No copy of the bulk">
 
@@ -1484,6 +1484,46 @@ class QuicFrame
 | `type: i32` | The frame type, with every STREAM type answered as `QUIC_FRAME_STREAM`. |
 | `value: i64` |  |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="32" icon="phosphor/regular/hash">
+
+`QUIC_FRAME_MAX_ACK_RANGES: i32`
+
+The most ACK ranges a `QuicFrame` keeps. A frame may list more, and every
+one is still checked; the ones past this are counted in `ackRangeTotal`
+but not stored. Loss recovery, which would read them, is WP34 Q3.
+
+</scalar-card>
+
+<scalar-card title="QUIC_FRAME_MAX_DATA" icon="phosphor/regular/hash">
+
+`QUIC_FRAME_MAX_DATA: i32`
+
+</scalar-card>
+
+<scalar-card title="QUIC_FRAME_MAX_STREAMS_BIDI" icon="phosphor/regular/hash">
+
+`QUIC_FRAME_MAX_STREAMS_BIDI: i32`
+
+</scalar-card>
+
+<scalar-card title="QUIC_FRAME_MAX_STREAMS_UNI" icon="phosphor/regular/hash">
+
+`QUIC_FRAME_MAX_STREAMS_UNI: i32`
+
+</scalar-card>
+
+<scalar-card title="QUIC_FRAME_MAX_STREAM_DATA" icon="phosphor/regular/hash">
+
+`QUIC_FRAME_MAX_STREAM_DATA: i32`
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -1663,40 +1703,6 @@ The DATAGRAM type with a Length field (RFC 9221 §4), which `quicPutDatagram` al
 <scalar-card title="QUIC_FRAME_HANDSHAKE_DONE" icon="phosphor/regular/hash">
 
 `QUIC_FRAME_HANDSHAKE_DONE: i32`
-
-</scalar-card>
-
-<scalar-card title="32" icon="phosphor/regular/hash">
-
-`QUIC_FRAME_MAX_ACK_RANGES: i32`
-
-The most ACK ranges a `QuicFrame` keeps. A frame may list more, and every
-one is still checked; the ones past this are counted in `ackRangeTotal`
-but not stored. Loss recovery, which would read them, is WP34 Q3.
-
-</scalar-card>
-
-<scalar-card title="QUIC_FRAME_MAX_DATA" icon="phosphor/regular/hash">
-
-`QUIC_FRAME_MAX_DATA: i32`
-
-</scalar-card>
-
-<scalar-card title="QUIC_FRAME_MAX_STREAMS_BIDI" icon="phosphor/regular/hash">
-
-`QUIC_FRAME_MAX_STREAMS_BIDI: i32`
-
-</scalar-card>
-
-<scalar-card title="QUIC_FRAME_MAX_STREAMS_UNI" icon="phosphor/regular/hash">
-
-`QUIC_FRAME_MAX_STREAMS_UNI: i32`
-
-</scalar-card>
-
-<scalar-card title="QUIC_FRAME_MAX_STREAM_DATA" icon="phosphor/regular/hash">
-
-`QUIC_FRAME_MAX_STREAM_DATA: i32`
 
 </scalar-card>
 

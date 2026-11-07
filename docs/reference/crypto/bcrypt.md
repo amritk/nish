@@ -467,17 +467,9 @@ function bcryptVerifyN(
 <scalar-field name="returns" type="Result&lt;boolean[], string&gt;">
 </scalar-field>
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
-
-<scalar-card title="60" icon="phosphor/regular/hash">
-
-`BCRYPT_HASH_LENGTH: i32`
-
-The length of a bcrypt hash string: `$2b$`, two cost digits, `$`, 22 salt and 31 digest characters.
-
-</scalar-card>
 
 <scalar-card title="31" icon="phosphor/regular/hash">
 
@@ -500,6 +492,20 @@ The number of password bytes the key schedule reads; the rest are not.
 `BCRYPT_MIN_COST: i32`
 
 The smallest cost the reference accepts: 2^4 rounds.
+
+</scalar-card>
+
+</scalar-grid>
+
+## Constants
+
+<scalar-grid cols="2">
+
+<scalar-card title="60" icon="phosphor/regular/hash">
+
+`BCRYPT_HASH_LENGTH: i32`
+
+The length of a bcrypt hash string: `$2b$`, two cost digits, `$`, 22 salt and 31 digest characters.
 
 </scalar-card>
 

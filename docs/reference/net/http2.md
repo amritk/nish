@@ -368,6 +368,20 @@ class Http2Stream
 | `responded: boolean` | A final (non-1xx) response head was sent. |
 | `sendWindow: i64` | What the server may still send on the stream. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`H2_MAX_FRAGMENTS: i32`
+
+How many frames one header block may be cut into.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -417,14 +431,6 @@ The peer sent GOAWAY: `lastStreamId`, `errorCode`.
 `H2_INVALID: i32`
 
 What a write answers for fields or a status it may not send: Linux's EINVAL.
-
-</scalar-card>
-
-<scalar-card title="64" icon="phosphor/regular/hash">
-
-`H2_MAX_FRAGMENTS: i32`
-
-How many frames one header block may be cut into.
 
 </scalar-card>
 

@@ -286,6 +286,30 @@ class QuicSentPackets
 | `stateAt(s: i32): i32` | The state of slot `s`, or free for a slot outside the ring. |
 | `timeAt(s: i32): i64` | When the packet in slot `s` was sent, or -1. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="25" icon="phosphor/regular/hash">
+
+`QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY: i64`
+
+The default max_ack_delay (RFC 9000 §18.2), in milliseconds, until the peer's transport parameters say otherwise.
+
+</scalar-card>
+
+<scalar-card title="16" icon="phosphor/regular/hash">
+
+`QUIC_RECOVERY_MAX_BACKOFF: i32`
+
+The most times the probe timeout doubles (§6.2.1). Sixteen doublings of
+the longest probe timeout a peer can cause still fit an `i64`, and by then
+the idle timeout has ended the connection.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -315,14 +339,6 @@ acknowledgement until one arrives, as if the congestion window were full.
 `QUIC_RECOVERY_DATAGRAM_SIZE: i64`
 
 max_datagram_size (B.1): the 1200 bytes every datagram this server sends is at most.
-
-</scalar-card>
-
-<scalar-card title="25" icon="phosphor/regular/hash">
-
-`QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY: i64`
-
-The default max_ack_delay (RFC 9000 §18.2), in milliseconds, until the peer's transport parameters say otherwise.
 
 </scalar-card>
 
@@ -416,16 +432,6 @@ kInitialRtt (§6.2.2), in milliseconds: the round trip assumed before the first 
 `QUIC_RECOVERY_INITIAL_WINDOW: i64`
 
 kInitialWindow (§7.2): min(10 × 1200, max(14720, 2 × 1200)), so 12000 bytes.
-
-</scalar-card>
-
-<scalar-card title="16" icon="phosphor/regular/hash">
-
-`QUIC_RECOVERY_MAX_BACKOFF: i32`
-
-The most times the probe timeout doubles (§6.2.1). Sixteen doublings of
-the longest probe timeout a peer can cause still fit an `i64`, and by then
-the idle timeout has ended the connection.
 
 </scalar-card>
 

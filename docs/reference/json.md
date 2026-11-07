@@ -350,7 +350,7 @@ class JsonWriter
 | `u32(v: u32): void` | One past `i32`'s range is ten digits, so the last digit is split off in `u32` and the nine before it are an `i32`'s. |
 | `written(): i32` | How many bytes have been written since `reset`. |
 
-## Constants
+## Limits
 
 <scalar-grid cols="2">
 
@@ -363,6 +363,12 @@ is one bit of two `i32` fields inside the writer, so a nesting past it is
 `JSON_WRITE_TOO_DEEP` rather than a stack that grows.
 
 </scalar-card>
+
+</scalar-grid>
+
+## Constants
+
+<scalar-grid cols="2">
 
 <scalar-card title="-7" icon="phosphor/regular/hash">
 

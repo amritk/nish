@@ -78,7 +78,7 @@ One connection's response parser: responses on a kept-alive connection follow on
 
 </scalar-grid>
 
-<scalar-detail title="The writer">
+<scalar-callout type="info">
 
 **The writer** is `http1RequestHead`, which answers a request line and
 header section with the framing field the body needs, and
@@ -91,7 +91,7 @@ is the one way to ask the server to switch protocols: it writes `Upgrade`
 and `Connection: Upgrade` itself, and every other writer refuses a
 `Connection` that lists `upgrade`.
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="The parser">
 
@@ -360,6 +360,28 @@ class Http1ResponseParser
 | `reset(): void` | Makes the parser as it was new, for the next connection, keeping its limits, its mode and its buffers: what was fed and not read is dropped, and an error or a close is forgotten. |
 | `tunnelBytes(): u8[]` | In a tunnel: every byte fed past the response head, as a fresh array. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="4,096" icon="phosphor/regular/hash">
+
+`HTTP1_MAX_CHUNK_LINE: i32`
+
+The longest chunk-size line, extension included, the parser reads.
+
+</scalar-card>
+
+<scalar-card title="32" icon="phosphor/regular/hash">
+
+`HTTP1_MAX_INFORMATIONAL: i32`
+
+The most interim 1xx responses the parser reads before a final one.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -513,22 +535,6 @@ class Http1ResponseParser
 `HTTP1_INFORMATIONAL: i32`
 
 `next()`: an interim 1xx response was read; `status` and the fields are its.
-
-</scalar-card>
-
-<scalar-card title="4,096" icon="phosphor/regular/hash">
-
-`HTTP1_MAX_CHUNK_LINE: i32`
-
-The longest chunk-size line, extension included, the parser reads.
-
-</scalar-card>
-
-<scalar-card title="32" icon="phosphor/regular/hash">
-
-`HTTP1_MAX_INFORMATIONAL: i32`
-
-The most interim 1xx responses the parser reads before a final one.
 
 </scalar-card>
 

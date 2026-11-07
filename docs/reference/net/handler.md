@@ -297,6 +297,20 @@ class HttpRequest
 | `valueEnd(i: i32): i32` | Where field `i`'s value ends in `head`. |
 | `valueStart(i: i32): i32` | Where field `i`'s value starts in `head`. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="16" icon="phosphor/regular/hash">
+
+`HANDLER_MAX_WATCHED: i32`
+
+The most descriptors `watch` takes beside the handler's own.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -314,14 +328,6 @@ class HttpRequest
 `HANDLER_DROPPED: i32`
 
 An answer for a request whose connection closed first: nothing was sent.
-
-</scalar-card>
-
-<scalar-card title="16" icon="phosphor/regular/hash">
-
-`HANDLER_MAX_WATCHED: i32`
-
-The most descriptors `watch` takes beside the handler's own.
 
 </scalar-card>
 

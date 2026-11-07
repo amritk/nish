@@ -54,7 +54,7 @@ A public key as `rsaParsePublicKey` read it.
 
 </scalar-grid>
 
-<scalar-detail title="The key">
+<scalar-callout type="info">
 
 **The key** is the DER of PKCS#1's `RSAPublicKey ::= SEQUENCE { modulus
 INTEGER, publicExponent INTEGER }` (RFC 8017 §A.1.1), nothing before it and
@@ -66,7 +66,7 @@ odd, at least 3 and below 2^32 (so below the modulus). Anything else answers
 costs, because the work grows with the exponent's length, and every
 certificate in use carries 65537 (RSA-3, docs/security/crypto-rsa.md).
 
-</scalar-detail>
+</scalar-callout>
 
 <scalar-detail title="Verification">
 
@@ -239,6 +239,28 @@ class RsaPublicKey
 | `e: u8[]` | The public exponent, big-endian with no leading zero byte. |
 | `n: u8[]` | The modulus, big-endian with no leading zero byte. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="8,192" icon="phosphor/regular/hash">
+
+`RSA_MAX_BITS: i32`
+
+The largest modulus `rsaParsePublicKey` accepts, in bits.
+
+</scalar-card>
+
+<scalar-card title="1,024" icon="phosphor/regular/hash">
+
+`RSA_MIN_BITS: i32`
+
+The smallest modulus `rsaParsePublicKey` accepts, in bits. A policy that wants 2048 checks `bits` itself.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -264,22 +286,6 @@ SHA-384.
 `RSA_HASH_SHA512: i32`
 
 SHA-512.
-
-</scalar-card>
-
-<scalar-card title="8,192" icon="phosphor/regular/hash">
-
-`RSA_MAX_BITS: i32`
-
-The largest modulus `rsaParsePublicKey` accepts, in bits.
-
-</scalar-card>
-
-<scalar-card title="1,024" icon="phosphor/regular/hash">
-
-`RSA_MIN_BITS: i32`
-
-The smallest modulus `rsaParsePublicKey` accepts, in bits. A policy that wants 2048 checks `bits` itself.
 
 </scalar-card>
 

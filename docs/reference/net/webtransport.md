@@ -381,6 +381,20 @@ class WebTransportWaiting
 | `reset(): void` | Empties the room. |
 | `take(e: i32): i64` | Takes entry `e` out of the room and answers its stream. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="1,024" icon="phosphor/regular/hash">
+
+`WT_REASON_MAX: i32`
+
+The longest reason a CLOSE capsule carries.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -446,14 +460,6 @@ The first HTTP/3 code a WebTransport application code maps to.
 `WT_LIMIT: i32`
 
 A stream past the session's `maxStreams`: Linux's EMFILE.
-
-</scalar-card>
-
-<scalar-card title="1,024" icon="phosphor/regular/hash">
-
-`WT_REASON_MAX: i32`
-
-The longest reason a CLOSE capsule carries.
 
 </scalar-card>
 

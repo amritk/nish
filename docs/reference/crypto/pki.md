@@ -300,6 +300,76 @@ class PkiTrustStore
 | `bySubject: Map<string, X509Certificate[]>` | The roots under each subject, keyed by the subject's DER in hex. |
 | `roots: X509Certificate[]` | Every root, in the order given, no two with the same DER. |
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="1,048,576" icon="phosphor/regular/hash">
+
+`PKI_MAX_CHAIN_BYTES: i32`
+
+The most bytes a chain's certificates may total: 1 MiB.
+
+</scalar-card>
+
+<scalar-card title="128" icon="phosphor/regular/hash">
+
+`PKI_MAX_CHAIN_CERTS: i32`
+
+The most certificates a chain may hold, the leaf among them.
+
+</scalar-card>
+
+<scalar-card title="1,024" icon="phosphor/regular/hash">
+
+`PKI_MAX_NAMES: i32`
+
+The most subjectAltName dNSNames and iPAddresses together a certificate may carry.
+
+</scalar-card>
+
+<scalar-card title="250,000" icon="phosphor/regular/hash">
+
+`PKI_MAX_NAME_CHECKS: i32`
+
+The most name-against-subtree comparisons one call makes.
+
+</scalar-card>
+
+<scalar-card title="8" icon="phosphor/regular/hash">
+
+`PKI_MAX_PATH: i32`
+
+The most certificates in a path, the leaf and the root among them.
+
+</scalar-card>
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`PKI_MAX_SIGNATURES: i32`
+
+The most signatures one call checks.
+
+</scalar-card>
+
+<scalar-card title="256" icon="phosphor/regular/hash">
+
+`PKI_MAX_SUBTREES: i32`
+
+The most permitted and excluded subtrees together a certificate may carry.
+
+</scalar-card>
+
+<scalar-card title="2,048" icon="phosphor/regular/hash">
+
+`PKI_MIN_RSA_BITS: i32`
+
+The shortest RSA modulus accepted, in bits.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -431,70 +501,6 @@ No path leads to a root of the store.
 `PKI_ERR_WEAK_KEY: i32`
 
 An RSA key is shorter than `PKI_MIN_RSA_BITS`, or its modulus is not a whole number of bytes.
-
-</scalar-card>
-
-<scalar-card title="1,048,576" icon="phosphor/regular/hash">
-
-`PKI_MAX_CHAIN_BYTES: i32`
-
-The most bytes a chain's certificates may total: 1 MiB.
-
-</scalar-card>
-
-<scalar-card title="128" icon="phosphor/regular/hash">
-
-`PKI_MAX_CHAIN_CERTS: i32`
-
-The most certificates a chain may hold, the leaf among them.
-
-</scalar-card>
-
-<scalar-card title="1,024" icon="phosphor/regular/hash">
-
-`PKI_MAX_NAMES: i32`
-
-The most subjectAltName dNSNames and iPAddresses together a certificate may carry.
-
-</scalar-card>
-
-<scalar-card title="250,000" icon="phosphor/regular/hash">
-
-`PKI_MAX_NAME_CHECKS: i32`
-
-The most name-against-subtree comparisons one call makes.
-
-</scalar-card>
-
-<scalar-card title="8" icon="phosphor/regular/hash">
-
-`PKI_MAX_PATH: i32`
-
-The most certificates in a path, the leaf and the root among them.
-
-</scalar-card>
-
-<scalar-card title="64" icon="phosphor/regular/hash">
-
-`PKI_MAX_SIGNATURES: i32`
-
-The most signatures one call checks.
-
-</scalar-card>
-
-<scalar-card title="256" icon="phosphor/regular/hash">
-
-`PKI_MAX_SUBTREES: i32`
-
-The most permitted and excluded subtrees together a certificate may carry.
-
-</scalar-card>
-
-<scalar-card title="2,048" icon="phosphor/regular/hash">
-
-`PKI_MIN_RSA_BITS: i32`
-
-The shortest RSA modulus accepted, in bits.
 
 </scalar-card>
 

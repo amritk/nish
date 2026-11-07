@@ -362,6 +362,32 @@ A value in a `JsonDocument`: an index into it, valid until the document parses a
 type JsonValue = i32
 ```
 
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="262,144" icon="phosphor/regular/hash">
+
+`JSON_VALUE_DEFAULT_MAX_VALUES: i32`
+
+The most values one document holds by default: a parse that would make
+more is `JSON_VALUE_ERR_VALUES`. Each value costs the document about 46
+bytes of arrays it keeps, about 66 after a `parseRanged` (`docs/security/json.md`,
+JSON-10), so this caps them near 12 MB, or 17 MB; a program raises `maxValues` up to
+`JSON_VALUE_MAX_VALUES` for larger documents.
+
+</scalar-card>
+
+<scalar-card title="4,194,304" icon="phosphor/regular/hash">
+
+`JSON_VALUE_MAX_VALUES: i32`
+
+The most `maxValues` can be: a handle keeps a value's index in its low 22 bits.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
 
 <scalar-grid cols="2">
@@ -375,18 +401,6 @@ type JsonValue = i32
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `JSON_VALUE_BOOLEAN: i32`
-
-</scalar-card>
-
-<scalar-card title="262,144" icon="phosphor/regular/hash">
-
-`JSON_VALUE_DEFAULT_MAX_VALUES: i32`
-
-The most values one document holds by default: a parse that would make
-more is `JSON_VALUE_ERR_VALUES`. Each value costs the document about 46
-bytes of arrays it keeps, about 66 after a `parseRanged` (`docs/security/json.md`,
-JSON-10), so this caps them near 12 MB, or 17 MB; a program raises `maxValues` up to
-`JSON_VALUE_MAX_VALUES` for larger documents.
 
 </scalar-card>
 
@@ -451,14 +465,6 @@ Text that is not one JSON number, for `newNumber`, or an `f64` that is NaN or an
 `JSON_VALUE_ERR_VALUES: i32`
 
 One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at its first byte) or a builder.
-
-</scalar-card>
-
-<scalar-card title="4,194,304" icon="phosphor/regular/hash">
-
-`JSON_VALUE_MAX_VALUES: i32`
-
-The most `maxValues` can be: a handle keeps a value's index in its low 22 bits.
 
 </scalar-card>
 
