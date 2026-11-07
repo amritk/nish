@@ -2,7 +2,13 @@
  * `std/sort` — `xs.sort(cmp)` on an array, in Nish: a stable merge sort,
  * compiled once per comparator.
  *
- * A program does not import this module. A `.sort(cmp)` call is what loads it
+ *     export const main = (): i32 => {
+ *       const xs: i32[] = [3, 1, 2];
+ *       xs.sort((a, b) => a - b); // xs is now [1, 2, 3], and the call answers xs
+ *       return xs[0];
+ *     };
+ *
+ * **A program does not import this module.** A `.sort(cmp)` call is what loads it
  * (the checker's `importSort`), and the checker routes the call to `sortWith`
  * here. `cmp` is a compile-time function parameter, so each comparator is an
  * instantiation of its own whose body calls the comparator directly — there is
@@ -143,7 +149,16 @@ const mergePass = <T>(src: T[], dst: T[], cmp: (a: T, b: T) => number, n: i32, w
   }
 }
 
-/** `xs` sorted in place by `cmp`, stably, and answered: what `xs.sort(cmp)` compiles to. */
+/**
+ * `xs` sorted in place by `cmp`, stably, and answered: what `xs.sort(cmp)`
+ * compiles to.
+ *
+ * @param xs the array to sort; its elements are rearranged in place.
+ * @param cmp compares an earlier element with a later one: a positive answer
+ *   puts the later one first, and anything else, `NaN` and negative zero
+ *   included, keeps their order.
+ * @returns `xs` itself, the same array the call was given, now sorted.
+ */
 export const sortWith = <T>(xs: T[], cmp: (a: T, b: T) => number): T[] => {
   const n: i32 = toI32(xs.length)
   if (n < 2) {

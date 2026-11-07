@@ -4,11 +4,14 @@
  *
  *     import { Rng } from "nish/random";
  *
- *     const r = new Rng(42);
- *     const die: i32 = r.nextInt(1, 6); // 1 to 6, each with equal chance
- *     const u: f64 = r.nextF64(); // in [0, 1)
+ *     export const main = (): i32 => {
+ *       const r = new Rng(42);
+ *       const die: i32 = r.nextInt(1, 6); // 1 to 6, each with equal chance
+ *       const u: f64 = r.nextF64(); // in [0, 1)
+ *       return die;
+ *     };
  *
- * The state is one 32-bit integer. Each step adds the odd constant
+ * **The state is one 32-bit integer.** Each step adds the odd constant
  * 0x9E3779B9 (2^32 divided by the golden ratio) to it, wrapping, so the
  * states walk all 2^32 values before any repeats, whatever the seed — 0
  * included. Each answer is MurmurHash3's 32-bit finaliser applied to the new
@@ -31,10 +34,10 @@
  * below 2^53, so its products and sums are exact both ways. The program a test prints under
  * Node is the one it prints compiled (docs/RUN_UNDER_NODE.md).
  *
- * It is not for cryptography: a key or a nonce comes from
+ * **It is not for cryptography**: a key or a nonce comes from
  * `crypto.getRandomValues`.
  *
- * An `Rng` is an ordinary object, so a parallel body or a task that makes one
+ * **An `Rng` is an ordinary object**, so a parallel body or a task that makes one
  * of its own may step it as it likes: what a function allocates is its own
  * memory (docs/LANGUAGE.md, "Data parallelism"). One shared by several tasks
  * would be a write their caller can see, and is refused as any such write is;
@@ -100,14 +103,28 @@ const mix = (h: i32): i32 => {
 /** A generator of pseudo-random numbers: a Weyl sequence from its seed, each state mixed. */
 export class Rng {
   /** Where the walk is: the seed plus the increment times the steps taken, wrapped. */
-  state: i32
+  private state: i32
 
-  /** A generator whose sequence `seed` decides: two made from one seed answer the same numbers. */
+  /**
+   * A generator whose sequence `seed` decides: two made from one seed answer
+   * the same numbers.
+   *
+   * @param seed any `i32`, 0 and negatives included. The walk is one cycle
+   *   of 2^32 states, so seeds are starting points on it, not separate
+   *   sequences: `seed + k * 0x9E3779B9`, wrapped, answers the same numbers as
+   *   `seed`, `k` steps later.
+   */
   constructor(seed: i32) {
     this.state = seed
   }
 
-  /** The next 32 bits, as an `i32`: over 2^32 steps each value is answered exactly once. */
+  /**
+   * The next 32 bits, as an `i32`: over 2^32 steps each value is answered
+   * exactly once.
+   *
+   * @returns any `i32`, negatives included, each equally likely; the generator
+   *   steps once.
+   */
   nextI32(): i32 {
     this.state = wrappingAdd(this.state, GOLDEN)
     return mix(this.state)
@@ -117,6 +134,9 @@ export class Rng {
    * The next number in [0, 1), from two steps: the high 27 bits of one and
    * the high 26 of the next make a 53-bit integer, which a double holds
    * exactly, scaled by 2^-53.
+   *
+   * @returns a multiple of 2^-53 at least 0 and below 1; the generator steps
+   *   twice.
    */
   nextF64(): f64 {
     const hi: i32 = this.nextI32() >>> 5
@@ -136,6 +156,11 @@ export class Rng {
    * answer equally often. Fewer than half the draws are ever refused, so an
    * answer takes one `nextI32()` step usually and fewer than two on average,
    * and a sequence is still the seed's.
+   *
+   * @param lo the smallest answer allowed.
+   * @param hi the largest answer allowed; equal to `lo` answers `lo`, and below
+   *   it stops the program.
+   * @returns an integer from `lo` to `hi` inclusive.
    */
   nextInt(lo: i32, hi: i32): i32 {
     if (lo > hi) {

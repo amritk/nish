@@ -8,18 +8,21 @@
  *
  *     import { getU32BE, setU16LE } from "nish/bytes";
  *
- *     const header: u8[] = [0, 0, 1, 0, 0, 0];
- *     const length = getU32BE(header, 0); // 256
- *     setU16LE(header, 4, toU16(513)); // header[4] = 1, header[5] = 2
+ *     export const main = (): i32 => {
+ *       const header: u8[] = [0, 0, 1, 0, 0, 0];
+ *       const length = getU32BE(header, 0); // 256
+ *       setU16LE(header, 4, toU16(513)); // header[4] = 1, header[5] = 2
+ *       return toI32(length);
+ *     };
  *
- * Every function takes the array and the offset of its first byte; the `LE`
+ * **Every function takes the array and the offset of its first byte; the `LE`
  * name puts the least significant byte there, the `BE` name the most
- * significant. The widths are `u16`, `u32` and `u64`, the signed `i32` and
+ * significant.** The widths are `u16`, `u32` and `u64`, the signed `i32` and
  * `i64`, which are the same bytes read as two's complement, and `f64`, whose
  * bytes are its IEEE 754 bits (`f64ToBits`). There is no `f32`: the language
  * has no bit cast for one.
  *
- * Each access is an ordinary index, so an offset whose bytes do not all lie in
+ * **Each access is an ordinary index**, so an offset whose bytes do not all lie in
  * the array panics `index`, naming the first byte that does not. A guard in
  * the caller does not yet remove these checks: in a loop guarded by
  * `off + 3 < b.length`, the checker proves an index it can see but not one
@@ -31,8 +34,8 @@
  * eight bytes unchecked, which lowers to one load and a byte swap. An offset
  * outside the range still goes byte by byte, so it panics as the others do.
  *
- * The in-range answers are byte for byte those of the copies `std/` keeps for
- * itself: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
+ * **The in-range answers are byte for byte those of the copies `std/` keeps for
+ * itself**: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
  * `chacha20Word` and `poly1305Le64` (`std/crypto/chacha20poly1305.ts`) for
  * `getU32LE` and `getU64LE`, `loadWord` and `storeWord` (`std/crypto/sha512.ts`)
  * for `getU64BE` and `setU64BE`, `http2FramePut32` (`std/net/http2-frame.ts`)
@@ -41,8 +44,8 @@
  * TLS word helpers read zero past the end and drop bytes written there, which
  * their callers rely on, where this module panics.
  *
- * Under Node (`docs/RUN_UNDER_NODE.md`) the `u16` and `u32` functions are
- * expected to answer as they do natively, because the top byte of a `u32` is
+ * **Under Node (`docs/RUN_UNDER_NODE.md`) the `u16` and `u32` functions are
+ * expected to answer as they do natively**, because the top byte of a `u32` is
  * multiplied in rather than shifted and each byte written is masked before
  * its `toU8`: there `<<` turns bit 31 into a sign and the prelude's `toU8`
  * and `toU32` saturate, and natively the multiply and the mask fold into the
@@ -52,40 +55,81 @@
  * 64-bit functions and `f64` meet its BigInt `u64` and `i64`, which `toU8`
  * refuses.
  *
- * The module also has the runs a parser walks and the copy it makes of them.
+ * **The module also has the runs a parser walks and the copy it makes of
+ * them.**
  * `skipBlank`, `skipDigits`, `skipJsonText` and `skipJsonPlain` each answer
  * the first index in a range whose byte is not in their class — JSON's blanks,
  * the ASCII digits, the bytes a JSON string holds as themselves, the bytes a
  * JSON writer copies without an escape — and `copyBytes` copies a
  * window of one array into another, or into itself, as one move:
  *
- *     const text: u8[] = [32, 32, 52, 50, 44]; // "  42,"
- *     const start = skipBlank(text, 0, 5); // 2
- *     const end = skipDigits(text, start, 5); // 4
+ *     import { skipBlank, skipDigits } from "nish/bytes";
  *
- * The four runs clamp their range and never panic; `copyBytes` panics on a
- * range outside its array. Natively each is a runtime kernel
+ *     export const main = (): i32 => {
+ *       const text: u8[] = [32, 32, 52, 50, 44]; // "  42,"
+ *       const start = skipBlank(text, 0, 5); // 2
+ *       const end = skipDigits(text, start, 5); // 4
+ *       return end - start;
+ *     };
+ *
+ * **The four runs clamp their range and never panic; `copyBytes` panics on a
+ * range outside its array.** Natively each is a runtime kernel
  * (docs/LANGUAGE.md, "Byte runs"), and the runs are variable-time: they are
  * for text, never for secret data.
  */
 
-/** The `u16` whose low byte is `b[off]` and high byte `b[off + 1]`. */
+/**
+ * The `u16` whose low byte is `b[off]` and high byte `b[off + 1]`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read.
+ */
 export const getU16LE = (b: u8[], off: i32): u16 => toU16(b[off]) | (toU16(b[off + 1]) << 8)
 
-/** The `u16` whose high byte is `b[off]` and low byte `b[off + 1]`. */
+/**
+ * The `u16` whose high byte is `b[off]` and low byte `b[off + 1]`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read.
+ */
 export const getU16BE = (b: u8[], off: i32): u16 => (toU16(b[off]) << 8) | toU16(b[off + 1])
 
-/** The `u32` whose bytes, least significant first, are `b[off]` to `b[off + 3]`. */
+/**
+ * The `u32` whose bytes, least significant first, are `b[off]` to `b[off + 3]`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read.
+ */
 export const getU32LE = (b: u8[], off: i32): u32 =>
   (toU32(b[off]) | (toU32(b[off + 1]) << 8) | (toU32(b[off + 2]) << 16)) +
   toU32(b[off + 3]) * toU32(0x1000000)
 
-/** The `u32` whose bytes, most significant first, are `b[off]` to `b[off + 3]`. */
+/**
+ * The `u32` whose bytes, most significant first, are `b[off]` to `b[off + 3]`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read.
+ */
 export const getU32BE = (b: u8[], off: i32): u32 =>
   toU32(b[off]) * toU32(0x1000000) +
   ((toU32(b[off + 1]) << 16) | (toU32(b[off + 2]) << 8) | toU32(b[off + 3]))
 
-/** The `u64` whose bytes, least significant first, are `b[off]` to `b[off + 7]`. */
+/**
+ * The `u64` whose bytes, least significant first, are `b[off]` to `b[off + 7]`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read.
+ */
 export const getU64LE = (b: u8[], off: i32): u64 => {
   let v = toU64(0)
   for (let i: i32 = 0; i < 8; i++) {
@@ -108,6 +152,11 @@ const getU64BEByByte = (b: u8[], off: i32): u64 => {
  * The fast path's ors are grouped in pairs, which LLVM folds into one load and
  * a `bswap`; a flat chain of eight `or`s stayed byte by byte. The byte loop is
  * its own function so its last load is not merged with the fast path's.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read.
  */
 export const getU64BE = (b: u8[], off: i32): u64 => {
   if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
@@ -123,37 +172,100 @@ export const getU64BE = (b: u8[], off: i32): u64 => {
   return getU64BEByByte(b, off)
 }
 
-/** `getU32LE`'s bits as a two's-complement `i32`. */
+/**
+ * `getU32LE`'s bits as a two's-complement `i32`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read, from -2^31 to 2^31 - 1.
+ */
 export const getI32LE = (b: u8[], off: i32): i32 => toI32(getU32LE(b, off))
 
-/** `getU32BE`'s bits as a two's-complement `i32`. */
+/**
+ * `getU32BE`'s bits as a two's-complement `i32`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read, from -2^31 to 2^31 - 1.
+ */
 export const getI32BE = (b: u8[], off: i32): i32 => toI32(getU32BE(b, off))
 
-/** `getU64LE`'s bits as a two's-complement `i64`. */
+/**
+ * `getU64LE`'s bits as a two's-complement `i64`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read, from -2^63 to 2^63 - 1.
+ */
 export const getI64LE = (b: u8[], off: i32): i64 => toI64(getU64LE(b, off))
 
-/** `getU64BE`'s bits as a two's-complement `i64`. */
+/**
+ * `getU64BE`'s bits as a two's-complement `i64`.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @returns The number read, from -2^63 to 2^63 - 1.
+ */
 export const getI64BE = (b: u8[], off: i32): i64 => toI64(getU64BE(b, off))
 
-/** The `f64` whose IEEE 754 bits are `getU64LE`'s. */
+/**
+ * The `f64` whose IEEE 754 bits are `getU64LE`'s.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @returns The double whose bits the eight bytes are.
+ */
 export const getF64LE = (b: u8[], off: i32): f64 => bitsToF64(toI64(getU64LE(b, off)))
 
-/** The `f64` whose IEEE 754 bits are `getU64BE`'s. */
+/**
+ * The `f64` whose IEEE 754 bits are `getU64BE`'s.
+ *
+ * @param b The bytes the number is read from; they are not changed.
+ * @param off Where in `b` its first byte is; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @returns The double whose bits the eight bytes are.
+ */
 export const getF64BE = (b: u8[], off: i32): f64 => bitsToF64(toI64(getU64BE(b, off)))
 
-/** Writes `v` into `b[off]` and `b[off + 1]`, low byte first. */
+/**
+ * Writes `v` into `b[off]` and `b[off + 1]`, low byte first.
+ *
+ * @param b The bytes written into; only the two at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store.
+ */
 export const setU16LE = (b: u8[], off: i32, v: u16): void => {
   b[off] = toU8(v & 255)
   b[off + 1] = toU8((v >> 8) & 255)
 }
 
-/** Writes `v` into `b[off]` and `b[off + 1]`, high byte first. */
+/**
+ * Writes `v` into `b[off]` and `b[off + 1]`, high byte first.
+ *
+ * @param b The bytes written into; only the two at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store.
+ */
 export const setU16BE = (b: u8[], off: i32, v: u16): void => {
   b[off] = toU8((v >> 8) & 255)
   b[off + 1] = toU8(v & 255)
 }
 
-/** Writes `v` into `b[off]` to `b[off + 3]`, least significant byte first. */
+/**
+ * Writes `v` into `b[off]` to `b[off + 3]`, least significant byte first.
+ *
+ * @param b The bytes written into; only the four at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store.
+ */
 export const setU32LE = (b: u8[], off: i32, v: u32): void => {
   b[off] = toU8(v & 255)
   b[off + 1] = toU8((v >> 8) & 255)
@@ -161,7 +273,14 @@ export const setU32LE = (b: u8[], off: i32, v: u32): void => {
   b[off + 3] = toU8((v >> 24) & 255)
 }
 
-/** Writes `v` into `b[off]` to `b[off + 3]`, most significant byte first. */
+/**
+ * Writes `v` into `b[off]` to `b[off + 3]`, most significant byte first.
+ *
+ * @param b The bytes written into; only the four at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store.
+ */
 export const setU32BE = (b: u8[], off: i32, v: u32): void => {
   b[off] = toU8((v >> 24) & 255)
   b[off + 1] = toU8((v >> 16) & 255)
@@ -169,36 +288,96 @@ export const setU32BE = (b: u8[], off: i32, v: u32): void => {
   b[off + 3] = toU8(v & 255)
 }
 
-/** Writes `v` into `b[off]` to `b[off + 7]`, least significant byte first. */
+/**
+ * Writes `v` into `b[off]` to `b[off + 7]`, least significant byte first.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store.
+ */
 export const setU64LE = (b: u8[], off: i32, v: u64): void => {
   for (let i: i32 = 0; i < 8; i++) {
     b[off + i] = toU8((v >> toU64(i * 8)) & toU64(255))
   }
 }
 
-/** Writes `v` into `b[off]` to `b[off + 7]`, most significant byte first. */
+/**
+ * Writes `v` into `b[off]` to `b[off + 7]`, most significant byte first.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store.
+ */
 export const setU64BE = (b: u8[], off: i32, v: u64): void => {
   for (let i: i32 = 0; i < 8; i++) {
     b[off + i] = toU8((v >> toU64((7 - i) * 8)) & toU64(255))
   }
 }
 
-/** Writes `v`'s two's-complement bits as `setU32LE` does. */
+/**
+ * Writes `v`'s two's-complement bits as `setU32LE` does.
+ *
+ * @param b The bytes written into; only the four at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store; a negative one is stored as its two's
+ *   complement.
+ */
 export const setI32LE = (b: u8[], off: i32, v: i32): void => setU32LE(b, off, toU32(v))
 
-/** Writes `v`'s two's-complement bits as `setU32BE` does. */
+/**
+ * Writes `v`'s two's-complement bits as `setU32BE` does.
+ *
+ * @param b The bytes written into; only the four at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store; a negative one is stored as its two's
+ *   complement.
+ */
 export const setI32BE = (b: u8[], off: i32, v: i32): void => setU32BE(b, off, toU32(v))
 
-/** Writes `v`'s two's-complement bits as `setU64LE` does. */
+/**
+ * Writes `v`'s two's-complement bits as `setU64LE` does.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store; a negative one is stored as its two's
+ *   complement.
+ */
 export const setI64LE = (b: u8[], off: i32, v: i64): void => setU64LE(b, off, toU64(v))
 
-/** Writes `v`'s two's-complement bits as `setU64BE` does. */
+/**
+ * Writes `v`'s two's-complement bits as `setU64BE` does.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @param v The number to store; a negative one is stored as its two's
+ *   complement.
+ */
 export const setI64BE = (b: u8[], off: i32, v: i64): void => setU64BE(b, off, toU64(v))
 
-/** Writes `v`'s IEEE 754 bits as `setU64LE` does. */
+/**
+ * Writes `v`'s IEEE 754 bits as `setU64LE` does.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @param v The double to store, as its IEEE 754 bits.
+ */
 export const setF64LE = (b: u8[], off: i32, v: f64): void => setU64LE(b, off, toU64(f64ToBits(v)))
 
-/** Writes `v`'s IEEE 754 bits as `setU64BE` does. */
+/**
+ * Writes `v`'s IEEE 754 bits as `setU64BE` does.
+ *
+ * @param b The bytes written into; only the eight at `off` change.
+ * @param off Where in `b` the first byte goes; it covers `b[off]` to
+ *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ * @param v The double to store, as its IEEE 754 bits.
+ */
 export const setF64BE = (b: u8[], off: i32, v: f64): void => setU64BE(b, off, toU64(f64ToBits(v)))
 
 // ---- Byte-class runs and the byte copy (WP38 S6a) ----------------------------------------
@@ -245,13 +424,30 @@ const bytesRunStart = (from: i32, end: i32): i32 => {
  * or 32 bytes at a time (docs/LANGUAGE.md, "Byte runs"). It is
  * **variable-time**: how long it takes says how long the run is, so it is
  * never for secret data.
+ *
+ * @param b The bytes scanned; they are not changed.
+ * @param from Where the scan starts, clamped into `[0, to]`.
+ * @param to Where the scan stops, exclusive, clamped into `[0, b.length]`.
+ * @returns The index of the first byte in the clamped range that is not a
+ *   blank, or
+ *   the clamped `to` when there is none.
  */
 export const skipBlank = (b: u8[], from: i32, to: i32): i32 => {
   const end: i32 = bytesRunEnd(b, to)
   return skipBlankWalk(b, bytesRunStart(from, end), end)
 }
 
-/** `skipBlank` for the ASCII digits `0` to `9`: the same clamps, the same kernel family, `nish_bytes_skip_digits`. */
+/**
+ * `skipBlank` for the ASCII digits `0` to `9`: the same clamps, the same
+ * kernel family, `nish_bytes_skip_digits`.
+ *
+ * @param b The bytes scanned; they are not changed.
+ * @param from Where the scan starts, clamped into `[0, to]`.
+ * @param to Where the scan stops, exclusive, clamped into `[0, b.length]`.
+ * @returns The index of the first byte in the clamped range that is not a
+ *   digit, or
+ *   the clamped `to` when there is none.
+ */
 export const skipDigits = (b: u8[], from: i32, to: i32): i32 => {
   const end: i32 = bytesRunEnd(b, to)
   return skipDigitsWalk(b, bytesRunStart(from, end), end)
@@ -268,6 +464,13 @@ export const skipDigits = (b: u8[], from: i32, to: i32): i32 => {
  * the scan is `nish_bytes_skip_json_text`: blocks of ASCII 16 or 32 bytes at a
  * time, each multi-byte sequence a byte at a time. Variable-time, as
  * `skipBlank` is.
+ *
+ * @param b The bytes scanned; they are not changed.
+ * @param from Where the scan starts, clamped into `[0, to]`.
+ * @param to Where the scan stops, exclusive, clamped into `[0, b.length]`.
+ * @returns The index of the first byte in the clamped range that is not in
+ *   the run, or
+ *   the clamped `to` when there is none.
  */
 export const skipJsonText = (b: u8[], from: i32, to: i32): i32 => {
   const end: i32 = bytesRunEnd(b, to)
@@ -283,6 +486,13 @@ export const skipJsonText = (b: u8[], from: i32, to: i32): i32 => {
  * the bytes of a string through as they are. Natively the scan is
  * `nish_bytes_skip_json_plain`, 16 bytes at a time. Variable-time, as
  * `skipBlank` is.
+ *
+ * @param b The bytes scanned; they are not changed.
+ * @param from Where the scan starts, clamped into `[0, to]`.
+ * @param to Where the scan stops, exclusive, clamped into `[0, b.length]`.
+ * @returns The index of the first byte in the clamped range that a JSON
+ *   writer must escape, or
+ *   the clamped `to` when there is none.
  */
 export const skipJsonPlain = (b: u8[], from: i32, to: i32): i32 => {
   const end: i32 = bytesRunEnd(b, to)
@@ -300,6 +510,12 @@ export const skipJsonPlain = (b: u8[], from: i32, to: i32): i32 => {
  * `0 <= from <= from + count <= src.length` and the same for `at` in `dst` —
  * panics `copyBytes` before any byte is written. Natively the copy is one
  * `llvm.memmove`.
+ *
+ * @param dst The array written into; only `dst[at..at+count)` changes.
+ * @param at Where in `dst` the first copied byte goes.
+ * @param src The array copied from, which may be `dst` itself.
+ * @param from Where in `src` the copied bytes start.
+ * @param count How many bytes to copy; zero copies nothing.
  */
 export const copyBytes = (dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void => {
   if (count < 0 || at < 0 || from < 0 || at > toI32(dst.length) - count || from > toI32(src.length) - count) {

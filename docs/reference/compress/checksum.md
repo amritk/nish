@@ -49,16 +49,19 @@ CRC-32's lookup tables, built once and read by every `update`.
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="Keep a `Crc32`">
 
-A module has no global state, so CRC-32's tables live in a `Crc32` object:
-build one and keep it, because building it is 4,096 table entries (about
-ten microseconds) and an update of a 5 KB body is under one. `crc32`
-is the one-off convenience that builds a table for one call.
+A module has no global state, so CRC-32's tables live
+in a `Crc32` object: build one and keep it, because building it is 4,096
+table entries (about ten microseconds) and an update of a 5 KB body is
+under one. `crc32` is the one-off convenience that builds a table for one
+call.
 
-</scalar-callout>
+</scalar-detail>
 
-CRC-32 is slicing-by-8: eight 256-entry tables, eight bytes per step with
+<scalar-detail title="CRC-32 is slicing-by-8">
+
+eight 256-entry tables, eight bytes per step with
 one table read per byte and no dependency between the reads of a step
 (Kounavis and Berry, "A Systematic Approach to Building High Performance
 Software-based CRC Generators", 2005). From 80 bytes on it is also braided
@@ -67,13 +70,24 @@ the braids have a second set of eight tables. Adler-32 defers its two modulo
 reductions to once every 5,552 bytes, the most that cannot overflow 32 bits
 (RFC 1950 §9 and zlib's `NMAX`).
 
-Neither is a cryptographic hash: both detect accidental corruption only.
+</scalar-detail>
+
+<scalar-detail title="Neither is a cryptographic hash">
+
+both detect accidental corruption only.
 Written from the specifications, not ported from another implementation.
 
-The table reads in `update` are `nish:unsafe`'s `uncheckedGet`: every index
-is a byte plus a multiple of 256 below 2,048, and both tables are built here
-at exactly that length and never replaced, which is the whole proof. The input
-window is checked once, before the loop.
+</scalar-detail>
+
+<scalar-detail title="What is unchecked">
+
+The table reads in `update` are `nish:unsafe`'s
+`uncheckedGet`: every index is a byte plus a multiple of 256 below 2,048,
+and both tables are built here at exactly that length and never replaced,
+which is the whole proof. The input window is checked once, before the
+loop.
+
+</scalar-detail>
 
 ## adler32
 
@@ -90,17 +104,29 @@ function adler32(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array that holds the bytes to checksum.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `buf` the bytes start.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes to checksum; 0 answers 1.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32">
+
+The Adler-32 of the window, the value zlib's trailer carries.
+
 </scalar-field>
 
 ## adler32Update
@@ -121,20 +147,37 @@ function adler32Update(
 #### Parameters
 
 <scalar-field name="adler" type="u32" required>
+
+The Adler-32 of the bytes before this window, as the last
+  call answered it, or 1 to start a new checksum.
+
 </scalar-field>
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array that holds the bytes to add.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `buf` the bytes start.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes to add; 0 answers `adler` unchanged.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32">
+
+The Adler-32 of everything so far, to pass as `adler` to the
+  next call, or to use as the finished checksum.
+
 </scalar-field>
 
 ## crc32
@@ -150,17 +193,29 @@ function crc32(buf: u8[], off: i32, len: i32): u32
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array that holds the bytes to checksum.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `buf` the bytes start.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes to checksum; 0 answers 0.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32">
+
+The CRC-32 of the window, the value gzip's trailer carries.
+
 </scalar-field>
 
 ## Crc32
@@ -176,6 +231,4 @@ class Crc32
 | Member | |
 | --- | --- |
 | `new Crc32()` | Builds the eight tables and their braided form. |
-| `readonly braid: u32[]` | `braid[k * 256 + b]`: the same, followed by the 32 bytes of the other four braids' words as well, which a braid steps over. |
-| `readonly table: u32[]` | `table[k * 256 + b]`: the CRC of byte `b` followed by `k` zero bytes. |
-| `update(crc: u32, buf: u8[], off: i32, len: i32): u32` | The CRC-32 of the bytes `crc` was the CRC of, followed by `buf[off .. off + len)`. Start a new checksum from 0. A window outside `buf` panics. |
+| `update(crc: u32, buf: u8[], off: i32, len: i32): u32` | The CRC-32 of the bytes `crc` was the CRC of, followed by `buf[off .. off + len)`. Start a new checksum from 0. A window outside `buf` panics. Neither the object nor `buf` is changed. |

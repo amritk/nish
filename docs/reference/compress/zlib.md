@@ -53,10 +53,16 @@ A zlib decompressor, allocated once.
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="Allocated once">
 
-The objects allocate their tables once and nothing per call; the free
-functions build one for a single call. The header written is `0x78` and
+The objects allocate their tables once and nothing per
+call; the free functions build one for a single call.
+
+</scalar-detail>
+
+<scalar-callout type="warning">
+
+**What is written and what is refused.** The header written is `0x78` and
 the `FLEVEL` of the level, with no preset dictionary. Reading refuses a
 method other than 8, a window over 32 KB, a header whose check fails
 (`ZLIB_ERR_HEADER`) and a preset dictionary (`ZLIB_ERR_DICTIONARY`, since
@@ -69,7 +75,8 @@ Written from RFC 1950.
 
 ## zlibCompress
 
-`ZlibCompressor.compress` at `level`, building the compressor for this call alone.
+`ZlibCompressor.compress` at `level`, building the compressor for this call
+alone.
 
 ```ts
 function zlibCompress(
@@ -85,31 +92,54 @@ function zlibCompress(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array that holds the data to compress.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `src` the data starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes of data.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the stream is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` the stream starts.
+
 </scalar-field>
 
 <scalar-field name="level" type="i32" required>
+
+How hard to compress, 0 to 9; another level panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` one past the stream's last byte, or
+  `DEFLATE_NO_ROOM`, as `ZlibCompressor.compress` answers.
+
 </scalar-field>
 
 ## zlibDecompress
 
-`ZlibDecompressor.decompress`, building the decompressor for this call alone.
+`ZlibDecompressor.decompress`, building the decompressor for this call
+alone.
 
 ```ts
 function zlibDecompress(
@@ -125,26 +155,48 @@ function zlibDecompress(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array that holds the zlib stream.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `src` the stream starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the stream is, trailer included.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the data is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` the data starts.
+
 </scalar-field>
 
 <scalar-field name="limit" type="i32" required>
+
+The most bytes of data to accept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` one past the data's last byte, or a negative
+  code, as `ZlibDecompressor.decompress` answers.
+
 </scalar-field>
 
 ## ZlibCompressor
@@ -158,7 +210,6 @@ class ZlibCompressor
 | Member | |
 | --- | --- |
 | `new ZlibCompressor(level: i32)` | A compressor at `level`, 0 to 9; another level panics. |
-| `readonly deflater: Deflater` |  |
 | `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Compresses `src[off .. off + len)` into `out` from `at` as one zlib stream and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out` cannot hold it; `compressBound(len)` bytes always can. A window outside its array panics. Allocates nothing. |
 
 ## ZlibDecompressor
@@ -172,7 +223,6 @@ class ZlibDecompressor
 | Member | |
 | --- | --- |
 | `new ZlibDecompressor()` | Builds the tables. |
-| `readonly inflater: Inflater` |  |
 | `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses the zlib stream `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends, or a negative `ZLIB_ERR_*` or `DEFLATE_ERR_*`. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
 
 ## Constants

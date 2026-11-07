@@ -41,9 +41,12 @@ import {
 ```ts
 import { getU32BE, setU16LE } from "nish/bytes";
 
-const header: u8[] = [0, 0, 1, 0, 0, 0];
-const length = getU32BE(header, 0); // 256
-setU16LE(header, 4, toU16(513)); // header[4] = 1, header[5] = 2
+export const main = (): i32 => {
+  const header: u8[] = [0, 0, 1, 0, 0, 0];
+  const length = getU32BE(header, 0); // 256
+  setU16LE(header, 4, toU16(513)); // header[4] = 1, header[5] = 2
+  return toI32(length);
+};
 ```
 
 <scalar-grid cols="2">
@@ -232,14 +235,16 @@ shift-and-or. This module is that loop written once:
 
 </scalar-callout>
 
-Every function takes the array and the offset of its first byte; the `LE`
+**Every function takes the array and the offset of its first byte; the `LE`
 name puts the least significant byte there, the `BE` name the most
-significant. The widths are `u16`, `u32` and `u64`, the signed `i32` and
+significant.** The widths are `u16`, `u32` and `u64`, the signed `i32` and
 `i64`, which are the same bytes read as two's complement, and `f64`, whose
 bytes are its IEEE 754 bits (`f64ToBits`). There is no `f32`: the language
 has no bit cast for one.
 
-Each access is an ordinary index, so an offset whose bytes do not all lie in
+<scalar-detail title="Each access is an ordinary index">
+
+**Each access is an ordinary index**, so an offset whose bytes do not all lie in
 the array panics `index`, naming the first byte that does not. A guard in
 the caller does not yet remove these checks: in a loop guarded by
 `off + 3 < b.length`, the checker proves an index it can see but not one
@@ -251,8 +256,10 @@ gone indexes the bytes itself. `getU64BE`, and with it `getI64BE` and
 eight bytes unchecked, which lowers to one load and a byte swap. An offset
 outside the range still goes byte by byte, so it panics as the others do.
 
-The in-range answers are byte for byte those of the copies `std/` keeps for
-itself: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
+</scalar-detail>
+
+**The in-range answers are byte for byte those of the copies `std/` keeps for
+itself**: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
 `chacha20Word` and `poly1305Le64` (`std/crypto/chacha20poly1305.ts`) for
 `getU32LE` and `getU64LE`, `loadWord` and `storeWord` (`std/crypto/sha512.ts`)
 for `getU64BE` and `setU64BE`, `http2FramePut32` (`std/net/http2-frame.ts`)
@@ -261,8 +268,8 @@ of them is replaced by this module. Out of range they differ: the AES and
 TLS word helpers read zero past the end and drop bytes written there, which
 their callers rely on, where this module panics.
 
-Under Node (`docs/RUN_UNDER_NODE.md`) the `u16` and `u32` functions are
-expected to answer as they do natively, because the top byte of a `u32` is
+**Under Node (`docs/RUN_UNDER_NODE.md`) the `u16` and `u32` functions are
+expected to answer as they do natively**, because the top byte of a `u32` is
 multiplied in rather than shifted and each byte written is masked before
 its `toU8`: there `<<` turns bit 31 into a sign and the prelude's `toU8`
 and `toU32` saturate, and natively the multiply and the mask fold into the
@@ -272,7 +279,8 @@ the prelude saturates too (`setI32LE(b, 0, -2)` writes zeros), and the
 64-bit functions and `f64` meet its BigInt `u64` and `i64`, which `toU8`
 refuses.
 
-The module also has the runs a parser walks and the copy it makes of them.
+**The module also has the runs a parser walks and the copy it makes of
+them.**
 `skipBlank`, `skipDigits`, `skipJsonText` and `skipJsonPlain` each answer
 the first index in a range whose byte is not in their class — JSON's blanks,
 the ASCII digits, the bytes a JSON string holds as themselves, the bytes a
@@ -280,13 +288,20 @@ JSON writer copies without an escape — and `copyBytes` copies a
 window of one array into another, or into itself, as one move:
 
 ```ts
-const text: u8[] = [32, 32, 52, 50, 44]; // "  42,"
-const start = skipBlank(text, 0, 5); // 2
-const end = skipDigits(text, start, 5); // 4
+import { skipBlank, skipDigits } from "nish/bytes";
 ```
 
-The four runs clamp their range and never panic; `copyBytes` panics on a
-range outside its array. Natively each is a runtime kernel
+```ts
+export const main = (): i32 => {
+  const text: u8[] = [32, 32, 52, 50, 44]; // "  42,"
+  const start = skipBlank(text, 0, 5); // 2
+  const end = skipDigits(text, start, 5); // 4
+  return end - start;
+};
+```
+
+**The four runs clamp their range and never panic; `copyBytes` panics on a
+range outside its array.** Natively each is a runtime kernel
 (docs/LANGUAGE.md, "Byte runs"), and the runs are variable-time: they are
 for text, never for secret data.
 
@@ -316,18 +331,33 @@ function copyBytes(
 #### Parameters
 
 <scalar-field name="dst" type="u8[]" required>
+
+The array written into; only `dst[at..at+count)` changes.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `dst` the first copied byte goes.
+
 </scalar-field>
 
 <scalar-field name="src" type="readonly u8[]" required>
+
+The array copied from, which may be `dst` itself.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+Where in `src` the copied bytes start.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+How many bytes to copy; zero copies nothing.
+
 </scalar-field>
 
 ## getF64BE
@@ -341,14 +371,24 @@ function getF64BE(b: u8[], off: i32): f64
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64">
+
+The double whose bits the eight bytes are.
+
 </scalar-field>
 
 ## getF64LE
@@ -362,14 +402,24 @@ function getF64LE(b: u8[], off: i32): f64
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64">
+
+The double whose bits the eight bytes are.
+
 </scalar-field>
 
 ## getI32BE
@@ -383,14 +433,24 @@ function getI32BE(b: u8[], off: i32): i32
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The number read, from -2^31 to 2^31 - 1.
+
 </scalar-field>
 
 ## getI32LE
@@ -404,14 +464,24 @@ function getI32LE(b: u8[], off: i32): i32
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The number read, from -2^31 to 2^31 - 1.
+
 </scalar-field>
 
 ## getI64BE
@@ -425,14 +495,24 @@ function getI64BE(b: u8[], off: i32): i64
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The number read, from -2^63 to 2^63 - 1.
+
 </scalar-field>
 
 ## getI64LE
@@ -446,14 +526,24 @@ function getI64LE(b: u8[], off: i32): i64
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i64">
+
+The number read, from -2^63 to 2^63 - 1.
+
 </scalar-field>
 
 ## getU16BE
@@ -467,14 +557,24 @@ function getU16BE(b: u8[], off: i32): u16
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u16">
+
+The number read.
+
 </scalar-field>
 
 ## getU16LE
@@ -488,14 +588,24 @@ function getU16LE(b: u8[], off: i32): u16
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u16">
+
+The number read.
+
 </scalar-field>
 
 ## getU32BE
@@ -509,14 +619,24 @@ function getU32BE(b: u8[], off: i32): u32
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32">
+
+The number read.
+
 </scalar-field>
 
 ## getU32LE
@@ -530,14 +650,24 @@ function getU32LE(b: u8[], off: i32): u32
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u32">
+
+The number read.
+
 </scalar-field>
 
 ## getU64BE
@@ -554,14 +684,24 @@ function getU64BE(b: u8[], off: i32): u64
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u64">
+
+The number read.
+
 </scalar-field>
 
 ## getU64LE
@@ -575,14 +715,24 @@ function getU64LE(b: u8[], off: i32): u64
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes the number is read from; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` its first byte is; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u64">
+
+The number read.
+
 </scalar-field>
 
 ## setF64BE
@@ -596,12 +746,22 @@ function setF64BE(b: u8[], off: i32, v: f64): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="f64" required>
+
+The double to store, as its IEEE 754 bits.
+
 </scalar-field>
 
 ## setF64LE
@@ -615,12 +775,22 @@ function setF64LE(b: u8[], off: i32, v: f64): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="f64" required>
+
+The double to store, as its IEEE 754 bits.
+
 </scalar-field>
 
 ## setI32BE
@@ -634,12 +804,23 @@ function setI32BE(b: u8[], off: i32, v: i32): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the four at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="i32" required>
+
+The number to store; a negative one is stored as its two's
+  complement.
+
 </scalar-field>
 
 ## setI32LE
@@ -653,12 +834,23 @@ function setI32LE(b: u8[], off: i32, v: i32): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the four at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="i32" required>
+
+The number to store; a negative one is stored as its two's
+  complement.
+
 </scalar-field>
 
 ## setI64BE
@@ -672,12 +864,23 @@ function setI64BE(b: u8[], off: i32, v: i64): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="i64" required>
+
+The number to store; a negative one is stored as its two's
+  complement.
+
 </scalar-field>
 
 ## setI64LE
@@ -691,12 +894,23 @@ function setI64LE(b: u8[], off: i32, v: i64): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="i64" required>
+
+The number to store; a negative one is stored as its two's
+  complement.
+
 </scalar-field>
 
 ## setU16BE
@@ -710,12 +924,22 @@ function setU16BE(b: u8[], off: i32, v: u16): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the two at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="u16" required>
+
+The number to store.
+
 </scalar-field>
 
 ## setU16LE
@@ -729,12 +953,22 @@ function setU16LE(b: u8[], off: i32, v: u16): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the two at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="u16" required>
+
+The number to store.
+
 </scalar-field>
 
 ## setU32BE
@@ -748,12 +982,22 @@ function setU32BE(b: u8[], off: i32, v: u32): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the four at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="u32" required>
+
+The number to store.
+
 </scalar-field>
 
 ## setU32LE
@@ -767,12 +1011,22 @@ function setU32LE(b: u8[], off: i32, v: u32): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the four at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="u32" required>
+
+The number to store.
+
 </scalar-field>
 
 ## setU64BE
@@ -786,12 +1040,22 @@ function setU64BE(b: u8[], off: i32, v: u64): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="u64" required>
+
+The number to store.
+
 </scalar-field>
 
 ## setU64LE
@@ -805,12 +1069,22 @@ function setU64LE(b: u8[], off: i32, v: u64): void
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes written into; only the eight at `off` change.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `b` the first byte goes; it covers `b[off]` to
+  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+
 </scalar-field>
 
 <scalar-field name="v" type="u64" required>
+
+The number to store.
+
 </scalar-field>
 
 ## skipBlank
@@ -836,22 +1110,37 @@ function skipBlank(
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes scanned; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+Where the scan starts, clamped into `[0, to]`.
+
 </scalar-field>
 
 <scalar-field name="to" type="i32" required>
+
+Where the scan stops, exclusive, clamped into `[0, b.length]`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index of the first byte in the clamped range that is not a
+  blank, or
+  the clamped `to` when there is none.
+
 </scalar-field>
 
 ## skipDigits
 
-`skipBlank` for the ASCII digits `0` to `9`: the same clamps, the same kernel family, `nish_bytes_skip_digits`.
+`skipBlank` for the ASCII digits `0` to `9`: the same clamps, the same
+kernel family, `nish_bytes_skip_digits`.
 
 ```ts
 function skipDigits(
@@ -864,17 +1153,31 @@ function skipDigits(
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes scanned; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+Where the scan starts, clamped into `[0, to]`.
+
 </scalar-field>
 
 <scalar-field name="to" type="i32" required>
+
+Where the scan stops, exclusive, clamped into `[0, b.length]`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index of the first byte in the clamped range that is not a
+  digit, or
+  the clamped `to` when there is none.
+
 </scalar-field>
 
 ## skipJsonPlain
@@ -899,17 +1202,31 @@ function skipJsonPlain(
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes scanned; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+Where the scan starts, clamped into `[0, to]`.
+
 </scalar-field>
 
 <scalar-field name="to" type="i32" required>
+
+Where the scan stops, exclusive, clamped into `[0, b.length]`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index of the first byte in the clamped range that a JSON
+  writer must escape, or
+  the clamped `to` when there is none.
+
 </scalar-field>
 
 ## skipJsonText
@@ -936,15 +1253,29 @@ function skipJsonText(
 #### Parameters
 
 <scalar-field name="b" type="u8[]" required>
+
+The bytes scanned; they are not changed.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+Where the scan starts, clamped into `[0, to]`.
+
 </scalar-field>
 
 <scalar-field name="to" type="i32" required>
+
+Where the scan stops, exclusive, clamped into `[0, b.length]`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index of the first byte in the clamped range that is not in
+  the run, or
+  the clamped `to` when there is none.
+
 </scalar-field>

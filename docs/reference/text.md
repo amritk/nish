@@ -19,6 +19,18 @@ import {
 } from "nish/text";
 ```
 
+```ts
+import { replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
+
+export const main = (): i32 => {
+  const lines: string[] = splitLines("a b\n  c  \n"); // ["a b", "  c  "]
+  const words: string[] = splitWhitespace(lines[0]); // ["a", "b"]
+  const c: string = trim(lines[1]); // "c"
+  const dashed: string = replaceAll("a b", " ", "-"); // "a-b"
+  return toI32(words.length);
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="codePointLength" icon="phosphor/regular/function" href="#codepointlength">
@@ -85,8 +97,8 @@ The runs of non-blank bytes in `text`, with every blank run as the separator.
 
 <scalar-callout type="info">
 
-The language gives a string `length`, `charCodeAt`, `substring`, `indexOf`,
-`startsWith`, `endsWith` and `===` by content, and an array `join`. It does
+**The language gives a string `length`, `charCodeAt`, `substring`, `indexOf`,
+`startsWith`, `endsWith` and `===` by content, and an array `join`.** It does
 **not** give `split`, `trim`, `toLowerCase` or a regular expression (that is
 `std/regex`), and that is a decision rather than a gap: each allocates, and
 several need a locale or a character table this runtime has no room for
@@ -94,7 +106,9 @@ several need a locale or a character table this runtime has no room for
 
 </scalar-callout>
 
-So a program that reads a file and wants its lines writes the loop. This
+<scalar-detail title="So a program that reads a file and wants its lines writes the loop">
+
+This
 module is that loop, written once. Every offset here is a **byte** offset,
 like `s.length` itself, and every function but one is ASCII-only where it
 inspects characters at all — a UTF-8 string passes through `splitLines` and
@@ -102,7 +116,11 @@ inspects characters at all — a UTF-8 string passes through `splitLines` and
 multi-byte sequence. The one is `codePointLength`, which counts code points
 rather than bytes and answers the same natively and under Node; it says how.
 
-Every width this module declares is spelled (`i32`, never `number`) *and*
+</scalar-detail>
+
+<scalar-detail title="Every width this module declares is spelled">
+
+**Every width this module declares is spelled** (`i32`, never `number`) *and*
 every value a builtin hands it is converted at the read: `s.length`,
 `a.length`, `s.charCodeAt(i)` and `s.indexOf(t)` all answer `number`
 (LANGUAGE.md, *Arrays and strings as receivers*), and `number` is `f64` under
@@ -112,6 +130,8 @@ that mode at all (`docs/wp26-stdlib.md` §4). A length a loop tests on every
 iteration is read into an `i32` local once rather than converted per
 iteration, which is both cheaper and how the loop wants to read; a string is
 immutable, so its length cannot change underneath the local.
+
+</scalar-detail>
 
 ## codePointLength
 
@@ -144,11 +164,17 @@ function codePointLength(text: string): i32
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text whose code points are counted.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many code points `text` holds, counted as above.
+
 </scalar-field>
 
 ## contains
@@ -167,14 +193,23 @@ function contains(
 #### Parameters
 
 <scalar-field name="haystack" type="string" required>
+
+The text searched.
+
 </scalar-field>
 
 <scalar-field name="needle" type="string" required>
+
+The text looked for, compared byte for byte.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when `needle` occurs in `haystack`.
+
 </scalar-field>
 
 ## firstDifference
@@ -195,14 +230,25 @@ function firstDifference(
 #### Parameters
 
 <scalar-field name="left" type="string[]" required>
+
+One side's lines.
+
 </scalar-field>
 
 <scalar-field name="right" type="string[]" required>
+
+The other side's lines, compared to `left`'s with `!==` by
+  content.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index of the first line that differs, the shorter length when
+  one side is a prefix of the other, or `-1` when they are equal.
+
 </scalar-field>
 
 ## indexOfAny
@@ -235,17 +281,32 @@ function indexOfAny(
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text searched.
+
 </scalar-field>
 
 <scalar-field name="bytes" type="string" required>
+
+The set of bytes looked for, written as a string of 1 to 16
+  ASCII characters; their order does not matter.
+
 </scalar-field>
 
 <scalar-field name="from" type="i32" required>
+
+Where the search starts, as a byte offset, clamped into
+  `[0, text.length]`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The byte offset of the first match at or after `from`, or -1 when
+  there is none.
+
 </scalar-field>
 
 ## replaceAll
@@ -271,17 +332,30 @@ function replaceAll(
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text whose occurrences are replaced.
+
 </scalar-field>
 
 <scalar-field name="needle" type="string" required>
+
+The text looked for. Occurrences are found left to right and
+  do not overlap: after a match the search goes on past its end.
+
 </scalar-field>
 
 <scalar-field name="replacement" type="string" required>
+
+The text each occurrence becomes; it is not searched.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The text with every occurrence replaced.
+
 </scalar-field>
 
 ## splitLines
@@ -302,11 +376,17 @@ function splitLines(text: string): string[]
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text to split; an empty one has no lines.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string[]">
+
+A fresh array of the lines, in order.
+
 </scalar-field>
 
 ## splitWhitespace
@@ -323,11 +403,19 @@ function splitWhitespace(text: string): string[]
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text to split; the blanks are space, tab, newline and
+  carriage return.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string[]">
+
+A fresh array of the non-blank runs, in order; empty when `text` is
+  all blank.
+
 </scalar-field>
 
 ## trim
@@ -341,11 +429,19 @@ function trim(text: string): string
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text to trim; the blanks are space, tab, newline and
+  carriage return.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+`text` from its first non-blank byte to its last, or `""` when it is
+  all blank.
+
 </scalar-field>
 
 ## trimEnd
@@ -359,11 +455,19 @@ function trimEnd(text: string): string
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text to trim; the blanks are space, tab, newline and
+  carriage return.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+`text` up to and including its last non-blank byte, or `""` when it
+  is all blank.
+
 </scalar-field>
 
 ## trimStart
@@ -377,9 +481,17 @@ function trimStart(text: string): string
 #### Parameters
 
 <scalar-field name="text" type="string" required>
+
+The text to trim; the blanks are space, tab, newline and
+  carriage return.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+`text` from its first non-blank byte on, or `""` when it is all
+  blank.
+
 </scalar-field>

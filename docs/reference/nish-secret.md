@@ -17,10 +17,16 @@ import {
 ```
 
 ```ts
-import { Secret, expose, secret, wipe } from "nish:secret"
+import { Secret, exposeWith, secret, wipe } from "nish:secret"
+import { hmacSha256 } from "nish/crypto/hmac"
 
-const key: Secret<u8[]> = secret(readKey())
-const tag: u8[] = expose(key, (k: u8[]): u8[] => hmacSha256(k, message))
+const tag = (k: u8[], message: u8[]): u8[] => hmacSha256(k, message)
+
+const raw: u8[] = new Array<u8>(32)
+crypto.getRandomValues(raw)
+const key: Secret<u8[]> = secret(raw)          // `raw` is moved: not read again
+const message: u8[] = [1, 2, 3]
+const mac: u8[] = exposeWith(key, message, tag)
 wipe(key)
 ```
 
@@ -60,8 +66,8 @@ Key material: an array of integers (`u8[]`, `u32[]`, ...) or a record whose ever
 
 <scalar-callout type="info">
 
-This file is the source behind the builtin module, and it is imported only
-by that name: `nish/secret` is refused, so there is one spelling for the
+**This file is the source behind the builtin module**, and it is imported
+only by that name: `nish/secret` is refused, so there is one spelling for the
 checker's rules to be read under. What is written here is the meaning; what
 makes a `Secret` worth having is in `src/secret.ts`, which knows this module
 by its path and package:
@@ -79,8 +85,12 @@ by its path and package:
 
 </scalar-callout>
 
-Under Node the module is answered by `runtime/shim.mjs`, where a `Secret` is
-a plain wrapper and `wipe` zero-fills it.
+<scalar-detail title="Under Node the module is answered by `runtime/shim.mjs`">
+
+**Under Node the module is answered by `runtime/shim.mjs`**, where a
+`Secret` is a plain wrapper and `wipe` zero-fills it.
+
+</scalar-detail>
 
 ## expose
 
@@ -96,19 +106,32 @@ function expose<T, R>(
 #### Parameters
 
 <scalar-field name="s" type="Secret&lt;T&gt;" required>
+
+the secret to read. It is not used up: it can be exposed again,
+  and is still to be wiped.
+
 </scalar-field>
 
 <scalar-field name="f" type="(value: T) =&gt; R" required>
+
+the computation, handed the held value itself. The checker holds
+  it to the rules in the module header: no I/O, no C, it does not keep the
+  value, and its declared result type holds no `Secret`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="R">
+
+what `f` returns.
+
 </scalar-field>
 
 ## exposeWith
 
-`f(value, arg)`: `expose` with one more argument, because the arrow `expose` runs captures nothing.
+`f(value, arg)`: `expose` with one more argument, because the arrow `expose`
+runs captures nothing.
 
 ```ts
 function exposeWith<T, A, R>(
@@ -121,17 +144,30 @@ function exposeWith<T, A, R>(
 #### Parameters
 
 <scalar-field name="s" type="Secret&lt;T&gt;" required>
+
+the secret to read, as for `expose`.
+
 </scalar-field>
 
 <scalar-field name="arg" type="A" required>
+
+handed to `f` as its second argument. `f` may read it but not
+  write it.
+
 </scalar-field>
 
 <scalar-field name="f" type="(value: T, arg: A) =&gt; R" required>
+
+the computation, under the same rules as `expose`'s.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="R">
+
+what `f` returns.
+
 </scalar-field>
 
 ## secret
@@ -145,11 +181,19 @@ function secret<T>(value: T): Secret<T>
 #### Parameters
 
 <scalar-field name="value" type="T" required>
+
+the key material: an array of integers or a record whose every
+  field is an integer, that nothing else holds (NL2512).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Secret&lt;T&gt;">
+
+a `Secret` holding `value` itself, not a copy, so its storage is
+  the storage `wipe` later zeroes.
+
 </scalar-field>
 
 ## wipe
@@ -166,6 +210,11 @@ function wipe<T>(_target: T): void
 #### Parameters
 
 <scalar-field name="_target" type="T" required>
+
+what to zero: a `Secret`, never a nullable one (narrow it
+  first), or an array or record of integers that `expose`'s function
+  holds.
+
 </scalar-field>
 
 ## Secret
@@ -179,5 +228,4 @@ class Secret<T>
 
 | Member | |
 | --- | --- |
-| `new Secret<T>(value: T)` |  |
-| `value: T` | The wrapped value. Only this module reads or writes it (`src/secret.ts`). |
+| `new Secret<T>(value: T)` | Wraps `value`. Only `secret` calls this: `new Secret` anywhere else is refused (NL2437). |

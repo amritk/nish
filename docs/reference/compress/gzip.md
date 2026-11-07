@@ -103,9 +103,11 @@ A header with a method other than 8 or a reserved
 flag bit is `GZIP_ERR_HEADER`; `FEXTRA`, `FNAME`, `FCOMMENT` and `FHCRC` are
 read and skipped, the header CRC checked. A wrong CRC-32 is `GZIP_ERR_CRC`,
 a wrong length `GZIP_ERR_SIZE`. Members may follow one another (§2.2) and
-are decompressed one after another into the same output; anything after the
-last member that is not another member is `GZIP_ERR_HEADER`, so trailing
-garbage is refused, not ignored. The `limit` bounds the whole output.
+are decompressed one after another into the same output. Bytes after the
+last member are read as another member's header, so trailing garbage is
+refused, not ignored: two or more bytes without the `1f 8b` magic are
+`GZIP_ERR_HEADER`, while a single byte, or fewer than 10 that start with
+`1f 8b`, is `DEFLATE_ERR_TRUNCATED`. The `limit` bounds the whole output.
 
 </scalar-detail>
 
@@ -138,31 +140,54 @@ function gzipCompress(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array that holds the data to compress.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `src` the data starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes of data to compress.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the member is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` the member starts.
+
 </scalar-field>
 
 <scalar-field name="level" type="i32" required>
+
+How hard to compress, 0 to 9; another level panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` one past the member's last byte, or
+  `DEFLATE_NO_ROOM`, as `GzipCompressor.compress` answers.
+
 </scalar-field>
 
 ## gzipDecompress
 
-`GzipDecompressor.decompress`, building the decompressor for this call alone.
+`GzipDecompressor.decompress`, building the decompressor for this call
+alone.
 
 ```ts
 function gzipDecompress(
@@ -178,26 +203,48 @@ function gzipDecompress(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array that holds the gzip data, one member or several.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `src` the first member starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the members are.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the data is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` the data starts.
+
 </scalar-field>
 
 <scalar-field name="limit" type="i32" required>
+
+The most bytes of data to accept over all the members.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` one past the data's last byte, or a negative
+  code, as `GzipDecompressor.decompress` answers.
+
 </scalar-field>
 
 ## gzipFixedBound
@@ -211,11 +258,19 @@ function gzipFixedBound(n: i32): i32
 #### Parameters
 
 <scalar-field name="n" type="i32" required>
+
+The length of the input, in bytes; a negative `n` answers the
+  bound of 0.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+A size in bytes, not a position: a `room` of this many always
+  holds the member.
+
 </scalar-field>
 
 ## GzipCompressor
@@ -230,8 +285,6 @@ class GzipCompressor
 | Member | |
 | --- | --- |
 | `new GzipCompressor(level: i32)` | A compressor at `level`, 0 to 9 (`DEFLATE_FAST`, `DEFLATE_DEFAULT`, ...); another level panics. |
-| `readonly crc: Crc32` |  |
-| `readonly deflater: Deflater` |  |
 | `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Compresses `src[off .. off + len)` into `out` from `at` as one gzip member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) when `out` cannot hold it; `compressBound(len)` bytes always can. A window outside its array panics. Allocates nothing. |
 
 ## GzipDecompressor
@@ -246,8 +299,6 @@ class GzipDecompressor
 | Member | |
 | --- | --- |
 | `new GzipDecompressor()` | Builds the tables. |
-| `readonly crc: Crc32` |  |
-| `readonly inflater: Inflater` |  |
 | `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses every member of `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends; or `DEFLATE_ERR_OUTPUT_LIMIT` when the data is longer, `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE`, `DEFLATE_ERR_TRUNCATED` or another `DEFLATE_ERR_*` for a malformed stream. An empty input is truncated. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
 
 ## GzipFixedCompressor
@@ -263,8 +314,6 @@ class GzipFixedCompressor
 | Member | |
 | --- | --- |
 | `new GzipFixedCompressor()` | Builds the tables. |
-| `readonly crc: Crc32` |  |
-| `readonly deflater: FixedDeflater` |  |
 | `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32` | Compresses `src[off .. off + len)` into `out[at .. at + room)` as one gzip member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) as soon as it would need more than `room` bytes, so a caller passing the most it will take stops early on an input that does not shrink. `gzipFixedBound(len)` always fits. A window outside its array panics. Allocates nothing. |
 
 ## GzipReader
@@ -286,37 +335,15 @@ class GzipReader
 
 | Member | |
 | --- | --- |
-| `new GzipReader(limit: i64)` | A reader that refuses more than `limit` decoded bytes in all; a negative `limit` panics. |
-| `checksum: u32` | The member's running CRC-32 and length, and the body's total length. |
-| `readonly crc: Crc32` |  |
-| `crcPos: i32` | Where the bytes not yet checksummed start. |
-| `histStart: i32` | Where the current member's output began, for its distances. |
-| `inEnd: i32` |  |
-| `readonly inflater: Inflater` |  |
-| `readonly input: u8[]` | Input not yet decoded. |
-| `inStart: i32` |  |
-| `readonly limit: i64` | The most decoded bytes `read` hands out in all. |
-| `members: i32` | Whether a member has been read; another may follow. |
-| `more: boolean` | Whether more input may come. |
-| `readonly output: u8[]` | The decoded window: history from `windowStart`, unread output from `readPos` to `writePos`. |
-| `phase: i32` | 0: a member header next; 1: inside a member's stream; 2: its trailer; 3: done; < 0: failed. |
-| `readPos: i32` |  |
-| `size: u32` |  |
-| `total: i64` |  |
-| `writePos: i32` |  |
-| `advance(): i32` | Decodes as far as the input and the output buffer allow; answers 0 or a final code. |
+| `new GzipReader(limit: i64)` | A reader that refuses more than `limit` decoded bytes in all; a negative `limit` panics. It is ready for a first body without a call to `start`. |
 | `commit(n: i32): void` | Takes `n` bytes copied into `inputBuffer()` at `inputEnd()`; more than `inputRoom()` panics. |
-| `compact(): void` | Moves the undecoded input to the front of its buffer. |
 | `endInput(): void` | Says that no input follows what has been given. |
-| `feed(src: u8[], off: i32, len: i32): i32` | Copies as much of `src[off .. off + len)` as fits and answers how much. |
-| `inputBuffer(): u8[]` | The buffer to copy input into, from `inputEnd()` for at most `inputRoom()` bytes. |
+| `feed(src: u8[], off: i32, len: i32): i32` | Copies as much of `src[off .. off + len)` as fits and answers how much. A window outside `src` panics. |
+| `inputBuffer(): u8[]` | The buffer to copy input into, from `inputEnd()` for at most `inputRoom()` bytes; then `commit` how many were copied. It may first move the input not yet decoded to the front, so read `inputEnd()` after this call. |
 | `inputEnd(): i32` | Where new input goes in `inputBuffer()`. |
-| `inputRoom(): i32` | How many bytes `inputBuffer()` has room for. |
-| `inputRoomRaw(): i32` | The room `input` has without compacting. |
+| `inputRoom(): i32` | How many bytes `inputBuffer()` has room for, from `inputEnd()`. Like `inputBuffer()`, it may first move the input not yet decoded to the front. |
 | `read(out: u8[], at: i32, max: i32): i32` | Copies up to `max` decoded bytes into `out` from `at` and answers how many (at least 1; `max` is at least 1), or `GZIP_NEED_INPUT` when it needs more input first, `GZIP_END` once the body has ended, or a negative error, after which it answers that error again until `start`. A window outside `out` panics. |
-| `slide(): void` | Slides the decoded window down once the unread output has been read and the buffer is past half. |
 | `start(): void` | Begins a new body, dropping any input and output left over. |
-| `sum(): void` | Adds the decoded bytes not yet checksummed to the member's CRC-32 and length. |
 
 ## GzipWriter
 
@@ -335,21 +362,10 @@ class GzipWriter
 
 | Member | |
 | --- | --- |
-| `new GzipWriter(level: i32)` | A writer at `level`, 0 to 9; another level panics. |
-| `checksum: u32` | The CRC-32 and length of every byte written so far. |
-| `readonly crc: Crc32` |  |
-| `readonly deflater: Deflater` |  |
-| `fill: i32` |  |
-| `finished: boolean` |  |
-| `pending: i32` | Where the pending input starts in `window`, and where it ends. |
-| `size: u32` |  |
-| `started: boolean` | Whether the header has been written, and whether `finish` has. |
-| `readonly window: u8[]` | The history and the pending input. |
+| `new GzipWriter(level: i32)` | A writer at `level`, 0 to 9; another level panics. It is ready for a first body without a call to `start`. |
 | `bound(len: i32): i32` | The most bytes a `write` of `len` bytes, or a `flush` or `finish` after it, can produce. Less than 64 KB is pending before the call, and the call compresses once per 64 KB pending: `deflateBound` of all of it, with the constant part of `deflateBound` again for each compression after the first. |
-| `drain(out: u8[], at: i32, final: boolean): i32` | Compresses the pending input as non-final blocks into `out[at ..)`, then slides the window so that the last 32 KB stay as history. Answers the new position, or -1. |
-| `finish(out: u8[], at: i32): i32` | Compresses everything pending as the final block and writes the trailer; answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. `start` begins another body. |
-| `flush(out: u8[], at: i32): i32` | Compresses everything pending and ends with an empty stored block, so a reader can decode every byte written so far (zlib's `Z_SYNC_FLUSH`). Answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. |
-| `header(out: u8[], at: i32): i32` | Writes the header into `out` at `at` if it has not been; answers the new position. |
+| `finish(out: u8[], at: i32): i32` | Compresses everything pending as the final block and writes the trailer; answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. `start` begins another body; until then `write`, `flush` and `finish` panic, as does a window outside `out`. |
+| `flush(out: u8[], at: i32): i32` | Compresses everything pending and ends with an empty stored block, so a reader can decode every byte written so far (zlib's `Z_SYNC_FLUSH`). Answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. Flushing after `finish` panics, as does a window outside `out`. |
 | `start(): void` | Begins a new body: the next output starts with a header. |
 | `write(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Takes `src[off .. off + len)` and answers where the output it produced in `out` from `at` ends (often `at`: input waits until 64 KB are pending), or `DEFLATE_NO_ROOM` when `out` has less than `bound(len)` bytes from `at`. Writing after `finish` panics, as does a window outside its array. |
 

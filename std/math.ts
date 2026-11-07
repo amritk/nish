@@ -3,7 +3,14 @@
  * rather than libm, so a program answers the same on every target, wasm
  * included, and the optimiser sees the whole function.
  *
- * A program does not import this module. A call to one of the three is what
+ *     export const main = (): i32 => {
+ *       const slope: f64 = Math.tan(0.5);
+ *       const angle: f64 = Math.atan2(1.0, -1.0); // 3 * pi / 4
+ *       const side: f64 = Math.hypot(3.0, 4.0); // 5
+ *       return side === 5.0 ? 0 : 1;
+ *     };
+ *
+ * **A program does not import this module.** A call to one of the three is what
  * loads it (the checker's `importMath`), and the compiler copies each function
  * here that the call reaches into the calling module as an `internal`
  * function, so this file writes no `.ll` of its own. Under Node and `tsc` the
@@ -344,7 +351,14 @@ const kernelTan = (x0: f64, y0: f64, odd: boolean): f64 => {
   const t: f64 = clearLo(a)
   return t + a * (t * zz + 1.0 + t * vv)
 }
-/** `Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past 2^20 * pi/2. */
+/**
+ * `Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past
+ * 2^20 * pi/2.
+ *
+ * @param x The angle, in radians.
+ * @returns The tangent of `x`; NaN for a NaN or an infinite `x`, and `x`
+ *   itself when `|x| < 2^-27`, a zero's sign kept.
+ */
 export const tanF64 = (x: f64): f64 => {
   const ax: f64 = Math.abs(x)
   if (ax < 0.7853984832763672) {
@@ -412,7 +426,16 @@ const atanlo = (id: i32): f64 => {
   }
 }
 
-/** `Math.atan2(y, x)`: fdlibm's, with a compensated quotient and a double-double pi - atan. */
+/**
+ * `Math.atan2(y, x)`: fdlibm's, with a compensated quotient and a
+ * double-double pi - atan.
+ *
+ * @param y The point's vertical coordinate.
+ * @param x The point's horizontal coordinate.
+ * @returns The angle from the positive x axis to the point `(x, y)`, in
+ *   radians in [-pi, pi], with JavaScript's value for every signed zero,
+ *   infinity and NaN.
+ */
 export const atan2F64 = (y: f64, x: f64): f64 => {
   const piO4: f64 = 7.85398163397448279e-1
   const piO2: f64 = 1.570796326794896558
@@ -592,7 +615,16 @@ const hypotRest = (ax: f64, ay: f64, a: f64, b: f64): f64 => {
   return pow2(-600) * hypotCoreF(a * up, b * up)
 }
 
-/** `Math.hypot(x, y)`: fdlibm's core, rescaled by a power of two outside [1e-150, 1e150]. */
+/**
+ * `Math.hypot(x, y)`: fdlibm's core, rescaled by a power of two outside
+ * [1e-150, 1e150].
+ *
+ * @param x One side's length; only its magnitude matters.
+ * @param y The other side's length; only its magnitude matters.
+ * @returns The square root of `x * x + y * y`, computed without the squares
+ *   overflowing or underflowing: Infinity when either is infinite, even beside
+ *   a NaN, and NaN when either is otherwise NaN.
+ */
 export const hypotF64 = (x: f64, y: f64): f64 => {
   const ax: f64 = Math.abs(x)
   const ay: f64 = Math.abs(y)

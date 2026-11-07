@@ -22,21 +22,36 @@ import {
 ```
 
 ```ts
-import { AtomicI32, Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope, scopeWithStack } from "nish/threads";
+import { parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope, scopeWithStack } from "nish/threads";
 
-parallelMapInto(src, dst, (x) => x * 3);
-const ys = parallelMap(src, (x) => x * k + b); // k, b: `const` locals, read by the body
-const sq = parallelFrom(n, (i) => i * i);
-const total = parallelReduce(src, (a, b) => a + b, 0);
-{
-  using s = scope();
-  s.spawn(sumOf, xs, out, 0);
-  s.spawn(maxOf, ys, out, 1);
-} // both tasks have run, and `out` holds both answers
-{
-  using s = scopeWithStack(64 * 1024 * 1024); // each task's thread has a 64 MiB stack
-  s.spawn(checkModule, ast, out, 0);
-}
+const sumOf = (xs: i32[]): i32 => {
+  let total: i32 = 0;
+  for (const x of xs) {
+    total = total + x;
+  }
+  return total;
+};
+
+export const main = (): i32 => {
+  const src: i32[] = [1, 2, 3, 4];
+  const k: i32 = 10;
+  const dst: i32[] = [0, 0, 0, 0];
+  parallelMapInto(src, dst, (x) => x * 3);               // dst is [3, 6, 9, 12]
+  const ys = parallelMap(src, (x) => x * k);             // [10, 20, 30, 40]: `k` is read by the body
+  const sq = parallelFrom(4, (i) => i * i);              // [0, 1, 4, 9]
+  const total = parallelReduce(src, (a, b) => a + b, 0); // 10
+  const out: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(sumOf, ys, out, 0);
+    s.spawn(sumOf, sq, out, 1);
+  } // both tasks have run, and `out` is [100, 14]
+  {
+    using s = scopeWithStack(64 * 1024 * 1024); // each task's thread has a 64 MiB stack
+    s.spawn(sumOf, src, out, 0);
+  }
+  return total;
+};
 ```
 
 <scalar-grid cols="2">
@@ -132,7 +147,9 @@ are this file's, whichever way the program is compiled.
 
 </scalar-detail>
 
-What makes the region safe is checked at the call, not trusted
+<scalar-detail title="What makes the region safe is checked at the call, not trusted">
+
+**What makes the region safe is checked at the call, not trusted**
 (docs/LANGUAGE.md, "Data parallelism"): the function passed as `f` may write
 nothing its caller could observe, may allocate only temporaries it drops
 before it returns — they are given back after every element — `dst` may not
@@ -143,13 +160,19 @@ the parameters of the function it is written in: each one is handed to the
 body as a parameter of its own, which no body may write through. Importing this module compiles the program with `--threads`,
 because every worker needs an arena of its own.
 
-A reduce is deterministic. `src` is split into `min(64, ceil(n / BLOCK))`
+</scalar-detail>
+
+<scalar-detail title="A reduce is deterministic">
+
+`src` is split into `min(64, ceil(n / BLOCK))`
 blocks, each block is folded from `identity`, and the block results are
 combined left to right — here, on one thread, and by the compiled program on
 any number of them — so an `f64` sum is the same bits on one core or sixty
 four. That needs `f` to be associative and `identity` to be its identity,
 which the checker enforces for an arrow whose body is one operator on its two
 parameters and cannot see through a named function.
+
+</scalar-detail>
 
 ## parallelFrom
 
@@ -167,14 +190,24 @@ function parallelFrom<U>(
 #### Parameters
 
 <scalar-field name="n" type="i32" required>
+
+how many elements the array has.
+
 </scalar-field>
 
 <scalar-field name="f" type="(i: i32) =&gt; U" required>
+
+computes the element at an index from the index alone, under the
+  rules `parallelMapInto` gives its `f`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="U[]">
+
+a new array of `n` elements, which the caller owns.
+
 </scalar-field>
 
 ## parallelMap
@@ -193,14 +226,24 @@ function parallelMap<T, U>(
 #### Parameters
 
 <scalar-field name="src" type="T[]" required>
+
+the elements to map, read and not written.
+
 </scalar-field>
 
 <scalar-field name="f" type="(x: T) =&gt; U" required>
+
+computes one element from one element of `src`, under the rules
+  `parallelMapInto` gives its `f`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="U[]">
+
+a new array of `src.length` elements, which the caller owns.
+
 </scalar-field>
 
 ## parallelMapInto
@@ -220,12 +263,25 @@ function parallelMapInto<T, U>(
 #### Parameters
 
 <scalar-field name="src" type="T[]" required>
+
+the elements to map, read and not written.
+
 </scalar-field>
 
 <scalar-field name="dst" type="U[]" required>
+
+where `f(src[i])` is written, at the same index. If it is shorter
+  than `src` the program stops before any element is written; any elements
+  past `src.length` are left as they were.
+
 </scalar-field>
 
 <scalar-field name="f" type="(x: T) =&gt; U" required>
+
+computes one element from one element of `src`. It is called once
+  per element, natively on any thread and in no set order, so it may write
+  nothing its caller could observe (see the module header).
+
 </scalar-field>
 
 ## parallelReduce
@@ -245,17 +301,33 @@ function parallelReduce<T>(
 #### Parameters
 
 <scalar-field name="src" type="T[]" required>
+
+the elements to fold, read and not written.
+
 </scalar-field>
 
 <scalar-field name="f" type="(acc: T, x: T) =&gt; T" required>
+
+combines an accumulator with an element, and the blocks' results
+  with each other, so it must be associative for the answer to mean the
+  fold it reads as.
+
 </scalar-field>
 
 <scalar-field name="identity" type="T" required>
+
+what each block's fold starts from, which must be `f`'s
+  identity, such as `0` for `+`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="T">
+
+the fold of every element of `src`, the same however many threads
+  computed it.
+
 </scalar-field>
 
 ## scope
@@ -269,6 +341,10 @@ function scope(): ThreadScope
 #### Returns
 
 <scalar-field name="returns" type="ThreadScope">
+
+a new scope of its own, whose tasks run on threads of the
+  platform's default stack size and are joined when the block ends.
+
 </scalar-field>
 
 ## scopeWithStack
@@ -287,11 +363,19 @@ function scopeWithStack(bytes: i32): ThreadScope
 #### Parameters
 
 <scalar-field name="bytes" type="i32" required>
+
+the least stack each task's thread gets, in bytes. Below
+  131,072 (128 KiB) is a compile error when it is a constant (NL2584) and
+  stops the program when it is computed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="ThreadScope">
+
+a new scope of its own, joined when the block ends.
+
 </scalar-field>
 
 ## AtomicI32
@@ -316,8 +400,7 @@ class AtomicI32
 
 | Member | |
 | --- | --- |
-| `new AtomicI32(value: i32)` |  |
-| `value: i32` | The value; named only by this class's methods, which the compiler emits. |
+| `new AtomicI32(value: i32)` | An atomic holding `value`. |
 | `add(delta: i32): i32` | Adds `delta`, wrapping, and answers the value before. |
 | `compareExchange(expected: i32, desired: i32): i32` | Sets the value to `desired` if it is `expected`, and answers the value it saw. |
 | `exchange(value: i32): i32` | Sets the value to `value` and answers the value before. |
@@ -351,8 +434,7 @@ class AtomicI64
 
 | Member | |
 | --- | --- |
-| `new AtomicI64(value: i64)` |  |
-| `value: i64` | The value; named only by this class's methods, which the compiler emits. |
+| `new AtomicI64(value: i64)` | An atomic holding `value`. |
 | `add(delta: i64): i64` | Adds `delta` and answers the value before; natively the sum wraps at 64 bits. |
 | `compareExchange(expected: i64, desired: i64): i64` | Sets the value to `desired` if it is `expected`, and answers the value it saw. |
 | `exchange(value: i64): i64` | Sets the value to `value` and answers the value before. |
@@ -396,14 +478,9 @@ class Channel<T>
 
 | Member | |
 | --- | --- |
-| `new Channel<T>()` |  |
-| `head: i32` | Under Node: how many of `queue`'s values a loop has taken. |
-| `queue: T[]` | Under Node: every value sent, in the order it was sent. |
-| `state: i64` | Natively: the runtime's handle on the channel (runtime/runtime-parallel.c), 0 until the channel is first used. Nothing written here reads or writes it. |
+| `new Channel<T>()` | An empty channel, open until its scope joins. |
 | `[Symbol.iterator](): ChannelWalk<T>` | What `for (const x of ch)` asks for under Node: a walk that takes each value as it reaches it, so a second loop over the channel finds it empty, as it does natively. |
-| `ready(): boolean` | Whether a value is waiting, under Node, where nothing is sent while a loop runs. |
 | `send(x: T): void` | Hand `x` to the receiver. It never waits: a channel holds as many values as are sent. |
-| `take(): T` | The next value, for a loop that has found one waiting (`ChannelWalk`). Natively the loop is the compiler's, which takes a value with the runtime instead, and nothing calls this. |
 
 ## Mutex
 
@@ -423,8 +500,7 @@ class Mutex<T>
 
 | Member | |
 | --- | --- |
-| `new Mutex<T>(init: T)` |  |
-| `guard: MutexGuard<T>` | The one guard, which holds the data; only `lock()` hands it out. |
+| `new Mutex<T>(init: T)` | A free lock that owns `init`. |
 | `lock(): MutexGuard<T>` | The guard over the data, for a `using` declaration: `using g = m.lock()`. Natively the call waits until the lock is free and takes it. |
 
 ## MutexGuard
@@ -444,9 +520,8 @@ class MutexGuard<T>
 
 | Member | |
 | --- | --- |
-| `new MutexGuard<T>(value: T)` |  |
+| `new MutexGuard<T>(value: T)` | A guard over `value`, with the lock free. `Mutex` makes its one guard with this. |
 | `value: T` | The data the lock owns. |
-| `word: i32` | The lock word: 0 when the lock is free, 1 while a guard's block holds it. Nothing written here reads or writes it. Natively the compiler takes it with an acquire compare-and-swap in `lock()` and gives it back with a release store at every exit of the guard's block (`src/emit-parallel.ts`); under Node one task runs at a time and there is nothing to exclude. |
 | `[Symbol.dispose](): void` | What `using` calls when the guard's block ends. Natively the compiler emits the release itself at every exit of the block, and under Node nothing was taken, so there is nothing to give back. |
 
 ## ThreadScope
@@ -463,7 +538,6 @@ class ThreadScope
 | Member | |
 | --- | --- |
 | `new ThreadScope()` |  |
-| `tag: i32` | The stack, in bytes, of each thread the scope's tasks run on, or 0 for the platform's default. Only `scopeWithStack` writes it, and only `nish_scope_join` (runtime/runtime-parallel.c) reads it, as the scope's first word. It also makes each scope an object of its own, whose address is what the runtime files the scope's tasks under. |
 | `[Symbol.dispose](): void` | What `using` calls when the block ends. Natively the compiler emits the join itself at every exit of the block, and under Node every task has already run by the time this is reached, so there is nothing left to do. |
 | `spawn<A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void` | Run `entry(arg)` on a thread of its own and store its answer in `dst[at]` when the scope closes. `at` is checked here, before the task is taken, and again when its answer is stored. |
 | `spawnThunk<R>(entry: () => R): void` | `s.spawn(() => work(xs))` as the compiler reads it: run the arrow, whose captured `const` locals are its arguments, on a thread of its own when the scope closes, and store nothing. Only the compiler names this method, and a program that names it is refused as `spawnWith`'s is (NL2389). |

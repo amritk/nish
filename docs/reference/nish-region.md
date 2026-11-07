@@ -18,11 +18,25 @@ import {
 ```
 
 ```ts
-import { Region, enterWith, free, regionWith } from "nish:region"
+import { Region, enter, free, regionWith } from "nish:region"
 
-const r: Region<Session> = regionWith(id, open)
-const n: i32 = enterWith(r, out, serve)
-free(r)
+class Session {
+  hits: i32 = 0
+  payload: u8[]
+  constructor(size: i32) {
+    this.payload = new Array<u8>(size)
+  }
+}
+
+const open = (size: i32): Session => new Session(size)
+const hit = (s: Session): i32 => {
+  s.hits = s.hits + 1
+  return s.hits
+}
+
+const r: Region<Session> = regionWith(16, open)  // the Session lives in r
+const n: i32 = enter(r, hit)                      // 1: a number comes out
+free(r)                                           // r is dead from here
 ```
 
 <scalar-grid cols="2">
@@ -67,8 +81,8 @@ A region whose root is a `T`.
 
 <scalar-callout type="info">
 
-This file is the source behind the builtin module, and it is imported only
-by that name: `nish/region` is refused, so there is one spelling for the
+**This file is the source behind the builtin module**, and it is imported
+only by that name: `nish/region` is refused, so there is one spelling for the
 checker's rules to be read under (`src/region-check.ts`). What is written
 here is the meaning, over five intrinsics the compiler gives bodies of their
 own (`src/emit-region.ts`), which swap the thread's arena for the region's
@@ -82,12 +96,20 @@ around the function they run:
 
 </scalar-callout>
 
-A `Region<T>` is a handle, a 64-bit integer, and not a pointer: the root
+<scalar-detail title="A `Region&lt;T&gt;` is a handle">
+
+**A `Region<T>` is a handle**, a 64-bit integer, and not a pointer: the root
 never leaves the region except through `enter`'s function, and that
 function answers a scalar, so nothing outside a region can point into it.
 
-Under Node the module is answered by `runtime/nish.mjs`, where a region is
-an entry in a table and `free` drops it.
+</scalar-detail>
+
+<scalar-detail title="Under Node the module is answered by `runtime/nish.mjs`">
+
+**Under Node the module is answered by `runtime/nish.mjs`**, where a region
+is an entry in a table and `free` drops it.
+
+</scalar-detail>
 
 ## enter
 
@@ -103,14 +125,26 @@ function enter<T, R>(
 #### Parameters
 
 <scalar-field name="r" type="Region&lt;T&gt;" required>
+
+the region to enter. A handle that is 0, freed, another thread's or
+  already entered stops the program.
+
 </scalar-field>
 
 <scalar-field name="f" type="(root: T) =&gt; R" required>
+
+runs on the root, and everything it allocates lands in the region.
+  It answers a number, a `boolean`, an `enum` or a `Region` (NL2611), so
+  nothing it answers points into the region.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="R">
+
+what `f` returns.
+
 </scalar-field>
 
 ## enterWith
@@ -128,22 +162,36 @@ function enterWith<T, A, R>(
 #### Parameters
 
 <scalar-field name="r" type="Region&lt;T&gt;" required>
+
+the region to enter, checked as `enter` checks it.
+
 </scalar-field>
 
 <scalar-field name="arg" type="A" required>
+
+handed to `f` after the root. It lives outside the region, under
+  the same rule as `regionWith`'s `arg` (NL2610).
+
 </scalar-field>
 
 <scalar-field name="f" type="(root: T, arg: A) =&gt; R" required>
+
+runs on the root and `arg`, under the same rules as `enter`'s.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="R">
+
+what `f` returns.
+
 </scalar-field>
 
 ## free
 
-Give the region's memory back. The handle is dead after it. The compiler writes the body.
+Give the region's memory back. The handle is dead after it. The compiler
+writes the body.
 
 ```ts
 function free<T>(_r: Region<T>): void
@@ -152,11 +200,17 @@ function free<T>(_r: Region<T>): void
 #### Parameters
 
 <scalar-field name="_r" type="Region&lt;T&gt;" required>
+
+the region to free. It and every copy of the handle are dead after
+  this; freeing it again, or while it is entered, stops the program rather
+  than freeing twice.
+
 </scalar-field>
 
 ## region
 
-A new region, whose root is what `f` answers; everything `f` allocates is in it.
+A new region, whose root is what `f` answers; everything `f` allocates is in
+it.
 
 ```ts
 function region<T>(f: () => T): Region<T>
@@ -165,16 +219,25 @@ function region<T>(f: () => T): Region<T>
 #### Parameters
 
 <scalar-field name="f" type="() =&gt; T" required>
+
+builds the root. What it answers must be memory it allocated
+  (NL2614), and the checker refuses it storing region memory anywhere
+  outside the region (NL2609).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Region&lt;T&gt;">
+
+the handle to the new region, which holds its memory until `free`.
+
 </scalar-field>
 
 ## regionWith
 
-`region` with one argument for `f`, because the arrow `region` runs captures nothing.
+`region` with one argument for `f`, because the arrow `region` runs captures
+nothing.
 
 ```ts
 function regionWith<A, T>(
@@ -186,14 +249,25 @@ function regionWith<A, T>(
 #### Parameters
 
 <scalar-field name="arg" type="A" required>
+
+handed to `f`. It lives outside the region, so unless it is a
+  number, `boolean`, `enum` or string literal `f` may not store it into
+  region memory (NL2610).
+
 </scalar-field>
 
 <scalar-field name="f" type="(arg: A) =&gt; T" required>
+
+builds the root from `arg`, under the same rules as `region`'s.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Region&lt;T&gt;">
+
+the handle to the new region, which holds its memory until `free`.
+
 </scalar-field>
 
 ## Region
@@ -209,4 +283,3 @@ class Region<T>
 | Member | |
 | --- | --- |
 | `new Region<T>()` |  |
-| `root: T \| null` | Never read: the compiler's type has no fields. |

@@ -9,12 +9,13 @@
  *     let c: u32 = crc.update(toU32(0), body, 0, 100);
  *     c = crc.update(c, body, 100, toI32(body.length) - 100); // the same as one call
  *
- * A module has no global state, so CRC-32's tables live in a `Crc32` object:
- * build one and keep it, because building it is 4,096 table entries (about
- * ten microseconds) and an update of a 5 KB body is under one. `crc32`
- * is the one-off convenience that builds a table for one call.
+ * **Keep a `Crc32`.** A module has no global state, so CRC-32's tables live
+ * in a `Crc32` object: build one and keep it, because building it is 4,096
+ * table entries (about ten microseconds) and an update of a 5 KB body is
+ * under one. `crc32` is the one-off convenience that builds a table for one
+ * call.
  *
- * CRC-32 is slicing-by-8: eight 256-entry tables, eight bytes per step with
+ * **CRC-32 is slicing-by-8**: eight 256-entry tables, eight bytes per step with
  * one table read per byte and no dependency between the reads of a step
  * (Kounavis and Berry, "A Systematic Approach to Building High Performance
  * Software-based CRC Generators", 2005). From 80 bytes on it is also braided
@@ -23,13 +24,14 @@
  * reductions to once every 5,552 bytes, the most that cannot overflow 32 bits
  * (RFC 1950 §9 and zlib's `NMAX`).
  *
- * Neither is a cryptographic hash: both detect accidental corruption only.
+ * **Neither is a cryptographic hash**: both detect accidental corruption only.
  * Written from the specifications, not ported from another implementation.
  *
- * The table reads in `update` are `nish:unsafe`'s `uncheckedGet`: every index
- * is a byte plus a multiple of 256 below 2,048, and both tables are built here
- * at exactly that length and never replaced, which is the whole proof. The input
- * window is checked once, before the loop.
+ * **What is unchecked.** The table reads in `update` are `nish:unsafe`'s
+ * `uncheckedGet`: every index is a byte plus a multiple of 256 below 2,048,
+ * and both tables are built here at exactly that length and never replaced,
+ * which is the whole proof. The input window is checked once, before the
+ * loop.
  */
 import { uncheckedGet, uncheckedSet } from "nish:unsafe"
 
@@ -103,12 +105,12 @@ const checksumWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
  */
 export class Crc32 {
   /** `table[k * 256 + b]`: the CRC of byte `b` followed by `k` zero bytes. */
-  readonly table: u32[]
+  private readonly table: u32[]
   /**
    * `braid[k * 256 + b]`: the same, followed by the 32 bytes of the other
    * four braids' words as well, which a braid steps over.
    */
-  readonly braid: u32[]
+  private readonly braid: u32[]
 
   /** Builds the eight tables and their braided form. */
   constructor() {
@@ -151,7 +153,15 @@ export class Crc32 {
   /**
    * The CRC-32 of the bytes `crc` was the CRC of, followed by
    * `buf[off .. off + len)`. Start a new checksum from 0. A window outside
-   * `buf` panics.
+   * `buf` panics. Neither the object nor `buf` is changed.
+   *
+   * @param crc The CRC-32 of the bytes before this window, as the last
+   *   `update` answered it, or 0 to start a new checksum.
+   * @param buf The array that holds the bytes to add.
+   * @param off Where in `buf` the bytes start.
+   * @param len How many bytes to add; 0 answers `crc` unchanged.
+   * @returns The CRC-32 of everything so far, to pass as `crc` to the next
+   *   `update`, or to use as the finished checksum.
    */
   update(crc: u32, buf: u8[], off: i32, len: i32): u32 {
     checksumWindow("Crc32.update", buf, off, len)
@@ -258,6 +268,11 @@ const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32)
  * The CRC-32 of `buf[off .. off + len)`. It builds a `Crc32` for the one
  * call, which costs about as much as checksumming 5 KB: keep a `Crc32` for
  * anything repeated. A window outside `buf` panics.
+ *
+ * @param buf The array that holds the bytes to checksum.
+ * @param off Where in `buf` the bytes start.
+ * @param len How many bytes to checksum; 0 answers 0.
+ * @returns The CRC-32 of the window, the value gzip's trailer carries.
  */
 export const crc32 = (buf: u8[], off: i32, len: i32): u32 => new Crc32().update(toU32(0), buf, off, len)
 
@@ -265,6 +280,14 @@ export const crc32 = (buf: u8[], off: i32, len: i32): u32 => new Crc32().update(
  * The Adler-32 of the bytes `adler` was the Adler-32 of, followed by
  * `buf[off .. off + len)` (RFC 1950 §9). Start a new checksum from 1. A
  * window outside `buf` panics.
+ *
+ * @param adler The Adler-32 of the bytes before this window, as the last
+ *   call answered it, or 1 to start a new checksum.
+ * @param buf The array that holds the bytes to add.
+ * @param off Where in `buf` the bytes start.
+ * @param len How many bytes to add; 0 answers `adler` unchanged.
+ * @returns The Adler-32 of everything so far, to pass as `adler` to the
+ *   next call, or to use as the finished checksum.
  */
 export const adler32Update = (adler: u32, buf: u8[], off: i32, len: i32): u32 => {
   checksumWindow("adler32Update", buf, off, len)
@@ -299,5 +322,12 @@ export const adler32Update = (adler: u32, buf: u8[], off: i32, len: i32): u32 =>
   return (s2 << 16) | s1
 }
 
-/** The Adler-32 of `buf[off .. off + len)`. A window outside `buf` panics. */
+/**
+ * The Adler-32 of `buf[off .. off + len)`. A window outside `buf` panics.
+ *
+ * @param buf The array that holds the bytes to checksum.
+ * @param off Where in `buf` the bytes start.
+ * @param len How many bytes to checksum; 0 answers 1.
+ * @returns The Adler-32 of the window, the value zlib's trailer carries.
+ */
 export const adler32 = (buf: u8[], off: i32, len: i32): u32 => adler32Update(toU32(1), buf, off, len)

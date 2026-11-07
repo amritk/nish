@@ -4,16 +4,16 @@ entry: tests/cases/arr_sort_cmp.ts
 module std/sort.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
-unsafe import 41:10 wrappingAdd from "nish:unsafe"
-unsafe import 41:23 wrappingSub from "nish:unsafe"
-unsafe call 50:54 wrappingSub (node 34)
-unsafe call 50:82 wrappingAdd (node 43)
-unsafe call 60:11 wrappingAdd (node 95)
-unsafe call 66:9 wrappingAdd (node 148)
-unsafe call 70:13 wrappingSub (node 164)
-unsafe call 73:11 wrappingSub (node 221)
-unsafe call 124:11 wrappingAdd (node 677)
-unsafe call 130:11 wrappingAdd (node 719)
+unsafe import 47:10 wrappingAdd from "nish:unsafe"
+unsafe import 47:23 wrappingSub from "nish:unsafe"
+unsafe call 56:54 wrappingSub (node 34)
+unsafe call 56:82 wrappingAdd (node 43)
+unsafe call 66:11 wrappingAdd (node 95)
+unsafe call 72:9 wrappingAdd (node 148)
+unsafe call 76:13 wrappingSub (node 164)
+unsafe call 79:11 wrappingSub (node 221)
+unsafe call 130:11 wrappingAdd (node 677)
+unsafe call 136:11 wrappingAdd (node 719)
 const RUN: i32 = 32
 function stepTo(lo: i32, step: i32, n: i32): i32 -> @nish.stepTo
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false

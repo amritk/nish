@@ -10,6 +10,14 @@ import {
 } from "nish/sort";
 ```
 
+```ts
+export const main = (): i32 => {
+  const xs: i32[] = [3, 1, 2];
+  xs.sort((a, b) => a - b); // xs is now [1, 2, 3], and the call answers xs
+  return xs[0];
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="sortWith" icon="phosphor/regular/function" href="#sortwith">
@@ -20,16 +28,16 @@ import {
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="A program does not import this module">
 
-A program does not import this module. A `.sort(cmp)` call is what loads it
+A `.sort(cmp)` call is what loads it
 (the checker's `importSort`), and the checker routes the call to `sortWith`
 here. `cmp` is a compile-time function parameter, so each comparator is an
 instantiation of its own whose body calls the comparator directly — there is
 no function pointer. Under Node and `tsc` the call is the platform's
 `Array.prototype.sort`, so nothing here runs there.
 
-</scalar-callout>
+</scalar-detail>
 
 <scalar-detail title="Same order as Node">
 
@@ -77,7 +85,8 @@ of two of them, or a sum taken only when it stays below `n`.
 
 ## sortWith
 
-`xs` sorted in place by `cmp`, stably, and answered: what `xs.sort(cmp)` compiles to.
+`xs` sorted in place by `cmp`, stably, and answered: what `xs.sort(cmp)`
+compiles to.
 
 ```ts
 function sortWith<T>(
@@ -89,12 +98,23 @@ function sortWith<T>(
 #### Parameters
 
 <scalar-field name="xs" type="T[]" required>
+
+the array to sort; its elements are rearranged in place.
+
 </scalar-field>
 
 <scalar-field name="cmp" type="(a: T, b: T) =&gt; number" required>
+
+compares an earlier element with a later one: a positive answer
+  puts the later one first, and anything else, `NaN` and negative zero
+  included, keeps their order.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="T[]">
+
+`xs` itself, the same array the call was given, now sorted.
+
 </scalar-field>
