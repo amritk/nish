@@ -820,7 +820,7 @@ export class Http1ResponseParser {
 
   /**
    * Field `i`'s name, in lowercase, as a fresh string.
-   * @param i The field's index, from 0 to `fields()`.
+   * @param i The field's index, from 0 to below `fields()`.
    * @returns The name, or "" past the last field.
    */
   fieldName(i: i32): string {
@@ -832,7 +832,7 @@ export class Http1ResponseParser {
 
   /**
    * Field `i`'s value, OWS trimmed, as a fresh string.
-   * @param i The field's index, from 0 to `fields()`.
+   * @param i The field's index, from 0 to below `fields()`.
    * @returns The value, or "" past the last field.
    */
   fieldValue(i: i32): string {
