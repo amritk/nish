@@ -132,9 +132,9 @@
  * is stored differently there than natively, where a string is its UTF-8
  * bytes; `parse` over a `u8[]` reads the same bytes both ways.
  *
- * **Public is not the whole API.** Nish has no private members, so the
- * methods marked "Internal" in their comments, and the fields, are reachable
- * by a program; the guarantees above hold only through the methods that are
+ * **Public is not the whole API.** The compiler ignores `private`, so every
+ * member is reachable by a program; `private` and `@internal` mark what is
+ * not API, and the guarantees above hold only through the members that are
  * not marked so. `append` with indices of the program's choosing, for
  * example, skips the check that keeps a tree finite.
  *
@@ -272,8 +272,8 @@ class JsonValueRanges {
 /**
  * A JSON tree, and the memory every value of it lives in. Make one, then
  * `parse` into it or build with the `new*` methods; the module header has the
- * rules. Its fields and its "Internal" methods are reachable, as every
- * member in Nish is; use the others.
+ * rules. Its `private` and `@internal` members are reachable, as every
+ * member in Nish is, because the compiler ignores `private`; use the others.
  */
 export class JsonDocument {
   /** Per value: its `JSON_VALUE_*` kind. */

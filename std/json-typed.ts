@@ -418,7 +418,7 @@ export class JsonDecoder {
 
   /**
    * The current key's length in bytes once decoded, or `-1` when the current
-   * token is not a key: what the code written for a class switches on before
+   * token is not a key or string: what the code written for a class switches on before
    * it compares a key's bytes with a field's name.
    *
    * @returns the decoded key length in bytes, or `-1`.
@@ -430,7 +430,7 @@ export class JsonDecoder {
   /**
    * Byte `at` of the current key when the key has no escape, so that its
    * bytes are the input's, and `-1` otherwise: for a key with an escape, for
-   * an `at` outside it, and when the current token is not a key. A `-1`
+   * an `at` outside it, and when the current token is not a key or string. A `-1`
    * matches no byte of a field's name, and the code written for a class then
    * compares the key with each name of its length through `keyIs`, which
    * decodes the escapes.
@@ -473,7 +473,7 @@ export class JsonDecoder {
 
   /**
    * The current key, decoded, as a new string: a `Map` field's key. `""` when
-   * the current token is not a key.
+   * the current token is not a key or string.
    *
    * @returns the decoded key, or `""`.
    */
@@ -816,8 +816,9 @@ export class JsonDecoder {
    * Reads the next value, an array of `i32`s, into `xs`, element by element:
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
-   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
-   * answered untouched.
+   * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and `xs` is answered
+   * untouched.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -846,8 +847,9 @@ export class JsonDecoder {
    * Reads the next value, an array of `u32`s, into `xs`, element by element:
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
-   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
-   * answered untouched.
+   * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and `xs` is answered
+   * untouched.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -876,8 +878,9 @@ export class JsonDecoder {
    * Reads the next value, an array of `i64`s, into `xs`, element by element:
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
-   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
-   * answered untouched.
+   * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and `xs` is answered
+   * untouched.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -906,8 +909,9 @@ export class JsonDecoder {
    * Reads the next value, an array of `u64`s, into `xs`, element by element:
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
-   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
-   * answered untouched.
+   * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and `xs` is answered
+   * untouched.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -936,8 +940,9 @@ export class JsonDecoder {
    * Reads the next value, an array of numbers, into `xs`, element by element:
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
-   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
-   * answered untouched.
+   * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and `xs` is answered
+   * untouched.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -966,8 +971,9 @@ export class JsonDecoder {
    * Reads the next value, an array of booleans, into `xs`, element by element:
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
-   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
-   * answered untouched.
+   * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and `xs` is answered
+   * untouched.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -995,9 +1001,12 @@ export class JsonDecoder {
   /**
    * Reads the next value, an array of strings, into `xs`, element by element:
    * each one overwrites the slot `xs` already has or is pushed past its end,
-   * and the slots left over are popped, so an array no longer than `xs`
-   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
-   * answered untouched.
+   * and the slots left over are popped, so an array no longer than `xs` grows
+   * nothing. Only the container is reused: an element keeps the string its
+   * slot held when the text is equal, as `string` does, and is otherwise a new
+   * string. Anything but an array fails with `JSON_DECODE_TYPE`, or
+   * with the tokenizer's code when the input is malformed, and `xs` is answered
+   * untouched.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.

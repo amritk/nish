@@ -1,8 +1,8 @@
 /**
  * `std/pair` — two values answered by one call.
  *
- * It exists for the function that has two things to say, like the lexer's
- * `scanEscape`: where an escape ended, and whether it was malformed. Without a
+ * It exists for the function that has two things to say, like the
+ * `scanEscape` below: where an escape ended, and whether it was malformed. Without a
  * pair, the second answer lives in a field on some object, written by the
  * callee and read back by the caller three lines later. With one, both come
  * back in the return:
@@ -25,13 +25,12 @@
 export interface Pair<A, B> {
   /**
    * The first of the two answers. What it means is the returning function's
-   * contract: `scanEscape`'s is where the escape ended.
+   * contract, which its own doc states.
    */
   first: A
   /**
    * The second of the two answers, with its meaning set by the returning
-   * function as `first`'s is: `scanEscape`'s is whether the escape was
-   * malformed.
+   * function as `first`'s is.
    */
   second: B
 }
