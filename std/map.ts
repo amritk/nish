@@ -3,15 +3,24 @@
  * have, written so that a program using them still runs unmodified under Node
  * (docs/wp32-map.md §9.2).
  *
- * The bodies below are the meaning, and they are what runs under Node:
+ *     import { reserve, getOrInsert } from "nish/map"
+ *
+ *     const counts = new Map<string, i32>()
+ *     reserve(counts, 64)  // room for 64 words before the table grows
+ *     for (const w of ["to", "be", "or", "not", "to", "be"]) {
+ *       counts.set(w, getOrInsert(counts, w, 0) + 1)  // a new word starts at 0
+ *     }
+ *     counts.get("to")  // 2
+ *
+ * **The bodies below are the meaning**, and they are what runs under Node:
  * `reserve` does nothing, and `getOrInsert` is a `get`, and a `set` when the
- * key was missing. Natively neither body is ever called. The compiler lowers
- * every call in place, as it lowers `hashKey` and `sameKey`: `reserve` is the
- * table's `reserveSlots`, which grows the buckets so that `n` entries fit
- * without a rebuild, and `getOrInsert` is one `probe` of the key, then the
+ * key was missing. **Natively neither body is ever called.** The compiler
+ * lowers every call in place, as it lowers `hashKey` and `sameKey`: `reserve`
+ * is the table's `reserveSlots`, which grows the buckets so that `n` entries
+ * fit without a rebuild, and `getOrInsert` is one `probe` of the key, then the
  * value it found or an insert through the empty bucket the probe stopped at,
- * with the hash it already computed. So this module writes no `.ll` of its
- * own, and a one-file program that imports it is still one module.
+ * with the hash it already computed. So this module writes no `.ll` of its own,
+ * and a one-file program that imports it is still one module.
  */
 
 /**
@@ -19,6 +28,10 @@
  * grows the table. Only the speed of a program depends on it: natively it
  * presizes the bucket table, and under Node, which has no such call, it does
  * nothing. A count that is not positive does nothing either way.
+ *
+ * @param _m - the map to presize.
+ * @param _n - how many entries it should hold, those already in it counted,
+ *   without growing.
  */
 export const reserve = <K, V>(_m: Map<K, V>, _n: number): void => {
   // Nothing to do here: natively the compiler lowers the call itself, and Node has no table to presize.
@@ -28,6 +41,11 @@ export const reserve = <K, V>(_m: Map<K, V>, _n: number): void => {
  * The value of `key` in `m`; or, when `key` is missing, `value`, after
  * setting `key` to it. One hash and one probe natively, whichever it was.
  * `value` is evaluated either way, as every argument is.
+ *
+ * @param m - the map to look in, and to add to when `key` is missing.
+ * @param key - the key to find.
+ * @param value - the value to store when `key` is missing.
+ * @returns the value `key` already had, or `value` when it had none.
  */
 export const getOrInsert = <K, V>(m: Map<K, V>, key: K, value: V): V => {
   const found = m.get(key)

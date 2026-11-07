@@ -77,7 +77,13 @@ const jsonPointerWellFormed = (s: string, from: i32): boolean => {
   return true
 }
 
-/** Whether `s` is an RFC 6901 JSON Pointer (the module header's grammar). Allocates nothing. */
+/**
+ * Whether `s` is an RFC 6901 JSON Pointer (the module header's grammar).
+ * Allocates nothing.
+ *
+ * @param s - the text to check.
+ * @returns true when `s` is a JSON Pointer, the empty one included.
+ */
 export const isJsonPointer = (s: string): boolean => jsonPointerWellFormed(s, 0)
 
 /**
@@ -103,6 +109,9 @@ const jsonPointerIntegerEnd = (s: string, from: i32): i32 => {
  * leading zero (`0`, `12`, not `01`, `+1` or `-1`), then `#`, or an optional
  * `+` or `-` and another such integer and then a JSON Pointer, which may be
  * empty. Allocates nothing.
+ *
+ * @param s - the text to check.
+ * @returns true when `s` is a relative JSON Pointer.
  */
 export const isRelativeJsonPointer = (s: string): boolean => {
   let i: i32 = jsonPointerIntegerEnd(s, 0)
@@ -157,6 +166,10 @@ const jsonPointerTokenEnd = (p: string, from: i32): i32 => {
 /**
  * The reference tokens of JSON Pointer `p`, decoded: `[]` for `""`,
  * `["a/b", "", "~"]` for `/a~1b//~0`. `null` when `p` is not a JSON Pointer.
+ *
+ * @param p - the pointer text.
+ * @returns the decoded reference tokens, in order, or `null` when `p` is not a
+ *   JSON Pointer.
  */
 export const jsonPointerParse = (p: string): string[] | null => {
   if (!isJsonPointer(p)) {
@@ -175,6 +188,9 @@ export const jsonPointerParse = (p: string): string[] | null => {
 /**
  * `token` written as one token of a JSON Pointer: `~` as `~0` and `/` as
  * `~1`, so `"a/b"` is `a~1b`. Everything else is copied whole.
+ *
+ * @param token - one reference token, as it reads in an object key.
+ * @returns the token as it is written inside a pointer.
  */
 export const jsonPointerEscape = (token: string): string => {
   const parts: string[] = []
@@ -220,6 +236,12 @@ const jsonPointerIndex = (p: string, from: i32, end: i32, length: i32): i32 => {
  * `""`, else each token taken in turn, as the module header says.
  * `JSON_POINTER_NONE` when the pointer names nothing there (or `root` names
  * no value), and `JSON_POINTER_ERR_SYNTAX` when `p` is not a JSON Pointer.
+ *
+ * @param doc - the document to look in.
+ * @param root - the value the pointer starts from.
+ * @param p - the pointer text.
+ * @returns the handle of the value named, `JSON_POINTER_NONE`, or
+ *   `JSON_POINTER_ERR_SYNTAX`.
  */
 export const jsonPointerResolve = (doc: JsonDocument, root: i32, p: string): i32 => {
   if (!isJsonPointer(p)) {
