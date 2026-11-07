@@ -26810,14 +26810,14 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     "simd: --emit-dts and its wasm loader export none of the vector signatures, naming the type, nor a class that holds one",
     sides.status === 0 &&
       d.includes("twice(x: number): number;") &&
-      m.includes("twice: raw.twice") &&
-      !/\b(first|make|sum): raw\./.test(m) &&
+      m.includes("twice: (x) => guarded(() => raw.twice(x))") &&
+      !/\braw\.(first|make|sum)\b/.test(m) &&
       d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector") &&
       d.includes("the result is `i32x4`, a `nish:simd` vector") &&
       d.includes("sum(vs: i32x4[]): number  -- not exported to JS") &&
-      !/\bpair: raw\./.test(m) &&
+      !/\braw\.pair\b/.test(m) &&
       d.includes("the result is `Result<f64x2, string>`, which holds a `nish:simd` vector") &&
-      !/\bpeek(Nested)?: raw\./.test(m) &&
+      !/\braw\.peek(Nested)?\b/.test(m) &&
       d.includes("peek(h: Holder): number  -- not exported to JS: argument 1 (h) is `Holder`, which holds a `nish:simd` vector") &&
       d.includes("peekNested(h: Nested): number  -- not exported to JS: argument 1 (h) is `Nested`, which holds a `nish:simd` vector"),
     `${shown(sides)}\n--- lib.d.ts\n${d}\n--- lib.mjs\n${m}`
