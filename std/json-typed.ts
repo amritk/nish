@@ -1046,8 +1046,11 @@ export class JsonDecoder {
   }
 
   /**
-   * @internal Called by name by the decoder the compiler writes for
-   *   `jsonDecode`, src/emit-json.ts.
+   * Reads the next value as `u32Array` does, or a JSON `null` as `null`.
+   *
+   * @param xs - the array to decode into, or `null` to decode into a new one.
+   * @returns `null` for a JSON `null`; otherwise the decoded array, which is
+   *   `xs` when it was not `null`.
    */
   u32ArrayOrNull(xs: u32[] | null): u32[] | null {
     if (this.takeNull()) {
@@ -1061,8 +1064,11 @@ export class JsonDecoder {
   }
 
   /**
-   * @internal Called by name by the decoder the compiler writes for
-   *   `jsonDecode`, src/emit-json.ts.
+   * Reads the next value as `i64Array` does, or a JSON `null` as `null`.
+   *
+   * @param xs - the array to decode into, or `null` to decode into a new one.
+   * @returns `null` for a JSON `null`; otherwise the decoded array, which is
+   *   `xs` when it was not `null`.
    */
   i64ArrayOrNull(xs: i64[] | null): i64[] | null {
     if (this.takeNull()) {
@@ -1094,8 +1100,11 @@ export class JsonDecoder {
   }
 
   /**
-   * @internal Called by name by the decoder the compiler writes for
-   *   `jsonDecode`, src/emit-json.ts.
+   * Reads the next value as `f64Array` does, or a JSON `null` as `null`.
+   *
+   * @param xs - the array to decode into, or `null` to decode into a new one.
+   * @returns `null` for a JSON `null`; otherwise the decoded array, which is
+   *   `xs` when it was not `null`.
    */
   f64ArrayOrNull(xs: f64[] | null): f64[] | null {
     if (this.takeNull()) {
@@ -1109,8 +1118,11 @@ export class JsonDecoder {
   }
 
   /**
-   * @internal Called by name by the decoder the compiler writes for
-   *   `jsonDecode`, src/emit-json.ts.
+   * Reads the next value as `booleanArray` does, or a JSON `null` as `null`.
+   *
+   * @param xs - the array to decode into, or `null` to decode into a new one.
+   * @returns `null` for a JSON `null`; otherwise the decoded array, which is
+   *   `xs` when it was not `null`.
    */
   booleanArrayOrNull(xs: boolean[] | null): boolean[] | null {
     if (this.takeNull()) {
@@ -1124,8 +1136,11 @@ export class JsonDecoder {
   }
 
   /**
-   * @internal Called by name by the decoder the compiler writes for
-   *   `jsonDecode`, src/emit-json.ts.
+   * Reads the next value as `stringArray` does, or a JSON `null` as `null`.
+   *
+   * @param xs - the array to decode into, or `null` to decode into a new one.
+   * @returns `null` for a JSON `null`; otherwise the decoded array, which is
+   *   `xs` when it was not `null`.
    */
   stringArrayOrNull(xs: string[] | null): string[] | null {
     if (this.takeNull()) {
@@ -1219,8 +1234,10 @@ export const jsonEncodeNumber = (w: JsonWriter, n: JsonNumber): void => {
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as a JSON array of `i32`s, each element as `w.i32` writes it.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, in order.
  */
 export const jsonEncodeI32Array = (w: JsonWriter, xs: i32[]): void => {
   w.beginArray()
@@ -1231,8 +1248,10 @@ export const jsonEncodeI32Array = (w: JsonWriter, xs: i32[]): void => {
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as a JSON array of `u32`s, each element as `w.u32` writes it.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, in order.
  */
 export const jsonEncodeU32Array = (w: JsonWriter, xs: u32[]): void => {
   w.beginArray()
@@ -1243,8 +1262,10 @@ export const jsonEncodeU32Array = (w: JsonWriter, xs: u32[]): void => {
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as a JSON array of `i64`s, each element as `w.i64` writes it.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, in order.
  */
 export const jsonEncodeI64Array = (w: JsonWriter, xs: i64[]): void => {
   w.beginArray()
@@ -1270,8 +1291,10 @@ export const jsonEncodeU64Array = (w: JsonWriter, xs: u64[]): void => {
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as a JSON array of numbers, each element as `w.f64` writes it.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, in order.
  */
 export const jsonEncodeF64Array = (w: JsonWriter, xs: f64[]): void => {
   w.beginArray()
@@ -1282,8 +1305,10 @@ export const jsonEncodeF64Array = (w: JsonWriter, xs: f64[]): void => {
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as a JSON array of booleans, each element as `w.boolean` writes it.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, in order.
  */
 export const jsonEncodeBooleanArray = (w: JsonWriter, xs: boolean[]): void => {
   w.beginArray()
@@ -1294,8 +1319,10 @@ export const jsonEncodeBooleanArray = (w: JsonWriter, xs: boolean[]): void => {
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as a JSON array of strings, each element as `w.string` writes it.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, in order.
  */
 export const jsonEncodeStringArray = (w: JsonWriter, xs: string[]): void => {
   w.beginArray()
@@ -1306,8 +1333,10 @@ export const jsonEncodeStringArray = (w: JsonWriter, xs: string[]): void => {
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as `jsonEncodeI32Array` does, or `null` when `xs` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, or `null`.
  */
 export const jsonEncodeI32ArrayOrNull = (w: JsonWriter, xs: i32[] | null): void => {
   if (xs === null) {
@@ -1318,8 +1347,10 @@ export const jsonEncodeI32ArrayOrNull = (w: JsonWriter, xs: i32[] | null): void 
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as `jsonEncodeU32Array` does, or `null` when `xs` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, or `null`.
  */
 export const jsonEncodeU32ArrayOrNull = (w: JsonWriter, xs: u32[] | null): void => {
   if (xs === null) {
@@ -1330,8 +1361,10 @@ export const jsonEncodeU32ArrayOrNull = (w: JsonWriter, xs: u32[] | null): void 
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as `jsonEncodeI64Array` does, or `null` when `xs` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, or `null`.
  */
 export const jsonEncodeI64ArrayOrNull = (w: JsonWriter, xs: i64[] | null): void => {
   if (xs === null) {
@@ -1356,8 +1389,10 @@ export const jsonEncodeU64ArrayOrNull = (w: JsonWriter, xs: u64[] | null): void 
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as `jsonEncodeF64Array` does, or `null` when `xs` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, or `null`.
  */
 export const jsonEncodeF64ArrayOrNull = (w: JsonWriter, xs: f64[] | null): void => {
   if (xs === null) {
@@ -1368,8 +1403,10 @@ export const jsonEncodeF64ArrayOrNull = (w: JsonWriter, xs: f64[] | null): void 
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as `jsonEncodeBooleanArray` does, or `null` when `xs` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, or `null`.
  */
 export const jsonEncodeBooleanArrayOrNull = (w: JsonWriter, xs: boolean[] | null): void => {
   if (xs === null) {
@@ -1380,8 +1417,10 @@ export const jsonEncodeBooleanArrayOrNull = (w: JsonWriter, xs: boolean[] | null
 }
 
 /**
- * @internal Called by name by the code the compiler writes for `jsonEncode`,
- *   src/json-typed.ts `jsonEncodeHelper`.
+ * Writes `xs` as `jsonEncodeStringArray` does, or `null` when `xs` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, or `null`.
  */
 export const jsonEncodeStringArrayOrNull = (w: JsonWriter, xs: string[] | null): void => {
   if (xs === null) {

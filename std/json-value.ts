@@ -1020,7 +1020,7 @@ export class JsonDocument {
   // ---- Handles ----------------------------------------------------------------
 
   /**
-   * Internal: the index handle `v` names in this document, or `-1` when it
+   * The index handle `v` names in this document, or `-1` when it
    * names nothing here.
    *
    * @internal Read by std/yaml-json.ts, which builds a document from YAML
@@ -1714,7 +1714,7 @@ export class JsonDocument {
   }
 
   /**
-   * Internal: adds index `v`, with the key `bytes[keyAt, keyAt + keyLength)`,
+   * Adds index `v`, with the key `bytes[keyAt, keyAt + keyLength)`,
    * after the last member of index `c`, unchecked: `push` and `set` check
    * first. A container whose slots are full moves them to the end of the slot
    * arrays with twice the room, unless they are at the end already, where they
@@ -1796,7 +1796,10 @@ export class JsonDocument {
   }
 
   /**
-   * Internal: `s`'s bytes onto the end of `bytes`; answers how many.
+   * Appends `s`'s bytes to the end of `bytes`.
+   *
+   * @param s - the text whose bytes are stored.
+   * @returns how many bytes were stored.
    *
    * @internal Read by std/yaml-json.ts, which builds a document from YAML
    *   through it.

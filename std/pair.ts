@@ -24,11 +24,14 @@
  */
 export interface Pair<A, B> {
   /**
-   * The first answer, such as where a scan stopped.
+   * The first of the two answers. What it means is the returning function's
+   * contract: `scanEscape`'s is where the escape ended.
    */
   first: A
   /**
-   * The second answer, such as whether what was scanned was malformed.
+   * The second of the two answers, with its meaning set by the returning
+   * function as `first`'s is: `scanEscape`'s is whether the escape was
+   * malformed.
    */
   second: B
 }

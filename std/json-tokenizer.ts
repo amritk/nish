@@ -155,7 +155,10 @@ export const JSON_TOK_ERR_WINDOW: i32 = -13
  * over; and a body of 16 MiB is past what an HTTP server should buffer anyway.
  */
 export const JSON_DEFAULT_MAX_DEPTH: i32 = 128
-/** The default longest string or key, decoded: a mebibyte. */
+/**
+ * The default longest string or key: a mebibyte of raw bytes between its
+ * quotes, escapes counted as written.
+ */
 export const JSON_DEFAULT_MAX_STRING_BYTES: i32 = 1048576
 /** The default longest number text, in bytes: room for any double in its shortest form. */
 export const JSON_DEFAULT_MAX_NUMBER_BYTES: i32 = 256
