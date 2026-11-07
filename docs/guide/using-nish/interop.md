@@ -96,7 +96,8 @@ console.log(stats.add(2, 3));                                  // 5
 console.log(stats.mean(new Float64Array([1, 2, 3, 4])));       // 2.5
 ```
 
-In a browser, pass `load` the `arrayBuffer()` of a `fetch` response. The `wasm` profile
+`load(source, imports)` takes the bytes or a compiled `WebAssembly.Module`, and
+an import object that defaults to `{}`. The `wasm` profile
 is freestanding — no C library — so functions that take or return strings, or
 do I/O, are not callable from it; the generated `.d.ts` lists them as
 comments. A whole program that does need them can be built for WASI instead,
@@ -104,12 +105,61 @@ with `nish app.ts --link app.wasm --profile wasi` (which needs a WASI sysroot;
 see [INSTALL.md](../../INSTALL.md#wasi-optional-for---profile-wasi)), and run
 under any WASI host.
 
+### In a browser
+
+For a page, link with the `wasm-host` profile instead. It takes the same
+inputs but exports only what the loader calls: your exported functions,
+`memory`, and the arena entry points when `runtime-wasm.c` is linked. That
+makes the module smaller than the `wasm` profile's (`examples/arrays.ts`:
+2,827 bytes down to 2,091). `--inline` also writes the bytes as an ES module, so
+the page needs no `fetch` and no `await`:
+
+```console
+$ $NISH/scripts/build.sh stats.ll $NISH/runtime/runtime-wasm.c -o stats.wasm \
+    --profile wasm-host --inline stats.bytes.mjs
+stats.wasm: 807 bytes (wasm-host, no wasm-opt)
+```
+
+```js
+import { loadSync } from "./stats.mjs";
+import { bytes } from "./stats.bytes.mjs";
+
+const stats = loadSync(bytes);
+console.log(stats.add(2, 3));                                  // 5
+```
+
+`loadSync` compiles on the calling thread. Chromium refuses to compile a module
+over 8 MB that way on the main thread; for one that large, `await load(bytes)`
+compiles in the background instead. The loader imports nothing and reads no
+URL, so a bundler can take it as it is.
+
+Two flags work with `wasm-host` only. `--memory <MiB>` fixes the memory size,
+initial and maximum (1 to 4096); an arena that outgrows it traps. Without the
+flag the memory grows on demand. `--inline <file.mjs>` writes the bytes
+module. Any other profile refuses either flag with exit 2. The stack is a
+fixed 64 KiB. If `wasm-opt` (binaryen) is on `PATH`, `build.sh` runs
+`wasm-opt -Oz` on the module, and the build line says whether it ran.
+
+With Vite, `nish/vite` does all of this in `vite build`:
+
+```js
+// vite.config.js
+import nish from "nish/vite";
+
+export default { plugins: [nish({ entries: ["src/stats.ts"] })] };
+```
+
+In a build, `import { add } from "./stats.ts"` gets the wasm build, compiled,
+linked with `--profile wasm-host --inline` and loaded with `loadSync`. Under
+`vite serve` the import stays the TypeScript itself. Entries are paths from
+the project root.
+
 **Cross the boundary once per batch, not once per element.** A call into a
 `.node` addon costs about 30 ns and a call into wasm about 2 ns before any work
 is done, so pass whole buffers and let the loop run on the Nish side.
 
 **Do not name an exported function `memory`:** the module `build.sh
---profile wasm` links exports its linear memory under that name, so a wasm
+--profile wasm` or `wasm-host` links exports its linear memory under that name, so a wasm
 `--target`, `--profile wasi` or `--emit-dts` compile refuses the function
 (NL3038), and `build.sh` refuses IR that defines one with the `wasm` or `wasi`
 profile. The wasi module does not export the function, but the name is
