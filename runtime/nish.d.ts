@@ -25,8 +25,9 @@
  * So a program that `tsc` accepts may still be rejected by `nish`; the
  * reverse should never happen, and a case where it does is a bug in this file.
  * `docs/LANGUAGE.md` is the normative description; the doc comments here are
- * the reference for each builtin, and each ends with the capability a call
- * needs (docs/LANGUAGE.md -> Capabilities), `none` for a call that needs none.
+ * the reference for each builtin, and the doc of each callable builtin ends
+ * with the capability a call needs (docs/LANGUAGE.md -> Capabilities), `none`
+ * for a call that needs none.
  *
  * **`Map`, `Set`, `Math`, `Array`, `ReadonlyArray` and `String` are
  * `lib.es2022`'s**, which a program is checked against: a second declaration
@@ -208,6 +209,7 @@ type Result<T, E> = (ResultOk<T> | ResultErr<E>) & ResultMethods<T, E>;
  * @returns a `Result` on its success arm.
  */
 declare function Ok<T, E>(value: T): Result<T, E>;
+/** The success of a `Result<void, E>`, with no payload. Capability: none. */
 declare function Ok<E>(): Result<void, E>;
 /**
  * The failure value, likewise: its `Result` type comes from the context.
@@ -222,12 +224,19 @@ declare function Err<T, E>(error: E): Result<T, E>;
 
 /**
  * The disposable protocol `using` reads: declared here so that a program using
- * `nish/threads`'s scope, a `Mutex`'s lock or `arena()` needs no
- * `"ESNext.Disposable"` in its `lib`. `nish` itself takes `using` only for a
- * `scope()`, a `lock()` or an `arena()`, and any other `using` initialiser is
- * refused. `[Symbol.dispose]` is `nish/threads`'s alone: the compiler emits the
- * join, the release or the unlock itself and never calls it, and any other
- * class that declares one is refused.
+ * `nish/threads`'s scope, a `Mutex`'s lock, `arena()` or a handle class needs
+ * no `"ESNext.Disposable"` in its `lib`. `nish` takes `using` only for a
+ * `scope()`, a `lock()`, an `arena()` or a `new` of a handle class, and any
+ * other `using` initialiser is refused. A handle class is a class with exactly
+ * one `readonly` `CPtr` or `CPtr | null` field: it owns the C resource the
+ * pointer names, and its `[Symbol.dispose](): void` is `close(this.file);` or
+ * `const p = this.file; if (p !== null) { close(p); }` for a `declare function`
+ * `close` of one parameter. `using` of a handle class closes it at every exit
+ * of its block, once, in the reverse of the order the declarators opened; a
+ * panic and `process.exit` do not close. `--deny ffi` refuses that `using`.
+ * Any other class that declares `[Symbol.dispose]` is refused. The compiler
+ * emits the join, the release, the unlock or the close itself, and
+ * `[Symbol.dispose]` is never called by name.
  */
 interface SymbolConstructor {
   /** The key of the method `using` calls when its block ends. */
@@ -235,7 +244,10 @@ interface SymbolConstructor {
 }
 /** A value `using` may bind: one whose `[Symbol.dispose]()` ends its scope. */
 interface Disposable {
-  /** Ends the value's scope; `using` calls it on every exit from the block. */
+  /**
+   * Ends the value's scope. The compiler runs it on every exit from the `using`
+   * block; a call by name is refused.
+   */
   [Symbol.dispose](): void;
 }
 
@@ -1008,14 +1020,15 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  * `stdout` and `stderr`, which keep what they held. The runtime writes `stdin`
  * and drains both outputs in one `poll` loop, so a child that fills one pipe
  * while the parent waits on another cannot deadlock it. When a stream passes
- * 16 MiB the child is killed with `SIGKILL` and that array keeps the first
+ * 16 MiB (`NISH_PIPED_CAP`) the child is killed with `SIGKILL` and that array keeps the first
  * 16 MiB. A child that exits without reading its stdin is not a failure. The
  * child inherits the environment and working directory, and no descriptor of the
  * program but its three streams; it starts with SIGPIPE as the program had it,
  * and the program's own SIGPIPE from writing to a child that stopped reading is
  * absorbed. The two output arrays are grown by the runtime, so `readonly` is
  * refused for them, as is a typed-array spelling (`Int32Array`, ...), whose
- * length is fixed. A `wasm32` build refuses it. Capability: process.spawn.
+ * length is fixed. A `wasm32` build refuses it (NL2404).
+ * Capability: process.spawn.
  *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
@@ -1035,7 +1048,7 @@ declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], 
  * one twice. An empty `fds` is `spawn` exactly. The child shares each
  * descriptor's open file, its offset and its status flags, `O_NONBLOCK` among
  * them, and this process keeps its own. Reap the pid with `waitPid`. No reading
- * under Node, which throws. A `wasm32` build refuses it.
+ * under Node, which throws. A `wasm32` build refuses it (NL2404).
  * Capability: process.spawn.
  *
  * @param argv the program and its arguments.
@@ -1053,7 +1066,7 @@ declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
  * reaped stays a zombie until the program exits, as it would in C. Test
  * `pid > 0` before handing the answer on: a failure such as -1 (EPERM) passed
  * to `waitPid` reads as "any child". No reading under Node, which throws. A
- * `wasm32` build refuses it, and a scope's task or a parallel body that calls it
+ * `wasm32` build refuses it (NL2404), and a scope's task or a parallel body that calls it
  * is refused as any shared write is. Also exported by `nish:process`.
  * Capability: process.spawn.
  *
@@ -1067,7 +1080,7 @@ declare function spawn(argv: string[]): i32;
  * Send `sig` to `pid`. Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are
  * accepted, whose numbers are the same on Linux and Darwin, so a number means
  * the same signal on every host. A positive `pid` may be any process of this
- * user, not only a child. A `wasm32` build refuses it, and a scope's task or a
+ * user, not only a child. A `wasm32` build refuses it (NL2404), and a scope's task or a
  * parallel body that calls it is refused as any shared write is. Under Node it
  * checks the signal and the pid as the native one does and turns Node's error
  * code back into its errno. Also exported by `nish:process`.
@@ -1089,7 +1102,7 @@ declare function kill(pid: i32, sig: i32): i32;
  * must answer a signal while its children run reaps with flag 1 (WNOHANG) on
  * each tick of a `pollWait` loop that also watches the signal descriptor, and
  * stops its children with `kill` when `readSignal` answers. No reading under
- * Node, which throws, naming itself. A `wasm32` build refuses it, and a scope's
+ * Node, which throws, naming itself. A `wasm32` build refuses it (NL2404), and a scope's
  * task or a parallel body that calls it is refused as any shared write is. Also
  * exported by `nish:process`. Capability: process.spawn.
  *
@@ -1111,7 +1124,7 @@ declare function waitPid(pid: i32, flags: i32): i32[];
  * it. A program asks it to decide how many workers to start; it reads the count
  * again on each call. Under Node it is `os.availableParallelism()` lowered by
  * `NISH_NUM_THREADS`, and since Node reads no cgroup quota, inside a container
- * with one the two can differ. A `wasm32` build refuses it. It writes nothing
+ * with one the two can differ. A `wasm32` build refuses it (NL2404). It writes nothing
  * and may be called in a task. Also exported by `nish:process`.
  * Capability: none.
  *
@@ -1122,7 +1135,7 @@ declare function availableParallelism(): i32;
  * Bytes of physical memory — `_SC_PHYS_PAGES` times the page size on Linux,
  * `hw.memsize` on Darwin. It is the machine's, not a cgroup's limit. Under Node
  * it is `os.totalmem()`, a `bigint` as every `i64` is there. A `wasm32` build
- * refuses it. It writes nothing and may be called in a task. Also exported by
+ * refuses it (NL2404). It writes nothing and may be called in a task. Also exported by
  * `nish:process`. Capability: none.
  *
  * @returns the byte count, or -1 when the host does not say.
@@ -1136,7 +1149,7 @@ declare function totalMemory(): i64;
  * of `main`, before a `scope()` or a parallel loop starts the pool, and a task
  * or a parallel body that calls it is refused as any shared write is. It never
  * crashes the program: a failure is only the answer. A `wasm32` build refuses
- * it. Throws under Node. Also exported by `nish:process`. The label is
+ * it (NL2404). Throws under Node. Also exported by `nish:process`. The label is
  * `kill`'s: neither reaches another process, but the priority is the one the
  * program's children inherit, and a step down cannot always be taken back.
  * Capability: process.spawn.
@@ -1166,7 +1179,7 @@ declare function setIdlePriority(): i32;
  * never moves a process onto a CPU it was kept off. `availableParallelism()`
  * answers 1 afterwards, and children started afterwards inherit the mask. A task
  * or a parallel body that calls it is refused as any shared write is. A `wasm32`
- * build refuses it. Also exported by `nish:process`. Capability: process.spawn.
+ * build refuses it (NL2404). Also exported by `nish:process`. Capability: process.spawn.
  *
  * @param cpu the CPU index.
  * @returns 0, or a negative errno: a CPU outside the mask the process already
@@ -1271,15 +1284,20 @@ declare function readSignal(fd: i32): i32;
 // `u8[]`: 16 of IPv6 address (IPv4 as `::ffff:a.b.c.d`), then the port,
 // big-endian. Every socket is non-blocking and close-on-exec. No reading under
 // Node, where each throws. Every function needs the `net` capability; the
-// `NET_*` constants are numbers and need none.
+// `NET_*` constants are numbers and need none. No function is callable in a
+// `scope()` task or a parallel body, and a call that writes an array is
+// refused in a scope's region on an array a task may read, as `fill` is.
+// Every function is refused at compile time on wasm32 and the WASI profile
+// (NL2404), except `netMss`, which compiles to the constant -1 there.
 
 /**
- * Write the address form of a numeric `host` and `port` into `out`. No `nish:net` call looks a
- * name up; `nish/net/dns` resolves one first. An address is 18 bytes: the 16 bytes of an IPv6
- * address (IPv4 as the mapped `::ffff:a.b.c.d`), then the port, big-endian, so `127.0.0.1:8080`
- * is ten zeros, `255 255`, `127 0 0 1`, `31 144`. An array longer than 18 bytes is fine; the rest
- * is not touched. Not callable in a `scope()` task or a parallel body. Refused at compile time
- * on wasm32 and the WASI profile (NL2404); under Node it throws. Capability: net.
+ * Write the address form of a numeric `host` and `port` into `out`. No `nish:net` call looks a name
+ * up; `nish/net/dns` resolves one first. An address is 18 bytes: the 16 bytes of an IPv6 address
+ * (IPv4 as the mapped `::ffff:a.b.c.d`), then the port, big-endian, so `127.0.0.1:8080` is ten
+ * zeros, `255 255`, `127 0 0 1`, `31 144`. An array longer than 18 bytes is fine; the rest is not
+ * touched. Not callable in a `scope()` task or a parallel body. Refused at compile time on wasm32
+ * and the WASI profile (NL2404); under Node it throws. A call that writes `out` is refused in a
+ * scope's region on an array a task may read, as `fill` is. Capability: net.
  *
  * @param out at least 18 bytes, receiving the address; it must not be `readonly`, and is left as
  *   it was when the answer is -22.
@@ -1290,8 +1308,9 @@ declare function readSignal(fd: i32): i32;
  */
 declare function netAddress(out: u8[], host: string, port: i32): i32;
 /**
- * The port the socket `fd` is bound to, which is how a program that listened on port 0 learns
- * the one the kernel chose. Capability: net.
+ * The port the socket `fd` is bound to, which is how a program that listened on port 0 learns the
+ * one the kernel chose. Not callable in a `scope()` task or a parallel body. Refused at compile
+ * time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param fd a bound socket.
  * @returns the port, or a negative errno.
@@ -1300,8 +1319,9 @@ declare function netLocalPort(fd: i32): i32;
 /**
  * A listening TCP socket with `SO_REUSEADDR`, so a restarted server rebinds a port its old
  * connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with
- * `IPV6_V6ONLY` off, so `"::"` hears IPv4 and IPv6, and on a kernel without IPv6 `"::"` is
- * IPv4's `0.0.0.0`. Capability: net.
+ * `IPV6_V6ONLY` off, so `"::"` hears IPv4 and IPv6, and on a kernel without IPv6 `"::"` is IPv4's
+ * `0.0.0.0`. Not callable in a `scope()` task or a parallel body. Refused at compile time on wasm32
+ * and the WASI profile (NL2404). Capability: net.
  *
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
@@ -1311,20 +1331,20 @@ declare function netLocalPort(fd: i32): i32;
  */
 declare function tcpListen(host: string, port: i32, backlog: i32): i32;
 /**
- * `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on
- * each accepted socket for flag 2. Flag 1 lets several listeners that all ask for it share one
- * port, each with its own accept queue, whether one process holds them all or each of several
- * processes holds one. On Linux the connections are spread by a hash of the connection's
- * 4-tuple and only listeners of the same user may share; on Darwin the listeners share the
- * port but one of them takes the connections, so the flag buys a restart without a gap rather
- * than a spread. Flag 2 sets `TCP_NODELAY` on every connection `tcpAccept` takes from the
- * listener, on every platform: the runtime sets it on each accepted socket, and a connection
- * on which it cannot be set is closed and its failure answered. Flag 4, with flag 1, steers by
- * CPU: a new connection goes to the group's listener whose bind order is the index of the
- * CPU that received it (Linux; -95 elsewhere); a CPU past the group's size falls back to the
- * hash. Flags add: 3 is both, 5 and 7 steer. Flag 0 is `tcpListen` exactly. A port held by a
- * listener without flag 1 is -98 to a listener that asks for it, and the other way round.
- * Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
+ * `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket
+ * for flag 2. Flag 1 lets several listeners that all ask for it share one port, each with its own
+ * accept queue, whether one process holds them all or each of several processes holds one. On Linux
+ * the connections are spread by a hash of the connection's 4-tuple and only listeners of the same
+ * user may share; on Darwin the listeners share the port but one of them takes the connections, so
+ * the flag buys a restart without a gap rather than a spread. Flag 2 sets `TCP_NODELAY` on every
+ * connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each
+ * accepted socket, and a connection on which it cannot be set is closed and its failure answered.
+ * Flag 4, with flag 1, steers by CPU: a new connection goes to the group's listener whose bind
+ * order is the index of the CPU that received it (Linux; -95 elsewhere); a CPU past the group's
+ * size falls back to the hash. Flags add: 3 is both, 5 and 7 steer. Flag 0 is `tcpListen` exactly.
+ * A port held by a listener without flag 1 is -98 to a listener that asks for it, and the other way
+ * round. Refused at compile time on wasm32 and the WASI profile (NL2404). Not callable in a
+ * `scope()` task or a parallel body. Capability: net.
  *
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
@@ -1336,9 +1356,11 @@ declare function tcpListen(host: string, port: i32, backlog: i32): i32;
  */
 declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
 /**
- * The next waiting connection, as a descriptor of its own, non-blocking and close-on-exec,
- * with the peer's address written into `peer`. Not `willreturn`: on a blocking socket the
- * program inherited it waits. Capability: net.
+ * The next waiting connection, as a descriptor of its own, non-blocking and close-on-exec, with the
+ * peer's address written into `peer`. Not `willreturn`: on a blocking socket the program inherited
+ * it waits. Not callable in a `scope()` task or a parallel body. A call that writes `peer` is
+ * refused in a scope's region on an array a task may read, as `fill` is. Refused at compile time on
+ * wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param fd the listener.
  * @param peer at least 18 bytes, receiving the peer's address in the 18-byte form; it must not
@@ -1348,11 +1370,13 @@ declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i3
  */
 declare function tcpAccept(fd: i32, peer: u8[]): i32;
 /**
- * Up to `len` bytes into `buf[off, off + len)`. The range is checked in the compiled code
- * before the call: one outside `0 <= off <= off + len <= buf.length`, or a negative `off` or
- * `len`, panics with `slice out of range: [4, 9) of length 8` (the numbers are the range and
- * length), exit 1. A `buf` that is not a writable `u8[]` is refused at compile time (NL2402).
- * Capability: net.
+ * Up to `len` bytes into `buf[off, off + len)`. The range is checked in the compiled code before
+ * the call: one outside `0 <= off <= off + len <= buf.length`, or a negative `off` or `len`, panics
+ * with `slice out of range: [4, 9) of length 8` (the numbers are the range and length), exit 1. A
+ * `buf` that is not a writable `u8[]` is refused at compile time (NL2402). Not callable in a
+ * `scope()` task or a parallel body. A call that writes `buf` is refused in a scope's region on an
+ * array a task may read, as `fill` is. Refused at compile time on wasm32 and the WASI profile
+ * (NL2404). Capability: net.
  *
  * @param fd the socket to read.
  * @param buf the buffer filled.
@@ -1363,9 +1387,10 @@ declare function tcpAccept(fd: i32, peer: u8[]): i32;
 declare function netRead(fd: i32, buf: u8[], off: i32, len: i32): i32;
 /**
  * Up to `len` bytes of `buf[off, off + len)`. A gone peer is -32, never SIGPIPE, so a closed
- * connection cannot end the process. The range is checked as `netRead`'s is, with the same
- * panic. `buf` may be `readonly`; anything but a `u8[]` is refused at compile time (NL2405).
- * Capability: net.
+ * connection cannot end the process. The range is checked as `netRead`'s is, with the same panic.
+ * `buf` may be `readonly`; anything but a `u8[]` is refused at compile time (NL2405). Not callable
+ * in a `scope()` task or a parallel body. Refused at compile time on wasm32 and the WASI profile
+ * (NL2404). Capability: net.
  *
  * @param fd the socket to write.
  * @param buf the bytes sent.
@@ -1377,10 +1402,11 @@ declare function netRead(fd: i32, buf: u8[], off: i32, len: i32): i32;
 declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 /**
  * `netWrite` of `a`'s range then `b`'s, in one system call (`sendmsg` with two buffers), so a
- * header and a body leave together with no copy into one buffer. The count may be fewer than
- * `aLen + bLen` and may end inside `a`; the program sends the rest, as after a short
- * `netWrite`. A gone peer is -32, never SIGPIPE. Both ranges are checked as `netRead`'s is,
- * `a`'s first, and either may be empty. Capability: net.
+ * header and a body leave together with no copy into one buffer. The count may be fewer than `aLen
+ * + bLen` and may end inside `a`; the program sends the rest, as after a short `netWrite`. A gone
+ * peer is -32, never SIGPIPE. Both ranges are checked as `netRead`'s is, `a`'s first, and either
+ * may be empty. Not callable in a `scope()` task or a parallel body. Refused at compile time on
+ * wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param fd the socket to write.
  * @param a the first buffer.
@@ -1402,7 +1428,8 @@ declare function netWrite2(
   bLen: i32
 ): i32;
 /**
- * Shut one or both directions of a connection. Capability: net.
+ * Shut one or both directions of a connection. Not callable in a `scope()` task or a parallel body.
+ * Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param fd the socket.
  * @param how the read side (0), the write side (1) or both (2).
@@ -1411,8 +1438,9 @@ declare function netWrite2(
 declare function netShutdown(fd: i32, how: i32): i32;
 /**
  * Close the descriptor. The descriptor is gone whatever the answer, as `close(2)` promises on
- * Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait.
- * Capability: net.
+ * Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait. Not
+ * callable in a `scope()` task or a parallel body. Refused at compile time on wasm32 and the WASI
+ * profile (NL2404). Capability: net.
  *
  * @param fd the descriptor closed.
  * @returns 0, or the failure.
@@ -1420,12 +1448,13 @@ declare function netShutdown(fd: i32, how: i32): i32;
 declare function netClose(fd: i32): i32;
 /**
  * A new TCP socket, non-blocking and close-on-exec, that starts connecting to `addr`: an IPv4
- * address from an IPv4 socket, any other from an IPv6 one. It answers its descriptor at once,
- * while the connection is still being made: the `EINPROGRESS` (-115) of a non-blocking
- * `connect` is not a failure, and the loop says when it has finished by reporting the
- * descriptor writable (ask `pollAdd` for events 2, then `connectResult`). It holds
- * `TCP_NODELAY`, so a small write is sent at once. Neither this nor `connectResult` waits or
- * allocates. Capability: net.
+ * address from an IPv4 socket, any other from an IPv6 one. It answers its descriptor at once, while
+ * the connection is still being made: the `EINPROGRESS` (-115) of a non-blocking `connect` is not a
+ * failure, and the loop says when it has finished by reporting the descriptor writable (ask
+ * `pollAdd` for events 2, then `connectResult`). It holds `TCP_NODELAY`, so a small write is sent
+ * at once. Neither this nor `connectResult` waits or allocates. Not callable in a `scope()` task or
+ * a parallel body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
+ * net.
  *
  * ```ts
  * const addr: u8[] = new Array<u8>(18);
@@ -1444,9 +1473,10 @@ declare function netClose(fd: i32): i32;
  */
 declare function tcpConnect(addr: readonly u8[]): i32;
 /**
- * How the connection of a `tcpConnect` went, asked once `fd` is writable. The kernel clears
- * the failure as it is read, so a second call answers 0; the descriptor is closed with
- * `netClose` either way. Capability: net.
+ * How the connection of a `tcpConnect` went, asked once `fd` is writable. The kernel clears the
+ * failure as it is read, so a second call answers 0; the descriptor is closed with `netClose`
+ * either way. Not callable in a `scope()` task or a parallel body. Refused at compile time on
+ * wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param fd the connecting socket.
  * @returns 0 when the connection is made, else its failure from `SO_ERROR`: -111 for a port
@@ -1456,8 +1486,8 @@ declare function connectResult(fd: i32): i32;
 /**
  * A datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way
  * `tcpListen`'s is, `"::"` and its IPv4 fallback included. The ECN bits of every datagram are
- * always read. Without flag 1 a port in use is -98. Refused at compile time on wasm32 and the
- * WASI profile (NL2404), and not callable in a parallel body. Capability: net.
+ * always read. Without flag 1 a port in use is -98. Refused at compile time on wasm32 and the WASI
+ * profile (NL2404), and not callable in a `scope()` task or a parallel body. Capability: net.
  *
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
@@ -1470,10 +1500,11 @@ declare function udpBind(host: string, port: i32, flags: i32): i32;
 /**
  * `buf[off, off + len)` to the address `to`, in one `sendmsg`. Not `willreturn`: on a blocking
  * socket the program inherited it waits. The range is checked as `netRead`'s is, with the same
- * panic. On Linux a `segment` above 0 is GSO: one send of 4,800 bytes with `segment = 1200`
- * leaves as four datagrams of 1,200. A socket that is IPv4, bound to an IPv4 host or to `"::"`
- * on a kernel without IPv6, sends to an `::ffff:a.b.c.d` address as IPv4. On Darwin a
- * `segment` or an `ecn` above 0 is -95. Capability: net.
+ * panic. On Linux a `segment` above 0 is GSO: one send of 4,800 bytes with `segment = 1200` leaves
+ * as four datagrams of 1,200. A socket that is IPv4, bound to an IPv4 host or to `"::"` on a kernel
+ * without IPv6, sends to an `::ffff:a.b.c.d` address as IPv4. On Darwin a `segment` or an `ecn`
+ * above 0 is -95. Not callable in a `scope()` task or a parallel body. Refused at compile time on
+ * wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param fd the UDP socket.
  * @param buf the bytes sent; may be `readonly`.
@@ -1499,16 +1530,18 @@ declare function udpSendTo(
   ecn: i32
 ): i32;
 /**
- * The next datagram, or several GRO coalesced, into `buf[off, off + len)` in one `recvmsg`,
- * cut to `len` if it is longer. An empty datagram is a datagram: the answer is 0 for it. Not
- * `willreturn`, as `udpSendTo`. The range is checked as `netRead`'s is, with the same panic.
- * `meta` must be an `i32[]` (NL2406), and none of the written arrays may be `readonly`. On a
- * socket bound with `udpBind` flag 2, one GSO send arrives as one datagram of up to 64 KB with
- * `meta[0]` its segment size, so walk the buffer in steps of that size, the last datagram
- * possibly shorter; without it the datagrams arrive apart with `meta[0]` 0. The kernel
- * coalesces only datagrams of one flow that arrive after the option is set. On Darwin `meta`
- * is always `0, 0`, and a `meta[1]` of 0 is also what a datagram that is not ECN-capable reads
- * as. Capability: net.
+ * The next datagram, or several GRO coalesced, into `buf[off, off + len)` in one `recvmsg`, cut to
+ * `len` if it is longer. An empty datagram is a datagram: the answer is 0 for it. Not `willreturn`,
+ * as `udpSendTo`. The range is checked as `netRead`'s is, with the same panic. `meta` must be an
+ * `i32[]` (NL2406), and none of the written arrays may be `readonly`. On a socket bound with
+ * `udpBind` flag 2, one GSO send arrives as one datagram of up to 64 KB with `meta[0]` its segment
+ * size, so walk the buffer in steps of that size, the last datagram possibly shorter; without it
+ * the datagrams arrive apart with `meta[0]` 0. The kernel coalesces only datagrams of one flow that
+ * arrive after the option is set. On Darwin `meta` is always `0, 0`, and a `meta[1]` of 0 is also
+ * what a datagram that is not ECN-capable reads as. Not callable in a `scope()` task or a parallel
+ * body. A call that writes `buf`, `from` or `meta` is refused in a scope's region on an array a
+ * task may read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404).
+ * Capability: net.
  *
  * @param fd the UDP socket.
  * @param buf the buffer filled.
@@ -1524,10 +1557,10 @@ declare function udpSendTo(
 declare function udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32;
 /**
  * A readiness loop, level-triggered: epoll on Linux, kqueue on Darwin. The descriptor is
- * close-on-exec. A descriptor still ready when the program waits again is reported again, so a
- * loop that handles one pair of several, or leaves a datagram unread, loses nothing. Nothing
- * here allocates. Refused at compile time on wasm32 and the WASI profile (NL2404), and not
- * callable in a `scope()` task or a parallel body. Capability: net.
+ * close-on-exec. A descriptor still ready when the program waits again is reported again, so a loop
+ * that handles one pair of several, or leaves a datagram unread, loses nothing. Nothing here
+ * allocates. Refused at compile time on wasm32 and the WASI profile (NL2404), and not callable in a
+ * `scope()` task or a parallel body. Capability: net.
  *
  * ```ts
  * const loop = pollCreate();
@@ -1551,9 +1584,10 @@ declare function udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[],
  */
 declare function pollCreate(): i32;
 /**
- * Watch `fd` for `events` under `token`. On Darwin a descriptor added watching nothing is
- * known to the loop but never reported (a disabled read filter), and an add that answers -17
- * leaves the descriptor under the token it gave rather than the old one. Capability: net.
+ * Watch `fd` for `events` under `token`. On Darwin a descriptor added watching nothing is known to
+ * the loop but never reported (a disabled read filter), and an add that answers -17 leaves the
+ * descriptor under the token it gave rather than the old one. Not callable in a `scope()` task or a
+ * parallel body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param loop the loop from `pollCreate`.
  * @param fd the descriptor watched.
@@ -1565,7 +1599,8 @@ declare function pollCreate(): i32;
  */
 declare function pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32;
 /**
- * New events or a new token for a watched `fd`. Capability: net.
+ * New events or a new token for a watched `fd`. Not callable in a `scope()` task or a parallel
+ * body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param loop the loop from `pollCreate`.
  * @param fd the descriptor watched.
@@ -1575,7 +1610,9 @@ declare function pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32;
  */
 declare function pollModify(loop: i32, fd: i32, events: i32, token: i32): i32;
 /**
- * Stop watching `fd`. Closing a descriptor stops the watching too. Capability: net.
+ * Stop watching `fd`. Closing a descriptor stops the watching too. Not callable in a `scope()` task
+ * or a parallel body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
+ * net.
  *
  * @param loop the loop from `pollCreate`.
  * @param fd the descriptor no longer watched.
@@ -1583,17 +1620,18 @@ declare function pollModify(loop: i32, fd: i32, events: i32, token: i32): i32;
  */
 declare function pollRemove(loop: i32, fd: i32): i32;
 /**
- * Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]`
- * events (1 readable, 2 writable, with 4 added for a hang-up or an error). Not `willreturn`,
- * because it can wait forever. It never writes past `ready.length`. `ready` must be an `i32[]`
- * (the tokens are the program's own `i32`s) and not `readonly`. A signal that interrupts the
- * wait makes it answer 0, as a timeout does, rather than wait past the deadline; the
- * descriptor `signalFd()` answers can be added to the loop, and is readable when SIGTERM or
- * SIGINT arrives. A UDP socket is always writable, and on Linux one whose both sides are shut
- * is readable, writable and hung up, 7. On Darwin a descriptor both readable and writable is
- * one pair, 3; a descriptor watching nothing is never reported (epoll still reports its
- * hang-up or error as 4); and a peer's half-close is 5 (`1|4`) where Linux reports 1.
- * Not callable in a `scope()` task or a parallel body. Capability: net.
+ * Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events (1 readable, 2
+ * writable, with 4 added for a hang-up or an error). Not `willreturn`, because it can wait forever.
+ * It never writes past `ready.length`. `ready` must be an `i32[]` (the tokens are the program's own
+ * `i32`s) and not `readonly`. A signal that interrupts the wait makes it answer 0, as a timeout
+ * does, rather than wait past the deadline; the descriptor `signalFd()` answers can be added to the
+ * loop, and is readable when SIGTERM or SIGINT arrives. A UDP socket is always writable, and on
+ * Linux one whose both sides are shut is readable, writable and hung up, 7. On Darwin a descriptor
+ * both readable and writable is one pair, 3; a descriptor watching nothing is never reported (epoll
+ * still reports its hang-up or error as 4); and a peer's half-close is 5 (`1|4`) where Linux
+ * reports 1. Not callable in a `scope()` task or a parallel body. A call that writes `ready` is
+ * refused in a scope's region on an array a task may read, as `fill` is. Refused at compile time on
+ * wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param loop the loop from `pollCreate`.
  * @param ready receives the pairs; shorter than 2 is -22.
@@ -1603,11 +1641,11 @@ declare function pollRemove(loop: i32, fd: i32): i32;
  */
 declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 /**
- * Set one socket option from a whitelist: there is no raw level and option
- * number, so a program cannot pass a level, a name and a length through to the kernel. The ids
- * are the runtime's own numbers, the same on Linux and Darwin. Refused at compile time on
- * wasm32 and the WASI profile (NL2404); under Node it throws rather than set one. Capability:
- * net.
+ * Set one socket option from a whitelist: there is no raw level and option number, so a program
+ * cannot pass a level, a name and a length through to the kernel. The ids are the runtime's own
+ * numbers, the same on Linux and Darwin. Refused at compile time on wasm32 and the WASI profile
+ * (NL2404); under Node it throws rather than set one. Not callable in a `scope()` task or a
+ * parallel body. Capability: net.
  *
  * ```ts
  * import { NET_TCP_QUICKACK, netSetOption } from "nish:net";
@@ -1625,10 +1663,11 @@ declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 declare function netSetOption(fd: i32, option: i32, value: i32): i32;
 /**
  * A connected TCP socket's send MSS, the payload bytes one segment carries: Linux's `TCP_INFO`
- * `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above 0 and on Darwin. The answer moves as
- * the path does, so read it when it is needed rather than once. It never panics. It compiles
- * on wasm32 and the WASI profile, where it is the constant -1 with its descriptor still
- * evaluated; under Node it throws rather than answer -1.
+ * `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above 0 and on Darwin, though the kernel
+ * answers its default `536` for those. The answer moves as the path does, so read it when it
+ * is needed rather than once. It never panics. Not callable in a `scope()` task or a parallel
+ * body. It compiles on wasm32 and the WASI profile, where it is the constant -1 with its
+ * descriptor still evaluated; under Node it throws rather than answer -1.
  * Capability: net.
  *
  * ```ts
@@ -1677,23 +1716,22 @@ declare const NET_SO_SNDBUF: i32;
  */
 declare const NET_SO_RCVBUF: i32;
 /**
- * A listening Unix stream socket at `path` (`@name`: Linux's abstract namespace), its file
- * mode 0600, so only its owner may connect. A Unix socket is a descriptor like any other:
- * `netRead`, `netWrite`, `netShutdown`, `netClose` and the readiness loop take it, and a gone
- * peer is -32. The path is bytes up to the first NUL, so a NUL inside it is -22, as an empty
- * path is. It must fit `sun_path` with its NUL: 107 bytes on Linux, 103 on Darwin, measured on
- * the string as written; a longer one is -36 before a socket exists. An abstract name leaves
- * no file; its name is at most 107 bytes, a bare `@` is -22, and on Darwin every `@` path is
- * -95. A file whose name starts with `@` is spelled `./@name`. A bind never replaces a file.
- * Closing a listener does not unlink its file: `unlinkSync` it when the server stops, or let
- * the next start's `NET_UNIX_UNLINK_STALE` clear it. A failure after the bind closes the
- * socket and unlinks the file it made. A connect needs write permission on the file and search
- * permission on every directory above it, which is the real boundary: put the socket in a
- * directory only the users who may connect can reach. With `NET_UNIX_UNLINK_STALE`, the
- * runtime connects to an existing socket file and unlinks it only on a refusal; between the
- * probe and the unlink another process can bind the path, so the directory must be the
- * program's own. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
- * net.
+ * A listening Unix stream socket at `path` (`@name`: Linux's abstract namespace), its file mode
+ * 0600, so only its owner may connect. A Unix socket is a descriptor like any other: `netRead`,
+ * `netWrite`, `netShutdown`, `netClose` and the readiness loop take it, and a gone peer is -32. The
+ * path is bytes up to the first NUL, so a NUL inside it is -22, as an empty path is. It must fit
+ * `sun_path` with its NUL: 107 bytes on Linux, 103 on Darwin, measured on the string as written; a
+ * longer one is -36 before a socket exists. An abstract name leaves no file; its name is at most
+ * 107 bytes, a bare `@` is -22, and on Darwin every `@` path is -95. A file whose name starts with
+ * `@` is spelled `./@name`. A bind never replaces a file. Closing a listener does not unlink its
+ * file: `unlinkSync` it when the server stops, or let the next start's `NET_UNIX_UNLINK_STALE`
+ * clear it. A failure after the bind closes the socket and unlinks the file it made. A connect
+ * needs write permission on the file and search permission on every directory above it, which is
+ * the real boundary: put the socket in a directory only the users who may connect can reach. With
+ * `NET_UNIX_UNLINK_STALE`, the runtime connects to an existing socket file and unlinks it only on a
+ * refusal; between the probe and the unlink another process can bind the path, so the directory
+ * must be the program's own. Refused at compile time on wasm32 and the WASI profile (NL2404). Not
+ * callable in a `scope()` task or a parallel body. Capability: net.
  *
  * @param path the socket file, or `@name`; it must be a `string`.
  * @param backlog the kernel's queue of unaccepted connections.
@@ -1708,7 +1746,8 @@ declare const NET_SO_RCVBUF: i32;
 declare function unixListen(path: string, backlog: i32, flags: i32): i32;
 /**
  * `unixListen` with the socket file's mode chosen, set between the bind and the listen so no
- * connect gets in under a wider one. Capability: net.
+ * connect gets in under a wider one. Not callable in a `scope()` task or a parallel body. Refused
+ * at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param path the socket file.
  * @param backlog the kernel's queue of unaccepted connections.
@@ -1719,8 +1758,9 @@ declare function unixListen(path: string, backlog: i32, flags: i32): i32;
  */
 declare function unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32;
 /**
- * A new socket, non-blocking and close-on-exec, connected to the listener at `path`. A
- * relative path is the working directory's. Capability: net.
+ * A new socket, non-blocking and close-on-exec, connected to the listener at `path`. A relative
+ * path is the working directory's. Not callable in a `scope()` task or a parallel body. Refused at
+ * compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param path the socket file, or `@name`; it must be a `string`.
  * @returns the socket's descriptor, or a negative errno: -111 when nothing listens there, -2
@@ -1730,7 +1770,8 @@ declare function unixListenMode(path: string, backlog: i32, flags: i32, mode: i3
 declare function unixConnect(path: string): i32;
 /**
  * The next connection on a Unix listener, non-blocking and close-on-exec. No peer address is
- * written: a Unix client is seldom bound. Capability: net.
+ * written: a Unix client is seldom bound. Not callable in a `scope()` task or a parallel body.
+ * Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param fd the listener.
  * @returns the connection's descriptor; -11 when none is waiting.
@@ -1738,8 +1779,10 @@ declare function unixConnect(path: string): i32;
 declare function unixAccept(fd: i32): i32;
 /**
  * Two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec: a channel
- * without a name for a child process or one side of a program. `fds` must be an `i32[]` and
- * not `readonly`. Capability: net.
+ * without a name for a child process or one side of a program. `fds` must be an `i32[]` and not
+ * `readonly`. Not callable in a `scope()` task or a parallel body. A call that writes `fds` is
+ * refused in a scope's region on an array a task may read, as `fill` is. Refused at compile time on
+ * wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param kind `NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin), which keeps each write
  *   one message so a read returns one message, never two run together.
@@ -1748,14 +1791,14 @@ declare function unixAccept(fd: i32): i32;
  */
 declare function unixSocketPair(kind: i32, fds: i32[]): i32;
 /**
- * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
- * descriptor `fd` (`SCM_RIGHTS`). The receiver's `recvFd` gets a new descriptor for the same
- * open file, with its offset and status flags shared, as `dup` gives; `fd` stays open here.
- * The descriptor rides on at least one byte of data, so the receiver's read is what tells it a
- * descriptor came. A stream socket can send short: the descriptor travels with the first
- * bytes, so send the rest with `netWrite`, not `sendFd`, or the receiver gets a second copy.
- * The range is checked as `netRead`'s is, with the same panic; `buf` may be `readonly`.
- * Capability: net.
+ * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the descriptor `fd`
+ * (`SCM_RIGHTS`). The receiver's `recvFd` gets a new descriptor for the same open file, with its
+ * offset and status flags shared, as `dup` gives; `fd` stays open here. The descriptor rides on at
+ * least one byte of data, so the receiver's read is what tells it a descriptor came. A stream
+ * socket can send short: the descriptor travels with the first bytes, so send the rest with
+ * `netWrite`, not `sendFd`, or the receiver gets a second copy. The range is checked as `netRead`'s
+ * is, with the same panic; `buf` may be `readonly`. Not callable in a `scope()` task or a parallel
+ * body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param sock the Unix socket.
  * @param fd the descriptor sent.
@@ -1768,17 +1811,19 @@ declare function unixSocketPair(kind: i32, fds: i32[]): i32;
  */
 declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 /**
- * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and
- * the first descriptor that came with them into `fd[0]`, or -1 when the message carried none.
- * Every other descriptor in the message is closed before the answer, so a peer cannot leave
- * this process holding descriptors it never asked for; room is made for 8, so the kernel drops
- * the rest of a message that carries more and the bytes are still answered. The one kept is
- * close-on-exec, so a later `spawn` does not hand it on, and keeps the sender's blocking mode
- * (it is not made non-blocking, so `netRead` on a blocking one waits: set what the program
- * needs on it before it joins a loop). The range is checked as `netRead`'s is, with the same
- * panic. `buf` and `fd` must not be `readonly`, and `fd` must be an `i32[]`. On Darwin the
- * descriptor is made close-on-exec by a later `fcntl`, so a child another thread spawns
- * between the two inherits it. Capability: net.
+ * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and the first descriptor
+ * that came with them into `fd[0]`, or -1 when the message carried none. Every other descriptor in
+ * the message is closed before the answer, so a peer cannot leave this process holding descriptors
+ * it never asked for; room is made for 8, so the kernel drops the rest of a message that carries
+ * more and the bytes are still answered. The one kept is close-on-exec, so a later `spawn` does not
+ * hand it on, and keeps the sender's blocking mode (it is not made non-blocking, so `netRead` on a
+ * blocking one waits: set what the program needs on it before it joins a loop). The range is
+ * checked as `netRead`'s is, with the same panic. `buf` and `fd` must not be `readonly`, and `fd`
+ * must be an `i32[]`. On Darwin the descriptor is made close-on-exec by a later `fcntl`, so a child
+ * another thread spawns between the two inherits it. Not callable in a `scope()` task or a parallel
+ * body. A call that writes `buf` or `fd` is refused in a scope's region on an array a task may
+ * read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
+ * net.
  *
  * @param sock the Unix socket.
  * @param buf the buffer filled.
@@ -1792,11 +1837,13 @@ declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i
 declare function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
 /**
  * The peer of the Unix socket `fd` as the kernel recorded it when the connection was made (the
- * `connect`, or the `socketpair`): `out` gets its pid, uid and gid. A peer that has since
- * changed its uid, passed the socket on or closed still reads as it was then. The pid is -1
- * where Darwin has no `LOCAL_PEERPID` or the kernel refuses it. A uid or gid of
- * 2^31 or above wraps (-2 is uid 4294967294). `out` must be an `i32[]` and not `readonly`.
- * Capability: net.
+ * `connect`, or the `socketpair`): `out` gets its pid, uid and gid. A peer that has since changed
+ * its uid, passed the socket on or closed still reads as it was then. The pid is -1 where Darwin
+ * has no `LOCAL_PEERPID` or the kernel refuses it. A uid or gid of 2^31 or above wraps (-2 is uid
+ * 4294967294). `out` must be an `i32[]` and not `readonly`. Not callable in a `scope()` task or a
+ * parallel body. A call that writes `out` is refused in a scope's region on an array a task may
+ * read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
+ * net.
  *
  * @param fd the connected Unix socket.
  * @param out at least 3 slots, receiving pid, uid and gid.
@@ -1987,6 +2034,7 @@ declare var crypto: {
    */
   getRandomValues(bytes: u8[]): void;
 };
+
 // ---- The builtin modules (`nish:`) ---------------------------------------------
 //
 // The same builtins, importable. `nish:` resolves to no file — the import
@@ -2563,7 +2611,11 @@ declare const Arena: {
  * way (NL2421), a `push` onto an array the block does not bind to a fresh array
  * (NL2422), a `return` or `orReturn()` (NL2423), a call to a function that
  * stores an allocation (NL2424) and a `spawn` on a scope declared outside the
- * block (NL2427). The rule is the escape analysis's, so it is conservative.
+ * block (NL2427), on a scope the same `using` declares ahead of `arena()`
+ * (`using s = scope(), a = arena()`, NL2427, since `s` joins after the release)
+ * or on one ahead of the statement's last `arena()`
+ * (`using a = arena(), s = scope(), b = arena()`, NL2427, since `b` releases
+ * before `s` joins). The rule is the escape analysis's, so it is conservative.
  * A parallel body or a task may not open one (NL2351). A map that answers numbers
  * or strings may run inside one, and a task filed on a scope the block declares
  * may read what it allocated. It nests with `scope()` and `lock()` on the same
@@ -3074,7 +3126,8 @@ interface String {
    * literal, or that no proof places inside `[0, length]`, is reported by
    * NL8002. Capability: none.
    *
-   * @param start the first byte.
+   * @param start the first byte; `nish` requires it, though `lib`'s signature
+   *   marks it optional.
    * @param end the byte after the last, `s.length` by default.
    * @returns the new string; an empty range is `""`.
    */
