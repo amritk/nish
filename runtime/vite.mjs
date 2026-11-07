@@ -82,7 +82,7 @@ export default function nish(options = {}) {
     // `extern_weak` one, a panic stub wasm-ld writes itself, does not count)
     // or the loader calls the arena.
     const needsRuntime =
-      /^declare (?!extern_weak)[^"]*@nish_/m.test(ir) ||
+      /^declare (?!extern_weak)[^"\n]*@nish_/m.test(ir) ||
       readFileSync(loader, "utf8").includes("raw.nish_arena_mark(");
     const inline = path.join(dir, `${stem}.bytes.mjs`);
     const inputs = needsRuntime ? [ll, runtimeWasm] : [ll];
@@ -113,13 +113,15 @@ export default function nish(options = {}) {
       if (!id.startsWith(PREFIX)) return null;
       const entry = id.slice(PREFIX.length);
       const { loader, inline, names } = await buildEntry(entry);
+      // The module's own bindings are prefixed, so an export named `bytes`,
+      // `loadSync` or `exports` does not redeclare one of them.
       const lines = [
-        `import { loadSync } from ${JSON.stringify(loader)};`,
-        `import { bytes } from ${JSON.stringify(inline)};`,
-        `const exports = loadSync(bytes, ${importsFor(entry)});`,
-        "export default exports;",
+        `import { loadSync as __nishLoadSync } from ${JSON.stringify(loader)};`,
+        `import { bytes as __nishBytes } from ${JSON.stringify(inline)};`,
+        `const __nishExports = __nishLoadSync(__nishBytes, ${importsFor(entry)});`,
+        "export default __nishExports;",
       ];
-      if (names.length > 0) lines.push(`export const { ${names.join(", ")} } = exports;`);
+      if (names.length > 0) lines.push(`export const { ${names.join(", ")} } = __nishExports;`);
       return `${lines.join("\n")}\n`;
     },
   };

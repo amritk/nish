@@ -29574,8 +29574,12 @@ if (!only || "vite".includes(only)) {
     fs.rmSync(app, { recursive: true, force: true })
     fs.mkdirSync(path.join(app, "src"), { recursive: true })
     fs.copyFileSync(path.join(root, "examples", "arrays.ts"), path.join(app, "src", "arrays.ts"))
+    fs.writeFileSync(
+      path.join(app, "src", "clash.ts"),
+      "export const bytes = (n: number): number => n + 1\nexport const loadSync = (n: number): number => n * 2\n"
+    )
     const main = path.join(app, "src", "main.ts")
-    const plugin = nish({ compiler: NISH, entries: ["src/arrays.ts"] })
+    const plugin = nish({ compiler: NISH, entries: ["src/arrays.ts", "src/clash.ts"] })
     check(
       "vite: nish/vite's default export is the plugin, enforced before Vite's own",
       typeof nish === "function" && plugin.name === "nish" && plugin.enforce === "pre"
@@ -29601,12 +29605,12 @@ if (!only || "vite".includes(only)) {
     }
     check("vite: load compiles and links the entry", typeof code === "string", failure)
     if (typeof code === "string") {
-      const found = unbundlable(code.replace(/^import \{ \w+ \} from "[^"]+";$/gm, ""))
+      const found = unbundlable(code.replace(/^import \{ \w+ as \w+ \} from "[^"]+";$/gm, ""))
       check(
         "vite: the generated module imports the loader and the bytes and awaits nothing",
-        /^import \{ loadSync \} from /m.test(code) &&
-          /^import \{ bytes \} from /m.test(code) &&
-          code.includes("loadSync(bytes, {})") &&
+        /^import \{ loadSync as __nishLoadSync \} from /m.test(code) &&
+          /^import \{ bytes as __nishBytes \} from /m.test(code) &&
+          code.includes("__nishLoadSync(__nishBytes, {})") &&
           found.length === 0,
         `${found.join(", ")}\n${code}`
       )
@@ -29620,6 +29624,32 @@ if (!only || "vite".includes(only)) {
           page.default.memory instanceof WebAssembly.Memory,
         Object.keys(page).join(", ")
       )
+    }
+    // An export named like one of the generated module's own bindings is still
+    // exported, and the module still parses.
+    let clash = null
+    let clashFailure = ""
+    try {
+      const id = await plugin.resolveId("./clash.ts", main)
+      clash = typeof id === "string" ? await plugin.load(id) : null
+    } catch (e) {
+      clashFailure = String(e.stderr ?? e)
+    }
+    if (typeof clash === "string") {
+      const generated = path.join(app, "generated-clash.mjs")
+      fs.writeFileSync(generated, clash)
+      try {
+        const page = await import(pathToFileURL(generated).href)
+        check(
+          "vite: an entry exporting `bytes` and `loadSync` gets both, named and on the default export",
+          page.bytes(2) === 3 && page.loadSync(5) === 10 && page.default.bytes(4) === 5,
+          Object.keys(page).join(", ")
+        )
+      } catch (e) {
+        check("vite: an entry exporting `bytes` and `loadSync` gets both, named and on the default export", false, `${e}\n${clash}`)
+      }
+    } else {
+      check("vite: an entry exporting `bytes` and `loadSync` gets both, named and on the default export", false, clashFailure)
     }
     check("vite: load leaves every other id to Vite", (await plugin.load(path.join(app, "src", "main.ts"))) === null)
   }

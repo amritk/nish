@@ -161,6 +161,7 @@ sqlite_to=""                           # --sqlite-objects <dir>: compile runtime
 sqlite_from=""                         # --sqlite-from <dir>: link runtime/sqlite/ compiled there
 modules_at=""                          # --module-objects <dir>: each X.ll's object is <dir>/X.o
 memory_mib=""                          # --memory <MiB>: wasm-host's fixed memory (WP50 stage 1)
+wasm_opt=""                            # what the build line says of wasm-opt; set only by wasm-host
 inline_to=""                           # --inline <file.mjs>: wasm-host's bytes as an ES module
 while [ $# -gt 0 ]; do
   case "$1" in
