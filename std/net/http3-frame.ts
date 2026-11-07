@@ -176,8 +176,8 @@ export class Http3FrameHeader {
  * values, in order, and the rest counted in `dropped`.
  */
 export class Http3Settings {
-  unknownIds: i64[]
-  unknownValues: i64[]
+  private unknownIds: i64[]
+  private unknownValues: i64[]
   maxTableCapacity: i64 = 0
   maxFieldSectionSize: i64 = -1
   blockedStreams: i64 = 0

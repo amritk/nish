@@ -697,7 +697,7 @@ export const hpackDecodeString = (h: HpackHuffman, c: HpackCursor, out: u8[]): i
  */
 export class HpackTable {
   bytes: u8[]
-  entries: i32[]
+  private entries: i32[]
   first: i32
   size: i32
   maxSize: i32
@@ -714,7 +714,7 @@ export class HpackTable {
   }
 
   /** How many entries `entries` describes, evicted ones included. */
-  slots(): i32 {
+  private slots(): i32 {
     return toI32(this.entries.length) >> 1
   }
 
@@ -724,22 +724,22 @@ export class HpackTable {
   }
 
   /** Where dynamic entry `i`, 1 being the newest, sits in `entries`; `i` must be in range. */
-  slot(i: i32): i32 {
+  private slot(i: i32): i32 {
     return this.slots() - i
   }
 
   /** Where entry `k` of `entries` starts in `bytes`. */
-  startOf(k: i32): i32 {
+  private startOf(k: i32): i32 {
     return this.entries[k * 2]
   }
 
   /** Where entry `k` of `entries` ends in `bytes`: where the next starts, or the end of `bytes`. */
-  endOf(k: i32): i32 {
+  private endOf(k: i32): i32 {
     return k + 1 < this.slots() ? this.entries[k * 2 + 2] : toI32(this.bytes.length)
   }
 
   /** What entry `k` of `entries` costs (§4.1); it fits an `i32` because the table holds it. */
-  costOf(k: i32): i32 {
+  private costOf(k: i32): i32 {
     return this.endOf(k) - this.startOf(k) + HPACK_ENTRY_OVERHEAD
   }
 
@@ -792,7 +792,7 @@ export class HpackTable {
   }
 
   /** Shifts the evicted prefix out of `entries`, and out of `bytes`, once it is half of either. */
-  compact(): void {
+  private compact(): void {
     const end: i32 = toI32(this.bytes.length)
     const start: i32 = this.count() > 0 ? this.startOf(this.first) : end
     const n: i32 = this.slots()
@@ -901,7 +901,7 @@ export class HpackWork {
   cursor: HpackCursor
   nameScratch: u8[]
   valueScratch: u8[]
-  pools: u8[][][]
+  private pools: u8[][][]
 
   constructor() {
     this.nameScratch = []
@@ -971,7 +971,7 @@ export class HpackWork {
  */
 export class HpackDecoder {
   table: HpackTable
-  huffman: HpackHuffman
+  private huffman: HpackHuffman
   settingsLimit: i32
   maxHeaderListSize: i32
   /** The smallest limit set since the last size update, or -1 when none is owed. */
@@ -982,7 +982,7 @@ export class HpackDecoder {
   values: u8[][]
   neverIndexed: boolean[]
   /** The storage a block is decoded with, made by the first `decode`, so an idle connection holds none. */
-  work: HpackWork | null = null
+  private work: HpackWork | null = null
   /**
    * The octets the decoder has moved through its dynamic table, counted where
    * they move: each name or value `appendNameAt` and `appendValueAt` copy out
@@ -1009,7 +1009,7 @@ export class HpackDecoder {
   }
 
   /** The decoder's working storage, made the first time it is asked for. */
-  working(): HpackWork {
+  private working(): HpackWork {
     const work: HpackWork | null = this.work
     if (work !== null) {
       return work
@@ -1036,7 +1036,7 @@ export class HpackDecoder {
   }
 
   /** Appends the name at static or dynamic index `index`, which must be in range, to `out`. */
-  appendNameAt(index: i32, out: u8[]): void {
+  private appendNameAt(index: i32, out: u8[]): void {
     if (index <= HPACK_STATIC_LENGTH) {
       hpackAppendText(out, hpackStaticName(index))
       return
@@ -1047,7 +1047,7 @@ export class HpackDecoder {
   }
 
   /** Appends the value at `index` to `out`, as `appendNameAt` does the name. */
-  appendValueAt(index: i32, out: u8[]): void {
+  private appendValueAt(index: i32, out: u8[]): void {
     if (index <= HPACK_STATIC_LENGTH) {
       hpackAppendText(out, hpackStaticValue(index))
       return
@@ -1058,7 +1058,7 @@ export class HpackDecoder {
   }
 
   /** How many octets the name at `index` has. */
-  nameLengthAt(index: i32): i32 {
+  private nameLengthAt(index: i32): i32 {
     if (index <= HPACK_STATIC_LENGTH) {
       return toI32(hpackStaticName(index).length)
     }
@@ -1066,7 +1066,7 @@ export class HpackDecoder {
   }
 
   /** What the entry at `index` counts towards a header list, without building it. */
-  sizeAt(index: i32): i64 {
+  private sizeAt(index: i32): i64 {
     if (index <= HPACK_STATIC_LENGTH) {
       return (
         toI64(hpackStaticName(index).length) +
@@ -1078,12 +1078,12 @@ export class HpackDecoder {
   }
 
   /** Whether `index` names an entry of either table. */
-  hasIndex(index: i32): boolean {
+  private hasIndex(index: i32): boolean {
     return index >= 1 && index <= HPACK_STATIC_LENGTH + this.table.count()
   }
 
   /** Empties the fields and gives each one's array back, emptied, to its class's pool, for the next block. */
-  clear(): void {
+  private clear(): void {
     while (toI32(this.names.length) > 0) {
       const work: HpackWork = this.working()
       const last: i32 = toI32(this.names.length) - 1
@@ -1141,7 +1141,7 @@ export class HpackDecoder {
    * copied into the pools, which the limit bounds; nothing is allocated once
    * those have grown to the largest block and list seen.
    */
-  decodeFields(c: HpackCursor): i32 {
+  private decodeFields(c: HpackCursor): i32 {
     let listSize: i64 = 0
     let tooLarge: boolean = false
     let sawField: boolean = false
@@ -1270,7 +1270,7 @@ export class HpackDecoder {
   }
 
   /** A pooled copy of `bytes`, for the caller. */
-  copyOf(bytes: u8[]): u8[] {
+  private copyOf(bytes: u8[]): u8[] {
     const out: u8[] = this.working().take(toI32(bytes.length))
     for (const b of bytes) {
       out.push(b)
@@ -1317,7 +1317,7 @@ export class HpackEncoder {
    * table has one. The static table is searched first, then the dynamic one
    * from the newest entry.
    */
-  findField(name: u8[], value: u8[]): i32 {
+  private findField(name: u8[], value: u8[]): i32 {
     for (let i: i32 = 1; i <= HPACK_STATIC_LENGTH; i += 1) {
       if (hpackSameAsText(name, hpackStaticName(i)) && hpackSameAsText(value, hpackStaticValue(i))) {
         return i
@@ -1337,7 +1337,7 @@ export class HpackEncoder {
   }
 
   /** The lowest index whose entry has `name`, or 0 when neither table has one. */
-  findName(name: u8[]): i32 {
+  private findName(name: u8[]): i32 {
     for (let i: i32 = 1; i <= HPACK_STATIC_LENGTH; i += 1) {
       if (hpackSameAsText(name, hpackStaticName(i))) {
         return i

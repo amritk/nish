@@ -388,8 +388,8 @@ const http2CheckCap = (what: string, value: i32, low: i32, high: i32): void => {
 export class Http2Connection {
   // Pointers and 64-bit fields first, then 32-bit ones, then flags: the
   // order the layout packs without padding.
-  config: Http2Config
-  frame: Http2Frame
+  private config: Http2Config
+  private frame: Http2Frame
   /**
    * Where `input`, `output` and `block` are borrowed from: the server's, or
    * a pool of one of each the connection makes itself when it first needs a
@@ -401,9 +401,9 @@ export class Http2Connection {
   /** Bytes to send are `output[outputStart .. outputEnd)`. */
   output: u8[]
   /** The header block being gathered across CONTINUATION frames. */
-  block: u8[]
+  private block: u8[]
   /** Where a response's header block is encoded, emptied and reused. */
-  encoded: u8[]
+  private encoded: u8[]
   decoder: HpackDecoder
   encoder: HpackEncoder
   /**
@@ -412,14 +412,14 @@ export class Http2Connection {
    * their arrays, so a program copies what it keeps (`docs/security/http2.md`, H2-1).
    */
   fields: HttpFields
-  streams: Http2Stream[]
+  private streams: Http2Stream[]
   /** The identifiers the server reset most recently, a ring. */
-  resets: i32[]
+  private resets: i32[]
   /** The identifiers of the streams closed most recently, however they closed, a ring. */
-  closed: i32[]
+  private closed: i32[]
   /** The bytes of `:status` and of a three-digit status, reused for every response. */
-  statusName: u8[]
-  statusValue: u8[]
+  private statusName: u8[]
+  private statusValue: u8[]
   /**
    * The `date` every final response carries (RFC 9110 §6.6.1), as the 29
    * bytes of an IMF-fixdate, or empty for none. A bare connection has no
@@ -428,26 +428,26 @@ export class Http2Connection {
    */
   date: u8[]
   /** The bytes of `date`, the field's name, made once. */
-  dateName: u8[]
+  private dateName: u8[]
   /**
    * One empty array, made once: GOAWAY's debug data, which the server never
    * sends, and `input`, `output` and `block` while the connection holds none.
    */
-  empty: u8[]
+  private empty: u8[]
   /** The server's SETTINGS, made once and sent by every `restart`. */
-  settingIds: i32[]
-  settingValues: i64[]
+  private settingIds: i32[]
+  private settingValues: i64[]
   /** The peer's SETTINGS_INITIAL_WINDOW_SIZE. */
-  peerInitialWindow: i64 = 65535
+  private peerInitialWindow: i64 = 65535
   /** The peer's SETTINGS_MAX_HEADER_LIST_SIZE, advisory; -1 until it sends one. */
   peerMaxHeaderList: i64 = -1
   /** The window a new stream starts with on the receiving side. */
-  localInitialWindow: i64 = 65535
+  private localInitialWindow: i64 = 65535
   /** The connection's send window. */
-  sendWindow: i64 = 65535
+  private sendWindow: i64 = 65535
   /** The connection's receive window, and what has been handed on since it was last credited. */
-  recvWindow: i64 = 65535
-  recvUnacked: i64 = 0
+  private recvWindow: i64 = 65535
+  private recvUnacked: i64 = 0
   /** H2_DATA's bytes: the input buffer, valid until the next `feed`. */
   data: u8[]
   /** H2_RESET's, H2_GOAWAY's and H2_ERROR's code. */
@@ -456,15 +456,15 @@ export class Http2Connection {
   inputEnd: i32 = 0
   outputStart: i32 = 0
   outputEnd: i32 = 0
-  blockLength: i32 = 0
+  private blockLength: i32 = 0
   /** The stream the open header block is on, or 0 when none is open. */
-  blockStream: i32 = 0
+  private blockStream: i32 = 0
   /** A stream error the HEADERS that opened the block carried. */
-  blockError: i32 = 0
-  blockFragments: i32 = 0
-  resetAt: i32 = 0
-  closedAt: i32 = 0
-  state: i32 = 0
+  private blockError: i32 = 0
+  private blockFragments: i32 = 0
+  private resetAt: i32 = 0
+  private closedAt: i32 = 0
+  private state: i32 = 0
   /** The highest stream identifier the peer has opened. */
   lastPeerStream: i32 = 0
   /** Streams with a slot. */
@@ -472,7 +472,7 @@ export class Http2Connection {
   /** The peer's SETTINGS_MAX_FRAME_SIZE. */
   peerMaxFrameSize: i32 = 16384
   /** What is left of `config.resetBudget`. */
-  resetCredit: i32 = 0
+  private resetCredit: i32 = 0
   /** The last event's stream. */
   stream: i32 = 0
   /** H2_DATA's window onto `data`. */
@@ -481,18 +481,18 @@ export class Http2Connection {
   /** H2_GOAWAY's last stream identifier. */
   lastStreamId: i32 = 0
   /** The last stream identifier the server's first GOAWAY named, which no later one may raise (§6.8). */
-  sentLast: i32 = 0
+  private sentLast: i32 = 0
   /** How far into `input`, `output` and `block` the connection has written since it borrowed each: what giving it back zeroes. */
   inputUsed: i32 = 0
-  outputUsed: i32 = 0
-  blockUsed: i32 = 0
-  blockEndStream: boolean = false
+  private outputUsed: i32 = 0
+  private blockUsed: i32 = 0
+  private blockEndStream: boolean = false
   /** Whether the peer has acknowledged the server's SETTINGS. */
   settingsAcked: boolean = false
   /** `writeData` was held back by the connection's window. */
-  sendBlocked: boolean = false
+  private sendBlocked: boolean = false
   goawaySent: boolean = false
-  goawayReceived: boolean = false
+  private goawayReceived: boolean = false
   /** The peer's byte stream has ended (`endInput`). */
   inputEnded: boolean = false
   /** Whether the last H2_REQUEST, H2_DATA or H2_TRAILERS ended its stream. */
@@ -500,7 +500,7 @@ export class Http2Connection {
   /** Whether H2_RESET came from the peer's RST_STREAM rather than a rule its stream broke. */
   resetByPeer: boolean = false
   /** The server's SETTINGS are not written yet: the first `holdOutput` writes them. */
-  prefaceOwed: boolean = false
+  private prefaceOwed: boolean = false
 
   /**
    * A connection under `config`, owing its SETTINGS — and the WINDOW_UPDATE
@@ -622,7 +622,7 @@ export class Http2Connection {
   // ---- Borrowed buffers ---------------------------------------------------------
 
   /** The pools the connection borrows from, made at ceiling 1 the first time a bare connection asks. */
-  lender(): Http2Pools {
+  private lender(): Http2Pools {
     const pools: Http2Pools | null = this.pools
     if (pools !== null) {
       return pools
@@ -633,7 +633,7 @@ export class Http2Connection {
   }
 
   /** Borrows `input` unless the connection holds it. */
-  holdInput(): void {
+  private holdInput(): void {
     if (this.input.length === 0) {
       this.input = this.lender().input.take()
       this.inputUsed = 0
@@ -641,7 +641,7 @@ export class Http2Connection {
   }
 
   /** Borrows `output` unless the connection holds it, and writes the SETTINGS it owes. */
-  holdOutput(): void {
+  private holdOutput(): void {
     if (this.output.length === 0) {
       this.output = this.lender().output.take()
       this.outputUsed = 0
@@ -657,7 +657,7 @@ export class Http2Connection {
   }
 
   /** Borrows `block` unless the connection holds it. */
-  holdBlock(): void {
+  private holdBlock(): void {
     if (this.block.length === 0) {
       this.block = this.lender().block.take()
       this.blockUsed = 0
@@ -665,7 +665,7 @@ export class Http2Connection {
   }
 
   /** Gives `input` back, zeroing what was written into it; ends the last H2_DATA's window. */
-  giveInput(): void {
+  private giveInput(): void {
     if (this.input.length > 0) {
       this.lender().input.give(this.input, this.inputUsed)
       this.input = this.empty
@@ -679,7 +679,7 @@ export class Http2Connection {
   }
 
   /** Gives `output` back, zeroing what was written into it, sent or not. */
-  giveOutput(): void {
+  private giveOutput(): void {
     if (this.output.length > 0) {
       this.lender().output.give(this.output, this.outputUsed)
       this.output = this.empty
@@ -690,7 +690,7 @@ export class Http2Connection {
   }
 
   /** Gives `block` back, zeroing what was gathered into it. */
-  giveBlock(): void {
+  private giveBlock(): void {
     if (this.block.length > 0) {
       this.lender().block.give(this.block, this.blockUsed)
       this.block = this.empty
@@ -826,7 +826,7 @@ export class Http2Connection {
   }
 
   /** The room left at the end of the output, once what was sent is moved out of the way. */
-  room(): i32 {
+  private room(): i32 {
     this.holdOutput()
     this.outputEnd = http2Compact(this.output, this.outputStart, this.outputEnd)
     this.outputStart = 0
@@ -834,13 +834,13 @@ export class Http2Connection {
   }
 
   /** The room DATA and HEADERS may use: all but the control reserve. */
-  bodyRoom(): i32 {
+  private bodyRoom(): i32 {
     const r: i32 = this.room() - H2_CONTROL_RESERVE
     return r > 0 ? r : 0
   }
 
   /** Appends a frame a writer put at the end of the output, when it fit (`end >= 0`), and answers whether it did. */
-  wrote(end: i32): boolean {
+  private wrote(end: i32): boolean {
     if (end >= 0) {
       this.outputEnd = end
       this.outputUsed = end > this.outputUsed ? end : this.outputUsed
@@ -864,7 +864,7 @@ export class Http2Connection {
   }
 
   /** Opens stream `id` in a free slot; the caller has checked there is one. */
-  open(id: i32): Http2Stream {
+  private open(id: i32): Http2Stream {
     for (const s of this.streams) {
       if (s.id === 0) {
         s.id = id
@@ -885,7 +885,7 @@ export class Http2Connection {
   }
 
   /** Frees the slot of a stream that is closed. */
-  release(s: Http2Stream): void {
+  private release(s: Http2Stream): void {
     if (s.id !== 0) {
       this.closedAt = http2Remember(this.closed, this.closedAt, s.id)
       s.id = 0
@@ -894,7 +894,7 @@ export class Http2Connection {
   }
 
   /** The peer ended stream `s`; closes it when the server had too. */
-  remoteEnd(s: Http2Stream): void {
+  private remoteEnd(s: Http2Stream): void {
     s.remoteEnded = true
     if (s.localEnded) {
       this.release(s)
@@ -902,7 +902,7 @@ export class Http2Connection {
   }
 
   /** The server ended stream `s`; closes it when the peer had too, and credits the reset budget. */
-  localEnd(s: Http2Stream): void {
+  private localEnd(s: Http2Stream): void {
     s.localEnded = true
     if (this.resetCredit < this.config.resetBudget) {
       this.resetCredit = this.resetCredit + 1
@@ -913,7 +913,7 @@ export class Http2Connection {
   }
 
   /** Whether the server reset stream `id` recently, so frames still in flight for it are ignored (§5.4.2). */
-  recentlyReset(id: i32): boolean {
+  private recentlyReset(id: i32): boolean {
     return id > 0 && this.resets.indexOf(id) >= 0
   }
 
@@ -923,7 +923,7 @@ export class Http2Connection {
    * opened, and is the out-of-order identifier §5.1.1 calls PROTOCOL_ERROR
    * rather than a frame on a closed stream (STREAM_CLOSED, §5.1).
    */
-  recentlyClosed(id: i32): boolean {
+  private recentlyClosed(id: i32): boolean {
     return id > 0 && this.closed.indexOf(id) >= 0
   }
 
@@ -931,7 +931,7 @@ export class Http2Connection {
    * Sends RST_STREAM for `id` with `code`, frees its slot if it has one, and
    * remembers it; answers false, changing nothing, when the frame did not fit.
    */
-  resetStream(id: i32, code: i32): boolean {
+  private resetStream(id: i32, code: i32): boolean {
     if (!this.wrote(http2WriteRstStream(this.output, this.outputEnd, id, toI64(code)))) {
       return false
     }
@@ -949,19 +949,19 @@ export class Http2Connection {
    * server into it (MadeYouReset, CVE-2025-8671). Answers H2_NEED_MORE, or
    * once the budget is spent the connection error ENHANCE_YOUR_CALM (§10.5).
    */
-  chargeReset(): i32 {
+  private chargeReset(): i32 {
     this.resetCredit = this.resetCredit - 1
     return this.resetCredit < 0 ? this.fail(H2_ENHANCE_YOUR_CALM) : H2_NEED_MORE
   }
 
   /** A stream error the peer caused on `id`, which the program never saw: resets it and charges the budget. */
-  refuseStream(id: i32, code: i32): i32 {
+  private refuseStream(id: i32, code: i32): i32 {
     this.resetStream(id, code)
     return this.chargeReset()
   }
 
   /** A stream error on `s`: resets it, charges the budget, and answers the H2_RESET that tells the program. */
-  streamError(s: Http2Stream, code: i32): i32 {
+  private streamError(s: Http2Stream, code: i32): i32 {
     const id: i32 = s.id
     const charged: i32 = this.refuseStream(id, code)
     if (charged !== H2_NEED_MORE) {
@@ -993,7 +993,7 @@ export class Http2Connection {
   }
 
   /** A connection error: queues GOAWAY with `code` and answers H2_ERROR. */
-  fail(code: i32): i32 {
+  private fail(code: i32): i32 {
     if (this.state !== H2_STATE_FAILED) {
       this.state = H2_STATE_FAILED
       this.errorCode = toI64(code)
@@ -1010,7 +1010,7 @@ export class Http2Connection {
    * when it is still open for receiving, with a WINDOW_UPDATE once half a
    * window is owed.
    */
-  credit(s: Http2Stream | null, n: i32): void {
+  private credit(s: Http2Stream | null, n: i32): void {
     this.recvUnacked = this.recvUnacked + toI64(n)
     const half: i64 = toI64(this.config.connectionWindowSize / 2)
     if (this.recvUnacked > toI64(0) && this.recvUnacked >= half) {
@@ -1075,7 +1075,7 @@ export class Http2Connection {
   }
 
   /** One frame that parsed: the rules no single frame type owns, then the type's own. */
-  handleFrame(f: Http2Frame): i32 {
+  private handleFrame(f: Http2Frame): i32 {
     if (this.blockStream !== 0 && (f.type !== H2_FRAME_CONTINUATION || f.streamId !== this.blockStream)) {
       return this.fail(H2_PROTOCOL_ERROR)
     }
@@ -1118,7 +1118,7 @@ export class Http2Connection {
   }
 
   /** Whether `id` names an idle stream: one the peer has not opened yet. */
-  isIdle(id: i32): boolean {
+  private isIdle(id: i32): boolean {
     // An even identifier is the server's to open (§5.1.1), and this server
     // opens none, so every even stream is idle for as long as it lives.
     return id % 2 === 0 || id > this.lastPeerStream
@@ -1129,12 +1129,12 @@ export class Http2Connection {
    * word: the server reset it and these were in flight (§5.4.2), or it was
    * opened after the server's GOAWAY and so never opened at all (§6.8).
    */
-  discarded(id: i32): boolean {
+  private discarded(id: i32): boolean {
     return this.recentlyReset(id) || (this.goawaySent && id > this.sentLast)
   }
 
   /** DATA (§6.1): flow control first, on the whole payload, then the stream's state. */
-  handleData(f: Http2Frame): i32 {
+  private handleData(f: Http2Frame): i32 {
     const id: i32 = f.streamId
     const size: i32 = f.length
     const s: Http2Stream | null = this.find(id)
@@ -1181,7 +1181,7 @@ export class Http2Connection {
   }
 
   /** Appends a fragment of a header block; a block past `maxHeaderBlock` or `H2_MAX_FRAGMENTS` ends the connection. */
-  gather(f: Http2Frame): boolean {
+  private gather(f: Http2Frame): boolean {
     this.holdBlock()
     this.blockFragments = this.blockFragments + 1
     if (
@@ -1199,7 +1199,7 @@ export class Http2Connection {
   }
 
   /** HEADERS (§6.2): starts a header block, and ends it when END_HEADERS says so. */
-  handleHeaders(f: Http2Frame): i32 {
+  private handleHeaders(f: Http2Frame): i32 {
     this.blockStream = f.streamId
     this.blockEndStream = f.has(H2_FLAG_END_STREAM)
     this.blockError = f.streamError
@@ -1209,7 +1209,7 @@ export class Http2Connection {
   }
 
   /** CONTINUATION (§6.10): only inside a header block, which `handleFrame` has checked it continues. */
-  handleContinuation(f: Http2Frame): i32 {
+  private handleContinuation(f: Http2Frame): i32 {
     if (this.blockStream === 0) {
       return this.fail(H2_PROTOCOL_ERROR)
     }
@@ -1224,7 +1224,7 @@ export class Http2Connection {
    * because the decoder's table must stay in step with the peer's encoder
    * (§4.3); then a new stream's request, or an open stream's trailers.
    */
-  endBlock(): i32 {
+  private endBlock(): i32 {
     const id: i32 = this.blockStream
     this.blockStream = 0
     // The decoder takes back the arrays the last request's fields point into,
@@ -1283,7 +1283,7 @@ export class Http2Connection {
   }
 
   /** A header block on an open stream: trailers, which must end it (§8.1). */
-  trailers(s: Http2Stream, decoded: i32): i32 {
+  private trailers(s: Http2Stream, decoded: i32): i32 {
     if (s.remoteEnded) {
       return this.streamError(s, H2_STREAM_CLOSED)
     }
@@ -1309,7 +1309,7 @@ export class Http2Connection {
    * END_STREAM, then a RST_STREAM with NO_ERROR when the peer is still
    * sending (§8.1), so the stream never reaches the program.
    */
-  tooLarge(id: i32): void {
+  private tooLarge(id: i32): void {
     // The control reserve holds this with its date: under fifty bytes.
     this.encodeStatus(H2_STATUS_TOO_LARGE, true)
     const n: i32 = toI32(this.encoded.length)
@@ -1337,7 +1337,7 @@ export class Http2Connection {
    * `date` is the static table's name 33 and a value of 29 bytes, in Huffman
    * when that is shorter.
    */
-  encodeStatus(status: i32, withDate: boolean): void {
+  private encodeStatus(status: i32, withDate: boolean): void {
     while (toI32(this.encoded.length) > 0) {
       this.encoded.pop()
     }
@@ -1356,7 +1356,7 @@ export class Http2Connection {
   }
 
   /** PRIORITY (§6.3): checked and otherwise ignored, and it opens nothing. */
-  handlePriority(f: Http2Frame): i32 {
+  private handlePriority(f: Http2Frame): i32 {
     if (f.streamError === 0) {
       return H2_NEED_MORE
     }
@@ -1368,7 +1368,7 @@ export class Http2Connection {
   }
 
   /** RST_STREAM (§6.4): the stream is closed; on an idle one it is a connection error. */
-  handleRstStream(f: Http2Frame): i32 {
+  private handleRstStream(f: Http2Frame): i32 {
     if (this.isIdle(f.streamId)) {
       return this.fail(H2_PROTOCOL_ERROR)
     }
@@ -1393,7 +1393,7 @@ export class Http2Connection {
    * acknowledged. A new SETTINGS_INITIAL_WINDOW_SIZE moves every stream's send
    * window by the difference (§6.9.2), and opening one answers H2_WINDOW.
    */
-  handleSettings(f: Http2Frame): i32 {
+  private handleSettings(f: Http2Frame): i32 {
     if (f.has(H2_FLAG_ACK)) {
       if (!this.settingsAcked) {
         this.settingsAcked = true
@@ -1452,7 +1452,7 @@ export class Http2Connection {
   }
 
   /** WINDOW_UPDATE (§6.9): a send window grows, and a write it held back may go on. */
-  handleWindowUpdate(f: Http2Frame): i32 {
+  private handleWindowUpdate(f: Http2Frame): i32 {
     const inc: i64 = toI64(f.increment)
     if (f.streamId === 0) {
       this.sendWindow = this.sendWindow + inc
@@ -1488,7 +1488,7 @@ export class Http2Connection {
   // ---- Writing ------------------------------------------------------------------
 
   /** The stream the program may still send on, or `null`. */
-  writable(id: i32): Http2Stream | null {
+  private writable(id: i32): Http2Stream | null {
     if (this.state === H2_STATE_FAILED) {
       return null
     }
@@ -1505,7 +1505,7 @@ export class Http2Connection {
    * Nothing is encoded until it is sure to be sent, so the HPACK state never
    * moves for a block that was not.
    */
-  sendHead(s: Http2Stream, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32 {
+  private sendHead(s: Http2Stream, status: i32, names: u8[][], values: u8[][], endStream: boolean): i32 {
     if (httpFieldsCheckOutgoing(names, values) !== HTTP_FIELDS_OK) {
       return H2_INVALID
     }

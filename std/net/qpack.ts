@@ -842,7 +842,7 @@ export class QpackDecoder {
   }
 
   /** Empties the fields, keeping the arrays' storage for the next section. */
-  clear(): void {
+  private clear(): void {
     while (this.bytes.length > 0) {
       this.bytes.pop()
     }
@@ -868,7 +868,7 @@ export class QpackDecoder {
    * Takes `cost` from what the section has room for and answers true, or
    * answers false and takes nothing when the section would pass its limit.
    */
-  take(cost: i64): boolean {
+  private take(cost: i64): boolean {
     if (cost > this.room) {
       return false
     }
@@ -877,7 +877,7 @@ export class QpackDecoder {
   }
 
   /** The answer for a string read: `QPACK_OK`, past the limit, or the refusal `status` names. */
-  stringResult(status: i32): i64 {
+  private stringResult(status: i32): i64 {
     if (status === QPACK_STRING_PAST_LIMIT) {
       return QPACK_SECTION_TOO_LARGE
     }
@@ -885,18 +885,18 @@ export class QpackDecoder {
   }
 
   /** Records `reason` and answers QPACK_DECOMPRESSION_FAILED. */
-  refuse(reason: i32): i64 {
+  private refuse(reason: i32): i64 {
     this.reason = reason
     return QPACK_DECOMPRESSION_FAILED
   }
 
   /** The refusal for a negative `qpackReadInteger` answer. */
-  refuseInteger(status: i64): i64 {
+  private refuseInteger(status: i64): i64 {
     return this.refuse(qpackIntegerReason(status))
   }
 
   /** Records a field whose name and value end where `bytes` ends now. */
-  addField(nameStart: i32, valueStart: i32, neverIndexed: boolean): void {
+  private addField(nameStart: i32, valueStart: i32, neverIndexed: boolean): void {
     this.nameStart.push(nameStart)
     this.nameLength.push(valueStart - nameStart)
     this.valueStart.push(valueStart)
@@ -909,7 +909,7 @@ export class QpackDecoder {
    * The body of `decode`: the prefix, then one pass over the field lines,
    * each told apart by its first byte's pattern (§4.5.2 to §4.5.6).
    */
-  decodeLines(src: u8[]): i64 {
+  private decodeLines(src: u8[]): i64 {
     const insertCount: i64 = qpackReadInteger(this, src, 8)
     if (insertCount < 0) {
       return this.refuseInteger(insertCount)
@@ -1015,7 +1015,7 @@ export class QpackDecoder {
  * anything on its own encoder stream once the stream type is written.
  */
 export class QpackEncoder {
-  huffman: HpackHuffman
+  private huffman: HpackHuffman
   /** The connection error the decoder stream met, which every later call answers. */
   failed: i64
   /** Which rule `failed` broke, a `QPACK_REASON_*`. */
@@ -1147,7 +1147,7 @@ export class QpackEncoder {
   }
 
   /** Counts a Stream Cancellation for `streamId`. */
-  cancelled(streamId: i64): void {
+  private cancelled(streamId: i64): void {
     if (this.cancellations < QPACK_COUNT_MAX) {
       this.cancellations += 1
     }
@@ -1155,7 +1155,7 @@ export class QpackEncoder {
   }
 
   /** Records `reason` and answers QPACK_DECODER_STREAM_ERROR, which sticks. */
-  refuse(reason: i32): i64 {
+  private refuse(reason: i32): i64 {
     this.reason = reason
     this.failed = QPACK_DECODER_STREAM_ERROR
     return this.failed

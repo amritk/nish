@@ -84,7 +84,7 @@ export const H2_ALPN: string = "h2"
 export class Http2TlsServer {
   tls: TlsTcpServer
   /** The caps every slot's connection is made under. */
-  config: Http2Config
+  private config: Http2Config
   /**
    * The connections made so far, slot `k`'s at `k`: slot 0's, made by the
    * constructor, and one for each slot accepted into since.
@@ -121,7 +121,7 @@ export class Http2TlsServer {
   }
 
   /** Makes the next slot's connection, on this pool's buffers and `date`. */
-  build(): void {
+  private build(): void {
     const conn: Http2Connection = new Http2Connection(this.config)
     conn.date = this.date.current()
     conn.pools = this.pools
@@ -129,7 +129,7 @@ export class Http2TlsServer {
   }
 
   /** Whether `slot` holds a connection and its HTTP/2 side has been made. */
-  live(slot: i32): boolean {
+  private live(slot: i32): boolean {
     return this.tls.holds(slot) && slot < toI32(this.connections.length)
   }
 
@@ -214,7 +214,7 @@ export class Http2TlsServer {
   }
 
   /** Whether `slot`'s handshake is done and chose anything but `h2`. */
-  refused(slot: i32): boolean {
+  private refused(slot: i32): boolean {
     return this.tls.connection(slot).state === TLS_RECORD_STATE_OPEN && this.alpn(slot) !== H2_ALPN
   }
 
