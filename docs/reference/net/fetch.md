@@ -251,7 +251,7 @@ Whether the upper-case variable may be read: false for `HTTP_PROXY` under CGI, w
 
 <scalar-field name="returns" type="string">
 
-The proxy URL to use, or "" for none.
+The chosen variable's value, a proxy URL or for `no_proxy` a comma-separated host list, or "" when neither applies.
 
 </scalar-field>
 

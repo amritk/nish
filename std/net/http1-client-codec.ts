@@ -391,7 +391,7 @@ const http1ClientPutField = (out: u8[], at: i32, names: string[], values: string
  * @param at The index in `out` the request line starts at; a negative one answers `HTTP1_NO_ROOM`.
  * @param method The request method, a token such as `GET`, written as given.
  * @param target The request target in the form the method may send, written as given.
- * @param names The field names, in the order they are written after `Host`; matched case-insensitively.
+ * @param names The field names, matched case-insensitively; exactly one is `Host`, which is written first, and the rest follow in order.
  * @param values The value of each field in `names`, at the same index.
  * @param bodyLength The body's length in bytes, or `HTTP1_CHUNKED` (-1) or `HTTP1_NO_BODY` (-2).
  * @returns The index in `out` just past the empty line, or `HTTP1_REFUSED` or `HTTP1_NO_ROOM`.
@@ -462,7 +462,7 @@ const http1ClientPutHead = (
  *
  * @param method The request method, a token such as `GET`.
  * @param target The request target in the form the method may send.
- * @param names The field names, in the order they are written after `Host`.
+ * @param names The field names; exactly one is `Host`, which is written first, and the rest follow in order.
  * @param values The value of each field in `names`, at the same index.
  * @param bodyLength The body's length in bytes, or `HTTP1_CHUNKED` (-1) or `HTTP1_NO_BODY` (-2).
  * @returns The head, ending in the empty line, or `null` for everything `http1WriteRequestHead` refuses and for a head over 1 GiB.
@@ -487,7 +487,7 @@ export const http1RequestHead = (
  *
  * @param method The request method, a token; a WebSocket handshake sends `GET`.
  * @param target The request target in the form the method may send.
- * @param names The caller's field names, written after `Host` and before the two upgrade fields.
+ * @param names The caller's field names; exactly one is `Host`, which is written first, and the rest follow in order, before the two upgrade fields.
  * @param values The value of each field in `names`, at the same index.
  * @param upgrade The protocol asked for, one token such as `websocket`; an empty one answers `null`.
  * @returns The head, ending in the empty line, or `null` when any of the above is refused or the head is over 1 GiB.

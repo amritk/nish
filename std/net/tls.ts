@@ -387,7 +387,8 @@ export class TlsP256Signer {
 
   /**
    * Makes the signer's scratch and one signature array per DER length, so a
-   * signature allocates nothing.
+   * signature keeps nothing: the P-256 step releases what it allocates per
+   * call, and the DER is written into one of these arrays.
    */
   constructor() {
     this.scratch = new P256SignScratch()

@@ -5810,8 +5810,10 @@ export class P256SignScratch {
   points: P256PointScratch
 
   /**
-   * Makes every array a signature needs, the round constants and the base
-   * point's comb table included, so `p256SignSha256Into` allocates nothing.
+   * Makes the arrays every signature reuses, the round constants and the
+   * base point's comb table included, so the base-point multiplication works
+   * in them; what `p256SignSha256Into` still allocates per call is released
+   * when its arena block ends, so nothing is kept.
    */
   constructor() {
     this.kt = [

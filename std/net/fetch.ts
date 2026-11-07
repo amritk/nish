@@ -1482,7 +1482,7 @@ export const fetchSync = (req: HttpRequest, options: HttpOptions): HttpResponse 
  * @param lower The lower-case variable's value, such as `http_proxy`'s, or null when it is unset.
  * @param upper The upper-case variable's value, such as `HTTP_PROXY`'s, or null when it is unset.
  * @param upperAllowed Whether the upper-case variable may be read: false for `HTTP_PROXY` under CGI, where a request's `Proxy` header sets it.
- * @returns The proxy URL to use, or "" for none.
+ * @returns The chosen variable's value, a proxy URL or for `no_proxy` a comma-separated host list, or "" when neither applies.
  */
 export const httpChooseProxy = (
   lower: string | null,

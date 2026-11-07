@@ -182,7 +182,7 @@ The request target in the form the method may send.
 
 <scalar-field name="names" type="string[]" required>
 
-The field names, in the order they are written after `Host`.
+The field names; exactly one is `Host`, which is written first, and the rest follow in order.
 
 </scalar-field>
 
@@ -243,7 +243,7 @@ The request target in the form the method may send.
 
 <scalar-field name="names" type="string[]" required>
 
-The caller's field names, written after `Host` and before the two upgrade fields.
+The caller's field names; exactly one is `Host`, which is written first, and the rest follow in order, before the two upgrade fields.
 
 </scalar-field>
 
@@ -327,7 +327,7 @@ The request target in the form the method may send, written as given.
 
 <scalar-field name="names" type="string[]" required>
 
-The field names, in the order they are written after `Host`; matched case-insensitively.
+The field names, matched case-insensitively; exactly one is `Host`, which is written first, and the rest follow in order.
 
 </scalar-field>
 
