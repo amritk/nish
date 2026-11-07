@@ -9,7 +9,11 @@
 //   3. every misuse is a checked panic that names it, in a child of its own:
 //      an index after `giveBack`, an index after `close`, a `push` then
 //      `giveBack`, a range outside the region, a second `giveBack`, and a
-//      `reuse` of a window still lent.
+//      `reuse` of a window still lent;
+//   4. a loop bound `i < w.length` proves nothing past a `giveBack` or a
+//      `close` inside the loop: both empty `w`, so the next index panics.
+//      This fails if the compiler took either call to leave `w`'s length or
+//      data as they were (`markShmWindow`, `resizesArray`).
 import { readFileSyncOrNull } from "nish:fs"
 import { monotonicNanos, spawnSync, spawnSyncTo } from "nish:process"
 import { copyBytes } from "nish/bytes"
@@ -53,6 +57,19 @@ const child = (name: string, what: string): i32 => {
     region.giveBack(w)
   } else if (what === "reuse-lent") {
     region.lend(0, 4, w)
+  } else if (what === "loop-given-back" || what === "loop-closed") {
+    let sum: i32 = 0
+    for (let i: i32 = 0; i < w.length; i++) {
+      if (i === 2) {
+        if (what === "loop-given-back") {
+          region.giveBack(w)
+        } else {
+          region.close().expect("close")
+        }
+      }
+      sum = sum + toI32(w[i])
+    }
+    console.log(`${sum}`)
   }
   return 0 // not reached: each misuse above panics
 }
@@ -118,6 +135,8 @@ export const main = (): i32 => {
   panics(t, name, "outside", "nish/sync/shm: byte window at 60 is outside the region of 64 bytes")
   panics(t, name, "twice", "window of length 0 is not lent by this region: it was given back")
   panics(t, name, "reuse-lent", "reuse of length 16 is not a window this region lent and was given back")
+  panics(t, name, "loop-given-back", "index out of range: 2 >= 0")
+  panics(t, name, "loop-closed", "index out of range: 2 >= 0")
   t.ok("unlink the region", unlinkRegion(name).isOk())
   t.ok("close the region", region.close().isOk())
   return t.done()

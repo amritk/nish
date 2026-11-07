@@ -24,6 +24,10 @@ PASS  twice: the child exits 1
 PASS  twice: and says why
 PASS  reuse-lent: the child exits 1
 PASS  reuse-lent: and says why
+PASS  loop-given-back: the child exits 1
+PASS  loop-given-back: and says why
+PASS  loop-closed: the child exits 1
+PASS  loop-closed: and says why
 PASS  unlink the region
 PASS  close the region
-nish/sync/shm windows: 28 passed, 0 failed, 0 skipped
+nish/sync/shm windows: 32 passed, 0 failed, 0 skipped
