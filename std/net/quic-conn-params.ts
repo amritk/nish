@@ -158,6 +158,10 @@ export class QuicTransportParameters {
   hasRetryScid: boolean = false
   disableActiveMigration: boolean = false
 
+  /**
+   * Makes the parameters an endpoint has before it sets or reads any: §18.2's
+   * defaults, every connection ID and token empty.
+   */
   constructor() {
     this.originalDcid = []
     this.statelessResetToken = []

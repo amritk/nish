@@ -766,10 +766,10 @@ export class QuicStreams {
   recvMaxData: i64 = 0
   windowData: i64 = 0
   recvTotal: i64 = 0
-  recvConsumed: i64 = 0
+  private recvConsumed: i64 = 0
   /** The connection's send credit from the peer, what was sent against it, and what is written but not sent. */
   sendMaxData: i64 = 0
-  sendTotal: i64 = 0
+  private sendTotal: i64 = 0
   writtenTotal: i64 = 0
   /** The transport error `locate` answered -2 for. */
   private locateError: i64 = 0

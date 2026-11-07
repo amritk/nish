@@ -1375,6 +1375,7 @@ export class QuicConnection {
   private serverRandom: u8[]
   /** The x25519 private key `begin` takes from the entropy, until the handshake hands it to `TlsServer`. */
   readonly ephemeral: Secret<u8[]>
+  /** The 32-byte HMAC key, taken from the entropy, that each new local connection ID is derived from; `release` wipes it. */
   cidSeed: u8[]
   /**
    * The DCID of the client's first Initial, which the Initial keys come from: its first `originalDcidLength` bytes.
@@ -1385,6 +1386,7 @@ export class QuicConnection {
   private peerScid: u8[]
   /** The server's first connection ID, the SCID of every long-header packet it sends. */
   private localScid: u8[]
+  /** The `TlsServer` running this connection's handshake: null until the client's first Initial has opened, and again after `reset`. */
   tls: TlsServer | null = null
   /** The slot's `TlsServer`, made by its first handshake and `restart`ed by every one after (QUIC-3). */
   tlsSlot: TlsServer | null = null
@@ -1543,7 +1545,9 @@ export class QuicConnection {
   originalDcidLength: i32 = 0
   private peerScidLength: i32 = 0
   private pathHead: i32 = 0
+  /** How many PATH_CHALLENGE payloads wait to be answered, 0 to 4. */
   pathCount: i32 = 0
+  /** Where the connection is in its life: one of the `QUIC_STATE_*` constants. */
   state: i32 = 0
   /** Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. */
   dropped: i32 = 0

@@ -233,6 +233,10 @@ export class QuicFrame {
   resetTokenStart: i32 = 0
   fin: boolean = false
 
+  /**
+   * Makes an empty frame with room for `QUIC_FRAME_MAX_ACK_RANGES` ACK
+   * ranges, for `quicParseFrame` to fill.
+   */
   constructor() {
     // Sized once, so reading an ACK stores nothing new into the frame.
     this.ackRanges = new Array<i64>(QUIC_FRAME_MAX_ACK_RANGES * 2)

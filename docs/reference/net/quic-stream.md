@@ -464,11 +464,9 @@ class QuicStreams
 | `peerUniLimit: i64` |  |
 | `peerUniOpened: i64` |  |
 | `pools: QuicStreamPools \| null` | Where the streams borrow their buffers: the table's own pools, or the set a server shares across its connections (`share`). `null` when the streams have no buffers at all (`bufferSize` 0, or no slots). |
-| `recvConsumed: i64` |  |
 | `recvMaxData: i64` | The connection's receive credit: what was advertised, its window, what arrived, and what was read. |
 | `recvTotal: i64` |  |
 | `sendMaxData: i64` | The connection's send credit from the peer, what was sent against it, and what is written but not sent. |
-| `sendTotal: i64` |  |
 | `slots: QuicStream[]` |  |
 | `windowData: i64` |  |
 | `writtenTotal: i64` |  |

@@ -468,7 +468,7 @@ class QuicConnection
 | `challengesDrawn: i64` |  |
 | `challengeUntil: i64` |  |
 | `cids: QuicCidTable` |  |
-| `cidSeed: u8[]` |  |
+| `cidSeed: u8[]` | The 32-byte HMAC key, taken from the entropy, that each new local connection ID is derived from; `release` wipes it. |
 | `confidentialityLimit: i64` | The AEAD limits this connection keeps (RFC 9001 §6.6): packets one 1-RTT write key seals, and packets that fail to authenticate over the connection. `afterTls` sets them from the suite when the 1-RTT keys arrive; until then they are AES-GCM's. They are fields so that a test can lower them after the handshake; nothing else should set them. |
 | `datagramEcn: i32` | ECN (RFC 9000 §13.4): `ecnMarking` is the carrier's to set when it sends this connection's datagrams with the ECN bits of `datagramEcn`, which each `takeDatagramInto` sets for the datagram it wrote: ECT(0) while loss recovery's `ecnCodepoint()` asks for it, 0 otherwise and always while `ecnMarking` is false. Every packet of a marked datagram is counted as marked, and an ACK_ECN's counts are validated against them. `reset` keeps `ecnMarking`, which is the carrier's, and clears the rest. |
 | `datagramsIn: QuicDatagramQueue` |  |
@@ -494,7 +494,7 @@ class QuicConnection
 | `now: i64` | The latest time the caller gave, in milliseconds; time never runs backwards here. |
 | `otherIsNext: boolean` | Whether `otherReadKeys` are the next generation's rather than the previous one's. |
 | `otherReadKeys: QuicKeys \| null` | The other read keys of the Application Data space (RFC 9001 §6.3): the next generation's while `otherIsNext`, and for a probe timeout after an update the previous one's, for reordered packets (§6.5). |
-| `pathCount: i32` |  |
+| `pathCount: i32` | How many PATH_CHALLENGE payloads wait to be answered, 0 to 4. |
 | `pathKnown: boolean` | Whether `pathCurrent` holds the client's address: the carrier passes addresses, and a first Initial gave one. |
 | `pathReceived: i64` | Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). |
 | `pathSent: i64` |  |
@@ -511,9 +511,9 @@ class QuicConnection
 | `serverName: string` | The client's `server_name` the handshake read, or empty when it sent none. |
 | `skipHead: i32` | Where the next skipped packet number goes in `skipped`. |
 | `skipsDrawn: i64` |  |
-| `state: i32` |  |
+| `state: i32` | Where the connection is in its life: one of the `QUIC_STATE_*` constants. |
 | `streams: QuicStreams` | The streams, both ways (`nish/net/quic-stream`). |
-| `tls: TlsServer \| null` |  |
+| `tls: TlsServer \| null` | The `TlsServer` running this connection's handshake: null until the client's first Initial has opened, and again after `reset`. |
 | `tlsSlot: TlsServer \| null` | The slot's `TlsServer`, made by its first handshake and `restart`ed by every one after (QUIC-3). |
 | `writePhase: boolean` |  |
 | `readonly writeSecret256: Secret<u8[]>` |  |

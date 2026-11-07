@@ -386,6 +386,15 @@ const http1ClientPutField = (out: u8[], at: i32, names: string[], values: string
  * here; a `Connection` that lists `upgrade`, which only
  * `http1UpgradeRequestHead` may write; and a `bodyLength` below -2. Answers
  * `HTTP1_NO_ROOM` when it is well formed but does not fit. Either way `out` is untouched.
+ *
+ * @param out The buffer the head is written into; nothing outside the head's bytes changes.
+ * @param at The index in `out` the request line starts at; a negative one answers `HTTP1_NO_ROOM`.
+ * @param method The request method, a token such as `GET`, written as given.
+ * @param target The request target in the form the method may send, written as given.
+ * @param names The field names, matched case-insensitively; exactly one is `Host`, which is written first, and the rest follow in order.
+ * @param values The value of each field in `names`, at the same index.
+ * @param bodyLength The body's length in bytes, or `HTTP1_CHUNKED` (-1) or `HTTP1_NO_BODY` (-2).
+ * @returns The index in `out` just past the empty line, or `HTTP1_REFUSED` or `HTTP1_NO_ROOM`.
  */
 export const http1WriteRequestHead = (
   out: u8[],
@@ -448,8 +457,15 @@ const http1ClientPutHead = (
 }
 
 /**
- * `http1WriteRequestHead`'s head in an array of its own, or `null` for
- * everything it refuses.
+ * `http1WriteRequestHead`'s head in an array of its own, sized to fit, so
+ * there is no room to run out of.
+ *
+ * @param method The request method, a token such as `GET`.
+ * @param target The request target in the form the method may send.
+ * @param names The field names; exactly one is `Host`, which is written first, and the rest follow in order.
+ * @param values The value of each field in `names`, at the same index.
+ * @param bodyLength The body's length in bytes, or `HTTP1_CHUNKED` (-1) or `HTTP1_NO_BODY` (-2).
+ * @returns The head, ending in the empty line, or `null` for everything `http1WriteRequestHead` refuses and for a head over 1 GiB.
  */
 export const http1RequestHead = (
   method: string,
@@ -468,6 +484,13 @@ export const http1RequestHead = (
  * `Connection` among the caller's fields, which would contradict the two this
  * writes. A response to it is read after `expect(false, false)` and then
  * `expectUpgrade()`, so that its 101 answers `HTTP1_UPGRADE`.
+ *
+ * @param method The request method, a token; a WebSocket handshake sends `GET`.
+ * @param target The request target in the form the method may send.
+ * @param names The caller's field names; exactly one is `Host`, which is written first, and the rest follow in order, before the two upgrade fields.
+ * @param values The value of each field in `names`, at the same index.
+ * @param upgrade The protocol asked for, one token such as `websocket`; an empty one answers `null`.
+ * @returns The head, ending in the empty line, or `null` when any of the above is refused or the head is over 1 GiB.
  */
 export const http1UpgradeRequestHead = (
   method: string,

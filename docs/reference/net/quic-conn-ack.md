@@ -74,7 +74,7 @@ class QuicAckRanges
 
 | Member | |
 | --- | --- |
-| `new QuicAckRanges()` |  |
+| `new QuicAckRanges()` | Makes an empty set, nothing received yet, with room for `QUIC_ACK_MAX_RANGES` ranges. |
 | `ackPending: boolean` | Whether an ack-eliciting packet arrived since the last `pushAck`. |
 | `count: i32` |  |
 | `floor: i64` | Every packet number at or below this is answered as already received; -1 until a range is dropped. |

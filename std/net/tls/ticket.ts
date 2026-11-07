@@ -147,6 +147,10 @@ export class TlsTicketKeyInfo {
   /** How many it may seal: `TLS_TICKET_SEAL_CAP` unless the program lowers it. */
   sealCap: i64
 
+  /**
+   * Makes a blank record, nothing sealed yet and the cap at
+   * `TLS_TICKET_SEAL_CAP`, for `tlsTicketKeyDraw` to fill.
+   */
   constructor() {
     this.id = new Array<u8>(TLS_TICKET_KEY_ID_SIZE)
     this.createdAt = 0
@@ -194,6 +198,10 @@ export class TlsTicketState {
   serverNameLength: i32
   pskLength: i32
 
+  /**
+   * Makes an empty state, its server name and PSK arrays at their fixed sizes
+   * and both lengths 0.
+   */
   constructor() {
     this.suite = 0
     this.issuedAt = 0

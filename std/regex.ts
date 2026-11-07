@@ -2234,7 +2234,9 @@ export class Regex {
   private dPrefFast: boolean
 
   /**
-   * A pattern not compiled yet: call `regexCompile`, which builds its program.
+   * @internal Built only by `regexCompile`, which a program calls instead.
+   *
+   * A pattern not compiled yet: `regexCompile` builds its program.
    *
    * @param source The pattern as written, kept for `source`.
    * @param flags The flags as written, kept for `flags`.

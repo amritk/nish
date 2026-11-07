@@ -207,6 +207,11 @@ const urlDecodeRun = (
  * The index of the first `?` in `bytes[off, off + len)`, or -1 when there is
  * none. The path is `[off, q)` and the query `(q, off + len)`; nothing is
  * copied. A `#` is not looked for: a request target holds no fragment.
+ *
+ * @param bytes The array holding the request target.
+ * @param off Where the target starts in `bytes`.
+ * @param len The target's length in bytes; a window outside `bytes` panics.
+ * @returns The index in `bytes` of the `?`, or -1 when the target has no query.
  */
 export const urlQueryStart = (bytes: u8[], off: i32, len: i32): i32 => {
   urlCheckWindow(bytes, off, len, "urlQueryStart")
@@ -230,6 +235,14 @@ export const urlQueryStart = (bytes: u8[], off: i32, len: i32): i32 => {
  * of room always suffice; with less, `URL_DECODE_ERR_SPACE` is answered before
  * any write at or past `out.length`. On an error the bytes before it have been
  * written. What is decoded is not checked as UTF-8.
+ *
+ * @param src The array holding the encoded text.
+ * @param off Where the encoded text starts in `src`.
+ * @param len The encoded text's length in bytes; a window outside `src` panics.
+ * @param out The array the decoded bytes are written into.
+ * @param at The index in `out` the first decoded byte goes to; one below 0 or above `out.length` panics.
+ * @param flags `URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
+ * @returns How many bytes were written from `out[at]` on, or `URL_DECODE_ERR_ESCAPE`, `URL_DECODE_ERR_NUL` or `URL_DECODE_ERR_SPACE`.
  */
 export const percentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 =>
   urlDecodeRun(src, off, len, out, at, flags, false)
@@ -239,6 +252,14 @@ export const percentDecode = (src: u8[], off: i32, len: i32, out: u8[], at: i32,
  * fails at — the `%` of a malformed escape or of `%00`, or the first byte
  * `out` has no room for — or -1 when it does not fail. It writes what
  * `percentDecode` would have written before the error.
+ *
+ * @param src The array holding the encoded text.
+ * @param off Where the encoded text starts in `src`.
+ * @param len The encoded text's length in bytes; a window outside `src` panics.
+ * @param out The array the decoded bytes are written into, as `percentDecode` writes them.
+ * @param at The index in `out` the first decoded byte goes to; one below 0 or above `out.length` panics.
+ * @param flags The `URL_DECODE_*` sum `percentDecode` was given.
+ * @returns The index in `src` decoding stops at, or -1 when all of it decodes.
  */
 export const percentDecodeErrorAt = (src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32): i32 =>
   urlDecodeRun(src, off, len, out, at, flags, true)
@@ -247,6 +268,14 @@ export const percentDecodeErrorAt = (src: u8[], off: i32, len: i32, out: u8[], a
  * `percentDecode` for one path segment: `+` is literal whatever `flags` say,
  * and `%2F` is a 0x2F byte in the segment. Split the path with
  * `UrlPathSegments` first, then decode each segment.
+ *
+ * @param src The array holding the path.
+ * @param off Where the segment starts in `src`, as `UrlPathSegments` gives it.
+ * @param len The segment's length in bytes; a window outside `src` panics.
+ * @param out The array the decoded bytes are written into.
+ * @param at The index in `out` the first decoded byte goes to; one below 0 or above `out.length` panics.
+ * @param flags A `URL_DECODE_*` sum; `URL_DECODE_FORM` in it is ignored.
+ * @returns How many bytes were written from `out[at]` on, or a negative `URL_DECODE_ERR_*` code, as `percentDecode` answers.
  */
 export const percentDecodePathSegment = (
   src: u8[],
@@ -482,6 +511,10 @@ const urlKeyEquals = (bytes: u8[], off: i32, len: i32, name: string): boolean =>
  * matches nothing. Call it again for the next pair with the same key.
  * `name` is ASCII: natively it is compared with the key's bytes, under Node
  * with its UTF-16 code units, so a non-ASCII name answers differently.
+ *
+ * @param q The query iterator, moved on past the pair found; its windows bound that pair.
+ * @param name The key to look for, as it reads decoded.
+ * @returns `URL_QUERY_PAIR` when a pair with the key was found, `URL_QUERY_END` when none is left, or the negative `URL_QUERY_ERR_*` code `next()` answered.
  */
 export const urlQueryFind = (q: UrlQuery, name: string): i32 => {
   let k: i32 = q.next()
@@ -580,6 +613,10 @@ const urlDecodeString = (src: u8[], off: i32, len: i32, flags: i32): string | nu
  * or what it decodes to is not valid UTF-8, which is where
  * `decodeURIComponent` throws. `s` is expected to be ASCII, as a URL on the
  * wire is. It allocates its answer.
+ *
+ * @param s The encoded text; a code unit past 0xFF (possible only under Node) answers null.
+ * @param flags `URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
+ * @returns The decoded text, or null for a refused escape or `%00`, or text that is not UTF-8.
  */
 export const urlDecode = (s: string, flags: i32): string | null => {
   const bytes: u8[] | null = urlBytesOf(s)
@@ -595,6 +632,10 @@ export const urlDecode = (s: string, flags: i32): string | null => {
  * `URLSearchParams.get` answers, and null when the target has no query, the
  * key is absent, the value is malformed or not UTF-8, or the key comes after
  * `URL_DEFAULT_MAX_PAIRS` pairs. It allocates its answer.
+ *
+ * @param target A request target such as `/search?q=nish`; everything after its first `?` is the query.
+ * @param name The key to look for, as it reads decoded; ASCII, as `urlQueryFind` asks.
+ * @returns The first decoded value for `name`, `""` when it has no `=`, or null in the cases above.
  */
 export const urlQueryGet = (target: string, name: string): string | null => {
   const bytes: u8[] | null = urlBytesOf(target)
@@ -1025,6 +1066,9 @@ const urlFinish = (u: Url): Url | null => {
  * digits or is above 65535. An http, https, ws or wss URL needs a non-empty
  * host. The path's dot segments are removed, as RFC 3986 §5.2.2 removes them
  * from a reference with a scheme. Nothing is decoded. It allocates its answer.
+ *
+ * @param s The absolute URL, such as `https://example.com/a?b#c`.
+ * @returns The URL's parts, still percent-encoded, `scheme` and `host` lower-cased; or null when `s` is refused.
  */
 export const urlParse = (s: string): Url | null => {
   const u: Url | null = urlReadReference(s)
@@ -1053,6 +1097,10 @@ const urlMerge = (base: Url, path: string): string => {
  * breaks a rule `urlParse` names or what it resolves to is an http, https, ws
  * or wss URL without a host. `base`'s fragment is never carried over. It
  * allocates its answer and does not change `base`.
+ *
+ * @param base The URL `ref` is relative to, as `urlParse` made it.
+ * @param ref The reference: an absolute URL, a network-path `//host/p`, an absolute path, a relative path, a query or a fragment.
+ * @returns The resolved URL, still percent-encoded, or null when `ref` is refused or resolves to a URL without a host its scheme needs.
  */
 export const urlResolve = (base: Url, ref: string): Url | null => {
   const r: Url | null = urlReadReference(ref)
@@ -1091,6 +1139,9 @@ const urlHostText = (u: Url): string => (u.host.indexOf(":") >= 0 ? "[" + u.host
  * The userinfo is written when either half is non-empty. A path that starts
  * with `//` under no authority is written after `/.`, as the WHATWG URL
  * Standard writes it, so the string does not read back with an authority.
+ *
+ * @param u The URL to write; its parts are written as they are held, so still percent-encoded.
+ * @returns The URL as one string, scheme to fragment.
  */
 export const urlSerialize = (u: Url): string => {
   const parts: string[] = []
@@ -1121,7 +1172,12 @@ export const urlSerialize = (u: Url): string => {
   return parts.join("")
 }
 
-/** The port a scheme uses when a URL names none: 80 for `http` and `ws`, 443 for `https` and `wss`, else -1. */
+/**
+ * The port a scheme uses when a URL names none.
+ *
+ * @param scheme The scheme, lower-cased and without its `:`, as `Url.scheme` holds it.
+ * @returns 80 for `http` and `ws`, 443 for `https` and `wss`, and -1 for any other scheme.
+ */
 export const urlDefaultPort = (scheme: string): i32 => {
   if (scheme === "http" || scheme === "ws") {
     return 80
@@ -1140,6 +1196,9 @@ export const urlDefaultPort = (scheme: string): i32 => {
  * Hosts are compared as written, lower-cased, so `[::1]` and `[0::1]` are
  * different origins, and so are `a.com.` and `a.com`: equal strings are the
  * same origin, and a split errs toward "different".
+ *
+ * @param u The URL whose origin is wanted.
+ * @returns The origin, such as `https://example.com:443`, or null for a scheme with no default port.
  */
 export const urlOrigin = (u: Url): string | null => {
   const fallback: i32 = urlDefaultPort(u.scheme)

@@ -136,6 +136,11 @@ export class DnsConfig {
   /** Lines longer than `DNS_CONFIG_MAX_LINE`, skipped whole. */
   skippedLines: i32 = 0
 
+  /**
+   * Makes an empty configuration with no servers or search domains, and
+   * `ndots`, `timeout` and `attempts` at resolv.conf's defaults (1, 5
+   * seconds, 2).
+   */
   constructor() {
     this.servers = new Array<u8>(DNS_MAX_SERVERS * DNS_ADDRESS_BYTES)
     this.scratch = new Array<u8>(16)
@@ -190,6 +195,10 @@ export class DnsHosts {
   /** Lines longer than `DNS_CONFIG_MAX_LINE`, skipped whole. */
   skippedLines: i32 = 0
 
+  /**
+   * Makes an empty table, sized for `DNS_HOSTS_MAX_ENTRIES` addresses and
+   * `DNS_HOSTS_MAX_NAMES` names, for `dnsParseHosts` to fill.
+   */
   constructor() {
     this.addresses = new Array<u8>(DNS_HOSTS_MAX_ENTRIES * DNS_ADDRESS_BYTES)
     this.names = new Array<u8>(DNS_HOSTS_MAX_NAME_BYTES)

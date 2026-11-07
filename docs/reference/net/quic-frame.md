@@ -1972,7 +1972,7 @@ class QuicFrame
 
 | Member | |
 | --- | --- |
-| `new QuicFrame()` |  |
+| `new QuicFrame()` | Makes an empty frame with room for `QUIC_FRAME_MAX_ACK_RANGES` ACK ranges, for `quicParseFrame` to fill. |
 | `ackDelay: i64` |  |
 | `ackRangeCount: i32` |  |
 | `ackRanges: i64[]` |  |

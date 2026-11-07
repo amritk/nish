@@ -273,7 +273,7 @@ class QuicTransportParameters
 
 | Member | |
 | --- | --- |
-| `new QuicTransportParameters()` |  |
+| `new QuicTransportParameters()` | Makes the parameters an endpoint has before it sets or reads any: §18.2's defaults, every connection ID and token empty. |
 | `ackDelayExponent: i64` |  |
 | `activeConnectionIdLimit: i64` |  |
 | `disableActiveMigration: boolean` |  |

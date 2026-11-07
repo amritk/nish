@@ -195,14 +195,23 @@ function fetchSync(
 #### Parameters
 
 <scalar-field name="req" type="HttpRequest" required>
+
+The request to send, as a `FetchSyncClient` takes it.
+
 </scalar-field>
 
 <scalar-field name="options" type="HttpOptions" required>
+
+The client's limits, timeouts, TLS trust and proxies for this one fetch.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="HttpResponse | null">
+
+The response, the last one when redirects were followed, or null on any failure.
+
 </scalar-field>
 
 ## httpChooseProxy
@@ -221,22 +230,35 @@ function httpChooseProxy(
 #### Parameters
 
 <scalar-field name="lower" type="string | null" required>
+
+The lower-case variable's value, such as `http_proxy`'s, or null when it is unset.
+
 </scalar-field>
 
 <scalar-field name="upper" type="string | null" required>
+
+The upper-case variable's value, such as `HTTP_PROXY`'s, or null when it is unset.
+
 </scalar-field>
 
 <scalar-field name="upperAllowed" type="boolean" required>
+
+Whether the upper-case variable may be read: false for `HTTP_PROXY` under CGI, where a request's `Proxy` header sets it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The chosen variable's value, a proxy URL or for `no_proxy` a comma-separated host list, or "" when neither applies.
+
 </scalar-field>
 
 ## httpErrorName
 
-A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout", ...
+A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout",
+... A fetch's `errorText` starts with it.
 
 ```ts
 function httpErrorName(code: i32): string
@@ -245,11 +267,17 @@ function httpErrorName(code: i32): string
 #### Parameters
 
 <scalar-field name="code" type="i32" required>
+
+An `HTTP_E_*` code, such as a client's `error`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The code's name, "none" for `HTTP_E_NONE`, or "unknown" for a number that is no code.
+
 </scalar-field>
 
 ## httpNoProxyMatch
@@ -271,17 +299,29 @@ function httpNoProxyMatch(
 #### Parameters
 
 <scalar-field name="noProxy" type="string" required>
+
+The list, as `NO_PROXY` holds it; an entry that does not parse is skipped.
+
 </scalar-field>
 
 <scalar-field name="host" type="string" required>
+
+The request's host name or IP address; trailing dots do not matter.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port the request goes to.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when an entry names the host (and its port, if it has one), so the request goes direct.
+
 </scalar-field>
 
 ## httpProxyFor
@@ -304,26 +344,47 @@ function httpProxyFor(
 #### Parameters
 
 <scalar-field name="scheme" type="string" required>
+
+The request URL's scheme, lower-cased; one other than `http` or `https` gets no proxy.
+
 </scalar-field>
 
 <scalar-field name="host" type="string" required>
+
+The request URL's host, matched against `noProxy`.
+
 </scalar-field>
 
 <scalar-field name="port" type="i32" required>
+
+The port the request goes to, matched against an entry's `:port`.
+
 </scalar-field>
 
 <scalar-field name="httpProxy" type="string" required>
+
+The proxy URL for `http` requests, or "" for none.
+
 </scalar-field>
 
 <scalar-field name="httpsProxy" type="string" required>
+
+The proxy URL for `https` requests, or "" for none.
+
 </scalar-field>
 
 <scalar-field name="noProxy" type="string" required>
+
+The comma-separated hosts that go direct, as `httpNoProxyMatch` reads them.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The proxy URL the request goes through, or "" when it goes direct.
+
 </scalar-field>
 
 ## FetchSyncClient

@@ -79,7 +79,7 @@ The offset in `src` of the byte `percentDecode` with the same arguments fails at
 
 <scalar-card title="urlDefaultPort" icon="phosphor/regular/function" href="#urldefaultport">
 
-The port a scheme uses when a URL names none: 80 for `http` and `ws`, 443 for `https` and `wss`, else -1.
+The port a scheme uses when a URL names none.
 
 </scalar-card>
 
@@ -276,26 +276,47 @@ function percentDecode(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array holding the encoded text.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the encoded text starts in `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The encoded text's length in bytes; a window outside `src` panics.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The array the decoded bytes are written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The index in `out` the first decoded byte goes to; one below 0 or above `out.length` panics.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many bytes were written from `out[at]` on, or `URL_DECODE_ERR_ESCAPE`, `URL_DECODE_ERR_NUL` or `URL_DECODE_ERR_SPACE`.
+
 </scalar-field>
 
 ## percentDecodeErrorAt
@@ -319,26 +340,47 @@ function percentDecodeErrorAt(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array holding the encoded text.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the encoded text starts in `src`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The encoded text's length in bytes; a window outside `src` panics.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The array the decoded bytes are written into, as `percentDecode` writes them.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The index in `out` the first decoded byte goes to; one below 0 or above `out.length` panics.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+The `URL_DECODE_*` sum `percentDecode` was given.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `src` decoding stops at, or -1 when all of it decodes.
+
 </scalar-field>
 
 ## percentDecodePathSegment
@@ -361,26 +403,47 @@ function percentDecodePathSegment(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array holding the path.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the segment starts in `src`, as `UrlPathSegments` gives it.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The segment's length in bytes; a window outside `src` panics.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The array the decoded bytes are written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The index in `out` the first decoded byte goes to; one below 0 or above `out.length` panics.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+A `URL_DECODE_*` sum; `URL_DECODE_FORM` in it is ignored.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many bytes were written from `out[at]` on, or a negative `URL_DECODE_ERR_*` code, as `percentDecode` answers.
+
 </scalar-field>
 
 ## urlDecode
@@ -400,19 +463,28 @@ function urlDecode(
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+The encoded text; a code unit past 0xFF (possible only under Node) answers null.
+
 </scalar-field>
 
 <scalar-field name="flags" type="i32" required>
+
+`URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, summed, or 0 for strict.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The decoded text, or null for a refused escape or `%00`, or text that is not UTF-8.
+
 </scalar-field>
 
 ## urlDefaultPort
 
-The port a scheme uses when a URL names none: 80 for `http` and `ws`, 443 for `https` and `wss`, else -1.
+The port a scheme uses when a URL names none.
 
 ```ts
 function urlDefaultPort(scheme: string): i32
@@ -421,11 +493,17 @@ function urlDefaultPort(scheme: string): i32
 #### Parameters
 
 <scalar-field name="scheme" type="string" required>
+
+The scheme, lower-cased and without its `:`, as `Url.scheme` holds it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+80 for `http` and `ws`, 443 for `https` and `wss`, and -1 for any other scheme.
+
 </scalar-field>
 
 ## urlOrigin
@@ -445,11 +523,17 @@ function urlOrigin(u: Url): string | null
 #### Parameters
 
 <scalar-field name="u" type="Url" required>
+
+The URL whose origin is wanted.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The origin, such as `https://example.com:443`, or null for a scheme with no default port.
+
 </scalar-field>
 
 ## urlParse
@@ -472,11 +556,17 @@ function urlParse(s: string): Url | null
 #### Parameters
 
 <scalar-field name="s" type="string" required>
+
+The absolute URL, such as `https://example.com/a?b#c`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Url | null">
+
+The URL's parts, still percent-encoded, `scheme` and `host` lower-cased; or null when `s` is refused.
+
 </scalar-field>
 
 ## urlQueryFind
@@ -499,14 +589,23 @@ function urlQueryFind(
 #### Parameters
 
 <scalar-field name="q" type="UrlQuery" required>
+
+The query iterator, moved on past the pair found; its windows bound that pair.
+
 </scalar-field>
 
 <scalar-field name="name" type="string" required>
+
+The key to look for, as it reads decoded.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+`URL_QUERY_PAIR` when a pair with the key was found, `URL_QUERY_END` when none is left, or the negative `URL_QUERY_ERR_*` code `next()` answered.
+
 </scalar-field>
 
 ## urlQueryGet
@@ -527,14 +626,23 @@ function urlQueryGet(
 #### Parameters
 
 <scalar-field name="target" type="string" required>
+
+A request target such as `/search?q=nish`; everything after its first `?` is the query.
+
 </scalar-field>
 
 <scalar-field name="name" type="string" required>
+
+The key to look for, as it reads decoded; ASCII, as `urlQueryFind` asks.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The first decoded value for `name`, `""` when it has no `=`, or null in the cases above.
+
 </scalar-field>
 
 ## urlQueryStart
@@ -554,17 +662,29 @@ function urlQueryStart(
 #### Parameters
 
 <scalar-field name="bytes" type="u8[]" required>
+
+The array holding the request target.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the target starts in `bytes`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The target's length in bytes; a window outside `bytes` panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `bytes` of the `?`, or -1 when the target has no query.
+
 </scalar-field>
 
 ## urlResolve
@@ -585,14 +705,23 @@ function urlResolve(
 #### Parameters
 
 <scalar-field name="base" type="Url" required>
+
+The URL `ref` is relative to, as `urlParse` made it.
+
 </scalar-field>
 
 <scalar-field name="ref" type="string" required>
+
+The reference: an absolute URL, a network-path `//host/p`, an absolute path, a relative path, a query or a fragment.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Url | null">
+
+The resolved URL, still percent-encoded, or null when `ref` is refused or resolves to a URL without a host its scheme needs.
+
 </scalar-field>
 
 ## urlSerialize
@@ -609,11 +738,17 @@ function urlSerialize(u: Url): string
 #### Parameters
 
 <scalar-field name="u" type="Url" required>
+
+The URL to write; its parts are written as they are held, so still percent-encoded.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The URL as one string, scheme to fragment.
+
 </scalar-field>
 
 ## Url

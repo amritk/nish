@@ -54,7 +54,7 @@ while (event !== HTTP1_NEED_MORE) {
 
 <scalar-card title="http1RequestHead" icon="phosphor/regular/function" href="#http1requesthead">
 
-`http1WriteRequestHead`'s head in an array of its own, or `null` for everything it refuses.
+`http1WriteRequestHead`'s head in an array of its own, sized to fit, so there is no room to run out of.
 
 </scalar-card>
 
@@ -153,8 +153,8 @@ Written from RFC 9112 and RFC 9110, not ported from another implementation.
 
 ## http1RequestHead
 
-`http1WriteRequestHead`'s head in an array of its own, or `null` for
-everything it refuses.
+`http1WriteRequestHead`'s head in an array of its own, sized to fit, so
+there is no room to run out of.
 
 ```ts
 function http1RequestHead(
@@ -169,23 +169,41 @@ function http1RequestHead(
 #### Parameters
 
 <scalar-field name="method" type="string" required>
+
+The request method, a token such as `GET`.
+
 </scalar-field>
 
 <scalar-field name="target" type="string" required>
+
+The request target in the form the method may send.
+
 </scalar-field>
 
 <scalar-field name="names" type="string[]" required>
+
+The field names; exactly one is `Host`, which is written first, and the rest follow in order.
+
 </scalar-field>
 
 <scalar-field name="values" type="string[]" required>
+
+The value of each field in `names`, at the same index.
+
 </scalar-field>
 
 <scalar-field name="bodyLength" type="i64" required>
+
+The body's length in bytes, or `HTTP1_CHUNKED` (-1) or `HTTP1_NO_BODY` (-2).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The head, ending in the empty line, or `null` for everything `http1WriteRequestHead` refuses and for a head over 1 GiB.
+
 </scalar-field>
 
 ## http1UpgradeRequestHead
@@ -212,23 +230,41 @@ function http1UpgradeRequestHead(
 #### Parameters
 
 <scalar-field name="method" type="string" required>
+
+The request method, a token; a WebSocket handshake sends `GET`.
+
 </scalar-field>
 
 <scalar-field name="target" type="string" required>
+
+The request target in the form the method may send.
+
 </scalar-field>
 
 <scalar-field name="names" type="string[]" required>
+
+The caller's field names; exactly one is `Host`, which is written first, and the rest follow in order, before the two upgrade fields.
+
 </scalar-field>
 
 <scalar-field name="values" type="string[]" required>
+
+The value of each field in `names`, at the same index.
+
 </scalar-field>
 
 <scalar-field name="upgrade" type="string" required>
+
+The protocol asked for, one token such as `websocket`; an empty one answers `null`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The head, ending in the empty line, or `null` when any of the above is refused or the head is over 1 GiB.
+
 </scalar-field>
 
 ## http1WriteRequestHead
@@ -266,29 +302,53 @@ function http1WriteRequestHead(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the head is written into; nothing outside the head's bytes changes.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The index in `out` the request line starts at; a negative one answers `HTTP1_NO_ROOM`.
+
 </scalar-field>
 
 <scalar-field name="method" type="string" required>
+
+The request method, a token such as `GET`, written as given.
+
 </scalar-field>
 
 <scalar-field name="target" type="string" required>
+
+The request target in the form the method may send, written as given.
+
 </scalar-field>
 
 <scalar-field name="names" type="string[]" required>
+
+The field names, matched case-insensitively; exactly one is `Host`, which is written first, and the rest follow in order.
+
 </scalar-field>
 
 <scalar-field name="values" type="string[]" required>
+
+The value of each field in `names`, at the same index.
+
 </scalar-field>
 
 <scalar-field name="bodyLength" type="i64" required>
+
+The body's length in bytes, or `HTTP1_CHUNKED` (-1) or `HTTP1_NO_BODY` (-2).
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` just past the empty line, or `HTTP1_REFUSED` or `HTTP1_NO_ROOM`.
+
 </scalar-field>
 
 ## Http1ResponseParser

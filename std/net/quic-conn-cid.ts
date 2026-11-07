@@ -70,6 +70,10 @@ export class QuicCidEntry {
   /** For a local ID: whether a NEW_CONNECTION_ID frame announced it yet. Sequence 0 needs none. */
   announced: boolean = false
 
+  /**
+   * Makes an unused slot, with room for the longest connection ID and its
+   * reset token.
+   */
   constructor() {
     this.cid = new Array<u8>(QUIC_MAX_CID_LENGTH)
     this.resetToken = new Array<u8>(QUIC_RESET_TOKEN_SIZE)

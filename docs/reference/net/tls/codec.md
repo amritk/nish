@@ -2204,7 +2204,7 @@ class TlsClientHello
 
 | Member | |
 | --- | --- |
-| `new TlsClientHello()` |  |
+| `new TlsClientHello()` | Makes an empty hello, every field empty and every flag false, for `tlsParseClientHello` to fill. |
 | `alert: i32` | 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. |
 | `alpn: u8[][]` | The ALPN protocol names offered, each as its bytes (RFC 7301 §3.1). |
 | `cipherSuites: i32[]` |  |
@@ -2254,7 +2254,7 @@ class TlsClientHelloView
 
 | Member | |
 | --- | --- |
-| `new TlsClientHelloView()` |  |
+| `new TlsClientHelloView()` | Makes an empty view, every window empty and every flag false, for `tlsReadClientHello` to fill. |
 | `alert: i32` | 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. |
 | `alpnAt: i32` | ALPN's `protocol_name_list`, each name a length byte and its bytes (RFC 7301 §3.1). |
 | `alpnLength: i32` |  |
@@ -2331,7 +2331,7 @@ class TlsServerFlightView
 
 | Member | |
 | --- | --- |
-| `new TlsServerFlightView()` |  |
+| `new TlsServerFlightView()` | Makes an empty view, every window empty and every flag false, for the `tlsRead*` functions to fill. |
 | `alert: i32` | 0 when the message parsed, else `decode_error`. |
 | `alpnAt: i32` | EncryptedExtensions' ALPN: the one protocol the server chose (RFC 7301 §3.1). |
 | `alpnLength: i32` |  |

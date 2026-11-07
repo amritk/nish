@@ -454,7 +454,7 @@ class TlsP256Signer
 
 | Member | |
 | --- | --- |
-| `new TlsP256Signer()` |  |
+| `new TlsP256Signer()` | Makes the signer's scratch and one signature array per DER length, so a signature keeps nothing: the P-256 step releases what it allocates per call, and the DER is written into one of these arrays. |
 | `sign(priv: Secret<u8[]>, content: u8[]): u8[] \| null` | `tlsSignEcdsaP256(priv, content)`, byte for byte, in the array of this signer's that has its length; `null` for a malformed key. It keeps nothing: the P-256 signature releases what it allocated, and the DER is written in place. The key is borrowed. |
 
 ## TlsSecretPool
