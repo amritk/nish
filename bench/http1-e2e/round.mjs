@@ -76,7 +76,9 @@ const descendants = (root) => {
   const out = []
   const walk = (p) => {
     for (const c of kids.get(p) ?? []) {
-      const m = read(`/proc/${c}/cmdline`).match(/--nish-prefork-worker=(\d+)/)
+      // The last match: under valgrind the cmdline also carries the
+      // --trace-children-skip-by-arg pattern, which names workers 1 and up.
+      const m = [...read(`/proc/${c}/cmdline`).matchAll(/--nish-prefork-worker=(\d+)/g)].at(-1)
       out.push({ pid: c, index: m ? Number(m[1]) : -1 })
       walk(c)
     }
@@ -170,6 +172,10 @@ const waitReady = async (child, limitMs) => {
     }
     await sleep(500)
   }
+  // Leave nothing holding the ports for the next round.
+  try {
+    process.kill(-child.pid, "SIGKILL")
+  } catch {}
   throw new Error("server not ready")
 }
 
