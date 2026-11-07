@@ -931,22 +931,7 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
   }
   const entries: string[] = []
   for (const sig of hosts) {
-    const args: string[] = []
-    const passed: string[] = []
-    let i = 0
-    while (i < sig.paramTypes.length) {
-      args.push(`a${i}`)
-      passed.push(hostArgument(table, sig.paramTypes[i], `a${i}`))
-      i = i + 1
-    }
-    const call = `host_${sig.name}(${passed.join(", ")})`
-    const body = hostResult(table, sig, call)
-    if (body === `host_${sig.name}(${args.join(", ")})`) {
-      entries.push(`      ${sig.name}: hostFn("${sig.name}"),`)
-      continue
-    }
-    lines.push(`  const host_${sig.name} = hostFn("${sig.name}");`)
-    entries.push(`      ${sig.name}: (${args.join(", ")}) => ${body},`)
+    pushHostEntry(table, sig, lines, entries)
   }
   lines.push("  return {")
   lines.push("    ...imports,")
@@ -957,4 +942,28 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
   lines.push("}")
   lines.push("")
   return lines
+}
+
+/**
+ * The `host` entry for one host function, into `entries`: the page's own
+ * function when nothing converts, else an adapter over it, whose binding goes
+ * into `lines`.
+ */
+const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entries: string[]): void => {
+  const args: string[] = []
+  const passed: string[] = []
+  let i = 0
+  while (i < sig.paramTypes.length) {
+    args.push(`a${i}`)
+    passed.push(hostArgument(table, sig.paramTypes[i], `a${i}`))
+    i = i + 1
+  }
+  const call = `host_${sig.name}(${passed.join(", ")})`
+  const body = hostResult(table, sig, call)
+  if (body === `host_${sig.name}(${args.join(", ")})`) {
+    entries.push(`      ${sig.name}: hostFn("${sig.name}"),`)
+    return
+  }
+  lines.push(`  const host_${sig.name} = hostFn("${sig.name}");`)
+  entries.push(`      ${sig.name}: (${args.join(", ")}) => ${body},`)
 }

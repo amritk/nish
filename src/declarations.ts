@@ -510,10 +510,7 @@ const checkHostSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, nam
   for (let i = 0; i < sig.paramTypes.length; i++) {
     const type = sig.paramTypes[i]
     if (type === T_VOID || !isHostType(ctx.table, type)) {
-      ctx.error(
-        decl.children[1].children[i],
-        hostTypeProblem(`Parameter \`${sig.paramNames[i]}\``, name, `\`${ctx.table.typeName(type)}\``)
-      )
+      refuseHostParameter(ctx, sig, decl, name, i)
     }
   }
   if (!isHostType(ctx.table, sig.returnType)) {
@@ -522,6 +519,18 @@ const checkHostSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, nam
       hostTypeProblem("The result", name, `\`${ctx.table.typeName(sig.returnType)}\``)
     )
   }
+}
+
+/** The refusal of parameter `i` of host function `name`, whose type does not cross. */
+const refuseHostParameter = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string, i: i32): void => {
+  ctx.error(
+    decl.children[1].children[i],
+    hostTypeProblem(
+      `Parameter \`${sig.paramNames[i]}\``,
+      name,
+      `\`${ctx.table.typeName(sig.paramTypes[i])}\``
+    )
+  )
 }
 
 /**

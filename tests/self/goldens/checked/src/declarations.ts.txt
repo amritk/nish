@@ -271,23 +271,33 @@ function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig ->
   callee +53:7 rejectStoredMask -> @rejectStoredMask
 function checkHostSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void -> @checkHostSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via CheckContext.error
+  sharedWrite: via refuseHostParameter
   escaping: name
-  calls: CheckContext.error TypeTable.typeName hostTypeProblem isHostType nish_panic_index nish_str_concat
-  pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
-  pointer sig: size=176 writesThrough=false captured=false
-  pointer decl: size=40 writesThrough=false captured=false
+  calls: CheckContext.error TypeTable.typeName hostTypeProblem isHostType nish_panic_index nish_str_concat refuseHostParameter
+  pointer ctx: size=296 writesThrough=true captured=false passedTo=refuseHostParameter#0 CheckContext.error#0
+  pointer sig: size=176 writesThrough=false captured=false passedTo=refuseHostParameter#1
+  pointer decl: size=40 writesThrough=false captured=false passedTo=refuseHostParameter#2
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
   local +1:11 type: i32 (const)
   callee +2:29 isHostType -> @isHostType
-  callee +3:7 CheckContext.error -> @CheckContext.error
-  callee +5:9 hostTypeProblem -> @hostTypeProblem
-  callee +5:74 TypeTable.typeName -> @TypeTable.typeName
-  callee +9:8 isHostType -> @isHostType
-  callee +10:5 CheckContext.error -> @CheckContext.error
-  callee +12:7 hostTypeProblem -> @hostTypeProblem
-  callee +12:48 TypeTable.typeName -> @TypeTable.typeName
+  callee +3:7 refuseHostParameter -> @refuseHostParameter
+  callee +6:8 isHostType -> @isHostType
+  callee +7:5 CheckContext.error -> @CheckContext.error
+  callee +9:7 hostTypeProblem -> @hostTypeProblem
+  callee +9:48 TypeTable.typeName -> @TypeTable.typeName
+function refuseHostParameter(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string, i: i32): void -> @refuseHostParameter
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: i name
+  calls: CheckContext.error TypeTable.typeName hostTypeProblem nish_panic_index nish_str_concat
+  pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer sig: size=176 writesThrough=false captured=false
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 CheckContext.error -> @CheckContext.error
+  callee +2:5 hostTypeProblem -> @hostTypeProblem
+  callee +5:12 TypeTable.typeName -> @TypeTable.typeName
 function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void -> @checkForeignSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

@@ -186,34 +186,35 @@ function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeSc
   local +72:13 target: i32 (const)
   callee +72:22 StringMap.get -> @StringMap.get
   local +73:13 dest: string (const)
-  local +76:15 at: string (const)
-  callee +79:11 relativeSpecifier -> @relativeSpecifier
-  callee +80:13 resolvePath -> @resolvePath
-  callee +80:29 joinPath -> @joinPath
-  callee +81:13 resolvePath -> @resolvePath
-  callee +86:31 relativeSpecifier -> @relativeSpecifier
-  local +89:9 edits: Edit[] (let)
-  callee +90:5 emitModule -> @emitModule
-  local +95:9 r: i32 (let)
-  local +97:13 node: Node (const)
-  callee +98:7 DiagnosticSink.report -> @DiagnosticSink.report
-  local +109:13 node: Node (const)
-  callee +110:7 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
-  local +113:11 header: string (const)
-  callee +113:20 runtimeImport -> @runtimeImport
-  callee +113:60 runtimeImport -> @runtimeImport
-  local +115:13 at: i32 (const)
-  callee +115:18 importOffset -> @importOffset
-  local +118:13 ordered: Edit[] (const)
-  local +119:11 placed: boolean (let)
-  local +120:18 edit: Edit (const)
-  callee +122:24 new Edit -> @Edit.constructor
-  callee +128:22 new Edit -> @Edit.constructor
-  local +132:11 text: string (const)
-  callee +132:18 applyModuleEdits -> @applyModuleEdits
-  callee +137:23 new EmittedFile -> @EmittedFile.constructor
-  local +143:7 entryOut: string (let)
-  local +144:7 script: boolean (let)
-  callee +149:16 scriptMain -> @scriptMain
-  callee +153:21 new EmittedFile -> @EmittedFile.constructor
-  callee +153:49 launcher -> @launcher
+  local +74:13 hostPath: string (const)
+  local +81:15 at: string (const)
+  callee +84:11 relativeSpecifier -> @relativeSpecifier
+  callee +85:13 resolvePath -> @resolvePath
+  callee +85:29 joinPath -> @joinPath
+  callee +86:13 resolvePath -> @resolvePath
+  callee +91:31 relativeSpecifier -> @relativeSpecifier
+  local +94:9 edits: Edit[] (let)
+  callee +95:5 emitModule -> @emitModule
+  local +100:9 r: i32 (let)
+  local +102:13 node: Node (const)
+  callee +103:7 DiagnosticSink.report -> @DiagnosticSink.report
+  local +114:13 node: Node (const)
+  callee +115:7 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
+  local +118:11 header: string (const)
+  callee +118:20 runtimeImport -> @runtimeImport
+  callee +118:60 runtimeImport -> @runtimeImport
+  local +120:13 at: i32 (const)
+  callee +120:18 importOffset -> @importOffset
+  local +123:13 ordered: Edit[] (const)
+  local +124:11 placed: boolean (let)
+  local +125:18 edit: Edit (const)
+  callee +127:24 new Edit -> @Edit.constructor
+  callee +133:22 new Edit -> @Edit.constructor
+  local +137:11 text: string (const)
+  callee +137:18 applyModuleEdits -> @applyModuleEdits
+  callee +142:23 new EmittedFile -> @EmittedFile.constructor
+  local +148:7 entryOut: string (let)
+  local +149:7 script: boolean (let)
+  callee +154:16 scriptMain -> @scriptMain
+  callee +158:21 new EmittedFile -> @EmittedFile.constructor
+  callee +158:49 launcher -> @launcher

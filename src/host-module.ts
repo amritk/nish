@@ -381,7 +381,7 @@ const keepExports = (text: string, tokens: Tokens): HostText => {
     const from = tokens.starts[kept.firsts[k]]
     const to = tokens.ends[kept.lasts[k]]
     out.add(blank(text, at, from))
-    out.add(text.substring(from, to))
+    out.add(text.slice(from, to))
     at = to
     k = k + 1
   }
@@ -394,7 +394,9 @@ const blank = (text: string, from: i32, to: i32): string => {
   const out = new StringBuilder()
   let run = 0
   let k = from
-  while (k < to) {
+  // The offsets are tokens' own, inside `text`: the first two tests change
+  // nothing but what the bounds check can prove.
+  while (k >= 0 && k < text.length && k < to) {
     const c = text.charCodeAt(k)
     if (c === 10 || c === 13) {
       out.add(blankRun(run))
@@ -557,14 +559,9 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
           )
         )
       } else if (isBuffer(type, typed, scalars)) {
-        problems.push(
-          new HostProblem(
-            `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, a buffer the page would lend wasm: buffer windows come in WP50 stage 3, so until then pass it through module storage`,
-            type
-          )
-        )
+        problems.push(bufferProblem(p, name, type))
       } else if (!crosses(type, scalars, local)) {
-        problems.push(new HostProblem(hostTypeProblem(`Parameter \`${p}\``, name, spell(type)), type))
+        problems.push(typeProblem(`Parameter \`${p}\``, name, type))
       }
     }
     const answer = unparen(result)
@@ -579,11 +576,22 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
         )
       )
     } else if (!crosses(answer, scalars, local)) {
-      problems.push(new HostProblem(hostTypeProblem("The result", name, spell(answer)), answer))
+      problems.push(typeProblem("The result", name, answer))
     }
   }
   return problems
 }
+
+/** A parameter the page would lend as a buffer, which crosses only from stage 3. */
+const bufferProblem = (p: string, name: string, type: Node): HostProblem =>
+  new HostProblem(
+    `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, a buffer the page would lend wasm: buffer windows come in WP50 stage 3, so until then pass it through module storage`,
+    type
+  )
+
+/** A parameter or result whose type is none a wasm import carries. */
+const typeProblem = (where: string, name: string, type: Node): HostProblem =>
+  new HostProblem(hostTypeProblem(where, name, spell(type)), type)
 
 const unparen = (type: Node): Node => (type.kind === N_TYPE_PAREN ? unparen(type.children[0]) : type)
 

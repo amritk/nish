@@ -339,14 +339,19 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       }
       const target = unit.resolved.get(stmt.text, -1)
       const dest = target >= 0 && target < outputs.length ? outputs[target] : ""
-      if (target >= 0 && target < modules.length && modules[target].source.host) {
-        // The page's module, named from where this file is written.
+      const hostPath =
+        target >= 0 && target < modules.length && modules[target].source.host
+          ? modules[target].source.path
+          : ""
+      if (hostPath.length > 0) {
+        // The page's module (a module's path is never empty), named from
+        // where this file is written.
         const at = compilation.workingDir
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(
           relativeSpecifier(
             resolvePath(at, joinPath([compilation.opts.emitTs, out])),
-            resolvePath(at, modules[target].source.path)
+            resolvePath(at, hostPath)
           )
         )
       } else if (dest.length > 0) {

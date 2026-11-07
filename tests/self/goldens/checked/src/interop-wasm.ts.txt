@@ -442,21 +442,31 @@ function hostResult(table: TypeTable, sig: FunctionSig, call: string): string ->
   callee +9:25 wasmUnsignedIn -> @wasmUnsignedIn
 function hostImportsOf(table: TypeTable, hosts: FunctionSig[]): string[] -> @hostImportsOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isRanged hostArgument hostResult nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 pushAll
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 hostArgument#0 hostResult#0
+  calls: TypeTable.isRanged nish_array_grow pushAll pushHostEntry
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 pushHostEntry#0
   pointer hosts: size=0 writesThrough=false captured=false
-  stackSites=3 stackLocals=3
+  stackSites=1 stackLocals=1
   local +0:9 lines: string[] (const)
   local +18:7 ranged: boolean (let)
   local +19:14 sig: FunctionSig (const)
   callee +20:9 TypeTable.isRanged -> @TypeTable.isRanged
   local +32:9 entries: string[] (const)
   local +33:14 sig: FunctionSig (const)
-  local +34:11 args: string[] (const)
-  local +35:11 passed: string[] (const)
-  local +36:9 i: i32 (let)
-  callee +39:19 hostArgument -> @hostArgument
-  local +42:11 call: string (const)
-  local +43:11 body: string (const)
-  callee +43:18 hostResult -> @hostResult
-  callee +54:3 pushAll -> @pushAll
+  callee +34:5 pushHostEntry -> @pushHostEntry
+  callee +39:3 pushAll -> @pushAll
+function pushHostEntry(table: TypeTable, sig: FunctionSig, lines: string[], entries: string[]): void -> @pushHostEntry
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: hostArgument hostResult nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
+  pointer table: size=96 writesThrough=false captured=false passedTo=hostArgument#0 hostResult#0
+  pointer sig: size=176 writesThrough=false captured=false passedTo=hostResult#1
+  pointer lines: size=0 writesThrough=true captured=false
+  pointer entries: size=0 writesThrough=true captured=false
+  stackSites=2 stackLocals=2
+  local -11:9 args: string[] (const)
+  local -10:9 passed: string[] (const)
+  local -9:7 i: i32 (let)
+  callee -6:17 hostArgument -> @hostArgument
+  local -3:9 call: string (const)
+  local -2:9 body: string (const)
+  callee -2:16 hostResult -> @hostResult
