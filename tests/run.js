@@ -30419,6 +30419,91 @@ if (!only || "wasm-host-panic".includes(only)) {
   }
 }
 
+// ---- WP50 stage 3: nish/page, the page half of a wasm-host module -----------
+//
+// tests/page holds a module with two `nish/host/ring` rings in module storage
+// and a page that drives them through runtime/page.mjs's `ringOver`, the page
+// filling one and draining the other; it also exercises `HostTable` (slot 0 is
+// never handed out, a taken or forged handle throws) and `reportPanic`. tsc
+// checks the page against main.d.ts and runtime/page.d.ts.
+if (!only || "wasm-host-page".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`page: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "page")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "page"))) {
+      fs.copyFileSync(path.join(root, "tests", "page", name), path.join(dir, name))
+    }
+    fs.copyFileSync(path.join(root, "runtime", "page.mjs"), path.join(dir, "nish-page.mjs"))
+    fs.copyFileSync(path.join(root, "runtime", "page.d.ts"), path.join(dir, "nish-page.d.mts"))
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(NISH, [at("main.ts"), "--target", "wasm32", "--emit-dts", at("main.d.ts"), "-o", `${at("ll")}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("page: a module with two rings in module storage compiles for wasm32 with --emit-dts, one .ll per module", compiled.status === 0, shown(compiled))
+    const linked = compiled.status === 0 ? wasmHostLink([at("ll/main.ll"), at("ll/ring.ll")], ["-o", at("main.wasm"), "--profile", "wasm-host"]) : null
+    check("page: it links under --profile wasm-host", linked?.status === 0, linked === null ? "" : shown(linked))
+    if (linked?.status === 0) {
+      fs.writeFileSync(
+        at("drive.mjs"),
+        [
+          'import { readFileSync } from "node:fs"',
+          'import * as loader from "./main.mjs"',
+          'import { run } from "./page.ts"',
+          "console.log(run(loader, readFileSync(process.argv[2])).join(\"\\n\"))",
+          "",
+        ].join("\n")
+      )
+      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at("main.wasm")], {
+        cwd: dir,
+        encoding: "utf8",
+      })
+      const lines = res.status === 0 ? res.stdout.trim().split("\n") : []
+      const expected = fs.readFileSync(path.join(root, "tests", "page", "expected.out"), "utf8").trim().split("\n")
+      const tableLines = lines.filter((l) => /^(handles|get|take|taken|zero|reused) /.test(l))
+      check(
+        "page: HostTable hands out 1 and up, never 0, reuses a taken slot, and throws on a taken, zero, forged or fractional handle",
+        tableLines.join("\n") === expected.filter((l) => /^(handles|get|take|taken|zero|reused) /.test(l)).join("\n"),
+        shown(res)
+      )
+      check(
+        "page: ringOver reads and writes the module's rings both ways through memory and layout",
+        lines.filter((l) => !/^(handles|get|take|taken|zero|reused|report) /.test(l)).join("\n") ===
+          expected.filter((l) => !/^(handles|get|take|taken|zero|reused|report) /.test(l)).join("\n"),
+        shown(res)
+      )
+      check(
+        "page: reportPanic writes `nish: <message>` to console.error",
+        lines.includes("report nish: index out of range: 9 >= 4"),
+        shown(res)
+      )
+    }
+    if (compiled.status === 0) {
+      const typedDir = at("typed")
+      fs.mkdirSync(typedDir)
+      for (const name of ["main.d.ts", "nish-page.d.mts", "page.ts"]) {
+        fs.copyFileSync(at(name), path.join(typedDir, name))
+      }
+      const config = path.join(typedDir, "tsconfig.json")
+      fs.writeFileSync(
+        config,
+        JSON.stringify({
+          extends: path.join(root, "tsconfig.json"),
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+          include: [],
+          files: ["main.d.ts", "nish-page.d.mts", "page.ts"].map((f) => path.join(typedDir, f)),
+        })
+      )
+      const typed = typeCheckProject(config, root)
+      check("page: the page type-checks against main.d.ts and runtime/page.d.ts", typed.ok, typed.output)
+    }
+  }
+}
+
 if (!only || "wasm-size".includes(only)) {
   // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
   const host = `${process.platform}-${process.arch}`
