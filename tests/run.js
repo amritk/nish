@@ -30042,6 +30042,25 @@ if (!only || "host-import".includes(only)) {
       scriptTsc.ok,
       scriptTsc.output
     )
+    // A module is already a module to tsc, so its reading gets no `export {}`.
+    const handleText = handleReading.status === 0 ? fs.readFileSync(path.join(handleDir, "reading-handle.ts"), "utf8") : ""
+    check(
+      "host-import: an --emit-ts reading of a module that spells HostHandle gets no export {}",
+      handleText.includes("type HostHandle<") && !/^export \{\}/m.test(handleText),
+      handleText || shown(handleReading)
+    )
+
+    // The three spellings of the brand, runtime/nish.d.ts's global and `"nish"`
+    // module ones and the alias a reading carries, are one type only while they
+    // are spelled alike: tsc compares them structurally.
+    const brandOf = (text) =>
+      [...text.matchAll(/^\s*(?:export )?type HostHandle<K extends string> = (.*?);?$/gm)].map((m) => m[1])
+    const brands = [...brandOf(fs.readFileSync(path.join(root, "runtime", "nish.d.ts"), "utf8")), ...brandOf(handleText)]
+    check(
+      "host-import: runtime/nish.d.ts's two HostHandle declarations and the --emit-ts reading's alias spell one brand",
+      brands.length === 3 && new Set(brands).size === 1,
+      brands.join("\n")
+    )
   }
 }
 
