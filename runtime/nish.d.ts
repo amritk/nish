@@ -444,6 +444,16 @@ declare function tcpAccept(fd: i32, peer: u8[]): i32;
 declare function netRead(fd: i32, buf: u8[], off: i32, len: i32): i32;
 /** Up to `len` bytes of `buf` from `off`: the count; a gone peer is -32, never SIGPIPE. */
 declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+/** `netWrite` of `a`'s range then `b`'s, in one system call: the count of both, at most `aLen + bLen`. */
+declare function netWrite2(
+  fd: i32,
+  a: readonly u8[],
+  aOff: i32,
+  aLen: i32,
+  b: readonly u8[],
+  bOff: i32,
+  bLen: i32
+): i32;
 /** Shut the read side (0), the write side (1) or both (2). */
 declare function netShutdown(fd: i32, how: i32): i32;
 /** Close the descriptor. */
@@ -723,6 +733,16 @@ declare module "nish:net" {
   export function netRead(fd: i32, buf: u8[], off: i32, len: i32): i32;
   /** Up to `len` bytes of `buf` from `off`: the count; a gone peer is -32, never SIGPIPE. */
   export function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+  /** `netWrite` of `a`'s range then `b`'s, in one system call: the count of both, at most `aLen + bLen`. */
+  export function netWrite2(
+    fd: i32,
+    a: readonly u8[],
+    aOff: i32,
+    aLen: i32,
+    b: readonly u8[],
+    bOff: i32,
+    bLen: i32
+  ): i32;
   /** Shut the read side (0), the write side (1) or both (2). */
   export function netShutdown(fd: i32, how: i32): i32;
   export function netClose(fd: i32): i32;

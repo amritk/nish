@@ -13,10 +13,13 @@ import {
   QUIC_FRAME_CONNECTION_CLOSE,
   QUIC_FRAME_CONNECTION_CLOSE_APP,
   QUIC_FRAME_DATAGRAM,
+  QUIC_FRAME_PATH_CHALLENGE,
+  QUIC_FRAME_PATH_RESPONSE,
   QUIC_FRAME_STREAM,
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
+  quicPushPathData,
   quicPushStream,
   quicPutDatagram,
 } from "nish/net/quic-frame";
@@ -188,6 +191,9 @@ export class RigClient {
   acked: i64 = -1;
   connectSent: i64 = 0;
   connected: boolean = false;
+  /** The PATH_RESPONSE frames owed for PATH_CHALLENGEs read and not yet answered, and how many came. */
+  responses: u8[];
+  challenges: i32 = 0;
 
   /** A client numbered `index` (which gives it its own connection IDs), sending from `host`, of the relay on `port`. */
   constructor(index: i32, host: string, port: i32) {
@@ -213,6 +219,14 @@ export class RigClient {
     this.datagrams = [];
     this.connect = [];
     this.second = [];
+    this.responses = [];
+  }
+
+  /** The client's NAT rebinds: from here on it sends from a new socket on `host`. Answers the old socket, still open. */
+  rebind(host: string): i32 {
+    const old: i32 = this.fd;
+    this.fd = udpBind(host, n32(0), n32(0));
+    return old;
   }
 
   /** The ClientHello: h3, `net_webtransport`'s transport parameters with this client's SCID, DATAGRAM frames. */
@@ -295,6 +309,9 @@ export class RigClient {
               into.push(payload[f.dataStart + k]);
             }
           }
+        } else if (f.type === QUIC_FRAME_PATH_CHALLENGE) {
+          this.challenges = this.challenges + 1;
+          quicPushPathData(this.responses, QUIC_FRAME_PATH_RESPONSE, payload, f.dataStart);
         } else if (f.type === QUIC_FRAME_CONNECTION_CLOSE || f.type === QUIC_FRAME_CONNECTION_CLOSE_APP) {
           this.closeCode = f.errorCode;
           this.closeApp = f.type === QUIC_FRAME_CONNECTION_CLOSE_APP;
@@ -304,9 +321,13 @@ export class RigClient {
     }
   }
 
-  /** Acknowledges what arrived since the last acknowledgement, so the relay's window stays open. */
+  /** Acknowledges what arrived since the last acknowledgement, so the relay's window stays open, with any PATH_RESPONSE owed. */
   ackIfNew(): void {
-    if (this.connected && this.closeCode < 0 && this.c.largestApp > this.acked) {
+    if (this.connected && this.closeCode < 0 && toI32(this.responses.length) > 0) {
+      const answers: u8[] = this.responses;
+      this.responses = [];
+      this.packet(answers);
+    } else if (this.connected && this.closeCode < 0 && this.c.largestApp > this.acked) {
       const none: u8[] = [];
       this.packet(none);
     }

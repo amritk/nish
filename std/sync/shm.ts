@@ -90,6 +90,17 @@ declare function nishshm_wait_i32(h: i32, at: i32, expected: i32, timeoutMs: i32
 declare function nishshm_wake(h: i32, at: i32, count: i32): i32
 declare function strerror(errnum: i32): string
 
+// The window intrinsics (`src/shm-window.ts`): each body is a call of itself,
+// which the compiler replaces with `nishshm_lend` or `nishshm_give_back`. They
+// are not `declare function`s because C would be handed `data` and not the
+// `nish_array` header, and could not answer a `u8[]`.
+
+/** `nishshm_lend`: a `u8[]` whose bytes are the region's `[at, at + len)`. */
+const shmLend = (h: i32, at: i32, len: i32, reuse: u8[] | null): u8[] => shmLend(h, at, len, reuse)
+
+/** `nishshm_give_back`: empties `window` and answers the length it had. */
+const shmGiveBack = (h: i32, window: u8[]): i32 => shmGiveBack(h, window)
+
 /** No ordering beyond the access itself being whole. */
 export const RELAXED: i32 = 0
 /** A load that sees everything written before the `RELEASE` store it reads. */
@@ -275,6 +286,24 @@ export class SharedRegion {
    */
   wake(at: i32, count: i32): i32 {
     return nishshm_wake(this.handle, at, count)
+  }
+
+  /**
+   * A `u8[]` of length `len` whose bytes are the region's `[at, at + len)`, not
+   * a copy: an index or `copyBytes` into it reads and writes the region. A range
+   * outside the region panics. `giveBack` or `close` empties it (length 0), so
+   * an index after either panics. A `push` moves it into this process's own
+   * memory, after which it is no window and `giveBack` panics. Pass a window
+   * already given back as `reuse` to lend it again without a new header: each
+   * lend without one keeps a few bytes for the life of the process.
+   */
+  lend(at: i32, len: i32, reuse: u8[] | null = null): u8[] {
+    return shmLend(this.handle, at, len, reuse)
+  }
+
+  /** Empties `window`, which this region lent, and answers the length it had. */
+  giveBack(window: u8[]): i32 {
+    return shmGiveBack(this.handle, window)
   }
 
   /** Unmaps the region; the handle names nothing after. The name stays until `unlinkRegion`. */

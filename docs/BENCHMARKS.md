@@ -807,6 +807,33 @@ Not measured by `bench/run.mjs`, which carries this section over unchanged. `nod
 
 Under `--cpu x86-64-v3`: −18.6%, −17.1%, −24.1% (bands ±2.6%, ±0.4%, ±6.4%). The steps, in instructions a head (loadgen GET / POST / browser GET), each kept because it moved all three: the line scan jumps to the first control byte of a 16-byte block instead of finishing it a byte at a time (5,617/7,761/16,335 → 5,399/7,422/15,757); a branch-free token check against a 128-bit set (→ 5,182/7,098/14,962); a kept field name lowercased while it is scanned in `head` rather than in a second pass (→ 5,113/6,987/14,627); CRLF taken in one step (→ 4,776/6,492/13,685). Results are checked identical to main's parser by `tests/link/net_http1_parse_diff`.
 <!-- http-parse:end -->
+<!-- http-conn:begin -->
+## Http1Connection per request, hot, cold, idle and DRAM-cold
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/http1-conn/run.mjs` times `Http1Connection` and the codec under it per request, with no socket, against `main`'s `std/` (`old`) and a byte-identical copy of that build (`old′`, the noise band); [bench/http1-conn/README.md](../bench/http1-conn/README.md) describes the six shapes, the working set against the caches, the RSS mode and `misses.sh`.
+
+| | |
+| --- | --- |
+| Date | 2026-11-06 |
+| nish | the hot-first `Http1Parser` layout against `main` at 98c4f9a7, `--profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.30GHz, 4 cores (L1d 48 KiB and L2 2 MiB a core, L3 504 MiB), pinned to core 1 |
+| Runs | 15 interleaved rounds, each the fastest of 5 batches; 200,000 requests a batch, 20,000 in the `-dram` shapes, which sweep a 1 GiB eviction ring between requests; cold, idle and direct over 10,000 connections (about 10 MiB, inside L3) |
+| Command | `node bench/http1-conn/run.mjs --connections 10000 --rounds 15 --base 98c4f9a7`, then `bash bench/http1-conn/misses.sh` |
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot | 323.0 (308.1–329.9) | 324.4 (310.1–332.1) 1.004 | 320.0 (305.8–333.6) 0.990 |
+| cold | 353.3 (334.5–379.9) | 356.9 (339.7–382.9) 1.010 | 341.6 (332.1–375.0) 0.967 |
+| idle | 446.5 (425.9–472.9) | 439.6 (424.4–452.9) 0.984 | 441.7 (421.0–444.2) 0.989 |
+| direct | 434.3 (415.2–442.4) | 435.8 (415.7–440.2) 1.004 | 434.7 (414.8–439.7) 1.001 |
+| idle-dram | 672.0 (650.3–735.5) | 668.5 (632.8–701.6) 0.995 | 650.7 (620.0–677.0) 0.968 |
+| direct-dram | 660.2 (643.8–715.8) | 666.5 (641.2–715.5) 1.010 | 649.1 (626.1–666.3) 0.983 |
+| peak RSS per idle connection, bytes | 1026 (1025–1026) | 1026 (1025–1026) | 1026 (1025–1026) |
+
+ns per request, median (min–max) and ratio of medians to `old`. `idle` shows no wall-time gain outside noise. In `idle-dram` the median is 3.2% under `old` against `old′`'s 0.5%, but the ranges overlap.
+
+What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
+<!-- http-conn:end -->
 
 <!-- sha-block:begin -->
 ## SHA-256's block function

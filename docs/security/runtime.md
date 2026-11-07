@@ -12,7 +12,7 @@ answer. Line numbers in the findings table refer to `main` at `bc6ad66`.
 | `runtime/nish.h` | every prototype and layout against its definition, and every contract comment against what the code does |
 | `runtime/runtime-os.c` | the file reads and writes, `writeFileBytesSync` (`O_NOFOLLOW` as `writeFileSync`, and a `close` that fails answers its errno rather than the full length), `writeBytes` (`nish_write_bytes`, after the emitter's range check), the shared write loop `nish_put_all`, `renameSync` and `unlinkSync` (a NUL in a path answers `-EINVAL` before the call; neither follows a link, and `unlinkSync` never falls back to `rmdir`), `isDirectorySync`, `mkdirSync`, `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (RT-24 to RT-26), `readdirSync` and its sort, both spawns, `spawnPiped` (`nish_spawn_piped`, `nish_pipe`: its pipes' descriptors, the `poll` loop, the output cap, the SIGPIPE mask), `spawnWithFds` (`nish_spawn_with_fds`: its limit, the scratch duplicates and their close, RT-40), `getenv`, `realpathSync`, `setCpuAffinity` (`nish_set_cpu_affinity`: the range check, the read of the current mask, the narrow-only set) |
 | `runtime/runtime-host.c` | `Date.now`, `crypto.getRandomValues` (short reads, `EINTR`, the limit), `statMtimeSync`, the signal pipe and its handler |
-| `runtime/runtime-net.c` | every address, length and control-message buffer, descriptor flags and leaks on each error path, the readiness loop's output bounds, the socket-option whitelist, `netMss`'s reading of a kernel-sized `tcp_info`, and the Unix-domain calls: the `sun_path` copy, the abstract name, the stale-file probe and its unlink, the mode set between bind and listen, and every error path after a bind; `sendFd`, `recvFd` and `peerCredentials` (`nish_unix_only`, the `SCM_RIGHTS` control buffer and its count, the descriptors closed, close-on-exec per platform, the credential read per platform, RT-37 to RT-39); `tcpListenFlags` flag 4 (the classic BPF program attached with `SO_ATTACH_REUSEPORT_CBPF`, its flag checks, and the close on a failed attach) |
+| `runtime/runtime-net.c` | every address, length and control-message buffer, descriptor flags and leaks on each error path, the readiness loop's output bounds, the socket-option whitelist, `netMss`'s reading of a kernel-sized `tcp_info`, and the Unix-domain calls: the `sun_path` copy, the abstract name, the stale-file probe and its unlink, the mode set between bind and listen, and every error path after a bind; `sendFd`, `recvFd` and `peerCredentials` (`nish_unix_only`, the `SCM_RIGHTS` control buffer and its count, the descriptors closed, close-on-exec per platform, the credential read per platform, RT-37 to RT-39); `tcpListenFlags` flag 4 (the classic BPF program attached with `SO_ATTACH_REUSEPORT_CBPF`, its flag checks, and the close on a failed attach); `netWrite2` (`nish_net_write2`: its two iovecs, `MSG_NOSIGNAL`, and the clamp that keeps the sum within `i32`) |
 | `runtime/runtime-parallel.c` | the partition arithmetic, the scope task list, thread-local state, thread-creation failure |
 | `runtime/runtime-wasm.c` | the linear-memory arena, `nish_alloc_array`, `nish_array_grow` |
 | `runtime/runtime-region.c` | the region table (its pages, free list, lock and published page pointers), the handle's index and generation, every check `nish_region_enter`, `_leave` and `_free` make before touching a slot (zero, stale, forged, another thread's, entered), the arena and chunk-size swap, the free through `nish_free_arena`, the 2^24-slot cap and the 2^40 generation retirement (RT-41 to RT-47); with `nish_arena_grow`'s read of `nish_region_chunk` in `runtime.c` |
@@ -79,6 +79,15 @@ A finding is any of these, reachable through a runtime entry point:
   cap in the readiness loop, and the `i32` range of every byte count, which
   the compiled range check (`emitNetCall`) and Linux's `MAX_RW_COUNT` bound
   together.
+- **`netWrite2` hands `sendmsg` only the two ranges the program checked.**
+  The compiled code checks both ranges, the first one first, before the call
+  (`tests/cases/net_write2_bounds`, `reject_net_write2_element`). The runtime
+  builds one iovec from each range, sends with `MSG_NOSIGNAL`, so a closed
+  peer answers -32 rather than raising `SIGPIPE`, and clamps the second length
+  to `INT32_MAX` minus the first, so the count it returns always fits an `i32`.
+  `net_write2_bounds.c` calls the runtime under a stand-in `sendmsg` that
+  prints each iovec and the flag, both ranges side by side and at the clamp;
+  `tests/link/net_write2` writes two buffers through a real socket pair.
 - **Every loop over attacker-sized input, timed.** `readdirSync` was given
   3,000 and 100,000 names with its compares counted, by interposing
   `strcmp`.

@@ -32,6 +32,9 @@
  * `spareSlots` connections over their address's cap wait so at once, and one
  * past that is closed with code 1 when its address is validated, so one
  * address holds at most `maxPerPeer + spareSlots` validated slots. A
+ * client whose NAT rebinds keeps its session, QUIC following it to the new
+ * address, and its places stay with the address they were claimed under:
+ * the slot's own copy in `peerAddresses`, which the release reads. A
  * connection that has opened no session `helloTimeout` after its first
  * Initial is closed with code 1, so a handshake alone holds its slot, and
  * any place, for no longer. Then the session has `helloTimeout` to send a

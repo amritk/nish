@@ -139,6 +139,7 @@ for (const name of [
   "tcpAccept",
   "netRead",
   "netWrite",
+  "netWrite2",
   "netShutdown",
   "netClose",
   "tcpConnect",

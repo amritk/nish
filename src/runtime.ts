@@ -241,6 +241,24 @@ export class RuntimeTable {
     this.add(plain("nish_region_enter", "declare i8* @nish_region_enter(i64 noundef)", EFFECT_WRITE))
     this.add(plain("nish_region_leave", "declare void @nish_region_leave(i64 noundef, i8*)", EFFECT_WRITE))
     this.add(plain("nish_region_free", "declare void @nish_region_free(i64 noundef)", EFFECT_WRITE))
+    // `SharedRegion.lend` and `giveBack` (runtime/runtime-shm.c), each the body of
+    // one of `std/sync/shm.ts`'s intrinsics (`src/emit-shm-window.ts`). A bad
+    // handle or range panics, so neither is `willreturn`; `lend` answers a
+    // header the runtime owns, `reuse` itself when one is given.
+    this.add(
+      mayNotReturn(
+        "nishshm_lend",
+        "declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nishshm_give_back",
+        "declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull)",
+        EFFECT_WRITE
+      )
+    )
     // Reads the offset, and writes nothing, as `nish_arena_mark` does.
     this.addWrites(
       WRITES_NOTHING,
@@ -861,6 +879,15 @@ export class RuntimeTable {
       new RuntimeFunction(
         "nish_net_write",
         `declare noundef i32 @nish_net_write(i32 noundef, ${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    // `netWrite2`: both buffers in one `sendmsg`, each range checked by the call.
+    this.add(
+      new RuntimeFunction(
+        "nish_net_write2",
+        `declare noundef i32 @nish_net_write2(i32 noundef, ${NET_BUFFER} readonly, i64 noundef, i64 noundef, ${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
         attrs1("nounwind"),
         EFFECT_WRITE
       )

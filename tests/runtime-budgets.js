@@ -625,9 +625,13 @@ const RUNTIME_SANDBOX_TEXT_BUDGET = 2560
  * fourteenth translation unit rather than more of `runtime-os.c`, so a program that
  * imports neither module links none of it: the linker drops the object nothing
  * references. The budget is the next 256-byte boundary above the measurement, as
- * every ceiling here was set.
+ * every ceiling here was set. It measured **2,964 bytes** (2,988 thread-local) on
+ * 2026-11-06 with clang 18.1.3 on linux-x64 once the windows of `SharedRegion.lend`
+ * were added (2,816 to 3,072): `nishshm_lend` 180, `nishshm_give_back` 112 and the
+ * loop in `nishshm_close` that empties every window before the unmap. They stay
+ * here rather than in a file of their own because `close` must reach them.
  */
-const RUNTIME_SHM_TEXT_BUDGET = 2816
+const RUNTIME_SHM_TEXT_BUDGET = 3072
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
@@ -750,8 +754,17 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * boxed: such a field holds its `len` and `data` in the object, so the 24-byte
  * header each one used to allocate is gone (`docs/LANGUAGE.md`, "Fixed-length
  * array fields are stored inline").
+ *
+ * Moved to **110,920 bytes** (+384) by path validation (RFC 9000 §9): the six
+ * arrays a `QuicConnection` keeps for its current, validated, arriving and probed
+ * addresses, the PATH_RESPONSE it owes on another path and its last three
+ * PATH_CHALLENGEs, with their headers.
+ *
+ * Moved to **110,912 bytes** (-8) when `QuicConnection`'s path and ECN fields
+ * were declared widest first, which took out the padding the path fields had
+ * added to the object (NL9010).
  */
-export const HTTP3_SERVER_SLOT_BYTES = 110536
+export const HTTP3_SERVER_SLOT_BYTES = 110912
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
