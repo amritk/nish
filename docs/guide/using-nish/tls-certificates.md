@@ -7,7 +7,7 @@ every certificate on the way is valid now and allowed to do what it does, and
 that the server's certificate names the host the program meant to reach.
 Without that check, TLS encrypts the connection to whoever answered. The
 module is part of the [standard library](standard-library.md) and is imported
-like any other ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
+like any other ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
 
 ## Verifying a chain
 
@@ -130,5 +130,5 @@ follow the x509-limbo test suite, and the cases where they differ are
 listed in the security record.
 
 The security record,
-[crypto-pki.md](https://github.com/amritk/nish/blob/main/docs/security/crypto-pki.md#path-validation-nishcryptopki),
+[crypto-pki.md](../../security/crypto-pki.md#path-validation-nishcryptopki),
 lists what was checked and what is open.

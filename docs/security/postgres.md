@@ -1,7 +1,7 @@
 # Security record: the PostgreSQL client
 
 The record of `nish/net/postgres`, the sans-IO client side of PostgreSQL's
-frontend/backend protocol 3.0 ([wp39-http-server.md](../wp39-http-server.md),
+frontend/backend protocol 3.0 ([wp39-http-server.md](https://github.com/amritk/nish/blob/main/docs/wp39-http-server.md),
 E6). It says what the client refuses from a server, and with what code, what a
 server can make it hold or compute, where the password lives and when it is
 wiped, and the test that pins each property. It is written with the code

@@ -19,7 +19,7 @@ what changed and one click to the rest.
 
 The release pull request is where a release is reviewed: every merge to `main`
 refreshes it with the version bump, the JSON and this section, and merging it
-creates the tag. [docs/wp12-release.md](docs/wp12-release.md) has the
+creates the tag. [docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md) has the
 procedure, and `CLAUDE.md` has the commit convention the headings come from.
 Between releases `[Unreleased]` is empty, because there is nothing to write by
 hand — the git log is the working account until a release turns it into one.

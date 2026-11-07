@@ -1,7 +1,7 @@
 # Security record: the SQLite amalgamation
 
 The record of the SQLite that `nish build` links into a program that calls it
-([runtime/sqlite/README.md](../../runtime/sqlite/README.md)). It says what is
+([runtime/sqlite/README.md](https://github.com/amritk/nish/blob/main/runtime/sqlite/README.md)). It says what is
 vendored and from where, which inputs SQLite trusts and which are an
 attacker's, the options it is compiled with, and how it is bumped for a CVE.
 It is written when the C lands, not after an audit, so that an audit starts
@@ -131,7 +131,7 @@ read.
 
 ## Bumping for a CVE
 
-Follow "Updating" in [runtime/sqlite/README.md](../../runtime/sqlite/README.md):
+Follow "Updating" in [runtime/sqlite/README.md](https://github.com/amritk/nish/blob/main/runtime/sqlite/README.md):
 it lists every file the version lives in and the sections to run. Then update
 the version and the commit in this record, and the version in
 `docs/guide/using-nish/cli.md`. The changed sources change the SQLite cache

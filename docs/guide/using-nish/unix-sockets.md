@@ -8,7 +8,7 @@ descriptors and names the process at the other end. Each answers a descriptor th
 rest of [`nish:net`](networking.md) takes as it is: `netRead`, `netWrite`,
 `netShutdown`, `netClose` and the readiness loop treat it as they treat a TCP
 socket. The rules are in the reference,
-[Unix-domain sockets](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#unix-domain-sockets).
+[Unix-domain sockets](../../LANGUAGE.md#unix-domain-sockets).
 
 Like the rest of `nish:net`, these calls are native only, never block, and
 answer an `i32`: a descriptor or `0` on success, a negated error number on a

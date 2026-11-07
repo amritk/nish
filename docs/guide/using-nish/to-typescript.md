@@ -86,7 +86,7 @@ program imports is written under `out/nish/`, and every `nish:` import,
 `nish:secret` included, becomes `nish/runtime` (`nish:async` becomes
 `nish/runtime/async.mjs`). Its `wipe` zero-fills the array under
 Node but cannot erase a copy the engine made, so a key that must be erased
-stays in the native build ([the record](https://github.com/amritk/nish/blob/main/docs/security/secret.md), SECRET-6).
+stays in the native build ([the record](../../security/secret.md), SECRET-6).
 [The CLI page](cli.md#writing-typescript---emit-ts) lists every rewrite and
 the kinds of module that are refused (C functions, NL4010; signals and
 `nish:net`, NL4011; a compound assignment whose index would run twice,
@@ -197,5 +197,5 @@ behaving as Node's do.
 
 To run an unmodified Nish source file under Node, with the builtins as
 globals rather than imports, see
-[Running a Nish program under Node](https://github.com/amritk/nish/blob/main/docs/RUN_UNDER_NODE.md). The builtins
-themselves are specified in [Builtins](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtins).
+[Running a Nish program under Node](../../RUN_UNDER_NODE.md). The builtins
+themselves are specified in [Builtins](../../LANGUAGE.md#builtins).

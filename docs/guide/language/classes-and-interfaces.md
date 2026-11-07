@@ -3,8 +3,8 @@
 A class is a record with a constructor and methods; an interface is a record
 with fields only. Neither has a hidden header, a vtable or a parent: a class
 is laid out exactly as the same struct would be in C. The normative rules are
-in the reference's [Classes](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#classes) and
-[Interfaces and object literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interfaces-and-object-literals)
+in the reference's [Classes](../../LANGUAGE.md#classes) and
+[Interfaces and object literals](../../LANGUAGE.md#interfaces-and-object-literals)
 sections.
 
 ## Classes

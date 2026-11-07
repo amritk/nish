@@ -6,7 +6,7 @@ the server's answers from an input buffer you fill, and tells you what
 happened, one event at a time. Your program owns the socket
 ([`nish:net`](networking.md)) and the loop, so one loop can drive many
 connections next to everything else it serves. It is imported like any other
-library module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
+library module ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
 
 It speaks protocol 3.0, which every PostgreSQL since 7.4 understands, and it is
 tested against exchanges recorded from PostgreSQL 18.
@@ -445,7 +445,7 @@ uses it ([below](#authentication)).
 
 ## Authentication
 
-The password is a `Secret<u8[]>` ([`nish:secret`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret)):
+The password is a `Secret<u8[]>` ([`nish:secret`](../../LANGUAGE.md#secrets-nishsecret)):
 the connection keeps its own copy, so the caller wipes theirs at once, and it
 wipes the copy once the proof is computed, or when the connection fails or is
 disposed. The nonce is 18 random bytes from

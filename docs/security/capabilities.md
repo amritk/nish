@@ -1,7 +1,7 @@
 # Security record: a dependency's capabilities
 
 The record of the dependency policy
-([wp40-dependency-capabilities.md](../wp40-dependency-capabilities.md)): a
+([wp40-dependency-capabilities.md](https://github.com/amritk/nish/blob/main/docs/wp40-dependency-capabilities.md)): a
 dependency that reaches `unsafe`, `ffi`, `fs.read`, `fs.write`, `net` or
 `process.spawn` the root package does not grant it is refused at compile time
 with NL2576, naming the dependency, the capability and the function; of the
@@ -96,7 +96,7 @@ index counts.
 | CAPS-5 | Low | outside the compiler | A package's install scripts (`postinstall` and its kin) run when the package manager installs it, before the compiler sees it. | **Accepted.** The check reads source; it cannot see what an installer runs. Install with `--ignore-scripts` for a dependency that has not been audited. |
 | CAPS-6 | Low | `ffi` | A granted `ffi` is all of C: a dependency may then do anything its C does, `net` and `process.spawn` included, and none of it is seen. | **Accepted.** The analysis stops at a `declare function`. Grant `ffi` only to a dependency whose C has been read. |
 | CAPS-7 | Low | `dependencyMasks` | A function argument is over-approximated: the root's function passed to a dependency's template makes that template's instantiation, which is the dependency's, reach what the root's function reaches, and the dependency is refused for it. | **Accepted.** The error is a refusal, never a miss: it errs towards asking for a grant. The root can grant it, or call its own function itself. |
-| CAPS-8 | Low | — | Nothing is confined at run time: the check is of the source the compiler was given. | **Accepted.** Confining the process to the computed set is WP37's ([wp37-os-sandbox.md](../wp37-os-sandbox.md), [sandbox.md](sandbox.md)), and holds only under `--sandbox`; a grant's directories and programs narrow it there (CAPS-17). |
+| CAPS-8 | Low | — | Nothing is confined at run time: the check is of the source the compiler was given. | **Accepted.** Confining the process to the computed set is WP37's ([wp37-os-sandbox.md](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md), [sandbox.md](sandbox.md)), and holds only under `--sandbox`; a grant's directories and programs narrow it there (CAPS-17). |
 | CAPS-9 | High if it failed | `checkCapabilityLock` | Every capability a dependency reaches beyond its row must be refused: gated or not, granted or not, and for a dependency with no row at all. | **Holds.** The comparison is of the same masks the policy reads, after it, and a dependency with no row is held to an empty one. Each refused capability is spanned at the first call of its witness chain, as NL2576 is. |
 | CAPS-10 | Medium if it failed | `readCapabilityLock` | A malformed lockfile must not be read as a wider one. | **Holds.** Text that is not JSON, a `version` other than 1, an unknown key, an unknown capability, and a key or capability written twice are NL3043, spanned in the lockfile, and stop the build. |
 | CAPS-11 | Medium if it failed | `checkCapabilityLock`, the driver | `--update-capability-lock` must not record a reach the policy refuses, and must not be skipped by the run cache. | **Holds.** The driver writes the file only after the check, so a refused build writes none; `nish run` checks before its cache lookup, so a cache hit is held to the lockfile. |

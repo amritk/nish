@@ -1,7 +1,7 @@
 # Security record: the HTTP router
 
 The record of WP43's first stage: `nish/net/router`, the method and path
-router ([wp43-http-app-layer.md](../wp43-http-app-layer.md)). It says what the
+router ([wp43-http-app-layer.md](https://github.com/amritk/nish/blob/main/docs/wp43-http-app-layer.md)). It says what the
 router refuses when a table is built and with what code, what it answers for a
 target no route reaches, what a lookup costs, what it writes and where, and
 the test that pins each property. It is written with the code rather than

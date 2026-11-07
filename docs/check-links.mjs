@@ -17,10 +17,11 @@
 // directory) is checked as the relative link to `<path>` would be: the file
 // must exist here and its `#fragment` must name a heading.
 //
-// The user guide is published on its own site, which serves only the guide's
-// pages and hands any other file it is linked to back as a download. So a
-// guide page links a file outside docs/guide/ by its GitHub URL, and a relative
-// link from a guide page that leaves docs/guide/ is reported.
+// The pages scalar.config.json routes are published as a site, which serves
+// those pages and hands any other file a page links to back as a download. So
+// a routed page links another routed page relatively (the site resolves it to
+// that page) and any other file of the repository by its GitHub URL, and a
+// relative link from a routed page to a file that is not one is reported.
 //
 // It also reads scalar.config.json, the navigation of the user guide's site:
 // every route's `filepath` must be an existing .md file, and every page under
@@ -111,10 +112,54 @@ const headingSlugs = (text) => {
   return slugs
 }
 
+// The docs site (Scalar) slugs a heading its own way, which is not GitHub's:
+// it deletes `_` and every character but a letter, a number, a mark, `-`, `.`
+// and a space, turns each space into `-`, then collapses each run of `-` to
+// one and trims `-` from both ends, so `` `--fix` `` is `fix` there and
+// `--fix` on GitHub, and "4. Exit codes" keeps its dot. Only headings of levels
+// 1 to 4 get an ID at all. This agrees with the site's preview on all 1,230
+// such headings of its 90 pages. A link that has to land on both sites names a
+// heading whose two slugs agree, or an `<a id="...">` written above it.
+/** The docs site's heading IDs for a Markdown file. */
+const scalarHeadingSlugs = (text) => {
+  const seen = new Map()
+  const slugs = new Set()
+  for (const line of proseLines(text)) {
+    const m = /^#{1,4}\s+(.*?)\s*#*\s*$/.exec(line)
+    if (!m) {
+      continue
+    }
+    let slug = m[1]
+      .replace(/`([^`]*)`/g, "$1")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\p{M}\-. ]/gu, "")
+      .replace(/ /g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "")
+    const n = seen.get(slug) ?? 0
+    seen.set(slug, n + 1)
+    if (n > 0) {
+      slug = `${slug}-${n}`
+    }
+    slugs.add(slug)
+  }
+  return slugs
+}
+
+/** The IDs a file's own HTML gives (`<a id="...">`), which hold on both sites. */
+const htmlIds = (text) =>
+  new Set(proseLines(text).flatMap((line) => [...line.matchAll(/<a\s+id="([^"]+)"/g)].map((m) => m[1])))
+
 const slugCache = new Map()
 const slugsOf = (file) => {
   if (!slugCache.has(file)) {
-    slugCache.set(file, headingSlugs(fs.readFileSync(file, "utf8")))
+    const text = fs.readFileSync(file, "utf8")
+    const ids = htmlIds(text)
+    slugCache.set(file, {
+      github: new Set([...headingSlugs(text), ...ids]),
+      site: new Set([...scalarHeadingSlugs(text), ...ids]),
+    })
   }
   return slugCache.get(file)
 }
@@ -125,7 +170,22 @@ const REFDEF = /^\s*\[[^\]]+\]:\s*(\S+)/
 
 // This repository's files on github.com, at main.
 const REPO_URL = /^https:\/\/github\.com\/amritk\/nish\/(?:blob|tree)\/main\/([^#?]*)(#.*)?$/
-const guideDir = path.join(root, "docs", "guide") + path.sep
+
+// The site's pages, by absolute path, from scalar.config.json's routes.
+const scalarConfig = path.join(root, "scalar.config.json")
+const routes = JSON.parse(fs.readFileSync(scalarConfig, "utf8")).navigation.routes
+const routedPages = new Set()
+const collectPages = (entries) => {
+  for (const entry of Object.values(entries)) {
+    if (entry.filepath !== undefined) {
+      routedPages.add(path.join(root, entry.filepath))
+    }
+    if (entry.children !== undefined) {
+      collectPages(entry.children)
+    }
+  }
+}
+collectPages(routes)
 
 const problems = []
 let checked = 0
@@ -155,10 +215,11 @@ for (const file of files) {
           repo === null
             ? path.resolve(path.dirname(file), decodeURIComponent(pathPart))
             : path.join(root, decodeURIComponent(pathPart))
-        if (repo === null && file.startsWith(guideDir) && !resolved.startsWith(guideDir)) {
+        if (repo === null && routedPages.has(file) && !routedPages.has(resolved) && fs.existsSync(resolved)) {
           const rel = path.relative(root, resolved).split(path.sep).join("/")
+          const kind = fs.statSync(resolved).isDirectory() ? "tree" : "blob"
           problems.push(
-            `${where}: \`${target}\` leaves the user guide, whose site serves only guide pages; link https://github.com/amritk/nish/blob/main/${rel}${fragment !== undefined ? `#${fragment}` : ""} instead`
+            `${where}: \`${target}\` is not a page of the docs site (scalar.config.json), which would serve it as a download; link https://github.com/amritk/nish/${kind}/main/${rel}${fragment !== undefined ? `#${fragment}` : ""} instead, or give it a route`
           )
           continue
         }
@@ -173,9 +234,18 @@ for (const file of files) {
         if (!resolved.endsWith(".md") || fs.statSync(resolved).isDirectory()) {
           continue
         }
-        if (!slugsOf(resolved).has(fragment.toLowerCase())) {
+        if (!slugsOf(resolved).github.has(fragment.toLowerCase())) {
           problems.push(
             `${where}: broken anchor \`${target}\` (no heading #${fragment} in ${path.relative(root, resolved)})`
+          )
+        } else if (
+          repo === null &&
+          routedPages.has(file) &&
+          routedPages.has(resolved) &&
+          !slugsOf(resolved).site.has(fragment.toLowerCase())
+        ) {
+          problems.push(
+            `${where}: anchor \`${target}\` lands on GitHub but not on the docs site, which spells that heading's ID differently (or gives a heading below level 4 none); write <a id="${fragment}"></a> on its own line above the heading in ${path.relative(root, resolved)}`
           )
         }
       }
@@ -186,14 +256,11 @@ for (const file of files) {
 // The guide's navigation. A route to anything but an existing .md file (a typo,
 // a directory) is a dead page on the site, and a guide page no route names is
 // one nobody can reach from it.
-const scalarConfig = path.join(root, "scalar.config.json")
-const routed = new Set()
-const walkRoutes = (routes, prefix) => {
-  for (const [route, entry] of Object.entries(routes)) {
+const walkRoutes = (entries, prefix) => {
+  for (const [route, entry] of Object.entries(entries)) {
     // A page must name its file; a group or a link legitimately has none.
     if (entry.type === "page" || entry.filepath !== undefined) {
       const file = path.join(root, entry.filepath ?? "")
-      routed.add(file)
       if (!(file.endsWith(".md") && fs.existsSync(file) && fs.statSync(file).isFile())) {
         problems.push(
           `scalar.config.json: route \`${prefix}${route}\` names no Markdown page: ${entry.filepath ?? "(no filepath)"}`
@@ -205,9 +272,10 @@ const walkRoutes = (routes, prefix) => {
     }
   }
 }
-walkRoutes(JSON.parse(fs.readFileSync(scalarConfig, "utf8")).navigation.routes, "")
+walkRoutes(routes, "")
+const guideDir = path.join(root, "docs", "guide") + path.sep
 for (const page of files.filter((f) => f.startsWith(guideDir))) {
-  if (!routed.has(page)) {
+  if (!routedPages.has(page)) {
     problems.push(`${path.relative(root, page)}: no route in scalar.config.json reaches this guide page`)
   }
 }

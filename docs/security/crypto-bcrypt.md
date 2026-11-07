@@ -737,7 +737,7 @@ The question was whether `bcryptHashN` leaves speed to a CPU's newer
 instructions: BMI2's `rorx` and `shrx` and BMI1's `bextr` take a word's bytes out
 without the copy-and-shift baseline x86-64 needs, and one outside report had a
 BMI2 kernel halving the time. Four candidates were measured, each against the
-bar of the [Adler-32 verdict](../wp38-simd.md): a candidate ships only if it
+bar of the [Adler-32 verdict](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md): a candidate ships only if it
 beats Nish's best width by at least 20%, in two runs, and by more than the
 noise band.
 The bar was first read on medians. After the medians on the noisy host E

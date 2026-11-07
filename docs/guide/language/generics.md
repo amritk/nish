@@ -6,9 +6,9 @@ what happens next: Nish compiles a separate copy for each set of types you
 actually use, so a generic costs exactly what the same code written out by
 hand for that type would, with no boxing and no type checks at run time. The
 reference sections are
-[Generic functions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#generic-functions),
-[Generic classes and interfaces](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#generic-classes-and-interfaces)
-and [Generic methods](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#generic-methods).
+[Generic functions](../../LANGUAGE.md#generic-functions),
+[Generic classes and interfaces](../../LANGUAGE.md#generic-classes-and-interfaces)
+and [Generic methods](../../LANGUAGE.md#generic-methods).
 
 ## Generic functions
 

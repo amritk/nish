@@ -3,8 +3,8 @@
 `if`, the loops, `switch` and the conditional operator work as they do in
 TypeScript, with two differences that matter: a condition must be a
 `boolean`, and integer arithmetic is checked. The normative rules are in the
-reference's [Statements](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#statements) and
-[Operators](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#operators) sections.
+reference's [Statements](../../LANGUAGE.md#statements) and
+[Operators](../../LANGUAGE.md#operators) sections.
 
 ## Conditions
 
@@ -136,7 +136,7 @@ jump cannot leave an arrow function for a label outside it.
 
 ## `switch`
 
-A `switch` takes an integer or an [enum](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums), and every
+A `switch` takes an integer or an [enum](../../LANGUAGE.md#enums), and every
 `case` label is a constant: a literal, a module constant or an enum member.
 A clause falls through into the next one, as in TypeScript, unless it ends in
 `break`, `return`, `continue` or `process.exit`. An empty clause falls through
@@ -246,6 +246,6 @@ export const main = (): i32 => {
 
 Floating-point arithmetic is never checked: dividing an `f64` by zero gives
 `Infinity`, as in JavaScript. The reference's
-[Checked integer division](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#checked-integer-division) and
-[Semantics decisions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#semantics-decisions) sections have
+[Checked integer division](../../LANGUAGE.md#checked-integer-division) and
+[Semantics decisions](../../LANGUAGE.md#semantics-decisions) sections have
 the exact rules.

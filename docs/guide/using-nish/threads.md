@@ -21,7 +21,7 @@ message that names the line and the reason; the rules are what keep threads
 from racing on memory or deadlocking on a lock or a channel.
 
 The same program also runs under Node, one task at a time, and prints the same
-answer ([RUN_UNDER_NODE.md](https://github.com/amritk/nish/blob/main/docs/RUN_UNDER_NODE.md) says how).
+answer ([RUN_UNDER_NODE.md](../../RUN_UNDER_NODE.md) says how).
 
 Threads share one process. To share memory between processes, such as
 prefork workers, see [Shared memory between processes](shared-memory.md).
@@ -67,7 +67,7 @@ export const main = (): i32 => {
   time, which caps four cores near 2.9x; the program measures about 2.7x.
   With a checksum the compiler vectorises, or four times the work per
   element, the same map is above 3x. The figures are in
-  [BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#scheduling-a-divided-region).
+  [BENCHMARKS.md](../../BENCHMARKS.md#scheduling-a-divided-region).
 - **`dst` must be at least as long as `src`**, or the call panics before it
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
@@ -144,7 +144,7 @@ argument or writes anything else its caller can see is refused at the call
 (NL2345 for output), because every thread would make that write at once and
 the order would be the scheduler's. So is a reduce whose arrow is plainly not
 associative, because the blocks are combined in a fixed order. The rules are
-in the reference, [Data parallelism](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#data-parallelism-nishthreads).
+in the reference, [Data parallelism](../../LANGUAGE.md#data-parallelism-nishthreads).
 
 ```ts nish:err NL2345
 import { parallelMapInto } from "nish/threads";
@@ -312,7 +312,7 @@ export const main = (): i32 => {
 };
 ```
 
-<a id="different-tasks-at-once-using-s--scope"></a>
+<a id="different-tasks-at-once-using-s--scope" style="scroll-margin-top: 65px"></a>
 
 ## Different tasks at once: `using s = scope()`
 
@@ -1010,7 +1010,7 @@ export const main = (): i32 => {
   40 ms for the same loop on one. A scope's task answer is copied in by the
   joining thread when it is under 64 KB, and taken whole above that.
 
-<a id="letting-nish---fix-write-it"></a>
+<a id="letting-nish---fix-write-it" style="scroll-margin-top: 65px"></a>
 
 ## Letting `nish --fix` write it
 
@@ -1066,7 +1066,7 @@ in a loop, where every task would write the one slot; a `let` another
 argument of the call names, or one a `for` header declares; and a channel
 arrow that captures a local or leaves a parameter's or its result's type out,
 which would not check at the top level; those stay refused for you to fix by hand. The reference lists each case:
-[What `nish --fix` writes for a thread program](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
+[What `nish --fix` writes for a thread program](../../LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
 
 ## Refused, and what to write instead
 
@@ -1272,8 +1272,8 @@ export const main = (): i32 => {
 ```
 
 The full rules, and the code each one is refused with, are in the reference:
-[Data parallelism](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#data-parallelism-nishthreads),
-[Scoped tasks](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#scoped-tasks-using-s--scope),
-[`Mutex<T>`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-lock-that-owns-its-data-mutext),
-[Atomics](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#atomics-atomici32-and-atomici64) and
-[`Channel<T>`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#channels-channelt).
+[Data parallelism](../../LANGUAGE.md#data-parallelism-nishthreads),
+[Scoped tasks](../../LANGUAGE.md#scoped-tasks-using-s--scope),
+[`Mutex<T>`](../../LANGUAGE.md#a-lock-that-owns-its-data-mutext),
+[Atomics](../../LANGUAGE.md#atomics-atomici32-and-atomici64) and
+[`Channel<T>`](../../LANGUAGE.md#channels-channelt).

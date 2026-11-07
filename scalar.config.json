@@ -8,18 +8,8 @@
   "navigation": {
     "header": [
       { "type": "link", "title": "GitHub", "to": "https://github.com/amritk/nish", "newTab": true },
-      {
-        "type": "link",
-        "title": "Language reference",
-        "to": "https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md",
-        "newTab": true
-      },
-      {
-        "type": "link",
-        "title": "Changelog",
-        "to": "https://github.com/amritk/nish/blob/main/CHANGELOG.md",
-        "newTab": true
-      }
+      { "type": "link", "title": "Language reference", "to": "/reference/language" },
+      { "type": "link", "title": "Changelog", "to": "/reference/changelog" }
     ],
     "routes": {
       "/": {
@@ -58,8 +48,16 @@
             "type": "group",
             "title": "The language",
             "children": {
-              "/types": { "type": "page", "title": "Types", "filepath": "docs/guide/language/types.md" },
-              "/functions": { "type": "page", "title": "Functions", "filepath": "docs/guide/language/functions.md" },
+              "/types": {
+                "type": "page",
+                "title": "Types",
+                "filepath": "docs/guide/language/types.md"
+              },
+              "/functions": {
+                "type": "page",
+                "title": "Functions",
+                "filepath": "docs/guide/language/functions.md"
+              },
               "/control-flow": {
                 "type": "page",
                 "title": "Control flow",
@@ -75,26 +73,62 @@
                 "title": "Classes and interfaces",
                 "filepath": "docs/guide/language/classes-and-interfaces.md"
               },
-              "/unions": { "type": "page", "title": "Discriminated unions", "filepath": "docs/guide/language/unions.md" },
-              "/errors": { "type": "page", "title": "Errors and Result", "filepath": "docs/guide/language/errors.md" },
+              "/unions": {
+                "type": "page",
+                "title": "Discriminated unions",
+                "filepath": "docs/guide/language/unions.md"
+              },
+              "/errors": {
+                "type": "page",
+                "title": "Errors and Result",
+                "filepath": "docs/guide/language/errors.md"
+              },
               "/maps-and-sets": {
                 "type": "page",
                 "title": "Maps and sets",
                 "filepath": "docs/guide/language/maps-and-sets.md"
               },
-              "/generics": { "type": "page", "title": "Generics", "filepath": "docs/guide/language/generics.md" },
-              "/modules": { "type": "page", "title": "Modules", "filepath": "docs/guide/language/modules.md" },
-              "/memory": { "type": "page", "title": "Memory", "filepath": "docs/guide/language/memory.md" },
-              "/regions": { "type": "page", "title": "Regions", "filepath": "docs/guide/language/regions.md" },
-              "/simd": { "type": "page", "title": "Vectors (SIMD)", "filepath": "docs/guide/language/simd.md" },
-              "/async": { "type": "page", "title": "Async functions", "filepath": "docs/guide/language/async.md" }
+              "/generics": {
+                "type": "page",
+                "title": "Generics",
+                "filepath": "docs/guide/language/generics.md"
+              },
+              "/modules": {
+                "type": "page",
+                "title": "Modules",
+                "filepath": "docs/guide/language/modules.md"
+              },
+              "/memory": {
+                "type": "page",
+                "title": "Memory",
+                "filepath": "docs/guide/language/memory.md"
+              },
+              "/regions": {
+                "type": "page",
+                "title": "Regions",
+                "filepath": "docs/guide/language/regions.md"
+              },
+              "/simd": {
+                "type": "page",
+                "title": "Vectors (SIMD)",
+                "filepath": "docs/guide/language/simd.md"
+              },
+              "/async": {
+                "type": "page",
+                "title": "Async functions",
+                "filepath": "docs/guide/language/async.md"
+              }
             }
           },
           "/using-nish": {
             "type": "group",
             "title": "Using Nish",
             "children": {
-              "/cli": { "type": "page", "title": "The CLI", "filepath": "docs/guide/using-nish/cli.md" },
+              "/cli": {
+                "type": "page",
+                "title": "The CLI",
+                "filepath": "docs/guide/using-nish/cli.md"
+              },
               "/standard-library": {
                 "type": "page",
                 "title": "The standard library",
@@ -105,48 +139,332 @@
                 "title": "Calling Nish from other languages",
                 "filepath": "docs/guide/using-nish/interop.md"
               },
-              "/threads": { "type": "page", "title": "Threads", "filepath": "docs/guide/using-nish/threads.md" },
+              "/threads": {
+                "type": "page",
+                "title": "Threads",
+                "filepath": "docs/guide/using-nish/threads.md"
+              },
               "/shared-memory": {
                 "type": "page",
                 "title": "Shared memory between processes",
                 "filepath": "docs/guide/using-nish/shared-memory.md"
               },
-              "/sqlite": { "type": "page", "title": "SQLite", "filepath": "docs/guide/using-nish/sqlite.md" },
-              "/networking": { "type": "page", "title": "Networking", "filepath": "docs/guide/using-nish/networking.md" },
-              "/unix-sockets": { "type": "page", "title": "Unix sockets", "filepath": "docs/guide/using-nish/unix-sockets.md" },
+              "/sqlite": {
+                "type": "page",
+                "title": "SQLite",
+                "filepath": "docs/guide/using-nish/sqlite.md"
+              },
+              "/networking": {
+                "type": "page",
+                "title": "Networking",
+                "filepath": "docs/guide/using-nish/networking.md"
+              },
+              "/unix-sockets": {
+                "type": "page",
+                "title": "Unix sockets",
+                "filepath": "docs/guide/using-nish/unix-sockets.md"
+              },
               "/tls-certificates": {
                 "type": "page",
                 "title": "Verifying TLS certificates",
                 "filepath": "docs/guide/using-nish/tls-certificates.md"
               },
-              "/tls-client": { "type": "page", "title": "TLS client", "filepath": "docs/guide/using-nish/tls-client.md" },
-              "/terminal": { "type": "page", "title": "Terminal programs", "filepath": "docs/guide/using-nish/terminal.md" },
-              "/sandbox": { "type": "page", "title": "The sandbox", "filepath": "docs/guide/using-nish/sandbox.md" },
+              "/tls-client": {
+                "type": "page",
+                "title": "TLS client",
+                "filepath": "docs/guide/using-nish/tls-client.md"
+              },
+              "/terminal": {
+                "type": "page",
+                "title": "Terminal programs",
+                "filepath": "docs/guide/using-nish/terminal.md"
+              },
+              "/sandbox": {
+                "type": "page",
+                "title": "The sandbox",
+                "filepath": "docs/guide/using-nish/sandbox.md"
+              },
               "/password-hashing": {
                 "type": "page",
                 "title": "Password hashing",
                 "filepath": "docs/guide/using-nish/password-hashing.md"
               },
-              "/auth": { "type": "page", "title": "Authentication tokens (JWT)", "filepath": "docs/guide/using-nish/auth.md" },
-              "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" },
-              "/api-server": { "type": "page", "title": "An API server", "filepath": "docs/guide/using-nish/api-server.md" },
-              "/websocket": { "type": "page", "title": "WebSocket", "filepath": "docs/guide/using-nish/websocket.md" },
-              "/http-client": { "type": "page", "title": "HTTP client", "filepath": "docs/guide/using-nish/http-client.md" },
+              "/auth": {
+                "type": "page",
+                "title": "Authentication tokens (JWT)",
+                "filepath": "docs/guide/using-nish/auth.md"
+              },
+              "/http-router": {
+                "type": "page",
+                "title": "HTTP routing",
+                "filepath": "docs/guide/using-nish/http-router.md"
+              },
+              "/api-server": {
+                "type": "page",
+                "title": "An API server",
+                "filepath": "docs/guide/using-nish/api-server.md"
+              },
+              "/websocket": {
+                "type": "page",
+                "title": "WebSocket",
+                "filepath": "docs/guide/using-nish/websocket.md"
+              },
+              "/http-client": {
+                "type": "page",
+                "title": "HTTP client",
+                "filepath": "docs/guide/using-nish/http-client.md"
+              },
               "/calling-services": {
                 "type": "page",
                 "title": "Calling other services",
                 "filepath": "docs/guide/using-nish/calling-services.md"
               },
-              "/postgres": { "type": "page", "title": "PostgreSQL", "filepath": "docs/guide/using-nish/postgres.md" },
-              "/compression": { "type": "page", "title": "Compression", "filepath": "docs/guide/using-nish/compression.md" },
-              "/to-typescript": { "type": "page", "title": "Back to TypeScript", "filepath": "docs/guide/using-nish/to-typescript.md" }
+              "/postgres": {
+                "type": "page",
+                "title": "PostgreSQL",
+                "filepath": "docs/guide/using-nish/postgres.md"
+              },
+              "/compression": {
+                "type": "page",
+                "title": "Compression",
+                "filepath": "docs/guide/using-nish/compression.md"
+              },
+              "/to-typescript": {
+                "type": "page",
+                "title": "Back to TypeScript",
+                "filepath": "docs/guide/using-nish/to-typescript.md"
+              }
+            }
+          },
+          "/reference": {
+            "type": "group",
+            "title": "Reference",
+            "children": {
+              "/language": {
+                "type": "page",
+                "title": "Language reference",
+                "filepath": "docs/LANGUAGE.md"
+              },
+              "/install": { "type": "page", "title": "Installing", "filepath": "docs/INSTALL.md" },
+              "/standard-library": {
+                "type": "page",
+                "title": "Standard library modules",
+                "filepath": "std/README.md"
+              },
+              "/run-under-node": {
+                "type": "page",
+                "title": "Running under Node",
+                "filepath": "docs/RUN_UNDER_NODE.md"
+              },
+              "/benchmarks": {
+                "type": "page",
+                "title": "Benchmarks",
+                "filepath": "docs/BENCHMARKS.md"
+              },
+              "/changelog": { "type": "page", "title": "Changelog", "filepath": "CHANGELOG.md" }
+            }
+          },
+          "/security": {
+            "type": "group",
+            "title": "Security records",
+            "children": {
+              "/": { "type": "page", "title": "Overview", "filepath": "docs/security/README.md" },
+              "/bytes": {
+                "type": "page",
+                "title": "nish/bytes",
+                "filepath": "docs/security/bytes.md"
+              },
+              "/capabilities": {
+                "type": "page",
+                "title": "Dependency capabilities",
+                "filepath": "docs/security/capabilities.md"
+              },
+              "/cli": {
+                "type": "page",
+                "title": "CLI and cache",
+                "filepath": "docs/security/cli.md"
+              },
+              "/codegen": {
+                "type": "page",
+                "title": "Codegen",
+                "filepath": "docs/security/codegen.md"
+              },
+              "/compress": {
+                "type": "page",
+                "title": "Compression",
+                "filepath": "docs/security/compress.md"
+              },
+              "/crypto-aead": {
+                "type": "page",
+                "title": "AEADs",
+                "filepath": "docs/security/crypto-aead.md"
+              },
+              "/crypto-bcrypt": {
+                "type": "page",
+                "title": "bcrypt",
+                "filepath": "docs/security/crypto-bcrypt.md"
+              },
+              "/crypto-chacha20-hw": {
+                "type": "page",
+                "title": "ChaCha20 kernel",
+                "filepath": "docs/security/crypto-chacha20-hw.md"
+              },
+              "/crypto-ecc": {
+                "type": "page",
+                "title": "P-256 ECDSA and X25519",
+                "filepath": "docs/security/crypto-ecc.md"
+              },
+              "/crypto-jwt": {
+                "type": "page",
+                "title": "JSON Web Tokens",
+                "filepath": "docs/security/crypto-jwt.md"
+              },
+              "/crypto-k1": {
+                "type": "page",
+                "title": "SHA-2, HMAC and HKDF",
+                "filepath": "docs/security/crypto-k1.md"
+              },
+              "/crypto-p384": {
+                "type": "page",
+                "title": "P-384 ECDSA",
+                "filepath": "docs/security/crypto-p384.md"
+              },
+              "/crypto-pki": {
+                "type": "page",
+                "title": "PKI trust anchors",
+                "filepath": "docs/security/crypto-pki.md"
+              },
+              "/crypto-rsa": {
+                "type": "page",
+                "title": "RSA signatures",
+                "filepath": "docs/security/crypto-rsa.md"
+              },
+              "/crypto-sha256-hw": {
+                "type": "page",
+                "title": "SHA-256 kernel",
+                "filepath": "docs/security/crypto-sha256-hw.md"
+              },
+              "/crypto-x509": {
+                "type": "page",
+                "title": "X.509",
+                "filepath": "docs/security/crypto-x509.md"
+              },
+              "/ct-verification": {
+                "type": "page",
+                "title": "Constant-time checks",
+                "filepath": "docs/security/ct-verification.md"
+              },
+              "/dns": {
+                "type": "page",
+                "title": "DNS stub resolver",
+                "filepath": "docs/security/dns.md"
+              },
+              "/fetch": {
+                "type": "page",
+                "title": "HTTP/1.1 client (fetchSync)",
+                "filepath": "docs/security/fetch.md"
+              },
+              "/handler": {
+                "type": "page",
+                "title": "HTTP request handler",
+                "filepath": "docs/security/handler.md"
+              },
+              "/http1-client-codec": {
+                "type": "page",
+                "title": "HTTP/1.1 client codec",
+                "filepath": "docs/security/http1-client-codec.md"
+              },
+              "/http1-codec": {
+                "type": "page",
+                "title": "HTTP/1.1 server and parser",
+                "filepath": "docs/security/http1-codec.md"
+              },
+              "/http2": { "type": "page", "title": "HTTP/2", "filepath": "docs/security/http2.md" },
+              "/http3": { "type": "page", "title": "HTTP/3", "filepath": "docs/security/http3.md" },
+              "/json": { "type": "page", "title": "JSON", "filepath": "docs/security/json.md" },
+              "/outbound": {
+                "type": "page",
+                "title": "Outbound policy",
+                "filepath": "docs/security/outbound.md"
+              },
+              "/postgres": {
+                "type": "page",
+                "title": "PostgreSQL client",
+                "filepath": "docs/security/postgres.md"
+              },
+              "/quic": { "type": "page", "title": "QUIC", "filepath": "docs/security/quic.md" },
+              "/regex": {
+                "type": "page",
+                "title": "nish/regex",
+                "filepath": "docs/security/regex.md"
+              },
+              "/router": {
+                "type": "page",
+                "title": "HTTP router",
+                "filepath": "docs/security/router.md"
+              },
+              "/runtime-browser": {
+                "type": "page",
+                "title": "Browser host",
+                "filepath": "docs/security/runtime-browser.md"
+              },
+              "/runtime": {
+                "type": "page",
+                "title": "C runtime",
+                "filepath": "docs/security/runtime.md"
+              },
+              "/sandbox": {
+                "type": "page",
+                "title": "--sandbox",
+                "filepath": "docs/security/sandbox.md"
+              },
+              "/secret": {
+                "type": "page",
+                "title": "nish:secret",
+                "filepath": "docs/security/secret.md"
+              },
+              "/shm": {
+                "type": "page",
+                "title": "Shared memory",
+                "filepath": "docs/security/shm.md"
+              },
+              "/sqlite": {
+                "type": "page",
+                "title": "SQLite amalgamation",
+                "filepath": "docs/security/sqlite.md"
+              },
+              "/supply-chain": {
+                "type": "page",
+                "title": "Supply chain",
+                "filepath": "docs/security/supply-chain.md"
+              },
+              "/term": {
+                "type": "page",
+                "title": "nish:term",
+                "filepath": "docs/security/term.md"
+              },
+              "/tls": { "type": "page", "title": "TLS 1.3", "filepath": "docs/security/tls.md" },
+              "/upstream": {
+                "type": "page",
+                "title": "Upstream HTTP calls",
+                "filepath": "docs/security/upstream.md"
+              },
+              "/url": {
+                "type": "page",
+                "title": "nish/net/url",
+                "filepath": "docs/security/url.md"
+              },
+              "/webtransport": {
+                "type": "page",
+                "title": "WebTransport",
+                "filepath": "docs/security/webtransport.md"
+              },
+              "/yaml": { "type": "page", "title": "YAML", "filepath": "docs/security/yaml.md" }
             }
           }
         }
       }
     }
   },
-  "siteConfig": {
-    "isPrivate": true
-  }
+  "siteConfig": { "isPrivate": true }
 }

@@ -4,8 +4,8 @@ A Nish program can be split across files with TypeScript's `import` and
 `export`. Each file is a module, and an import names one of four things:
 another file of your program, a built-in `nish:` module, a module of the
 standard library, or a package installed in `node_modules`. The rules are in
-the reference under [`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)
-and [Builtin modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtin-modules-nish).
+the reference under [`export` and `import`](../../LANGUAGE.md#export-and-import)
+and [Builtin modules](../../LANGUAGE.md#builtin-modules-nish).
 
 ## Exporting and importing
 

@@ -9,7 +9,7 @@ stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
 listeners, connections and pairs, passing a descriptor over one, and naming
 the process at the other end. The rules are in the reference,
-[`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
+[`nish:net`](../../LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
 
 Every function is also a global, as every `nish:` export is, but importing them
 says where they come from. They are native only: a `wasm32` build has no
@@ -197,33 +197,6 @@ export const acceptOne = (listener: i32, peer: u8[]): i32 => {
 The ids are plain `i32`s you pass straight to the call. They are not module
 constants, so `const MODE = NET_TCP_QUICKACK;` at the top of a module is an
 error; write the id where you call `netSetOption`.
-
-## Two buffers in one write: `netWrite2`
-
-A response is often a header and a body in two arrays. `netWrite2(fd, a,
-aOff, aLen, b, bOff, bLen)` sends `a`'s `[aOff, aOff + aLen)` and then `b`'s
-`[bOff, bOff + bLen)` in one system call, without copying them into one
-buffer first:
-
-```ts nish:ok
-import { netWrite2 } from "nish:net";
-
-// The head, then the body, in one `sendmsg`. The answer is how many bytes
-// went, which can be fewer than both: send the rest when the socket is
-// writable again.
-export const sendFramed = (fd: i32, head: readonly u8[], body: readonly u8[]): i32 =>
-  netWrite2(fd, head, 0, head.length, body, 0, body.length);
-```
-
-- **The answer counts bytes, as `netWrite`'s does.** A short write counts
-  what went, the head's bytes first; resume from there. `-11` (`EAGAIN`)
-  means the socket's send buffer is full, and `-32` (`EPIPE`) a peer that has
-  gone, never a `SIGPIPE`.
-- **Both ranges are checked before the call**, the first one first, and a
-  range outside its array stops the program with `slice out of range`, as
-  `netWrite`'s does. Either range may be empty.
-- **Native only.** A wasm build refuses it, and under Node it throws, as every
-  `nish:net` call does.
 
 ## A connection's segment size: `netMss`
 
@@ -601,17 +574,6 @@ first datagram, and it is proven once `server.quic(slot).addressValidated` is
 set: by a Handshake packet from the client, or by a Retry token when the
 server's config turns `retry` on. The relay example in `examples/relay` counts
 a client against its per-address cap only from that point.
-
-A QUIC client's address can change mid-connection, as a NAT rebinding changes
-its port. After the handshake, `Http3Server` follows it: the next packet from
-the new address moves the connection there, and the server sends a
-PATH_CHALLENGE the client must answer (RFC 9000 §9). Until the client answers,
-the server sends the new address at most three times what came from it, and
-with no answer it goes back to the last address that was proven. A forged
-source address can borrow a little traffic this way, never the connection.
-`Http3Server.addresses[slot]` is where the slot sends now, so it changes with
-the client: a cap keyed on the address a session started from keeps its own
-copy, as the relay does.
 
 ## Under Node
 

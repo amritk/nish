@@ -10,11 +10,11 @@ you are using:
 | | What it does | Fidelity |
 | --- | --- | --- |
 | **The prelude** (`runtime/nish.mjs`) | Supplies the globals Nish has and Node does not. **Rewrites nothing.** | f64 mode, minus the list below |
-| **The rewriter** ([wp13-differential.md](wp13-differential.md)) | Rewrote every expression from the types stage0's checker recorded. **Frozen**: it was deleted with stage0, and `tests/differential/goldens/rewrites.txt` keeps its output for the corpus ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | Both modes, minus [`known-failures.txt`](../tests/differential/known-failures.txt) |
+| **The rewriter** ([wp13-differential.md](https://github.com/amritk/nish/blob/main/docs/wp13-differential.md)) | Rewrote every expression from the types stage0's checker recorded. **Frozen**: it was deleted with stage0, and `tests/differential/goldens/rewrites.txt` keeps its output for the corpus ([wp19-stage0-retirement.md](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md)) | Both modes, minus [`known-failures.txt`](https://github.com/amritk/nish/blob/main/tests/differential/known-failures.txt) |
 
 The rewriter was the testing oracle: it was exact because it could see the type
 of every expression and turn `a + b` into `(a + b) | 0`. Its successor
-is `--emit-ts <dir>` ([wp33-round-trip.md](wp33-round-trip.md) §4), which writes the
+is `--emit-ts <dir>` ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §4), which writes the
 same translation out as TypeScript a person can keep. The prelude is the thing
 you would actually hand to someone, and it is weaker because a prelude can only
 replace *globals* — never operators, never the object model.
@@ -90,7 +90,7 @@ clocks. The command lines above stay as they are.
   `String.fromCharCode` makes them, with the native `slice out of range` panic
   for a range outside the array. ASCII agrees with a native run; a byte above
   127 is the divergence `fromCharCode` already has
-  ([wp33-round-trip.md](wp33-round-trip.md) §3.2)
+  ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.2)
 - `statMtimeSync` — `fs.statSync(path, { throwIfNoEntry: false })?.mtimeMs`,
   or NaN, which is the native arithmetic exactly, so the digits agree
 - `crypto.getRandomValues` — Node's own takes only a typed array, so the
@@ -100,7 +100,7 @@ clocks. The command lines above stay as they are.
   ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals))
 - `signalFd`, `readSignal` — installed only to **throw**: Node tells its event
   loop about a signal, and a blocking read never lets the loop run, so there is
-  no synchronous answer to give ([wp33-round-trip.md](wp33-round-trip.md) §3.5)
+  no synchronous answer to give ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.5)
 - `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`,
   `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`,
   `udpBind`, `udpSendTo`,
@@ -205,7 +205,7 @@ no prelude can reach it. They are language decisions
   `ef` against a panic. Unlike `a[i]`, JavaScript defines both as correct, so a
   program ported from TypeScript can depend on them. `substring` keeps
   JavaScript's clamping exactly; `slice` is the checked, faster one
-  ([wp15-performance.md](wp15-performance.md) §4).
+  ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §4).
 - **A record put into an array is copied natively** and shared here
   ([Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)).
   After `ps.push(p); p.x = 9`, `ps[0].x` is still the old value natively and
@@ -230,7 +230,7 @@ no prelude can reach it. They are language decisions
   ([LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop)).
 - **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
   in `runtime/nish.d.ts`, so a value that leaves its range is silent here and
-  an exit-1 panic natively ([wp31-ranged-integers.md](wp31-ranged-integers.md)
+  an exit-1 panic natively ([wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md)
   §6). Only a program that leaves a range can tell the difference.
 - **`orReturn()` does not propagate.** It throws a marker that the rewriter's
   `try`/`catch` turns into an early `return`; unmodified there is no `catch`, so
@@ -255,7 +255,7 @@ no prelude can reach it. They are language decisions
   found`), and `runtime/node.mjs`, the host the shim installs, imports
   `node:fs`, `node:child_process` and `node:os`, which a browser does not have.
   `runtime/core.mjs` imports none of them: another host is an adapter that
-  installs itself in its place ([wp33-round-trip.md](wp33-round-trip.md) §4.3).
+  installs itself in its place ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §4.3).
 - **A scope's tasks run at the spawn under Node**, one after another, and each
   stores its answer there; natively they run together when the scope's block
   ends, and each answer is stored after the last task finishes

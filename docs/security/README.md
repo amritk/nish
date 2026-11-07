@@ -5,7 +5,7 @@ audited by its own stage, and each stage left a record in this directory. A
 record says what was checked, how, what was found, its severity and what became
 of it, and it names the test that pins each property. How to report a
 vulnerability, which releases get fixes and the threat model in brief are in
-[`SECURITY.md`](../../SECURITY.md).
+[`SECURITY.md`](https://github.com/amritk/nish/blob/main/SECURITY.md).
 
 Every fix landed with a regression test that was shown failing on the stage's
 base commit and passing after. An area that found nothing would still have
@@ -356,7 +356,7 @@ the record that found it. The notes below the table name each such finding.
 ## Fuzzed
 
 Each parser below is a libFuzzer target in `tests/fuzz/targets/` (how to
-build, run and replay one: [`tests/fuzz/README.md`](../../tests/fuzz/README.md)),
+build, run and replay one: [`tests/fuzz/README.md`](https://github.com/amritk/nish/blob/main/tests/fuzz/README.md)),
 and its record says what fuzzing found. The TLS, QUIC, HTTP/1, WebSocket,
 HPACK and X.509 targets each ran for at least 30 minutes from their seed
 corpora and found no crash, sanitizer report, timeout or OOM, except

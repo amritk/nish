@@ -103,14 +103,23 @@ who write programs in Nish. A page there follows these rules:
   that section does not say; where the two disagree, the guide is wrong.
 - **No links to the compiler's records**: not to `wp*.md`,
   `MASTER_PLAN.md` or `.claude/`.
-- **Outside the guide is a GitHub link.** The site serves the guide's pages
-  and nothing else: a relative link to any other file of the repository —
-  the reference, `INSTALL.md`, a security record, a source file — downloads
-  that file there instead of opening it. So a guide page links one as
-  `https://github.com/amritk/nish/blob/main/<path>` (`tree/main/` for a
-  directory), anchor and all, and links other guide pages relatively.
-  `node docs/check-links.mjs` checks those URLs against the files here and
-  refuses a relative link out of the guide.
+- **Link pages relatively, everything else on GitHub.** The site serves
+  every file `scalar.config.json` routes: the guide, the reference
+  (`LANGUAGE.md`, `INSTALL.md`, `std/README.md`, ...) and the security
+  records. A relative link from one of those to another opens it on the
+  site, as it does on GitHub. A relative link to any other file — a source
+  file, a test, a design note — the site serves as a download, so a routed
+  page links one as `https://github.com/amritk/nish/blob/main/<path>`
+  (`tree/main/` for a directory), anchor and all. `node docs/check-links.mjs`
+  checks those URLs against the files here and refuses the relative form.
+- **An anchor lands on both sites.** The site spells some heading IDs
+  differently from GitHub (it drops the doubled and leading hyphens of
+  `` `--fix` `` and keeps the dot of "4. Exit codes") and gives a heading
+  below level 4 none. A link between routed pages to such a heading needs
+  `<a id="<github-slug>" style="scroll-margin-top: 65px"></a>` on its own
+  line above it; the style keeps the heading clear of the site's header, and
+  GitHub drops it. `node docs/check-links.mjs` names each anchor that needs
+  one.
 - **Every page has a route.** The site's navigation is
   [`scalar.config.json`](../scalar.config.json) at the repository root, read
   by [Scalar Docs](https://scalar.com/products/docs); a new page gets a route
@@ -123,6 +132,7 @@ who write programs in Nish. A page there follows these rules:
   `docs/cookbook/*.ts`; `--check` fails when the doc is stale.
 - `node docs/check-links.mjs` verifies every relative link, every link to
   this repository at `github.com/amritk/nish/blob/main/`, and their heading
-  anchors in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`; that no guide
-  page links out of `docs/guide/` relatively; and that
+  anchors in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`; that a routed
+  page links only routed pages relatively, with anchors that land on the site
+  too; and that
   `scalar.config.json`'s routes and the pages under `docs/guide/` match.

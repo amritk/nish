@@ -4,7 +4,7 @@ Every value in a Nish program has one type, fixed when the program is
 compiled, and that type never changes. There is no `any`, no boxing and no
 implicit conversion of any kind: two values are compatible only when their
 types are identical. The normative rules are in the reference's
-[Types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#types) section.
+[Types](../../LANGUAGE.md#types) section.
 
 ## Numbers
 
@@ -68,7 +68,7 @@ written asks for another type: an annotated declaration, a `return`, an
 argument to a function, or the other side of an operator whose type is
 known. That is why `const big: i64 = 9000000000` above compiles. The full
 list of those places is under
-[Numeric literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#numeric-literals).
+[Numeric literals](../../LANGUAGE.md#numeric-literals).
 
 Integer arithmetic is checked: what happens when a value overflows is on the
 [Control flow](control-flow.md#checked-arithmetic) page.
@@ -101,7 +101,7 @@ export const main = (): i32 => {
 
 `f64ToBits(x)` and `f32ToBits(x)` give a float's raw IEEE-754 bits, as an
 `i64` and an `i32`; the whole list of builtins is in the reference's
-[Math table](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtins).
+[Math table](../../LANGUAGE.md#builtins).
 
 ## Booleans
 
@@ -254,7 +254,7 @@ Three rules keep it honest:
 - **`?.` needs something that can be `null`.** On a value that never is,
   write `.`.
 
-The reference's [Nullable types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nullable-types) section
+The reference's [Nullable types](../../LANGUAGE.md#nullable-types) section
 has every form a test may take. A function that can *fail*, rather than find
 nothing, returns a `Result` instead — see
 [Errors and `Result`](errors.md).
@@ -273,12 +273,12 @@ index can also spare the bounds check:
 const digit: integer<0, 9> = 12;
 ```
 
-The reference's [Types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#types) section lists every rule
+The reference's [Types](../../LANGUAGE.md#types) section lists every rule
 for `integer<Lo, Hi>`.
 
 ## Enum member types
 
-A member of an [enum](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums) is also a type. Written as an
+A member of an [enum](../../LANGUAGE.md#enums) is also a type. Written as an
 annotation, `Kind.Array` is a slot that holds that one member and nothing
 else, which is how a class records which of an enum's cases it is: a
 `readonly` field of the member's type, set to the member.
@@ -380,4 +380,4 @@ export const main = (): i32 => {
 };
 ```
 
-The reference's [Enums](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums) section has every rule.
+The reference's [Enums](../../LANGUAGE.md#enums) section has every rule.
