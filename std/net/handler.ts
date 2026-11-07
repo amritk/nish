@@ -162,7 +162,10 @@ export class HandlerLimits {
   http: Http1Config
   /** The most connections at once. */
   slots: i32 = 256
-  /** The JSON scratch buffer's size: the largest body `json` and `problem` can write. */
+  /**
+   * The JSON scratch buffer's size: the largest body `json` and `problem` can write.
+   * @internal Read by `HttpHandler`'s constructor in this module to size the buffer it owns.
+   */
   jsonBytes: i32 = 65536
   /** The most readiness events one `wait` takes. */
   maxEvents: i32 = 256
@@ -176,6 +179,11 @@ export class HandlerLimits {
    */
   bodyTimeout: i32 = 30000
 
+  /**
+   * The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30
+   * second body timeout, and the carrier's own defaults with the body cap
+   * lowered to one MiB. Change a field after construction to tune one.
+   */
   constructor() {
     this.http = new Http1Config()
     this.http.maxBody = HANDLER_ONE_MIB
@@ -190,26 +198,48 @@ export class HandlerLimits {
 export class HttpRequest {
   /** The method, the target and the header section, as the parser kept them (field names lowercased). */
   head: u8[]
-  /** Four per field, into `head`: name start and end, value start and end. */
+  /**
+   * Four per field, into `head`: name start and end, value start and end.
+   * @internal Filled by `HttpHandler` in this module when it copies the head, and read by `header`, `valueStart` and `valueEnd`.
+   */
   spans: i32[]
-  /** The route parameters as `[start, end)` pairs into `head`, in the pattern's order. */
+  /**
+   * The route parameters as `[start, end)` pairs into `head`, in the pattern's order.
+   * @internal Filled by `HttpHandler` in this module from `Router.match`; programs read them through `paramStart`, `param` and the rest.
+   */
   params: i32[]
   /** The body, `body[0 .. bodyLength)`. */
   body: u8[]
-  /** What the carrier had no room for yet: `pending[pendingStart .. pendingEnd)`. */
+  /**
+   * What the carrier had no room for yet: `pending[pendingStart .. pendingEnd)`.
+   * @internal Written and flushed by `HttpHandler` in this module while it streams the response.
+   */
   pending: u8[]
-  /** When the head was read, as the handler's turn saw it (`monotonicNanos`); `bodyTimeout` runs from here. */
+  /**
+   * When the head was read, as the handler's turn saw it (`monotonicNanos`); `bodyTimeout` runs from here.
+   * @internal Stamped and checked by `HttpHandler` in this module to close a connection whose body trickles past `bodyTimeout`.
+   */
   since: i64 = 0
   /** The index `Router.add` answered for the route, or a negative `ROUTER_*` code. */
   route: i32 = 0
-  /** How many parameter pairs `params` holds. */
+  /**
+   * How many parameter pairs `params` holds.
+   * @internal Set by `HttpHandler` in this module after routing; the param accessors check `k` against it.
+   */
   paramCount: i32 = 0
   methodStart: i32 = 0
   methodEnd: i32 = 0
   targetStart: i32 = 0
   targetEnd: i32 = 0
-  /** Where the path ends: the target's first `?`, or its end. */
+  /**
+   * Where the path ends: the target's first `?`, or its end.
+   * @internal Set by `HttpHandler` in this module when it copies the head, and read by `pathIs` and `queryIndex`.
+   */
   pathEnd: i32 = 0
+  /**
+   * How many fields `spans` describes.
+   * @internal Set by `HttpHandler` in this module when it copies the head, and read by `header`.
+   */
   headerCount: i32 = 0
   bodyLength: i32 = 0
   /** The connection's slot, and its generation when this request was read. */
@@ -217,10 +247,27 @@ export class HttpRequest {
   gen: i32 = 0
   /** Its index in the handler's pool. */
   index: i32 = 0
+  /**
+   * Where the request is in its life, one of the module's private `HANDLER_*` states.
+   * @internal Moved by `HttpHandler` in this module from the free list through reading, queued, held and streaming, and back.
+   */
   state: i32 = 0
+  /**
+   * Where the unsent bytes in `pending` start.
+   * @internal Advanced by `HttpHandler` in this module as the carrier takes pending bytes.
+   */
   pendingStart: i32 = 0
+  /**
+   * Where the unsent bytes in `pending` end.
+   * @internal Advanced by `HttpHandler` in this module as `write` keeps what the carrier had no room for.
+   */
   pendingEnd: i32 = 0
 
+  /**
+   * An empty request for the handler's pool; its buffers grow to the first
+   * request it holds and are kept for the ones after.
+   * @param index its place in the handler's pool, which the free list and the queue name it by
+   */
   constructor(index: i32) {
     this.index = index
     this.head = []
@@ -230,29 +277,51 @@ export class HttpRequest {
     this.pending = []
   }
 
-  /** Whether the method is exactly `method` (methods are case-sensitive, RFC 9110 §9.1). */
+  /**
+   * Whether the method is exactly `method` (methods are case-sensitive, RFC 9110 §9.1).
+   * @internal Called by `HttpHandler` in this module to route a HEAD as GET when only GET has the path; programs usually dispatch on `route`.
+   * @param method the method name to compare with, such as `"GET"`
+   * @returns true when the request's method is byte for byte `method`
+   */
   methodIs(method: string): boolean {
     return handlerSpanIs(this.head, this.methodStart, this.methodEnd, method)
   }
 
-  /** Whether the path, the target up to its `?`, is exactly `path`. */
+  /**
+   * Whether the path, the target up to its `?`, is exactly `path`.
+   * @param path the raw path to compare with, still percent-encoded as it came on the wire
+   * @returns true when the target's path, without its query, is byte for byte `path`
+   */
   pathIs(path: string): boolean {
     return handlerSpanIs(this.head, this.targetStart, this.pathEnd, path)
   }
 
-  /** Where parameter `k` starts in `head`. Panics on a parameter the route does not have. */
+  /**
+   * Where parameter `k` starts in `head`. Panics on a parameter the route does not have.
+   * @param k the parameter's position in the route pattern, from 0
+   * @returns the byte offset in `head` of the parameter's first raw byte
+   */
   paramStart(k: i32): i32 {
     this.checkParam(k)
     return this.params[2 * k]
   }
 
-  /** Where parameter `k` ends in `head`. */
+  /**
+   * Where parameter `k` ends in `head`.
+   * @param k the parameter's position in the route pattern, from 0
+   * @returns the byte offset in `head` just past the parameter's last raw byte
+   */
   paramEnd(k: i32): i32 {
     this.checkParam(k)
     return this.params[2 * k + 1]
   }
 
-  /** Whether parameter `k`, raw, is exactly `text`. */
+  /**
+   * Whether parameter `k`, raw, is exactly `text`.
+   * @param k the parameter's position in the route pattern, from 0
+   * @param text the value to compare with, as it would appear still percent-encoded
+   * @returns true when the raw parameter bytes are exactly `text`
+   */
   paramIs(k: i32, text: string): boolean {
     this.checkParam(k)
     return handlerSpanIs(this.head, this.params[2 * k], this.params[2 * k + 1], text)
@@ -262,13 +331,20 @@ export class HttpRequest {
    * Parameter `k` percent-decoded into `out` from 0 (`routerDecode`): its
    * length, `ROUTER_BAD_ESCAPE` for a malformed escape, or `ROUTER_NO_ROOM`
    * when `out` is too short. Nothing is written on a code.
+   * @param k the parameter's position in the route pattern, from 0
+   * @param out where the decoded bytes go, from index 0; the caller's buffer
+   * @returns how many decoded bytes were written, or a negative `ROUTER_*` code
    */
   param(k: i32, out: u8[]): i32 {
     this.checkParam(k)
     return routerDecode(this.head, this.params[2 * k], this.params[2 * k + 1], out)
   }
 
-  /** Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1. */
+  /**
+   * Parameter `k` read as a decimal number that is not negative and fits an `i32`, or -1.
+   * @param k the parameter's position in the route pattern, from 0
+   * @returns the number the parameter's digits spell, or -1 when it is empty, holds a non-digit or overflows
+   */
   paramDecimal(k: i32): i32 {
     this.checkParam(k)
     return handlerDecimal(this.head, this.params[2 * k], this.params[2 * k + 1])
@@ -287,6 +363,9 @@ export class HttpRequest {
    * decoded too. `HANDLER_ABSENT` when no parameter has the name,
    * `ROUTER_BAD_ESCAPE` for a malformed escape in its value, `ROUTER_NO_ROOM`
    * when `out` is too short. A name with no `=` has an empty value.
+   * @param name the parameter name to look for, compared with each name after decoding
+   * @param out where the decoded value goes, from index 0; the caller's buffer
+   * @returns how many decoded bytes were written, or `HANDLER_ABSENT` or a negative `ROUTER_*` code
    */
   query(name: string, out: u8[]): i32 {
     const at: i32 = this.queryIndex(name)
@@ -296,7 +375,11 @@ export class HttpRequest {
     return handlerFormDecode(this.head, this.queryValueStart, this.queryValueEnd, out)
   }
 
-  /** Whether the query holds a parameter named `name`. */
+  /**
+   * Whether the query holds a parameter named `name`.
+   * @param name the parameter name to look for, compared with each name after decoding
+   * @returns true when some pair in the query has that name, even with an empty value
+   */
   hasQuery(name: string): boolean {
     return this.queryIndex(name) >= 0
   }
@@ -305,7 +388,11 @@ export class HttpRequest {
   queryValueStart: i32 = 0
   queryValueEnd: i32 = 0
 
-  /** Finds the first parameter named `name`: where its pair starts, or -1; its raw value goes to `queryValue...`. */
+  /**
+   * Finds the first parameter named `name`: where its pair starts, or -1; its raw value goes to `queryValue...`.
+   * @param name the parameter name to look for, compared with each name after decoding
+   * @returns the byte offset in `head` where the matching `name=value` pair starts, or -1 when none matches
+   */
   queryIndex(name: string): i32 {
     let at: i32 = this.pathEnd + 1
     const end: i32 = this.targetEnd
@@ -328,7 +415,11 @@ export class HttpRequest {
     return -1
   }
 
-  /** The index of the first field named `name`, which is lowercase, or `HANDLER_ABSENT`. */
+  /**
+   * The index of the first field named `name`, which is lowercase, or `HANDLER_ABSENT`.
+   * @param name the field name in lowercase, since the parser lowercased every name it kept
+   * @returns the field's index for `valueStart` and `valueEnd`, or `HANDLER_ABSENT` when no field has the name
+   */
   header(name: string): i32 {
     for (let i: i32 = 0; i < this.headerCount; i++) {
       if (handlerSpanIs(this.head, this.spans[4 * i], this.spans[4 * i + 1], name)) {
@@ -338,17 +429,30 @@ export class HttpRequest {
     return HANDLER_ABSENT
   }
 
-  /** Where field `i`'s value starts in `head`. */
+  /**
+   * Where field `i`'s value starts in `head`.
+   * @param i a field index, as `header` answered it
+   * @returns the byte offset in `head` of the value's first byte
+   */
   valueStart(i: i32): i32 {
     return this.spans[4 * i + 2]
   }
 
-  /** Where field `i`'s value ends in `head`. */
+  /**
+   * Where field `i`'s value ends in `head`.
+   * @param i a field index, as `header` answered it
+   * @returns the byte offset in `head` just past the value's last byte
+   */
   valueEnd(i: i32): i32 {
     return this.spans[4 * i + 3]
   }
 
-  /** Whether the first field named `name` (lowercase) has exactly the value `value`. */
+  /**
+   * Whether the first field named `name` (lowercase) has exactly the value `value`.
+   * @param name the field name in lowercase
+   * @param value the value to compare with, byte for byte and case-sensitive
+   * @returns true when the field is present and its first occurrence has exactly that value
+   */
   headerIs(name: string, value: string): boolean {
     const i: i32 = this.header(name)
     return i >= 0 && handlerSpanIs(this.head, this.spans[4 * i + 2], this.spans[4 * i + 3], value)
@@ -399,11 +503,18 @@ export class HttpHandler {
   private acceptRestUntil: i64 = 0
   /** `bodyTimeout` in nanoseconds. */
   private bodyTimeout: i64 = 0
-  /** When the current turn's sockets were ready (`monotonicNanos`): a head read in it is stamped with this. */
+  /**
+   * When the current turn's sockets were ready (`monotonicNanos`): a head read in it is stamped with this.
+   * @internal Read by std/net/upstream.ts, whose `pump` compares it with the last turn it saw to run once per handler turn.
+   */
   turnAt: i64 = 0
   /** When `wait` next looks for a body past `bodyTimeout`. */
   private bodyCheckAt: i64 = 0
   private listener: i32 = 0
+  /**
+   * The readiness loop's descriptor, from `pollCreate`.
+   * @internal Read by std/net/upstream.ts to add its upstream sockets to the same loop, so one `wait` serves both.
+   */
   loop: i32 = 0
   private queueStart: i32 = 0
   private queueCount: i32 = 0
@@ -418,6 +529,9 @@ export class HttpHandler {
    * (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of
    * `nish/net/prefork`), routing through `router`, whose routes are added
    * before the first `wait`.
+   * @param limits the caps and timeouts, read once here; changing them later has no effect
+   * @param listener the listening socket's descriptor, still the program's to close
+   * @param router the routes, which the handler keeps and consults at each request head
    */
   constructor(limits: HandlerLimits, listener: i32, router: Router) {
     if (limits.slots < 1 || limits.jsonBytes < 256 || limits.maxEvents < 1 || limits.bodyTimeout < 1) {
@@ -469,6 +583,8 @@ export class HttpHandler {
    * `HANDLER_MAX_WATCHED - 1`): `fired(id)` says whether it was ready in the
    * last `wait`. For a program's own descriptors — `signalFd()` for a
    * graceful stop, a pipe from another thread.
+   * @param fd the program's descriptor to watch for reading; it stays the program's to read and close
+   * @param id the name `fired` asks about it by, from 0 to `HANDLER_MAX_WATCHED - 1`
    */
   watch(fd: i32, id: i32): void {
     if (id < 0 || id >= HANDLER_MAX_WATCHED) {
@@ -477,7 +593,11 @@ export class HttpHandler {
     pollAdd(this.loop, fd, H1_WANT_READ, -2 - id)
   }
 
-  /** Whether watched descriptor `id` was ready in the last `wait`. */
+  /**
+   * Whether watched descriptor `id` was ready in the last `wait`.
+   * @param id the name the descriptor was given to `watch`
+   * @returns true when it was readable in the last turn; false for an id outside the range
+   */
   fired(id: i32): boolean {
     return id >= 0 && id < HANDLER_MAX_WATCHED && this.watchedFired[id]
   }
@@ -487,6 +607,8 @@ export class HttpHandler {
    * socket to be ready, accepts, reads and writes what is, closes the
    * connections past their timeouts, and answers how many whole requests
    * are waiting for `take`.
+   * @param timeoutMs the longest to block, in milliseconds, or -1 to block until something is ready
+   * @returns how many whole requests are queued for `take` after this turn
    */
   wait(timeoutMs: i32): i32 {
     for (let id: i32 = 0; id < HANDLER_MAX_WATCHED; id++) {
@@ -887,7 +1009,10 @@ export class HttpHandler {
 
   // ---- Requests -------------------------------------------------------------------
 
-  /** Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here. */
+  /**
+   * Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here.
+   * @returns true when `take` will give out a request whose connection is still open
+   */
   ready(): boolean {
     while (this.queueCount > 0) {
       const r: HttpRequest = this.requests[this.queue[this.queueStart]]
@@ -901,7 +1026,10 @@ export class HttpHandler {
     return false
   }
 
-  /** The next whole request, which the program now owes an answer. Panics when none is `ready`. */
+  /**
+   * The next whole request, which the program now owes an answer. Panics when none is `ready`.
+   * @returns the oldest queued request, the program's until it answers it
+   */
   take(): HttpRequest {
     if (!this.ready()) {
       panic("HttpHandler.take: no request is ready")
@@ -918,12 +1046,18 @@ export class HttpHandler {
     return this.server.holds(r.slot) && this.slotGen[r.slot] === r.gen
   }
 
-  /** How many requests the pool has made: the most ever in flight at once. */
+  /**
+   * How many requests the pool has made: the most ever in flight at once.
+   * @returns the pool's size, which only grows, so a flat count shows nothing leaks
+   */
   pooled(): i32 {
     return toI32(this.requests.length)
   }
 
-  /** How many connections are open. */
+  /**
+   * How many connections are open.
+   * @returns the number of carrier slots holding a connection, which falls to 0 after `drain`
+   */
   connections(): i32 {
     return this.server.busy()
   }
@@ -936,6 +1070,12 @@ export class HttpHandler {
    * `write` the body and `end`. Answers `HANDLER_SENT`, or `HANDLER_DROPPED`
    * when `r`'s connection has closed — every later `write` and `end` for it
    * then does nothing, and `end` hands it back.
+   * @param r a request taken and not yet answered
+   * @param status the response status, from 200 to 599
+   * @param names the field names, as bytes, beside `values`
+   * @param values each field's value, `values[k]` for `names[k]`
+   * @param bodyLength how many body bytes will follow, or `HTTP1_CHUNKED` for a body of unknown length
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   start(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 {
     if (r.state !== HANDLER_HELD) {
@@ -974,6 +1114,11 @@ export class HttpHandler {
    * Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room
    * for is copied and sent as room comes, so `buf` is the caller's again on
    * return. Answers `HANDLER_SENT` or `HANDLER_DROPPED`.
+   * @param r a request whose response `start` began
+   * @param buf the bytes to send from; the caller's again on return
+   * @param off where in `buf` the body bytes start
+   * @param len how many bytes to send
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32 {
     if (r.state !== HANDLER_STREAMING) {
@@ -1035,6 +1180,8 @@ export class HttpHandler {
    * Ends `r`'s response. `r` is the handler's again: it goes back once the
    * carrier has taken every byte, and the connection's next request is read.
    * Answers `HANDLER_SENT` or `HANDLER_DROPPED`.
+   * @param r a request whose response `start` began; the handler's again after this call
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   end(r: HttpRequest): i32 {
     if (r.state !== HANDLER_STREAMING) {
@@ -1055,13 +1202,32 @@ export class HttpHandler {
     return HANDLER_SENT
   }
 
-  /** Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call. */
+  /**
+   * Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call.
+   * @param r a request taken and not yet answered; the handler's again after this call
+   * @param status the response status, from 200 to 599
+   * @param contentType the `Content-Type` value, as bytes
+   * @param body the buffer holding the body; the caller's again on return
+   * @param off where in `body` the body bytes start
+   * @param len how many body bytes to send
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   */
   send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32 {
     this.typeValue[0] = contentType
     return this.sendFields(r, status, this.typeName, this.typeValue, body, off, len)
   }
 
-  /** Answers `r` with `status`, the fields `names[k]`: `values[k]` and the body `body[off .. off + len)`, in one call. */
+  /**
+   * Answers `r` with `status`, the fields `names[k]`: `values[k]` and the body `body[off .. off + len)`, in one call.
+   * @param r a request taken and not yet answered; the handler's again after this call
+   * @param status the response status, from 200 to 599
+   * @param names the field names, as bytes, beside `values`
+   * @param values each field's value, `values[k]` for `names[k]`
+   * @param body the buffer holding the body; the caller's again on return
+   * @param off where in `body` the body bytes start
+   * @param len how many body bytes to send
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   */
   sendFields(
     r: HttpRequest,
     status: i32,
@@ -1082,7 +1248,12 @@ export class HttpHandler {
     return this.end(r)
   }
 
-  /** Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say. */
+  /**
+   * Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say.
+   * @param r a request taken and not yet answered; the handler's again after this call
+   * @param status the response status, from 200 to 599
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
+   */
   empty(r: HttpRequest, status: i32): i32 {
     return this.sendFields(r, status, this.noFields, this.noFields, this.scratch, HANDLER_ZERO, HANDLER_ZERO)
   }
@@ -1091,6 +1262,7 @@ export class HttpHandler {
    * The JSON writer, reset onto the handler's scratch buffer: write one value
    * with it, then `sendJson`. One JSON body at a time, since every request
    * shares the buffer.
+   * @returns the handler's own writer, empty, valid until the next `json`, `sendJson` or `problem`
    */
   json(): JsonWriter {
     this.writer.reset(this.scratch, HANDLER_ZERO)
@@ -1102,6 +1274,9 @@ export class HttpHandler {
    * Answers `r` with `status` and the value `json`'s writer holds, as
    * `application/json`. A value the writer refused or did not finish — it
    * outgrew `jsonBytes`, say — is answered as a 500 problem instead.
+   * @param r a request taken and not yet answered; the handler's again after this call
+   * @param status the response status for a value that fit, from 200 to 599
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   sendJson(r: HttpRequest, status: i32): i32 {
     if (!this.jsonBegun) {
@@ -1120,6 +1295,11 @@ export class HttpHandler {
    * `status` and, when not empty, `detail`, a sentence for a person about
    * this occurrence. Nothing of the request is echoed, so a detail is the
    * program's own words.
+   * @param r a request taken and not yet answered; the handler's again after this call
+   * @param status the response status, from 200 to 599, also written into the object
+   * @param title the status's reason phrase, or empty to leave it out
+   * @param detail a sentence for a person about this occurrence, or empty to leave it out
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   problem(r: HttpRequest, status: i32, title: string, detail: string): i32 {
     const length: i32 = this.writeProblem(status, title, detail)
@@ -1168,6 +1348,8 @@ export class HttpHandler {
    * field naming the methods the path has (RFC 9110 §15.5.6), and 404 for
    * anything else. A parameter's malformed escape is the program's to refuse,
    * when it decodes the parameter.
+   * @param r a request whose `route` is negative, taken and not yet answered; the handler's again after this call
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   refuse(r: HttpRequest): i32 {
     if (r.route === ROUTER_METHOD_NOT_ALLOWED) {

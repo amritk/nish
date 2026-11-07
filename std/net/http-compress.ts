@@ -4,7 +4,7 @@
  * body with `Content-Encoding: gzip`, for any of the three servers.
  *
  *     import { DEFLATE_FAST } from "nish/compress/deflate";
- *     import { HTTP_CODING_GZIP, HttpCompressor } from "nish/net/http-compress";
+ *     import { HTTP_OFFER_GZIP, HttpCompressor, httpAcceptEncoding } from "nish/net/http-compress";
  *
  *     const enc = new HttpCompressor(DEFLATE_FAST, 1024, 65536); // once per thread
  *     // HTTP/1.1, in one call:
@@ -15,7 +15,7 @@
  *     if (m >= 0) {
  *       enc.addFields(names, values);
  *       h2.respond(id, 200, enc.names, enc.values, false);
- *       h2.write(id, enc.output, 0, m);
+ *       h2.writeData(id, enc.output, 0, m, true);
  *     }
  *
  * **Opt-in.** Nothing here runs unless the program asks: it decides which
@@ -87,6 +87,7 @@ export const HTTP_CODING_NONE: i32 = -1
 
 /** `httpAcceptEncoding`'s `offered` bits: the program can send gzip, deflate. */
 export const HTTP_OFFER_GZIP: i32 = 1
+/** The `offered` bit for deflate, which is negotiated but never produced here. */
 export const HTTP_OFFER_DEFLATE: i32 = 2
 
 /**
@@ -99,10 +100,15 @@ export const HTTP_OFFER_DEFLATE: i32 = 2
  * response that already fits one segment, decided without compressing.
  */
 export const HTTP_COMPRESS_SENT: i32 = 0
+/** The client did not accept gzip, so the body went as it is; the default before any decision. */
 export const HTTP_COMPRESS_NOT_ACCEPTED: i32 = 1
+/** The body was shorter than `minLength`, too small to be worth compressing. */
 export const HTTP_COMPRESS_TOO_SMALL: i32 = 2
+/** The body was longer than `maxLength`, more than `output` was sized for. */
 export const HTTP_COMPRESS_TOO_LARGE: i32 = 3
+/** Gzip ran but did not save `minSaving` bytes and `minSavingPercent` percent. */
 export const HTTP_COMPRESS_TOO_LITTLE_SAVED: i32 = 4
+/** Under `segmentMode`, compressing would not have saved a TCP segment. */
 export const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5
 
 /**
@@ -111,7 +117,9 @@ export const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5
  * encoder always, or the constructor's level always.
  */
 export const HTTP_ENCODER_AUTO: i32 = 0
+/** Always the fixed-Huffman encoder: fastest, at some cost in size on large bodies. */
 export const HTTP_ENCODER_FIXED: i32 = 1
+/** Always the `GzipCompressor` at the constructor's level, whatever the body's length. */
 export const HTTP_ENCODER_LEVEL: i32 = 2
 
 /**
@@ -124,7 +132,15 @@ export const HTTP_DEFAULT_MSS: i32 = 1448
 /** The bytes `content-encoding: gzip` adds to an HTTP/1.1 head: name, value, ": " and CRLF. */
 export const HTTP1_GZIP_FIELD_BYTES: i32 = 24
 
-/** The number of TCP segments `bytes` bytes take at `mss` bytes a segment. */
+/**
+ * The number of TCP segments `bytes` bytes take at `mss` bytes a segment.
+ * A segment size of zero or less panics, since no count would mean anything.
+ *
+ * @param bytes the length of the whole response, head and body, in bytes
+ * @param mss the payload one segment carries, in bytes
+ * @returns how many segments the bytes fill, the last one possibly partial;
+ *   0 for no bytes
+ */
 export const httpSegments = (bytes: i32, mss: i32): i32 => {
   if (mss <= 0) {
     panic("httpSegments: a segment size of zero or less")
@@ -236,6 +252,14 @@ const httpOws = (c: i32): boolean => c === 32 || c === 9
  * HTTP_OFFER_DEFLATE`): `HTTP_CODING_GZIP`, `HTTP_CODING_DEFLATE`,
  * `HTTP_CODING_IDENTITY` or `HTTP_CODING_NONE`, by the rules in the module
  * comment. A window outside `buf` panics.
+ *
+ * @param buf the buffer holding the field value, such as the request head
+ * @param start the index in `buf` of the value's first octet
+ * @param end the index just past the value's last octet
+ * @param offered which codings the program can produce, `HTTP_OFFER_*` bits
+ *   or 0 for none
+ * @returns the `HTTP_CODING_*` to send the body in, or `HTTP_CODING_NONE`
+ *   when nothing offered is acceptable and identity is refused too
  */
 export const httpAcceptEncoding = (buf: u8[], start: i32, end: i32, offered: i32): i32 => {
   if (start < 0 || start > end || end > toI32(buf.length)) {
@@ -345,6 +369,11 @@ export const httpAcceptEncoding = (buf: u8[], start: i32, end: i32, offered: i32
  * body as it is: `identity;q=0`, or `*;q=0` with no `identity` listed. A
  * server should then send a coding the client takes even where it would not
  * bother (`HttpCompressor.compressAnyway`).
+ *
+ * @param buf the buffer holding the field value, such as the request head
+ * @param start the index in `buf` of the value's first octet
+ * @param end the index just past the value's last octet
+ * @returns true when the client said it cannot take the body uncompressed
  */
 export const httpIdentityRefused = (buf: u8[], start: i32, end: i32): boolean =>
   httpAcceptEncoding(buf, start, end, 0) === HTTP_CODING_NONE
@@ -417,6 +446,11 @@ export class HttpCompressor {
    * A compressor at `level` (`DEFLATE_FAST` suits a server) for bodies of
    * `minLength` to `maxLength` bytes. A level outside 0 to 9, a negative
    * `minLength` or a `maxLength` below it panics.
+   *
+   * @param level the deflate level for bodies past `fixedLimit`, 0 to 9
+   * @param minLength the shortest body worth compressing, in bytes
+   * @param maxLength the longest body it will compress, in bytes; `output` is
+   *   sized for it once, here
    */
   constructor(level: i32, minLength: i32, maxLength: i32) {
     if (minLength < 0 || maxLength < minLength) {
@@ -451,6 +485,14 @@ export class HttpCompressor {
    * length, or -1 to send the body as it is, and sets `decision` either way.
    * `encoder` picks the encoder; the fixed-Huffman one stops as soon as its
    * output passes what would be kept. A window outside `body` panics.
+   *
+   * @param coding the coding negotiated for this request, from
+   *   `httpAcceptEncoding`
+   * @param body the buffer holding the response body
+   * @param off the index in `body` where the body starts
+   * @param len the body's length in bytes
+   * @returns how many bytes of `output` hold the gzip body, or -1 to send the
+   *   body uncompressed; `decision` says which reason applied
    */
   compress(coding: i32, body: u8[], off: i32, len: i32): i32 {
     if (off < 0 || len < 0 || off > toI32(body.length) - len) {
@@ -493,6 +535,14 @@ export class HttpCompressor {
    * segments, so long as it is no longer than `maxLength`. Answers the
    * compressed length, or -1 when `coding` is not gzip or the body is too
    * long (sent as it is, which RFC 9110 §12.5.3 allows).
+   *
+   * @param coding the coding negotiated for this request, from
+   *   `httpAcceptEncoding`
+   * @param body the buffer holding the response body
+   * @param off the index in `body` where the body starts
+   * @param len the body's length in bytes
+   * @returns how many bytes of `output` hold the gzip body, or -1 to send the
+   *   body uncompressed
    */
   compressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32 {
     if (off < 0 || len < 0 || off > toI32(body.length) - len) {
@@ -521,7 +571,13 @@ export class HttpCompressor {
     return n
   }
 
-  /** The bytes a compressed `len`-byte body must save: `minSaving` and `minSavingPercent`, at least 1. */
+  /**
+   * The bytes a compressed `len`-byte body must save: `minSaving` and `minSavingPercent`, at least 1.
+   *
+   * @param len the uncompressed body's length in bytes
+   * @returns the fewest bytes gzip must shave off for the compressed body to
+   *   be sent, never below 1; the percent share rounds up
+   */
   leastSaving(len: i32): i32 {
     let least: i32 = this.minSaving > 1 ? this.minSaving : 1
     let pct: i32 = this.minSavingPercent
@@ -544,6 +600,15 @@ export class HttpCompressor {
    * segments. When it does not, `decision` becomes
    * `HTTP_COMPRESS_NO_FEWER_SEGMENTS`. `respondEncoded` calls it; a program
    * driving HTTP/2 or HTTP/3 by hand may with its own head sizes.
+   *
+   * @param identityBytes the whole response's length sent uncompressed, head
+   *   included, in bytes
+   * @param encodedBytes the whole response's length sent compressed, head
+   *   included, in bytes
+   * @param mss the connection's segment size in bytes, or 0 or less for the
+   *   compressor's own
+   * @returns true when compressing saves at least one segment, so the
+   *   compressed response is worth sending
    */
   fewerSegments(identityBytes: i32, encodedBytes: i32, mss: i32): boolean {
     const size: i32 = this.segmentSize(mss)
@@ -554,7 +619,12 @@ export class HttpCompressor {
     return false
   }
 
-  /** The segment `segmentMode` counts in: `mss` when above 0, else `this.mss` when above 0, else `HTTP_DEFAULT_MSS`. */
+  /**
+   * The segment `segmentMode` counts in: `mss` when above 0, else `this.mss` when above 0, else `HTTP_DEFAULT_MSS`.
+   *
+   * @internal Called by std/net/http1-server.ts to find the segment size its
+   *   connection counts a response in before it decides whether to compress.
+   */
   segmentSize(mss: i32): i32 {
     if (mss > 0) {
       return mss
@@ -571,6 +641,13 @@ export class HttpCompressor {
    * `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks
    * the head: when it does not fit, the caller goes on to `compress`, which
    * decides again. Anything else answers false and leaves `decision` alone.
+   *
+   * @param coding the coding negotiated for this request
+   * @param len the body's length in bytes
+   * @param mss the connection's segment size in bytes, or 0 or less for the
+   *   compressor's own
+   * @returns true when the body fits one segment, so compressing it cannot
+   *   help and it is sent as it is if its head fits too
    */
   oneSegment(coding: i32, len: i32, mss: i32): boolean {
     if (
@@ -591,6 +668,13 @@ export class HttpCompressor {
    * `encodedLength` bytes with the fields `addFields` built: less
    * `Content-Encoding: gzip`, less `Vary` (a body the segment count kept as
    * it is would go out so to any client), and the other `Content-Length`.
+   *
+   * @param encodedHead the compressed response's HTTP/1.1 head length in bytes
+   * @param encodedLength the compressed body's length in bytes, as its
+   *   `Content-Length` spells it
+   * @param length the uncompressed body's length in bytes
+   * @returns the head length, in bytes, the same response would have sent
+   *   uncompressed
    */
   http1IdentityHead(encodedHead: i32, encodedLength: i32, length: i32): i32 {
     let head: i32 = encodedHead - HTTP1_GZIP_FIELD_BYTES
@@ -605,6 +689,9 @@ export class HttpCompressor {
    * the response needs `Vary: Accept-Encoding`: a body sent compressed, or
    * one sent as it is because the client did not take gzip. A body the
    * lengths or the saving kept as it is would go out the same to any client.
+   *
+   * @returns true when the response must carry `Vary: Accept-Encoding` so a
+   *   cache does not hand it to a client that asked differently
    */
   varies(): boolean {
     return this.decision === HTTP_COMPRESS_SENT || this.decision === HTTP_COMPRESS_NOT_ACCEPTED
@@ -615,6 +702,10 @@ export class HttpCompressor {
    * `Content-Encoding: gzip` and, when `vary`, `Vary: Accept-Encoding`. The
    * arrays are reused, so after the first few calls this allocates nothing;
    * they hold until the next call.
+   *
+   * @param names the program's own response field names, in order
+   * @param values the value for each name, at the same index; a value with
+   *   no name beside it is left out
    */
   addFields(names: u8[][], values: u8[][]): void {
     while (this.names.length > 0) {
@@ -654,6 +745,10 @@ export class HttpCompressor {
    * Sets `names` / `values` to the program's fields and, when `vary` and the
    * last decision `varies`, `Vary: Accept-Encoding`: the fields of a body
    * sent as it is from a resource that is sometimes compressed.
+   *
+   * @param names the program's own response field names, in order
+   * @param values the value for each name, at the same index; a value with
+   *   no name beside it is left out
    */
   identityFields(names: u8[][], values: u8[][]): void {
     while (this.names.length > 0) {
@@ -674,5 +769,10 @@ export class HttpCompressor {
   }
 }
 
-/** A compressor for the usual server: `DEFLATE_FAST`, bodies of 1 KB to 1 MB. */
+/**
+ * A compressor for the usual server: `DEFLATE_FAST`, bodies of 1 KB to 1 MB.
+ *
+ * @returns a new compressor the caller owns, one per thread, with every
+ *   other setting at its default
+ */
 export const httpCompressorDefault = (): HttpCompressor => new HttpCompressor(DEFLATE_FAST, 1024, 1048576)

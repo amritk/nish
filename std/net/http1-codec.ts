@@ -6,7 +6,7 @@
  * socket gave it, of any length and cut anywhere, and then calls `next()`
  * until it answers `HTTP1_NEED_MORE`:
  *
- *     import { Http1Parser, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
+ *     import { Http1Parser, HTTP1_NEED_MORE, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
  *
  *     const p = new Http1Parser(maxTarget, maxHeaderBytes, maxHeaders, maxBody);
  *     p.feed(received, 0, n);
@@ -155,8 +155,20 @@ const HTTP1_S_ERROR: i32 = 10
  * has, how many of them are the word asked about, and whether the last is.
  */
 class Http1ListTally {
+  /**
+   * How many elements the list has.
+   * @internal Written by `http1Tally` and read by the field checks in this module.
+   */
   elements: i32 = 0
+  /**
+   * How many elements are the word asked about.
+   * @internal Written by `http1Tally` and read by the field checks in this module.
+   */
   matches: i32 = 0
+  /**
+   * Whether the last element is the word asked about.
+   * @internal Written by `http1Tally` and read by the field checks in this module.
+   */
   lastMatches: boolean = false
 }
 
@@ -190,13 +202,36 @@ export class Http1Parser {
   body: u8[]
 
   // --- where the parser is ----------------------------------------------------
+  /**
+   * Where the unconsumed input starts in `buf`.
+   * @internal Moved by the parser's free functions in this module, and reset by
+   * std/net/http1-server.ts when it parks the input buffer, and read there to
+   * hand the bytes after an upgrade to the WebSocket reader.
+   */
   start: i32 = 0
   end: i32 = 0
-  /** Where the search for the next LF resumes, so a line fed a byte at a time is scanned once. */
+  /**
+   * Where the search for the next LF resumes, so a line fed a byte at a time is scanned once.
+   * @internal Moved by `http1TakeLine` in this module, and reset by
+   * std/net/http1-server.ts when it parks the input buffer.
+   */
   scan: i32 = 0
+  /**
+   * Which kind of thing the parser waits for, one of the `HTTP1_S_` states.
+   * @internal Read and written by the parser's free functions in this module to drive the state machine.
+   */
   state: i32 = 0
-  /** The line `http1TakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped. */
+  /**
+   * The line `http1TakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped.
+   * @internal Set by `http1TakeLine` in this module, and reset by
+   * std/net/http1-server.ts when it parks the input buffer.
+   */
   lineStart: i32 = 0
+  /**
+   * Where the line `http1TakeLine` found ends, before its CRLF.
+   * @internal Set by `http1TakeLine` in this module, and reset by
+   * std/net/http1-server.ts when it parks the input buffer.
+   */
   lineEnd: i32 = 0
   /** How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. */
   headerCount: i32 = 0
@@ -207,6 +242,7 @@ export class Http1Parser {
    * control byte other than HTAB, or DEL (RFC 9110 §5.5). `http1TakeLine`
    * sets it as it looks for the line's end, so a field line's bytes are read
    * once, not once for the LF and again for the check.
+   * @internal Set by `http1TakeLine` and read by the field-line parser in this module.
    */
   lineControl: boolean = false
   chunked: boolean = false
@@ -216,6 +252,7 @@ export class Http1Parser {
   /**
    * Whether a kept-alive request ended and its head is still held for the
    * response: the next `next()` clears it before it reads a byte more.
+   * @internal Read and written by the parser's free functions in this module to keep a finished request's head readable.
    */
   headHeld: boolean = false
   /**
@@ -226,13 +263,22 @@ export class Http1Parser {
   keepText: boolean = true
 
   // --- the request's numbers: valid from its `HTTP1_HEAD` until the `next()` after its `HTTP1_END`
-  /** Bytes of the header or trailer section so far, against `maxHeaderBytes`. */
+  /**
+   * Bytes of the header or trailer section so far, against `maxHeaderBytes`.
+   * @internal Read and written by the parser's free functions in this module to enforce the 431 limit.
+   */
   sectionBytes: i32 = 0
-  /** Field lines of the request so far, its trailers included, against `maxHeaders`. */
+  /**
+   * Field lines of the request so far, its trailers included, against `maxHeaders`.
+   * @internal Read and written by the parser's free functions in this module to enforce the 431 limit.
+   */
   fieldCount: i32 = 0
   /** The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. */
   minor: i32 = 1
-  /** Bytes left in a length-delimited body or in the current chunk. */
+  /**
+   * Bytes left in a length-delimited body or in the current chunk.
+   * @internal Read and written by the parser's free functions in this module to count body bytes rather than guess them.
+   */
   left: i32 = 0
   /** The declared body length, or -1 when the request has none or is chunked. */
   contentLength: i32 = -1
@@ -245,9 +291,25 @@ export class Http1Parser {
   targetEnd: i32 = 0
 
   // --- limits, the caller's --------------------------------------------------
+  /**
+   * The longest request target, in bytes, before a 414.
+   * @internal Set by the constructor and read by the request-line parser in this module.
+   */
   maxTarget: i32 = 0
+  /**
+   * The longest header or trailer section, in bytes, before a 431.
+   * @internal Set by the constructor and read by the field-line parser in this module.
+   */
   maxHeaderBytes: i32 = 0
+  /**
+   * The most field lines one request may carry, before a 431.
+   * @internal Set by the constructor and read by the field-line parser in this module.
+   */
   maxHeaders: i32 = 0
+  /**
+   * The longest body, declared or de-chunked, in bytes, before a 413.
+   * @internal Set by the constructor and read by the body readers in this module.
+   */
   maxBody: i32 = 0
   /** The most body bytes one `HTTP1_BODY` hands over; a caller's number, 2^30 unless set. */
   maxChunk: i32 = 1073741824
@@ -262,17 +324,28 @@ export class Http1Parser {
   upgrade: string = ""
   /** What was wrong, once `next()` said `HTTP1_ERROR`; for a log, not for the response. */
   reason: string = ""
-  /** Reused by every list `http1Tally` walks. */
+  /**
+   * Reused by every list `http1Tally` walks.
+   * @internal Filled by `http1Tally` and read by the field checks in this module, so a list costs no allocation.
+   */
   tally: Http1ListTally
   /** The status code to answer once `next()` said `HTTP1_ERROR`. */
   status: i32 = 0
-  /** De-chunked body bytes so far, against `maxBody`. */
+  /**
+   * De-chunked body bytes so far, against `maxBody`.
+   * @internal Read and written by the parser's free functions in this module to enforce the 413 limit on a chunked body.
+   */
   bodyTotal: i32 = 0
 
   /**
    * Each limit is clamped into 0 to 2^30, so that the sums the parser makes
    * of them (a request line is the method, the target and ten bytes more)
    * cannot overflow an `i32`.
+   *
+   * @param maxTarget the longest request target in bytes; a longer one is a 414
+   * @param maxHeaderBytes the longest header or trailer section in bytes; a longer one is a 431
+   * @param maxHeaders the most field lines a request may carry, trailers included; more is a 431
+   * @param maxBody the longest body in bytes, declared or de-chunked; a longer one is a 413
    */
   constructor(maxTarget: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i32) {
     this.maxTarget = http1Clamp(maxTarget)
@@ -301,6 +374,10 @@ export class Http1Parser {
    * panics, as the crypto modules' `update` does. Once the parser has closed
    * or refused, the input is dropped; once it has upgraded, it is kept for
    * `upgradeBytes()`.
+   *
+   * @param data the bytes the socket gave, which the parser copies and does not keep
+   * @param off where in `data` the new bytes start
+   * @param len how many bytes from `off` to append
    */
   feed(data: u8[], off: i32, len: i32): void {
     const size: i32 = toI32(data.length)
@@ -319,7 +396,10 @@ export class Http1Parser {
     this.end = at + len
   }
 
-  /** The next event the input holds; see the module comment. */
+  /**
+   * The next event the input holds; see the module comment.
+   * @returns one of the `HTTP1_` events, `HTTP1_NEED_MORE` when the input must grow before anything more can happen
+   */
   next(): i32 {
     return http1Next(this)
   }
@@ -328,6 +408,9 @@ export class Http1Parser {
    * The value of the first field named `name` (any case), or `null`. A field
    * that may repeat is read through the spans. The answer is a fresh string;
    * `headerIndex` and `headerIs` allocate nothing.
+   *
+   * @param name the field name to look for, compared in any case
+   * @returns the first such field's value with its surrounding whitespace trimmed, or `null` when the request has none
    */
   header(name: string): string | null {
     const i: i32 = this.headerIndex(name)
@@ -345,7 +428,11 @@ export class Http1Parser {
     return http1Text(this.head, spans[at + 2], spans[at + 3], false)
   }
 
-  /** The index of the first field named `name` (any case), or -1. */
+  /**
+   * The index of the first field named `name` (any case), or -1.
+   * @param name the field name to look for, compared in any case
+   * @returns which field it is, so its spans are `spans[4 * i ..]`, or -1 when the request has none
+   */
   headerIndex(name: string): i32 {
     const spans: i32[] = this.spans
     const count: i32 = this.headerCount
@@ -357,7 +444,12 @@ export class Http1Parser {
     return -1
   }
 
-  /** Whether the first field named `name` (any case) has exactly the value `value`. */
+  /**
+   * Whether the first field named `name` (any case) has exactly the value `value`.
+   * @param name the field name to look for, compared in any case
+   * @param value the value to compare with, byte for byte
+   * @returns true when that field exists and its trimmed value is `value`, with nothing allocated
+   */
   headerIs(name: string, value: string): boolean {
     const i: i32 = this.headerIndex(name)
     const spans: i32[] = this.spans
@@ -367,12 +459,20 @@ export class Http1Parser {
     return http1HeadIs(this.head, spans[4 * i + 2], spans[4 * i + 3], value, false)
   }
 
-  /** Whether the method is exactly `text` (methods are case-sensitive, RFC 9110 §9.1). */
+  /**
+   * Whether the method is exactly `text` (methods are case-sensitive, RFC 9110 §9.1).
+   * @param text the method to compare with, such as `"GET"`
+   * @returns true when the request's method is those bytes in that case
+   */
   methodIs(text: string): boolean {
     return http1HeadIs(this.head, this.methodStart, this.methodEnd, text, false)
   }
 
-  /** Whether the request target is exactly `text`. */
+  /**
+   * Whether the request target is exactly `text`.
+   * @param text the target to compare with, such as `"/index.html"`
+   * @returns true when the request's target is those bytes, compared without decoding
+   */
   targetIs(text: string): boolean {
     return http1HeadIs(this.head, this.targetStart, this.targetEnd, text, false)
   }
@@ -380,6 +480,9 @@ export class Http1Parser {
   /**
    * Whether the request asked to switch to exactly `protocol` (any case): one
    * `Upgrade` field holding that one token, with `upgrade` in `Connection`.
+   *
+   * @param protocol the protocol token to look for, such as `"websocket"`, compared in any case
+   * @returns true only when the request asks for that protocol and nothing else
    */
   upgradeIs(protocol: string): boolean {
     if (!this.upgrading) {
@@ -406,17 +509,25 @@ export class Http1Parser {
    * so its input and head buffers hold nothing it needs: a caller may lend
    * them out and leave empty arrays in `buf`, `body` and `head`, which the
    * next feed and head make or the caller puts back first.
+   *
+   * @returns true when the parser holds no bytes it still needs, so its buffers may be lent out
    */
   resting(): boolean {
     return this.state === HTTP1_S_REQUEST_LINE && this.end === this.start && !this.headHeld
   }
 
-  /** How many bytes were fed and not consumed yet: what a caller bounds its reads by. */
+  /**
+   * How many bytes were fed and not consumed yet: what a caller bounds its reads by.
+   * @returns the count of unread input bytes, at `buf[start ..]`
+   */
   buffered(): i32 {
     return this.end - this.start
   }
 
-  /** After `HTTP1_UPGRADE`: every byte fed past the request, as a fresh array. */
+  /**
+   * After `HTTP1_UPGRADE`: every byte fed past the request, as a fresh array.
+   * @returns a copy the caller owns of the bytes that belong to the next protocol, empty when none arrived yet
+   */
   upgradeBytes(): u8[] {
     let n: i32 = this.end - this.start
     if (n < 0) {
@@ -707,7 +818,11 @@ const HTTP1_TCHAR_32: i32 = 67071226
 const HTTP1_TCHAR_64: i32 = -939524098
 const HTTP1_TCHAR_96: i32 = 1476395007
 
-/** Whether `c` is a tchar of RFC 9110 §5.6.2, the bytes a token is made of. */
+/**
+ * Whether `c` is a tchar of RFC 9110 §5.6.2, the bytes a token is made of.
+ * @param c the byte to test, as a number 0 to 255
+ * @returns true when `c` may stand in a method, a field name or another token
+ */
 export const http1IsTokenByte = (c: i32): boolean => {
   const low: u64 = toU64(toU32(HTTP1_TCHAR_32)) << toU64(32)
   const high: u64 = (toU64(toU32(HTTP1_TCHAR_96)) << toU64(32)) | toU64(toU32(HTTP1_TCHAR_64))
@@ -775,10 +890,21 @@ const http1LowerName = (head: u8[], k0: i32, stop: i32): i32 => {
   return k
 }
 
-/** Whether `c` may appear in a field value (RFC 9110 §5.5): HTAB, SP, VCHAR or obs-text. */
+/**
+ * Whether `c` may appear in a field value (RFC 9110 §5.5): HTAB, SP, VCHAR or obs-text.
+ * @param c the byte to test, as a number 0 to 255
+ * @returns true when `c` cannot end the line early or smuggle a control byte into the value
+ */
 export const http1IsValueByte = (c: i32): boolean => c === 9 || (c >= 32 && c !== 127)
 
-/** `buf[from .. to)` as a string, each upper-case ASCII letter lowered when `lower`. */
+/**
+ * `buf[from .. to)` as a string, each upper-case ASCII letter lowered when `lower`.
+ * @param buf the bytes to read from
+ * @param from where the text starts in `buf`
+ * @param to where the text ends in `buf`, exclusive
+ * @param lower true to lowercase ASCII letters, as a field name wants
+ * @returns a fresh string of those bytes, one character per byte
+ */
 export const http1Text = (buf: u8[], from: i32, to: i32, lower: boolean): string => {
   const parts: string[] = []
   for (let k: i32 = from; k >= 0 && k < to && k < toI32(buf.length); k += 1) {
@@ -791,10 +917,21 @@ export const http1Text = (buf: u8[], from: i32, to: i32, lower: boolean): string
   return parts.join("")
 }
 
-/** Whether `c` is optional whitespace, a space or a tab (OWS, RFC 9110 §5.6.3). */
+/**
+ * Whether `c` is optional whitespace, a space or a tab (OWS, RFC 9110 §5.6.3).
+ * @param c the byte to test, as a number 0 to 255
+ * @returns true when `c` is whitespace a field value is trimmed of
+ */
 export const http1IsOws = (c: i32): boolean => c === 32 || c === 9
 
-/** Whether `text[a .. b)` is `word`, which is lowercase, in any ASCII case. */
+/**
+ * Whether `text[a .. b)` is `word`, which is lowercase, in any ASCII case.
+ * @param text the string holding the candidate
+ * @param a where the candidate starts in `text`
+ * @param b where the candidate ends in `text`, exclusive
+ * @param word the lowercase word to compare with
+ * @returns true when the slice is `word` with any letters in either case
+ */
 export const http1SameWord = (text: string, a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
   if (a < 0 || b - a !== n || b > toI32(text.length)) {
@@ -1286,7 +1423,11 @@ const http1ContentLength = (bytes: u8[], from: i32, to: i32, limit: i32): i32 =>
   return over ? -2 : value
 }
 
-/** The value of the hex digit `c`, or -1. */
+/**
+ * The value of the hex digit `c`, or -1.
+ * @param c the byte to read, as a number 0 to 255
+ * @returns 0 to 15 for a hex digit in either case, or -1 when `c` is not one
+ */
 export const http1HexValue = (c: i32): i32 => {
   if (c >= 48 && c <= 57) {
     return c - 48
@@ -1496,7 +1637,11 @@ const http1BytesOf = (text: string): u8[] => {
   return out
 }
 
-/** Whether every byte of `text` is a tchar, and there is at least one. */
+/**
+ * Whether every byte of `text` is a tchar, and there is at least one.
+ * @param text the candidate token, such as a field name a caller wants to send
+ * @returns true when `text` is a valid token, false for an empty string
+ */
 export const http1IsToken = (text: string): boolean => {
   const n: i32 = toI32(text.length)
   if (n === 0) {
@@ -1510,7 +1655,11 @@ export const http1IsToken = (text: string): boolean => {
   return true
 }
 
-/** Whether every byte of `text` may stand in a field value or a reason phrase. */
+/**
+ * Whether every byte of `text` may stand in a field value or a reason phrase.
+ * @param text the candidate value or reason phrase
+ * @returns true when nothing in `text` could end the line early; an empty string passes
+ */
 export const http1IsFieldText = (text: string): boolean => {
   const n: i32 = toI32(text.length)
   for (let k: i32 = 0; k < n; k += 1) {
@@ -1535,6 +1684,13 @@ export const http1IsFieldText = (text: string): boolean => {
  * caller's fields, since the framing is decided here; a 1xx or 204 response
  * with a body length (RFC 9110 §15.2, §15.3.5); and any other `bodyLength`
  * below zero.
+ *
+ * @param status the status code, 100 to 599
+ * @param reason the reason phrase after the code, which may be empty
+ * @param names the caller's field names, one per field, beside `values`
+ * @param values the caller's field values, `values[i]` for `names[i]`
+ * @param bodyLength the body's length in bytes, or `HTTP1_CHUNKED` or `HTTP1_NO_BODY`
+ * @returns the head's bytes in a fresh array the caller owns, or `null` when the head is refused
  */
 export const http1ResponseHead = (
   status: i32,
@@ -1596,6 +1752,13 @@ const http1HexDigits = (len: i32): i32 => {
  * CRLF — and answers where it ends, or `HTTP1_NO_ROOM` when it does not fit,
  * with `out` untouched. An empty window writes nothing and answers `at`,
  * because a chunk of size zero ends the body. A window outside `data` panics.
+ *
+ * @param out the caller's buffer the chunk is written into
+ * @param at where in `out` the chunk starts
+ * @param data the body bytes to send
+ * @param off where in `data` the chunk's bytes start
+ * @param len how many bytes of `data` the chunk carries
+ * @returns the offset in `out` just past the chunk, or `HTTP1_NO_ROOM` when it does not fit
  */
 export const http1WriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i32, len: i32): i32 => {
   const size: i32 = toI32(data.length)
@@ -1633,6 +1796,11 @@ export const http1WriteChunk = (out: u8[], at: i32, data: readonly u8[], off: i3
  * An empty window answers an empty array, because a chunk of size zero is the
  * end of the body and only `http1LastChunk` writes that. A window outside
  * `data` panics.
+ *
+ * @param data the body bytes to send
+ * @param off where in `data` the chunk's bytes start
+ * @param len how many bytes of `data` the chunk carries
+ * @returns the chunk's bytes, framing included, in a fresh array the caller owns
  */
 export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
   const size: i32 = toI32(data.length)
@@ -1647,12 +1815,19 @@ export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
   return out
 }
 
-/** The last chunk and the empty trailer section that end a chunked body: `0\r\n\r\n`. */
+/**
+ * The last chunk and the empty trailer section that end a chunked body: `0\r\n\r\n`.
+ * @returns those five bytes in a fresh array the caller owns
+ */
 export const http1LastChunk = (): u8[] => [48, 13, 10, 13, 10]
 
 /**
  * Writes `http1LastChunk`'s five bytes into `out` at `at` and answers where
  * they end, or `HTTP1_NO_ROOM` with `out` untouched.
+ *
+ * @param out the caller's buffer the last chunk is written into
+ * @param at where in `out` the last chunk starts
+ * @returns the offset in `out` just past the five bytes, or `HTTP1_NO_ROOM` when they do not fit
  */
 export const http1WriteLastChunk = (out: u8[], at: i32): i32 => {
   if (at < 0 || at > toI32(out.length) - 5) {
@@ -1711,7 +1886,12 @@ const http1BytesAreFieldText = (bytes: u8[]): boolean => {
   return k === n || http1LanesAreFieldText(loadU8x16(bytes, n - 16))
 }
 
-/** Whether the octets of `bytes` spell `word`, which is lowercase, in any ASCII case: a field name compared as RFC 9110 §5.1 says. */
+/**
+ * Whether the octets of `bytes` spell `word`, which is lowercase, in any ASCII case: a field name compared as RFC 9110 §5.1 says.
+ * @param bytes the field name as octets, as `nish/net/http-fields` holds it
+ * @param word the lowercase name to compare with
+ * @returns true when `bytes` is `word` with any letters in either case
+ */
 export const http1BytesAre = (bytes: u8[], word: string): boolean =>
   http1HeadIs(bytes, 0, toI32(bytes.length), word, true)
 
@@ -1735,7 +1915,13 @@ const http1DecimalDigits = (n: i32): i32 => {
   return digits
 }
 
-/** Writes `text` at `out[at ..)`, which the caller has made sure holds it, and answers where it ends. */
+/**
+ * Writes `text` at `out[at ..)`, which the caller has made sure holds it, and answers where it ends.
+ * @param out the caller's buffer
+ * @param at where in `out` the text starts
+ * @param text the text to write, one byte per character
+ * @returns the offset in `out` just past the text
+ */
 export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
   const n: i32 = toI32(text.length)
   if (at >= 0 && at <= toI32(out.length) - n) {
@@ -1857,6 +2043,17 @@ const http1PutDecimal = (out: u8[], at: i32, n: i32): i32 => {
  * that is not field text on a final status, the only one it is sent on;
  * `HTTP1_NO_ROOM` when it is well formed but does not fit, the `Date` line
  * counted when it is sent. Either way `out` is untouched.
+ *
+ * @param out the caller's buffer the head is written into
+ * @param at where in `out` the head starts
+ * @param status the status code, 100 to 599
+ * @param reason the reason phrase after the code, which may be empty
+ * @param names the caller's field names as octets, beside `values`
+ * @param values the caller's field values as octets, `values[i]` for `names[i]`
+ * @param bodyLength the body's length in bytes, or `HTTP1_CHUNKED` or `HTTP1_NO_BODY`
+ * @param connection the `Connection` field's value to send, such as `"close"`, or empty for none
+ * @param date the IMF-fixdate bytes to send as `Date`, or empty for none
+ * @returns the offset in `out` just past the head, `HTTP1_REFUSED` for a head it will not write, or `HTTP1_NO_ROOM`
  */
 export const http1WriteResponseHead = (
   out: u8[],
