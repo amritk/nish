@@ -6,8 +6,8 @@ loads it. It covers the panic import, the generated loader's guard around
 every export, the buffer windows a host import is lent, the ring the page and
 the program share in module storage, and the page-side handle table. It says
 what each side may hand the other, what is refused, and the test that pins
-each property. It is written against the stage's branch at the commit that
-adds this record; lines are cited at that commit.
+each property. It is written against the stage's branch at `8ccfad7`. Lines
+are cited at that commit.
 
 **Result.** The module reads nothing the page names outside the memory it
 owns, and a page that calls back into a module mid-call or after a panic is
