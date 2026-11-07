@@ -274,10 +274,13 @@ const consumer = (
       }
     }
     waited = waited + (tried - first)
+    // The head is what respond adds: the output may still hold the last
+    // message's tail.
+    const queued: i32 = conn.outputEnd - conn.outputStart
     if (conn.respond(200, names, values, len) !== 0) {
       panic(`bench/ring-inplace: respond answered short on ${i}`)
     }
-    sent = sent + toI64(conn.outputEnd - conn.outputStart)
+    sent = sent + toI64(conn.outputEnd - conn.outputStart - queued)
     bodies = bodies + toI64(len)
     let off: i32 = 0
     while (off < len) {
