@@ -612,11 +612,19 @@ const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean =
  * what keeps it a stack slot rather than an arena allocation.
  */
 class JsonMember {
+  /** @internal Set by `jsonReadMember` and read by `jsonField` and `jsonFields`. */
   keyAt: i32 = 0
+  /** @internal Set by `jsonReadMember` and read by `jsonField` and `jsonFields`. */
   keyEnd: i32 = 0
+  /** @internal Set by `jsonReadMember` and read by `jsonField` and `jsonFields`. */
   valueAt: i32 = 0
+  /** @internal Set by `jsonReadMember` and read by `jsonField` and `jsonFields`. */
   valueEnd: i32 = 0
-  /** The opening quote of the next key, or `-1` when no comma follows the value. */
+  /**
+   * The opening quote of the next key, or `-1` when no comma follows the value.
+   *
+   * @internal Set by `jsonReadMember` and read by `jsonField` and `jsonFields`.
+   */
   next: i32 = -1
 }
 
@@ -711,6 +719,10 @@ const jsonValueText = (object: string, member: JsonMember): string => {
  * A nested value is stepped over rather than searched, so `name` is a field of
  * this object and not a path into it: that is the "flat" in the module header,
  * and it is the shape the compiler's `--json` line has.
+ *
+ * @param object - the text of one JSON object.
+ * @param name - the field to look for, matched against each key's decoded text.
+ * @returns the first such field's value, or `null` when there is none.
  */
 export const jsonField = (object: string, name: string): string | null => {
   const member: JsonMember = new JsonMember()
@@ -751,6 +763,11 @@ export const jsonField = (object: string, name: string): string | null => {
  * Reading `values` back, passing it to a function, or storing it anywhere
  * before the return would undo this; `tests/link/std_json` pins the flat
  * arena and the `using` block.
+ *
+ * @param object - the text of one JSON object.
+ * @param names - the fields to look for.
+ * @returns one value per name, in the order of `names`, each `null` when that
+ *   field is missing.
  */
 export const jsonFields = (object: string, names: string[]): (string | null)[] => {
   const count: i32 = toI32(names.length)
@@ -901,6 +918,7 @@ const jsonEscapedWidth = (code: i32): i32 => {
  * a caller writes the whole value and reads `failed` once at the end.
  */
 export class JsonWriter {
+  /** The caller's buffer the text is written into; the writer never grows it. */
   buf: u8[]
   private start: i32 = 0
   /** The cursor: the bytes written are `buf[start .. end)`. */
@@ -918,8 +936,15 @@ export class JsonWriter {
    * would save. Two `i32` words rather than an `i64` or an array, so that a
    * writer allocates nothing and the module still runs under Node, where an
    * `i64` is a BigInt.
+   *
+   * @internal Read and written by the `jsonWriter*` free functions of this
+   *   module, which do the writer's work.
    */
   objectsLow: i32 = 0
+  /**
+   * @internal Read and written by the `jsonWriter*` free functions of this
+   *   module, which do the writer's work.
+   */
   objectsHigh: i32 = 0
   /**
    * What goes before the next key or element of the innermost container,
@@ -927,6 +952,9 @@ export class JsonWriter {
    * line break or a comma and a line break. The minified text tests it only
    * where it would test a "comma due" flag, against 0 and 1, so the indented
    * states cost it nothing; bit 1 is the indent and every step keeps it.
+   *
+   * @internal Read and written by the `jsonWriter*` free functions of this
+   *   module, which do the writer's work.
    */
   sep: i32 = 0
   /**
@@ -935,15 +963,37 @@ export class JsonWriter {
    * keeps it, so a writer set up once writes every text the same way.
    */
   indentWidth: i32 = 0
-  /** The byte an indent is made of: a space, or a tab after `setIndentTab`. */
+  /**
+   * The byte an indent is made of: a space, or a tab after `setIndentTab`.
+   *
+   * @internal Read and written by the `jsonWriter*` free functions of this
+   *   module, which do the writer's work.
+   */
   indentByte: i32 = 32
-  /** Whether a key has been written in the innermost object and its value is due. */
+  /**
+   * Whether a key has been written in the innermost object and its value is
+   * due.
+   *
+   * @internal Read and written by the `jsonWriter*` free functions of this
+   *   module, which do the writer's work.
+   */
   afterKey: boolean = false
-  /** Whether the top-level value has been written whole. */
+  /**
+   * Whether the top-level value has been written whole.
+   *
+   * @internal Read and written by the `jsonWriter*` free functions of this
+   *   module, which do the writer's work.
+   */
   done: boolean = false
   /** Whether a NaN or infinite `f64` is `JSON_WRITE_NON_FINITE` rather than `null`. Kept by `reset`. */
   strict: boolean = false
 
+  /**
+   * A writer that starts its text at `buf[start ..)`, as `reset` does.
+   *
+   * @param buf - the buffer to write into, which the caller keeps.
+   * @param start - the offset in `buf` the text starts at.
+   */
   constructor(buf: u8[], start: i32) {
     this.buf = buf
     this.reset(buf, start)
@@ -953,6 +1003,9 @@ export class JsonWriter {
    * Starts a new text at `buf[start ..)`, forgetting everything the last one
    * wrote and every error it hit: what a server calls once per response, on
    * the buffer it reuses. A `start` outside `buf` is `JSON_WRITE_BAD_WINDOW`.
+   *
+   * @param buf - the buffer to write into, which the caller keeps.
+   * @param start - the offset in `buf` the text starts at.
    */
   reset(buf: u8[], start: i32): void {
     this.buf = buf
@@ -974,6 +1027,8 @@ export class JsonWriter {
    * is clamped to 10 as `JSON.stringify` clamps it, and below 1 is the
    * minified text, the default. A mode that `reset` keeps; set it before the
    * text, since a change in the middle of one applies from the next byte.
+   *
+   * @param spaces - the spaces per level, 1 to 10; anything less is minified.
    */
   setIndent(spaces: i32): void {
     let width: i32 = spaces
@@ -1001,17 +1056,29 @@ export class JsonWriter {
    * the `null` `JSON.stringify` writes. Off by default; a mode that `reset`
    * keeps. Strict is for a caller to whom a `null` where a number was due is
    * a corrupt record rather than a missing one.
+   *
+   * @param strict - true to fail on a NaN or an infinity, false to write
+   *   `null`.
    */
   setStrict(strict: boolean): void {
     this.strict = strict
   }
 
-  /** How many bytes have been written since `reset`. */
+  /**
+   * How many bytes have been written since `reset`.
+   *
+   * @returns the byte count, `end - start`.
+   */
   written(): i32 {
     return this.end - this.start
   }
 
-  /** Whether one whole value has been written, every container closed, and nothing failed. */
+  /**
+   * Whether one whole value has been written, every container closed, and
+   * nothing failed.
+   *
+   * @returns true when the text is one whole JSON value.
+   */
   complete(): boolean {
     return this.failed === JSON_WRITE_OK && this.done
   }
@@ -1020,6 +1087,8 @@ export class JsonWriter {
    * The bytes written so far, `buf[start .. end)`, as a string. A convenience
    * that allocates a byte at a time, for a caller that wants text rather than
    * bytes; a server sends `buf` itself.
+   *
+   * @returns a new string of the bytes written.
    */
   text(): string {
     const buf: u8[] = this.buf
@@ -1030,10 +1099,21 @@ export class JsonWriter {
     return parts.join("")
   }
 
+  /**
+   * Opens an object where a value is due. `JSON_WRITE_KEY_EXPECTED` inside an
+   * object before its key, `JSON_WRITE_TOO_DEEP` past `JSON_WRITER_MAX_DEPTH`
+   * open containers, `JSON_WRITE_DONE` after the top-level value, and
+   * `JSON_WRITE_FULL` when `buf` has no room.
+   */
   beginObject(): void {
     jsonWriterOpen(this, true, JSON_OPEN_BRACE)
   }
 
+  /**
+   * Closes the innermost object. `JSON_WRITE_UNBALANCED` when that is not an
+   * object, or nothing is open, and `JSON_WRITE_VALUE_EXPECTED` when a key is
+   * still waiting for its value.
+   */
   endObject(): void {
     if (this.sep === JSON_WRITER_SEP_COMMA_BREAK) {
       jsonWriterCloseIndented(this, true, JSON_CLOSE_BRACE)
@@ -1042,10 +1122,15 @@ export class JsonWriter {
     }
   }
 
+  /** Opens an array where a value is due, with the same errors as `beginObject`. */
   beginArray(): void {
     jsonWriterOpen(this, false, JSON_OPEN_BRACKET)
   }
 
+  /**
+   * Closes the innermost array. `JSON_WRITE_UNBALANCED` when that is not an
+   * array, or nothing is open.
+   */
   endArray(): void {
     if (this.sep === JSON_WRITER_SEP_COMMA_BREAK) {
       jsonWriterCloseIndented(this, false, JSON_CLOSE_BRACKET)
@@ -1054,7 +1139,11 @@ export class JsonWriter {
     }
   }
 
-  /** The next member's key, with the comma before it and the colon after it. */
+  /**
+   * The next member's key, with the comma before it and the colon after it.
+   *
+   * @param name - the key, escaped as `string` escapes a value.
+   */
   key(name: string): void {
     if (this.failed !== JSON_WRITE_OK) {
       return
@@ -1082,7 +1171,12 @@ export class JsonWriter {
     }
   }
 
-  /** `s` quoted and escaped as `JSON.stringify` escapes it; every other byte goes through as itself. */
+  /**
+   * `s` quoted and escaped as `JSON.stringify` escapes it; every other byte
+   * goes through as itself.
+   *
+   * @param s - the text to write.
+   */
   string(s: string): void {
     if (jsonWriterValueDue(this) && jsonWriterPutString(this, s)) {
       jsonWriterValueDone(this)
@@ -1096,6 +1190,10 @@ export class JsonWriter {
    * `JsonDocument`, writes without making a string per key. A window outside
    * `bytes` is `JSON_WRITE_BAD_WINDOW`, checked once, before anything is
    * written.
+   *
+   * @param bytes - the array holding the text.
+   * @param off - the offset in `bytes` of its first byte.
+   * @param len - how many bytes it is.
    */
   keyBytes(bytes: u8[], off: i32, len: i32): void {
     if (this.failed !== JSON_WRITE_OK) {
@@ -1135,6 +1233,10 @@ export class JsonWriter {
    * quotes and escapes, byte for byte, and no allocation. A window outside
    * `bytes` is `JSON_WRITE_BAD_WINDOW`, checked once, before anything is
    * written.
+   *
+   * @param bytes - the array holding the text.
+   * @param off - the offset in `bytes` of its first byte.
+   * @param len - how many bytes it is.
    */
   stringBytes(bytes: u8[], off: i32, len: i32): void {
     if (this.failed !== JSON_WRITE_OK) {
@@ -1148,6 +1250,11 @@ export class JsonWriter {
     }
   }
 
+  /**
+   * `v` in decimal, as `String(v)` spells it.
+   *
+   * @param v - the value to write.
+   */
   i32(v: i32): void {
     if (jsonWriterValueDue(this) && jsonWriterPutDigits(this, v, -1)) {
       jsonWriterValueDone(this)
@@ -1157,6 +1264,8 @@ export class JsonWriter {
   /**
    * One past `i32`'s range is ten digits, so the last digit is split off in
    * `u32` and the nine before it are an `i32`'s.
+   *
+   * @param v - the value to write.
    */
   u32(v: u32): void {
     if (!jsonWriterValueDue(this)) {
@@ -1177,7 +1286,12 @@ export class JsonWriter {
     }
   }
 
-  /** The digits of `v`, the minimum included: the arithmetic stays on the negative side, where it fits. */
+  /**
+   * The digits of `v`, the minimum included: the arithmetic stays on the
+   * negative side, where it fits.
+   *
+   * @param v - the value to write.
+   */
   i64(v: i64): void {
     if (jsonWriterValueDue(this) && jsonWriterPutDigits64(this, v)) {
       jsonWriterValueDone(this)
@@ -1189,6 +1303,8 @@ export class JsonWriter {
    * shortest digits that read back as `v`, `-0` as `0`, and `null` for NaN
    * and both infinities, which JSON cannot spell — or, once `setStrict(true)`,
    * `JSON_WRITE_NON_FINITE` for those three, with nothing written.
+   *
+   * @param v - the value to write.
    */
   f64(v: f64): void {
     // `v - v` is `0` for every finite `v`, and NaN for NaN and both infinities.
@@ -1203,6 +1319,11 @@ export class JsonWriter {
     }
   }
 
+  /**
+   * `true` or `false`.
+   *
+   * @param v - the value to write.
+   */
   boolean(v: boolean): void {
     if (jsonWriterValueDue(this) && jsonWriterPutText(this, v ? "true" : "false")) {
       jsonWriterValueDone(this)
@@ -1226,6 +1347,10 @@ export class JsonWriter {
    * In an indented text the fragment goes in where a value would, after its
    * line break and indent, but its own bytes are not re-indented: an object
    * fragment stays on one line, where `JSON.stringify` would spread it out.
+   *
+   * @param bytes - the array holding the fragment.
+   * @param off - the offset in `bytes` of its first byte.
+   * @param len - how many bytes it is.
    */
   raw(bytes: u8[], off: i32, len: i32): void {
     if (this.failed !== JSON_WRITE_OK) {
@@ -1836,6 +1961,9 @@ const jsonWriterPutF64 = (w: JsonWriter, v: f64): boolean => {
  * `JsonWriter.string` writes — as a string. A thin layer on the writer: it
  * sizes a buffer to fit exactly, writes into it and reads it back. A string
  * with nothing to escape skips the writer and is only quoted.
+ *
+ * @param s - the text to quote.
+ * @returns the quoted, escaped text.
  */
 export const jsonStringifyString = (s: string): string => {
   const n: i32 = toI32(s.length)

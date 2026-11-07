@@ -165,12 +165,17 @@ export type JsonValue = i32
 
 /** What `kind` answers for a handle that names no value. */
 export const JSON_VALUE_NONE: i32 = 0
+/** The kind of `null`. */
 export const JSON_VALUE_NULL: i32 = 1
+/** The kind of `true` and `false`, which `boolean` reads. */
 export const JSON_VALUE_BOOLEAN: i32 = 2
 /** A number, kept as its text: `numberText`, `isI64`, `i64`, `isU64`, `u64` and `f64` read it. */
 export const JSON_VALUE_NUMBER: i32 = 3
+/** A string, decoded: `string` and `stringEquals` read it. */
 export const JSON_VALUE_STRING: i32 = 4
+/** An array: `length` and `at` read its elements, in order. */
 export const JSON_VALUE_ARRAY: i32 = 5
+/** An object: `length`, `keyAt`, `at` and `get` read its members, in order. */
 export const JSON_VALUE_OBJECT: i32 = 6
 
 /** What a builder answers when it did what it was asked. */
@@ -231,13 +236,27 @@ class JsonValueRanges {
   /**
    * Per value, its first byte in the parsed bytes and one past its last; per
    * member slot, its key's, quotes included. `-1` where nothing was recorded.
+   *
+   * @internal Read and written by `JsonDocument` alone; the class is not
+   *   exported.
    */
   valueStart: i32[]
+  /** @internal Read and written by `JsonDocument` alone; the class is not exported. */
   valueEnd: i32[]
+  /** @internal Read and written by `JsonDocument` alone; the class is not exported. */
   slotKeyStart: i32[]
+  /** @internal Read and written by `JsonDocument` alone; the class is not exported. */
   slotKeyEnd: i32[]
-  /** For `parseRanged`: where each open container's key and each pending member's key end; `openKeySource` and `pendingSource` hold where they start. */
+  /**
+   * For `parseRanged`: where each open container's key and each pending
+   * member's key end; `openKeySource` and `pendingSource` hold where they
+   * start.
+   *
+   * @internal Read and written by `JsonDocument` alone; the class is not
+   *   exported.
+   */
   openKeyEnd: i32[]
+  /** @internal Read and written by `JsonDocument` alone; the class is not exported. */
   pendingKeyEnd: i32[]
 
   constructor() {
@@ -308,6 +327,10 @@ export class JsonDocument {
   private sortB: i32[]
   /** `parseText`'s copy of its string. */
   private textBytes: u8[]
+  /**
+   * @internal The tokenizer every parse reads through. Read by
+   *   std/yaml-json.ts, which builds a document from YAML through it.
+   */
   tok: JsonTokenizer
   /** A tokenizer over one stored number at a time, for `isI64`, `i64` and `f64`, limited only by `i32`. */
   private numbers: JsonTokenizer
@@ -322,6 +345,7 @@ export class JsonDocument {
   top: i32 = 0
   /** How many member slots are in use, and how many bytes. */
   slotTop: i32 = 0
+  /** How many bytes of the decoded-text store are in use. */
   byteTop: i32 = 0
   /** How many members are pending. */
   private pendingTop: i32 = 0
@@ -332,6 +356,14 @@ export class JsonDocument {
   /** Whether the last `unsigned` read a number that fits a `u64`. */
   private unsignedFits: boolean = false
 
+  /**
+   * An empty document whose parses are held to `limits`, with `maxDepth` capped
+   * at `JSON_WRITER_MAX_DEPTH` so that every document a parse accepts can be
+   * written back. `maxValues` starts at `JSON_VALUE_DEFAULT_MAX_VALUES`.
+   *
+   * @param limits - the depth and size limits for every parse; the document
+   *   copies them.
+   */
   constructor(limits: JsonLimits) {
     this.maxValues = JSON_VALUE_DEFAULT_MAX_VALUES
     this.kinds = []
@@ -398,6 +430,12 @@ export class JsonDocument {
    * source ranges; `parseRanged` does.
    *
    * Keep in step with `parseRanged`, the same loop plus the ranges.
+   *
+   * @param src - the bytes to parse, which the document only reads.
+   * @param off - the offset in `src` of the first byte of the text.
+   * @param len - how many bytes the text is.
+   * @returns the root value's handle, or the negative code that is also in
+   *   `failed`.
    */
   parse(src: u8[], off: i32, len: i32): JsonValue {
     this.clear()
@@ -489,6 +527,12 @@ export class JsonDocument {
    * loop inline there and cost the plain loop more instructions. A program
    * that links both can still see the plain loop's code laid out differently
    * (`docs/BENCHMARKS.md`). Keep in step with `parse`.
+   *
+   * @param src - the bytes to parse, which the document only reads.
+   * @param off - the offset in `src` of the first byte of the text.
+   * @param len - how many bytes the text is.
+   * @returns the root value's handle, or the negative code that is also in
+   *   `failed`.
    */
   parseRanged(src: u8[], off: i32, len: i32): JsonValue {
     this.clear()
@@ -587,7 +631,14 @@ export class JsonDocument {
     return this.handle(root)
   }
 
-  /** `parse` over the bytes of `s`, copied into an array the document reuses; `errorAt` is a byte offset in `s`. Keep in step with `parseTextRanged`. */
+  /**
+   * `parse` over the bytes of `s`, copied into an array the document reuses;
+   * `errorAt` is a byte offset in `s`. Keep in step with `parseTextRanged`.
+   *
+   * @param s - the JSON text.
+   * @returns the root value's handle, or the negative code that is also in
+   *   `failed`.
+   */
   parseText(s: string): JsonValue {
     const n: i32 = toI32(s.length)
     const buf: u8[] = jsonValueRoom(this.textBytes, n)
@@ -598,7 +649,14 @@ export class JsonDocument {
     return this.parse(buf, JSON_VALUE_NO_WORD, n)
   }
 
-  /** `parseRanged` over the bytes of `s`, as `parseText` is `parse`'s; its offsets are byte offsets in `s`. Keep in step with `parseText`. */
+  /**
+   * `parseRanged` over the bytes of `s`, as `parseText` is `parse`'s; its
+   * offsets are byte offsets in `s`. Keep in step with `parseText`.
+   *
+   * @param s - the JSON text.
+   * @returns the root value's handle, or the negative code that is also in
+   *   `failed`.
+   */
   parseTextRanged(s: string): JsonValue {
     const n: i32 = toI32(s.length)
     const buf: u8[] = jsonValueRoom(this.textBytes, n)
@@ -961,7 +1019,13 @@ export class JsonDocument {
 
   // ---- Handles ----------------------------------------------------------------
 
-  /** Internal: the index handle `v` names in this document, or `-1` when it names nothing here. */
+  /**
+   * Internal: the index handle `v` names in this document, or `-1` when it
+   * names nothing here.
+   *
+   * @internal Read by std/yaml-json.ts, which builds a document from YAML
+   *   through it.
+   */
   index(v: JsonValue): i32 {
     if (v < 0 || v >> JSON_VALUE_INDEX_BITS !== this.generation) {
       return -1
@@ -977,7 +1041,13 @@ export class JsonDocument {
 
   // ---- Reading ----------------------------------------------------------------
 
-  /** `v`'s `JSON_VALUE_*` kind, or `JSON_VALUE_NONE` when `v` names no value of this document's current contents. */
+  /**
+   * `v`'s `JSON_VALUE_*` kind, or `JSON_VALUE_NONE` when `v` names no value of
+   * this document's current contents.
+   *
+   * @param v - any handle.
+   * @returns a `JSON_VALUE_*` kind.
+   */
   kind(v: JsonValue): i32 {
     return this.kindAt(this.index(v))
   }
@@ -991,13 +1061,26 @@ export class JsonDocument {
     return toI32(kinds[x])
   }
 
-  /** A boolean's value; `false` for any other value. */
+  /**
+   * A boolean's value; `false` for any other value.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns true only for a `true` value.
+   */
   boolean(v: JsonValue): boolean {
     const x: i32 = this.index(v)
     return this.kindAt(x) === JSON_VALUE_BOOLEAN && jsonValueGet(this.first, x) === JSON_VALUE_TRUE_WORD
   }
 
-  /** How many elements an array has, or members an object has; `-1` for any other value. */
+  /**
+   * How many elements an array has, or members an object has; `-1` for any
+   * other value.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the element or member count, or `-1`.
+   */
   length(v: JsonValue): i32 {
     return this.lengthAt(this.index(v))
   }
@@ -1016,13 +1099,27 @@ export class JsonDocument {
     return jsonValueGet(this.first, x) + i
   }
 
-  /** Element `i` of an array, or the value of member `i` of an object, in order; `-1` when there is none. */
+  /**
+   * Element `i` of an array, or the value of member `i` of an object, in order;
+   * `-1` when there is none.
+   *
+   * @param v - an array or object handle.
+   * @param i - the position, from 0.
+   * @returns the element or member value, or `-1`.
+   */
   at(v: JsonValue, i: i32): JsonValue {
     const s: i32 = this.slotAt(this.index(v), i)
     return s < 0 ? -1 : this.handle(jsonValueGet(this.slotValue, s))
   }
 
-  /** The key of member `i` of an object, decoded; `""` when `v` is not an object or has no member `i`. */
+  /**
+   * The key of member `i` of an object, decoded; `""` when `v` is not an object
+   * or has no member `i`.
+   *
+   * @param v - an object handle.
+   * @param i - the member position, from 0.
+   * @returns the key, a new string, or `""`.
+   */
   keyAt(v: JsonValue, i: i32): string {
     const x: i32 = this.index(v)
     if (this.kindAt(x) !== JSON_VALUE_OBJECT) {
@@ -1035,7 +1132,14 @@ export class JsonDocument {
     return this.textOf(jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s))
   }
 
-  /** The value of the member of object `v` whose key is `key`'s bytes; `-1` when there is none. */
+  /**
+   * The value of the member of object `v` whose key is `key`'s bytes; `-1` when
+   * there is none.
+   *
+   * @param v - an object handle.
+   * @param key - the key to look for, compared byte by byte.
+   * @returns the member value, or `-1`.
+   */
   get(v: JsonValue, key: string): JsonValue {
     const x: i32 = this.index(v)
     if (this.kindAt(x) !== JSON_VALUE_OBJECT) {
@@ -1057,7 +1161,13 @@ export class JsonDocument {
     return -1
   }
 
-  /** A string's decoded bytes as a string; `""` for any other value. */
+  /**
+   * A string's decoded bytes as a string; `""` for any other value.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the string, a new one each call, or `""`.
+   */
   string(v: JsonValue): string {
     const x: i32 = this.index(v)
     if (this.kindAt(x) !== JSON_VALUE_STRING) {
@@ -1066,7 +1176,14 @@ export class JsonDocument {
     return this.textOf(jsonValueGet(this.first, x), jsonValueGet(this.count, x))
   }
 
-  /** Whether `v` is a string whose decoded bytes are `s`'s. Allocates nothing. */
+  /**
+   * Whether `v` is a string whose decoded bytes are `s`'s. Allocates nothing.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @param s - the text to compare against.
+   * @returns true when the bytes match exactly.
+   */
   stringEquals(v: JsonValue, s: string): boolean {
     const x: i32 = this.index(v)
     return (
@@ -1075,7 +1192,14 @@ export class JsonDocument {
     )
   }
 
-  /** A number's text, exactly as it was written or built; `""` for any other value. */
+  /**
+   * A number's text, exactly as it was written or built; `""` for any other
+   * value.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the number text, or `""`.
+   */
   numberText(v: JsonValue): string {
     const x: i32 = this.index(v)
     if (this.kindAt(x) !== JSON_VALUE_NUMBER) {
@@ -1088,12 +1212,22 @@ export class JsonDocument {
    * Whether `v` is a number written without a fraction or an exponent whose
    * value fits an `i64`: the spelling, so `1.0` is not one. `isIntegral(v)`
    * asks whether the value is whole.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns true when `i64(v)` gives the exact value.
    */
   isI64(v: JsonValue): boolean {
     return this.readNumber(this.index(v)) && this.numbers.isInteger()
   }
 
-  /** A number's value as an `i64` when `isI64(v)` holds, and `0` otherwise. */
+  /**
+   * A number's value as an `i64` when `isI64(v)` holds, and `0` otherwise.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the integer, or `0`.
+   */
   i64(v: JsonValue): i64 {
     // `numberI64` is already `0` for a number that is not an `i64`.
     return this.readNumber(this.index(v)) ? this.numbers.numberI64() : toI64(0)
@@ -1102,13 +1236,23 @@ export class JsonDocument {
   /**
    * Whether `v` is a number written without a sign, a fraction or an exponent
    * whose value fits a `u64`: the spelling, as `isI64(v)` is.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns true when `u64(v)` gives the exact value.
    */
   isU64(v: JsonValue): boolean {
     this.unsigned(this.index(v))
     return this.unsignedFits
   }
 
-  /** A number's value as a `u64` when `isU64(v)` holds, and `0` otherwise. */
+  /**
+   * A number's value as a `u64` when `isU64(v)` holds, and `0` otherwise.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the integer, or `0`.
+   */
   u64(v: JsonValue): u64 {
     return this.unsigned(this.index(v))
   }
@@ -1153,12 +1297,23 @@ export class JsonDocument {
    * `1e2` and `1e400` are, where `isI64(v)` and `isU64(v)` go by spelling and
    * by range and answer `false` for all three. `false` for any other kind and
    * for a handle from an earlier parse.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns true when the value is a whole number.
    */
   isIntegral(v: JsonValue): boolean {
     return this.readNumber(this.index(v)) && this.numbers.isIntegral()
   }
 
-  /** A number's nearest `f64`, ties to even, as `JSON.parse` reads it; `0` for any other value. */
+  /**
+   * A number's nearest `f64`, ties to even, as `JSON.parse` reads it; `0` for
+   * any other value.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the nearest double, or `0`.
+   */
   f64(v: JsonValue): f64 {
     if (!this.readNumber(this.index(v))) {
       return 0
@@ -1204,25 +1359,51 @@ export class JsonDocument {
   // that is not there, for a value or key a builder made and no setter gave a
   // range, and for every value and key after a `parse` or `parseText`.
 
-  /** The offset of `v`'s first byte in the bytes the document parsed. */
+  /**
+   * The offset of `v`'s first byte in the bytes the document parsed.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the byte offset, or `-1`.
+   */
   start(v: JsonValue): i32 {
     const x: i32 = this.index(v)
     return this.hasValueRange(x) ? jsonValueGet(this.rangeArrays().valueStart, x) : -1
   }
 
-  /** One past the offset of `v`'s last byte: `v` is `src[start(v), end(v))`. */
+  /**
+   * One past the offset of `v`'s last byte: `v` is `src[start(v), end(v))`.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the byte offset, or `-1`.
+   */
   end(v: JsonValue): i32 {
     const x: i32 = this.index(v)
     return this.hasValueRange(x) ? jsonValueGet(this.rangeArrays().valueEnd, x) : -1
   }
 
-  /** The offset of the first byte of the key of member `i` of object `o`, its opening quote. */
+  /**
+   * The offset of the first byte of the key of member `i` of object `o`, its
+   * opening quote.
+   *
+   * @param o - an object handle.
+   * @param i - the member position, from 0.
+   * @returns the byte offset, or `-1`.
+   */
   keyStart(o: JsonValue, i: i32): i32 {
     const s: i32 = this.keySlot(this.index(o), i)
     return this.hasKeyRange(s) ? jsonValueGet(this.rangeArrays().slotKeyStart, s) : -1
   }
 
-  /** One past the offset of the last byte of the key of member `i` of object `o`, its closing quote. */
+  /**
+   * One past the offset of the last byte of the key of member `i` of object
+   * `o`, its closing quote.
+   *
+   * @param o - an object handle.
+   * @param i - the member position, from 0.
+   * @returns the byte offset, or `-1`.
+   */
   keyEnd(o: JsonValue, i: i32): i32 {
     const s: i32 = this.keySlot(this.index(o), i)
     return this.hasKeyRange(s) ? jsonValueGet(this.rangeArrays().slotKeyEnd, s) : -1
@@ -1263,6 +1444,11 @@ export class JsonDocument {
    * from another text with the `new*` methods and keeps where each value
    * came from. `JSON_VALUE_OK`, `JSON_VALUE_ERR_HANDLE`, or
    * `JSON_VALUE_ERR_RANGE` when `0 <= start <= end` does not hold.
+   *
+   * @param v - the value to give the range to.
+   * @param start - the offset of its first byte in the other text.
+   * @param end - one past the offset of its last byte.
+   * @returns `JSON_VALUE_OK` or the error code.
    */
   setRange(v: JsonValue, start: i32, end: i32): i32 {
     const x: i32 = this.index(v)
@@ -1291,6 +1477,12 @@ export class JsonDocument {
    * Gives the key of member `i` of object `o` the range `[start, end)`, as
    * `setRange` does a value's. `JSON_VALUE_ERR_HANDLE` when `o` is not an
    * object or has no member `i`.
+   *
+   * @param o - an object handle.
+   * @param i - the member position, from 0.
+   * @param start - the offset of the key's first byte in the other text.
+   * @param end - one past the offset of its last byte.
+   * @returns `JSON_VALUE_OK` or the error code.
    */
   setKeyRange(o: JsonValue, i: i32, start: i32, end: i32): i32 {
     const s: i32 = this.keySlot(this.index(o), i)
@@ -1323,27 +1515,58 @@ export class JsonDocument {
   // Each `new*` answers a handle, or `JSON_VALUE_ERR_VALUES` when the document
   // already holds `maxValues`.
 
+  /**
+   * A new `null`.
+   *
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   */
   newNull(): JsonValue {
     return this.handle(this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD))
   }
 
+  /**
+   * A new boolean.
+   *
+   * @param b - the value it holds.
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   */
   newBoolean(b: boolean): JsonValue {
     return this.handle(
       this.newNode(JSON_VALUE_BOOLEAN, b ? JSON_VALUE_TRUE_WORD : JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
     )
   }
 
-  /** A string holding `s`'s bytes. */
+  /**
+   * A string holding `s`'s bytes.
+   *
+   * @param s - the text, copied into the document.
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   */
   newString(s: string): JsonValue {
     return this.newStored(JSON_VALUE_STRING, s)
   }
 
-  /** A number holding `x`'s digits. */
+  /**
+   * A number holding `x`'s digits.
+   *
+   * @param x - the value, written in decimal.
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   */
   newI64(x: i64): JsonValue {
     return this.newStored(JSON_VALUE_NUMBER, `${x}`)
   }
 
-  /** A number holding `x`'s digits. */
+  /**
+   * A number holding `x`'s digits.
+   *
+   * @param x - the value, written in decimal.
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   */
   newU64(x: u64): JsonValue {
     return this.newStored(JSON_VALUE_NUMBER, `${x}`)
   }
@@ -1353,6 +1576,11 @@ export class JsonDocument {
    * read back as `x`, with `-0` as `0`: what `JsonWriter.f64` writes.
    * `JSON_VALUE_ERR_NUMBER` for NaN and both infinities, which JSON cannot
    * spell.
+   *
+   * @param x - the value; it must be finite.
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   *   `JSON_VALUE_ERR_NUMBER` for a value that is not finite.
    */
   newF64(x: f64): JsonValue {
     // `x - x` is `0` for every finite `x`, and NaN for NaN and both infinities.
@@ -1366,6 +1594,11 @@ export class JsonDocument {
    * A number holding `text` exactly, which must be one JSON number and
    * nothing else (RFC 8259 §6); `JSON_VALUE_ERR_NUMBER` otherwise. This is how
    * a program writes a number no integer or float type holds.
+   *
+   * @param text - the number text, such as `"1e400"`.
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   *   `JSON_VALUE_ERR_NUMBER` for text that is not one number.
    */
   newNumber(text: string): JsonValue {
     const at: i32 = this.byteTop
@@ -1382,15 +1615,34 @@ export class JsonDocument {
     return this.handle(this.newNode(JSON_VALUE_NUMBER, at, n))
   }
 
+  /**
+   * A new empty array, which `push` fills.
+   *
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   */
   newArray(): JsonValue {
     return this.handle(this.newNode(JSON_VALUE_ARRAY, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
+  /**
+   * A new empty object, which `set` fills.
+   *
+   * @returns the new value's handle, in no container yet, or
+   *   `JSON_VALUE_ERR_VALUES` when the document already holds `maxValues`.
+   */
   newObject(): JsonValue {
     return this.handle(this.newNode(JSON_VALUE_OBJECT, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
-  /** Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. */
+  /**
+   * Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or
+   * `JSON_VALUE_ERR_ATTACHED`.
+   *
+   * @param a - the array to append to.
+   * @param v - the value to append, which must be in no container.
+   * @returns `JSON_VALUE_OK` or the error code.
+   */
   push(a: JsonValue, v: JsonValue): i32 {
     const ax: i32 = this.index(a)
     const vx: i32 = this.index(v)
@@ -1411,6 +1663,11 @@ export class JsonDocument {
    * property of a JavaScript object does. The value it replaces leaves the
    * object and is in no container afterwards. `JSON_VALUE_OK`, or
    * `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`.
+   *
+   * @param o - the object to change.
+   * @param key - the member key.
+   * @param v - the value, which must be in no container.
+   * @returns `JSON_VALUE_OK` or the error code.
    */
   set(o: JsonValue, key: string, v: JsonValue): i32 {
     const ox: i32 = this.index(o)
@@ -1462,6 +1719,9 @@ export class JsonDocument {
    * first. A container whose slots are full moves them to the end of the slot
    * arrays with twice the room, unless they are at the end already, where they
    * grow in place; the slots it leaves are not reused until `clear`.
+   *
+   * @internal Read by std/yaml-json.ts, which builds a document from YAML
+   *   through it.
    */
   append(c: i32, v: i32, keyAt: i32, keyLength: i32): void {
     let start: i32 = jsonValueGet(this.first, c)
@@ -1535,7 +1795,12 @@ export class JsonDocument {
     }
   }
 
-  /** Internal: `s`'s bytes onto the end of `bytes`; answers how many. */
+  /**
+   * Internal: `s`'s bytes onto the end of `bytes`; answers how many.
+   *
+   * @internal Read by std/yaml-json.ts, which builds a document from YAML
+   *   through it.
+   */
   storeText(s: string): i32 {
     const n: i32 = toI32(s.length)
     const at: i32 = this.byteTop
@@ -1558,6 +1823,10 @@ export class JsonDocument {
    * nothing writes nothing and fails nothing. A parsed tree is never deeper
    * than the writer nests; a built one deeper than `JSON_WRITER_MAX_DEPTH`
    * ends at `JSON_WRITE_TOO_DEEP`, where the recursion stops.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @param w - the writer, where a value is due.
    */
   write(v: JsonValue, w: JsonWriter): void {
     this.writeAt(this.index(v), w)
@@ -1606,6 +1875,10 @@ export class JsonDocument {
    * fits, then made into one string. `""` when `v` names nothing or the
    * writer refuses it, which only a built tree deeper than
    * `JSON_WRITER_MAX_DEPTH` makes it do; `write` gives the code.
+   *
+   * @param v - a handle from this document; one from an earlier parse names
+   *   nothing.
+   * @returns the minified text, or `""`.
    */
   stringify(v: JsonValue): string {
     // Every byte stored and a few of punctuation per value: one pass fits most

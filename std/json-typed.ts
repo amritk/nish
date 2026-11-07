@@ -169,13 +169,19 @@ const JSON_TYPED_ERASED: string =
 export class JsonNumber {
   /** The text is `bytes[0, count)`, one JSON number; the bytes past it are room. */
   bytes: u8[]
+  /** How many bytes of `bytes` the text is. */
   count: i32 = 1
 
+  /** A number holding `0`. */
   constructor() {
     this.bytes = [48]
   }
 
-  /** The number's text, exactly as it was written or set. */
+  /**
+   * The number's text, exactly as it was written or set.
+   *
+   * @returns the text, a copy that later decoding does not change.
+   */
   text(): string {
     return String.fromBytes(this.bytes, 0, this.count)
   }
@@ -193,27 +199,49 @@ export class JsonNumber {
     return tok
   }
 
-  /** Whether the number is written without a fraction or an exponent and its value fits an `i64`. */
+  /**
+   * Whether the number is written without a fraction or an exponent and its
+   * value fits an `i64`.
+   *
+   * @returns true when `i64()` gives the exact value.
+   */
   isI64(): boolean {
     return this.reader().isInteger()
   }
 
-  /** The value as an `i64` when `isI64()` holds, and `0` otherwise. */
+  /**
+   * The value as an `i64` when `isI64()` holds, and `0` otherwise.
+   *
+   * @returns the integer, or `0` when `isI64()` does not hold.
+   */
   i64(): i64 {
     return this.reader().numberI64()
   }
 
-  /** Whether the number is written in digits alone, with no sign, fraction or exponent, and fits a `u64`. */
+  /**
+   * Whether the number is written in digits alone, with no sign, fraction or
+   * exponent, and fits a `u64`.
+   *
+   * @returns true when `u64()` gives the exact value.
+   */
   isU64(): boolean {
     return this.reader().isU64()
   }
 
-  /** The value as a `u64` when `isU64()` holds, and `0` otherwise. */
+  /**
+   * The value as a `u64` when `isU64()` holds, and `0` otherwise.
+   *
+   * @returns the integer, or `0` when `isU64()` does not hold.
+   */
   u64(): u64 {
     return this.reader().numberU64()
   }
 
-  /** The nearest `f64`, ties to even, as `JSON.parse` reads it. */
+  /**
+   * The nearest `f64`, ties to even, as `JSON.parse` reads it.
+   *
+   * @returns the nearest double; an infinity past the largest one.
+   */
   f64(): f64 {
     return this.reader().numberF64()
   }
@@ -221,6 +249,9 @@ export class JsonNumber {
   /**
    * Sets the text to `text` when it is one JSON number and nothing else, and
    * answers whether it was; any other text leaves the number as it was.
+   *
+   * @param text - the number text to hold, such as `"1e400"`.
+   * @returns true when `text` was one JSON number and is now held.
    */
   setText(text: string): boolean {
     const n: i32 = toI32(text.length)
@@ -275,6 +306,15 @@ export class JsonDecoder {
    */
   private held: boolean = false
 
+  /**
+   * A decoder over `src[off, off + len)` held to `limits`, through a tokenizer
+   * of its own.
+   *
+   * @param src - the bytes to decode, which the decoder only reads.
+   * @param off - the offset in `src` of the first byte of the text.
+   * @param len - how many bytes the text is.
+   * @param limits - the depth and size limits for the tokenizer.
+   */
   constructor(src: u8[], off: i32, len: i32, limits: JsonLimits) {
     this.tok = new JsonTokenizer(src, off, len, limits)
   }
@@ -282,6 +322,10 @@ export class JsonDecoder {
   /**
    * Starts over on `src[off, off + len)`, keeping the limits, `ignoreUnknown`
    * and `maxMapKeys`, and clearing any error and the count of map keys taken.
+   *
+   * @param src - the bytes to decode next.
+   * @param off - the offset in `src` of the first byte of the text.
+   * @param len - how many bytes the text is.
    */
   reset(src: u8[], off: i32, len: i32): void {
     this.tok.reset(src, off, len)
@@ -299,7 +343,13 @@ export class JsonDecoder {
     }
   }
 
-  /** `JSON_DECODE_TYPE` at the current token, unless the read that found it failed already. */
+  /**
+   * `JSON_DECODE_TYPE` at the current token, unless the read that found it
+   * failed already.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   wrongType(): void {
     this.fail(JSON_DECODE_TYPE, this.tok.tokStart)
   }
@@ -320,7 +370,11 @@ export class JsonDecoder {
     return k
   }
 
-  /** The next value opens an object; anything else is `JSON_DECODE_TYPE`. */
+  /**
+   * The next value opens an object; anything else is `JSON_DECODE_TYPE`.
+   *
+   * @returns true when an object was opened, false with `failed` set.
+   */
   beginObject(): boolean {
     const k: i32 = this.take()
     if (k === JSON_TOK_OBJECT_BEGIN) {
@@ -332,7 +386,12 @@ export class JsonDecoder {
     return false
   }
 
-  /** Reads the next key of the open object, or its end; `false` at the end and after any error. */
+  /**
+   * Reads the next key of the open object, or its end; `false` at the end and
+   * after any error.
+   *
+   * @returns true when a key was read and its value is next.
+   */
   nextField(): boolean {
     if (this.failed !== JSON_DECODE_OK) {
       return false
@@ -347,7 +406,12 @@ export class JsonDecoder {
     return false
   }
 
-  /** Whether the current key is `name`. */
+  /**
+   * Whether the current key is `name`.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   keyIs(name: string): boolean {
     return this.tok.keyEquals(name)
   }
@@ -356,6 +420,8 @@ export class JsonDecoder {
    * The current key's length in bytes once decoded, or `-1` when the current
    * token is not a key: what the code written for a class switches on before
    * it compares a key's bytes with a field's name.
+   *
+   * @returns the decoded key length in bytes, or `-1`.
    */
   keyLength(): i32 {
     return this.tok.stringLength()
@@ -368,6 +434,9 @@ export class JsonDecoder {
    * matches no byte of a field's name, and the code written for a class then
    * compares the key with each name of its length through `keyIs`, which
    * decodes the escapes.
+   *
+   * @param at - the offset into the key, from 0.
+   * @returns the byte, 0 to 255, or `-1`.
    */
   keyByte(at: i32): i32 {
     const tok: JsonTokenizer = this.tok
@@ -390,6 +459,8 @@ export class JsonDecoder {
    * read, so the keys of a map inside another map count before the outer
    * key's value is whole, and the total never passes the limit.
    * `JSON_DECODE_MAP_LIMIT` at the key when they may not.
+   *
+   * @returns true when the key may be taken, false with `failed` set.
    */
   mapRoom(): boolean {
     if (this.mapKeys < this.maxMapKeys) {
@@ -400,7 +471,12 @@ export class JsonDecoder {
     return false
   }
 
-  /** The current key, decoded, as a new string: a `Map` field's key. `""` when the current token is not a key. */
+  /**
+   * The current key, decoded, as a new string: a `Map` field's key. `""` when
+   * the current token is not a key.
+   *
+   * @returns the decoded key, or `""`.
+   */
   key(): string {
     return this.text()
   }
@@ -410,6 +486,8 @@ export class JsonDecoder {
    * `String.fromBytes`: straight from the input when it has no escape, and
    * from its unescaped bytes when it has one. `""` when the current token is
    * neither.
+   *
+   * @returns the decoded text, or `""`.
    */
   text(): string {
     const tok: JsonTokenizer = this.tok
@@ -430,7 +508,13 @@ export class JsonDecoder {
     return String.fromBytes(bytes, 0, n)
   }
 
-  /** The current key names no field: stepped over with its value, or `JSON_DECODE_UNKNOWN`. */
+  /**
+   * The current key names no field: stepped over with its value, or
+   * `JSON_DECODE_UNKNOWN`.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   unknownField(): void {
     if (this.failed !== JSON_DECODE_OK) {
       return
@@ -445,17 +529,32 @@ export class JsonDecoder {
     }
   }
 
-  /** The current key names a field the object already gave. */
+  /**
+   * The current key names a field the object already gave.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   duplicateField(): void {
     this.fail(JSON_DECODE_DUPLICATE, this.tok.tokStart)
   }
 
-  /** The object just closed without one of the fields. */
+  /**
+   * The object just closed without one of the fields.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   missingField(): void {
     this.fail(JSON_DECODE_MISSING, this.tok.tokStart)
   }
 
-  /** After the top-level value: nothing but blanks may follow. Answers `failed`. */
+  /**
+   * After the top-level value: nothing but blanks may follow. Answers `failed`.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   finish(): i32 {
     if (this.failed === JSON_DECODE_OK) {
       const k: i32 = this.tok.next()
@@ -468,7 +567,13 @@ export class JsonDecoder {
     return this.failed
   }
 
-  /** Whether the next value is `null`, read if so; otherwise it is held for the read that follows. */
+  /**
+   * Whether the next value is `null`, read if so; otherwise it is held for the
+   * read that follows.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   takeNull(): boolean {
     const k: i32 = this.take()
     if (k === JSON_TOK_NULL) {
@@ -480,7 +585,11 @@ export class JsonDecoder {
     return false
   }
 
-  /** The next value opens an array; anything else is `JSON_DECODE_TYPE`. */
+  /**
+   * The next value opens an array; anything else is `JSON_DECODE_TYPE`.
+   *
+   * @returns true when an array was opened, false with `failed` set.
+   */
   beginArray(): boolean {
     const k: i32 = this.take()
     if (k === JSON_TOK_ARRAY_BEGIN) {
@@ -492,7 +601,12 @@ export class JsonDecoder {
     return false
   }
 
-  /** Whether the open array has another element, whose first token is then held; `false` at its end and after any error. */
+  /**
+   * Whether the open array has another element, whose first token is then held;
+   * `false` at its end and after any error.
+   *
+   * @returns true when an element is next.
+   */
   nextElement(): boolean {
     if (this.failed !== JSON_DECODE_OK) {
       return false
@@ -535,13 +649,29 @@ export class JsonDecoder {
     return v
   }
 
+  /**
+   * The next value as an `i32`: an integer written without a fraction or an
+   * exponent, from -2^31 to 2^31 - 1. One outside that range is
+   * `JSON_DECODE_RANGE`, and anything but a number is `JSON_DECODE_TYPE`.
+   *
+   * @returns the integer, or `0` with an error.
+   */
   i32(): i32 {
     const lo: i64 = -2147483648
     const hi: i64 = 2147483647
     return toI32(this.integer(lo, hi, true))
   }
 
-  /** The bounds are compared and never computed with, so under Node a number beside a BigInt is fine. */
+  /**
+   * The next value as a `u32`: an integer written without a fraction or an
+   * exponent, from 0 to 2^32 - 1. One outside that range is
+   * `JSON_DECODE_RANGE`, and anything but a number is `JSON_DECODE_TYPE`.
+   *
+   * The bounds are compared and never computed with, so under Node a number
+   * beside a BigInt is fine.
+   *
+   * @returns the integer, or `0` with an error.
+   */
   u32(): u32 {
     const lo: i64 = 0
     const hi: i64 = 4294967295
@@ -550,7 +680,16 @@ export class JsonDecoder {
     return toU32(toF64(this.integer(lo, hi, true)))
   }
 
-  /** Any integer `isInteger` accepts fits an `i64`, so there is no range to check. */
+  /**
+   * The next value as an `i64`: an integer written without a fraction or an
+   * exponent, from -2^63 to 2^63 - 1. Anything else is `JSON_DECODE_TYPE` or
+   * `JSON_DECODE_RANGE`.
+   *
+   * Any integer `isInteger` accepts fits an `i64`, so there is no range to
+   * check.
+   *
+   * @returns the integer, or `0` with an error.
+   */
   i64(): i64 {
     return this.integer(toI64(0), toI64(0), false)
   }
@@ -560,6 +699,8 @@ export class JsonDecoder {
    * sign, fraction or exponent, up to 2^64 - 1, read through the tokenizer's
    * `numberU64`. A negative number, `-0` included, and one past 2^64 - 1 are
    * `JSON_DECODE_RANGE`, as a fraction is; `0` with an error.
+   *
+   * @returns the integer, or `0` with an error.
    */
   u64(): u64 {
     const k: i32 = this.take()
@@ -580,6 +721,8 @@ export class JsonDecoder {
    * The next value as a `JsonNumber`: its text, copied into `n`'s bytes
    * exactly as the input writes it. Anything but a number is
    * `JSON_DECODE_TYPE`, and `n` keeps the number it held.
+   *
+   * @param n - the number to overwrite, whose bytes are reused.
    */
   number(n: JsonNumber): void {
     const k: i32 = this.take()
@@ -608,6 +751,12 @@ export class JsonDecoder {
     n.count = copied
   }
 
+  /**
+   * The next value as the nearest `f64`, as `JSON.parse` reads it. Anything but
+   * a number is `JSON_DECODE_TYPE`.
+   *
+   * @returns the number, or `0` with an error.
+   */
   f64(): f64 {
     const k: i32 = this.take()
     if (k === JSON_TOK_NUMBER) {
@@ -619,6 +768,12 @@ export class JsonDecoder {
     return 0
   }
 
+  /**
+   * The next value as a boolean. Anything but `true` or `false` is
+   * `JSON_DECODE_TYPE`.
+   *
+   * @returns the value, or `false` with an error.
+   */
   boolean(): boolean {
     const k: i32 = this.take()
     if (k === JSON_TOK_TRUE) {
@@ -634,6 +789,10 @@ export class JsonDecoder {
    * The next value as a string: `cur` itself when the input's string is equal
    * to it, which allocates nothing, and a new string otherwise; `cur` with an
    * error.
+   *
+   * @param cur - the string the field holds now, answered again when the input
+   *   spells the same one.
+   * @returns the decoded string, or `cur` when it is equal or on an error.
    */
   string(cur: string): string {
     const k: i32 = this.take()
@@ -653,6 +812,16 @@ export class JsonDecoder {
   // array already has, or pushed past its end, and what is left over is
   // popped, so an array of the same length grows nothing.
 
+  /**
+   * Reads the next value, an array of `i32`s, into `xs`, element by element:
+   * each one overwrites the slot `xs` already has or is pushed past its end,
+   * and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
+   * answered untouched.
+   *
+   * @param xs - the array to decode into, which is reused, not copied.
+   * @returns `xs` itself, holding the decoded elements.
+   */
   i32Array(xs: i32[]): i32[] {
     if (!this.beginArray()) {
       return xs
@@ -673,6 +842,16 @@ export class JsonDecoder {
     return xs
   }
 
+  /**
+   * Reads the next value, an array of `u32`s, into `xs`, element by element:
+   * each one overwrites the slot `xs` already has or is pushed past its end,
+   * and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
+   * answered untouched.
+   *
+   * @param xs - the array to decode into, which is reused, not copied.
+   * @returns `xs` itself, holding the decoded elements.
+   */
   u32Array(xs: u32[]): u32[] {
     if (!this.beginArray()) {
       return xs
@@ -693,6 +872,16 @@ export class JsonDecoder {
     return xs
   }
 
+  /**
+   * Reads the next value, an array of `i64`s, into `xs`, element by element:
+   * each one overwrites the slot `xs` already has or is pushed past its end,
+   * and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
+   * answered untouched.
+   *
+   * @param xs - the array to decode into, which is reused, not copied.
+   * @returns `xs` itself, holding the decoded elements.
+   */
   i64Array(xs: i64[]): i64[] {
     if (!this.beginArray()) {
       return xs
@@ -713,6 +902,16 @@ export class JsonDecoder {
     return xs
   }
 
+  /**
+   * Reads the next value, an array of `u64`s, into `xs`, element by element:
+   * each one overwrites the slot `xs` already has or is pushed past its end,
+   * and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
+   * answered untouched.
+   *
+   * @param xs - the array to decode into, which is reused, not copied.
+   * @returns `xs` itself, holding the decoded elements.
+   */
   u64Array(xs: u64[]): u64[] {
     if (!this.beginArray()) {
       return xs
@@ -733,6 +932,16 @@ export class JsonDecoder {
     return xs
   }
 
+  /**
+   * Reads the next value, an array of numbers, into `xs`, element by element:
+   * each one overwrites the slot `xs` already has or is pushed past its end,
+   * and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
+   * answered untouched.
+   *
+   * @param xs - the array to decode into, which is reused, not copied.
+   * @returns `xs` itself, holding the decoded elements.
+   */
   f64Array(xs: f64[]): f64[] {
     if (!this.beginArray()) {
       return xs
@@ -753,6 +962,16 @@ export class JsonDecoder {
     return xs
   }
 
+  /**
+   * Reads the next value, an array of booleans, into `xs`, element by element:
+   * each one overwrites the slot `xs` already has or is pushed past its end,
+   * and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
+   * answered untouched.
+   *
+   * @param xs - the array to decode into, which is reused, not copied.
+   * @returns `xs` itself, holding the decoded elements.
+   */
   booleanArray(xs: boolean[]): boolean[] {
     if (!this.beginArray()) {
       return xs
@@ -773,6 +992,16 @@ export class JsonDecoder {
     return xs
   }
 
+  /**
+   * Reads the next value, an array of strings, into `xs`, element by element:
+   * each one overwrites the slot `xs` already has or is pushed past its end,
+   * and the slots left over are popped, so an array no longer than `xs`
+   * allocates nothing. Anything but an array is `JSON_DECODE_TYPE`, and `xs` is
+   * answered untouched.
+   *
+   * @param xs - the array to decode into, which is reused, not copied.
+   * @returns `xs` itself, holding the decoded elements.
+   */
   stringArray(xs: string[]): string[] {
     if (!this.beginArray()) {
       return xs
@@ -798,6 +1027,13 @@ export class JsonDecoder {
     return xs
   }
 
+  /**
+   * Reads the next value as `i32Array` does, or a JSON `null` as `null`.
+   *
+   * @param xs - the array to decode into, or `null` to decode into a new one.
+   * @returns `null` for a JSON `null`; otherwise the decoded array, which is
+   *   `xs` when it was not `null`.
+   */
   i32ArrayOrNull(xs: i32[] | null): i32[] | null {
     if (this.takeNull()) {
       return null
@@ -809,6 +1045,10 @@ export class JsonDecoder {
     return this.i32Array(fresh)
   }
 
+  /**
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   u32ArrayOrNull(xs: u32[] | null): u32[] | null {
     if (this.takeNull()) {
       return null
@@ -820,6 +1060,10 @@ export class JsonDecoder {
     return this.u32Array(fresh)
   }
 
+  /**
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   i64ArrayOrNull(xs: i64[] | null): i64[] | null {
     if (this.takeNull()) {
       return null
@@ -831,6 +1075,13 @@ export class JsonDecoder {
     return this.i64Array(fresh)
   }
 
+  /**
+   * Reads the next value as `u64Array` does, or a JSON `null` as `null`.
+   *
+   * @param xs - the array to decode into, or `null` to decode into a new one.
+   * @returns `null` for a JSON `null`; otherwise the decoded array, which is
+   *   `xs` when it was not `null`.
+   */
   u64ArrayOrNull(xs: u64[] | null): u64[] | null {
     if (this.takeNull()) {
       return null
@@ -842,6 +1093,10 @@ export class JsonDecoder {
     return this.u64Array(fresh)
   }
 
+  /**
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   f64ArrayOrNull(xs: f64[] | null): f64[] | null {
     if (this.takeNull()) {
       return null
@@ -853,6 +1108,10 @@ export class JsonDecoder {
     return this.f64Array(fresh)
   }
 
+  /**
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   booleanArrayOrNull(xs: boolean[] | null): boolean[] | null {
     if (this.takeNull()) {
       return null
@@ -864,6 +1123,10 @@ export class JsonDecoder {
     return this.booleanArray(fresh)
   }
 
+  /**
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
   stringArrayOrNull(xs: string[] | null): string[] | null {
     if (this.takeNull()) {
       return null
@@ -880,6 +1143,11 @@ export class JsonDecoder {
  * Decodes the JSON object `d` holds into `out`, the whole input, and answers
  * `d.failed`: `0`, or the first error's code. The compiler writes the code
  * from `T`'s fields at every call; this body is what Node runs.
+ *
+ * @param _d - the decoder, positioned before the object.
+ * @param _out - the object to fill, field by field.
+ * @returns `0` when the whole input decoded, else the first error's
+ *   `JSON_DECODE_*` or `JSON_TOK_ERR_*` code.
  */
 export const jsonDecode = <T>(_d: JsonDecoder, _out: T): i32 => {
   panic(JSON_TYPED_ERASED)
@@ -889,6 +1157,9 @@ export const jsonDecode = <T>(_d: JsonDecoder, _out: T): i32 => {
  * Writes `value` to `w` as one JSON object, its fields in declaration order.
  * The compiler writes the code from `T`'s fields at every call; this body is
  * what Node runs.
+ *
+ * @param _w - the writer to write to, where a value is due.
+ * @param _value - the object to write.
  */
 export const jsonEncode = <T>(_w: JsonWriter, _value: T): void => {
   panic(JSON_TYPED_ERASED)
@@ -898,6 +1169,10 @@ export const jsonEncode = <T>(_w: JsonWriter, _value: T): void => {
 // because the code the compiler writes calls them from the module that
 // encodes, which may not be this one.
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeStringOrNull = (w: JsonWriter, s: string | null): void => {
   if (s === null) {
     w.nullValue()
@@ -911,6 +1186,9 @@ export const jsonEncodeStringOrNull = (w: JsonWriter, s: string | null): void =>
  * array of this call's own that nothing keeps. A value past 2^63 has no
  * `i64` to go through the writer's `i64` as, so every `u64` takes this one
  * loop. Every `u64` here is built with `toU64`, a BigInt under Node.
+ *
+ * @param w - the writer to write to.
+ * @param v - the value to write.
  */
 export const jsonEncodeU64 = (w: JsonWriter, v: u64): void => {
   const ten: u64 = toU64(10)
@@ -929,12 +1207,21 @@ export const jsonEncodeU64 = (w: JsonWriter, v: u64): void => {
   w.raw(digits, first, toI32(digits.length) - first)
 }
 
-/** A `JsonNumber`, as the text it holds, byte for byte. */
+/**
+ * A `JsonNumber`, as the text it holds, byte for byte.
+ *
+ * @param w - the writer to write to.
+ * @param n - the number whose text is written.
+ */
 export const jsonEncodeNumber = (w: JsonWriter, n: JsonNumber): void => {
   const start: i32 = 0
   w.raw(n.bytes, start, n.count)
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeI32Array = (w: JsonWriter, xs: i32[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -943,6 +1230,10 @@ export const jsonEncodeI32Array = (w: JsonWriter, xs: i32[]): void => {
   w.endArray()
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeU32Array = (w: JsonWriter, xs: u32[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -951,6 +1242,10 @@ export const jsonEncodeU32Array = (w: JsonWriter, xs: u32[]): void => {
   w.endArray()
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeI64Array = (w: JsonWriter, xs: i64[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -959,6 +1254,13 @@ export const jsonEncodeI64Array = (w: JsonWriter, xs: i64[]): void => {
   w.endArray()
 }
 
+/**
+ * Writes `xs` as a JSON array of `u64`s, each element as `jsonEncodeU64` writes
+ * it.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, in order.
+ */
 export const jsonEncodeU64Array = (w: JsonWriter, xs: u64[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -967,6 +1269,10 @@ export const jsonEncodeU64Array = (w: JsonWriter, xs: u64[]): void => {
   w.endArray()
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeF64Array = (w: JsonWriter, xs: f64[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -975,6 +1281,10 @@ export const jsonEncodeF64Array = (w: JsonWriter, xs: f64[]): void => {
   w.endArray()
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeBooleanArray = (w: JsonWriter, xs: boolean[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -983,6 +1293,10 @@ export const jsonEncodeBooleanArray = (w: JsonWriter, xs: boolean[]): void => {
   w.endArray()
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeStringArray = (w: JsonWriter, xs: string[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -991,6 +1305,10 @@ export const jsonEncodeStringArray = (w: JsonWriter, xs: string[]): void => {
   w.endArray()
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeI32ArrayOrNull = (w: JsonWriter, xs: i32[] | null): void => {
   if (xs === null) {
     w.nullValue()
@@ -999,6 +1317,10 @@ export const jsonEncodeI32ArrayOrNull = (w: JsonWriter, xs: i32[] | null): void 
   }
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeU32ArrayOrNull = (w: JsonWriter, xs: u32[] | null): void => {
   if (xs === null) {
     w.nullValue()
@@ -1007,6 +1329,10 @@ export const jsonEncodeU32ArrayOrNull = (w: JsonWriter, xs: u32[] | null): void 
   }
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeI64ArrayOrNull = (w: JsonWriter, xs: i64[] | null): void => {
   if (xs === null) {
     w.nullValue()
@@ -1015,6 +1341,12 @@ export const jsonEncodeI64ArrayOrNull = (w: JsonWriter, xs: i64[] | null): void 
   }
 }
 
+/**
+ * Writes `xs` as `jsonEncodeU64Array` does, or `null` when `xs` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param xs - the elements, or `null`.
+ */
 export const jsonEncodeU64ArrayOrNull = (w: JsonWriter, xs: u64[] | null): void => {
   if (xs === null) {
     w.nullValue()
@@ -1023,6 +1355,10 @@ export const jsonEncodeU64ArrayOrNull = (w: JsonWriter, xs: u64[] | null): void 
   }
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeF64ArrayOrNull = (w: JsonWriter, xs: f64[] | null): void => {
   if (xs === null) {
     w.nullValue()
@@ -1031,6 +1367,10 @@ export const jsonEncodeF64ArrayOrNull = (w: JsonWriter, xs: f64[] | null): void 
   }
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeBooleanArrayOrNull = (w: JsonWriter, xs: boolean[] | null): void => {
   if (xs === null) {
     w.nullValue()
@@ -1039,6 +1379,10 @@ export const jsonEncodeBooleanArrayOrNull = (w: JsonWriter, xs: boolean[] | null
   }
 }
 
+/**
+ * @internal Called by name by the code the compiler writes for `jsonEncode`,
+ *   src/json-typed.ts `jsonEncodeHelper`.
+ */
 export const jsonEncodeStringArrayOrNull = (w: JsonWriter, xs: string[] | null): void => {
   if (xs === null) {
     w.nullValue()

@@ -23,6 +23,12 @@
  * compiler; `docs/wp23-language-surface.md` §5 is the argument for that.
  */
 export interface Pair<A, B> {
+  /**
+   * The first answer, such as where a scan stopped.
+   */
   first: A
+  /**
+   * The second answer, such as whether what was scanned was malformed.
+   */
   second: B
 }

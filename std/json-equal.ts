@@ -144,6 +144,12 @@ const jsonEqualNumbers = (a: string, b: string): boolean => {
  * JSON Schema's rule (the module header): numbers by value, objects whatever
  * their member order. The two may be one document. `false` when either
  * handle names no value. Iterative, so any depth compares.
+ *
+ * @param da - the document that holds `a`.
+ * @param a - a value handle from `da`.
+ * @param db - the document that holds `b`, which may be `da` itself.
+ * @param b - a value handle from `db`.
+ * @returns true when the two values are equal as JSON Schema compares them.
  */
 export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): boolean => {
   const left: i32[] = [a]
@@ -281,6 +287,11 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
  * members in key order, each key a length, `:` and the key (orders and lengths
  * as the module header says).
  * `""` for a handle that names no value.
+ *
+ * @param doc - the document that holds `v`.
+ * @param v - the value to write out.
+ * @returns the canonical text, which two values share exactly when `jsonEqual`
+ *   calls them equal.
  */
 export const jsonEqualCanonical = (doc: JsonDocument, v: i32): string => jsonEqualCanonicalText(doc, v)
 
@@ -290,6 +301,10 @@ export const jsonEqualCanonical = (doc: JsonDocument, v: i32): string => jsonEqu
  * Node, so a string past U+00FF hashes differently there), unkeyed (the
  * module header says what that means for a table). The offset basis for a handle that names no
  * value.
+ *
+ * @param doc - the document that holds `v`.
+ * @param v - the value to hash.
+ * @returns the hash, the same for any two values `jsonEqual` calls equal.
  */
 export const jsonEqualHash = (doc: JsonDocument, v: i32): u64 => {
   const text: string = jsonEqualCanonicalText(doc, v)
@@ -317,6 +332,10 @@ export const jsonEqualHash = (doc: JsonDocument, v: i32): u64 => {
  * earlier one, or `-1` when every element is distinct or `v` is not an array:
  * JSON Schema's `uniqueItems` holds exactly when this is `-1`. Linear in the
  * elements read, through a `Map` of their canonical texts.
+ *
+ * @param doc - the document that holds `v`.
+ * @param v - the array to search.
+ * @returns the index of the first repeated element, or `-1` when there is none.
  */
 export const jsonEqualFirstDuplicate = (doc: JsonDocument, v: i32): i32 => {
   if (doc.kind(v) !== JSON_VALUE_ARRAY) {
