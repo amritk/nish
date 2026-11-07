@@ -157,7 +157,7 @@ export const SIGNAL_REFUSAL: string =
  * The message NL4017 carries. Node polls no descriptor JavaScript can name,
  * so a wait on one has no translation; `sleep` has, a timer.
  */
-export const WAIT_REFUSAL: string =
+const WAIT_REFUSAL: string =
   "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native"
 
 /**
