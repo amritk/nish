@@ -2857,8 +2857,13 @@ export class QuicConnection {
       const slot: i32 = toI32((this.challengesDrawn - 1 - toI64(m)) % toI64(QUIC_CONN_CHALLENGES))
       // Not secret once sent, but compared without branching on the bytes all the same.
       matched =
-        timingSafeEqualAt(payload, frame.dataStart, this.challengeData, slot * QUIC_PATH_DATA_SIZE, QUIC_PATH_DATA_SIZE) ||
-        matched
+        timingSafeEqualAt(
+          payload,
+          frame.dataStart,
+          this.challengeData,
+          slot * QUIC_PATH_DATA_SIZE,
+          QUIC_PATH_DATA_SIZE
+        ) || matched
     }
     if (matched) {
       this.pathConfirmed()
@@ -3175,7 +3180,8 @@ export class QuicConnection {
       due = recovery
     }
     if (this.pathValidating) {
-      const path: i64 = this.challengeResendAt < this.challengeUntil ? this.challengeResendAt : this.challengeUntil
+      const path: i64 =
+        this.challengeResendAt < this.challengeUntil ? this.challengeResendAt : this.challengeUntil
       if (due < 0 || path < due) {
         due = path
       }
@@ -3497,7 +3503,14 @@ export class QuicConnection {
     space.clearStaged()
     const payloadStart: i32 = at + overhead - QUIC_AEAD_TAG_SIZE
     const payloadEnd: i32 = at + size - QUIC_AEAD_TAG_SIZE
-    const next: i32 = quicPutPathData(out, payloadStart, payloadEnd, QUIC_FRAME_PATH_RESPONSE, this.probeData, 0)
+    const next: i32 = quicPutPathData(
+      out,
+      payloadStart,
+      payloadEnd,
+      QUIC_FRAME_PATH_RESPONSE,
+      this.probeData,
+      0
+    )
     if (next < 0) {
       return 0
     }
@@ -3992,7 +4005,14 @@ export class QuicConnection {
    * written to the space's staging row, and `stagedEliciting` says whether
    * anything elicits an acknowledgement.
    */
-  buildPayloadInto(space: QuicConnSpace, out: u8[], start: i32, end: i32, elicit: boolean, pathFrames: boolean): i32 {
+  buildPayloadInto(
+    space: QuicConnSpace,
+    out: u8[],
+    start: i32,
+    end: i32,
+    elicit: boolean,
+    pathFrames: boolean
+  ): i32 {
     let at: i32 = start
     space.clearStaged()
     if (space.received.ackPending) {
