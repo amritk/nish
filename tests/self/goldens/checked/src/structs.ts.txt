@@ -307,10 +307,10 @@ function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkEnumInitializer
   escaping: notLiteral what
-  calls: CheckContext.error TypeTable.assignable TypeTable.isRanged TypeTable.typeName checkEnumInitializer checkNumericLiteral isNumeric literalInitializerType nish_panic_index nish_str_concat
-  pointer ctx: size=296 writesThrough=true captured=false passedTo=checkEnumInitializer#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 checkNumericLiteral#0
+  calls: CheckContext.error TypeTable.assignable TypeTable.isHostHandle TypeTable.isRanged TypeTable.typeName checkEnumInitializer checkNumericLiteral isNumeric literalInitializerType nish_panic_index nish_str_concat nish_str_eq
+  pointer ctx: size=296 writesThrough=true captured=false passedTo=checkEnumInitializer#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkNumericLiteral#0
   pointer field: size=72 writesThrough=true captured=false passedTo=checkEnumInitializer#1
-  pointer init: size=40 writesThrough=false captured=false passedTo=checkEnumInitializer#2 literalInitializerType#1 CheckContext.error#1 CheckContext.error#1 checkNumericLiteral#1 checkNumericLiteral#4
+  pointer init: size=40 writesThrough=false captured=false passedTo=checkEnumInitializer#2 literalInitializerType#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 checkNumericLiteral#1 checkNumericLiteral#4
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
   callee +2:5 checkEnumInitializer -> @checkEnumInitializer
@@ -322,10 +322,13 @@ function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node
   callee +9:17 TypeTable.typeName -> @TypeTable.typeName
   callee +10:5 CheckContext.error -> @CheckContext.error
   callee +10:35 TypeTable.typeName -> @TypeTable.typeName
-  callee +11:46 isNumeric -> @isNumeric
-  callee +11:66 TypeTable.isRanged -> @TypeTable.isRanged
-  local +14:11 negated: boolean (const)
-  callee +15:5 checkNumericLiteral -> @checkNumericLiteral
+  callee +11:14 TypeTable.isHostHandle -> @TypeTable.isHostHandle
+  callee +15:7 CheckContext.error -> @CheckContext.error
+  callee +17:23 TypeTable.typeName -> @TypeTable.typeName
+  callee +20:46 isNumeric -> @isNumeric
+  callee +20:66 TypeTable.isRanged -> @TypeTable.isRanged
+  local +23:11 negated: boolean (const)
+  callee +24:5 checkNumericLiteral -> @checkNumericLiteral
 function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

@@ -70,39 +70,40 @@ struct CheckContext (class) size=296 align=8 exported
   field strictExports: boolean index=5 offset=36
   field wasm: boolean index=6 offset=37
   field wasmFreestanding: boolean index=7 offset=38
-  field sigs: StringMap index=8 offset=40
-  field entryHasMain: boolean index=9 offset=48
-  field current: FunctionSig | null index=10 offset=56
-  field typeBindings: StringMap index=11 offset=64
-  field functionBindings: FunctionBindings index=12 offset=72
-  field arrowOuterScopes: Scope[] index=13 offset=80
-  field arrowOuterFunctions: FunctionBindings[] index=14 offset=88
-  field pathLocals: Local[] index=15 offset=96
-  field pathRoots: Local[] index=16 offset=104
-  field pathKeys: string[] index=17 offset=112
-  field thisRoot: Local index=18 offset=120
-  field pathIndexCount: i32 index=19 offset=128
-  field awaitedCall: i32 index=20 offset=132
-  field arrowFns: FunctionSig[] index=21 offset=136
-  field arrowScopes: Scope[] index=22 offset=144
-  field arrowModes: i32[] index=23 offset=152
-  field currentInstance: Instantiation | null index=24 offset=160
-  field currentStructInstance: StructInstantiation | null index=25 offset=168
-  field constraintsDeferred: boolean index=26 offset=176
-  field deferredConstraints: DeferredConstraint[] index=27 offset=184
-  field reportedOnce: StringSet index=28 offset=192
-  field pending: Instantiation[] index=29 offset=200
-  field pendingFinish: StructInfo[] index=30 offset=208
-  field loopKinds: i32[] index=31 offset=216
-  field loopBreaks: boolean[] index=32 offset=224
-  field loopLabels: string[] index=33 offset=232
-  field loopFrames: i32[] index=34 offset=240
-  field switchFrames: SwitchFrame[] index=35 offset=248
-  field flowFrames: LoopFlow[] index=36 offset=256
-  field statementExpression: Node | null index=37 offset=264
-  field awaitStatement: Node | null index=38 offset=272
-  field forOfWalk: Node | null index=39 offset=280
-  field errored: boolean index=40 offset=288
+  field pageModule: boolean index=8 offset=39
+  field sigs: StringMap index=9 offset=40
+  field entryHasMain: boolean index=10 offset=48
+  field current: FunctionSig | null index=11 offset=56
+  field typeBindings: StringMap index=12 offset=64
+  field functionBindings: FunctionBindings index=13 offset=72
+  field arrowOuterScopes: Scope[] index=14 offset=80
+  field arrowOuterFunctions: FunctionBindings[] index=15 offset=88
+  field pathLocals: Local[] index=16 offset=96
+  field pathRoots: Local[] index=17 offset=104
+  field pathKeys: string[] index=18 offset=112
+  field thisRoot: Local index=19 offset=120
+  field pathIndexCount: i32 index=20 offset=128
+  field awaitedCall: i32 index=21 offset=132
+  field arrowFns: FunctionSig[] index=22 offset=136
+  field arrowScopes: Scope[] index=23 offset=144
+  field arrowModes: i32[] index=24 offset=152
+  field currentInstance: Instantiation | null index=25 offset=160
+  field currentStructInstance: StructInstantiation | null index=26 offset=168
+  field constraintsDeferred: boolean index=27 offset=176
+  field deferredConstraints: DeferredConstraint[] index=28 offset=184
+  field reportedOnce: StringSet index=29 offset=192
+  field pending: Instantiation[] index=30 offset=200
+  field pendingFinish: StructInfo[] index=31 offset=208
+  field loopKinds: i32[] index=32 offset=216
+  field loopBreaks: boolean[] index=33 offset=224
+  field loopLabels: string[] index=34 offset=232
+  field loopFrames: i32[] index=35 offset=240
+  field switchFrames: SwitchFrame[] index=36 offset=248
+  field flowFrames: LoopFlow[] index=37 offset=256
+  field statementExpression: Node | null index=38 offset=264
+  field awaitStatement: Node | null index=39 offset=272
+  field forOfWalk: Node | null index=40 offset=280
+  field errored: boolean index=41 offset=288
   constructor -> @CheckContext.constructor
   method error -> @CheckContext.error
   method errorAtSpan -> @CheckContext.errorAtSpan

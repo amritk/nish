@@ -458,63 +458,64 @@ function Compilation.discover(this: Compilation, path: string, name: string, pac
   callee +10:20 new Parser -> @Parser.constructor
   local +11:11 file: Node (const)
   callee +11:18 Parser.parseSourceFile -> @Parser.parseSourceFile
-  local +18:16 diagnostic: Diagnostic (const)
-  callee +19:7 DiagnosticSink.add -> @DiagnosticSink.add
-  local +29:13 problems: HostProblem[] (const)
-  callee +29:24 hostSignatureProblems -> @hostSignatureProblems
-  local +30:18 problem: HostProblem (const)
-  callee +31:9 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +36:7 markHostFunctions -> @markHostFunctions
-  local +38:11 isEntry: boolean (const)
-  callee +40:29 packageDirOf -> @packageDirOf
-  callee +43:7 liftScript -> @liftScript
-  local +45:11 packageName: string (const)
-  callee +45:72 Compilation.packageOf -> @Compilation.packageOf
-  local +46:11 checker: Checker (const)
-  callee +46:21 new Checker -> @Checker.constructor
-  callee +57:24 isWasmBuild -> @isWasmBuild
-  callee +58:36 isFreestandingWasmBuild -> @isFreestandingWasmBuild
-  local +59:11 unit: ModuleUnit (const)
-  callee +59:18 new ModuleUnit -> @ModuleUnit.constructor
-  callee +66:41 threadsModuleName -> @threadsModuleName
-  callee +69:5 StringMap.set -> @StringMap.set
-  callee +72:29 Compilation.hostModules -> @Compilation.hostModules
-  local +81:11 beforeValidation: i32 (const)
-  callee +81:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +82:5 validate -> @validate
-  local +83:11 failedValidation: boolean (const)
-  callee +83:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +84:54 DiagnosticSink.count -> @DiagnosticSink.count
-  local +94:11 beforeNames: i32 (const)
-  callee +94:25 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +95:5 Checker.declareNames -> @Checker.declareNames
-  callee +107:29 DiagnosticSink.count -> @DiagnosticSink.count
-  local +108:11 signaturesFailed: boolean (const)
-  local +109:11 dir: string (const)
-  callee +109:17 dirname -> @dirname
-  local +110:9 ok: boolean (let)
-  local +116:9 failedDecl: Node | null (let)
-  local +117:16 imp: ImportBinding (const)
-  callee +119:11 isBuiltinSpecifier -> @isBuiltinSpecifier
-  callee +122:11 StringMap.has -> @StringMap.has
-  local +129:13 found: ResolvedModule (const)
-  callee +129:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
-  local +133:15 fix: Edit[] (const)
-  callee +135:13 fsSpecifierFix -> @fsSpecifierFix
-  callee +138:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
-  callee +140:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +146:13 target: string (const)
-  callee +148:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  callee +151:91 stdModuleNames -> @stdModuleNames
-  callee +159:10 buildsPageModule -> @buildsPageModule
-  callee +161:9 StringSet.has -> @StringSet.has
-  callee +161:33 Compilation.identityOf -> @Compilation.identityOf
-  callee +163:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +176:13 targetIdentity: string (const)
-  callee +176:30 Compilation.identityOf -> @Compilation.identityOf
-  callee +179:12 Compilation.discover -> @Compilation.discover
-  callee +184:9 StringMap.set -> @StringMap.set
-  callee +184:42 StringMap.get -> @StringMap.get
+  local +24:16 diagnostic: Diagnostic (const)
+  callee +25:7 DiagnosticSink.add -> @DiagnosticSink.add
+  local +32:13 problems: HostProblem[] (const)
+  callee +32:24 hostSignatureProblems -> @hostSignatureProblems
+  local +33:18 problem: HostProblem (const)
+  callee +34:9 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +39:7 markHostFunctions -> @markHostFunctions
+  local +41:11 isEntry: boolean (const)
+  callee +43:29 packageDirOf -> @packageDirOf
+  callee +46:7 liftScript -> @liftScript
+  local +48:11 packageName: string (const)
+  callee +48:72 Compilation.packageOf -> @Compilation.packageOf
+  local +49:11 checker: Checker (const)
+  callee +49:21 new Checker -> @Checker.constructor
+  callee +60:24 isWasmBuild -> @isWasmBuild
+  callee +61:36 isFreestandingWasmBuild -> @isFreestandingWasmBuild
+  callee +62:30 buildsPageModule -> @buildsPageModule
+  local +63:11 unit: ModuleUnit (const)
+  callee +63:18 new ModuleUnit -> @ModuleUnit.constructor
+  callee +70:41 threadsModuleName -> @threadsModuleName
+  callee +73:5 StringMap.set -> @StringMap.set
+  callee +76:29 Compilation.hostModules -> @Compilation.hostModules
+  local +85:11 beforeValidation: i32 (const)
+  callee +85:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +86:5 validate -> @validate
+  local +87:11 failedValidation: boolean (const)
+  callee +87:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +88:54 DiagnosticSink.count -> @DiagnosticSink.count
+  local +98:11 beforeNames: i32 (const)
+  callee +98:25 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +99:5 Checker.declareNames -> @Checker.declareNames
+  callee +111:29 DiagnosticSink.count -> @DiagnosticSink.count
+  local +112:11 signaturesFailed: boolean (const)
+  local +113:11 dir: string (const)
+  callee +113:17 dirname -> @dirname
+  local +114:9 ok: boolean (let)
+  local +120:9 failedDecl: Node | null (let)
+  local +121:16 imp: ImportBinding (const)
+  callee +123:11 isBuiltinSpecifier -> @isBuiltinSpecifier
+  callee +126:11 StringMap.has -> @StringMap.has
+  local +133:13 found: ResolvedModule (const)
+  callee +133:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
+  local +137:15 fix: Edit[] (const)
+  callee +139:13 fsSpecifierFix -> @fsSpecifierFix
+  callee +142:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
+  callee +144:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +150:13 target: string (const)
+  callee +152:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  callee +155:91 stdModuleNames -> @stdModuleNames
+  callee +163:10 buildsPageModule -> @buildsPageModule
+  callee +165:9 StringSet.has -> @StringSet.has
+  callee +165:33 Compilation.identityOf -> @Compilation.identityOf
+  callee +167:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +180:13 targetIdentity: string (const)
+  callee +180:30 Compilation.identityOf -> @Compilation.identityOf
+  callee +183:12 Compilation.discover -> @Compilation.discover
+  callee +188:9 StringMap.set -> @StringMap.set
+  callee +188:42 StringMap.get -> @StringMap.get
 function Compilation.resolveSpecifier(this: Compilation, dir: string, specifier: string): ResolvedModule -> @Compilation.resolveSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via Compilation.resolveBareSpecifier

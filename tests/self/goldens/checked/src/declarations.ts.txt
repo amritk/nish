@@ -265,10 +265,10 @@ function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig ->
   callee +24:22 resolveType -> @resolveType
   callee +25:26 annotationSpelling -> @annotationSpelling
   callee +28:5 checkHostSignature -> @checkHostSignature
-  callee +33:5 CheckContext.error -> @CheckContext.error
-  callee +38:5 checkForeignSignature -> @checkForeignSignature
-  callee +46:5 rejectForeignPointer -> @rejectForeignPointer
-  callee +53:7 rejectStoredMask -> @rejectStoredMask
+  callee +34:5 CheckContext.error -> @CheckContext.error
+  callee +39:5 checkForeignSignature -> @checkForeignSignature
+  callee +47:5 rejectForeignPointer -> @rejectForeignPointer
+  callee +54:7 rejectStoredMask -> @rejectStoredMask
 function checkHostSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void -> @checkHostSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseHostParameter
