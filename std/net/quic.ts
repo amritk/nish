@@ -1470,7 +1470,10 @@ export class QuicConnection {
    * datagram being read's. Made once and overwritten in place.
    */
   private pathCurrent: u8[]
-  /** The last address the client proved it receives at, in `nish:net`'s 18-byte form; see above. */
+  /**
+   * The last address the client proved it receives at, in `nish:net`'s
+   * 18-byte form (RFC 9000 §9): the handshake's, or one a PATH_RESPONSE answered.
+   */
   pathValidated: u8[]
   private pathArrival: u8[]
   /**
@@ -1546,7 +1549,11 @@ export class QuicConnection {
    * lower them after the handshake; nothing else should set them.
    */
   confidentialityLimit: i64 = 8388608
-  /** Packets that may fail to authenticate before the connection closes; see above. */
+  /**
+   * Packets that may fail to authenticate before the connection closes (RFC
+   * 9001 §6.6). `afterTls` sets it from the suite; a test may lower it after
+   * the handshake.
+   */
   integrityLimit: i64 = 4503599627370496
   /** Packets sealed under the current 1-RTT write key, and packets that failed to authenticate, against those limits. */
   sealedUnderKey: i64 = 0

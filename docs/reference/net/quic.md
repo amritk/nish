@@ -484,7 +484,7 @@ class QuicConnection
 | `initial: QuicConnSpace` | The Initial packet number space: its keys, packet numbers and acknowledgements (RFC 9000 §12.3). |
 | `initialClient: u8[]` | The Initial secrets of RFC 9001 §5.2, the client's and the server's. |
 | `initialServer: u8[]` | The server's Initial secret (RFC 9001 §5.2); see `initialClient`. |
-| `integrityLimit: i64` | Packets that may fail to authenticate before the connection closes; see above. |
+| `integrityLimit: i64` | Packets that may fail to authenticate before the connection closes (RFC 9001 §6.6). `afterTls` sets it from the suite; a test may lower it after the handshake. |
 | `keyUpdates: i32` | Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. |
 | `localEncoded: u8[]` | `localParameters` encoded for the TLS extension the server sends. |
 | `localParameters: QuicTransportParameters` | The server's transport parameters, set for each connection, and their encoding. |
@@ -498,7 +498,7 @@ class QuicConnection
 | `pathKnown: boolean` | Whether `pathCurrent` holds the client's address: the carrier passes addresses, and a first Initial gave one. |
 | `pathReceived: i64` | Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). |
 | `pathSent: i64` | Bytes sent to the path being validated, at most three times `pathReceived`. |
-| `pathValidated: u8[]` | The last address the client proved it receives at, in `nish:net`'s 18-byte form; see above. |
+| `pathValidated: u8[]` | The last address the client proved it receives at, in `nish:net`'s 18-byte form (RFC 9000 §9): the handshake's, or one a PATH_RESPONSE answered. |
 | `pathValidating: boolean` | Whether `pathCurrent` is not validated yet: a PATH_CHALLENGE is out on it. |
 | `peerParameters: QuicTransportParameters` | The client's transport parameters, once the handshake has checked them; until then, every default. |
 | `probeAddress: u8[]` | A PATH_CHALLENGE that came from another address in a datagram that moved nothing (§9.1): answered there by `takeProbeInto`, from `probeData`, within `probeBudget` bytes, three times what came from `probeAddress` (§8.1). Only the latest such challenge is kept. A response owed on `pathCurrent` when the connection moves goes back the same way (`sendResponsesBack`). |
