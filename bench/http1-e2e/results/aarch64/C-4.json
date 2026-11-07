@@ -1,0 +1,93 @@
+{
+ "kind": "round",
+ "arm": "C",
+ "round": "4",
+ "nish": "0.35.0",
+ "machine": {
+  "label": "aarch64",
+  "cpu": "unknown",
+  "cpus": 4,
+  "kernel": "7.0.0-1017-azure",
+  "postgres": "16.15 (Ubuntu 16.15-1.pgdg24.04+2)",
+  "clk_tck": 100
+ },
+ "load": {
+  "users": 15000,
+  "think": "0.25",
+  "ramp": 60,
+  "measure": 120,
+  "tail": 5,
+  "window": [
+   70,
+   170
+  ]
+ },
+ "tracing": false,
+ "http_workers": 2,
+ "window_s": 100,
+ "requests": 1484246,
+ "errors": 0,
+ "rps": 14842.46,
+ "workers": {
+  "oncpu": 20927852376,
+  "utime": 600,
+  "stime": 1493,
+  "vcsw": 405995,
+  "ivcsw": 52614
+ },
+ "others": {
+  "oncpu": 39577407864,
+  "utime": 3742,
+  "stime": 215,
+  "vcsw": 458517,
+  "ivcsw": 4110
+ },
+ "per_request": {
+  "oncpu_ns": 14099.989069197423,
+  "user_ns": 4042.0417780785738,
+  "kernel_ns": 10057.947291118851,
+  "vcsw": 0.273536192787449,
+  "ivcsw": 0.03544830169661902
+ },
+ "perf": {
+  "source": "perf stat (hardware counters)",
+  "seconds": 100,
+  "events": [
+   "cycles:u",
+   "cycles:k",
+   "instructions:u",
+   "instructions:k",
+   "L1-dcache-load-misses",
+   "ll_cache_miss_rd:u",
+   "ll_cache_miss_rd:k"
+  ],
+  "counts": {
+   "cycles:u": 18436582331,
+   "cycles:k": 38647821028,
+   "instructions:u": 32477367074,
+   "instructions:k": 51464380783,
+   "L1-dcache-load-misses": 810608491,
+   "ll_cache_miss_rd:u": 33938409,
+   "ll_cache_miss_rd:k": 38243831
+  },
+  "percent_enabled": {
+   "cycles:u": 100,
+   "cycles:k": 100,
+   "instructions:u": 100,
+   "instructions:k": 100,
+   "L1-dcache-load-misses": 100,
+   "ll_cache_miss_rd:u": 100,
+   "ll_cache_miss_rd:k": 100
+  },
+  "not_counted": [],
+  "per_request": {
+   "cycles:u": 12421.513907398099,
+   "cycles:k": 26038.68969699093,
+   "instructions:u": 21881.391005264624,
+   "instructions:k": 34673.754069743154,
+   "L1-dcache-load-misses": 546.1416038850703,
+   "ll_cache_miss_rd:u": 22.865757428350825,
+   "ll_cache_miss_rd:k": 25.766504339577132
+  }
+ }
+}

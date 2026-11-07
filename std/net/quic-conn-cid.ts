@@ -60,12 +60,17 @@ const QUIC_CID_ZERO: i32 = 0
  * says whether the slot holds an ID at all.
  */
 export class QuicCidEntry {
+  /** The ID's sequence number, as issued in NEW_CONNECTION_ID; 0 for the ID of the handshake. */
   sequence: i64 = 0
+  /** @internal Read by `net/quic.ts` and `net/http3-server.ts`. */
   cid: u8[]
   /** The stateless reset token issued with it (RFC 9000 §10.3); `hasToken` is false for a peer's sequence 0. */
   resetToken: u8[]
+  /** How many bytes of `cid` the ID takes, 0 to 20. */
   length: i32 = 0
+  /** @internal Read by `net/quic.ts` and `net/http3-server.ts`. */
   used: boolean = false
+  /** @internal Read only by this module's table. */
   hasToken: boolean = false
   /** For a local ID: whether a NEW_CONNECTION_ID frame announced it yet. Sequence 0 needs none. */
   announced: boolean = false
@@ -148,7 +153,12 @@ const quicCidSlots = (count: i32): QuicCidEntry[] => {
  * `active_connection_id_limit` this side advertised, which bounds the peer's.
  */
 export class QuicCidTable {
+  /** The slots for the IDs this side issued, so a caller can walk them, used or not. */
   local: QuicCidEntry[]
+  /**
+   * The slots for the IDs the peer issued, used or not, as `limit` bounds them; a caller walks
+   * them to see each ID and its reset token.
+   */
   peer: QuicCidEntry[]
   /** Peer sequence numbers this side must send RETIRE_CONNECTION_ID for, oldest first, as a ring of `retireCount` from `retireHead`. */
   private retirePending: i64[]
@@ -160,6 +170,7 @@ export class QuicCidTable {
   /** The index in `peer` of the ID this side sends to, or -1 before the peer gave one. */
   private current: i32 = -1
   private retireHead: i32 = 0
+  /** How many RETIRE_CONNECTION_ID frames this side still owes the peer, at most twice `limit`. */
   retireCount: i32 = 0
 
   /**

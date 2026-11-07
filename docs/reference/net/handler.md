@@ -171,8 +171,6 @@ class HttpHandler
 | --- | --- |
 | `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. |
 | `scratch: u8[]` | `json` and `problem` write here. |
-| `server: Http1Server` |  |
-| `writer: JsonWriter` |  |
 | `connections(): i32` | How many connections are open. |
 | `drain(): void` | Begins a graceful stop: the handler accepts no more connections, closes each idle one now, and closes each other one once the request on it is answered and sent, so `connections()` falls to 0 as the program answers what it holds. A request already read on a draining connection is still handed over and answered. The listener is the program's to close. |
 | `empty(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say. |
@@ -206,18 +204,17 @@ class HttpRequest
 | --- | --- |
 | `new HttpRequest(index: i32)` | An empty request for the handler's pool; its buffers grow to the first request it holds and are kept for the ones after. |
 | `body: u8[]` | The body, `body[0 .. bodyLength)`. |
-| `bodyLength: i32` |  |
-| `gen: i32` |  |
+| `bodyLength: i32` | How many bytes of `body` are the request's body, 0 for none; read the body as `body[0 .. bodyLength)`. |
 | `head: u8[]` | The method, the target and the header section, as the parser kept them (field names lowercased). |
 | `index: i32` | Its index in the handler's pool. |
-| `methodEnd: i32` |  |
-| `methodStart: i32` |  |
-| `queryValueEnd: i32` |  |
+| `methodEnd: i32` | Where the method ends in `head`, one past its last byte. |
+| `methodStart: i32` | Where the method starts in `head`; the method is `head[methodStart .. methodEnd)`, for a log line or a `Router.match`. |
+| `queryValueEnd: i32` | Where the raw value `queryIndex` found ends in `head`, one past its last byte; it starts at `queryValueStart`. |
 | `queryValueStart: i32` | The span `queryIndex` found, raw. |
 | `route: i32` | The index `Router.add` answered for the route, or a negative `ROUTER_*` code. |
 | `slot: i32` | The connection's slot, and its generation when this request was read. |
-| `targetEnd: i32` |  |
-| `targetStart: i32` |  |
+| `targetEnd: i32` | Where the request target ends in `head`, one past its last byte. |
+| `targetStart: i32` | Where the request target (path and query) starts in `head`; the target is `head[targetStart .. targetEnd)`. |
 | `hasQuery(name: string): boolean` | Whether the query holds a parameter named `name`. |
 | `header(name: string): i32` | The index of the first field named `name`, which is lowercase, or `HANDLER_ABSENT`. |
 | `headerIs(name: string, value: string): boolean` | Whether the first field named `name` (lowercase) has exactly the value `value`. |

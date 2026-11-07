@@ -262,11 +262,11 @@ class Http1Connection
 | `bufferLimit: i32` | The most input the connection buffers, unread: the cap `inputRoom` holds it to. |
 | `closeAfter: boolean` | The connection closes once this exchange is over. |
 | `data: u8[]` | `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. |
-| `dataLength: i32` |  |
-| `dataStart: i32` |  |
+| `dataLength: i32` | How many bytes `H1_BODY` or `H1_WS_MESSAGE` handed over, from `data[dataStart]`. |
+| `dataStart: i32` | Where the bytes `H1_BODY` or `H1_WS_MESSAGE` handed over start in `data`. |
 | `date: HttpDate` | The `Date` every final response carries. The connection makes its own; `Http1Server` and `Http1TlsServer` put theirs here, so that every slot of a pool shares one and the pool formats at most once a second. A program may put another, to share it or to pin its clock. |
 | `fd: i32` | The plain TCP socket the carrier sends `output` on, which `sendBody` writes to directly: `Http1Server.accept` sets it, and `restart` and `abort` put it back to -1. -1 for a connection with no such socket (a sans-IO carrier, `Http1TlsServer`'s TLS records), where `sendBody` copies as `write` does. |
-| `heads: Http1OutputPool \| null` |  |
+| `heads: Http1OutputPool \| null` | Where the parser's head buffer goes while the slot rests, beside `inputs`; null otherwise. |
 | `headSince: i64` | When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. |
 | `headTimed: boolean` | A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. |
 | `inputs: Http1OutputPool \| null` | Where the parser's input and head buffers go while the slot rests, with `Http1Config.idleInput`; null otherwise. |
@@ -275,8 +275,8 @@ class Http1Connection
 | `noOutput: u8[]` | The empty array `output` is while the connection holds no buffer. |
 | `opcode: i32` | `H1_WS_MESSAGE`'s opcode: text or binary. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`. Empty until the connection first needs room to write: then its own buffer, made once, or one borrowed from `pool` and given back by `release` once sent. |
-| `outputEnd: i32` |  |
-| `outputStart: i32` |  |
+| `outputEnd: i32` | Where the unsent bytes end in `output`, one past the last; equal to `outputStart` when nothing waits. |
+| `outputStart: i32` | Where the unsent bytes start in `output`; a carrier sends from here and calls `consume` with what it sent. |
 | `parser: Http1Parser` | The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is the current request's from its `H1_REQUEST` until its response is done, `H1_END` included, however much of a pipelined request is fed behind it. |
 | `pong: u8[]` | A ping's payload, kept until its pong fits: empty until the first ping. |
 | `pool: Http1OutputPool \| null` | Where `output` is borrowed from, for a connection of a pool; null for one that keeps its own. |
@@ -330,7 +330,7 @@ class Http1OutputPool
 | Member | |
 | --- | --- |
 | `new Http1OutputPool(size: i32)` | An empty pool: no buffer is made until the first `take`. |
-| `free: u8[][]` |  |
+| `free: u8[][]` | The buffers given back and not yet taken again; `made - free.length` is how many are out. |
 | `made: i32` | How many buffers the pool has made. |
 
 ## Http1Server
@@ -351,7 +351,7 @@ class Http1Server
 | `expireScans: i32` | How many calls of `expire` walked every slot, for a program measuring its cost. |
 | `fds: i32[]` | Each slot's descriptor, or -1 while it is free, for the slots accepted into so far: its length is the high-water mark, and a slot past it has never been used. |
 | `free: i32[]` | The slots closed since they were used, a stack whose top `accept` takes before it builds a slot past the high-water mark: finding one costs the same with every slot free as with all but one busy, where a scan of `fds` walked the busy ones. |
-| `heads: Http1OutputPool` |  |
+| `heads: Http1OutputPool` | The head buffers resting slots lend, beside `inputs`; `made` counts how many the slots ever needed. |
 | `inputs: Http1OutputPool` | The input and head buffers resting slots lend, with `Http1Config.idleInput`. |
 | `outputs: Http1OutputPool` | The output buffers the slots borrow while they write. |
 | `accept(): i32` | Accepts the next waiting connection into a free slot and answers the slot, which the program adds to its loop with `H1_WANT_READ`; -11 when none is waiting, `H1_POOL_FULL` when every slot is busy (the connection is closed), or `tcpAccept`'s own failure. |
@@ -389,7 +389,7 @@ class Http1TlsServer
 | `date: HttpDate` | The `Date` every slot's responses carry, as `Http1Server.date` is. |
 | `expireScans: i32` | How many calls of `expire` walked every slot. |
 | `outputs: Http1OutputPool` | The output buffers the slots borrow while they write. |
-| `tls: TlsTcpServer` |  |
+| `tls: TlsTcpServer` | The TLS 1.3 pool underneath, one slot beside each connection; read it for a slot's TLS connection. |
 | `accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32` | Accepts the next waiting connection as `TlsTcpServer.accept` does, with the caller's 32-byte server random and x25519 key, and gives it a fresh connection, building the slot's on its first accept. Answers the slot, or what `TlsTcpServer.accept` answers. |
 | `alpn(slot: i32): string` | The ALPN protocol `slot`'s handshake chose, or empty. |
 | `busy(): i32` | How many slots hold a connection. |

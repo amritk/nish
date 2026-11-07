@@ -370,23 +370,23 @@ class QuicStream
 | Member | |
 | --- | --- |
 | `new QuicStream(bufferSize: i32, none: u8[])` | A slot for buffers of `bufferSize` bytes, holding none: each side starts as `none`, the table's empty array. |
-| `id: i64` |  |
+| `id: i64` | The stream ID (RFC 9000 §2.1), or -1 while the slot is free. |
 | `recvBuf: u8[]` | The receive buffer: byte `o` of the stream at `o % size`, its bit in `recvHave` set while unread. Both are the table's empty array until the first byte arrives and after the side is done, and borrowed in between. |
 | `recvContiguous: i64` | Every byte below this has arrived. |
 | `recvFinal: i64` | The final size once a FIN or RESET_STREAM fixed it, or -1. |
-| `recvHave: u8[]` |  |
+| `recvHave: u8[]` | The bitmap beside `recvBuf`: a bit per buffer byte, set while that byte has arrived and is unread. |
 | `recvHighest: i64` | The highest offset any frame reached, which flow control counts. |
 | `recvLimit: i64` | The credit this side gave: no byte at or past this offset may arrive. |
-| `recvState: i32` |  |
-| `resendHigh: i64` |  |
+| `recvState: i32` | The receive side's state (RFC 9000 §3.2), a `QUIC_RECV_*` constant. |
+| `resendHigh: i64` | One past the last byte to send again, or -1 when nothing is owed; see `resendLow`. |
 | `resendLow: i64` | Bytes a lost packet carried, `[resendLow, resendHigh)`, or -1; `resendFin` when the FIN was among them. |
 | `resetCode: i64` | The peer's RESET_STREAM error code, or -1. |
-| `sendAcked: u8[]` |  |
+| `sendAcked: u8[]` | The bitmap beside `sendBuf`: a bit per buffer byte, set once acknowledged and not yet released. |
 | `sendBase: i64` | Every byte below this was acknowledged, and its room released. |
 | `sendBuf: u8[]` | The send buffer: byte `o` at `o % size`, its bit in `sendAcked` set once acknowledged and not yet released. Borrowed by the first write, and kept until every byte is acknowledged or the side is reset, since a lost packet is sent again from it. |
 | `sendEnd: i64` | One past the last byte written. |
 | `sendNext: i64` | The next byte never sent: the stream's credit and the connection's count up to here. |
-| `sendState: i32` |  |
+| `sendState: i32` | The send side's state (RFC 9000 §3.1), a `QUIC_SEND_*` constant. |
 | `stopCode: i64` | The peer's STOP_SENDING error code, or -1. |
 | `at(offset: i64): i32` | The buffer index of stream offset `offset`. |
 | `room(): i64` | How many more bytes the send buffer takes. |
@@ -428,10 +428,10 @@ class QuicStreamPools
 | Member | |
 | --- | --- |
 | `new QuicStreamPools(bufferSize: i32, streams: i32, connections: i32)` | Pools for `connections` connections of `streams` stream slots each, `bufferSize` bytes each way. |
-| `bits: BufferPool` |  |
-| `data: BufferPool` |  |
+| `bits: BufferPool` | The pool of bitmaps beside them, a bit per buffer byte: which bytes are unread or acknowledged. |
+| `data: BufferPool` | The pool of stream buffers, `bufferSize` bytes each, that the send and receive sides borrow. |
 | `ready: i32` | How many buffers the reserve holds. |
-| `readyBits: u8[][]` |  |
+| `readyBits: u8[][]` | The reserve's bitmaps, one beside each `readyData` buffer at the same index. |
 | `readyData: u8[][]` | The reserve: `ready` buffers and their bitmaps, taken from the pools and not lent to a stream; the rest of each list is `none`. |
 | `lent(): i32` | How many buffers and bitmaps are lent to streams now, the reserve's left out: 0 once every stream that borrowed has given back. |
 
@@ -453,23 +453,23 @@ class QuicStreams
 | `freeCount: i32` | How many slots `free` holds. |
 | `lastFin: boolean` | Whether the last `putNextChunk` carried the FIN, for the packet's record. |
 | `lastId: i64` | What the last `putNextChunk` or `putNextControl` wrote, for the packet's record. |
-| `lastKind: i32` |  |
-| `lastLength: i32` |  |
-| `lastOffset: i64` |  |
-| `lastValue: i64` |  |
-| `peerBidiClosed: i64` |  |
-| `peerBidiLimit: i64` |  |
+| `lastKind: i32` | Which control frame `putNextControl` last wrote, a `QUIC_STREAM_CONTROL_*` constant. |
+| `lastLength: i32` | The bytes of the last chunk `putNextChunk` wrote. |
+| `lastOffset: i64` | The stream offset of the last chunk `putNextChunk` wrote. |
+| `lastValue: i64` | The stream the last control frame `putNextControl` wrote names, or 0 for a connection-level one. |
+| `peerBidiClosed: i64` | How many of the client's bidirectional streams finished, which is what lets the limit rise. |
+| `peerBidiLimit: i64` | The bidirectional stream limit this side last advertised to the client (MAX_STREAMS). |
 | `peerBidiOpened: i64` | How many of each type the client opened, the limit advertised, and how many of them finished. |
-| `peerUniClosed: i64` |  |
-| `peerUniLimit: i64` |  |
-| `peerUniOpened: i64` |  |
+| `peerUniClosed: i64` | How many of the client's unidirectional streams finished, which is what lets the limit rise. |
+| `peerUniLimit: i64` | The unidirectional stream limit this side last advertised to the client (MAX_STREAMS). |
+| `peerUniOpened: i64` | How many unidirectional streams the client opened. |
 | `pools: QuicStreamPools \| null` | Where the streams borrow their buffers: the table's own pools, or the set a server shares across its connections (`share`). `null` when the streams have no buffers at all (`bufferSize` 0, or no slots). |
 | `recvMaxData: i64` | The connection's receive credit: what was advertised, its window, what arrived, and what was read. |
-| `recvTotal: i64` |  |
+| `recvTotal: i64` | Bytes the connection received, counted at each stream's highest offset, against `recvMaxData`. |
 | `sendMaxData: i64` | The connection's send credit from the peer, what was sent against it, and what is written but not sent. |
-| `slots: QuicStream[]` |  |
-| `windowData: i64` |  |
-| `writtenTotal: i64` |  |
+| `slots: QuicStream[]` | The stream slots, a fixed count set at construction; a free one has `id` -1. |
+| `windowData: i64` | The connection's receive window in bytes: how far past what was read the credit is raised. |
+| `writtenTotal: i64` | Bytes the application wrote to every stream, sent or not; a write may not take it past `sendMaxData`. |
 | `beginPacket(): void` | Starts a packet: the next `putNextChunk` calls look at each stream at most once. |
 | `chunkAcked(id: i64, offset: i64, length: i32, fin: boolean): void` | A packet that carried bytes `[offset, offset + length)` of stream `id`, and its FIN when `fin`, was acknowledged: the bytes are marked, the buffer's start moves past every acknowledged one, and once all of them and the FIN are, the sending side is done (§3.1 "Data Recvd"). |
 | `chunkLost(id: i64, offset: i64, length: i32, fin: boolean): void` | A packet that carried those bytes was lost: they are queued to go again, unless the side is done or reset. |

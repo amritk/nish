@@ -2612,9 +2612,9 @@ export class PgConnection {
   }
 
   /**
-   * A `text[]` parameter: every element quoted, `"` and `\` escaped, so no
-   * element reads as NULL (build one with `arrayNull` for that). Panics while
-   * an array parameter is open.
+   * A `text[]` parameter: every element quoted, with each double quote and
+   * backslash escaped by a backslash, so no element reads as NULL (build one
+   * with `arrayNull` for that). Panics while an array parameter is open.
    * @param items The elements, in order; read now, not kept. Empty sends `{}`.
    * @returns True when it was written; false, and nothing written, as every
    *   `param...` call is.

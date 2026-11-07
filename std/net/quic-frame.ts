@@ -208,29 +208,62 @@ export const QUIC_PATH_DATA_SIZE: i32 = 8
  *   phrase as the data.
  */
 export class QuicFrame {
+  /** The stream a STREAM, RESET_STREAM, STOP_SENDING, MAX_STREAM_DATA or STREAM_DATA_BLOCKED frame names. */
   streamId: i64 = 0
+  /** The byte offset in the stream (STREAM) or the handshake stream (CRYPTO) where the data starts. */
   offset: i64 = 0
+  /** The frame's one number: a limit, a final size or a sequence number, as the list above gives per type. */
   value: i64 = 0
+  /** The application or transport error code of a RESET_STREAM, STOP_SENDING or CONNECTION_CLOSE. */
   errorCode: i64 = 0
+  /** The frame type a transport CONNECTION_CLOSE (0x1c) blames; 0 for the application form. */
   frameType: i64 = 0
+  /** A NEW_CONNECTION_ID's Retire Prior To: every peer ID with a lower sequence number is to be retired. */
   retirePriorTo: i64 = 0
+  /** The largest packet number an ACK acknowledges. */
   largest: i64 = 0
+  /** An ACK's delay as sent, not yet scaled by the peer's `ack_delay_exponent`. */
   ackDelay: i64 = 0
+  /**
+   * An ACK's ranges as `[smallest, largest]` packet-number pairs, highest
+   * first. Only the first `ackRangeCount` pairs are meaningful; the array
+   * keeps its `QUIC_FRAME_MAX_ACK_RANGES * 2` length.
+   */
   ackRanges: i64[]
+  /**
+   * How many ranges the ACK carried, which can exceed `ackRangeCount` when ranges past the stored cap
+   * were read and dropped.
+   */
   ackRangeTotal: i64 = 0
+  /** An ACK_ECN's cumulative count of packets received marked ECT(0). */
   ect0: i64 = 0
+  /** An ACK_ECN's cumulative count of packets received marked ECT(1). */
   ect1: i64 = 0
+  /** An ACK_ECN's cumulative count of packets received marked ECN-CE (congestion experienced). */
   ce: i64 = 0
   /** The frame type, with every STREAM type answered as `QUIC_FRAME_STREAM`. */
   type: i32 = 0
   /** One past the frame's last byte, where the next frame starts. */
   end: i32 = 0
+  /**
+   * Where the frame's data (stream or CRYPTO bytes, token, path data, datagram or reason phrase)
+   * starts in the payload.
+   */
   dataStart: i32 = 0
+  /** How many bytes of data start at `dataStart`. */
   dataLength: i32 = 0
+  /**
+   * How many `[smallest, largest]` pairs of `ackRanges` hold an ACK range, at most
+   * `QUIC_FRAME_MAX_ACK_RANGES`.
+   */
   ackRangeCount: i32 = 0
+  /** Where a NEW_CONNECTION_ID's connection ID starts in the payload. */
   connectionIdStart: i32 = 0
+  /** A NEW_CONNECTION_ID's connection ID length in bytes, 1 to 20. */
   connectionIdLength: i32 = 0
+  /** Where a NEW_CONNECTION_ID's 16-byte stateless reset token starts in the payload. */
   resetTokenStart: i32 = 0
+  /** A STREAM frame's FIN bit (the stream ends with this data), or a DATAGRAM that carried a Length. */
   fin: boolean = false
 
   /**

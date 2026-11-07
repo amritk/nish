@@ -27,10 +27,10 @@ stages:
     todos:
       - id: simd-load-codegen-bug
         content: Fix loadU8x16 emitting a bitcast with no operand inside a loop over a hoisted array header, pinned by a tests/cases program, then inline http1Load16 — see Plaintext follow-ups
-        status: pending
+        status: completed
       - id: date-clock-per-turn
         content: Read the wall clock once per Http1Server serve call instead of per response in HttpDate.current — see Plaintext follow-ups
-        status: pending
+        status: completed
       - id: benchmarks-refresh
         content: Build every twin with bench/http-twins/build.sh and rerun bench/techempower/run.sh into docs/BENCHMARKS.md — see Plaintext follow-ups
         status: pending
@@ -41,13 +41,13 @@ stages:
     todos:
       - id: rename-fetch-sync
         content: Move std/net/http-client.ts to std/net/fetch.ts with httpFetch as fetchSync and HttpClient as FetchSyncClient — see Name the HTTP clients
-        status: pending
+        status: completed
       - id: rename-codecs
         content: Move std/net/http1.ts and std/net/http1-client.ts to http1-codec.ts and http1-client-codec.ts, with every importer — see Name the HTTP clients
-        status: pending
+        status: completed
       - id: rename-docs
         content: Update docs/guide, docs/security records, std/README.md, docs/AI.md and every pointer to the old paths — see Name the HTTP clients
-        status: pending
+        status: completed
   - id: upstream-explicit
     title: Non-blocking outbound calls on the explicit loop
     goal: A route handler calls another HTTP service or Postgres without blocking its worker, on the handler's own poll loop.
@@ -55,16 +55,16 @@ stages:
     todos:
       - id: upstream-module
         content: Add std/net/upstream.ts, a keep-alive pool to one origin driven by the http1-client codec on HttpHandler's loop, answers tagged with the asking request — see Non-blocking outbound calls
-        status: pending
+        status: completed
       - id: upstream-policy
         content: Apply OutboundPolicy in Upstream when its origin comes from input, and write docs/security/upstream.md — see Non-blocking outbound calls
-        status: pending
+        status: completed
       - id: pg-carrier
         content: Promote tests/postgres/carrier.ts into std as a PgPool and PgBatcher carrier on HttpHandler's loop — see Non-blocking outbound calls
-        status: pending
+        status: completed
       - id: upstream-guide
         content: Add a guide page for calling a service from a handler, routed in scalar.config.json — see Non-blocking outbound calls
-        status: pending
+        status: completed
   - id: tfb-all-tests
     title: Every TFB test type, on every core
     goal: The entry answers db, query, update, cached-query and fortune, and scales across cores evenly.
@@ -72,13 +72,13 @@ stages:
     todos:
       - id: tfb-db-tests
         content: Add db, query, update and cached-query to bench/techempower on the Postgres carrier, batching across requests in flight — see Every TFB test type
-        status: pending
+        status: completed
       - id: tfb-fortune
         content: Add fortune with an HTML escape, a byte sort and one reused response buffer — see Every TFB test type
-        status: pending
+        status: completed
       - id: prefork-pinning
         content: Pin each prefork worker to its own core and steer connections by incoming CPU in std/net/prefork.ts — see Every TFB test type
-        status: pending
+        status: completed
       - id: tfb-separate-rig
         content: Measure every test type with the client on its own machine at TFB's connection counts — see Every TFB test type
         status: pending
@@ -89,10 +89,10 @@ stages:
     todos:
       - id: wp46-stage-1
         content: Build WP46 stage 1, runtime/runtime-region.c and its budgets — see Regions
-        status: pending
+        status: completed
       - id: wp46-stage-2
         content: Build WP46 stage 2, nish:region in the checker and codegen with its NL codes — see Regions
-        status: pending
+        status: completed
   - id: async-language
     title: async and await in the language
     goal: The checker and codegen accept the restricted async of WP49 section 2 and lower each task to a compile-time-sized frame.
@@ -100,15 +100,16 @@ stages:
     todos:
       - id: async-checker
         content: Accept async, await on a direct call, Promise as a return type, spawn and awaitAll, and refuse promise values and recursion through await — see async and await in the language
-        status: pending
+        status: completed
       - id: async-lowering
         content: Lower each async function to a frame struct and resume switch, nesting awaited frames, sized at compile time — see async and await in the language
-        status: pending
+        status: completed
       - id: async-emit-ts
         content: Emit async functions as JavaScript async functions under --emit-ts and state the declared differences in LANGUAGE.md — see async and await in the language
-        status: pending
+        status: completed
   - id: async-runtime
     title: The executor and the async server
+    status: in_progress
     goal: One executor per process resumes tasks when their socket or timer is ready, and serve, fetch and the Postgres pool are async.
     verification: A program with no async function links no executor, an async server serves pipelined requests with Arena.used() flat, and runtime-async.c has a budget row and a security record.
     todos:
@@ -205,7 +206,7 @@ WP49 sections 2 and 3:
 
 ## The executor and the async server
 
-WP49 section 4:
+Split into four pull requests in [wp49-s5.plan.md](wp49-s5.plan.md): the executor, async `fetch`, `serve` with the async Postgres pool, and cancellation. WP49 section 4:
 - One executor per process, on `pollWait`. An epoll entry carries a task index and a generation.
 - `serve` spawns one task per request, each in its own region.
 - `fetch` and the Postgres pool become async wrappers over `Upstream` and the carrier.

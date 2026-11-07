@@ -33,9 +33,16 @@ import { quicPacketCopy } from "nish/net/quic-packet"
 export class QuicDatagramQueue {
   /** Entry `k`'s bytes are `data[k * entrySize ..]`, `lengths[k]` of them. */
   data: u8[]
+  /** Each entry's payload length in bytes, 0 to `entrySize`; entry `k`'s is `lengths[k]`. */
   lengths: i32[]
+  /**
+   * The largest payload an entry holds, in bytes, fixed when the ring is made; it is also the
+   * stride of `data`. A longer datagram is refused and counted in `dropped`.
+   */
   entrySize: i32 = 0
+  /** The index of the oldest entry; the `j`-th oldest is entry `(head + j) % capacity()`. */
   head: i32 = 0
+  /** How many datagrams wait in the ring, from 0 to its entry count. */
   count: i32 = 0
   /** Datagrams refused for want of room or for their size, which the peer's side counts as dropped. */
   dropped: i32 = 0

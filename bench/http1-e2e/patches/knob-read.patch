@@ -1,0 +1,81 @@
+diff -ru a/std/net/http1-codec.ts b/std/net/http1-codec.ts
+--- a/std/net/http1-codec.ts	2026-11-07 21:40:48.358387052 +0000
++++ b/std/net/http1-codec.ts	2026-11-07 21:40:48.389885917 +0000
+@@ -81,6 +81,7 @@
+  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
+  */
+ import { copyBytes } from "nish/bytes"
++import { netRead } from "nish:net"
+ import {
+   and,
+   any,
+@@ -319,6 +320,22 @@
+     this.end = at + len
+   }
+ 
++  /**
++   * knob-read (bench/http1-e2e): `recv` up to `ask` bytes from `fd` straight
++   * into the input buffer at `end`, which the caller checked has room. -1000
++   * once the parser has closed or refused, where `feed` would drop the input.
++   */
++  readFrom(fd: i32, ask: i32): i32 {
++    if (this.state === HTTP1_S_CLOSED || this.state === HTTP1_S_ERROR) {
++      return -1000
++    }
++    const n: i32 = netRead(fd, this.buf, this.end, ask)
++    if (n > 0) {
++      this.end = this.end + n
++    }
++    return n
++  }
++
+   /** The next event the input holds; see the module comment. */
+   next(): i32 {
+     return http1Next(this)
+diff -ru a/std/net/http1-server.ts b/std/net/http1-server.ts
+--- a/std/net/http1-server.ts	2026-11-07 21:40:48.358429174 +0000
++++ b/std/net/http1-server.ts	2026-11-07 21:40:48.390254346 +0000
+@@ -1885,7 +1885,25 @@
+       if (want <= 0) {
+         break
+       }
+-      const n: i32 = netRead(fd, this.scratch, H1_ZERO, want)
++      // knob-read: an HTTP connection reads straight into its (lent) input
++      // buffer when it has free room past `end`, so the bytes are not copied
++      // from `scratch`; anything else reads into `scratch` as before.
++      let ask: i32 = want
++      let n: i32 = -1000
++      if (conn.state === H1_S_HTTP) {
++        conn.unpark()
++        const p: Http1Parser = conn.parser
++        const free: i32 = toI32(p.buf.length) - p.end
++        if (free > 0) {
++          ask = free < want ? free : want
++          n = p.readFrom(fd, ask)
++        }
++      }
++      const direct: boolean = n !== -1000
++      if (!direct) {
++        ask = want
++        n = netRead(fd, this.scratch, H1_ZERO, want)
++      }
+       if (n <= 0) {
+         if (n === 0) {
+           conn.endInput()
+@@ -1895,12 +1913,14 @@
+         break
+       }
+       moved = true
+-      conn.feed(this.scratch, H1_ZERO, n)
++      if (!direct) {
++        conn.feed(this.scratch, H1_ZERO, n)
++      }
+       // A short read emptied the socket. The loop's readiness is
+       // level-triggered, so more input, or the peer's close, wakes it again;
+       // reading once more here would only answer -11, at the price of a
+       // system call on every request.
+-      if (n < want) {
++      if (n < ask) {
+         break
+       }
+     }

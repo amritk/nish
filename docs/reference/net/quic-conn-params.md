@@ -274,31 +274,31 @@ class QuicTransportParameters
 | Member | |
 | --- | --- |
 | `new QuicTransportParameters()` | Makes the parameters an endpoint has before it sets or reads any: §18.2's defaults, every connection ID and token empty. |
-| `ackDelayExponent: i64` |  |
-| `activeConnectionIdLimit: i64` |  |
-| `disableActiveMigration: boolean` |  |
-| `error: i64` |  |
-| `errorParameter: i64` |  |
-| `hasInitialScid: boolean` |  |
-| `hasOriginalDcid: boolean` |  |
-| `hasPreferredAddress: boolean` |  |
-| `hasRetryScid: boolean` |  |
-| `hasStatelessResetToken: boolean` |  |
-| `initialMaxData: i64` |  |
-| `initialMaxStreamDataBidiLocal: i64` |  |
-| `initialMaxStreamDataBidiRemote: i64` |  |
-| `initialMaxStreamDataUni: i64` |  |
-| `initialMaxStreamsBidi: i64` |  |
-| `initialMaxStreamsUni: i64` |  |
-| `initialScid: u8[]` |  |
-| `maxAckDelay: i64` |  |
+| `ackDelayExponent: i64` | `ack_delay_exponent`: the power of two an ACK frame's delay is scaled by, at most 20; 3 by default. |
+| `activeConnectionIdLimit: i64` | `active_connection_id_limit`: how many of its peer's connection IDs the sender keeps, at least 2. |
+| `disableActiveMigration: boolean` | `disable_active_migration`: the sender does not support active connection migration (RFC 9000 §9) from the address the handshake used. |
+| `error: i64` | What the last parse answered: `QUIC_ERROR_NO_ERROR`, or `QUIC_ERROR_TRANSPORT_PARAMETER` with `errorParameter` set. |
+| `errorParameter: i64` | The ID of the parameter a failed parse is about, or -1 when the bytes did not frame; read beside `error`. |
+| `hasInitialScid: boolean` | Whether `initialScid` was set or read; an empty ID is a value, so its length cannot say. |
+| `hasOriginalDcid: boolean` | Whether `originalDcid` was set or read; an empty ID is a value, so its length cannot say. |
+| `hasPreferredAddress: boolean` | Whether `preferredAddress` was set or read. |
+| `hasRetryScid: boolean` | Whether `retryScid` was set or read; an empty ID is a value, so its length cannot say. |
+| `hasStatelessResetToken: boolean` | Whether `statelessResetToken` was set or read. |
+| `initialMaxData: i64` | `initial_max_data`: the connection's first receive credit, in bytes, across every stream. |
+| `initialMaxStreamDataBidiLocal: i64` | `initial_max_stream_data_bidi_local`: the first credit, in bytes, on a bidirectional stream the sender opens. |
+| `initialMaxStreamDataBidiRemote: i64` | `initial_max_stream_data_bidi_remote`: the first credit, in bytes, on a bidirectional stream its peer opens. |
+| `initialMaxStreamDataUni: i64` | `initial_max_stream_data_uni`: the first credit, in bytes, on a unidirectional stream its peer opens. |
+| `initialMaxStreamsBidi: i64` | `initial_max_streams_bidi`: how many bidirectional streams the peer may open at first, at most 2^60. |
+| `initialMaxStreamsUni: i64` | `initial_max_streams_uni`: how many unidirectional streams the peer may open at first, at most 2^60. |
+| `initialScid: u8[]` | `initial_source_connection_id`: the Source Connection ID of the sender's first Initial packet. |
+| `maxAckDelay: i64` | `max_ack_delay`, in milliseconds: how long the sender may hold an acknowledgement, below 2^14; 25 by default. |
 | `maxDatagramFrameSize: i64` | RFC 9221's `max_datagram_frame_size`: 0, the default, for no DATAGRAM frames. |
-| `maxIdleTimeout: i64` |  |
-| `maxUdpPayloadSize: i64` |  |
-| `originalDcid: u8[]` |  |
-| `preferredAddress: u8[]` |  |
-| `retryScid: u8[]` |  |
-| `statelessResetToken: u8[]` |  |
+| `maxIdleTimeout: i64` | `max_idle_timeout`, in milliseconds; 0, the default, for no idle timeout. |
+| `maxUdpPayloadSize: i64` | `max_udp_payload_size`: the largest UDP payload the sender takes, at least 1200 bytes; 65527 by default. |
+| `originalDcid: u8[]` | `original_destination_connection_id`: the client's first Destination Connection ID; server only. |
+| `preferredAddress: u8[]` | `preferred_address`, kept as the bytes the server sent, since this side never acts on it; server only. |
+| `retryScid: u8[]` | `retry_source_connection_id`: the Source Connection ID of the server's Retry; server only. |
+| `statelessResetToken: u8[]` | `stateless_reset_token`: 16 bytes that end a stateless reset for the server's connection ID; server only. |
 
 ## Limits
 

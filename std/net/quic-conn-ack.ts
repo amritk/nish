@@ -47,6 +47,7 @@ export class QuicAckRanges {
   /** Every packet number at or below this is answered as already received; -1 until a range is dropped. */
   floor: i64 = -1
   private ranges: i64[]
+  /** How many disjoint ranges are held, at most `QUIC_ACK_MAX_RANGES`. */
   count: i32 = 0
   /** Whether an ack-eliciting packet arrived since the last `pushAck`. */
   ackPending: boolean = false
