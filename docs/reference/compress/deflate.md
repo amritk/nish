@@ -115,7 +115,7 @@ Both objects take caller-owned
 windows, `src[off .. off + len)` in and `out[at ..)` out, and answer where
 the output ends. Everything a call needs — the match finder's hash chains,
 the block's symbols, the Huffman scratch, the decoder's tables — is
-allocated by the constructor, about 330 KB for a `Deflater` and 4 KB for an
+allocated by the constructor, about 330 KB for a `Deflater` and 28 KB for an
 `Inflater`, so build one per thread and reuse it: a call allocates nothing.
 The free functions `deflateCompress` and `deflateDecompress` build one for
 a single call, for a program that compresses once.
@@ -179,11 +179,18 @@ function compressBound(n: i32): i32
 #### Parameters
 
 <scalar-field name="n" type="i32" required>
+
+The length of the input, in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+A size in bytes, not a position: an `out` with this many bytes
+  from `at` always holds the raw, zlib or gzip stream.
+
 </scalar-field>
 
 ## deflateBound
@@ -200,11 +207,18 @@ function deflateBound(n: i32): i32
 #### Parameters
 
 <scalar-field name="n" type="i32" required>
+
+The length of the input, in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+A size in bytes, not a position: an `out` with this many bytes
+  from `at` always holds the stream.
+
 </scalar-field>
 
 ## deflateCompress
@@ -227,26 +241,48 @@ function deflateCompress(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array that holds the data to compress.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `src` the data starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes of data to compress.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the stream is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` the stream starts.
+
 </scalar-field>
 
 <scalar-field name="level" type="i32" required>
+
+How hard to compress, 0 to 9; another level panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` one past the stream's last byte, or
+  `DEFLATE_NO_ROOM`, as `Deflater.compress` answers.
+
 </scalar-field>
 
 ## deflateDecompress
@@ -267,26 +303,48 @@ function deflateDecompress(
 #### Parameters
 
 <scalar-field name="src" type="u8[]" required>
+
+The array that holds the raw DEFLATE stream.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where in `src` the stream starts.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes the stream is.
+
 </scalar-field>
 
 <scalar-field name="out" type="u8[]" required>
+
+The caller's array the data is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+Where in `out` the data starts.
+
 </scalar-field>
 
 <scalar-field name="limit" type="i32" required>
+
+The most bytes of data to accept.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` one past the data's last byte, or a negative
+  `DEFLATE_ERR_*` code, as `Inflater.decompress` answers.
+
 </scalar-field>
 
 ## fixedDeflateBound
@@ -303,11 +361,18 @@ function fixedDeflateBound(n: i32): i32
 #### Parameters
 
 <scalar-field name="n" type="i32" required>
+
+The length of the input, in bytes.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+A size in bytes, not a position: a `room` of this many always
+  holds the block.
+
 </scalar-field>
 
 ## DeflateHuffmanScratch
@@ -322,12 +387,6 @@ class DeflateHuffmanScratch
 | Member | |
 | --- | --- |
 | `new DeflateHuffmanScratch()` | Allocates the scratch. |
-| `readonly buckets: i32[]` | The radix pass's 256 buckets. |
-| `readonly keys: i32[]` | Their frequencies, then (in place) the tree, then their lengths. |
-| `readonly perLength: i32[]` | How many codes have each length, 0 to 32. |
-| `readonly syms: i32[]` | Symbols sorted by frequency, then by symbol. |
-| `readonly tmpKeys: i32[]` |  |
-| `readonly tmpSyms: i32[]` | The other half of each radix pass. |
 
 ## Deflater
 
@@ -342,65 +401,7 @@ class Deflater
 | Member | |
 | --- | --- |
 | `new Deflater(level: i32)` | A compressor at `level`, 0 to 9; another level panics. |
-| `base: i32` | The next call's `delta` floor: past every position the tables hold, by a whole window. |
-| `bitBuf: u64` | Bits written but not yet stored, low bit first, and how many. |
-| `bitCount: i32` |  |
-| `readonly clCodes: i32[]` |  |
-| `readonly clFreq: i32[]` | The code-length code, and the run-length coded lengths it codes. |
-| `readonly clLens: i32[]` |  |
-| `count: i32` | How many of `tokens` the block holds. |
-| `readonly countScratch: i32[]` | Canonical-code and length-building scratch. |
-| `delta: i32` | A table position is an index of the current input plus this. |
-| `readonly distBase: i32[]` |  |
-| `readonly distCodes: i32[]` |  |
-| `readonly distExtra: i32[]` |  |
-| `readonly distFreq: i32[]` |  |
-| `readonly distLens: i32[]` |  |
-| `readonly distSymbol: i32[]` |  |
-| `readonly fixedDistCodes: i32[]` |  |
-| `readonly fixedDistLens: i32[]` |  |
-| `readonly fixedLitCodes: i32[]` |  |
-| `readonly fixedLitLens: i32[]` | The fixed code (§3.2.6). |
-| `readonly head: i32[]` | `head[h]`: the most recent position whose hash is `h`, plus `delta`; 0 for none. |
-| `readonly lazyLength: i32` | A match shorter than this is checked against the next position's (levels 4 to 9); 0 for greedy. |
-| `readonly lengthBase: i32[]` | Base and extra bits of each length and distance symbol. |
-| `readonly lengthExtra: i32[]` |  |
-| `readonly lengthSymbol: i32[]` | Length - 3 to length symbol - 257; distance to distance symbol, as `deflateDistSymbol` reads it. |
-| `readonly level: i32` | The level, 0 to 9. |
-| `readonly litCodes: i32[]` |  |
-| `readonly litFreq: i32[]` | The block's literal/length and distance frequencies. |
-| `readonly litLens: i32[]` | The dynamic code for the block. |
-| `readonly maxChain: i32` | Candidates tried per position. |
-| `readonly minMatch: i32` | The shortest match taken: 4 at levels 1 to 3, whose hash covers four bytes, else 3. |
-| `readonly nextScratch: i32[]` |  |
-| `readonly niceLength: i32` | A match this long is taken without looking further. |
-| `readonly prev: i32[]` | `prev[p & 32767]`: the position before `p` with `p`'s hash. |
-| `readonly rle: i32[]` |  |
-| `rleCount: i32` | How many entries of `rle` the block uses. |
-| `readonly scratch: DeflateHuffmanScratch` |  |
-| `readonly tokens: i32[]` | The block's symbols: a literal byte, or `dist << 9 \| (256 + len - 3)`. |
-| `addLiteral(b: i32): void` | Records the literal `b` as the block's next symbol. |
-| `addMatch(len: i32, dist: i32): void` | Records the match `len`, `dist` as the block's next symbol. |
-| `alignBits(out: u8[], op: i32): i32` | Stores whole bytes of the bit buffer into `out` at `op` and drops the partial byte's padding: the byte alignment a stored block's `LEN` starts at. Answers the new `op`; the caller has checked the room. |
-| `begin(start: i32): void` | Starts a stream whose history begins at index `start` of the next input: every position the tables hold is pushed a window behind it. |
-| `buildRle(hlit: i32, hdist: i32): void` | Builds the run-length coded lengths of the dynamic header (§3.2.7) for `hlit` literal/length and `hdist` distance lengths, and their frequencies in `clFreq`. |
-| `collectGreedy(src: u8[], start: i32, end: i32, histStart: i32): i32` | Fills the block's symbols greedily from `start`, and answers where the block ends: at `end`, or where the symbol buffer filled. The match finder, the chains and the symbol bookkeeping are written out in this one loop over locals, because this is the fast level's whole cost. |
-| `collectLazy(src: u8[], start: i32, end: i32, histStart: i32): i32` | Fills the block's symbols from `p`, deferring each match by a position while the next one finds a longer one; answers where the block ends. |
 | `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Compresses `src[off .. off + len)` into `out` from `at` as one raw DEFLATE stream, and answers where it ends, or `DEFLATE_NO_ROOM` when `out` cannot hold it: `deflateBound(len)` bytes always can. A window outside its array panics. Allocates nothing. |
-| `compressRange(src: u8[], start: i32, end: i32, histStart: i32, final: boolean, out: u8[], op: i32, oe: i32): i32` | Compresses `src[start .. end)` as blocks into `out[op .. oe)`, matching back as far as `histStart`; `final` marks the last block BFINAL. Answers the new output position, with up to 31 bits still in the bit buffer, or -1 when a block does not fit. |
-| `finish(end: i32): void` | Ends a stream whose input ended at index `end`: the next stream's positions start a window past every position the tables now hold. |
-| `flushBits(out: u8[], op: i32, oe: i32): i32` | Writes the whole bytes of the bit buffer, and the last partial byte padded with zeros, into `out` at `op`; answers the end, or `DEFLATE_NO_ROOM`. |
-| `insert(src: u8[], p: i32): void` | Records `p` in the chains without searching; `p + 4 <= src.length`. |
-| `longest(src: u8[], p: i32, end: i32, histStart: i32): i32` | The best match at `p`, after recording `p` in the chains: answers `len << 16 \| dist`, or 0 for none at least `minMatch` long. `p + 4 <= end`, which the caller checks. |
-| `putBits(out: u8[], op: i32, v: i32, n: i32): i32` | Appends the low `n` bits of `v` (`n` at most 32) to the bit buffer, storing whole words into `out` at `op`; answers the new `op`. The caller has checked the room. |
-| `rebase(p: i32): void` | Slides every table position down so that index `p` of the input is a window above the floor again; a position more than a window behind `p` becomes 0, which is never a candidate. |
-| `reset(): void` | Forgets the history: the next call starts a stream from nothing. Only a streaming writer needs it; `compress` starts a new stream on every call. |
-| `slide(shift: i32): void` | Moves the tables' positions down by `shift`, as the input they index moves down by `shift` bytes; a position that falls below 0 is dropped. The streaming writer calls it when it slides its window. |
-| `startBlock(): void` | Clears the block's symbols and frequencies. |
-| `storedBits(n: i32, pending: i32): i32` | The bits a stored rendering of `n` bytes takes from a bit buffer holding `pending` bits: each piece of up to 65,535 bytes has three header bits, the padding to a byte and four bytes of `LEN` / `NLEN`. |
-| `writeBlock(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32` | Writes the block's symbols, `src[start .. end)`'s, as the smallest of a dynamic, a fixed and a stored block; answers the new position, or -1 without writing when that does not fit in `out[op .. oe)`. |
-| `writeStored(src: u8[], start: i32, end: i32, final: boolean, out: u8[], op: i32, oe: i32): i32` | Writes `src[start .. end)` as stored blocks, the last BFINAL when `final`; answers the new position, or -1 without writing when it does not fit in `out[op .. oe)`. |
-| `writeSymbols(lc: i32[], ll: i32[], dc: i32[], dl: i32[], out: u8[], op: i32): i32` | Writes the block's symbols and its end-of-block code under the given code into `out` at `op`; answers the new position. The room was checked by the block's exact size. |
 
 ## FixedDeflater
 
@@ -418,13 +419,6 @@ class FixedDeflater
 | Member | |
 | --- | --- |
 | `new FixedDeflater()` | The tables, once. |
-| `readonly distBase: i32[]` |  |
-| `readonly distCode: i32[]` | Per distance symbol: its five-bit code, bit-reversed; its base distance; its extra bits. |
-| `readonly distExtra: i32[]` |  |
-| `readonly distSymbol: i32[]` | Distance to distance symbol, as `Deflater.distSymbol` maps it. |
-| `readonly head: i32[]` | `head[h]`: one past the last position, from the input's start, whose four bytes hash to `h`; 0 for none. |
-| `readonly length: i32[]` | Per length - 3: the length symbol's code and then its extra bits, below bit 16, and how many bits above. |
-| `readonly literal: i32[]` | Per byte: its fixed code, bit-reversed, below bit 16, and the code's length above. |
 | `compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32` | Compresses `src[off .. off + len)` as one final fixed-Huffman block into `out[at .. at + room)`, and answers where it ends, or `DEFLATE_NO_ROOM` as soon as it would need more than `room` bytes: a caller that only wants the output when it is smaller passes the most it will take, and an input that does not compress is abandoned part way. `fixedDeflateBound(len)` always fits. A window outside its array panics. Allocates nothing. |
 
 ## InflateTable
@@ -439,11 +433,7 @@ class InflateTable
 
 | Member | |
 | --- | --- |
-| `new InflateTable(bits: i32, symbols: i32, capacity: i32)` | A table indexing `bits` bits, for an alphabet of up to `symbols` symbols, with room for `capacity` entries: the main table and its subtables. |
-| `readonly bits: i32` | The prefix the table indexes. |
-| `readonly count: i32[]` | How many codes have each length 0 to 15. |
-| `readonly entries: i32[]` | `entries[peek]`: value << 16 \| extra << 11 \| kind << 8 \| length. The low byte is the length alone, so a bit buffer shifts by an entry as it is. |
-| `readonly symbols: i32[]` | The symbols, ordered by code. |
+| `new InflateTable(bits: i32, symbols: i32, capacity: i32)` | A table indexing `bits` bits, for an alphabet of up to `symbols` symbols, with room for `capacity` entries: the main table and its subtables. The arrays are allocated here and filled by `Inflater`. |
 
 ## Inflater
 
@@ -458,43 +448,12 @@ class Inflater
 | Member | |
 | --- | --- |
 | `new Inflater()` | Builds the tables, the fixed code's among them. |
-| `bitBuf: u64` | Bits read but not consumed, low bit first, and how many. |
-| `bitCount: i32` |  |
-| `readonly clEntries: i32[]` |  |
-| `readonly clLens: i32[]` | The order-indexed code-length code lengths. |
-| `readonly codeLengths: InflateTable` |  |
 | `consumed: i32` | The input bytes the last `decompress` read, its final block included. |
-| `readonly dist: InflateTable` |  |
-| `readonly distBase: i32[]` |  |
-| `readonly distEntries: i32[]` |  |
-| `readonly distExtra: i32[]` |  |
-| `fixed: boolean` | Whether the Huffman block uses the fixed code. |
-| `readonly fixedDist: InflateTable` |  |
-| `readonly fixedLit: InflateTable` |  |
-| `inPos: i32` | Where the last `inflate` stopped in its input and its output. |
-| `last: boolean` | Whether the block being read is the final one. |
-| `readonly lengthBase: i32[]` |  |
-| `readonly lengthExtra: i32[]` |  |
-| `readonly lens: i32[]` | The lengths a dynamic header sends, literal/length then distance. |
-| `readonly lit: InflateTable` |  |
-| `readonly litEntries: i32[]` | Each symbol's table entry with a length of 0, per kind of table: `entryOf(kind, s, 0)`. |
-| `readonly offsets: i32[]` | Scratch for building a table. |
-| `outPos: i32` |  |
-| `state: i32` | Where `inflate` resumes: the block header, a stored block, a Huffman block, or done. |
-| `storedLeft: i32` | Bytes of the current stored block still to copy. |
-| `build(t: InflateTable, lens: i32[], from: i32, n: i32, kind: i32): i32` | Builds `t` from the code lengths `lens[from .. from + n)`; answers 0, or `DEFLATE_ERR_HUFFMAN` for an over-subscribed set or an incomplete one (an incomplete set of a single one-bit code is allowed, as RFC 1951 §3.2.7 allows one distance code). |
+| `inPos: i32` | Where the last `inflate` stopped in its input: the first byte it did not use, or after `INFLATE_DONE` the first byte after the final block. |
+| `outPos: i32` | Where the last `inflate` stopped in its output: one past the last byte it wrote. |
 | `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses the raw DEFLATE stream `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends; or `DEFLATE_ERR_OUTPUT_LIMIT` when the stream holds more, `DEFLATE_ERR_TRAILING` when bytes follow its final block, or another negative `DEFLATE_ERR_*` for a malformed stream. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
-| `entryOf(kind: i32, s: i32, len: i32): i32` | The table entry for symbol `s` of a table of `kind`. |
-| `fill(src: u8[], end: i32): void` | Reads bytes of `src` into the bit buffer from `inPos` while it has room and `end` allows. |
-| `huffman(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32` | The Huffman block loop: decodes symbols until the end of the block (answers 0, the state back at a block header), or until the input or the output runs short or the stream is malformed (answers that code). |
-| `inflate(src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32` | Decodes from `src[ip .. inEnd)` into `out[op .. outEnd)`, resuming where the last call stopped; a match may reach back to `histStart`. `more` says whether input may follow `inEnd`: with it, running out is `INFLATE_NEED_INPUT` (every byte up to `inPos` is used, and the bit buffer keeps what it read ahead), without it `DEFLATE_ERR_TRUNCATED`. Answers `INFLATE_DONE` once the final block has ended, with `inPos` the first byte after it; `INFLATE_NEED_OUTPUT` when the next symbol does not fit; or a negative `DEFLATE_ERR_*`. `inPos` and `outPos` say where it stopped. Windows outside their arrays panic. |
-| `lookup(t: InflateTable, kind: i32, entries: i32[], bb: u64, bc: i32): i32` | The entry of the symbol at the bottom of `bb`, holding `bc` valid bits, from `t` (whose entries are `entries`), with its whole code length in the low four bits, through a subtable or the slow way as the table says: -1 when the bits run out before the code ends, -2 when no code matches. A code is decoded only once all its bits are here. |
-| `readDynamic(src: u8[], end: i32): i32` | Reads a dynamic block's header (§3.2.7) from the bit buffer and `src`, and builds its tables. Answers 0, `INFLATE_NEED_INPUT` when the input ran out first (nothing is consumed then: the caller rewinds), or an error. |
-| `reset(): void` | Starts a new stream: the next `inflate` reads a first block header. |
-| `slowDecode(t: InflateTable, kind: i32, bb: u64, bc: i32): i32` | Decodes the symbol at the bottom of `bb`, holding `bc` valid bits, one bit at a time from the counts (§3.2.2): answers the table entry of the symbol with its true code length, or -1 when the bits run out before a code ends (`bc` too small), or -2 when no code matches. |
-| `step(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32` | `inflate`'s state machine, once its windows are checked. |
-| `take(n: i32): i32` | The low `n` bits of the bit buffer, consumed; the caller has checked that `n` are there. |
-| `unread(): void` | Gives back the whole bytes of the bit buffer to the input, after dropping the bits to the next byte boundary: where a stored block's `LEN`, or the framing after the final block, begins. |
+| `inflate(src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32` | Decodes from `src[ip .. inEnd)` into `out[op .. outEnd)`, resuming where the last call stopped: the resumable step under `decompress`, for a stream that arrives in pieces or an output buffer that is drained between calls. `GzipDecompressor`, `GzipReader` and `ZlibDecompressor` are built on it. `inPos` and `outPos` say where it stopped. Windows outside their arrays panic. Allocates nothing. |
+| `reset(): void` | Starts a new stream: the next `inflate` reads a first block header and whatever the last stream left in the bit buffer is dropped. A new `Inflater` is already at the start, and `decompress` resets itself; call this before reusing one for another stream through `inflate`. |
 
 ## Constants
 

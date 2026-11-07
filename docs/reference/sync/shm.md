@@ -52,7 +52,7 @@ Creates the region `name`, `bytes` long and zeroed, mode 0600, and maps it.
 
 <scalar-card title="fence" icon="phosphor/regular/function" href="#fence">
 
-A fence of `order`, for the accesses around it.
+A fence of `order`, for the accesses around it: C11's `atomic_thread_fence`, so it orders the calling thread's accesses, to regions and to its own memory, exactly as that fence does; `RELAXED` is no fence at all.
 
 </scalar-card>
 
@@ -172,19 +172,37 @@ function createRegion(
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+the region's name, 1 to 30 of `A-Z a-z 0-9 . _ -`, not
+  starting with `.`; anything else is `SHM_INVALID`
+
 </scalar-field>
 
 <scalar-field name="bytes" type="i32" required>
+
+the region's length, from 1 to 1 GiB; outside that is
+  `SHM_INVALID`
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;SharedRegion, ShmError&gt;">
+
+a new `SharedRegion` mapping the fresh region, which this thread
+  alone can use and which stays mapped until its `close` or the process
+  ends; or the `ShmError`: `SHM_EXISTS`, `SHM_INVALID`, `SHM_TOO_MANY`
+  when this thread has 63 regions open, code 95 on wasi, or the errno the
+  system gave
+
 </scalar-field>
 
 ## fence
 
-A fence of `order`, for the accesses around it.
+A fence of `order`, for the accesses around it: C11's
+`atomic_thread_fence`, so it orders the calling thread's accesses, to
+regions and to its own memory, exactly as that fence does; `RELAXED` is no
+fence at all.
 
 ```ts
 function fence(order: i32): void
@@ -193,6 +211,10 @@ function fence(order: i32): void
 #### Parameters
 
 <scalar-field name="order" type="i32" required>
+
+`RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL` or `SEQ_CST`; any
+  other value panics
+
 </scalar-field>
 
 ## openRegion
@@ -209,11 +231,24 @@ function openRegion(
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+the name the region was created under, with `createRegion`'s
+  rules (`SHM_INVALID` otherwise)
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;SharedRegion, ShmError&gt;">
+
+a new `SharedRegion` on the same bytes every other mapping of the
+  name sees, which this thread alone can use until its `close`; or the
+  `ShmError`: `SHM_NOT_FOUND`, `SHM_ACCESS` for a region another user owns,
+  that others may read or write, or (on Linux) that is not a regular file
+  or has a second hard link, `SHM_INVALID` for a bad name or a region of
+  size 0 or over 1 GiB, `SHM_TOO_MANY`, code 95 on wasi, or the errno the
+  system gave
+
 </scalar-field>
 
 ## unlinkRegion
@@ -230,11 +265,19 @@ function unlinkRegion(
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+the region's name, with `createRegion`'s rules (`SHM_INVALID`
+  otherwise)
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;void, ShmError&gt;">
+
+`Ok()` once the name is gone, or the `ShmError`: `SHM_NOT_FOUND`,
+  `SHM_INVALID`, code 95 on wasi, or the errno the system gave
+
 </scalar-field>
 
 ## SharedRegion
@@ -248,26 +291,25 @@ class SharedRegion
 
 | Member | |
 | --- | --- |
-| `new SharedRegion(handle: i32)` |  |
-| `handle: i32` | The runtime's handle; it names nothing after `close`. |
-| `addI32(at: i32, delta: i32, order: i32): i32` | Adds `delta` to the 32-bit slot at `at`, wrapping, and answers the value before. |
-| `addI64(at: i32, delta: i64, order: i32): i64` | Adds `delta` to the 64-bit slot at `at`, wrapping, and answers the value before. |
-| `close(): Result<void, ShmError>` | Unmaps the region; the handle names nothing after. The name stays until `unlinkRegion`. |
-| `compareExchangeI32(at: i32, expected: i32, desired: i32, order: i32): i32` | Sets the 32-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. |
-| `compareExchangeI64(at: i32, expected: i64, desired: i64, order: i32): i64` | Sets the 64-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. |
-| `exchangeI32(at: i32, value: i32, order: i32): i32` | Sets the 32-bit slot at `at` to `value` and answers the value before. |
-| `exchangeI64(at: i32, value: i64, order: i32): i64` | Sets the 64-bit slot at `at` to `value` and answers the value before. |
-| `giveBack(window: u8[]): i32` | Empties `window`, which this region lent, and answers the length it had. |
+| `new SharedRegion(handle: i32)` | Wraps a handle the runtime answered. A program gets a region from `createRegion` or `openRegion` instead; a handle that names no region open on this thread makes every access panic, and `close` answer code 9. |
+| `addI32(at: i32, delta: i32, order: i32): i32` | Adds `delta` to the 32-bit slot at `at`, wrapping, and answers the value before, as one atomic read-modify-write. |
+| `addI64(at: i32, delta: i64, order: i32): i64` | Adds `delta` to the 64-bit slot at `at`, wrapping, and answers the value before, as one atomic read-modify-write. |
+| `close(): Result<void, ShmError>` | Unmaps the region; the handle names nothing after. The name stays until `unlinkRegion`. Every window still lent from it is emptied first, so an index into one after this panics rather than reading unmapped memory (a window a `push` moved off the region is the program's own array, and is left alone); any other access through this object panics too. |
+| `compareExchangeI32(at: i32, expected: i32, desired: i32, order: i32): i32` | Sets the 32-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. It never fails spuriously (a strong compare-exchange). |
+| `compareExchangeI64(at: i32, expected: i64, desired: i64, order: i32): i64` | Sets the 64-bit slot at `at` to `desired` if it holds `expected`, and answers what it held: the exchange happened when that is `expected`. It never fails spuriously (a strong compare-exchange). |
+| `exchangeI32(at: i32, value: i32, order: i32): i32` | Sets the 32-bit slot at `at` to `value` and answers the value before, as one atomic read-modify-write. |
+| `exchangeI64(at: i32, value: i64, order: i32): i64` | Sets the 64-bit slot at `at` to `value` and answers the value before, as one atomic read-modify-write. |
+| `giveBack(window: u8[]): i32` | Empties `window`, which this region lent, and answers the length it had. After it the array has length 0 and may be passed to `lend` as `reuse`. |
 | `lend(at: i32, len: i32, reuse: u8[] \| null = null): u8[]` | A `u8[]` of length `len` whose bytes are the region's `[at, at + len)`, not a copy: an index or `copyBytes` into it reads and writes the region. A range outside the region panics. `giveBack` or `close` empties it (length 0), so an index after either panics. A `push` moves it into this process's own memory, after which it is no window and `giveBack` panics. Pass a window already given back as `reuse` to lend it again without a new header: each lend without one keeps a few bytes for the life of the process. |
-| `loadI32(at: i32, order: i32): i32` | The 32-bit slot at `at`. |
-| `loadI64(at: i32, order: i32): i64` | The 64-bit slot at `at`. |
-| `read(at: i32, dst: u8[], off: i32, len: i32): void` | Copies `len` bytes of the region at `at` into `dst[off, off + len)`. |
+| `loadI32(at: i32, order: i32): i32` | Loads the 32-bit slot at `at`, one atomic load. |
+| `loadI64(at: i32, order: i32): i64` | Loads the 64-bit slot at `at`, one atomic load. |
+| `read(at: i32, dst: u8[], off: i32, len: i32): void` | Copies `len` bytes of the region at `at` into `dst[off, off + len)`. A plain copy, not atomic: a writer in another process racing it can tear what it reads, and only the atomics around it order it. |
 | `size(): i32` | The region's length in bytes. |
-| `storeI32(at: i32, value: i32, order: i32): void` | Sets the 32-bit slot at `at` to `value`. |
-| `storeI64(at: i32, value: i64, order: i32): void` | Sets the 64-bit slot at `at` to `value`. |
-| `waitI32(at: i32, expected: i32, timeoutMs: i32): i32` | Sleeps while the 32-bit slot at `at` holds `expected`, at most `timeoutMs` (negative: no limit): `SHM_WOKEN`, `SHM_NOT_EQUAL`, `SHM_TIMED_OUT`, or `SHM_UNSUPPORTED` off Linux. |
+| `storeI32(at: i32, value: i32, order: i32): void` | Sets the 32-bit slot at `at` to `value`, one atomic store. |
+| `storeI64(at: i32, value: i64, order: i32): void` | Sets the 64-bit slot at `at` to `value`, one atomic store. |
+| `waitI32(at: i32, expected: i32, timeoutMs: i32): i32` | Sleeps while the 32-bit slot at `at` holds `expected`, at most `timeoutMs` (negative: no limit): `SHM_WOKEN`, `SHM_NOT_EQUAL`, `SHM_TIMED_OUT`, or `SHM_UNSUPPORTED` off Linux. It promises no ordering: load the slot again, with the ordering the caller needs, after it returns. |
 | `wake(at: i32, count: i32): i32` | Wakes at most `count` of the processes sleeping on the 32-bit slot at `at`: how many it woke, or `SHM_UNSUPPORTED` off Linux. |
-| `write(at: i32, src: readonly u8[], off: i32, len: i32): void` | Copies `src[off, off + len)` into the region at `at`. |
+| `write(at: i32, src: readonly u8[], off: i32, len: i32): void` | Copies `src[off, off + len)` into the region at `at`. A plain copy, not atomic: publish it to another process with a `RELEASE` (or `SEQ_CST`) store after it. |
 
 ## ShmError
 
@@ -279,7 +321,7 @@ class ShmError
 
 | Member | |
 | --- | --- |
-| `new ShmError(code: i32)` |  |
+| `new ShmError(code: i32)` | The error for one errno, with its text: `strerror`'s, except that 95 (`SHM_UNSUPPORTED` negated) reads "not supported on this platform". |
 | `code: i32` | The errno, positive: `SHM_NOT_FOUND`, `SHM_EXISTS` and the rest. |
 | `message: string` | What it means, such as `File exists`. |
 

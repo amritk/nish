@@ -12,6 +12,15 @@ import {
 } from "nish/math";
 ```
 
+```ts
+export const main = (): i32 => {
+  const slope: f64 = Math.tan(0.5);
+  const angle: f64 = Math.atan2(1.0, -1.0); // 3 * pi / 4
+  const side: f64 = Math.hypot(3.0, 4.0); // 5
+  return side === 5.0 ? 0 : 1;
+};
+```
+
 <scalar-grid cols="2">
 
 <scalar-card title="atan2F64" icon="phosphor/regular/function" href="#atan2f64">
@@ -34,15 +43,15 @@ import {
 
 </scalar-grid>
 
-<scalar-callout type="info">
+<scalar-detail title="A program does not import this module">
 
-A program does not import this module. A call to one of the three is what
+A call to one of the three is what
 loads it (the checker's `importMath`), and the compiler copies each function
 here that the call reaches into the calling module as an `internal`
 function, so this file writes no `.ll` of its own. Under Node and `tsc` the
 calls are the platform's `Math`, so nothing here runs there.
 
-</scalar-callout>
+</scalar-detail>
 
 <scalar-detail title="Exactness">
 
@@ -71,7 +80,8 @@ rescale into that range otherwise.
 
 ## atan2F64
 
-`Math.atan2(y, x)`: fdlibm's, with a compensated quotient and a double-double pi - atan.
+`Math.atan2(y, x)`: fdlibm's, with a compensated quotient and a
+double-double pi - atan.
 
 ```ts
 function atan2F64(y: f64, x: f64): f64
@@ -80,19 +90,31 @@ function atan2F64(y: f64, x: f64): f64
 #### Parameters
 
 <scalar-field name="y" type="f64" required>
+
+The point's vertical coordinate.
+
 </scalar-field>
 
 <scalar-field name="x" type="f64" required>
+
+The point's horizontal coordinate.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64">
+
+The angle from the positive x axis to the point `(x, y)`, in
+  radians in [-pi, pi], with JavaScript's value for every signed zero,
+  infinity and NaN.
+
 </scalar-field>
 
 ## hypotF64
 
-`Math.hypot(x, y)`: fdlibm's core, rescaled by a power of two outside [1e-150, 1e150].
+`Math.hypot(x, y)`: fdlibm's core, rescaled by a power of two outside
+[1e-150, 1e150].
 
 ```ts
 function hypotF64(x: f64, y: f64): f64
@@ -101,19 +123,31 @@ function hypotF64(x: f64, y: f64): f64
 #### Parameters
 
 <scalar-field name="x" type="f64" required>
+
+One side's length; only its magnitude matters.
+
 </scalar-field>
 
 <scalar-field name="y" type="f64" required>
+
+The other side's length; only its magnitude matters.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64">
+
+The square root of `x * x + y * y`, computed without the squares
+  overflowing or underflowing: Infinity when either is infinite, even beside
+  a NaN, and NaN when either is otherwise NaN.
+
 </scalar-field>
 
 ## tanF64
 
-`Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past 2^20 * pi/2.
+`Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past
+2^20 * pi/2.
 
 ```ts
 function tanF64(x: f64): f64
@@ -122,9 +156,16 @@ function tanF64(x: f64): f64
 #### Parameters
 
 <scalar-field name="x" type="f64" required>
+
+The angle, in radians.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="f64">
+
+The tangent of `x`; NaN for a NaN or an infinite `x`, and `x`
+  itself when `|x| < 2^-27`, a zero's sign kept.
+
 </scalar-field>

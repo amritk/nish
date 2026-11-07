@@ -162,6 +162,10 @@ function agentDriven(): boolean
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` when an agent is judged to be at the keyboard, the answer
+  `styleFor`'s `agent` takes; it reads the environment afresh each call.
+
 </scalar-field>
 
 ## styleFor
@@ -183,14 +187,27 @@ function styleFor(fd: i32, agent: boolean): Style
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+the descriptor the painted text is written to, 1 for standard
+  output or 2 for standard error; only the terminal check reads it.
+
 </scalar-field>
 
 <scalar-field name="agent" type="boolean" required>
+
+whether the reader is an agent, as `agentDriven` answered;
+  `true` gives plain text, whatever forces colour.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="Style">
+
+a new `Style` each call, the caller's to keep and recolour: one
+  that paints the theme, one that paints the failsafe, or one that paints
+  nothing.
+
 </scalar-field>
 
 ## HelpMenu
@@ -207,13 +224,7 @@ class HelpMenu
 
 | Member | |
 | --- | --- |
-| `new HelpMenu(style: Style, program: string, column: i32, usageColumn: i32)` |  |
-| `column: i32` |  |
-| `lines: string[]` |  |
-| `program: string` |  |
-| `style: Style` |  |
-| `usageColumn: i32` |  |
-| `usages: i32` |  |
+| `new HelpMenu(style: Style, program: string, column: i32, usageColumn: i32)` | An empty menu; nothing is written until `text` is asked for. |
 | `header(version: string, summary: string): void` | The opening line, the program's name, `version` and a one-line `summary`, and a blank after it. |
 | `line(text: string): void` | A line exactly as given, painted (or not) by the caller with the menu's `style`: a rule, a banner, a blank. Its width is the caller's to keep. |
 | `note(text: string): void` | An indented line of prose, faint. |
@@ -242,64 +253,61 @@ class Style
 
 | Member | |
 | --- | --- |
-| `new Style(on: boolean, colour: boolean)` |  |
-| `colour: boolean` |  |
-| `dimMono: string` |  |
-| `dimThemed: string` |  |
-| `flagMono: string` |  |
-| `flagThemed: string` |  |
-| `headingMono: string` |  |
-| `headingThemed: string` |  |
-| `metaMono: string` |  |
-| `metaThemed: string` |  |
-| `nameMono: string` |  |
-| `nameThemed: string` |  |
-| `on: boolean` |  |
-| `bgBlack(text: string): string` | `text` on the theme's black. |
-| `bgBlue(text: string): string` | `text` on the theme's blue. |
-| `bgBrightBlack(text: string): string` | `text` on the theme's bright black. |
-| `bgBrightBlue(text: string): string` | `text` on the theme's bright blue. |
-| `bgBrightCyan(text: string): string` | `text` on the theme's bright cyan. |
-| `bgBrightGreen(text: string): string` | `text` on the theme's bright green. |
-| `bgBrightMagenta(text: string): string` | `text` on the theme's bright magenta. |
-| `bgBrightRed(text: string): string` | `text` on the theme's bright red. |
-| `bgBrightWhite(text: string): string` | `text` on the theme's bright white. |
-| `bgBrightYellow(text: string): string` | `text` on the theme's bright yellow. |
-| `bgCyan(text: string): string` | `text` on the theme's cyan. |
-| `bgGreen(text: string): string` | `text` on the theme's green. |
-| `bgMagenta(text: string): string` | `text` on the theme's magenta. |
-| `bgRed(text: string): string` | `text` on the theme's red. |
-| `bgWhite(text: string): string` | `text` on the theme's white. |
-| `bgYellow(text: string): string` | `text` on the theme's yellow. |
-| `black(text: string): string` | `text` in the theme's black. |
-| `blue(text: string): string` | `text` in the theme's blue. |
-| `bold(text: string): string` | `text` bold. |
-| `brightBlack(text: string): string` | `text` in the theme's bright black (gray). |
-| `brightBlue(text: string): string` | `text` in the theme's bright blue. |
-| `brightCyan(text: string): string` | `text` in the theme's bright cyan. |
-| `brightGreen(text: string): string` | `text` in the theme's bright green. |
-| `brightMagenta(text: string): string` | `text` in the theme's bright magenta. |
-| `brightRed(text: string): string` | `text` in the theme's bright red. |
-| `brightWhite(text: string): string` | `text` in the theme's bright white. |
-| `brightYellow(text: string): string` | `text` in the theme's bright yellow. |
-| `cyan(text: string): string` | `text` in the theme's cyan. |
+| `new Style(on: boolean, colour: boolean)` | A style with every role at its default pair. `styleFor` builds the right one for a stream; a program calls this to decide for itself. |
+| `dimMono: string` | The SGR list `dim` paints descriptions and notes with on the failsafe, where the terminal has no colours: empty, so plain, unless set. |
+| `dimThemed: string` | The SGR list `dim` paints descriptions and notes with when the terminal has colours: faint (`SGR_FAINT`) unless the program sets another. |
+| `flagMono: string` | The SGR list `flag` paints a flag or command with on the failsafe, where the terminal has no colours: bold (`SGR_BOLD`) unless set. |
+| `flagThemed: string` | The SGR list `flag` paints a flag or command with when the terminal has colours: cyan (`SGR_CYAN`) unless the program sets another. |
+| `headingMono: string` | The SGR list `heading` paints a section heading with on the failsafe, where the terminal has no colours: bold (`SGR_BOLD`) unless set. |
+| `headingThemed: string` | The SGR list `heading` paints a section heading with when the terminal has colours: bold magenta (`"1;35"`) unless the program sets another. |
+| `metaMono: string` | The SGR list `meta` paints a placeholder with on the failsafe, where the terminal has no colours: underline (`SGR_UNDERLINE`) unless set. |
+| `metaThemed: string` | The SGR list `meta` paints a placeholder with when the terminal has colours: yellow (`SGR_YELLOW`) unless the program sets another. |
+| `nameMono: string` | The SGR list `name` paints the tool's own name with on the failsafe, where the terminal has no colours: bold (`SGR_BOLD`) unless set. |
+| `nameThemed: string` | The SGR list `name` paints the tool's own name with when the terminal has colours: bold magenta (`"1;35"`) unless the program sets another. |
+| `bgBlack(text: string): string` | `text` on the theme's black (`SGR_BG_BLACK`). |
+| `bgBlue(text: string): string` | `text` on the theme's blue (`SGR_BG_BLUE`). |
+| `bgBrightBlack(text: string): string` | `text` on the theme's bright black (`SGR_BG_BRIGHT_BLACK`). |
+| `bgBrightBlue(text: string): string` | `text` on the theme's bright blue (`SGR_BG_BRIGHT_BLUE`). |
+| `bgBrightCyan(text: string): string` | `text` on the theme's bright cyan (`SGR_BG_BRIGHT_CYAN`). |
+| `bgBrightGreen(text: string): string` | `text` on the theme's bright green (`SGR_BG_BRIGHT_GREEN`). |
+| `bgBrightMagenta(text: string): string` | `text` on the theme's bright magenta (`SGR_BG_BRIGHT_MAGENTA`). |
+| `bgBrightRed(text: string): string` | `text` on the theme's bright red (`SGR_BG_BRIGHT_RED`). |
+| `bgBrightWhite(text: string): string` | `text` on the theme's bright white (`SGR_BG_BRIGHT_WHITE`). |
+| `bgBrightYellow(text: string): string` | `text` on the theme's bright yellow (`SGR_BG_BRIGHT_YELLOW`). |
+| `bgCyan(text: string): string` | `text` on the theme's cyan (`SGR_BG_CYAN`). |
+| `bgGreen(text: string): string` | `text` on the theme's green (`SGR_BG_GREEN`). |
+| `bgMagenta(text: string): string` | `text` on the theme's magenta (`SGR_BG_MAGENTA`). |
+| `bgRed(text: string): string` | `text` on the theme's red (`SGR_BG_RED`). |
+| `bgWhite(text: string): string` | `text` on the theme's white (`SGR_BG_WHITE`). |
+| `bgYellow(text: string): string` | `text` on the theme's yellow (`SGR_BG_YELLOW`). |
+| `black(text: string): string` | `text` in the theme's black (`SGR_BLACK`). |
+| `blue(text: string): string` | `text` in the theme's blue (`SGR_BLUE`). |
+| `bold(text: string): string` | `text` bold (`SGR_BOLD`), under the failsafe too. |
+| `brightBlack(text: string): string` | `text` in the theme's bright black, a gray (`SGR_BRIGHT_BLACK`). |
+| `brightBlue(text: string): string` | `text` in the theme's bright blue (`SGR_BRIGHT_BLUE`). |
+| `brightCyan(text: string): string` | `text` in the theme's bright cyan (`SGR_BRIGHT_CYAN`). |
+| `brightGreen(text: string): string` | `text` in the theme's bright green (`SGR_BRIGHT_GREEN`). |
+| `brightMagenta(text: string): string` | `text` in the theme's bright magenta (`SGR_BRIGHT_MAGENTA`). |
+| `brightRed(text: string): string` | `text` in the theme's bright red (`SGR_BRIGHT_RED`). |
+| `brightWhite(text: string): string` | `text` in the theme's bright white (`SGR_BRIGHT_WHITE`). |
+| `brightYellow(text: string): string` | `text` in the theme's bright yellow (`SGR_BRIGHT_YELLOW`). |
+| `cyan(text: string): string` | `text` in the theme's cyan (`SGR_CYAN`). |
 | `dim(text: string): string` | Text that explains rather than names, such as descriptions and notes, in `dimThemed` or `dimMono`. |
-| `faint(text: string): string` | `text` faint. |
+| `faint(text: string): string` | `text` faint (`SGR_FAINT`), under the failsafe too. |
 | `flag(text: string): string` | A flag, or a command a person would type, in `flagThemed` or `flagMono`. |
-| `green(text: string): string` | `text` in the theme's green. |
+| `green(text: string): string` | `text` in the theme's green (`SGR_GREEN`). |
 | `heading(text: string): string` | A section heading, in `headingThemed` or `headingMono`. |
-| `inverse(text: string): string` | `text` with foreground and background swapped. |
-| `italic(text: string): string` | `text` italic, where the terminal has it. |
-| `magenta(text: string): string` | `text` in the theme's magenta. |
+| `inverse(text: string): string` | `text` with foreground and background swapped (`SGR_INVERSE`), under the failsafe too. |
+| `italic(text: string): string` | `text` italic (`SGR_ITALIC`), where the terminal has it, under the failsafe too. |
+| `magenta(text: string): string` | `text` in the theme's magenta (`SGR_MAGENTA`). |
 | `meta(text: string): string` | A placeholder the person fills in, such as `<file.ts>` or `speed\|size`, in `metaThemed` or `metaMono`. |
 | `name(text: string): string` | The tool's own name where it opens a line, in `nameThemed` or `nameMono`. |
-| `paint(text: string, themed: string, mono: string): string` | `text` wrapped in the escape for `themed` (an SGR parameter list in the theme's basic colours) or `mono` (attributes only), and a reset after it; `text` unchanged when marking up is off or the chosen list is empty, so a caller never has to ask. |
-| `red(text: string): string` | `text` in the theme's red. |
+| `red(text: string): string` | `text` in the theme's red (`SGR_RED`). |
 | `sgr(text: string, codes: string): string` | `text` painted with any SGR parameter list (`"1;31"`, `"38;5;208"`, `"38;2;255;128;0"`) when colour is on, and unchanged otherwise: the way to 256-colour and truecolor, which ignore the reader's theme, so they stay the caller's explicit choice. The failsafe paints nothing, since the list may name a colour a monochrome terminal cannot show. |
-| `strikethrough(text: string): string` | `text` struck through. |
-| `underline(text: string): string` | `text` underlined. |
-| `white(text: string): string` | `text` in the theme's white. |
-| `yellow(text: string): string` | `text` in the theme's yellow. |
+| `strikethrough(text: string): string` | `text` struck through (`SGR_STRIKETHROUGH`), under the failsafe too. |
+| `underline(text: string): string` | `text` underlined (`SGR_UNDERLINE`), under the failsafe too. |
+| `white(text: string): string` | `text` in the theme's white (`SGR_WHITE`). |
+| `yellow(text: string): string` | `text` in the theme's yellow (`SGR_YELLOW`). |
 
 ## Constants
 
@@ -309,11 +317,15 @@ class Style
 
 `SGR_BG_BLACK: string`
 
+The SGR parameter for the theme's black as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;44&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_BLUE: string`
+
+The SGR parameter for the theme's blue as the background.
 
 </scalar-card>
 
@@ -321,11 +333,15 @@ class Style
 
 `SGR_BG_BRIGHT_BLACK: string`
 
+The SGR parameter for the theme's bright black as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;104&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_BRIGHT_BLUE: string`
+
+The SGR parameter for the theme's bright blue as the background.
 
 </scalar-card>
 
@@ -333,11 +349,15 @@ class Style
 
 `SGR_BG_BRIGHT_CYAN: string`
 
+The SGR parameter for the theme's bright cyan as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;102&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_BRIGHT_GREEN: string`
+
+The SGR parameter for the theme's bright green as the background.
 
 </scalar-card>
 
@@ -345,11 +365,15 @@ class Style
 
 `SGR_BG_BRIGHT_MAGENTA: string`
 
+The SGR parameter for the theme's bright magenta as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;101&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_BRIGHT_RED: string`
+
+The SGR parameter for the theme's bright red as the background.
 
 </scalar-card>
 
@@ -357,11 +381,15 @@ class Style
 
 `SGR_BG_BRIGHT_WHITE: string`
 
+The SGR parameter for the theme's bright white as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;103&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_BRIGHT_YELLOW: string`
+
+The SGR parameter for the theme's bright yellow as the background.
 
 </scalar-card>
 
@@ -369,11 +397,15 @@ class Style
 
 `SGR_BG_CYAN: string`
 
+The SGR parameter for the theme's cyan as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;42&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_GREEN: string`
+
+The SGR parameter for the theme's green as the background.
 
 </scalar-card>
 
@@ -381,11 +413,15 @@ class Style
 
 `SGR_BG_MAGENTA: string`
 
+The SGR parameter for the theme's magenta as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;41&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_RED: string`
+
+The SGR parameter for the theme's red as the background.
 
 </scalar-card>
 
@@ -393,11 +429,15 @@ class Style
 
 `SGR_BG_WHITE: string`
 
+The SGR parameter for the theme's white as the background.
+
 </scalar-card>
 
 <scalar-card title="&quot;43&quot;" icon="phosphor/regular/hash">
 
 `SGR_BG_YELLOW: string`
+
+The SGR parameter for the theme's yellow as the background.
 
 </scalar-card>
 
@@ -405,11 +445,15 @@ class Style
 
 `SGR_BLACK: string`
 
+The SGR parameter for the theme's black as the text colour.
+
 </scalar-card>
 
 <scalar-card title="&quot;34&quot;" icon="phosphor/regular/hash">
 
 `SGR_BLUE: string`
+
+The SGR parameter for the theme's blue as the text colour.
 
 </scalar-card>
 
@@ -417,11 +461,15 @@ class Style
 
 `SGR_BOLD: string`
 
+The SGR parameter for bold, or increased intensity.
+
 </scalar-card>
 
 <scalar-card title="&quot;90&quot;" icon="phosphor/regular/hash">
 
 `SGR_BRIGHT_BLACK: string`
+
+The SGR parameter for the theme's bright black (gray) as the text colour.
 
 </scalar-card>
 
@@ -429,11 +477,15 @@ class Style
 
 `SGR_BRIGHT_BLUE: string`
 
+The SGR parameter for the theme's bright blue as the text colour.
+
 </scalar-card>
 
 <scalar-card title="&quot;96&quot;" icon="phosphor/regular/hash">
 
 `SGR_BRIGHT_CYAN: string`
+
+The SGR parameter for the theme's bright cyan as the text colour.
 
 </scalar-card>
 
@@ -441,11 +493,15 @@ class Style
 
 `SGR_BRIGHT_GREEN: string`
 
+The SGR parameter for the theme's bright green as the text colour.
+
 </scalar-card>
 
 <scalar-card title="&quot;95&quot;" icon="phosphor/regular/hash">
 
 `SGR_BRIGHT_MAGENTA: string`
+
+The SGR parameter for the theme's bright magenta as the text colour.
 
 </scalar-card>
 
@@ -453,11 +509,15 @@ class Style
 
 `SGR_BRIGHT_RED: string`
 
+The SGR parameter for the theme's bright red as the text colour.
+
 </scalar-card>
 
 <scalar-card title="&quot;97&quot;" icon="phosphor/regular/hash">
 
 `SGR_BRIGHT_WHITE: string`
+
+The SGR parameter for the theme's bright white as the text colour.
 
 </scalar-card>
 
@@ -465,11 +525,15 @@ class Style
 
 `SGR_BRIGHT_YELLOW: string`
 
+The SGR parameter for the theme's bright yellow as the text colour.
+
 </scalar-card>
 
 <scalar-card title="&quot;36&quot;" icon="phosphor/regular/hash">
 
 `SGR_CYAN: string`
+
+The SGR parameter for the theme's cyan as the text colour.
 
 </scalar-card>
 
@@ -477,11 +541,15 @@ class Style
 
 `SGR_FAINT: string`
 
+The SGR parameter for faint, or decreased intensity.
+
 </scalar-card>
 
 <scalar-card title="&quot;32&quot;" icon="phosphor/regular/hash">
 
 `SGR_GREEN: string`
+
+The SGR parameter for the theme's green as the text colour.
 
 </scalar-card>
 
@@ -489,11 +557,15 @@ class Style
 
 `SGR_INVERSE: string`
 
+The SGR parameter for inverse: foreground and background swapped.
+
 </scalar-card>
 
 <scalar-card title="&quot;3&quot;" icon="phosphor/regular/hash">
 
 `SGR_ITALIC: string`
+
+The SGR parameter for italic, which some terminals do not show.
 
 </scalar-card>
 
@@ -501,11 +573,15 @@ class Style
 
 `SGR_MAGENTA: string`
 
+The SGR parameter for the theme's magenta as the text colour.
+
 </scalar-card>
 
 <scalar-card title="&quot;31&quot;" icon="phosphor/regular/hash">
 
 `SGR_RED: string`
+
+The SGR parameter for the theme's red as the text colour.
 
 </scalar-card>
 
@@ -513,11 +589,15 @@ class Style
 
 `SGR_STRIKETHROUGH: string`
 
+The SGR parameter for struck through.
+
 </scalar-card>
 
 <scalar-card title="&quot;4&quot;" icon="phosphor/regular/hash">
 
 `SGR_UNDERLINE: string`
+
+The SGR parameter for underline.
 
 </scalar-card>
 
@@ -525,11 +605,15 @@ class Style
 
 `SGR_WHITE: string`
 
+The SGR parameter for the theme's white as the text colour.
+
 </scalar-card>
 
 <scalar-card title="&quot;33&quot;" icon="phosphor/regular/hash">
 
 `SGR_YELLOW: string`
+
+The SGR parameter for the theme's yellow as the text colour.
 
 </scalar-card>
 
