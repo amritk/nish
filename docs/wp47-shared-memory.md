@@ -406,50 +406,78 @@ paths are compared:
   `commit`s; the consumer `peek`s the record, passes the window to
   `sendBody` and `release`s it once the body is sent.
 
-The consumer runs on CPU 0, the producer on CPU 1 and the reader on CPU 2.
-The consumer times each message from the record being there to the response
-being flushed, into a 10 ns histogram after a warm-up of a tenth. Its wait
-for the producer is left out. The pipeline figure is wall time over
-messages. Bytes copied counts every copy of a body byte on the way: the
-producer's push, the consumer's pop and what `write` or `sendBody` puts in
-the connection's output. Each round runs every size and mode twice, in a
-seeded shuffled order, with 50,000 messages a run. A figure is the median
-over 5 rounds × 2 runs, with the lowest and highest in brackets. The noise
-band is the median gap between the two runs of one mode in a round. The
-machine was the 4-core cloud VM above, Linux 6.18, on 2026-11-07.
+The consumer runs on CPU 0, the producer on CPU 1 and the reader on CPU 2:
+three of the machine's four cores are pinned. The consumer times each
+message from the record being there to the response being flushed, into a
+10 ns histogram after a warm-up of a tenth. Its wait for the producer is
+left out. The pipeline figure is wall time over messages.
 
-| record | mode | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | noise band p50 |
-| ---: | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 KB | copied | 950 (780 to 1,120) | 6,490 (5,660 to 14,330) | 2,193 (1,649 to 3,224) | 2,921 | ±6.5% |
-| 1 KB | in place | 1,060 (890 to 1,180) | 6,915 (5,860 to 7,320) | 2,254 (1,754 to 2,749) | 0 | ±18.4% |
-| 4 KB | copied | 1,635 (1,510 to 1,840) | 8,365 (7,540 to 11,120) | 7,496 (6,448 to 9,272) | 12,137 | ±6.7% |
-| 4 KB | in place | 1,575 (1,370 to 1,820) | 8,900 (7,290 to 31,460) | 8,002 (6,559 to 9,466) | 0 | ±8.5% |
-| 10 KB | copied | 3,170 (2,880 to 3,500) | 13,105 (10,640 to 20,490) | 18,820 (16,535 to 20,846) | 30,569 | ±2.7% |
-| 10 KB | in place | 2,635 (2,370 to 2,910) | 15,900 (8,960 to 20,630) | 18,717 (15,237 to 20,010) | 0 | ±4.9% |
+Bytes copied counts every user-space copy of a body byte that the bench can
+see: the producer's `tryPush`, the consumer's `tryPop`, and what `write` or
+`sendBody` puts in the connection's output. In place, that last is only
+what `sendBody` keeps of a body the socket did not take whole (a tail); the
+table gives the median over runs, a message, to two decimals, and the most
+messages with a tail and the most tail bytes in any run. Not counted, in
+either mode: the response head, which `respond` writes into the output;
+the kernel's copy into the socket; `Http1Connection`'s compaction of its
+output when it makes room; and the reader's `netRead`.
 
-| record | in place vs copied: consumer p50 | p99 | pipeline | noise band p50 |
-| ---: | ---: | ---: | ---: | ---: |
-| 1 KB | +11.6% | +6.5% | +2.8% | ±18.4% |
-| 4 KB | -3.7% | +6.4% | +6.8% | ±8.5% |
-| 10 KB | -16.9% | +21.3% | -0.5% | ±4.9% |
+Every run checks what it delivered. The reader counts the bytes it reads,
+which must equal what the consumer sent. It also parses each response head,
+takes its `content-length` worth of body, and folds those bodies into an
+FNV-1a sum, which must equal the sum the producer folds over every record
+it renders. A run that fails either check fails the whole run. Both sums
+are one byte at a time, on the producer's and the reader's cores, so they
+slow the producer and the reader, which pace the pipeline. The pipeline
+and p99 figures here are higher than those of a run without the check.
+Every wait has a ten-second deadline, and a child that exits with an error
+fails the run.
 
-What this says:
+Each round runs every size and mode twice, in a seeded shuffled order, with
+50,000 messages a run. A figure is the median over 5 rounds × 2 runs, with
+the lowest and highest in brackets. A noise band, for p50, p99 and the
+pipeline each, is the median over rounds of the gap between the two runs of
+one mode in a round. A difference between the modes is set against the
+wider of the two modes' bands. The machine was the 4-core cloud VM above
+(Intel Xeon @ 2.10 GHz), Linux 6.18, on 2026-11-07.
 
-- **In place copies nothing.** The copied path moves each body three
-  times: about 3 bytes for every byte of body (2,921 for a 973-byte body).
-  When the socket takes a whole body, `sendBody` writes straight from the
-  ring, and here it nearly always did (under one byte a message on average).
-- **Only at 10 KB is the consumer measurably faster**: 17 % at the median,
-  well outside the ±4.9 % band. At 4 KB the gap (-4 %) is inside the band,
-  and at 1 KB in place is 12 % slower, inside its ±18 % band. An earlier
-  run on the same machine gave the same picture (1 KB +16 %, 4 KB -4 %,
-  10 KB -17 %). The likely cause of the small-record cost is that below a
-  few KB, sending the body on its own costs more than a memcpy into the
-  output that one write sends with the head. The p99 is noisy in both
-  modes; it moves with the run, not the mode.
-- **The pipeline does not move** (-0.5 % to +7 %, inside the band).
-  Rendering the JSON in the producer, about 2 to 19 µs a record, sets the
-  rate, not the consumer's 1 to 3 µs.
+| record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | messages with a tail | noise band p50 / p99 / pipeline |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 KB | copied | 973 | 1,005 (910 to 1,130) | 6,865 (5,700 to 7,400) | 3,462 (2,845 to 3,586) | 2,921.01 | — | ±8.2% / ±12.5% / ±7.4% |
+| 1 KB | in place | 973 | 1,045 (1,000 to 1,150) | 6,465 (5,950 to 7,370) | 3,719 (3,399 to 4,197) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | ±3.7% / ±8.1% / ±3.4% |
+| 4 KB | copied | 4,045 | 1,675 (1,490 to 1,880) | 23,025 (20,120 to 25,070) | 12,732 (10,293 to 13,197) | 12,137.43 | — | ±12.9% / ±8.9% / ±19.6% |
+| 4 KB | in place | 4,045 | 1,590 (1,500 to 1,800) | 22,995 (19,060 to 25,050) | 12,725 (10,912 to 13,786) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | ±4.3% / ±6.9% / ±2.2% |
+| 10 KB | copied | 10,189 | 3,185 (2,850 to 3,400) | 34,020 (27,520 to 36,420) | 28,670 (25,975 to 32,038) | 30,569.31 | — | ±6.2% / ±5.0% / ±8.0% |
+| 10 KB | in place | 10,189 | 2,750 (2,590 to 2,840) | 33,455 (30,360 to 34,250) | 33,929 (31,214 to 35,330) | 0.00 | 0 of 50,000 (at most 0, 0 bytes) | ±4.0% / ±3.0% / ±3.4% |
+
+| record | in place vs copied, consumer p50 | consumer p99 | pipeline |
+| ---: | ---: | ---: | ---: |
+| 1 KB | +4.0% (band ±8.2%, inside) | -5.8% (band ±12.5%, inside) | +7.4% (band ±7.4%, outside) |
+| 4 KB | -5.1% (band ±12.9%, inside) | -0.1% (band ±8.9%, inside) | -0.1% (band ±19.6%, inside) |
+| 10 KB | -13.7% (band ±6.2%, outside) | -1.7% (band ±5.0%, inside) | +18.3% (band ±8.0%, outside) |
+
+What this says, and only as far as the bands allow:
+
+- **In place makes no user-space copy of the body, except partial-write
+  tails, and this run had none** (0 bytes over 0 of 50,000 messages in
+  every run). The copied path moves each body three times in user space:
+  2,921 bytes for a 973-byte body, about 3 for every byte. The kernel's
+  copy into the socket is the same in both modes and is not in either
+  count.
+- **The consumer's median is faster in place only at 10 KB**: 13.7 %,
+  outside its ±6.2 % band. At 1 KB (+4.0 %) and 4 KB (-5.1 %) the
+  difference is inside the band, so it is not one.
+- **The consumer's p99 does not differ between the modes** at any size:
+  -5.8 %, -0.1 % and -1.7 %, each inside its band. An earlier version of
+  this section reported in place's p99 as worse at every size, from a run
+  with no band for p99; with bands, that finding does not hold.
+- **The pipeline is slower in place at 10 KB**: +18.3 %, outside its
+  ±8.0 % band. At 1 KB the +7.4 % sits at the edge of its ±7.4 % band, and
+  at 4 KB there is no difference. This bench does not say why. Both
+  pipelines are paced by the producer and the reader, not by the consumer,
+  whose median is 1 to 3 µs against a pipeline of 3 to 34 µs a message.
+  One untested guess is that in place the producer renders and sums into
+  ring memory the consumer is reading from, which a private buffer avoids.
 
 To reproduce:
 

@@ -1580,10 +1580,24 @@ node bench/ring-inplace/run.mjs --rounds 9 --cpus 1,2,3
 Each round runs every size and mode twice in a seeded shuffled order. The
 table gives the consumer's p50 and p99 per message (its wait for the
 producer left out), the pipeline's ns a message, and the body bytes copied
-a message. A figure is the median over the runs, with the lowest and
-highest. The noise band is the median gap between the two runs of a mode:
-a difference between the modes inside it is not one. A run fails if the
-reader did not hear every byte sent.
+in user space a message, to two decimals. In place, that count is only the
+tails `sendBody` keeps when the socket does not take a body whole; the
+table gives how many messages had one. The kernel's copy into the socket,
+the output's compaction and the reader's `netRead` are not counted. A
+figure is the median over the runs, with the lowest and highest. The noise
+bands, for p50, p99 and the pipeline each, are the median gap between the
+two runs of a mode, and each difference between the modes is marked inside
+or outside the wider of the two modes' bands: one inside is not one.
+
+A run fails if the reader did not hear every byte sent, or if the FNV-1a
+sum over the bodies it parses out of the stream differs from the
+producer's over the records it rendered. It also fails if any wait passes
+its ten-second deadline or a child exits with an error. The sums are one
+byte at a time on the producer's and the reader's cores, so they raise the
+pipeline and p99 figures. On the 2026-11-07 run (wp47 §7), in place was
+faster at the consumer's median only at 10 KB (-13.7 %, band ±6.2 %). It
+made no difference to p99 at any size, and was slower over the pipeline
+at 10 KB (+18.3 %, band ±8.0 %).
 
 ## SQLite
 
