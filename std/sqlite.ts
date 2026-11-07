@@ -210,7 +210,7 @@ export const openDatabase = (path: string, flags: i32): Result<Database, SqliteE
 /** A connection. Close it with `close`, which finalizes its statements too. */
 export class Database {
   /** The adapter's handle; 0 names nothing. */
-  handle: i32
+  private handle: i32
 
   constructor(handle: i32) {
     this.handle = handle
@@ -276,7 +276,7 @@ export class Database {
  */
 export class Statement {
   /** The adapter's handle. */
-  handle: i32
+  private handle: i32
 
   constructor(handle: i32) {
     this.handle = handle

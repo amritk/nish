@@ -87,9 +87,9 @@ export class DnsClient {
   buf: u8[]
   from: u8[]
   recvMeta: i32[]
-  idBytes: u8[]
+  private idBytes: u8[]
   /** Whether `idBytes` holds an ID no send has used yet. */
-  idFresh: boolean = false
+  private idFresh: boolean = false
   loop: i32 = 0
   tokenBase: i32 = 0
   /** Sockets that could not be opened, written or connected, each a failed try. */
@@ -229,7 +229,7 @@ export class DnsClient {
    * drawn only after the last went out, so an empty call or a close costs no
    * `getRandomValues`.
    */
-  nextOutgoing(): i32 {
+  private nextOutgoing(): i32 {
     if (!this.idFresh) {
       crypto.getRandomValues(this.idBytes)
       this.idFresh = true

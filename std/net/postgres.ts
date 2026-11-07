@@ -390,19 +390,25 @@ const pgAllZero = (bytes: u8[]): boolean => {
  * The holder outlives the wipe, so that `wiped()` reads the very bytes.
  */
 class PgPassword {
+  /** @internal Used by `PgConnection.scramContinue` and `PgPool.connect` in this module. */
   readonly bytes: Secret<u8[]>
-  /** Whether `wipe()` has run; the bytes are no longer a password. */
+  /**
+   * Whether `wipe()` has run; the bytes are no longer a password.
+   * @internal Used by `PgConnection.dispose`, `PgConnection.scramContinue`, `PgPool.connect` and `PgPool.dispose` in this module.
+   */
   gone: boolean = false
 
   constructor(password: Secret<u8[]>) {
     this.bytes = secret(expose(password, pgCopyBytes))
   }
 
+  /** @internal Used by `PgConnection.dispose` and `PgPool.dispose` in this module. */
   wipe(): void {
     wipe(this.bytes)
     this.gone = true
   }
 
+  /** @internal Used by `PgConnection.passwordWiped` and `PgPool.passwordWiped` in this module. */
   wiped(): boolean {
     return expose(this.bytes, pgAllZero)
   }
@@ -980,9 +986,9 @@ export class PgBinaryArray {
   /** The element type's OID, 20, 21 or 23, once `begin` has read a header it accepts. */
   elementOid: i32 = 0
   /** The current element's first byte in the buffer. */
-  start: i32 = 0
+  private start: i32 = 0
   /** The current element's length: its type's size, or 0 for a NULL. */
-  length: i32 = 0
+  private length: i32 = 0
   private binary: PgBinary
   private b: u8[]
   private pos: i32 = 0
@@ -2904,15 +2910,27 @@ const PG_SLOT_DRAINING: i32 = 4
 
 /** One of a pool's connections, and the groups it has in flight. */
 class PgPoolSlot {
+  /** @internal Used by `PgPool.dispatch`, `PgPool.wanted`, `PgPool.connect`, `PgPool.next` and `PgPool.anyReady` in this module. */
   state: i32 = 0
+  /** @internal Used by `PgPool.dispatch`, `PgPool.connect`, `PgPool.connection` and `PgPool.dispose` in this module. */
   conn: PgConnection | null = null
-  /** How many registered statements this connection has queued, and how many the server has described. */
+  /**
+   * How many registered statements this connection has queued, and how many the server has described.
+   * @internal Used by `PgPool.dispatch`, `PgPool.connect` and `PgPool.next` in this module.
+   */
   queued: i32 = 0
+  /** @internal Used by `PgPool.connect` and `PgPool.next` in this module. */
   described: i32 = 0
-  /** The groups in flight, oldest first, in a ring: each one's ticket, and how many of the pool's own prepares lead it. */
+  /**
+   * The groups in flight, oldest first, in a ring: each one's ticket, and how many of the pool's own prepares lead it.
+   * @internal Used by `PgPool.next` in this module.
+   */
   readonly tickets: i32[]
+  /** @internal Used by `PgPool.next` in this module. */
   readonly leads: i32[]
+  /** @internal Used by `PgPool.connect` and `PgPool.next` in this module. */
   head: i32 = 0
+  /** @internal Used by `PgPool.inFlight`, `PgPool.send`, `PgPool.connect` and `PgPool.next` in this module. */
   count: i32 = 0
 
   constructor(ring: i32) {
@@ -2920,6 +2938,7 @@ class PgPoolSlot {
     this.leads = new Array<i32>(ring)
   }
 
+  /** @internal Used by `PgPool.dispatch` and `PgPool.next` in this module. */
   push(ticket: i32, leads: i32): void {
     const at: i32 = (this.head + this.count) % toI32(this.tickets.length)
     this.tickets[at] = ticket
@@ -2927,6 +2946,7 @@ class PgPoolSlot {
     this.count += 1
   }
 
+  /** @internal Used by `PgPool.next` in this module. */
   pop(): void {
     this.head = (this.head + 1) % toI32(this.tickets.length)
     this.count -= 1
@@ -3365,23 +3385,46 @@ export class PgBatchConfig {
 
 /** One execution's requests, grouped by key, and how far its rows have been routed. */
 class PgBatchRun {
-  /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch. */
+  /**
+   * Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch.
+   * @internal Used by `PgBatcher.take`, `PgBatcher.emit`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module.
+   */
   tags: i32[]
+  /** @internal Used by `PgBatcher.take`, `PgBatcher.emit` and `PgBatcher.nextUnsorted` in this module. */
   first: i32[]
-  /** Under `sorted` false, whether key `k` has had a row; grown by `take` with `tags`, and empty when sorted. */
+  /**
+   * Under `sorted` false, whether key `k` has had a row; grown by `take` with `tags`, and empty when sorted.
+   * @internal Used by `PgBatcher.take`, `PgBatcher.row` and `PgBatcher.nextUnsorted` in this module.
+   */
   had: boolean[]
+  /** @internal Used by `PgBatcher.row`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   keys: i32 = 0
-  /** The key rows are being read for, whether it has had one, and the next of its requests to answer. */
+  /**
+   * The key rows are being read for, whether it has had one, and the next of its requests to answer.
+   * @internal Used by `PgBatcher.row`, `PgBatcher.emit`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module.
+   */
   cur: i32 = 0
+  /** @internal Used by `PgBatcher.next` in this module. */
   curRows: boolean = false
+  /** @internal Used by `PgBatcher.emit`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   at: i32 = 0
-  /** The key whose `PG_BATCH_ROW` events are owed for the connection's current row; -1 for none. */
+  /**
+   * The key whose `PG_BATCH_ROW` events are owed for the connection's current row; -1 for none.
+   * @internal Used by `PgBatcher.quietRun`, `PgBatcher.row`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module.
+   */
   target: i32 = -1
-  /** The handle `take` gave for the run's execution, and how many takes it has had, mod `PG_BATCH_USES`. */
+  /**
+   * The handle `take` gave for the run's execution, and how many takes it has had, mod `PG_BATCH_USES`.
+   * @internal Used by `PgBatcher.take` and `PgBatcher.run` in this module.
+   */
   handle: i32 = -1
+  /** @internal Used by `PgBatcher.take` in this module. */
   uses: i32 = 0
+  /** @internal Used by `PgBatcher.take`, `PgBatcher.run`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   open: boolean = false
+  /** @internal Used by `PgBatcher.quietRun`, `PgBatcher.end`, `PgBatcher.fail`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   ended: boolean = false
+  /** @internal Used by `PgBatcher.row`, `PgBatcher.fail`, `PgBatcher.next` and `PgBatcher.nextUnsorted` in this module. */
   failed: boolean = false
 
   constructor() {
@@ -3390,7 +3433,10 @@ class PgBatchRun {
     this.had = []
   }
 
-  /** Opens the run for `keys` keys, none of whose rows have been read. */
+  /**
+   * Opens the run for `keys` keys, none of whose rows have been read.
+   * @internal Used by `PgBatcher.take` in this module.
+   */
   reset(keys: i32): void {
     this.open = true
     this.keys = keys
@@ -3471,7 +3517,10 @@ export class PgBatcher {
   refused: i32 = 0
   /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored, stopping at 2^31 - 1. */
   stray: i32 = 0
-  /** The most requests one execution takes, from `PgBatchConfig.maxRequests`. */
+  /**
+   * The most requests one execution takes, from `PgBatchConfig.maxRequests`.
+   * @internal Used by `PgCarrier.routeBatch` in std/net/postgres-carrier.ts.
+   */
   readonly maxRequests: i32
   private readonly keyType: i32
   private readonly maxBytes: i32
@@ -3556,6 +3605,7 @@ export class PgBatcher {
    * Drops the oldest waiting request and answers its tag, or -1 when none
    * waits: for a program that cannot reach the server to fail requests
    * rather than hold them.
+   * @internal Used by `PgCarrier.next` in std/net/postgres-carrier.ts.
    */
   shed(): i32 {
     if (this.count === 0) {
@@ -4120,6 +4170,7 @@ export class PgBatchClock {
   lastReason: i32 = 0
   /** How long the oldest item of the last batch waited, in microseconds. */
   lastWaitUs: i64 = 0
+  /** @internal Used by `PgBatcher.takeDue` in this module. */
   readonly maxCount: i32
   private readonly minCount: i32
   private readonly factor: f64
@@ -4312,7 +4363,7 @@ export class PgBatchTurns {
   /** The clock the turns read and record into. */
   readonly clock: PgBatchClock
   /** The number of slots. */
-  readonly size: i32
+  private readonly size: i32
   private readonly busy: boolean[]
   private running: i32 = 0
   private woken: i32 = -1

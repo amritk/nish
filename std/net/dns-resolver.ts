@@ -106,14 +106,14 @@ const DNS_L_DONE: i32 = 2
  */
 export class DnsResolver {
   config: DnsConfig
-  hosts: DnsHosts | null
+  private hosts: DnsHosts | null
   /** Each query's bytes, from offset 0: the header, the name and the question's type and class. */
   queries: u8[][]
   /** Each query's name in wire form, labels and root, as asked; and that name lowercased, the start of its chain. */
   names: u8[][]
   starts: u8[][]
   /** Each query's TCP reply as it arrives, without its two-byte length. */
-  streams: u8[][]
+  private streams: u8[][]
   /** Each query's addresses and their TTLs, once it has its answer. */
   answers: u8[][]
   answerTtls: i32[][]
@@ -123,7 +123,7 @@ export class DnsResolver {
   lookupAddresses: u8[][]
   lookupTtls: i32[][]
   reply: DnsReply
-  scratch: u8[]
+  private scratch: u8[]
   queryLength: i32[]
   nameLength: i32[]
   state: i32[]
@@ -151,10 +151,10 @@ export class DnsResolver {
   dots: i32[]
   lookupState: i32[]
   lookupResult: i32[]
-  lookupPort: i32[]
+  private lookupPort: i32[]
   maxLookups: i32 = 0
   /** Where `nextOutgoing` looks first, so no query waits behind another forever. */
-  cursor: i32 = 0
+  private cursor: i32 = 0
   /** Datagrams dropped for coming from another address or port than the server's. */
   droppedSource: i32 = 0
   /** Replies dropped for another ID. */
