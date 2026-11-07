@@ -25,9 +25,11 @@
  * flag bit is `GZIP_ERR_HEADER`; `FEXTRA`, `FNAME`, `FCOMMENT` and `FHCRC` are
  * read and skipped, the header CRC checked. A wrong CRC-32 is `GZIP_ERR_CRC`,
  * a wrong length `GZIP_ERR_SIZE`. Members may follow one another (§2.2) and
- * are decompressed one after another into the same output; anything after the
- * last member that is not another member is `GZIP_ERR_HEADER`, so trailing
- * garbage is refused, not ignored. The `limit` bounds the whole output.
+ * are decompressed one after another into the same output. Bytes after the
+ * last member are read as another member's header, so trailing garbage is
+ * refused, not ignored: two or more bytes without the `1f 8b` magic are
+ * `GZIP_ERR_HEADER`, while a single byte, or fewer than 10 that start with
+ * `1f 8b`, is `DEFLATE_ERR_TRUNCATED`. The `limit` bounds the whole output.
  *
  * **Streaming.** `GzipWriter` compresses a body that arrives in pieces and
  * `GzipReader` decompresses one: see each class.
@@ -315,7 +317,10 @@ export class GzipDecompressor {
    * @param src The array that holds the gzip data, one member or several.
    * @param off Where in `src` the first member starts.
    * @param len How many bytes the members are; every one must belong to a
-   *   member, since anything else after the last is `GZIP_ERR_HEADER`.
+   *   member. Bytes after the last are read as another member's header:
+   *   two or more without the `1f 8b` magic are `GZIP_ERR_HEADER`, and a
+   *   single byte, or fewer than 10 that start with `1f 8b`, is
+   *   `DEFLATE_ERR_TRUNCATED`; a header that parses is decoded as a member.
    * @param out The caller's array the data is written into, the members'
    *   one after another.
    * @param at Where in `out` the data starts.

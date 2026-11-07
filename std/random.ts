@@ -109,8 +109,10 @@ export class Rng {
    * A generator whose sequence `seed` decides: two made from one seed answer
    * the same numbers.
    *
-   * @param seed any `i32`, 0 and negatives included; each gives its own
-   *   sequence.
+   * @param seed any `i32`, 0 and negatives included. The walk is one cycle
+   *   of 2^32 states, so seeds are starting points on it, not separate
+   *   sequences: `seed + k * 0x9E3779B9`, wrapped, answers the same numbers as
+   *   `seed`, `k` steps later.
    */
   constructor(seed: i32) {
     this.state = seed

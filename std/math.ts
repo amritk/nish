@@ -357,7 +357,7 @@ const kernelTan = (x0: f64, y0: f64, odd: boolean): f64 => {
  *
  * @param x The angle, in radians.
  * @returns The tangent of `x`; NaN for a NaN or an infinite `x`, and `x`
- *   itself for a zero, its sign kept.
+ *   itself when `|x| < 2^-27`, a zero's sign kept.
  */
 export const tanF64 = (x: f64): f64 => {
   const ax: f64 = Math.abs(x)

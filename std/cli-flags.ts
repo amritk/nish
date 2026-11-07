@@ -292,7 +292,8 @@ export class FlagTable {
    * A string flag: `--name value` or `--name=value`, once.
    *
    * @param name what follows `--`, such as `"output"`; panics on a name no
-   *   command line could match or one already declared
+   *   command line could match, one already declared, or a `no-x` beside a
+   *   declared boolean `x`
    * @param meta the placeholder the help row and the missing-value message
    *   show, such as `"<file>"`; when empty the message says "a value"
    * @param description the flag's line in the `Flags` help section
@@ -307,7 +308,8 @@ export class FlagTable {
    * usage errors.
    *
    * @param name what follows `--`, such as `"jobs"`; panics on a name no
-   *   command line could match or one already declared
+   *   command line could match, one already declared, or a `no-x` beside a
+   *   declared boolean `x`
    * @param meta the placeholder the help row and the missing-value message
    *   show, such as `"<n>"`; when empty the message says "a value"
    * @param description the flag's line in the `Flags` help section
@@ -320,8 +322,9 @@ export class FlagTable {
    * A boolean flag: `--name` sets it, `--no-name` clears it, once.
    *
    * @param name what follows `--`, such as `"verbose"`; panics on a name no
-   *   command line could match, one already declared, or one whose `no-`
-   *   form is itself a declared flag
+   *   command line could match, one already declared, one whose `no-`
+   *   form is itself a declared flag, or a `no-x` beside a declared boolean
+   *   `x`
    * @param description the flag's line in the `Flags` help section
    */
   boolean(name: string, description: string): void {
@@ -332,7 +335,8 @@ export class FlagTable {
    * A flag given any number of times, each with a value.
    *
    * @param name what follows `--`, such as `"include"`; panics on a name no
-   *   command line could match or one already declared
+   *   command line could match, one already declared, or a `no-x` beside a
+   *   declared boolean `x`
    * @param meta the placeholder the help row and the missing-value message
    *   show, such as `"<dir>"`; when empty the message says "a value"
    * @param description the flag's line in the `Flags` help section

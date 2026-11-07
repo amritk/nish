@@ -1697,11 +1697,11 @@ unsafe call 89:24 wrappingSub (node 177)
 unsafe call 89:49 wrappingAdd (node 183)
 unsafe call 96:7 wrappingMul (node 219)
 unsafe call 98:7 wrappingMul (node 237)
-unsafe call 127:18 wrappingAdd (node 288)
-unsafe call 167:23 wrappingAdd (node 385)
-unsafe call 167:35 wrappingSub (node 389)
-unsafe call 172:36 wrappingSub (node 418)
-unsafe call 177:12 wrappingAdd (node 453)
+unsafe call 129:18 wrappingAdd (node 288)
+unsafe call 169:23 wrappingAdd (node 385)
+unsafe call 169:35 wrappingSub (node 389)
+unsafe call 174:36 wrappingSub (node 418)
+unsafe call 179:12 wrappingAdd (node 453)
 const GOLDEN: i32 = -1640531527
 const MIX_1: i32 = -2048144789
 const MIX_2: i32 = -1028477387

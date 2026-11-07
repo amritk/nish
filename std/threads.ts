@@ -853,6 +853,9 @@ export class Channel<T> {
    * What `for (const x of ch)` asks for under Node: a walk that takes each
    * value as it reaches it, so a second loop over the channel finds it empty,
    * as it does natively.
+   *
+   * @returns A fresh walk over this channel; each step takes a value, and
+   *   the walk ends at the first step that finds none waiting.
    */
   [Symbol.iterator](): ChannelWalk<T> {
     return new ChannelWalk<T>(this)

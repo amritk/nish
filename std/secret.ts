@@ -95,7 +95,8 @@ export const exposeWith = <T, A, R>(s: Secret<T>, arg: A, f: (value: T, arg: A) 
  * (`src/emit-secret.ts`); this one is never emitted.
  *
  * @param _target what to zero: a `Secret`, never a nullable one (narrow it
- *   first), or an array or record of integers.
+ *   first), or an array or record of integers that `expose`'s function
+ *   holds.
  */
 export const wipe = <T>(_target: T): void => {
   // Lowered by the compiler: see above.

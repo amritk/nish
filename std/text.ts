@@ -130,7 +130,8 @@ export const splitWhitespace = (text: string): string[] => {
 /**
  * `text` without its leading blank bytes.
  *
- * @param text The text to trim; the blanks are space, tab, newline and carriage return.
+ * @param text The text to trim; the blanks are space, tab, newline and
+ *   carriage return.
  * @returns `text` from its first non-blank byte on, or `""` when it is all
  *   blank.
  */
@@ -146,7 +147,8 @@ export const trimStart = (text: string): string => {
 /**
  * `text` without its trailing blank bytes.
  *
- * @param text The text to trim; the blanks are space, tab, newline and carriage return.
+ * @param text The text to trim; the blanks are space, tab, newline and
+ *   carriage return.
  * @returns `text` up to and including its last non-blank byte, or `""` when it
  *   is all blank.
  */
@@ -161,7 +163,8 @@ export const trimEnd = (text: string): string => {
 /**
  * `text` without blank bytes at either end.
  *
- * @param text The text to trim; the blanks are space, tab, newline and carriage return.
+ * @param text The text to trim; the blanks are space, tab, newline and
+ *   carriage return.
  * @returns `text` from its first non-blank byte to its last, or `""` when it is
  *   all blank.
  */

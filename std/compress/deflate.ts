@@ -15,7 +15,7 @@
  * windows, `src[off .. off + len)` in and `out[at ..)` out, and answer where
  * the output ends. Everything a call needs — the match finder's hash chains,
  * the block's symbols, the Huffman scratch, the decoder's tables — is
- * allocated by the constructor, about 330 KB for a `Deflater` and 27 KB for an
+ * allocated by the constructor, about 330 KB for a `Deflater` and 28 KB for an
  * `Inflater`, so build one per thread and reuse it: a call allocates nothing.
  * The free functions `deflateCompress` and `deflateDecompress` build one for
  * a single call, for a program that compresses once.
@@ -2022,9 +2022,12 @@ export class Inflater {
   /** Bits read but not consumed, low bit first, and how many. */
   private bitBuf: u64
   private bitCount: i32
-  /** @internal Used by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts). Where the last `inflate` stopped in its input and its output. */
+  /**
+   * Where the last `inflate` stopped in its input: the first byte it did not
+   * use, or after `INFLATE_DONE` the first byte after the final block.
+   */
   inPos: i32
-  /** @internal Used by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts). */
+  /** Where the last `inflate` stopped in its output: one past the last byte it wrote. */
   outPos: i32
   /** The input bytes the last `decompress` read, its final block included. */
   consumed: i32
@@ -2087,7 +2090,12 @@ export class Inflater {
     }
   }
 
-  /** @internal Called by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts). Starts a new stream: the next `inflate` reads a first block header. */
+  /**
+   * Starts a new stream: the next `inflate` reads a first block header and
+   * whatever the last stream left in the bit buffer is dropped. A new
+   * `Inflater` is already at the start, and `decompress` resets itself;
+   * call this before reusing one for another stream through `inflate`.
+   */
   reset(): void {
     this.state = INF_S_BLOCK
     this.last = false
@@ -2568,16 +2576,30 @@ export class Inflater {
   }
 
   /**
-   * @internal Called by `GzipDecompressor`, `GzipReader` (std/compress/gzip.ts) and `ZlibDecompressor` (std/compress/zlib.ts).
    * Decodes from `src[ip .. inEnd)` into `out[op .. outEnd)`, resuming where
-   * the last call stopped; a match may reach back to `histStart`. `more`
-   * says whether input may follow `inEnd`: with it, running out is
-   * `INFLATE_NEED_INPUT` (every byte up to `inPos` is used, and the bit
-   * buffer keeps what it read ahead), without it `DEFLATE_ERR_TRUNCATED`.
-   * Answers `INFLATE_DONE` once the final block has ended, with `inPos` the
-   * first byte after it; `INFLATE_NEED_OUTPUT` when the next symbol does not
-   * fit; or a negative `DEFLATE_ERR_*`. `inPos` and `outPos` say where it
-   * stopped. Windows outside their arrays panic.
+   * the last call stopped: the resumable step under `decompress`, for a
+   * stream that arrives in pieces or an output buffer that is drained
+   * between calls. `GzipDecompressor`, `GzipReader` and `ZlibDecompressor`
+   * are built on it. `inPos` and `outPos` say where it stopped. Windows
+   * outside their arrays panic. Allocates nothing.
+   *
+   * @param src The array that holds the compressed input.
+   * @param ip Where in `src` this call's input starts; the bytes before it
+   *   that an earlier call read ahead are in the bit buffer, not re-read.
+   * @param inEnd One past this call's last input byte.
+   * @param more Whether input may follow `inEnd`: with it, running out is
+   *   `INFLATE_NEED_INPUT` (every byte up to `inPos` is used, and the bit
+   *   buffer keeps what it read ahead), without it `DEFLATE_ERR_TRUNCATED`.
+   * @param out The array the decoded bytes are written into.
+   * @param op Where in `out` this call writes first.
+   * @param outEnd One past the last byte of `out` this call may write.
+   * @param histStart The earliest byte of `out` a match may copy from; the
+   *   bytes from it to `op` must be the stream's earlier output, up to the
+   *   32 KB window.
+   * @returns `INFLATE_DONE` once the final block has ended, with `inPos` the
+   *   first byte after it; `INFLATE_NEED_INPUT` when the input ran out with
+   *   `more`; `INFLATE_NEED_OUTPUT` when the next symbol does not fit before
+   *   `outEnd`; or a negative `DEFLATE_ERR_*` for a malformed stream.
    */
   inflate(
     src: u8[],

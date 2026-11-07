@@ -50,8 +50,9 @@
  * `PASS  <name>`, `FAIL  <name>` with an indented detail line,
  * `SKIP  <name> (<reason>)`, and a summary that ends
  * `N passed, M failed, K skipped` — so a Nish test program reads like the rest
- * of the suite and a skip is counted rather than merely mentioned. A green run that skipped half its checks should
- * look different from one that proved everything.
+ * of the suite and a skip is counted rather than merely mentioned. A green run
+ * that skipped half its checks should look different from one that proved
+ * everything.
  *
  * **The widths are spelled explicitly** (`i32`, `i64`, `f64`) rather than as
  * `number`, so the module means the same thing under `--number-mode f64` as it
@@ -293,7 +294,8 @@ export class Suite {
    * @param actual the value the program computed.
    * @param expected the value it should be.
    * @param tolerance the largest difference that still passes, inclusive. A
-   *   `NaN` on either side fails whatever it is.
+   *   `NaN` on either side fails whatever it is, and so do two equal
+   *   infinities, since their difference is `NaN`.
    * @returns whether the check passed, so the caller can stop before a read
    *   that depends on it.
    */
