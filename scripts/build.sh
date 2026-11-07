@@ -785,6 +785,16 @@ case "$profile" in
         *.ll) if grep -q '@nish_round_init' "$i"; then round_wanted=1; fi ;;
       esac
     done
+    # Under wasm-host a panic site is the page's `nish.panic` import, which
+    # runtime-wasm.c makes the call to: IR with a tagged site links it, or the
+    # panic would stay the silent trap of an undefined weak stub.
+    if [ "$profile" = wasm-host ] && [ "$wasm_named" = 0 ] && [ "$round_wanted" = 0 ]; then
+      for i in ${inputs[@]+"${inputs[@]}"}; do
+        case "$i" in
+          *.ll) if grep -q ', !nish.site !{i32 ' "$i"; then round_wanted=1; fi ;;
+        esac
+      done
+    fi
     if [ "$round_wanted" = 1 ] && [ "$wasm_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-wasm.c")
     fi

@@ -1155,7 +1155,7 @@ const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entr
       args.push(`a${i + 1}`)
       passed.push(`win().${window}`)
       passed.push(
-        `(a${i} >>> ${windowShift(window)}) + ${hostArgument(table, sig.paramTypes[i + 1], `a${i + 1}`)}`
+        `(a${i} >>> ${windowShift(window)}) + (${hostArgument(table, sig.paramTypes[i + 1], `a${i + 1}`)})`
       )
       i = i + 2
       continue
