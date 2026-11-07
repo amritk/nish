@@ -40,6 +40,8 @@ Your modules are under std/crypto/ or std/net/, so docs/security/README.md appli
 - Put each `@internal` inside the JSDoc directly above the member it describes.
 - **A doc anywhere can make a member API.** Before you mark a member `private` or `@internal`, read its class doc and every doc that mentions it. A member is API, and stays public and untagged, if a class doc lists it as readable or settable ("The fields are readable: ..."), if another member's doc points the caller at it ("the peer's address is in `peer`"), or if a doc gives the caller a duty to call it ("the caller's to wipe", "a carrier still calls `wipeResumption`"). Waves 1 and 2 hid ten such members across four PRs. If you decide a member is not API, change the doc that says it is, in the same commit.
 - **Re-check every sentence you rewrite.** A sentence rewritten to fix one review finding must still be true for every code path that touches what it describes. Rewritten sentences produced new defects in three rounds.
+- **"Used by the tests" means API, not internal.** A member a test program (tests/link, tests/cases, tests/nish) reads, sets or calls directly is public, untagged and documented, even when no user would. Five PRs tagged such members `@internal` with a "used by the tests" note; every one went back.
+- **Say whether a returned object is shared.** If a method returns an object the class keeps and updates, say so ("the controller's live object"); never call it a snapshot or a copy unless it is one.
 - Write each `@internal` on its own line, or as the first thing in a one-line comment, never after description text on the same line.
 
 ## Definition of done
