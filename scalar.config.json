@@ -135,5 +135,8 @@
         }
       }
     }
+  },
+  "siteConfig": {
+    "isPrivate": true
   }
 }
