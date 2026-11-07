@@ -483,9 +483,20 @@ const consumer = (
     waited = waited + (tried - first)
     // The head is what respond adds: the output may still hold the last
     // message's tail.
-    const queued: i32 = conn.outputEnd - conn.outputStart
-    if (conn.respond(200, names, values, len) !== 0) {
-      fail(name, prod, read, `respond answered short on ${i}`)
+    let queued: i32 = conn.outputEnd - conn.outputStart
+    let head: i32 = conn.respond(200, names, values, len)
+    // No room for the head behind that tail yet: send it, then answer.
+    const stalled: i64 = monotonicNanos()
+    while (head === H1_AGAIN) {
+      if (monotonicNanos() - stalled > DEADLINE_NS) {
+        fail(name, prod, read, `respond found no room on ${i}`)
+      }
+      drain(server, conn, name, prod, read)
+      queued = conn.outputEnd - conn.outputStart
+      head = conn.respond(200, names, values, len)
+    }
+    if (head !== 0) {
+      fail(name, prod, read, `respond answered ${head} on ${i}`)
     }
     sent = sent + toI64(conn.outputEnd - conn.outputStart - queued)
     bodies = bodies + toI64(len)
