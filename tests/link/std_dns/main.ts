@@ -261,14 +261,26 @@ class Server {
   }
 }
 
+/** How many UDP ports `serverOpen` draws before it gives up on one free over TCP too. */
+const PORT_TRIES: i32 = 32
+
 /** Binds the server's sockets and watches them on `loop`: 0, or the first failure. */
 const serverOpen = (s: Server, loop: i32): i32 => {
-  s.udp = udpBind("127.0.0.1", 0, 0)
-  if (s.udp < 0) {
-    return s.udp
+  // The kernel picks a port free for UDP only: another test on the shard can
+  // hold the same number over TCP (-98, EADDRINUSE), so draw another.
+  let tries: i32 = 0
+  while (s.listener < 0 && tries < PORT_TRIES) {
+    if (s.udp >= 0) {
+      netClose(s.udp)
+    }
+    s.udp = udpBind("127.0.0.1", 0, 0)
+    if (s.udp < 0) {
+      return s.udp
+    }
+    s.port = netLocalPort(s.udp)
+    s.listener = tcpListen("127.0.0.1", s.port, 8)
+    tries += 1
   }
-  s.port = netLocalPort(s.udp)
-  s.listener = tcpListen("127.0.0.1", s.port, 8)
   s.spoofer = udpBind("127.0.0.1", 0, 0)
   s.dead = udpBind("127.0.0.1", 0, 0)
   if (s.listener < 0 || s.spoofer < 0 || s.dead < 0) {
