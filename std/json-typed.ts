@@ -817,8 +817,9 @@ export class JsonDecoder {
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
    * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
-   * with the tokenizer's code when the input is malformed, and `xs` is answered
-   * untouched.
+   * with the tokenizer's code when the input is malformed. A value that is not
+   * an array leaves `xs` untouched; a failure inside the array leaves its
+   * contents unspecified.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -848,8 +849,9 @@ export class JsonDecoder {
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
    * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
-   * with the tokenizer's code when the input is malformed, and `xs` is answered
-   * untouched.
+   * with the tokenizer's code when the input is malformed. A value that is not
+   * an array leaves `xs` untouched; a failure inside the array leaves its
+   * contents unspecified.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -879,8 +881,9 @@ export class JsonDecoder {
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
    * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
-   * with the tokenizer's code when the input is malformed, and `xs` is answered
-   * untouched.
+   * with the tokenizer's code when the input is malformed. A value that is not
+   * an array leaves `xs` untouched; a failure inside the array leaves its
+   * contents unspecified.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -910,8 +913,9 @@ export class JsonDecoder {
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
    * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
-   * with the tokenizer's code when the input is malformed, and `xs` is answered
-   * untouched.
+   * with the tokenizer's code when the input is malformed. A value that is not
+   * an array leaves `xs` untouched; a failure inside the array leaves its
+   * contents unspecified.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -941,8 +945,9 @@ export class JsonDecoder {
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
    * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
-   * with the tokenizer's code when the input is malformed, and `xs` is answered
-   * untouched.
+   * with the tokenizer's code when the input is malformed. A value that is not
+   * an array leaves `xs` untouched; a failure inside the array leaves its
+   * contents unspecified.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -972,8 +977,9 @@ export class JsonDecoder {
    * each one overwrites the slot `xs` already has or is pushed past its end,
    * and the slots left over are popped, so an array no longer than `xs`
    * allocates nothing. Anything but an array fails with `JSON_DECODE_TYPE`, or
-   * with the tokenizer's code when the input is malformed, and `xs` is answered
-   * untouched.
+   * with the tokenizer's code when the input is malformed. A value that is not
+   * an array leaves `xs` untouched; a failure inside the array leaves its
+   * contents unspecified.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -1005,8 +1011,9 @@ export class JsonDecoder {
    * nothing. Only the container is reused: an element keeps the string its
    * slot held when the text is equal, as `string` does, and is otherwise a new
    * string. Anything but an array fails with `JSON_DECODE_TYPE`, or
-   * with the tokenizer's code when the input is malformed, and `xs` is answered
-   * untouched.
+   * with the tokenizer's code when the input is malformed. A value that is not
+   * an array leaves `xs` untouched; a failure inside the array leaves its
+   * contents unspecified.
    *
    * @param xs - the array to decode into, which is reused, not copied.
    * @returns `xs` itself, holding the decoded elements.
@@ -1194,6 +1201,11 @@ export const jsonEncode = <T>(_w: JsonWriter, _value: T): void => {
 // encodes, which may not be this one.
 
 /**
+ * Writes `s` as `w.string` does, or `null` when `s` is `null`.
+ *
+ * @param w - the writer to write to.
+ * @param s - the string to write, or `null`.
+ *
  * @internal Called by name by the code the compiler writes for `jsonEncode`,
  *   src/json-typed.ts `jsonEncodeHelper`.
  */
