@@ -6,7 +6,10 @@
 //      for (a), and one a core for (b), as a prefork server would (a
 //      scope's task cannot read the clock, so (b) is processes);
 //   c  `nish/crypto/bcrypt-batch` at `bcryptCalibrate()`'s width over
-//      `cores` tasks, holding a part batch up to `hold` microseconds.
+//      `cores` tasks, holding a part batch up to `hold` microseconds, for
+//      the logins i with i % workers === worker: the harness runs one
+//      process over every core for (c), and one a core with `cores` 1 for
+//      (d), a prefork server whose every process batches its own logins.
 // A login that has arrived while its server is busy waits; an idle server
 // spins on the clock until its next login arrives. It prints `done` and the
 // clock when its last answer was made, then `i ns` for each login it
@@ -73,9 +76,24 @@ const direct = (arrive: i64[], start: i64, hash: string, worker: i32, workers: i
   return refused
 }
 
-/** Mode c: queue each login as it arrives and run the batcher whenever a batch is due; the refused count. */
-const batched = (arrive: i64[], start: i64, hash: string, b: BcryptBatcher): i32 => {
-  const n: i32 = toI32(arrive.length)
+/**
+ * Modes c and d: queue each of this worker's logins as it arrives and run the
+ * batcher whenever a batch is due; the refused count. A ticket is the login's
+ * index among this worker's, `mine[ticket]` its index in the schedule.
+ */
+const batched = (
+  arrive: i64[],
+  start: i64,
+  hash: string,
+  b: BcryptBatcher,
+  worker: i32,
+  workers: i32
+): i32 => {
+  const mine: i32[] = []
+  for (let i: i32 = worker; i >= 0 && i < arrive.length; i += workers) {
+    mine.push(i)
+  }
+  const n: i32 = toI32(mine.length)
   const lat: i64[] = new Array<i64>(n)
   let queued: i32 = 0
   let answered: i32 = 0
@@ -84,9 +102,13 @@ const batched = (arrive: i64[], start: i64, hash: string, b: BcryptBatcher): i32
   spinUntil(start)
   while (answered < n) {
     const now: i64 = monotonicNanos()
-    while (queued >= 0 && queued < arrive.length && start + arrive[queued] <= now) {
+    while (queued >= 0 && queued < mine.length && mine[queued] >= 0 && mine[queued] < arrive.length) {
+      const at: i64 = start + arrive[mine[queued]]
+      if (at > now) {
+        break
+      }
       const pw: Secret<u8[]> = sent()
-      b.verify(pw, hash, start + arrive[queued])
+      b.verify(pw, hash, at)
       wipe(pw)
       queued++
     }
@@ -97,17 +119,17 @@ const batched = (arrive: i64[], start: i64, hash: string, b: BcryptBatcher): i32
         if (!a.ok) {
           refused++
         }
-        const i: i32 = a.ticket
-        if (i >= 0 && i < lat.length && i < arrive.length) {
-          lat[i] = last - (start + arrive[i])
+        const k: i32 = a.ticket
+        if (k >= 0 && k < lat.length && k < mine.length && mine[k] >= 0 && mine[k] < arrive.length) {
+          lat[k] = last - (start + arrive[mine[k]])
         }
         answered++
       }
     }
   }
   const lines: string[] = []
-  for (let i: i32 = 0; i < lat.length; i++) {
-    lines.push(`${i} ${lat[i]}`)
+  for (let k: i32 = 0; k < lat.length && k < mine.length; k++) {
+    lines.push(`${mine[k]} ${lat[k]}`)
   }
   console.log(`done ${last}`)
   console.log(lines.join("\n"))
@@ -152,5 +174,7 @@ export const main = (): i32 => {
     console.log(b.error)
     return 1
   }
-  return batched(arrive, start, hash, b.value) === 0 ? 0 : 1
+  return batched(arrive, start, hash, b.value, parseInt(process.argv[9]), parseInt(process.argv[10])) === 0
+    ? 0
+    : 1
 }

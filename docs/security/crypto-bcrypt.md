@@ -716,8 +716,8 @@ Logins a second are level at all three rates, since each server keeps up
 with the arrivals. The cause is that `run` blocks its thread until every
 share of the run has finished. A login that arrives during a run waits for
 that run to end, about one hash, while (b)'s other processes are idle and
-take it at once. The batcher does not overlap one run with the next; that
-is where it could still gain at light load.
+take it at once. The batcher does not overlap one run with the next; a
+batcher per process does, which is (d) below.
 
 **At saturation it scales less than (b).** From one core to four, (b) goes
 from 16.9 to 66.7 logins a second, 3.9 times. The batcher goes from 46 to
@@ -730,6 +730,76 @@ light load it adds the hold to p50: 63.7 against 59.0 ms on one core at 5/s,
 and 65.0 against 60.0 on four cores at 10/s. Under load the batches fill
 without it, from the logins that arrive during a run. A hold of 0 is the
 default to start from.
+
+#### One batcher per process
+
+Mode (d) is (b)'s prefork server with a
+batcher in every process: one process a core, the logins dealt round-robin,
+each process a batcher at `bcryptCalibrate()`'s width with `cores` 1 and a
+hold of 0 (`node bench/crypto/bcrypt/batcher.mjs --rounds 3`). Each run is
+one share on its process's own thread, and the processes' runs overlap: a
+login that arrives while one process is running goes to another, as in (b),
+and the logins that arrive at a busy process fill its next batch, as in
+(c). It needs no change to the batcher or the thread surface; overlapping
+runs inside one process would need a task that outlives its `run`, which
+the thread surface declines ([wp29](https://github.com/amritk/nish/blob/main/docs/wp29-thread-surface.md) §4.2, §9).
+
+The run below is a different VM from the tables above, `Intel(R) Xeon(R)
+Processor @ 2.10GHz`, 4 vCPUs, three rounds after a warm-up; its (c) is not
+the same as the table above's (in a burst 223 logins a second against 155),
+so compare (d) only with the (b) and (c) of this run. The noise band, (b)
+against (b′): at most 2% in logins a second, 4% at p50 (83.5 against 80.1
+ms at 60/s) and 11% at p99 (198.5 against 178.4 ms at 60/s). Four cores:
+
+| arrivals/s | logins | mode | logins/s | p50 ms | p99 ms |
+| ---: | ---: | --- | ---: | ---: | ---: |
+| 10 | 60 | (b) | 8.8 (8.8–8.8) [8.8] | 58.6 (58.3–64.5) [58.3] | 73.2 (66.0–101.1) [66.0] |
+| 10 | 60 | (b′) twin | 8.8 (8.8–8.8) [8.8] | 58.2 (58.2–64.4) [58.2] | 68.3 (66.7–74.6) [66.7] |
+| 10 | 60 | (c) hold 0 | 8.8 (8.8–8.8) [8.8] | 60.7 (59.3–66.3) [59.3] | 120.5 (113.2–130.6) [113.2] |
+| 10 | 60 | (d) hold 0 | 8.8 (8.8–8.8) [8.8] | 60.1 (58.1–60.8) [58.1] | 66.7 (65.5–73.8) [65.5] |
+| 30 | 180 | (b) | 32.1 (32.1–32.1) [32.1] | 58.4 (58.3–59.8) [58.3] | 84.9 (79.3–87.4) [79.3] |
+| 30 | 180 | (b′) twin | 32.1 (32.1–32.1) [32.1] | 58.6 (58.1–58.6) [58.1] | 82.6 (82.4–85.3) [82.4] |
+| 30 | 180 | (c) hold 0 | 31.9 (31.8–31.9) [31.9] | 86.6 (84.7–91.4) [84.7] | 127.5 (124.3–145.1) [124.3] |
+| 30 | 180 | (d) hold 0 | 32.1 (32.1–32.1) [32.1] | 58.5 (58.4–58.5) [58.4] | 85.1 (78.6–85.8) [78.6] |
+| 60 | 240 | (b) | 60.1 (59.9–60.1) [60.1] | 83.5 (78.5–88.2) [78.5] | 198.5 (176.4–203.1) [176.4] |
+| 60 | 240 | (b′) twin | 60.1 (60.1–60.2) [60.2] | 80.1 (75.8–80.1) [75.8] | 178.4 (175.5–182.7) [175.5] |
+| 60 | 240 | (c) hold 0 | 59.6 (59.5–59.6) [59.6] | 94.8 (93.6–101.0) [93.6] | 139.4 (132.4–147.6) [132.4] |
+| 60 | 240 | (d) hold 0 | 60.1 (60.1–60.1) [60.1] | 68.7 (64.4–69.4) [64.4] | 123.1 (120.2–123.2) [120.2] |
+| 120 | 240 | (b) | 66.5 (66.5–67.8) [67.8] | 921.2 (902.2–943.2) [902.2] | 1849.4 (1806.8–1861.2) [1806.8] |
+| 120 | 240 | (b′) twin | 67.8 (66.8–68.3) [68.3] | 910.7 (884.3–923.9) [884.3] | 1805.0 (1775.3–1854.9) [1775.3] |
+| 120 | 240 | (c) hold 0 | 131.5 (129.2–132.4) [132.4] | 116.0 (115.9–120.0) [115.9] | 157.1 (154.3–157.5) [154.3] |
+| 120 | 240 | (d) hold 0 | 130.7 (130.0–131.3) [131.3] | 100.3 (100.2–102.7) [100.2] | 142.6 (139.9–144.5) [139.9] |
+| 240 | 240 | (b) | 67.2 (66.5–67.6) [67.6] | 1238.1 (1234.8–1276.4) [1234.8] | 2575.9 (2566.8–2616.6) [2566.8] |
+| 240 | 240 | (b′) twin | 67.0 (65.0–67.9) [67.9] | 1238.9 (1229.8–1278.1) [1229.8] | 2588.3 (2558.1–2666.8) [2558.1] |
+| 240 | 240 | (c) hold 0 | 193.2 (185.8–198.8) [198.8] | 174.7 (173.5–235.3) [173.5] | 350.8 (284.6–377.6) [284.6] |
+| 240 | 240 | (d) hold 0 | 196.7 (195.2–204.2) [204.2] | 140.8 (135.8–158.6) [135.8] | 294.8 (236.7–324.1) [236.7] |
+| burst | 96 | (b) | 67.3 (66.6–68.0) [68.0] | 715.1 (714.3–717.2) [714.3] | 1427.1 (1411.6–1441.1) [1411.6] |
+| burst | 96 | (b′) twin | 67.1 (66.2–67.7) [67.7] | 723.3 (713.1–751.3) [713.1] | 1431.0 (1418.8–1449.7) [1418.8] |
+| burst | 96 | (c) hold 0 | 223.2 (211.8–251.8) [251.8] | 192.3 (187.0–234.2) [187.0] | 430.0 (381.2–453.4) [381.2] |
+| burst | 96 | (d) hold 0 | 246.2 (221.0–250.5) [250.5] | 199.3 (190.7–249.3) [190.7] | 389.9 (383.3–434.4) [383.3] |
+
+At every rate (d) is level with or better than the better of (b) and (c):
+
+- at 10 and 30/s it is level with (b) at p50 and p99, where (c) loses to
+  (b): p99 66.7 ms against (c)'s 120.5 at 10/s, p50 58.5 against 86.6 and
+  p99 85.1 against 127.5 at 30/s;
+- at 60/s it beats both: p50 68.7 ms against (b)'s 83.5 and (c)'s 94.8,
+  p99 123.1 against 198.5 and 139.4. (b) has started to queue behind busy
+  processes there and (d) batches what queues;
+- at 120 and 240/s it answers as many logins a second as (c), level, about
+  twice (b), with p50 lower: 100.3 ms against 116.0 at 120/s and 140.8
+  against 174.7 at 240/s. Its p99 is level with (c)'s at 120/s (142.6
+  against 157.1, inside the band) and lower at 240/s, 294.8 against 350.8;
+- in a burst it answers 246 logins a second against (c)'s 223, 10% more,
+  with p50 and p99 level.
+
+Round-robin dealing favours (d) as it favours (b). `SO_REUSEPORT`, which
+`nish/net/prefork` listens with, spreads connections by a hash of their
+addresses, so it can give a busy process a login while another is idle,
+and that login then waits as in (c). Nothing here measures that.
+
+On one core (d) is (c) with `cores` 1, which the one-core table above
+already times as (c).
 
 ### BMI2 and x86-64-v3: measured, not built
 

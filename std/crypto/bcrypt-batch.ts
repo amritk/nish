@@ -42,6 +42,14 @@
  * password-hashing guide describes for a scope on the event loop's thread;
  * give the batcher a thread of its own to avoid it.
  *
+ * **On several cores, a batcher per process.** One batcher over every core
+ * cannot start a run while one is going, so at light load a login waits for
+ * the run in progress while cores sit idle. A prefork server with one process
+ * a core, each with a batcher of `cores: 1`, overlaps the processes' runs:
+ * measured, it matched a plain process per core at light load and one
+ * batcher over every core under load (docs/security/crypto-bcrypt.md, "One
+ * batcher per process").
+ *
  * **The batcher keeps its own copy of each password.** `verify` and `hash`
  * borrow the caller's `Secret<u8[]>`, as any function taking one does: they
  * copy it, inside `exposeWith`, into a holder of the batcher's own (a class
