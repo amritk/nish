@@ -138,7 +138,7 @@ class QuicCidEntry
 
 | Member | |
 | --- | --- |
-| `new QuicCidEntry()` |  |
+| `new QuicCidEntry()` | Makes an unused slot, with room for the longest connection ID and its reset token. |
 | `announced: boolean` | For a local ID: whether a NEW_CONNECTION_ID frame announced it yet. Sequence 0 needs none. |
 | `cid: u8[]` |  |
 | `hasToken: boolean` |  |

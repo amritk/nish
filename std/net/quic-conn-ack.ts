@@ -51,6 +51,10 @@ export class QuicAckRanges {
   /** Whether an ack-eliciting packet arrived since the last `pushAck`. */
   ackPending: boolean = false
 
+  /**
+   * Makes an empty set, nothing received yet, with room for
+   * `QUIC_ACK_MAX_RANGES` ranges.
+   */
   constructor() {
     this.ranges = new Array<i64>(QUIC_ACK_MAX_RANGES * 2)
   }

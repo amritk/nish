@@ -518,6 +518,10 @@ export class QuicRecovery {
   /** Whether the handshake is confirmed (RFC 9001 §4.1.2), which the caller sets: the peer's max_ack_delay then bounds its ACK delays, and the Application Data space has a probe timeout. */
   handshakeConfirmed: boolean = false
 
+  /**
+   * Makes the state a new connection has, as `reset` leaves it: every space
+   * empty, the RTT estimate and the window at their initial values.
+   */
   constructor() {
     this.spaces = [
       new QuicSentPackets(QUIC_RECOVERY_HANDSHAKE_CAPACITY),

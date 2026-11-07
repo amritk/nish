@@ -372,7 +372,7 @@ class DnsConfig
 
 | Member | |
 | --- | --- |
-| `new DnsConfig()` |  |
+| `new DnsConfig()` | Makes an empty configuration with no servers or search domains, and `ndots`, `timeout` and `attempts` at resolv.conf's defaults (1, 5 seconds, 2). |
 | `attempts: i32` | Rounds through the servers before giving up, 1 to `DNS_MAX_ATTEMPTS`. |
 | `droppedSearch: i32` | Search domains past `DNS_MAX_SEARCH` or `DNS_MAX_SEARCH_BYTES`, or empty (a bare `.`), read and not kept. |
 | `droppedServers: i32` | Nameserver lines past `DNS_MAX_SERVERS`, read and not kept. |
@@ -396,7 +396,7 @@ class DnsHosts
 
 | Member | |
 | --- | --- |
-| `new DnsHosts()` |  |
+| `new DnsHosts()` | Makes an empty table, sized for `DNS_HOSTS_MAX_ENTRIES` addresses and `DNS_HOSTS_MAX_NAMES` names, for `dnsParseHosts` to fill. |
 | `droppedEntries: i32` | Lines with an address word and a name past the first `DNS_HOSTS_MAX_ENTRIES` entries, read and not kept; their address is not parsed. |
 | `droppedNames: i32` | Names past a cap, or longer than `DNS_HOSTS_MAX_NAME`, read and not kept. |
 | `entryCount: i32` | How many entries, each an address and its names, are kept, 0 to `DNS_HOSTS_MAX_ENTRIES`. |

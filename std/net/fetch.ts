@@ -167,7 +167,13 @@ const HTTP_CLIENT_WRITABLE: i32 = 2
 /** The size of the client random and of each ephemeral private key a TLS handshake draws. */
 const HTTP_CLIENT_TLS_KEY_BYTES: i32 = 32
 
-/** A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout", ... */
+/**
+ * A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout",
+ * ... A fetch's `errorText` starts with it.
+ *
+ * @param code An `HTTP_E_*` code, such as a client's `error`.
+ * @returns The code's name, "none" for `HTTP_E_NONE`, or "unknown" for a number that is no code.
+ */
 export const httpErrorName = (code: i32): string => {
   // Indexed by code: the order of the HTTP_E_* constants above.
   const names: string[] = [
@@ -1454,6 +1460,10 @@ export class FetchSyncClient {
  * One fetch on a client of its own, closed once the body has been read or
  * the fetch failed. Null on a failure, with no way to say why: a program
  * that reports its errors fetches through a `FetchSyncClient`.
+ *
+ * @param req The request to send, as a `FetchSyncClient` takes it.
+ * @param options The client's limits, timeouts, TLS trust and proxies for this one fetch.
+ * @returns The response, the last one when redirects were followed, or null on any failure.
  */
 export const fetchSync = (req: HttpRequest, options: HttpOptions): HttpResponse | null => {
   const client: FetchSyncClient = new FetchSyncClient(options)
@@ -1468,6 +1478,11 @@ export const fetchSync = (req: HttpRequest, options: HttpOptions): HttpResponse 
 /**
  * A proxy variable's value: `lower` when it is set and not empty, else
  * `upper` when `upperAllowed`, else "". `HTTP_PROXY` is not allowed under CGI.
+ *
+ * @param lower The lower-case variable's value, such as `http_proxy`'s, or null when it is unset.
+ * @param upper The upper-case variable's value, such as `HTTP_PROXY`'s, or null when it is unset.
+ * @param upperAllowed Whether the upper-case variable may be read: false for `HTTP_PROXY` under CGI, where a request's `Proxy` header sets it.
+ * @returns The proxy URL to use, or "" for none.
  */
 export const httpChooseProxy = (
   lower: string | null,
@@ -1487,6 +1502,14 @@ export const httpChooseProxy = (
  * The proxy a request to `scheme://host:port` goes through, given the three
  * settings: `httpsProxy` for https, `httpProxy` for http, and "" for none or
  * when `noProxy` names the host.
+ *
+ * @param scheme The request URL's scheme, lower-cased; one other than `http` or `https` gets no proxy.
+ * @param host The request URL's host, matched against `noProxy`.
+ * @param port The port the request goes to, matched against an entry's `:port`.
+ * @param httpProxy The proxy URL for `http` requests, or "" for none.
+ * @param httpsProxy The proxy URL for `https` requests, or "" for none.
+ * @param noProxy The comma-separated hosts that go direct, as `httpNoProxyMatch` reads them.
+ * @returns The proxy URL the request goes through, or "" when it goes direct.
  */
 export const httpProxyFor = (
   scheme: string,
@@ -1514,6 +1537,11 @@ export const httpProxyFor = (
  * (with or without a leading dot), or an IP address that matches only itself;
  * any of them may end in `:port`, and an IPv6 address with a port is written
  * in brackets. Case does not matter. Address ranges are not understood.
+ *
+ * @param noProxy The list, as `NO_PROXY` holds it; an entry that does not parse is skipped.
+ * @param host The request's host name or IP address; trailing dots do not matter.
+ * @param port The port the request goes to.
+ * @returns True when an entry names the host (and its port, if it has one), so the request goes direct.
  */
 export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): boolean => {
   const name: string = httpClientTrimDots(httpClientLower(host))

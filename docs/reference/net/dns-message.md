@@ -303,7 +303,7 @@ class DnsReply
 
 | Member | |
 | --- | --- |
-| `new DnsReply()` |  |
+| `new DnsReply()` | Makes an empty reply with every array sized for `DNS_MAX_ANSWERS` answers and `DNS_MAX_NAME_BYTES`-byte names, for `dnsParseReply` to fill. |
 | `addresses: u8[]` | `count` addresses of `DNS_ADDRESS_BYTES` each, from offset 0. |
 | `count: i32` | How many addresses were kept. |
 | `dropped: i32` | How many addresses past `DNS_MAX_ANSWERS` were read and not kept. |

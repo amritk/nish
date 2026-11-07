@@ -105,13 +105,13 @@ One frame, as `websocketWriteFrame` writes it, in an array of its own; the same 
 
 <scalar-card title="websocketFrameSize" icon="phosphor/regular/function" href="#websocketframesize">
 
-How many bytes a frame of `len` payload bytes takes, its header included.
+How many bytes a frame of `len` payload bytes takes, its header included, so a caller can size the buffer `websocketWriteFrame` writes into.
 
 </scalar-card>
 
 <scalar-card title="websocketIsUtf8" icon="phosphor/regular/function" href="#websocketisutf8">
 
-Whether `buf[off .. off + len)` is well-formed UTF-8.
+Whether `buf[off .. off + len)` is well-formed UTF-8: what a whole text message's payload, or a close frame's reason, must be (§8.1).
 
 </scalar-card>
 
@@ -250,11 +250,17 @@ function websocketAcceptKey(key: string): string
 #### Parameters
 
 <scalar-field name="key" type="string" required>
+
+The key as the client sent it; it is not checked here, so check it with `websocketKeyIsValid` first.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+The 28-character accept value.
+
 </scalar-field>
 
 ## websocketCheckResponse
@@ -265,7 +271,8 @@ Reads the server's answer to `websocketUpgradeRequest(…, key, offered)`
 a status other than 101 (`WS_HS_STATUS`; a redirect is not followed), a
 version other than HTTP/1.1, `Upgrade` absent, repeated or not `websocket`,
 no `Connection` listing `upgrade`, `Sec-WebSocket-Accept` absent, repeated
-or not `websocketAcceptKey(key)` (a forged or replayed answer), any
+or not `websocketAcceptKey(key)` (a forged or replayed answer, or any answer
+when `key` is not a valid key), any
 `Sec-WebSocket-Extensions` (this client offers none, so none may be in use),
 and a `Sec-WebSocket-Protocol` that is present when nothing was offered,
 repeated, a list, or not one of `offered`. On `WS_HS_OK` the parser's next
@@ -284,17 +291,29 @@ function websocketCheckResponse(
 #### Parameters
 
 <scalar-field name="response" type="Http1ResponseParser" required>
+
+The client's parser, at the `HTTP1_HEAD` of the response.
+
 </scalar-field>
 
 <scalar-field name="key" type="string" required>
+
+The key the request sent, from `websocketClientKey`.
+
 </scalar-field>
 
 <scalar-field name="offered" type="string[]" required>
+
+The subprotocols the request offered, as passed to `websocketUpgradeRequest`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="WsHandshake">
+
+`WS_HS_OK` and the chosen subprotocol, or the first `WS_HS_*` rule the response broke.
+
 </scalar-field>
 
 ## websocketClientKey
@@ -315,11 +334,17 @@ function websocketClientKey(
 #### Parameters
 
 <scalar-field name="nonce" type="u8[]" required>
+
+16 fresh random bytes; the caller keeps the returned key to check the response with.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The 24-character key, or null when `nonce` is not 16 bytes.
+
 </scalar-field>
 
 ## websocketClosePayload
@@ -339,14 +364,23 @@ function websocketClosePayload(
 #### Parameters
 
 <scalar-field name="code" type="i32" required>
+
+The close status code, such as 1000 for a normal closure.
+
 </scalar-field>
 
 <scalar-field name="reason" type="string" required>
+
+Why the connection closes, for a person to read; "" for no reason.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The payload for a `WS_OP_CLOSE` frame, the code big-endian and then the reason's bytes, or null when refused.
+
 </scalar-field>
 
 ## websocketFrame
@@ -368,31 +402,53 @@ function websocketFrame(
 #### Parameters
 
 <scalar-field name="fin" type="boolean" required>
+
+Whether this is the message's last frame; a control frame must set it.
+
 </scalar-field>
 
 <scalar-field name="opcode" type="i32" required>
+
+The frame's opcode, such as `WS_OP_TEXT` or `WS_OP_PING`.
+
 </scalar-field>
 
 <scalar-field name="payload" type="u8[]" required>
+
+The array holding the payload; it is not changed, even when masked.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the payload starts in `payload`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The payload's length in bytes.
+
 </scalar-field>
 
 <scalar-field name="mask" type="u8[] | null" required>
+
+The 4-byte mask key for a client's frame, or null for a server's.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The whole frame, `websocketFrameSize(len, mask !== null)` bytes, or null for a frame `websocketWriteFrame` refuses.
+
 </scalar-field>
 
 ## websocketFrameSize
 
-How many bytes a frame of `len` payload bytes takes, its header included.
+How many bytes a frame of `len` payload bytes takes, its header included,
+so a caller can size the buffer `websocketWriteFrame` writes into.
 
 ```ts
 function websocketFrameSize(
@@ -404,19 +460,30 @@ function websocketFrameSize(
 #### Parameters
 
 <scalar-field name="len" type="i32" required>
+
+The payload's length in bytes, at least 0.
+
 </scalar-field>
 
 <scalar-field name="masked" type="boolean" required>
+
+Whether the frame carries a 4-byte mask key, as every frame a client sends does.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The frame's size in bytes: 2 to 14 bytes of header, then `len`.
+
 </scalar-field>
 
 ## websocketIsUtf8
 
-Whether `buf[off .. off + len)` is well-formed UTF-8. A window outside `buf` panics.
+Whether `buf[off .. off + len)` is well-formed UTF-8: what a whole text
+message's payload, or a close frame's reason, must be (§8.1). A window
+outside `buf` panics.
 
 ```ts
 function websocketIsUtf8(
@@ -429,17 +496,29 @@ function websocketIsUtf8(
 #### Parameters
 
 <scalar-field name="buf" type="u8[]" required>
+
+The array holding the bytes.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the bytes start in `buf`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+How many bytes to check; 0 is valid UTF-8.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the bytes are UTF-8 with no overlong form, surrogate or code point past U+10FFFF, and no character cut short at the end.
+
 </scalar-field>
 
 ## websocketKeyIsValid
@@ -455,11 +534,17 @@ function websocketKeyIsValid(key: string): boolean
 #### Parameters
 
 <scalar-field name="key" type="string" required>
+
+The field's value, as the client sent it.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True for a 24-character key ending in `==` whose other characters decode to 16 bytes.
+
 </scalar-field>
 
 ## websocketOfferedProtocols
@@ -480,11 +565,17 @@ function websocketOfferedProtocols(
 #### Parameters
 
 <scalar-field name="p" type="Http1Parser" required>
+
+The server's parser, at the `HTTP1_HEAD` of the request.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string[] | null">
+
+The offered subprotocols in order, `[]` when none are offered, or null when one is not a token.
+
 </scalar-field>
 
 ## websocketRequestKey
@@ -504,11 +595,17 @@ function websocketRequestKey(
 #### Parameters
 
 <scalar-field name="p" type="Http1Parser" required>
+
+The server's parser, at the `HTTP1_HEAD` of the request.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+The `Sec-WebSocket-Key` to pass to `websocketUpgradeResponse`, or null when the request is not a valid handshake.
+
 </scalar-field>
 
 ## websocketUpgradeRequest
@@ -535,20 +632,35 @@ function websocketUpgradeRequest(
 #### Parameters
 
 <scalar-field name="host" type="string" required>
+
+The `Host` field's value: the server's host, and its port when it is not the scheme's default.
+
 </scalar-field>
 
 <scalar-field name="target" type="string" required>
+
+The request target, such as `/chat?room=1`.
+
 </scalar-field>
 
 <scalar-field name="key" type="string" required>
+
+The client's key, from `websocketClientKey`.
+
 </scalar-field>
 
 <scalar-field name="protocols" type="string[]" required>
+
+The subprotocols the client offers, in order of preference; `[]` for none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The whole request head, ending in the empty line, or null when refused.
+
 </scalar-field>
 
 ## websocketUpgradeResponse
@@ -568,14 +680,23 @@ function websocketUpgradeResponse(
 #### Parameters
 
 <scalar-field name="key" type="string" required>
+
+The client's `Sec-WebSocket-Key`, as `websocketRequestKey` gave it.
+
 </scalar-field>
 
 <scalar-field name="protocol" type="string" required>
+
+The subprotocol the server chose from `websocketOfferedProtocols`, or "" for none.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+The whole response head, ending in the empty line, or null when refused.
+
 </scalar-field>
 
 ## websocketWriteFrame
@@ -588,9 +709,9 @@ shortest of its three forms. Answers where the frame ends, `WS_NO_ROOM` when
 it does not fit, or `WS_REFUSED` for an opcode RFC 6455 does not define, a
 control frame that is not FIN or is longer than 125 bytes, and a mask that
 is not 4 bytes; on either refusal `out` is untouched. A window outside
-`payload` panics. A text frame's payload is not checked here, because a
-fragment may end inside a character; `websocketIsUtf8` checks a whole
-message.
+`payload` panics, and so does a payload longer than 2^31 - 15 bytes. A text
+frame's payload is not checked here, because a fragment may end inside a
+character; `websocketIsUtf8` checks a whole message.
 
 ```ts
 function websocketWriteFrame(
@@ -608,32 +729,59 @@ function websocketWriteFrame(
 #### Parameters
 
 <scalar-field name="out" type="u8[]" required>
+
+The buffer the frame is written into.
+
 </scalar-field>
 
 <scalar-field name="at" type="i32" required>
+
+The index in `out` the frame starts at; one outside `out` answers `WS_NO_ROOM`.
+
 </scalar-field>
 
 <scalar-field name="fin" type="boolean" required>
+
+Whether this is the message's last frame; a control frame must set it.
+
 </scalar-field>
 
 <scalar-field name="opcode" type="i32" required>
+
+The frame's opcode, such as `WS_OP_TEXT` or `WS_OP_PING`.
+
 </scalar-field>
 
 <scalar-field name="payload" type="u8[]" required>
+
+The array holding the payload; it is not changed, even when masked.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the payload starts in `payload`.
+
 </scalar-field>
 
 <scalar-field name="len" type="i32" required>
+
+The payload's length in bytes.
+
 </scalar-field>
 
 <scalar-field name="mask" type="u8[] | null" required>
+
+The 4-byte mask key for a client's frame, or null for a server's.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+The index in `out` just past the frame, or `WS_NO_ROOM` or `WS_REFUSED`.
+
 </scalar-field>
 
 ## WsDecoder

@@ -2424,7 +2424,7 @@ class QuicHeader
 
 | Member | |
 | --- | --- |
-| `new QuicHeader()` |  |
+| `new QuicHeader()` | Makes an empty header, every array empty and every window at 0, for `quicParseHeader` or `quicParseHeaderInto` to fill. |
 | `dcid: u8[]` | The Destination Connection ID. |
 | `dcidLength: i32` |  |
 | `dcidStart: i32` | Where `dcid`, `scid` and `token` sit in the datagram, as far as the parse got. `quicParseHeaderInto` fills these and nothing else, so a connection reads a header with no copy; `quicParseHeader` copies the windows out into the arrays above. |
@@ -2494,7 +2494,7 @@ class QuicKeysSlot
 
 | Member | |
 | --- | --- |
-| `new QuicKeysSlot()` |  |
+| `new QuicKeysSlot()` | Makes the slot's arrays and key schedules once, with no keys derived yet (`keys.aead` is 0). |
 | `hp128: AesKey` |  |
 | `hp16: u8[]` |  |
 | `hp256: AesKey` |  |
@@ -2518,7 +2518,7 @@ class QuicPacket
 
 | Member | |
 | --- | --- |
-| `new QuicPacket()` |  |
+| `new QuicPacket()` | Makes an empty packet, its header and payload empty, for `quicOpenPacket` to fill. |
 | `error: i32` | `QUIC_PACKET_OK`, or the `QUIC_ERR_*` that stopped the open. |
 | `firstByte: i32` | The first byte with header protection removed. |
 | `header: u8[]` | The header in the clear, packet number included: the AEAD's associated data. |

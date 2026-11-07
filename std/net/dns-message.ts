@@ -173,6 +173,10 @@ export class DnsReply {
    */
   asked: u8[]
 
+  /**
+   * Makes an empty reply with every array sized for `DNS_MAX_ANSWERS` answers
+   * and `DNS_MAX_NAME_BYTES`-byte names, for `dnsParseReply` to fill.
+   */
   constructor() {
     this.addresses = new Array<u8>(DNS_MAX_ANSWERS * DNS_ADDRESS_BYTES)
     this.ttls = new Array<i32>(DNS_MAX_ANSWERS)

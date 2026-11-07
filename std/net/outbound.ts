@@ -72,6 +72,10 @@ export class OutboundPolicy {
   /** At most this many redirects, or the client's own limit if lower. */
   maxRedirects: i32 = 5
 
+  /**
+   * Makes the default policy the class describes: public addresses only, any
+   * host name, and the default limits.
+   */
   constructor() {
     this.allowHosts = []
     this.permitted = []
@@ -137,6 +141,10 @@ export class OutboundPolicy {
 /**
  * Whether the sixteen address bytes at `addr[off]` are public, as the module
  * comment defines it. Panics when sixteen bytes do not fit there.
+ *
+ * @param addr The array holding the address; an IPv4 one in its `::ffff:` form, as nish:net writes it.
+ * @param off Where the address's sixteen bytes start in `addr`.
+ * @returns True for a public address. An IPv4 one carried by NAT64 or 6to4 is judged as that IPv4 address.
  */
 export const outboundAddressPublic = (addr: u8[], off: i32): boolean => {
   if (off < 0 || off > toI32(addr.length) - 16) {
@@ -166,7 +174,15 @@ export const outboundAddressPublic = (addr: u8[], off: i32): boolean => {
   return !(b0 === 0x3f && b1 === 0xff && (b2 & 0xf0) === 0)
 }
 
-/** Whether `policy` lets a connection go to the sixteen address bytes at `addr[off]`. */
+/**
+ * Whether `policy` lets a connection go to the sixteen address bytes at
+ * `addr[off]`: a prefix it `permit`s, or else a public address.
+ *
+ * @param policy The policy whose permits are checked first.
+ * @param addr The array holding the address; an IPv4 one in its `::ffff:` form, as nish:net writes it.
+ * @param off Where the address's sixteen bytes start in `addr`.
+ * @returns True when a connection may go there. An IPv4 address carried by NAT64 or 6to4 is judged as that address, by a permit too.
+ */
 export const outboundAddressAllowed = (policy: OutboundPolicy, addr: u8[], off: i32): boolean => {
   if (outboundPermitted(policy, addr, off)) {
     return true
@@ -192,6 +208,11 @@ export const outboundAddressAllowed = (policy: OutboundPolicy, addr: u8[], off: 
  * Keeps the addresses of `count` `DNS_ADDRESS_BYTES` records in `addresses`
  * that `policy` allows, moved to the front in their order, and answers how
  * many. Refused records are left behind them, so the caller can name one.
+ *
+ * @param policy The policy each address is checked against, as `outboundAddressAllowed` checks it.
+ * @param addresses The records, each sixteen address bytes and a two-byte port, reordered in place.
+ * @param count How many records `addresses` holds from its start; one that does not fit panics.
+ * @returns How many records were kept, now `addresses`' first ones; 0 when every one was refused.
  */
 export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i32): i32 => {
   if (count < 0 || count * DNS_ADDRESS_BYTES > toI32(addresses.length)) {
@@ -219,6 +240,10 @@ export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i
  * Whether `policy` lets a URL name `host`, as the URL parser gives it
  * (lower-cased, an IPv6 literal without its brackets). Any host when the
  * policy names none.
+ *
+ * @param policy The policy whose `allowHost` names are checked.
+ * @param host The URL's host; its case and one trailing dot do not matter.
+ * @returns True when the host is one the policy names, or under a `.`-led name it allows, or the policy names none.
  */
 export const outboundHostAllowed = (policy: OutboundPolicy, host: string): boolean => {
   if (policy.allowHosts.length === 0) {
@@ -242,7 +267,13 @@ export const outboundHostAllowed = (policy: OutboundPolicy, host: string): boole
   return false
 }
 
-/** The sixteen address bytes at `addr[off]` as text: dotted for an IPv4 address, eight hex groups otherwise. */
+/**
+ * The sixteen address bytes at `addr[off]` as text, for an error to name.
+ *
+ * @param addr The array holding the address.
+ * @param off Where the address's sixteen bytes start in `addr`.
+ * @returns Dotted decimal for an IPv4 address in its `::ffff:` form, otherwise all eight lower-case hex groups with no `::` shortening.
+ */
 export const outboundAddressText = (addr: u8[], off: i32): string => {
   if (outboundMapped(addr, off)) {
     const at: i32 = off + OUTBOUND_V4_AT

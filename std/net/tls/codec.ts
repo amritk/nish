@@ -373,6 +373,10 @@ export class TlsClientHelloView {
   hasPreSharedKey: boolean = false
   hasPskModes: boolean = false
 
+  /**
+   * Makes an empty view, every window empty and every flag false, for
+   * `tlsReadClientHello` to fill.
+   */
   constructor() {
     this.data = []
     this.extensionSeen = new Array<u32>(TLS_U16_BITMAP_WORDS)
@@ -913,6 +917,10 @@ export class TlsClientHello {
   /** Whether `psk_key_exchange_modes` lists `psk_dhe_ke`. */
   pskDheKe: boolean = false
 
+  /**
+   * Makes an empty hello, every field empty and every flag false, for
+   * `tlsParseClientHello` to fill.
+   */
   constructor() {
     this.random = []
     this.sessionId = []
@@ -2039,6 +2047,10 @@ export class TlsServerFlightView {
   /** EncryptedExtensions' empty `server_name`, the acknowledgement of RFC 6066 §3. */
   serverNameAcknowledged: boolean = false
 
+  /**
+   * Makes an empty view, every window empty and every flag false, for the
+   * `tlsRead*` functions to fill.
+   */
   constructor() {
     this.data = []
     this.extensionSeen = new Array<u32>(TLS_U16_BITMAP_WORDS)

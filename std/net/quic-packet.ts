@@ -256,6 +256,10 @@ export class QuicHeader {
   tokenStart: i32 = 0
   tokenLength: i32 = 0
 
+  /**
+   * Makes an empty header, every array empty and every window at 0, for
+   * `quicParseHeader` or `quicParseHeaderInto` to fill.
+   */
   constructor() {
     this.dcid = []
     this.scid = []
@@ -343,6 +347,10 @@ export class QuicPacket {
   /** A short header's Key Phase bit (RFC 9001 §6); `false` for a long header. */
   keyPhase: boolean = false
 
+  /**
+   * Makes an empty packet, its header and payload empty, for `quicOpenPacket`
+   * to fill.
+   */
   constructor() {
     this.header = []
     this.payload = []
@@ -1336,6 +1344,10 @@ export class QuicKeysSlot {
   hp128: AesKey
   hp256: AesKey
 
+  /**
+   * Makes the slot's arrays and key schedules once, with no keys derived yet
+   * (`keys.aead` is 0).
+   */
   constructor() {
     this.key16 = new Array<u8>(16)
     this.key32 = new Array<u8>(32)

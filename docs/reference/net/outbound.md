@@ -27,7 +27,7 @@ options.outbound = new OutboundPolicy();
 
 <scalar-card title="outboundAddressAllowed" icon="phosphor/regular/function" href="#outboundaddressallowed">
 
-Whether `policy` lets a connection go to the sixteen address bytes at `addr[off]`.
+Whether `policy` lets a connection go to the sixteen address bytes at `addr[off]`: a prefix it `permit`s, or else a public address.
 
 </scalar-card>
 
@@ -39,7 +39,7 @@ Whether the sixteen address bytes at `addr[off]` are public, as the module comme
 
 <scalar-card title="outboundAddressText" icon="phosphor/regular/function" href="#outboundaddresstext">
 
-The sixteen address bytes at `addr[off]` as text: dotted for an IPv4 address, eight hex groups otherwise.
+The sixteen address bytes at `addr[off]` as text, for an error to name.
 
 </scalar-card>
 
@@ -105,7 +105,8 @@ special-purpose address registries, not ported from another implementation.
 
 ## outboundAddressAllowed
 
-Whether `policy` lets a connection go to the sixteen address bytes at `addr[off]`.
+Whether `policy` lets a connection go to the sixteen address bytes at
+`addr[off]`: a prefix it `permit`s, or else a public address.
 
 ```ts
 function outboundAddressAllowed(
@@ -118,17 +119,29 @@ function outboundAddressAllowed(
 #### Parameters
 
 <scalar-field name="policy" type="OutboundPolicy" required>
+
+The policy whose permits are checked first.
+
 </scalar-field>
 
 <scalar-field name="addr" type="u8[]" required>
+
+The array holding the address; an IPv4 one in its `::ffff:` form, as nish:net writes it.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the address's sixteen bytes start in `addr`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when a connection may go there. An IPv4 address carried by NAT64 or 6to4 is judged as that address, by a permit too.
+
 </scalar-field>
 
 ## outboundAddressPublic
@@ -146,19 +159,28 @@ function outboundAddressPublic(
 #### Parameters
 
 <scalar-field name="addr" type="u8[]" required>
+
+The array holding the address; an IPv4 one in its `::ffff:` form, as nish:net writes it.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the address's sixteen bytes start in `addr`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True for a public address. An IPv4 one carried by NAT64 or 6to4 is judged as that IPv4 address.
+
 </scalar-field>
 
 ## outboundAddressText
 
-The sixteen address bytes at `addr[off]` as text: dotted for an IPv4 address, eight hex groups otherwise.
+The sixteen address bytes at `addr[off]` as text, for an error to name.
 
 ```ts
 function outboundAddressText(
@@ -170,14 +192,23 @@ function outboundAddressText(
 #### Parameters
 
 <scalar-field name="addr" type="u8[]" required>
+
+The array holding the address.
+
 </scalar-field>
 
 <scalar-field name="off" type="i32" required>
+
+Where the address's sixteen bytes start in `addr`.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+Dotted decimal for an IPv4 address in its `::ffff:` form, otherwise all eight lower-case hex groups with no `::` shortening.
+
 </scalar-field>
 
 ## outboundFilter
@@ -197,17 +228,29 @@ function outboundFilter(
 #### Parameters
 
 <scalar-field name="policy" type="OutboundPolicy" required>
+
+The policy each address is checked against, as `outboundAddressAllowed` checks it.
+
 </scalar-field>
 
 <scalar-field name="addresses" type="u8[]" required>
+
+The records, each sixteen address bytes and a two-byte port, reordered in place.
+
 </scalar-field>
 
 <scalar-field name="count" type="i32" required>
+
+How many records `addresses` holds from its start; one that does not fit panics.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+How many records were kept, now `addresses`' first ones; 0 when every one was refused.
+
 </scalar-field>
 
 ## outboundHostAllowed
@@ -226,14 +269,23 @@ function outboundHostAllowed(
 #### Parameters
 
 <scalar-field name="policy" type="OutboundPolicy" required>
+
+The policy whose `allowHost` names are checked.
+
 </scalar-field>
 
 <scalar-field name="host" type="string" required>
+
+The URL's host; its case and one trailing dot do not matter.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+True when the host is one the policy names, or under a `.`-led name it allows, or the policy names none.
+
 </scalar-field>
 
 ## OutboundPolicy
@@ -248,7 +300,7 @@ class OutboundPolicy
 
 | Member | |
 | --- | --- |
-| `new OutboundPolicy()` |  |
+| `new OutboundPolicy()` | Makes the default policy the class describes: public addresses only, any host name, and the default limits. |
 | `maxBodyBytes: i64` | A fetch's body is cut off past this, or past the client's own cap if lower. |
 | `maxRedirects: i32` | At most this many redirects, or the client's own limit if lower. |
 | `permitted: u8[]` | `OUTBOUND_PERMIT_BYTES` per prefix `permit` let through. |

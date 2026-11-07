@@ -385,6 +385,10 @@ export class TlsP256Signer {
   /** The DER signatures, index `length - TLS_P256_DER_MIN`. */
   private ders: u8[][]
 
+  /**
+   * Makes the signer's scratch and one signature array per DER length, so a
+   * signature allocates nothing.
+   */
   constructor() {
     this.scratch = new P256SignScratch()
     this.rs = new Array<u8>(P256_SIGNATURE_SIZE)

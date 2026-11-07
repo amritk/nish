@@ -163,7 +163,7 @@ class QuicRecovery
 
 | Member | |
 | --- | --- |
-| `new QuicRecovery()` |  |
+| `new QuicRecovery()` | Makes the state a new connection has, as `reset` leaves it: every space empty, the RTT estimate and the window at their initial values. |
 | `congestionEvents: i32` | How many congestion events reduced the window, and how many of them were persistent congestion. |
 | `congestionWindow: i64` | congestion_window (B.2), in bytes. |
 | `ecnCongestionEvents: i32` | How many congestion events a rise in the ECN-CE count caused (§7.1). |

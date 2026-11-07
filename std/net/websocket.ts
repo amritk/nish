@@ -213,7 +213,16 @@ const websocketUtf8Run = (state: WsUtf8, buf: u8[], off: i32, len: i32): boolean
   return true
 }
 
-/** Whether `buf[off .. off + len)` is well-formed UTF-8. A window outside `buf` panics. */
+/**
+ * Whether `buf[off .. off + len)` is well-formed UTF-8: what a whole text
+ * message's payload, or a close frame's reason, must be (§8.1). A window
+ * outside `buf` panics.
+ *
+ * @param buf The array holding the bytes.
+ * @param off Where the bytes start in `buf`.
+ * @param len How many bytes to check; 0 is valid UTF-8.
+ * @returns True when the bytes are UTF-8 with no overlong form, surrogate or code point past U+10FFFF, and no character cut short at the end.
+ */
 export const websocketIsUtf8 = (buf: u8[], off: i32, len: i32): boolean => {
   const size: i32 = toI32(buf.length)
   if (off < 0 || len < 0 || off > size || len > size - off) {
@@ -625,7 +634,14 @@ export const WS_NO_ROOM: i32 = -1
 /** `websocketWriteFrame`: a frame the encoder refuses to write. */
 export const WS_REFUSED: i32 = -2
 
-/** How many bytes a frame of `len` payload bytes takes, its header included. */
+/**
+ * How many bytes a frame of `len` payload bytes takes, its header included,
+ * so a caller can size the buffer `websocketWriteFrame` writes into.
+ *
+ * @param len The payload's length in bytes, at least 0.
+ * @param masked Whether the frame carries a 4-byte mask key, as every frame a client sends does.
+ * @returns The frame's size in bytes: 2 to 14 bytes of header, then `len`.
+ */
 export const websocketFrameSize = (len: i32, masked: boolean): i32 => {
   let extended: i32 = 8
   if (len < 126) {
@@ -645,9 +661,19 @@ export const websocketFrameSize = (len: i32, masked: boolean): i32 => {
  * it does not fit, or `WS_REFUSED` for an opcode RFC 6455 does not define, a
  * control frame that is not FIN or is longer than 125 bytes, and a mask that
  * is not 4 bytes; on either refusal `out` is untouched. A window outside
- * `payload` panics. A text frame's payload is not checked here, because a
- * fragment may end inside a character; `websocketIsUtf8` checks a whole
- * message.
+ * `payload` panics, and so does a payload longer than 2^31 - 15 bytes. A text
+ * frame's payload is not checked here, because a fragment may end inside a
+ * character; `websocketIsUtf8` checks a whole message.
+ *
+ * @param out The buffer the frame is written into.
+ * @param at The index in `out` the frame starts at; one outside `out` answers `WS_NO_ROOM`.
+ * @param fin Whether this is the message's last frame; a control frame must set it.
+ * @param opcode The frame's opcode, such as `WS_OP_TEXT` or `WS_OP_PING`.
+ * @param payload The array holding the payload; it is not changed, even when masked.
+ * @param off Where the payload starts in `payload`.
+ * @param len The payload's length in bytes.
+ * @param mask The 4-byte mask key for a client's frame, or null for a server's.
+ * @returns The index in `out` just past the frame, or `WS_NO_ROOM` or `WS_REFUSED`.
  */
 export const websocketWriteFrame = (
   out: u8[],
@@ -727,6 +753,14 @@ export const websocketWriteFrame = (
 /**
  * One frame, as `websocketWriteFrame` writes it, in an array of its own; the
  * same refusals answer `null`. A window outside `payload` panics.
+ *
+ * @param fin Whether this is the message's last frame; a control frame must set it.
+ * @param opcode The frame's opcode, such as `WS_OP_TEXT` or `WS_OP_PING`.
+ * @param payload The array holding the payload; it is not changed, even when masked.
+ * @param off Where the payload starts in `payload`.
+ * @param len The payload's length in bytes.
+ * @param mask The 4-byte mask key for a client's frame, or null for a server's.
+ * @returns The whole frame, `websocketFrameSize(len, mask !== null)` bytes, or null for a frame `websocketWriteFrame` refuses.
  */
 export const websocketFrame = (
   fin: boolean,
@@ -753,6 +787,10 @@ export const websocketFrame = (
  * Answers `null` for a code that may not be sent (1005, 1006 and 1015 among
  * them; §7.4), a reason that is not UTF-8, and one longer than 123 bytes,
  * which would take the frame past 125.
+ *
+ * @param code The close status code, such as 1000 for a normal closure.
+ * @param reason Why the connection closes, for a person to read; "" for no reason.
+ * @returns The payload for a `WS_OP_CLOSE` frame, the code big-endian and then the reason's bytes, or null when refused.
  */
 export const websocketClosePayload = (code: i32, reason: string): u8[] | null => {
   const n: i32 = toI32(reason.length)
@@ -808,6 +846,9 @@ const websocketSwapBytes = (text: string, from1: i32, to1: i32, from2: i32, to2:
 /**
  * `Sec-WebSocket-Accept` for the client's `Sec-WebSocket-Key` (§4.2.2 item
  * 5.4): the SHA-1 of the key and `WS_GUID`, in padded standard base64.
+ *
+ * @param key The key as the client sent it; it is not checked here, so check it with `websocketKeyIsValid` first.
+ * @returns The 28-character accept value.
  */
 export const websocketAcceptKey = (key: string): string =>
   base64StdPadEncode(sha1(websocketBytesOf(`${key}${WS_GUID}`)))
@@ -816,6 +857,9 @@ export const websocketAcceptKey = (key: string): string =>
  * Whether `key` is a valid `Sec-WebSocket-Key` (§4.2.1 item 5): padded
  * standard base64 that decodes to exactly 16 bytes, in its one canonical
  * spelling.
+ *
+ * @param key The field's value, as the client sent it.
+ * @returns True for a 24-character key ending in `==` whose other characters decode to 16 bytes.
  */
 export const websocketKeyIsValid = (key: string): boolean => {
   if (toI32(key.length) !== 24 || !key.endsWith("==")) {
@@ -837,6 +881,9 @@ export const websocketKeyIsValid = (key: string): boolean => {
  * (alone, in any case), at version 13, with a valid key. Otherwise `null`, and
  * the server answers 400 (or 426 with `Sec-WebSocket-Version: 13` when only the
  * version is wrong, §4.4).
+ *
+ * @param p The server's parser, at the `HTTP1_HEAD` of the request.
+ * @returns The `Sec-WebSocket-Key` to pass to `websocketUpgradeResponse`, or null when the request is not a valid handshake.
  */
 export const websocketRequestKey = (p: Http1Parser): string | null => {
   if (!p.methodIs("GET") || p.minor !== 1 || !p.upgradeIs("websocket")) {
@@ -857,6 +904,10 @@ export const websocketRequestKey = (p: Http1Parser): string | null => {
  * `Connection`, `Sec-WebSocket-Accept`, and `Sec-WebSocket-Protocol` when
  * `protocol` is not empty (the caller picks it from the client's list).
  * Answers `null` for an invalid key or a protocol that is not a token.
+ *
+ * @param key The client's `Sec-WebSocket-Key`, as `websocketRequestKey` gave it.
+ * @param protocol The subprotocol the server chose from `websocketOfferedProtocols`, or "" for none.
+ * @returns The whole response head, ending in the empty line, or null when refused.
  */
 export const websocketUpgradeResponse = (key: string, protocol: string): u8[] | null => {
   if (!websocketKeyIsValid(key)) {
@@ -879,6 +930,9 @@ export const websocketUpgradeResponse = (key: string, protocol: string): u8[] | 
  * empty ones dropped (RFC 9110 §5.6.1). Answers `[]` when there is no such
  * field, and `null` when an element is not a token: a server picks one of
  * these, or none, for `websocketUpgradeResponse`.
+ *
+ * @param p The server's parser, at the `HTTP1_HEAD` of the request.
+ * @returns The offered subprotocols in order, `[]` when none are offered, or null when one is not a token.
  */
 export const websocketOfferedProtocols = (p: Http1Parser): string[] | null => {
   const out: string[] = []
@@ -976,6 +1030,9 @@ const websocketListHas = (value: string, word: string): boolean => {
  * `crypto.getRandomValues` and fresh for every connection: a key that repeats
  * or can be guessed lets a cache or an intermediary replay an old handshake's
  * answer. This module draws no randomness itself.
+ *
+ * @param nonce 16 fresh random bytes; the caller keeps the returned key to check the response with.
+ * @returns The 24-character key, or null when `nonce` is not 16 bytes.
  */
 export const websocketClientKey = (nonce: u8[]): string | null => {
   if (toI32(nonce.length) !== 16) {
@@ -994,6 +1051,12 @@ export const websocketClientKey = (nonce: u8[]): string | null => {
  * one, or one holding a comma, a space, CR or LF), a protocol offered twice, an
  * empty host, and everything the request writer refuses (CR, LF or another
  * control byte in `host`, a `target` that is not a request target).
+ *
+ * @param host The `Host` field's value: the server's host, and its port when it is not the scheme's default.
+ * @param target The request target, such as `/chat?room=1`.
+ * @param key The client's key, from `websocketClientKey`.
+ * @param protocols The subprotocols the client offers, in order of preference; `[]` for none.
+ * @returns The whole request head, ending in the empty line, or null when refused.
  */
 export const websocketUpgradeRequest = (
   host: string,
@@ -1068,13 +1131,19 @@ export class WsHandshake {
  * a status other than 101 (`WS_HS_STATUS`; a redirect is not followed), a
  * version other than HTTP/1.1, `Upgrade` absent, repeated or not `websocket`,
  * no `Connection` listing `upgrade`, `Sec-WebSocket-Accept` absent, repeated
- * or not `websocketAcceptKey(key)` (a forged or replayed answer), any
+ * or not `websocketAcceptKey(key)` (a forged or replayed answer, or any answer
+ * when `key` is not a valid key), any
  * `Sec-WebSocket-Extensions` (this client offers none, so none may be in use),
  * and a `Sec-WebSocket-Protocol` that is present when nothing was offered,
  * repeated, a list, or not one of `offered`. On `WS_HS_OK` the parser's next
  * events are `HTTP1_END` and `HTTP1_UPGRADE`; its `tunnelBytes()` go to
  * `WsDecoder(false, …)`, and every frame the client sends is masked with a
  * fresh mask key from `crypto.getRandomValues` (§5.3).
+ *
+ * @param response The client's parser, at the `HTTP1_HEAD` of the response.
+ * @param key The key the request sent, from `websocketClientKey`.
+ * @param offered The subprotocols the request offered, as passed to `websocketUpgradeRequest`.
+ * @returns `WS_HS_OK` and the chosen subprotocol, or the first `WS_HS_*` rule the response broke.
  */
 export const websocketCheckResponse = (
   response: Http1ResponseParser,

@@ -410,7 +410,7 @@ class TlsTicketKeyInfo
 
 | Member | |
 | --- | --- |
-| `new TlsTicketKeyInfo()` |  |
+| `new TlsTicketKeyInfo()` | Makes a blank record, nothing sealed yet and the cap at `TLS_TICKET_SEAL_CAP`, for `tlsTicketKeyDraw` to fill. |
 | `createdAt: i64` | When the key was drawn, in `monotonicNanos()`. |
 | `id: u8[]` | The key id, the ticket's additional data. |
 | `sealCap: i64` | How many it may seal: `TLS_TICKET_SEAL_CAP` unless the program lowers it. |
@@ -430,7 +430,7 @@ class TlsTicketState
 
 | Member | |
 | --- | --- |
-| `new TlsTicketState()` |  |
+| `new TlsTicketState()` | Makes an empty state, its server name and PSK arrays at their fixed sizes and both lengths 0. |
 | `chainStart: i64` | When the full handshake this ticket's chain started from ran. |
 | `id: u8[]` | The ticket's nonce, written by `tlsTicketOpen`: its id in the strike register. |
 | `issuedAt: i64` | When the ticket was issued, in `monotonicNanos()`: `tlsTicketSeal` writes its `now` here. |
