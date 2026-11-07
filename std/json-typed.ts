@@ -184,7 +184,7 @@ export class JsonNumber {
    * A tokenizer over the text, read to its one token. It may open no
    * container and take a number of any length, so it allocates no stack.
    */
-  reader(): JsonTokenizer {
+  private reader(): JsonTokenizer {
     const limits: JsonLimits = new JsonLimits()
     limits.maxDepth = 0
     limits.maxNumberBytes = this.count
@@ -253,7 +253,7 @@ export class JsonNumber {
  * strings it decodes, the arrays it grows and the objects it makes.
  */
 export class JsonDecoder {
-  tok: JsonTokenizer
+  private tok: JsonTokenizer
   /** `JSON_DECODE_OK`, or the first `JSON_DECODE_*` or `JSON_TOK_ERR_*` code. */
   failed: i32 = 0
   /** The byte offset in the input of the token the error was found at; `-1` until one. */
@@ -273,7 +273,7 @@ export class JsonDecoder {
    * the first token of an array element, read to see whether the array had
    * ended, or a value `takeNull` found was not `null`.
    */
-  held: boolean = false
+  private held: boolean = false
 
   constructor(src: u8[], off: i32, len: i32, limits: JsonLimits) {
     this.tok = new JsonTokenizer(src, off, len, limits)
@@ -292,7 +292,7 @@ export class JsonDecoder {
   }
 
   /** Records the first error. */
-  fail(code: i32, at: i32): void {
+  private fail(code: i32, at: i32): void {
     if (this.failed === JSON_DECODE_OK) {
       this.failed = code
       this.errorAt = at
@@ -305,7 +305,7 @@ export class JsonDecoder {
   }
 
   /** The kind of the next value's first token, or a negative code; the held token first, when there is one. */
-  take(): i32 {
+  private take(): i32 {
     if (this.failed !== JSON_DECODE_OK) {
       return this.failed
     }
@@ -515,7 +515,7 @@ export class JsonDecoder {
    * `toI64`, so that under Node, where an `i64` is a BigInt, what a caller
    * computes with it never mixes a BigInt with a number.
    */
-  integer(lo: i64, hi: i64, bounded: boolean): i64 {
+  private integer(lo: i64, hi: i64, bounded: boolean): i64 {
     const k: i32 = this.take()
     if (k !== JSON_TOK_NUMBER) {
       if (k >= 0) {

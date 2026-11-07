@@ -258,21 +258,21 @@ class JsonValueRanges {
  */
 export class JsonDocument {
   /** Per value: its `JSON_VALUE_*` kind. */
-  kinds: u8[]
+  private kinds: u8[]
   /** Per value: a string's or a number's first byte in `bytes`, a container's first slot, a boolean's `0` or `1`. */
-  first: i32[]
+  private first: i32[]
   /** Per value: a string's or a number's byte count, or a container's member count. */
-  count: i32[]
+  private count: i32[]
   /** Per value: how many slots a container has from `first`, its members and room to grow. */
-  room: i32[]
+  private room: i32[]
   /** Per value: the container it is in, or `-1`. */
-  parent: i32[]
+  private parent: i32[]
   /** Per member slot: the member's value, and an object member's key as a window of `bytes`. */
-  slotValue: i32[]
-  slotKeyAt: i32[]
-  slotKeyLength: i32[]
+  private slotValue: i32[]
+  private slotKeyAt: i32[]
+  private slotKeyLength: i32[]
   /** The bytes of every string, key and number, decoded, one after the other. */
-  bytes: u8[]
+  private bytes: u8[]
   /**
    * The source ranges, `null` until the first `parseRanged` or setter, so
    * that a document that never keeps ranges allocates nothing for them.
@@ -283,8 +283,8 @@ export class JsonDocument {
    * `clear` moves anyway, so that a plain `parse` writes nothing for ranges.
    */
   ranges: JsonValueRanges | null = null
-  rangeTop: i32 = 0
-  slotRangeTop: i32 = 0
+  private rangeTop: i32 = 0
+  private slotRangeTop: i32 = 0
   /** The generation the ranges were written in; `0`, never a generation, when none were. */
   rangeGeneration: i32 = 0
   /**
@@ -295,22 +295,22 @@ export class JsonDocument {
    * duplicate check's. All of them keep their length from one parse to the
    * next, which is what lets a parse allocate nothing.
    */
-  openValue: i32[]
-  openBase: i32[]
-  openKeyAt: i32[]
-  openKeyLength: i32[]
-  openKeySource: i32[]
-  pendingValue: i32[]
-  pendingKeyAt: i32[]
-  pendingKeyLength: i32[]
-  pendingSource: i32[]
-  sortA: i32[]
-  sortB: i32[]
+  private openValue: i32[]
+  private openBase: i32[]
+  private openKeyAt: i32[]
+  private openKeyLength: i32[]
+  private openKeySource: i32[]
+  private pendingValue: i32[]
+  private pendingKeyAt: i32[]
+  private pendingKeyLength: i32[]
+  private pendingSource: i32[]
+  private sortA: i32[]
+  private sortB: i32[]
   /** `parseText`'s copy of its string. */
-  textBytes: u8[]
+  private textBytes: u8[]
   tok: JsonTokenizer
   /** A tokenizer over one stored number at a time, for `isI64`, `i64` and `f64`, limited only by `i32`. */
-  numbers: JsonTokenizer
+  private numbers: JsonTokenizer
 
   /** `JSON_VALUE_DUPLICATE_REFUSE` or `JSON_VALUE_DUPLICATE_LAST`; read by `parse`. */
   duplicates: i32 = 0
@@ -324,13 +324,13 @@ export class JsonDocument {
   slotTop: i32 = 0
   byteTop: i32 = 0
   /** How many members are pending. */
-  pendingTop: i32 = 0
+  private pendingTop: i32 = 0
   /** The most values the document holds; more is `JSON_VALUE_ERR_VALUES`. At most `JSON_VALUE_MAX_VALUES`. */
   maxValues: i32 = 0
   /** The generation every handle of the current document carries; see `JSON_VALUE_INDEX_BITS`. */
   generation: i32 = 1
   /** Whether the last `unsigned` read a number that fits a `u64`. */
-  unsignedFits: boolean = false
+  private unsignedFits: boolean = false
 
   constructor(limits: JsonLimits) {
     this.maxValues = JSON_VALUE_DEFAULT_MAX_VALUES
@@ -610,7 +610,7 @@ export class JsonDocument {
   }
 
   /** Internal: Records a failed parse and forgets what it built. */
-  parseFailed(code: i32, at: i32): i32 {
+  private parseFailed(code: i32, at: i32): i32 {
     this.clear()
     this.failed = code
     this.errorAt = at
@@ -623,7 +623,7 @@ export class JsonDocument {
    * `JSON_VALUE_ERR_DUPLICATE` with `errorAt` set. Keep in step with
    * `closeRanged`.
    */
-  close(c: i32, base: i32): i32 {
+  private close(c: i32, base: i32): i32 {
     let n: i32 = this.pendingTop - base
     const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
     if (object && n > 1) {
@@ -656,7 +656,7 @@ export class JsonDocument {
   }
 
   /** Internal: `close` for `parseRanged`, which also gives each member its key's range. Keep in step with `close`. */
-  closeRanged(c: i32, base: i32): i32 {
+  private closeRanged(c: i32, base: i32): i32 {
     let n: i32 = this.pendingTop - base
     const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
     if (object && n > 1) {
@@ -700,7 +700,7 @@ export class JsonDocument {
    * and the first of them is its first member. Keep in step with
    * `duplicateKeysRanged`.
    */
-  duplicateKeys(base: i32, n: i32): i32 {
+  private duplicateKeys(base: i32, n: i32): i32 {
     let firstRepeat: i32 = -1
     if (n <= JSON_VALUE_PAIRWISE) {
       for (let i: i32 = base + 1; i < base + n; i += 1) {
@@ -736,7 +736,7 @@ export class JsonDocument {
    * `duplicateKeys` keeps the one caller that lets it inline into `parse`.
    * Keep in step with `duplicateKeys`.
    */
-  duplicateKeysRanged(base: i32, n: i32): i32 {
+  private duplicateKeysRanged(base: i32, n: i32): i32 {
     let firstRepeat: i32 = -1
     if (n <= JSON_VALUE_PAIRWISE) {
       for (let i: i32 = base + 1; i < base + n; i += 1) {
@@ -772,7 +772,7 @@ export class JsonDocument {
    * `JSON_VALUE_DUPLICATE_LAST` `head` takes its value and it is marked gone.
    * Answers the smallest source offset of a repeating key seen so far.
    */
-  repeat(head: i32, later: i32, firstRepeat: i32): i32 {
+  private repeat(head: i32, later: i32, firstRepeat: i32): i32 {
     const source: i32 = jsonValueGet(this.pendingSource, later)
     if (this.duplicates === JSON_VALUE_DUPLICATE_LAST) {
       jsonValuePut(this.pendingValue, head, jsonValueGet(this.pendingValue, later))
@@ -782,7 +782,7 @@ export class JsonDocument {
   }
 
   /** Internal: Whether pending members `a` and `b` have the same key bytes. */
-  samePendingKey(a: i32, b: i32): boolean {
+  private samePendingKey(a: i32, b: i32): boolean {
     return this.comparePending(a, b) === 0
   }
 
@@ -792,7 +792,7 @@ export class JsonDocument {
    * whichever of them holds the result. Keep in step with
    * `sortPendingRanged`.
    */
-  sortPending(base: i32, n: i32): i32[] {
+  private sortPending(base: i32, n: i32): i32[] {
     let from: i32[] = jsonValueRoomI32(this.sortA, n)
     let to: i32[] = jsonValueRoomI32(this.sortB, n)
     this.sortA = from
@@ -836,7 +836,7 @@ export class JsonDocument {
    * that `sortPending` keeps the one caller that lets it inline into `parse`.
    * Keep in step with `sortPending`.
    */
-  sortPendingRanged(base: i32, n: i32): i32[] {
+  private sortPendingRanged(base: i32, n: i32): i32[] {
     let from: i32[] = jsonValueRoomI32(this.sortA, n)
     let to: i32[] = jsonValueRoomI32(this.sortB, n)
     this.sortA = from
@@ -876,7 +876,7 @@ export class JsonDocument {
   }
 
   /** Internal: Pending members `a` and `b` ordered by key bytes. */
-  comparePending(a: i32, b: i32): i32 {
+  private comparePending(a: i32, b: i32): i32 {
     return jsonValueCompareBytes(
       this.bytes,
       jsonValueGet(this.pendingKeyAt, a),
@@ -887,7 +887,7 @@ export class JsonDocument {
   }
 
   /** Internal: The tokenizer's current string or key, decoded onto the end of `bytes`; answers its length. */
-  storeString(tok: JsonTokenizer): i32 {
+  private storeString(tok: JsonTokenizer): i32 {
     const n: i32 = tok.stringLength()
     const at: i32 = this.byteTop
     const buf: u8[] = jsonValueRoom(this.bytes, at + n)
@@ -898,7 +898,7 @@ export class JsonDocument {
   }
 
   /** Internal: The tokenizer's current token as written, a number's text, onto the end of `bytes`; answers its length. Keep in step with `storeSourceRanged`. */
-  storeSource(tok: JsonTokenizer): i32 {
+  private storeSource(tok: JsonTokenizer): i32 {
     const src: u8[] = tok.src
     const start: i32 = tok.tokStart
     const n: i32 = tok.tokEnd - start
@@ -919,7 +919,7 @@ export class JsonDocument {
    * `storeSource` keeps the one caller that lets it inline into `parse`.
    * Keep in step with `storeSource`.
    */
-  storeSourceRanged(tok: JsonTokenizer): i32 {
+  private storeSourceRanged(tok: JsonTokenizer): i32 {
     const src: u8[] = tok.src
     const start: i32 = tok.tokStart
     const n: i32 = tok.tokEnd - start
@@ -940,7 +940,7 @@ export class JsonDocument {
    * its index; `JSON_VALUE_ERR_VALUES` when the document already holds
    * `maxValues`.
    */
-  newNode(kind: i32, first: i32, count: i32): i32 {
+  private newNode(kind: i32, first: i32, count: i32): i32 {
     const v: i32 = this.top
     const cap: i32 = this.maxValues < JSON_VALUE_MAX_VALUES ? this.maxValues : JSON_VALUE_MAX_VALUES
     if (v >= cap) {
@@ -971,7 +971,7 @@ export class JsonDocument {
   }
 
   /** Internal: the handle of index `x` in this document's generation; a negative `x` is answered as it is. */
-  handle(x: i32): JsonValue {
+  private handle(x: i32): JsonValue {
     return x < 0 ? x : (this.generation << JSON_VALUE_INDEX_BITS) | x
   }
 
@@ -983,7 +983,7 @@ export class JsonDocument {
   }
 
   /** Internal: the kind of index `x`, or `JSON_VALUE_NONE`. */
-  kindAt(x: i32): i32 {
+  private kindAt(x: i32): i32 {
     const kinds: u8[] = this.kinds
     if (x < 0 || x >= this.top || x >= toI32(kinds.length)) {
       return JSON_VALUE_NONE
@@ -1003,13 +1003,13 @@ export class JsonDocument {
   }
 
   /** Internal: `length` of index `x`. */
-  lengthAt(x: i32): i32 {
+  private lengthAt(x: i32): i32 {
     const k: i32 = this.kindAt(x)
     return k === JSON_VALUE_ARRAY || k === JSON_VALUE_OBJECT ? jsonValueGet(this.count, x) : -1
   }
 
   /** Internal: the slot of member or element `i` of the container at index `x`, or `-1`. */
-  slotAt(x: i32, i: i32): i32 {
+  private slotAt(x: i32, i: i32): i32 {
     if (i < 0 || i >= this.lengthAt(x)) {
       return -1
     }
@@ -1046,7 +1046,7 @@ export class JsonDocument {
   }
 
   /** Internal: the slot of the member of the object at index `x` whose key is `key`'s bytes, or `-1`. */
-  findKey(x: i32, key: string): i32 {
+  private findKey(x: i32, key: string): i32 {
     const start: i32 = jsonValueGet(this.first, x)
     const n: i32 = jsonValueGet(this.count, x)
     for (let s: i32 = start; s < start + n; s += 1) {
@@ -1119,7 +1119,7 @@ export class JsonDocument {
    * exponent, and at most 2^64 - 1. Every `u64` comes from `toU64`, which is
    * a BigInt under Node, and nothing here wraps, so it means the same there.
    */
-  unsigned(x: i32): u64 {
+  private unsigned(x: i32): u64 {
     this.unsignedFits = false
     if (!this.readNumber(x) || !this.numbers.integral) {
       return toU64(0)
@@ -1167,7 +1167,7 @@ export class JsonDocument {
   }
 
   /** Internal: points the number tokenizer at index `x`'s text and reads its one token; `false` when it is not a number. */
-  readNumber(x: i32): boolean {
+  private readNumber(x: i32): boolean {
     if (this.kindAt(x) !== JSON_VALUE_NUMBER) {
       return false
     }
@@ -1177,7 +1177,7 @@ export class JsonDocument {
   }
 
   /** Internal: `bytes[at, at + n)` as a string, in one allocation. */
-  textOf(at: i32, n: i32): string {
+  private textOf(at: i32, n: i32): string {
     const bytes: u8[] = this.bytes
     if (at < 0 || n <= 0 || at > toI32(bytes.length) - n) {
       return ""
@@ -1186,7 +1186,7 @@ export class JsonDocument {
   }
 
   /** Internal: whether `bytes[at, at + n)` are exactly `s`'s bytes. */
-  bytesEqual(at: i32, n: i32, s: string): boolean {
+  private bytesEqual(at: i32, n: i32, s: string): boolean {
     const bytes: u8[] = this.bytes
     if (toI32(s.length) !== n || at < 0 || at > toI32(bytes.length) - n) {
       return false
@@ -1229,17 +1229,17 @@ export class JsonDocument {
   }
 
   /** Internal: whether value `x` has a current range: below `rangeTop`, and written in this generation. */
-  hasValueRange(x: i32): boolean {
+  private hasValueRange(x: i32): boolean {
     return x >= 0 && x < this.rangeTop && this.rangeGeneration === this.generation
   }
 
   /** Internal: whether slot `s` has a current key range: below `slotRangeTop`, and written in this generation. */
-  hasKeyRange(s: i32): boolean {
+  private hasKeyRange(s: i32): boolean {
     return s >= 0 && s < this.slotRangeTop && this.rangeGeneration === this.generation
   }
 
   /** Internal: the range arrays, made the first time a parse or setter writes a range. */
-  rangeArrays(): JsonValueRanges {
+  private rangeArrays(): JsonValueRanges {
     const had: JsonValueRanges | null = this.ranges
     if (had !== null) {
       return had
@@ -1250,7 +1250,7 @@ export class JsonDocument {
   }
 
   /** Internal: before a setter writes a range, forgets an earlier generation's, so that none of them reads as this one's. */
-  ownRanges(): void {
+  private ownRanges(): void {
     if (this.rangeGeneration !== this.generation) {
       this.rangeTop = 0
       this.slotRangeTop = 0
@@ -1315,7 +1315,7 @@ export class JsonDocument {
   }
 
   /** Internal: the slot of member `i` of the object at index `x`, or `-1` when `x` is not an object or has no member `i`. */
-  keySlot(x: i32, i: i32): i32 {
+  private keySlot(x: i32, i: i32): i32 {
     return this.kindAt(x) === JSON_VALUE_OBJECT ? this.slotAt(x, i) : -1
   }
 
@@ -1439,7 +1439,7 @@ export class JsonDocument {
    * container `c` is inside. Through `push` and `set`, that is what keeps
    * every tree finite.
    */
-  adoptable(c: i32, v: i32): i32 {
+  private adoptable(c: i32, v: i32): i32 {
     if (this.kindAt(v) === JSON_VALUE_NONE) {
       return JSON_VALUE_ERR_HANDLE
     }
@@ -1487,7 +1487,7 @@ export class JsonDocument {
   }
 
   /** Internal: a new value of `kind` holding `s`'s bytes, as a handle. */
-  newStored(kind: i32, s: string): JsonValue {
+  private newStored(kind: i32, s: string): JsonValue {
     return this.handle(this.newNode(kind, this.byteTop, this.storeText(s)))
   }
 
@@ -1498,7 +1498,7 @@ export class JsonDocument {
    * test that comes first: a document that never keeps ranges, or a builder's
    * own slots, skip the copy without leaving `append`'s loop.
    */
-  moveSlots(start: i32, n: i32): i32 {
+  private moveSlots(start: i32, n: i32): i32 {
     const moved: i32 = this.slotTop
     for (let i: i32 = 0; i < n; i += 1) {
       jsonValuePut(this.slotValue, moved + i, jsonValueGet(this.slotValue, start + i))
@@ -1518,7 +1518,7 @@ export class JsonDocument {
    * generation, and a slot below `slotRangeTop` means the arrays were made;
    * reading them here, not through `rangeArrays`, keeps `append` small.
    */
-  moveKeyRanges(from: i32, to: i32, n: i32): void {
+  private moveKeyRanges(from: i32, to: i32, n: i32): void {
     const r: JsonValueRanges | null = this.ranges
     const top: i32 = this.slotRangeTop
     if (r !== null) {
@@ -1564,7 +1564,7 @@ export class JsonDocument {
   }
 
   /** Internal: `write` of index `x`. */
-  writeAt(x: i32, w: JsonWriter): void {
+  private writeAt(x: i32, w: JsonWriter): void {
     const k: i32 = this.kindAt(x)
     if (k === JSON_VALUE_NONE || w.failed !== JSON_WRITE_OK) {
       return

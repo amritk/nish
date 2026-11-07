@@ -274,21 +274,21 @@ export class Map<K, V> {
   /** How many entries are live. The one field a program may read, and it may not write it. */
   size: number = 0
   /** Bucket -> fingerprint and entry index plus one; see the header. */
-  slots: u32[]
+  private slots: u32[]
   /** `slots.length - 1`: the table is a power of two. */
-  mask: i32 = 7
+  private mask: i32 = 7
   /** Live entries, as an `i32` for the load and compaction arithmetic. */
-  live: i32 = 0
-  entryKeys: K[]
-  entryValues: V[]
+  private live: i32 = 0
+  private entryKeys: K[]
+  private entryValues: V[]
   /** The full hash of each entry; 0 once the entry is deleted. */
-  entryHashes: u32[]
+  private entryHashes: u32[]
   /**
    * How many `for...of` loops are walking the table now. While it is above 0
    * a rebuild doubles rather than compacts, and `clear` marks entries dead
    * rather than truncating, so no entry moves under a walk's cursor (§6.2).
    */
-  walks: i32 = 0
+  private walks: i32 = 0
 
   constructor() {
     this.slots = new Array<u32>(INITIAL_SLOTS)
@@ -421,7 +421,7 @@ export class Map<K, V> {
    * While a loop walks the table it always doubles and moves no entry, and the
    * first rebuild after the walk compacts (§6.2).
    */
-  rebuild(): void {
+  private rebuild(): void {
     const used = toI32(this.entryKeys.length)
     const walking = this.walks > 0
     const slots = rebuiltSlots(this.slots, walking ? used : this.live, used)
@@ -468,13 +468,13 @@ export class Map<K, V> {
 export class Set<T> {
   /** How many elements are live. The one field a program may read, and it may not write it. */
   size: number = 0
-  slots: u32[]
-  mask: i32 = 7
-  live: i32 = 0
-  entryKeys: T[]
-  entryHashes: u32[]
+  private slots: u32[]
+  private mask: i32 = 7
+  private live: i32 = 0
+  private entryKeys: T[]
+  private entryHashes: u32[]
   /** `Map`'s walk count: how many `for...of` loops are walking the table now. */
-  walks: i32 = 0
+  private walks: i32 = 0
 
   constructor() {
     this.slots = new Array<u32>(INITIAL_SLOTS)
@@ -567,7 +567,7 @@ export class Set<T> {
     }
   }
 
-  rebuild(): void {
+  private rebuild(): void {
     const used = toI32(this.entryKeys.length)
     const walking = this.walks > 0
     const slots = rebuiltSlots(this.slots, walking ? used : this.live, used)

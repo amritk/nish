@@ -902,7 +902,7 @@ const jsonEscapedWidth = (code: i32): i32 => {
  */
 export class JsonWriter {
   buf: u8[]
-  start: i32 = 0
+  private start: i32 = 0
   /** The cursor: the bytes written are `buf[start .. end)`. */
   end: i32 = 0
   /** `JSON_WRITE_OK`, or the first `JSON_WRITE_*` code a call hit. */

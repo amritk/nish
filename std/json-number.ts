@@ -83,20 +83,20 @@ const jsonNumberIsDigit = (c: i32): boolean => c >= JSON_NUMBER_DIGIT_0 && c <= 
  * stepping over the point.
  */
 class JsonNumberParts {
-  text: string
+  private text: string
   /** `0` when the text is a number, else a `JSON_NUMBER_ERR_*` code. */
   code: i32
   negative: boolean
   /** Whether every digit is zero, `-0` and `0.0e5` included. */
   zero: boolean
   /** Where the integer part's digits start, and how many there are. */
-  intStart: i32
-  intLen: i32
+  private intStart: i32
+  private intLen: i32
   /** Where the fraction's digits start, after the point, and how many there are. */
-  fracStart: i32
-  fracLen: i32
+  private fracStart: i32
+  private fracLen: i32
   /** The first significant digit's place among the integer and fraction digits run together. */
-  first: i32
+  private first: i32
   /** How many significant digits there are, from the first non-zero one to the last. */
   count: i32
   /** The decimal exponent of the first significant digit: `3` for `1234`, `-2` for `0.05`. */
@@ -126,13 +126,13 @@ class JsonNumberParts {
   }
 
   /** The digit at place `p` of the integer and fraction digits run together. */
-  placeDigit(p: i32): i32 {
+  private placeDigit(p: i32): i32 {
     const at: i32 = p < this.intLen ? this.intStart + p : this.fracStart + (p - this.intLen)
     return toI32(this.text.charCodeAt(at)) - JSON_NUMBER_DIGIT_0
   }
 
   /** Reads the text against RFC 8259's number grammar; answers `0` or a code. */
-  read(): i32 {
+  private read(): i32 {
     const s: string = this.text
     const n: i32 = toI32(s.length)
     let i: i32 = 0
