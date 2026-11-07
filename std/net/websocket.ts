@@ -84,23 +84,37 @@ import { Http1ResponseParser, http1UpgradeRequestHead } from "nish/net/http1-cli
 export const WS_GUID: string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 // Opcodes (§5.2).
+/** A frame that continues the message before it. */
 export const WS_OP_CONTINUATION: i32 = 0
+/** A text message, UTF-8. */
 export const WS_OP_TEXT: i32 = 1
+/** A binary message. */
 export const WS_OP_BINARY: i32 = 2
+/** A close frame: an optional status code, then an optional UTF-8 reason. */
 export const WS_OP_CLOSE: i32 = 8
+/** A ping, which the peer answers with a pong carrying the same payload. */
 export const WS_OP_PING: i32 = 9
+/** A pong, the answer to a ping or an unasked heartbeat. */
 export const WS_OP_PONG: i32 = 10
 
 // Close status codes (§7.4.1).
+/** The purpose of the connection is fulfilled. */
 export const WS_CLOSE_NORMAL: i32 = 1000
+/** The endpoint is going away: a server shutting down, or a page closed. */
 export const WS_CLOSE_GOING_AWAY: i32 = 1001
+/** The peer broke the framing rules. */
 export const WS_CLOSE_PROTOCOL_ERROR: i32 = 1002
+/** The peer sent a kind of data the endpoint cannot take. */
 export const WS_CLOSE_UNSUPPORTED: i32 = 1003
 /** Reported for a close frame with no status; never sent. */
 export const WS_CLOSE_NO_STATUS: i32 = 1005
+/** A message's data did not fit its type, such as a text message that is not UTF-8. */
 export const WS_CLOSE_INVALID_DATA: i32 = 1007
+/** A message broke the endpoint's policy, when no other code fits. */
 export const WS_CLOSE_POLICY: i32 = 1008
+/** A message was longer than the endpoint takes. */
 export const WS_CLOSE_TOO_BIG: i32 = 1009
+/** The endpoint met a condition it could not handle. */
 export const WS_CLOSE_INTERNAL_ERROR: i32 = 1011
 
 /** The longest payload a control frame may carry (§5.5). */
@@ -131,8 +145,11 @@ const WS_S_ERROR: i32 = 2
  * Table 3-7), so that a sequence cut between two fragments is checked whole.
  */
 class WsUtf8 {
+  /** @internal Validator state `websocketUtf8Run` reads and writes. */
   need: i32 = 0
+  /** @internal Validator state `websocketUtf8Run` reads and writes. */
   lo: i32 = 0x80
+  /** @internal Validator state `websocketUtf8Run` reads and writes. */
   hi: i32 = 0xbf
 }
 
@@ -226,30 +243,42 @@ export class WsDecoder {
   data: u8[]
   /** The peer's close reason after `WS_CLOSE`, or what was wrong after `WS_ERROR`. */
   closeReason: string = ""
-  /** The bytes fed and not yet consumed are `buf[start .. end)`. */
+  /** The bytes fed and not yet consumed are `buf[start .. end)`. @internal */
   buf: u8[]
-  /** The message being assembled; its first `messageLen` bytes are live. */
+  /** The message being assembled; its first `messageLen` bytes are live. @internal */
   message: u8[]
-  /** A control frame's payload, kept apart so a ping cannot disturb a message in progress. */
+  /** A control frame's payload, kept apart so a ping cannot disturb a message in progress. @internal */
   control: u8[]
-  /** The UTF-8 check of the text message being assembled. */
+  /** The UTF-8 check of the text message being assembled. @internal */
   utf8: WsUtf8
 
+  /** The longest message accepted, in bytes; a longer one is refused with 1009. */
   maxMessage: i32 = 0
+  /** How many bytes of `data` the last event filled. */
   dataLen: i32 = 0
   /** The last event's opcode: `WS_OP_TEXT` or `WS_OP_BINARY` for a message, the control opcode otherwise. */
   opcode: i32 = 0
   /** The peer's status code after `WS_CLOSE` (`WS_CLOSE_NO_STATUS` when it sent none), or the one to send after `WS_ERROR`. */
   closeCode: i32 = 0
+  /** @internal The unread bytes are `buf[start .. end)`; `nish/net/http1-server` reads them to size its input. */
   start: i32 = 0
+  /** @internal The end of the unread bytes; `nish/net/http1-server` reads it with `start`. */
   end: i32 = 0
+  /** @internal Decoder state the module's `websocket` helpers read and write. */
   state: i32 = 0
-  /** The opcode of the message whose fragments are arriving, or 0 between messages. */
+  /** The opcode of the message whose fragments are arriving, or 0 between messages. @internal */
   messageOpcode: i32 = 0
+  /** @internal Decoder state the module's `websocket` helpers read and write. */
   messageLen: i32 = 0
 
+  /** Whether every frame must be masked, as a server requires of a client. */
   expectMasked: boolean = false
 
+  /**
+   * A decoder with nothing fed yet.
+   * @param expectMasked True for a server, whose client masks every frame; false for a client.
+   * @param maxMessage The longest message accepted, in bytes; below zero is read as zero.
+   */
   constructor(expectMasked: boolean, maxMessage: i32) {
     this.expectMasked = expectMasked
     // Below zero allows only empty messages, as zero does.
@@ -268,6 +297,9 @@ export class WsDecoder {
   /**
    * Appends `data[off .. off + len)` to the input. A window outside `data`
    * panics; after `WS_CLOSE` or `WS_ERROR` the input is dropped.
+   * @param data The bytes read from the connection.
+   * @param off Where the new bytes start in `data`.
+   * @param len How many bytes to append.
    */
   feed(data: u8[], off: i32, len: i32): void {
     const size: i32 = toI32(data.length)
@@ -295,7 +327,10 @@ export class WsDecoder {
     this.end = at + len
   }
 
-  /** The next event the input holds; see the module comment. */
+  /**
+   * The next event the input holds; see the module comment.
+   * @returns A `WS_` event, `WS_NEED_MORE` when the input runs out.
+   */
   next(): i32 {
     return websocketNext(this)
   }
@@ -1012,8 +1047,14 @@ export const WS_HS_PROTOCOL: i32 = 7
 export class WsHandshake {
   /** The subprotocol the server chose, or `""` when it chose none. */
   protocol: string = ""
+  /** `WS_HS_OK`, or the `WS_HS_*` rule the response broke. */
   error: i32 = 0
 
+  /**
+   * The answer to one handshake check.
+   * @param error `WS_HS_OK`, or the rule the response broke.
+   * @param protocol The subprotocol the server chose, or `""`.
+   */
   constructor(error: i32, protocol: string) {
     this.error = error
     this.protocol = protocol

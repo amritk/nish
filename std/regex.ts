@@ -151,19 +151,25 @@ const REGEX_FOLD_INDEX: string =
   "005E0002006?001C00700034007@004F00810065008A007500910085009C009500:400:500:E00;500;500<500;E00=500<600>800<G00?B00=700@L00=I00B100>@00C200?000D300?A00E300@100F500@A00G500A200H600AB00I600B800JF00BK00L400CE00N600KA010100L@011<00M0012M00MA014>00N1016000NA017@00O4018C00OD019F010601;1010F01<A011601>1011F01?C012601A6012F01BG013601D3013F01E3014>01F3014N01G3015>01H3015N01I3016>01J4016N01K5017>01L5017N01M5018>01N5018N01O5019>0205019O021C01:?023301;9024C01;I02630452027G045B029G046202;G046J02=G047:02?G047J02AG04M<02D404ML02FD04N<02I404NL02KD04O<02N4074002OH074E031C0755033C075E035C07@4037?07@D038?07A4039?07AD03:?07B403;?07BD03<?07C403=@07CD03>@07D403?@07DD03@@07E<03AC07EL03BC07F<03CC07FL03DC07G<03EC07GL03FC07H<03GK07I003I107I@03J907J003KA07JI03LK07K<03N307KL03O?07L>040I07LN042107M>043907N<044F07O<046308;5047F08;E0496095I04:E096904<5096I04=E097904?50;0?04@G0;0O04B70;1?04CG0;1O04E70;2?04FG0;2O04H70;3?04IL0;4804K80;4H04L80;5804M80;5H04N80;6804O80;6H05080;7B05180;8>05340;8N055419B6056J19BF057M19C6058M19D8059M19DH05:M19I>05;N19J005<N19J@05=N19K005>N19KI05?N19L<05A119LO05B519M@05CD19N005DO19NF05F91:KF05H11:L605JA1:LF05M11:M605OA1:MF06211OI506471OIE065G1OJ;06772100068I210@06:9211006;I211@06=9212006>I215@06@:216006AJ216@06C:217406DJ217D06F:21;H06GK21<906I;21<L06JK21==06L;234206MM234B06O=2352070M235B072=236?073M236O075=237?076M23:L078>23;F079N265007;@265@07=0266007>@266@07@02KB007AB2KB@07C22KC007DB2KC@07F23J8007GD3J8@07I43J9007JD3J9@07L43J:007MD"
 // gen-regex-unicode:end
 
-/** The most instructions a compiled pattern may have. */
+/** The most instructions a compiled pattern may have; `regexCompile` refuses a bigger program. */
 export const REGEX_MAX_INSTRUCTIONS: i32 = 100000
-/** The largest count `{n}`, `{n,}` or `{n,m}` may give. */
+/** The largest count `{n}`, `{n,}` or `{n,m}` may give; a larger one is a compile error. */
 export const REGEX_MAX_REPEAT: i32 = 1000
-/** How deeply groups may nest. */
+/** How deeply groups may nest; a deeper pattern is a compile error. */
 export const REGEX_MAX_DEPTH: i32 = 250
 /** The most entries one thread list's capture table may have: instructions × slots per thread. */
 const REGEX_MAX_SLOT_TABLE: i32 = 4194304
-/** The most capturing groups a pattern may have, past group 0; a name is checked against each. */
+/**
+ * The most capturing groups a pattern may have, past group 0; one more is a
+ * compile error. A name is checked against each.
+ */
 export const REGEX_MAX_GROUPS: i32 = 1024
-/** The most ranges one class may list; the class sorts them by insertion. */
+/** The most ranges one class may list; one more is a compile error. */
 export const REGEX_MAX_CLASS_RANGES: i32 = 10000
-/** Most ranges the property escapes and case folding of one pattern may add to its classes. */
+/**
+ * The most ranges the property escapes and case folding of one pattern may
+ * add to its classes; one more is a compile error.
+ */
 export const REGEX_MAX_PROPERTY_RANGES: i32 = 100000
 /** Most ranges a class sorts by insertion; a longer one is merge-sorted. */
 const REGEX_INSERTION_SORT: i32 = 64
@@ -462,47 +468,69 @@ const regexPushUtf8 = (out: u8[], cp: i32): void => {
  */
 class RegexParser {
   // Widest first, so the alignment rules insert no padding.
-  src: string
+  private src: string
+  /** @internal `regexCompile` puts it in the compile error. */
   error: string
 
+  /** @internal `Regex` compiles the parser's tree from it. */
   kind: i32[]
+  /** @internal `Regex` compiles the parser's tree from it. */
   na: i32[]
+  /** @internal `Regex` compiles the parser's tree from it. */
   nb: i32[]
+  /** @internal `Regex` compiles the parser's tree from it. */
   nc: i32[]
+  /** @internal `Regex` compiles the parser's tree from it. */
   nd: i32[]
+  /** @internal `Regex` compiles the parser's tree from it. */
   ne: i32[]
+  /** @internal `Regex` compiles the parser's tree from it. */
   kid: i32[]
+  /** @internal `Regex` compiles the parser's tree from it. */
   next: i32[]
 
+  /** @internal `Regex.build` copies the group names from it. */
   names: string[]
 
+  /** @internal `Regex.build` copies the parsed classes from it. */
   clsAscii: u8[]
+  /** @internal `Regex.build` copies the parsed classes from it. */
   clsLo: i32[]
+  /** @internal `Regex.build` copies the parsed classes from it. */
   clsHi: i32[]
+  /** @internal `Regex.build` copies the parsed classes from it. */
   clsFrom: i32[]
+  /** @internal `Regex.build` copies the parsed classes from it. */
   clsTo: i32[]
+  /** @internal `Regex.build` copies the parsed classes from it. */
   clsNeg: u8[]
   /** The class being parsed: its ranges, unsorted, `tmpCount` of them. */
-  tmpLo: i32[]
-  tmpHi: i32[]
+  private tmpLo: i32[]
+  private tmpHi: i32[]
+  /** @internal `regexCompile` compares `pos` with it to find a stray `)`. */
   len: i32
+  /** @internal `regexCompile` reads it to find a stray `)`. */
   pos: i32
+  /** @internal `regexCompile` reads where the parse failed. */
   errorAt: i32
-  /** Capture groups, the whole match (group 0) included. */
+  /** Capture groups, the whole match (group 0) included. @internal `Regex.build` copies it. */
   groups: i32
-  tmpCount: i32
+  private tmpCount: i32
   /** What `parseBraces` read. */
-  qMin: i32
-  qMax: i32
+  private qMin: i32
+  private qMax: i32
   /** Where `tableNumber` reads next. */
-  tablePos: i32
+  private tablePos: i32
   /** The ranges property escapes and case folding have added, against `REGEX_MAX_PROPERTY_RANGES`. */
-  propertyRanges: i32
+  private propertyRanges: i32
 
-  icase: boolean
-  multiline: boolean
+  private icase: boolean
+  private multiline: boolean
+  /** @internal `Regex.compileNode` reads it to compile `.`. */
   dotAll: boolean
+  /** @internal `regexCompile` reads it after the parse. */
   failed: boolean
+  /** @internal `Regex.build` copies it. */
   hasNames: boolean
 
   constructor(src: string, icase: boolean, multiline: boolean, dotAll: boolean) {
@@ -541,6 +569,7 @@ class RegexParser {
     this.propertyRanges = 0
   }
 
+  /** @internal `regexCompile` calls it for a stray `)`. */
   fail(message: string, at: i32): i32 {
     if (!this.failed) {
       this.failed = true
@@ -550,11 +579,11 @@ class RegexParser {
     return -1
   }
 
-  byteAt(i: i32): i32 {
+  private byteAt(i: i32): i32 {
     return toI32(this.src.charCodeAt(i))
   }
 
-  node(kind: i32, a: i32, b: i32): i32 {
+  private node(kind: i32, a: i32, b: i32): i32 {
     const n: i32 = toI32(this.kind.length)
     this.kind.push(kind)
     this.na.push(a)
@@ -571,7 +600,7 @@ class RegexParser {
    * A node for code point `cp`, with its other case under `i`: one other
    * case is a character's second operand, more make a class of them all.
    */
-  charNode(cp: i32): i32 {
+  private charNode(cp: i32): i32 {
     if (!this.icase) {
       return this.node(NODE_CHAR, cp, cp)
     }
@@ -600,7 +629,7 @@ class RegexParser {
   }
 
   /** The number at `tablePos` in `table`, a generated table's base-32 digits, `tablePos` moved past it. */
-  tableNumber(table: string): i32 {
+  private tableNumber(table: string): i32 {
     let v: i32 = 0
     let d: i32 = toI32(table.charCodeAt(this.tablePos)) - 48
     this.tablePos += 1
@@ -617,7 +646,7 @@ class RegexParser {
    * block starting at or before it, or the first. `tablePos` is left at that
    * member's step.
    */
-  foldSeek(cp: i32): i32 {
+  private foldSeek(cp: i32): i32 {
     let a: i32 = 0
     let b: i32 = toI32(REGEX_FOLD_INDEX.length) >> 3
     while (b - a > 1) {
@@ -633,7 +662,7 @@ class RegexParser {
   }
 
   /** `cp`'s step in `REGEX_FOLD_DATA`, for `regexFoldTarget`, or -1 if it folds to nothing. */
-  foldStepOf(cp: i32): i32 {
+  private foldStepOf(cp: i32): i32 {
     let c: i32 = this.foldSeek(cp)
     const end: i32 = toI32(REGEX_FOLD_DATA.length)
     while (c < cp && this.tablePos < end) {
@@ -645,7 +674,7 @@ class RegexParser {
     return c === cp && this.tablePos < end ? this.tableNumber(REGEX_FOLD_DATA) : -1
   }
 
-  /** `alternative ('|' alternative)*`. */
+  /** `alternative ('|' alternative)*`. @internal `regexCompile` starts the parse with it. */
   parseAlt(depth: i32): i32 {
     if (depth > REGEX_MAX_DEPTH) {
       return this.fail("groups nest too deeply", this.pos)
@@ -673,7 +702,7 @@ class RegexParser {
   }
 
   /** The terms up to a `|`, a `)` or the end. */
-  parseSeq(depth: i32): i32 {
+  private parseSeq(depth: i32): i32 {
     let first: i32 = -1
     let last: i32 = -1
     let count: i32 = 0
@@ -706,7 +735,7 @@ class RegexParser {
   }
 
   /** An atom and at most one quantifier. */
-  parseTerm(depth: i32): i32 {
+  private parseTerm(depth: i32): i32 {
     const groupsBefore: i32 = this.groups
     const atomAt: i32 = this.pos
     const atom: i32 = this.parseAtom(depth)
@@ -765,7 +794,7 @@ class RegexParser {
    * in `qMin` / `qMax` (-1 unbounded) with the cursor past it. Anything else
    * leaves the cursor where it was.
    */
-  parseBraces(): boolean {
+  private parseBraces(): boolean {
     let i: i32 = this.pos + 1
     const start: i32 = this.pos
     let min: i32 = 0
@@ -814,7 +843,7 @@ class RegexParser {
     return true
   }
 
-  parseAtom(depth: i32): i32 {
+  private parseAtom(depth: i32): i32 {
     const c: i32 = this.byteAt(this.pos)
     if (c === 40) {
       return this.parseGroup(depth)
@@ -861,7 +890,7 @@ class RegexParser {
     return this.charNode(packed >> 3)
   }
 
-  parseGroup(depth: i32): i32 {
+  private parseGroup(depth: i32): i32 {
     const open: i32 = this.pos
     this.pos += 1
     let capture: boolean = true
@@ -929,7 +958,7 @@ class RegexParser {
   }
 
   /** A `\` outside a class. */
-  parseEscape(): i32 {
+  private parseEscape(): i32 {
     const at: i32 = this.pos
     this.pos += 1
     if (this.pos >= this.len) {
@@ -982,7 +1011,7 @@ class RegexParser {
    * `\`. Shared by escapes inside and outside a class; inside one, `\b` is a
    * backspace and `\-` a hyphen.
    */
-  parseCharEscape(inClass: boolean): i32 {
+  private parseCharEscape(inClass: boolean): i32 {
     const at: i32 = this.pos - 1
     const c: i32 = this.byteAt(this.pos)
     this.pos += 1
@@ -1057,7 +1086,7 @@ class RegexParser {
   }
 
   /** Exactly `n` hex digits at the cursor, or -1 with the cursor left. */
-  parseHex(n: i32): i32 {
+  private parseHex(n: i32): i32 {
     if (this.pos + n > this.len) {
       return -1
     }
@@ -1076,7 +1105,7 @@ class RegexParser {
   }
 
   /** `\uHHHH`, a surrogate pair of them, or `\u{H…}`, the cursor after the `u`. */
-  parseUnicodeEscape(at: i32): i32 {
+  private parseUnicodeEscape(at: i32): i32 {
     if (this.pos < this.len && this.byteAt(this.pos) === 123) {
       let i: i32 = this.pos + 1
       let v: i32 = 0
@@ -1115,7 +1144,7 @@ class RegexParser {
     return v
   }
 
-  addRange(lo: i32, hi: i32): void {
+  private addRange(lo: i32, hi: i32): void {
     if (this.tmpCount < toI32(this.tmpLo.length)) {
       this.tmpLo[this.tmpCount] = lo
       this.tmpHi[this.tmpCount] = hi
@@ -1131,7 +1160,7 @@ class RegexParser {
    * escape's letter — to the class being parsed. A capital adds the complement, the
    * gaps between the set's sorted ranges.
    */
-  addSet(letter: i32): void {
+  private addSet(letter: i32): void {
     const negate: boolean = letter === 68 || letter === 87 || letter === 83
     const lower: i32 = negate ? letter + 32 : letter
     let set: i32 = SET_SPACE
@@ -1215,7 +1244,7 @@ class RegexParser {
    * alone, or `General_Category`, `Script` or `Script_Extensions` (or `gc`,
    * `sc`, `scx`) `=` a value, spelled as ECMA-262 spells them.
    */
-  addProperty(at: i32, negate: boolean): void {
+  private addProperty(at: i32, negate: boolean): void {
     this.pos += 1
     if (this.pos >= this.len || this.byteAt(this.pos) !== 123) {
       this.fail("invalid property name", at)
@@ -1309,7 +1338,7 @@ class RegexParser {
   }
 
   /** Count `n` more ranges against `REGEX_MAX_PROPERTY_RANGES`, failing at `at` past it. */
-  countPropertyRanges(n: i32, at: i32): void {
+  private countPropertyRanges(n: i32, at: i32): void {
     this.propertyRanges += n
     if (this.propertyRanges > REGEX_MAX_PROPERTY_RANGES) {
       this.fail("property escapes and case folding add more than 100000 ranges", at)
@@ -1317,7 +1346,7 @@ class RegexParser {
   }
 
   /** One member of a class: a code point, or -2 once a set escape has added its ranges. */
-  parseClassAtom(): i32 {
+  private parseClassAtom(): i32 {
     const c: i32 = this.byteAt(this.pos)
     if (c === 92) {
       const at: i32 = this.pos
@@ -1349,7 +1378,7 @@ class RegexParser {
   }
 
   /** `[…]` or `[^…]`. */
-  parseClass(): i32 {
+  private parseClass(): i32 {
     const open: i32 = this.pos
     this.pos += 1
     let negated: boolean = false
@@ -1406,7 +1435,7 @@ class RegexParser {
   }
 
   /** Store the class in `tmpLo` / `tmpHi` and answer its node. */
-  finishClass(negated: boolean): i32 {
+  private finishClass(negated: boolean): i32 {
     const k: i32 = toI32(this.clsFrom.length)
     const base: i32 = toI32(this.clsAscii.length)
     let j: i32 = 0
@@ -1463,7 +1492,7 @@ class RegexParser {
    * Append the non-ASCII part of the class being parsed to `clsLo` /
    * `clsHi`, sorted by start and merged, and answer where the merged run ends.
    */
-  storeRanges(): i32 {
+  private storeRanges(): i32 {
     const from: i32 = toI32(this.clsLo.length)
     let i: i32 = 0
     while (i < this.tmpCount) {
@@ -1519,7 +1548,7 @@ class RegexParser {
    * scratch copy, so that a class of many ranges, such as a few property
    * escapes in one, costs n log n rather than the n² insertion would.
    */
-  mergeSort(from: i32, end: i32): void {
+  private mergeSort(from: i32, end: i32): void {
     const n: i32 = end - from
     let srcLo: i32[] = []
     let srcHi: i32[] = []
@@ -1584,7 +1613,7 @@ class RegexParser {
    * folds to; if they do, the class being parsed becomes them and the
    * missing code points, to be stored again.
    */
-  foldRanges(from: i32, out: i32): boolean {
+  private foldRanges(from: i32, out: i32): boolean {
     // A class closed already, holding no folding code point or all of them, leaves the fold table unread.
     let touches: boolean = false
     let covers: boolean = true
@@ -1644,7 +1673,7 @@ class RegexParser {
   }
 
   /** Whether the sorted, merged ranges `[from, out)` hold `c`. */
-  rangesHave(from: i32, out: i32, c: i32): boolean {
+  private rangesHave(from: i32, out: i32, c: i32): boolean {
     let lo: i32 = from
     let hi: i32 = out
     while (lo < hi) {
@@ -1928,55 +1957,92 @@ const regexScanFrom = (text: string, masks: u8[], depth: i32, off: i32, width: i
 
 /** One match: the input it was found in and the byte offsets of every group. */
 export class RegexMatch {
-  /** The text that was searched. */
+  /** The text that was searched. @internal `Regex.exec` fills it in. */
   input: string
-  /** `start, end` of group 0, then of each group in order; -1 for a group that took no part. */
+  /** `start, end` of group 0, then of each group in order; -1 for a group that took no part. @internal `Regex.exec` fills it in. */
   slots: i32[]
-  /** Each group's name, "" for an unnamed one. */
+  /** Each group's name, "" for an unnamed one. @internal `Regex.exec` fills it in. */
   names: string[]
 
+  /** An empty match with no groups, for `Regex.exec` to fill in. */
   constructor() {
     this.input = ""
     this.slots = []
     this.names = []
   }
 
-  /** Where the match starts. */
+  /**
+   * Where the match starts.
+   *
+   * @returns The byte offset of the match's first byte in the searched text.
+   */
   start(): i32 {
     return this.slots[0]
   }
 
-  /** Where the match ends, one past its last byte. */
+  /**
+   * Where the match ends.
+   *
+   * @returns The byte offset one past the match's last byte; equal to `start` for an empty match.
+   */
   end(): i32 {
     return this.slots[1]
   }
 
-  /** The matched text. */
+  /**
+   * The matched text.
+   *
+   * @returns The bytes from `start` to `end` of the searched text; "" for an empty match.
+   */
   text(): string {
     return this.group(REGEX_WHOLE)
   }
 
-  /** How many groups there are, the whole match (group 0) included. */
+  /**
+   * How many groups the pattern has.
+   *
+   * @returns The count with the whole match (group 0) included, so a pattern with no groups gives 1.
+   */
   groupCount(): i32 {
     return toI32(this.slots.length) / 2
   }
 
-  /** Whether group `k` took part in the match. */
+  /**
+   * Whether group `k` took part in the match.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns False for a group that took no part and for a number with no group.
+   */
   matched(k: i32): boolean {
     return k >= 0 && k < this.groupCount() && this.slots[2 * k] >= 0
   }
 
-  /** Where group `k` starts, or -1. */
+  /**
+   * Where group `k` starts.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns The byte offset of the group's first byte, or -1 when the group took no part or does not exist.
+   */
   groupStart(k: i32): i32 {
     return this.matched(k) ? this.slots[2 * k] : -1
   }
 
-  /** Where group `k` ends, or -1. */
+  /**
+   * Where group `k` ends.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns The byte offset one past the group's last byte, or -1 when the group took no part or does not exist.
+   */
   groupEnd(k: i32): i32 {
     return this.matched(k) ? this.slots[2 * k + 1] : -1
   }
 
-  /** Group `k`'s text: "" when it took no part, so test `matched` to tell the two apart. */
+  /**
+   * Group `k`'s text.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns The group's text; "" when it took no part or does not exist, so test `matched` to tell that from an empty capture.
+   */
   group(k: i32): string {
     if (!this.matched(k)) {
       return ""
@@ -1984,7 +2050,12 @@ export class RegexMatch {
     return this.input.slice(this.slots[2 * k], this.slots[2 * k + 1])
   }
 
-  /** The text of the group named `name`; "" when there is none or it took no part. */
+  /**
+   * The text of a named group.
+   *
+   * @param name The name the pattern gave the group with `(?<name>...)`.
+   * @returns The group's text; "" when no group has that name or it took no part.
+   */
   named(name: string): string {
     return this.group(toI32(this.names.indexOf(name)))
   }
@@ -2001,167 +2072,173 @@ export class Regex {
   /** The flags as written. */
   readonly flags: string
   /** Each repeat node's mark slot, or -1 before it has one. */
-  markOf: i32[]
-  names: string[]
+  private markOf: i32[]
+  private names: string[]
 
-  op: i32[]
-  ia: i32[]
-  ib: i32[]
+  private op: i32[]
+  private ia: i32[]
+  private ib: i32[]
 
-  clsAscii: u8[]
-  clsLo: i32[]
-  clsHi: i32[]
-  clsFrom: i32[]
-  clsTo: i32[]
-  clsNeg: u8[]
+  private clsAscii: u8[]
+  private clsLo: i32[]
+  private clsHi: i32[]
+  private clsFrom: i32[]
+  private clsTo: i32[]
+  private clsNeg: u8[]
 
   /** The literal every match starts with, or "". */
-  prefix: string
+  private prefix: string
   /** The prefix's rarest byte, which `findPrefix` searches for, at `rareAt`. */
-  rareStr: string
+  private rareStr: string
   /** A literal inside every match that the part before it cannot read, or "": see `dfaInner`. */
-  innerLit: string
+  private innerLit: string
   /** Which ASCII bytes a match can start with, or empty when any byte can start one. */
-  firstSet: u8[]
+  private firstSet: u8[]
   /**
    * The byte sets of a match's first `scanDepth` positions, 32 bytes each in
    * `regexScanFrom`'s layout. Every position but the last is ASCII only, so
    * each is one byte of the text.
    */
-  posMasks: u8[]
+  private posMasks: u8[]
 
   // Two lists of threads, each with a capture table indexed by pc. A list
   // holds only the threads that wait for a character or have matched, in
   // priority order; the instructions a closure has passed through are in
   // `visit`, stamped with the closure's generation `gen`.
-  cDense: i32[]
-  cSlots: i32[]
-  nDense: i32[]
-  nSlots: i32[]
-  visit: i32[]
+  private cDense: i32[]
+  private cSlots: i32[]
+  private nDense: i32[]
+  private nSlots: i32[]
+  private visit: i32[]
   /** The closure's stack: explore `stkA` (kind 0) or restore slot `stkA` to `stkB` (kind 1). */
-  stkKind: i32[]
-  stkA: i32[]
-  stkB: i32[]
+  private stkKind: i32[]
+  private stkA: i32[]
+  private stkB: i32[]
   /** The captures of the thread being followed. */
-  caps: i32[]
+  private caps: i32[]
   /** The best match so far. */
-  mslots: i32[]
+  private mslots: i32[]
 
   // The lazy DFA, built on first use by `dfaInit`. State `id` lives at
   // offset `id << dShift` of `dTrans`, one transition per byte class; its
   // instructions are `dPool[dStart[id] .. + dLen[id])` and `dHash` finds a
   // state by them, holding `id + 1`.
-  dTrans: i32[]
-  dPool: i32[]
-  dStart: i32[]
-  dLen: i32[]
-  dFlags: i32[]
-  dHash: i32[]
+  private dTrans: i32[]
+  private dPool: i32[]
+  private dStart: i32[]
+  private dLen: i32[]
+  private dFlags: i32[]
+  private dHash: i32[]
   // Scratch for one step: the closure's stamps, leaves and stack, and the
   // next state's instructions.
-  dVisit: i32[]
-  dLeaf: i32[]
-  dBuf: i32[]
-  dStk: i32[]
+  private dVisit: i32[]
+  private dLeaf: i32[]
+  private dBuf: i32[]
+  private dStk: i32[]
   /** The class of each ASCII byte; every byte above it maps to the spare column, never filled. */
-  dCls: i32[]
+  private dCls: i32[]
   /** The classes of the code points from `dWlo[i]` up to the next: every one above ASCII. */
-  dWlo: i32[]
-  dWcls: i32[]
+  private dWlo: i32[]
+  private dWcls: i32[]
   /** A code point of each class, or -1 for the end of the text, and its kind. */
-  dRep: i32[]
-  dNextK: i32[]
+  private dRep: i32[]
+  private dNextK: i32[]
   /** The context a class leaves behind, read forward and in reverse. */
-  dCtxF: i32[]
-  dCtxR: i32[]
-  dMaskF: i32[]
-  dMaskR: i32[]
+  private dCtxF: i32[]
+  private dCtxR: i32[]
+  private dMaskF: i32[]
+  private dMaskR: i32[]
   /** Each start state's offset + 1, by mode and context, or 0. */
-  dStartOff: i32[]
+  private dStartOff: i32[]
   /** The unanchored start state after the prefix (see `dPrefFast`): its offset + 1, or 0 until it is computed. */
-  dPrefOff: i32
+  private dPrefOff: i32
   /** Bytes the inner search read in vain past its literal, and bytes it moved past: see `dfaInner`. */
-  innerWaste: f64
-  innerGain: f64
+  private innerWaste: f64
+  private innerGain: f64
 
   /** Capture groups, the whole match included. */
   groups: i32
   /** Slots a thread carries: two per group, then one mark per repeat that can iterate empty. */
-  width: i32
+  private width: i32
   /**
    * How deep the marked iterations nest, up to `REGEX_MAX_LEVELS`, so a
    * closure tells `1 << levels` sets of them apart; `checkDepth` is the
    * nesting where the compiler is.
    */
-  levels: i32
-  checkDepth: i32
-  cCount: i32
-  nCount: i32
-  gen: i32
+  private levels: i32
+  private checkDepth: i32
+  private cCount: i32
+  private nCount: i32
+  private gen: i32
   /** The forward program's length; the reverse one follows it, at `revEntry`. */
-  fwdCount: i32
-  revEntry: i32
+  private fwdCount: i32
+  private revEntry: i32
   /** The reverse of the part before `innerLit`, which the inner search runs back from it. */
-  innerEntry: i32
+  private innerEntry: i32
   /** Where `dfaForward` stopped reading, and where `dfaInner`'s match starts. */
-  dStop: i32
-  dBegin: i32
+  private dStop: i32
+  private dBegin: i32
   /** Where `rareStr` is in `prefix`. */
-  rareAt: i32
-  scanDepth: i32
-  scanWidth: i32
-  scanOff: i32
-  dShift: i32
-  dCount: i32
-  dCap: i32
-  dMax: i32
-  dPoolLen: i32
-  dPoolMax: i32
-  dGen: i32
+  private rareAt: i32
+  private scanDepth: i32
+  private scanWidth: i32
+  private scanOff: i32
+  private dShift: i32
+  private dCount: i32
+  private dCap: i32
+  private dMax: i32
+  private dPoolLen: i32
+  private dPoolMax: i32
+  private dGen: i32
   /** Bumped by every flush, so a step can tell its row was cleared under it. */
-  dEpoch: i32
-  dFlushes: i32
+  private dEpoch: i32
+  private dFlushes: i32
   /** Where the last flush happened. */
-  dPos: i32
+  private dPos: i32
   /** The class of the end of the text, and how many intervals above ASCII there are. */
-  dEot: i32
-  dWide: i32
+  private dEot: i32
+  private dWide: i32
 
-  hasNames: boolean
-  tooBig: boolean
+  private hasNames: boolean
+  private tooBig: boolean
   /** The pattern is `prefix` and nothing else. */
-  literal: boolean
+  private literal: boolean
   /** The pattern starts with `^` outside multiline mode. */
-  anchored: boolean
+  private anchored: boolean
   /** Whether a byte above ASCII can start a match, when `firstSet` is not empty. */
-  firstWide: boolean
+  private firstWide: boolean
   /** The pattern can match the empty string. */
-  nullable: boolean
+  private nullable: boolean
   /** The reverse program was compiled. */
-  revOk: boolean
+  private revOk: boolean
   /** `dfaInit` has run, and whether the DFA may be used. */
-  dReady: boolean
-  dOk: boolean
+  private dReady: boolean
+  private dOk: boolean
   /** An idle state skips ahead with the prefilter. */
-  dSkip: boolean
+  private dSkip: boolean
   /** The scan's window is rare enough in text to search with. */
-  scanSel: boolean
+  private scanSel: boolean
   /** The scan's first positions are exactly the prefix's bytes, all ASCII: see `prefixIsScan`. */
-  prefixExact: boolean
+  private prefixExact: boolean
   /**
    * Whether no forward assertion reads the character before it, so every
    * forward state after a character holds the same context and a state with
    * no thread left is the unanchored start state wherever the text resumes.
    */
-  dCtxFree: boolean
+  private dCtxFree: boolean
   /**
    * Whether a match can start only where the ASCII `prefix` is and no
    * assertion reads the context, so the unanchored start state after the
    * prefix's bytes is one state, at `dPrefOff`.
    */
-  dPrefFast: boolean
+  private dPrefFast: boolean
 
+  /**
+   * A pattern not compiled yet: call `regexCompile`, which builds its program.
+   *
+   * @param source The pattern as written, kept for `source`.
+   * @param flags The flags as written, kept for `flags`.
+   */
   constructor(source: string, flags: string) {
     this.source = source
     this.flags = flags
@@ -2259,12 +2336,21 @@ export class Regex {
     this.prefixExact = false
   }
 
-  /** How many groups there are, the whole match (group 0) included. */
+  /**
+   * How many groups the pattern has.
+   *
+   * @returns The count with the whole match (group 0) included, so a pattern with no groups gives 1.
+   */
   groupCount(): i32 {
     return this.groups
   }
 
-  /** The number of the group named `name`, or -1. */
+  /**
+   * The number of a named group.
+   *
+   * @param name The name the pattern gave the group with `(?<name>...)`.
+   * @returns The group's number, for `RegexMatch.group`; -1 when no group has that name or `name` is "".
+   */
   groupIndex(name: string): i32 {
     if (name === "") {
       return -1
@@ -2272,7 +2358,7 @@ export class Regex {
     return toI32(this.names.indexOf(name))
   }
 
-  emit(op: i32, a: i32, b: i32): i32 {
+  private emit(op: i32, a: i32, b: i32): i32 {
     const pc: i32 = toI32(this.op.length)
     if (pc >= REGEX_MAX_INSTRUCTIONS) {
       this.tooBig = true
@@ -2284,12 +2370,12 @@ export class Regex {
     return pc
   }
 
-  pc(): i32 {
+  private pc(): i32 {
     return toI32(this.op.length)
   }
 
   /** One iteration of a repeat's body: its groups cleared, then the body. */
-  compileIteration(p: RegexParser, r: i32, rev: boolean): void {
+  private compileIteration(p: RegexParser, r: i32, rev: boolean): void {
     if (p.ne[r] > p.nd[r]) {
       this.emit(OP_CLEAR, 2 * p.nd[r], 2 * p.ne[r])
     }
@@ -2301,7 +2387,7 @@ export class Regex {
    * end: a concatenation's parts come last first and each assertion trades
    * places with its mirror, `^` with `$`. The reverse DFA runs that program.
    */
-  compileNode(p: RegexParser, n: i32, rev: boolean): void {
+  private compileNode(p: RegexParser, n: i32, rev: boolean): void {
     if (this.tooBig) {
       return
     }
@@ -2447,7 +2533,14 @@ export class Regex {
    *   body × min; L: SPLIT M, exit; M: MARK k; body; CHECK k; JMP L     (unbounded)
    *   body × min; (SPLIT M, exit; M: MARK k; body; CHECK k) × (max - min)
    */
-  compileEmptyCheckedRepeat(p: RegexParser, n: i32, min: i32, max: i32, greedy: boolean, rev: boolean): void {
+  private compileEmptyCheckedRepeat(
+    p: RegexParser,
+    n: i32,
+    min: i32,
+    max: i32,
+    greedy: boolean,
+    rev: boolean
+  ): void {
     while (toI32(this.markOf.length) <= n) {
       this.markOf.push(REGEX_NONE)
     }
@@ -2492,7 +2585,7 @@ export class Regex {
    * check that it moved on. The mark records how deep it nests, which the VM
    * keys its closure's stamps by.
    */
-  compileMarked(p: RegexParser, n: i32, k: i32, rev: boolean): void {
+  private compileMarked(p: RegexParser, n: i32, k: i32, rev: boolean): void {
     const level: i32 = this.checkDepth
     if (level < REGEX_MAX_LEVELS && level >= this.levels) {
       this.levels = level + 1
@@ -2504,7 +2597,7 @@ export class Regex {
     this.emit(OP_CHECK, k, REGEX_NIL)
   }
 
-  /** Compile the parsed pattern and size the VM. Answers an error, or "". */
+  /** Compile the parsed pattern and size the VM. Answers an error, or "". @internal `regexCompile` calls it. */
   build(p: RegexParser, root: i32): string {
     this.groups = p.groups
     this.width = 2 * p.groups
@@ -2583,7 +2676,7 @@ export class Regex {
    * run with the rarest first byte, the longest of those, and compiles the
    * parts before it reversed, at `innerEntry`.
    */
-  findInner(p: RegexParser, root: i32): void {
+  private findInner(p: RegexParser, root: i32): void {
     if (p.kind[root] !== NODE_CAT) {
       return
     }
@@ -2648,12 +2741,12 @@ export class Regex {
   }
 
   /** Whether node `n` is one ASCII character, matched exactly. */
-  isAsciiChar(p: RegexParser, n: i32): boolean {
+  private isAsciiChar(p: RegexParser, n: i32): boolean {
     return p.kind[n] === NODE_CHAR && p.na[n] === p.nb[n] && p.na[n] < 128
   }
 
   /** Whether node `n` can read the ASCII byte `b`. */
-  canConsume(p: RegexParser, n: i32, b: i32): boolean {
+  private canConsume(p: RegexParser, n: i32, b: i32): boolean {
     const kind: i32 = p.kind[n]
     if (kind === NODE_CHAR) {
       return p.na[n] === b || p.nb[n] === b
@@ -2680,7 +2773,7 @@ export class Regex {
   }
 
   /** The literal prefix, whether the pattern is only that literal, the anchor, and the first-byte set. */
-  findPrefilters(): void {
+  private findPrefilters(): void {
     const bytes: u8[] = []
     let pc: i32 = 0
     while (true) {
@@ -2733,7 +2826,7 @@ export class Regex {
    * a character above ASCII can start, since the next byte of the text may be
    * inside that character.
    */
-  findScan(): void {
+  private findScan(): void {
     const count: i32 = this.pc()
     const masks: u8[] = new Array<u8>(32 * REGEX_SCAN_DEPTH)
     const odds: i32[] = new Array<i32>(REGEX_SCAN_DEPTH)
@@ -2932,7 +3025,7 @@ export class Regex {
    * else. The positions after them hold for every match too, so a start the
    * scan finds is then the prefix's next occurrence that can begin a match.
    */
-  prefixIsScan(): boolean {
+  private prefixIsScan(): boolean {
     const n: i32 = toI32(this.prefix.length)
     if (n === 0 || n > this.scanDepth) {
       return false
@@ -2958,7 +3051,7 @@ export class Regex {
   }
 
   /** Whether class `k` holds code point `cp`, which is at least 0. */
-  classHas(k: i32, cp: i32): boolean {
+  private classHas(k: i32, cp: i32): boolean {
     if (cp < 128) {
       return this.clsAscii[k * 128 + cp] === 1
     }
@@ -2980,7 +3073,7 @@ export class Regex {
   }
 
   /** Whether assertion `kind` holds at byte `p` of `text`. */
-  assertHolds(kind: i32, text: string, p: i32, len: i32): boolean {
+  private assertHolds(kind: i32, text: string, p: i32, len: i32): boolean {
     if (kind === ASSERT_BEGIN_TEXT) {
       return p === 0
     }
@@ -3028,7 +3121,7 @@ export class Regex {
   }
 
   /** Start a closure that has visited nothing, wrapping the stamps before they overflow. */
-  newGeneration(): void {
+  private newGeneration(): void {
     if (this.gen >= 2147483647) {
       const count: i32 = toI32(this.visit.length)
       let pc: i32 = 0
@@ -3052,7 +3145,16 @@ export class Regex {
    * thread that was here before it, since the check it meets next fails for
    * it alone. `(?:a*?)*` on "aa" goes on to the second `a` that way.
    */
-  addThread(dense: i32[], slots: i32[], count0: i32, pc0: i32, text: string, p: i32, len: i32, ns: i32): i32 {
+  private addThread(
+    dense: i32[],
+    slots: i32[],
+    count0: i32,
+    pc0: i32,
+    text: string,
+    p: i32,
+    len: i32,
+    ns: i32
+  ): i32 {
     let count: i32 = count0
     const states: i32 = 1 << this.levels
     this.stkKind[0] = 0
@@ -3153,7 +3255,7 @@ export class Regex {
    * The first match of `prefix` at or after `from`, or -1: a search for its
    * rarest byte, then a comparison of the bytes around it.
    */
-  findPrefix(text: string, from: i32): i32 {
+  private findPrefix(text: string, from: i32): i32 {
     if (this.scanSel) {
       return this.findPrefixScan(text, from)
     }
@@ -3188,7 +3290,7 @@ export class Regex {
    * alone. When `prefixExact` the scan's positions are the prefix's bytes and
    * a start it finds is a match.
    */
-  findPrefixScan(text: string, from: i32): i32 {
+  private findPrefixScan(text: string, from: i32): i32 {
     const len: i32 = toI32(text.length)
     const n: i32 = toI32(this.prefix.length)
     let p: i32 = from
@@ -3216,7 +3318,7 @@ export class Regex {
    * The first index at or after `from`, which is at least 0, whose bytes pass
    * every position of `posMasks`, or -1. No match starts anywhere it skips.
    */
-  scanTo(text: string, from: i32): i32 {
+  private scanTo(text: string, from: i32): i32 {
     if (from > toI32(text.length)) {
       return -1
     }
@@ -3224,7 +3326,7 @@ export class Regex {
   }
 
   /** Where the next match can start at or after `p`, by the prefilter, or -1. */
-  dSkipTo(text: string, p: i32): i32 {
+  private dSkipTo(text: string, p: i32): i32 {
     if (this.prefix !== "") {
       return this.findPrefix(text, p)
     }
@@ -3239,7 +3341,7 @@ export class Regex {
    * it does not. Leaves `dOk` false when the split or the table would be too
    * big, and the VM does all the work.
    */
-  dfaInit(): void {
+  private dfaInit(): void {
     this.dReady = true
     const total: i32 = this.pc()
     const count: i32 = this.fwdCount
@@ -3523,7 +3625,7 @@ export class Regex {
    * Split each of the `n` classes of `cls` by `hit`, numbering the new
    * classes in order of first appearance. Answers how many there are.
    */
-  dRefine(cls: i32[], hit: u8[], units: i32, n: i32, remap: i32[]): i32 {
+  private dRefine(cls: i32[], hit: u8[], units: i32, n: i32, remap: i32[]): i32 {
     let k: i32 = 0
     while (k < 2 * n && k < toI32(remap.length)) {
       remap[k] = -1
@@ -3547,7 +3649,7 @@ export class Regex {
   }
 
   /** The smallest power of two that holds `cap` states at most half full. */
-  dHashSize(cap: i32): i32 {
+  private dHashSize(cap: i32): i32 {
     let size: i32 = 1
     while (size < 2 * cap) {
       size *= 2
@@ -3556,7 +3658,7 @@ export class Regex {
   }
 
   /** The class of code point `cp`, which is above ASCII. */
-  dWideClass(cp: i32): i32 {
+  private dWideClass(cp: i32): i32 {
     if (this.dWide === 1) {
       return this.dWcls[0]
     }
@@ -3574,7 +3676,7 @@ export class Regex {
   }
 
   /** Whether assertion `kind` holds between a character of kind `ctx` and one of kind `nk`. */
-  dAssert(kind: i32, ctx: i32, nk: i32): boolean {
+  private dAssert(kind: i32, ctx: i32, nk: i32): boolean {
     if (kind === ASSERT_BEGIN_TEXT) {
       return ctx === CTX_START
     }
@@ -3597,7 +3699,7 @@ export class Regex {
    * wait for a character or match to `dLeaf` in priority order. Answers the
    * new length.
    */
-  dClose(pc0: i32, ctx: i32, nk: i32, n0: i32): i32 {
+  private dClose(pc0: i32, ctx: i32, nk: i32, n0: i32): i32 {
     let n: i32 = n0
     this.dStk[0] = pc0
     let top: i32 = 1
@@ -3643,7 +3745,7 @@ export class Regex {
    * Compute and record the transition from the state at `off` on class `c`,
    * read at byte `p`. Answers the entry as stored, or 0 when the cache gave up.
    */
-  dStep(off: i32, c: i32, p: i32): i32 {
+  private dStep(off: i32, c: i32, p: i32): i32 {
     const id: i32 = off >> this.dShift
     const start: i32 = this.dStart[id]
     const len: i32 = this.dLen[id]
@@ -3748,7 +3850,7 @@ export class Regex {
   }
 
   /** The hash of a state's flags and its `n` instructions in `src` from `at`. */
-  dHashOf(src: i32[], at: i32, n: i32, flags: i32): i32 {
+  private dHashOf(src: i32[], at: i32, n: i32, flags: i32): i32 {
     let h: i32 = flags
     let i: i32 = 0
     while (i < n) {
@@ -3763,7 +3865,7 @@ export class Regex {
    * `dBuf`, made if it is new. Answers -1 when the cache is full and was
    * cleared too recently, at byte `p`, to clear again.
    */
-  dIntern(n: i32, flags: i32, p: i32): i32 {
+  private dIntern(n: i32, flags: i32, p: i32): i32 {
     const mask: i32 = toI32(this.dHash.length) - 1
     const at: i32 = 0
     let slot: i32 = this.dHashOf(this.dBuf, at, n, flags) & mask
@@ -3835,7 +3937,7 @@ export class Regex {
   }
 
   /** Double the state table, up to `dMax` states. */
-  dGrow(): void {
+  private dGrow(): void {
     let cap: i32 = 2 * this.dCap
     if (cap > this.dMax) {
       cap = this.dMax
@@ -3885,7 +3987,7 @@ export class Regex {
    * state for nearly every byte and the VM is cheaper. Answers whether it
    * cleared.
    */
-  dFlush(p: i32): boolean {
+  private dFlush(p: i32): boolean {
     this.dFlushes += 1
     const moved: i32 = p > this.dPos ? p - this.dPos : this.dPos - p
     if (this.dFlushes > DFA_FREE_FLUSHES && moved < DFA_BYTES_PER_STATE * this.dMax) {
@@ -3910,7 +4012,7 @@ export class Regex {
   }
 
   /** The start state for `mode` after a character of kind `ctx`, or -1. */
-  dStartAt(mode: i32, ctx: i32, p: i32): i32 {
+  private dStartAt(mode: i32, ctx: i32, p: i32): i32 {
     const k: i32 = mode * CTX_SLOTS + ctx
     const cached: i32 = this.dStartOff[k]
     if (cached > 0) {
@@ -3940,7 +4042,7 @@ export class Regex {
    * `p`, or -1 when a step on the way is not a plain transition; then
    * `dPrefFast` goes off.
    */
-  dAfterPrefix(p: i32): i32 {
+  private dAfterPrefix(p: i32): i32 {
     let off: i32 = this.dStartAt(DFA_UNANCHORED, this.dMaskF[CTX_OTHER], p)
     const n: i32 = toI32(this.prefix.length)
     let k: i32 = 0
@@ -3962,7 +4064,7 @@ export class Regex {
   }
 
   /** The kind of the character before byte `p`, as the forward program tells kinds apart. */
-  ctxBefore(text: string, p: i32): i32 {
+  private ctxBefore(text: string, p: i32): i32 {
     let kind: i32 = CTX_OTHER
     if (p <= 0) {
       kind = CTX_START
@@ -3989,7 +4091,7 @@ export class Regex {
   }
 
   /** The kind of the character at byte `p`, as the reverse program tells kinds apart. */
-  ctxAt(text: string, p: i32): i32 {
+  private ctxAt(text: string, p: i32): i32 {
     const len: i32 = toI32(text.length)
     let kind: i32 = CTX_OTHER
     if (p >= len) {
@@ -4020,7 +4122,7 @@ export class Regex {
    * `DFA_NONE` or `DFA_GAVE_UP` otherwise, and leaves where it stopped
    * reading in `dStop`.
    */
-  dfaForward(text: string, from: i32, first: boolean, pinned: boolean): i32 {
+  private dfaForward(text: string, from: i32, first: boolean, pinned: boolean): i32 {
     const len: i32 = toI32(text.length)
     const mode: i32 = this.anchored || pinned ? DFA_ANCHORED : DFA_UNANCHORED
     let p: i32 = from
@@ -4143,7 +4245,7 @@ export class Regex {
    * `innerLit` does when the literal is at `e`. Answers `DFA_NONE` or
    * `DFA_GAVE_UP` otherwise.
    */
-  dfaReverse(text: string, from: i32, e: i32, mode: i32): i32 {
+  private dfaReverse(text: string, from: i32, e: i32, mode: i32): i32 {
     const len: i32 = toI32(text.length)
     let p: i32 = e
     let off: i32 = this.dStartAt(mode, this.ctxAt(text, e), e)
@@ -4245,7 +4347,7 @@ export class Regex {
    * the regex: past twice those and a slack, the inner search is dropped for
    * the plain one, which keeps the cost linear.
    */
-  dfaInner(text: string, from: i32, first: boolean): i32 {
+  private dfaInner(text: string, from: i32, first: boolean): i32 {
     let lower: i32 = from
     while (this.innerLit !== "") {
       const i: i32 = toI32(text.indexOf(this.innerLit, lower))
@@ -4285,7 +4387,7 @@ export class Regex {
    * whether there is one and where it ends, the reverse DFA where it starts,
    * and the VM, from that start, the groups.
    */
-  run(text: string, from: i32, want: i32): boolean {
+  private run(text: string, from: i32, want: i32): boolean {
     const len: i32 = toI32(text.length)
     if (from < 0 || from > len) {
       return false
@@ -4353,7 +4455,7 @@ export class Regex {
    * Any slots at all bring the marks along, because which match comes first
    * depends on them. `pinned` tries only a match that starts at `from`.
    */
-  vm(text: string, from: i32, want: i32, pinned: boolean): boolean {
+  private vm(text: string, from: i32, want: i32, pinned: boolean): boolean {
     const ns: i32 = want > 0 && this.width > 2 * this.groups ? this.width : want
     const len: i32 = toI32(text.length)
     const anchored: boolean = this.anchored || pinned
@@ -4480,7 +4582,12 @@ export class Regex {
     return matched
   }
 
-  /** Whether the pattern matches anywhere in `text`. */
+  /**
+   * Whether the pattern matches anywhere in `text`.
+   *
+   * @param text The text to search.
+   * @returns True when there is at least one match.
+   */
   test(text: string): boolean {
     return this.run(text, REGEX_TEXT_START, REGEX_WANT_NONE)
   }
@@ -4489,6 +4596,11 @@ export class Regex {
    * Search `text` from byte `from` and fill `m` with the first match and
    * every group. Answers whether there was one; `m` is untouched when not.
    * Reusing one `RegexMatch` makes a loop of searches allocate nothing.
+   *
+   * @param text The text to search.
+   * @param from The byte offset to start searching at; a match may start there or later.
+   * @param m Where the match goes; overwritten on a match, left as it was otherwise.
+   * @returns True when there was a match.
    */
   exec(text: string, from: i32, m: RegexMatch): boolean {
     const ns: i32 = 2 * this.groups
@@ -4508,7 +4620,13 @@ export class Regex {
     return true
   }
 
-  /** The first match at or after byte `from`, or null. */
+  /**
+   * The first match at or after byte `from`.
+   *
+   * @param text The text to search.
+   * @param from The byte offset to start searching at; a match may start there or later.
+   * @returns A new match, or null when there is none.
+   */
   find(text: string, from: i32): RegexMatch | null {
     const m: RegexMatch = new RegexMatch()
     if (this.exec(text, from, m)) {
@@ -4517,7 +4635,13 @@ export class Regex {
     return null
   }
 
-  /** The text of every match, left to right, none overlapping. */
+  /**
+   * The text of every match, left to right, none overlapping. After an empty
+   * match the search resumes one character on.
+   *
+   * @param text The text to search.
+   * @returns Each match's text in order; empty when nothing matches.
+   */
   findAll(text: string): string[] {
     const out: string[] = []
     const len: i32 = toI32(text.length)
@@ -4538,7 +4662,12 @@ export class Regex {
     return out
   }
 
-  /** How many matches `findAll` would answer. */
+  /**
+   * How many matches `findAll` would answer, without making their strings.
+   *
+   * @param text The text to search.
+   * @returns The number of non-overlapping matches.
+   */
   count(text: string): i32 {
     const len: i32 = toI32(text.length)
     let n: i32 = 0
@@ -4598,17 +4727,27 @@ export class Regex {
    * `String.prototype.replace`'s template: `$$` is `$`, `$&` the match,
    * `` $` `` and `$'` the text before and after it, `$1` to `$99` a group
    * and `$<name>` a named one; a group that took no part is "".
+   *
+   * @param text The text to search.
+   * @param replacement The template each match is replaced by.
+   * @returns The replaced text; `text` unchanged when nothing matches.
    */
   replace(text: string, replacement: string): string {
     return this.replaceMatches(text, replacement, false)
   }
 
-  /** `text` with every match replaced by `replacement`, as `replace` reads it. */
+  /**
+   * `text` with every match replaced by `replacement`, as `replace` reads it.
+   *
+   * @param text The text to search.
+   * @param replacement The template each match is replaced by.
+   * @returns The replaced text; `text` unchanged when nothing matches.
+   */
   replaceAll(text: string, replacement: string): string {
     return this.replaceMatches(text, replacement, true)
   }
 
-  replaceMatches(text: string, replacement: string, all: boolean): string {
+  private replaceMatches(text: string, replacement: string, all: boolean): string {
     const len: i32 = toI32(text.length)
     // Track every group only when the template can name one.
     let ns: i32 = 2
@@ -4650,7 +4789,7 @@ export class Regex {
   }
 
   /** Group `k` of the match in `mslots`, or "". */
-  slotText(text: string, ns: i32, k: i32): string {
+  private slotText(text: string, ns: i32, k: i32): string {
     if (k < 0 || 2 * k + 1 >= ns || this.mslots[2 * k] < 0) {
       return ""
     }
@@ -4658,7 +4797,7 @@ export class Regex {
   }
 
   /** Append the replacement template, expanded for the match in `mslots`, to `parts`. */
-  expand(rep: string, text: string, ns: i32, parts: string[]): void {
+  private expand(rep: string, text: string, ns: i32, parts: string[]): void {
     const n: i32 = toI32(rep.length)
     const groupsAfterZero: i32 = this.groups - 1
     let lit: i32 = 0
@@ -4714,6 +4853,9 @@ export class Regex {
    * part), an empty match where the last piece ended or at the end cuts
    * nothing, and "" splits to nothing when the pattern matches it, else to
    * `[""]`.
+   *
+   * @param text The text to cut.
+   * @returns The pieces in order, each group's text after the piece before its match.
    */
   split(text: string): string[] {
     const len: i32 = toI32(text.length)
@@ -4755,6 +4897,10 @@ export class Regex {
  * Compile `pattern` with `flags`, a string of `i`, `m`, `s` and `u` in any
  * order; `u` changes nothing, as patterns are always read by code point.
  * The error names what is wrong and its byte in the pattern.
+ *
+ * @param pattern The pattern, in JavaScript's syntax without the slashes.
+ * @param flags Any of `i` (ignore case), `m` (`^` and `$` match at line ends), `s` (`.` matches a newline) and `u`, each at most once.
+ * @returns The compiled pattern, or the reason it does not compile, such as "regex: missing ) at byte 0" or `regex: invalid flags "x"`.
  */
 export const regexCompile = (pattern: string, flags: string): Result<Regex, string> => {
   let icase: boolean = false
@@ -4794,7 +4940,13 @@ export const regexCompile = (pattern: string, flags: string): Result<Regex, stri
   return Ok(re)
 }
 
-/** `text` with every syntax character escaped, so that it compiles to a pattern matching exactly `text`. */
+/**
+ * `text` with every syntax character escaped, so that it compiles to a
+ * pattern matching exactly `text`.
+ *
+ * @param text The literal text to match.
+ * @returns A pattern for `regexCompile`; `text` unchanged when it holds no syntax character.
+ */
 export const regexEscape = (text: string): string => {
   const parts: string[] = []
   const n: i32 = toI32(text.length)

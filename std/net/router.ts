@@ -103,55 +103,73 @@ export class RouterLimits {
 export class Router {
   // References, then 32-bit fields: the order the layout packs without padding.
   /** Per node: its first literal child, or -1; siblings chain through `nextSibling`. */
-  firstChild: i32[]
+  private firstChild: i32[]
   /** Per node: the next literal child of its parent, or -1. */
-  nextSibling: i32[]
+  private nextSibling: i32[]
   /** Per node: its literal label, `labels[labelStart .. labelEnd)`; empty for a parameter or `*` node. */
-  labelStart: i32[]
-  labelEnd: i32[]
+  private labelStart: i32[]
+  private labelEnd: i32[]
   /** Per node: its parameter child, or -1; one per node, since names take no part in matching. */
-  paramChild: i32[]
+  private paramChild: i32[]
   /** Per node: its `*` child, or -1. */
-  wildChild: i32[]
+  private wildChild: i32[]
   /** Per node: the first route ending there, or -1; routes chain through `endpointNext`. */
-  firstEndpoint: i32[]
+  private firstEndpoint: i32[]
   /** Every literal label, back to back. */
-  labels: u8[]
+  private labels: u8[]
   /** Per route: its method's index into `methodStart`, the next route ending at its node, and its parameter pairs. */
-  routeMethod: i32[]
-  endpointNext: i32[]
-  routeParams: i32[]
-  /** The methods the table knows, `methodBytes[methodStart[m] .. methodEnd[m])`, compared exactly (RFC 9110 §9.1). */
+  private routeMethod: i32[]
+  private endpointNext: i32[]
+  private routeParams: i32[]
+  /**
+   * The methods the table knows, `methodBytes[methodStart[m] .. methodEnd[m])`, compared exactly (RFC 9110 §9.1).
+   * @internal Read by std/net/handler.ts, which matches a path against each known method to build a 405's `Allow` value.
+   */
   methodBytes: u8[]
+  /**
+   * Where method `m`'s bytes start in `methodBytes`.
+   * @internal Read by std/net/handler.ts to match a path under each known method for `Allow`, and under GET for a HEAD.
+   */
   methodStart: i32[]
+  /**
+   * Where method `m`'s bytes end in `methodBytes`.
+   * @internal Read by std/net/handler.ts beside `methodStart`, for the same matches.
+   */
   methodEnd: i32[]
   /** `match`'s scratch, sized by the constructor: each segment's span, then the pairs found so far. */
-  segStart: i32[]
-  segEnd: i32[]
-  found: i32[]
+  private segStart: i32[]
+  private segEnd: i32[]
+  private found: i32[]
   /** `add`'s scratch: each pattern segment's kind and span in the pattern. */
-  patKind: i32[]
-  patStart: i32[]
-  patEnd: i32[]
+  private patKind: i32[]
+  private patStart: i32[]
+  private patEnd: i32[]
   /** The limits, copied out of the `RouterLimits` the table was made with. */
-  maxPatternBytes: i32 = 0
-  maxSegments: i32 = 0
+  private maxPatternBytes: i32 = 0
+  private maxSegments: i32 = 0
+  /**
+   * The most parameters one pattern may have, a final `*` counted.
+   * @internal Read by std/net/handler.ts to size the scratch `params` array it hands `match`.
+   */
   maxParams: i32 = 0
-  maxRoutes: i32 = 0
-  maxMethods: i32 = 0
+  private maxRoutes: i32 = 0
+  private maxMethods: i32 = 0
   /** The most segments any route has: a path is split no further than one past it. */
-  deepest: i32 = 0
+  private deepest: i32 = 0
   /** During a match: how many segments the path has, where it ends, the method's index, and the pairs in `found`. */
-  segments: i32 = 0
-  pathEnd: i32 = 0
-  wanted: i32 = 0
-  foundCount: i32 = 0
+  private segments: i32 = 0
+  private pathEnd: i32 = 0
+  private wanted: i32 = 0
+  private foundCount: i32 = 0
   /** During a match: whether a route of another method ended at the path's end. */
-  otherMethod: boolean = false
+  private otherMethod: boolean = false
   /** The nodes the last `match` visited: never more than `nodeCount()`, which the tests pin. */
-  visited: i32 = 0
+  private visited: i32 = 0
 
-  /** An empty table. Panics, naming the field, on a limit outside the range `RouterLimits` gives it. */
+  /**
+   * An empty table. Panics, naming the field, on a limit outside the range `RouterLimits` gives it.
+   * @param limits the caps, copied out here, so changing them later has no effect on this table
+   */
   constructor(limits: RouterLimits) {
     routerLimit("maxPatternBytes", limits.maxPatternBytes, 1, 65536)
     routerLimit("maxSegments", limits.maxSegments, 1, 256)
@@ -186,16 +204,23 @@ export class Router {
   }
 
   /** How many routes the table holds; the next `add` answers this index. */
-  routes(): i32 {
+  private routes(): i32 {
     return toI32(this.routeMethod.length)
   }
 
-  /** How many nodes the tree has, the root included: the most one `match` visits. */
+  /**
+   * How many nodes the tree has, the root included: the most one `match` visits.
+   * @returns the node count, which grows only as `add` makes new segments
+   */
   nodeCount(): i32 {
     return toI32(this.firstChild.length)
   }
 
-  /** How many `[start, end)` pairs `route` answers: its parameters, and one more for a final `*`. */
+  /**
+   * How many `[start, end)` pairs `route` answers: its parameters, and one more for a final `*`.
+   * @param route a route index `add` answered; panics on one the table does not hold
+   * @returns how many pairs `match` writes to `params` for that route, so half the slots it needs
+   */
   paramCount(route: i32): i32 {
     if (route < 0 || route >= this.routes()) {
       panic(`Router.paramCount: route ${route} is not in a table of ${this.routes()}`)
@@ -203,7 +228,10 @@ export class Router {
     return this.routeParams[route]
   }
 
-  /** How many nodes the last `match` visited. */
+  /**
+   * How many nodes the last `match` visited.
+   * @returns the visit count, never more than `nodeCount()`, which the tests use to pin a lookup's cost
+   */
   lastVisited(): i32 {
     return this.visited
   }
@@ -212,6 +240,9 @@ export class Router {
    * Adds the route `method pattern` and answers its index, counting from 0, or
    * a negative `ROUTER_*` code; a refused pattern adds nothing. Whether a
    * pattern is refused never depends on the order routes were added in.
+   * @param method the method the route answers, an HTTP token of 1 to 32 bytes such as `"GET"`
+   * @param pattern the path pattern, starting with `/`, with `:name` parameters and an optional final `*`
+   * @returns the new route's index, which `match` answers for it, or a negative `ROUTER_*` code
    */
   add(method: string, pattern: string): i32 {
     const methodLength: i32 = toI32(method.length)
@@ -291,7 +322,7 @@ export class Router {
    * Splits `pattern`, which starts with `/`, into `patKind`/`patStart`/`patEnd`
    * and answers how many segments it has, or the code that refuses it.
    */
-  splitPattern(pattern: string): i32 {
+  private splitPattern(pattern: string): i32 {
     const length: i32 = toI32(pattern.length)
     let count: i32 = 0
     let start: i32 = 1
@@ -333,7 +364,7 @@ export class Router {
   }
 
   /** The child of `node` that pattern segment `k` leads to, or -1. */
-  childFor(node: i32, pattern: string, k: i32): i32 {
+  private childFor(node: i32, pattern: string, k: i32): i32 {
     const kind: i32 = this.patKind[k]
     if (kind === ROUTER_PARAM) {
       return this.paramChild[node]
@@ -353,7 +384,7 @@ export class Router {
   }
 
   /** Adds the child of `node` that pattern segment `k` leads to, and answers it. */
-  addChild(node: i32, pattern: string, k: i32): i32 {
+  private addChild(node: i32, pattern: string, k: i32): i32 {
     const child: i32 = this.nodeCount()
     const kind: i32 = this.patKind[k]
     const at: i32 = toI32(this.labels.length)
@@ -379,7 +410,10 @@ export class Router {
     return child
   }
 
-  /** The index of `method` among the methods the table knows, or -1. */
+  /**
+   * The index of `method` among the methods the table knows, or -1.
+   * @internal Called by std/net/handler.ts to find GET's index, so a HEAD on a GET-only path routes as GET.
+   */
   methodIndex(method: string): i32 {
     const length: i32 = toI32(method.length)
     for (let m: i32 = 0; m < toI32(this.methodStart.length); m++) {
@@ -397,6 +431,14 @@ export class Router {
    * `params` as `[start, end)` offsets into `target`, two slots each, in the
    * pattern's order, and a final `*` as one more pair; on a refusal `params`
    * is untouched. Panics on a range outside its array.
+   * @param method the buffer holding the request's method
+   * @param mStart where the method starts in `method`
+   * @param mEnd where the method ends in `method`
+   * @param target the buffer holding the request target, which may be the same buffer as `method`
+   * @param tStart where the target starts in `target`
+   * @param tEnd where the target ends in `target`, the query included
+   * @param params the caller's scratch for the parameter pairs, two slots for each pair
+   * @returns the matched route's index, or `ROUTER_NOT_FOUND`, `ROUTER_METHOD_NOT_ALLOWED` or `ROUTER_TOO_MANY_PARAMS`
    */
   match(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
     if (mStart < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
@@ -464,7 +506,7 @@ export class Router {
    * that reaches a route wins, and a branch that does not is left with the
    * pairs it pushed popped.
    */
-  walk(target: u8[], node: i32, depth: i32): i32 {
+  private walk(target: u8[], node: i32, depth: i32): i32 {
     this.visited += 1
     if (depth === this.segments) {
       return this.endpointFor(node)
@@ -511,7 +553,7 @@ export class Router {
   }
 
   /** The route of the wanted method ending at `node`, or -1, noting a route of another method there. */
-  endpointFor(node: i32): i32 {
+  private endpointFor(node: i32): i32 {
     for (let e: i32 = this.firstEndpoint[node]; e >= 0; e = this.endpointNext[e]) {
       if (this.routeMethod[e] === this.wanted) {
         return e
@@ -530,6 +572,11 @@ export class Router {
  * stays `+`: a space spelled `+` is the query's form encoding, not the path's.
  * The output may hold any byte, NUL and `/` included. Panics on a range
  * outside `target`.
+ * @param target the buffer the range points into, usually the request head
+ * @param start where the raw parameter starts in `target`
+ * @param end where the raw parameter ends in `target`
+ * @param out where the decoded bytes go, from index 0; the caller's buffer
+ * @returns how many decoded bytes were written, or `ROUTER_BAD_ESCAPE` or `ROUTER_NO_ROOM`
  */
 export const routerDecode = (target: u8[], start: i32, end: i32, out: u8[]): i32 => {
   if (start < 0 || end < start || end > toI32(target.length)) {

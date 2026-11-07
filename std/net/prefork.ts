@@ -3,6 +3,7 @@
  * starts one worker process per core, restarts one that dies, and stops them
  * all on SIGTERM or SIGINT (`docs/wp42-multicore-server.md` §2.3).
  *
+ *     import { tcpListenFlags } from "nish:net";
  *     import { preforkWorkers } from "nish/net/prefork";
  *
  *     export const main = (): number => {
@@ -222,6 +223,12 @@ const preforkDigits = (s: string): boolean => {
  * How many workers to start: `env` (`NISH_WORKERS`, `null` when unset) when it
  * is a positive whole number, else `requested` when positive, else the
  * platform's default.
+ *
+ * @param requested the program's own choice, `PreforkConfig.workers`; 0 or
+ *   less leaves it to the environment or the platform
+ * @param env the raw `NISH_WORKERS` text, or `null` when it is unset; text
+ *   that is not a positive whole number is ignored
+ * @returns how many worker processes the supervisor starts, always 1 or more
  */
 export const preforkWorkerCount = (requested: i32, env: string | null): i32 => {
   if (env !== null && preforkDigits(env)) {
@@ -240,7 +247,13 @@ export const preforkWorkerCount = (requested: i32, env: string | null): i32 => {
   return cores > 0 ? cores : 1
 }
 
-/** The worker index `args` carries in its last element, or -1 when none. */
+/**
+ * The worker index `args` carries in its last element, or -1 when none.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @returns this worker's index, 0 to `N - 1`, or -1 in the supervisor (or any
+ *   process not started by one)
+ */
 export const preforkIndex = (args: string[]): i32 => {
   if (args.length < 2) {
     return -1
@@ -256,6 +269,10 @@ export const preforkIndex = (args: string[]): i32 => {
 /**
  * `args` (`process.argv`) without the worker flag and the channels and
  * listener flags before it, the same in every process.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @returns a new list of the arguments the user gave, without the flags the
+ *   supervisor appended, so a worker reads the same ones the supervisor did
  */
 export const preforkArgs = (args: string[]): string[] => {
   let keep: i32 = toI32(args.length)
@@ -299,17 +316,41 @@ const preforkChannel = (args: string[], at: i32): i32 => {
   return preforkDigits(field) ? parseInt(field) : -1
 }
 
-/** In a worker, its end of its supervisor channel; -1 when it has none. */
+/**
+ * In a worker, its end of its supervisor channel; -1 when it has none.
+ *
+ * @param args the worker's arguments, `process.argv`
+ * @returns the descriptor the worker talks to the supervisor through, or -1
+ *   without `supervisorChannels` or outside a worker
+ */
 export const preforkSupervisorChannel = (args: string[]): i32 => preforkChannel(args, 0)
 
-/** In a worker, its end of its channel to the service worker; -1 in the service worker or when none. */
+/**
+ * In a worker, its end of its channel to the service worker; -1 in the service worker or when none.
+ *
+ * @param args the worker's arguments, `process.argv`
+ * @returns the descriptor this worker reaches the service worker through, or -1
+ */
 export const preforkServiceChannel = (args: string[]): i32 => preforkChannel(args, 1)
 
-/** In the service worker, its end of the channel to worker `index`; -1 for itself or elsewhere. */
+/**
+ * In the service worker, its end of the channel to worker `index`; -1 for itself or elsewhere.
+ *
+ * @param args the service worker's arguments, `process.argv`
+ * @param index the other worker whose channel to look up, 0 to `N - 1`
+ * @returns the descriptor the service worker reaches worker `index` through,
+ *   or -1 for its own index, an index out of range, or any other process
+ */
 export const preforkServiceChannelOf = (args: string[], index: i32): i32 =>
   index < 0 || index > 2147483645 ? -1 : preforkChannel(args, 2 + index)
 
-/** In a worker, the listener the supervisor bound for it (`listenPort`); -1 when none. */
+/**
+ * In a worker, the listener the supervisor bound for it (`listenPort`); -1 when none.
+ *
+ * @param args the worker's arguments, `process.argv`
+ * @returns the listening socket's descriptor to serve instead of binding one,
+ *   or -1 when the worker should bind its own
+ */
 export const preforkListener = (args: string[]): i32 => {
   if (preforkIndex(args) < 0) {
     return -1
@@ -333,40 +374,89 @@ const PREFORK_SIGKILL: i32 = 9
 
 /** One worker's slot in the supervisor. */
 class PreforkSlot {
-  /** When the running worker started, or when the waiting one may start. */
+  /**
+   * When the running worker started, or when the waiting one may start.
+   *
+   * @internal Read and set by `PreforkSupervisor`'s start, backoff and restart to time a worker's restart.
+   */
   at: i64 = 0
-  /** The running worker's pid, 0 while it waits to be started again. */
+  /**
+   * The running worker's pid, 0 while it waits to be started again.
+   *
+   * @internal Read by `PreforkSupervisor` to match a reaped child to its slot and to signal it.
+   */
   pid: i32 = 0
-  /** The wait before the last restart, 0 after a worker that ran long. */
+  /**
+   * The wait before the last restart, 0 after a worker that ran long.
+   *
+   * @internal Read and set by `PreforkSupervisor.backoff` to double the wait after a quick exit.
+   */
   delay: i32 = 0
-  /** The worker exited with `restart` off, and is never started again. */
+  /**
+   * The worker exited with `restart` off, and is never started again.
+   *
+   * @internal Read by `PreforkSupervisor`'s restarts so a worker that exited with `restart` off stays gone.
+   */
   gone: boolean = false
-  /** The supervisor's end of the worker's channel, -1 when it has none. */
+  /**
+   * The supervisor's end of the worker's channel, -1 when it has none.
+   *
+   * @internal Read by `preforkSupervise` to hand the end to the program's callback, and closed by `PreforkSupervisor.closeChannel`.
+   */
   channel: i32 = -1
 }
 
 /** The supervisor's state while it runs. */
 class PreforkSupervisor {
-  config: PreforkConfig
+  private config: PreforkConfig
+  /**
+   * The executable each worker is spawned from: `/proc/self/exe` resolved on
+   * Linux, else the program's first argument.
+   *
+   * @internal Read by `preforkSupervise` to name the program when its first
+   *   start fails.
+   */
   program: string
-  args: string[]
+  private args: string[]
+  /**
+   * One slot per worker, by index.
+   *
+   * @internal Read by `preforkSupervise` to find a worker's channel from the
+   *   token its readiness event carries.
+   */
   slots: PreforkSlot[]
   /** While the group starts: each worker's end to the service worker, -1 for none. */
-  toService: i32[]
+  private toService: i32[]
   /** While the group starts: the service worker's end to each worker, -1 for none. */
-  fromWorkers: i32[]
+  private fromWorkers: i32[]
   /** When a group still running gets SIGKILL. */
-  cascadeAt: i64 = 0
+  private cascadeAt: i64 = 0
+  /**
+   * How many workers are running now, started and not yet reaped.
+   *
+   * @internal Read by `preforkSupervise` to see when, with `restart` off,
+   *   every worker has exited.
+   */
   running: i32 = 0
   /** The readiness loop each supervisor channel is added to. */
-  loop: i32
+  private loop: i32
   /** `config.serviceWorker`: with it at 0 or above, the workers are one group. */
-  service: i32
+  private service: i32
   /** The group is being stopped, to be started again once none of it is left. */
-  cascading: boolean = false
+  private cascading: boolean = false
   /** Worker i's listener at i, held for the whole run; empty without `listenPort`. */
-  listeners: i32[]
+  private listeners: i32[]
 
+  /**
+   * A supervisor with one empty slot per worker and no worker started yet.
+   *
+   * @param config the checked settings it runs by, kept and read throughout
+   * @param args the supervisor's own arguments, `process.argv`, which every
+   *   worker is started with
+   * @param count how many workers to keep running
+   * @param loop the readiness loop each supervisor channel is added to; the
+   *   caller owns and closes it
+   */
   constructor(config: PreforkConfig, args: string[], count: i32, loop: i32) {
     this.config = config
     this.loop = loop
@@ -391,7 +481,7 @@ class PreforkSupervisor {
    * Start worker `index` with its channel ends, the service ones from
    * `pairs`; false when a socketpair, the loop or the spawn refused it.
    */
-  start(index: i32): boolean {
+  private start(index: i32): boolean {
     const fds: i32[] = []
     let own: i32 = -1
     if (this.config.supervisorChannels) {
@@ -458,7 +548,7 @@ class PreforkSupervisor {
   }
 
   /** The slot `pid` ran in, or -1. */
-  find(pid: i32): i32 {
+  private find(pid: i32): i32 {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (this.slots[i].pid === pid) {
         return i
@@ -472,7 +562,7 @@ class PreforkSupervisor {
    * at least `quickExitMs`, else, or when `failed` (`spawn` refused it), after
    * a wait that starts at `backoffMs` and doubles up to `backoffCapMs`.
    */
-  backoff(slot: PreforkSlot, now: i64, failed: boolean): void {
+  private backoff(slot: PreforkSlot, now: i64, failed: boolean): void {
     if (failed || now - slot.at < toI64(this.config.quickExitMs)) {
       const cap: i32 = this.config.backoffCapMs
       if (slot.delay === 0) {
@@ -493,6 +583,8 @@ class PreforkSupervisor {
    * program spawned itself before calling `preforkWith`) is reaped too, and
    * its status is discarded. Answers false when `waitPid` fails, which means
    * no child is left to wait for.
+   *
+   * @internal Called by `preforkSupervise` on every tick, and by `stop`.
    */
   reap(stopping: boolean): boolean {
     while (this.running > 0) {
@@ -529,7 +621,11 @@ class PreforkSupervisor {
     return true
   }
 
-  /** Close the supervisor's end of `slot`'s channel, which takes it off the loop. */
+  /**
+   * Close the supervisor's end of `slot`'s channel, which takes it off the loop.
+   *
+   * @internal Called by `preforkSupervise` after a channel hangs up.
+   */
   closeChannel(slot: PreforkSlot): void {
     if (slot.channel >= 0) {
       netClose(slot.channel)
@@ -538,13 +634,17 @@ class PreforkSupervisor {
   }
 
   /** Stop the group so it starts again whole: SIGTERM now, SIGKILL after `graceMs`. */
-  cascade(now: i64): void {
+  private cascade(now: i64): void {
     this.cascading = true
     this.cascadeAt = now + toI64(this.config.graceMs)
     this.signal(PREFORK_SIGTERM)
   }
 
-  /** SIGKILL a stopping group that outlived `graceMs`, again each `graceMs`. */
+  /**
+   * SIGKILL a stopping group that outlived `graceMs`, again each `graceMs`.
+   *
+   * @internal Called by `preforkSupervise` on every tick.
+   */
   escalate(): void {
     if (!this.cascading || this.running <= 0) {
       return
@@ -557,7 +657,7 @@ class PreforkSupervisor {
   }
 
   /** A pair from each worker to the service worker; false when one failed. */
-  pairs(): boolean {
+  private pairs(): boolean {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (i !== this.service) {
         const pair: i32[] = [-1, -1]
@@ -572,7 +672,7 @@ class PreforkSupervisor {
   }
 
   /** Close every end `pairs` made: the workers hold their copies now. */
-  closePairs(): void {
+  private closePairs(): void {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (this.toService[i] >= 0) {
         netClose(this.toService[i])
@@ -591,7 +691,7 @@ class PreforkSupervisor {
    * false when `first`; otherwise it backs off the slot that failed and stops
    * the workers it started, to be tried again whole.
    */
-  restartGroup(first: boolean): boolean {
+  private restartGroup(first: boolean): boolean {
     if (this.running > 0) {
       return true
     }
@@ -631,6 +731,8 @@ class PreforkSupervisor {
    * Start every waiting worker whose time has come. When `first`, answer false
    * at the first `spawn` that fails; otherwise a failed start waits on the
    * same backoff as a worker that exited at once, and the answer is true.
+   *
+   * @internal Called by `preforkSupervise` for the first start and on every tick.
    */
   restart(first: boolean): boolean {
     if (this.service >= 0) {
@@ -653,6 +755,8 @@ class PreforkSupervisor {
   /**
    * One listener per worker, in index order, which is the order steering
    * counts CPUs in; false, with the ones made closed, when one cannot bind.
+   *
+   * @internal Called by `preforkSupervise` before the first start when `listenPort` is set.
    */
   listen(steer: boolean): boolean {
     const config: PreforkConfig = this.config
@@ -673,7 +777,11 @@ class PreforkSupervisor {
     return true
   }
 
-  /** Close the listeners `listen` made. */
+  /**
+   * Close the listeners `listen` made.
+   *
+   * @internal Called by `preforkSupervise` once the workers are stopped.
+   */
   closeListeners(): void {
     for (let i: i32 = 0; i < toI32(this.listeners.length); i++) {
       netClose(this.listeners[i])
@@ -682,7 +790,7 @@ class PreforkSupervisor {
   }
 
   /** Send `sig` to every running worker. */
-  signal(sig: i32): void {
+  private signal(sig: i32): void {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       if (this.slots[i].pid > 0) {
         kill(this.slots[i].pid, sig)
@@ -697,6 +805,8 @@ class PreforkSupervisor {
    * child that is not a worker is skipped in both phases, and the SIGKILL
    * phase ends only when the last worker is reaped or no child is left. The
    * supervisor's channel ends are closed first, so only `signals` wakes it.
+   *
+   * @internal Called by `preforkSupervise` once, on shutdown.
    */
   stop(loop: i32, signals: i32, ready: i32[]): void {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
@@ -778,6 +888,13 @@ const preforkDiscard = (buf: u8[], _index: i32, fd: i32, _events: i32): void => 
  * listener could be made (no worker is started). Panics on a config
  * `preforkInvalid` names a field of. Supervisor channels are read and
  * dropped; `preforkSupervise` hands them to the program.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @param config the supervisor's settings, every field checked (a bad one
+ *   panics) in the supervisor and each worker alike; past that check a
+ *   worker reads only `pin`
+ * @returns in a worker, its index at once; in the supervisor, once it is done,
+ *   `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or `PREFORK_SPAWN_FAILED`
  */
 export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
   const buf: u8[] = new Array<u8>(512)
@@ -798,6 +915,16 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
  * `availableParallelism()`; and, through `preforkInvalid`, on seqpacket
  * channels off Linux. A listener that cannot bind answers
  * `PREFORK_SPAWN_FAILED` before any worker starts.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @param config the supervisor's settings, every field checked (a bad one
+ *   panics) in the supervisor and each worker alike; past that check a
+ *   worker reads only `pin`
+ * @param state the program's own value, passed to every `onChannel` call
+ * @param onChannel what the supervisor runs when worker `index`'s channel
+ *   `fd` wakes it, with `pollWait`'s `events`
+ * @returns in a worker, its index at once; in the supervisor, once it is done,
+ *   `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or `PREFORK_SPAWN_FAILED`
  */
 export const preforkSupervise = <S>(
   args: string[],
@@ -888,5 +1015,11 @@ export const preforkSupervise = <S>(
   return result
 }
 
-/** `preforkWith` with the default `PreforkConfig`. */
+/**
+ * `preforkWith` with the default `PreforkConfig`.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @returns in a worker, its index at once; in the supervisor, once it is done,
+ *   `PREFORK_STOPPED` or `PREFORK_SPAWN_FAILED`
+ */
 export const preforkWorkers = (args: string[]): i32 => preforkWith(args, new PreforkConfig())

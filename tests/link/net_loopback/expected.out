@@ -101,6 +101,11 @@ PASS  webtransport: the server validated the new port with a PATH_CHALLENGE the 
 PASS  webtransport: the slot's address follows the client to its new port
 PASS  webtransport: and every server call kept 0 bytes over the rebinding
 PASS  webtransport: nothing after the rebinding went to the old port
+PASS  webtransport: the client's NAT rebinds to a new address, and eight rounds of a datagram and a bidirectional stream are echoed to it
+PASS  webtransport: the server validated the new address with a PATH_CHALLENGE the client answered (RFC 9000 §9.3)
+PASS  webtransport: the slot's address follows the client to its new address
+PASS  webtransport: and every server call kept 0 bytes over the rebinding
+PASS  webtransport: nothing after the rebinding went to the old address
 PASS  webtransport: the client's CLOSE_WEBTRANSPORT_SESSION with code 7 and a reason: the server ends the CONNECT stream
 PASS  webtransport: and its program saw the client's code and reason
 PASS  webtransport: a second session on the connection
@@ -111,4 +116,4 @@ PASS  webtransport: three more connections, each a session and a datagram, close
 PASS  webtransport: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's, the signature's or the listener's (WT-1, H3-1, H3-3)
 PASS  webtransport: the program was refused nothing and held nothing it could not place
 PASS  webtransport: with nothing gone wrong in the loop
-net loopback: 110 passed, 0 failed, 0 skipped
+net loopback: 115 passed, 0 failed, 0 skipped
