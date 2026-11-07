@@ -187,56 +187,60 @@ const tlsClientAdvanceHeld = (protection: TlsRecordProtection, held: Secret<u8[]
  */
 export class TlsRecordClient {
   tls: TlsClient
+  /** @internal Read by `net/fetch.ts`. */
   reader: TlsRecordReader
   readProtection: TlsRecordProtection
   writeProtection: TlsRecordProtection
   /** Never installed: seals the compatibility record in the clear once the write side is protected. */
-  clearProtection: TlsRecordProtection
+  private clearProtection: TlsRecordProtection
   /** Bytes to send are `output[outputStart .. outputEnd)`. */
   output: u8[]
   /** Application data the caller has not read is `plain[plainStart .. plainEnd)`. */
-  plain: u8[]
+  private plain: u8[]
   /** Where a record is opened to. */
-  scratch: u8[]
+  private scratch: u8[]
   /** The server's and the client's current application traffic secrets, at both hash lengths. */
-  readonly readTraffic256: Secret<u8[]>
-  readonly readTraffic384: Secret<u8[]>
-  readonly writeTraffic256: Secret<u8[]>
-  readonly writeTraffic384: Secret<u8[]>
-  readHash: i32 = 0
-  writeHash: i32 = 0
+  private readonly readTraffic256: Secret<u8[]>
+  private readonly readTraffic384: Secret<u8[]>
+  private readonly writeTraffic256: Secret<u8[]>
+  private readonly writeTraffic384: Secret<u8[]>
+  private readHash: i32 = 0
+  private writeHash: i32 = 0
   /** The header of a post-handshake message the server has sent part of, and a KeyUpdate's body. */
-  postHandshake: u8[]
+  private postHandshake: u8[]
   state: i32 = 0
   alert: i32 = 0
   peerAlert: i32 = -1
-  padding: i32 = 0
+  private padding: i32 = 0
   /** The `TLS_LEVEL_*` the server's records are read at. */
-  readLevel: i32 = 0
+  private readLevel: i32 = 0
   /** The `TLS_LEVEL_*` the client's records are written at. */
-  writeLevel: i32 = 0
+  private writeLevel: i32 = 0
   outputStart: i32 = 0
   outputEnd: i32 = 0
+  /** @internal Read by `net/fetch.ts`. */
   plainStart: i32 = 0
+  /** @internal Read by `net/fetch.ts`. */
   plainEnd: i32 = 0
   /** How much of `TlsClient`'s Initial-level output is already in records. */
-  pendingInitialAt: i32 = 0
+  private pendingInitialAt: i32 = 0
   /** How much of `TlsClient`'s Handshake-level output is already in records. */
-  pendingHandshakeAt: i32 = 0
+  private pendingHandshakeAt: i32 = 0
   /** How many bytes of the current post-handshake message's header or KeyUpdate are in `postHandshake`. */
-  postHandshakeLength: i32 = 0
+  private postHandshakeLength: i32 = 0
   /** How many body bytes of a NewSessionTicket are still to come, handed to `TlsClient` as they arrive. */
-  ticketLeft: i32 = 0
-  idleRecords: i32 = 0
+  private ticketLeft: i32 = 0
+  private idleRecords: i32 = 0
   keyUpdates: i32 = 0
   peerClosed: boolean = false
+  /** @internal Read by `net/fetch.ts`. */
   ended: boolean = false
   /** The server's first handshake record has arrived, which opens the window its `change_cipher_spec` may come in. */
-  started: boolean = false
+  private started: boolean = false
   /** The client's compatibility `change_cipher_spec` is sent (§D.4). */
-  ccsSent: boolean = false
-  keyUpdateDue: boolean = false
-  closeDue: boolean = false
+  private ccsSent: boolean = false
+  private keyUpdateDue: boolean = false
+  private closeDue: boolean = false
 
   /**
    * Wraps `tls`, which should be fresh, and starts it: the ClientHello is
@@ -294,7 +298,7 @@ export class TlsRecordClient {
   }
 
   /** Wipes the server's application traffic secret and the read keys. */
-  wipeRead(): void {
+  private wipeRead(): void {
     exposeWith(this.readTraffic256, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
     exposeWith(this.readTraffic384, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
     this.readHash = 0
@@ -302,7 +306,7 @@ export class TlsRecordClient {
   }
 
   /** Wipes the client's application traffic secret and its write keys. */
-  wipeWrite(): void {
+  private wipeWrite(): void {
     exposeWith(this.writeTraffic256, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
     exposeWith(this.writeTraffic384, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
     this.writeHash = 0
@@ -315,7 +319,7 @@ export class TlsRecordClient {
    * read keys from it. False when the secret is not known or the keys do not
    * install.
    */
-  keepRead(): boolean {
+  private keepRead(): boolean {
     const tls: TlsClient = this.tls
     if (!tls.readKnown(TLS_LEVEL_APPLICATION)) {
       return false
@@ -336,7 +340,7 @@ export class TlsRecordClient {
   }
 
   /** `keepRead` for the client's application traffic secret and the write keys. */
-  keepWrite(): boolean {
+  private keepWrite(): boolean {
     const tls: TlsClient = this.tls
     if (!tls.writeKnown(TLS_LEVEL_APPLICATION)) {
       return false
@@ -392,7 +396,7 @@ export class TlsRecordClient {
    * handled, an end without `close_notify` is truncation: the connection
    * fails with nothing more sent, and every key it holds is wiped.
    */
-  checkTruncation(): void {
+  private checkTruncation(): void {
     if (this.ended && !this.peerClosed && this.state !== TLS_RECORD_STATE_FAILED && this.reader.next() <= 0) {
       this.state = TLS_RECORD_STATE_FAILED
       this.dropPending()
@@ -410,7 +414,7 @@ export class TlsRecordClient {
   }
 
   /** Forgets what is owed but not yet sealed: the handshake queues, a KeyUpdate and a close. */
-  dropPending(): void {
+  private dropPending(): void {
     this.tls.clearOutput(TLS_LEVEL_INITIAL)
     this.tls.clearOutput(TLS_LEVEL_HANDSHAKE)
     this.pendingInitialAt = 0
@@ -425,7 +429,7 @@ export class TlsRecordClient {
    * verdict on the server's certificate the records stay where they are, and
    * `authenticate` comes back for them.
    */
-  process(): void {
+  private process(): void {
     while (this.state !== TLS_RECORD_STATE_FAILED && !this.peerClosed && !this.abandoned()) {
       if (this.tls.state === TLS_CLIENT_STATE_WAIT_AUTH) {
         break
@@ -453,7 +457,7 @@ export class TlsRecordClient {
   }
 
   /** Whether a whole record's content fits beside what the caller has not read, moving that to the front when it would then fit. */
-  plainHasRoom(): boolean {
+  private plainHasRoom(): boolean {
     const capacity: i32 = TLS_RECORD_CLIENT_PLAIN_SIZE
     if (capacity - (this.plainEnd - this.plainStart) < TLS_MAX_PLAINTEXT) {
       return false
@@ -470,7 +474,7 @@ export class TlsRecordClient {
   }
 
   /** Counts a record that carried nothing for the caller: 0, or `unexpected_message` once there are too many in a row. */
-  idle(): i32 {
+  private idle(): i32 {
     this.idleRecords = this.idleRecords + 1
     return this.idleRecords > TLS_RECORD_IDLE_LIMIT ? TLS_ALERT_UNEXPECTED_MESSAGE : 0
   }
@@ -481,7 +485,7 @@ export class TlsRecordClient {
    * `scratch`, and its content goes to `handleApplicationRecord` once the
    * server's Finished is read, to the handshake before. Answers 0 or the alert.
    */
-  handleRecord(buf: u8[], off: i32, n: i32): i32 {
+  private handleRecord(buf: u8[], off: i32, n: i32): i32 {
     if (toI32(buf[off]) === TLS_CONTENT_CHANGE_CIPHER_SPEC) {
       return this.handleChangeCipherSpec(buf, off, n - TLS_RECORD_HEADER_SIZE)
     }
@@ -511,7 +515,7 @@ export class TlsRecordClient {
    * between the records of one handshake message. Dropped; anything else is
    * `unexpected_message`.
    */
-  handleChangeCipherSpec(buf: u8[], off: i32, length: i32): i32 {
+  private handleChangeCipherSpec(buf: u8[], off: i32, length: i32): i32 {
     if (length !== 1 || toI32(buf[off + TLS_RECORD_HEADER_SIZE]) !== 1) {
       return TLS_ALERT_UNEXPECTED_MESSAGE
     }
@@ -522,7 +526,7 @@ export class TlsRecordClient {
   }
 
   /** Handshake bytes, `scratch[0 .. length)`, for `TlsClient` at the level they were read at; an empty fragment is `unexpected_message` (§5.1). */
-  handleHandshake(length: i32): i32 {
+  private handleHandshake(length: i32): i32 {
     if (length === 0) {
       return TLS_ALERT_UNEXPECTED_MESSAGE
     }
@@ -541,7 +545,7 @@ export class TlsRecordClient {
    * content in `scratch`: application data for the caller, an alert, or
    * post-handshake handshake bytes, which nothing else may interrupt (§5.1).
    */
-  handleApplicationRecord(length: i32): i32 {
+  private handleApplicationRecord(length: i32): i32 {
     const type: i32 = this.readProtection.contentType
     if ((this.postHandshakeLength > 0 || this.ticketLeft > 0) && type !== TLS_CONTENT_HANDSHAKE) {
       return TLS_ALERT_UNEXPECTED_MESSAGE
@@ -575,7 +579,7 @@ export class TlsRecordClient {
    * connection that never authenticated cannot end like one that did — ends
    * the connection with nothing more sent and every key wiped.
    */
-  handleAlert(length: i32): i32 {
+  private handleAlert(length: i32): i32 {
     if (length !== 2) {
       return TLS_ALERT_DECODE_ERROR
     }
@@ -607,7 +611,7 @@ export class TlsRecordClient {
    * other type is `unexpected_message`. Each message counts against the idle
    * limit.
    */
-  handlePostHandshake(length: i32): i32 {
+  private handlePostHandshake(length: i32): i32 {
     let k: i32 = 0
     while (k < length) {
       if (this.ticketLeft > 0) {
@@ -684,7 +688,7 @@ export class TlsRecordClient {
    * which `pump` sends. Answers 0, or `internal_error` when the keys do not
    * install.
    */
-  updateReadKeys(requested: boolean): i32 {
+  private updateReadKeys(requested: boolean): i32 {
     const advanced: boolean =
       this.readHash === SHA384_SIZE
         ? tlsClientAdvanceHeld(this.readProtection, this.readTraffic384)
@@ -704,7 +708,7 @@ export class TlsRecordClient {
    * server's flight, after which its handshake secrets have done their work
    * and are wiped in `TlsClient`.
    */
-  advance(): void {
+  private advance(): void {
     const tls: TlsClient = this.tls
     if (this.readLevel === TLS_LEVEL_INITIAL && tls.readKnown(TLS_LEVEL_HANDSHAKE)) {
       if (!tlsClientInstallHeld(this.readProtection, tls.suite, tls.secrets().serverHandshake)) {
@@ -731,7 +735,7 @@ export class TlsRecordClient {
   }
 
   /** Whether `need` more bytes fit in `output`, moving what is unsent to the front first. */
-  outputHasRoom(need: i32): boolean {
+  private outputHasRoom(need: i32): boolean {
     const capacity: i32 = TLS_RECORD_CLIENT_OUTPUT_SIZE
     if (this.outputEnd + need > capacity && this.outputStart > 0) {
       const held: i32 = this.outputEnd - this.outputStart
@@ -745,17 +749,17 @@ export class TlsRecordClient {
   }
 
   /** The most content one record may carry under the write protection as it stands (§5.4). */
-  maxChunk(): i32 {
+  private maxChunk(): i32 {
     return TLS_MAX_PLAINTEXT - this.writePadding()
   }
 
   /** The padding the next record carries: `padding` once records are protected, none in the clear. */
-  writePadding(): i32 {
+  private writePadding(): i32 {
     return this.writeProtection.isProtected() ? this.padding : 0
   }
 
   /** The room a record of `len` content bytes takes in `output` under the write protection as it stands. */
-  recordRoom(len: i32): i32 {
+  private recordRoom(len: i32): i32 {
     if (!this.writeProtection.isProtected()) {
       return TLS_RECORD_HEADER_SIZE + len
     }
@@ -767,7 +771,7 @@ export class TlsRecordClient {
    * under `protection`. False, writing nothing, when it does not fit; a
    * refusal from `seal` itself fails the connection.
    */
-  sealWith(protection: TlsRecordProtection, type: i32, data: u8[], off: i32, len: i32): boolean {
+  private sealWith(protection: TlsRecordProtection, type: i32, data: u8[], off: i32, len: i32): boolean {
     const sealed: boolean = protection.isProtected()
     const padding: i32 = sealed ? this.padding : 0
     const room: i32 = sealed
@@ -786,7 +790,7 @@ export class TlsRecordClient {
   }
 
   /** `sealWith` under the write protection. */
-  sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean {
+  private sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean {
     return this.sealWith(this.writeProtection, type, data, off, len)
   }
 
@@ -794,7 +798,7 @@ export class TlsRecordClient {
    * The compatibility `change_cipher_spec` (§D.4), in the clear whatever the
    * write side is under, once a connection. False when `output` has no room.
    */
-  sealChangeCipherSpec(): boolean {
+  private sealChangeCipherSpec(): boolean {
     if (this.ccsSent) {
       return true
     }
@@ -815,7 +819,7 @@ export class TlsRecordClient {
    * `maxChunk()` bytes, and answers where it stopped. A padding that leaves
    * no room for content fails the connection with `internal_error`.
    */
-  sealQueue(queue: u8[], at: i32, length: i32): i32 {
+  private sealQueue(queue: u8[], at: i32, length: i32): i32 {
     let next: i32 = at
     const most: i32 = this.maxChunk()
     if (most < 1 && next < length) {
@@ -842,7 +846,7 @@ export class TlsRecordClient {
    * application secrets wiped in `TlsClient` once they are installed here. A
    * KeyUpdate owed to the server goes last.
    */
-  pump(): void {
+  private pump(): void {
     if (this.state === TLS_RECORD_STATE_FAILED) {
       return
     }
@@ -911,7 +915,7 @@ export class TlsRecordClient {
    * to the next secret (§4.6.3, §7.2), the old one wiped. False, sending
    * nothing, when it does not fit in `output` yet.
    */
-  sendKeyUpdate(request: boolean): boolean {
+  private sendKeyUpdate(request: boolean): boolean {
     const message: u8[] = [toU8(TLS_HANDSHAKE_KEY_UPDATE), toU8(0), toU8(0), toU8(1), toU8(request ? 1 : 0)]
     if (!this.sealRecord(TLS_CONTENT_HANDSHAKE, message, TLS_RECORD_CLIENT_FROM, TLS_KEY_UPDATE_SIZE)) {
       return false
@@ -953,7 +957,7 @@ export class TlsRecordClient {
    * the client writes with now. What was still owed is dropped, and once the
    * alert is sealed every key the connection holds is wiped.
    */
-  fail(alert: i32): void {
+  private fail(alert: i32): void {
     if (this.state === TLS_RECORD_STATE_FAILED) {
       return
     }
@@ -969,7 +973,7 @@ export class TlsRecordClient {
   }
 
   /** Seals an alert record of `level` and `description`; false, sending nothing, when `output` has no room for it. */
-  sendAlert(level: i32, description: i32): boolean {
+  private sendAlert(level: i32, description: i32): boolean {
     const body: u8[] = [toU8(level), toU8(description)]
     const two: i32 = 2
     return this.sealRecord(TLS_CONTENT_ALERT, body, TLS_RECORD_CLIENT_FROM, two)
@@ -1104,12 +1108,12 @@ export class TlsRecordClient {
   }
 
   /** Whether the client closed before its Finished was sealed, so the server's records are not read. */
-  abandoned(): boolean {
+  private abandoned(): boolean {
     return this.state === TLS_RECORD_STATE_CLOSED && this.writeLevel !== TLS_LEVEL_APPLICATION
   }
 
   /** Seals the `close_notify` `close` owes once `output` has room, then wipes the write direction. */
-  sealClose(): void {
+  private sealClose(): void {
     if (this.closeDue && this.sendAlert(TLS_ALERT_LEVEL_WARNING, TLS_ALERT_CLOSE_NOTIFY)) {
       this.closeDue = false
       this.wipeWrite()

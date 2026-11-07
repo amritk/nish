@@ -154,9 +154,13 @@ const TLS_CODEC_FROM: i32 = 0
  * reader was opened on.
  */
 class TlsReader {
+  /** @internal Read by the free functions of this module. */
   data: u8[]
+  /** @internal Read by the free functions of this module. */
   at: i32
+  /** @internal Read by the free functions of this module. */
   end: i32
+  /** @internal Read by the free functions of this module. */
   failed: boolean = false
 
   constructor(data: u8[], at: i32, end: i32) {
@@ -233,13 +237,29 @@ const tlsReadSkipTo = (r: TlsReader, to: i32): void => {
  * in a slot reads its ClientHellos without moving the arena.
  */
 export class TlsClientHelloView {
-  /** The buffer the windows point into: the one the last hello was read from. */
+  /**
+   * The buffer the windows point into: the one the last hello was read from.
+   *
+   * @internal Read by `net/tls.ts`.
+   */
   data: u8[]
-  /** One bit per extension type read, for the duplicate check (§4.2); cleared by each read. */
+  /**
+   * One bit per extension type read, for the duplicate check (§4.2); cleared by each read.
+   *
+   * @internal Read by the free functions of this module.
+   */
   extensionSeen: u32[]
-  /** One bit per group a share was offered for, for the duplicate check (§4.2.8). */
+  /**
+   * One bit per group a share was offered for, for the duplicate check (§4.2.8).
+   *
+   * @internal Read by the free functions of this module.
+   */
   shareSeen: u32[]
-  /** The reader each read runs, kept so that a read allocates none. */
+  /**
+   * The reader each read runs, kept so that a read allocates none.
+   *
+   * @internal Read by the free functions of this module.
+   */
   reader: TlsReader
   /** 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. */
   alert: i32 = 0
@@ -324,7 +344,11 @@ export class TlsClientHelloView {
     this.reader = new TlsReader(this.data, TLS_CODEC_FROM, TLS_CODEC_FROM)
   }
 
-  /** Forgets the last hello: every window empty, every flag down, both bitmaps clear. */
+  /**
+   * Forgets the last hello: every window empty, every flag down, both bitmaps clear.
+   *
+   * @internal Read by the free functions of this module.
+   */
   clear(): void {
     this.alert = 0
     this.legacyVersion = 0
@@ -1693,11 +1717,23 @@ export const tlsEncodeClientHello = (
  * TLS 1.2 server sends.
  */
 export class TlsServerFlightView {
-  /** The buffer the windows point into: the one the last message was read from. */
+  /**
+   * The buffer the windows point into: the one the last message was read from.
+   *
+   * @internal Read by `net/tls/client.ts`.
+   */
   data: u8[]
-  /** One bit per extension type read, for the duplicate check (§4.2). */
+  /**
+   * One bit per extension type read, for the duplicate check (§4.2).
+   *
+   * @internal Read by the free functions of this module.
+   */
   extensionSeen: u32[]
-  /** The reader each read runs, kept so that a read allocates none. */
+  /**
+   * The reader each read runs, kept so that a read allocates none.
+   *
+   * @internal Read by the free functions of this module.
+   */
   reader: TlsReader
   /** 0 when the message parsed, else `decode_error`. */
   alert: i32 = 0
@@ -1745,7 +1781,11 @@ export class TlsServerFlightView {
     this.reader = new TlsReader(this.data, TLS_CODEC_FROM, TLS_CODEC_FROM)
   }
 
-  /** Forgets the last message: every window empty, every flag down, the bitmap clear. */
+  /**
+   * Forgets the last message: every window empty, every flag down, the bitmap clear.
+   *
+   * @internal Read by the free functions of this module.
+   */
   clear(): void {
     this.alert = 0
     this.extensionAlert = 0

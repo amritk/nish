@@ -211,9 +211,9 @@ export class TlsRecordReader {
   /** The bytes held, or `empty` while the reader holds none. */
   buffer: u8[]
   /** The zero-length array `buffer` is while no buffer is borrowed. */
-  empty: u8[]
+  private empty: u8[]
   /** Where `buffer` comes from and goes back to. */
-  pool: BufferPool
+  private pool: BufferPool
   /** The first byte not yet consumed. */
   start: i32 = 0
   /** One past the last byte pushed. */
@@ -228,6 +228,8 @@ export class TlsRecordReader {
   /**
    * Borrows from `pool` from now on, giving back first, zeroed, any buffer
    * held from the old one. Every byte held is forgotten, as `reset` does.
+   *
+   * @internal Read by `net/tls/record-server.ts`.
    */
   borrowFrom(pool: BufferPool): void {
     this.reset()
@@ -242,7 +244,7 @@ export class TlsRecordReader {
   }
 
   /** Gives the buffer back, zeroed, if one is held. */
-  giveBack(): void {
+  private giveBack(): void {
     if (this.buffer.length > 0) {
       // Every byte of it may have held a record: zero all of it.
       this.pool.giveSecret(this.buffer, TLS_MAX_RECORD)
@@ -345,7 +347,7 @@ export class TlsRecordProtection {
    */
   recordLimit: i64 = 0
   /** The negotiated suite, or 0 while the direction is cleartext. */
-  suite: i32 = 0
+  private suite: i32 = 0
   /** The real content type of the last record `open` answered. */
   contentType: i32 = 0
   /** The arrays `key` and `aes` point into: AES-128's and ChaCha20's or AES-256's. */
@@ -356,7 +358,7 @@ export class TlsRecordProtection {
   /** Where `advance` derives the next traffic secret: HashLen bytes of it. */
   next: u8[]
   /** Where the keys are derived. */
-  kdf: HkdfScratch
+  private kdf: HkdfScratch
 
   constructor() {
     this.key16 = new Array<u8>(16)
@@ -380,6 +382,8 @@ export class TlsRecordProtection {
    * and both AES key schedules wiped: the keys and IV with `secureZero`, and
    * each schedule with `aesKeyWipe`, its whole `roundKeys` and its H, which
    * the next `install` fills again (TLS-2).
+   *
+   * @internal Read by `net/tls/record-server.ts` and `net/tls/record-client.ts`.
    */
   clear(): void {
     secureZero(this.key16)
@@ -416,7 +420,7 @@ export class TlsRecordProtection {
   }
 
   /** Points `key`, and for AES `aes`, at the arrays of the size `suite` needs. */
-  reserve(suite: i32): void {
+  private reserve(suite: i32): void {
     this.key = tlsSuiteKeyLength(suite) === 16 ? this.key16 : this.key32
     if (suite !== TLS_CHACHA20_POLY1305_SHA256) {
       this.aes = tlsSuiteKeyLength(suite) === 16 ? this.aes128 : this.aes256
@@ -431,7 +435,7 @@ export class TlsRecordProtection {
    * inside an arena block, so a key install leaves the arena where it was.
    * ChaCha20 has no schedule.
    */
-  derive(suite: i32, secret: u8[]): void {
+  private derive(suite: i32, secret: u8[]): void {
     using _scope = arena()
     tlsTrafficKeysInto(this.kdf, suite, secret, this.key, this.iv)
     const aes: AesKey | null = this.aes
@@ -445,7 +449,7 @@ export class TlsRecordProtection {
    * ChaCha20: a protection that carried AES keeps its schedule for the next
    * AES key, and must not use it for ChaCha20.
    */
-  aesForSuite(): AesKey | null {
+  private aesForSuite(): AesKey | null {
     return this.suite === TLS_CHACHA20_POLY1305_SHA256 ? null : this.aes
   }
 

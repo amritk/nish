@@ -326,15 +326,15 @@ export const tlsTrafficIv = (suite: i32, trafficSecret: Secret<u8[]>): Secret<u8
  */
 export class TlsTranscript {
   /** 32 for SHA-256, 48 for SHA-384. */
-  hashLength: i32
-  sha256: Sha256
-  sha384: Sha384
+  private hashLength: i32
+  private sha256: Sha256
+  private sha384: Sha384
   /** Never fed: the initial hash values `reset` copies from. */
-  fresh256: Sha256
-  fresh384: Sha384
+  private fresh256: Sha256
+  private fresh384: Sha384
   /** Where `hashInto` finishes a copy of the running hash, so that the transcript goes on. */
-  twin256: Sha256
-  twin384: Sha384
+  private twin256: Sha256
+  private twin384: Sha384
 
   constructor(hashLength: i32) {
     this.hashLength = hashLength
@@ -346,7 +346,11 @@ export class TlsTranscript {
     this.twin384 = new Sha384()
   }
 
-  /** Starts an empty transcript over the hash `hashLength` names, in the hashers it already has. */
+  /**
+   * Starts an empty transcript over the hash `hashLength` names, in the hashers it already has.
+   *
+   * @internal Read by `net/tls.ts` and `net/tls/client.ts`.
+   */
   reset(hashLength: i32): void {
     this.hashLength = hashLength
     hmacCopySha256(this.fresh256, this.sha256)
@@ -366,6 +370,8 @@ export class TlsTranscript {
    * Writes the transcript hash of everything absorbed so far, `hashLength`
    * bytes, at `out[at]`; the transcript goes on. What the digest allocates
    * dies with the call. A window outside `out` writes what fits.
+   *
+   * @internal Read by `net/tls.ts` and `net/tls/client.ts`.
    */
   hashInto(out: u8[], at: i32): void {
     let digest: u8[] = []

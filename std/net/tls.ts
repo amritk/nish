@@ -372,11 +372,11 @@ export const tlsSignEcdsaP256 = (priv: Secret<u8[]>, content: u8[]): u8[] | null
  */
 export class TlsP256Signer {
   /** The P-256 signer's scratch. */
-  scratch: P256SignScratch
+  private scratch: P256SignScratch
   /** `r || s` as `p256SignSha256Into` writes it. */
-  rs: u8[]
+  private rs: u8[]
   /** The DER signatures, index `length - TLS_P256_DER_MIN`. */
-  ders: u8[][]
+  private ders: u8[][]
 
   constructor() {
     this.scratch = new P256SignScratch()
@@ -517,12 +517,19 @@ class TlsExchangeWords {
    * The salt the handshake secret is extracted under, `hashLength` bytes of
    * it: the `TLS_DERIVED_SALT_*` constant on a full handshake, the salt
    * derived from the PSK early secret on a resumed one.
+   *
+   * @internal Read by the free functions of this module.
    */
   salt0: u64 = 0
+  /** @internal Read by the free functions of this module. */
   salt1: u64 = 0
+  /** @internal Read by the free functions of this module. */
   salt2: u64 = 0
+  /** @internal Read by the free functions of this module. */
   salt3: u64 = 0
+  /** @internal Read by the free functions of this module. */
   salt4: u64 = 0
+  /** @internal Read by the free functions of this module. */
   salt5: u64 = 0
   /** 32 or 48: which handshake secret to extract. */
   hashLength: i32 = 0
@@ -711,7 +718,11 @@ export class TlsSecretPool {
     this.toBeSigned = new Array<u8>(hashLength + TLS_CERTIFICATE_VERIFY_PREFIX)
   }
 
-  /** Wipes the one secret `index` names (`TLS_SECRET_*`), leaving the rest; any other index wipes nothing. */
+  /**
+   * Wipes the one secret `index` names (`TLS_SECRET_*`), leaving the rest; any other index wipes nothing.
+   *
+   * @internal Read by `net/tls/client.ts`.
+   */
   zero(index: i32): void {
     if (index === TLS_SECRET_HANDSHAKE) {
       exposeWith(this.handshake, TLS_FROM, tlsZeroHeld)
@@ -740,7 +751,7 @@ export class TlsSecretPool {
     }
   }
 
-  /** Wipes every secret in the pool. */
+  /** Wipes every secret in the pool. @internal Read by `net/tls/client.ts`. */
   wipe(): void {
     wipe(this.handshake)
     wipe(this.clientHandshake)
@@ -880,7 +891,7 @@ const tlsServerTicketCapacity = (state: TlsTicketState): i32 => {
  */
 export class TlsServer {
   config: TlsServerConfig
-  serverRandom: u8[]
+  private serverRandom: u8[]
   /** The connection's x25519 private key, copied in by `restart` and wiped by the record layer once the ServerHello is written. */
   readonly ephemeral: Secret<u8[]>
   /** The client's `host_name`, or empty. */
@@ -888,33 +899,41 @@ export class TlsServer {
   /** The ALPN protocol chosen, one of the configuration's, or empty. */
   alpn: string = ""
   /** The last host name a client of this server sent, kept across `restart` so that the next one naming it reuses the string. */
-  lastServerName: string = ""
+  private lastServerName: string = ""
   /** The client's `quic_transport_parameters`, opaque; empty unless the carrier is QUIC. */
   clientTransportParameters: u8[]
   /** The array `clientTransportParameters` points at once read, kept across `restart` and refilled in the room it has. */
-  clientParameters: u8[]
-  transcript: TlsTranscript
+  private clientParameters: u8[]
+  private transcript: TlsTranscript
   /** The bytes received at the current level and not yet a whole message: `input[0 .. inputLength)`. */
   input: u8[]
-  /** What the server has written at the Initial level and not handed on: `outputInitial[0 .. outputInitialLength)`. */
+  /**
+   * What the server has written at the Initial level and not handed on: `outputInitial[0 .. outputInitialLength)`.
+   *
+   * @internal Read by `net/tls/record-server.ts` and `net/quic.ts`.
+   */
   outputInitial: u8[]
-  /** What the server has written at the Handshake level and not handed on: `outputHandshake[0 .. outputHandshakeLength)`. */
+  /**
+   * What the server has written at the Handshake level and not handed on: `outputHandshake[0 .. outputHandshakeLength)`.
+   *
+   * @internal Read by `net/tls/record-server.ts` and `net/quic.ts`.
+   */
   outputHandshake: u8[]
   /** An empty array: what `clientTransportParameters` holds until a client's are read. */
-  none: u8[]
+  private none: u8[]
   /** The secrets under each hash (`TlsSecretPool`); `secrets()` answers the negotiated hash's. */
   secrets256: TlsSecretPool
   secrets384: TlsSecretPool
   /** The ClientHello last read, as windows into `input`. */
-  hello: TlsClientHelloView
+  private hello: TlsClientHelloView
   /** Where every HKDF and HMAC of the schedule runs. */
-  kdf: HkdfScratch
+  private kdf: HkdfScratch
   /** The exchange's words (`tlsExchange`). */
   exchange: TlsExchangeWords
   /** The server's x25519 public key, unpacked from the exchange's words for the ServerHello. */
-  serverPublic: u8[]
+  private serverPublic: u8[]
   /** A transcript hash on its way into the schedule: HashLen bytes of it. */
-  hashes: u8[]
+  private hashes: u8[]
   /**
    * The salt the handshake secret is extracted under, HashLen bytes of it:
    * the `TLS_DERIVED_SALT_*` constant on a full handshake, derived from the
@@ -923,48 +942,59 @@ export class TlsServer {
    */
   salt: u8[]
   /** The transcript hash through the ClientHello's binders prefix, which a binder covers (§4.2.11.2). */
-  binderHash: u8[]
+  private binderHash: u8[]
   /** What the ticket `resume` is reading opened to; its PSK is zeroed once read. */
   opened: TlsTicketState
   /** What `issue` seals; its PSK is zeroed once sealed. */
   issuing: TlsTicketState
   /** The sealed ticket, sized once for the largest. */
-  ticketScratch: u8[]
-  /** What the server has written at the Application level and not handed on: one NewSessionTicket. */
+  private ticketScratch: u8[]
+  /**
+   * What the server has written at the Application level and not handed on: one NewSessionTicket.
+   *
+   * @internal Read by `net/tls/record-server.ts`.
+   */
   outputApplication: u8[]
   /** The ticket nonce: one ticket a connection, so one byte, the same each time, keeps each PSK distinct (§4.6.1). */
-  ticketNonce: u8[]
+  private ticketNonce: u8[]
   /** The ticket's `ticket_age_add`, drawn fresh for each ticket (§4.6.1). */
-  ageAddBytes: u8[]
+  private ageAddBytes: u8[]
   /**
    * Which of the negotiated pool's secrets the handshake has derived: bit
    * `1 << TLS_SECRET_*` for each. A secret wiped by `wipeSecret` keeps its
    * bit, since its place is still the one it was derived into.
    */
-  held: i32 = 0
+  private held: i32 = 0
   state: i32 = 0
   /** The alert the server failed with, or 0. */
   alert: i32 = 0
   /** The negotiated cipher suite, or 0 before the first ClientHello is read. */
   suite: i32 = 0
+  /** @internal Read by `net/tls/record-server.ts`. */
   hashLength: i32 = 0
+  /** @internal Read by `net/tls/record-server.ts`. */
   inputLength: i32 = 0
+  /** @internal Read by `net/tls/record-server.ts` and `net/quic.ts`. */
   outputInitialLength: i32 = 0
+  /** @internal Read by `net/tls/record-server.ts` and `net/quic.ts`. */
   outputHandshakeLength: i32 = 0
+  /** @internal Read by `net/tls/record-server.ts`. */
   outputApplicationLength: i32 = 0
   /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
   retried: boolean = false
   /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
-  configFits: boolean = false
+  private configFits: boolean = false
   /** Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. */
   tickets: boolean = false
   /**
    * Whether this connection may be issued a ticket: tickets are on, the
    * client listed `psk_dhe_ke`, the only mode this server resumes in, and its
    * server name, if any, fits a ticket.
+   *
+   * @internal Read by `net/tls/record-server.ts`.
    */
   ticketWanted: boolean = false
-  /** Whether `issue` has run for this connection. */
+  /** Whether `issue` has run for this connection. @internal Read by `net/tls/record-server.ts`. */
   issued: boolean = false
   /** Whether this connection resumed a ticket (row 1 of the record's table). */
   resumed: boolean = false
@@ -1051,7 +1081,7 @@ export class TlsServer {
    * master secret `sign` derived ahead and what a ticket being read left: its
    * PSK, early secret and binder key, and the salt.
    */
-  fail(alert: i32): i32 {
+  private fail(alert: i32): i32 {
     this.wipeResumption()
     const pool: TlsSecretPool = this.secrets()
     pool.zero(TLS_SECRET_PSK)
@@ -1068,6 +1098,8 @@ export class TlsServer {
    * Wipes the resumption master secret, which `sign` derives ahead of the
    * client's Finished. `issue` calls it once the ticket is sealed, and the
    * carrier when a connection ends, closed or failed, without one (TLS-1).
+   *
+   * @internal Read by `net/tls/record-server.ts`.
    */
   wipeResumption(): void {
     this.secrets().zero(TLS_SECRET_RESUMPTION)
@@ -1109,7 +1141,11 @@ export class TlsServer {
     this.secrets().zero(index)
   }
 
-  /** Zeroes the ephemeral key, which the record layer does once the ServerHello is written: not while a hello that offers a ticket waits for `resume`, whose exchange still needs it. */
+  /**
+   * Zeroes the ephemeral key, which the record layer does once the ServerHello is written: not while a hello that offers a ticket waits for `resume`, whose exchange still needs it.
+   *
+   * @internal Read by `net/tls/record-server.ts`.
+   */
   wipeEphemeral(): void {
     exposeWith(this.ephemeral, TLS_FROM, tlsZeroHeld)
   }
@@ -1122,7 +1158,7 @@ export class TlsServer {
   }
 
   /** The level the client's next bytes must arrive at, or -1 when the state expects none. */
-  expectedLevel(): i32 {
+  private expectedLevel(): i32 {
     switch (this.state) {
       case TLS_STATE_WAIT_CLIENT_HELLO:
         return TLS_LEVEL_INITIAL
@@ -1139,7 +1175,7 @@ export class TlsServer {
    * clients cut their messages, and never past the largest message `receive`
    * takes.
    */
-  reserveInput(need: i32): void {
+  private reserveInput(need: i32): void {
     const capacity: i32 = toI32(this.input.length)
     if (need <= capacity) {
       return
@@ -1162,7 +1198,7 @@ export class TlsServer {
    * writes with an ECDSA signature, so only a longer signature grows the
    * Handshake level's, once per slot.
    */
-  reserveOutput(level: i32, need: i32): void {
+  private reserveOutput(level: i32, need: i32): void {
     const initial: boolean = level === TLS_LEVEL_INITIAL
     const buffer: u8[] = initial ? this.outputInitial : this.outputHandshake
     const held: i32 = initial ? this.outputInitialLength : this.outputHandshakeLength
@@ -1253,7 +1289,7 @@ export class TlsServer {
    * admits bytes only in the two states that expect them, so the state is
    * one of those two here.
    */
-  handleMessage(length: i32): i32 {
+  private handleMessage(length: i32): i32 {
     const type: i32 = toI32(this.input[0])
     if (this.state === TLS_STATE_WAIT_CLIENT_HELLO) {
       return type === TLS_HANDSHAKE_CLIENT_HELLO
@@ -1268,7 +1304,7 @@ export class TlsServer {
    * (§4.1.1: the server picks; following the client's order is the choice
    * RFC 8448's server makes).
    */
-  chooseSuite(hello: TlsClientHelloView): i32 {
+  private chooseSuite(hello: TlsClientHelloView): i32 {
     const data: u8[] = hello.data
     const end: i32 = hello.suitesAt + hello.suitesLength
     for (
@@ -1289,7 +1325,7 @@ export class TlsServer {
    * Answers 0 with `alpn` set, or empty when nothing is negotiated, or
    * `no_application_protocol`.
    */
-  chooseAlpn(hello: TlsClientHelloView): i32 {
+  private chooseAlpn(hello: TlsClientHelloView): i32 {
     this.alpn = ""
     if (hello.hasAlpn && toI32(this.config.alpn.length) > 0) {
       const data: u8[] = hello.data
@@ -1315,7 +1351,7 @@ export class TlsServer {
    * already spells those bytes, so a slot whose clients name one host makes
    * the string once, and made again only when the name changes.
    */
-  takeServerName(hello: TlsClientHelloView): void {
+  private takeServerName(hello: TlsClientHelloView): void {
     if (!hello.hasServerName) {
       this.serverName = ""
       return
@@ -1334,7 +1370,7 @@ export class TlsServer {
    * the suite, the extensions §9.2 requires, the group, the signature scheme,
    * the share itself, and the application protocol.
    */
-  handleClientHello(length: i32): i32 {
+  private handleClientHello(length: i32): i32 {
     const hello: TlsClientHelloView = this.hello
     const data: u8[] = this.input
     tlsReadClientHello(hello, data, 4, length)
@@ -1495,7 +1531,7 @@ export class TlsServer {
    * does not resume, the checks a certificate needs and the full flight.
    * Answers 0 or the alert.
    */
-  answerHello(index: i32): i32 {
+  private answerHello(index: i32): i32 {
     const hello: TlsClientHelloView = this.hello
     if (!this.resumed) {
       if (!hello.hasSignatureAlgorithms) {
@@ -1538,7 +1574,7 @@ export class TlsServer {
    * the negotiated one, its PSK is that long, and it names the server name
    * this hello names, or none when the hello names none (rows 4 and 5).
    */
-  ticketFits(): boolean {
+  private ticketFits(): boolean {
     const hello: TlsClientHelloView = this.hello
     const opened: TlsTicketState = this.opened
     const h: i32 = this.hashLength
@@ -1562,7 +1598,7 @@ export class TlsServer {
    * counted with `take`, so that a full register fails closed into a full
    * handshake (row 7).
    */
-  selectTicket(
+  private selectTicket(
     current: Secret<u8[]>,
     currentInfo: TlsTicketKeyInfo,
     previous: Secret<u8[]>,
@@ -1617,7 +1653,7 @@ export class TlsServer {
    * hello's binder for it verifies (§4.2.11.2). The PSK and binder key are
    * zeroed before it returns; the early secret stays for `saltFromEarly`.
    */
-  bindTicket(): boolean {
+  private bindTicket(): boolean {
     const hello: TlsClientHelloView = this.hello
     const pool: TlsSecretPool = this.secrets()
     const h: i32 = this.hashLength
@@ -1650,7 +1686,7 @@ export class TlsServer {
   }
 
   /** The salt a resumed handshake secret is extracted under, `Derive-Secret(early, "derived", "")`, into `salt`. */
-  saltFromEarly(): void {
+  private saltFromEarly(): void {
     const pool: TlsSecretPool = this.secrets()
     using _scope = arena()
     const early: u8[] = expose(pool.early, tlsHeldClone)
@@ -1707,7 +1743,7 @@ export class TlsServer {
    * handshake traffic secrets, EncryptedExtensions and the server's
    * Finished, after which the server waits for the client's.
    */
-  writeResumedFlight(index: i32): void {
+  private writeResumedFlight(index: i32): void {
     const hello: TlsClientHelloView = this.hello
     const none: u8[] = []
     this.reserveOutput(
@@ -1741,7 +1777,7 @@ export class TlsServer {
   }
 
   /** The resumed ServerHello, the handshake traffic secrets and EncryptedExtensions, in the room `writeResumedFlight` reserved. */
-  writeResumedHello(pool: TlsSecretPool, index: i32): void {
+  private writeResumedHello(pool: TlsSecretPool, index: i32): void {
     const hello: TlsClientHelloView = this.hello
     using _scope = arena()
     const helloAt: i32 = this.outputInitialLength
@@ -1786,7 +1822,7 @@ export class TlsServer {
    * `Secret` field a word at a time; the record layer wipes it once the
    * ServerHello is written (TLS-1).
    */
-  exchangeKeys(): i32 {
+  private exchangeKeys(): i32 {
     const w: TlsExchangeWords = this.exchange
     const share: u8[] = this.input
     const at: i32 = this.hello.x25519ShareAt
@@ -1825,7 +1861,7 @@ export class TlsServer {
    * EncryptedExtensions and Certificate at the Handshake level, then the
    * CertificateVerify input: all in place, inside one arena block.
    */
-  writeServerFlight(): void {
+  private writeServerFlight(): void {
     const hello: TlsClientHelloView = this.hello
     const h: i32 = this.hashLength
     // Room for the messages first, outside the block, measured by writing
@@ -1908,7 +1944,7 @@ export class TlsServer {
    * held secret `dst` (RFC 8446 §7.1): derived into a plain array that dies
    * with the caller's arena block, copied in, and zeroed.
    */
-  deriveInto(prk: u8[], label: string, dst: Secret<u8[]>): void {
+  private deriveInto(prk: u8[], label: string, dst: Secret<u8[]>): void {
     const out: u8[] = new Array<u8>(this.hashLength)
     tlsDeriveSecretInto(this.kdf, this.hashLength, prk, label, this.hashes, TLS_FROM, out)
     exposeWith(dst, out, tlsHeldCopyIn)
@@ -1954,7 +1990,7 @@ export class TlsServer {
   }
 
   /** CertificateVerify, carrying `signature`, at the Handshake level, in the room `sign` reserved. */
-  writeCertificateVerify(signature: u8[]): void {
+  private writeCertificateVerify(signature: u8[]): void {
     using _scope = arena()
     const verifyAt: i32 = this.outputHandshakeLength
     const verifyEnd: i32 = tlsWriteCertificateVerify(
@@ -1971,7 +2007,7 @@ export class TlsServer {
    * it: its `verify_data`, under the server's handshake traffic secret, goes
    * straight into its place in the flight.
    */
-  writeServerFinished(pool: TlsSecretPool): void {
+  private writeServerFinished(pool: TlsSecretPool): void {
     const h: i32 = this.hashLength
     using _scope = arena()
     const at: i32 = this.outputHandshakeLength
@@ -1997,7 +2033,7 @@ export class TlsServer {
    * Finished the server expects, and the resumption master secret, after
    * which the server waits for that Finished.
    */
-  masterSecretStep(pool: TlsSecretPool): void {
+  private masterSecretStep(pool: TlsSecretPool): void {
     const h: i32 = this.hashLength
     using _scope = arena()
     this.transcript.hashInto(this.hashes, TLS_FROM)
@@ -2054,7 +2090,7 @@ export class TlsServer {
   }
 
   /** The resumption PSK for nonce `ticketNonce`, into `issuing.psk` (§4.6.1). */
-  resumptionPsk(): void {
+  private resumptionPsk(): void {
     const pool: TlsSecretPool = this.secrets()
     using _scope = arena()
     const resumption: u8[] = expose(pool.resumption, tlsHeldClone)
@@ -2071,7 +2107,7 @@ export class TlsServer {
   }
 
   /** `issue`'s ticket: sealed into `ticketScratch`, its PSK zeroed, and the NewSessionTicket written. */
-  writeTicket(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean {
+  private writeTicket(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean {
     const issuing: TlsTicketState = this.issuing
     issuing.suite = this.suite
     issuing.lifetime = TLS_TICKET_LIFETIME_SECONDS
@@ -2114,7 +2150,7 @@ export class TlsServer {
    * secret `sign` derived is the connection's, and known. The transcript already holds this Finished: `sign` absorbed the
    * one it expected, and these bytes are equal to it.
    */
-  handleFinished(length: i32): i32 {
+  private handleFinished(length: i32): i32 {
     if (length !== this.hashLength) {
       return TLS_ALERT_DECODE_ERROR
     }
@@ -2133,7 +2169,7 @@ export class TlsServer {
    * A message the server wrote at `level`, `output[at .. end)` of that
    * level's buffer, goes into the transcript and stays on the output.
    */
-  sent(level: i32, at: i32, end: i32): void {
+  private sent(level: i32, at: i32, end: i32): void {
     if (level === TLS_LEVEL_INITIAL) {
       this.transcript.update(this.outputInitial, at, end - at)
       this.outputInitialLength = end
@@ -2182,7 +2218,11 @@ export class TlsServer {
     }
   }
 
-  /** Forgets the handshake bytes written at `level`, which a carrier has read out of the buffer itself. */
+  /**
+   * Forgets the handshake bytes written at `level`, which a carrier has read out of the buffer itself.
+   *
+   * @internal Read by `net/tls/record-server.ts` and `net/quic.ts`.
+   */
   clearOutput(level: i32): void {
     if (level === TLS_LEVEL_INITIAL) {
       this.outputInitialLength = 0
