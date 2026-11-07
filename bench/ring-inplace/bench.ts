@@ -285,7 +285,7 @@ const consumer = (
     let off: i32 = 0
     while (off < len) {
       const took: i32 =
-        mode === "copy" ? conn.write(body, off, len - off) : conn.sendBody(body, off, len - off)
+        mode === "copy" ? conn.write(own, off, len - off) : conn.sendBody(body, off, len - off)
       if (took > 0) {
         if (mode === "copy") {
           copied = copied + toI64(took)
