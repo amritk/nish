@@ -25,8 +25,8 @@
  * token, or it is a PROTOCOL_VIOLATION; an ID already given another sequence
  * number is one too. More active IDs than the limit this side advertised is
  * a CONNECTION_ID_LIMIT_ERROR (§5.1.1). Retire Prior To retires every older ID
- * at once: each is queued in `retirePending`, for this side to send
- * RETIRE_CONNECTION_ID for, and `current` moves to the oldest still active.
+ * at once: each is queued for this side to send RETIRE_CONNECTION_ID for,
+ * and the ID this side sends to moves to the oldest still active.
  * Queued retirements past twice the limit are a CONNECTION_ID_LIMIT_ERROR too
  * (§5.1.2), which bounds what a peer can make this side owe it.
  *
@@ -189,7 +189,7 @@ export class QuicCidTable {
   }
 
   /**
-   * Issues the first `length` bytes of `cid` as the next local ID, with its
+   * Issues `cid`, up to its first 20 bytes, as the next local ID, with its
    * 16-byte reset token (or none, empty, for sequence 0), and answers its
    * sequence number; -1 when every local slot is taken.
    *
@@ -245,7 +245,9 @@ export class QuicCidTable {
   }
 
   /**
-   * Whether `buf[at .. at + length)` is an active local ID. Every slot is compared, each in constant time.
+   * Whether `buf[at .. at + length)` is an active local ID. Each active slot
+   * of that length is compared in constant time, and the loop does not stop
+   * at a match; unused slots and slots of another length are skipped.
    *
    * @param buf The bytes holding the ID, such as a received datagram; only read.
    * @param at The offset of the ID's first byte in `buf`.
@@ -449,7 +451,8 @@ export class QuicCidTable {
   /**
    * A copy of the peer ID this side sends to, or empty before the peer gave any.
    *
-   * @returns A new array of the ID's bytes, the caller's to keep; empty when no peer ID is active.
+   * @returns A new array of the ID's bytes, the caller's to keep; empty when no peer ID is active, and
+   *   also when the active one is zero-length (use `currentPeerEntry` to tell the two apart).
    */
   currentPeer(): u8[] {
     const entry: QuicCidEntry | null = this.currentPeerEntry()

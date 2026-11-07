@@ -445,8 +445,8 @@ export const QUIC_CONN_SKIP_RING: i32 = 8
 export const QUIC_CONN_SKIP_MIN: i64 = 128
 /**
  * How many distances past `QUIC_CONN_SKIP_MIN` a skip may fall at: the next
- * skipped number is `QUIC_CONN_SKIP_MIN` plus 0 to 896 packets on, so one in
- * every 128 to 1024 is skipped.
+ * skipped number is `QUIC_CONN_SKIP_MIN` plus 0 to 896 past the number after
+ * the last skip, so skips fall 129 to 1025 numbers apart.
  */
 export const QUIC_CONN_SKIP_SPREAD: i64 = 897
 /**
@@ -649,7 +649,10 @@ export class QuicStreamData {
 class QuicConnReassembly {
   /** @internal Read in quic.ts outside the class. */
   ring: u8[]
-  /** @internal Kept with `ring`, its family, which quic.ts's free functions read. */
+  /**
+   * @internal Only its own class reads it; kept public with `ring`, its family, read in quic.ts outside
+   *   the class.
+   */
   have: u8[]
   /**
    * The level whose bytes the ring holds.
@@ -805,7 +808,8 @@ class QuicConnSpace {
   private sentFlags: u8[]
   /**
    * Each packet's STREAM chunks, `QUIC_CONN_PACKET_STREAMS` to a row: how many, then each one's stream, offset, length and FIN.
-   * @internal Kept with `sentStreamId`, its family, which quic.ts's free functions read.
+   * @internal Only its own class reads it; kept public with `sentStreamId`, its family, read in quic.ts
+   *   outside the class.
    */
   sentStreamCount: i32[]
   /** @internal Read in quic.ts outside the class. */
@@ -818,7 +822,8 @@ class QuicConnSpace {
   sentStreamFin: u8[]
   /**
    * Each packet's control frames, `QUIC_CONN_PACKET_CONTROL` to a row: their kind and value (a sequence number or a stream).
-   * @internal Kept with `sentControlKind`, its family, which quic.ts's free functions read.
+   * @internal Only its own class reads it; kept public with `sentControlKind`, its family, read in quic.ts
+   *   outside the class.
    */
   sentControlCount: i32[]
   /** @internal Read in quic.ts outside the class. */
@@ -3345,7 +3350,9 @@ export class QuicConnection {
    *
    * @param signature The certificate key's signature over `signatureInput()`, in the encoding the
    *   negotiated TLS signature scheme uses.
-   * @returns 0, or the error the connection has closed with (also when it was already closed).
+   * @returns 0 when TLS took the signature, or the error the connection has closed with (also when it
+   *   was already closed). It is also 0, with nothing signed, when the connection has no TLS session
+   *   and has not failed.
    */
   sign(signature: u8[]): i64 {
     const tls: TlsServer | null = this.tls

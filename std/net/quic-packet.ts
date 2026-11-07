@@ -1293,7 +1293,8 @@ export const quicKeysUpdate = (
  * points at now; a slot's arrays of the other lengths are
  * `QuicKeysSlot.wipe`'s, which zeroes them all.
  *
- * @param keys The keys to zero; unusable afterwards until derived into again.
+ * @param keys The keys to zero. Nothing marks them wiped and nothing refuses them afterwards, so derive
+ *   into them again before sealing or opening with them.
  */
 export const quicKeysWipe = (keys: QuicKeys): void => {
   secureZero(keys.key)
@@ -1381,7 +1382,7 @@ const quicPacketPoint = (slot: QuicKeysSlot, aead: i32): void => {
 /**
  * `quicPacketDerive` in place: the packet key and IV from `secret` into
  * `keys`' own arrays, and for the AES suites the key's schedule expanded
- * into its own `AesKey`. HKDF runs in `kdf`, which wipes what it held, and
+ * into its own `AesKey`. HKDF runs in `kdf`, which wipes its secret-bearing fields, and
  * the expansion's temporaries go with the arena block.
  */
 const quicPacketDeriveInto = (kdf: HkdfScratch, keys: QuicKeys, secret: u8[]): void => {
@@ -1404,7 +1405,8 @@ const quicPacketDeriveInto = (kdf: HkdfScratch, keys: QuicKeys, secret: u8[]): v
  * or `null`, deriving nothing, where `quicKeys` answers `null`. The keys
  * are the slot's: the next derivation into it overwrites them.
  *
- * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param kdf The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+ *   before each returns (its `info` label is not).
  * @param slot The caller's slot to derive into; its earlier keys are overwritten.
  * @param aead The negotiated suite, one of the `QUIC_AEAD_*` constants.
  * @param secret The traffic secret as a plain array, 32 bytes (48 for AES-256-GCM); only read, and not
@@ -1455,7 +1457,8 @@ export const quicKeysInto = (
  * same arrays as `keys`', not a copy, so wiping either generation zeroes the
  * header-protection key both use.
  *
- * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param kdf The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+ *   before each returns (its `info` label is not).
  * @param slot The caller's slot for the next generation; a different slot from the one `keys` live in.
  * @param keys The current generation's keys, whose header-protection arrays are shared; left unchanged.
  * @param nextSecret The next generation's traffic secret as a plain array; only read, and not wiped.
@@ -1483,7 +1486,8 @@ export const quicKeysUpdateInto = (
  * length and not `secret` itself. Answers whether it derived, which it does
  * where `quicKeyUpdateSecret` answers a secret.
  *
- * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param kdf The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+ *   before each returns (its `info` label is not).
  * @param aead The negotiated suite, one of the `QUIC_AEAD_*` constants.
  * @param secret The current traffic secret as a plain array; only read, and not wiped.
  * @param out The array the next secret is written over, 32 bytes (48 for AES-256-GCM).
@@ -1567,7 +1571,8 @@ export const quicKeyUpdateSecretHeldInto = (dst: Secret<u8[]>, src: Secret<u8[]>
  * Answers whether it derived: not for an ID over 20 bytes, a window outside
  * `buf`, or an output of another length.
  *
- * @param kdf The caller's HKDF scratch, reused across derivations; it wipes what it held before each returns.
+ * @param kdf The caller's HKDF scratch, reused across derivations; its secret-bearing fields are wiped
+ *   before each returns (its `info` label is not).
  * @param buf The bytes holding the client's first Destination Connection ID, such as the datagram.
  * @param at The byte offset in `buf` where the ID starts.
  * @param length The ID's length in bytes, 0 to 20.

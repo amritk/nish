@@ -152,7 +152,7 @@ export const QUIC_ERROR_TRANSPORT_PARAMETER: i64 = 0x08
 export const QUIC_ERROR_CONNECTION_ID_LIMIT: i64 = 0x09
 /** PROTOCOL_VIOLATION: the peer broke the protocol in a way no more specific code names. */
 export const QUIC_ERROR_PROTOCOL_VIOLATION: i64 = 0x0a
-/** INVALID_TOKEN: a server received a Retry token it cannot accept. */
+/** INVALID_TOKEN: a server received a client Initial whose Token field it cannot accept, from a Retry or NEW_TOKEN. */
 export const QUIC_ERROR_INVALID_TOKEN: i64 = 0x0b
 /** APPLICATION_ERROR: the application closed, reported in a transport close where 0x1d may not be sent. */
 export const QUIC_ERROR_APPLICATION: i64 = 0x0c
@@ -591,8 +591,8 @@ export const quicParseFrame = (frame: QuicFrame, payload: u8[], at: i32, end: i3
  *   `QUIC_FRAME_STREAM`.
  * @param packetType The packet's `QUIC_PACKET_*` type from `nish/net/quic-packet`, `QUIC_PACKET_SHORT`
  *   for 1-RTT.
- * @returns True when §12.4 permits the frame there; false for a packet type that carries no frames, such as
- *   Retry.
+ * @returns True when §12.4 permits the frame there; false when it does not permit that frame in that
+ *   packet type, and for a packet type that carries no frames, such as Retry.
  */
 export const quicFrameAllowed = (type: i32, packetType: i32): boolean => {
   if (packetType === QUIC_PACKET_SHORT) {

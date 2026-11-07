@@ -249,8 +249,8 @@ export class QuicListenerAnswer {
    * leave no copy beyond the arrays' lengths either. Each is left that long
    * and all zero, `kind` a drop. An answer whose reply grew past its room
    * keeps what lies beyond the longest length it is wiped at; one made with
-   * `QUIC_LISTENER_ANSWER_SIZE` never grows.
-   * @internal Read by http3-server.ts, and in quic-listener.ts outside the class.
+   * `QUIC_LISTENER_ANSWER_SIZE` never grows. The caller's to call once it
+   * has sent the answer `QuicListener.handle` gave, and before it drops it.
    */
   wipe(): void {
     quicListenerWipeRoom(this.reply, this.room)
@@ -1067,8 +1067,8 @@ export const quicListenerTakeFlight = (
  * @param len The bytes received.
  * @param segment The GRO segment size in bytes, or 0 (or less) for a single datagram.
  * @param now The caller's time in milliseconds.
- * @returns How many datagrams were handed over: 1 for a single datagram, else one per `segment` bytes,
- *   rounded up, and 0 when `len` is 0 or less.
+ * @returns How many datagrams were handed over: always 1 when `segment` is 0 or less, whatever `len`;
+ *   otherwise one per `segment` bytes of `len`, rounded up, which is 0 when `len` is 0 or less.
  */
 export const quicListenerReceiveSegments = (
   conn: QuicConnection,

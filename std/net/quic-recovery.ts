@@ -218,8 +218,9 @@ export class QuicSentPackets {
   /**
    * An empty ring; `QuicRecovery` makes one for each space.
    *
-   * @param capacity How many packets the space can keep in flight at once, fixed for the ring's life:
-   *   `QUIC_RECOVERY_HANDSHAKE_CAPACITY` or `QUIC_RECOVERY_APPLICATION_CAPACITY`.
+   * @param capacity How many sent packets the ring records at once, fixed for its life: in flight and
+   *   settled alike, until `compact` drops the settled ones. `QUIC_RECOVERY_HANDSHAKE_CAPACITY` or
+   *   `QUIC_RECOVERY_APPLICATION_CAPACITY`.
    */
   constructor(capacity: i32) {
     this.capacity = capacity

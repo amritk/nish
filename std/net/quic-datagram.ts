@@ -41,7 +41,8 @@ export class QuicDatagramQueue {
   dropped: i32 = 0
 
   /**
-   * Makes an empty ring, allocating all of its storage, `entries * entrySize` bytes, now.
+   * Makes an empty ring, allocating all of its storage now: `entries * entrySize` bytes of
+   * payload and a 4-byte length per entry.
    *
    * @param entries How many datagrams the ring holds at most before `push` refuses the next.
    * @param entrySize The largest payload, in bytes, an entry holds; a longer one is dropped, not split.
