@@ -151,19 +151,25 @@ const REGEX_FOLD_INDEX: string =
   "005E0002006?001C00700034007@004F00810065008A007500910085009C009500:400:500:E00;500;500<500;E00=500<600>800<G00?B00=700@L00=I00B100>@00C200?000D300?A00E300@100F500@A00G500A200H600AB00I600B800JF00BK00L400CE00N600KA010100L@011<00M0012M00MA014>00N1016000NA017@00O4018C00OD019F010601;1010F01<A011601>1011F01?C012601A6012F01BG013601D3013F01E3014>01F3014N01G3015>01H3015N01I3016>01J4016N01K5017>01L5017N01M5018>01N5018N01O5019>0205019O021C01:?023301;9024C01;I02630452027G045B029G046202;G046J02=G047:02?G047J02AG04M<02D404ML02FD04N<02I404NL02KD04O<02N4074002OH074E031C0755033C075E035C07@4037?07@D038?07A4039?07AD03:?07B403;?07BD03<?07C403=@07CD03>@07D403?@07DD03@@07E<03AC07EL03BC07F<03CC07FL03DC07G<03EC07GL03FC07H<03GK07I003I107I@03J907J003KA07JI03LK07K<03N307KL03O?07L>040I07LN042107M>043907N<044F07O<046308;5047F08;E0496095I04:E096904<5096I04=E097904?50;0?04@G0;0O04B70;1?04CG0;1O04E70;2?04FG0;2O04H70;3?04IL0;4804K80;4H04L80;5804M80;5H04N80;6804O80;6H05080;7B05180;8>05340;8N055419B6056J19BF057M19C6058M19D8059M19DH05:M19I>05;N19J005<N19J@05=N19K005>N19KI05?N19L<05A119LO05B519M@05CD19N005DO19NF05F91:KF05H11:L605JA1:LF05M11:M605OA1:MF06211OI506471OIE065G1OJ;06772100068I210@06:9211006;I211@06=9212006>I215@06@:216006AJ216@06C:217406DJ217D06F:21;H06GK21<906I;21<L06JK21==06L;234206MM234B06O=2352070M235B072=236?073M236O075=237?076M23:L078>23;F079N265007;@265@07=0266007>@266@07@02KB007AB2KB@07C22KC007DB2KC@07F23J8007GD3J8@07I43J9007JD3J9@07L43J:007MD"
 // gen-regex-unicode:end
 
-/** The most instructions a compiled pattern may have. */
+/** The most instructions a compiled pattern may have; `regexCompile` refuses a bigger program. */
 export const REGEX_MAX_INSTRUCTIONS: i32 = 100000
-/** The largest count `{n}`, `{n,}` or `{n,m}` may give. */
+/** The largest count `{n}`, `{n,}` or `{n,m}` may give; a larger one is a compile error. */
 export const REGEX_MAX_REPEAT: i32 = 1000
-/** How deeply groups may nest. */
+/** How deeply groups may nest; a deeper pattern is a compile error. */
 export const REGEX_MAX_DEPTH: i32 = 250
 /** The most entries one thread list's capture table may have: instructions × slots per thread. */
 const REGEX_MAX_SLOT_TABLE: i32 = 4194304
-/** The most capturing groups a pattern may have, past group 0; a name is checked against each. */
+/**
+ * The most capturing groups a pattern may have, past group 0; one more is a
+ * compile error. A name is checked against each.
+ */
 export const REGEX_MAX_GROUPS: i32 = 1024
-/** The most ranges one class may list; the class sorts them by insertion. */
+/** The most ranges one class may list; one more is a compile error. */
 export const REGEX_MAX_CLASS_RANGES: i32 = 10000
-/** Most ranges the property escapes and case folding of one pattern may add to its classes. */
+/**
+ * The most ranges the property escapes and case folding of one pattern may
+ * add to its classes; one more is a compile error.
+ */
 export const REGEX_MAX_PROPERTY_RANGES: i32 = 100000
 /** Most ranges a class sorts by insertion; a longer one is merge-sorted. */
 const REGEX_INSERTION_SORT: i32 = 64
@@ -1958,48 +1964,85 @@ export class RegexMatch {
   /** Each group's name, "" for an unnamed one. @internal `Regex.exec` fills it in. */
   names: string[]
 
+  /** An empty match with no groups, for `Regex.exec` to fill in. */
   constructor() {
     this.input = ""
     this.slots = []
     this.names = []
   }
 
-  /** Where the match starts. */
+  /**
+   * Where the match starts.
+   *
+   * @returns The byte offset of the match's first byte in the searched text.
+   */
   start(): i32 {
     return this.slots[0]
   }
 
-  /** Where the match ends, one past its last byte. */
+  /**
+   * Where the match ends.
+   *
+   * @returns The byte offset one past the match's last byte; equal to `start` for an empty match.
+   */
   end(): i32 {
     return this.slots[1]
   }
 
-  /** The matched text. */
+  /**
+   * The matched text.
+   *
+   * @returns The bytes from `start` to `end` of the searched text; "" for an empty match.
+   */
   text(): string {
     return this.group(REGEX_WHOLE)
   }
 
-  /** How many groups there are, the whole match (group 0) included. */
+  /**
+   * How many groups the pattern has.
+   *
+   * @returns The count with the whole match (group 0) included, so a pattern with no groups gives 1.
+   */
   groupCount(): i32 {
     return toI32(this.slots.length) / 2
   }
 
-  /** Whether group `k` took part in the match. */
+  /**
+   * Whether group `k` took part in the match.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns False for a group that took no part and for a number with no group.
+   */
   matched(k: i32): boolean {
     return k >= 0 && k < this.groupCount() && this.slots[2 * k] >= 0
   }
 
-  /** Where group `k` starts, or -1. */
+  /**
+   * Where group `k` starts.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns The byte offset of the group's first byte, or -1 when the group took no part or does not exist.
+   */
   groupStart(k: i32): i32 {
     return this.matched(k) ? this.slots[2 * k] : -1
   }
 
-  /** Where group `k` ends, or -1. */
+  /**
+   * Where group `k` ends.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns The byte offset one past the group's last byte, or -1 when the group took no part or does not exist.
+   */
   groupEnd(k: i32): i32 {
     return this.matched(k) ? this.slots[2 * k + 1] : -1
   }
 
-  /** Group `k`'s text: "" when it took no part, so test `matched` to tell the two apart. */
+  /**
+   * Group `k`'s text.
+   *
+   * @param k The group's number, 0 for the whole match.
+   * @returns The group's text; "" when it took no part or does not exist, so test `matched` to tell that from an empty capture.
+   */
   group(k: i32): string {
     if (!this.matched(k)) {
       return ""
@@ -2007,7 +2050,12 @@ export class RegexMatch {
     return this.input.slice(this.slots[2 * k], this.slots[2 * k + 1])
   }
 
-  /** The text of the group named `name`; "" when there is none or it took no part. */
+  /**
+   * The text of a named group.
+   *
+   * @param name The name the pattern gave the group with `(?<name>...)`.
+   * @returns The group's text; "" when no group has that name or it took no part.
+   */
   named(name: string): string {
     return this.group(toI32(this.names.indexOf(name)))
   }
@@ -2185,6 +2233,12 @@ export class Regex {
    */
   private dPrefFast: boolean
 
+  /**
+   * A pattern not compiled yet: call `regexCompile`, which builds its program.
+   *
+   * @param source The pattern as written, kept for `source`.
+   * @param flags The flags as written, kept for `flags`.
+   */
   constructor(source: string, flags: string) {
     this.source = source
     this.flags = flags
@@ -2282,12 +2336,21 @@ export class Regex {
     this.prefixExact = false
   }
 
-  /** How many groups there are, the whole match (group 0) included. */
+  /**
+   * How many groups the pattern has.
+   *
+   * @returns The count with the whole match (group 0) included, so a pattern with no groups gives 1.
+   */
   groupCount(): i32 {
     return this.groups
   }
 
-  /** The number of the group named `name`, or -1. */
+  /**
+   * The number of a named group.
+   *
+   * @param name The name the pattern gave the group with `(?<name>...)`.
+   * @returns The group's number, for `RegexMatch.group`; -1 when no group has that name or `name` is "".
+   */
   groupIndex(name: string): i32 {
     if (name === "") {
       return -1
@@ -4519,7 +4582,12 @@ export class Regex {
     return matched
   }
 
-  /** Whether the pattern matches anywhere in `text`. */
+  /**
+   * Whether the pattern matches anywhere in `text`.
+   *
+   * @param text The text to search.
+   * @returns True when there is at least one match.
+   */
   test(text: string): boolean {
     return this.run(text, REGEX_TEXT_START, REGEX_WANT_NONE)
   }
@@ -4528,6 +4596,11 @@ export class Regex {
    * Search `text` from byte `from` and fill `m` with the first match and
    * every group. Answers whether there was one; `m` is untouched when not.
    * Reusing one `RegexMatch` makes a loop of searches allocate nothing.
+   *
+   * @param text The text to search.
+   * @param from The byte offset to start searching at; a match may start there or later.
+   * @param m Where the match goes; overwritten on a match, left as it was otherwise.
+   * @returns True when there was a match.
    */
   exec(text: string, from: i32, m: RegexMatch): boolean {
     const ns: i32 = 2 * this.groups
@@ -4547,7 +4620,13 @@ export class Regex {
     return true
   }
 
-  /** The first match at or after byte `from`, or null. */
+  /**
+   * The first match at or after byte `from`.
+   *
+   * @param text The text to search.
+   * @param from The byte offset to start searching at; a match may start there or later.
+   * @returns A new match, or null when there is none.
+   */
   find(text: string, from: i32): RegexMatch | null {
     const m: RegexMatch = new RegexMatch()
     if (this.exec(text, from, m)) {
@@ -4556,7 +4635,13 @@ export class Regex {
     return null
   }
 
-  /** The text of every match, left to right, none overlapping. */
+  /**
+   * The text of every match, left to right, none overlapping. After an empty
+   * match the search resumes one character on.
+   *
+   * @param text The text to search.
+   * @returns Each match's text in order; empty when nothing matches.
+   */
   findAll(text: string): string[] {
     const out: string[] = []
     const len: i32 = toI32(text.length)
@@ -4577,7 +4662,12 @@ export class Regex {
     return out
   }
 
-  /** How many matches `findAll` would answer. */
+  /**
+   * How many matches `findAll` would answer, without making their strings.
+   *
+   * @param text The text to search.
+   * @returns The number of non-overlapping matches.
+   */
   count(text: string): i32 {
     const len: i32 = toI32(text.length)
     let n: i32 = 0
@@ -4637,12 +4727,22 @@ export class Regex {
    * `String.prototype.replace`'s template: `$$` is `$`, `$&` the match,
    * `` $` `` and `$'` the text before and after it, `$1` to `$99` a group
    * and `$<name>` a named one; a group that took no part is "".
+   *
+   * @param text The text to search.
+   * @param replacement The template each match is replaced by.
+   * @returns The replaced text; `text` unchanged when nothing matches.
    */
   replace(text: string, replacement: string): string {
     return this.replaceMatches(text, replacement, false)
   }
 
-  /** `text` with every match replaced by `replacement`, as `replace` reads it. */
+  /**
+   * `text` with every match replaced by `replacement`, as `replace` reads it.
+   *
+   * @param text The text to search.
+   * @param replacement The template each match is replaced by.
+   * @returns The replaced text; `text` unchanged when nothing matches.
+   */
   replaceAll(text: string, replacement: string): string {
     return this.replaceMatches(text, replacement, true)
   }
@@ -4753,6 +4853,9 @@ export class Regex {
    * part), an empty match where the last piece ended or at the end cuts
    * nothing, and "" splits to nothing when the pattern matches it, else to
    * `[""]`.
+   *
+   * @param text The text to cut.
+   * @returns The pieces in order, each group's text after the piece before its match.
    */
   split(text: string): string[] {
     const len: i32 = toI32(text.length)
@@ -4794,6 +4897,10 @@ export class Regex {
  * Compile `pattern` with `flags`, a string of `i`, `m`, `s` and `u` in any
  * order; `u` changes nothing, as patterns are always read by code point.
  * The error names what is wrong and its byte in the pattern.
+ *
+ * @param pattern The pattern, in JavaScript's syntax without the slashes.
+ * @param flags Any of `i` (ignore case), `m` (`^` and `$` match at line ends), `s` (`.` matches a newline) and `u`, each at most once.
+ * @returns The compiled pattern, or the reason it does not compile, such as "regex: missing ) at byte 0" or `regex: invalid flags "x"`.
  */
 export const regexCompile = (pattern: string, flags: string): Result<Regex, string> => {
   let icase: boolean = false
@@ -4833,7 +4940,13 @@ export const regexCompile = (pattern: string, flags: string): Result<Regex, stri
   return Ok(re)
 }
 
-/** `text` with every syntax character escaped, so that it compiles to a pattern matching exactly `text`. */
+/**
+ * `text` with every syntax character escaped, so that it compiles to a
+ * pattern matching exactly `text`.
+ *
+ * @param text The literal text to match.
+ * @returns A pattern for `regexCompile`; `text` unchanged when it holds no syntax character.
+ */
 export const regexEscape = (text: string): string => {
   const parts: string[] = []
   const n: i32 = toI32(text.length)
