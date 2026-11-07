@@ -1049,6 +1049,11 @@
                 "title": "nish/net/url",
                 "filepath": "docs/security/url.md"
               },
+              "/wasm-host": {
+                "type": "page",
+                "title": "The wasm-host boundary",
+                "filepath": "docs/security/wasm-host.md"
+              },
               "/webtransport": {
                 "type": "page",
                 "title": "WebTransport",
