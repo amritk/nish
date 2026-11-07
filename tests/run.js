@@ -29700,6 +29700,92 @@ if (!only || "vite".includes(only)) {
 
 // ---- WP50 stage 2: a wasm module imports the page's host functions --------------
 //
+// tests/host-window: WP50 stage 3's buffer windows (docs/wp50-wasm-host.md
+// §5.3). A host function lends a window of a module array: the import takes the
+// data pointer, `at` and `n`, the module checks `at + n` against the length in
+// 64 bits, and the loader hands the page a view of all memory and the absolute
+// first index. Named `host-import-window` so the `host-import` filter runs it.
+if (!only || "host-import-window".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`host-import-window: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "host-window")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "host-window"))) {
+      fs.copyFileSync(path.join(root, "tests", "host-window", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("host-import-window: a program lending windows compiles for wasm32 with --host", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const ir = fs.readFileSync(at("main.ll"), "utf8")
+      const declared = ["doubleU8", "doubleU16", "doubleU32", "doubleI32", "doubleF32"].every((name) =>
+        new RegExp(`^declare void @${name}\\(i8\\*, i32, i32\\) #\\d+$`, "m").test(ir)
+      )
+      check(
+        "host-import-window: a window is the data pointer then `at` and `n`, each an i32, in the import",
+        declared && /^declare double @sumF64\(i8\*, i32, i32\) #\d+$/m.test(ir),
+        ir.split("\n").filter((line) => line.startsWith("declare")).join("\n")
+      )
+      const body = (name) => {
+        const start = ir.indexOf(`@${name}(`, ir.indexOf("define"))
+        const from = ir.lastIndexOf("define", start)
+        return from < 0 ? "" : ir.slice(from, ir.indexOf("\n}\n", from))
+      }
+      check(
+        "host-import-window: `at + n` is added in i64 and held against the length, so a sum that wraps in 32 bits still panics",
+        /zext i32 [^\n]+ to i64[\s\S]*add i64[\s\S]*icmp ule i64[\s\S]*ffi\.length/.test(body("past")),
+        body("past")
+      )
+      check(
+        "host-import-window: lending `0, toU32(xs.length)` is proven, so the call has no window check",
+        body("whole") !== "" && !body("whole").includes("ffi.length"),
+        body("whole")
+      )
+      const linked = wasmHostLink([at("main.ll")], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      check("host-import-window: the module links with --profile wasm-host", linked.status === 0, shown(linked))
+      const loader = fs.readFileSync(at("main.mjs"), "utf8")
+      check(
+        "host-import-window: the loader's adapter passes a whole-memory view, the pointer as an index plus `at`, and `n`",
+        loader.includes("doubleF32: (a0, a1, a2) => host_doubleF32(win().f32, (a0 >>> 2) + (a1 >>> 0), a2 >>> 0),") &&
+          loader.includes("doubleU8: (a0, a1, a2) => host_doubleU8(win().u8, (a0 >>> 0) + (a1 >>> 0), a2 >>> 0),") &&
+          loader.includes("sumF64: (a0, a1, a2) => host_sumF64(win().f64, (a0 >>> 3) + (a1 >>> 0), a2 >>> 0),") &&
+          loader.includes("if (b !== windowBuffer) {"),
+        loader.split("\n").filter((line) => line.includes("win")).join("\n")
+      )
+      if (linked.status === 0) {
+        fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
+        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+        const lines = run.stdout.split("\n")
+        check(
+          "host-import-window: every element type crosses, and the page's writes through a mutable window are the module's",
+          run.status === 0 &&
+            ["u8s 15", "u16s 15", "u32s 15", "i32s 15", "f32s 15", "f64s 5", "whole 20"].every((line, i) => lines[i] === line),
+          shown(run)
+        )
+        const reach = "`doubleI32`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs)"
+        check(
+          "host-import-window: a window past the end panics before the page runs, and one whose `at + n` wraps does too",
+          lines[7] !== undefined &&
+            lines[7].startsWith(`past NishPanic ${reach}`) &&
+            lines[8] !== undefined &&
+            lines[8].startsWith(`wraps NishPanic ${reach}`),
+          shown(run)
+        )
+      }
+    }
+  }
+}
+
 // tests/host-import holds a host module with one function per kind of value that
 // crosses, a program that calls each, an entry for `--emit-ts`, and three pages
 // for tsc. Compiled with `--host`, each host function is a `declare` with the wasm
