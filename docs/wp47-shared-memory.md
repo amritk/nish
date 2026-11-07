@@ -244,8 +244,12 @@ one build.
 
 One reservation and one lent record at a time. A second `reserve`,
 `tryPush` during a reservation, `commit` of more than was reserved, or
-`peek`, `tryPop` or `popBatch` while a record is lent each panic with a
-message that names the call; `commit`, `abandon` and `release` give the
+`peek`, `tryPop`, `popBatch` or `popWait` while a record is lent each panic
+with a message that names the call (`popWait` reaches the panic through
+`tryPop`, so it names `tryPop`); a `push` onto a window is caught only when
+it is given back, at `commit` or `abandon`, as "a push moved it"; `reserve`
+panics on a ring of 8, whose largest reservation (`capacity / 2 - 4`) is 0,
+and a ring of 16 allows 4; the reserved bytes are not zeroed; `commit`, `abandon` and `release` give the
 window back, so an index through it afterwards is the ordinary `index out of
 range: i >= 0`, also inside a loop whose bound was the window's length.
 

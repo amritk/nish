@@ -15,7 +15,8 @@
  *
  * **Two rings.** `SpscRing` has one producer and one consumer, and holds
  * records of any length up to its capacity back to back: a record costs its
- * length rounded up to 4, plus 4. `MpscRing` takes any number of producers
+ * length rounded up to 4, plus 4, and a record written with `reserve` may
+ * leave padding at a lap's end (a skip marker, below). `MpscRing` takes any number of producers
  * and one consumer, in fixed slots of `slotBytes` each (Vyukov's bounded
  * queue: a producer claims a slot with a compare-exchange on the enqueue
  * position, and each slot's sequence number says whose turn it is). Neither
@@ -57,7 +58,11 @@
  * padding") and the record starts at the next lap. Every pop steps over a
  * marker. A record `tryPush` wrapped across the end cannot be lent, so `peek`
  * answers an empty window for it and `tryPop` takes it, as it does for a
- * record of length 0.
+ * record of length 0. A reservation is at most `capacity / 2 - 4` bytes, so
+ * a ring of 8 can never reserve (it panics) and one of 16 allows 4. The
+ * reserved bytes are not zeroed: `commit` only what was written. A consumer
+ * that polls `peek` on a doorbell ring has no wait call yet (`popWait` takes
+ * records, not windows).
  *
  * **The format keeps its magic.** A ring no producer `reserve`s into is
  * byte for byte what it was, and a consumer built before the marker that
@@ -237,7 +242,8 @@ export class SpscRing {
 
   /**
    * Appends `src[off, off + len)` as one record: false when the ring has no
-   * room for it now. A record longer than the ring could ever hold panics.
+   * room for it now. A record longer than the ring could ever hold panics,
+   * and so does a call while a reservation is open.
    */
   tryPush(src: readonly u8[], off: i32, len: i32): boolean {
     if (this.reserved >= 0) {
@@ -296,13 +302,18 @@ export class SpscRing {
    * for it now. Nothing is published until `commit`; `abandon` drops it. `n`
    * is from 1 (a window of 0 could not be told from no room; `tryPush` takes
    * an empty record) to `capacity / 2 - 4`, so an empty ring always has room
-   * for one; outside that, or while a reservation is open, it panics.
+   * for one; outside that, or while a reservation is open, it panics. A ring
+   * of 8 has no such `n` and always panics; one of 16 allows 4. The bytes
+   * are not zeroed: they hold whatever the ring last held there.
    */
   reserve(n: i32): u8[] {
     if (this.reserved >= 0) {
       panic("nish/sync/ring: reserve while a reservation is open; commit or abandon it first")
     }
     const most: i32 = this.capacity / 2 - 4
+    if (most < 1) {
+      panic(`nish/sync/ring: an SPSC ring of ${this.capacity} bytes cannot reserve; a reservation is at most half the ring less 4`)
+    }
     if (n < 1 || n > most) {
       panic(`nish/sync/ring: a reservation of ${n} bytes is not from 1 to ${most}, half the ring less 4`)
     }
@@ -418,7 +429,8 @@ export class SpscRing {
   /**
    * Moves the next record into `dst` from `off` and answers its length:
    * `RING_EMPTY` when there is none, `RING_TOO_SMALL` (keeping it queued)
-   * when it is longer than `dst.length - off`.
+   * when it is longer than `dst.length - off`. Panics while `peek` has a
+   * record lent.
    */
   tryPop(dst: u8[], off: i32): i32 {
     this.notPeeked("tryPop")
@@ -439,7 +451,7 @@ export class SpscRing {
    * Moves up to `lens.length` records into `dst`, back to back from 0, while
    * they fit, and sets `lens[i]` to each one's length: how many it moved. One
    * load of the producer's position and one store of the consumer's, however
-   * many records it moves.
+   * many records it moves. Panics while `peek` has a record lent.
    */
   popBatch(dst: u8[], lens: i32[]): i32 {
     this.notPeeked("popBatch")
@@ -474,6 +486,8 @@ export class SpscRing {
    * push rings the doorbell, for at most `timeoutMs` in all (negative: no
    * limit): `RING_EMPTY` only once that has passed. `SHM_UNSUPPORTED` for a
    * ring without a doorbell, or off Linux, where the caller polls `tryPop`.
+   * Panics while `peek` has a record lent, from `tryPop`, so the message
+   * names `tryPop`.
    */
   popWait(dst: u8[], off: i32, timeoutMs: i32): i32 {
     const deadline: i64 = ringDeadline(timeoutMs)

@@ -26,6 +26,9 @@ PASS  whole
 PASS  peek answers empty for a record of length 0
 PASS  which tryPop takes
 PASS  leaving none
+PASS  a ring of 16 reserves 4 bytes
+PASS  and commits them
+PASS  whole
 PASS  tryPush and reserve mix over 2000 records of 1 to 124 bytes
 PASS  peek lends most of them
 PASS  the consumer starts
@@ -64,9 +67,21 @@ PASS  release-none: the child exits 1
 PASS  release-none: and says why
 PASS  lone-marker: the child exits 1
 PASS  lone-marker: and says why
+PASS  forged-pop: the child exits 1
+PASS  forged-pop: and says why
+PASS  forged-batch: the child exits 1
+PASS  forged-batch: and says why
+PASS  forged-peek: the child exits 1
+PASS  forged-peek: and says why
+PASS  tiny: the child exits 1
+PASS  tiny: and says why
+PASS  sixteen: the child exits 1
+PASS  sixteen: and says why
+PASS  popwait-peeked: the child exits 1
+PASS  popwait-peeked: and says why
 PASS  loop-commit: the child exits 1
 PASS  loop-commit: and says why
 PASS  loop-release: the child exits 1
 PASS  loop-release: and says why
 PASS  unlink the region
-nish/sync/ring in place: 71 passed, 0 failed, 0 skipped
+nish/sync/ring in place: 86 passed, 0 failed, 0 skipped
