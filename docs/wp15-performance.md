@@ -13,7 +13,8 @@ written in, each lowered as one more parameter of the direct call: no
 environment struct, no indirect call
 ([LANGUAGE.md](LANGUAGE.md#function-parameters)). Runtime closures stay forbidden: the capture allocates nothing
 and keeps every callee known, so the purity, termination and escape analyses
-still see it, with each capture counted as an escape of what it names.
+still see it, each capture read as an argument to the arrow it reaches
+(`captureTarget`; an escape when no ordinary chain reaches it).
 
 The project's northern star is **the fastest binary we can emit**, with
 **binary size second**. This note records the decisions that follow from that

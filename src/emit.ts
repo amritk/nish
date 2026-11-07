@@ -141,6 +141,7 @@ import {
 } from "./emit-parallel"
 import {
   CaptureSlot,
+  captureTarget,
   capturesOf,
   isAtomicMethod,
   isChannelSend,
@@ -581,14 +582,11 @@ export class Emitter {
       i = i + 1
     }
     // WP29: the captures of the arrows an instance was given, which it passes
-    // on to the arrow or to the next instance (`capturesOf`). No fact is
-    // collected about a parameter the source never names, so none is claimed.
+    // on to the arrow or to the next instance (`capturesOf`).
+    const capAttrs = this.captureParamAttributes(sig, isPrivate)
     let captured = 0
     for (const type of this.captureParamTypes(sig, isPrivate)) {
-      const attrs: string[] = []
-      if (optimize) {
-        attrs.push("noundef")
-      }
+      const attrs: string[] = optimize && captured < capAttrs.length ? capAttrs[captured] : []
       params.push(new IRParam(captureParamName(captured), type, attrs))
       captured = captured + 1
     }
@@ -1101,8 +1099,17 @@ export class Emitter {
       params.push(parts.join(" "))
       i = i + 1
     }
+    const capAttrs = this.captureParamAttributes(sig, false)
+    let captured = 0
     for (const type of this.captureParamTypes(sig, false)) {
-      params.push(optimize ? `${type} noundef` : type)
+      const parts: string[] = [type]
+      if (optimize && captured < capAttrs.length) {
+        for (const attr of capAttrs[captured]) {
+          parts.push(attr)
+        }
+      }
+      params.push(parts.join(" "))
+      captured = captured + 1
     }
     const ret: string[] = []
     if (optimize) {
@@ -2034,6 +2041,42 @@ export class Emitter {
     }
     for (const slot of capturesOf(sig)) {
       out.push(this.llvmAbi(slot.type(), isPrivate))
+    }
+    return out
+  }
+
+  /**
+   * WP29: the attributes of each parameter `sig` carries for a capture
+   * (`captureParamTypes`), in the same order. The source cannot name one, so
+   * all `sig` and every instance it forwards the value to can do with it is
+   * pass it on until the arrow's own parameter for it receives the same
+   * pointer. When that chain is ordinary instances only (`captureTarget`),
+   * what the arrow's facts prove of that parameter (that the arrow never
+   * writes through it or keeps it, its size and alignment) holds for this
+   * parameter too, and it gets the arrow parameter's attributes. Otherwise
+   * nothing is claimed but `noundef`.
+   */
+  captureParamAttributes(sig: FunctionSig, isPrivate: boolean): string[][] {
+    const out: string[][] = []
+    if (sig.lifted) {
+      return out
+    }
+    for (const slot of capturesOf(sig)) {
+      const target = captureTarget(sig, slot.arrow, slot.index)
+      const facts: FunctionFacts | null = target === null ? null : this.facts.get(target.sig.name)
+      if (target === null || facts === null || target.index >= target.sig.paramNames.length) {
+        out.push(["noundef"])
+      } else {
+        out.push(
+          paramAttributes(
+            this.table,
+            target.sig.paramNames[target.index],
+            target.sig.paramTypes[target.index],
+            facts,
+            isPrivate
+          )
+        )
+      }
     }
     return out
   }

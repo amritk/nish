@@ -3212,9 +3212,20 @@ export const main = (): i32 => {
   `tests/link/fnarg_capture_forward`), and a recursive function that passes
   itself a new arrow on every call meets the instantiation limit
   (`reject_fnarg_capture_recursion`). Escape analysis and the parameter
-  attributes count a capture as an escaping use of what it names: a captured
-  parameter is never `readonly` or `nocapture`, and a captured `parts` array
-  is not released by `join` (`mem_join_parts_captured`). An arrow anywhere but
+  attributes read a capture as an argument to the arrow, at the arrow's own
+  parameter for it: what it names escapes only when the arrow keeps it, or
+  hands it to something that does, so an object an arrow only reads may be an
+  alloca and a parameter it only reads `readonly nocapture`
+  (`mem_capture_read_stack`, `fnarg_capture_readonly`; the negatives are
+  `mem_capture_forward_keep`, `mem_capture_callee_keep`). An element of a
+  captured array is kept unless the arrow proved it keeps none, and a
+  captured array is never one whose strings go to the caller with it
+  (`mem_capture_element_keep`). The capture stays an escape, as it was before,
+  when anything but an ordinary function stands between the call and the
+  arrow (a data-parallel form, `spawn`, a task, an async function:
+  `tests/link/mem_capture_parallel_forward`, `mem_capture_async`), and a
+  captured `parts` array is not released by `join`, whose release depends on
+  order rather than escape (`mem_join_parts_captured`). An arrow anywhere but
   as such an
   argument is
   `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in Nish, so it cannot be stored, returned or called where it stands ``

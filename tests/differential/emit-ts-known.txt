@@ -42,6 +42,7 @@ cases/map_fingerprint_miss ffi  # refused: NL4010 under --emit-ts
 cases/map_hash_collide ffi  # refused: NL4010 under --emit-ts
 cases/map_hash_kat ffi  # refused: NL4010 under --emit-ts
 cases/math_ulp_samples libm  # differ: stdout line 2 differs
+cases/mem_capture_async refused  # refused: NL4016 under --emit-ts
 cases/mem_join_parts_same_pass host  # differ: stdout line 1 differs [arenaUsed]
 cases/mem_join_parts_scope host  # differ: stdout line 1 differs [arenaUsed]
 cases/mem_loop_scope host  # differ: stdout line 1 differs [arenaUsed]
