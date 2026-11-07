@@ -165,21 +165,16 @@ class Http1ListTally {
  * on a kept-alive connection follow one another through the same parser.
  */
 export class Http1Parser {
-  // The fields are declared widest first, references before numbers before
-  // flags, so the struct carries no padding; the groups say what each is.
+  // The fields a request reads come first, so that a kept-alive connection
+  // whose parser has gone cold between requests brings back two or three
+  // cache lines of it, not all four: the buffers, then the offsets `feed`,
+  // `buffered`, `http1TakeLine` and the head's lines move, then the flags,
+  // then the rest of the request's numbers and the caller's limits. What only
+  // `keepText`, an error or a chunked body reads follows. Each group packs as
+  // widest first does, and the flags' two bytes of padding are the only ones:
+  // the struct is the 200 bytes its fields sum to, rounded to 8.
 
-  // --- the request: valid from its `HTTP1_HEAD` until the `next()` after its `HTTP1_END`
-  method: string = ""
-  target: string = ""
-  /** The field names, in lowercase, in the order they arrived; `values` beside them. */
-  names: string[]
-  values: string[]
-  /** The `Upgrade` field when `Connection` asked for it, else empty. */
-  upgrade: string = ""
-  /** The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. */
-  body: u8[]
-  /** What was wrong, once `next()` said `HTTP1_ERROR`; for a log, not for the response. */
-  reason: string = ""
+  // --- the request's buffers -------------------------------------------------
   /** The bytes fed and not yet consumed are `buf[start .. end)`. */
   buf: u8[]
   /**
@@ -191,52 +186,22 @@ export class Http1Parser {
   head: u8[]
   /** Four entries per field, into `head`: name start and end, value start and end (OWS trimmed). */
   spans: i32[]
-  /** Reused by every list `http1Tally` walks. */
-  tally: Http1ListTally
+  /** The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. */
+  body: u8[]
 
-  // --- limits, the caller's --------------------------------------------------
-  maxTarget: i32 = 0
-  maxHeaderBytes: i32 = 0
-  maxHeaders: i32 = 0
-  maxBody: i32 = 0
-  /** The most body bytes one `HTTP1_BODY` hands over; a caller's number, 2^30 unless set. */
-  maxChunk: i32 = 1073741824
-
-  /** The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. */
-  minor: i32 = 1
-  /** The declared body length, or -1 when the request has none or is chunked. */
-  contentLength: i32 = -1
-  bodyOff: i32 = 0
-  bodyLen: i32 = 0
-  /** The status code to answer once `next()` said `HTTP1_ERROR`. */
-  status: i32 = 0
-  /** The method is `head[methodStart .. methodEnd)` and the target `head[targetStart .. targetEnd)`. */
-  methodStart: i32 = 0
-  methodEnd: i32 = 0
-  targetStart: i32 = 0
-  targetEnd: i32 = 0
-  /** How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. */
-  headerCount: i32 = 0
-  /** How much of `head` the request uses. */
-  headLength: i32 = 0
-
-  // --- internal --------------------------------------------------------------
+  // --- where the parser is ----------------------------------------------------
   start: i32 = 0
   end: i32 = 0
   /** Where the search for the next LF resumes, so a line fed a byte at a time is scanned once. */
   scan: i32 = 0
   state: i32 = 0
-  /** Bytes left in a length-delimited body or in the current chunk. */
-  left: i32 = 0
-  /** De-chunked body bytes so far, against `maxBody`. */
-  bodyTotal: i32 = 0
-  /** Bytes of the header or trailer section so far, against `maxHeaderBytes`. */
-  sectionBytes: i32 = 0
-  /** Field lines of the request so far, its trailers included, against `maxHeaders`. */
-  fieldCount: i32 = 0
   /** The line `http1TakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped. */
   lineStart: i32 = 0
   lineEnd: i32 = 0
+  /** How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. */
+  headerCount: i32 = 0
+  /** How much of `head` the request uses. */
+  headLength: i32 = 0
   /**
    * Whether the line being scanned holds a byte a field value may not: a
    * control byte other than HTAB, or DEL (RFC 9110 §5.5). `http1TakeLine`
@@ -260,6 +225,50 @@ export class Http1Parser {
    */
   keepText: boolean = true
 
+  // --- the request's numbers: valid from its `HTTP1_HEAD` until the `next()` after its `HTTP1_END`
+  /** Bytes of the header or trailer section so far, against `maxHeaderBytes`. */
+  sectionBytes: i32 = 0
+  /** Field lines of the request so far, its trailers included, against `maxHeaders`. */
+  fieldCount: i32 = 0
+  /** The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. */
+  minor: i32 = 1
+  /** Bytes left in a length-delimited body or in the current chunk. */
+  left: i32 = 0
+  /** The declared body length, or -1 when the request has none or is chunked. */
+  contentLength: i32 = -1
+  bodyOff: i32 = 0
+  bodyLen: i32 = 0
+  /** The method is `head[methodStart .. methodEnd)` and the target `head[targetStart .. targetEnd)`. */
+  methodStart: i32 = 0
+  methodEnd: i32 = 0
+  targetStart: i32 = 0
+  targetEnd: i32 = 0
+
+  // --- limits, the caller's --------------------------------------------------
+  maxTarget: i32 = 0
+  maxHeaderBytes: i32 = 0
+  maxHeaders: i32 = 0
+  maxBody: i32 = 0
+  /** The most body bytes one `HTTP1_BODY` hands over; a caller's number, 2^30 unless set. */
+  maxChunk: i32 = 1073741824
+
+  // --- what `keepText`, an error or a chunked body reads ----------------------
+  method: string = ""
+  target: string = ""
+  /** The field names, in lowercase, in the order they arrived; `values` beside them. */
+  names: string[]
+  values: string[]
+  /** The `Upgrade` field when `Connection` asked for it, else empty. */
+  upgrade: string = ""
+  /** What was wrong, once `next()` said `HTTP1_ERROR`; for a log, not for the response. */
+  reason: string = ""
+  /** Reused by every list `http1Tally` walks. */
+  tally: Http1ListTally
+  /** The status code to answer once `next()` said `HTTP1_ERROR`. */
+  status: i32 = 0
+  /** De-chunked body bytes so far, against `maxBody`. */
+  bodyTotal: i32 = 0
+
   /**
    * Each limit is clamped into 0 to 2^30, so that the sums the parser makes
    * of them (a request line is the method, the target and ten bytes more)
@@ -274,12 +283,15 @@ export class Http1Parser {
     // head kept, at HTTP1_FIRST_INPUT and HTTP1_FIRST_HEAD bytes: a parser
     // that is built and never fed (a pool's spare slot) costs neither, and a
     // caller that lends them out between requests puts empty ones here.
+    // The spans are made first: the arena places each block after the last,
+    // so their header and first entries sit just behind the parser's fields
+    // rather than behind four empty arrays.
+    this.spans = new Array<i32>(64)
     this.buf = []
     this.body = this.buf
+    this.head = []
     this.names = []
     this.values = []
-    this.head = []
-    this.spans = new Array<i32>(64)
     this.tally = new Http1ListTally()
     this.restart()
   }
