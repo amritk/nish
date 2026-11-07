@@ -46,7 +46,7 @@ The global `process.exit`: a terminator, which `never` is how `tsc` spells it.
 
 <scalar-card title="getenv" icon="phosphor/regular/function" href="#getenv">
 
-One environment variable, or `null` when it is unset (an empty value is a set variable).
+One environment variable, as the call runs.
 
 </scalar-card>
 
@@ -106,7 +106,7 @@ The same run with `stdin` written to the child and its stdout and stderr appende
 
 <scalar-card title="spawnSync" icon="phosphor/regular/function" href="#spawnsync">
 
-Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure.
+Run `argv[0]`, searched on `PATH`, with `argv` as its argument vector, and wait for it.
 
 </scalar-card>
 
@@ -175,7 +175,16 @@ function exit(code: i32): never
 
 ## getenv
 
-One environment variable, or `null` when it is unset (an empty value is a set variable).
+One environment variable, as the call runs. The value is what `getenv(3)`
+answers, so it is bytes: a variable holding something that is not valid
+UTF-8 comes back as those bytes, as `readFileSync` does, and every offset
+into it is a byte offset. The bytes are copied into the arena, so the result
+is an ordinary string that outlives any later change to the environment, and
+it is narrowed with `if (cc !== null)` like any other nullable. It is a call
+and not `process.env.CC`, because a member access on a key chosen at runtime
+is forbidden. Two reads of one variable are two calls: a `setenv` from linked
+C may change the answer between them. Also exported by `nish:process`.
+Capability: env.
 
 ```ts
 function getenv(name: string): string | null
@@ -184,11 +193,18 @@ function getenv(name: string): string | null
 #### Parameters
 
 <scalar-field name="name" type="string" required>
+
+the variable's name.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+its value, or `null` when it is unset (an empty value, as `CC=`, is a
+  set variable and answers a zero-length string).
+
 </scalar-field>
 
 ## kill
@@ -361,7 +377,12 @@ function spawnPiped(
 
 ## spawnSync
 
-Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure.
+Run `argv[0]`, searched on `PATH`, with `argv` as its argument vector, and
+wait for it. The child inherits this process's environment, streams and
+working directory. The argument is checked down to its element type: an
+`i32[]` is an array but not a command line. Arguments are passed as bytes, so
+an embedded NUL truncates one. A `wasm32` build and a WASI build have no
+processes, and a WASI build always answers `-1`. Capability: process.spawn.
 
 ```ts
 function spawnSync(argv: string[]): number
@@ -370,11 +391,19 @@ function spawnSync(argv: string[]): number
 #### Parameters
 
 <scalar-field name="argv" type="string[]" required>
+
+the program and its arguments.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="number">
+
+the exit status, or `128 + n` when signal `n` killed it (the shell's
+  convention), or `-1` when the vector is empty — there is no `argv[0]` to
+  run — and whenever the child cannot be started or cannot be waited for.
+
 </scalar-field>
 
 ## spawnSyncTo

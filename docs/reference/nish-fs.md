@@ -59,19 +59,19 @@ Whether a directory is at `path` right now.
 
 <scalar-card title="readFileBytesSync" icon="phosphor/regular/function" href="#readfilebytessync">
 
-The file's bytes as they are on disk — no UTF-8 assumed, so a zero byte and a byte of 0x80 or above survive — or `null` for every path `readFileSyncOrNull` answers `null` for.
+The file's bytes as they are on disk — nothing assumes UTF-8, so a zero byte, a byte of 0x80 or above and an invalid sequence all come back unchanged, and `length` is the file's size — or `null` for exactly the paths `readFileSyncOrNull` answers `null` for: missing, a directory, a parent that cannot be searched.
 
 </scalar-card>
 
 <scalar-card title="readFileSync" icon="phosphor/regular/function" href="#readfilesync">
 
-The whole file as a string; a path that cannot be read as one — missing, a directory, a parent that cannot be searched — prints `nish: cannot read <path>` and exits 1.
+The whole file as one string; a path that cannot be read as one — missing, a directory, a parent that cannot be searched — prints `nish: cannot read <path>` to stderr and exits 1.
 
 </scalar-card>
 
 <scalar-card title="readFileSyncOrNull" icon="phosphor/regular/function" href="#readfilesyncornull">
 
-The same read, answering `null` for every path the other exits over.
+The same read, answering `null` for every path the other exits over: a missing path, a directory, a parent that cannot be searched, a pipe with no length to ask for.
 
 </scalar-card>
 
@@ -83,7 +83,7 @@ The directory's entries, sorted ascending by bytes and without `.` or `..`, or `
 
 <scalar-card title="realpathSync" icon="phosphor/regular/function" href="#realpathsync">
 
-`path` with every symbolic link resolved, as an absolute normalised path — or `null` when it does not resolve, a path that does not exist included.
+`path` with every symbolic link resolved and every `.`, `..` and repeated separator removed, as an absolute path — or `null` when it does not resolve, a path that does not exist included.
 
 </scalar-card>
 
@@ -175,6 +175,10 @@ function createFileExclusiveSync(
 ## isDirectorySync
 
 Whether a directory is at `path` right now. One `stat`, and never an exit.
+The answer is a fact about the file system as the call runs and can be stale
+by the time the caller acts on it: `mkdirSync` is still the call that decides
+whether a directory was made, and `readFileSyncOrNull` is still the way to
+read a file without racing a check against it. Capability: fs.read.
 
 ```ts
 function isDirectorySync(path: string): boolean
@@ -183,11 +187,18 @@ function isDirectorySync(path: string): boolean
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+the path to ask about.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+`true` for a directory; `false` for everything else — a missing
+  path, a plain file, a device node, a parent that cannot be searched.
+
 </scalar-field>
 
 ## mkdirSync
@@ -234,9 +245,15 @@ function mkdirSyncMode(
 
 ## readFileBytesSync
 
-The file's bytes as they are on disk — no UTF-8 assumed, so a zero byte and
-a byte of 0x80 or above survive — or `null` for every path
-`readFileSyncOrNull` answers `null` for.
+The file's bytes as they are on disk — nothing assumes UTF-8, so a zero byte,
+a byte of 0x80 or above and an invalid sequence all come back unchanged, and
+`length` is the file's size — or `null` for exactly the paths
+`readFileSyncOrNull` answers `null` for: missing, a directory, a parent that
+cannot be searched. There is no exiting twin. The array is an ordinary arena
+`u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A file
+longer than 2^31 - 1 bytes is one it cannot read. A `wasm32` build has no file
+I/O and so no `readFileBytesSync`. Under Node the answer is
+`Array.from(fs.readFileSync(path))` or `null`. Capability: fs.read.
 
 ```ts
 function readFileBytesSync(
@@ -247,18 +264,28 @@ function readFileBytesSync(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+the file to read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="u8[] | null">
+
+its bytes, or `null`.
+
 </scalar-field>
 
 ## readFileSync
 
-The whole file as a string; a path that cannot be read as one — missing, a
+The whole file as one string; a path that cannot be read as one — missing, a
 directory, a parent that cannot be searched — prints `nish: cannot read
-<path>` and exits 1.
+<path>` to stderr and exits 1. A file longer than 2^31 - 1 bytes is one it
+cannot read, in both number modes, as in Node. Paths are relative to the
+working directory, and a NUL byte in `path` is refused as a missing path is.
+A `wasm32` build has no file I/O and so no `readFileSync`.
+Capability: fs.read.
 
 ```ts
 function readFileSync(path: string): string
@@ -267,16 +294,28 @@ function readFileSync(path: string): string
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+the file to read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string">
+
+its contents.
+
 </scalar-field>
 
 ## readFileSyncOrNull
 
-The same read, answering `null` for every path the other exits over.
+The same read, answering `null` for every path the other exits over: a
+missing path, a directory, a parent that cannot be searched, a pipe with no
+length to ask for. A program can therefore report the missing file itself and
+carry on; the call subsumes an `existsSync` and has no time-of-check race.
+The result is narrowed with `if (text !== null)` like any other nullable.
+The 2^31 - 1 byte limit and the NUL rule of `readFileSync` apply.
+Capability: fs.read.
 
 ```ts
 function readFileSyncOrNull(
@@ -287,11 +326,17 @@ function readFileSyncOrNull(
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+the file to read.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+its contents, or `null`.
+
 </scalar-field>
 
 ## readdirSync
@@ -317,8 +362,13 @@ function readdirSync(
 
 ## realpathSync
 
-`path` with every symbolic link resolved, as an absolute normalised path —
-or `null` when it does not resolve, a path that does not exist included.
+`path` with every symbolic link resolved and every `.`, `..` and repeated
+separator removed, as an absolute path — or `null` when it does not resolve,
+a path that does not exist included. Every component but the last must exist
+for POSIX `realpath` to answer at all, so "does not resolve" is one answer
+rather than several. The bytes are copied into the arena, so the result is an
+ordinary string, narrowed with `if (p !== null)` like any other nullable.
+Capability: fs.read.
 
 ```ts
 function realpathSync(path: string): string | null
@@ -327,11 +377,17 @@ function realpathSync(path: string): string | null
 #### Parameters
 
 <scalar-field name="path" type="string" required>
+
+the path to resolve.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="string | null">
+
+the resolved path, or `null`.
+
 </scalar-field>
 
 ## renameSync

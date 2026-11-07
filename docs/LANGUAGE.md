@@ -6936,6 +6936,8 @@ import { write } from "nish:io";
 
 ### `console`
 
+The reference for each of these, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
+
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `console.log(x: string \| number \| i64 \| f64 \| boolean): void` | Writes `x` and a newline to stdout with one `write(2)`; statement position only; exactly one argument | write | `str_console_log`, `i64_basic`; `reject_console_log_noargs`, `reject_console_log_two_args`, `reject_console_log_as_value`; arrays and objects are rejected (`` `console.log` accepts string, number, or boolean, got i32[] `` *(CLI only)*) |
@@ -6951,6 +6953,8 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 `math_intrinsics`). Booleans print `true`/`false`.
 
 ### `Math`
+
+The reference for each member of `Math`, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
@@ -6972,6 +6976,8 @@ an `i32`, so write `Math.sqrt(toF64(n))` or use f64 mode. A numeric literal
 argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 
 ### Numeric conversions
+
+The reference for each conversion, with its parameter and its answer, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
 | Signature | Semantics | Test |
 | --- | --- | --- |
@@ -7955,6 +7961,8 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   `reject_emit_ts_region`).
 
 ### `process`
+
+The reference for each member of `process`, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
@@ -8958,6 +8966,8 @@ bytes — natively and under WASI, and expect the same lines from both.
 
 ### Arrays and strings as receivers
 
+The reference for each member, with its parameters and its answer, is its doc comment on `Array`, `ReadonlyArray` or `String` in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
+
 | Member | Semantics | Test |
 | --- | --- | --- |
 | `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
@@ -9039,6 +9049,8 @@ arrow argument like any other, so it may read that function's `const` locals
 and parameters (`arr_sort_capture`), under the rule in [Function parameters](#function-parameters).
 
 ### Bulk writes: `set` and `fill`
+
+The reference for `set` and `fill`, with their parameters and their answers, is their doc comments on `Array` in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
 A packet is copied, cleared and filled through `u8[]` without a loop per byte
 (WP34 N2). Both methods take their meaning from `TypedArray.prototype`, and both
@@ -9144,6 +9156,8 @@ a `main` runs under both and agrees byte for byte.
 
 ### Readonly arrays
 
+The reference for the members a `readonly T[]` has is their doc comments on `ReadonlyArray` in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
+
 `readonly T[]` — or `ReadonlyArray<T>`, the same type under the other spelling
 — is a `T[]` that may not be written through. It is the same header, the same
 pointer and the same LLVM type; the golden
@@ -9219,6 +9233,8 @@ string-to-number parsing is the bare
 
 ### Typed-array names have no `push` or `pop`
 
+The reference for the four names is the doc comment on `Array` in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
+
 `Int32Array`, `Float32Array`, `Float64Array` and `BigInt64Array` are the same
 type as `i32[]`, `f32[]`, `f64[]` and `i64[]`, but in TypeScript a typed array
 has a fixed length and no `push` or `pop`, so a call to either is a
@@ -9289,6 +9305,8 @@ TypeScript itself refuses `const a: number[] = new Float64Array(n)`, so no
 program `tsc` accepts reaches that push.
 
 ### `Arena`
+
+The reference for `Arena.used`, `Arena.mark` and `arena()`, with their answers and their capabilities, is their doc comments in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
 Reading the arena the runtime allocates from
 ([wp6-memory.md](wp6-memory.md#3-explicit-control)). The automatic placement
@@ -9414,6 +9432,8 @@ const tally = (rows: string[]): i32 => {
   (`tests/cases/perf_arena_using`).
 
 ### `Map` and `Set`
+
+The reference for each member of `Map` and `Set`, with its parameters and its answer, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
 The global `Map<K, V>` and `Set<T>` are JavaScript's: insertion-ordered, with
 keys compared by SameValueZero, so `-0` is `+0` and `NaN` is `NaN`. They need
@@ -9838,6 +9858,8 @@ export const main = (): i32 => {
 
 ### Typed JSON: `nish/json-typed`
 
+The reference for each export, with its parameters, its answer and the codes it records, is its doc comment in [`std/json-typed.ts`](../std/json-typed.ts); the rules are here.
+
 `jsonDecode(d, out)` reads one JSON object into a class and `jsonEncode(w,
 value)` writes one back, and the code that does it is written by the compiler
 from the class's fields. They are generic functions in
@@ -10167,6 +10189,8 @@ export const main = (): i32 => {
   compiled as written and gets those bodies natively too.
 
 ### Capabilities
+
+Each builtin's label is the `Capability:` line of its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
 Every builtin carries exactly one **capability** label, or a deliberate none,
 and the compiler works out which capabilities every function, module and

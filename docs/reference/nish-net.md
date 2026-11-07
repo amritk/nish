@@ -279,7 +279,10 @@ function netAddress(
 
 ## netClose
 
-Close the descriptor.
+Close the descriptor. The descriptor is gone whatever the answer, as `close(2)` promises on
+Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait. Not
+callable in a `scope()` task or a parallel body. Refused at compile time on wasm32 and the WASI
+profile (NL2404). Capability: net.
 
 ```ts
 function netClose(fd: i32): i32
@@ -288,11 +291,17 @@ function netClose(fd: i32): i32
 #### Parameters
 
 <scalar-field name="fd" type="i32" required>
+
+the descriptor closed.
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+0, or the failure.
+
 </scalar-field>
 
 ## netLocalPort
