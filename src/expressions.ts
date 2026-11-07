@@ -803,6 +803,11 @@ export const checkNumericLiteral = (
   if (ctx.table.isRanged(want)) {
     return checkRangedLiteral(ctx, expr, want, negated, at)
   }
+  // The literal `0` is the handle that names nothing (WP50 S2): what a field
+  // starts as before the page has given one out, and what `h !== 0` asks about.
+  if (ctx.table.isHostHandle(want) && !negated && expr.text === "0") {
+    return want
+  }
   const type = want >= 0 && isNumeric(want) ? want : ctx.numberType()
   if (isFloat(type)) {
     return type

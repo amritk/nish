@@ -1785,7 +1785,7 @@ export const marksTailCall = (
  * someone on purpose.
  */
 export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
-  isNumeric(type) || type === T_BOOL || table.enumBase(type) >= 0
+  isNumeric(type) || type === T_BOOL || table.enumBase(type) >= 0 || table.isHostHandle(type)
 
 /**
  * Whether nothing that existed before a call to `sig` can be made to hold a

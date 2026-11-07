@@ -709,7 +709,7 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
   // A discriminated union crosses nowhere either, and reads as written; so
   // does a `nish:simd` vector, which no C, N-API or wasm signature carries,
   // and a `nish:region` handle, which names memory only this process holds.
-  if (table.isUnion(t) || table.isVector(t) || table.isRegion(t)) {
+  if (table.isUnion(t) || table.isVector(t) || table.isRegion(t) || table.isHostHandle(t)) {
     return table.typeName(t)
   }
   switch (table.kindOf(t)) {

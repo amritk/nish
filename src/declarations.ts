@@ -16,6 +16,7 @@ import { isNishSpecifier, nishModuleNames } from "./nish-modules"
 import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectStoredMask } from "./simd"
+import { hostTypeProblem } from "./host-module"
 import { ASYNC_RETURN_MESSAGE, promiseArgument, rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import { functionTypeHereMessage, isContextualLiteral, isFunctionParameter } from "./generics"
@@ -42,6 +43,7 @@ import { checkLiteralInitializer } from "./structs"
 import {
   isForeignBuffer,
   isForeignType,
+  isHostType,
   isNumeric,
   K_ARRAY,
   T_ERROR,
@@ -463,7 +465,17 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     sig.returnType = resolveType(returnAnnotation, ctx)
     sig.returnSpelling = annotationSpelling(ctx, true, returnAnnotation)
   }
-  if (foreign) {
+  if (foreign && ctx.source.host) {
+    checkHostSignature(ctx, sig, decl, name)
+  } else if (foreign && ctx.wasmFreestanding) {
+    // A freestanding module links no C, so the declaration would name an
+    // import nothing on the page provides: the browser refuses it at
+    // instantiation, long after the build said yes (WP50 §3).
+    ctx.error(
+      decl.children[0],
+      `\`declare function ${name}\` declares a C function, and a freestanding wasm build links no C: export \`${name}\` from a host module the page provides (\`--host\`) and import it from there`
+    )
+  } else if (foreign) {
     checkForeignSignature(ctx, sig, decl, name)
   } else {
     // WP27 S2: a foreign pointer never crosses a boundary this compiler
@@ -483,6 +495,33 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     }
   }
   return sig
+}
+
+/**
+ * The rules a host module's export adds (WP50 S2, `docs/wp50-wasm-host.md`
+ * §4): every parameter and the result a scalar, an enum, a ranged integer or a
+ * `HostHandle`, which are the values a wasm import's signature carries as an
+ * `i32`, `i64`, `f32` or `f64`. What the page could not have meant — a string,
+ * a buffer, a `Promise` — was refused in its own words before resolution
+ * (`hostSignatureProblems`), so what reaches this is a name that resolved to
+ * something else, such as an enum member type.
+ */
+const checkHostSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
+  for (let i = 0; i < sig.paramTypes.length; i++) {
+    const type = sig.paramTypes[i]
+    if (type === T_VOID || !isHostType(ctx.table, type)) {
+      ctx.error(
+        decl.children[1].children[i],
+        hostTypeProblem(`Parameter \`${sig.paramNames[i]}\``, name, `\`${ctx.table.typeName(type)}\``)
+      )
+    }
+  }
+  if (!isHostType(ctx.table, sig.returnType)) {
+    ctx.error(
+      decl.children[2],
+      hostTypeProblem("The result", name, `\`${ctx.table.typeName(sig.returnType)}\``)
+    )
+  }
 }
 
 /**

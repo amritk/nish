@@ -101,6 +101,14 @@ export const isForeignType = (table: TypeTable, t: i32): boolean =>
 export const isForeignBuffer = (table: TypeTable, t: i32): boolean =>
   t >= 0 && table.kindOf(t) === K_ARRAY && table.refOf(t) === T_U8
 
+/**
+ * A type a host function's signature carries (WP50 S2): a scalar, a ranged
+ * integer or an enum, each one wasm value, and a `HostHandle`, an `i32`.
+ * `void` passes, as a result; a parameter is refused it by its caller.
+ */
+export const isHostType = (table: TypeTable, t: i32): boolean =>
+  isForeignScalar(t) || table.isRanged(t) || table.isEnum(t) || table.isHostHandle(t)
+
 const isForeignScalar = (t: i32): boolean =>
   t === T_ERROR ||
   t === T_I32 ||
@@ -194,6 +202,14 @@ const K_REGION: i32 = 23
  * (`rejectStoredMask` in `src/simd.ts`).
  */
 const K_MASK: i32 = 24
+/**
+ * A `HostHandle<"kind">` (WP50 S2, `docs/wp50-wasm-host.md` §4): an `i32` the
+ * page's TypeScript gave out, naming something only the page holds. `names`
+ * is the kind, so `HostHandle<"canvas">` and `HostHandle<"socket">` are two
+ * ids and neither is assignable to the other or to a number. It is a value
+ * the program stores and compares and hands back, never one it computes with.
+ */
+const K_HOST_HANDLE: i32 = 25
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -377,7 +393,9 @@ export class TypeTable {
    * collide with the other because the kind leads.
    */
   derivedKey(kind: i32, ref: i32, name: string): string {
-    return kind === K_STRUCT || kind === K_ENUM ? `${kind}:${name}` : `${kind}:${ref}`
+    return kind === K_STRUCT || kind === K_ENUM || kind === K_HOST_HANDLE
+      ? `${kind}:${name}`
+      : `${kind}:${ref}`
   }
 
   /** The id for a derived type, interning it the first time it is asked for. */
@@ -707,6 +725,16 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_REGION
   }
 
+  /** The host handle of the kind `kind`, e.g. `canvas` for `HostHandle<"canvas">`. */
+  hostHandleOf(kind: string): i32 {
+    return this.intern(K_HOST_HANDLE, -1, kind)
+  }
+
+  /** Whether `type` is a `HostHandle<"kind">`; -1 is not. */
+  isHostHandle(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_HOST_HANDLE
+  }
+
   /** A vector's or a mask's lane count: sixteen bytes over its lane's width. */
   laneCount(type: i32): i32 {
     return 16 / this.alignOf(this.refs[type])
@@ -882,6 +910,8 @@ export class TypeTable {
         return `msk.${this.scalarName(this.refs[type])}`
       case K_REGION:
         return `rgn.${this.mangle(this.refs[type])}`
+      case K_HOST_HANDLE:
+        return `hh.${this.names[type]}`
       default:
         return this.scalarName(type)
     }
@@ -1137,6 +1167,8 @@ export class TypeTable {
         return `<${this.laneCount(type)} x i1>`
       case K_REGION:
         return "i64"
+      case K_HOST_HANDLE:
+        return "i32"
       default:
         process.exit(internalErrorFor(`internal error: llvmType of kind ${this.kinds[type]}`, this.json))
     }
@@ -1165,6 +1197,8 @@ export class TypeTable {
         return 4 // its enum's i32
       case K_RANGED:
         return 4 // an i32 (WP31 §5)
+      case K_HOST_HANDLE:
+        return 4 // an i32
       case K_VECTOR:
         return 16 // and sixteen bytes in size, as clang's `vector_size(16)` is
       default:
@@ -1207,6 +1241,8 @@ export class TypeTable {
         return `mask${(16 / this.laneCount(type)) * 8}x${this.laneCount(type)}`
       case K_REGION:
         return `Region<${this.typeName(this.refs[type])}>`
+      case K_HOST_HANDLE:
+        return `HostHandle<"${this.names[type]}">`
       default:
         return this.scalarName(type)
     }

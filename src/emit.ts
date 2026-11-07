@@ -248,7 +248,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader } from "./target"
-import { accessAlign, isForeignBuffer, T_STRING, T_VOID, TypeTable } from "./types"
+import { accessAlign, isForeignBuffer, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -1539,7 +1539,11 @@ export class Emitter {
       case N_PAREN:
         return this.emitExpression(expr.children[0])
       case N_NUMBER:
-        return numericConstant(expr.text, this.typeOf(expr))
+        // A `HostHandle` literal is the `0` that names nothing, an `i32`.
+        return numericConstant(
+          expr.text,
+          this.table.isHostHandle(this.typeOf(expr)) ? T_I32 : this.typeOf(expr)
+        )
       case N_TRUE:
         return "true"
       case N_FALSE:

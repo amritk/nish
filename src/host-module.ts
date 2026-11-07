@@ -396,7 +396,7 @@ const blank = (text: string, from: i32, to: i32): string => {
   while (k < to) {
     const c = text.charCodeAt(k)
     if (c === 10 || c === 13) {
-      out.add(spaces(run))
+      out.add(blankRun(run))
       run = 0
       out.addChar(c)
     } else {
@@ -404,13 +404,13 @@ const blank = (text: string, from: i32, to: i32): string => {
     }
     k = k + 1
   }
-  out.add(spaces(run))
+  out.add(blankRun(run))
   return out.toText()
 }
 
 const SPACES: string = "                                                                "
 
-const spaces = (count: i32): string => {
+const blankRun = (count: i32): string => {
   if (count <= SPACES.length) {
     return SPACES.substring(0, count)
   }
@@ -480,7 +480,6 @@ const SCALAR_NAMES = (): StringSet => {
     "boolean",
     "number",
     "void",
-    "bigint",
     "HostHandle",
   ]) {
     names.add(name)
@@ -533,7 +532,7 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
       continue
     }
     const result = stmt.children[2]
-    if ((stmt.flags & FLAG_ASYNC) !== 0 || isNamed(result, "Promise")) {
+    if ((stmt.flags & FLAG_ASYNC) !== 0 || isTypeNamed(result, "Promise")) {
       problems.push(
         new HostProblem(
           `Host function \`${name}\` returns a \`Promise\`, which wasm cannot wait for: await it in the page and call an export with the result`,
@@ -548,7 +547,7 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
       if (type.kind === N_EMPTY) {
         continue // the checker's own refusal: a parameter needs a type
       }
-      if (isNamed(type, "string")) {
+      if (isTypeNamed(type, "string")) {
         problems.push(
           new HostProblem(
             `Parameter \`${p}\` of host function \`${name}\` is a \`string\`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length`,
@@ -570,7 +569,7 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
     if (answer.kind === N_EMPTY) {
       continue
     }
-    if (isNamed(answer, "string")) {
+    if (isTypeNamed(answer, "string")) {
       problems.push(
         new HostProblem(
           `Host function \`${name}\` returns a \`string\`, which wasm cannot receive: return the text by writing it into a module-storage u8[] the module names, and return its length`,
@@ -586,7 +585,7 @@ export const hostSignatureProblems = (file: Node): HostProblem[] => {
 
 const unparen = (type: Node): Node => (type.kind === N_TYPE_PAREN ? unparen(type.children[0]) : type)
 
-const isNamed = (type: Node, name: string): boolean => type.kind === N_TYPE_REF && type.text === name
+const isTypeNamed = (type: Node, name: string): boolean => type.kind === N_TYPE_REF && type.text === name
 
 /** A typed array, or an array of scalars spelled `T[]`, `readonly T[]` or `Array<T>`. */
 const isBuffer = (type: Node, typed: StringSet, scalars: StringSet): boolean => {
@@ -598,8 +597,8 @@ const isBuffer = (type: Node, typed: StringSet, scalars: StringSet): boolean => 
       return true
     }
     if (type.text === "Array" || type.text === "ReadonlyArray") {
-      const args = type.children.length > 0 ? type.children[0].children : []
-      return args.length === 1 && isScalarRef(unparen(args[0]), scalars)
+      const args = type.children.length > 0 ? type.children[0].children.length : 0
+      return args === 1 && isScalarRef(unparen(type.children[0].children[0]), scalars)
     }
     return false
   }

@@ -197,7 +197,7 @@ import { jsonQuote, splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { hostModuleText, hostSignatureProblems, markHostFunctions } from "./host-module"
+import { HostText, hostModuleText, hostSignatureProblems, markHostFunctions } from "./host-module"
 import {
   buildModeOf,
   buildsPageModule,
@@ -744,7 +744,7 @@ export class Compilation {
       return false
     }
     const host = this.hostIdentities.has(identity)
-    const read = host ? hostModuleText(text) : null
+    const read: HostText | null = host ? hostModuleText(text) : null
     const source = new SourceFile(name, read === null ? text : read.text)
     if (read !== null && read.problem.length > 0) {
       this.sink.report(source, read.start, read.end, read.problem)
@@ -799,7 +799,6 @@ export class Compilation {
     )
     checker.ctx.wasm = isWasmBuild(this.opts)
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
-    checker.ctx.pageModule = buildsPageModule(this.opts)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of
