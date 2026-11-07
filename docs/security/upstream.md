@@ -2,7 +2,7 @@
 
 The record of `nish/net/upstream`, the outbound HTTP/1.1 calls a route handler
 makes without blocking its worker
-([wp49-async-server.md](../wp49-async-server.md) §7). It says what a call
+([wp49-async-server.md](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md) §7). It says what a call
 holds, what the origin can make the pool spend, how an answer reaches the
 request that asked for it and no other, where the outbound policy is checked,
 and the test that pins each property. It is written with the code, at base

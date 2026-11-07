@@ -5,8 +5,8 @@ A vector holds sixteen bytes of numbers side by side: sixteen `u8`s, eight
 a whole vector in one instruction, so a loop that loads, stores and shuffles
 vectors does in one step what would otherwise take four or sixteen. The six
 types and their functions come from the built-in module `nish:simd`. The rules
-are in the reference under [`nish:simd`](../../LANGUAGE.md#nishsimd-sixteen-byte-vectors)
-and [its lane operations](../../LANGUAGE.md#nishsimd-lane-operations-and-masks).
+are in the reference under [`nish:simd`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors)
+and [its lane operations](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-lane-operations-and-masks).
 
 ## Making a vector
 

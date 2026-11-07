@@ -54,6 +54,8 @@ export PATH="$(brew --prefix llvm@18)/bin:$PATH"   # add to your shell profile
 Xcode's `clang` (`xcode-select --install`) also works for native binaries;
 the Homebrew LLVM is needed for the `wasm` and `wasi` profiles (`wasm-ld`).
 
+<a id="wasi-optional-for---profile-wasi" style="scroll-margin-top: 65px"></a>
+
 ### WASI (optional, for `--profile wasi`)
 
 The `wasi` profile links the runtime against wasi-libc so that whole programs
@@ -105,7 +107,7 @@ of its own architecture by the release workflow before the release existed, and
 installing is a download and an unpack.
 
 Through npm, which is also how an Nish *program* resolves its dependencies
-([wp21-packages.md](wp21-packages.md)), so this is the one to pick if you want
+([wp21-packages.md](https://github.com/amritk/nish/blob/main/docs/wp21-packages.md)), so this is the one to pick if you want
 the compiler pinned per project in a `package.json`:
 
 ```bash
@@ -169,7 +171,7 @@ release also attaches `nish-<version>.spdx.json`, an SPDX 2.3 software bill of
 materials: every attached file with its SHA-256, the clang, linker, Node.js
 and seed compiler that built each tarball (recorded by the build row itself),
 and the vendored code from
-[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) that each of them contains.
+[THIRD_PARTY_NOTICES.md](https://github.com/amritk/nish/blob/main/THIRD_PARTY_NOTICES.md) that each of them contains.
 How these fit the rest of the release's defences is
 [docs/security/supply-chain.md](security/supply-chain.md).
 
@@ -198,13 +200,13 @@ never fails over it.
 > installers above handle it by running the binary through a one-line `exec` of
 > an absolute path. If you unpack a tarball by hand, invoke it by path
 > (`nish-<version>-<asset>/bin/nish`) or write that wrapper yourself. The
-> underlying defect is [wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
+> underlying defect is [wp19 §5a](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
 > item 4.
 
 **The package is `nish` from 0.20.0.** Releases up to 0.18.0 were published
 as `@amritk/nish` (0.19.0's publish to npm failed), which is deprecated and
 points here; `npm install -g nish`
-replaces it ([docs/wp12-release.md](wp12-release.md#the-npm-name)). Versions
+replaces it ([docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md#the-npm-name)). Versions
 0.0.0 and 0.0.1 of `nish` are an unrelated 2014 project that held the name
 before it, so pin `nish@^0.20.0` or later rather than an older range.
 
@@ -233,9 +235,9 @@ nish: no prebuilt compiler for freebsd/x64
 Until 0.6.0 it ran the TypeScript compiler that shipped in the same package
 instead — the same compiler by every test here, about eight times slower, and
 no C toolchain needed. That compiler was stage0, which was deleted in R6
-([wp19](wp19-stage0-retirement.md)), so there is nothing left in the package to
+([wp19](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md)), so there is nothing left in the package to
 fall back to. The cost is stated where the rest of that deletion's costs are,
-in [wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly),
+in [wp19 §6](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly),
 and it is a real one: **musl, FreeBSD and 32-bit platforms have no `npm
 install` route to a compiler any more.**
 
@@ -276,7 +278,7 @@ to have on the issue tracker rather than a workaround to discover here.
 `nish` from 0.20.0; 0.19.0 is on GitHub only, because its npm publish
 failed. Every release publishes the main package and its platform packages to
 npm from `release.yml`, by trusted publishing
-([docs/wp12-release.md](wp12-release.md#release-procedure) step 4), so
+([docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md#release-procedure) step 4), so
 `npm install -g nish` is the whole install. The rest of this section is
 for a machine that cannot reach the registry, or a release before 0.10.0.
 
@@ -358,7 +360,7 @@ v0.16.0; v0.1.1 was the first release with a binary attached.
 The `v0.1.0` tag exists but has no release behind it and no assets, so every
 `v0.1.0` download URL is a 404 — the tag was pushed by a workflow, and GitHub
 raises no event for that, so nothing ever built it
-([docs/wp12-release.md](wp12-release.md#release-procedure) step 2). When a newer
+([docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md#release-procedure) step 2). When a newer
 release exists, take its version from
 [the releases page](https://github.com/amritk/nish/releases/latest).
 
@@ -435,7 +437,7 @@ over, `runtime-checksum.c` the CRC-32 kernels of `nish/compress/checksum`,
 `runtime-sandbox.c` the confinement a `--sandbox` build applies, and
 `runtime-shm.c` the shared-memory regions of `nish/sync/shm`.
 They are separate so that each carries its own measured size ceiling
-([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
+([docs/wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md)); nothing in the core calls into the
 others, so a line that names only `runtime.c` and `runtime-os.c` still links a
 program that uses none of the other nine. `scripts/build.sh` compiles the other
 nine beside any
@@ -451,7 +453,7 @@ beside `-DNISH_THREADS=1`).
 ## 2a. What `npm run build` does
 
 `src/` is the compiler, written in Nish, and it compiles itself
-([docs/wp14-selfhost.md](wp14-selfhost.md)). From a checkout, with clang on
+([docs/wp14-selfhost.md](https://github.com/amritk/nish/blob/main/docs/wp14-selfhost.md)). From a checkout, with clang on
 `PATH`, `npm run build` runs `scripts/bootstrap.sh` with the seed from §2:
 
 ```bash
@@ -486,7 +488,7 @@ in `src/` and becomes usable inside `src/` from the next release on; CI's
 `bootstrap` job is what checks that the released seed still builds stage1.
 Until R6 the seed was a TypeScript compiler, stage0, run under Node; it was
 deleted once the native one answered every flag it did
-([wp19](wp19-stage0-retirement.md)).
+([wp19](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md)).
 
 ## 3. Hello world
 
@@ -518,7 +520,7 @@ nish hello.ts -o hello.ll
 
 Other build profiles: `--profile size` (smallest binary), `--profile debug`
 (no optimisation, symbols kept). Run `nish --help` for every flag, and
-see the [README](../README.md) for the language subset.
+see the [README](https://github.com/amritk/nish/blob/main/README.md) for the language subset.
 
 To use a program as a script rather than keep the binary, run it:
 
@@ -548,6 +550,8 @@ tenth. `--link` with no absolute `HOME` or `XDG_CACHE_HOME`, or with a root
 it cannot make private, compiles the runtime itself as it always did; the
 wasi profile and `scripts/build.sh` called directly never use the cache.
 Removing the directory is always safe.
+
+<a id="4-exit-codes" style="scroll-margin-top: 65px"></a>
 
 ## 4. Exit codes
 

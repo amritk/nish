@@ -6,8 +6,8 @@ memory is reused, while it compiles the program; at run time there is nothing
 scanning for garbage and, unless you make a [region](regions.md), nothing for
 you to release. Most programs never need to think about memory at
 all. This page says why, and what the exceptions are. The reference sections
-are [Memory model](../../LANGUAGE.md#memory-model) and
-[`using a = arena()`](../../LANGUAGE.md#using-a--arena).
+are [Memory model](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#memory-model) and
+[`using a = arena()`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#using-a--arena).
 
 ## What the compiler does for you
 
@@ -92,7 +92,7 @@ The warnings catch the shapes the compiler can name, not every possible
 leak: an array you keep pushing onto for the whole run is memory you meant
 to keep, and nothing warns about it.
 
-<a id="freeing-a-batch-yourself-using-a--arena"></a>
+<a id="freeing-a-batch-yourself-using-a--arena" style="scroll-margin-top: 65px"></a>
 
 ## Freeing a batch yourself: `using a = arena()`
 

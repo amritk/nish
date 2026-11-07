@@ -79,6 +79,6 @@ Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385
   [authentication tokens (JWT)](using-nish/auth.md).
 
 This guide teaches; it is not the definition of the language. That is the
-[language reference](../LANGUAGE.md), and each page here links the section of
+[language reference](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md), and each page here links the section of
 it that governs what the page describes. Where the two disagree, the reference
 is right and the guide has a bug.

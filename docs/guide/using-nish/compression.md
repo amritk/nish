@@ -6,7 +6,7 @@ gzip (RFC 1952), zlib (RFC 1950) and the raw DEFLATE stream (RFC 1951) inside
 both. `nish/compress/checksum` holds their checksums, CRC-32 and Adler-32.
 `nish/net/http-compress` puts gzip on an HTTP response. They are written in
 Nish and imported like any other library module
-([`export` and `import`](../../LANGUAGE.md#export-and-import)); what they
+([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)); what they
 write, Node's `zlib`, browsers and `gunzip` read, and what those write, they
 read.
 

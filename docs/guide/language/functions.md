@@ -2,9 +2,9 @@
 
 A Nish function is an arrow bound to a top-level `const`, with every
 parameter and its return type written out. The normative rules are in the
-reference's [Functions](../../LANGUAGE.md#functions),
-[`main`](../../LANGUAGE.md#main) and
-[Function parameters](../../LANGUAGE.md#function-parameters) sections.
+reference's [Functions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#functions),
+[`main`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#main) and
+[Function parameters](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#function-parameters) sections.
 
 ## Declaring a function
 

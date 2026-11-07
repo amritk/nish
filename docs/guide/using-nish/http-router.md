@@ -4,7 +4,7 @@
 added. It reads no socket and knows no HTTP version: you hand it the method
 and the target as bytes, from an HTTP/1.1 request line or from an HTTP/2 or
 HTTP/3 `:path`, and it answers which route they reach. It is imported like any
-other library module ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
+other library module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
 Nish has no function values, so a route is not a handler. `add` answers a
 number, the route's index, and your program dispatches on that number with
@@ -231,7 +231,7 @@ a/b.txt, 7 bytes
 A decoded parameter can hold any byte, `/`, `..` and NUL among them. Check it
 before you use it as a file name.
 
-<a id="from-http11-http2-and-http3"></a>
+<a id="from-http11-http2-and-http3" style="scroll-margin-top: 65px"></a>
 
 ## From HTTP/1.1, HTTP/2 and HTTP/3
 

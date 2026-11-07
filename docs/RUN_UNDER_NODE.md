@@ -10,11 +10,11 @@ you are using:
 | | What it does | Fidelity |
 | --- | --- | --- |
 | **The prelude** (`runtime/nish.mjs`) | Supplies the globals Nish has and Node does not. **Rewrites nothing.** | f64 mode, minus the list below |
-| **The rewriter** ([wp13-differential.md](wp13-differential.md)) | Rewrote every expression from the types stage0's checker recorded. **Frozen**: it was deleted with stage0, and `tests/differential/goldens/rewrites.txt` keeps its output for the corpus ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | Both modes, minus [`known-failures.txt`](../tests/differential/known-failures.txt) |
+| **The rewriter** ([wp13-differential.md](https://github.com/amritk/nish/blob/main/docs/wp13-differential.md)) | Rewrote every expression from the types stage0's checker recorded. **Frozen**: it was deleted with stage0, and `tests/differential/goldens/rewrites.txt` keeps its output for the corpus ([wp19-stage0-retirement.md](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md)) | Both modes, minus [`known-failures.txt`](https://github.com/amritk/nish/blob/main/tests/differential/known-failures.txt) |
 
 The rewriter was the testing oracle: it was exact because it could see the type
 of every expression and turn `a + b` into `(a + b) | 0`. Its successor
-is `--emit-ts <dir>` ([wp33-round-trip.md](wp33-round-trip.md) §4), which writes the
+is `--emit-ts <dir>` ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §4), which writes the
 same translation out as TypeScript a person can keep. The prelude is the thing
 you would actually hand to someone, and it is weaker because a prelude can only
 replace *globals* — never operators, never the object model.
@@ -84,23 +84,23 @@ clocks. The command lines above stay as they are.
   with `TypedArray.prototype.set`'s copy-first meaning and the native
   `slice out of range` panic; `fill` needs nothing, since `Array.prototype.fill`
   already means what the language's does
-  ([Bulk writes](LANGUAGE.md#bulk-writes-set-and-fill))
+  ([Bulk writes](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#bulk-writes-set-and-fill))
 - `String.fromBytes` — added to Node's `String`, where JavaScript has no such
   static: the range of a byte array as one string, one UTF-16 unit per byte as
   `String.fromCharCode` makes them, with the native `slice out of range` panic
   for a range outside the array. ASCII agrees with a native run; a byte above
   127 is the divergence `fromCharCode` already has
-  ([wp33-round-trip.md](wp33-round-trip.md) §3.2)
+  ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.2)
 - `statMtimeSync` — `fs.statSync(path, { throwIfNoEntry: false })?.mtimeMs`,
   or NaN, which is the native arithmetic exactly, so the digits agree
 - `crypto.getRandomValues` — Node's own takes only a typed array, so the
   prelude replaces it on Node's `crypto` with one that fills a plain array too
   (through a `Uint8Array`) and panics past 65,536 bytes with the native words;
   `Date.now` needs nothing, since Node's is the same floored wall clock
-  ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals))
+  ([The host](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals))
 - `signalFd`, `readSignal` — installed only to **throw**: Node tells its event
   loop about a signal, and a blocking read never lets the loop run, so there is
-  no synchronous answer to give ([wp33-round-trip.md](wp33-round-trip.md) §3.5)
+  no synchronous answer to give ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.5)
 - `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`,
   `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`,
   `udpBind`, `udpSendTo`,
@@ -109,13 +109,13 @@ clocks. The command lines above stay as they are.
   `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` — installed only to **throw**, each
   naming itself: Node's sockets are ready only to its event loop, which a
   program that owns its loop never returns to
-  ([`nish:net`](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)). A
+  ([`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)). A
   `nish:net` import does not resolve under Node at all, nor does any other
   `nish:` import but the three below; the globals are what the prelude can answer
 - `isTerminal`, `terminalSize` — `tty.isatty(fd)`, and the `columns` and
   `rows` Node keeps for stdout, or for stderr when stdout is not a terminal,
   `[-25, 0]` when neither is: the native answers
-  ([`nish:term`](LANGUAGE.md#nishterm-terminal-input))
+  ([`nish:term`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishterm-terminal-input))
 - `readStdin`, `waitStdin`, `setRawMode` — installed only to **throw**, each
   naming itself: Node reads stdin only to its event loop, as it does a socket,
   and its own raw mode turns Ctrl-C into a byte where the native one keeps it a
@@ -135,7 +135,7 @@ clocks. The command lines above stay as they are.
   BigInt). A `number` mixed with a BigInt throws a `TypeError`, as BigInt
   arithmetic does. The answers agree with a native run; the timing does not,
   and nothing here claims it
-  ([Constant time](LANGUAGE.md#constant-time-ctselect-and-cteq))
+  ([Constant time](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-time-ctselect-and-cteq))
 - `secureZero` — fills the array with zeros, as the native wipe does
 - `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`
   — as globals and as the `nish:unsafe` import, which the prelude resolves to
@@ -145,7 +145,7 @@ clocks. The command lines above stay as they are.
   typed array of its lanes (`Uint8Array`, `Int32Array`, `Float32Array`, …), so
   a lane wraps or rounds as its type does; `replace` copies, and a load or a
   store checks the whole vector and panics with the native words
-  ([`nish:simd`](LANGUAGE.md#nishsimd-sixteen-byte-vectors))
+  ([`nish:simd`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors))
 - `nish:secret` — resolved to `runtime/shim.mjs`, where a `Secret` is a plain
   wrapper and `wipe` zero-fills what it holds; the checker's rules about a
   `Secret` are not enforced under Node, and a zero-fill there promises nothing
@@ -171,14 +171,14 @@ nothing from the prelude: under Node it is the JavaScript closure it reads as,
 and natively each name it reads is one more argument of a direct call. The two
 agree because the arrow runs during the call, on the same thread, and the
 checker refuses a capture that could change before it runs (a `let`) or that
-the arrow assigns ([LANGUAGE.md](LANGUAGE.md#function-parameters);
+the arrow assigns ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#function-parameters);
 `tests/cases/fnarg_capture_local` runs on both).
 
 ## What stays divergent
 
 Each of these lives below the globals, in an operator or in the object model, so
 no prelude can reach it. They are language decisions
-([LANGUAGE.md](LANGUAGE.md#semantics-decisions)), not gaps to fill.
+([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#semantics-decisions)), not gaps to fill.
 
 - **i32 mode entirely.** `number` is a 32-bit integer whose signed overflow
   panics; `/` truncates and panics on a zero divisor; `>>>` keeps the signed
@@ -205,9 +205,9 @@ no prelude can reach it. They are language decisions
   `ef` against a panic. Unlike `a[i]`, JavaScript defines both as correct, so a
   program ported from TypeScript can depend on them. `substring` keeps
   JavaScript's clamping exactly; `slice` is the checked, faster one
-  ([wp15-performance.md](wp15-performance.md) §4).
+  ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §4).
 - **A record put into an array is copied natively** and shared here
-  ([Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)).
+  ([Arrays of records are contiguous](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-of-records-are-contiguous)).
   After `ps.push(p); p.x = 9`, `ps[0].x` is still the old value natively and
   `9` under Node, and `[p, p]` is two records natively and one object twice
   here. The reverse also holds: after `const r = ps[0]; ps[0] = q`, `r` reads
@@ -227,10 +227,10 @@ no prelude can reach it. They are language decisions
   compile error natively too. A value the spelling does not reach — through
   another module's `type` alias, out of a `Map` or `Set`, or a generic's `T`
   result — still pushes natively and throws here
-  ([LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop)).
+  ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#typed-array-names-have-no-push-or-pop)).
 - **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
   in `runtime/nish.d.ts`, so a value that leaves its range is silent here and
-  an exit-1 panic natively ([wp31-ranged-integers.md](wp31-ranged-integers.md)
+  an exit-1 panic natively ([wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md)
   §6). Only a program that leaves a range can tell the difference.
 - **`orReturn()` does not propagate.** It throws a marker that the rewriter's
   `try`/`catch` turns into an early `return`; unmodified there is no `catch`, so
@@ -255,11 +255,11 @@ no prelude can reach it. They are language decisions
   found`), and `runtime/node.mjs`, the host the shim installs, imports
   `node:fs`, `node:child_process` and `node:os`, which a browser does not have.
   `runtime/core.mjs` imports none of them: another host is an adapter that
-  installs itself in its place ([wp33-round-trip.md](wp33-round-trip.md) §4.3).
+  installs itself in its place ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §4.3).
 - **A scope's tasks run at the spawn under Node**, one after another, and each
   stores its answer there; natively they run together when the scope's block
   ends, and each answer is stored after the last task finishes
-  ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)). A task writes
+  ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#scoped-tasks-using-s--scope)). A task writes
   nothing another can see except through a `Mutex`'s guard (the next item), and
   cannot print, and the checker refuses a program that reads a destination, or
   writes what a task may read, before the block ends, so the two print the same
@@ -276,7 +276,7 @@ no prelude can reach it. They are language decisions
   at once and its `[Symbol.dispose]` does nothing, because the tasks run one at
   a time, at their spawns, so their critical sections run in spawn order —
   one of the orders the native threads can run them in
-  ([LANGUAGE.md](LANGUAGE.md#a-lock-that-owns-its-data-mutext)). A program
+  ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-lock-that-owns-its-data-mutext)). A program
   whose guarded updates commute exactly (integer sums and counts, a histogram,
   not an `f64` sum) and whose tasks do not branch on what they read under the
   lock prints the same both ways; the checker refuses the parent locking what
@@ -290,7 +290,7 @@ no prelude can reach it. They are language decisions
   ends at once, as natively. Nothing waits, and nothing needs to: a task runs
   at its spawn, and the checker holds every task that may send on a channel to
   a `spawn` before the one receiver's, so every value has been sent when the
-  receiver's loop starts ([LANGUAGE.md](LANGUAGE.md#channels-channelt)). How
+  receiver's loop starts ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#channels-channelt)). How
   two senders' values interleave is spawn order here and the scheduler's
   natively, so a program prints the same both ways when what it prints does
   not depend on that order — a count, an integer sum.

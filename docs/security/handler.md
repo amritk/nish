@@ -2,7 +2,7 @@
 
 The record of WP43's second stage: `nish/net/handler`, the request and
 response layer over the HTTP/1.1 carrier
-([wp43-http-app-layer.md](../wp43-http-app-layer.md)). It says what the
+([wp43-http-app-layer.md](https://github.com/amritk/nish/blob/main/docs/wp43-http-app-layer.md)). It says what the
 handler holds per connection and per request, what it refuses and how, what
 happens to an answer that outlives its connection, and the test that pins
 each property. It is written with the code rather than after an audit, so

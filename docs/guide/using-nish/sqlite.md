@@ -15,7 +15,7 @@ of it.
 | what went wrong | [`SqliteError`](#errors) |
 
 The reference is
-[SQLite: `nish/sqlite`](../../LANGUAGE.md#sqlite-nishsqlite).
+[SQLite: `nish/sqlite`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#sqlite-nishsqlite).
 
 ## Opening a database
 
@@ -91,7 +91,7 @@ call. `reset()` keeps the bindings; `clearBindings()` sets them all back to
 `SQLITE_RANGE`; an `off` and `len` that do not fit inside `buf` answer
 `SQLITE_MISUSE`. A `string` passed to `bindText`, `exec`, `prepare` or
 `openDatabase` that holds a NUL byte stops the program with the
-[`ffi-nul` panic](../../LANGUAGE.md#panic-sites) rather than cutting the SQL
+[`ffi-nul` panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) rather than cutting the SQL
 short; bind text with NUL bytes in it through `bindTextBytes`.
 
 ```ts nish:ok

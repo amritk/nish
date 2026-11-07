@@ -198,4 +198,4 @@ behaving as Node's do.
 To run an unmodified Nish source file under Node, with the builtins as
 globals rather than imports, see
 [Running a Nish program under Node](../../RUN_UNDER_NODE.md). The builtins
-themselves are specified in [Builtins](../../LANGUAGE.md#builtins).
+themselves are specified in [Builtins](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtins).

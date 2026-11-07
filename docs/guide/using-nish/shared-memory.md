@@ -10,14 +10,13 @@ on a different core without a socket or a system call per message.
 | --- | --- |
 | a block of memory several processes read and write | [`createRegion` / `openRegion`](#a-region) |
 | a counter, flag or total they all update | [the atomics on a region](#counting-across-processes) |
-| to read, write or `netRead` into a region's bytes with no copy | [`lend` and `giveBack`](#a-regions-bytes-as-an-array-lend-and-giveback) |
 | a queue from one process to another | [`SpscRing`](#a-queue-spscring-and-mpscring) |
 | to write or read a queued record where it lies, with no copy | [`reserve`, `commit`, `peek` and `release`](#records-in-place-reserve-commit-peek-and-release) |
 | a queue from many processes to one | [`MpscRing`](#a-queue-spscring-and-mpscring) |
 | to sleep until another process says there is work | [`popWait`, or `waitI32` and `wake`](#sleeping-until-there-is-work) |
 
 The rules are in the reference,
-[Shared memory between processes](../../LANGUAGE.md#shared-memory-between-processes-nishsyncshm-and-nishsyncring).
+[Shared memory between processes](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#shared-memory-between-processes-nishsyncshm-and-nishsyncring).
 Both modules are native only, and a program that imports neither is
 unchanged.
 
@@ -50,7 +49,7 @@ export const main = (): i32 => {
 - **The name outlives the processes.** It stays (in `/dev/shm` on Linux) until
   `unlinkRegion`, even if every process has exited, so a program killed
   before it unlinks leaves it behind. Unlink a stale one before creating, as
-  [`examples/prefork-jobs.ts`](../../../examples/prefork-jobs.ts) does. The
+  [`examples/prefork-jobs.ts`](https://github.com/amritk/nish/blob/main/examples/prefork-jobs.ts) does. The
   mapping itself goes away with `close()` or when the process exits.
 - **A name somebody else made is refused.** `createRegion` fails with
   `SHM_EXISTS` when the name exists, whoever made it; `openRegion` fails with
@@ -96,54 +95,6 @@ export const main = (): i32 => {
   `SEQ_CST`, a store `RELAXED`, `RELEASE` or `SEQ_CST`; asking a load for
   `RELEASE` stops the program.
 
-## A region's bytes as an array: `lend` and `giveBack`
-
-`read` and `write` copy. `region.lend(at, len)` does not: it answers a `u8[]`
-of length `len` whose bytes *are* the region's `[at, at + len)`, so an index
-store, `copyBytes` into it or `netRead` into it writes the region itself, and
-every process mapping it sees the bytes. `region.giveBack(window)` answers the
-window's length and empties it.
-
-```ts nish:ok
-import { ACQUIRE, createRegion, RELEASE, unlinkRegion } from "nish/sync/shm";
-
-export const main = (): i32 => {
-  const region = createRegion("guide-window", 4096).expect("create");
-  let window: u8[] = region.lend(64, 16); // the region's bytes 64..79
-  for (let i = 0; i < 4; i++) {
-    for (let j = 0; j < window.length; j++) {
-      window[j] = toU8(i + j); // writes the region, no copy
-    }
-    region.storeI32(0, i, RELEASE); // then publish, as a ring does
-    region.giveBack(window);
-    window = region.lend(64, 16, window); // lend again in the same header
-  }
-  console.log(`${region.loadI32(0, ACQUIRE)} ${window[1]}`); // 3 4
-  region.giveBack(window);
-  unlinkRegion("guide-window").expect("unlink");
-  return 0;
-};
-```
-
-- **A range is checked when you lend it.** Outside the region it stops the
-  program: `nish/sync/shm: byte window at 4090 is outside the region of 4096
-  bytes`.
-- **After `giveBack` or `close()` the window is empty.** Its length is 0, so an
-  index is `index out of range: 0 >= 0`, never a read of memory that is no
-  longer mapped. Do not keep a window past either.
-- **A window is not atomic.** Write the bytes, then publish them with a
-  `RELEASE` store to a slot; the reader `ACQUIRE`-loads the slot before it
-  reads the bytes.
-- **Pass the window you gave back as the third argument.** Each `lend` without
-  one keeps a 48-byte header until the process exits, since the program may
-  still hold the array; a loop that lends with `reuse` takes no memory. A
-  `reuse` that is still lent, or another region's, stops the program.
-- **Do not grow it.** A `pop` or a shorter `length` keeps the window, but a
-  `push` past its length moves the array into the program's own memory, and
-  `giveBack` then stops the program: `window of length 17 is no longer the
-  region's bytes: a push moved it`. So does a second `giveBack`.
-- **A window belongs to the thread that lent it**, as the region does.
-
 ## A queue: `SpscRing` and `MpscRing`
 
 A ring is a bounded queue of byte records inside a region. `SpscRing` has one
@@ -188,7 +139,7 @@ export const main = (): i32 => {
   their kin in [`nish/bytes`](standard-library.md) read and write fields.
 
 The repository's
-[`examples/prefork-jobs.ts`](../../../examples/prefork-jobs.ts) puts it
+[`examples/prefork-jobs.ts`](https://github.com/amritk/nish/blob/main/examples/prefork-jobs.ts) puts it
 together: four prefork workers send jobs to a fifth on one `MpscRing`, and
 each gets its answers back on an `SpscRing` of its own.
 

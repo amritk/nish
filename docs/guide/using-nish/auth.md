@@ -19,7 +19,7 @@ algorithms of RFC 7518 and RFC 8037:
 | `EdDSA` | yes | yes | an Ed25519 key |
 
 A shared secret and a private key are `Secret<u8[]>` values
-([Secrets](../../LANGUAGE.md#secrets-nishsecret)), so the compiler keeps them
+([Secrets](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret)), so the compiler keeps them
 out of logs and templates. A key copies what you hand it, so you wipe your own
 copy as soon as the key is made, and `key.wipe()` zeroes the key's copy when
 you are done with it. A wiped key signs and verifies nothing.

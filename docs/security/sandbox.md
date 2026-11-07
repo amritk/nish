@@ -5,7 +5,7 @@ wrapper calls it lowers to, `runtime/runtime-sandbox.c`, which applies it, and
 the `fs.read=<dir>` and `fs.write=<dir>` scopes it enforces. It says
 what the sandbox withholds, against which adversary, what it leaves that
 adversary, and which test pins each answer. The design and its open questions
-are [`wp37-os-sandbox.md`](../wp37-os-sandbox.md); a `§` or an "open question"
+are [`wp37-os-sandbox.md`](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md); a `§` or an "open question"
 below is that note's. It was written on `main` at `804120e` and names
 functions rather than lines, so it has no `file:line` anchors to move.
 

@@ -3,10 +3,10 @@
 An array holds values of one type and can grow; a string is immutable UTF-8
 text. Both have a short, fixed list of methods — far fewer than in
 JavaScript — and both are bounds-checked. The normative rules are in the
-reference's [Array literals](../../LANGUAGE.md#array-literals),
-[Element access](../../LANGUAGE.md#element-access),
-[Arrays and strings as receivers](../../LANGUAGE.md#arrays-and-strings-as-receivers)
-and [Template literals](../../LANGUAGE.md#template-literals) sections.
+reference's [Array literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#array-literals),
+[Element access](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#element-access),
+[Arrays and strings as receivers](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-and-strings-as-receivers)
+and [Template literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#template-literals) sections.
 
 ## Arrays
 
@@ -155,7 +155,7 @@ that no class implements stores the records themselves back to back, which
 is why holding one of its elements across a `push` onto the same array is
 refused. An array of class instances, of an interface some class implements,
 or of a `T | null` holds a pointer to each element instead
-([Arrays of records are contiguous](../../LANGUAGE.md#arrays-of-records-are-contiguous)).
+([Arrays of records are contiguous](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-of-records-are-contiguous)).
 
 ## Strings
 

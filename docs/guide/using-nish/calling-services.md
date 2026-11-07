@@ -6,7 +6,7 @@ service. `nish/net/upstream` makes those calls without stopping the server.
 `get` sends the request and returns at once. The answer arrives in a later
 turn of the same loop that serves your clients, tagged with the request that
 asked for it. Meanwhile every other client is served as usual. It is a library
-module ([`export` and `import`](../../LANGUAGE.md#export-and-import)) built on
+module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)) built on
 [an API server](api-server.md)'s handler.
 
 For a one-off fetch from a command-line program, where blocking is fine, use

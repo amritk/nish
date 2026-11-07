@@ -7,7 +7,7 @@ directory (`/dev/shm` on Linux), and every byte in it can be written at any
 moment by another process, so both the name and the contents are
 attacker-facing. It says what is refused, with which code or panic, and the
 test that pins each answer. The design is
-[`wp47-shared-memory.md`](../wp47-shared-memory.md). It was written on top of
+[`wp47-shared-memory.md`](https://github.com/amritk/nish/blob/main/docs/wp47-shared-memory.md). It was written on top of
 `main` at `ce8f92c`, in the change that adds the three files, and names
 functions rather than lines, so it has no `file:line` anchors to move.
 

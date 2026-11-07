@@ -6,7 +6,7 @@ response is in, with a timeout on every wait and a cap on every body.
 `nish/net/http1-client-codec`, below it, is the protocol alone: it writes a
 request's head and reads the response, bytes in and events out, and opens no
 socket, for a program that runs its own loop. Both are imported like any other
-library module ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
+library module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
 ## Fetching a URL
 

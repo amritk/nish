@@ -565,7 +565,7 @@ const END = "<!-- json-compare:end -->"
 const preamble = () => [
   "## JSON against other languages",
   "",
-  "Written by `node bench/json-compare/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The run is its own, so the host below may not be the one in the table at the head of this file. The workloads, the checksums and the measurement rules are in [that script's header](../bench/json-compare/run.mjs), and the Nish program is [main.ts](../bench/json-compare/main.ts).",
+  "Written by `node bench/json-compare/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The run is its own, so the host below may not be the one in the table at the head of this file. The workloads, the checksums and the measurement rules are in [that script's header](https://github.com/amritk/nish/blob/main/bench/json-compare/run.mjs), and the Nish program is [main.ts](https://github.com/amritk/nish/blob/main/bench/json-compare/main.ts).",
   "",
   "The ratio column divides the Nish minimum by that implementation's minimum, as the tables above do: above 1.00x it is faster than Nish. A ratio within the noise band, the gap between Nish and a byte-identical copy of its binary, is marked as no difference.",
   "",

@@ -141,7 +141,7 @@ this is what is true now.
 
 - **The RT-9 primitives are builtins**: `lstatOwnerModeSync(path): i64`,
   `geteuid(): i64` and `isExecutableSync(path): boolean`
-  ([LANGUAGE.md](../LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-isexecutablesync)).
+  ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-isexecutablesync)).
   `src/` may call them once a release ships them (the rolling freeze), so
   **CLI-7 and CLI-9 stay open** for the release after this one: a hit that
   refuses a cache root it does not own or that is group- or world-writable,
@@ -242,7 +242,7 @@ the runtime itself. The objects are linked, never executed by the compiler.
 
 ## The module cache (CLI-12)
 
-Added with `nish run`'s module cache ([wp48-run-rebuilds.md](../wp48-run-rebuilds.md));
+Added with `nish run`'s module cache ([wp48-run-rebuilds.md](https://github.com/amritk/nish/blob/main/docs/wp48-run-rebuilds.md));
 its anchors are function names in the commit that adds this section. A debug
 link used to compile every module of the program, unchanged or not. It now
 keeps each module's object in `$XDG_CACHE_HOME/nish/module/<sha256 of the

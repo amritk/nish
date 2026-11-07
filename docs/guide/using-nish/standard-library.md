@@ -19,13 +19,13 @@ pattern is what you need. `Map` and `Set`
 need no import at all ([Maps and sets](../language/maps-and-sets.md)), and the
 built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 `nish:io`, `nish:net`) are part of the language rather than this library; see
-[Builtin modules](../../LANGUAGE.md#builtin-modules-nish).
+[Builtin modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtin-modules-nish).
 
 `nish:process` is where a program starts a child without waiting for it
 (`spawn`), signals it (`kill`) and reaps it (`waitPid`), and where it asks how
 many cores and bytes of memory the machine has (`availableParallelism`,
 `totalMemory`) to size a pool of workers; see
-[Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+[Children and the machine](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
 A batch job steps aside for interactive work with `setNice(n)` (the nice value,
 0..19, lower-only: `-22` outside that range and `-13` below the current value,
 even as root) or, on Linux, `setIdlePriority()` (`SCHED_IDLE`: the CPU only when
@@ -34,7 +34,7 @@ nothing else wants it). Each answers 0 or a negative errno and never throws;
 `SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
 normal-priority fallback for work that must finish, and call either at the top
 of `main`, before any thread starts. See
-[Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority-setcpuaffinity).
+[Scheduling](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#scheduling-setnice-setidlepriority-setcpuaffinity).
 
 `spawnPiped(argv, stdin, stdout, stderr)` runs a child with every stream in
 memory: the child reads `stdin`'s bytes and then end of file, and what it
@@ -61,7 +61,7 @@ if (status !== 0) {
 
 It is `process.spawn` in the capability report, and refused when compiling for
 WebAssembly. See
-[Directories and subprocesses](../../LANGUAGE.md#directories-and-subprocesses).
+[Directories and subprocesses](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#directories-and-subprocesses).
 
 `spawnWithFds(argv, fds)` starts a child as `spawn` does and hands it the
 descriptors in `fds`: `fds[0]` is the child's descriptor 3, `fds[1]` its 4,
@@ -84,7 +84,7 @@ if (pid > 0) {
 ```
 
 It is `process.spawn` in the capability report too. See
-[Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+[Children and the machine](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
 
 `nish:fs` is where a program replaces a file in one step: write the new
 contents beside the target, then `renameSync` the temporary over it, so a
@@ -96,7 +96,7 @@ failure, such as `-2` for a missing path or `-18` when the two names are on
 different filesystems, so the program decides what to say. Bytes that are
 not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
 through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
-[File I/O](../../LANGUAGE.md#file-io). A native string built by
+[File I/O](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#file-io). A native string built by
 `String.fromBytes` carries any bytes, and `write` and `writeFileSync` send it
 as it is, but under `--emit-ts` `String.fromBytes` decodes UTF-8 and an
 invalid sequence becomes U+FFFD, so `writeBytes` and `writeFileBytesSync` are
@@ -219,7 +219,7 @@ true
 `indexOfAny(text, bytes, from)` finds the first byte at or after `from` that
 is one of up to 16 ASCII characters, and is compiled to a vectorised search;
 it is not constant-time, so it is never for secret data
-([Byte search](../../LANGUAGE.md#byte-search-indexofany-in-nishtext)).
+([Byte search](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#byte-search-indexofany-in-nishtext)).
 `firstDifference(left, right)` answers the index of the first line where two
 arrays of lines differ.
 
@@ -790,7 +790,7 @@ export const main = (): i32 => {
 
 Both calls need the compiler: under Node, where the types are erased, they end
 the program with an error. The rules in full are in
-[Typed JSON](../../LANGUAGE.md#typed-json-nishjson-typed).
+[Typed JSON](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#typed-json-nishjson-typed).
 
 ## `nish/json-value`
 
@@ -1461,7 +1461,7 @@ export const main = (): i32 => {
 
 A generator is an ordinary object you step, so a task or a parallel body that
 makes its own may use it freely; one shared between tasks would be a write
-they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
+they all see, and is refused. See [Random numbers](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#random-numbers-rng-in-nishrandom)
 in the reference.
 
 ## `nish/cli`
@@ -1530,7 +1530,7 @@ the program: `NISH_AGENT` decides when it is set, a no (`0`, `false`, `no`,
 `styleFor` is always plain: the escapes would only cost the agent tokens.
 
 `HelpMenu` and `Style` reach no
-[capability](../../LANGUAGE.md#capabilities). `styleFor` and `agentDriven`
+[capability](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#capabilities). `styleFor` and `agentDriven`
 reach `env`, and `styleFor` reaches `process.spawn` too: unless colour is
 forced or refused first, it asks a shell whether the descriptor is a terminal
 and how many colours it has. To keep a
@@ -1687,7 +1687,7 @@ usage: git-lite remote add <name> <url> [flags]
 to stderr and exits 2, the status `nish` itself uses for a usage error.
 `usageError()` answers those two lines without printing them. `exitUsage`
 reaches `exit`; the rest of the module reaches no
-[capability](../../LANGUAGE.md#capabilities).
+[capability](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#capabilities).
 
 ## `nish/cli-args`
 
@@ -1805,7 +1805,7 @@ so a description need not say it.
 looks each argument up once in a map: on a tree of 500 commands with 8 flags
 each, a parse takes about a microsecond. Help, guesses and error wording are
 worked out only when they are printed. `parse` reaches no
-[capability](../../LANGUAGE.md#capabilities); `finish` writes to standard
+[capability](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#capabilities); `finish` writes to standard
 output or standard error and exits. Shell completion and man pages are not
 generated yet, and nish's own command line does not use this module: `src/`
 can only use what a released compiler ships, so it moves onto
@@ -2296,7 +2296,7 @@ export const main = (): i32 => {
 };
 ```
 
-The rules are in [Secrets](../../LANGUAGE.md#secrets-nishsecret).
+The rules are in [Secrets](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret).
 
 ### Keeping a key in an object
 
@@ -2382,7 +2382,7 @@ key you passed in, and leave the `wipe` to the code that made the key.
 
 Calling `wipe()` is the program's job: the compiler checks that the method
 wipes every field, not that something calls it. The rules are in
-[A `Secret` field](../../LANGUAGE.md#a-secret-field).
+[A `Secret` field](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-secret-field).
 
 ## `nish/crypto`
 
@@ -2593,7 +2593,7 @@ the bytes to send in its `date`. The formatter itself, `httpDateWrite` in
 When an `Http3Server` shuts down, call its `stop()`: it releases every
 connection and wipes the stateless reset and Retry token keys of the
 `QuicServerConfig` it was made with, so keep no other copy of them, or wipe
-yours with [`secureZero`](../../LANGUAGE.md#wiping-a-secret-securezero) too.
+yours with [`secureZero`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#wiping-a-secret-securezero) too.
 It zeroes those keys in place, so give each server a `QuicServerConfig` of its
 own: once one server stops, any other listener, connection or server made with
 the same configuration would sign its Retry tokens and stateless resets with a
@@ -2608,7 +2608,7 @@ write the packet keys into a `QuicKeysSlot` you pass, and that slot is yours to
 wipe, so call its `wipe()` (or `quicKeysWipe` on the keys) when you are done.
 
 A `TlsServer` keeps every secret of an open connection as a
-[`Secret` field](../../LANGUAGE.md#a-secret-field): the ephemeral key, and the
+[`Secret` field](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-secret-field): the ephemeral key, and the
 handshake, traffic, exporter and resumption secrets in the `TlsSecretPool` that
 `secrets()` answers, read only through `expose`. `new TlsServer`, `restart`
 and `TlsTcpServer.accept` copy the ephemeral key you hand them into the
@@ -3183,5 +3183,5 @@ the two files and `clock` for its deadline. Both are native only, as every
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports
-resolve is in [`export` and `import`](../../LANGUAGE.md#export-and-import),
+resolve is in [`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import),
 and [Modules](../language/modules.md) covers importing your own files.

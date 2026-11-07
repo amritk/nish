@@ -5,7 +5,7 @@ Part of the repository security audit (#363). This record covers
 eight or four blocks at a time in vector registers. It also covers the branch
 the compiler puts in front of `std/crypto/chacha20poly1305.ts`'s
 `chacha20XorInto` to reach that kernel (WP38 S10,
-[wp38-simd.md](../wp38-simd.md#31-a-runtime-kernels-chosen-at-run-time)). For each, it
+[wp38-simd.md](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#31-a-runtime-kernels-chosen-at-run-time)). For each, it
 says what was checked, how, what was found, and which test pins each property.
 Anchors are at the change that adds the kernel.
 

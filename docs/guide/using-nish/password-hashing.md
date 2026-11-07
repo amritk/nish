@@ -6,7 +6,7 @@ PHP's `password_hash` and the bcrypt packages for Node, Python and Go all read
 and write. A hash made here verifies there, and the other way round, but for
 the few unusual passwords [below](#what-bcrypt-reads-of-a-password).
 
-The password is a `Secret<u8[]>` ([Secrets](../../LANGUAGE.md#secrets-nishsecret)),
+The password is a `Secret<u8[]>` ([Secrets](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret)),
 so the compiler keeps it out of logs and templates. The hash is computed inside
 `exposeWith`, and the Blowfish state it builds (about 4 KB) is wiped before the
 function returns. A verify compares the two hashes in constant time.

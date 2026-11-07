@@ -5,7 +5,7 @@ audited by its own stage, and each stage left a record in this directory. A
 record says what was checked, how, what was found, its severity and what became
 of it, and it names the test that pins each property. How to report a
 vulnerability, which releases get fixes and the threat model in brief are in
-[`SECURITY.md`](../../SECURITY.md).
+[`SECURITY.md`](https://github.com/amritk/nish/blob/main/SECURITY.md).
 
 Every fix landed with a regression test that was shown failing on the stage's
 base commit and passing after. An area that found nothing would still have
@@ -356,7 +356,7 @@ the record that found it. The notes below the table name each such finding.
 ## Fuzzed
 
 Each parser below is a libFuzzer target in `tests/fuzz/targets/` (how to
-build, run and replay one: [`tests/fuzz/README.md`](../../tests/fuzz/README.md)),
+build, run and replay one: [`tests/fuzz/README.md`](https://github.com/amritk/nish/blob/main/tests/fuzz/README.md)),
 and its record says what fuzzing found. The TLS, QUIC, HTTP/1, WebSocket,
 HPACK and X.509 targets each ran for at least 30 minutes from their seed
 corpora and found no crash, sanitizer report, timeout or OOM, except
@@ -421,7 +421,7 @@ only.
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | TLS-7 | Low | `std/net/tls/client.ts` | TLS 1.2 and below are refused by design (`protocol_version`, or `illegal_parameter` for the downgrade sentinel); client certificates, 0-RTT and client resumption are not offered | — |
 | TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | A handshake that fails within the `receive` that delivered the ServerHello seals its fatal alert in the clear, before the client's handshake write keys are installed | — |
-| CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
+| CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JSON_TOK_END_CEILING`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
 | SQL-2 | Low | `std/sqlite.ts` (`columnText`) | `sqlite3_column_text` answers NULL both for SQL `NULL` and when converting the value to text runs out of memory, and `columnText` reads either as `null`. A program can take a value it failed to read for an empty column. `columnInto` tells the two apart and answers `SQLITE_NOMEM`. | — |
 | X509-12 | Low | `std/crypto/x509.ts` (`x509NameEqual`, `x509NameIsPrefix`) | Names compare as DER byte for byte, not after RFC 5280 §7.1's stringprep, so a re-encoded issuer Name does not chain and a re-encoded directoryName constraint does not match. Fails closed | — |
