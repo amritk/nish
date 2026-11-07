@@ -880,9 +880,10 @@ function SpscRing.emptyWindow(this: SpscRing, window: u8[] | null): u8[] -> @nis
   pointer this: size=96 writesThrough=false captured=false
   pointer window: size=0 writesThrough=true captured=true passedTo=nish.SharedRegion.lend#3
   stackSites=0 stackLocals=0
-  local +0:11 w: u8[] (const)
-  callee +0:21 SharedRegion.lend -> @nish.SharedRegion.lend
-  callee +1:5 SharedRegion.giveBack -> @nish.SharedRegion.giveBack
+  local +0:11 none: i32 (const)
+  local +1:11 w: u8[] (const)
+  callee +1:21 SharedRegion.lend -> @nish.SharedRegion.lend
+  callee +2:5 SharedRegion.giveBack -> @nish.SharedRegion.giveBack
 function SpscRing.reserve(this: SpscRing, n: i32): u8[] -> @nish.SpscRing.reserve [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7

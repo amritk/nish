@@ -284,7 +284,8 @@ export class SpscRing {
     if (window !== null && window.length === 0) {
       return window
     }
-    const w: u8[] = this.region.lend(this.base + RING_DATA_AT, 0, window)
+    const none: i32 = 0
+    const w: u8[] = this.region.lend(this.base + RING_DATA_AT, none, window)
     this.region.giveBack(w)
     return w
   }
