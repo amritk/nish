@@ -38,6 +38,8 @@
     "!scripts/sbom.mjs",
     "!scripts/rebuild-compare.sh",
     "!scripts/ddc-chain.sh",
+    "!scripts/gen-reference.mjs",
+    "!scripts/typedoc-nish-widths.mjs",
     "std",
     "README.md",
     "LICENSE",

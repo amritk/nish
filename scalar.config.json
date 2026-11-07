@@ -8,12 +8,7 @@
   "navigation": {
     "header": [
       { "type": "link", "title": "GitHub", "to": "https://github.com/amritk/nish", "newTab": true },
-      {
-        "type": "link",
-        "title": "Language reference",
-        "to": "https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md",
-        "newTab": true
-      },
+      { "type": "link", "title": "Language reference", "to": "/reference/language" },
       { "type": "link", "title": "Changelog", "to": "/reference/changelog" }
     ],
     "routes": {
@@ -251,16 +246,622 @@
                 "title": "Standard library modules",
                 "filepath": "std/README.md"
               },
+              "/language": {
+                "type": "page",
+                "title": "Language reference",
+                "filepath": "docs/reference/language.md"
+              },
+              "/library": {
+                "type": "group",
+                "title": "Library reference",
+                "children": {
+                  "/": { "type": "page", "title": "Overview", "filepath": "docs/reference/index.md" },
+                  "/builtins": {
+                    "type": "group",
+                    "title": "Builtins",
+                    "children": {
+                      "/": { "type": "page", "title": "Globals", "filepath": "docs/reference/builtins.md" },
+                      "/nish-async": {
+                        "type": "page",
+                        "title": "nish:async",
+                        "filepath": "docs/reference/nish-async.md"
+                      },
+                      "/nish-fs": {
+                        "type": "page",
+                        "title": "nish:fs",
+                        "filepath": "docs/reference/nish-fs.md"
+                      },
+                      "/nish-io": {
+                        "type": "page",
+                        "title": "nish:io",
+                        "filepath": "docs/reference/nish-io.md"
+                      },
+                      "/nish-net": {
+                        "type": "page",
+                        "title": "nish:net",
+                        "filepath": "docs/reference/nish-net.md"
+                      },
+                      "/nish-process": {
+                        "type": "page",
+                        "title": "nish:process",
+                        "filepath": "docs/reference/nish-process.md"
+                      },
+                      "/nish-region": {
+                        "type": "page",
+                        "title": "nish:region",
+                        "filepath": "docs/reference/nish-region.md"
+                      },
+                      "/nish-secret": {
+                        "type": "page",
+                        "title": "nish:secret",
+                        "filepath": "docs/reference/nish-secret.md"
+                      },
+                      "/nish-simd": {
+                        "type": "page",
+                        "title": "nish:simd",
+                        "filepath": "docs/reference/nish-simd.md"
+                      },
+                      "/nish-term": {
+                        "type": "page",
+                        "title": "nish:term",
+                        "filepath": "docs/reference/nish-term.md"
+                      },
+                      "/nish-unsafe": {
+                        "type": "page",
+                        "title": "nish:unsafe",
+                        "filepath": "docs/reference/nish-unsafe.md"
+                      }
+                    }
+                  },
+                  "/base64": {
+                    "type": "page",
+                    "title": "nish/base64",
+                    "filepath": "docs/reference/base64.md"
+                  },
+                  "/bytes": { "type": "page", "title": "nish/bytes", "filepath": "docs/reference/bytes.md" },
+                  "/cli": { "type": "page", "title": "nish/cli", "filepath": "docs/reference/cli.md" },
+                  "/cli-args": {
+                    "type": "page",
+                    "title": "nish/cli-args",
+                    "filepath": "docs/reference/cli-args.md"
+                  },
+                  "/cli-flags": {
+                    "type": "page",
+                    "title": "nish/cli-flags",
+                    "filepath": "docs/reference/cli-flags.md"
+                  },
+                  "/collections": {
+                    "type": "page",
+                    "title": "nish/collections",
+                    "filepath": "docs/reference/collections.md"
+                  },
+                  "/compress": {
+                    "type": "group",
+                    "title": "nish/compress",
+                    "children": {
+                      "/checksum": {
+                        "type": "page",
+                        "title": "nish/compress/checksum",
+                        "filepath": "docs/reference/compress/checksum.md"
+                      },
+                      "/deflate": {
+                        "type": "page",
+                        "title": "nish/compress/deflate",
+                        "filepath": "docs/reference/compress/deflate.md"
+                      },
+                      "/gzip": {
+                        "type": "page",
+                        "title": "nish/compress/gzip",
+                        "filepath": "docs/reference/compress/gzip.md"
+                      },
+                      "/zlib": {
+                        "type": "page",
+                        "title": "nish/compress/zlib",
+                        "filepath": "docs/reference/compress/zlib.md"
+                      }
+                    }
+                  },
+                  "/crypto": {
+                    "type": "group",
+                    "title": "nish/crypto",
+                    "children": {
+                      "/aes": {
+                        "type": "page",
+                        "title": "nish/crypto/aes",
+                        "filepath": "docs/reference/crypto/aes.md"
+                      },
+                      "/base64url": {
+                        "type": "page",
+                        "title": "nish/crypto/base64url",
+                        "filepath": "docs/reference/crypto/base64url.md"
+                      },
+                      "/bcrypt": {
+                        "type": "page",
+                        "title": "nish/crypto/bcrypt",
+                        "filepath": "docs/reference/crypto/bcrypt.md"
+                      },
+                      "/bcrypt-batch": {
+                        "type": "page",
+                        "title": "nish/crypto/bcrypt-batch",
+                        "filepath": "docs/reference/crypto/bcrypt-batch.md"
+                      },
+                      "/chacha20poly1305": {
+                        "type": "page",
+                        "title": "nish/crypto/chacha20poly1305",
+                        "filepath": "docs/reference/crypto/chacha20poly1305.md"
+                      },
+                      "/ct": {
+                        "type": "page",
+                        "title": "nish/crypto/ct",
+                        "filepath": "docs/reference/crypto/ct.md"
+                      },
+                      "/ed25519": {
+                        "type": "page",
+                        "title": "nish/crypto/ed25519",
+                        "filepath": "docs/reference/crypto/ed25519.md"
+                      },
+                      "/hkdf": {
+                        "type": "page",
+                        "title": "nish/crypto/hkdf",
+                        "filepath": "docs/reference/crypto/hkdf.md"
+                      },
+                      "/hmac": {
+                        "type": "page",
+                        "title": "nish/crypto/hmac",
+                        "filepath": "docs/reference/crypto/hmac.md"
+                      },
+                      "/jwt": {
+                        "type": "page",
+                        "title": "nish/crypto/jwt",
+                        "filepath": "docs/reference/crypto/jwt.md"
+                      },
+                      "/p256": {
+                        "type": "page",
+                        "title": "nish/crypto/p256",
+                        "filepath": "docs/reference/crypto/p256.md"
+                      },
+                      "/p384": {
+                        "type": "page",
+                        "title": "nish/crypto/p384",
+                        "filepath": "docs/reference/crypto/p384.md"
+                      },
+                      "/pki": {
+                        "type": "page",
+                        "title": "nish/crypto/pki",
+                        "filepath": "docs/reference/crypto/pki.md"
+                      },
+                      "/pki-roots": {
+                        "type": "page",
+                        "title": "nish/crypto/pki-roots",
+                        "filepath": "docs/reference/crypto/pki-roots.md"
+                      },
+                      "/rsa": {
+                        "type": "page",
+                        "title": "nish/crypto/rsa",
+                        "filepath": "docs/reference/crypto/rsa.md"
+                      },
+                      "/sha1": {
+                        "type": "page",
+                        "title": "nish/crypto/sha1",
+                        "filepath": "docs/reference/crypto/sha1.md"
+                      },
+                      "/sha256": {
+                        "type": "page",
+                        "title": "nish/crypto/sha256",
+                        "filepath": "docs/reference/crypto/sha256.md"
+                      },
+                      "/sha512": {
+                        "type": "page",
+                        "title": "nish/crypto/sha512",
+                        "filepath": "docs/reference/crypto/sha512.md"
+                      },
+                      "/x25519": {
+                        "type": "page",
+                        "title": "nish/crypto/x25519",
+                        "filepath": "docs/reference/crypto/x25519.md"
+                      },
+                      "/x509": {
+                        "type": "page",
+                        "title": "nish/crypto/x509",
+                        "filepath": "docs/reference/crypto/x509.md"
+                      },
+                      "/x509-random": {
+                        "type": "page",
+                        "title": "nish/crypto/x509-random",
+                        "filepath": "docs/reference/crypto/x509-random.md"
+                      }
+                    }
+                  },
+                  "/json": { "type": "page", "title": "nish/json", "filepath": "docs/reference/json.md" },
+                  "/json-equal": {
+                    "type": "page",
+                    "title": "nish/json-equal",
+                    "filepath": "docs/reference/json-equal.md"
+                  },
+                  "/json-format": {
+                    "type": "page",
+                    "title": "nish/json-format",
+                    "filepath": "docs/reference/json-format.md"
+                  },
+                  "/json-number": {
+                    "type": "page",
+                    "title": "nish/json-number",
+                    "filepath": "docs/reference/json-number.md"
+                  },
+                  "/json-pointer": {
+                    "type": "page",
+                    "title": "nish/json-pointer",
+                    "filepath": "docs/reference/json-pointer.md"
+                  },
+                  "/json-tokenizer": {
+                    "type": "page",
+                    "title": "nish/json-tokenizer",
+                    "filepath": "docs/reference/json-tokenizer.md"
+                  },
+                  "/json-typed": {
+                    "type": "page",
+                    "title": "nish/json-typed",
+                    "filepath": "docs/reference/json-typed.md"
+                  },
+                  "/json-value": {
+                    "type": "page",
+                    "title": "nish/json-value",
+                    "filepath": "docs/reference/json-value.md"
+                  },
+                  "/map": { "type": "page", "title": "nish/map", "filepath": "docs/reference/map.md" },
+                  "/math": { "type": "page", "title": "nish/math", "filepath": "docs/reference/math.md" },
+                  "/net": {
+                    "type": "group",
+                    "title": "nish/net",
+                    "children": {
+                      "/buffer-pool": {
+                        "type": "page",
+                        "title": "nish/net/buffer-pool",
+                        "filepath": "docs/reference/net/buffer-pool.md"
+                      },
+                      "/dns": {
+                        "type": "page",
+                        "title": "nish/net/dns",
+                        "filepath": "docs/reference/net/dns.md"
+                      },
+                      "/dns-config": {
+                        "type": "page",
+                        "title": "nish/net/dns-config",
+                        "filepath": "docs/reference/net/dns-config.md"
+                      },
+                      "/dns-message": {
+                        "type": "page",
+                        "title": "nish/net/dns-message",
+                        "filepath": "docs/reference/net/dns-message.md"
+                      },
+                      "/dns-resolver": {
+                        "type": "page",
+                        "title": "nish/net/dns-resolver",
+                        "filepath": "docs/reference/net/dns-resolver.md"
+                      },
+                      "/fetch": {
+                        "type": "page",
+                        "title": "nish/net/fetch",
+                        "filepath": "docs/reference/net/fetch.md"
+                      },
+                      "/handler": {
+                        "type": "page",
+                        "title": "nish/net/handler",
+                        "filepath": "docs/reference/net/handler.md"
+                      },
+                      "/hpack": {
+                        "type": "page",
+                        "title": "nish/net/hpack",
+                        "filepath": "docs/reference/net/hpack.md"
+                      },
+                      "/http-compress": {
+                        "type": "page",
+                        "title": "nish/net/http-compress",
+                        "filepath": "docs/reference/net/http-compress.md"
+                      },
+                      "/http-fields": {
+                        "type": "page",
+                        "title": "nish/net/http-fields",
+                        "filepath": "docs/reference/net/http-fields.md"
+                      },
+                      "/http1-client-codec": {
+                        "type": "page",
+                        "title": "nish/net/http1-client-codec",
+                        "filepath": "docs/reference/net/http1-client-codec.md"
+                      },
+                      "/http1-codec": {
+                        "type": "page",
+                        "title": "nish/net/http1-codec",
+                        "filepath": "docs/reference/net/http1-codec.md"
+                      },
+                      "/http1-server": {
+                        "type": "page",
+                        "title": "nish/net/http1-server",
+                        "filepath": "docs/reference/net/http1-server.md"
+                      },
+                      "/http2": {
+                        "type": "page",
+                        "title": "nish/net/http2",
+                        "filepath": "docs/reference/net/http2.md"
+                      },
+                      "/http2-frame": {
+                        "type": "page",
+                        "title": "nish/net/http2-frame",
+                        "filepath": "docs/reference/net/http2-frame.md"
+                      },
+                      "/http2-tls": {
+                        "type": "page",
+                        "title": "nish/net/http2-tls",
+                        "filepath": "docs/reference/net/http2-tls.md"
+                      },
+                      "/http3": {
+                        "type": "page",
+                        "title": "nish/net/http3",
+                        "filepath": "docs/reference/net/http3.md"
+                      },
+                      "/http3-frame": {
+                        "type": "page",
+                        "title": "nish/net/http3-frame",
+                        "filepath": "docs/reference/net/http3-frame.md"
+                      },
+                      "/http3-server": {
+                        "type": "page",
+                        "title": "nish/net/http3-server",
+                        "filepath": "docs/reference/net/http3-server.md"
+                      },
+                      "/outbound": {
+                        "type": "page",
+                        "title": "nish/net/outbound",
+                        "filepath": "docs/reference/net/outbound.md"
+                      },
+                      "/postgres": {
+                        "type": "page",
+                        "title": "nish/net/postgres",
+                        "filepath": "docs/reference/net/postgres.md"
+                      },
+                      "/postgres-carrier": {
+                        "type": "page",
+                        "title": "nish/net/postgres-carrier",
+                        "filepath": "docs/reference/net/postgres-carrier.md"
+                      },
+                      "/prefork": {
+                        "type": "page",
+                        "title": "nish/net/prefork",
+                        "filepath": "docs/reference/net/prefork.md"
+                      },
+                      "/qpack": {
+                        "type": "page",
+                        "title": "nish/net/qpack",
+                        "filepath": "docs/reference/net/qpack.md"
+                      },
+                      "/quic": {
+                        "type": "page",
+                        "title": "nish/net/quic",
+                        "filepath": "docs/reference/net/quic.md"
+                      },
+                      "/quic-conn-ack": {
+                        "type": "page",
+                        "title": "nish/net/quic-conn-ack",
+                        "filepath": "docs/reference/net/quic-conn-ack.md"
+                      },
+                      "/quic-conn-cid": {
+                        "type": "page",
+                        "title": "nish/net/quic-conn-cid",
+                        "filepath": "docs/reference/net/quic-conn-cid.md"
+                      },
+                      "/quic-conn-params": {
+                        "type": "page",
+                        "title": "nish/net/quic-conn-params",
+                        "filepath": "docs/reference/net/quic-conn-params.md"
+                      },
+                      "/quic-datagram": {
+                        "type": "page",
+                        "title": "nish/net/quic-datagram",
+                        "filepath": "docs/reference/net/quic-datagram.md"
+                      },
+                      "/quic-frame": {
+                        "type": "page",
+                        "title": "nish/net/quic-frame",
+                        "filepath": "docs/reference/net/quic-frame.md"
+                      },
+                      "/quic-listener": {
+                        "type": "page",
+                        "title": "nish/net/quic-listener",
+                        "filepath": "docs/reference/net/quic-listener.md"
+                      },
+                      "/quic-packet": {
+                        "type": "page",
+                        "title": "nish/net/quic-packet",
+                        "filepath": "docs/reference/net/quic-packet.md"
+                      },
+                      "/quic-recovery": {
+                        "type": "page",
+                        "title": "nish/net/quic-recovery",
+                        "filepath": "docs/reference/net/quic-recovery.md"
+                      },
+                      "/quic-stream": {
+                        "type": "page",
+                        "title": "nish/net/quic-stream",
+                        "filepath": "docs/reference/net/quic-stream.md"
+                      },
+                      "/router": {
+                        "type": "page",
+                        "title": "nish/net/router",
+                        "filepath": "docs/reference/net/router.md"
+                      },
+                      "/tls": {
+                        "type": "group",
+                        "title": "nish/net/tls",
+                        "children": {
+                          "/": {
+                            "type": "page",
+                            "title": "nish/net/tls",
+                            "filepath": "docs/reference/net/tls.md"
+                          },
+                          "/client": {
+                            "type": "page",
+                            "title": "nish/net/tls/client",
+                            "filepath": "docs/reference/net/tls/client.md"
+                          },
+                          "/codec": {
+                            "type": "page",
+                            "title": "nish/net/tls/codec",
+                            "filepath": "docs/reference/net/tls/codec.md"
+                          },
+                          "/record": {
+                            "type": "page",
+                            "title": "nish/net/tls/record",
+                            "filepath": "docs/reference/net/tls/record.md"
+                          },
+                          "/record-client": {
+                            "type": "page",
+                            "title": "nish/net/tls/record-client",
+                            "filepath": "docs/reference/net/tls/record-client.md"
+                          },
+                          "/record-server": {
+                            "type": "page",
+                            "title": "nish/net/tls/record-server",
+                            "filepath": "docs/reference/net/tls/record-server.md"
+                          },
+                          "/schedule": {
+                            "type": "page",
+                            "title": "nish/net/tls/schedule",
+                            "filepath": "docs/reference/net/tls/schedule.md"
+                          },
+                          "/ticket": {
+                            "type": "page",
+                            "title": "nish/net/tls/ticket",
+                            "filepath": "docs/reference/net/tls/ticket.md"
+                          },
+                          "/verify": {
+                            "type": "page",
+                            "title": "nish/net/tls/verify",
+                            "filepath": "docs/reference/net/tls/verify.md"
+                          }
+                        }
+                      },
+                      "/tls-tcp": {
+                        "type": "page",
+                        "title": "nish/net/tls-tcp",
+                        "filepath": "docs/reference/net/tls-tcp.md"
+                      },
+                      "/upstream": {
+                        "type": "page",
+                        "title": "nish/net/upstream",
+                        "filepath": "docs/reference/net/upstream.md"
+                      },
+                      "/url": {
+                        "type": "page",
+                        "title": "nish/net/url",
+                        "filepath": "docs/reference/net/url.md"
+                      },
+                      "/websocket": {
+                        "type": "page",
+                        "title": "nish/net/websocket",
+                        "filepath": "docs/reference/net/websocket.md"
+                      },
+                      "/webtransport": {
+                        "type": "page",
+                        "title": "nish/net/webtransport",
+                        "filepath": "docs/reference/net/webtransport.md"
+                      }
+                    }
+                  },
+                  "/pair": { "type": "page", "title": "nish/pair", "filepath": "docs/reference/pair.md" },
+                  "/random": {
+                    "type": "page",
+                    "title": "nish/random",
+                    "filepath": "docs/reference/random.md"
+                  },
+                  "/regex": { "type": "page", "title": "nish/regex", "filepath": "docs/reference/regex.md" },
+                  "/region": {
+                    "type": "page",
+                    "title": "nish/region",
+                    "filepath": "docs/reference/region.md"
+                  },
+                  "/secret": {
+                    "type": "page",
+                    "title": "nish/secret",
+                    "filepath": "docs/reference/secret.md"
+                  },
+                  "/sort": { "type": "page", "title": "nish/sort", "filepath": "docs/reference/sort.md" },
+                  "/sqlite": {
+                    "type": "page",
+                    "title": "nish/sqlite",
+                    "filepath": "docs/reference/sqlite.md"
+                  },
+                  "/sync": {
+                    "type": "group",
+                    "title": "nish/sync",
+                    "children": {
+                      "/ring": {
+                        "type": "page",
+                        "title": "nish/sync/ring",
+                        "filepath": "docs/reference/sync/ring.md"
+                      },
+                      "/shm": {
+                        "type": "page",
+                        "title": "nish/sync/shm",
+                        "filepath": "docs/reference/sync/shm.md"
+                      }
+                    }
+                  },
+                  "/term": { "type": "page", "title": "nish/term", "filepath": "docs/reference/term.md" },
+                  "/term-io": {
+                    "type": "page",
+                    "title": "nish/term-io",
+                    "filepath": "docs/reference/term-io.md"
+                  },
+                  "/term-pixels": {
+                    "type": "page",
+                    "title": "nish/term-pixels",
+                    "filepath": "docs/reference/term-pixels.md"
+                  },
+                  "/term-probe": {
+                    "type": "page",
+                    "title": "nish/term-probe",
+                    "filepath": "docs/reference/term-probe.md"
+                  },
+                  "/term-rate": {
+                    "type": "page",
+                    "title": "nish/term-rate",
+                    "filepath": "docs/reference/term-rate.md"
+                  },
+                  "/testing": {
+                    "type": "page",
+                    "title": "nish/testing",
+                    "filepath": "docs/reference/testing.md"
+                  },
+                  "/text": { "type": "page", "title": "nish/text", "filepath": "docs/reference/text.md" },
+                  "/threads": {
+                    "type": "page",
+                    "title": "nish/threads",
+                    "filepath": "docs/reference/threads.md"
+                  },
+                  "/yaml": { "type": "page", "title": "nish/yaml", "filepath": "docs/reference/yaml.md" },
+                  "/yaml-json": {
+                    "type": "page",
+                    "title": "nish/yaml-json",
+                    "filepath": "docs/reference/yaml-json.md"
+                  },
+                  "/yaml-lines": {
+                    "type": "page",
+                    "title": "nish/yaml-lines",
+                    "filepath": "docs/reference/yaml-lines.md"
+                  },
+                  "/yaml-write": {
+                    "type": "page",
+                    "title": "nish/yaml-write",
+                    "filepath": "docs/reference/yaml-write.md"
+                  }
+                }
+              },
               "/run-under-node": {
                 "type": "page",
                 "title": "Running under Node",
                 "filepath": "docs/RUN_UNDER_NODE.md"
               },
-              "/benchmarks": {
-                "type": "page",
-                "title": "Benchmarks",
-                "filepath": "docs/BENCHMARKS.md"
-              },
+              "/benchmarks": { "type": "page", "title": "Benchmarks", "filepath": "docs/BENCHMARKS.md" },
               "/changelog": { "type": "page", "title": "Changelog", "filepath": "CHANGELOG.md" }
             }
           },

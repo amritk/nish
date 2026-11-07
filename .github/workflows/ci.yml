@@ -1652,3 +1652,8 @@ jobs:
       # a reader -- human or agent -- to a page that does not exist.
       - name: Docs (links and anchors resolve)
         run: node docs/check-links.mjs
+
+      # docs/reference/** and its routes are generated from std/**, runtime/nish.d.ts
+      # and docs/LANGUAGE.md; a page edited by hand or left behind fails here.
+      - name: Docs (the library reference is regenerated)
+        run: node scripts/gen-reference.mjs --check
