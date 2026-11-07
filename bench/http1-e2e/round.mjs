@@ -166,7 +166,7 @@ const waitReady = async (child, limitMs) => {
     if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}`)
     if (await portOpen()) {
       const kids = descendants(child.pid).filter((k) => k.index >= 0)
-      if (kids.length > HTTP_WORKERS) return kids
+      if (kids.length > HTTP_WORKERS && kids.some((k) => k.index === 0)) return kids
     }
     await sleep(500)
   }

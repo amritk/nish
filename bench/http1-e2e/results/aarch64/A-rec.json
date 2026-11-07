@@ -1,0 +1,299 @@
+{
+ "kind": "round",
+ "arm": "A",
+ "round": "rec",
+ "nish": "0.34.1",
+ "machine": {
+  "label": "aarch64",
+  "cpu": "unknown",
+  "cpus": 4,
+  "kernel": "7.0.0-1017-azure",
+  "postgres": "16.15 (Ubuntu 16.15-1.pgdg24.04+2)",
+  "clk_tck": 100
+ },
+ "load": {
+  "users": 15000,
+  "think": "0.25",
+  "ramp": 60,
+  "measure": 120,
+  "tail": 5,
+  "window": [
+   70,
+   170
+  ]
+ },
+ "tracing": true,
+ "http_workers": 2,
+ "window_s": 100,
+ "requests": 1481953,
+ "errors": 0,
+ "rps": 14819.53,
+ "workers": {
+  "oncpu": 20024331784,
+  "utime": 692,
+  "stime": 1310,
+  "vcsw": 428645,
+  "ivcsw": 50888
+ },
+ "others": {
+  "oncpu": 37666345380,
+  "utime": 3548,
+  "stime": 218,
+  "vcsw": 467961,
+  "ivcsw": 3896
+ },
+ "per_request": {
+  "oncpu_ns": 13512.123383130234,
+  "user_ns": 4670.524166396664,
+  "kernel_ns": 8841.59921673357,
+  "vcsw": 0.2892433160835735,
+  "ivcsw": 0.03433847092316693
+ },
+ "perf_record": {
+  "source": "perf record -g (hardware cycles sampling)",
+  "seconds": 20,
+  "top": [
+   {
+    "pct": 8.68,
+    "sym": "[k] 0xffffd9e92680f804"
+   },
+   {
+    "pct": 4.03,
+    "sym": "[.] nish.http1Next"
+   },
+   {
+    "pct": 3.5,
+    "sym": "[.] ConduitWorker.drive"
+   },
+   {
+    "pct": 2.3,
+    "sym": "[.] jwtDecode"
+   },
+   {
+    "pct": 2.15,
+    "sym": "[.] nish.http1TakeLine"
+   },
+   {
+    "pct": 1.75,
+    "sym": "[.] ConduitWorker.answer"
+   },
+   {
+    "pct": 1.6,
+    "sym": "[.] nish.Http1Connection.inputRoom"
+   },
+   {
+    "pct": 1.51,
+    "sym": "[.] nish.Http1Connection.feed"
+   },
+   {
+    "pct": 1.5,
+    "sym": "[k] 0xffffd9e9265abc28"
+   },
+   {
+    "pct": 1.48,
+    "sym": "[k] 0xffffd9e9256b1080"
+   },
+   {
+    "pct": 1.44,
+    "sym": "[k] 0xffffd9e9265abc1c"
+   },
+   {
+    "pct": 1.42,
+    "sym": "[k] 0xffffd9e9253c4b9c"
+   },
+   {
+    "pct": 1.41,
+    "sym": "[k] 0xffffd9e8b7eb3030"
+   },
+   {
+    "pct": 1.38,
+    "sym": "[k] 0xffffd9e9267fb480"
+   },
+   {
+    "pct": 1.33,
+    "sym": "[k] 0xffffd9e92645aa10"
+   },
+   {
+    "pct": 1.31,
+    "sym": "[.] nish.Http1Connection.respond"
+   },
+   {
+    "pct": 1.25,
+    "sym": "[k] 0xffffd9e926454520"
+   },
+   {
+    "pct": 1.22,
+    "sym": "[.] 0x0000000000000578"
+   },
+   {
+    "pct": 1.21,
+    "sym": "[k] 0xffffd9e9253c4ba4"
+   },
+   {
+    "pct": 1.15,
+    "sym": "[k] 0xffffd9e8b7eb2fe0"
+   },
+   {
+    "pct": 1.13,
+    "sym": "[.] ConduitReq.room"
+   },
+   {
+    "pct": 1.05,
+    "sym": "[.] ConduitWorker.run"
+   },
+   {
+    "pct": 1.04,
+    "sym": "[k] 0xffffd9e925422e40"
+   },
+   {
+    "pct": 1,
+    "sym": "[k] 0xffffd9e9256cdddc"
+   },
+   {
+    "pct": 0.95,
+    "sym": "[.] Jwt.verify"
+   },
+   {
+    "pct": 0.92,
+    "sym": "[.] nish_poll_wait"
+   },
+   {
+    "pct": 0.92,
+    "sym": "[k] 0xffffd9e9256cddd8"
+   },
+   {
+    "pct": 0.92,
+    "sym": "[k] 0xffffd9e9267ffc38"
+   },
+   {
+    "pct": 0.91,
+    "sym": "[.] nish.http1HeadAppend"
+   },
+   {
+    "pct": 0.87,
+    "sym": "[k] 0xffffd9e92644fb68"
+   },
+   {
+    "pct": 0.76,
+    "sym": "[k] 0xffffd9e92680fce0"
+   },
+   {
+    "pct": 0.72,
+    "sym": "[k] 0xffffd9e925423c58"
+   },
+   {
+    "pct": 0.67,
+    "sym": "[k] 0xffffd9e92644fb4c"
+   },
+   {
+    "pct": 0.63,
+    "sym": "[k] 0xffffd9e92535a07c"
+   },
+   {
+    "pct": 0.63,
+    "sym": "[.] nish.Sha256.digest"
+   },
+   {
+    "pct": 0.59,
+    "sym": "[k] 0xffffd9e9264aa0bc"
+   },
+   {
+    "pct": 0.58,
+    "sym": "[k] 0xffffd9e9267baa1c"
+   },
+   {
+    "pct": 0.56,
+    "sym": "[.] 0x00000000000a1c38"
+   },
+   {
+    "pct": 0.56,
+    "sym": "[k] 0xffffd9e92680f6e4"
+   },
+   {
+    "pct": 0.51,
+    "sym": "[.] ConduitWorker.pump"
+   },
+   {
+    "pct": 0.5,
+    "sym": "[.] ConduitWorker.submit"
+   },
+   {
+    "pct": 0.49,
+    "sym": "[k] 0xffffd9e9265d07ac"
+   },
+   {
+    "pct": 0.48,
+    "sym": "[.] nish.Http1Connection.park"
+   },
+   {
+    "pct": 0.46,
+    "sym": "[k] 0xffffd9e9264752d4"
+   },
+   {
+    "pct": 0.44,
+    "sym": "[k] 0xffffd9e8b7eb303c"
+   },
+   {
+    "pct": 0.44,
+    "sym": "[.] nish.Http1Parser.methodIs"
+   },
+   {
+    "pct": 0.42,
+    "sym": "[.] 0x00000000000a1c40"
+   },
+   {
+    "pct": 0.42,
+    "sym": "[.] isText"
+   },
+   {
+    "pct": 0.41,
+    "sym": "[.] ConduitWorker.release"
+   },
+   {
+    "pct": 0.4,
+    "sym": "[k] 0xffffd9e9264749b0"
+   },
+   {
+    "pct": 0.4,
+    "sym": "[.] __send"
+   },
+   {
+    "pct": 0.37,
+    "sym": "[k] 0xffffd9e9265d07b8"
+   },
+   {
+    "pct": 0.34,
+    "sym": "[k] 0xffffd9e9265e5318"
+   },
+   {
+    "pct": 0.33,
+    "sym": "[.] nish.Http1Server.next"
+   },
+   {
+    "pct": 0.32,
+    "sym": "[.] epoll_pwait"
+   },
+   {
+    "pct": 0.31,
+    "sym": "[k] 0xffffd9e92646a83c"
+   },
+   {
+    "pct": 0.3,
+    "sym": "[k] 0xffffd9e92649aa84"
+   },
+   {
+    "pct": 0.29,
+    "sym": "[.] Jwt.claimsValid"
+   },
+   {
+    "pct": 0.29,
+    "sym": "[.] nish_run_base"
+   },
+   {
+    "pct": 0.29,
+    "sym": "[k] 0xffffd9e92648c270"
+   }
+  ],
+  "note": "rebuilt from the .top file perf-stat.sh wrote before head -60 broke its pipe (exit 141); fixed since"
+ }
+}

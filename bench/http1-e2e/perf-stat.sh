@@ -76,7 +76,7 @@ cmd_record() {
   # Self time by symbol, user and kernel, for the report.
   "$PERF" report -i "$data" --no-children --sort sym --stdio -q 2> /dev/null \
     | awk 'NF >= 3 && $1 ~ /%$/ { pct = $1; sub(/%/, "", pct); $1 = ""; sub(/^ +/, ""); printf "%s\t%s\n", pct, $0 }' \
-    | head -60 > "$data.top"
+    | awk "NR <= 60" > "$data.top"  # head would close the pipe early: SIGPIPE under pipefail
   node -e '
     const fs = require("fs")
     const top = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean).map((l) => {
