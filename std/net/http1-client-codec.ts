@@ -545,6 +545,7 @@ export class Http1ResponseParser {
    * `fieldName`, `fieldValue`, `reasonText` and `header` answer in either mode.
    */
   names: string[]
+  /** The field values, each beside its name in `names`. */
   values: string[]
   /**
    * The response's reason phrase and kept fields, copied: `head[reasonStart ..
@@ -564,6 +565,7 @@ export class Http1ResponseParser {
   buf: u8[]
 
   // --- limits, the caller's --------------------------------------------------
+  /** The most body bytes a response may carry, de-chunked; past it the parser refuses. */
   maxBody: i64 = 0
   /** The declared body length, or -1 when the response has none or is chunked or read until close. */
   contentLength: i64 = -1
@@ -584,7 +586,9 @@ export class Http1ResponseParser {
   status: i32 = 0
   /** The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. */
   minor: i32 = 1
+  /** Where the last `HTTP1_BODY`'s bytes start in `body`. */
   bodyOff: i32 = 0
+  /** How many bytes the last `HTTP1_BODY` holds. */
   bodyLen: i32 = 0
   /** Why `next()` said `HTTP1_ERROR`: one of the `HTTP1_E_` codes. */
   error: i32 = 0
@@ -609,11 +613,13 @@ export class Http1ResponseParser {
   /** @internal Parser state the module's `http1Client` helpers read and write. */
   lineEnd: i32 = 0
 
+  /** Whether the response's body is chunked. */
   chunked: boolean = false
   /** @internal Parser state the module's `http1Client` helpers read and write. */
   persistent: boolean = false
-  /** What `expect` said of the request this response answers. */
+  /** What `expect` said of the request this response answers: whether it was a HEAD. */
   wasHead: boolean = false
+  /** What `expect` said of the request this response answers: whether it was a CONNECT. */
   wasConnect: boolean = false
   /** Whether `expectUpgrade` said the request asked to switch protocols. */
   wasUpgrade: boolean = false
@@ -633,6 +639,11 @@ export class Http1ResponseParser {
   /**
    * Each `i32` limit is clamped into 0 to 2^30 and `maxBody` into 0 to 2^53,
    * so that the sums the parser makes of them cannot overflow.
+   * @param maxStatusLine The longest status line accepted, in bytes.
+   * @param maxHeaderBytes The most bytes the header section may take.
+   * @param maxHeaders The most field lines a response may carry, trailers included.
+   * @param maxBody The most body bytes a response may carry, de-chunked.
+   * @param maxTrailerBytes The most bytes the trailer section may take.
    */
   constructor(maxStatusLine: i32, maxHeaderBytes: i32, maxHeaders: i32, maxBody: i64, maxTrailerBytes: i32) {
     this.maxStatusLine = http1ClientClamp(maxStatusLine)
@@ -696,6 +707,8 @@ export class Http1ResponseParser {
    * parser waits for a response's first status line, and the parser forgets it
    * after that response's `HTTP1_END`; anywhere else it does nothing, so a
    * pipelining caller says it once per response, after the last one's end.
+   * @param methodWasHead Whether the request was a HEAD, so the response has no body.
+   * @param wasConnect Whether the request was a CONNECT, so a 2xx opens a tunnel.
    */
   expect(methodWasHead: boolean, wasConnect: boolean): void {
     if (this.state === HTTP1_CLIENT_S_STATUS_LINE && this.informational === 0) {
@@ -726,6 +739,9 @@ export class Http1ResponseParser {
    * Appends `data[off .. off + len)` to the input. A window outside `data`
    * panics. After `finish()`, or once the parser has closed or refused, the
    * input is dropped; in a tunnel it is kept for `tunnelBytes()`.
+   * @param data The bytes read from the connection.
+   * @param off Where the new bytes start in `data`.
+   * @param len How many bytes to append.
    */
   feed(data: u8[], off: i32, len: i32): void {
     const size: i32 = toI32(data.length)
@@ -750,7 +766,10 @@ export class Http1ResponseParser {
     this.closed = true
   }
 
-  /** The next event the input holds; see the module comment. */
+  /**
+   * The next event the input holds; see the module comment.
+   * @returns An `HTTP1_` event, `HTTP1_NEED_MORE` when the input runs out.
+   */
   next(): i32 {
     const event: i32 = http1ClientNext(this)
     if (event !== HTTP1_NEED_MORE || !this.closed) {
@@ -771,12 +790,17 @@ export class Http1ResponseParser {
    * ended (RFC 9112 §9.3): a 1.1 response unless `Connection` lists `close`,
    * a 1.0 response only when it lists `keep-alive`, and never one read until
    * close, a tunnel or an error.
+   * @returns Whether the connection may be reused.
    */
   keepAlive(): boolean {
     return this.persistent
   }
 
-  /** The value of the first field named `name` (any case), or `null`. */
+  /**
+   * The value of the first field named `name` (any case).
+   * @param name The field name to look for.
+   * @returns The field's value, OWS trimmed, or `null` when the response has no such field.
+   */
   header(name: string): string | null {
     for (let i: i32 = 0; i < this.spanCount; i += 1) {
       if (http1ClientHeadSameWord(this.head, this.spans[i * 4], this.spans[i * 4 + 1], name)) {
@@ -786,12 +810,19 @@ export class Http1ResponseParser {
     return null
   }
 
-  /** How many fields the response last read has; trailers are not kept. */
+  /**
+   * How many fields the response last read has; trailers are not kept.
+   * @returns The number of fields, which `fieldName` and `fieldValue` index.
+   */
   fields(): i32 {
     return this.spanCount
   }
 
-  /** Field `i`'s name, in lowercase, as a fresh string; "" past the last field. */
+  /**
+   * Field `i`'s name, in lowercase, as a fresh string.
+   * @param i The field's index, from 0 to `fields()`.
+   * @returns The name, or "" past the last field.
+   */
   fieldName(i: i32): string {
     if (i < 0 || i >= this.spanCount) {
       return ""
@@ -799,7 +830,11 @@ export class Http1ResponseParser {
     return http1Text(this.head, this.spans[i * 4], this.spans[i * 4 + 1], false)
   }
 
-  /** Field `i`'s value, OWS trimmed, as a fresh string; "" past the last field. */
+  /**
+   * Field `i`'s value, OWS trimmed, as a fresh string.
+   * @param i The field's index, from 0 to `fields()`.
+   * @returns The value, or "" past the last field.
+   */
   fieldValue(i: i32): string {
     if (i < 0 || i >= this.spanCount) {
       return ""
@@ -807,7 +842,10 @@ export class Http1ResponseParser {
     return http1Text(this.head, this.spans[i * 4 + 2], this.spans[i * 4 + 3], false)
   }
 
-  /** The reason phrase, as a fresh string. */
+  /**
+   * The reason phrase, as a fresh string.
+   * @returns The reason phrase of the response last read, "" when it had none.
+   */
   reasonText(): string {
     if (this.reasonEnd <= this.reasonStart) {
       return ""
@@ -815,12 +853,18 @@ export class Http1ResponseParser {
     return http1Text(this.head, this.reasonStart, this.reasonEnd, false)
   }
 
-  /** How many bytes were fed and not consumed yet. */
+  /**
+   * How many bytes were fed and not consumed yet.
+   * @returns The count of unread input bytes.
+   */
   buffered(): i32 {
     return this.end - this.start
   }
 
-  /** In a tunnel: every byte fed past the response head, as a fresh array. */
+  /**
+   * In a tunnel: every byte fed past the response head, as a fresh array.
+   * @returns The bytes, or an empty array outside a tunnel.
+   */
   tunnelBytes(): u8[] {
     let n: i32 = this.end - this.start
     if (n < 0 || this.state !== HTTP1_CLIENT_S_TUNNEL) {

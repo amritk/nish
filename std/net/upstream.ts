@@ -164,9 +164,13 @@ export class UpstreamLimits {
   lookupMs: i32 = 5000
   /** Room for one request head: the request line, `Host` and the empty line. */
   maxHead: i32 = 8192
+  /** The longest status line a response may have, in bytes. */
   maxStatusLine: i32 = 8192
+  /** The most bytes a response's header section may take. */
   maxHeaderBytes: i32 = 65536
+  /** The most field lines a response may carry, trailers included. */
   maxHeaders: i32 = 100
+  /** The most bytes a response's trailer section may take. */
   maxTrailerBytes: i32 = 8192
 }
 
@@ -187,6 +191,7 @@ export class UpstreamResponse {
   status: i32 = 0
   /** `UPSTREAM_E_NONE`, an `HTTP1_E_` refusal of the codec, or an `UPSTREAM_E_` code. */
   error: i32 = 0
+  /** How many bytes of `body` the response filled. */
   length: i32 = 0
   /** @internal Call bookkeeping that `Upstream` reads and writes. */
   headLength: i32 = 0
@@ -199,6 +204,12 @@ export class UpstreamResponse {
   /** Made once more already, after a reused connection dropped it unanswered. @internal */
   retried: boolean = false
 
+  /**
+   * An empty call slot; `Upstream` makes its pool of them.
+   * @param index The slot's place in the pool.
+   * @param headRoom The most bytes the request head may take.
+   * @param placeholder The request the slot names until a call takes it.
+   */
   constructor(index: i32, headRoom: i32, placeholder: HttpRequest) {
     this.index = index
     this.req = placeholder
@@ -270,6 +281,9 @@ export class Upstream {
    * when a cap is below 1 or the watch ids run past the handler's. An
    * unusable origin is not a panic: `error` says why, and every call fails
    * with it.
+   * @param h The handler whose poll loop the connections are watched on.
+   * @param origin The `http://` URL of the origin every call goes to.
+   * @param limits The pool's sizes, watch ids, deadlines and the codec's caps.
    */
   constructor(h: HttpHandler, origin: string, limits: UpstreamLimits) {
     if (limits.connections < 1 || limits.calls < 1 || limits.maxHead < 1 || limits.timeoutMs < 1) {
@@ -370,6 +384,9 @@ export class Upstream {
    * however it ends; `UPSTREAM_E_FULL` when every slot is taken, and then
    * nothing is held and `req` is still the program's to answer. `path` is
    * copied out before this returns.
+   * @param req The handler's request the call answers; it stays held until the call ends.
+   * @param path The origin's path to get, with its query.
+   * @returns `UPSTREAM_E_NONE` when the call started, `UPSTREAM_E_FULL` when no slot is free.
    */
   get(req: HttpRequest, path: string): i32 {
     if (this.freeCount === 0) {
@@ -414,13 +431,19 @@ export class Upstream {
     return UPSTREAM_E_NONE
   }
 
-  /** Whether a finished call is waiting for `take`; reads the upstream's sockets once per handler turn. */
+  /**
+   * Whether a finished call is waiting for `take`; reads the upstream's sockets once per handler turn.
+   * @returns Whether `take` has a call to hand back.
+   */
   ready(): boolean {
     this.pump()
     return this.doneCount > 0
   }
 
-  /** The next finished call, which the program gives back with `release`. Panics when none is `ready`. */
+  /**
+   * The next finished call, which the program gives back with `release`. Panics when none is `ready`.
+   * @returns The call, with `ok`, `status` and its body, or `error` saying why it failed.
+   */
   take(): UpstreamResponse {
     if (!this.ready()) {
       panic("Upstream.take: no call is ready")
@@ -436,6 +459,7 @@ export class Upstream {
    * Gives a taken call's slot back to the pool. Panics for a call not taken
    * or already released: two calls sharing a slot would hand one request's
    * answer to another.
+   * @param r The call `take` handed back.
    */
   release(r: UpstreamResponse): void {
     if (!r.taken) {
@@ -446,12 +470,18 @@ export class Upstream {
     this.freeCount += 1
   }
 
-  /** How many calls hold a slot: queued, in flight, or finished and not yet released. */
+  /**
+   * How many calls hold a slot: queued, in flight, or finished and not yet released.
+   * @returns The count of slots in use.
+   */
   pending(): i32 {
     return toI32(this.free.length) - this.freeCount
   }
 
-  /** How many connections to the origin are open. */
+  /**
+   * How many connections to the origin are open.
+   * @returns The count of open connections.
+   */
   openConnections(): i32 {
     let n: i32 = 0
     for (let k: i32 = 0; k < toI32(this.connections.length); k += 1) {

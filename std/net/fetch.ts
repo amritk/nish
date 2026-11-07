@@ -202,13 +202,22 @@ export const httpErrorName = (code: i32): string => {
  * `Authorization` field, so a password is never sent by accident.
  */
 export class HttpRequest {
+  /** The request method, sent as given, such as `GET` or `POST`. */
   method: string
+  /** The absolute URL the request is sent to. */
   url: string
+  /** The header field names, in the order they are sent. */
   names: string[]
+  /** The header field values, each beside its name in `names`. */
   values: string[]
   /** Null for no body at all; an empty array sends `Content-Length: 0`. */
   body: u8[] | null = null
 
+  /**
+   * A request with no header fields and no body.
+   * @param method The request method, such as `GET`.
+   * @param url The absolute `http://` or `https://` URL to send it to.
+   */
   constructor(method: string, url: string) {
     this.method = method
     this.url = url
@@ -216,7 +225,11 @@ export class HttpRequest {
     this.values = []
   }
 
-  /** Appends one header field; nothing is checked until the request is written. */
+  /**
+   * Appends one header field; nothing is checked until the request is written.
+   * @param name The field name.
+   * @param value The field value; one holding a CR or LF makes the fetch fail.
+   */
   header(name: string, value: string): void {
     this.names.push(name)
     this.values.push(value)
@@ -246,10 +259,13 @@ export class HttpOptions {
   readTimeoutMs: i32 = 30000
   /** The budget for a whole fetch, its body included; 0 or less for none. */
   totalTimeoutMs: i32 = 0
+  /** The most redirect hops one fetch follows; past them the fetch fails. */
   maxRedirects: i32 = 5
   /** The status line and the header section, each at most this. */
   maxHeaderBytes: i32 = 65536
+  /** Follow a redirect rather than answer it; only to the same origin unless `crossOriginRedirects` is set. */
   followRedirects: boolean = false
+  /** Let a followed redirect go to another origin (see the module comment). */
   crossOriginRedirects: boolean = false
   /** Read the proxy settings from the environment (see the module comment). */
   useEnvProxy: boolean = true
@@ -261,20 +277,34 @@ export class HttpOptions {
  * `names` are lower-cased and in the order they arrived, beside `values`.
  */
 export class HttpResponse {
+  /** The status code, such as 200. */
   status: i32 = 0
+  /** The reason phrase the server sent beside the status. */
   reason: string = ""
+  /** The URL that answered, which differs from the request's after a redirect. */
   url: string = ""
+  /** The header field names, lower-cased, in the order they arrived. */
   names: string[]
+  /** The header field values, each beside its name in `names`. */
   values: string[]
+  /** The reader for the response's body. */
   body: HttpBodyReader
 
+  /**
+   * A response with no status and no fields yet; the client fills them in.
+   * @param body The reader for the body that follows the head.
+   */
   constructor(body: HttpBodyReader) {
     this.names = []
     this.values = []
     this.body = body
   }
 
-  /** The first value of the field `name`, in any case; null when the response has none. */
+  /**
+   * The first value of the field `name`, in any case.
+   * @param name The field name to look for.
+   * @returns The value, or null when the response has no such field.
+   */
   header(name: string): string | null {
     const lower: string = httpClientLower(name)
     for (let i: i32 = 0; i < toI32(this.names.length) && i < toI32(this.values.length); i += 1) {
@@ -293,9 +323,15 @@ export class HttpResponse {
  * client that made it, and only until that client starts its next fetch.
  */
 export class HttpBodyReader {
+  /** The client that made the response; it carries the connection the body arrives on. */
   client: FetchSyncClient
   private generation: i32
 
+  /**
+   * A reader for the body of one response.
+   * @param client The client that made the response.
+   * @param generation The client's response number, so a reader stops reading once the client moves on.
+   */
   constructor(client: FetchSyncClient, generation: i32) {
     this.client = client
     this.generation = generation
@@ -308,6 +344,10 @@ export class HttpBodyReader {
    * event stream is read event by event. A window outside `buf` panics; an
    * empty one answers 0 at once, reading nothing, so 0 means the end only
    * when `n` is positive.
+   * @param buf Where the body bytes are written.
+   * @param off Where in `buf` the first byte goes.
+   * @param n The most bytes to read.
+   * @returns How many bytes were read, 0 at the end of the body, or a negated `HTTP_E_*` code.
    */
   read(buf: u8[], off: i32, n: i32): i32 {
     if (off < 0 || n < 0 || toI64(off) + toI64(n) > toI64(buf.length)) {
@@ -322,6 +362,8 @@ export class HttpBodyReader {
   /**
    * The rest of the body in one array, or null on an error or once it passes
    * `limit` bytes (`HTTP_E_BODY_TOO_LARGE`, and the connection is closed).
+   * @param limit The most body bytes to accept.
+   * @returns The body, or null on an error or a body past `limit`.
    */
   readAll(limit: i32): u8[] | null {
     let size: i32 = 4096
@@ -373,7 +415,9 @@ export class HttpBodyReader {
  */
 export class FetchSyncClient {
   // Declared widest first, so no byte of a client is padding.
+  /** The options every fetch through this client follows. */
   options: HttpOptions
+  /** A sentence saying why the last failure happened, for a log; "" after a fetch that answered. */
   errorText: string = ""
   /** The proxy settings in use; "" for none. `setProxies` replaces them. */
   private httpProxy: string = ""
@@ -419,6 +463,11 @@ export class FetchSyncClient {
   /** Whether this is `fetchSync`'s client, closed whole once its one body is done with. @internal */
   once: boolean = false
 
+  /**
+   * A client with no connection open yet, its proxy settings read from the
+   * environment when `useEnvProxy` is set.
+   * @param options How every fetch through the client behaves.
+   */
   constructor(options: HttpOptions) {
     this.options = options
     this.parser = httpClientParser(options)
@@ -433,7 +482,12 @@ export class FetchSyncClient {
     }
   }
 
-  /** Replaces the proxy settings, as the three variables would set them; "" for none. */
+  /**
+   * Replaces the proxy settings, as the three variables would set them; "" for none.
+   * @param httpProxy The proxy for http URLs, as `http_proxy` would give it.
+   * @param httpsProxy The proxy for https URLs, as `https_proxy` would give it.
+   * @param noProxy The hosts reached without a proxy, as `no_proxy` would list them.
+   */
   setProxies(httpProxy: string, httpsProxy: string, noProxy: string): void {
     this.httpProxy = httpProxy
     this.httpsProxy = httpsProxy
@@ -445,6 +499,8 @@ export class FetchSyncClient {
    * redirects as the options say; null on a failure, with `error` and
    * `errorText` set. The body is read through the response's `body` before
    * the next fetch.
+   * @param req The request to send.
+   * @returns The response, its body still to be read, or null on a failure.
    */
   fetch(req: HttpRequest): HttpResponse | null {
     this.error = HTTP_E_NONE

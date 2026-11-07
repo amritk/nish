@@ -83,6 +83,7 @@ export class OutboundPolicy {
    * trailing dot do not matter. A leading dot (`.example.com`) allows the
    * name and every name under it. An address literal matches only itself,
    * as the URL writes it (`::1` or `[::1]`, `127.0.0.1`), never as a suffix.
+   * @param name The host name, `.`-led for a whole domain, or an address literal.
    */
   allowHost(name: string): void {
     let entry: string = outboundLower(name)
@@ -96,6 +97,8 @@ export class OutboundPolicy {
    * Lets the addresses in `cidr` through though they are not public:
    * `10.1.2.0/24`, `fd00:1::/64`, or one address alone. False, with nothing
    * added, when `cidr` is not an address and a prefix length that fits it.
+   * @param cidr The address, or the address and its prefix length after a `/`.
+   * @returns Whether the prefix was added.
    */
   permit(cidr: string): boolean {
     const n: i32 = toI32(cidr.length)
