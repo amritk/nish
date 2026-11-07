@@ -1,5 +1,5 @@
 /**
- * `std/term-rate` — how fast the link to the terminal is, measured from frames
+ * `nish/term-rate` — how fast the link to the terminal is, measured from frames
  * sent and acknowledged, and the frame rate and drawing detail a program keeps
  * to under it.
  *
@@ -9,6 +9,17 @@
  * and asks it whether a frame may be drawn now and in what shape
  * (`RateDecision`). Every time is an `f64` count of milliseconds on the
  * caller's clock, as `FixedStep`'s is in `nish/term`.
+ *
+ *     import { RateController, RateOptions } from "nish/term-rate"
+ *
+ *     const rate = new RateController(new RateOptions())
+ *     // each turn of the loop, at nowMs:
+ *     rate.tick(nowMs)
+ *     if (rate.mayDraw(nowMs)) {
+ *       // draw as rate.decision() says, then write the frame and `CSI 5 n`
+ *       rate.frameSent(bytes, costNs, nowMs)
+ *     }
+ *     // for each `CSI 0 n` read back: rate.ackReceived(nowMs)
  *
  * **The acknowledgement.** A frame is acknowledged when the terminal answers a
  * status query sent right after it: the terminal answers in order, so the
@@ -428,7 +439,11 @@ export class RateController {
   /** Whether a frame has been sent, so cost and size are known. */
   private haveFrame: boolean
 
-  /** A controller for `options`, read once. */
+  /**
+   * A controller for `options`, read once.
+   *
+   * @param options The rate limits, preference and hints to run with; changing it later changes nothing.
+   */
   constructor(options: RateOptions) {
     this.prefer = options.prefer === DETAIL_FIRST ? DETAIL_FIRST : RATE_FIRST
     this.maxUnacked = options.maxUnacked >= 2 ? 2 : 1
@@ -512,7 +527,11 @@ export class RateController {
     this.publish()
   }
 
-  /** Frames sent and not yet acknowledged. */
+  /**
+   * Frames sent and not yet acknowledged.
+   *
+   * @returns How many frames await their acknowledgement, from 0.
+   */
   unacked(): i32 {
     return toI32(this.sentMs.length) - this.head
   }
@@ -524,6 +543,9 @@ export class RateController {
    * limit, or while the answers to frames given up on may still come, is
    * counted as dropped, and the next waits for the next step. A time that is
    * not a finite number is refused.
+   *
+   * @param nowMs The time now, in milliseconds on the clock every call uses.
+   * @returns True when the program should draw and send a frame now.
    */
   mayDraw(nowMs: f64): boolean {
     if (!rateFinite(nowMs)) {
@@ -551,6 +573,10 @@ export class RateController {
    * sent at `nowMs`. A call whose time is not a finite number is ignored; a
    * cost that is not a finite number or is negative is not measured, and
    * negative bytes count as none.
+   *
+   * @param bytes The frame's size in bytes as written.
+   * @param costNs How long the frame took to build, in nanoseconds.
+   * @param nowMs When it was sent, in milliseconds on the clock every call uses.
    */
   frameSent(bytes: i32, costNs: f64, nowMs: f64): void {
     if (!rateFinite(nowMs)) {
@@ -586,6 +612,8 @@ export class RateController {
    * since the terminal answers in order. One with no frame waiting (a stray
    * answer) is ignored, and one whose time is not a finite number answers its
    * frame and measures nothing.
+   *
+   * @param nowMs When the acknowledgement was read, in milliseconds on the clock every call uses.
    */
   ackReceived(nowMs: f64): void {
     if (this.stale > 0) {
@@ -902,6 +930,8 @@ export class RateController {
    * detail, restore it or rise, at most one change, with the hysteresis the
    * module header describes. Nothing is decided before the first
    * acknowledgement, nor at a fixed rate.
+   *
+   * @param nowMs The time now, in milliseconds on the clock every call uses.
    */
   tick(nowMs: f64): void {
     if (!rateFinite(nowMs)) {
@@ -971,12 +1001,20 @@ export class RateController {
     s.lost = this.lost
   }
 
-  /** How to draw the next frame, as of the last `tick`. */
+  /**
+   * How to draw the next frame, as of the last `tick`.
+   *
+   * @returns The frame rate, resolution divisor, richest backend and palette to draw with.
+   */
   decision(): RateDecision {
     return this.current
   }
 
-  /** What has been measured, as of the last `tick`. */
+  /**
+   * What has been measured, as of the last `tick`.
+   *
+   * @returns The rate, round trip, throughput, frame cost and frames dropped, unacknowledged and lost.
+   */
   stats(): TermStats {
     return this.measured
   }
@@ -1006,6 +1044,10 @@ const rateBackendName = (cap: i32): string => {
  * Write `stats` as two short lines, inverse, into `corner` (a `CORNER_*`) of
  * `screen`: the rate, round trip and kilobytes a second, then the frame cost,
  * the frames dropped and the backend cap. A screen too small clips them.
+ *
+ * @param screen The screen to draw on, before it is flushed.
+ * @param stats What to show, such as `RateController.stats()`.
+ * @param corner Which corner, one of the `CORNER_` constants.
  */
 export const drawStatsOverlay = (screen: Screen, stats: TermStats, corner: i32): void => {
   const top: string = `${stats.tier}fps ${rateWhole(stats.rttMs)}ms ${rateWhole(stats.bytesPerSec / 1000.0)}kB/s`

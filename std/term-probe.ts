@@ -1,5 +1,5 @@
 /**
- * `std/term-probe` — what the terminal a program runs in can do (its colours,
+ * `nish/term-probe` — what the terminal a program runs in can do (its colours,
  * keyboard protocol, graphics and size), asked of it once at start and read
  * from its answer.
  *
@@ -10,16 +10,14 @@
  * caller's milliseconds as `f64` from any origin, and nothing here reads,
  * writes or waits.
  *
- * ```ts
- * import { TermEnv, TermProbe, probeQueries } from "nish/term-probe";
+ *     import { TermEnv, TermProbe, probeQueries } from "nish/term-probe"
  *
- * const env: TermEnv = new TermEnv();
- * env.term = "xterm-256color";
- * const probe: TermProbe = new TermProbe(env, 80, 24, 0.0);
- * const queries: string = probeQueries(env); // write these to the terminal
- * // …feed each read: probe.feed(bytes, count, nowMs), until probe.done() or probe.timedOut(nowMs)
- * console.log(`${probe.result().colors}`);
- * ```
+ *     const env: TermEnv = new TermEnv()
+ *     env.term = "xterm-256color"
+ *     const probe: TermProbe = new TermProbe(env, 80, 24, 0.0)
+ *     const queries: string = probeQueries(env) // write these to the terminal
+ *     // …feed each read: probe.feed(bytes, count, nowMs), until probe.done() or probe.timedOut(nowMs)
+ *     console.log(`${probe.result().colors}`)
  *
  * - `TermEnv` — the environment variables the probe reads, each "" when
  *   unset, one field each in camelCase: `term` (`TERM`), `colorterm`
@@ -218,7 +216,13 @@ const termPassthrough = (multiplexer: string, query: string): string => {
   return multiplexer === "screen" ? `\x1bP${query}\x1b\\` : query
 }
 
-/** Every query the probe asks, as one write; `TermProbe` reads the answers. */
+/**
+ * Every query the probe asks, as one write; `TermProbe` reads the answers.
+ *
+ * @param env The environment, which picks the queries: under a multiplexer some pass through it,
+ *   and under `screen` or the Linux console the string queries are left out.
+ * @returns The queries, ending in DA1, to `write` at once.
+ */
 export const probeQueries = (env: TermEnv): string => {
   const mux: string = termMultiplexer(env)
   const parts: string[] = ["\x1b[>q", "\x1b[?2026$p", "\x1b[?1016$p", "\x1b[?u"]
@@ -284,7 +288,14 @@ export class TermProbe {
   /** When DA1 was answered; -1 before. */
   private answeredAtMs: f64
 
-  /** A probe whose queries were written at `sentAtMs` to a window of `cols` by `rows` cells. */
+  /**
+   * A probe whose queries were written at `sentAtMs` to a window of `cols` by `rows` cells.
+   *
+   * @param env The environment the queries were made for, also read for what replies cannot say.
+   * @param cols The window's width in cells, for working out a cell's pixels from the window's.
+   * @param rows The window's height in cells, likewise.
+   * @param sentAtMs When the queries were written, in milliseconds on the clock `feed` is given.
+   */
   constructor(env: TermEnv, cols: i32, rows: i32, sentAtMs: f64) {
     this.env = env
     this.cols = cols
@@ -311,12 +322,22 @@ export class TermProbe {
     }
   }
 
-  /** Decode `bytes[0, count)`, read at `nowMs`. */
+  /**
+   * Decode `bytes[0, count)`, read at `nowMs`.
+   *
+   * @param bytes The bytes read from the terminal.
+   * @param count How many of `bytes`, from the first, were read.
+   * @param nowMs When they were read, in milliseconds on the clock `sentAtMs` used.
+   */
   feed(bytes: u8[], count: i32, nowMs: f64): void {
     this.take(this.decoder.feedEvents(bytes, count, nowMs), nowMs)
   }
 
-  /** Whether DA1 has been answered, so every reply is in. */
+  /**
+   * Whether DA1 has been answered, so every reply is in.
+   *
+   * @returns True once DA1 is answered.
+   */
   done(): boolean {
     return this.answeredAtMs >= 0.0
   }
@@ -324,6 +345,9 @@ export class TermProbe {
   /**
    * Whether `timeoutMs` has passed since the send with DA1 unanswered. Once it
    * has, it calls `finish(nowMs)`, so `heldEvents` is complete.
+   *
+   * @param nowMs The time now, in milliseconds on the clock `sentAtMs` used.
+   * @returns True once the time is up with DA1 unanswered; false while waiting, and always once DA1 is answered.
    */
   timedOut(nowMs: f64): boolean {
     if (this.done() || nowMs - this.sentAtMs < this.timeoutMs) {
@@ -339,23 +363,38 @@ export class TermProbe {
    * timeout — is given up (the ESC as a key, the reply as nothing) and
    * `heldEvents` returned complete. Call it once, when `done()` or `timedOut`
    * ends the probe, and hand every later read to the program's own decoder.
+   *
+   * @param nowMs The time now, in milliseconds on the clock `sentAtMs` used.
+   * @returns The events that were not replies, in the order they came, as `heldEvents` gives them.
    */
   finish(nowMs: f64): TermEvent[] {
     this.take(this.decoder.pollEvents(nowMs + this.decoder.escapeTimeoutMs), nowMs)
     return this.held
   }
 
-  /** The events that were not replies — keys typed, a paste — in the order they came, for the program to handle. */
+  /**
+   * The events that were not replies — keys typed, a paste — in the order they came, for the program to handle.
+   *
+   * @returns The held events, oldest first; complete only after `finish`.
+   */
   heldEvents(): TermEvent[] {
     return this.held
   }
 
-  /** The time from the send to the answer to DA1, in milliseconds; -1 before it. */
+  /**
+   * The time from the send to the answer to DA1, in milliseconds; -1 before it.
+   *
+   * @returns The round trip in milliseconds, or -1 while DA1 is unanswered.
+   */
   rttMs(): f64 {
     return this.done() ? this.answeredAtMs - this.sentAtMs : -1.0
   }
 
-  /** What the terminal can do, from the replies so far and the environment. */
+  /**
+   * What the terminal can do, from the replies so far and the environment.
+   *
+   * @returns The capabilities found; what no reply settled comes from the environment.
+   */
   result(): TermCaps {
     const env: TermEnv = this.env
     const caps: TermCaps = new TermCaps()

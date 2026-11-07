@@ -65,7 +65,9 @@ export const YAML_PAIR: i32 = 5
 
 /** A plain scalar, or a node with no style of its own (an alias, a pair). */
 export const YAML_PLAIN: i32 = 0
+/** A `'...'` scalar. */
 export const YAML_SINGLE_QUOTED: i32 = 1
+/** A `"..."` scalar, the one style with escapes. */
 export const YAML_DOUBLE_QUOTED: i32 = 2
 /** A `|` block scalar. */
 export const YAML_LITERAL: i32 = 3
@@ -78,44 +80,95 @@ export const YAML_BLOCK: i32 = 6
 
 /** A scalar's core-schema type, from `type`; `-1` for a node that is not a scalar. */
 export const YAML_NULL: i32 = 0
+/** `true` or `false`. */
 export const YAML_BOOL: i32 = 1
+/** An integer: decimal, `0o` octal or `0x` hex. */
 export const YAML_INT: i32 = 2
+/** A number with a fraction or exponent, an infinity (`.inf`, `-.inf`) or not-a-number (`.nan`). */
 export const YAML_FLOAT: i32 = 3
+/** Every other scalar; a quoted or block scalar is one unless a `!!` core tag that fits its text says otherwise. */
 export const YAML_STRING: i32 = 4
 
 // ---- Diagnostic codes ---------------------------------------------------------
 
+/** Warning: an anchor or alias name ends in `:`, which YAML reads as part of the name. */
 export const YAML_ERR_AMBIGUOUS_ANCHOR_NAME: i32 = 1
+/** An anchor or alias whose name is empty or runs on into a flow indicator. */
 export const YAML_ERR_BAD_ANCHOR: i32 = 2
+/** A block scalar header that is not `|` or `>` with at most one indentation digit and one chomping indicator. */
 export const YAML_ERR_BAD_BLOCK_HEADER: i32 = 3
+/** A `#` that no whitespace precedes, so it cannot start a comment. */
 export const YAML_ERR_BAD_COMMENT: i32 = 4
+/**
+ * A `%YAML` directive with a bad version or content after it; as a warning, a
+ * `%TAG` directive missing its handle or prefix.
+ */
 export const YAML_ERR_BAD_DIRECTIVE: i32 = 5
+/**
+ * A double-quoted escape that is not one: an unknown letter, the wrong count of
+ * hex digits, or a code point past U+10FFFF.
+ */
 export const YAML_ERR_BAD_ESCAPE: i32 = 6
+/** An implicit key that does not fit on one line, or runs more than 1024 characters before its `:`. */
 export const YAML_ERR_BAD_IMPLICIT_KEY: i32 = 7
+/**
+ * A quoted scalar or flow collection continued on a line not indented deeper
+ * than its parent, or a block scalar whose leading blank line is indented
+ * deeper than its first content line.
+ */
 export const YAML_ERR_BAD_INDENT: i32 = 8
+/** A `<<` merge whose value is not a map, an alias to one, or a sequence of those. */
 export const YAML_ERR_BAD_MERGE: i32 = 9
+/** A node with two anchors or two tags, or an alias with an anchor or tag. */
 export const YAML_ERR_BAD_PROPERTY: i32 = 10
+/** A plain scalar that holds `: `, which only a key may. */
 export const YAML_ERR_BAD_SCALAR_CONTENT: i32 = 11
+/** A plain scalar that starts with an indicator character, or a flow entry that starts with `-`. */
 export const YAML_ERR_BAD_SCALAR_START: i32 = 12
+/** A tag that is empty or not well formed. */
 export const YAML_ERR_BAD_TAG: i32 = 13
+/**
+ * Warning: a `!!` core tag that does not fit its node, or a value `!!int`,
+ * `!!float`, `!!bool` or `!!null` cannot read; the node is kept as a string.
+ */
 export const YAML_ERR_BAD_TAG_VALUE: i32 = 14
+/** Collections nested deeper than `maxDepth`; the parse stops there. */
 export const YAML_ERR_DEPTH_LIMIT: i32 = 15
+/** A second `%YAML` directive in one document; as a warning, a `%TAG` handle declared twice. */
 export const YAML_ERR_DUPLICATE_DIRECTIVE: i32 = 16
+/** A map that repeats a key, when `uniqueKeys` asks for the check. */
 export const YAML_ERR_DUPLICATE_KEY: i32 = 17
+/** Warning: the stream has more documents than the first, which `firstDocumentOnly` left unread. */
 export const YAML_ERR_MULTIPLE_DOCUMENTS: i32 = 18
+/** An alias inside the node its anchor names. */
 export const YAML_ERR_RECURSIVE_ALIAS: i32 = 19
+/** A tab used to indent; YAML indents with spaces only. */
 export const YAML_ERR_TAB_INDENT: i32 = 20
+/** A `,` in a flow collection with no entry before it. */
 export const YAML_ERR_UNEXPECTED_COMMA: i32 = 21
+/** Text where no node may start, such as after the end of a node or a document marker inside a flow collection. */
 export const YAML_ERR_UNEXPECTED_CONTENT: i32 = 22
+/** A directive that no `...` precedes or no `---` follows. */
 export const YAML_ERR_UNEXPECTED_DIRECTIVE: i32 = 23
+/** Warning: a directive other than `%YAML` and `%TAG`; it is skipped. */
 export const YAML_ERR_UNKNOWN_DIRECTIVE: i32 = 24
+/** A tag whose handle no `%TAG` directive declared. */
 export const YAML_ERR_UNKNOWN_TAG_HANDLE: i32 = 25
+/** An alias with no anchor of that name before it. */
 export const YAML_ERR_UNRESOLVED_ALIAS: i32 = 26
+/** Warning: a `%YAML` version other than 1.2; the document is parsed as 1.2. */
 export const YAML_ERR_UNSUPPORTED_YAML_VERSION: i32 = 27
+/** A flow collection with no closing `]` or `}`. */
 export const YAML_ERR_UNTERMINATED_FLOW: i32 = 28
+/** A quoted scalar with no closing quote. */
 export const YAML_ERR_UNTERMINATED_QUOTE: i32 = 29
 
-/** The name of a `YAML_ERR_*` code, such as `"DUPLICATE_KEY"`, or `""` for one that is not a code. */
+/**
+ * The name of a diagnostic code, for a message or a log line.
+ *
+ * @param code A `YAML_ERR_*` code, such as `YAML_ERR_DUPLICATE_KEY`.
+ * @returns The code's name without its prefix, such as `"DUPLICATE_KEY"`, or `""` for a number that is not a code.
+ */
 export const yamlErrorName = (code: i32): string => {
   const names: string[] = [
     "",
@@ -347,7 +400,9 @@ export class YamlStream {
    * @internal Used by `YamlParser`.
    */
   kidTop: i32 = 0
+  /** How many of the diagnostics are errors; the same as `errorCount()`. */
   errors: i32 = 0
+  /** How many of the diagnostics are warnings; the same as `warningCount()`. */
   warnings: i32 = 0
   /**
    * How many path steps have searched merge keys; the stamp of the latest.
@@ -360,6 +415,12 @@ export class YamlStream {
    */
   merge: boolean = true
 
+  /**
+   * An empty stream over `text`, for the parser to fill; get a parsed one from
+   * `parseYaml`.
+   *
+   * @param text The YAML source every node and diagnostic range points into.
+   */
   constructor(text: string) {
     this.source = text
     const room: i32 = toI32(text.length) / 8 + 16
@@ -398,57 +459,109 @@ export class YamlStream {
 
   // ---- Documents ---------------------------------------------------------------
 
-  /** How many documents the stream holds: `0` for an empty text, unless `firstDocumentOnly`. */
+  /**
+   * How many documents the stream holds.
+   *
+   * @returns `0` for an empty text, and always `1` under `firstDocumentOnly`.
+   */
   documentCount(): i32 {
     return toI32(this.docRoots.length)
   }
 
-  /** Document `d`'s root node, or `-1` for a document that is not there. */
+  /**
+   * Document `d`'s root node.
+   *
+   * @param d The document's index, from 0.
+   * @returns The root node, or `-1` for a document that is not there.
+   */
   documentRoot(d: i32): i32 {
     return yamlAt(this.docRoots, d)
   }
 
-  /** The byte document `d` starts at (its `---`, if it has one), or `-1`. */
+  /**
+   * Where document `d` starts.
+   *
+   * @param d The document's index, from 0.
+   * @returns The byte offset of its first byte (its `---`, if it has one), or `-1` for a document that is not there.
+   */
   documentStart(d: i32): i32 {
     return yamlAt(this.docStarts, d)
   }
 
-  /** One past document `d`'s last byte (through its `...`, if it has one), or `-1`. */
+  /**
+   * Where document `d` ends.
+   *
+   * @param d The document's index, from 0.
+   * @returns The byte offset one past its last byte (through its `...`, if it has one), or `-1` for
+   *   a document that is not there.
+   */
   documentEnd(d: i32): i32 {
     return yamlAt(this.docEnds, d)
   }
 
   // ---- Nodes -------------------------------------------------------------------
 
-  /** Node `n`'s `YAML_*` kind, or `0` for `-1` and any handle that is not a node. */
+  /**
+   * What node `n` is.
+   *
+   * @param n A node handle, such as a `documentRoot` or a `child`.
+   * @returns `YAML_SCALAR`, `YAML_MAP`, `YAML_SEQ`, `YAML_ALIAS` or `YAML_PAIR`, or `0` for `-1`
+   *   and any handle that is not a node.
+   */
   kind(n: i32): i32 {
     const kinds: u8[] = this.kinds
     return n >= 0 && n < this.top && n < toI32(kinds.length) ? toI32(kinds[n]) : 0
   }
 
-  /** Node `n`'s style: `YAML_PLAIN`, a quoted or block-scalar style, `YAML_FLOW` or `YAML_BLOCK`. */
+  /**
+   * How node `n` is written.
+   *
+   * @param n A node handle.
+   * @returns `YAML_PLAIN`, a quoted or block-scalar style, `YAML_FLOW` or `YAML_BLOCK`.
+   */
   style(n: i32): i32 {
     const styles: u8[] = this.styles
     return n >= 0 && n < this.top && n < toI32(styles.length) ? toI32(styles[n]) : 0
   }
 
-  /** The first byte of node `n`'s source, its properties not included, or `-1`. */
+  /**
+   * Where node `n`'s source starts, its anchor and tag not included.
+   *
+   * @param n A node handle.
+   * @returns The byte offset of its first byte, or `-1` for a handle that is not a node.
+   */
   start(n: i32): i32 {
     return n < this.top ? yamlAt(this.starts, n) : -1
   }
 
-  /** One past the last byte of node `n`'s source, or `-1`. */
+  /**
+   * Where node `n`'s source ends.
+   *
+   * @param n A node handle.
+   * @returns The byte offset one past its last byte, or `-1` for a handle that is not a node.
+   */
   end(n: i32): i32 {
     return n < this.top ? yamlAt(this.ends, n) : -1
   }
 
-  /** How many children a map (its pairs) or a seq (its items) has; `0` for any other node. */
+  /**
+   * How many children node `n` has.
+   *
+   * @param n A node handle.
+   * @returns A map's pair count or a seq's item count; `0` for any other node.
+   */
   count(n: i32): i32 {
     const k: i32 = this.kind(n)
     return k === YAML_MAP || k === YAML_SEQ ? yamlAt(this.counts, n) : 0
   }
 
-  /** Child `i` of a map or a seq, or `-1` past its last. */
+  /**
+   * One child of a map or a seq.
+   *
+   * @param n The map or seq.
+   * @param i The child's position, from 0.
+   * @returns The `i`th pair of a map or item of a seq, or `-1` past the last child.
+   */
   child(n: i32, i: i32): i32 {
     if (i < 0 || i >= this.count(n)) {
       return -1
@@ -456,27 +569,52 @@ export class YamlStream {
     return yamlAt(this.kids, yamlAt(this.firsts, n) + i)
   }
 
-  /** A pair's key node, or `-1` for a node that is not a pair. */
+  /**
+   * A pair's key.
+   *
+   * @param pair A `YAML_PAIR` node, a child of a map.
+   * @returns The key node, or `-1` for a node that is not a pair.
+   */
   key(pair: i32): i32 {
     return this.kind(pair) === YAML_PAIR ? yamlAt(this.firsts, pair) : -1
   }
 
-  /** A pair's value node, or `-1` for an empty value (`a:`, which reads as null) and any node that is not a pair. */
+  /**
+   * A pair's value.
+   *
+   * @param pair A `YAML_PAIR` node, a child of a map.
+   * @returns The value node, or `-1` for an empty value (`a:`, which reads as null) and any node that is not a pair.
+   */
   value(pair: i32): i32 {
     return this.kind(pair) === YAML_PAIR ? yamlAt(this.counts, pair) : -1
   }
 
-  /** The node an alias names, or `-1` for an alias with no anchor and any node that is not an alias. */
+  /**
+   * The node an alias names.
+   *
+   * @param n An alias node.
+   * @returns The anchored node, or `-1` for an alias with no anchor and any node that is not an alias.
+   */
   target(n: i32): i32 {
     return this.kind(n) === YAML_ALIAS ? yamlAt(this.firsts, n) : -1
   }
 
-  /** Node `n` itself, or the node it names when it is an alias. */
+  /**
+   * Node `n` with an alias followed.
+   *
+   * @param n A node handle.
+   * @returns The node an alias names, or `n` itself when it is not an alias.
+   */
   resolved(n: i32): i32 {
     return this.kind(n) === YAML_ALIAS ? yamlAt(this.firsts, n) : n
   }
 
-  /** Node `n`'s anchor name, without its `&`, or `""`. */
+  /**
+   * Node `n`'s anchor name.
+   *
+   * @param n A node handle.
+   * @returns The name without its `&`, or `""` for a node with no anchor.
+   */
   anchor(n: i32): string {
     const slot: i32 = n < this.top ? yamlAt(this.props, n) : -1
     if (slot < 0) {
@@ -487,9 +625,12 @@ export class YamlStream {
   }
 
   /**
-   * Node `n`'s tag, resolved: `"int"` for `!!int` (the `tag:yaml.org,2002:`
-   * prefix stripped), `"!local"` for `!local`, `"!"` for the non-specific `!`,
-   * a `%TAG` handle's prefix joined to its suffix, or `""` for an untagged node.
+   * Node `n`'s tag, resolved.
+   *
+   * @param n A node handle.
+   * @returns `"int"` for `!!int` (the `tag:yaml.org,2002:` prefix stripped), `"!local"` for
+   *   `!local`, `"!"` for the non-specific `!`, a `%TAG` handle's prefix joined to its suffix, or
+   *   `""` for an untagged node.
    */
   tag(n: i32): string {
     const slot: i32 = n < this.top ? yamlAt(this.props, n) : -1
@@ -499,10 +640,12 @@ export class YamlStream {
 
   /**
    * A scalar's text, decoded: quotes and escapes undone, lines folded, a block
-   * scalar's indentation and chomping applied. An alias answers its target's
-   * text, and any other node `""`. A `\u` surrogate pair is one character; a
-   * lone surrogate escape is kept as its three bytes, which are not UTF-8.
-   * Decoded on every call; keep the result.
+   * scalar's indentation and chomping applied. A `\u` surrogate pair is one
+   * character; a lone surrogate escape is kept as its three bytes, which are
+   * not UTF-8. Decoded on every call; keep the result.
+   *
+   * @param n A scalar, or an alias to one.
+   * @returns The decoded text; an alias answers its target's, and any other node `""`.
    */
   text(n: i32): string {
     const at: i32 = this.resolved(n)
@@ -513,10 +656,12 @@ export class YamlStream {
   }
 
   /**
-   * A scalar's core-schema type: `YAML_NULL`, `YAML_BOOL`, `YAML_INT`,
-   * `YAML_FLOAT` or `YAML_STRING`; through an alias; `-1` for a collection.
-   * A quoted or block scalar is a string, and so is any tagged one the core
-   * schema does not describe; a `!!str` plain scalar is a string too.
+   * A scalar's core-schema type. A quoted or block scalar is a string, and so
+   * is any tagged one the core schema does not describe; a `!!str` plain scalar
+   * is a string too.
+   *
+   * @param n A scalar, or an alias to one.
+   * @returns `YAML_NULL`, `YAML_BOOL`, `YAML_INT`, `YAML_FLOAT` or `YAML_STRING`; `-1` for a collection.
    */
   type(n: i32): i32 {
     const at: i32 = this.resolved(n)
@@ -535,7 +680,12 @@ export class YamlStream {
     return resolvedType
   }
 
-  /** Whether a scalar is the boolean `true`; `false` for anything that is not a `YAML_BOOL`. */
+  /**
+   * A boolean scalar's value.
+   *
+   * @param n A scalar, or an alias to one.
+   * @returns Whether it is the boolean `true`; `false` for anything that is not a `YAML_BOOL`.
+   */
   boolValue(n: i32): boolean {
     if (this.type(n) !== YAML_BOOL) {
       return false
@@ -548,7 +698,12 @@ export class YamlStream {
     return code === 116 || code === 84
   }
 
-  /** A `YAML_INT` scalar's value; `0` for anything else, and the value wrapped past 64 bits. */
+  /**
+   * An integer scalar's value.
+   *
+   * @param n A scalar, or an alias to one.
+   * @returns The value of a `YAML_INT`, wrapped past 64 bits; `0` for anything else.
+   */
   intValue(n: i32): i64 {
     if (this.type(n) !== YAML_INT) {
       return toI64(0)
@@ -561,7 +716,12 @@ export class YamlStream {
     return yamlParseInt(decoded, 0, toI32(decoded.length))
   }
 
-  /** A `YAML_FLOAT` or `YAML_INT` scalar's value as an `f64`; `0` for anything else. */
+  /**
+   * A number scalar's value.
+   *
+   * @param n A scalar, or an alias to one.
+   * @returns The value of a `YAML_FLOAT` or `YAML_INT` as an `f64`; `0` for anything else.
+   */
   floatValue(n: i32): f64 {
     const t: i32 = this.type(n)
     const at: i32 = this.resolved(n)
@@ -580,72 +740,136 @@ export class YamlStream {
 
   // ---- Diagnostics -------------------------------------------------------------
 
-  /** How many diagnostics the parse found, errors and warnings, in order of where they start. */
+  /**
+   * How many diagnostics the parse found, errors and warnings, in order of
+   * where they start.
+   *
+   * @returns The count; diagnostics are numbered from 0 below it.
+   */
   diagnosticCount(): i32 {
     return toI32(this.diagCodes.length)
   }
 
-  /** How many of the diagnostics are errors: `0` for a valid stream. */
+  /**
+   * How many of the diagnostics are errors.
+   *
+   * @returns The count: `0` for a valid stream.
+   */
   errorCount(): i32 {
     return this.errors
   }
 
-  /** How many of the diagnostics are warnings. */
+  /**
+   * How many of the diagnostics are warnings.
+   *
+   * @returns The count; a warning does not make the stream invalid.
+   */
   warningCount(): i32 {
     return this.warnings
   }
 
-  /** Diagnostic `i`'s `YAML_ERR_*` code, or `0`. */
+  /**
+   * What diagnostic `i` is about.
+   *
+   * @param i The diagnostic's index, from 0.
+   * @returns Its `YAML_ERR_*` code, or `0` for an index past the last.
+   */
   diagnosticCode(i: i32): i32 {
     const code: i32 = i < 0 ? 0 : yamlAt(this.diagCodes, i)
     return code < 0 ? 0 : code
   }
 
-  /** Whether diagnostic `i` is a warning rather than an error. */
+  /**
+   * Whether diagnostic `i` is a warning rather than an error.
+   *
+   * @param i The diagnostic's index, from 0.
+   * @returns `true` for a warning; `false` for an error and for an index past the last.
+   */
   diagnosticIsWarning(i: i32): boolean {
     const warnings: boolean[] = this.diagWarnings
     return i >= 0 && i < toI32(warnings.length) ? warnings[i] : false
   }
 
-  /** The first byte diagnostic `i` is about, or `-1`. */
+  /**
+   * Where diagnostic `i`'s range starts.
+   *
+   * @param i The diagnostic's index, from 0.
+   * @returns The byte offset of the first byte it is about, or `-1` for an index past the last.
+   */
   diagnosticStart(i: i32): i32 {
     return yamlAt(this.diagStarts, i)
   }
 
-  /** One past the last byte diagnostic `i` is about, or `-1`; the same as its start for a point. */
+  /**
+   * Where diagnostic `i`'s range ends.
+   *
+   * @param i The diagnostic's index, from 0.
+   * @returns The byte offset one past the last byte it is about, the same as its start for a point,
+   *   or `-1` for an index past the last.
+   */
   diagnosticEnd(i: i32): i32 {
     return yamlAt(this.diagEnds, i)
   }
 
-  /** Diagnostic `i`'s message, such as `Map key "a" is duplicated` (a capital first, as other YAML tooling spells them), or `""`. */
+  /**
+   * Diagnostic `i`'s message, for a person.
+   *
+   * @param i The diagnostic's index, from 0.
+   * @returns A sentence such as `Map key "a" is duplicated` (a capital first, as other YAML tooling
+   *   spells them), or `""` for an index past the last.
+   */
   diagnosticMessage(i: i32): string {
     const messages: string[] = this.diagMessages
     return i >= 0 && i < toI32(messages.length) ? messages[i] : ""
   }
 
-  /** The document diagnostic `i` was found in, or `-1`. */
+  /**
+   * The document diagnostic `i` was found in.
+   *
+   * @param i The diagnostic's index, from 0.
+   * @returns The document's index, or `-1` for an index past the last.
+   */
   diagnosticDocument(i: i32): i32 {
     return yamlAt(this.diagDocuments, i)
   }
 
   // ---- Comments ----------------------------------------------------------------
 
-  /** How many comments the stream kept: none unless `keepComments`. */
+  /**
+   * How many comments the stream kept.
+   *
+   * @returns The count: `0` unless `keepComments` was set.
+   */
   commentCount(): i32 {
     return toI32(this.commentStarts.length)
   }
 
-  /** Comment `i`'s first byte, its `#`, or `-1`. */
+  /**
+   * Where comment `i` starts.
+   *
+   * @param i The comment's index, from 0, in source order.
+   * @returns The byte offset of its `#`, or `-1` for an index past the last.
+   */
   commentStart(i: i32): i32 {
     return yamlAt(this.commentStarts, i)
   }
 
-  /** One past comment `i`'s last byte, before its line break, or `-1`. */
+  /**
+   * Where comment `i` ends.
+   *
+   * @param i The comment's index, from 0, in source order.
+   * @returns The byte offset one past its last byte, before its line break, or `-1` for an index past the last.
+   */
   commentEnd(i: i32): i32 {
     return yamlAt(this.commentEnds, i)
   }
 
-  /** Comment `i`'s text after its `#`, or `""`. */
+  /**
+   * Comment `i`'s text.
+   *
+   * @param i The comment's index, from 0, in source order.
+   * @returns The text after its `#`, or `""` for an index past the last.
+   */
   comment(i: i32): string {
     const from: i32 = this.commentStart(i)
     return from < 0 ? "" : this.source.substring(from + 1, this.commentEnd(i))
@@ -4500,7 +4724,15 @@ const yamlKeyText = (stream: YamlStream, node: i32): string => {
   return writer.out
 }
 
-/** The text map key `node` of `stream` is matched by in a path and named by in a diagnostic; see `yamlKeyText`. */
+/**
+ * The text a map key is matched by in a path and named by in a diagnostic.
+ *
+ * @param stream The parsed stream.
+ * @param node The key node.
+ * @returns A scalar's decoded text (its source text for a number or a boolean, `""` for a null), an
+ *   alias's target's text (`*name` when it names no anchor), or a collection written as one line of
+ *   flow text, `{ a: 1 }` or `[ a, b ]`, cut to `…` past 4096 bytes at a character's start.
+ */
 export const keyText = (stream: YamlStream, node: i32): string => yamlKeyText(stream, node)
 
 // ---- Paths ----------------------------------------------------------------------
@@ -4733,14 +4965,18 @@ class YamlPathWalker {
 }
 
 /**
- * The node `path` names below `root` of `stream`: each step a map key (matched
- * by `keyText`; of duplicate keys, the last) or a sequence index (`"0"`, no
- * leading zero), through aliases. While the stream merges (`YamlOptions.merge`),
- * a key a map does not hold is looked for in the maps its `<<` keys name, in
- * order: the map's own keys win, then the first merged map that has it, and the
- * pair found is the one inside that map. When a step does not match, the node
- * the last matching step reached; `root` itself for an empty path. A step onto an empty
- * value (`a:`) matches and reaches no node, so the answer is then `-1`.
+ * The node a path names. Each step is a map key (matched by `keyText`; of
+ * duplicate keys, the last) or a sequence index (`"0"`, no leading zero),
+ * through aliases. While the stream merges (`YamlOptions.merge`), a key a map
+ * does not hold is looked for in the maps its `<<` keys name, in order: the
+ * map's own keys win, then the first merged map that has it, and the pair found
+ * is the one inside that map.
+ *
+ * @param stream The parsed stream.
+ * @param root The node the path starts at, such as a `documentRoot`.
+ * @param path The steps, outermost first.
+ * @returns The node the last matching step reached: `root` itself for an empty path, and `-1` when
+ *   a step lands on an empty value (`a:`).
  */
 export const pathNode = (stream: YamlStream, root: i32, path: string[]): i32 => {
   const walker: YamlPathWalker = new YamlPathWalker(stream)
@@ -4748,7 +4984,14 @@ export const pathNode = (stream: YamlStream, root: i32, path: string[]): i32 => 
   return walker.node
 }
 
-/** The last map pair `path` steps through below `root` of `stream` (see `pathNode`), or `-1` for none. */
+/**
+ * The last map pair a path steps through (see `pathNode`).
+ *
+ * @param stream The parsed stream.
+ * @param root The node the path starts at.
+ * @param path The steps, outermost first.
+ * @returns The pair, or `-1` for none.
+ */
 export const pathPair = (stream: YamlStream, root: i32, path: string[]): i32 => {
   const walker: YamlPathWalker = new YamlPathWalker(stream)
   walker.walk(root, path)
@@ -4756,8 +4999,12 @@ export const pathPair = (stream: YamlStream, root: i32, path: string[]): i32 => 
 }
 
 /**
- * How many steps of `path` match below `root` of `stream` (see `pathNode`):
- * `path.length` when every step matches, an empty value's included.
+ * How many steps of a path match (see `pathNode`).
+ *
+ * @param stream The parsed stream.
+ * @param root The node the path starts at.
+ * @param path The steps, outermost first.
+ * @returns The matching steps, an empty value's included: `path.length` when every step matches.
  */
 export const pathMatch = (stream: YamlStream, root: i32, path: string[]): i32 => {
   const walker: YamlPathWalker = new YamlPathWalker(stream)
@@ -4767,7 +5014,14 @@ export const pathMatch = (stream: YamlStream, root: i32, path: string[]): i32 =>
 
 // ---- Parsing --------------------------------------------------------------------
 
-/** Parses `text` as a YAML stream with `options`. Panics when `maxDepth` is outside 1 to 1000. */
+/**
+ * Parses a YAML stream with options. Panics when `maxDepth` is outside 1 to
+ * 1000.
+ *
+ * @param text The YAML source.
+ * @param options What to keep and check, and how deep collections may nest.
+ * @returns The documents, nodes and diagnostics the parse found.
+ */
 export const parseYamlWith = (text: string, options: YamlOptions): YamlStream => {
   if (options.maxDepth < 1 || options.maxDepth > YAML_MAX_DEPTH) {
     panic("nish/yaml: maxDepth must be between 1 and 1000")
@@ -4782,5 +5036,10 @@ export const parseYamlWith = (text: string, options: YamlOptions): YamlStream =>
   return parser.stream
 }
 
-/** Parses `text` as a YAML stream with the default options. */
+/**
+ * Parses a YAML stream with the default options.
+ *
+ * @param text The YAML source.
+ * @returns The documents, nodes and diagnostics the parse found.
+ */
 export const parseYaml = (text: string): YamlStream => parseYamlWith(text, new YamlOptions())

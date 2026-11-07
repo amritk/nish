@@ -1,11 +1,9 @@
 /**
- * `std/term-io` — opening a terminal, drawing frames, reading events and
+ * `nish/term-io` — opening a terminal, drawing frames, reading events and
  * leaving it as it was: the one entry point that uses the other term modules
  * and does the I/O.
  *
- * ```ts
- * import { defaultTerminalOptions, runTerminal, TermInput, Frame } from "nish/term-io";
- * ```
+ *     import { defaultTerminalOptions, runTerminal, TermInput, Frame } from "nish/term-io"
  *
  * - `runTerminal(options, state, update, render)` is the whole program loop:
  *   it opens the terminal, runs `update(state, input)` at
@@ -143,8 +141,9 @@ export class TerminalOptions {
   quitOnCtrlC: boolean
   /** How long after a held key's last repeat it counts as released, without the kitty protocol (100). */
   releaseGapMs: f64
-  /** The framebuffer's size in pixels, or 0 by 0 for none (0 by 0). */
+  /** The framebuffer's width in pixels, or 0 for none (0). Either side 0 means no framebuffer. */
   framebufferWidth: i32
+  /** The framebuffer's height in pixels, or 0 for none (0). */
   framebufferHeight: i32
   /** The corner (`CORNER_*` from `nish/term-rate`) to draw the stats overlay in, or -1 for none (-1). */
   overlay: i32
@@ -156,6 +155,7 @@ export class TerminalOptions {
    */
   graphics: string
 
+  /** The defaults each field's comment gives in brackets. */
   constructor() {
     this.stepsPerSecond = 60
     this.minFps = 10
@@ -176,7 +176,11 @@ export class TerminalOptions {
   }
 }
 
-/** The options every field's comment gives the default of. */
+/**
+ * The options a program starts from and changes what it needs in.
+ *
+ * @returns A fresh `TerminalOptions` holding the default each field's comment gives.
+ */
 export const defaultTerminalOptions = (): TerminalOptions => new TerminalOptions()
 
 /** The monotonic clock in milliseconds. */
@@ -258,24 +262,32 @@ const termIoParam = (e: TermEvent, i: i32): i32 => (i < toI32(e.params.length) ?
  * Made by `openTerminal`.
  */
 export class Terminal {
+  /** The options it was opened with. */
   options: TerminalOptions
+  /** What the probe found the terminal can do. */
   caps: TermCaps
   /** The cell grid the program draws into, the terminal's size. */
   screen: Screen
+  /** Half-block pixels drawn on `screen`, two to a cell. */
   canvas: Canvas
   /** The pixels the program draws into, `options.framebufferWidth × framebufferHeight`. */
   framebuffer: Framebuffer
   /** The framebuffer shrunk by the controller's resolution divisor. */
   scaled: Framebuffer
+  /** The buffer a kitty or sixel frame is encoded into before it is written. */
   pixels: PixelBytes
+  /** Turns the bytes read from stdin into events. */
   decoder: KeyDecoder
+  /** Which keys are down, and the releases made up from silence without the kitty protocol. */
   keys: KeyState
+  /** Paces the frames and chooses their detail from how fast the terminal acknowledges them. */
   rate: RateController
   /** The events read during the probe, handed to the program first. */
   private held: TermEvent[]
   /** The send times of the frames not yet acknowledged, a ring of `TERM_IO_ACKS`. */
   private ackSent: f64[]
   private ackHead: i32
+  /** The frames sent whose acknowledgement has not come back, up to the most the ring holds. */
   ackCount: i32
   private readBuf: u8[]
   /** Where the framebuffer is drawn, for `rectCols × rectRows` cells and `rectBackend`. */
@@ -301,7 +313,9 @@ export class Terminal {
   graphics: i32
   /** The backend the last frame used. */
   backend: i32
+  /** A cell's width in pixels as the terminal reported it, at most 256; 0 when it did not say. */
   cellWidthPx: i32
+  /** A cell's height in pixels as the terminal reported it, at most 256; 0 when it did not say. */
   cellHeightPx: i32
   /** The size `terminalSize` last answered. */
   private sizeCols: i32
@@ -323,6 +337,16 @@ export class Terminal {
   /** Whether `screen` was drawn in 256 colours last frame. */
   palette256: boolean
 
+  /**
+   * A terminal already in raw mode and probed, before anything is turned on;
+   * `openTerminal` makes one and turns on what the options ask for.
+   *
+   * @param options The program's options.
+   * @param caps What the probe found.
+   * @param cols The terminal's columns.
+   * @param rows The terminal's rows.
+   * @param held The events that arrived during the probe, which `readEvents` hands over first.
+   */
   constructor(options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[]) {
     this.options = options
     this.caps = caps
@@ -506,7 +530,12 @@ export class Terminal {
     }
   }
 
-  /** What the controller measured, with the backend the last frame actually used. */
+  /**
+   * What the controller measured, with the backend the last frame actually
+   * used.
+   *
+   * @returns A fresh snapshot, for an overlay or a log.
+   */
   stats(): TermStats {
     const s: TermStats = this.rate.stats()
     s.backend = this.backend
@@ -523,10 +552,12 @@ export class Terminal {
   }
 
   /**
-   * Whether the terminal changed size since the last call; if it did, the
-   * `Screen` takes the new size and the framebuffer is fitted again. It
-   * compares the size the terminal answers, not the `Screen`'s, which clamps
-   * a huge one, so a huge terminal is not resized every frame.
+   * Take a new terminal size, if there is one: the `Screen` takes it and the
+   * framebuffer is fitted again. It compares the size the terminal answers, not
+   * the `Screen`'s, which clamps a huge one, so a huge terminal is not resized
+   * every frame.
+   *
+   * @returns True when the size changed since the last call.
    */
   checkResize(): boolean {
     this.readSize()
@@ -651,11 +682,13 @@ export class Terminal {
   }
 
   /**
-   * Wait up to `waitMs` milliseconds (a negative wait has no limit) for input,
-   * and append what it means for the program to `out`: keys, mouse, paste and
-   * focus events, the releases made up from silence, `EVENT_QUIT` for Ctrl-C.
-   * Frame acknowledgements are taken here and never appended. Answers false
-   * once stdin has ended.
+   * Wait for input and append what it means for the program: keys, mouse, paste
+   * and focus events, the releases made up from silence, `EVENT_QUIT` for
+   * Ctrl-C. Frame acknowledgements are taken here and never appended.
+   *
+   * @param waitMs The longest wait in milliseconds; a negative wait has no limit.
+   * @param out Where the events go, after what it holds.
+   * @returns False once stdin has ended.
    */
   readEvents(waitMs: i32, out: TermEvent[]): boolean {
     if (toI32(this.held.length) > 0) {
@@ -825,8 +858,11 @@ const termIoRefusal = (): string => {
 /**
  * Open the terminal: refuse a pipe, enter raw mode and the alternate screen,
  * hide the cursor, probe what the terminal can do and turn on what `options`
- * asks for and it has. The restore string undoes all of it should the
- * program panic or be signalled before `close`.
+ * asks for and it has. The restore string undoes all of it should the program
+ * panic or be signalled before `close`.
+ *
+ * @param options What to turn on, and how to pace frames.
+ * @returns The open terminal, or an `Err` saying why not: stdin or stdout is not a terminal, or raw mode was refused.
  */
 export const openTerminal = (options: TerminalOptions): Result<Terminal, string> => {
   const refused: string = termIoRefusal()
@@ -874,15 +910,29 @@ export const openTerminal = (options: TerminalOptions): Result<Terminal, string>
 
 /** What one `update` step gets: the events since the last step and which keys are down. */
 export class TermInput {
+  /** The events since the last step, in the order they arrived. */
   events: TermEvent[]
+  /** Which keys are down, for `isDown`. */
   keys: KeyState
 
+  /**
+   * An input with no events yet.
+   *
+   * @param keys The terminal's key state, which `isDown` reads.
+   */
   constructor(keys: KeyState) {
     this.events = []
     this.keys = keys
   }
 
-  /** Whether the key of kind `key` (a `KEY_*`; `code` for `KEY_CHAR`) is down. */
+  /**
+   * Whether a key is down.
+   *
+   * @param key The key's `KEY_` kind.
+   * @param code The code point for `KEY_CHAR`; it tells `KEY_CONTROL` and `KEY_UNKNOWN` keys apart
+   *   too, and is ignored for the other kinds.
+   * @returns True from the key's press until its release, real or synthetic, or a loss of focus.
+   */
   isDown(key: i32, code: i32): boolean {
     return this.keys.isDown(key, code)
   }
@@ -890,13 +940,22 @@ export class TermInput {
 
 /** What `render` draws into: the cells, the pixels, how far into the next step the clock is, and the stats. */
 export class Frame {
+  /** The cell grid, the terminal's size. */
   screen: Screen
+  /** The pixels, `options.framebufferWidth × framebufferHeight`; 0 by 0 when the options ask for none. */
   framebuffer: Framebuffer
   /** From 0 up to 1: how far past the last `update` step this frame is, to interpolate with. */
   alpha: f64
+  /** What the controller measured, when the frame was made. */
   stats: TermStats
+  /** What the probe found the terminal can do. */
   caps: TermCaps
 
+  /**
+   * A frame drawing into `term`'s screen and framebuffer, at `alpha` 0.
+   *
+   * @param term The open terminal.
+   */
   constructor(term: Terminal) {
     this.screen = term.screen
     this.framebuffer = term.framebuffer
@@ -945,14 +1004,18 @@ const termIoWait = (term: Terminal, step: FixedStep, nowMs: f64): i32 => {
 }
 
 /**
- * Open the terminal and run the program: `update(state, input)` once per
- * fixed step (`options.stepsPerSecond`), the events since the last step in
- * `input.events`, and `render(state, frame)` whenever the controller allows a
+ * Open the terminal and run the program: `update` once per fixed step
+ * (`options.stepsPerSecond`) and `render` whenever the controller allows a
  * frame, which is then presented. A resize is an `EVENT_RESIZE` (`x` the new
- * columns, `y` the rows) with the `Screen` already resized. The loop ends when
- * `update` answers false or the user quits (`EVENT_QUIT`), answering `Ok(0)`,
- * and the terminal is closed however it ends. An `Err` is a terminal that
- * could not be opened, or stdin ending.
+ * columns, `y` the rows) with the `Screen` already resized. The terminal is
+ * closed however the loop ends.
+ *
+ * @param options What to turn on, and how to pace steps and frames.
+ * @param state The program's state, handed to every call.
+ * @param update Runs one step on the events since the last in `input.events`; answers false to stop.
+ * @param render Draws `state` into `frame`.
+ * @returns `Ok(0)` once `update` answers false or the user quits (`EVENT_QUIT`); an `Err` for a
+ *   terminal that could not be opened, or stdin ending.
  */
 export const runTerminal = <G>(
   options: TerminalOptions,

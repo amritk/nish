@@ -1,5 +1,5 @@
 /**
- * `std/term` — a terminal drawn as a grid of coloured cells, and the keys a
+ * `nish/term` — a terminal drawn as a grid of coloured cells, and the keys a
  * terminal sends turned into events.
  *
  *     import { Screen, Canvas, rgb, COLOR_DEFAULT, enterAltScreen, hideCursor } from "nish/term";
@@ -412,7 +412,14 @@ const termLeadBits = (c: i32, width: i32): i32 => {
   return width === 3 ? c & 15 : c & 7
 }
 
-/** The colour with red, green and blue each in 0–255, as `0xRRGGBB`; a component outside is clamped. */
+/**
+ * A colour from its red, green and blue.
+ *
+ * @param r Red, 0–255; a value outside is clamped.
+ * @param g Green, 0–255; a value outside is clamped.
+ * @param b Blue, 0–255; a value outside is clamped.
+ * @returns The colour as `0xRRGGBB`, for any `fg`, `bg` or pixel.
+ */
 export const rgb = (r: i32, g: i32, b: i32): i32 =>
   (termClamp(r, 0, 255) << 16) | (termClamp(g, 0, 255) << 8) | termClamp(b, 0, 255)
 
@@ -431,9 +438,11 @@ const termCubeLevel = (v: i32): i32 => {
 const termCubeValue = (q: i32): i32 => (q === 0 ? 0 : q * 40 + 55)
 
 /**
- * The 256-colour palette index nearest `colour`: one of the 6×6×6 cube
- * (16–231) or of the 24 greys (232–255), whichever is closer in RGB.
- * `COLOR_DEFAULT` stays itself.
+ * The 256-colour palette entry nearest a colour: one of the 6×6×6 cube (16–231)
+ * or of the 24 greys (232–255), whichever is closer in RGB.
+ *
+ * @param colour An `0xRRGGBB` colour, or `COLOR_DEFAULT`.
+ * @returns The palette index; `COLOR_DEFAULT` stays itself.
  */
 export const paletteIndex = (colour: i32): i32 => {
   if (colour < 0) {
@@ -460,35 +469,73 @@ export const paletteIndex = (colour: i32): i32 => {
   return greyDistance < cubeDistance ? step + 232 : cube
 }
 
-/** Switch to the alternate screen, which the terminal restores the old contents from on leaving. */
+/**
+ * Switch to the alternate screen, which the terminal restores the old contents
+ * from on leaving.
+ *
+ * @returns The escape sequence, to `write`.
+ */
 export const enterAltScreen = (): string => "\x1b[?1049h"
 
-/** Leave the alternate screen and show what was there before `enterAltScreen`. */
+/**
+ * Leave the alternate screen and show what was there before `enterAltScreen`.
+ *
+ * @returns The escape sequence, to `write`.
+ */
 export const leaveAltScreen = (): string => "\x1b[?1049l"
 
-/** Hide the cursor, so a redraw does not flicker it across the screen. */
+/**
+ * Hide the cursor, so a redraw does not flicker it across the screen.
+ *
+ * @returns The escape sequence, to `write`.
+ */
 export const hideCursor = (): string => "\x1b[?25l"
 
-/** Show the cursor again. */
+/**
+ * Show the cursor again.
+ *
+ * @returns The escape sequence, to `write`.
+ */
 export const showCursor = (): string => "\x1b[?25h"
 
-/** Move the cursor home and erase the whole screen; a `Screen` that was drawn on wants `invalidate` after it. */
+/**
+ * Move the cursor home and erase the whole screen; a `Screen` that was drawn on
+ * wants `invalidate` after it.
+ *
+ * @returns The escape sequences, to `write`.
+ */
 export const clearScreen = (): string => "\x1b[H\x1b[2J"
 
-/** Reset colour and attributes to the terminal's defaults: SGR 0. */
+/**
+ * Reset colour and attributes to the terminal's defaults: SGR 0.
+ *
+ * @returns The escape sequence, to `write`.
+ */
 export const resetStyle = (): string => "\x1b[0m"
 
-/** Move the cursor to column `x`, row `y`, both from 0. */
+/**
+ * Move the cursor to a cell.
+ *
+ * @param x The column, from 0 at the left.
+ * @param y The row, from 0 at the top.
+ * @returns The escape sequence, to `write`.
+ */
 export const moveCursor = (x: i32, y: i32): string => `\x1b[${y + 1};${x + 1}H`
 
 /**
  * Begin a synchronized update (DEC mode 2026): a terminal that knows the mode
  * holds what follows until `endSync`, then paints it in one go, so a frame is
  * never seen half drawn. One that does not ignores it.
+ *
+ * @returns The escape sequence, to `write`.
  */
 export const beginSync = (): string => "\x1b[?2026h"
 
-/** End a synchronized update, so the terminal paints what `beginSync` held. */
+/**
+ * End a synchronized update, so the terminal paints what `beginSync` held.
+ *
+ * @returns The escape sequence, to `write`.
+ */
 export const endSync = (): string => "\x1b[?2026l"
 
 /**
@@ -619,9 +666,13 @@ export class Screen {
   sync: boolean
 
   /**
-   * A `width × height` screen of blank cells in the terminal's colours, none
-   * of them sent yet, so the first `flush` draws them all. With `palette256`
-   * set, every colour is sent as its nearest 256-colour index (`paletteIndex`).
+   * A screen of blank cells in the terminal's colours, none of them sent yet,
+   * so the first `flush` draws them all.
+   *
+   * @param width Columns, as the terminal reports them.
+   * @param height Rows, as the terminal reports them.
+   * @param palette256 Whether to send every colour as its nearest 256-colour index
+   *   (`paletteIndex`), for a terminal without 24-bit colour.
    */
   constructor(width: i32, height: i32, palette256: boolean) {
     this.width = width < 0 ? 0 : width
@@ -642,10 +693,13 @@ export class Screen {
   }
 
   /**
-   * Make the screen `width × height`, blank and unsent: a terminal that changed
-   * size is redrawn in full. Each side is at most 4,096 cells and the screen at
-   * most 1,048,576, rows dropped to fit, so no size a terminal reports makes it
+   * Make the screen a new size, blank and unsent: a terminal that changed size
+   * is redrawn in full. Each side is at most 4,096 cells and the screen at most
+   * 1,048,576, rows dropped to fit, so no size a terminal reports makes it
    * overflow or run out of memory.
+   *
+   * @param width The new columns.
+   * @param height The new rows.
    */
   resize(width: i32, height: i32): void {
     this.width = termClamp(width, 0, TERM_MAX_SIDE)
@@ -669,7 +723,11 @@ export class Screen {
     this.invalidate()
   }
 
-  /** Blank every cell of the frame being drawn: a space on `background`, default foreground, no attributes. */
+  /**
+   * Blank every cell of the frame being drawn.
+   *
+   * @param background The colour each cell's space is drawn on; the foreground is the default and no attribute is set.
+   */
   clear(background: i32): void {
     this.glyphs.fill(TERM_SPACE)
     this.fgs.fill(COLOR_DEFAULT)
@@ -686,9 +744,17 @@ export class Screen {
   }
 
   /**
-   * Draw code point `glyph` at column `x`, row `y`; a cell off the screen is
-   * not drawn. Bits of `attrs` other than `ATTR_BOLD` and `ATTR_INVERSE` are
-   * dropped, so `flush` never has an attribute it cannot write.
+   * Draw one character in a cell; a cell off the screen is not drawn.
+   *
+   * @param x The column, from 0.
+   * @param y The row, from 0.
+   * @param glyph The character's code point, taken to be one column wide. A C0 or C1 control, DEL,
+   *   a surrogate or a value that is no code point is sent as U+FFFD, so a cell cannot move the
+   *   cursor or open an escape.
+   * @param fg The character's colour, `0xRRGGBB` or `COLOR_DEFAULT`.
+   * @param bg The cell's colour behind it, `0xRRGGBB` or `COLOR_DEFAULT`.
+   * @param attrs `ATTR_BOLD` and `ATTR_INVERSE` bits; any other bit is dropped, so `flush` never
+   *   has an attribute it cannot write.
    */
   set(x: i32, y: i32, glyph: i32, fg: i32, bg: i32, attrs: i32): void {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
@@ -705,8 +771,15 @@ export class Screen {
   }
 
   /**
-   * Draw `s` from column `x` of row `y`, one cell per character, clipped at
-   * the edges, and answer the column after its last character.
+   * Draw a string along a row, one cell per character, clipped at the edges.
+   *
+   * @param x The column of the first character, from 0; it may be off the screen.
+   * @param y The row, from 0.
+   * @param s The text. A control character in it, a line break included, takes a cell and is sent as U+FFFD.
+   * @param fg The characters' colour.
+   * @param bg The colour behind them.
+   * @param attrs `ATTR_BOLD` and `ATTR_INVERSE` bits, as `set` takes them.
+   * @returns The column after the last character, `x` plus the characters in `s`, whether or not they were clipped.
    */
   text(x: i32, y: i32, s: string, fg: i32, bg: i32, attrs: i32): i32 {
     const n: i32 = toI32(s.length)
@@ -720,7 +793,13 @@ export class Screen {
     return column
   }
 
-  /** The code point drawn at column `x`, row `y` of the frame being drawn, or -1 off the screen. */
+  /**
+   * What the frame being drawn holds in a cell.
+   *
+   * @param x The column, from 0.
+   * @param y The row, from 0.
+   * @returns The code point drawn there, or -1 off the screen.
+   */
   glyphAt(x: i32, y: i32): i32 {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return -1
@@ -815,20 +894,21 @@ export class Screen {
   }
 
   /**
-   * The escapes and glyphs that turn the frame last sent into the frame drawn,
-   * and the drawn frame becomes the sent one. Write the answer with `write`;
-   * an empty string means nothing changed.
+   * Turn the frame last sent into the frame drawn, and make the drawn frame the
+   * sent one.
    *
    * Changed cells are visited row by row. The cursor is moved only when it is
    * not already at the cell — `ESC [ n C` along the row, `ESC [ row ; col H`
    * otherwise — and a gap of up to three unchanged ASCII cells in the current
-   * style is rewritten instead, which is shorter than the move. A style is
-   * sent only when it differs from the previous cell's, and only the parts
-   * that differ, from a reset when an attribute has to be turned off. A flush
-   * that leaves the terminal in a style other than the default ends with
-   * `ESC [ 0 m`, so what the caller writes next starts plain. With `sync` set,
-   * a flush that changes anything is wrapped in `beginSync` and `endSync`, in
-   * the same string, so the terminal paints the frame whole.
+   * style is rewritten instead, which is shorter than the move. A style is sent
+   * only when it differs from the previous cell's, and only the parts that
+   * differ, from a reset when an attribute has to be turned off. A flush that
+   * leaves the terminal in a style other than the default ends with `ESC [ 0
+   * m`, so what the caller writes next starts plain. With `sync` set, a flush
+   * that changes anything is wrapped in `beginSync` and `endSync`, in the same
+   * string, so the terminal paints the frame whole.
+   *
+   * @returns The escapes and glyphs, to `write`; `""` when nothing changed.
    */
   flush(): string {
     const w: i32 = this.width
@@ -1021,7 +1101,12 @@ export class Canvas {
   /** One colour per pixel, row by row. */
   pixels: i32[]
 
-  /** A canvas of `screen`'s size, every pixel `COLOR_DEFAULT`. Make a new one after the screen is resized. */
+  /**
+   * A canvas of `screen`'s size, every pixel `COLOR_DEFAULT`. Make a new one
+   * after the screen is resized.
+   *
+   * @param screen The screen it draws on, two pixels to a cell, one above the other.
+   */
   constructor(screen: Screen) {
     this.screen = screen
     this.width = screen.width
@@ -1030,7 +1115,11 @@ export class Canvas {
     this.pixels.fill(COLOR_DEFAULT)
   }
 
-  /** Set every pixel to `colour`. */
+  /**
+   * Set every pixel to one colour.
+   *
+   * @param colour The colour, `0xRRGGBB` or `COLOR_DEFAULT` for none.
+   */
   clear(colour: i32): void {
     this.pixels.fill(colour)
     const rows: i32 = this.height >> 1
@@ -1041,7 +1130,13 @@ export class Canvas {
     }
   }
 
-  /** The colour of the pixel at `x`, `y`, or `COLOR_DEFAULT` off the canvas. */
+  /**
+   * What colour a pixel is.
+   *
+   * @param x The pixel column, from 0.
+   * @param y The pixel row, from 0; two to a screen row.
+   * @returns The colour, or `COLOR_DEFAULT` off the canvas.
+   */
   pixel(x: i32, y: i32): i32 {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return COLOR_DEFAULT
@@ -1049,7 +1144,13 @@ export class Canvas {
     return this.pixels[y * this.width + x]
   }
 
-  /** Set the pixel at `x`, `y` to `colour`; a pixel off the canvas is not drawn. */
+  /**
+   * Set one pixel; a pixel off the canvas is not drawn.
+   *
+   * @param x The pixel column, from 0.
+   * @param y The pixel row, from 0; two to a screen row.
+   * @param colour The colour, `0xRRGGBB` or `COLOR_DEFAULT` for none.
+   */
   setPixel(x: i32, y: i32, colour: i32): void {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return
@@ -1058,7 +1159,15 @@ export class Canvas {
     this.paintCell(x, y >> 1)
   }
 
-  /** Fill the `w × h` rectangle whose top-left pixel is `x`, `y`, clipped to the canvas. */
+  /**
+   * Fill a rectangle, clipped to the canvas.
+   *
+   * @param x The top-left pixel's column.
+   * @param y The top-left pixel's row.
+   * @param w The width in pixels; 0 or less fills nothing.
+   * @param h The height in pixels; 0 or less fills nothing.
+   * @param colour The colour, `0xRRGGBB` or `COLOR_DEFAULT` for none.
+   */
   fillRect(x: i32, y: i32, w: i32, h: i32, colour: i32): void {
     const left: i32 = x < 0 ? 0 : x
     const top: i32 = y < 0 ? 0 : y
@@ -1077,9 +1186,15 @@ export class Canvas {
   }
 
   /**
-   * Draw a line from `x0`, `y0` to `x1`, `y1`, both ends included (Bresenham's).
-   * Any `i32` ends will do: the walk stops once it leaves the canvas for good,
-   * though one that starts far outside steps all the way in.
+   * Draw a line, both ends included (Bresenham's). Any `i32` ends will do: the
+   * walk stops once it leaves the canvas for good, though one that starts far
+   * outside steps all the way in.
+   *
+   * @param x0 The first end's pixel column.
+   * @param y0 The first end's pixel row.
+   * @param x1 The other end's pixel column.
+   * @param y1 The other end's pixel row.
+   * @param colour The colour, `0xRRGGBB` or `COLOR_DEFAULT` for none.
    */
   line(x0: i32, y0: i32, x1: i32, y1: i32, colour: i32): void {
     // The error terms are f64, exact here, because a span past 2^30 overflows `2 * err` in i32.
@@ -1117,9 +1232,15 @@ export class Canvas {
   }
 
   /**
-   * Draw `s` in cells from column `col` of cell row `row` in `fg`, each
-   * character on the colour of the pixels behind it (the top one, or the
-   * bottom one where the top is unset), and answer the column after it.
+   * Draw a string in screen cells over the pixels, each character on the colour
+   * of the pixels behind it (the top one, or the bottom one where the top is
+   * unset).
+   *
+   * @param col The cell column of the first character, from 0.
+   * @param row The cell row, from 0: pixel rows `2 * row` and `2 * row + 1`.
+   * @param s The text.
+   * @param fg The characters' colour.
+   * @returns The column after the last character, whether or not it was clipped.
    */
   text(col: i32, row: i32, s: string, fg: i32): i32 {
     const n: i32 = toI32(s.length)
@@ -1159,7 +1280,12 @@ export class KeyEvent {
   /** The character's code point, the control byte, or the escape sequence's final byte. */
   code: i32
 
-  /** The event of kind `kind` with code `code`. */
+  /**
+   * A key event.
+   *
+   * @param kind One of the `KEY_` constants.
+   * @param code The code point for `KEY_CHAR`, otherwise the byte that named the key.
+   */
   constructor(kind: i32, code: i32) {
     this.kind = kind
     this.code = code
@@ -1208,7 +1334,11 @@ export class TermEvent {
   /** For `EVENT_FOCUS`, whether the terminal gained focus. */
   gained: boolean
 
-  /** An event of type `type` with every other field at its default. */
+  /**
+   * An event with every field but its type at its default.
+   *
+   * @param type One of the `EVENT_` constants.
+   */
   constructor(type: i32) {
     this.type = type
     this.key = 0
@@ -1278,7 +1408,12 @@ export class KeyDecoder {
    */
   pasting: boolean
 
-  /** A decoder that gives up on an unfinished sequence after `escapeTimeoutMs` (25–50 is usual). */
+  /**
+   * A decoder with nothing held.
+   *
+   * @param escapeTimeoutMs How long an unfinished sequence is held before it is given up, in
+   *   milliseconds; 25–50 is usual.
+   */
   constructor(escapeTimeoutMs: f64) {
     this.escapeTimeoutMs = escapeTimeoutMs
     this.pending = []
@@ -1291,15 +1426,25 @@ export class KeyDecoder {
     this.pasteBytes = []
   }
 
-  /** Whether bytes are held, so the caller should `poll` once the timeout has passed. */
+  /**
+   * Whether bytes are held, so the caller should `poll` once the timeout has
+   * passed.
+   *
+   * @returns True while the bytes of an unfinished sequence are held.
+   */
   waiting(): boolean {
     return toI32(this.pending.length) > 0
   }
 
   /**
-   * The keys in `bytes[0, count)`, read at time `nowMs`, after whatever was
-   * held: held bytes older than the timeout are given up first, as keys of
-   * their own, and the rest continue into these.
+   * Decode what was read, after whatever was held: held bytes older than the
+   * timeout are given up first, as keys of their own, and the rest continue
+   * into these.
+   *
+   * @param bytes The buffer the read filled.
+   * @param count How many of its bytes the read filled, from the start.
+   * @param nowMs When the bytes were read, on the clock `poll` is given.
+   * @returns The keys, in the order they were typed; an unfinished sequence at the end is held.
    */
   feed(bytes: u8[], count: i32, nowMs: f64): KeyEvent[] {
     const events: KeyEvent[] = this.poll(nowMs)
@@ -1314,7 +1459,12 @@ export class KeyDecoder {
     return events
   }
 
-  /** The keys held bytes become once `escapeTimeoutMs` has passed since they arrived: none before then. */
+  /**
+   * Give up held bytes once the timeout has passed since they arrived.
+   *
+   * @param nowMs The time now, on the clock `feed` was given.
+   * @returns The keys the held bytes become, or none before the timeout.
+   */
   poll(nowMs: f64): KeyEvent[] {
     const events: KeyEvent[] = []
     const held: i32 = toI32(this.pending.length)
@@ -1327,9 +1477,14 @@ export class KeyDecoder {
   }
 
   /**
-   * The events in `bytes[0, count)`, read at time `nowMs`, after whatever was
-   * held, as `feed` takes them. The timeout counts from the last byte that
-   * arrived, so a reply split across reads is not given up halfway.
+   * Decode what was read into events of every kind, after whatever was held, as
+   * `feed` takes them. The timeout counts from the last byte that arrived, so a
+   * reply split across reads is not given up halfway.
+   *
+   * @param bytes The buffer the read filled.
+   * @param count How many of its bytes the read filled, from the start.
+   * @param nowMs When the bytes were read, on the clock `pollEvents` is given.
+   * @returns The events, in the order they were sent; an unfinished sequence or paste at the end is held.
    */
   feedEvents(bytes: u8[], count: i32, nowMs: f64): TermEvent[] {
     const events: TermEvent[] = this.pollEvents(nowMs)
@@ -1344,9 +1499,12 @@ export class KeyDecoder {
   }
 
   /**
-   * The events held bytes become once `escapeTimeoutMs` has passed: an ESC as
-   * `KEY_ESCAPE`, an unterminated DCS, APC or OSC as nothing. A paste waits
-   * for its end however long it takes.
+   * Give up held bytes once the timeout has passed: an ESC as `KEY_ESCAPE`, an
+   * unterminated DCS, APC or OSC as nothing. A paste waits for its end however
+   * long it takes.
+   *
+   * @param nowMs The time now, on the clock `feedEvents` was given.
+   * @returns The events the held bytes become, or none before the timeout.
    */
   pollEvents(nowMs: f64): TermEvent[] {
     const events: TermEvent[] = []
@@ -1455,27 +1613,33 @@ export class KeyState {
   }
 
   /**
-   * Whether the key of kind `key` is down. `code` tells a `KEY_CHAR`,
-   * `KEY_CONTROL` or `KEY_UNKNOWN` apart and is ignored for the rest; a
-   * letter is the same key in either case, since Shift changes the code a
-   * terminal sends.
+   * Whether a key is down. A letter is the same key in either case, since Shift
+   * changes the code a terminal sends.
+   *
+   * @param key The key's `KEY_` kind.
+   * @param code Tells a `KEY_CHAR`, `KEY_CONTROL` or `KEY_UNKNOWN` apart, as `TermEvent.code` does;
+   *   ignored for the other kinds.
+   * @returns True from the key's press until its release, real or synthetic, or a loss of focus.
    */
   isDown(key: i32, code: i32): boolean {
     return this.find(termKeyId(key, code)) >= 0
   }
 
   /**
-   * Take `events`, which arrived at `nowMs`, and answer what the program
-   * should see: first the releases `tick` makes for the keys `events` does
-   * not mention (a held key's repeats can wait in a read longer than the
-   * gap), then each event, with
-   * Ctrl-C as `EVENT_QUIT` (its repeats and release dropped) and a press of a
-   * key already down marked `ACTION_REPEAT` while releases are synthetic.
-   * A real release of a key not down is dropped: it was let go already, made
-   * up from silence or by losing focus. Losing focus lets every key go, since
-   * its release goes elsewhere. A non-finite `nowMs` releases nothing; a key
-   * it presses keeps its last time, and a new one is timed from the watermark
-   * (0 without one).
+   * Take the events of one read and answer what the program should see: first
+   * the releases `tick` makes for the keys the events do not mention (a held
+   * key's repeats can wait in a read longer than the gap), then each event,
+   * with Ctrl-C as `EVENT_QUIT` (its repeats and release dropped) and a press
+   * of a key already down marked `ACTION_REPEAT` while releases are synthetic.
+   *
+   * A real release of a key not down is dropped: it was let go already, made up
+   * from silence or by losing focus. Losing focus lets every key go, since its
+   * release goes elsewhere.
+   *
+   * @param events The events, as `KeyDecoder.feedEvents` or `pollEvents` gave them.
+   * @param nowMs When they arrived. A non-finite time releases nothing; a key it presses keeps its
+   *   last time, and a new one is timed from the watermark (0 without one).
+   * @returns The events to act on, in order.
    */
   apply(events: TermEvent[], nowMs: f64): TermEvent[] {
     const out: TermEvent[] = this.releaseDue(nowMs, events)
@@ -1500,10 +1664,11 @@ export class KeyState {
   }
 
   /**
-   * Everything the terminal generated before `sentAtMs`, on the caller's
-   * clock, has arrived: the answer to an in-order query sent then has come
-   * back. From now on silence is measured against the latest such time. A
-   * non-finite `sentAtMs` is ignored.
+   * Note that everything the terminal generated before a time has arrived: the
+   * answer to an in-order query sent then has come back. From now on silence is
+   * measured against the latest such time.
+   *
+   * @param sentAtMs When the query was sent, on the caller's clock; a non-finite time is ignored.
    */
   delivered(sentAtMs: f64): void {
     if (!termFinite(sentAtMs)) {
@@ -1516,14 +1681,23 @@ export class KeyState {
   }
 
   /**
-   * How long before `nowMs` the latest answered query was sent, or -1 with no
-   * watermark: the caller clears `watermarked` once this passes its bound.
+   * How long ago the latest answered query was sent; the caller clears
+   * `watermarked` once this passes its bound.
+   *
+   * @param nowMs The time now, on the clock `delivered` was given.
+   * @returns The milliseconds since that query was sent, or -1 with no watermark.
    */
   deliveredAgoMs(nowMs: f64): f64 {
     return this.watermarked ? nowMs - this.watermarkMs : toF64(-1)
   }
 
-  /** The releases due by `nowMs` while releases are synthetic: each key whose gap has passed, let go. */
+  /**
+   * The releases due while releases are synthetic: each key whose gap has
+   * passed, let go.
+   *
+   * @param nowMs The time now, on the clock `apply` was given.
+   * @returns The synthetic releases, one per key let go; none while releases are real.
+   */
   tick(nowMs: f64): TermEvent[] {
     const none: TermEvent[] = []
     return this.releaseDue(nowMs, none)
@@ -1656,7 +1830,14 @@ export class FixedStep {
    */
   started: boolean
 
-  /** A clock of `stepsPerSecond` steps a second (1 at least), running at most `maxSteps` (1 at least) per `advance`. */
+  /**
+   * A clock for a simulation that steps at a fixed rate whatever the frame
+   * rate.
+   *
+   * @param stepsPerSecond The rate; 1 at least.
+   * @param maxSteps The most steps one `advance` answers, 1 at least; time past them is dropped, so
+   *   a stall does not have to be caught up.
+   */
   constructor(stepsPerSecond: i32, maxSteps: i32) {
     const rate: i32 = stepsPerSecond < 1 ? 1 : stepsPerSecond
     this.stepMs = 1000.0 / toF64(rate)
@@ -1667,9 +1848,12 @@ export class FixedStep {
   }
 
   /**
-   * The steps to run for the time between the last call and `nowMs`. The first
-   * call only starts the clock and answers 0, as does a time earlier than the
-   * last one.
+   * The steps to run for the time between the last call and now. The first call
+   * only starts the clock and answers 0, as does a time earlier than the last
+   * one.
+   *
+   * @param nowMs The time now, in milliseconds.
+   * @returns How many steps to run, 0 to `maxSteps`.
    */
   advance(nowMs: f64): i32 {
     if (!this.started || !(nowMs >= this.lastMs)) {
@@ -1694,7 +1878,11 @@ export class FixedStep {
     return steps
   }
 
-  /** How far into the next step the clock is, from 0 up to but not including 1. */
+  /**
+   * How far into the next step the clock is, for drawing between two steps.
+   *
+   * @returns A fraction from 0 up to but not including 1.
+   */
   alpha(): f64 {
     return this.carry / this.stepMs
   }

@@ -159,7 +159,12 @@ const YAML_JSON_DOT: i32 = 46
 const YAML_JSON_ZERO: i32 = 48
 const YAML_JSON_LT: i32 = 60
 
-/** A `YAML_JSON_ERR_*` code's name, without the prefix; `""` for any other code. */
+/**
+ * A load failure's name, for a message.
+ *
+ * @param code A `YAML_JSON_ERR_*` code, as `failed` holds it.
+ * @returns The code's name without the `YAML_JSON_ERR_` prefix, such as `"DEPTH"`; `""` for any other code.
+ */
 export const yamlJsonErrorName = (code: i32): string => {
   const names: string[] = ["DOCUMENT", "YAML", "NOT_FINITE", "EXPANSION", "DEPTH", "NUMBER", "MERGE"]
   const i: i32 = YAML_JSON_ERR_DOCUMENT - code
@@ -176,8 +181,9 @@ export class YamlJsonLoader {
   maxDepth: i32 = 0
   /** The last `load`'s code: `0`, a `YAML_JSON_ERR_*` code or a `JSON_VALUE_ERR_*` code. */
   failed: i32 = 0
-  /** The byte range the error is about, and `-1` until one. */
+  /** The first byte the failure is about; `-1` after a load that succeeds. */
   errorStart: i32 = -1
+  /** One past the last byte the failure is about; `-1` after a load that succeeds. */
   errorEnd: i32 = -1
 
   /** The stream and document of the load in progress. */
@@ -215,6 +221,7 @@ export class YamlJsonLoader {
   /** The merged pairs the load may still visit. */
   private mergeBudget: i32 = 0
 
+  /** A loader that holds collections to `JSON_WRITER_MAX_DEPTH`, so whatever it loads can be written back out. */
   constructor() {
     this.maxDepth = JSON_WRITER_MAX_DEPTH
     this.stream = parseYaml("")
@@ -230,9 +237,14 @@ export class YamlJsonLoader {
   }
 
   /**
-   * Clears `doc` and loads document `d` of `stream` into it. Answers the root
-   * value, or a negative code, which is also in `failed`, with the range in
-   * `errorStart` and `errorEnd`; nothing is kept from a load that fails.
+   * Clears `doc` and loads document `d` of `stream` into it. Nothing is kept
+   * from a load that fails.
+   *
+   * @param stream The parsed stream, with the options it was parsed under; its `merge` decides whether `<<` keys merge.
+   * @param d The document's 0-based index in `stream`.
+   * @param doc Where the values go; cleared first, and cleared again when the load fails.
+   * @returns The root value, or a negative code that is also in `failed`, with the range in
+   *   `errorStart` and `errorEnd`.
    */
   load(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue {
     this.stream = stream

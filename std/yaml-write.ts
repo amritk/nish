@@ -402,10 +402,13 @@ class YamlWriter {
 }
 
 /**
- * `v` of `doc` as block YAML text that `parseYaml` reads back as the same
- * tree; `""` when `v` names no value or nests deeper than
- * `JSON_WRITER_MAX_DEPTH` collections. See the module comment for the rule
- * that quotes a string.
+ * A value as block YAML text that `parseYaml` reads back as the same tree. See
+ * the module comment for the rule that quotes a string.
+ *
+ * @param doc The document that holds `v`.
+ * @param v The value to write, usually the document's root.
+ * @returns The text, ending in a line break; `""` when `v` names no value or nests deeper than
+ *   `JSON_WRITER_MAX_DEPTH` collections.
  */
 export const stringifyYaml = (doc: JsonDocument, v: JsonValue): string => {
   if (doc.kind(v) === JSON_VALUE_NONE) {

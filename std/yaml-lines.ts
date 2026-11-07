@@ -41,6 +41,11 @@ export class YamlLineIndex {
   /** `starts[n]` is the byte at which line `n + 1` begins; line 1 begins at 0. */
   private starts: i32[]
 
+  /**
+   * Records where each line of `text` starts, in one scan.
+   *
+   * @param text The text the offsets index, such as the source `parseYaml` read.
+   */
   constructor(text: string) {
     this.text = text
     this.starts = [0]
@@ -64,12 +69,21 @@ export class YamlLineIndex {
     }
   }
 
-  /** How many lines the text has: one more than its breaks, so `""` has one. */
+  /**
+   * How many lines the text has.
+   *
+   * @returns One more than its line breaks, so `""` has one and a text ending in a break has an empty last line.
+   */
   lineCount(): i32 {
     return toI32(this.starts.length)
   }
 
-  /** The byte at which 1-based `line` begins; a line outside the text clamps to the first or last. */
+  /**
+   * Where a line begins.
+   *
+   * @param line The 1-based line; one outside the text clamps to the first or last line.
+   * @returns The byte offset of the line's first byte.
+   */
   lineStart(line: i32): i32 {
     const count: i32 = toI32(this.starts.length)
     let index: i32 = line - 1
@@ -82,12 +96,23 @@ export class YamlLineIndex {
     return index < count ? this.starts[index] : 0
   }
 
-  /** The 1-based line `offset` is on, after clamping it to `[0, text.length]`. */
+  /**
+   * Which line an offset is on.
+   *
+   * @param offset A byte offset into the text; clamped to `[0, text.length]`.
+   * @returns The 1-based line; a break belongs to the line it ends.
+   */
   line(offset: i32): i32 {
     return this.lineIndexOf(this.clamp(offset)) + 1
   }
 
-  /** The 1-based column of `offset` on its line, counting characters. */
+  /**
+   * Where an offset is on its line, in characters.
+   *
+   * @param offset A byte offset into the text; clamped to `[0, text.length]`.
+   * @returns The 1-based column: one more than the characters between the line's start and
+   *   `offset`, a UTF-8 continuation byte not counting.
+   */
   column(offset: i32): i32 {
     const at: i32 = this.clamp(offset)
     const index: i32 = this.lineIndexOf(at)
@@ -106,7 +131,12 @@ export class YamlLineIndex {
     return column
   }
 
-  /** The 1-based column of `offset` on its line, counting bytes. */
+  /**
+   * Where an offset is on its line, in bytes.
+   *
+   * @param offset A byte offset into the text; clamped to `[0, text.length]`.
+   * @returns The 1-based column: one more than the bytes between the line's start and `offset`.
+   */
   byteColumn(offset: i32): i32 {
     const at: i32 = this.clamp(offset)
     return at - this.lineStart(this.lineIndexOf(at) + 1) + 1
