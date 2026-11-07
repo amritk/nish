@@ -420,18 +420,18 @@ machine was the 4-core cloud VM above, Linux 6.18, on 2026-11-07.
 
 | record | mode | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | noise band p50 |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 KB | copied | 885 (820 to 1,020) | 5,585 (5,430 to 7,090) | 2,017 (1,751 to 2,281) | 2,921 | ±8.6% |
-| 1 KB | in place | 1,030 (950 to 1,120) | 6,175 (5,260 to 7,410) | 2,348 (1,852 to 2,601) | 0 | ±11.5% |
-| 4 KB | copied | 1,665 (1,500 to 2,040) | 9,350 (6,600 to 13,200) | 7,955 (6,596 to 8,471) | 12,137 | ±6.8% |
-| 4 KB | in place | 1,595 (1,330 to 1,680) | 8,570 (7,130 to 26,430) | 8,004 (6,618 to 8,515) | 0 | ±4.4% |
-| 10 KB | copied | 3,165 (2,780 to 3,370) | 13,540 (11,220 to 36,410) | 18,879 (15,301 to 20,497) | 30,569 | ±5.5% |
-| 10 KB | in place | 2,625 (2,410 to 2,960) | 12,460 (10,340 to 25,660) | 18,062 (15,195 to 20,605) | 0 | ±12.2% |
+| 1 KB | copied | 950 (780 to 1,120) | 6,490 (5,660 to 14,330) | 2,193 (1,649 to 3,224) | 2,921 | ±6.5% |
+| 1 KB | in place | 1,060 (890 to 1,180) | 6,915 (5,860 to 7,320) | 2,254 (1,754 to 2,749) | 0 | ±18.4% |
+| 4 KB | copied | 1,635 (1,510 to 1,840) | 8,365 (7,540 to 11,120) | 7,496 (6,448 to 9,272) | 12,137 | ±6.7% |
+| 4 KB | in place | 1,575 (1,370 to 1,820) | 8,900 (7,290 to 31,460) | 8,002 (6,559 to 9,466) | 0 | ±8.5% |
+| 10 KB | copied | 3,170 (2,880 to 3,500) | 13,105 (10,640 to 20,490) | 18,820 (16,535 to 20,846) | 30,569 | ±2.7% |
+| 10 KB | in place | 2,635 (2,370 to 2,910) | 15,900 (8,960 to 20,630) | 18,717 (15,237 to 20,010) | 0 | ±4.9% |
 
 | record | in place vs copied: consumer p50 | p99 | pipeline | noise band p50 |
 | ---: | ---: | ---: | ---: | ---: |
-| 1 KB | +16.4% | +10.6% | +16.4% | ±11.5% |
-| 4 KB | -4.2% | -8.3% | +0.6% | ±6.8% |
-| 10 KB | -17.1% | -8.0% | -4.3% | ±12.2% |
+| 1 KB | +11.6% | +6.5% | +2.8% | ±18.4% |
+| 4 KB | -3.7% | +6.4% | +6.8% | ±8.5% |
+| 10 KB | -16.9% | +21.3% | -0.5% | ±4.9% |
 
 What this says:
 
@@ -440,13 +440,16 @@ What this says:
   When the socket takes a whole body, `sendBody` writes straight from the
   ring, and here it nearly always did (under one byte a message on average).
 - **Only at 10 KB is the consumer measurably faster**: 17 % at the median,
-  outside the ±12 % band. At 4 KB the gap (-4 %) is inside the band. At
-  1 KB in place is 16 % slower, at the edge of its ±11.5 % band. The likely
-  cause is that below a few KB, sending the body on its own costs more than a
-  memcpy into the output that one write sends with the head.
-- **The pipeline does not move** (-4 % to +16 %, all inside or at the
-  edge of the band). Rendering the JSON in the producer, about 2 to 19 µs
-  a record, sets the rate, not the consumer's 1 to 3 µs.
+  well outside the ±4.9 % band. At 4 KB the gap (-4 %) is inside the band,
+  and at 1 KB in place is 12 % slower, inside its ±18 % band. An earlier
+  run on the same machine gave the same picture (1 KB +16 %, 4 KB -4 %,
+  10 KB -17 %). The likely cause of the small-record cost is that below a
+  few KB, sending the body on its own costs more than a memcpy into the
+  output that one write sends with the head. The p99 is noisy in both
+  modes; it moves with the run, not the mode.
+- **The pipeline does not move** (-0.5 % to +7 %, inside the band).
+  Rendering the JSON in the producer, about 2 to 19 µs a record, sets the
+  rate, not the consumer's 1 to 3 µs.
 
 To reproduce:
 
