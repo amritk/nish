@@ -130,6 +130,7 @@ for (const s of sizes) {
   for (const m of modes) {
     const lines = both(s, m)
     const tails = lines.map((l) => field(l, "tails"))
+    const copied = lines.map((l) => field(l, "copied"))
     const cols = [
       `${s / 1024} KB`,
       m === "copy" ? "copied" : "in place",
@@ -137,11 +138,13 @@ for (const s of sizes) {
       spread(lines.map((l) => field(l, "p50_ns"))),
       spread(lines.map((l) => field(l, "p99_ns"))),
       spread(lines.map((l) => field(l, "wall_ns"))),
-      (median(lines.map((l) => field(l, "copied"))) / n).toLocaleString("en-US", {
+      (median(copied) / n).toLocaleString("en-US", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }),
-      m === "copy" ? "—" : `${f(median(tails))} of ${f(n)} (at most ${f(Math.max(...tails))})`,
+      m === "copy"
+        ? "—"
+        : `${f(median(tails))} of ${f(n)} (at most ${f(Math.max(...tails))}, ${f(Math.max(...copied))} bytes)`,
       ["p50_ns", "p99_ns", "wall_ns"].map((name) => pct(band(s, m, name))).join(" / "),
     ]
     console.log(`| ${cols.join(" | ")} |`)
