@@ -74,8 +74,6 @@ const PRODUCER_SUM_AT: i32 = 24
 /** FNV-1a over every body the reader parsed out of the stream, in order. */
 const READ_SUM_AT: i32 = 32
 const RING_AT: i32 = 64
-/** The ring header's bytes; the region is `RING_AT`, this, then the data, which `main` checks against `spscRingBytes`. */
-const RING_HEADER_BYTES: i32 = 256
 /** Per-message times in 10 ns buckets up to 200 µs; a longer one counts in the last. */
 const BUCKETS: i32 = 20001
 const PINNED_MS: i64 = 1792138314000
@@ -137,30 +135,12 @@ const render = (w: JsonWriter, id: i32, size: i32): i32 => {
   return w.end
 }
 
-/** Whether `mode` is one this program runs. */
+/**
+ * Whether `mode` is one this program runs. `main` and `producer` check it
+ * first, so past them `mode !== "inplace"` means the producer `tryPush`es and
+ * `mode !== "copy"` means the consumer `peek`s.
+ */
 const knownMode = (mode: string): boolean => mode === "copy" || mode === "inplace" || mode === "consumer"
-
-/** Whether `mode`'s producer renders privately and `tryPush`es; an unknown mode panics. */
-const producerPushes = (mode: string): boolean => {
-  if (mode === "copy" || mode === "consumer") {
-    return true
-  }
-  if (mode === "inplace") {
-    return false
-  }
-  panic(`bench/ring-inplace: unknown mode ${mode}`)
-}
-
-/** Whether `mode`'s consumer `peek`s and `sendBody`s; an unknown mode panics. */
-const consumerPeeks = (mode: string): boolean => {
-  if (mode === "inplace" || mode === "consumer") {
-    return true
-  }
-  if (mode === "copy") {
-    return false
-  }
-  panic(`bench/ring-inplace: unknown mode ${mode}`)
-}
 
 /** Whether `cap` is a ring capacity `size`-byte records can be reserved and pushed in. */
 const ringFits = (cap: i32, size: i32): boolean =>
@@ -170,7 +150,7 @@ const producer = (region: SharedRegion, mode: string, size: i32, n: i32, cap: i3
   if (!knownMode(mode)) {
     panic(`bench/ring-inplace: the producer has an unknown mode ${mode}`)
   }
-  const pushes: boolean = producerPushes(mode)
+  const pushes: boolean = mode !== "inplace"
   const ring: SpscRing = attachSpscRing(region, RING_AT).expect("attach")
   if (ring.capacity !== cap) {
     panic(`bench/ring-inplace: the ring holds ${ring.capacity} bytes, not the ${cap} asked for`)
@@ -394,7 +374,7 @@ const consumer = (
   pcpu: string,
   rcpu: string
 ): i32 => {
-  const peeks: boolean = consumerPeeks(mode)
+  const peeks: boolean = mode !== "copy"
   const ring: SpscRing = initSpscRing(region, RING_AT, cap, false)
   const listener: i32 = tcpListen("127.0.0.1", 0, 4)
   const server = new Http1Server(new Http1Config(), listener, 1)
@@ -603,10 +583,7 @@ export const main = (): i32 => {
     )
     return 2
   }
-  const bytes: i32 = RING_AT + RING_HEADER_BYTES + cap
-  if (RING_AT + spscRingBytes(cap) > bytes) {
-    panic("bench/ring-inplace: the region is too small for the ring")
-  }
+  const bytes: i32 = RING_AT + spscRingBytes(cap)
   const name: string = `nish-bench-inplace-${monotonicNanos() % toI64(1000000000)}`
   const region = createRegion(name, bytes).expect("create")
   const rc: i32 = consumer(region, name, mode, size, n, cap, args[4], args[5])
