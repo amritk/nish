@@ -2426,19 +2426,19 @@ class QuicHeader
 | --- | --- |
 | `new QuicHeader()` | Makes an empty header, every array empty and every window at 0, for `quicParseHeader` or `quicParseHeaderInto` to fill. |
 | `dcid: u8[]` | The Destination Connection ID. |
-| `dcidLength: i32` |  |
+| `dcidLength: i32` | The Destination Connection ID's length in bytes, 0 to 20; a short header's is the length the reader passed. |
 | `dcidStart: i32` | Where `dcid`, `scid` and `token` sit in the datagram, as far as the parse got. `quicParseHeaderInto` fills these and nothing else, so a connection reads a header with no copy; `quicParseHeader` copies the windows out into the arrays above. |
 | `end: i32` | One past the packet's last byte, which is where the next coalesced packet starts. |
 | `error: i32` | `QUIC_PACKET_OK`, or the `QUIC_ERR_*` that stopped the parse. |
 | `pnOffset: i32` | Where the protected packet number starts: the header-protection sample starts 4 bytes after it. For a Retry, which has none, where its tag starts. |
 | `retryTag: u8[]` | A Retry's integrity tag, the datagram's last 16 bytes; empty for every other type. |
 | `scid: u8[]` | The Source Connection ID; empty for a short header. |
-| `scidLength: i32` |  |
-| `scidStart: i32` |  |
+| `scidLength: i32` | The Source Connection ID's length in bytes, 0 to 20; 0 for a short header. |
+| `scidStart: i32` | Where the Source Connection ID starts in the datagram; 0 for a short header. |
 | `start: i32` | Where in the datagram the packet starts. |
 | `token: u8[]` | An Initial's token, or a Retry's; empty for every other type. |
-| `tokenLength: i32` |  |
-| `tokenStart: i32` |  |
+| `tokenLength: i32` | An Initial's or a Retry's token length in bytes; 0 for every other type. |
+| `tokenStart: i32` | Where an Initial's or a Retry's token starts in the datagram; 0 for every other type. |
 | `type: i32` | `QUIC_PACKET_INITIAL`, `_ZERO_RTT`, `_HANDSHAKE`, `_RETRY` or `_SHORT`. |
 | `version: i64` | The long header's 32-bit version, held in an `i64`; 0 for a short header, which has none. |
 
@@ -2495,15 +2495,15 @@ class QuicKeysSlot
 | Member | |
 | --- | --- |
 | `new QuicKeysSlot()` | Makes the slot's arrays and key schedules once, with no keys derived yet (`keys.aead` is 0). |
-| `hp128: AesKey` |  |
-| `hp16: u8[]` |  |
-| `hp256: AesKey` |  |
-| `hp32: u8[]` |  |
-| `key16: u8[]` |  |
-| `key32: u8[]` |  |
+| `hp128: AesKey` | The AES-128 key schedule for header protection, expanded from `hp16`. |
+| `hp16: u8[]` | The 16-byte header-protection key an AES-128-GCM suite uses. |
+| `hp256: AesKey` | The AES-256 key schedule for header protection, expanded from `hp32`. |
+| `hp32: u8[]` | The 32-byte header-protection key an AES-256-GCM or ChaCha20-Poly1305 suite uses. |
+| `key16: u8[]` | The 16-byte packet key an AES-128-GCM suite uses. |
+| `key32: u8[]` | The 32-byte packet key an AES-256-GCM or ChaCha20-Poly1305 suite uses. |
 | `keys: QuicKeys` | The keys, pointing into the arrays below; `aead` is 0 until something is derived. |
-| `packet128: AesKey` |  |
-| `packet256: AesKey` |  |
+| `packet128: AesKey` | The AES-128 key schedule for packet protection, expanded from `key16`. |
+| `packet256: AesKey` | The AES-256 key schedule for packet protection, expanded from `key32`. |
 | `wipe(): void` | Zeroes every key the slot holds: the keys and the IV with `secureZero`, and each AES schedule with `aesKeyWipe`, whose volatile stores reach the whole of `roundKeys` (the kernels' powers of H included) and H itself. |
 
 ## QuicPacket

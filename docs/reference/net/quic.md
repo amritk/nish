@@ -458,38 +458,38 @@ class QuicConnection
 | `new QuicConnection(config: QuicServerConfig, entropy: u8[])` | A connection under `config`, with `entropy` its `QUIC_CONN_ENTROPY_SIZE` random bytes, which are copied out and then wiped in the caller's array. Every buffer the connection will use is made here, sized by `config`. Entropy of another length, or limits outside what `QuicServerConfig` documents, leave the connection closing with INTERNAL_ERROR before it reads anything; it then sends nothing. |
 | `addressValidated: boolean` | Whether the client's address is validated: a Handshake packet from it was processed. |
 | `alpn: string` | The ALPN protocol the handshake chose. |
-| `application: QuicConnSpace` |  |
+| `application: QuicConnSpace` | The Application Data packet number space, which holds the 1-RTT keys. |
 | `appReadSlot: i32` | Which of the Application Data space's two read slots, and two write slots, hold the current keys. |
-| `appWriteSlot: i32` |  |
-| `authFailures: i64` |  |
+| `appWriteSlot: i32` | Which of the Application Data space's two write slots holds the current keys, 0 or 1. |
+| `authFailures: i64` | Packets that failed to authenticate over the connection, against `integrityLimit`. |
 | `bytesReceived: i64` | Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). |
-| `bytesSent: i64` |  |
+| `bytesSent: i64` | Bytes sent, which may not pass three times `bytesReceived` before the address is validated. |
 | `challengeResendAt: i64` | When the PATH_CHALLENGE goes again with fresh data, and when validation gives up (§8.2.4); -1 when not validating. |
-| `challengesDrawn: i64` |  |
-| `challengeUntil: i64` |  |
-| `cids: QuicCidTable` |  |
+| `challengesDrawn: i64` | How many PATH_CHALLENGE data have been drawn over the connection; see `challengeData`. |
+| `challengeUntil: i64` | When path validation gives up, in milliseconds, or -1 when not validating. |
+| `cids: QuicCidTable` | The connection IDs of both sides and their stateless reset tokens (`nish/net/quic-conn-cid`). |
 | `cidSeed: u8[]` | The 32-byte HMAC key, taken from the entropy, that each new local connection ID is derived from; `release` wipes it. |
 | `confidentialityLimit: i64` | The AEAD limits this connection keeps (RFC 9001 §6.6): packets one 1-RTT write key seals, and packets that fail to authenticate over the connection. `afterTls` sets them from the suite when the 1-RTT keys arrive; until then they are AES-GCM's. They are fields so that a test can lower them after the handshake; nothing else should set them. |
 | `datagramEcn: i32` | ECN (RFC 9000 §13.4): `ecnMarking` is the carrier's to set when it sends this connection's datagrams with the ECN bits of `datagramEcn`, which each `takeDatagramInto` sets for the datagram it wrote: ECT(0) while loss recovery's `ecnCodepoint()` asks for it, 0 otherwise and always while `ecnMarking` is false. Every packet of a marked datagram is counted as marked, and an ACK_ECN's counts are validated against them. `reset` keeps `ecnMarking`, which is the carrier's, and clears the rest. |
-| `datagramsIn: QuicDatagramQueue` |  |
+| `datagramsIn: QuicDatagramQueue` | DATAGRAM payloads the client sent, waiting to be read; its `dropped` counts those that found it full. |
 | `datagramsOut: QuicDatagramQueue` | DATAGRAM payloads waiting to be sent, and those the client sent waiting to be read. |
 | `dropped: i32` | Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. |
 | `earlyResends: i32` | Handshake data sent again early, against `QUIC_CONN_EARLY_RESENDS` (RFC 9002 §6.2.3). |
-| `ecnMarking: boolean` |  |
+| `ecnMarking: boolean` | Whether the carrier sends with the ECN bits of `datagramEcn`; the carrier sets it, and `reset` keeps it. |
 | `readonly ephemeral: Secret<u8[]>` | The x25519 private key `begin` takes from the entropy, until the handshake hands it to `TlsServer`. |
 | `error: i64` | The error code the connection closed with: a transport error, `0x100 + alert`, or the application's code. |
 | `errorIsApplication: boolean` | Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. |
-| `handshake: QuicConnSpace` |  |
+| `handshake: QuicConnSpace` | The Handshake packet number space. |
 | `handshakeComplete: boolean` | Whether the handshake is complete, which for a server is also confirmed (RFC 9001 §4.1.2). |
-| `initial: QuicConnSpace` |  |
+| `initial: QuicConnSpace` | The Initial packet number space: its keys, packet numbers and acknowledgements (RFC 9000 §12.3). |
 | `initialClient: u8[]` | The Initial secrets of RFC 9001 §5.2, the client's and the server's. |
-| `initialServer: u8[]` |  |
-| `integrityLimit: i64` |  |
+| `initialServer: u8[]` | The server's Initial secret (RFC 9001 §5.2); see `initialClient`. |
+| `integrityLimit: i64` | Packets that may fail to authenticate before the connection closes; see above. |
 | `keyUpdates: i32` | Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. |
-| `localEncoded: u8[]` |  |
+| `localEncoded: u8[]` | `localParameters` encoded for the TLS extension the server sends. |
 | `localParameters: QuicTransportParameters` | The server's transport parameters, set for each connection, and their encoding. |
-| `readonly nextReadSecret256: Secret<u8[]>` |  |
-| `readonly nextReadSecret384: Secret<u8[]>` |  |
+| `readonly nextReadSecret256: Secret<u8[]>` | The next generation's 1-RTT read secret under SHA-256; see `readSecret256`. |
+| `readonly nextReadSecret384: Secret<u8[]>` | The next generation's 1-RTT read secret under SHA-384; see `readSecret256`. |
 | `nextSkip: i64` | The next Application Data packet number skipped (RFC 9000 §21.4), or -1 before the 1-RTT keys; a test may set it to force one. `skipped` holds the last `QUIC_CONN_SKIP_RING` skipped, -1 where none, `skipHead` where the next goes, and `skipsDrawn` how many distances were drawn. |
 | `now: i64` | The latest time the caller gave, in milliseconds; time never runs backwards here. |
 | `otherIsNext: boolean` | Whether `otherReadKeys` are the next generation's rather than the previous one's. |
@@ -497,27 +497,27 @@ class QuicConnection
 | `pathCount: i32` | How many PATH_CHALLENGE payloads wait to be answered, 0 to 4. |
 | `pathKnown: boolean` | Whether `pathCurrent` holds the client's address: the carrier passes addresses, and a first Initial gave one. |
 | `pathReceived: i64` | Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). |
-| `pathSent: i64` |  |
-| `pathValidated: u8[]` |  |
+| `pathSent: i64` | Bytes sent to the path being validated, at most three times `pathReceived`. |
+| `pathValidated: u8[]` | The last address the client proved it receives at, in `nish:net`'s 18-byte form; see above. |
 | `pathValidating: boolean` | Whether `pathCurrent` is not validated yet: a PATH_CHALLENGE is out on it. |
 | `peerParameters: QuicTransportParameters` | The client's transport parameters, once the handshake has checked them; until then, every default. |
 | `probeAddress: u8[]` | A PATH_CHALLENGE that came from another address in a datagram that moved nothing (§9.1): answered there by `takeProbeInto`, from `probeData`, within `probeBudget` bytes, three times what came from `probeAddress` (§8.1). Only the latest such challenge is kept. A response owed on `pathCurrent` when the connection moves goes back the same way (`sendResponsesBack`). |
 | `probeOwed: boolean` | Whether a PATH_RESPONSE is owed on `probeAddress`, and whether the datagram being read carried a challenge for it. |
 | `readPhase: boolean` | The Key Phase bit of the current read keys, and of the current write keys. |
 | `readonly readSecret256: Secret<u8[]>` | The 1-RTT traffic secrets (RFC 9001 §6.1), one set of SHA-256's length and one of SHA-384's, the one the suite's hash picks in use: the current read secret, the next generation's, and the current write secret, which a key update ratchets in place. The write side keeps no next secret, because the server derives its next write keys only when it moves to them. |
-| `readonly readSecret384: Secret<u8[]>` |  |
+| `readonly readSecret384: Secret<u8[]>` | The current 1-RTT read secret under SHA-384; see `readSecret256`. |
 | `recovery: QuicRecovery` | Loss detection, the RTT estimate, the congestion window and the pacer (RFC 9002). |
 | `sealedUnderKey: i64` | Packets sealed under the current 1-RTT write key, and packets that failed to authenticate, against those limits. |
 | `serverName: string` | The client's `server_name` the handshake read, or empty when it sent none. |
 | `skipHead: i32` | Where the next skipped packet number goes in `skipped`. |
-| `skipsDrawn: i64` |  |
+| `skipsDrawn: i64` | How many skip distances have been drawn; see `nextSkip`. |
 | `state: i32` | Where the connection is in its life: one of the `QUIC_STATE_*` constants. |
 | `streams: QuicStreams` | The streams, both ways (`nish/net/quic-stream`). |
 | `tls: TlsServer \| null` | The `TlsServer` running this connection's handshake: null until the client's first Initial has opened, and again after `reset`. |
 | `tlsSlot: TlsServer \| null` | The slot's `TlsServer`, made by its first handshake and `restart`ed by every one after (QUIC-3). |
-| `writePhase: boolean` |  |
-| `readonly writeSecret256: Secret<u8[]>` |  |
-| `readonly writeSecret384: Secret<u8[]>` |  |
+| `writePhase: boolean` | The Key Phase bit of the current write keys. |
+| `readonly writeSecret256: Secret<u8[]>` | The current 1-RTT write secret under SHA-256; see `readSecret256`. |
+| `readonly writeSecret384: Secret<u8[]>` | The current 1-RTT write secret under SHA-384; see `readSecret256`. |
 | `acceptRetry(originalDcid: u8[], retryScid: u8[]): boolean` | Sets up a connection whose client came back with a Retry token that `nish/net/quic-listener` checked (RFC 9000 §8.1.2): `originalDcid` is the DCID of the client's Initial before the Retry, and `retryScid` the Retry's SCID, which the client now sends to. The server's transport parameters then name both (§7.3), and the client's address counts as validated, so the anti-amplification limit does not apply. Call it before the first `receive`; answers whether it took: not once the connection has started, and not for an ID over 20 bytes. |
 | `afterTls(): void` | Whatever TLS's last step made due: its output moved into each level's CRYPTO stream, the keys of each level it now has secrets for, the client's transport parameters checked once it has read them, and, when the handshake completes, the Handshake keys discarded (RFC 9001 §4.9.2), HANDSHAKE_DONE queued (§4.1.2) and the client given more connection IDs. |
 | `amplificationBlocked(): boolean` | Whether the anti-amplification limit stops the server sending (RFC 9000 §8.1): the client's address is not validated and three times what it sent leaves no room for a whole datagram. |
@@ -592,9 +592,9 @@ class QuicStreamData
 | Member | |
 | --- | --- |
 | `new QuicStreamData(streamId: i64, data: u8[], fin: boolean)` | A run as `readStream` hands it out. |
-| `data: u8[]` |  |
-| `fin: boolean` |  |
-| `streamId: i64` |  |
+| `data: u8[]` | The bytes of the run, in stream order. |
+| `fin: boolean` | Whether the run ends the stream: the client sends no bytes after it. |
+| `streamId: i64` | The RFC 9000 stream ID the bytes arrived on. |
 
 ## Limits
 

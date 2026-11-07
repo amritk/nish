@@ -519,17 +519,17 @@ class QuicListener
 | --- | --- |
 | `new QuicListener(config: QuicServerConfig, entropy: u8[])` | A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. |
 | `initialClient: u8[]` | The Initial secrets of an INVALID_TOKEN close, and its keys, both directions. |
-| `initialServer: u8[]` |  |
+| `initialServer: u8[]` | The server's Initial secret of an INVALID_TOKEN close; `initialClient` is the client's. |
 | `kdf: HkdfScratch` | Every HMAC and HKDF the listener computes runs here; its `sha256` makes tokens, resets and the generator's blocks. |
 | `pool: u8[]` | Unpredictable bytes not yet used, from `poolHead`, and the counter the next block is made from. |
-| `poolHead: i32` |  |
-| `readSlot: QuicKeysSlot` |  |
-| `resetsLimited: i32` |  |
+| `poolHead: i32` | Where the unused bytes of `pool` start: `QUIC_LISTENER_POOL` when it is spent. |
+| `readSlot: QuicKeysSlot` | The INVALID_TOKEN close's keys for reading the client's Initial. |
+| `resetsLimited: i32` | Stateless resets the rate limit held back, which a log or test reads to see the limit working. |
 | `resetsSent: i32` | Stateless resets sent, and ones the rate limit held back. |
-| `seed: u8[]` |  |
+| `seed: u8[]` | The 32 bytes of entropy every unpredictable byte is made from; `release` wipes it. |
 | `spare: QuicListenerAnswer` | What `handle` answers into before it copies the answer out. |
 | `tag: u8[]` | A full HMAC-SHA256 tag, wiped once its 16 bytes are used. |
-| `writeSlot: QuicKeysSlot` |  |
+| `writeSlot: QuicKeysSlot` | The INVALID_TOKEN close's keys for sealing the server's Initial. |
 | `handle(datagram: u8[], address: u8[], now: i64): QuicListenerAnswer` | `handleWindow` over the whole of `datagram`, into an answer of its own, made with exactly the room its reply takes: for a caller that keeps each answer, at the cost of one `QuicListenerAnswer` a datagram. A carrier makes one answer and calls `handleWindow`. |
 | `handleWindow(datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer): i32` | Decides what to answer a datagram whose first packet no connection owns, `datagram[at .. at + len)`, read where it lies, from `address` (the client's address as the caller's socket reports it, port included) at `now` (the caller's monotonic time in milliseconds), into `answer`, whose arrays are refilled in their own room. Answers `answer.kind`. See the module header for the rules; nothing a peer sends makes it panic, and nothing it does keeps arena memory. A window outside `datagram` is the caller's mistake, and panics. |
 | `release(): void` | Ends the listener: wipes the seed and the generator's unused bytes, the tag and the HMAC and HKDF scratch, the INVALID_TOKEN close's Initial secrets and key slots, and `handle`'s spare answer, which holds the last one; `handle` and `handleWindow` then drop every datagram they are handed. The other methods still run, under the zeroed seed, and are the caller's not to call. What `handle` returned is the caller's to wipe. The configuration's keys are not the listener's to wipe: `Http3Server.stop` wipes them with the rest of the server. |
@@ -555,11 +555,11 @@ class QuicListenerAnswer
 | Member | |
 | --- | --- |
 | `new QuicListenerAnswer(room: i32)` | An empty answer with room for a reply of `room` bytes. |
-| `kind: i32` |  |
-| `originalDcid: u8[]` |  |
-| `reply: u8[]` |  |
-| `retried: boolean` |  |
-| `retryScid: u8[]` |  |
+| `kind: i32` | What to do with the datagram: a `QUIC_LISTEN_*`, `QUIC_LISTEN_DROP` after `wipe`. |
+| `originalDcid: u8[]` | After a Retry, the DCID of the client's first Initial, which `QuicConnection.acceptRetry` checks. |
+| `reply: u8[]` | The datagram to send back to the peer's address; empty when the answer sends nothing. |
+| `retried: boolean` | Whether an accepted Initial carried a valid Retry token, so `originalDcid` and `retryScid` are set. |
+| `retryScid: u8[]` | After a Retry, the SCID the Retry chose, which `QuicConnection.acceptRetry` checks. |
 | `wipe(): void` | Zeroes the last answer: `reply` across its whole room and each ID across its 20 bytes, so a Retry's token, a stateless reset's token and the IDs leave no copy beyond the arrays' lengths either. Each is left that long and all zero, `kind` a drop. An answer whose reply grew past its room keeps what lies beyond the longest length it is wiped at; one made with `QUIC_LISTENER_ANSWER_SIZE` never grows. The caller's to call once it has sent the answer `QuicListener.handle` gave, and before it drops it. |
 
 ## Limits

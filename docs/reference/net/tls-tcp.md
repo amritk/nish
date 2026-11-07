@@ -303,7 +303,7 @@ class TlsTcpClient
 | Member | |
 | --- | --- |
 | `new TlsTcpClient(addr: u8[], config: TlsClientConfig, trust: TlsClientTrust)` | A connection to the server at `addr` (`nish:net`'s 18-byte form, which `netAddress` writes) under `config`, authenticated against `trust`. The name the certificate must carry is `config.serverName`, never one taken from `addr`. The ClientHello is sealed here and waits for the socket. |
-| `conn: TlsRecordClient` |  |
+| `conn: TlsRecordClient` | The TLS record layer over the socket: its `tls` is the handshake, read for the negotiated suite and `alpnChosen`. |
 | `close(): void` | Ends the connection at once: a `close_notify` unless it already failed or closed, one attempt to send what is left, every key wiped and the socket closed, which also takes it out of every loop. |
 | `failure(): i32` | Why a failed connection failed: the TCP failure when TCP did not connect, else the alert (`TlsRecordClient.failure`). |
 | `fd(): i32` | The socket, for `pollAdd`; -1 when there is none. |

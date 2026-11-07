@@ -57,12 +57,9 @@ class QuicDatagramQueue
 | Member | |
 | --- | --- |
 | `new QuicDatagramQueue(entries: i32, entrySize: i32)` | Makes an empty ring, allocating all of its storage now: `entries * entrySize` bytes of payload and a 4-byte length per entry. |
-| `count: i32` |  |
+| `count: i32` | How many datagrams wait in the ring, from 0 to its entry count. |
 | `data: u8[]` | Entry `k`'s bytes are `data[k * entrySize ..]`, `lengths[k]` of them. |
 | `dropped: i32` | Datagrams refused for want of room or for their size, which the peer's side counts as dropped. |
-| `entrySize: i32` |  |
-| `head: i32` |  |
-| `lengths: i32[]` |  |
 | `capacity(): i32` | How many datagrams the ring holds at most. |
 | `peekLength(): i32` | The oldest datagram's length, or -1 when the ring is empty. |
 | `pop(buf: u8[], at: i32, cap: i32): i32` | Copies the oldest datagram into `buf` at `at` and forgets it. Answers its length, -1 when the ring is empty, or -2, keeping it, when it does not fit in `cap` bytes from `at` inside `buf`. |

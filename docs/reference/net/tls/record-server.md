@@ -144,10 +144,10 @@ class TlsRecordPools
 | Member | |
 | --- | --- |
 | `new TlsRecordPools(ceiling: i32)` | Four empty pools of `ceiling` buffers each; nothing is made until a slot needs it. |
-| `output: BufferPool` |  |
-| `plain: BufferPool` |  |
-| `reader: BufferPool` |  |
-| `scratch: BufferPool` |  |
+| `output: BufferPool` | Lends each slot its `output` buffer, where sealed records wait to be sent. |
+| `plain: BufferPool` | Lends each slot its `plain` buffer, where opened application data waits to be read. |
+| `reader: BufferPool` | Lends each slot its record reader's buffer. |
+| `scratch: BufferPool` | Lends each slot the buffer a record's content is opened into. |
 | `lent(): i32` | How many buffers of the four pools are lent now: 0 once every connection has given its back. |
 | `made(): i32` | How many buffers the four pools have made: their high-water mark together. |
 
@@ -172,29 +172,29 @@ class TlsRecordServer
 | Member | |
 | --- | --- |
 | `new TlsRecordServer(tls: TlsServer)` | Makes a slot for `tls` with a pool set of its own, one buffer of each kind, and starts the connection as `start` does. A carrier that shares its pools calls `borrowFrom` right after. |
-| `alert: i32` |  |
+| `alert: i32` | The alert this server sent, or 0. |
 | `closeDue: boolean` | The server has closed and its `close_notify` waits for room in `output`. |
 | `keyUpdates: i32` | KeyUpdates taken from the client, against `TLS_RECORD_MAX_KEY_UPDATES`. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`; `empty` until a record is sealed. |
-| `outputEnd: i32` |  |
-| `outputStart: i32` |  |
-| `padding: i32` |  |
-| `peerAlert: i32` |  |
-| `peerClosed: boolean` |  |
+| `outputEnd: i32` | Where the bytes still to send end in `output`. |
+| `outputStart: i32` | Where the bytes still to send begin in `output`. |
+| `padding: i32` | How many zero bytes each protected record the server writes carries after its content type (§5.4); 0 unless the caller sets it. |
+| `peerAlert: i32` | The error alert the client sent, or -1 when it sent none. |
+| `peerClosed: boolean` | True once the client's `close_notify` has arrived. |
 | `plain: u8[]` | Application data the caller has not read is `plain[plainStart .. plainEnd)`; `empty` until a record brings some. |
-| `plainEnd: i32` |  |
-| `plainStart: i32` |  |
-| `readHash: i32` |  |
-| `readProtection: TlsRecordProtection` |  |
+| `plainEnd: i32` | Where the application data not yet read ends in `plain`. |
+| `plainStart: i32` | Where the application data not yet read begins in `plain`. |
+| `readHash: i32` | The hash length of the client's traffic secret in bytes (32 or 48), or 0 before it is known. |
+| `readProtection: TlsRecordProtection` | Opens the client's records; its sequence number counts the records read at the current keys. |
 | `readonly readTraffic256: Secret<u8[]>` | The client's and the server's current application traffic secrets, for KeyUpdate, each held at both hash lengths: `readHash` and `writeHash` say which of a pair holds the secret, and are 0 before it is known. |
-| `readonly readTraffic384: Secret<u8[]>` |  |
-| `state: i32` |  |
-| `tls: TlsServer` |  |
-| `writeHash: i32` |  |
+| `readonly readTraffic384: Secret<u8[]>` | The client's current application traffic secret when the hash is SHA-384, 48 bytes. |
+| `state: i32` | Where the connection stands: one of the `TLS_RECORD_STATE_*` constants. |
+| `tls: TlsServer` | The handshake underneath: read it for the suite, ALPN, server name and exporter secret. |
+| `writeHash: i32` | The hash length of the server's traffic secret in bytes (32 or 48), or 0 before it is known. |
 | `writeLevel: i32` | The `TLS_LEVEL_*` the server's records are written at. |
-| `writeProtection: TlsRecordProtection` |  |
-| `readonly writeTraffic256: Secret<u8[]>` |  |
-| `readonly writeTraffic384: Secret<u8[]>` |  |
+| `writeProtection: TlsRecordProtection` | Seals the server's records; its sequence number counts the records written at the current keys. |
+| `readonly writeTraffic256: Secret<u8[]>` | The server's current application traffic secret when the hash is SHA-256, 32 bytes. |
+| `readonly writeTraffic384: Secret<u8[]>` | The server's current application traffic secret when the hash is SHA-384, 48 bytes. |
 | `abort(): void` | The socket failed under the connection: it ends with nothing more sent, and every key it holds wiped. |
 | `borrowFrom(pools: TlsRecordPools): void` | Borrows the record buffers from `pools` from now on, a carrier's set its slots share. Whatever is held from the old pools is given back first, zeroed, and dropped with it, so call it on a slot with nothing in flight: the carrier does, right after the constructor. |
 | `close(): void` | Closes the server's side (§6.1): a `close_notify`, after which `write` answers `TLS_RECORD_PIPE` and nothing more is sent. What was still owed of the handshake is dropped; application data already written stays ahead of the alert, which waits for room in `output` when there is none. The resumption master secret is wiped, since nothing issues a ticket from it, and the write keys once the `close_notify` is sealed (`sealClose`). Nothing happens once the connection has failed or closed. |

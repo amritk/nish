@@ -183,7 +183,7 @@ class TlsClient
 | `sentServerName: boolean` | Whether `server_name` was sent, so that only then may the server acknowledge it. |
 | `sessionId: u8[]` | The legacy_session_id sent, which the ServerHello must echo. |
 | `shareGroup: i32` | The group of the key share the last ClientHello carried. |
-| `state: i32` |  |
+| `state: i32` | Where the handshake is: one of the `TLS_CLIENT_STATE_*` values, `TLS_CLIENT_STATE_CONNECTED` once it has finished and `TLS_CLIENT_STATE_FAILED` once `alert` is set. |
 | `suite: i32` | The negotiated cipher suite, or 0 before the ServerHello (or HelloRetryRequest) is read. |
 | `alpn(): string` | The ALPN protocol the server chose, or empty when it chose none. |
 | `authenticate(ok: boolean): i32` | The caller's verdict on the server's chain and signature, at `TLS_CLIENT_STATE_WAIT_AUTH`: `true` goes on to the server's Finished, reading what was held meanwhile; `false` is `reject(bad_certificate)`. Answers 0 or the alert; in any other state the client fails with `internal_error`. |

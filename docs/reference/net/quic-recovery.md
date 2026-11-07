@@ -168,8 +168,8 @@ class QuicRecovery
 | `congestionWindow: i64` | congestion_window (B.2), in bytes. |
 | `ecnCongestionEvents: i32` | How many congestion events a rise in the ECN-CE count caused (§7.1). |
 | `ecnState: i32` | ECN's state, `QUIC_RECOVERY_ECN_TESTING` until a marked packet's counts validate or fail. |
-| `ecnTestLost: i32` |  |
-| `ecnTestRecorded: i32` |  |
+| `ecnTestLost: i32` | How many marked packets were lost before ECN validated: once it reaches `ecnTestRecorded`, ECN fails (RFC 9000 A.4). |
+| `ecnTestRecorded: i32` | How many of the packets marked while testing ECN are recorded in a space's ring, so their loss can be seen. |
 | `ecnTestSent: i32` | The packets marked while testing, and of those recorded, how many and how many of them were lost. |
 | `firstSampleTime: i64` | When the first RTT sample was taken, or -1 before it: persistent congestion counts only packets sent since (§7.6.2). |
 | `handshakeConfirmed: boolean` | Whether the handshake is confirmed (RFC 9001 §4.1.2), which the caller sets: the peer's max_ack_delay then bounds its ACK delays, and the Application Data space has a probe timeout. |
@@ -179,13 +179,13 @@ class QuicRecovery
 | `minRtt: i64` | min_rtt (§5.2): 0 until the first sample. |
 | `pacerBudget: i64` | The pacer's credit in bytes (§7.7), and the time it was last topped up in microseconds, or -1. |
 | `pacerRtt: i64` | The smoothed RTT the pacer's rate is taken from, in microseconds: `smoothedRtt` on the pacer's clock. |
-| `pacerTime: i64` |  |
-| `persistentCongestions: i32` |  |
+| `pacerTime: i64` | When the pacer's credit was last topped up, in microseconds on the pacer's clock, or -1 before the first time. |
+| `persistentCongestions: i32` | How many of `congestionEvents` were persistent congestion (§7.6), which collapses the window to its minimum. |
 | `ptoCount: i32` | pto_count (A.3): how many probe timeouts fired since the last acknowledgement. |
 | `recoveryStart: i64` | congestion_recovery_start_time (B.2), or -1 outside recovery. |
 | `rttVar: i64` | rttvar (§5.3): kInitialRtt / 2 until the first sample. |
 | `smoothedRtt: i64` | smoothed_rtt (§5.3): kInitialRtt until the first sample. |
-| `spaces: QuicSentPackets[]` |  |
+| `spaces: QuicSentPackets[]` | The sent-packet ring of each packet number space, indexed by `QUIC_RECOVERY_INITIAL` and its siblings. |
 | `ssthresh: i64` | ssthresh (B.2): unbounded (2^62 − 1) until the first congestion event. |
 | `timeoutSpace: i32` | The space the last `onTimeout` acted on, or -1. |
 | `bytesInFlight(): i64` | bytes_in_flight (B.2): every space's packets in flight. |
@@ -226,12 +226,11 @@ class QuicSentPackets
 | --- | --- |
 | `new QuicSentPackets(capacity: i32)` | An empty ring; `QuicRecovery` makes one for each space. |
 | `acked: i32[]` | The slots the last `onAck` acknowledged, `ackedCount` of them, oldest first. |
-| `ackedCount: i32` |  |
 | `bytesInFlight: i64` | The bytes of this space's packets in flight. |
-| `ce: i64` |  |
-| `count: i32` |  |
+| `ce: i64` | The ECN-CE count of the last ACK_ECN frame validated in this space; a rise is a congestion event. |
+| `count: i32` | How many packets the ring keeps, in flight and settled; a test reads it to see what a flight recorded. |
 | `ect0: i64` | The ECN counts of the last ACK_ECN frame validated in this space (RFC 9000 §19.3.2). |
-| `ect1: i64` |  |
+| `ect1: i64` | The ECT(1) count of the last ACK_ECN frame validated in this space. |
 | `ectSent: i64` | How many of this space's packets, recorded or not, were sent marked ECT(0). |
 | `fineSent: i64[]` | When each packet was sent on the pacer's clock, in microseconds. |
 | `inFlight: i32` | How many recorded packets are still in flight: neither acknowledged nor lost. |
@@ -240,11 +239,8 @@ class QuicSentPackets
 | `lastPn: i64` | The packet number of the last packet recorded, or -1: each must be larger (RFC 9000 §12.3). |
 | `lossTime: i64` | loss_time (A.3): when the oldest packet not yet lost by the packet threshold becomes lost by time, or -1. |
 | `lost: i32[]` | The slots the last `onAck` or `onTimeout` declared lost, `lostCount` of them, oldest first. |
-| `lostCount: i32` |  |
-| `pn: i64[]` |  |
-| `size: i32[]` |  |
+| `lostCount: i32` | How many slots of `lost` the last `onAck` or `onTimeout` filled. |
 | `state: u8[]` | Each slot's state, with `QUIC_RECOVERY_MARKED` set if its packet was sent marked ECT(0). |
-| `timeSent: i64[]` |  |
 | `ackedSlot(k: i32): i32` | The `k`-th slot the last call acknowledged, or -1. |
 | `fineAt(s: i32): i64` | When the packet in slot `s` was sent on the pacer's clock, in microseconds, or -1. |
 | `full(): boolean` | Whether every slot is taken, so nothing more can be recorded until a packet is settled. |
