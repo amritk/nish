@@ -461,10 +461,9 @@ writes the same IR as before, byte for byte, over every positive case.
   at once, up to its first real wait, where Node runs it only to its first
   `await` and the rest after the spawning task yields (`async_spawn`,
   `docs/LANGUAGE.md`, "Where it is not Node").
-- **`--emit-ts` refuses an `async` function for now** (NL4016,
-  `reject_emit_ts_async`): the runtime the output imports does not answer the
-  resume order, `awaitAll` or `spawn` yet. Writing it is the follow-up to
-  this part.
+- **`--emit-ts` writes an `async` function as Node async/await** (part 3;
+  NL4016, its refusal until then, is retired): `docs/LANGUAGE.md`, "Under
+  `--emit-ts`", and `tests/emit-ts/async/`.
 
 Stage 5 replaces the driver, and nothing in the frame layout: the `malloc` per
 spawn with a slab per spawned kind, the queue with the executor of §4 in

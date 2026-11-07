@@ -108,8 +108,9 @@ the difference is a row of [the user guide's table](guide/using-nish/to-typescri
 or a bug in `nish` worth reporting. A program on `nish:net`, the signal
 descriptor or a C declaration (NL4010, NL4011), a compound assignment whose
 index would run twice (NL4012) or a generic whose element type decides its
-code (NL4013, NL4014) or an `async` function (NL4016) is refused and has no
-TypeScript to run.
+code (NL4013, NL4014) is refused and has no TypeScript to run. An `async`
+program is written as Node async/await, whose spawned tasks may print in
+another order than native.
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
@@ -884,7 +885,8 @@ export const main = (): i32 => {
 switch, one that awaits nothing a plain function, and `export async function
 main` runs to its end, then finishes every task it spawned. Nothing waits on
 sockets or timers in this release, so every task runs to completion.
-`--emit-ts` refuses it for now (`NL4016`); keep such a program native. A call
+`--emit-ts` writes it as Node async/await, where `spawn`ed tasks resume in
+Node's order, not the native one. A call
 that can fail answers `Promise<Result<T, E>>`: test the `Result` after the
 `await`. The rules:
 
