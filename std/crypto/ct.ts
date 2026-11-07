@@ -1,21 +1,27 @@
 /**
  * `nish/crypto/ct` — comparing secrets without telling the clock where they differ.
  *
- * An `===` loop over two MACs stops at the first differing byte, so the time it
- * takes says how many leading bytes an attacker already guessed right, and a
- * tag can be recovered one byte at a time. These functions read every byte of
- * the window whatever it holds: each pair is XORed, the differences are ORed
- * into one accumulator, and that accumulator is tested once, after the loop.
+ *     import { timingSafeEqual } from "nish/crypto/ct";
  *
- * What is *not* secret is checked first and may branch: the two lengths, and
- * whether a window lies inside its array. A caller comparing a received tag
- * against an expected one already knows both lengths, so refusing a mismatch
- * early leaks nothing the attacker did not send.
+ *     const ok: boolean = timingSafeEqual(expectedTag, receivedTag);
  *
- * The names are `timingSafeEqual*`, after Node's `crypto.timingSafeEqual`,
- * rather than `ctEq`: that one is reserved for the builtin WP34 N6 will add,
- * together with the disassembly check that proves the loop stays branch-free
- * after LLVM has seen it. Until then this is the discipline and not a proof.
+ * **Every byte is read.** An `===` loop over two MACs stops at the first
+ * differing byte, so the time it takes says how many leading bytes an attacker
+ * already guessed right, and a tag can be recovered one byte at a time. These
+ * functions read every byte of the window whatever it holds: each pair is
+ * XORed, the differences are ORed into one accumulator, and that accumulator is
+ * tested once, after the loop.
+ *
+ * **Lengths may branch.** What is *not* secret is checked first and may branch:
+ * the two lengths, and whether a window lies inside its array. A caller
+ * comparing a received tag against an expected one already knows both lengths,
+ * so refusing a mismatch early leaks nothing the attacker did not send.
+ *
+ * **A discipline, not yet a proof.** The names are `timingSafeEqual*`, after
+ * Node's `crypto.timingSafeEqual`, rather than `ctEq`: that one is reserved for
+ * the builtin WP34 N6 will add, together with the disassembly check that proves
+ * the loop stays branch-free after LLVM has seen it. Until then this is the
+ * discipline and not a proof.
  */
 
 /**
@@ -29,6 +35,11 @@
  * it would have looked the same length and been compared only that far. An
  * array longer than that answers `false` too — no `i32` index reaches its end,
  * and a compare that cannot read every byte must not say "equal".
+ *
+ * @param a One byte string, such as the tag that was received.
+ * @param b The other, such as the tag computed for comparison.
+ * @returns `true` only when both lengths match and every byte does; `false` for
+ *   different lengths or a length past 2^31 - 1.
  */
 export const timingSafeEqual = (a: u8[], b: u8[]): boolean => {
   if (a.length !== b.length || a.length > 2147483647) {
@@ -53,6 +64,14 @@ export const timingSafeEqual = (a: u8[], b: u8[]): boolean => {
  * first out-of-range read. That is a decision about the caller's position: a
  * verifier handed a truncated record should say "not equal", not take the
  * process down, and the bounds are public, so testing them first is safe.
+ *
+ * @param a The array holding the first window.
+ * @param aOff Where the first window starts in `a`.
+ * @param b The array holding the second window.
+ * @param bOff Where the second window starts in `b`.
+ * @param len How many bytes each window covers.
+ * @returns `true` only when both windows lie inside their arrays and every byte
+ *   matches; `false` for a window out of range.
  */
 export const timingSafeEqualAt = (a: u8[], aOff: i32, b: u8[], bOff: i32, len: i32): boolean => {
   const aLen: i32 = toI32(a.length)

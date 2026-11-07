@@ -1,17 +1,28 @@
 /**
  * `nish/crypto/sha512` — SHA-512 and SHA-384, written from FIPS 180-4.
  *
- * Both hashes are one compression function over eight 64-bit words: SHA-384
- * starts from its own initial value (§5.3.4) and keeps the first 48 bytes of
- * the result (§6.5), SHA-512 starts from §5.3.5 and keeps all 64. So one
- * engine does the work, and `Sha512` and `Sha384` are the two ways to start it.
+ *     import { sha512, sha384, Sha512 } from "nish/crypto/sha512";
  *
- * A hasher streams: `update` any number of windows, `copy` to take an
- * independent hasher at the same point (TLS 1.3 hashes its transcript and
- * reads intermediate hashes of it), then `digest` once. The work depends on how
- * many bytes arrive and never on their values: there is no branch and no table
- * index on message data, so a secret message (an HMAC key, a transcript) is
- * hashed in time that says nothing about it but its length.
+ *     const whole: u8[] = sha512(message); // 64 bytes; sha384 answers 48
+ *
+ *     const h = new Sha512();
+ *     h.update(first, 0, toI32(first.length));
+ *     h.update(second, 0, toI32(second.length));
+ *     const all: u8[] = h.digest();
+ *
+ * **One engine, two hashes.** Both hashes are one compression function over
+ * eight 64-bit words: SHA-384 starts from its own initial value (§5.3.4) and
+ * keeps the first 48 bytes of the result (§6.5), SHA-512 starts from §5.3.5 and
+ * keeps all 64. So one engine does the work, and `Sha512` and `Sha384` are the
+ * two ways to start it.
+ *
+ * **Time says only the length.** A hasher streams: `update` any number of
+ * windows, `copy` to take an independent hasher at the same point (TLS 1.3
+ * hashes its transcript and reads intermediate hashes of it), then `digest`
+ * once. The work depends on how many bytes arrive and never on their values:
+ * there is no branch and no table index on message data, so a secret message
+ * (an HMAC key, a transcript) is hashed in time that says nothing about it but
+ * its length.
  *
  * The constants are the fractional parts of the cube roots of the first eighty
  * primes (§4.2.3) and of the square roots of the first sixteen (§5.3.4, §5.3.5),
@@ -276,8 +287,11 @@ class Sha512Engine {
   block: u8[]
   /** The message schedule W_0 .. W_79, kept so a block allocates nothing. */
   schedule: u64[]
+  /** @internal Set by `nish/crypto/hmac` when it wipes, copies or restarts a hasher. */
   count: u64 = 0
+  /** @internal Set by `nish/crypto/hmac` when it wipes, copies or restarts a hasher. */
   filled: i32 = 0
+  /** @internal Set by `nish/crypto/hmac` when it wipes, copies or restarts a hasher. */
   finished: boolean = false
 
   constructor(initial: u64[]) {
@@ -287,7 +301,7 @@ class Sha512Engine {
   }
 
   /** One application of §6.4.2 to the block at `src[off]` .. `src[off + 127]`. */
-  compress(src: u8[], off: i32): void {
+  private compress(src: u8[], off: i32): void {
     const w = this.schedule
     const h = this.state
     const wLen: i32 = toI32(w.length)
@@ -358,6 +372,7 @@ class Sha512Engine {
     h[7] = h[7] + hh
   }
 
+  /** @internal Called by `Sha512` and `Sha384`, which hold the engine. */
   absorb(data: u8[], off: i32, len: i32): void {
     if (this.finished) {
       panic("sha512: update after digest")
@@ -397,6 +412,8 @@ class Sha512Engine {
   /**
    * Makes `twin` this engine at the same point. `twin` is a fresh engine of the
    * same hash, so its arrays are reused rather than allocated a second time.
+   *
+   * @internal Called by `Sha512` and `Sha384`, which hold the engine.
    */
   copyInto(twin: Sha512Engine): void {
     for (let i: i32 = 0; i < 8; i++) {
@@ -410,7 +427,11 @@ class Sha512Engine {
     twin.finished = this.finished
   }
 
-  /** Pads (§5.1.2), compresses what is left, and answers the first `size` bytes of H(N) (§6.4.2, §6.5). */
+  /**
+   * Pads (§5.1.2), compresses what is left, and answers the first `size` bytes of H(N) (§6.4.2, §6.5).
+   *
+   * @internal Called by `Sha512` and `Sha384`, which hold the engine.
+   */
   finish(size: i32): u8[] {
     if (this.finished) {
       panic("sha512: digest taken twice")
@@ -446,23 +467,52 @@ class Sha512Engine {
  * another `update` or `digest` panics.
  */
 export class Sha512 {
+  /**
+   * The engine the hash runs on. `nish/crypto/hmac` and `nish/crypto/ed25519`
+   * reach into it to wipe a hasher, and the tests to check the wipe; a caller
+   * has no use for it.
+   */
   engine: Sha512Engine
 
+  /**
+   * A hasher at the start of an empty message (FIPS 180-4 §5.3.5's initial hash
+   * value).
+   */
   constructor() {
     this.engine = new Sha512Engine(sha512Initial())
   }
 
+  /**
+   * Absorbs `data[off .. off + len)`. A window outside `data`, or an update
+   * after `digest`, panics.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
+   */
   update(data: u8[], off: i32, len: i32): void {
     this.engine.absorb(data, off, len)
   }
 
-  /** An independent hasher at the same point: updating either leaves the other alone. */
+  /**
+   * An independent hasher at the same point: updating either leaves the other
+   * alone.
+   *
+   * @returns A new hasher with its own engine; it shares no array with this
+   *   one.
+   */
   copy(): Sha512 {
     const twin = new Sha512()
     this.engine.copyInto(twin.engine)
     return twin
   }
 
+  /**
+   * Pads the message (§5.1.2) and answers its digest. Ends the computation: a
+   * second `digest` panics.
+   *
+   * @returns A fresh 64-byte digest, which the caller owns.
+   */
   digest(): u8[] {
     return this.engine.finish(SHA512_SIZE)
   }
@@ -473,23 +523,52 @@ export class Sha512 {
  * fresh 48-byte array.
  */
 export class Sha384 {
+  /**
+   * The engine the hash runs on. `nish/crypto/hmac` and `nish/crypto/ed25519`
+   * reach into it to wipe a hasher, and the tests to check the wipe; a caller
+   * has no use for it.
+   */
   engine: Sha512Engine
 
+  /**
+   * A hasher at the start of an empty message (FIPS 180-4 §5.3.4's initial hash
+   * value).
+   */
   constructor() {
     this.engine = new Sha512Engine(sha384Initial())
   }
 
+  /**
+   * Absorbs `data[off .. off + len)`. A window outside `data`, or an update
+   * after `digest`, panics.
+   *
+   * @param data The buffer holding the window; it is read, not kept.
+   * @param off Where the window starts in `data`.
+   * @param len How many bytes to absorb; 0 absorbs nothing.
+   */
   update(data: u8[], off: i32, len: i32): void {
     this.engine.absorb(data, off, len)
   }
 
-  /** An independent hasher at the same point: updating either leaves the other alone. */
+  /**
+   * An independent hasher at the same point: updating either leaves the other
+   * alone.
+   *
+   * @returns A new hasher with its own engine; it shares no array with this
+   *   one.
+   */
   copy(): Sha384 {
     const twin = new Sha384()
     this.engine.copyInto(twin.engine)
     return twin
   }
 
+  /**
+   * Pads the message (§5.1.2) and answers its digest, the first 48 bytes of the
+   * final hash value (§6.5). Ends the computation: a second `digest` panics.
+   *
+   * @returns A fresh 48-byte digest, which the caller owns.
+   */
   digest(): u8[] {
     return this.engine.finish(SHA384_SIZE)
   }
@@ -500,6 +579,9 @@ export class Sha384 {
  * longer than 2^31 - 1 bytes panics, for the reason `sha256` gives: a longer
  * length does not survive `toI32` under `--number-mode f64`, and the digest
  * would be of a prefix.
+ *
+ * @param data The whole message; it is read, not changed.
+ * @returns A fresh 64-byte digest.
  */
 export const sha512 = (data: u8[]): u8[] => {
   if (data.length > 2147483647) {
@@ -513,6 +595,9 @@ export const sha512 = (data: u8[]): u8[] => {
 /**
  * The SHA-384 digest of all of `data`, as a fresh 48-byte array. An array
  * longer than 2^31 - 1 bytes panics, as in `sha512`.
+ *
+ * @param data The whole message; it is read, not changed.
+ * @returns A fresh 48-byte digest.
  */
 export const sha384 = (data: u8[]): u8[] => {
   if (data.length > 2147483647) {

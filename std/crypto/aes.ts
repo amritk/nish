@@ -2,6 +2,16 @@
  * `nish/crypto/aes` — AES-128 and AES-256 (FIPS 197), GCM on top of them
  * (NIST SP 800-38D), and QUIC's AES header-protection mask (RFC 9001 §5.4.3).
  *
+ *     import { aesKey, aesGcmSeal, aesGcmOpen, aesKeyWipe } from "nish/crypto/aes";
+ *
+ *     const key = aesKey(keyBytes); // 16 or 32 bytes, else null
+ *     if (key !== null) {
+ *       // never seal two messages under one key with the same IV
+ *       const sealed: u8[] | null = aesGcmSeal(key, iv, aad, plaintext);
+ *       const opened: u8[] | null = sealed === null ? null : aesGcmOpen(key, iv, aad, sealed);
+ *       aesKeyWipe(key);
+ *     }
+ *
  * Written from the specifications and the papers below, in this module's own
  * layout, with one exception: `ghashMul32` is adapted from BearSSL's
  * `bmul64`, and carries BearSSL's notice. Nothing else here is ported from
@@ -110,14 +120,14 @@ const AES_BATCH: i32 = 64
  * H = E(K, 0^128), so a key used for many messages is expanded once.
  *
  * Make one with `aesKey`. The constructor and the fields are public only
- * because the language has no private ones, and a key built or edited by hand
- * is not trusted: one whose shape is not what `aesKey` makes answers `null`
- * everywhere (`aesKeyUsable`), and one whose H is zero opens nothing
- * (`aesGcmOpen`). On the runtime kernels' path GHASH takes H and its powers
- * from `roundKeys`, while `ghashLengths` and a non-12-byte IV's J0 take it
- * from `h`; `aesKey` writes both from one schedule, so they agree. A key
- * edited so that they disagree is outside the contract, and what it seals
- * then depends on which path the process runs.
+ * because tests build keys by hand and read their words, and a key built or
+ * edited by hand is not trusted: one whose shape is not what `aesKey` makes
+ * answers `null` everywhere (`aesKeyUsable`), and one whose H is zero opens
+ * nothing (`aesGcmOpen`). On the runtime kernels' path GHASH takes H and its
+ * powers from `roundKeys`, while `ghashLengths` and a non-12-byte IV's J0 take
+ * it from `h`; `aesKey` writes both from one schedule, so they agree. A key
+ * edited so that they disagree is outside the contract, and what it seals then
+ * depends on which path the process runs.
  *
  * Both are secret. A holder done with a key hands it to `aesKeyWipe`, whose
  * volatile stores zero all of `roundKeys` (the kernels' tail of H's powers
@@ -140,6 +150,14 @@ export class AesKey {
    */
   h: u64[]
 
+  /**
+   * Wraps a schedule array and allocates `h`; neither is filled. `aesKey` calls
+   * this and then fills both, and a caller makes keys with `aesKey`.
+   *
+   * @param rounds Nr: 10 for AES-128, 14 for AES-256.
+   * @param roundKeys The schedule array, `8 * (rounds + 1)` words; it is kept,
+   *   not copied.
+   */
   constructor(rounds: i32, roundKeys: u64[]) {
     this.rounds = rounds
     this.roundKeys = roundKeys
@@ -154,6 +172,8 @@ export class AesKey {
  * is about to be. `rounds` is not secret and stays. A wiped key seals under
  * an all-zero schedule and, its H being zero, opens nothing (`aesGcmOpen`);
  * `aesKeyInto` installs a new key into it.
+ *
+ * @param key The key to wipe; it stays usable as an `aesKeyInto` target.
  */
 export const aesKeyWipe = (key: AesKey): void => {
   wipe(key.roundKeys)
@@ -484,6 +504,10 @@ const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
  * `at`, which is a round number times eight. Exported so that
  * `tests/link/crypto_aes` can hold the copy the disassembly check reads to
  * this one; a caller has no other use for it.
+ *
+ * @param q The bitsliced state of four blocks, eight words, updated in place.
+ * @param rk The bitsliced round keys.
+ * @param at Where this round's eight words start in `rk`.
  */
 export const aesBitslicedRound = (q: u64[], rk: u64[], at: i32): void => {
   aesSbox(q)
@@ -700,6 +724,11 @@ const aesEncryptOne = (key: AesKey, src: u8[], dst: u8[]): void => {
  * Makes an `AesKey` from 16 bytes (AES-128) or 32 (AES-256): the key
  * schedule, bitsliced, and H = E(K, 0^128) for GCM. Any other length — 24
  * bytes included, since AES-192 is not offered — answers `null`.
+ *
+ * @param key The raw key, 16 or 32 bytes; it is read, not kept, and the caller
+ *   still wipes it.
+ * @returns A fresh key, which the caller hands to `aesKeyWipe` when done, or
+ *   `null` for another length.
  */
 export const aesKey = (key: u8[]): AesKey | null => {
   const length: i32 = toI32(key.length)
@@ -737,6 +766,11 @@ export const aesKey = (key: u8[]): AesKey | null => {
  *
  * `aesKey` makes its key through this, so this is the one call of
  * `aesScheduleInto`, and the checks its contract needs are made here.
+ *
+ * @param key The raw key, 16 or 32 bytes; it is read, not kept, and the caller
+ *   still wipes it.
+ * @param out The key to overwrite, its `roundKeys` sized for this key length.
+ * @returns `true` if `out` now holds the key; `false` if it was left as it was.
  */
 export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
   const length: i32 = toI32(key.length)
@@ -759,7 +793,15 @@ export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
   return true
 }
 
-/** One block encrypted (FIPS 197 §5.1, ECB): 16 bytes in, 16 fresh bytes out, or `null` for another length. */
+/**
+ * One block encrypted (FIPS 197 §5.1, ECB): 16 bytes in, 16 fresh bytes out, or
+ * `null` for another length.
+ *
+ * @param key The expanded key.
+ * @param block The 16 bytes to encrypt; it is read, not kept.
+ * @returns A fresh 16-byte block, or `null` for another length or a key
+ *   `aesKey` would not make.
+ */
 export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
   if (!aesKeyUsable(key) || toI32(block.length) !== AES_BLOCK) {
     return null
@@ -773,6 +815,11 @@ export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
  * The AES header-protection mask of RFC 9001 §5.4.3: the first five bytes of
  * the 16-byte `sample` encrypted under the header-protection key. `null` for
  * a sample of another length.
+ *
+ * @param key The header-protection key.
+ * @param sample The 16 bytes sampled from the packet's ciphertext.
+ * @returns A fresh 5-byte mask, or `null` for another sample length or a key
+ *   `aesKey` would not make.
  */
 export const aesHeaderMask = (key: AesKey, sample: u8[]): u8[] | null => {
   if (!aesKeyUsable(key) || toI32(sample.length) !== AES_BLOCK) {
@@ -836,6 +883,10 @@ const ghashMul32 = (x: u64, y: u64): u64 => {
  * The 128 × 128 product is Karatsuba twice over: three 64 × 64 products, each
  * of three 32 × 32 ones from `ghashMul32`. Straight-line code; exported, like
  * `aesBitslicedRound`, so the disassembly check's copy can be held to it.
+ *
+ * @param y The running GHASH value, two words, multiplied in place.
+ * @param hHi The high half of H.
+ * @param hLo The low half of H.
  */
 export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
   const low32: u64 = (toU64(1) << toU64(32)) - toU64(1)
@@ -1068,6 +1119,12 @@ const aesGcmTag = (y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textL
  * every bit of both tags is read and nothing is branched on until the caller
  * tests the one answer. Exported, like `aesBitslicedRound`, so the
  * disassembly check's copy can be held to it.
+ *
+ * @param tagHi The high half of the expected tag.
+ * @param tagLo The low half of the expected tag.
+ * @param gotHi The high half of the received tag.
+ * @param gotLo The low half of the received tag.
+ * @returns All-ones if the tags match, zero if they do not.
  */
 export const aesGcmTagMask = (tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 =>
   ctEq((tagHi ^ gotHi) | (tagLo ^ gotLo), toU64(0))
@@ -1078,6 +1135,13 @@ export const aesGcmTagMask = (tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u
  * bytes is the fast and usual one. `null` for an empty IV, for a key
  * `aesKey` did not make, and for a plaintext longer than 2^31 - 17 bytes,
  * whose sealed form would not fit in an array.
+ *
+ * @param key The expanded key.
+ * @param iv The nonce, any non-zero length; it must never repeat under one key.
+ * @param aad Data authenticated but not encrypted; may be empty.
+ * @param plaintext The message to encrypt; it is read, not kept.
+ * @returns A fresh array of ciphertext then tag, `plaintext.length + 16` bytes,
+ *   or `null` for bad input.
  */
 export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | null => {
   const length: i32 = toI32(plaintext.length)
@@ -1105,6 +1169,13 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
  * the key is not one `aesKey` made.
  * The tag is computed over the received ciphertext and compared in constant
  * time before anything is decrypted, so a forgery yields no plaintext at all.
+ *
+ * @param key The expanded key.
+ * @param iv The nonce the message was sealed with.
+ * @param aad The data authenticated with it; must match what was sealed.
+ * @param sealed The ciphertext followed by its 16-byte tag.
+ * @returns A fresh array holding the plaintext, or `null` if the tag fails or
+ *   the input is bad.
  */
 export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null => {
   const total: i32 = toI32(sealed.length)
