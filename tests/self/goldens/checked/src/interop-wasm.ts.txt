@@ -368,15 +368,15 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   local +2:9 lines: string[] (const)
   callee +3:14 banner -> @banner
   callee +4:47 basename -> @basename
-  callee +59:5 pushAll -> @pushAll
-  callee +59:20 wasmResultHelpers -> @wasmResultHelpers
-  callee +60:5 pushAll -> @pushAll
-  callee +60:20 wasmRangeHelper -> @wasmRangeHelper
-  callee +66:5 pushAll -> @pushAll
-  callee +66:20 wasmResultHelpers -> @wasmResultHelpers
-  callee +67:5 pushAll -> @pushAll
-  callee +67:20 wasmRangeHelper -> @wasmRangeHelper
-  local +71:14 fn: ExternalFunction (const)
-  callee +72:16 tsSignatureLine -> @tsSignatureLine
-  local +73:16 line: string (const)
-  callee +73:24 wasmWrapper -> @wasmWrapper
+  callee +83:5 pushAll -> @pushAll
+  callee +83:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +84:5 pushAll -> @pushAll
+  callee +84:20 wasmRangeHelper -> @wasmRangeHelper
+  callee +90:5 pushAll -> @pushAll
+  callee +90:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +91:5 pushAll -> @pushAll
+  callee +91:20 wasmRangeHelper -> @wasmRangeHelper
+  local +95:14 fn: ExternalFunction (const)
+  callee +96:16 tsSignatureLine -> @tsSignatureLine
+  local +97:16 line: string (const)
+  callee +97:24 wasmWrapper -> @wasmWrapper

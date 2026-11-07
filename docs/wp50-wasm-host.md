@@ -1,9 +1,10 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; nothing built.** The owner accepted every
+**Status: accepted, 2026-11-06; stage 1 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
-Stage 1 (§14) is the next to build. The anchors below are at `39a87b3b`.
+Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
+loader's `loadSync` and `nish/vite`; stage 2 is the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design, and `npm test` compiles none of them yet.
 

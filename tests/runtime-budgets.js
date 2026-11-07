@@ -831,6 +831,38 @@ export const RUNTIME_BUDGETS = [
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
 /**
+ * The page's bytes under `--profile wasm-host` (WP50 stage 1, docs/wp50-wasm-host.md):
+ * for each example, the ceilings on the three files a page ships -- the `.wasm`, the
+ * `--emit-dts` loader and the `--inline` module -- raw, after `gzip -9` and after
+ * brotli (Node's zlib at its defaults), as `[raw, gzip, brotli]`. The `wasm-size`
+ * block of tests/run.js builds each and holds it to every ceiling.
+ *
+ * Measured 2026-11-07 with clang 18 on linux-x64 and no wasm-opt, which CI does not
+ * install; each ceiling is the measurement, so any growth is a decision recorded here
+ * with its own figures. Against `--profile wasm`, the explicit export list takes
+ * add.wasm from 316 to 102 bytes (gzip 233 to 111, brotli 211 to 87) and arrays.wasm,
+ * linked with runtime-wasm.c, from 2,827 to 2,091 (gzip 1,479 to 1,092, brotli 1,302
+ * to 970). A wasm-opt pass shrinks the `.wasm` and so the inline module and leaves
+ * the loader as it is, so every ceiling holds with one too.
+ */
+export const WASM_HOST_SIZE_BUDGETS = [
+  {
+    src: "examples/add.ts",
+    runtime: false,
+    wasm: [102, 111, 87],
+    loader: [1625, 732, 625],
+    inline: [396, 253, 223],
+  },
+  {
+    src: "examples/arrays.ts",
+    runtime: true,
+    wasm: [2091, 1092, 970],
+    loader: [4560, 1602, 1399],
+    inline: [6163, 1468, 1267],
+  },
+]
+
+/**
  * A row's name in a check and in the report: the file, and its flags when it has any,
  * so the two rows for `runtime.c` read as the two configurations they are rather than
  * as a repeat.

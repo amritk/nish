@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build an Nish .ll module (plus optional C sources) into a native binary.
 #
-#   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
+#   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasm-host|wasi|napi]
 #
 # The C runtime is sixteen translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
@@ -33,6 +33,28 @@
 #          load it from Node. Add runtime/runtime-wasm.c to the inputs when a
 #          function uses arrays (the arena and the array cold paths, no libc);
 #          strings and I/O still need a WASI runtime and are not available.
+#   wasm-host  the wasm profile's module for a page (WP50 stage 1): the same
+#          inputs, linked with an explicit export list instead of exporting
+#          everything -- the program's exported functions, `memory`, and,
+#          when runtime-wasm.c is linked, the arena entry points the
+#          `--emit-dts` loader calls (nish_arena_mark, nish_arena_release,
+#          nish_alloc_array, nish_reset_arena, nish_free_arena). The stack is
+#          a fixed 64 KiB (-z stack-size=65536). Runs `wasm-opt -Oz` on the
+#          module when wasm-opt (binaryen) is on PATH; the build line says
+#          whether it ran. Two flags take this profile alone, and any other
+#          refuses them with exit 2:
+#            --memory <MiB>       memory fixed at <MiB> MiB (1 to 4096), the
+#                                 initial size and the maximum both, so it
+#                                 never grows and `memory.buffer` is one
+#                                 ArrayBuffer for the module's life; an arena
+#                                 that runs out traps. Without it (the
+#                                 default) the memory starts at what the
+#                                 module needs and grows on demand, as under
+#                                 the wasm profile.
+#            --inline <file.mjs>  also write <file.mjs>, an ES module whose
+#                                 `export const bytes = new Uint8Array([...])`
+#                                 holds the .wasm's bytes, so a page loads the
+#                                 module with `loadSync(bytes)` and no fetch.
 #   wasi   wasm32-wasi command module: runtime.c linked against wasi-libc, so
 #          string programs run under any WASI host (`_start` runs `main`;
 #          `node examples/wasi-host.mjs app.wasm args...`). Needs a WASI
@@ -138,6 +160,8 @@ cpu=""                                 # --cpu x86-64-v3: the one CPU level abov
 sqlite_to=""                           # --sqlite-objects <dir>: compile runtime/sqlite/ alone, into <dir>
 sqlite_from=""                         # --sqlite-from <dir>: link runtime/sqlite/ compiled there
 modules_at=""                          # --module-objects <dir>: each X.ll's object is <dir>/X.o
+memory_mib=""                          # --memory <MiB>: wasm-host's fixed memory (WP50 stage 1)
+inline_to=""                           # --inline <file.mjs>: wasm-host's bytes as an ES module
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -152,6 +176,12 @@ while [ $# -gt 0 ]; do
     --sqlite-objects) sqlite_to="$2"; shift 2 ;;
     --sqlite-from) sqlite_from="$2"; shift 2 ;;
     --module-objects) modules_at="$2"; shift 2 ;;
+    --memory)
+      [ -n "${2-}" ] || { echo "error: --memory needs a size in MiB" >&2; exit 2; }
+      memory_mib="$2"; shift 2 ;;
+    --inline)
+      [ -n "${2-}" ] || { echo "error: --inline needs a file to write" >&2; exit 2; }
+      inline_to="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
@@ -164,8 +194,18 @@ done
 if [ -n "$cpu" ]; then
   [ "$cpu" = x86-64-v3 ] || { echo "error: --cpu takes x86-64-v3, not '$cpu'" >&2; exit 2; }
   case "$profile" in
-    wasm|wasi) echo "error: --cpu x86-64-v3 is an x86-64 level, so the $profile profile does not take it" >&2; exit 2 ;;
+    wasm|wasm-host|wasi) echo "error: --cpu x86-64-v3 is an x86-64 level, so the $profile profile does not take it" >&2; exit 2 ;;
   esac
+fi
+if [ -n "$memory_mib" ] || [ -n "$inline_to" ]; then
+  [ "$profile" = wasm-host ] || { echo "error: --memory and --inline take the wasm-host profile, not '$profile'" >&2; exit 2; }
+fi
+if [ -n "$memory_mib" ]; then
+  case "$memory_mib" in
+    *[!0-9]*|0*) memory_ok=0 ;;
+    *) if [ "${#memory_mib}" -le 4 ] && [ "$memory_mib" -le 4096 ]; then memory_ok=1; else memory_ok=0; fi ;;
+  esac
+  [ "$memory_ok" = 1 ] || { echo "error: --memory takes a whole number of MiB from 1 to 4096, not '$memory_mib'" >&2; exit 2; }
 fi
 # wasm-ld exports a wasm module's linear memory as `memory`, so under the wasm
 # profile's `--export-all` a function of that name makes a module Node refuses
@@ -175,7 +215,7 @@ fi
 # when it knows the build is wasm, but IR compiled for the host with `-o` alone
 # reaches these profiles without telling it, so the IR is read here too.
 case "$profile" in
-  wasm|wasi)
+  wasm|wasm-host|wasi)
     for i in ${inputs[@]+"${inputs[@]}"}; do
       case "$i" in
         *.ll)
@@ -298,8 +338,8 @@ if [ "$sqlite_wanted" = 1 ] && [ -z "$sqlite_dir" ]; then
   echo "error: the module calls SQLite, and $(dirname "$0")/../runtime/sqlite/ is not there" >&2
   exit 2
 fi
-if [ "$sqlite_wanted" = 1 ] && [ "$profile" = wasm ]; then
-  echo "error: the module calls SQLite, which the wasm profile cannot link: it has no libc for runtime/sqlite/sqlite3.c to build on; use --profile wasi" >&2
+if [ "$sqlite_wanted" = 1 ] && { [ "$profile" = wasm ] || [ "$profile" = wasm-host ]; }; then
+  echo "error: the module calls SQLite, which the $profile profile cannot link: it has no libc for runtime/sqlite/sqlite3.c to build on; use --profile wasi" >&2
   exit 2
 fi
 
@@ -672,7 +712,7 @@ case "$profile" in
   speed|size)
     "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
       "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
-  wasm)
+  wasm|wasm-host)
     # A region's chunks come from malloc, and the freestanding wasm runtime
     # (runtime-wasm.c) has none, so IR that makes or enters one is refused here
     # rather than failing at the link on an undefined `nish_region_*`. The wasi
@@ -680,7 +720,7 @@ case "$profile" in
     for i in ${inputs[@]+"${inputs[@]}"}; do
       case "$i" in
         *.ll) if grep -q "@nish_region_" "$i"; then
-          echo "error: $i uses regions, which the wasm profile cannot link (it has no malloc); build it with --profile wasi" >&2
+          echo "error: $i uses regions, which the $profile profile cannot link (it has no malloc); build it with --profile wasi" >&2
           exit 2
         fi ;;
       esac
@@ -689,7 +729,7 @@ case "$profile" in
     # rather than probing PATH so a Homebrew llvm without a PATH entry still works.
     wasm_ld=$("$CC" -print-prog-name=wasm-ld)
     if [ ! -x "$wasm_ld" ]; then
-      echo "error: the wasm profile needs wasm-ld (install lld; on macOS: brew install llvm@18)" >&2
+      echo "error: the $profile profile needs wasm-ld (install lld; on macOS: brew install llvm@18)" >&2
       exit 2
     fi
     # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
@@ -749,10 +789,63 @@ case "$profile" in
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
-    "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory \
-      ${tls[@]+"${tls[@]}"} \
-      -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
-      "${inputs[@]}" -o "$out" ;;
+    wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory)
+    if [ "$profile" = wasm ]; then
+      "$CC" "${wasm_compile[@]}" \
+        ${tls[@]+"${tls[@]}"} \
+        -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
+        "${inputs[@]}" -o "$out"
+    else
+      # The export list. A module's exported functions are its `define` lines
+      # with external linkage and default visibility: the compiler gives
+      # everything else `internal` or `private`, and the other linkages are
+      # listed for IR it did not write. wasm-ld exports `memory` itself.
+      exports=()
+      runtime_linked=0
+      for i in "${inputs[@]}"; do
+        case "$i" in
+          */runtime-wasm.c|runtime-wasm.c) runtime_linked=1 ;;
+          *.ll)
+            while IFS= read -r name; do
+              exports+=("-Wl,--export=$name")
+            done < <(grep -E '^define ' "$i" \
+              | grep -Ev '^define (internal|private|linkonce|linkonce_odr|weak|weak_odr|available_externally|extern_weak|common|hidden|protected) ' \
+              | sed -nE 's/^[^@]*@"?([^"(]+)"?\(.*/\1/p') ;;
+        esac
+      done
+      if [ "$runtime_linked" = 1 ]; then
+        for name in nish_arena_mark nish_arena_release nish_alloc_array nish_reset_arena nish_free_arena; do
+          exports+=("-Wl,--export=$name")
+        done
+      fi
+      memory=(-Wl,-z,stack-size=65536)
+      if [ -n "$memory_mib" ]; then
+        bytes=$((memory_mib * 1048576))
+        memory+=("-Wl,--initial-memory=$bytes" "-Wl,--max-memory=$bytes")
+      fi
+      "$CC" "${wasm_compile[@]}" \
+        ${tls[@]+"${tls[@]}"} \
+        -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
+        "${inputs[@]}" -o "$out"
+      # binaryen's size pass is optional: the module is complete without it.
+      if command -v wasm-opt >/dev/null 2>&1; then
+        wasm-opt -Oz --enable-bulk-memory "$out" -o "$out"
+        wasm_opt="wasm-opt -Oz"
+      else
+        wasm_opt="no wasm-opt"
+      fi
+      if [ -n "$inline_to" ]; then
+        # Decimal, one array literal: of the inline forms the smallest after
+        # compression (docs/wp50-wasm-host.md, Q10). od prints each byte as an
+        # unsigned decimal, and tr and sed join them with commas.
+        {
+          printf '// The bytes of %s, from scripts/build.sh --profile wasm-host --inline.\n' "${out##*/}"
+          printf 'export const bytes = new Uint8Array(['
+          od -An -v -tu1 "$out" | tr -s ' \n' '  ' | sed -E 's/^ //; s/ $//; s/ /,/g' | tr -d '\n'
+          printf ']);\n'
+        } > "$inline_to"
+      fi
+    fi ;;
   wasi)
     sysroot=${WASI_SYSROOT:-}
     for d in /usr/lib/wasi-sysroot /opt/wasi-sdk/share/wasi-sysroot /usr/share/wasi-sysroot; do
@@ -830,4 +923,4 @@ esac
 if [ "${dsym:-0}" = 1 ]; then "$("$CC" -print-prog-name=dsymutil)" "$out"; fi
 
 # `wc -c` pads with spaces on macOS; strip them so the number is clean.
-printf '%s: %s bytes (%s)\n' "$out" "$(wc -c < "$out" | tr -d ' ')" "$profile"
+printf '%s: %s bytes (%s%s)\n' "$out" "$(wc -c < "$out" | tr -d ' ')" "$profile" "${wasm_opt:+, $wasm_opt}"
