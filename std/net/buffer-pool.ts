@@ -9,9 +9,10 @@
  *     // ... write out[0 .. used) and send it ...
  *     pool.giveSecret(out, used); // or pool.give(out, used) for bytes that were never secret
  *
- * It has the shape of `nish/net/http1-server`'s `Http1OutputPool` (`take`,
- * `give`, `made`, a `u8[][]` free list), so the two read alike and can merge,
- * with three things added:
+ * **The shape of `Http1OutputPool`.** It has the shape of
+ * `nish/net/http1-server`'s `Http1OutputPool` (`take`, `give`, `made`, a
+ * `u8[][]` free list), so the two read alike and can merge, with three things
+ * added:
  *
  * - **A ceiling.** At most `ceiling` buffers ever exist. A server sizes it to
  *   what preallocating every slot would have cost, so a full server behaves as
@@ -26,12 +27,13 @@
  *   buffer, or a give-back with nothing lent is a borrower's bug, and each
  *   panics with the pool's name rather than corrupting the free list quietly.
  *
- * The pool grows to its high-water mark and never shrinks: after warm-up a
+ * **It never shrinks.** The pool grows to its high-water mark: after warm-up a
  * `take` pops the free list and a `give` pushes onto capacity it already has,
  * so a warmed take/give loop moves the arena by nothing.
  *
- * Private helpers share the importing program's flat symbol namespace
- * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
+ * **Helper names.** Private helpers share the importing program's flat symbol
+ * namespace (`docs/wp26-stdlib.md` §3e), which is why each one carries the
+ * module's name.
  */
 
 /**
@@ -42,13 +44,27 @@
  */
 export class BufferPool {
   // References, then 32-bit fields: the order the layout packs without padding.
-  /** The buffers given back and not yet taken again; the last one is lent next. */
+  /**
+   * The buffers given back and not yet taken again; the last one is lent next.
+   * @internal Read by std/net/quic-stream.ts, and grown ahead of need by
+   * std/net/http3.ts and std/net/http3-server.ts.
+   */
   free: u8[][]
-  /** Names the pool in every panic, so a leak or a stray buffer says whose it is. */
+  /**
+   * Names the pool in every panic, so a leak or a stray buffer says whose it is.
+   * @internal Read by `bufferPoolCheckGive` in this module to name the pool in its panics.
+   */
   name: string
-  /** The length of every buffer the pool makes and takes back. */
+  /**
+   * The length of every buffer the pool makes and takes back.
+   * @internal Read by `bufferPoolCheckGive` here, and by std/net/http3-server.ts,
+   * std/net/http3.ts and std/net/quic-stream.ts to know how much room a borrowed buffer has.
+   */
   size: i32 = 0
-  /** The most buffers the pool will ever make. */
+  /**
+   * The most buffers the pool will ever make.
+   * @internal Read by `take` here, and by std/net/quic-stream.ts to cap what it primes and borrows.
+   */
   ceiling: i32 = 0
   /** How many buffers the pool has made: its high-water mark, since it never frees one. */
   made: i32 = 0
@@ -59,6 +75,10 @@ export class BufferPool {
    * `"Http2TlsServer.output"`). Panics, naming the pool, unless `size` is
    * above 0 and `ceiling` at least 1: a pool of neither makes a buffer
    * nobody can use or none at all.
+   *
+   * @param name the label every panic of this pool prints, to say whose buffer leaked
+   * @param size how many bytes each buffer holds, the same for every buffer the pool lends
+   * @param ceiling the most buffers the pool may ever make, sized to what every slot holding one at once would need
    */
   constructor(name: string, size: i32, ceiling: i32) {
     if (size <= 0) {
@@ -82,6 +102,8 @@ export class BufferPool {
    * Panics when all `ceiling` buffers are lent: the ceiling is what every
    * slot holding a buffer at once would need, so one more means a buffer was
    * never given back.
+   *
+   * @returns a buffer of `size` bytes the caller now borrows until it hands it back through `give` or `giveSecret`
    */
   take(): u8[] {
     if (this.free.length > 0) {
@@ -104,6 +126,9 @@ export class BufferPool {
    *
    * Panics when `buf` is not `size` bytes, when `used` is outside
    * `0 .. size`, or when nothing is lent.
+   *
+   * @param buf the buffer `take` lent, which the pool owns again once this returns
+   * @param used how many bytes from the start of `buf` the borrower wrote, the extent that gets zeroed
    */
   give(buf: u8[], used: i32): void {
     bufferPoolCheckGive(this, buf, used)
@@ -119,6 +144,9 @@ export class BufferPool {
    * above 0, and costs nothing for a buffer that was never written.
    *
    * Panics as `give` does.
+   *
+   * @param buf the buffer `take` lent, which held secret bytes and which the pool owns again once this returns
+   * @param used how many bytes from the start of `buf` the borrower wrote; above 0, the whole buffer is wiped
    */
   giveSecret(buf: u8[], used: i32): void {
     bufferPoolCheckGive(this, buf, used)
@@ -128,7 +156,10 @@ export class BufferPool {
     this.free.push(buf)
   }
 
-  /** How many buffers are lent now: made, less those waiting on the free list. */
+  /**
+   * How many buffers are lent now: made, less those waiting on the free list.
+   * @returns the count of buffers borrowed and not yet given back, which is 0 when every borrower kept its promise
+   */
   lent(): i32 {
     return this.made - toI32(this.free.length)
   }
