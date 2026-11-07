@@ -92,6 +92,8 @@ The warnings catch the shapes the compiler can name, not every possible
 leak: an array you keep pushing onto for the whole run is memory you meant
 to keep, and nothing warns about it.
 
+<a id="freeing-a-batch-yourself-using-a--arena"></a>
+
 ## Freeing a batch yourself: `using a = arena()`
 
 When you know a block's allocations are temporary, say so with

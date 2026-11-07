@@ -231,6 +231,8 @@ a/b.txt, 7 bytes
 A decoded parameter can hold any byte, `/`, `..` and NUL among them. Check it
 before you use it as a file name.
 
+<a id="from-http11-http2-and-http3"></a>
+
 ## From HTTP/1.1, HTTP/2 and HTTP/3
 
 `match` takes the method and the target as windows into arrays you already
