@@ -7,6 +7,7 @@ import ModuleUnit from "./compilation" -> struct ModuleUnit
 import Edit from "./diagnostics" -> struct Edit
 import applyModuleEdits from "./emit-ts-edits" -> function @applyModuleEdits
 import emitModule from "./emit-ts-edits" -> function @emitModule
+import HOST_HANDLE_ALIAS from "./emit-ts-edits" -> const HOST_HANDLE_ALIAS
 import REGION_REFUSAL from "./emit-ts-edits" -> const REGION_REFUSAL
 import SIGNAL_REFUSAL from "./emit-ts-edits" -> const SIGNAL_REFUSAL
 import Walk from "./emit-ts-edits" -> struct Walk
@@ -201,20 +202,20 @@ function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeSc
   local +114:13 node: Node (const)
   callee +115:7 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
   local +118:11 header: string (const)
-  callee +118:20 runtimeImport -> @runtimeImport
-  callee +118:60 runtimeImport -> @runtimeImport
-  local +120:13 at: i32 (const)
-  callee +120:18 importOffset -> @importOffset
-  local +123:13 ordered: Edit[] (const)
-  local +124:11 placed: boolean (let)
-  local +125:18 edit: Edit (const)
-  callee +127:24 new Edit -> @Edit.constructor
-  callee +133:22 new Edit -> @Edit.constructor
-  local +137:11 text: string (const)
-  callee +137:18 applyModuleEdits -> @applyModuleEdits
-  callee +142:23 new EmittedFile -> @EmittedFile.constructor
-  local +148:7 entryOut: string (let)
-  local +149:7 script: boolean (let)
-  callee +154:16 scriptMain -> @scriptMain
-  callee +158:21 new EmittedFile -> @EmittedFile.constructor
-  callee +158:49 launcher -> @launcher
+  callee +119:7 runtimeImport -> @runtimeImport
+  callee +120:7 runtimeImport -> @runtimeImport
+  local +123:13 at: i32 (const)
+  callee +123:18 importOffset -> @importOffset
+  local +126:13 ordered: Edit[] (const)
+  local +127:11 placed: boolean (let)
+  local +128:18 edit: Edit (const)
+  callee +130:24 new Edit -> @Edit.constructor
+  callee +136:22 new Edit -> @Edit.constructor
+  local +140:11 text: string (const)
+  callee +140:18 applyModuleEdits -> @applyModuleEdits
+  callee +145:23 new EmittedFile -> @EmittedFile.constructor
+  local +151:7 entryOut: string (let)
+  local +152:7 script: boolean (let)
+  callee +157:16 scriptMain -> @scriptMain
+  callee +161:21 new EmittedFile -> @EmittedFile.constructor
+  callee +161:49 launcher -> @launcher
