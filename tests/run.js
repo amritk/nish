@@ -29760,7 +29760,7 @@ if (!only || "host-import-window".includes(only)) {
         loader.split("\n").filter((line) => line.includes("win")).join("\n")
       )
       if (linked.status === 0) {
-        fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
+        fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\", \"stored\", \"stored\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
         const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
@@ -29772,13 +29772,18 @@ if (!only || "host-import-window".includes(only)) {
             ["u8s 15", "u16s 15", "u32s 15", "i32s 15", "f32s 15", "f64s 5", "whole 20"].every((line, i) => lines[i] === line),
           shown(run)
         )
+        check(
+          "host-import-window: module storage lends to a window, and the host's writes stay in storage for the next call",
+          lines[7] === "stored 15" && lines[8] === "stored 40",
+          shown(run)
+        )
         const reach = "`doubleI32`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs)"
         check(
           "host-import-window: a window past the end panics before the page runs, and one whose `at + n` wraps does too",
-          lines[7] !== undefined &&
-            lines[7].startsWith(`past NishPanic ${reach}`) &&
-            lines[8] !== undefined &&
-            lines[8].startsWith(`wraps NishPanic ${reach}`),
+          lines[9] !== undefined &&
+            lines[9].startsWith(`past NishPanic ${reach}`) &&
+            lines[10] !== undefined &&
+            lines[10].startsWith(`wraps NishPanic ${reach}`),
           shown(run)
         )
       }

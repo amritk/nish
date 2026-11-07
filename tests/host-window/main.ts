@@ -58,3 +58,14 @@ export const wraps = (): i32 => {
   doubleI32(xs, 4294967295, 2)
   return xs[0]
 }
+
+const KEPT = new Int32Array(4)
+
+/** Module storage lent to a window: the host's writes land in storage and outlive the call. */
+export const stored = (): i32 => {
+  for (let i = 0; i < KEPT.length; i++) {
+    KEPT[i] = KEPT[i] + i + 1
+  }
+  doubleI32(KEPT, 1, 2)
+  return KEPT[0] + KEPT[1] + KEPT[2] + KEPT[3]
+}
