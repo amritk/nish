@@ -386,7 +386,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -433,7 +434,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -499,7 +501,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -592,7 +595,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -690,7 +694,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -747,7 +752,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -930,7 +936,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -1043,7 +1050,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -1203,7 +1211,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -1268,24 +1277,8 @@
             ]
           }
         ]
-      }
-    }
-  ],
-  "allowSurvivors": [
-    {
-      "file": "std/hex.ts",
-      "line": 88,
-      "reason": "Equivalent: the guard is always true (k = 2i and k1 = 2i + 1 with i < n, and out is 2n long), so `k <= len`, `k1 <= len` and `||` do not change which stores run. It exists only so that the stores keep no bounds check."
-    },
-    {
-      "file": "std/hex.ts",
-      "line": 121,
-      "reason": "Equivalent: starting j at -1, or running it to out.length inclusive, adds an iteration whose k is 2^32 - 2 or 2 * out.length, which the always-true guard on line 126 skips, so no read, count or store changes."
-    },
-    {
-      "file": "std/hex.ts",
-      "line": 126,
-      "reason": "Equivalent: the guard is always true (k = 2j and k1 = 2j + 1 with j < out.length, and text is 2 * out.length long), so `k <= len`, `k1 <= len` and `||` do not change which reads run. It exists only so that the reads keep no bounds check."
+      },
+      "samples": 96
     }
   ]
 }
