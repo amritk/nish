@@ -110,32 +110,48 @@ entry:
   %11 = fneg double 0x0000000000000001
   call void @round$(double %11)
   call void @round$(double 0x000FFFFFFFFFFFFF)
+  %12 = fneg double 0x000FFFFFFFFFFFFF
+  call void @round$(double %12)
   call void @others(double 0x0000000000000000)
-  %12 = fneg double 0x0000000000000000
-  call void @others(double %12)
-  %13 = fneg double 0x3FE0000000000000
+  %13 = fneg double 0x0000000000000000
   call void @others(double %13)
-  call void @others(double 0x3FE0000000000000)
-  %14 = fneg double 0x01A56E1FC2F8F359
+  %14 = fneg double 0x3FE0000000000000
   call void @others(double %14)
-  call void @others(double 0x0000000000000001)
-  %15 = fneg double 0x0000000000000001
+  call void @others(double 0x3FE0000000000000)
+  %15 = fneg double 0x01A56E1FC2F8F359
   call void @others(double %15)
-  call void @others(double 0x000FFFFFFFFFFFFF)
-  %16 = fneg double 0x400599999999999A
+  call void @others(double 0x0000000000000001)
+  %16 = fneg double 0x0000000000000001
   call void @others(double %16)
+  call void @others(double 0x000FFFFFFFFFFFFF)
+  %17 = fneg double 0x000FFFFFFFFFFFFF
+  call void @others(double %17)
+  call void @others(double 0x3FF8000000000000)
+  %18 = fneg double 0x3FF8000000000000
+  call void @others(double %18)
+  call void @others(double 0x4004000000000000)
+  %19 = fneg double 0x4004000000000000
+  call void @others(double %19)
+  call void @others(double 0x3FDFFFFFFFFFFFFF)
+  %20 = fneg double 0x3FDFFFFFFFFFFFFF
+  call void @others(double %20)
+  call void @others(double 0x4330000000000000)
+  %21 = fneg double 0x4330000000000000
+  call void @others(double %21)
+  %22 = fneg double 0x400599999999999A
+  call void @others(double %22)
   call void @others(double 0x400599999999999A)
   call void @others(double 0x432FFFFFFFFFFFFF)
-  %17 = fneg double 0x432FFFFFFFFFFFFF
-  call void @others(double %17)
+  %23 = fneg double 0x432FFFFFFFFFFFFF
+  call void @others(double %23)
   call void @others(double 0x4340000000000000)
-  %18 = load double, double* %inf.addr, align 8
-  call void @others(double %18)
-  %19 = load double, double* %inf.addr, align 8
-  %20 = fneg double %19
-  call void @others(double %20)
-  %21 = fdiv double 0x0000000000000000, 0x0000000000000000
-  call void @others(double %21)
+  %24 = load double, double* %inf.addr, align 8
+  call void @others(double %24)
+  %25 = load double, double* %inf.addr, align 8
+  %26 = fneg double %25
+  call void @others(double %26)
+  %27 = fdiv double 0x0000000000000000, 0x0000000000000000
+  call void @others(double %27)
   ret i32 0
 }
 
