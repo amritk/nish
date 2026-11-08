@@ -2272,11 +2272,11 @@ function httpClientResolve(host: string, port: i32, options: HttpOptions, start:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.resolveHost
   escaping: code host port until
-  calls: nish.DnsConfig.constructor nish.DnsHosts.constructor nish.dnsLoadSystem nish.dnsLookupWith nish.httpClientAnswers nish.resolveHost nish_alloc_struct nish_panic nish_panic_overflow
+  calls: nish.DnsHosts.constructor nish.dnsLoadSystem nish.dnsLookupWith nish.httpClientAnswers nish.resolveHost nish_alloc_struct nish_panic nish_panic_overflow
   pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientAnswers#2
   pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.resolveHost#3 nish.dnsLookupWith#5 nish.httpClientAnswers#5
   pointer fault: size=16 writesThrough=true captured=false passedTo=nish.httpClientAnswers#6
-  stackSites=1 stackLocals=0
+  stackSites=0 stackLocals=0
   local +0:7 lookupMs: i64 (let)
   local +6:9 ttls: i32[] (const)
   local +7:9 dns: DnsConfig | null (const)
@@ -2285,7 +2285,6 @@ function httpClientResolve(host: string, port: i32, options: HttpOptions, start:
   local +12:11 hosts: DnsHosts (const)
   callee +12:29 new DnsHosts -> @nish.DnsHosts.constructor
   callee +13:5 dnsLoadSystem -> @nish.dnsLoadSystem
-  callee +13:19 new DnsConfig -> @nish.DnsConfig.constructor
   callee +14:13 dnsLookupWith -> @nish.dnsLookupWith
   callee +16:10 httpClientAnswers -> @nish.httpClientAnswers
 function httpClientAnswers(host: string, count: i32, options: HttpOptions, until: i64, code: i32, addresses: u8[], fault: HttpClientFault): i32 -> @nish.httpClientAnswers
@@ -2586,41 +2585,43 @@ function httpClientLookupAsync(host: string, port: i32, dns: DnsConfig | null, u
   pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.dnsParseAddress#3 nish.DnsClient.result#2 nish.DnsClient.result#2
   pointer ttls: size=0 writesThrough=true captured=false passedTo=nish.DnsClient.result#3 nish.DnsClient.result#3
   stackSites=2 stackLocals=2
-  local -5:9 name: u8[] (const)
-  local -4:12 i: i32 (let)
-  callee -1:7 dnsParseAddress -> @nish.dnsParseAddress
-  local +3:9 system: DnsConfig (const)
-  callee +3:29 new DnsConfig -> @nish.DnsConfig.constructor
-  local +4:9 hosts: DnsHosts (const)
-  callee +4:27 new DnsHosts -> @nish.DnsHosts.constructor
-  callee +5:3 dnsLoadSystem -> @nish.dnsLoadSystem
-  local +6:9 config: DnsConfig (const)
-  local +7:9 loop: i32 (const)
-  local +11:9 client: DnsClient (const)
-  callee +11:29 new DnsClient -> @nish.DnsClient.constructor
-  callee +11:43 new DnsResolver -> @nish.DnsResolver.constructor
-  local +12:9 lookup: i32 (const)
-  callee +12:23 DnsClient.start -> @nish.DnsClient.start
-  local +17:9 ready: i32[] (const)
-  local +18:7 slice: i32 (let)
-  local +19:7 status: i32 (let)
-  callee +19:21 DnsClient.result -> @nish.DnsClient.result
-  local +21:11 now: i64 (const)
-  callee +23:7 DnsClient.cancel -> @nish.DnsClient.cancel
-  local +27:9 own: i32 (let)
-  local +29:13 left: i64 (const)
-  local +34:11 wait: i32 (const)
-  callee +34:23 DnsClient.timeoutMs -> @nish.DnsClient.timeoutMs
-  local +36:13 slept: boolean (const)
-  callee +38:9 DnsClient.cancel -> @nish.DnsClient.cancel
-  local +43:11 count: i32 (const)
-  local +44:11 after: i64 (const)
-  callee +46:7 DnsClient.cancel -> @nish.DnsClient.cancel
-  local +50:14 k: i32 (let)
-  callee +51:11 DnsClient.owns -> @nish.DnsClient.owns
-  callee +52:9 DnsClient.ready -> @nish.DnsClient.ready
-  callee +55:5 DnsClient.tick -> @nish.DnsClient.tick
-  callee +56:14 DnsClient.result -> @nish.DnsClient.result
+  local -11:9 name: u8[] (const)
+  local -10:7 ascii: boolean (let)
+  local -9:12 i: i32 (let)
+  local -8:11 c: i32 (const)
+  callee -1:16 dnsParseAddress -> @nish.dnsParseAddress
+  local +3:9 hosts: DnsHosts (const)
+  callee +3:27 new DnsHosts -> @nish.DnsHosts.constructor
+  local +4:7 config: DnsConfig (let)
+  callee +4:27 new DnsConfig -> @nish.DnsConfig.constructor
+  callee +6:5 dnsLoadSystem -> @nish.dnsLoadSystem
+  callee +9:5 dnsLoadSystem -> @nish.dnsLoadSystem
+  local +11:9 loop: i32 (const)
+  local +15:9 client: DnsClient (const)
+  callee +15:29 new DnsClient -> @nish.DnsClient.constructor
+  callee +15:43 new DnsResolver -> @nish.DnsResolver.constructor
+  local +16:9 lookup: i32 (const)
+  callee +16:23 DnsClient.start -> @nish.DnsClient.start
+  local +21:9 ready: i32[] (const)
+  local +22:7 slice: i32 (let)
+  local +23:7 status: i32 (let)
+  callee +23:21 DnsClient.result -> @nish.DnsClient.result
+  local +25:11 now: i64 (const)
+  callee +27:7 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +31:9 own: i32 (let)
+  local +33:13 left: i64 (const)
+  local +38:11 wait: i32 (const)
+  callee +38:23 DnsClient.timeoutMs -> @nish.DnsClient.timeoutMs
+  local +40:13 slept: boolean (const)
+  callee +42:9 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +47:11 count: i32 (const)
+  local +48:11 after: i64 (const)
+  callee +50:7 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +54:14 k: i32 (let)
+  callee +55:11 DnsClient.owns -> @nish.DnsClient.owns
+  callee +56:9 DnsClient.ready -> @nish.DnsClient.ready
+  callee +59:5 DnsClient.tick -> @nish.DnsClient.tick
+  callee +60:14 DnsClient.result -> @nish.DnsClient.result
 function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): i32 -> @nish.httpClientDialAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
@@ -5458,18 +5459,18 @@ function resolveHost(name: string, timeoutMs: i32, port: i32, out: u8[], ttls: i
   callee +1:27 new DnsHosts -> @nish.DnsHosts.constructor
   callee +2:3 dnsLoadSystem -> @nish.dnsLoadSystem
   callee +3:10 dnsLookupWith -> @nish.dnsLookupWith
-function dnsLoadSystem(config: DnsConfig, hosts: DnsHosts): void -> @nish.dnsLoadSystem [exported]
+function dnsLoadSystem(config: DnsConfig | null, hosts: DnsHosts): void -> @nish.dnsLoadSystem [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_bytes
   calls: nish.dnsParseHosts nish.dnsParseResolvConf nish_arena_mark nish_arena_release nish_read_file_bytes
   pointer config: size=72 writesThrough=true captured=false passedTo=nish.dnsParseResolvConf#3 nish.dnsParseResolvConf#3
   pointer hosts: size=72 writesThrough=true captured=false passedTo=nish.dnsParseHosts#3
   stackSites=1 stackLocals=0
-  local +0:9 conf: u8[] | null (const)
-  callee +2:5 dnsParseResolvConf -> @nish.dnsParseResolvConf
-  callee +4:5 dnsParseResolvConf -> @nish.dnsParseResolvConf
-  local +6:9 hostsFile: u8[] | null (const)
-  callee +8:5 dnsParseHosts -> @nish.dnsParseHosts
+  local +0:11 conf: u8[] | null (const)
+  callee +2:7 dnsParseResolvConf -> @nish.dnsParseResolvConf
+  callee +4:7 dnsParseResolvConf -> @nish.dnsParseResolvConf
+  local +7:9 hostsFile: u8[] | null (const)
+  callee +9:5 dnsParseHosts -> @nish.dnsParseHosts
 function dnsLookupWith(config: DnsConfig, hosts: DnsHosts | null, name: string, timeoutMs: i32, port: i32, out: u8[], ttls: i32[]): i32 -> @nish.dnsLookupWith [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_create
