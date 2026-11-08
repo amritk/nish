@@ -177,33 +177,24 @@ const DECLARED = [
     }
   ),
   // `HttpOptions` gains `dns` and `HttpClientConn` the TLS session, so every
-  // program that reaches std/net/fetch.ts lays both out again; dns.ts's
-  // `dnsLoadSystem` takes a nullable config and skips resolv.conf without one.
+  // program that reaches std/net/fetch.ts lays both out again. dns.ts's
+  // `dnsLoadSystem` change lands in dns.ll, which #1304 moves too; that file
+  // is declared above under #1304's line.
   ...asyncFetch(
-    "async fetch speaks https and takes a DNS config, so HttpOptions and HttpClientConn grow fields and dnsLoadSystem may skip resolv.conf",
+    "async fetch speaks https and takes a DNS config, so HttpOptions and HttpClientConn grow fields",
     {
-      "examples/http-get-json.ts": ["dns.ll", "fetch.ll", "http-get-json.h", "http-get-json.ll"],
-      "tests/link/net_fetch_async/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_fetch_async_flat/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_fetch_async_https/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_fetch_async_https_flat/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_fetch_async_overlap/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_fetch_async_policy/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_http_fetch/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
-      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
-      "tests/link/net_http_fetch_tls/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_outbound/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
-      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
-    }
-  ),
-  ...asyncFetch(
-    "dnsLoadSystem takes a nullable DnsConfig so async fetch can leave resolv.conf unread when HttpOptions.dns is given",
-    {
-      "tests/link/net_upstream/main.ts": ["dns.ll"],
-      "tests/link/net_upstream_release/main.ts": ["dns.ll"],
-      "tests/link/std_dns/main.ts": ["dns.ll"],
-      "tests/link/std_dns_caps/main.ts": ["dns.ll"],
-      "tests/link/std_dns_soak/main.ts": ["dns.ll"],
+      "examples/http-get-json.ts": ["fetch.ll", "http-get-json.h", "http-get-json.ll"],
+      "tests/link/net_fetch_async/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_http_fetch/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_tls/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_outbound/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
     }
   ),
   ...asyncFetch(
