@@ -97,8 +97,8 @@ const USER: i32 = 1
 
 const user = async (req: Request): Promise<Response> => {
   const res = await fetch(`http://users.internal/v1/${req.param("id")}`)
-  if (res === null) { return Response.status(502) }
-  const body = await res.text()
+  if (res.isErr()) { return Response.status(502) }
+  const body = res.value.text()
   return Response.json(200, body)
 }
 
@@ -347,6 +347,24 @@ waits. `awaitAll(fetch(a), fetch(b))` runs both at once there too. The
 separate "sequential `await`" idea for command-line programs only is
 superseded by this note.
 
+**The body is read eagerly.** `fetch` reads the whole body before it
+answers, up to `maxBodyBytes` (256 MiB by default; past it the fetch fails
+with `HTTP_E_BODY_TOO_LARGE`), so `text()` and `bytes()` on the
+`FetchResponse` are plain methods, not awaited. A streamed body would need a
+reader the caller awaits chunk by chunk, holding the connection between
+awaits; that is a later API beside this one, not a change to it. `fetch`
+answers a `Result<FetchResponse, FetchError>` rather than null, so the
+`HTTP_E_*` code and its sentence come with the failure: there is no client
+object to read them from afterwards.
+
+**The pool is the fetch's own.** The async `fetch` keeps idle connections in
+a new `FetchPool`, which a caller opts into through `RequestInit.pool`;
+without one each fetch has a connection of its own. It is not §7's
+`Upstream` pool: that one belongs to an explicit loop and holds connections
+it drives itself, while a `FetchPool`'s connections are driven by whichever
+task takes one. The two share the parser, the request writer and the policy
+helpers, not their pools.
+
 The renames are a breaking change (`refactor!`). The project stays on 0.x,
 so this moves the minor version. 35 files under `std/`, `src/`, `examples/`,
 `docs/` and `tests/` name the two old module paths.
@@ -552,6 +570,44 @@ closes (ASYNC-6, open until cancellation). The executor is cooperative and
 runs on `main`'s thread (ASYNC-5). `--emit-ts` writes `sleep` as a
 `setTimeout` and refuses `readable`/`writable` (NL4017). `async` stays
 refused under the wasm profiles (NL2652).
+
+## Stage 5, part 2: async `fetch`
+
+`await fetch(url, init)` in `nish/net/fetch` drives
+`nish/net/http1-client-codec`'s parser over a non-blocking socket and parks
+its task on `writable` while a connect or a write is in flight and on
+`readable` while it waits for the response, so `awaitAll(fetch(a), fetch(b))`
+has both requests at the server at once (`tests/link/net_fetch_async_overlap`,
+whose server answers neither until both have arrived) and a slow fetch does
+not hold up another task (`tests/link/net_fetch_async`).
+
+- **The shape.** `fetch(url: string, init: RequestInit | null = null):
+  Promise<Result<FetchResponse, FetchError>>`. `RequestInit` holds the method,
+  fields, body, the `HttpOptions` `fetchSync` takes and an optional
+  `FetchPool`. The body is read eagerly (§8).
+- **One policy for both clients.** The URL check, the route and proxy choice
+  (the environment's `http_proxy`, `no_proxy` and the httpoxy rule), the request
+  head, the redirect rule, the resolver with the outbound policy, and the error
+  texts are helpers `FetchSyncClient` and `fetch` both call, so `HTTP_E_*`
+  codes mean the same thing from either (`tests/link/net_fetch_async_policy`).
+- **The pool.** A `FetchPool` keeps idle connections per route (origin, or
+  proxy), at most `maxIdlePerOrigin` each and 64 in all, and checks one is
+  quiet before it is taken. A fetch under an outbound policy neither keeps
+  nor takes one.
+- **Memory.** A fetch's allocations are its awaiting function's scope's and
+  go with it: 2,000 fetches, each awaited in a function of its own, leave
+  `Arena.used()` where it was (`tests/link/net_fetch_async_flat`). Awaited
+  straight in one function's loop, the responses stay until that function
+  returns.
+
+**What it does not do.** The name lookup blocks the process, within
+`connectTimeoutMs`. A wait has no deadline (ASYNC-6), so `readTimeoutMs`
+bounds nothing and `totalTimeoutMs` is checked when a wait ends. https is
+refused with `HTTP_E_TLS`, naming `fetchSync`, before anything is dialled:
+the TLS handshake would block, and a silent block is worse than a stated
+refusal. `--emit-ts` refuses a program that uses it, as it refuses
+`readable` and `writable` (NL4017). The record is
+[`security/fetch.md`](security/fetch.md#the-async-fetch) (HF-10, HF-11).
 
 ## Not in this work package
 

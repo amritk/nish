@@ -1,8 +1,27 @@
 /**
- * `nish/net/fetch` — a blocking HTTP/1.1 client for command-line
- * programs: `fetchSync(request, options)` dials, sends, and answers the
+ * `nish/net/fetch` — an HTTP/1.1 client. `fetchSync(request, options)` is the
+ * blocking one for command-line programs: it dials, sends, and answers the
  * response's head with a reader for its body, and a `FetchSyncClient` does the
- * same while keeping one connection alive between fetches.
+ * same while keeping one connection alive between fetches. `await fetch(url,
+ * init)` is the async one: it parks its task on `nish:async` instead of the
+ * thread, so `awaitAll(fetch(a), fetch(b))` overlaps the two.
+ *
+ *     import { fetch } from "nish/net/fetch";
+ *
+ *     const r = await fetch("http://127.0.0.1:8080/health");
+ *     if (r.isOk()) {
+ *       const body: string = r.value.text();
+ *     }
+ *
+ * **The async `fetch`** answers a `Result`: a `FetchResponse` whose body was
+ * read whole before it answered (up to `maxBodyBytes`, 256 MiB by default,
+ * else `HTTP_E_BODY_TOO_LARGE`), or a `FetchError` with the `HTTP_E_*` code.
+ * The connect, every write and every read wait on the executor; the name
+ * lookup still blocks, and only `http://` is driven (an `https://` URL answers
+ * `HTTP_E_TLS` naming `fetchSync`, never a silent block). A `FetchPool` handed
+ * in through `RequestInit.pool` keeps idle connections per route, capped.
+ * Policy, proxies, redirects and error codes are the shared code below, so
+ * both clients behave alike. It does not run under `--emit-ts`.
  *
  *     import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
  *
@@ -96,6 +115,7 @@ import {
   pollWait,
   tcpConnect,
 } from "nish:net"
+import { readable, writable } from "nish:async"
 import { getenv, monotonicNanos, wallClockNanos } from "nish:process"
 import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
 import { TlsClient, TlsClientConfig, tlsClientIsIpLiteral } from "nish/net/tls/client"
@@ -157,6 +177,8 @@ const HTTP_CLIENT_PROXY_PORT: i32 = 1080
 const HTTP_CLIENT_MAX_WAIT_MS: i64 = 3600000
 /** Nanoseconds in a millisecond. */
 const HTTP_CLIENT_NS_PER_MS: i64 = 1000000
+/** The largest body the async fetch can hold in one array, whatever `maxBodyBytes` says. */
+const HTTP_CLIENT_ASYNC_BODY_MAX: i64 = 2147483647
 /** A deadline that never comes: 146 years of monotonic nanoseconds, far below the overflow of a sum with a timeout. */
 const HTTP_CLIENT_NEVER: i64 = 4611686018 * 1000000000
 /** netRead's and netWrite's answer when the socket has nothing ready. */
@@ -312,13 +334,7 @@ export class HttpResponse {
    * @returns The value, or null when the response has no such field.
    */
   header(name: string): string | null {
-    const lower: string = httpClientLower(name)
-    for (let i: i32 = 0; i < toI32(this.names.length) && i < toI32(this.values.length); i += 1) {
-      if (this.names[i] === lower) {
-        return this.values[i]
-      }
-    }
-    return null
+    return httpClientField(this.names, this.values, name)
   }
 }
 
@@ -480,12 +496,10 @@ export class FetchSyncClient {
     this.ready = new Array<i32>(8)
     this.rbuf = new Array<u8>(HTTP_CLIENT_READ_BYTES)
     this.plain = []
-    if (options.useEnvProxy) {
-      const cgi: boolean = getenv("REQUEST_METHOD") !== null
-      this.httpProxy = httpChooseProxy(getenv("http_proxy"), getenv("HTTP_PROXY"), !cgi)
-      this.httpsProxy = httpChooseProxy(getenv("https_proxy"), getenv("HTTPS_PROXY"), true)
-      this.noProxy = httpChooseProxy(getenv("no_proxy"), getenv("NO_PROXY"), true)
-    }
+    const proxies: string[] = httpClientEnvProxies(options)
+    this.httpProxy = proxies[0]
+    this.httpsProxy = proxies[1]
+    this.noProxy = proxies[2]
   }
 
   /**
@@ -516,29 +530,16 @@ export class FetchSyncClient {
       this.drop()
     }
     this.generation += 1
-    const total: i32 = httpClientTotalMs(this.options)
-    this.deadline = total > 0 ? monotonicNanos() + toI64(total) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
-    let url: Url | null = urlParse(req.url)
-    if (url === null || (url.scheme !== "http" && url.scheme !== "https")) {
-      this.fail(HTTP_E_URL, `not an absolute http or https URL: ${httpClientRedact(url)}`)
+    this.deadline = httpClientDeadline(this.options)
+    const fault: HttpClientFault = new HttpClientFault()
+    let url: Url | null = httpClientTarget(req.url, this.options, fault)
+    if (url === null) {
+      this.fail(fault.code, fault.text)
       return null
     }
-    const refusal: string = this.hostRefusal(url)
-    if (refusal !== "") {
-      this.fail(HTTP_E_BLOCKED, refusal)
-      return null
-    }
-    let method: string = req.method
-    let body: u8[] | null = req.body
-    const names: string[] = []
-    const values: string[] = []
-    for (let i: i32 = 0; i < toI32(req.names.length) && i < toI32(req.values.length); i += 1) {
-      names.push(req.names[i])
-      values.push(req.values[i])
-    }
-    let hops: i32 = 0
+    const hop: HttpClientHop = new HttpClientHop(req.method, req.body, req.names, req.values)
     while (url !== null) {
-      const res: HttpResponse | null = this.exchange(url, method, names, values, body)
+      const res: HttpResponse | null = this.exchange(url, hop.method, hop.names, hop.values, hop.body)
       if (res === null) {
         return null
       }
@@ -546,68 +547,14 @@ export class FetchSyncClient {
       if (!this.options.followRedirects || location === null || !httpClientIsRedirect(res.status)) {
         return res
       }
-      const next: Url | null = urlResolve(url, location)
-      const maxRedirects: i32 = httpClientMaxRedirects(this.options)
-      if (hops >= maxRedirects) {
-        return this.refuse(
-          HTTP_E_TOO_MANY_REDIRECTS,
-          `more than ${maxRedirects} redirects, the last to ${httpClientRedact(next)}`
-        )
-      }
-      if (next === null || (next.scheme !== "http" && next.scheme !== "https")) {
-        return this.refuse(
-          HTTP_E_REDIRECT_REFUSED,
-          `a redirect to ${httpClientRedact(next)}, which is not an http or https URL`
-        )
-      }
-      if (url.scheme === "https" && next.scheme === "http") {
-        return this.refuse(
-          HTTP_E_REDIRECT_REFUSED,
-          `a redirect from https to http (${httpClientRedact(next)})`
-        )
-      }
-      const hopRefusal: string = this.hostRefusal(next)
-      if (hopRefusal !== "") {
-        return this.refuse(HTTP_E_BLOCKED, hopRefusal)
-      }
-      const from: string | null = urlOrigin(url)
-      const to: string | null = urlOrigin(next)
-      if (from === null || to === null || from !== to) {
-        if (!this.options.crossOriginRedirects) {
-          return this.refuse(
-            HTTP_E_REDIRECT_REFUSED,
-            `a redirect to another origin (${httpClientRedact(next)})`
-          )
-        }
-        // Credentials were meant for the first origin, not for wherever it points.
-        httpClientDropField(names, values, "authorization")
-        httpClientDropField(names, values, "proxy-authorization")
-        httpClientDropField(names, values, "cookie")
-        httpClientDropField(names, values, "host")
-      }
-      const status: i32 = res.status
-      if (
-        (status === 303 && method !== "HEAD") ||
-        ((status === 301 || status === 302) && method === "POST")
-      ) {
-        method = "GET"
-        body = null
-        httpClientDropField(names, values, "content-type")
+      const next: Url | null = httpClientRedirect(hop, this.options, url, res.status, location, fault)
+      if (next === null) {
+        return this.refuse(fault.code, fault.text)
       }
       this.drain()
-      hops += 1
       url = next
     }
     return null
-  }
-
-  /** Why the outbound policy refuses to let a URL name `url`'s host; "" when there is no policy or it allows the host. */
-  private hostRefusal(url: Url): string {
-    const policy: OutboundPolicy | null = this.options.outbound
-    if (policy === null || outboundHostAllowed(policy, url.host)) {
-      return ""
-    }
-    return `${httpClientRedact(url)} names a host the outbound policy does not allow`
   }
 
   /** Closes the connection; the client can still fetch, on a new one. */
@@ -656,32 +603,22 @@ export class FetchSyncClient {
    * a failure, with the error set.
    */
   private open(url: Url): boolean {
-    const port: i32 = url.port >= 0 ? url.port : urlDefaultPort(url.scheme)
-    // A proxy would look the name up itself, past the policy's address check.
-    const proxyText: string =
-      this.options.outbound !== null
-        ? ""
-        : httpProxyFor(url.scheme, url.host, port, this.httpProxy, this.httpsProxy, this.noProxy)
-    let proxy: Url | null = null
-    if (proxyText !== "") {
-      proxy = httpClientProxyUrl(proxyText)
-      if (proxy === null) {
-        this.fail(
-          HTTP_E_PROXY,
-          `the proxy setting is not an http:// URL with a host: ${httpClientRedact(
-            urlParse(proxyText.indexOf("://") >= 0 ? proxyText : "http://" + proxyText)
-          )}`
-        )
-        return false
-      }
+    const fault: HttpClientFault = new HttpClientFault()
+    const way: HttpClientRoute | null = httpClientRoute(
+      url,
+      this.options,
+      this.httpProxy,
+      this.httpsProxy,
+      this.noProxy,
+      fault
+    )
+    if (way === null) {
+      this.fail(fault.code, fault.text)
+      return false
     }
-    const origin: string = `${url.scheme}://${httpClientHostText(url.host)}:${port}`
-    let route: string = origin
-    if (proxy !== null && url.scheme === "http") {
-      route = `proxy ${httpClientHostText(proxy.host)}:${proxy.port}`
-    } else if (proxy !== null) {
-      route = `${origin} via ${httpClientHostText(proxy.host)}:${proxy.port}`
-    }
+    const proxy: Url | null = way.proxy
+    const port: i32 = way.port
+    const route: string = way.route
     if (
       this.fd >= 0 &&
       this.route === route &&
@@ -697,9 +634,7 @@ export class FetchSyncClient {
     if (url.scheme === "https" && !this.loadTrust()) {
       return false
     }
-    const dialHost: string = proxy !== null ? proxy.host : url.host
-    const dialPort: i32 = proxy !== null ? proxy.port : port
-    const fd: i32 = this.dial(dialHost, dialPort)
+    const fd: i32 = this.dial(way.dialHost, way.dialPort)
     if (fd < 0) {
       return false
     }
@@ -854,57 +789,18 @@ export class FetchSyncClient {
     values: string[],
     body: u8[] | null
   ): HttpResponse | null {
-    const viaProxy: boolean = this.route.startsWith("proxy ")
-    const sendNames: string[] = []
-    const sendValues: string[] = []
-    let hasHost: boolean = false
-    let hasProxyAuth: boolean = false
-    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
-      // Read before any call, which is where the bounds proof forgets a length.
-      const name: string = names[i]
-      const value: string = values[i]
-      hasHost = hasHost || httpClientNameIs(name, "host")
-      const proxyAuth: boolean = httpClientNameIs(name, "proxy-authorization")
-      if (proxyAuth && !viaProxy) {
-        // Only an http proxy reads it: sent direct or through a tunnel, it
-        // would hand the proxy's credentials to the origin.
-        continue
-      }
-      hasProxyAuth = hasProxyAuth || proxyAuth
-      sendNames.push(name)
-      sendValues.push(value)
-    }
-    const hostText: string = httpClientHostText(url.host)
-    const authority: string = url.port >= 0 ? `${hostText}:${url.port}` : hostText
-    if (!hasHost) {
-      sendNames.push("Host")
-      sendValues.push(authority)
-    }
-    let target: string = url.path === "" ? "/" : url.path
-    const query: string | null = url.query
-    if (query !== null) {
-      target = target + "?" + query
-    }
-    if (viaProxy) {
-      target = `${url.scheme}://${authority}${target}`
-      const proxy: Url | null = httpClientProxyUrl(this.httpProxy)
-      const auth: string | null = proxy !== null ? httpClientProxyAuth(proxy) : ""
-      if (auth === null) {
-        this.fail(HTTP_E_PROXY, "the proxy's user name or password is not valid percent-encoding")
-        return null
-      }
-      if (auth !== "" && !hasProxyAuth) {
-        sendNames.push("Proxy-Authorization")
-        sendValues.push(auth)
-      }
-    }
-    const bodyLength: i64 = body !== null ? toI64(body.length) : toI64(-2)
-    const head: u8[] | null = http1RequestHead(method, target, sendNames, sendValues, bodyLength)
+    const fault: HttpClientFault = new HttpClientFault()
+    const head: u8[] | null = httpClientRequestHead(
+      url,
+      method,
+      names,
+      values,
+      body,
+      this.route.startsWith("proxy ") ? this.httpProxy : "",
+      fault
+    )
     if (head === null) {
-      this.fail(
-        HTTP_E_REQUEST,
-        `the request ${method} ${httpClientRedact(url)} was refused: a bad method, target or header field`
-      )
+      this.fail(fault.code, fault.text)
       return null
     }
     this.gotByte = false
@@ -960,28 +856,10 @@ export class FetchSyncClient {
       }
       event = this.parser.next()
     }
-    if (event === HTTP1_ERROR) {
-      const code: i32 = this.parser.error
-      if (code === HTTP1_E_BODY_LIMIT) {
-        this.fail(
-          HTTP_E_BODY_TOO_LARGE,
-          `the body is larger than maxBodyBytes (${httpClientBodyCap(this.options)})`
-        )
-      } else {
-        // A response the server closed part way through is a connection lost,
-        // as one closed before any byte is; it is never sent again, because
-        // a byte of it came.
-        this.lost = code === HTTP1_E_TRUNCATED
-        this.fail(
-          HTTP_E_PROTOCOL,
-          `the response broke HTTP/1.1: ${this.parser.errorText} (http1 error ${code})`
-        )
-      }
-      return -1
-    }
-    if (event === HTTP1_CLOSED) {
-      this.lost = true
-      this.fail(HTTP_E_IO, "the server closed the connection before it answered")
+    if (event === HTTP1_ERROR || event === HTTP1_CLOSED) {
+      const fault: HttpClientFault = new HttpClientFault()
+      this.lost = httpClientParserFault(this.parser, event, this.options, fault)
+      this.fail(fault.code, fault.text)
       return -1
     }
     return event
@@ -1162,38 +1040,12 @@ export class FetchSyncClient {
       this.fail(code, `no time was left to connect to ${host}`)
       return -1
     }
-    let lookupMs: i64 = (until - start) / HTTP_CLIENT_NS_PER_MS
-    if (lookupMs < toI64(1)) {
-      lookupMs = toI64(1)
-    } else if (lookupMs > toI64(2147483647)) {
-      lookupMs = toI64(2147483647)
-    }
     const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
-    const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
-    const count: i32 = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
-    if (count === DNS_RESOLVE_TIMEOUT && until < HTTP_CLIENT_NEVER) {
-      this.failWait(code, `${host} was not looked up within ${budget} ms`)
+    const fault: HttpClientFault = new HttpClientFault()
+    const usable: i32 = httpClientResolve(host, port, this.options, start, until, code, addresses, fault)
+    if (usable < 0) {
+      this.fail(fault.code, fault.text)
       return -1
-    }
-    if (count <= 0) {
-      this.fail(
-        HTTP_E_DNS,
-        `${host} could not be looked up (${count === 0 ? "no address" : `resolver code ${count}`})`
-      )
-      return -1
-    }
-    let usable: i32 = count < DNS_RESOLVE_MAX_ADDRESSES ? count : DNS_RESOLVE_MAX_ADDRESSES
-    const policy: OutboundPolicy | null = this.options.outbound
-    if (policy !== null) {
-      // Only the bytes checked here are connected to: no second lookup a rebinding answer could change.
-      usable = outboundFilter(policy, addresses, usable)
-      if (usable === 0) {
-        this.fail(
-          HTTP_E_BLOCKED,
-          `${host} resolves to ${outboundAddressText(addresses, 0)}, which the outbound policy does not allow`
-        )
-        return -1
-      }
     }
     const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
     let last: i32 = 0
@@ -1434,13 +1286,7 @@ export class FetchSyncClient {
 
   /** Sets the error for a wait that ended with `code`, `text` saying what timed out. */
   private failWait(code: i32, text: string): void {
-    if (code === HTTP_E_TOTAL_TIMEOUT) {
-      this.fail(code, `the fetch ran past ${httpClientTotalMs(this.options)} ms`)
-    } else if (code === HTTP_E_IO) {
-      this.fail(code, "the poll loop failed")
-    } else {
-      this.fail(code, text)
-    }
+    this.fail(code, httpClientWaitText(code, this.options, text))
   }
 
   /** Refuses a redirect: closes the connection, whose response is left unread, and fails. */
@@ -1813,4 +1659,1045 @@ const httpClientProxyAuth = (proxy: Url): string | null => {
     return null
   }
   return "Basic " + base64Encode(httpFieldBytes(user + ":" + password))
+}
+
+/** The first value of the field `name`, in any case, from parallel name and value lists; null when there is none. */
+const httpClientField = (names: string[], values: string[], name: string): string | null => {
+  const lower: string = httpClientLower(name)
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
+    if (names[i] === lower) {
+      return values[i]
+    }
+  }
+  return null
+}
+
+/**
+ * The proxy settings the environment gives, as [http, https, no-proxy]; ""
+ * for each when `useEnvProxy` is off. A CGI program (`REQUEST_METHOD` set)
+ * ignores `HTTP_PROXY`, which a request's `Proxy:` header could have set.
+ */
+const httpClientEnvProxies = (options: HttpOptions): string[] => {
+  if (!options.useEnvProxy) {
+    return ["", "", ""]
+  }
+  const cgi: boolean = getenv("REQUEST_METHOD") !== null
+  return [
+    httpChooseProxy(getenv("http_proxy"), getenv("HTTP_PROXY"), !cgi),
+    httpChooseProxy(getenv("https_proxy"), getenv("HTTPS_PROXY"), true),
+    httpChooseProxy(getenv("no_proxy"), getenv("NO_PROXY"), true),
+  ]
+}
+
+/** When a fetch starting now must be done by, on the monotonic clock; `HTTP_CLIENT_NEVER` with no total timeout. */
+const httpClientDeadline = (options: HttpOptions): i64 => {
+  const total: i32 = httpClientTotalMs(options)
+  return total > 0 ? monotonicNanos() + toI64(total) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+}
+
+/** A failure a shared step found: an `HTTP_E_*` code and its sentence, before the code's name is put in front. */
+class HttpClientFault {
+  code: i32 = 0
+  text: string = ""
+
+  fail(code: i32, text: string): void {
+    this.code = code
+    this.text = text
+  }
+}
+
+/** Why the outbound policy refuses to let a URL name `url`'s host; "" when there is no policy or it allows the host. */
+const httpClientHostRefusal = (options: HttpOptions, url: Url): string => {
+  const policy: OutboundPolicy | null = options.outbound
+  if (policy === null || outboundHostAllowed(policy, url.host)) {
+    return ""
+  }
+  return `${httpClientRedact(url)} names a host the outbound policy does not allow`
+}
+
+/** The request's URL, parsed and checked against the scheme and the policy; null with `fault` set. */
+const httpClientTarget = (text: string, options: HttpOptions, fault: HttpClientFault): Url | null => {
+  const url: Url | null = urlParse(text)
+  if (url === null || (url.scheme !== "http" && url.scheme !== "https")) {
+    fault.fail(HTTP_E_URL, `not an absolute http or https URL: ${httpClientRedact(url)}`)
+    return null
+  }
+  const refusal: string = httpClientHostRefusal(options, url)
+  if (refusal !== "") {
+    fault.fail(HTTP_E_BLOCKED, refusal)
+    return null
+  }
+  return url
+}
+
+/** What the next hop of a fetch sends: the method, body and fields a redirect may rewrite, and the hops taken. */
+class HttpClientHop {
+  method: string
+  body: u8[] | null
+  names: string[]
+  values: string[]
+  hops: i32 = 0
+
+  constructor(method: string, body: u8[] | null, names: string[], values: string[]) {
+    this.method = method
+    this.body = body
+    this.names = []
+    this.values = []
+    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
+      // Read before any call, which is where the bounds proof forgets a length.
+      const name: string = names[i]
+      const value: string = values[i]
+      this.names.push(name)
+      this.values.push(value)
+    }
+  }
+}
+
+/**
+ * Where a redirect from `url` to `location` goes, with `hop` rewritten for
+ * it: credentials dropped across origins, a 303 (or a 301/302 after POST)
+ * turned into GET. Null with `fault` set when the redirect is refused.
+ */
+const httpClientRedirect = (
+  hop: HttpClientHop,
+  options: HttpOptions,
+  url: Url,
+  status: i32,
+  location: string,
+  fault: HttpClientFault
+): Url | null => {
+  const next: Url | null = urlResolve(url, location)
+  const maxRedirects: i32 = httpClientMaxRedirects(options)
+  if (hop.hops >= maxRedirects) {
+    fault.fail(
+      HTTP_E_TOO_MANY_REDIRECTS,
+      `more than ${maxRedirects} redirects, the last to ${httpClientRedact(next)}`
+    )
+    return null
+  }
+  if (next === null || (next.scheme !== "http" && next.scheme !== "https")) {
+    fault.fail(
+      HTTP_E_REDIRECT_REFUSED,
+      `a redirect to ${httpClientRedact(next)}, which is not an http or https URL`
+    )
+    return null
+  }
+  if (url.scheme === "https" && next.scheme === "http") {
+    fault.fail(HTTP_E_REDIRECT_REFUSED, `a redirect from https to http (${httpClientRedact(next)})`)
+    return null
+  }
+  const refusal: string = httpClientHostRefusal(options, next)
+  if (refusal !== "") {
+    fault.fail(HTTP_E_BLOCKED, refusal)
+    return null
+  }
+  const from: string | null = urlOrigin(url)
+  const to: string | null = urlOrigin(next)
+  if (from === null || to === null || from !== to) {
+    if (!options.crossOriginRedirects) {
+      fault.fail(HTTP_E_REDIRECT_REFUSED, `a redirect to another origin (${httpClientRedact(next)})`)
+      return null
+    }
+    // Credentials were meant for the first origin, not for wherever it points.
+    httpClientDropField(hop.names, hop.values, "authorization")
+    httpClientDropField(hop.names, hop.values, "proxy-authorization")
+    httpClientDropField(hop.names, hop.values, "cookie")
+    httpClientDropField(hop.names, hop.values, "host")
+  }
+  if (
+    (status === 303 && hop.method !== "HEAD") ||
+    ((status === 301 || status === 302) && hop.method === "POST")
+  ) {
+    hop.method = "GET"
+    hop.body = null
+    httpClientDropField(hop.names, hop.values, "content-type")
+  }
+  hop.hops += 1
+  return next
+}
+
+/** Where a connection for one URL goes: the address to dial, the proxy if any, and the route a kept connection must match. */
+class HttpClientRoute {
+  proxy: Url | null = null
+  dialHost: string = ""
+  route: string = ""
+  port: i32 = 0
+  dialPort: i32 = 0
+}
+
+/**
+ * The route to `url` under the proxy settings: none under an outbound
+ * policy, since a proxy would look the name up past the policy's address
+ * check. Null with `fault` set when the proxy setting is malformed.
+ */
+const httpClientRoute = (
+  url: Url,
+  options: HttpOptions,
+  httpProxy: string,
+  httpsProxy: string,
+  noProxy: string,
+  fault: HttpClientFault
+): HttpClientRoute | null => {
+  const way: HttpClientRoute = new HttpClientRoute()
+  const port: i32 = url.port >= 0 ? url.port : urlDefaultPort(url.scheme)
+  way.port = port
+  const proxyText: string =
+    options.outbound !== null ? "" : httpProxyFor(url.scheme, url.host, port, httpProxy, httpsProxy, noProxy)
+  let proxy: Url | null = null
+  if (proxyText !== "") {
+    proxy = httpClientProxyUrl(proxyText)
+    if (proxy === null) {
+      fault.fail(
+        HTTP_E_PROXY,
+        `the proxy setting is not an http:// URL with a host: ${httpClientRedact(
+          urlParse(proxyText.indexOf("://") >= 0 ? proxyText : "http://" + proxyText)
+        )}`
+      )
+      return null
+    }
+  }
+  const origin: string = `${url.scheme}://${httpClientHostText(url.host)}:${port}`
+  way.route = origin
+  way.dialHost = url.host
+  way.dialPort = port
+  if (proxy !== null) {
+    way.proxy = proxy
+    way.dialHost = proxy.host
+    way.dialPort = proxy.port
+    way.route =
+      url.scheme === "http"
+        ? `proxy ${httpClientHostText(proxy.host)}:${proxy.port}`
+        : `${origin} via ${httpClientHostText(proxy.host)}:${proxy.port}`
+  }
+  return way
+}
+
+/**
+ * The bytes of a request's head: `Host` added when the fields lack it, the
+ * absolute-form target and the proxy's credentials when `httpProxy` is the
+ * http proxy the request goes through ("" for none), and a
+ * `Proxy-Authorization` field dropped when it is not. Null with `fault` set.
+ */
+const httpClientRequestHead = (
+  url: Url,
+  method: string,
+  names: string[],
+  values: string[],
+  body: u8[] | null,
+  httpProxy: string,
+  fault: HttpClientFault
+): u8[] | null => {
+  const viaProxy: boolean = httpProxy !== ""
+  const sendNames: string[] = []
+  const sendValues: string[] = []
+  let hasHost: boolean = false
+  let hasProxyAuth: boolean = false
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
+    // Read before any call, which is where the bounds proof forgets a length.
+    const name: string = names[i]
+    const value: string = values[i]
+    hasHost = hasHost || httpClientNameIs(name, "host")
+    const proxyAuth: boolean = httpClientNameIs(name, "proxy-authorization")
+    if (proxyAuth && !viaProxy) {
+      // Only an http proxy reads it: sent direct or through a tunnel, it
+      // would hand the proxy's credentials to the origin.
+      continue
+    }
+    hasProxyAuth = hasProxyAuth || proxyAuth
+    sendNames.push(name)
+    sendValues.push(value)
+  }
+  const hostText: string = httpClientHostText(url.host)
+  const authority: string = url.port >= 0 ? `${hostText}:${url.port}` : hostText
+  if (!hasHost) {
+    sendNames.push("Host")
+    sendValues.push(authority)
+  }
+  let target: string = url.path === "" ? "/" : url.path
+  const query: string | null = url.query
+  if (query !== null) {
+    target = target + "?" + query
+  }
+  if (viaProxy) {
+    target = `${url.scheme}://${authority}${target}`
+    const proxy: Url | null = httpClientProxyUrl(httpProxy)
+    const auth: string | null = proxy !== null ? httpClientProxyAuth(proxy) : ""
+    if (auth === null) {
+      fault.fail(HTTP_E_PROXY, "the proxy's user name or password is not valid percent-encoding")
+      return null
+    }
+    if (auth !== "" && !hasProxyAuth) {
+      sendNames.push("Proxy-Authorization")
+      sendValues.push(auth)
+    }
+  }
+  const bodyLength: i64 = body !== null ? toI64(body.length) : toI64(-2)
+  const head: u8[] | null = http1RequestHead(method, target, sendNames, sendValues, bodyLength)
+  if (head === null) {
+    fault.fail(
+      HTTP_E_REQUEST,
+      `the request ${method} ${httpClientRedact(url)} was refused: a bad method, target or header field`
+    )
+  }
+  return head
+}
+
+/**
+ * The failure behind a parser's `HTTP1_ERROR` or `HTTP1_CLOSED` `event`, in
+ * `fault`: true when the connection was lost (closed before or part way
+ * through the response), which is what lets a kept connection be retried.
+ */
+const httpClientParserFault = (
+  parser: Http1ResponseParser,
+  event: i32,
+  options: HttpOptions,
+  fault: HttpClientFault
+): boolean => {
+  if (event === HTTP1_CLOSED) {
+    fault.fail(HTTP_E_IO, "the server closed the connection before it answered")
+    return true
+  }
+  const code: i32 = parser.error
+  if (code === HTTP1_E_BODY_LIMIT) {
+    fault.fail(HTTP_E_BODY_TOO_LARGE, `the body is larger than maxBodyBytes (${httpClientBodyCap(options)})`)
+    return false
+  }
+  fault.fail(HTTP_E_PROTOCOL, `the response broke HTTP/1.1: ${parser.errorText} (http1 error ${code})`)
+  // A response the server closed part way through is a connection lost, as
+  // one closed before any byte is; it is never sent again, because a byte of
+  // it came.
+  return code === HTTP1_E_TRUNCATED
+}
+
+/** The sentence for a failed wait: the total timeout and a broken poll loop have fixed ones, anything else `text`. */
+const httpClientWaitText = (code: i32, options: HttpOptions, text: string): string => {
+  if (code === HTTP_E_TOTAL_TIMEOUT) {
+    return `the fetch ran past ${httpClientTotalMs(options)} ms`
+  }
+  if (code === HTTP_E_IO) {
+    return "the poll loop failed"
+  }
+  return text
+}
+
+/**
+ * Looks `host` up within `start`..`until` into `addresses` and keeps those
+ * the outbound policy allows: how many to try, or -1 with `fault` set (`code`
+ * names the deadline a lookup that timed out ran past). The lookup blocks.
+ */
+const httpClientResolve = (
+  host: string,
+  port: i32,
+  options: HttpOptions,
+  start: i64,
+  until: i64,
+  code: i32,
+  addresses: u8[],
+  fault: HttpClientFault
+): i32 => {
+  let lookupMs: i64 = (until - start) / HTTP_CLIENT_NS_PER_MS
+  if (lookupMs < toI64(1)) {
+    lookupMs = toI64(1)
+  } else if (lookupMs > toI64(2147483647)) {
+    lookupMs = toI64(2147483647)
+  }
+  const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
+  const count: i32 = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
+  if (count === DNS_RESOLVE_TIMEOUT && until < HTTP_CLIENT_NEVER) {
+    fault.fail(
+      code,
+      httpClientWaitText(code, options, `${host} was not looked up within ${options.connectTimeoutMs} ms`)
+    )
+    return -1
+  }
+  if (count <= 0) {
+    fault.fail(
+      HTTP_E_DNS,
+      `${host} could not be looked up (${count === 0 ? "no address" : `resolver code ${count}`})`
+    )
+    return -1
+  }
+  let usable: i32 = count < DNS_RESOLVE_MAX_ADDRESSES ? count : DNS_RESOLVE_MAX_ADDRESSES
+  const policy: OutboundPolicy | null = options.outbound
+  if (policy !== null) {
+    // Only the bytes checked here are connected to: no second lookup a rebinding answer could change.
+    usable = outboundFilter(policy, addresses, usable)
+    if (usable === 0) {
+      fault.fail(
+        HTTP_E_BLOCKED,
+        `${host} resolves to ${outboundAddressText(addresses, 0)}, which the outbound policy does not allow`
+      )
+      return -1
+    }
+  }
+  return usable
+}
+
+// ---- The async fetch ---------------------------------------------------------
+
+/** How many idle connections a `FetchPool` holds at most, over every route. */
+const FETCH_POOL_SLOTS: i32 = 64
+
+/**
+ * Why an async `fetch` failed: an `HTTP_E_*` code and its sentence, the
+ * code's name first, as `FetchSyncClient.errorText` reads. The text never
+ * holds a URL's credentials or query.
+ */
+export class FetchError {
+  /** The `HTTP_E_*` code. */
+  code: i32
+  /** The code's name, a colon and what went wrong, such as `dns: example.invalid could not be looked up`. */
+  text: string
+
+  /**
+   * A failure with its code and text.
+   * @param code The `HTTP_E_*` code.
+   * @param text The code's name, a colon and the sentence.
+   */
+  constructor(code: i32, text: string) {
+    this.code = code
+    this.text = text
+  }
+}
+
+/**
+ * A response `fetch` answered, its body already read whole: the body is
+ * read before `fetch` answers, up to `maxBodyBytes`, so `text()` and
+ * `bytes()` are plain calls. `names` are lower-cased and in the order they
+ * arrived, beside `values`; `url` is the URL that answered.
+ */
+export class FetchResponse {
+  /** The status code, such as 200. */
+  status: i32 = 0
+  /** The reason phrase the server sent beside the status. */
+  reason: string = ""
+  /** The URL that answered, which differs from the request's after a redirect. */
+  url: string = ""
+  /** The header field names, lower-cased, in the order they arrived. */
+  names: string[]
+  /** The header field values, each beside its name in `names`. */
+  values: string[]
+  /** The body, de-chunked; empty for a `HEAD` or a status that has none. */
+  body: u8[]
+
+  /** A response with no status, fields or body yet; `fetch` fills them in. */
+  constructor() {
+    this.names = []
+    this.values = []
+    this.body = []
+  }
+
+  /**
+   * The first value of the field `name`, in any case.
+   * @param name The field name to look for.
+   * @returns The value, or null when the response has no such field.
+   */
+  header(name: string): string | null {
+    return httpClientField(this.names, this.values, name)
+  }
+
+  /**
+   * The body as a string, its bytes unchanged: nothing checks that they are UTF-8.
+   * @returns The body's text.
+   */
+  text(): string {
+    return String.fromBytes(this.body, HTTP_CLIENT_ZERO, toI32(this.body.length))
+  }
+
+  /**
+   * The body's bytes.
+   * @returns The body, the same array as `body`.
+   */
+  bytes(): u8[] {
+    return this.body
+  }
+}
+
+/**
+ * Connections an async `fetch` leaves open for the next one to the same
+ * place, held by the caller and handed in through `RequestInit.pool`. At
+ * most `maxIdlePerOrigin` wait per route and 64 in all; a kept connection
+ * the server closed, or sent a byte on unasked, is closed when it is next
+ * looked at. A fetch under an outbound policy never keeps or takes one.
+ */
+export class FetchPool {
+  /** The most idle connections kept for one route (origin, or proxy). */
+  maxIdlePerOrigin: i32
+  private fds: i32[]
+  private routes: string[]
+  private probe: u8[]
+
+  /**
+   * An empty pool.
+   * @param maxIdlePerOrigin The most idle connections kept for one route; 0 keeps none.
+   */
+  constructor(maxIdlePerOrigin: i32 = 4) {
+    this.maxIdlePerOrigin = maxIdlePerOrigin
+    this.fds = []
+    this.routes = []
+    this.probe = new Array<u8>(1)
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      this.fds.push(toI32(-1))
+      this.routes.push("")
+    }
+  }
+
+  /**
+   * How many idle connections the pool holds.
+   * @returns The count, over every route.
+   */
+  idle(): i32 {
+    let count: i32 = 0
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      if (this.fds[i] >= 0) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  /** Closes every idle connection; the pool can still keep new ones. */
+  close(): void {
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      this.drop(i)
+    }
+  }
+
+  /**
+   * A quiet idle connection for `route`, taken out of the pool; -1 for none.
+   * A connection that reads anything, its end included, is closed instead.
+   * @internal
+   */
+  take(route: string): i32 {
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      if (this.fds[i] < 0 || this.routes[i] !== route) {
+        continue
+      }
+      const fd: i32 = this.fds[i]
+      if (netRead(fd, this.probe, HTTP_CLIENT_ZERO, 1) === HTTP_CLIENT_WOULD_BLOCK) {
+        this.fds[i] = -1
+        this.routes[i] = ""
+        return fd
+      }
+      this.drop(i)
+    }
+    return -1
+  }
+
+  /** Keeps `fd` for `route` when there is room, else closes it. @internal */
+  put(route: string, fd: i32): void {
+    let same: i32 = 0
+    let free: i32 = -1
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      if (this.fds[i] < 0) {
+        free = free < 0 ? i : free
+      } else if (this.routes[i] === route) {
+        same += 1
+      }
+    }
+    if (same >= this.maxIdlePerOrigin || free < 0) {
+      netClose(fd)
+      return
+    }
+    this.fds[free] = fd
+    this.routes[free] = route
+  }
+
+  private drop(i: i32): void {
+    if (this.fds[i] >= 0) {
+      netClose(this.fds[i])
+    }
+    this.fds[i] = -1
+    this.routes[i] = ""
+  }
+}
+
+/**
+ * What an async `fetch` sends and how it behaves. `options` are
+ * `HttpOptions` as `fetchSync` reads them, except that `readTimeoutMs`
+ * bounds no wait (a wait has no deadline yet), `connectTimeoutMs` bounds
+ * only the name lookup, and `totalTimeoutMs` is checked each time a wait
+ * ends. `pool` keeps connections for later fetches; null closes each one
+ * when its fetch is done.
+ */
+export class RequestInit {
+  /** The request method, sent as given; `GET` by default. */
+  method: string = "GET"
+  /** The header field names, in the order they are sent. */
+  names: string[]
+  /** The header field values, each beside its name in `names`. */
+  values: string[]
+  /** Null for no body at all; an empty array sends `Content-Length: 0`. */
+  body: u8[] | null = null
+  /** The limits, policy and redirect and proxy settings (see above for the timeouts). */
+  options: HttpOptions
+  /** Where idle connections are kept between fetches; null for none. */
+  pool: FetchPool | null = null
+
+  /** A `GET` with no fields, no body, default options and no pool. */
+  constructor() {
+    this.names = []
+    this.values = []
+    this.options = new HttpOptions()
+  }
+
+  /**
+   * Appends one header field; nothing is checked until the request is written.
+   * @param name The field name.
+   * @param value The field value; one holding a CR or LF makes the fetch fail.
+   * @returns This init, so calls chain.
+   */
+  header(name: string, value: string): RequestInit {
+    this.names.push(name)
+    this.values.push(value)
+    return this
+  }
+}
+
+/** One connection an async fetch drives, and the state of the exchange on it. */
+class HttpClientConn {
+  deadline: i64
+  options: HttpOptions
+  parser: Http1ResponseParser
+  rbuf: u8[]
+  fault: HttpClientFault
+  route: string = ""
+  httpProxy: string
+  httpsProxy: string
+  noProxy: string
+  fd: i32 = -1
+  gotByte: boolean = false
+  lost: boolean = false
+  reused: boolean = false
+
+  constructor(options: HttpOptions) {
+    this.options = options
+    this.deadline = httpClientDeadline(options)
+    this.parser = httpClientParser(options)
+    this.rbuf = new Array<u8>(HTTP_CLIENT_READ_BYTES)
+    this.fault = new HttpClientFault()
+    const proxies: string[] = httpClientEnvProxies(options)
+    this.httpProxy = proxies[0]
+    this.httpsProxy = proxies[1]
+    this.noProxy = proxies[2]
+  }
+
+  /** Fails with `HTTP_E_TOTAL_TIMEOUT` once the fetch's deadline has passed. */
+  overdue(): boolean {
+    if (this.deadline < HTTP_CLIENT_NEVER && monotonicNanos() >= this.deadline) {
+      this.fault.fail(HTTP_E_TOTAL_TIMEOUT, httpClientWaitText(HTTP_E_TOTAL_TIMEOUT, this.options, ""))
+      return true
+    }
+    return false
+  }
+
+  /** Closes the connection, if one is open. */
+  close(): void {
+    if (this.fd >= 0) {
+      netClose(this.fd)
+      this.fd = -1
+    }
+  }
+
+  /** Hands the connection back to `pool` when the response left it clean to reuse, else closes it. */
+  release(pool: FetchPool | null): void {
+    if (
+      pool !== null &&
+      this.fd >= 0 &&
+      this.options.outbound === null &&
+      this.parser.keepAlive() &&
+      this.parser.buffered() === 0
+    ) {
+      pool.put(this.route, this.fd)
+      this.fd = -1
+      return
+    }
+    this.close()
+  }
+}
+
+/** One read of the response into the parser, parking the task until the socket has bytes; false with the fault set. */
+const httpClientFillAsync = async (conn: HttpClientConn): Promise<boolean> => {
+  if (conn.overdue()) {
+    return false
+  }
+  let n: i32 = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+  while (n === HTTP_CLIENT_WOULD_BLOCK) {
+    const ready = await readable(conn.fd)
+    if (!ready) {
+      conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
+      return false
+    }
+    if (conn.overdue()) {
+      return false
+    }
+    n = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+  }
+  if (n > 0) {
+    conn.gotByte = true
+    conn.parser.feed(conn.rbuf, HTTP_CLIENT_ZERO, n)
+    return true
+  }
+  if (n === 0) {
+    conn.parser.finish()
+    return true
+  }
+  conn.lost = true
+  conn.fault.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+  return false
+}
+
+/** The parser's next event, reading as it needs; -1 with the fault set. */
+const httpClientPumpAsync = async (conn: HttpClientConn): Promise<i32> => {
+  let event: i32 = conn.parser.next()
+  while (event === HTTP1_NEED_MORE) {
+    const filled = await httpClientFillAsync(conn)
+    if (!filled) {
+      return -1
+    }
+    event = conn.parser.next()
+  }
+  if (event === HTTP1_ERROR || event === HTTP1_CLOSED) {
+    conn.lost = httpClientParserFault(conn.parser, event, conn.options, conn.fault)
+    return -1
+  }
+  return event
+}
+
+/** Writes `bytes`, parking the task while the socket is full; false with the fault set. */
+const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<boolean> => {
+  let at: i32 = 0
+  const end: i32 = toI32(bytes.length)
+  while (at < end) {
+    if (conn.overdue()) {
+      return false
+    }
+    const n: i32 = netWrite(conn.fd, bytes, at, end - at)
+    if (n > 0) {
+      at += n
+    } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
+      const ready = await writable(conn.fd)
+      if (!ready) {
+        conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
+        return false
+      }
+    } else {
+      conn.lost = true
+      conn.fault.fail(HTTP_E_IO, `writing to the server failed (errno ${-n})`)
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Looks `host` up (blocking, within `connectTimeoutMs`) and connects to its
+ * addresses in turn, parking the task while each connect is in flight: the
+ * connected fd, or -1 with the fault set.
+ */
+const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32): Promise<i32> => {
+  const start: i64 = monotonicNanos()
+  const budget: i32 = conn.options.connectTimeoutMs
+  let until: i64 = budget > 0 ? start + toI64(budget) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+  let code: i32 = HTTP_E_CONNECT_TIMEOUT
+  if (conn.deadline < HTTP_CLIENT_NEVER && conn.deadline <= until) {
+    until = conn.deadline
+    code = HTTP_E_TOTAL_TIMEOUT
+  }
+  if (until <= start) {
+    conn.fault.fail(code, httpClientWaitText(code, conn.options, `no time was left to connect to ${host}`))
+    return -1
+  }
+  const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
+  const usable: i32 = httpClientResolve(host, port, conn.options, start, until, code, addresses, conn.fault)
+  if (usable < 0) {
+    return -1
+  }
+  const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
+  let last: i32 = 0
+  for (let i: i32 = 0; i < usable && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
+    copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
+    const fd: i32 = tcpConnect(one)
+    if (fd < 0) {
+      last = fd
+      continue
+    }
+    const ready = await writable(fd)
+    if (conn.overdue()) {
+      netClose(fd)
+      return -1
+    }
+    const result: i32 = ready ? connectResult(fd) : -5
+    if (result === 0) {
+      return fd
+    }
+    netClose(fd)
+    last = result
+  }
+  conn.fault.fail(HTTP_E_REFUSED, `could not connect to ${host} port ${port} (errno ${-last})`)
+  return -1
+}
+
+/**
+ * Makes `conn` a connection to where `url` goes: one the pool kept when
+ * there is one, else a new one, through an http proxy when the settings say
+ * so. False with the fault set; an https URL is refused before anything is
+ * dialled, since its TLS handshake would block the process.
+ */
+const httpClientOpenAsync = async (
+  conn: HttpClientConn,
+  url: Url,
+  pool: FetchPool | null,
+  fresh: boolean
+): Promise<boolean> => {
+  if (url.scheme === "https") {
+    conn.fault.fail(
+      HTTP_E_TLS,
+      `${httpClientRedact(url)} is https, which the async fetch does not drive yet; use fetchSync`
+    )
+    return false
+  }
+  const way: HttpClientRoute | null = httpClientRoute(
+    url,
+    conn.options,
+    conn.httpProxy,
+    conn.httpsProxy,
+    conn.noProxy,
+    conn.fault
+  )
+  if (way === null) {
+    return false
+  }
+  conn.route = way.route
+  conn.parser = httpClientParser(conn.options)
+  conn.reused = false
+  if (pool !== null && !fresh && conn.options.outbound === null) {
+    const kept: i32 = pool.take(way.route)
+    if (kept >= 0) {
+      conn.fd = kept
+      conn.reused = true
+      return true
+    }
+  }
+  const fd: i32 = await httpClientDialAsync(conn, way.dialHost, way.dialPort)
+  if (fd < 0) {
+    return false
+  }
+  conn.fd = fd
+  return true
+}
+
+/** Writes the request on `conn` and reads up to its final response's head; false with the fault set. */
+const httpClientSendAsync = async (conn: HttpClientConn, url: Url, hop: HttpClientHop): Promise<boolean> => {
+  const head: u8[] | null = httpClientRequestHead(
+    url,
+    hop.method,
+    hop.names,
+    hop.values,
+    hop.body,
+    conn.route.startsWith("proxy ") ? conn.httpProxy : "",
+    conn.fault
+  )
+  if (head === null) {
+    return false
+  }
+  conn.gotByte = false
+  conn.lost = false
+  conn.parser.expect(hop.method === "HEAD", false)
+  const wrote = await httpClientWriteAsync(conn, head)
+  if (!wrote) {
+    return false
+  }
+  const body: u8[] | null = hop.body
+  if (body !== null) {
+    const sent = await httpClientWriteAsync(conn, body)
+    if (!sent) {
+      return false
+    }
+  }
+  let event: i32 = await httpClientPumpAsync(conn)
+  while (event === HTTP1_INFORMATIONAL) {
+    event = await httpClientPumpAsync(conn)
+  }
+  if (event < 0) {
+    return false
+  }
+  if (event !== HTTP1_HEAD) {
+    conn.fault.fail(HTTP_E_PROTOCOL, `the response ended before its head (event ${event})`)
+    return false
+  }
+  return true
+}
+
+/**
+ * Reads the body into `res`, at most `limit` bytes: 1 at its end, 0 when it
+ * passed `limit` (the connection is then not reusable), -1 with the fault set.
+ */
+const httpClientBodyAsync = async (conn: HttpClientConn, res: FetchResponse, limit: i64): Promise<i32> => {
+  let buf: u8[] = new Array<u8>(0)
+  let len: i32 = 0
+  let event: i32 = await httpClientPumpAsync(conn)
+  while (event !== HTTP1_END) {
+    if (event < 0) {
+      return -1
+    }
+    if (event === HTTP1_BODY) {
+      const take: i32 = conn.parser.bodyLen
+      const need: i64 = toI64(len) + toI64(take)
+      if (need > limit) {
+        return 0
+      }
+      if (need > HTTP_CLIENT_ASYNC_BODY_MAX) {
+        // A raised maxBodyBytes cannot carry a body past one array's reach.
+        conn.fault.fail(
+          HTTP_E_BODY_TOO_LARGE,
+          `the body is larger than one array holds (${HTTP_CLIENT_ASYNC_BODY_MAX} bytes)`
+        )
+        return -1
+      }
+      if (need > toI64(buf.length)) {
+        let room: i64 = toI64(buf.length) * toI64(2)
+        if (room < need) {
+          room = need
+        }
+        if (room > HTTP_CLIENT_ASYNC_BODY_MAX) {
+          room = HTTP_CLIENT_ASYNC_BODY_MAX
+        }
+        const grown: u8[] = new Array<u8>(toI32(room))
+        copyBytes(grown, 0, buf, 0, len)
+        buf = grown
+      }
+      copyBytes(buf, len, conn.parser.body, conn.parser.bodyOff, take)
+      len += take
+    }
+    event = await httpClientPumpAsync(conn)
+  }
+  if (len === toI32(buf.length)) {
+    res.body = buf
+  } else {
+    const exact: u8[] = new Array<u8>(len)
+    copyBytes(exact, 0, buf, 0, len)
+    res.body = exact
+  }
+  return 1
+}
+
+/**
+ * One request and its whole response on `conn`, once more on a fresh
+ * connection when a kept one turns out to be gone before any byte of an
+ * idempotent request's answer came. Null with the fault set.
+ */
+const httpClientExchangeAsync = async (
+  conn: HttpClientConn,
+  url: Url,
+  hop: HttpClientHop,
+  pool: FetchPool | null,
+  redirectable: boolean
+): Promise<FetchResponse | null> => {
+  for (let attempt: i32 = 0; attempt < 2; attempt += 1) {
+    const opened = await httpClientOpenAsync(conn, url, pool, attempt > 0)
+    if (!opened) {
+      return null
+    }
+    const sent = await httpClientSendAsync(conn, url, hop)
+    if (sent) {
+      const res: FetchResponse = new FetchResponse()
+      res.status = conn.parser.status
+      res.reason = conn.parser.reason
+      res.url = httpClientUrlText(url)
+      for (
+        let i: i32 = 0;
+        i < toI32(conn.parser.names.length) && i < toI32(conn.parser.values.length);
+        i += 1
+      ) {
+        res.names.push(conn.parser.names[i])
+        res.values.push(conn.parser.values[i])
+      }
+      // A redirect's own body is read only far enough to keep its connection.
+      const hopping: boolean =
+        redirectable && httpClientIsRedirect(res.status) && res.header("location") !== null
+      const limit: i64 = hopping ? toI64(HTTP_CLIENT_DRAIN_BYTES) : httpClientBodyCap(conn.options)
+      const read: i32 = await httpClientBodyAsync(conn, res, limit)
+      if (read < 0) {
+        conn.close()
+        if (!hopping) {
+          return null
+        }
+        // As fetchSync's drain: a redirect's body that fails to read costs
+        // only its connection, never the fetch.
+        conn.fault.fail(HTTP_E_NONE, "")
+      } else if (read === 0) {
+        conn.close()
+      } else {
+        conn.release(pool)
+      }
+      return res
+    }
+    const retry: boolean = conn.reused && conn.lost && !conn.gotByte && httpClientIdempotent(hop.method)
+    conn.close()
+    if (!retry) {
+      return null
+    }
+  }
+  return null
+}
+
+/** `fetch` before its answer is wrapped: the response, or null with `fault` set. */
+const httpClientFetchAsync = async (
+  text: string,
+  init: RequestInit,
+  fault: HttpClientFault
+): Promise<FetchResponse | null> => {
+  const options: HttpOptions = init.options
+  const conn: HttpClientConn = new HttpClientConn(options)
+  conn.fault = fault
+  let url: Url | null = httpClientTarget(text, options, fault)
+  if (url === null) {
+    return null
+  }
+  const hop: HttpClientHop = new HttpClientHop(init.method, init.body, init.names, init.values)
+  while (url !== null) {
+    const res: FetchResponse | null = await httpClientExchangeAsync(
+      conn,
+      url,
+      hop,
+      init.pool,
+      options.followRedirects
+    )
+    if (res === null) {
+      return null
+    }
+    const location: string | null = res.header("location")
+    if (!options.followRedirects || location === null || !httpClientIsRedirect(res.status)) {
+      return res
+    }
+    url = httpClientRedirect(hop, options, url, res.status, location, fault)
+  }
+  return null
+}
+
+/**
+ * Fetches `url` without blocking the process: the task waits on the
+ * executor while the connection is made, the request written and the
+ * response read, so other tasks run meanwhile and `awaitAll(fetch(a),
+ * fetch(b))` overlaps the two. The body is read whole, up to
+ * `maxBodyBytes`, before the answer comes. Only http is driven this way: an
+ * https URL answers `HTTP_E_TLS` (use `fetchSync`). The name lookup still
+ * blocks. Policy, proxy, redirect and error rules are `fetchSync`'s.
+ *
+ * @param url The absolute `http://` URL to fetch.
+ * @param init The method, fields, body, options and pool; null for a plain `GET`.
+ * @returns The response with its body, or the failure: never a panic.
+ */
+export const fetch = async (
+  url: string,
+  init: RequestInit | null = null
+): Promise<Result<FetchResponse, FetchError>> => {
+  const req: RequestInit = init !== null ? init : new RequestInit()
+  const fault: HttpClientFault = new HttpClientFault()
+  const res: FetchResponse | null = await httpClientFetchAsync(url, req, fault)
+  if (res === null) {
+    return Err(new FetchError(fault.code, `${httpErrorName(fault.code)}: ${fault.text}`))
+  }
+  return Ok(res)
 }
