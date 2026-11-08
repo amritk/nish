@@ -118,7 +118,9 @@ What the wall clock shows, plainly:
 ### Where the misses are
 
 What the change does show is fewer lines touched. `bash bench/http1-conn/misses.sh`
-runs cachegrind (`--cache-sim=yes`, D1 48 KiB 12-way, LL 512 MiB 32-way) on
+runs Valgrind's cache simulator (cachegrind `--cache-sim=yes` for these
+shapes, callgrind for the stages loop below; D1 48 KiB 12-way, LL 512 MiB
+32-way) on
 `-g` builds of both, each shape at 0 and N requests over 10,000 connections,
 and `cg_annotate --diff`s the two so setup cancels. N is 100,000 for `idle`
 and `direct` and 20,000 for the `-dram` shapes. Misses per request:
@@ -220,8 +222,13 @@ In the v0.35.0 run, `old′` (a second build of v0.35.0) put parse at 346.5,
 1.007 of `old`; `cut` is 0.908 of it. On this machine the wall-clock ranges
 of parse overlap (`cut` 303.4–327.2 against v0.35.0's 320.4–360.1), so the
 x86 claim rests on the exact instruction count below, 518 fewer a request;
-the ranges are apart on aarch64's. The other stages of `cut` sit within
-their `old′` bands (1.002 to 1.026 of `old`).
+the ranges are apart on aarch64's. The other stages are not cut. Against
+`old`, `old′` put them at 1.021 (recv), 1.002 (dispatch), 1.011 (respond),
+0.988 (sendBody) and 1.026 (park), and `cut` at 1.043, 1.037, 1.031, 1.049
+and 1.055: 0.02 to 0.06 above `old′`, so just outside the band one rebuild
+gives. Each of `cut`'s ranges overlaps `old′`'s, and callgrind below counts
+the same instructions for all of them, so this run cannot tell that from
+noise.
 
 The sendBody row times `sendBody` less a separately timed hot `sendmsg` of
 the same lengths. That subtraction is noisy (`cut`'s minimum on aarch64 is
@@ -239,8 +246,11 @@ Valgrind gives no hardware counters here, so `bash bench/http1-conn/misses.sh`
 the `stages-loop` shape at 0 and N requests diffed, so no calibration loop is
 counted) stands in for them. Callgrind cannot part parse from dispatch (the
 loop's three `next()` calls inline to the same lines), so their row is the
-two together; `settle` counts in recv, as the stage comment in `main.ts`
-has it. Valgrind's CPUID hides SHA-NI, which
+two together. `settle` counts in recv, including the `settle` that `flush`
+makes, which `main.ts`'s wall-clock park span times, so callgrind's park row
+drops cost the wall-clock park includes. `total` is the timed loop as a
+whole: `other` is the bench's own clock reads and drain, not library work.
+Valgrind's CPUID hides SHA-NI, which
 touches nothing on this path. Ir / D1 read misses / D1 write misses per
 request:
 
@@ -312,7 +322,7 @@ a connection's lines do not come from DRAM.
 
 ### The cuts
 
-Each is a `perf(net)` commit, measured by the deterministic cachegrind Ir
+Each is a `perf(net)` commit, measured by the deterministic callgrind Ir
 count of the stages loop (same build flags, `-g`):
 
 | change | Ir / request before → after |
@@ -346,7 +356,15 @@ Ir), `http1HeadIs`'s length check (92), `http1BytesAreToken` (74) and `http1Meth
 The issue's profile put the challenge app's `Jwt.verify` (HMAC-SHA256) at
 ~2.9 µs a request on x86 from a cachegrind instruction count. Timed natively
 on the same x86 machine (`taskset -c 1`, a 147-byte HS256 token, 1,000,000
-calls a batch, the best of 5 batches, over several runs), ns per call:
+calls a batch, the best of 5 batches, over several runs), ns per call. The
+timed code is the challenge submission's `src/jwt.ts` (not in this
+repository) under a 50-line driver that issues one token, then times
+`jwt.verify(tok, 0, len, now + (k & 1023))` and `jwt.sign` over the signed
+part in a loop with `monotonicNanos`; it was built with
+`build/nish main.ts --profile speed -g --link v` and run as
+`taskset -c 1 ./v 1000000`, with `NISH_SHA256=soft` set for the third row.
+`bench/jwt-verify` times std's `JwtVerifier` the same way and is the
+re-runnable one in this repository:
 
 | path | ns per call |
 | --- | ---: |
