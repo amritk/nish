@@ -123,7 +123,8 @@ export const main = (): i32 => {
 
 ## Strings
 
-`string` is an immutable sequence of UTF-8 bytes. Strings compare by content
+`string` is an immutable sequence of bytes, usually UTF-8 text; the bytes are
+not validated. Strings compare by content
 with `===`, concatenate with `+`, and are how you print a number, through a
 template literal: `` `${n}` ``. `String(n)` and `n.toString()` do not exist.
 The [Arrays and strings](arrays-and-strings.md#strings) page covers what you

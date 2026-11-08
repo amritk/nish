@@ -112,8 +112,8 @@ uninstall it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
 </scalar-tabs>
 
 Nish is pre-alpha and changes between minor releases, so you may want to pin
-an exact version: end the install script's command with `| sh -s 0.20.0`,
-or run `npm install -g nish@0.20.0`. Read the
+an exact version: end the install script's command with `| sh -s 0.36.0`,
+or run `npm install -g nish@0.36.0`. Read the
 [changelog](../../../CHANGELOG.md) before you upgrade.
 
 <scalar-detail title="Checking where the download came from">
@@ -129,7 +129,7 @@ When the [GitHub CLI](https://cli.github.com) (`gh`) is installed and signed
 in, the install script checks the attestation too, and refuses to install if
 it does not verify. Without `gh` it skips that check and says so. To check a
 tarball you downloaded yourself, with its version and platform filled in
-(for example `nish-0.21.0-x86_64-linux.tar.gz` and `refs/tags/v0.21.0`):
+(for example `nish-0.36.0-x86_64-linux.tar.gz` and `refs/tags/v0.36.0`):
 
 ```bash
 gh attestation verify nish-<version>-<platform>.tar.gz \
@@ -155,7 +155,7 @@ nish --version
 ```
 
 - The first command prints `nish` and a version number, for example
-  `nish 0.20.0`. If `nish` is not found, the directory it was installed into is
+  `nish 0.36.0`. If `nish` is not found, the directory it was installed into is
   not on your `PATH` yet.
 - The second runs the C compiler `nish` will use, `$CC` if you set it and
   `clang` otherwise, and prints its LLVM version. If it is not found, `nish`

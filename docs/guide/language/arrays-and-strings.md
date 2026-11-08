@@ -1,7 +1,7 @@
 # Arrays and strings
 
-An array holds values of one type and can grow; a string is immutable UTF-8
-text. Both have a short, fixed list of methods — far fewer than in
+An array holds values of one type and can grow; a string is immutable
+bytes, usually UTF-8 text. Both have a short, fixed list of methods — far fewer than in
 JavaScript — and both are bounds-checked. The normative rules are in the
 reference's [Array literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#array-literals),
 [Element access](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#element-access),
@@ -220,7 +220,8 @@ reads and writes directly
 
 ## Strings
 
-A `string` is immutable UTF-8. `+` joins two strings, `===` compares them by
+A `string` is immutable bytes, usually UTF-8 text, and Nish does not check that
+they are valid UTF-8. `+` joins two strings, `===` compares them by
 content, and these are its methods, all of them:
 
 | Member | Answers |

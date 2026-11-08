@@ -194,9 +194,11 @@ writes leaves the first done and the second not. Do not call into the module
 again after it has exited. To run a program more than once, run it in a
 `Worker` and `terminate` the worker when it exits.
 
-A native string is always valid UTF-8. A JavaScript string the page hands the
-program may hold a lone surrogate, which the core reads as U+FFFD while `===`
-still tells the two apart: `indexOf("x\uD800", "\uFFFD")` is 1. Pass
+A native string is a length and bytes, and the bytes are not checked as UTF-8:
+`String.fromBytes` can build one from any bytes, and under `--emit-ts` the bytes
+decode as UTF-8, so an invalid byte becomes U+FFFD. A JavaScript string the page
+hands the program may hold a lone surrogate, which the core reads as U+FFFD while
+`===` still tells the two apart: `indexOf("x\uD800", "\uFFFD")` is 1. Pass
 `s.toWellFormed()` where a string from outside reaches the program, so both
 readings agree.
 
