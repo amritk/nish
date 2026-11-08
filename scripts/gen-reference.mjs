@@ -399,16 +399,17 @@ const listMarker = /^\s*(?:[-*+]|\d+[.)]) /
 
 /**
  * A paragraph's lines joined into one, each list item on a line of its own. A
- * line that opens with `- ` or `1. ` is an item only where a list can be: after
- * a line ending in a colon, or after another item. Elsewhere it is prose that
- * wrapped there (`... costs\n- 1 ...`), and joins with a space.
+ * line that opens with `- ` or `1. ` is an item only where a list can be: as
+ * the paragraph's first line, after a line ending in a colon, or after another
+ * item. Elsewhere it is prose that wrapped there (`... costs\n- 1 ...`), and
+ * joins with a space.
  */
 const joinLines = (para) => {
   let inList = false
   let out = ""
   for (const [i, raw] of para.split("\n").entries()) {
     const line = raw.trim()
-    const item = i > 0 && listMarker.test(line) && (inList || out.endsWith(":"))
+    const item = listMarker.test(line) && (i === 0 || inList || out.endsWith(":"))
     inList = item || (inList && !listMarker.test(line) && line !== "")
     out = i === 0 ? line : `${out}${item ? "<br>" : " "}${line}`
   }
@@ -432,6 +433,23 @@ const cell = (md) =>
     .map(joinLines)
     .join("<br><br>")
     .replace(/\|/g, "\\|")
+
+/**
+ * What `cell` must make of a doc comment's lists, checked on every run: a
+ * paragraph that opens with a list, a list after a colon, and prose that
+ * wrapped onto a line opening with `- `.
+ */
+const CELL_CASES = [
+  ["- a\n- b\n- c", "- a<br>- b<br>- c"],
+  ["Values:\n- a\n- b", "Values:<br>- a<br>- b"],
+  ["costs\n- 1 more than", "costs - 1 more than"],
+]
+
+/** Each `CELL_CASES` input whose cell is not the one expected, as a problem. */
+const cellCaseProblems = () =>
+  CELL_CASES.filter(([md, want]) => cell(md) !== want).map(
+    ([md, want]) => `cell(${JSON.stringify(md)}) is ${JSON.stringify(cell(md))}, not ${JSON.stringify(want)}`
+  )
 
 /** The one icon of each kind of entry a page shows as a card. */
 const ICONS = {
@@ -1620,7 +1638,9 @@ const renderLanguage = (link) => {
  * A section's first sentence, for its card, links dropped: its first paragraph
  * of prose, or, when the section opens with a list, its first item with the
  * item's bold lead unmarked. A list item's indented continuation lines are the
- * item's, never a paragraph of their own.
+ * item's, never a paragraph of their own. As in `joinLines`, a line opening
+ * with `- ` or `1. ` inside prose starts a list only after a colon; elsewhere
+ * it is prose that wrapped there.
  */
 const languageLead = (part) => {
   const { lines } = languageParts()
@@ -1638,6 +1658,11 @@ const languageLead = (part) => {
       continue
     }
     if (listMarker.test(line)) {
+      if (para.length > 0 && !inItem && !para.at(-1).endsWith(":")) {
+        para.push(line.trim())
+        opened = true
+        continue
+      }
       if (para.length > 0) {
         break
       }
@@ -2224,6 +2249,13 @@ const main = async () => {
       `gen-reference: ${unknown.length > 0 ? `unknown argument ${unknown.join(" ")}` : "--check writes nothing"}; the flags are --check, --update-baseline or --grow-baseline`
     )
     process.exit(2)
+  }
+  const cellProblems = cellCaseProblems()
+  if (cellProblems.length > 0) {
+    for (const p of cellProblems) {
+      console.error(`gen-reference: ${p}`)
+    }
+    process.exit(1)
   }
   const { project, gaps } = await readProject()
   // The baseline only shrinks: --update-baseline drops lines and refuses to

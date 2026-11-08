@@ -187,7 +187,10 @@ checked.
   Constants is a `##`, and each member a `###`; its parameters and return
   are fields, not headings. A class's or interface's members are a table;
   in a member's cell, paragraphs are a blank line apart and each list item
-  starts a line of its own. Below the lead and the usage example, a grid of
+  starts a line of its own. A list opens a paragraph or follows a line ending
+  in a colon: a line opening with `- ` or `1. ` anywhere else is prose that
+  wrapped there, so a list after a line like `One of` joins into one sentence.
+  Below the lead and the usage example, a grid of
   cards links each function, class, interface and object, one icon per kind
   (a function, a cube, a hash for a constant), when the page has more than
   one; a section of constants with one card shows it without a grid. A card's title may break after a lower-case
