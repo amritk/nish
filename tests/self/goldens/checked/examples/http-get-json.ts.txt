@@ -1128,7 +1128,7 @@ const HTTP_CLIENT_READABLE: i32 = 1
 const HTTP_CLIENT_WRITABLE: i32 = 2
 const HTTP_CLIENT_TLS_KEY_BYTES: i32 = 32
 const HTTP_CLIENT_DNS_SLICE_MS: i32 = 16
-const HTTP_CLIENT_EIO: i32 = -5
+const HTTP_CLIENT_LOOKUP_WAIT: i32 = -1000
 const FETCH_POOL_SLOTS: i32 = 64
 struct HttpRequest (class) size=40 align=8 exported
   field method: string index=0 offset=0
@@ -2295,16 +2295,17 @@ function httpClientAnswers(host: string, count: i32, options: HttpOptions, until
   calls: nish.HttpClientFault.fail nish.httpClientWaitText nish.outboundAddressText nish.outboundFilter nish_str_concat nish_str_from_i32
   pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientWaitText#1
   pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.outboundFilter#1 nish.outboundAddressText#0
-  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
   stackSites=0 stackLocals=0
   callee +0:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
   callee +2:7 httpClientWaitText -> @nish.httpClientWaitText
   callee +7:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  local +13:7 usable: i32 (let)
-  local +14:9 policy: OutboundPolicy | null (const)
-  callee +17:14 outboundFilter -> @nish.outboundFilter
-  callee +19:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee +21:32 outboundAddressText -> @nish.outboundAddressText
+  callee +11:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +17:7 usable: i32 (let)
+  local +18:9 policy: OutboundPolicy | null (const)
+  callee +21:14 outboundFilter -> @nish.outboundFilter
+  callee +23:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +25:32 outboundAddressText -> @nish.outboundAddressText
 function FetchError.constructor(this: FetchError, code: i32, text: string): void -> @nish.FetchError.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: code text
