@@ -77,6 +77,7 @@ import { runFfiStringChecks } from "./ffi-string.js"
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
+  selfCheckDeclarations,
   selfCheckHardening,
   selfCheckNotes,
   selfCheckRoots,
@@ -7096,6 +7097,14 @@ if (dealtHere("selfHosting")) {
     "nish-cmp: a declaration's words are found in CHANGELOG.md or the pending release notes, and nowhere else (stand-in inputs)",
     selfCheckNotes() === null,
     String(selfCheckNotes())
+  )
+  // And the list itself: an entry naming no program, file or undo matches
+  // every difference in every program, so with one in DECLARED nish-cmp
+  // passes whatever HEAD emits.
+  check(
+    "nish-cmp: every declaration names a program, a file or an undo, and TWO_STDS excuses only its one refusal (stand-in inputs and DECLARED itself)",
+    selfCheckDeclarations() === null,
+    String(selfCheckDeclarations())
   )
 
   // The fuzz run's declarations, by the same argument: an intended change to
