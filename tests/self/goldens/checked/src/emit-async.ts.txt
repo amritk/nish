@@ -1167,8 +1167,8 @@ function AsyncLayout.resolve(this: AsyncLayout, text: string): string -> @AsyncL
   local +21:11 value: i32 (let)
   callee +23:17 AsyncLayout.kids -> @AsyncLayout.kids
   callee +23:27 leadingNumber -> @leadingNumber
-  callee +25:36 AsyncLayout.units -> @AsyncLayout.units
-  callee +25:47 leadingNumber -> @leadingNumber
+  callee +25:22 AsyncLayout.units -> @AsyncLayout.units
+  callee +25:33 leadingNumber -> @leadingNumber
   local +27:15 pair: string (const)
   local +28:15 dot: i32 (const)
   callee +29:17 AsyncLayout.offset -> @AsyncLayout.offset

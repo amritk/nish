@@ -14209,7 +14209,24 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```
+
+[`nl4017_wait_on_descriptor.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4017_wait_on_descriptor.ts) (compiled with `--emit-ts build/test/wordings/nl4017_wait_on_descriptor`):
+
+```ts
+// NL4017: Node polls no descriptor JavaScript can name, so a task that awaits
+// `readable` has no translation, and `--emit-ts` refuses it at the wait.
+import { readable } from "nish:async"
+
+export async function main(): Promise<i32> {
+  const ok = await readable(0)
+  return ok ? 0 : 1
+}
+```
+
+```text
+--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
 ```
 
 ## NL7xxx: deprecation warnings

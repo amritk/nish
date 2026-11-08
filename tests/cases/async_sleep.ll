@@ -105,7 +105,7 @@ async.entry:
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   store i64 %arena.mark, i64* %async.spill.0
-  %0 = call i8* @nish_async_spawn(i32 0, i64 80)
+  %0 = call i8* @nish_async_spawn(i32 0, i64 48)
   %1 = call i8* @nish_async_enter(i8* %0)
   %2 = getelementptr inbounds i8, i8* %0, i64 32
   %3 = bitcast i8* %2 to { i32, i32, i32 }*
@@ -124,7 +124,7 @@ spawn.done:
   br label %spawn.join
 
 spawn.join:
-  %8 = call i8* @nish_async_spawn(i32 0, i64 80)
+  %8 = call i8* @nish_async_spawn(i32 0, i64 48)
   %9 = call i8* @nish_async_enter(i8* %8)
   %10 = getelementptr inbounds i8, i8* %8, i64 32
   %11 = bitcast i8* %10 to { i32, i32, i32 }*
@@ -143,7 +143,7 @@ spawn.done.1:
   br label %spawn.join.1
 
 spawn.join.1:
-  %16 = call i8* @nish_async_spawn(i32 0, i64 80)
+  %16 = call i8* @nish_async_spawn(i32 0, i64 48)
   %17 = call i8* @nish_async_enter(i8* %16)
   %18 = getelementptr inbounds i8, i8* %16, i64 32
   %19 = bitcast i8* %18 to { i32, i32, i32 }*

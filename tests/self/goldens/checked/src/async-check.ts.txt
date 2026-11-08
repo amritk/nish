@@ -226,10 +226,11 @@ function checkAsyncBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported
   callee +24:51 TypeTable.isResult -> @TypeTable.isResult
   callee +25:12 CheckContext.errorType -> @CheckContext.errorType
   callee +27:86 TypeTable.typeName -> @TypeTable.typeName
-  local +30:14 param: i32 (const)
-  callee +31:10 isSpawnable -> @isSpawnable
-  callee +32:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +34:77 TypeTable.typeName -> @TypeTable.typeName
+  local +30:7 refused: i32 (let)
+  local +31:12 i: i32 (let)
+  callee +32:10 isSpawnable -> @isSpawnable
+  callee +37:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +39:75 TypeTable.typeName -> @TypeTable.typeName
 function isSpawnable(ctx: CheckContext, type: i32): boolean -> @isSpawnable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

@@ -88,7 +88,7 @@ entry:
   %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %0)
   store i8* %1, i8** %name.addr, align 8
   %2 = load i8*, i8** %name.addr, align 8
-  %3 = call i8* @nish_async_spawn(i32 0, i64 80)
+  %3 = call i8* @nish_async_spawn(i32 0, i64 48)
   %4 = call i8* @nish_async_enter(i8* %3)
   %5 = call i8* @nish_async_copy_str(i8* %2)
   %6 = getelementptr inbounds i8, i8* %3, i64 32
