@@ -96,6 +96,7 @@ import {
   pollWait,
   tcpConnect,
 } from "nish:net"
+import { readable, writable } from "nish:async"
 import { getenv, monotonicNanos, wallClockNanos } from "nish:process"
 import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
 import { TlsClient, TlsClientConfig, tlsClientIsIpLiteral } from "nish/net/tls/client"
@@ -1722,8 +1723,11 @@ class HttpClientHop {
     this.names = []
     this.values = []
     for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
-      this.names.push(names[i])
-      this.values.push(values[i])
+      // Read before any call, which is where the bounds proof forgets a length.
+      const name: string = names[i]
+      const value: string = values[i]
+      this.names.push(name)
+      this.values.push(value)
     }
   }
 }
@@ -1794,10 +1798,10 @@ const httpClientRedirect = (
 /** Where a connection for one URL goes: the address to dial, the proxy if any, and the route a kept connection must match. */
 class HttpClientRoute {
   proxy: Url | null = null
-  port: i32 = 0
   dialHost: string = ""
-  dialPort: i32 = 0
   route: string = ""
+  port: i32 = 0
+  dialPort: i32 = 0
 }
 
 /**
@@ -2000,4 +2004,634 @@ const httpClientResolve = (
     }
   }
   return usable
+}
+
+// ---- The async fetch ---------------------------------------------------------
+
+/** How many idle connections a `FetchPool` holds at most, over every route. */
+const FETCH_POOL_SLOTS: i32 = 64
+
+/**
+ * Why an async `fetch` failed: an `HTTP_E_*` code and its sentence, the
+ * code's name first, as `FetchSyncClient.errorText` reads. The text never
+ * holds a URL's credentials or query.
+ */
+export class FetchError {
+  /** The `HTTP_E_*` code. */
+  code: i32
+  /** The code's name, a colon and what went wrong, such as `dns: example.invalid could not be looked up`. */
+  text: string
+
+  /**
+   * A failure with its code and text.
+   * @param code The `HTTP_E_*` code.
+   * @param text The code's name, a colon and the sentence.
+   */
+  constructor(code: i32, text: string) {
+    this.code = code
+    this.text = text
+  }
+}
+
+/**
+ * A response `fetch` answered, its body already read whole: the body is
+ * read before `fetch` answers, up to `maxBodyBytes`, so `text()` and
+ * `bytes()` are plain calls. `names` are lower-cased and in the order they
+ * arrived, beside `values`; `url` is the URL that answered.
+ */
+export class FetchResponse {
+  /** The status code, such as 200. */
+  status: i32 = 0
+  /** The reason phrase the server sent beside the status. */
+  reason: string = ""
+  /** The URL that answered, which differs from the request's after a redirect. */
+  url: string = ""
+  /** The header field names, lower-cased, in the order they arrived. */
+  names: string[]
+  /** The header field values, each beside its name in `names`. */
+  values: string[]
+  /** The body, de-chunked; empty for a `HEAD` or a status that has none. */
+  body: u8[]
+
+  /** A response with no status, fields or body yet; `fetch` fills them in. */
+  constructor() {
+    this.names = []
+    this.values = []
+    this.body = []
+  }
+
+  /**
+   * The first value of the field `name`, in any case.
+   * @param name The field name to look for.
+   * @returns The value, or null when the response has no such field.
+   */
+  header(name: string): string | null {
+    return httpClientField(this.names, this.values, name)
+  }
+
+  /**
+   * The body as a string, its bytes unchanged: nothing checks that they are UTF-8.
+   * @returns The body's text.
+   */
+  text(): string {
+    return String.fromBytes(this.body, HTTP_CLIENT_ZERO, toI32(this.body.length))
+  }
+
+  /**
+   * The body's bytes.
+   * @returns The body, the same array as `body`.
+   */
+  bytes(): u8[] {
+    return this.body
+  }
+}
+
+/**
+ * Connections an async `fetch` leaves open for the next one to the same
+ * place, held by the caller and handed in through `RequestInit.pool`. At
+ * most `maxIdlePerOrigin` wait per route and 64 in all; a kept connection
+ * the server closed, or sent a byte on unasked, is closed when it is next
+ * looked at. A fetch under an outbound policy never keeps or takes one.
+ */
+export class FetchPool {
+  /** The most idle connections kept for one route (origin, or proxy). */
+  maxIdlePerOrigin: i32
+  private fds: i32[]
+  private routes: string[]
+  private probe: u8[]
+
+  /**
+   * An empty pool.
+   * @param maxIdlePerOrigin The most idle connections kept for one route; 0 keeps none.
+   */
+  constructor(maxIdlePerOrigin: i32 = 4) {
+    this.maxIdlePerOrigin = maxIdlePerOrigin
+    this.fds = []
+    this.routes = []
+    this.probe = new Array<u8>(1)
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      this.fds.push(toI32(-1))
+      this.routes.push("")
+    }
+  }
+
+  /**
+   * How many idle connections the pool holds.
+   * @returns The count, over every route.
+   */
+  idle(): i32 {
+    let count: i32 = 0
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      if (this.fds[i] >= 0) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  /** Closes every idle connection; the pool can still keep new ones. */
+  close(): void {
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      this.drop(i)
+    }
+  }
+
+  /**
+   * A quiet idle connection for `route`, taken out of the pool; -1 for none.
+   * A connection that reads anything, its end included, is closed instead.
+   * @internal
+   */
+  take(route: string): i32 {
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      if (this.fds[i] < 0 || this.routes[i] !== route) {
+        continue
+      }
+      const fd: i32 = this.fds[i]
+      if (netRead(fd, this.probe, HTTP_CLIENT_ZERO, 1) === HTTP_CLIENT_WOULD_BLOCK) {
+        this.fds[i] = -1
+        this.routes[i] = ""
+        return fd
+      }
+      this.drop(i)
+    }
+    return -1
+  }
+
+  /** Keeps `fd` for `route` when there is room, else closes it. @internal */
+  put(route: string, fd: i32): void {
+    let same: i32 = 0
+    let free: i32 = -1
+    for (let i: i32 = 0; i < FETCH_POOL_SLOTS; i += 1) {
+      if (this.fds[i] < 0) {
+        free = free < 0 ? i : free
+      } else if (this.routes[i] === route) {
+        same += 1
+      }
+    }
+    if (same >= this.maxIdlePerOrigin || free < 0) {
+      netClose(fd)
+      return
+    }
+    this.fds[free] = fd
+    this.routes[free] = route
+  }
+
+  private drop(i: i32): void {
+    if (this.fds[i] >= 0) {
+      netClose(this.fds[i])
+    }
+    this.fds[i] = -1
+    this.routes[i] = ""
+  }
+}
+
+/**
+ * What an async `fetch` sends and how it behaves. `options` are
+ * `HttpOptions` as `fetchSync` reads them, except that `readTimeoutMs`
+ * bounds no wait (a wait has no deadline yet), `connectTimeoutMs` bounds
+ * only the name lookup, and `totalTimeoutMs` is checked each time a wait
+ * ends. `pool` keeps connections for later fetches; null closes each one
+ * when its fetch is done.
+ */
+export class RequestInit {
+  /** The request method, sent as given; `GET` by default. */
+  method: string = "GET"
+  /** The header field names, in the order they are sent. */
+  names: string[]
+  /** The header field values, each beside its name in `names`. */
+  values: string[]
+  /** Null for no body at all; an empty array sends `Content-Length: 0`. */
+  body: u8[] | null = null
+  /** The limits, policy and redirect and proxy settings (see above for the timeouts). */
+  options: HttpOptions
+  /** Where idle connections are kept between fetches; null for none. */
+  pool: FetchPool | null = null
+
+  /** A `GET` with no fields, no body, default options and no pool. */
+  constructor() {
+    this.names = []
+    this.values = []
+    this.options = new HttpOptions()
+  }
+
+  /**
+   * Appends one header field; nothing is checked until the request is written.
+   * @param name The field name.
+   * @param value The field value; one holding a CR or LF makes the fetch fail.
+   * @returns This init, so calls chain.
+   */
+  header(name: string, value: string): RequestInit {
+    this.names.push(name)
+    this.values.push(value)
+    return this
+  }
+}
+
+/** One connection an async fetch drives, and the state of the exchange on it. */
+class HttpClientConn {
+  deadline: i64
+  options: HttpOptions
+  parser: Http1ResponseParser
+  rbuf: u8[]
+  fault: HttpClientFault
+  route: string = ""
+  httpProxy: string
+  httpsProxy: string
+  noProxy: string
+  fd: i32 = -1
+  gotByte: boolean = false
+  lost: boolean = false
+  reused: boolean = false
+
+  constructor(options: HttpOptions) {
+    this.options = options
+    this.deadline = httpClientDeadline(options)
+    this.parser = httpClientParser(options)
+    this.rbuf = new Array<u8>(HTTP_CLIENT_READ_BYTES)
+    this.fault = new HttpClientFault()
+    const proxies: string[] = httpClientEnvProxies(options)
+    this.httpProxy = proxies[0]
+    this.httpsProxy = proxies[1]
+    this.noProxy = proxies[2]
+  }
+
+  /** Fails with `HTTP_E_TOTAL_TIMEOUT` once the fetch's deadline has passed. */
+  overdue(): boolean {
+    if (this.deadline < HTTP_CLIENT_NEVER && monotonicNanos() >= this.deadline) {
+      this.fault.fail(HTTP_E_TOTAL_TIMEOUT, httpClientWaitText(HTTP_E_TOTAL_TIMEOUT, this.options, ""))
+      return true
+    }
+    return false
+  }
+
+  /** Closes the connection, if one is open. */
+  close(): void {
+    if (this.fd >= 0) {
+      netClose(this.fd)
+      this.fd = -1
+    }
+  }
+
+  /** Hands the connection back to `pool` when the response left it clean to reuse, else closes it. */
+  release(pool: FetchPool | null): void {
+    if (
+      pool !== null &&
+      this.fd >= 0 &&
+      this.options.outbound === null &&
+      this.parser.keepAlive() &&
+      this.parser.buffered() === 0
+    ) {
+      pool.put(this.route, this.fd)
+      this.fd = -1
+      return
+    }
+    this.close()
+  }
+}
+
+/** One read of the response into the parser, parking the task until the socket has bytes; false with the fault set. */
+async function httpClientFillAsync(conn: HttpClientConn): Promise<boolean> {
+  if (conn.overdue()) {
+    return false
+  }
+  let n: i32 = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+  while (n === HTTP_CLIENT_WOULD_BLOCK) {
+    const ready = await readable(conn.fd)
+    if (!ready) {
+      conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
+      return false
+    }
+    if (conn.overdue()) {
+      return false
+    }
+    n = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+  }
+  if (n > 0) {
+    conn.gotByte = true
+    conn.parser.feed(conn.rbuf, HTTP_CLIENT_ZERO, n)
+    return true
+  }
+  if (n === 0) {
+    conn.parser.finish()
+    return true
+  }
+  conn.lost = true
+  conn.fault.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+  return false
+}
+
+/** The parser's next event, reading as it needs; -1 with the fault set. */
+async function httpClientPumpAsync(conn: HttpClientConn): Promise<i32> {
+  let event: i32 = conn.parser.next()
+  while (event === HTTP1_NEED_MORE) {
+    const filled = await httpClientFillAsync(conn)
+    if (!filled) {
+      return -1
+    }
+    event = conn.parser.next()
+  }
+  if (event === HTTP1_ERROR || event === HTTP1_CLOSED) {
+    conn.lost = httpClientParserFault(conn.parser, event, conn.options, conn.fault)
+    return -1
+  }
+  return event
+}
+
+/** Writes `bytes`, parking the task while the socket is full; false with the fault set. */
+async function httpClientWriteAsync(conn: HttpClientConn, bytes: u8[]): Promise<boolean> {
+  let at: i32 = 0
+  const end: i32 = toI32(bytes.length)
+  while (at < end) {
+    if (conn.overdue()) {
+      return false
+    }
+    const n: i32 = netWrite(conn.fd, bytes, at, end - at)
+    if (n > 0) {
+      at += n
+    } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
+      const ready = await writable(conn.fd)
+      if (!ready) {
+        conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
+        return false
+      }
+    } else {
+      conn.lost = true
+      conn.fault.fail(HTTP_E_IO, `writing to the server failed (errno ${-n})`)
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Looks `host` up (blocking, within `connectTimeoutMs`) and connects to its
+ * addresses in turn, parking the task while each connect is in flight: the
+ * connected fd, or -1 with the fault set.
+ */
+async function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): Promise<i32> {
+  const start: i64 = monotonicNanos()
+  const budget: i32 = conn.options.connectTimeoutMs
+  let until: i64 = budget > 0 ? start + toI64(budget) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+  let code: i32 = HTTP_E_CONNECT_TIMEOUT
+  if (conn.deadline < HTTP_CLIENT_NEVER && conn.deadline <= until) {
+    until = conn.deadline
+    code = HTTP_E_TOTAL_TIMEOUT
+  }
+  if (until <= start) {
+    conn.fault.fail(code, httpClientWaitText(code, conn.options, `no time was left to connect to ${host}`))
+    return -1
+  }
+  const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
+  const usable: i32 = httpClientResolve(host, port, conn.options, start, until, code, addresses, conn.fault)
+  if (usable < 0) {
+    return -1
+  }
+  const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
+  let last: i32 = 0
+  for (let i: i32 = 0; i < usable && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
+    copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
+    const fd: i32 = tcpConnect(one)
+    if (fd < 0) {
+      last = fd
+      continue
+    }
+    const ready = await writable(fd)
+    if (conn.overdue()) {
+      netClose(fd)
+      return -1
+    }
+    const result: i32 = ready ? connectResult(fd) : -5
+    if (result === 0) {
+      return fd
+    }
+    netClose(fd)
+    last = result
+  }
+  conn.fault.fail(HTTP_E_REFUSED, `could not connect to ${host} port ${port} (errno ${-last})`)
+  return -1
+}
+
+/**
+ * Makes `conn` a connection to where `url` goes: one the pool kept when
+ * there is one, else a new one, through an http proxy when the settings say
+ * so. False with the fault set; an https URL is refused before anything is
+ * dialled, since its TLS handshake would block the process.
+ */
+async function httpClientOpenAsync(conn: HttpClientConn, url: Url, pool: FetchPool | null, fresh: boolean): Promise<boolean> {
+  if (url.scheme === "https") {
+    conn.fault.fail(
+      HTTP_E_TLS,
+      `${httpClientRedact(url)} is https, which the async fetch does not drive yet; use fetchSync`
+    )
+    return false
+  }
+  const way: HttpClientRoute | null = httpClientRoute(
+    url,
+    conn.options,
+    conn.httpProxy,
+    conn.httpsProxy,
+    conn.noProxy,
+    conn.fault
+  )
+  if (way === null) {
+    return false
+  }
+  conn.route = way.route
+  conn.parser = httpClientParser(conn.options)
+  conn.reused = false
+  if (pool !== null && !fresh && conn.options.outbound === null) {
+    const kept: i32 = pool.take(way.route)
+    if (kept >= 0) {
+      conn.fd = kept
+      conn.reused = true
+      return true
+    }
+  }
+  const fd: i32 = await httpClientDialAsync(conn, way.dialHost, way.dialPort)
+  if (fd < 0) {
+    return false
+  }
+  conn.fd = fd
+  return true
+}
+
+/** Writes the request on `conn` and reads up to its final response's head; false with the fault set. */
+async function httpClientSendAsync(conn: HttpClientConn, url: Url, hop: HttpClientHop): Promise<boolean> {
+  const head: u8[] | null = httpClientRequestHead(
+    url,
+    hop.method,
+    hop.names,
+    hop.values,
+    hop.body,
+    conn.route.startsWith("proxy ") ? conn.httpProxy : "",
+    conn.fault
+  )
+  if (head === null) {
+    return false
+  }
+  conn.gotByte = false
+  conn.lost = false
+  conn.parser.expect(hop.method === "HEAD", false)
+  const wrote = await httpClientWriteAsync(conn, head)
+  if (!wrote) {
+    return false
+  }
+  const body: u8[] | null = hop.body
+  if (body !== null) {
+    const sent = await httpClientWriteAsync(conn, body)
+    if (!sent) {
+      return false
+    }
+  }
+  let event: i32 = await httpClientPumpAsync(conn)
+  while (event === HTTP1_INFORMATIONAL) {
+    event = await httpClientPumpAsync(conn)
+  }
+  if (event < 0) {
+    return false
+  }
+  if (event !== HTTP1_HEAD) {
+    conn.fault.fail(HTTP_E_PROTOCOL, `the response ended before its head (event ${event})`)
+    return false
+  }
+  return true
+}
+
+/**
+ * Reads the body into `res`, at most `limit` bytes: 1 at its end, 0 when it
+ * passed `limit` (the connection is then not reusable), -1 with the fault set.
+ */
+async function httpClientBodyAsync(conn: HttpClientConn, res: FetchResponse, limit: i64): Promise<i32> {
+  let buf: u8[] = new Array<u8>(0)
+  let len: i32 = 0
+  let event: i32 = await httpClientPumpAsync(conn)
+  while (event !== HTTP1_END) {
+    if (event < 0) {
+      return -1
+    }
+    if (event === HTTP1_BODY) {
+      const take: i32 = conn.parser.bodyLen
+      if (toI64(len) + toI64(take) > limit) {
+        return 0
+      }
+      if (len + take > toI32(buf.length)) {
+        let room: i32 = toI32(buf.length) * 2
+        if (room < len + take) {
+          room = len + take
+        }
+        const grown: u8[] = new Array<u8>(room)
+        copyBytes(grown, 0, buf, 0, len)
+        buf = grown
+      }
+      copyBytes(buf, len, conn.parser.body, conn.parser.bodyOff, take)
+      len += take
+    }
+    event = await httpClientPumpAsync(conn)
+  }
+  if (len === toI32(buf.length)) {
+    res.body = buf
+  } else {
+    const exact: u8[] = new Array<u8>(len)
+    copyBytes(exact, 0, buf, 0, len)
+    res.body = exact
+  }
+  return 1
+}
+
+/**
+ * One request and its whole response on `conn`, once more on a fresh
+ * connection when a kept one turns out to be gone before any byte of an
+ * idempotent request's answer came. Null with the fault set.
+ */
+async function httpClientExchangeAsync(
+  conn: HttpClientConn,
+  url: Url,
+  hop: HttpClientHop,
+  pool: FetchPool | null,
+  redirectable: boolean
+): Promise<FetchResponse | null> {
+  for (let attempt: i32 = 0; attempt < 2; attempt += 1) {
+    const opened = await httpClientOpenAsync(conn, url, pool, attempt > 0)
+    if (!opened) {
+      return null
+    }
+    const sent = await httpClientSendAsync(conn, url, hop)
+    if (sent) {
+      const res: FetchResponse = new FetchResponse()
+      res.status = conn.parser.status
+      res.reason = conn.parser.reason
+      res.url = httpClientUrlText(url)
+      for (let i: i32 = 0; i < toI32(conn.parser.names.length) && i < toI32(conn.parser.values.length); i += 1) {
+        res.names.push(conn.parser.names[i])
+        res.values.push(conn.parser.values[i])
+      }
+      // A redirect's own body is read only far enough to keep its connection.
+      const hopping: boolean = redirectable && httpClientIsRedirect(res.status) && res.header("location") !== null
+      const limit: i64 = hopping ? toI64(HTTP_CLIENT_DRAIN_BYTES) : httpClientBodyCap(conn.options)
+      const read: i32 = await httpClientBodyAsync(conn, res, limit)
+      if (read < 0) {
+        conn.close()
+        return null
+      }
+      if (read === 0) {
+        conn.close()
+      } else {
+        conn.release(pool)
+      }
+      return res
+    }
+    const retry: boolean = conn.reused && conn.lost && !conn.gotByte && httpClientIdempotent(hop.method)
+    conn.close()
+    if (!retry) {
+      return null
+    }
+  }
+  return null
+}
+
+/** `fetch` before its answer is wrapped: the response, or null with `fault` set. */
+async function httpClientFetchAsync(text: string, init: RequestInit, fault: HttpClientFault): Promise<FetchResponse | null> {
+  const options: HttpOptions = init.options
+  const conn: HttpClientConn = new HttpClientConn(options)
+  conn.fault = fault
+  let url: Url | null = httpClientTarget(text, options, fault)
+  if (url === null) {
+    return null
+  }
+  const hop: HttpClientHop = new HttpClientHop(init.method, init.body, init.names, init.values)
+  while (url !== null) {
+    const res: FetchResponse | null = await httpClientExchangeAsync(conn, url, hop, init.pool, options.followRedirects)
+    if (res === null) {
+      return null
+    }
+    const location: string | null = res.header("location")
+    if (!options.followRedirects || location === null || !httpClientIsRedirect(res.status)) {
+      return res
+    }
+    url = httpClientRedirect(hop, options, url, res.status, location, fault)
+  }
+  return null
+}
+
+/**
+ * Fetches `url` without blocking the process: the task waits on the
+ * executor while the connection is made, the request written and the
+ * response read, so other tasks run meanwhile and `awaitAll(fetch(a),
+ * fetch(b))` overlaps the two. The body is read whole, up to
+ * `maxBodyBytes`, before the answer comes. Only http is driven this way: an
+ * https URL answers `HTTP_E_TLS` (use `fetchSync`). The name lookup still
+ * blocks. Policy, proxy, redirect and error rules are `fetchSync`'s.
+ *
+ * @param url The absolute `http://` URL to fetch.
+ * @param init The method, fields, body, options and pool; null for a plain `GET`.
+ * @returns The response with its body, or the failure: never a panic.
+ */
+export async function fetch(url: string, init: RequestInit | null = null): Promise<Result<FetchResponse, FetchError>> {
+  const req: RequestInit = init !== null ? init : new RequestInit()
+  const fault: HttpClientFault = new HttpClientFault()
+  const res: FetchResponse | null = await httpClientFetchAsync(url, req, fault)
+  if (res === null) {
+    return Err(new FetchError(fault.code, `${httpErrorName(fault.code)}: ${fault.text}`))
+  }
+  return Ok(res)
 }
