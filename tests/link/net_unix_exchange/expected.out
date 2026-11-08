@@ -1,0 +1,7 @@
+listen true
+spawn true
+accept true
+parent read 4: ping
+parent write 4
+child exit 0
+unlink 0

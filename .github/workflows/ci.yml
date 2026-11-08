@@ -885,7 +885,10 @@ jobs:
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
     runs-on: ${{ matrix.seed.runner }}
-    timeout-minutes: 20
+    # About 8 minutes on the slower x86_64 runners since nish-cmp compiles four
+    # programs at a time; the serial run took 12 to 20 and timed out the 0.37.0
+    # release at 20. The margin is for a slow runner and a growing corpus.
+    timeout-minutes: 30
     strategy:
       # x86_64 and aarch64 have different registers and different calling
       # conventions, so one row failing must not cancel the row that would say

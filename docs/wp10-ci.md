@@ -97,7 +97,8 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
 - **`test`**, eight ways. `node tests/run.js --shard <i>/<n>` splits the suite.
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the two sections there that are dealt (`term-io` and
-  `--emit-ts`), about two minutes. Shard 1 runs every section after them
+  `--emit-ts`): about 200 s of setup, stage1 and pre-link sections per shard
+  (measured in the paragraph on the eight-way split, below). Shard 1 runs every section after them
   that is not dealt, together with the link programs whose output a later
   check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
   `tests/run.js`: term-io, `--emit-ts`, WP14 self-hosting, crypto-bench, the
@@ -367,17 +368,19 @@ no `SKIP` line (`.claude/testing.md`). A shard is not a filter, which is why
 `--shard` cuts at a section boundary and delegates rather than filtering
 ([shards](#shards-and-time-limits)).
 
-A newer measurement, per section rather than per check, on `e1449d5`: one
+A newer measurement, per section rather than per check, on `e1449d5` (an
+unsharded local run, before the link pool and the eight-way split described
+under [Shards](#shards-and-time-limits)): one
 unsharded local run of 2014 s spent 1305 s on the `tests/link/` programs, 344 s
 on WP14 self-hosting (its fixed point included, which CI delegates), 96 s on the
 WP13 differential and 56 s building stage1. Every other section took under
 35 s, and they came to 213 s together. CI's `test` step took 24 min 29 s on the
-same commit. The shard split follows from those numbers: the link programs are
-the part worth dealing out, and WP14 is the one section large enough to deal
-with them.
+same commit. That is why the link programs were the first thing dealt out, and WP14 the
+one section then large enough to deal with them.
 
-Since the link programs run through a worker pool (`defaultJobs()`, four on a
-hosted runner), they are no longer most of a shard. In
+The link programs have since moved to a worker pool (`defaultJobs()`, four on a
+hosted runner), so in a shard they are no longer most of the time. These
+figures are from the four-shard era, before the split into eight. In
 [run 40093958447](https://github.com/amritk/nish/actions/runs/40093958447),
 with #909's cheaper link profile as well, the 719 programs took 431 s of wall
 clock across the four `test` shards, 16 to 254 s per shard, against 123-192 s
@@ -387,7 +390,7 @@ of steps after the suite), crypto-bench (268 s, shard 2) and WP14
 self-hosting (137 s, shard 3). The longest `test` job took 11 min 59 s, on
 shard 1.
 
-Six weeks later, in
+Six weeks later, still on four shards, in
 [run 40820090678](https://github.com/amritk/nish/actions/runs/40820090678),
 the longest `test` job took 20 min 0 s, again shard 1: 5.6 minutes before the
 link programs, which every shard repeated, and 13.2 after them, which shard 1

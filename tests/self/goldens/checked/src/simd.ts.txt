@@ -178,7 +178,7 @@ function emitSimdCall(emitter: Emitter, expr: Node, name: string): string -> @em
   sharedWrite: via emitSimdOp
   escaping: name
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue TypeTable.laneCount TypeTable.refOf emitSimdOp emitVectorAccess isSimdAccess isSimdOp laneIndex nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 simdLaneType
-  pointer emitter: size=360 writesThrough=true captured=false passedTo=emitSimdOp#0 emitVectorAccess#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0
+  pointer emitter: size=368 writesThrough=true captured=false passedTo=emitSimdOp#0 emitVectorAccess#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitSimdOp#1 emitVectorAccess#1 Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -466,7 +466,7 @@ function callVectorIntrinsic(emitter: Emitter, name: string, ret: string, args: 
   sharedWrite: via IRFunction.emitValue
   escaping: name
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
-  pointer emitter: size=360 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=368 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
   callee +0:39 Emitter.useRuntime -> @Emitter.useRuntime
@@ -475,7 +475,7 @@ function emitSimdOp(emitter: Emitter, expr: Node, name: string): string -> @emit
   sharedWrite: via Emitter.typeOf
   escaping: name
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue TypeTable.isMask TypeTable.laneCount TypeTable.refOf binaryInstruction callVectorIntrinsic comparePredicate isCompare isLaneShift nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_new parseIntegerLiteral splatConstant unwrapParens vectorSuffix
-  pointer emitter: size=360 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 callVectorIntrinsic#0
+  pointer emitter: size=368 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 callVectorIntrinsic#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=1 stackLocals=1
   local +0:9 args: Node[] (const)
