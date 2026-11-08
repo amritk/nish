@@ -1,9 +1,11 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
-**Status: D1 accepted; stages 1 to 4 built (§10), stages 5 and 6 open.** The
-language half — `async`, `await`, `Promise<T>`, `spawn`, `awaitAll` and the
-frame lowering — compiles, with its tasks on an in-process queue; the executor
-that waits on sockets and timers (stage 5) is not built. The anchors below
+**Status: D1 accepted; stages 1 to 4 built, stage 5 in part (§10), stage 6
+open.** The language half — `async`, `await`, `Promise<T>`, `spawn`,
+`awaitAll` and the frame lowering — compiles, and runs on the executor that
+waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2)
+and tasks that share their spawner's objects (part 3); `serve`, the async
+Postgres pool and cancellation are not built. The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
 note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
@@ -390,14 +392,14 @@ Each stage is one pull request, with the work each one needs:
 `docs/security/` record for anything that reads the network, and a guide
 page for anything a user sees.
 
-| Stage | What | Waits for |
-| --- | --- | --- |
-| 1 | The renames of §8, old paths removed | — |
-| 2 | `nish/net/upstream` (§7) and the Postgres pool and carrier (WP39 E6), explicit style, each on the handler's loop | — |
-| 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 |
-| 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 |
-| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool | 4 |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 |
+| Stage | What | Waits for | Built |
+| --- | --- | --- | --- |
+| 1 | The renames of §8, old paths removed | — | yes |
+| 2 | `nish/net/upstream` (§7) and the Postgres pool and carrier (WP39 E6), explicit style, each on the handler's loop | — | yes |
+| 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
+| 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
+| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | in part: the executor (part 1, #1283), async `fetch` (part 2, #1293) and a task reaching its spawner's objects (part 3); `serve`, the async Postgres pool and cancellation are open |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.
