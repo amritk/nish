@@ -4,8 +4,9 @@
 // TC retry over TCP, a CNAME chain, the search list, a dead server timing out
 // so the next one answers, `attempts`, the hosts file and `localhost` with no
 // packet, spoofed replies dropped while the genuine one completes the lookup,
-// a flood read at most `DNS_CLIENT_MAX_DATAGRAMS` a wake, and IDs and source
-// ports that vary.
+// a flood read at most `DNS_CLIENT_MAX_DATAGRAMS` a wake, IDs and source
+// ports that vary, and `dnsLookupWith`, run in a child so this loop can
+// answer it, keeping the A it has when its time runs out before AAAA answers.
 import { DNS_RESOLVE_NO_ANSWER, DNS_RESOLVE_NOT_FOUND, DNS_RESOLVE_PENDING, DNS_RESOLVE_TIMEOUT, DnsResolver } from "nish/net/dns-resolver"
 import { DNS_CLIENT_MAX_DATAGRAMS, DnsClient, dnsLookupWith, resolveHost } from "nish/net/dns"
 import { DnsConfig, DnsHosts, dnsParseHosts, dnsParseResolvConf } from "nish/net/dns-config"
@@ -25,7 +26,7 @@ import {
   udpRecvFrom,
   udpSendTo,
 } from "nish:net"
-import { monotonicNanos } from "nish:process"
+import { kill, monotonicNanos, spawn, waitPid } from "nish:process"
 import { Suite } from "nish/testing"
 
 const HEX: string = "0123456789abcdef"
@@ -178,12 +179,12 @@ const zone = (name: string, qtype: i32, overTcp: boolean, head: i32[]): u8[] => 
       ? cat(cname, record(target, DNS_TYPE_A, 300, v4(192, 0, 2, 1)))
       : cat(cname, record(target, DNS_TYPE_AAAA, 600, v6(1)))
   }
-  if (name === "host.zone.test" || name === "spoof.test" || name === "flood.test") {
+  if (name === "host.zone.test" || name === "spoof.test" || name === "flood.test" || name === "noaaaa.test") {
     if (!a) {
       head[1] = 0
       return new Array<u8>(0)
     }
-    return record(atQuestion(), DNS_TYPE_A, 100, v4(192, 0, 2, name === "spoof.test" ? 4 : name === "flood.test" ? 5 : 3))
+    return record(atQuestion(), DNS_TYPE_A, 100, v4(192, 0, 2, name === "spoof.test" ? 4 : name === "flood.test" ? 5 : name === "noaaaa.test" ? 8 : 3))
   }
   head[0] = NXDOMAIN
   head[1] = 0
@@ -320,7 +321,8 @@ const deadQueries = (s: Server): i32 => {
  * three ways the client must drop: the genuine reply from another port, then
  * from the server with another ID, then with another question. A
  * `flood.test` A query is first sent `FLOOD` copies of its reply from
- * another port.
+ * another port. A `noaaaa.test` AAAA query is never answered, as on a
+ * network that drops AAAA.
  */
 const serverUdp = (s: Server): void => {
   let n: i32 = udpRecvFrom(s.udp, s.buf, 0, toI32(s.buf.length), s.from, s.meta)
@@ -349,7 +351,9 @@ const serverUdp = (s: Server): void => {
         f += 1
       }
     }
-    udpSendTo(s.udp, reply, 0, len, s.from, 0, 0)
+    if (questionOf(s.buf, n, qtype) !== "noaaaa.test" || qtype[0] !== DNS_TYPE_AAAA) {
+      udpSendTo(s.udp, reply, 0, len, s.from, 0, 0)
+    }
     n = udpRecvFrom(s.udp, s.buf, 0, toI32(s.buf.length), s.from, s.meta)
   }
 }
@@ -510,7 +514,53 @@ const LOOPBACK4: string = "00000000000000000000ffff7f000001"
 const WWW_A: string = "00000000000000000000ffffc0000201"
 const WWW_AAAA: string = "20010db8000000000000000000000001"
 
+/** The child's exit codes: the A address alone, `DNS_RESOLVE_TIMEOUT`, anything else. */
+const CHILD_A: i32 = 0
+const CHILD_TIMEOUT: i32 = 3
+const CHILD_OTHER: i32 = 4
+
+/**
+ * The child: `dnsLookupWith` of `noaaaa.test` against the parent's server on
+ * `port`, for one second, when AAAA alone would wait out two five-second tries.
+ */
+const lookupChild = (port: i32): i32 => {
+  const c: DnsConfig = config("nameserver 127.0.0.1\noptions timeout:5 attempts:2\n", [port])
+  const out: u8[] = new Array<u8>(32 * DNS_ADDRESS_BYTES)
+  const ttls: i32[] = new Array<i32>(32)
+  const n: i32 = dnsLookupWith(c, null, "noaaaa.test", 1000, 80, out, ttls)
+  if (n === 1 && toHex(out, 0, DNS_ADDRESS_BYTES) === "00000000000000000000ffffc00002080050") {
+    return CHILD_A
+  }
+  return n === DNS_RESOLVE_TIMEOUT ? CHILD_TIMEOUT : CHILD_OTHER
+}
+
+/** Serves `loop` until child `pid` exits, or ten seconds pass and it is killed: its exit status. */
+const serveChild = (s: Server, loop: i32, pid: i32): i32 => {
+  const ready: i32[] = new Array<i32>(32)
+  const end: i64 = monotonicNanos() + toI64(10000) * 1000000
+  let st: i32[] = waitPid(pid, 1)
+  while (st[0] === 0 && monotonicNanos() < end) {
+    const count: i32 = pollWait(loop, ready, 50)
+    let k: i32 = 0
+    while (k < count) {
+      if (ready[2 * k] === UDP_TOKEN) {
+        serverUdp(s)
+      }
+      k += 1
+    }
+    st = waitPid(pid, 1)
+  }
+  if (st[0] === 0) {
+    kill(pid, 9)
+    st = waitPid(pid, 0)
+  }
+  return st[1]
+}
+
 export const main = (): number => {
+  if (process.argv.length > 2 && process.argv[1] === "lookup") {
+    return lookupChild(parseInt(process.argv[2]))
+  }
   const t = new Suite("dns")
   const loop: i32 = pollCreate()
   const s: Server = new Server()
@@ -647,6 +697,13 @@ export const main = (): number => {
   t.eqI32("no packet: the server saw nothing", s.udpQueries + s.tcpQueries, queriesBefore)
   const silentConfig: DnsConfig = config(deadOnly, [s.deadPort])
   t.eqI32("timeout: dnsLookupWith gives up", dnsLookupWith(silentConfig, null, "www.test", 300, 80, out, ttls), DNS_RESOLVE_TIMEOUT)
+
+  // dnsLookupWith blocks on a loop of its own, so a child runs it while this
+  // loop serves: its time runs out with A answered and AAAA still asking.
+  const child: i32 = spawn([process.argv[0], "lookup", `${s.port}`])
+  if (t.ok("timeout: the lookup child starts", child > 0)) {
+    t.eqI32("timeout: dnsLookupWith keeps the A it has when AAAA never answers", serveChild(s, loop, child), CHILD_A)
+  }
   netClose(loop)
   return t.done()
 }

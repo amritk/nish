@@ -679,6 +679,54 @@ export const main = (): number => {
     t.eqI32("search: after every candidate was asked", r.sent, 2 + 2 + 6)
   }
   {
+    // A later candidate's NODATA names the name, so the error an earlier one
+    // left to fall back on does not stand: host.corp is NXDOMAIN for A with
+    // AAAA reaching no server, then host answers NODATA for both.
+    const r: DnsResolver = new DnsResolver(config(ONE + "search corp\noptions attempts:1\n"), null, 1)
+    const l: i32 = r.start("host", 80, zero)
+    const a: Sent = take(r, 1)
+    const b: Sent = take(r, 2)
+    answer(r, a, reply(a, a.q % 2 === 0 ? NXDOMAIN : SERVFAIL, 0, new Array<u8>(0)), zero)
+    answer(r, b, reply(b, b.q % 2 === 0 ? NXDOMAIN : SERVFAIL, 0, new Array<u8>(0)), zero)
+    const c1: Sent = takeSend(r, 3)
+    const c2: Sent = takeSend(r, 4)
+    t.eqStr("fallback: host.corp moves the search on to host", asks(c1.q < c2.q ? c1 : c2), "host A")
+    answer(r, c1, reply(c1, OK, 0, new Array<u8>(0)), zero)
+    answer(r, c2, reply(c2, OK, 0, new Array<u8>(0)), zero)
+    t.eqI32("fallback: a later candidate's NODATA is DNS_RESOLVE_NOT_FOUND", resultOf(r, l).count, DNS_RESOLVE_NOT_FOUND)
+  }
+  {
+    // settle: a driver out of time keeps one family's addresses and closes the other's query.
+    const r: DnsResolver = new DnsResolver(config(ONE), null, 1)
+    const l: i32 = r.start("a.test", 80, zero)
+    const a: Sent = take(r, 1)
+    const b: Sent = take(r, 2)
+    const four: Sent = a.q % 2 === 0 ? a : b
+    const six: Sent = a.q % 2 === 0 ? b : a
+    t.ok("settle: with neither family answered, the lookup runs on", !r.settle(l))
+    answer(r, four, reply(four, OK, 1, record("a.test", DNS_TYPE_A, 30, v4(192, 0, 2, 7))), zero)
+    drain(r, 3)
+    t.ok("settle: with A answered and AAAA asking, the lookup ends", r.settle(l))
+    t.eqStr("settle: the AAAA query is owed a close", drain(r, 4), `${six.q}:${DNS_CLOSE}`)
+    t.eqStr("settle: the answer is the A", listed(resultOf(r, l)), A80(7) + "/30")
+    const m: i32 = r.start("b.test", 80, zero)
+    const c: Sent = take(r, 5)
+    const d: Sent = take(r, 6)
+    const sixAgain: Sent = c.q % 2 === 0 ? d : c
+    answer(r, sixAgain, reply(sixAgain, OK, 1, record("b.test", DNS_TYPE_AAAA, 40, v6(9))), zero)
+    t.ok("settle: AAAA answered with A asking ends it too", r.settle(m))
+    t.eqStr("settle: the answer is the AAAA", listed(resultOf(r, m)), AAAA80(9) + "/40")
+    drain(r, 7)
+    const n: i32 = r.start("c.test", 80, zero)
+    const e: Sent = take(r, 8)
+    const f: Sent = take(r, 9)
+    answer(r, e, reply(e, OK, 0, new Array<u8>(0)), zero)
+    t.ok("settle: one family's NODATA is no address to keep", !r.settle(n))
+    answer(r, f, reply(f, OK, 0, new Array<u8>(0)), zero)
+    t.ok("settle: a finished lookup is settled already", r.settle(n))
+    t.eqI32("settle: and its answer stands", resultOf(r, n).count, DNS_RESOLVE_NOT_FOUND)
+  }
+  {
     // A query's NXDOMAIN is its current name's: an earlier candidate's must
     // not move the search past a name that exists.
     const r: DnsResolver = new DnsResolver(config(ONE + "search a.test b.test\noptions attempts:1\n"), null, 4)
