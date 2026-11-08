@@ -77,12 +77,13 @@ for build in old new; do
       --annotate --no-show-percs --context 0 "$dir/$shape-0.cg" "$dir/$shape-$n.cg") > "$out/$build-$shape-lines.txt"
     echo "$build $shape: $n requests, $out/$build-$shape.txt"
   done
-  # The stages shape: 1 batch of N requests after the warm pass over every
-  # connection, less 0 requests.
+  # The stages shape without its calibration (stages-loop): 1 batch of N
+  # requests after the warm pass over every connection, less 0 requests, so
+  # `other` holds no clock or `sendmsg` loop, only the timed loop's own work.
   for count in 0 "$requests"; do
     logged "$dir/stages-$count.log" valgrind --tool=callgrind --cache-sim=yes \
       --compress-strings=no --compress-pos=no --callgrind-out-file="$dir/stages-$count.cg" \
-      "$dir/conn" stages "$count" "$connections" 1
+      "$dir/conn" stages-loop "$count" "$connections" 1
   done
   node "$root/bench/http1-conn/stage-misses.mjs" "$dir/stages-0.cg" "$dir/stages-$requests.cg" \
     "$requests" "$src" > "$out/$build-stages.txt"

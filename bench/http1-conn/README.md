@@ -210,43 +210,58 @@ base; `cut` is this branch's `new` against v0.35.0. ns per request, median
 | parse | 308.9 (301.2–326.0) | 344.1 (320.4–360.1) | 346.3 (337.8–365.9) | 312.4 (303.4–327.2) |
 | dispatch | 29.3 (18.6–30.3) | 28.2 (23.6–30.9) | 28.0 (25.5–30.8) | 29.3 (27.6–32.5) |
 | respond | 96.3 (94.8–98.7) | 102.9 (96.0–110.0) | 103.8 (99.7–108.7) | 106.1 (102.8–111.3) |
-| sendBody | 58.5 (55.7–61.9) | 73.5 (35.8–94.3) | 75.9 (61.2–97.7) | 77.1 (50.4–101.5) |
+| sendBody | n/a | 73.5 (35.8–94.3) | 75.9 (61.2–97.7) | 77.1 (50.4–101.5) |
 | park | 16.1 (12.2–17.1) | 12.1 (10.0–13.2) | 12.1 (11.2–13.5) | 12.8 (11.5–15.2) |
-| total | 554.0 (539.6–572.9) | 604.6 (539.7–657.3) | 617.4 (582.1–651.1) | 587.9 (553.7–640.2) |
+| total | 554.0 (539.6–572.9)\* | 604.6 (539.7–657.3) | 617.4 (582.1–651.1) | 587.9 (553.7–640.2) |
 | clock read | 27.6 | 27.3 | 27.3 | 27.2 |
 | `sendmsg` (kernel) | — | 486.9 | 494.7 | 492.9 |
 
 In the v0.35.0 run, `old′` (a second build of v0.35.0) put parse at 346.5,
-1.007 of `old`; `cut` is 0.908 of it, with the ranges apart. The other
-stages of `cut` sit within their `old′` bands (1.002 to 1.026 of `old`).
-v0.34.1 has no `Http1Connection.sendBody`: `run.mjs` builds its bench with
-`write`, so its sendBody row times a different call and it has no bare
-`sendmsg` to take out.
+1.007 of `old`; `cut` is 0.908 of it. On this machine the wall-clock ranges
+of parse overlap (`cut` 303.4–327.2 against v0.35.0's 320.4–360.1), so the
+x86 claim rests on the exact instruction count below, 518 fewer a request;
+the ranges are apart on aarch64's. The other stages of `cut` sit within
+their `old′` bands (1.002 to 1.026 of `old`).
 
-### x86-64, cachegrind: instructions and misses per request
+The sendBody row times `sendBody` less a separately timed hot `sendmsg` of
+the same lengths. That subtraction is noisy (`cut`'s minimum on aarch64 is
+2.1 ns), so read the row's median, not its range, in both tables.
+
+\* v0.34.1 has no `Http1Connection.sendBody`: `run.mjs` builds its bench
+with `write`, which has no bare `sendmsg` to take out, so its sendBody cell
+is not comparable with the others and is left out; its total still holds the
+untaken-out `write`.
+
+### x86-64, callgrind: instructions and misses per request
 
 Valgrind gives no hardware counters here, so `bash bench/http1-conn/misses.sh`
-(cachegrind, D1 48 KiB 12-way, LL 512 MiB 32-way, the stages loop at 0 and N
-requests diffed) stands in for them. Valgrind's CPUID hides SHA-NI, which
+(callgrind with its cache simulator, D1 48 KiB 12-way, LL 512 MiB 32-way,
+the `stages-loop` shape at 0 and N requests diffed, so no calibration loop is
+counted) stands in for them. Callgrind cannot part parse from dispatch (the
+loop's three `next()` calls inline to the same lines), so their row is the
+two together; `settle` counts in recv, as the stage comment in `main.ts`
+has it. Valgrind's CPUID hides SHA-NI, which
 touches nothing on this path. Ir / D1 read misses / D1 write misses per
 request:
 
 | stage | v0.34.1 | v0.35.0 = main | cut |
 | --- | ---: | ---: | ---: |
-| recv | 573 / 5.82 / 0.25 | 574 / 4.46 / 0 | 574 / 4.46 / 0 |
-| next (parse) | 4,486 / 2.12 / 1.88 | 4,488 / 2.78 / 1.22 | 3,970 / 2.78 / 1.22 |
+| recv | 579 / 5.82 / 0.25 | 580 / 4.46 / 0 | 580 / 4.46 / 0 |
+| next (parse + dispatch) | 4,486 / 2.12 / 1.88 | 4,488 / 2.78 / 1.22 | 3,970 / 2.78 / 1.22 |
 | respond | 1,258 / 0 / 0 | 1,258 / 0 / 0 | 1,258 / 0 / 0 |
-| sendBody | 468 / 0 / 0 | 86 / 0.11 / 0 | 86 / 0.11 / 0 |
-| park | 82 / 0 / 0 | 68 / 0 / 0 | 68 / 0 / 0 |
-| other | 364 / 0 / 0 | 634 / 0.13 / 0 | 634 / 0.13 / 0 |
-| total | 7,231 / 8.07 / 2.13 | 7,108 / 7.47 / 1.22 | 6,590 / 7.47 / 1.22 |
+| sendBody | 468 / 0 / 0\* | 86 / 0.11 / 0 | 86 / 0.11 / 0 |
+| park | 76 / 0 / 0 | 62 / 0 / 0 | 62 / 0 / 0 |
+| other | 348 / 0.13 / 0 | 473 / 0.13 / 0 | 473 / 0.13 / 0 |
+| total | 7,215 / 8.07 / 2.13 | 6,947 / 7.47 / 1.22 | 6,429 / 7.47 / 1.22 |
 
-Last-level misses are 0 in every stage of every build: on this shape the
-connection's lines come from L2 or L3, never DRAM. The cut removes 518
-instructions a request from the parse and moves no miss.
+\* v0.34.1's sendBody is its `write` path, a different call.
+
+The cut removes 518 instructions a request from the parse and moves no
+miss. The simulated last level is 512 MiB, so its 0 misses here say nothing
+about DRAM; only aarch64's `ll_cache_miss_rd` below is evidence for that.
 
 Parse is ~35 ns slower on v0.35.0 than on v0.34.1 on x86, with the same
-instruction count. The only difference cachegrind sees in `next` is 0.66 write
+instruction count. The only difference callgrind sees in `next` is 0.66 write
 misses a request turned into 0.66 read misses, and a read miss stalls the
 parse where a write miss can drain from the store buffer. That is a likely
 cause, not a measured one. On arm the two differ by 1%.
@@ -265,11 +280,13 @@ over 15 rounds. Each base column is the `old` of its run, and `cut` is the
 | parse | 469.1 (468.6–469.8) | 474.3 (473.7–475.5) | 474.3 (473.4–476.2) | 314.5 (313.6–316.5) |
 | dispatch | 16.8 (16.1–17.2) | 16.9 (16.0–18.1) | 17.0 (16.7–17.4) | 16.1 (15.2–18.5) |
 | respond | 80.7 (80.4–81.4) | 87.1 (86.1–87.6) | 87.1 (86.2–87.6) | 90.3 (88.7–91.9) |
-| sendBody | 47.4 (47.0–47.8) | 64.9 (30.4–69.7) | 66.2 (30.5–72.2) | 70.8 (2.1–105.6) |
+| sendBody | n/a | 64.9 (30.4–69.7) | 66.2 (30.5–72.2) | 70.8 (2.1–105.6) |
 | park | 7.4 (7.0–7.5) | 4.7 (4.5–5.7) | 4.7 (4.6–5.7) | 4.6 (4.0–5.8) |
-| total | 665.3 (663.3–667.1) | 696.9 (660.6–705.0) | 697.5 (663.7–707.8) | 545.8 (481.4–578.8) |
+| total | 665.3 (663.3–667.1)\* | 696.9 (660.6–705.0) | 697.5 (663.7–707.8) | 545.8 (481.4–578.8) |
 | clock read | 31.1 | 31.1 | 31.1 | 31.2 |
 | `sendmsg` (kernel) | — | 674.2 | 674.7 | 669.3 |
+
+\* As on x86: v0.34.1's sendBody is not comparable and is left out.
 
 Parse is 0.663 of v0.35.0 here, against `old′`'s 1.001, a larger cut than on
 x86. The scans it replaces were a 64-bit word trick (the line's end) and a
@@ -290,8 +307,8 @@ per request, median (min–max):
 | cut | 2,818 (2,813–2,855) | 6,812 | 8.57 (6.81–26.24) | 0.00 |
 
 The cut takes 1,540 instructions and 546 cycles a request off v0.35.0 on
-arm. The L1D miss ranges overlap; last-level misses are 0, as cachegrind
-counts on x86.
+arm. The L1D miss ranges overlap; `ll_cache_miss_rd` is 0, so on this shape
+a connection's lines do not come from DRAM.
 
 ### The cuts
 
@@ -303,9 +320,10 @@ count of the stages loop (same build flags, `-g`):
 | `http1TakeLine` finds `\r\n` with one 16-byte compare per block | 7,051 → 6,710 (−4.8%) |
 | `http1RequestLine` checks the target sixteen bytes at a time for a byte outside `!`..`~` | 6,710 → 6,534 (−2.6%) |
 
-`misses.sh`'s count of the same trees runs 56 to 57 Ir above this one
-(7,108 → 6,590), and the two cuts together come to 517 by one count and 518
-by the other.
+`misses.sh`'s count of the same trees, the timed loop's own function with no
+calibration, runs 104 to 105 Ir below this whole-program one (6,947 →
+6,429), and the two cuts together come to 517 by one count and 518 by the
+other.
 
 Tried and dropped, each against the tree it would have landed on:
 
@@ -317,10 +335,31 @@ Tried and dropped, each against the tree it would have landed on:
 - **`EndOfHead` found by a `switch` on the byte after `\r\n`**: −45 Ir,
   inside the noise.
 
-What is above 0.5 µs now: no single stage. Parse, the largest, is ~312 ns
+What is above 0.5 µs: no single `std/net` stage, now or on v0.35.0 (parse,
+the largest, was ~344 ns on x86 and ~474 ns on arm). Parse is now ~312 ns
 on x86 and ~315 ns on arm. The whole library path is ~590 ns on x86 and
 ~546 ns on arm. What is left in parse past the scans: the OWS trims (~220
 Ir), `http1HeadIs`'s length check (92), `http1BytesAreToken` (74) and `http1MethodOverrun` (22).
+
+### `Jwt.verify`, outside `std/net`
+
+The issue's profile put the challenge app's `Jwt.verify` (HMAC-SHA256) at
+~2.9 µs a request on x86 from a cachegrind instruction count. Timed natively
+on the same x86 machine (`taskset -c 1`, a 147-byte HS256 token, 1,000,000
+calls a batch, the best of 5 batches, over several runs), ns per call:
+
+| path | ns per call |
+| --- | ---: |
+| `verify`, SHA-256 on SHA-NI | 691–752 |
+| `sign`, the HMAC over the 103-byte signed part | 304–329 |
+| `verify`, `NISH_SHA256=soft` (the scalar kernel) | 1,211–1,242 |
+
+So the 2.9 µs was largely Valgrind's: its CPUID hides SHA-NI, so the
+cachegrind run took the scalar kernel, and an instruction count is not a
+time. Natively `verify` is ~0.7 µs, still above 0.5 µs on its own. About
+400 ns of it is outside the HMAC (the base64url decode and the claims'
+JSON tokenizer), which is the follow-up; the HMAC is already at its minimum
+of three SHA-256 compressions, the key's pads absorbed once.
 
 ### Idle RSS per connection
 

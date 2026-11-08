@@ -11,9 +11,12 @@
 // to the stage its enclosing method belongs to. A call's inclusive cost goes
 // with the line it is made from. The loop's three `next()` calls all reach
 // IdlePool.next, inlined to the same lines, so callgrind cannot part parse
-// from dispatch: the row `next` is the two together. `other` is the rest:
-// the bench's own drain and sums, the clock reads, and runtime C inlined
-// where the line does not say whose it is.
+// from dispatch: the row `next (parse + dispatch)` is the two together.
+// `settle` goes to recv, as main.ts's stage comment has it; the `settle`
+// that `flush` makes is inlined to the same lines, so its cost lands in recv
+// too. `other` is the rest: the bench's own drain and sums, the clock reads,
+// and runtime C inlined where the line does not say whose it is. Run the
+// stages-loop shape, so no calibration loop is counted in it.
 import fs from "node:fs"
 import path from "node:path"
 
@@ -38,7 +41,7 @@ const methodStage = {
   write: "sendBody",
   bodyRoom: "sendBody",
   flush: "park",
-  settle: "park",
+  settle: "recv",
   send: "park",
   park: "park",
   release: "park",
@@ -171,8 +174,10 @@ for (const name of names) {
     const i = full.events.indexOf(e)
     const v = ((full.stages.get(name)?.[i] ?? 0) - (zero.stages.get(name)?.[i] ?? 0)) / requests
     total[j] += v
-    return v.toFixed(2)
+    // A rounding residue of -0.004 prints as 0.00, not -0.00.
+    return (Math.round(v * 100) / 100 || 0).toFixed(2)
   })
-  console.log(`| ${name} | ${cells.join(" | ")} |`)
+  const label = name === "next" ? "next (parse + dispatch)" : name
+  console.log(`| ${label} | ${cells.join(" | ")} |`)
 }
 console.log(`| total | ${total.map((v) => v.toFixed(2)).join(" | ")} |`)
