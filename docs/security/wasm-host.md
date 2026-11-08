@@ -6,7 +6,7 @@ loads it. It covers the panic import, the generated loader's guard around
 every export, the buffer windows a host import is lent, the ring the page and
 the program share in module storage, and the page-side handle table. It says
 what each side may hand the other, what is refused, and the test that pins
-each property. It is written against `91f5d8b8` in PR #1273, and its lines are
+each property. It is written against `924c5779` in PR #1273, and its lines are
 cited there.
 
 **Result.** The module reads nothing the page names outside the memory it
