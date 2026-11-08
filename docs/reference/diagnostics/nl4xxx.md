@@ -2,7 +2,7 @@
 
 # NL4xxx\: the interop sidecars
 
-The 16 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 17 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL4001
 
@@ -221,3 +221,28 @@ The message of an error contains:
 ```
 
 **Retired**: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (WP49 stage 4, part 3; tests/emit-ts/async)
+
+## NL4017
+
+The message of an error contains:
+
+```text
+--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```
+
+[`nl4017_wait_on_descriptor.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4017_wait_on_descriptor.ts) (compiled with `--emit-ts build/test/wordings/nl4017_wait_on_descriptor`):
+
+```ts
+// NL4017: Node polls no descriptor JavaScript can name, so a task that awaits
+// `readable` has no translation, and `--emit-ts` refuses it at the wait.
+import { readable } from "nish:async"
+
+export async function main(): Promise<i32> {
+  const ok = await readable(0)
+  return ok ? 0 : 1
+}
+```
+
+```text
+--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```

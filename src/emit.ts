@@ -43,6 +43,7 @@ import {
   emitAsyncCall,
   emitAsyncMain,
   emitAwaitAll,
+  emitKernelWait,
   emitSpawn,
   isAwaitAllDeclaration,
   suspends,
@@ -1752,6 +1753,9 @@ export class Emitter {
     const imported = this.program.nodeBuiltins[expr.id]
     if (imported === "async.spawn") {
       return emitSpawn(this, expr)
+    }
+    if (imported === "async.sleep" || imported === "async.readable" || imported === "async.writable") {
+      return emitKernelWait(this, expr, imported) // WP49 stage 5: a wait on the executor
     }
     if (imported.length > 0) {
       // A dotted canonical name (`process.exit`) belongs to the emitter for

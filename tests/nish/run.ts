@@ -529,7 +529,8 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   // at a time, AES-GCM on the CPU's AES instructions, the SHA-256 block on its
   // SHA instructions, CRC-32 on its CRC instructions, the stdin and terminal
   // calls of `nish:term`, the byte-class runs of `nish/bytes` and the
-  // `--sandbox` confinement, split apart so each carries its own size budget.
+  // `--sandbox` confinement and the executor `spawn` parks async tasks on,
+  // split apart so each carries its own size budget.
   // A direct `clang` line names them; only `scripts/build.sh` pairs them for
   // its callers.
   link.push("runtime/runtime.c");
@@ -547,6 +548,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   link.push("runtime/runtime-sandbox.c");
   link.push("runtime/runtime-shm.c");
   link.push("runtime/runtime-region.c");
+  link.push("runtime/runtime-async.c");
   link.push("-lm");
   link.push("-o");
   link.push(exe);

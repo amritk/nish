@@ -1828,11 +1828,13 @@ at the state its frame records and answers whether it finished; one that
 awaits nothing is a plain function, and awaiting it is a plain call. The
 frames of a program are sized when it is linked, and `export async function
 main` is resumed from the process entry until it finishes and its spawned
-tasks are done (`async_main`). In this release the tasks run on an
-in-process queue and nothing waits on the outside world, so every task runs
-to completion; the event loop that waits on sockets and timers is the next
-stage's ([wp49-async-server.md](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md), "Stage 4, part 2"). A
-program with no `async` function compiles byte for byte as before, and one
+tasks are done (`async_main`). A task waits on the outside world with
+`await sleep(ms)`, `await readable(fd)` or `await writable(fd)`: it is parked
+on the executor's kernel wait (epoll, kqueue on Darwin) and the others run
+until it is ready ([below](#waiting-on-a-timer-or-a-descriptor-sleep-readable-and-writable);
+[wp49-async-server.md](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md), "Stage 5, part 1"). A
+program with no `async` function compiles byte for byte as before, and links
+no executor; one
 whose `async` functions are never called keeps them `internal`, as it would a
 plain function (`async_unused`). A function that awaits loses `willreturn`
 and `readonly`; one that does not keeps its attributes (`async_attributes`).
@@ -1913,10 +1915,89 @@ async function run(): Promise<void> {
   size: `` recursion through `await` `` is refused at the `await` that closes
   the cycle, direct or mutual (NL2648,
   `reject_async_await_self`, `reject_async_await_mutual`). Write it as a loop.
+- **A spawned task's arguments outlive the spawner.** `spawn(f(x))` may
+  return, and its caller with it, while `f` still waits, so `f` never reads
+  the spawner's memory: a number, a `boolean` or an enum is copied by value,
+  and a `string` is copied into the task's own region before the task first
+  runs (`async_sleep_spawn_string`, `tests/link/async_spawn_args`). An
+  argument of any other type — an array, a class, an interface, a `Map` —
+  would be read after it was freed, and is
+  `` `spawn` hands `f` an argument of type `T`, which lives in the spawner's
+  region and is freed when the spawner returns `` (NL2673,
+  `reject_async_spawn_array_arg`). Copy what the task needs into a `string`
+  or numbers, or await the call instead of spawning it.
+- **Each spawned task has a region of its own**, entered whenever the task
+  runs and freed when it finishes, so what a task allocates is given back
+  when it ends, not when `main` does (`tests/link/async_region_per_task`).
+- **A `main` that never waits runs the loop too.** An `async` `main` that
+  awaits nothing compiles to a plain call, as any such function does; one
+  that spawns tasks returns first, then the executor runs every task it
+  spawned, and the program exits with `main`'s answer once they are done
+  (`tests/link/async_sync_main_loop`).
 - **No `async` in a wasm build.** A task is resumed by the native event loop,
   which a wasm module does not have: under a `wasm32` target or
   `--profile wasi` an `async` function is NL2652 (`reject_async_wasm`,
   `reject_async_wasi_profile`).
+
+### Waiting on a timer or a descriptor: `sleep`, `readable` and `writable`
+
+`nish:async` exports three waits on the executor. Each takes one `i32` and
+answers a `boolean`, and each is written only where it is awaited:
+
+| Call | Waits until | Answers `false` at once when |
+| --- | --- | --- |
+| `await sleep(ms)` | `ms` milliseconds have passed | `ms` is negative |
+| `await readable(fd)` | `fd` has bytes to read, or its peer closed it | `fd` is not an open descriptor |
+| `await writable(fd)` | `fd` can take bytes | `fd` is not an open descriptor |
+
+A wait that is answered at once does not suspend the task. A regular file
+never blocks, so `readable` and `writable` answer `true` for one at once.
+While a task waits, the others run; when none can run, the executor blocks
+in the kernel until a descriptor is ready or the first timer is due, and
+resumes the tasks it woke: the descriptors in the order the kernel reported
+them, then the expired timers, earliest deadline first, ties in the order
+they were made (`async_sleep`, `tests/link/async_timer_order`,
+`tests/link/async_readable`). A wait holds a duplicate of its descriptor, so
+closing the descriptor while a task waits on it does not end the wait, and
+the number's reuse cannot answer it ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md),
+ASYNC-4).
+
+```ts
+import { readable, sleep, spawn } from "nish:async"
+import { netRead } from "nish:net"
+
+async function echo(fd: i32): Promise<void> {
+  const ready = await readable(fd)
+  if (!ready) {
+    return
+  }
+  const buf: u8[] = new Array<u8>(4)
+  console.log(netRead(fd, buf, 0, 4))
+}
+
+async function tick(): Promise<void> {
+  await sleep(10)
+  console.log("tick")
+}
+
+export async function main(): Promise<i32> {
+  spawn(echo(0))
+  spawn(tick())
+  return 0
+}
+```
+
+- **A wait is awaited where it is written.** `sleep(10)` as a statement, as
+  `spawn`'s argument or anywhere else a value would be kept is
+  `` `sleep` is a wait on the executor, written only where it is awaited ``
+  (NL2671, `reject_async_sleep_bare`, `reject_async_sleep_spawned`), and so
+  are `readable` and `writable`.
+- **It takes one `i32`**: `` `readable` takes one `i32` `` (NL2672,
+  `reject_async_wait_argument`).
+- **A wait has no deadline of its own.** A descriptor that never becomes
+  ready parks its task, and the program, until it does
+  ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-6); cancellation is a
+  later stage of WP49.
 
 **Where it is not Node.** The source is TypeScript and runs under Node, but
 the resume order is not Node's, and these are declared differences:
@@ -1927,6 +2008,9 @@ the resume order is not Node's, and these are declared differences:
 | Microtasks run before I/O callbacks, in a defined order | Tasks resume in the order the kernel reports readiness, then by timer deadline |
 | A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
 | `spawn(f(x))` runs `f` to its first `await`, and the rest of `f` after the current task yields | `spawn(f(x))` runs `f` at once until it first waits on the outside world, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
+| `setTimeout` and socket callbacks run on libuv's loop, which keeps the process alive while anything is registered | `sleep`, `readable` and `writable` park a task on the executor; the program exits once `main` has returned and no task waits, a synchronous `main` included |
+| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; any other non-number argument is refused (NL2673) |
+| A task that never awaits holds the thread, as here | The same: the executor is cooperative and does not preempt a task |
 
 A program whose output does not depend on how its tasks interleave prints the
 same under both.
@@ -1940,7 +2024,12 @@ is `Promise.all` over its two to eight calls, and `spawn` starts its task
 without awaiting it and keeps it. The launcher of a program that declares an
 `async` function awaits `main`, then `settleTasks()`, which waits for every
 task `spawn` started, those tasks' own included, before it exits, as the
-native driver drains its queue. A program whose spawned tasks print in an
+native driver drains its queue. `await sleep(ms)` is a `setTimeout` that
+answers `true`, or `false` at once for a negative `ms`
+(`tests/emit-ts/async/sleep`); `readable` and `writable` have no Node
+counterpart a task can await, so a program that calls either is
+`--emit-ts cannot write readable or writable from nish:async` (NL4017,
+`tests/emit-ts/async/refused-readable`). A program whose spawned tasks print in an
 interleaving prints the same lines in another order (`async_spawn`, the
 `order` row of `tests/differential/emit-ts-known.txt`).
 

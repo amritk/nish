@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 662 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 665 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12653,4 +12653,28 @@ export function f(c: Canvas = 7): Canvas {
 
 ```text
 Parameter `c` is HostHandle<"canvas">, and a handle starts as `0`, the handle that names nothing: every other one is given out by the page
+```
+
+## NL2671
+
+The message of an error contains:
+
+```text
+` is a wait on the executor, written only where it is awaited: `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`, inside an `async` function
+```
+
+## NL2672
+
+The message of an error contains:
+
+```text
+` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on
+```
+
+## NL2673
+
+The message of an error contains:
+
+```text
+…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
 ```
