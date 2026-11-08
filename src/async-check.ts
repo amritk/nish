@@ -15,7 +15,8 @@ import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
 import { unwrapParens } from "./emit-util"
 import { BuiltinExport } from "./nish-modules"
-import { AwaitEdge, FunctionSig, ParallelCall } from "./program"
+import { AwaitEdge, FunctionSig } from "./program"
+import { recordRegionCall } from "./region-rules"
 import { Scope } from "./symbols"
 import { T_BOOL, T_ERROR, T_I32, T_STRING, T_VOID, isNumeric } from "./types"
 import {
@@ -330,21 +331,9 @@ export const checkAsyncBuiltin = (
       `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(callee.paramTypes[refused])}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region, and objects and arrays, which it shares with the spawner`
     )
   }
-  recordSpawn(ctx.program.asyncSpawns, expr, callee)
+  // Once: a generic caller's body is checked once per instantiation.
+  recordRegionCall(ctx.program.asyncSpawns, expr, callee)
   return T_VOID
-}
-
-/**
- * Remember a `spawn` for the region rules, once: a generic caller's body is
- * checked once per instantiation and reaches here again with the same node.
- */
-const recordSpawn = (spawns: ParallelCall[], node: Node, task: FunctionSig): void => {
-  for (const spawn of spawns) {
-    if (spawn.node === node && spawn.sig === task) {
-      return
-    }
-  }
-  spawns.push(new ParallelCall(node, task, null))
 }
 
 /**
