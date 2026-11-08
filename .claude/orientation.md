@@ -85,6 +85,14 @@ tests/              run.js + cases/ (goldens), link/, ir/, layout/,
 docs/               LANGUAGE, ARCHITECTURE, IR_COOKBOOK, MASTER_PLAN, wp*.md
 ```
 
+A `std/` module can land **spec-first**, in two pull requests: the first adds
+`specs/<name>.md`, the contract `contracts/<name>.json` that quotes it, and the
+Nish test `test/spec/<name>.ts` that vector emits from the contract; the second
+adds the module, and touches none of those. vector's gates (`check`, `frozen`,
+`stale`, `run`, `exports`, `mutate`) judge both and are run by hand, not by CI;
+the `vector-spec` skill is the walkthrough. Knip takes `test/spec/*.ts` as
+entries, because the module it imports does not exist until the second PR.
+
 ## Commands
 
 ```bash
