@@ -29,7 +29,7 @@ const walk = (n: number, text: string): number => {
 const watch = (n: number, acc: number): number => {
   if (n === 0) return acc;
   const label = `item ${n}`;
-  const bump = Arena.used();
+  const _bump = Arena.used();
   return watch(n - 1, acc + label.length);
 };
 

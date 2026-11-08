@@ -4,7 +4,7 @@
 // iterable or not.
 const count = <T>(s: Set<T>): number => {
   let n = 0;
-  for (const x of s) {
+  for (const _x of s) {
     n++;
   }
   return n;
@@ -22,7 +22,7 @@ class Bag<T> {
     for (const v of this.items.values()) {
       t += v;
     }
-    for (const k of (this.items.keys())) {
+    for (const _k of (this.items.keys())) {
       t += 1;
     }
     return t;

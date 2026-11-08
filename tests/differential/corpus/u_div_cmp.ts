@@ -21,7 +21,8 @@ export function main(): number {
   console.log(`${ltU32(big, small)}`);
   console.log(`${ltU32(small, big)}`);
   console.log(`${big > 2147483647}`);
-  console.log(`${big >= big}`);
+  const again: u32 = 4000000000;
+  console.log(`${big >= again}`);
   console.log(`${small <= big}`);
 
   const b: u8 = 200;

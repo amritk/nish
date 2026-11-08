@@ -1,0 +1,1 @@
+Both operands of `===` are `a`, so `a === a` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)

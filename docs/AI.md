@@ -223,6 +223,43 @@ if (xs.length !== 0) {
 }
 ```
 
+### Lines that type-check and are still refused
+
+Some mistakes have nothing wrong with their types. rustc warns about them and
+Clippy denies some. Nish refuses all of them, because each is a bug far more
+often than a choice
+([LANGUAGE.md](LANGUAGE.md#mistakes-every-type-accepts)). They are reported
+only once the program has no other error, so they show up last.
+
+| You wrote | Code | Write instead |
+| --- | --- | --- |
+| a local nothing reads, or only stores into (`n++` that nothing reports) | NL2689 | use it, delete it, or name it `_n`; a loop that only counts is `for (const _x of xs)` |
+| a statement with no call, store or `await` in it: `a === b;`, `p.x + 1;` | NL2690 | `a = b`, or delete the line |
+| `x = x`, `p.x = p.x` | NL2691 | the value you meant to store |
+| the same operand on both sides: `a.w === a.w`, `xs[i] - xs[i]`, `ok && ok` | NL2692 | the other operand you meant; to compare a value with itself, copy it to a second `const` first. On a float, `x !== x` (NaN) and `x - x` are allowed |
+| `if (c) … else if (c) …`, the same condition again | NL2693 | the condition you meant for the second branch |
+| `u < 0` or `u >= 0` on a `u8`, `u16`, `u32`, `u64` | NL2694 | test before the subtraction that would wrap, or use a signed type |
+
+```ts nish:err-body NL2689
+const xs = [3, 4];
+let total = 0;
+for (const x of xs) {
+  total = total + x;
+}
+const average = total / 2;
+console.log(`${total}`);
+```
+
+```ts nish:ok-body
+const xs = [3, 4];
+let total = 0;
+for (const x of xs) {
+  total = total + x;
+}
+const average = total / 2;
+console.log(`${average}`);
+```
+
 ## Types
 
 Every type is exactly one LLVM first-class type. No boxing, no runtime tag, no
@@ -3109,22 +3146,25 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    in an object-literal property or a method argument expecting a width?
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
-8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null`, a chain or `Map.get`), `?.` without a `??`, a cast, a
+8. Is every local read, and does every statement do something? An unread
+   local, `x = x`, `a === a` or a repeated `else if` is an error
+   ([Lines that type-check and are still refused](#lines-that-type-check-and-are-still-refused)).
+9. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null`, a chain or `Map.get`), `?.` without a `??`, a cast, a
    stored or returned callback, a generic *alias*, or `extends`?
-9. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
+10. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
    caps.json` lists every capability each function can reach — files, processes,
    the network, the environment, the clock, entropy, signals, `exit`, C calls —
    with the call chain that reaches it, and `nish run --capabilities file.ts`
    prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
    A package that must not touch the network says so in `package.json`
    ([Holding it to its capabilities](#holding-it-to-its-capabilities)).
-10. Must it never panic? Compile with `--deny-panics` (or list the module in
+11. Must it never panic? Compile with `--deny-panics` (or list the module in
    `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
    signed `+ - *`, `pop`, range entry, `expect` and exiting call it cannot
    prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an
    `uncheckedGet` or `uncheckedSet` behind its `nish:unsafe` import is allowed.
-11. If you are adding to this repository: `npm run check` and the touched
+12. If you are adding to this repository: `npm run check` and the touched
    `node tests/run.js` sections green locally, every CI `test` shard green
    ([CLAUDE.md](../CLAUDE.md#definition-of-done)), and a new construct ships a
    golden `.ll`, an `llvm-as` pass, a native round trip, a negative test, its

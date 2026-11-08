@@ -1,0 +1,1 @@
+`n` is u8, which is never below 0, so `0 <= n` is always true

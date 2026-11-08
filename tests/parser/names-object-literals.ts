@@ -33,7 +33,7 @@ export const main = (): i32 => {
   const first: Pair = pairs
   [0]
   const second: Pair = { a: xs[0], b: 2, }
-  ;[xs[0], xs[1]].length
+  ;[xs[0], xs[1]].push(0)
   const w: Words = words(1, 2)
   console.log(`${first.a} ${pairs[1].a} ${second.a} ${w.get + w.set + w.async + w.static}`)
   return 0

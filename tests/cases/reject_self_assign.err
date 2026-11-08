@@ -1,0 +1,1 @@
+`p.x = p.x` assigns `p.x` to itself, which does nothing

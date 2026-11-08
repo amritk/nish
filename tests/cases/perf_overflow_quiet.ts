@@ -20,6 +20,7 @@ export function test(): number {
   // A shift count inside the operand width shifts by what it says. Shifts
   // carry no no-wrap flag, so reaching the sign bit is defined.
   const shifted = 1 << 31;
+  const signBit = 1 << 31;
 
-  return toI32(wide / 100000000) + n + (fits - 2147483646) + (shifted - shifted);
+  return toI32(wide / 100000000) + n + (fits - 2147483646) + (shifted - signBit);
 }

@@ -613,7 +613,6 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
   let usedHere: i32 = 0
   let depth: i32 = 0
   root = used - 2
-  let next: i32 = used - 1
   while (avail > 0) {
     while (root >= 0 && uncheckedGet(keys, root) === depth) {
       usedHere += 1
@@ -623,7 +622,6 @@ const deflateLengths = (freq: i32[], n: i32, limit: i32, lens: i32[], w: Deflate
       if (depth < 33) {
         per[depth] += 1
       }
-      next -= 1
       avail -= 1
     }
     avail = 2 * usedHere

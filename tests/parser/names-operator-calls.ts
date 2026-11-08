@@ -54,13 +54,13 @@ export const test = (): i32 => {
   delete(n)
   await(n)
   yield(n)
-  n = n
+  n = n + 1
   in(n)
-  n = n
+  n = n + 1
   instanceof(n)
-  n = n
+  n = n + 1
   as(n)
-  n = n
+  n = n + 1
   satisfies(n)
   n = typeof(typeof(n))
   n = void (n) + await (1)

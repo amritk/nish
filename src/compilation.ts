@@ -1412,10 +1412,33 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    this.reportHygiene()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     if (this.opts.warnPortability) {
       this.reportPortability()
     }
     return true
+  }
+
+  /**
+   * Report what `src/hygiene.ts` held back — an unread local, a `let` never
+   * reassigned, `x = x`, `a === a`, a statement with no effect — now that
+   * every other rule has passed, so a program that is wrong in a deeper way is
+   * told that first. The program's own package and the standard library are
+   * held to them; a dependency's findings are its author's, as Rust caps the
+   * lints of a crate it did not build from the workspace.
+   */
+  reportHygiene(): void {
+    for (const unit of this.modules) {
+      if (unit.packageName !== ROOT_PACKAGE && unit.packageName !== CLI) {
+        continue
+      }
+      for (const finding of unit.checker.ctx.hygiene) {
+        this.sink.add(finding)
+      }
+    }
   }
 
   /**

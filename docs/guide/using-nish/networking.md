@@ -444,9 +444,11 @@ export const main = (): number => {
     // The service worker: its end to worker 1, say.
     const one = preforkServiceChannelOf(process.argv, 1);
     // ... serve the others over their ends ...
+    console.log(`worker 1 is on descriptor ${one}`);
   } else {
     const service = preforkServiceChannel(process.argv);
     // ... ask the service worker over `service`, serve clients ...
+    console.log(`the service worker is on descriptor ${service}`);
   }
   return 0;
 };

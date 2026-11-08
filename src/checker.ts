@@ -133,6 +133,7 @@ import {
 import { BoundsWalk, Offset, analyzeBounds, offsetIndex } from "./bounds"
 import { isAssignmentOperator, isOptionalChain, unwrapParens } from "./emit-util"
 import { checkResultLocalsHandled } from "./result"
+import { checkHygiene } from "./hygiene"
 import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
@@ -1829,6 +1830,10 @@ export const checkSignatureBody = (
     // `nish:secret`: a `Secret` the body makes leaves it returned or wiped on
     // every path, and is never copied or read once wiped (`src/secret.ts`).
     checkSecretFlow(ctx, body)
+    // The mistakes every type is happy with: an unread local, a `let` never
+    // reassigned, `x = x`, `a === a`, a statement with no effect. Held, not
+    // reported: the compilation adds them once nothing else failed (`src/hygiene.ts`).
+    checkHygiene(ctx, body)
     // WP15 §2.1/§2.2: prove what indices are in range before the warnings
     // are reported, because one of the warnings is about the proofs that did
     // not come off, and it has to be reported by the same source-order walk

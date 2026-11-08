@@ -237,6 +237,63 @@ loop may run zero times and does not terminate. Rules (`src/statements.ts`, `che
   (`tests/cases/reject_unreachable`, `reject_cf_unreachable_after_break`,
   `reject_exit_unreachable`; the `if` form *(CLI only)*).
 
+## Mistakes every type accepts
+
+Some lines type-check and still cannot be what their author meant. Rust
+warns about most of them and Clippy denies the rest. Here each one is an
+error, because it is a bug far more often than it is a choice. Each rule fires only
+where the answer is certain, and each has a spelling that says "on purpose".
+Rules (`src/hygiene.ts`):
+
+- **A local is read at least once** (NL2689). A `let` or `const`, a
+  `for...of` binding included, that nothing reads is
+  `` `x` is declared but never read `` (`reject_unread_local`,
+  `reject_unread_for_of`). Storing into a local is not reading it: `n++` or
+  `n += 1` on a line of its own, or as a `for` loop's step, writes `n` and
+  uses nothing, so a counter nothing reports is
+  `` `n` is assigned but its value is never read ``
+  (`reject_unread_local_written`); `const m = n++` reads it. A capture by an
+  arrow is a read. A lone name on its own line, `x;`, is not a read
+  (`reject_unread_lone_name`). A name that starts with `_` is never reported,
+  which is how a loop that only counts its turns is written:
+  `for (const _item of xs)` (`hygiene_quiet`). A `using` binding is exempt,
+  because its block's end uses it. A `Result` local has its own rule (NL2032,
+  [Result and error handling](result-and-error-handling.md)).
+- **A statement has an effect** (NL2690). An expression statement with no
+  call, `new`, store, `++`, `--` or `await` anywhere in it is
+  `This statement has no effect` (`reject_no_effect_statement`,
+  `reject_no_effect_member`). `state === next;` adds
+  `` (to assign, write `=`) ``. A lone name is left to the rule above.
+- **A value is not assigned to itself** (NL2691). `x = x`, `p.x = p.x`
+  and `xs[i] = xs[i]` do nothing (`reject_self_assign`).
+- **An operator has two different operands** (NL2692). With the same
+  operand on both sides, `===` `!==` `==` `!=` `<` `<=` `>` `>=` `&&` `||` `&`
+  `|` `^` `-` `/` `%` give an answer that does not depend on it, so the
+  expression is refused (`reject_same_operands`, `reject_same_operands_index`).
+  Two operands are the same when they are the same pure expression over the
+  same variables: the same local, field path, element by the same index, or
+  the same operators over those. A literal-only expression is not refused. On
+  `f32` and `f64`, `x !== x` is the NaN test and `x - x === 0` the finite
+  test, so only `<` and `>` are refused there, which are false for every
+  value (`reject_same_operands_float_ordered`). To compare a value with
+  itself on purpose, copy it to a second `const` first (`hygiene_quiet`).
+- **An `else if` tests something new** (NL2693). A condition the same as an
+  earlier one in the same `if`/`else if` chain can never pass, because the
+  earlier branch took every case it would match (`reject_repeated_condition`).
+  A condition with a call in it can answer differently the second time, and
+  is not compared.
+- **An unsigned value is not compared with zero for its sign** (NL2694).
+  `u < 0` and `0 > u` are always false, and `u >= 0` and `0 <= u` always
+  true, for a `u8`, `u16`, `u32` or `u64` (`reject_unsigned_zero`,
+  `reject_unsigned_zero_reversed`).
+
+These findings are reported only once every other rule has passed: a program
+with any other error is told that error alone (`reject_hygiene_held`), so
+an unread local never crowds out the error that left it unread. They are held
+to the program's own package and the standard library. A dependency's
+findings are left to its author, as Cargo caps the lints of a crate it pulls
+in.
+
 ## Rejected statements
 
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
