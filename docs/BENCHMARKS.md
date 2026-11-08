@@ -752,10 +752,14 @@ The noise band is the same transport run twice in every round (unix-ipc's run a 
 | echo 64 B, round trip median | 51.16 µs | 42.59 µs (stream) | −8.56 µs (−16.7 %) | 1.29 µs | outside the noise |
 | echo 64 B, round trip p99 | 110.93 µs | 99.08 µs (stream) | −11.85 µs (−10.7 %) | 2.34 µs | inside TCP's IQR (17.86): noise |
 | echo 64 B, client CPU/trip | 27.25 µs | 21.49 µs (stream) | −5.76 µs (−21.2 %) | 0.76 µs | outside the noise |
+| echo 64 B, client CPU/trip | 27.25 µs | 22.13 µs (seqpacket) | −5.12 µs (−18.8 %) | 0.76 µs | outside the noise |
 | echo 64 B, peer CPU/trip | 27.12 µs | 20.52 µs (stream) | −6.61 µs (−24.4 %) | 1.22 µs | outside the noise |
+| echo 64 B, peer CPU/trip | 27.12 µs | 21.25 µs (seqpacket) | −5.87 µs (−21.6 %) | 1.22 µs | outside the noise |
 | echo 4 KB, round trip median | 53.07 µs | 47.78 µs (stream) | −5.29 µs (−10.0 %) | 0.93 µs | outside the noise |
 | echo 4 KB, client CPU/trip | 35.54 µs | 31.74 µs (stream) | −3.80 µs (−10.7 %) | 0.95 µs | outside the noise |
+| echo 4 KB, client CPU/trip | 35.54 µs | 30.27 µs (seqpacket) | −5.27 µs (−14.8 %) | 0.95 µs | outside the noise |
 | echo 4 KB, peer CPU/trip | 28.15 µs | 24.01 µs (stream) | −4.14 µs (−14.7 %) | 0.67 µs | outside the noise |
+| echo 4 KB, peer CPU/trip | 28.15 µs | 23.24 µs (seqpacket) | −4.91 µs (−17.4 %) | 0.67 µs | outside the noise |
 | `SELECT 1`, wall/query | 66.13 µs | 56.60 µs | −9.53 µs (−14.4 %) | 1.38 µs | outside the noise |
 | `SELECT 1`, client CPU/query | 28.13 µs | 21.95 µs | −6.19 µs (−22.0 %) | 0.40 µs | outside the noise |
 | `SELECT 1`, server CPU/query | 37.39 µs | 30.71 µs | −6.67 µs (−17.9 %) | 1.21 µs | outside the noise |
@@ -765,7 +769,7 @@ The noise band is the same transport run twice in every round (unix-ipc's run a 
 
 The echo client's CPU per trip includes making each message and checking the reply byte by byte inside its timed loop, a cost the same on every transport that the peer, echoing only, does not pay: it is why the client's figure is above the peer's at 4 KB and its percentages the smaller; the peer's row is the transport alone.
 
-Seqpacket is within the noise of stream in every figure (64 B median 44.61 µs, 4 KB 47.11 µs). The 4 KB p99 is inside the noise for both Unix kinds. A 3-round run on the same box put the bands 1.3 to 8 times wider (64 B median 2.18 µs, 4 KB median 7.43 µs) and found the 4 KB round trip inside the noise; the 12-round figures above are the record.
+Seqpacket is within the noise of stream in every figure (64 B median 44.61 µs, 4 KB 47.11 µs); its CPU rows, from the same rounds, are in the table beside stream's. The 4 KB p99 is inside the noise for both Unix kinds. A 3-round run on the same box put the bands 1.3 to 8 times wider (64 B median 2.18 µs, 4 KB median 7.43 µs) and found the 4 KB round trip inside the noise; the 12-round figures above are the record.
 <!-- unix-ipc:end -->
 
 <!-- regex:begin -->
