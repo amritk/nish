@@ -12,6 +12,7 @@
 // The dump itself is `src/dump.ts`, which `src/compile.ts --emit-checked`
 // prints too: this file is only the command line the oracle spawns.
 
+import { Style } from "../std/cli"
 import { Compilation } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
@@ -59,12 +60,12 @@ export const main = (): number => {
   // before anything is bound; `check` binds the imports and checks the bodies.
   if (!compilation.load(path, path, "")) {
     if (compilation.sink.hasErrors()) {
-      writeError(`${compilation.sink.format(20)}\n`)
+      writeError(`${compilation.sink.format(20, new Style(false, false))}\n`)
     }
     return 1
   }
   if (!compilation.check()) {
-    writeError(`${compilation.sink.format(20)}\n`)
+    writeError(`${compilation.sink.format(20, new Style(false, false))}\n`)
     return 1
   }
 

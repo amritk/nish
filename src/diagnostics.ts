@@ -64,6 +64,7 @@
 // performance one because a deprecation is not a claim about the IR, and
 // `--no-warn-performance` is not a reader asking to hear nothing about it.
 
+import { SGR_CYAN, SGR_RED, SGR_YELLOW, Style } from "../std/cli"
 import { codeFor } from "./codes"
 import { compareStrings, jsonQuote, StringBuilder } from "./strings"
 import { StringMap } from "./map"
@@ -71,6 +72,7 @@ import { StringMap } from "./map"
 const CH_LF: i32 = 10
 const CH_CR: i32 = 13
 const CH_TAB: i32 = 9
+const CH_BACKTICK: i32 = 96
 
 /** Errors printed in full before the report is cut short with `...and N more`. */
 export const MAX_REPORTED_ERRORS: i32 = 20
@@ -282,18 +284,36 @@ export class Diagnostic {
     this.edits = []
   }
 
-  /** `<file>:<line>:<col>: <kind>: <text>` — the line the tests match on. */
-  summary(): string {
-    return `${this.source.path}:${this.line}:${this.column}: ${this.kind}: ${this.text}`
+  /**
+   * `<file>:<line>:<col>: <kind>: <text>` — the line the tests match on. The
+   * location and the text are bold, the kind word bold in its severity colour
+   * and a `` `name` `` the text quotes bold cyan; a plain `style` prints the
+   * bytes unchanged.
+   */
+  summary(style: Style): string {
+    const location = style.bold(`${this.source.path}:${this.line}:${this.column}:`)
+    return `${location} ${this.severity(style, `${this.kind}:`)} ${paintText(style, this.text)}`
+  }
+
+  /**
+   * `text` bold in this diagnostic's severity colour: red for an error, yellow
+   * for a warning, and bold alone on a terminal without colours.
+   */
+  severity(style: Style, text: string): string {
+    const warning = this.kind !== "error" && this.kind !== "syntax error"
+    return boldColour(style, text, warning ? SGR_YELLOW : SGR_RED)
   }
 
   /**
    * The source line and a caret line under the span: `^` at the start and `~`
    * to the end of the span, never past the end of that line. Tabs in the
    * source are mirrored in the caret line so the markers stay aligned in a
-   * terminal.
+   * terminal. The gutter is faint, and the span in the source line and the
+   * caret under it are painted in the severity colour; every width is counted
+   * on the plain text and the escapes wrap the finished runs, so the caret
+   * lands where it does without them.
    */
-  excerpt(): string {
+  excerpt(style: Style): string {
     const line = this.source.lineIndex(this.start)
     const text = this.source.lineText(line)
     const lineNo = `${this.line}`
@@ -338,12 +358,19 @@ export class Diagnostic {
       gutter.addChar(32)
       space = space + 1
     }
-    return `  ${lineNo} | ${text}\n  ${gutter.toText()} | ${pad.toText()}${marker.toText()}`
+    // The span within the line, clamped to it: a span may start on the line's
+    // `\r` or end past it, and only the bytes the line prints are painted.
+    const spanFrom = prefix < text.length ? prefix : text.length
+    const spanTo = markerEnd - lineStart > spanFrom ? markerEnd - lineStart : spanFrom
+    const shown = `${text.substring(0, spanFrom)}${this.severity(style, text.substring(spanFrom, spanTo))}${text.substring(spanTo, text.length)}`
+    const numbered = style.faint(`${lineNo} |`)
+    const blank = style.faint(`${gutter.toText()} |`)
+    return `  ${numbered} ${shown}\n  ${blank} ${pad.toText()}${this.severity(style, marker.toText())}`
   }
 
   /** The summary and the excerpt: what `CompileError.message` holds in stage0. */
-  message(): string {
-    return `${this.summary()}\n${this.excerpt()}`
+  message(style: Style): string {
+    return `${this.summary(style)}\n${this.excerpt(style)}`
   }
 
   /**
@@ -658,25 +685,12 @@ export class DiagnosticSink {
   /**
    * The human-readable report: each error's summary and excerpt, at most
    * `max` of them, then `...and N more errors` and a count line. A lone error
-   * prints exactly its message, as stage0 does.
+   * prints exactly its message, as stage0 does. `style` paints it
+   * (`Diagnostic.summary`, `Diagnostic.excerpt`); the two closing lines are
+   * faint.
    */
-  format(max: i32): string {
-    const errors = this.sorted()
-    if (errors.length === 1) {
-      return errors[0].message()
-    }
-    const lines: string[] = []
-    let i = 0
-    while (i < errors.length && i < max) {
-      lines.push(errors[i].message())
-      i = i + 1
-    }
-    const hidden = errors.length - max
-    if (hidden > 0) {
-      lines.push(`...and ${hidden} more error${hidden === 1 ? "" : "s"}`)
-    }
-    lines.push(`${errors.length} errors`)
-    return lines.join("\n")
+  format(max: i32, style: Style): string {
+    return formatReport(this.sorted(), "error", max, style)
   }
 }
 
@@ -687,23 +701,67 @@ export class DiagnosticSink {
  * summary and excerpt, at most `max` of them, then `...and N more <kind> warnings` and a count line. A lone
  * warning prints exactly its message, and an empty list prints nothing.
  */
-export const formatList = (list: Diagnostic[], kind: string, max: i32): string => {
-  if (list.length === 0) {
-    return ""
-  }
+export const formatList = (list: Diagnostic[], kind: string, max: i32, style: Style): string =>
+  list.length === 0 ? "" : formatReport(list, `${kind} warning`, max, style)
+
+/**
+ * The layout `format` and `formatList` share: a lone diagnostic's message, or
+ * the first `max` messages, `...and N more <noun>s` and the count line, both
+ * faint. `noun` is what one item is called in those two lines.
+ */
+const formatReport = (list: Diagnostic[], noun: string, max: i32, style: Style): string => {
   if (list.length === 1) {
-    return list[0].message()
+    return list[0].message(style)
   }
   const lines: string[] = []
   let i = 0
   while (i < list.length && i < max) {
-    lines.push(list[i].message())
+    lines.push(list[i].message(style))
     i = i + 1
   }
   const hidden = list.length - max
   if (hidden > 0) {
-    lines.push(`...and ${hidden} more ${kind} warning${hidden === 1 ? "" : "s"}`)
+    lines.push(style.faint(`...and ${hidden} more ${noun}${hidden === 1 ? "" : "s"}`))
   }
-  lines.push(`${list.length} ${kind} warnings`)
+  lines.push(style.faint(`${list.length} ${noun}s`))
   return lines.join("\n")
+}
+
+/**
+ * `text` in bold and the colour `codes` names, as one escape, or bold alone
+ * on a terminal without colours: `sgr` paints nothing there, and the
+ * severity has to stand out under the failsafe too.
+ */
+const boldColour = (style: Style, text: string, codes: string): string => {
+  const painted = style.sgr(text, `1;${codes}`)
+  return painted === text ? style.bold(text) : painted
+}
+
+/**
+ * A diagnostic's text, bold, with each `` `name` `` it quotes in bold cyan,
+ * its backticks included. An unpaired backtick leaves the rest bold.
+ */
+const paintText = (style: Style, text: string): string => {
+  const out = new StringBuilder()
+  let from = 0
+  let i = 0
+  while (i < text.length) {
+    if (text.charCodeAt(i) === CH_BACKTICK) {
+      let close = i + 1
+      while (close < text.length && text.charCodeAt(close) !== CH_BACKTICK) {
+        close = close + 1
+      }
+      if (close < text.length) {
+        out.add(style.bold(text.substring(from, i)))
+        out.add(boldColour(style, text.substring(i, close + 1), SGR_CYAN))
+        from = close + 1
+        i = close
+      } else {
+        i = text.length
+      }
+    }
+    i = i + 1
+  }
+  out.add(style.bold(text.substring(from, text.length)))
+  return out.toText()
 }

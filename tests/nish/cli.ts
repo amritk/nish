@@ -462,6 +462,97 @@ const checkHelp = (t: Suite, cli: Cli, name: string, env: boolean): void => {
   t.eqStr("a usage error says nothing on stdout", trim(usage.stdout), "");
 };
 
+/** `text` with every SGR sequence (`ESC [ ... m`) taken out: what a terminal shows of it, as bytes. */
+const stripSgr = (text: string): string => {
+  const kept: string[] = [];
+  let from = 0;
+  let i = 0;
+  while (i < text.length) {
+    if (text.charCodeAt(i) === 27) {
+      kept.push(text.substring(from, i));
+      while (i < text.length && text.charCodeAt(i) !== 109) {
+        i = i + 1;
+      }
+      from = i + 1;
+    }
+    i = i + 1;
+  }
+  kept.push(text.substring(from < text.length ? from : text.length, text.length));
+  return kept.join("");
+};
+
+/**
+ * Diagnostics on a terminal: the location bold, the severity label red for an
+ * error and yellow for a warning, the message bold with each `name` cyan, the
+ * gutter faint and the span and its caret in the severity's colour. The same
+ * variables as `--help` decide it, and under them the text is the plain report
+ * byte for byte, so the colour can never move a caret or change a word.
+ */
+const checkDiagnosticColour = (t: Suite, cli: Cli, env: boolean): void => {
+  if (!env) {
+    t.skip("coloured diagnostics", "needs env(1) to set the colour variables, and the probe did not find one");
+    return;
+  }
+  const esc = "\u001b[";
+  const bad = `${WORK}/${FIXTURE_BAD}`;
+  const warn = `${WORK}/${FIXTURE_WARN}`;
+  const plainEnv = ["NO_COLOR=1", "NISH_AGENT=0"];
+  const forced = ["NO_COLOR=", "CLICOLOR=", "TERM=xterm-256color", "FORCE_COLOR=1", "NISH_AGENT=0"];
+
+  const plain = cli.run("colour_bad_plain", plainEnv, [bad, "-o", `${WORK}/colour.ll`]);
+  t.eqI32("a refused program under NO_COLOR exits 1", plain.status, 1);
+  t.eqBool("and its report has no escape in it", contains(plain.stderr, "\u001b"), false);
+  const painted = cli.run("colour_bad", forced, [bad, "-o", `${WORK}/colour.ll`]);
+  t.eqI32("the same program under FORCE_COLOR=1 still exits 1", painted.status, 1);
+  t.containsAll("and its report is painted part by part", painted.stderr, [
+    `${esc}1m${bad}:3:18:${esc}0m ${esc}1;31merror:${esc}0m ${esc}1mCannot initialize i32 variable ${esc}0m${esc}1;36m\`b\`${esc}0m${esc}1m with string${esc}0m\n`,
+    `  ${esc}2m3 |${esc}0m   const b: i32 = ${esc}1;31m"y"${esc}0m;\n`,
+    `  ${esc}2m  |${esc}0m                  ${esc}1;31m^~~${esc}0m\n`,
+    `${esc}2m2 errors${esc}0m\n`,
+  ]);
+  t.eqStr("and is the plain report once the escapes are gone", stripSgr(painted.stderr), plain.stderr);
+
+  const warnPlain = cli.run("colour_warn_plain", plainEnv, [warn, "-o", `${WORK}/colour-warn.ll`]);
+  const warnPainted = cli.run("colour_warn", forced, [warn, "-o", `${WORK}/colour-warn.ll`]);
+  t.eqI32("a warned program under FORCE_COLOR=1 still exits 0", warnPainted.status, 0);
+  t.containsAll("and its warning is yellow where an error is red", warnPainted.stderr, [
+    `${esc}1m${warn}:5:11:${esc}0m ${esc}1;33mperformance:${esc}0m `,
+    `  ${esc}2m5 |${esc}0m     const ${esc}1;33mrow${esc}0m = new Array<i32>(3 + i);\n`,
+    `  ${esc}2m  |${esc}0m           ${esc}1;33m^~~${esc}0m\n`,
+  ]);
+  t.eqStr("and is the plain warning once the escapes are gone", stripSgr(warnPainted.stderr), warnPlain.stderr);
+
+  // `NO_COLOR` and an agent each win over `FORCE_COLOR`, and a pipe with no
+  // variable set is not a terminal: all three are the plain report exactly.
+  const both = cli.run("colour_no_color", ["NO_COLOR=1", "FORCE_COLOR=1", "NISH_AGENT=0"], [bad, "-o", `${WORK}/colour.ll`]);
+  t.eqStr("NO_COLOR=1 wins over FORCE_COLOR=1", both.stderr, plain.stderr);
+  const agent = cli.run("colour_agent", ["NO_COLOR=", "FORCE_COLOR=1", "NISH_AGENT=1"], [bad, "-o", `${WORK}/colour.ll`]);
+  t.eqStr("an agent's run is plain under FORCE_COLOR=1", agent.stderr, plain.stderr);
+  const piped = cli.run(
+    "colour_pipe",
+    ["NO_COLOR=", "FORCE_COLOR=", "CLICOLOR_FORCE=", "CLICOLOR=", "NISH_AGENT=0"],
+    [bad, "-o", `${WORK}/colour.ll`]
+  );
+  t.eqStr("a pipe with no colour variable set is plain", piped.stderr, plain.stderr);
+
+  // `--json` is for a program to read: no escape on either stream, whatever forces colour.
+  const json = cli.run("colour_json", forced, [bad, "--json", "-o", `${WORK}/colour.ll`]);
+  t.eqBool("--json under FORCE_COLOR=1 has no escape on stdout", contains(json.stdout, "\u001b"), false);
+  t.eqBool("or on stderr", contains(json.stderr, "\u001b"), false);
+
+  // A tab and a two-byte character before the span: the caret is placed on the
+  // plain line, so stripping the escapes leaves it under the span.
+  const wide = `${WORK}/colour-wide.ts`;
+  writeFileSync(
+    wide,
+    ["export const test = (): number => {", '\tconst e = "\u00e9"; const x: i32 = e;', "  return 0;", "};", ""].join("\n")
+  );
+  const widePlain = cli.run("colour_wide_plain", plainEnv, [wide, "-o", `${WORK}/colour.ll`]);
+  const widePainted = cli.run("colour_wide", forced, [wide, "-o", `${WORK}/colour.ll`]);
+  t.contains("a tab and an \u00e9 before the span keep the caret under it", widePlain.stderr, '  2 | \tconst e = "\u00e9"; const x: i32 = e;\n    | \t                              ^\n');
+  t.eqStr("and the painted report is that text once the escapes are gone", stripSgr(widePainted.stderr), widePlain.stderr);
+};
+
 /** The other two band-2 refusals: a flag the driver does not have, and one missing its value. */
 const checkUsageErrors = (t: Suite, cli: Cli): void => {
   const entry = `${WORK}/${FIXTURE_OK}`;
@@ -2094,6 +2185,7 @@ export const main = (): number => {
 
   const name = checkIdentity(t, cli);
   checkHelp(t, cli, name, env);
+  checkDiagnosticColour(t, cli, env);
   checkUsageErrors(t, cli);
   checkSuccess(t, cli);
   checkErrorObjects(t, cli);
