@@ -42,4 +42,6 @@ PASS  localhost: 127.0.0.1 first
 PASS  localhost: then ::1
 PASS  no packet: the server saw nothing
 PASS  timeout: dnsLookupWith gives up
-dns: 44 passed, 0 failed, 0 skipped
+PASS  timeout: the lookup child starts
+PASS  timeout: dnsLookupWith keeps the A it has when AAAA never answers
+dns: 46 passed, 0 failed, 0 skipped

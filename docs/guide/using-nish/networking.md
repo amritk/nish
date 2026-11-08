@@ -547,9 +547,10 @@ or led back to the name asked (a loop inside one reply reads as `-41`), and from
 socket or of `pollWait` that failed.
 
 `resolveHost` answers `start`'s codes too, and waits for both the A and the
-AAAA answer, so one family that answered is not returned on its own when the
-time runs out. `localhost`, an address literal and a name in the hosts table
-answer at once, with no packet. For a command-line tool or a program's
+AAAA answer until the time runs out; then a family that answered with
+addresses is returned on its own, and only a lookup with none yet is `-45`.
+`localhost`, an address literal and a name in the hosts table answer at once,
+with no packet. For a command-line tool or a program's
 start-up, `resolveHost(name, timeoutMs, port, out, ttls)` reads
 `/etc/resolv.conf` and `/etc/hosts` and blocks until the lookup ends. The
 [standard library page](standard-library.md#nishnetdns) has both in full.
