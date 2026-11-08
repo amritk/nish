@@ -588,7 +588,7 @@ const VIA_SEND_BODY: boolean = true
  * `clock <ns> writev <ns>` and `<stage> <ns>` for each stage, every figure a
  * total over `requests`.
  */
-const stages = (requests: i32, count: i32, batches: i32): i32 => {
+const stages = (requests: i32, count: i32, batches: i32, calibrate: boolean): i32 => {
   const b: IdlePool = new IdlePool(count, false, 0)
   const req: u8[] = articles()
   const body: u8[] = articleList()
@@ -678,7 +678,7 @@ const stages = (requests: i32, count: i32, batches: i32): i32 => {
   // The clock alone: as many reads as the requests make spans, back to back.
   let clock: i64 = 0
   let writev: i64 = 0
-  for (let pass: i32 = 0; pass < batches; pass += 1) {
+  for (let pass: i32 = 0; calibrate && pass < batches; pass += 1) {
     const started: i64 = monotonicNanos()
     let last: i64 = started
     for (let k: i32 = 0; k < requests; k += 1) {
@@ -725,8 +725,10 @@ export const main = (): i32 => {
   if (evictMib < 0 || evictMib > 2047) {
     panic("bench: the eviction ring must be 0 to 2047 MiB")
   }
-  if (shape === "stages") {
-    return stages(requests, count, batches)
+  // stages-loop is the stages shape without its calibration, for counting
+  // the loop alone under perf stat.
+  if (shape === "stages" || shape === "stages-loop") {
+    return stages(requests, count, batches, shape === "stages")
   }
   if (shape === "idle" || shape === "direct" || shape === "rss") {
     return idle(shape, requests, count, batches, evictMib)
