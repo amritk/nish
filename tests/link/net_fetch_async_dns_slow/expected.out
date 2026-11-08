@@ -1,0 +1,6 @@
+dns: asked for slow.test; the answer waits for the other task
+literal: 200 hello from /literal
+named: 200 hello from /named
+under the default outbound policy: blocked
+a server that never answers: connect timeout: slow.test was not looked up within 300 ms
+dns: 4 queries asked
