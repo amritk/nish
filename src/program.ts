@@ -1608,6 +1608,11 @@ export class CheckedProgram {
   exposeCalls: ParallelCall[]
   /** `nish:region`: every `region`, `regionWith`, `enter` and `enterWith` call, judged once the facts are in (`Compilation.checkRegions`). */
   regionCalls: ParallelCall[]
+  /**
+   * WP49 stage 5, part 3: every `spawn` from `nish:async`, whose task is walked
+   * by the region rules once the facts are in (`Compilation.checkRegions`).
+   */
+  asyncSpawns: ParallelCall[]
   /** `nish:region`: every `Channel.send`, whose value may not hold a `Region` (`Compilation.checkRegions`). */
   channelSends: ParallelCall[]
   /** `nish:secret`: what each `secret(v)` asks of the whole-program facts (`Compilation.checkSecrets`). */
@@ -1834,6 +1839,7 @@ export class CheckedProgram {
     this.panicSites = []
     this.exposeCalls = []
     this.regionCalls = []
+    this.asyncSpawns = []
     this.channelSends = []
     this.secretNeeds = []
     this.spawnCalls = []

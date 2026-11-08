@@ -190,7 +190,7 @@ import {
   scopeSymbol,
 } from "./parallel"
 import { rejectAwaitCycles } from "./async-check"
-import { crossingMessage, holdsRegion, regionCallFindings } from "./region-rules"
+import { crossingMessage, holdsRegion, regionCallFindings, taskFindings } from "./region-rules"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
 import { jsonQuote, splitByte } from "./strings"
@@ -2439,6 +2439,11 @@ export class Compilation {
           fresh
         )
         for (const finding of findings) {
+          this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
+        }
+      }
+      for (const call of program.asyncSpawns) {
+        for (const finding of taskFindings(programs, table, facts, program, call.node, call.sig, fresh)) {
           this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
         }
       }

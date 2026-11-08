@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 840
+export const RULE_COUNT: i32 = 841
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -93,6 +93,8 @@ const diagnosticRules = (): string[] => [
   "NL2335",
   ": a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer",
   "NL2477",
+  ", which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner",
+  "NL2673",
   ": a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join",
   "NL2480",
   "` is a `Secret` field, which is read only as a call's argument or an `===`/`!==` operand: bound, returned, chosen or stored, it would be a second owner of the key the holder's `wipe()` ends, so pass it to `expose`, `exposeWith` or a function that takes a `Secret`",
@@ -163,8 +165,6 @@ const diagnosticRules = (): string[] => [
   "NL2326",
   "`: a captured value is the task's argument, and a `Mutex` reaches a task as an argument or as a field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer",
   "NL2510",
-  ", which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner",
-  "NL2673",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
   "NL2323",
   "` cannot hold a `Secret`: an element, a `Result` payload or a type argument outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter",
@@ -583,6 +583,8 @@ const diagnosticRules = (): string[] => [
   "NL3035",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
   "NL2123",
+  "what a task hands on may be memory of its own region, freed while the task it spawned still holds it",
+  "NL2689",
   "` is generic, and a wasm import is one function with one signature: write it once per type it takes",
   "NL2662",
   "`??` cannot default an element read: past the end of the array, JavaScript answers the default and ",
@@ -677,8 +679,6 @@ const diagnosticRules = (): string[] => [
   "NL2331",
   "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
   "NL2226",
-  "region memory kept by memory outside the region points at freed memory once `free` runs",
-  "NL2609",
   ": a shift by the width or more moves every bit out, and a rotate by it is a rotate by ",
   "NL2631",
   "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",
@@ -749,6 +749,8 @@ const diagnosticRules = (): string[] => [
   "NL2330",
   "`main` cannot take parameters (command-line arguments are not supported yet)",
   "NL2139",
+  "region memory kept by memory outside the region points at freed memory once ",
+  "NL2609",
   "` mentions a type parameter no other argument binds; annotate the parameter",
   "NL2342",
   "` takes a count that is an integer literal below the lane width, from 0 to ",

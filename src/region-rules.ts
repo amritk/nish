@@ -130,39 +130,51 @@ const storesText = (program: CheckedProgram, value: Node, target: Node): string 
 const handsText = (program: CheckedProgram, arg: Node, callee: string, which: string): string =>
   `hands \`${textOf(program, arg)}\` to ${callee}, ${which}`
 
-const regionToOuterMessage = (fn: FunctionSig, what: string): string =>
-  `${fnName(fn)} runs inside a region, and ${what}: region memory kept by memory outside the region ` +
-  "points at freed memory once `free` runs; copy the numbers out instead"
+/** How a message opens on a function a region runs: "`f` runs inside a region". */
+const insideRegion = (fn: FunctionSig): string => `${fnName(fn)} runs inside a region`
 
-const outerToRegionMessage = (fn: FunctionSig, what: string): string =>
-  `${fnName(fn)} runs inside a region, and ${what}: memory outside a region kept by the region's memory ` +
+/**
+ * How a message opens on a spawned task (WP49 stage 5, part 3), which runs in
+ * a region of its own and holds its object and array arguments outside it.
+ */
+const insideTask = (fn: FunctionSig): string =>
+  `${fnName(fn)} runs as a spawned task, in a region of its own that is freed when it ends`
+
+/** `who` opens the message (`insideRegion`), and `freed` says when the region goes. */
+const regionToOuterMessage = (who: string, what: string, freed: string): string =>
+  `${who}, and ${what}: region memory kept by memory outside the region points at freed memory once ${freed}; ` +
+  "copy the numbers out instead"
+
+const outerToRegionMessage = (who: string, what: string): string =>
+  `${who}, and ${what}: memory outside a region kept by the region's memory ` +
   "may be released while the region still points at it; copy it into memory the region allocates instead"
 
 /** `outerToRegionMessage` for a value put in a literal. */
-const literalMessage = (fn: FunctionSig, program: CheckedProgram, value: Node): string =>
-  outerToRegionMessage(fn, putsText(program, value))
+const literalMessage = (who: string, program: CheckedProgram, value: Node): string =>
+  outerToRegionMessage(who, putsText(program, value))
 
 /** `outerToRegionMessage` for `arg` handed to `callee`. */
 const handsOuterMessage = (
-  fn: FunctionSig,
+  who: string,
   program: CheckedProgram,
   arg: Node,
   callee: string,
   which: string
-): string => outerToRegionMessage(fn, handsText(program, arg, callee, which))
+): string => outerToRegionMessage(who, handsText(program, arg, callee, which))
 
 /** `regionToOuterMessage` for `arg` handed to `callee`. */
 const handsRegionMessage = (
-  fn: FunctionSig,
+  who: string,
+  freed: string,
   program: CheckedProgram,
   arg: Node,
   callee: string,
   which: string
-): string => regionToOuterMessage(fn, handsText(program, arg, callee, which))
+): string => regionToOuterMessage(who, handsText(program, arg, callee, which), freed)
 
 /** `growthMessage` for `arg` handed to `callee`, which may grow it. */
-const handsGrowthMessage = (fn: FunctionSig, program: CheckedProgram, arg: Node, callee: string): string =>
-  growthMessage(fn, handsText(program, arg, callee, "which may grow it"))
+const handsGrowthMessage = (who: string, program: CheckedProgram, arg: Node, callee: string): string =>
+  growthMessage(who, handsText(program, arg, callee, "which may grow it"))
 
 const enterResultMessage = (fn: FunctionSig, table: TypeTable): string =>
   `${fnName(fn)} answers \`${table.typeName(fn.returnType)}\`, and the function \`enter\` or \`enterWith\` runs ` +
@@ -180,16 +192,20 @@ const notFreshMessage = (fn: FunctionSig, ref: string): string =>
   `The function \`region\` or \`regionWith\` runs answers the region's root, which must be memory it allocated, ` +
   `and ${fnName(fn)} may not: ${ref}`
 
-const growthMessage = (fn: FunctionSig, what: string): string =>
-  `${fnName(fn)} runs inside a region, and ${what}: storage outside the region that grows inside it ` +
+const growthMessage = (who: string, what: string): string =>
+  `${who}, and ${what}: storage outside the region that grows inside it ` +
   "would move into the region and be freed with it"
 
-const noFactsMessage = (fn: FunctionSig, callee: FunctionSig): string =>
-  `${fnName(fn)} runs inside a region, and calls ${regionCalleeName(callee)}, which the region rules have no facts for`
+const noFactsMessage = (who: string, callee: FunctionSig): string =>
+  `${who}, and calls ${regionCalleeName(callee)}, which the region rules have no facts for`
 
 const arenaStateMessage = (fn: FunctionSig): string =>
   `${fnName(fn)} runs inside a region, and reaches \`Arena.mark\` or \`Arena.used\`: ` +
   "inside a region they would read the region's own arena, not the thread's"
+
+const nestedSpawnMessage = (task: FunctionSig): string =>
+  `${insideTask(task)}, and spawns a task with an object or an array, itself or through a callee: ` +
+  "what a task hands on may be memory of its own region, freed while the task it spawned still holds it"
 
 export const regionNewMessage = (): string =>
   "A `Region` is made by `region(f)` or `regionWith(arg, f)`, which run `f` in it, not by `new`"
@@ -286,13 +302,24 @@ class RegionWalk {
   changed: boolean
   collect: boolean
   findings: RegionFinding[]
+  /**
+   * WP49 stage 5, part 3: `fn` is a spawned task, not a region's function.
+   * Its outside memory is what it shares with its spawner, which outlives it,
+   * so only memory of its own region kept from outside is refused, and growth.
+   */
+  task: boolean
+  /** How a message opens on `fn` (`insideRegion`, `insideTask`). */
+  who: string
+  /** When `fn`'s region is freed, for a message. */
+  freed: string
 
   constructor(
     program: CheckedProgram,
     table: TypeTable,
     facts: FactsTable,
     fn: FunctionSig,
-    fresh: StringSet
+    fresh: StringSet,
+    task: boolean
   ) {
     this.program = program
     this.table = table
@@ -308,6 +335,9 @@ class RegionWalk {
     this.changed = false
     this.collect = true
     this.findings = []
+    this.task = task
+    this.who = task ? insideTask(fn) : insideRegion(fn)
+    this.freed = task ? "the task ends" : "`free` runs"
   }
 
   report(node: Node, message: string): void {
@@ -485,14 +515,17 @@ class RegionWalk {
       return
     }
     if (holder === ORIGIN_REGION && mayBeOuter(value)) {
-      this.report(at, outerToRegionMessage(this.fn, what))
+      if (!this.task) {
+        this.report(at, outerToRegionMessage(this.who, what))
+      }
     } else if (holder === ORIGIN_OUTER && mayBeRegion(value)) {
-      this.report(at, regionToOuterMessage(this.fn, what))
+      this.report(at, regionToOuterMessage(this.who, what, this.freed))
     } else if (holder === ORIGIN_UNKNOWN) {
-      this.report(
-        at,
-        value === ORIGIN_OUTER ? outerToRegionMessage(this.fn, what) : regionToOuterMessage(this.fn, what)
-      )
+      if (value !== ORIGIN_OUTER) {
+        this.report(at, regionToOuterMessage(this.who, what, this.freed))
+      } else if (!this.task) {
+        this.report(at, outerToRegionMessage(this.who, what))
+      }
     }
   }
 
@@ -556,8 +589,8 @@ class RegionWalk {
     for (const child of node.children) {
       const value = child.kind === N_PROPERTY ? child.children[child.children.length - 1] : child
       const o = this.origin(value)
-      if (o !== ORIGIN_NONE && mayBeOuter(o)) {
-        this.report(child, literalMessage(this.fn, this.program, value))
+      if (o !== ORIGIN_NONE && mayBeOuter(o) && !this.task) {
+        this.report(child, literalMessage(this.who, this.program, value))
       }
     }
   }
@@ -634,7 +667,7 @@ class RegionWalk {
       if (mayBeOuter(holder)) {
         this.report(
           node,
-          growthMessage(this.fn, `grows \`${textOf(this.program, receiver)}\` with \`${method}\``)
+          growthMessage(this.who, `grows \`${textOf(this.program, receiver)}\` with \`${method}\``)
         )
         return
       }
@@ -652,7 +685,7 @@ class RegionWalk {
   judgeCallee(node: Node, callee: FunctionSig, isNew: boolean): void {
     const f: FunctionFacts | null = this.facts.get(callee.name)
     if (f === null) {
-      this.report(node, noFactsMessage(this.fn, callee))
+      this.report(node, noFactsMessage(this.who, callee))
       return
     }
     const handed = this.handedTo(node, callee)
@@ -676,24 +709,24 @@ class RegionWalk {
       const arg = i < handed.length ? handed[i] : node
       if (pp === null) {
         // A `string` has no pointer facts, so a constructor is taken to keep it.
-        if (isNew && mayBeOuter(o)) {
-          this.report(node, handsOuterMessage(this.fn, this.program, arg, name, "which may keep it"))
+        if (isNew && mayBeOuter(o) && !this.task) {
+          this.report(node, handsOuterMessage(this.who, this.program, arg, name, "which may keep it"))
         }
         continue
       }
       if (mayBeOuter(o)) {
         if (pp.polluted) {
-          this.report(node, handsRegionMessage(this.fn, this.program, arg, name, "which stores into it"))
+          this.report(node, handsRegionMessage(this.who, this.freed, this.program, arg, name, "which stores into it"))
         } else if (pp.writesReach && f.allocates) {
-          this.report(node, handsGrowthMessage(this.fn, this.program, arg, name))
-        } else if (isNew && (pp.keptInThis || pp.captured)) {
-          this.report(node, handsOuterMessage(this.fn, this.program, arg, name, "which keeps it"))
+          this.report(node, handsGrowthMessage(this.who, this.program, arg, name))
+        } else if (isNew && (pp.keptInThis || pp.captured) && !this.task) {
+          this.report(node, handsOuterMessage(this.who, this.program, arg, name, "which keeps it"))
         }
-      } else if (pp.polluted && anyOuter) {
+      } else if (pp.polluted && anyOuter && !this.task) {
         this.report(
           node,
           handsOuterMessage(
-            this.fn,
+            this.who,
             this.program,
             arg,
             name,
@@ -779,7 +812,7 @@ export const regionCallFindings = (
   const fn = instance.functionArgs[0]
   const f = facts.get(fn.name)
   if (f === null) {
-    out.push(new RegionFinding(program, site, noFactsMessage(fn, fn)))
+    out.push(new RegionFinding(program, site, noFactsMessage(insideRegion(fn), fn)))
     return out
   }
   if (f.readsArenaState) {
@@ -797,10 +830,45 @@ export const regionCallFindings = (
       out.push(new RegionFinding(program, site, notFreshMessage(fn, ref)))
     }
   }
+  const names = fn.paramNames
+  const seedNames: string[] = []
+  const seedOrigins: i32[] = []
+  if (role === REGION_MAKE_WITH && names.length > 0) {
+    seedNames.push(names[0])
+    seedOrigins.push(ORIGIN_OUTER)
+  }
+  if ((role === REGION_ENTER || role === REGION_ENTER_WITH) && names.length > 0) {
+    seedNames.push(names[0])
+    seedOrigins.push(ORIGIN_REGION)
+  }
+  if (role === REGION_ENTER_WITH && names.length > 1) {
+    seedNames.push(names[1])
+    seedOrigins.push(ORIGIN_OUTER)
+  }
+  for (const finding of walkFindings(programs, table, facts, fn, freshResults, seedNames, seedOrigins, false)) {
+    out.push(finding)
+  }
+  return out
+}
+
+/**
+ * The walk's refusals in `fn`'s body, its parameters `seedNames` bound to
+ * `seedOrigins`: a region's function, or a spawned task (`task`).
+ */
+const walkFindings = (
+  programs: CheckedProgram[],
+  table: TypeTable,
+  facts: FactsTable,
+  fn: FunctionSig,
+  freshResults: FreshResults,
+  seedNames: string[],
+  seedOrigins: i32[],
+  task: boolean
+): RegionFinding[] => {
   const home = regionProgramOf(programs, fn)
   const body = fn.body()
   if (home === null || body === null) {
-    return out
+    return []
   }
   // Only one instantiation's tables are installed at a time, and
   // `resultRef` installs its own, so the callees are judged before the walk enters `fn`'s.
@@ -822,19 +890,10 @@ export const regionCallFindings = (
   if (fnInstance !== null) {
     home.enterInstance(fnInstance)
   }
-  const walk = new RegionWalk(home, table, facts, fn, fresh)
-  const names = fn.paramNames
-  if (role === REGION_MAKE_WITH && names.length > 0) {
-    walk.paramNames.push(names[0])
-    walk.paramOrigins.push(ORIGIN_OUTER)
-  }
-  if ((role === REGION_ENTER || role === REGION_ENTER_WITH) && names.length > 0) {
-    walk.paramNames.push(names[0])
-    walk.paramOrigins.push(ORIGIN_REGION)
-  }
-  if (role === REGION_ENTER_WITH && names.length > 1) {
-    walk.paramNames.push(names[1])
-    walk.paramOrigins.push(ORIGIN_OUTER)
+  const walk = new RegionWalk(home, table, facts, fn, fresh, task)
+  for (let i = 0; i < seedNames.length; i++) {
+    walk.paramNames.push(seedNames[i])
+    walk.paramOrigins.push(seedOrigins[i])
   }
   // A run that changes anything adds a binding or raises one a step up
   // none, scalar, region or outer, unknown, and bindings are finite, so this
@@ -849,7 +908,50 @@ export const regionCallFindings = (
   if (fnInstance !== null) {
     home.leaveInstance()
   }
-  for (const finding of walk.findings) {
+  return walk.findings
+}
+
+/**
+ * WP49 stage 5, part 3: the refusals the task of one `spawn` from
+ * `nish:async` earns, at `site` and in `task`'s body. The objects and arrays
+ * it is handed are its spawner's, outside the region the task allocates
+ * from, which is freed when it ends: the walk holds the task to keeping none
+ * of its own memory in them and growing none of them. A task that spawns a
+ * task with an object it shares is refused outright: what it hands on may be
+ * its own, and freed while the other task holds it.
+ */
+export const taskFindings = (
+  programs: CheckedProgram[],
+  table: TypeTable,
+  facts: FactsTable,
+  program: CheckedProgram,
+  site: Node,
+  task: FunctionSig,
+  freshResults: FreshResults
+): RegionFinding[] => {
+  const out: RegionFinding[] = []
+  const f = facts.get(task.name)
+  if (f === null) {
+    return out
+  }
+  if (f.feedsTasks) {
+    out.push(new RegionFinding(program, site, nestedSpawnMessage(task)))
+  }
+  const seedNames: string[] = []
+  const seedOrigins: i32[] = []
+  for (let i = 0; i < task.paramTypes.length; i++) {
+    const type = task.paramTypes[i]
+    if (task.isCompileTime(i) || isCopied(table, type)) {
+      continue
+    }
+    // A `string` argument is copied into the task's region when it starts.
+    seedNames.push(task.paramNames[i])
+    seedOrigins.push(table.sharedWithTask(type) ? ORIGIN_OUTER : ORIGIN_REGION)
+  }
+  if (seedOrigins.indexOf(ORIGIN_OUTER) < 0) {
+    return out
+  }
+  for (const finding of walkFindings(programs, table, facts, task, freshResults, seedNames, seedOrigins, true)) {
     out.push(finding)
   }
   return out

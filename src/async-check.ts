@@ -15,7 +15,7 @@ import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
 import { unwrapParens } from "./emit-util"
 import { BuiltinExport } from "./nish-modules"
-import { AwaitEdge, FunctionSig } from "./program"
+import { AwaitEdge, FunctionSig, ParallelCall } from "./program"
 import { Scope } from "./symbols"
 import { T_BOOL, T_ERROR, T_I32, T_STRING, T_VOID, isNumeric } from "./types"
 import {
@@ -330,14 +330,31 @@ export const checkAsyncBuiltin = (
       `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(callee.paramTypes[refused])}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region, and objects and arrays, which it shares with the spawner`
     )
   }
+  recordSpawn(ctx.program.asyncSpawns, expr, callee)
   return T_VOID
 }
 
 /**
- * WP49 stage 5, debt (b): whether a spawned task may take a `type` argument.
- * The task outlives its spawner, whose region is freed when it returns, so
- * an argument is a value the frame holds (a number, a `boolean`, an enum) or
- * a `string` the task copies into its own region when it starts.
+ * Remember a `spawn` for the region rules, once: a generic caller's body is
+ * checked once per instantiation and reaches here again with the same node.
+ */
+const recordSpawn = (spawns: ParallelCall[], node: Node, task: FunctionSig): void => {
+  for (const spawn of spawns) {
+    if (spawn.node === node && spawn.sig === task) {
+      return
+    }
+  }
+  spawns.push(new ParallelCall(node, task, null))
+}
+
+/**
+ * WP49 stage 5: whether a spawned task may take a `type` argument. The task
+ * outlives its spawner's call, so an argument is a value the frame holds (a
+ * number, a `boolean`, an enum), a `string` the task copies into its own
+ * region when it starts, or an object or array the task shares with its
+ * spawner (`TypeTable.sharedWithTask`): the spawner keeps no arena scope that
+ * could release it (`FunctionFacts.feedsTasks`), and the region rules hold the
+ * task to them as memory outside its region (`taskFindings`).
  */
 const isSpawnable = (ctx: CheckContext, type: i32): boolean =>
   type === T_ERROR ||
