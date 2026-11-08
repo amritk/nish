@@ -17,7 +17,9 @@ nothing. Every target, however long, deep or malformed, answers a route index
 or `ROUTER_NOT_FOUND` / `ROUTER_METHOD_NOT_ALLOWED`, or
 `ROUTER_TOO_MANY_PARAMS` when the caller's `params` holds too few pairs;
 none panics. `match` panics only on caller misuse: a method or target range
-outside the array it indexes. A lookup splits the path once and enters each node of the table at most once, so its
+outside the array it indexes.
+
+A lookup splits the path once and enters each node of the table at most once, so its
 cost is bounded by the target's length plus the table's size, whatever the
 target. A match allocates nothing and writes only into the `params` the caller
 passed, and only when every pair fits. Nothing was found to fix or left open.
@@ -39,13 +41,14 @@ a program does with a decoded parameter.
 ## Threat model
 
 The attacker is the client: the method and the target are theirs, any bytes of
-any length, and they may send as many requests as the carrier lets them. A
-win is a panic, time or memory a target can make a lookup spend beyond its own
-length and the table's size, a write outside `params`, a request routed to a
-route its path does not spell, or two programs with the same routes routing
-one target differently because they added the routes in a different order.
-The route table is the program's and is trusted; its mistakes are refusal
-codes from `add`, or a panic in the constructor for a limit out of range.
+any length, and they may send as many requests as the carrier lets them.
+
+A win is a panic, time or memory a target can make a lookup spend beyond its
+own length and the table's size, a write outside `params`, a request routed to
+a route its path does not spell, or two programs with the same routes routing
+one target differently because they added the routes in a different order. The
+route table is the program's and is trusted; its mistakes are refusal codes
+from `add`, or a panic in the constructor for a limit out of range.
 
 ## Findings
 
@@ -85,9 +88,12 @@ no name or a bad name byte, a repeated name, `*` inside a segment, `%`, `?`, a
 space, a control byte, a byte past `~`) is `ROUTER_BAD_PATTERN`; a bad method
 is `ROUTER_BAD_METHOD`; each limit is `ROUTER_TOO_LONG` or `ROUTER_FULL` one
 past its value and taken at it, and "a third method is refused by maxMethods
-alone" pins the method limit apart from `maxRoutes`. "none of the refusals added a node" pins that
+alone" pins the method limit apart from `maxRoutes`.
+
+"none of the refusals added a node" pins that
 a refused `add` changes nothing, and "a duplicate is still named a duplicate
 when the table is full" that the codes do not depend on the table's state.
+
 Each refusal is checked in the other order too, so none hangs on what was
 added first: "a duplicate is refused whichever name came first", "* in the
 middle is ambiguous in an empty table", "then a pattern over maxPatternBytes"
@@ -95,6 +101,7 @@ after the exact fits, "are each refused all the same, adding no node"; and a
 literal wins over a parameter whichever came first, "a literal wins over a
 parameter added before it" and "a literal added before a parameter wins over
 it".
+
 Each refusal also ends a program that checks it, with exit 1 and the message
 its own `panic` gives: `link/net_router_negative_duplicate`, `_ambiguous`,
 `_too_long` and `_too_many_params`, each `exits with 1 and stdout matches

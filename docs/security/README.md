@@ -102,40 +102,46 @@ the record that found it. The notes below the table name each such finding.
 3. CG-9 (Low) was fixed by the runtime stage as RT-7; the codegen record
    counts CG-9 and the runtime record counts RT-7. K1-6, which the codegen
    record also lists, is counted once, under K1.
-4. RT-9 added the ownership primitives CLI-7 and CLI-9 need; it is counted as
-   a fixed Low. RT-10, RT-11, RT-12 and RT-13 (Low) were left open by the
-   runtime stage and fixed by #405 (closes #387). The "CG-3 (rest)" row of
-   that record is CG-3 and is counted under codegen. RT-14 (Medium), a
-   `string` lent to C by a `declare function` (WP27 S3.1), was decided and
-   fixed by the stage that found it, and is counted as a fixed Medium; its
-   anchors are in `src/`, not in the runtime. RT-15 (Medium), a `string` a
-   `declare function` returns (WP27 S3.2), is counted the same way. So is RT-16 (Medium), `readCString` and the literal `null` a `CPtr | null`
-   parameter takes (WP27 S3.3), and RT-18 (Medium), a `u8[]` lent to C with its
-   count checked (WP40 B1.2), and RT-20 (Medium), the C resource a `using`
-   owns (#861). RT-21 (Low), `nish_argv_init` testing `malloc`'s answer for
-   null only after computing from it, was found by #888's harness stage while
-   building the runtime under UBSan, fixed there, and is counted as a fixed
-   Low. RT-24 and RT-25 (Medium), the mode race and the link a secret's
+4. RT-9 added the ownership primitives CLI-7 and CLI-9 need; it is counted as a
+   fixed Low. RT-10, RT-11, RT-12 and RT-13 (Low) were left open by the runtime
+   stage and fixed by #405 (closes #387). The "CG-3 (rest)" row of that record
+   is CG-3 and is counted under codegen. RT-14 (Medium), a `string` lent to C
+   by a `declare function` (WP27 S3.1), was decided and fixed by the stage that
+   found it, and is counted as a fixed Medium; its anchors are in `src/`, not
+   in the runtime. RT-15 (Medium), a `string` a `declare function` returns
+   (WP27 S3.2), is counted the same way. So is RT-16 (Medium), `readCString`
+   and the literal `null` a `CPtr | null` parameter takes (WP27 S3.3), and
+   RT-18 (Medium), a `u8[]` lent to C with its count checked (WP40 B1.2), and
+   RT-20 (Medium), the C resource a `using` owns (#861). RT-21 (Low),
+   `nish_argv_init` testing `malloc`'s answer for null only after computing
+   from it, was found by #888's harness stage while building the runtime under
+   UBSan, fixed there, and is counted as a fixed Low.
+
+   RT-24 and RT-25 (Medium), the mode race and the link a secret's
    write could follow, and RT-26 (Low), the umask on `mkdirSyncMode`, were
    decided and fixed by the stage that added the mode-taking writes (#992),
    and are counted as fixed. RT-27, RT-28 and RT-30 (Medium) and RT-29
    (Low), `spawnPiped`'s deadlock, output cap, pipe descriptors and SIGPIPE,
    were found and fixed by the stage that added it, and are counted as
    fixed; RT-30's Darwin window is recorded in the row and is not counted.
+
    RT-31, the stdin channel itself, is a decision and is not counted, and so
    is RT-32, how `netMss` reads the kernel's reply (#1094).
    RT-33 and RT-35 (Medium) and RT-36 (Low), the Unix path copy, the socket
    file's mode window and the error paths of the Unix-domain calls, were
    found and fixed by the stage that added them, and are counted as fixed.
    RT-34 (Low), the stale-socket unlink racing another binder, is counted as
-   an open Low: its boundary is the socket's directory. RT-37 (Low), the
-   descriptors `recvFd` closes and the family check, and RT-40 (Low),
-   `spawnWithFds`' self-dups and collisions, were found and fixed by the stage
-   that added descriptor passing, and are counted as fixed. RT-38 (Low), the
-   window on Darwin before a received descriptor is close-on-exec, is counted
-   as an open Low. RT-39, what `peerCredentials` reads and when, is a
+   an open Low: its boundary is the socket's directory.
+
+   RT-37 (Low), the descriptors `recvFd` closes and the family check, and RT-40
+   (Low), `spawnWithFds`' self-dups and collisions, were found and fixed by the
+   stage that added descriptor passing, and are counted as fixed. RT-38 (Low),
+   the window on Darwin before a received descriptor is close-on-exec, is
+   counted as an open Low. RT-39, what `peerCredentials` reads and when, is a
    decision and is not counted. RT-17 and RT-19 were amended there, not
-   reopened. RT-41 (High), RT-42 (Medium), RT-43 and RT-44 (Low), the region
+   reopened.
+
+   RT-41 (High), RT-42 (Medium), RT-43 and RT-44 (Low), the region
    handle's checks, the enter and leave order, the table's limits and the
    chunk sizes, were found and fixed by the stage that added regions to the
    runtime (WP46 stage 1) and are counted as fixed. RT-45 (Medium), a mark
@@ -160,7 +166,9 @@ the record that found it. The notes below the table name each such finding.
    are open: the program owns the loop and the clock. WT-1 repeats H3-1 and
    is counted in its own record. H3-1, H3-2, H3-3, H3-6, H3-7, H3-8 and WT-1
    are closed and counted as fixed, and QUIC-9, the microsecond pacer H3-8
-   rests on, is closed and counted as a fixed Low in the QUIC row. H1-1
+   rests on, is closed and counted as a fixed Low in the QUIC row.
+
+   H1-1
    (Medium), the slowloris head, was closed by #895 (`headTimeout`), H2-1
    (Medium), the arena a header block left, by #473, and H2-4 (Medium), the
    resets the server sent for the client, by #805; each is counted as a fixed
@@ -196,7 +204,9 @@ the record that found it. The notes below the table name each such finding.
     as a fixed Medium. JSON-15 (Medium), the same flood through integer, `boolean`
     and enum keys, was closed by #1107, which keys the integer hash; it is
     counted as a fixed Medium. JSON-16 (Low), float keys still hashed unkeyed,
-    is open, beside JSON-2. JSON-3, duplicate keys
+    is open, beside JSON-2.
+
+    JSON-3, duplicate keys
     reported as tokens, was left open by the tokenizer stage and is fixed for
     `jsonDecode` callers by the typed layer (#573), which refuses a duplicate
     of a field; it is counted as a fixed Low. The tokenizer is unchanged, a
@@ -211,26 +221,30 @@ the record that found it. The notes below the table name each such finding.
     included, is wiped with a store no optimiser removes when its level, its
     key generation or the connection ends, the end of the closing or draining
     period included. It is counted as a fixed Low.
-    QUIC-5 (Low), the server's static keys and the listener's seed, was
-    closed for #430 too: `QuicListener.release` wipes the listener's seed,
-    scratch, INVALID_TOKEN keys and last answer, and `Http3Server.stop` the
-    configuration's stateless reset and Retry token keys with every
-    connection. A copy of a key the caller keeps stays the caller's to wipe,
-    and a configuration shared with another server is left keyed with zeros.
-    It is counted as a fixed Low.
-    QUIC-1 (Low), the `QuicKeys` the one-shot key forms answered, was left
-    open by #430's secret-boundary stage and closed by #674's secret-fields
-    stage: `quicKeys` and `quicKeysUpdate` now derive into a `QuicKeysSlot`
-    the caller passes, leave in the arena only the `HkdfScratch` each makes,
-    which wipes its hashers and output blocks before the call returns, and a
-    slot the caller owns is the caller's to wipe. It is counted as a fixed Low.
-    QUIC-6 (Low), RFC 9001 §6.6's AEAD limits, and QUIC-7 (Low), an
-    optimistic ACK, were closed by #784: a write key
-    starts a key update at three quarters of its confidentiality limit and
-    the connection closes with AEAD_LIMIT_REACHED at it when none can be made
-    or past the integrity limit, and the server skips a 1-RTT packet number
-    every 128 to 1,024 packets and closes with PROTOCOL_VIOLATION on an ACK
-    of one. Each is counted as a fixed Low.
+
+    QUIC-5 (Low), the server's static keys and the listener's seed, was closed
+    for #430 too: `QuicListener.release` wipes the listener's seed, scratch,
+    INVALID_TOKEN keys and last answer, and `Http3Server.stop` the
+    configuration's stateless reset and Retry token keys with every connection.
+    A copy of a key the caller keeps stays the caller's to wipe, and a
+    configuration shared with another server is left keyed with zeros. It is
+    counted as a fixed Low.
+
+    QUIC-1 (Low), the `QuicKeys` the one-shot key forms answered, was left open
+    by #430's secret-boundary stage and closed by #674's secret-fields stage:
+    `quicKeys` and `quicKeysUpdate` now derive into a `QuicKeysSlot` the caller
+    passes, leave in the arena only the `HkdfScratch` each makes, which wipes
+    its hashers and output blocks before the call returns, and a slot the
+    caller owns is the caller's to wipe. It is counted as a fixed Low.
+
+    QUIC-6 (Low), RFC 9001 §6.6's AEAD limits, and QUIC-7 (Low), an optimistic
+    ACK, were closed by #784: a write key starts a key update at three quarters
+    of its confidentiality limit and the connection closes with
+    AEAD_LIMIT_REACHED at it when none can be made or past the integrity limit,
+    and the server skips a 1-RTT packet number every 128 to 1,024 packets and
+    closes with PROTOCOL_VIOLATION on an ACK of one. Each is counted as a fixed
+    Low.
+
     QUIC-10 (Low), ECN counts parsed and ignored, was closed by #914, which
     has the carriers mark ECT(0); it is counted as a fixed Low.
     QUIC-11 (Low), a peer's address change not followed, was closed by
@@ -261,7 +275,9 @@ the record that found it. The notes below the table name each such finding.
     the limits of a compile-time check (install scripts, the C behind a
     granted `ffi`, a function argument blamed on its template, nothing
     confined at run time), are accepted, with the reason in their record,
-    and are not counted. Of the grant arguments' rows, CAPS-14 to CAPS-16
+    and are not counted.
+
+    Of the grant arguments' rows, CAPS-14 to CAPS-16
     and CAPS-20 hold and are not findings, CAPS-17 (Medium) and CAPS-18
     (Low), what the build check cannot see and a run-time scope shared by
     every package, are accepted and not counted, and CAPS-19 (Medium), a
@@ -272,18 +288,23 @@ the record that found it. The notes below the table name each such finding.
     refused, are accepted, with the reason in their record, and are not
     counted. PG-12 (Low), ClientKey left in a hasher, and PG-13 (Low), an
     unbounded send buffer, were found by the module's first review and fixed
-    before it merged. PG-14, the batcher's check of the ordinal a server
+    before it merged.
+
+    PG-14, the batcher's check of the ordinal a server
     routes rows by, holds and is not a finding. PG-15 (Medium), a late or
     repeated server event panicking on or reaching a reused run, PG-16
     (Medium), one bad text key failing its whole batch, and PG-17 (Low),
     collidable key hashing, were found by the batcher's first review and
-    fixed before it merged. PG-18, PG-19 and PG-20 are the shapes a
-    connection target can take; PG-18 and PG-19 hold and are not findings,
-    and PG-20 (Medium), a URL's user information ending at its last `@`
-    where libpq ends it at the first, was found by the Unix-socket targets'
-    first review and fixed before it merged. PG-21 (Low), a socket another
-    local user can create, and PG-22 (Low), a socket file taken as its
-    directory, are accepted and not counted. PG-23 (Medium), a carrier
+    fixed before it merged.
+
+    PG-18, PG-19 and PG-20 are the shapes a connection target can take; PG-18
+    and PG-19 hold and are not findings, and PG-20 (Medium), a URL's user
+    information ending at its last `@` where libpq ends it at the first, was
+    found by the Unix-socket targets' first review and fixed before it merged.
+    PG-21 (Low), a socket another local user can create, and PG-22 (Low), a
+    socket file taken as its directory, are accepted and not counted.
+
+    PG-23 (Medium), a carrier
     query held for ever by a server that accepts and never answers, and
     PG-24 (Medium), a batcher's requests held for ever behind an execution
     lost before it was taken, were found as the carrier was written and
@@ -326,7 +347,9 @@ the record that found it. The notes below the table name each such finding.
 24. PKI-18 (Medium) and PKI-21 to PKI-24 (Low) were found by running the
     module against x509-limbo and are fixed: a root's own constraints, a
     root checked as an issuer, key identifiers, the leaf's server profile and
-    its key. PKI-17 (Medium) and PKI-19, PKI-20, PKI-25 to PKI-28 and PKI-30
+    its key.
+
+    PKI-17 (Medium) and PKI-19, PKI-20, PKI-25 to PKI-28 and PKI-30
     to PKI-32 (Low) are open and counted: no revocation, no policy
     processing, Names compared byte for byte, chains limbo accepts refused,
     criticality not read, two extensions' parts not decoded, no Public

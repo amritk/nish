@@ -165,7 +165,9 @@ Each frame is followed by a status query, and the terminal's answer says the
 frame has been read. From those answers `nish/term-rate` measures the round
 trip, the bytes a second the link carries and what a frame costs to build, and
 picks a frame rate from 60, 30, 20, 15, 10 and 5 that fits all three with
-room to spare. At most one frame is unanswered at a time, so a slow link
+room to spare.
+
+At most one frame is unanswered at a time, so a slow link
 shows fewer frames instead of a growing backlog, and a key you press is never
 queued behind seconds of drawing. Below `options.minFps` (10), it draws with
 less detail instead: a cheaper pixel backend, a coarser framebuffer, 256

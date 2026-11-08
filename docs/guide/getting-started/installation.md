@@ -18,12 +18,20 @@ the Linux steps inside it. musl-based Linux (Alpine), FreeBSD and 32-bit
 systems have no prebuilt compiler either; INSTALL.md describes what you can do
 on them.
 
-## 1. Install LLVM
+## Install it in three steps
+
+Install LLVM, then the compiler, then check that both run.
+
+<scalar-steps>
+
+<scalar-step title="Install LLVM">
 
 `nish` calls `clang` from your `PATH`, or the compiler named by the `CC`
 environment variable when that is set.
 
-**Ubuntu / Debian**
+<scalar-tabs>
+
+<scalar-tab title="Ubuntu / Debian">
 
 ```bash
 sudo apt-get update
@@ -34,13 +42,17 @@ export CC=clang-18        # add this line to your shell profile
 These packages install only versioned commands (`clang-18`, `ld.lld-18`), not
 a plain `clang`, which is why `CC` points at the versioned one.
 
-**Fedora**
+</scalar-tab>
+
+<scalar-tab title="Fedora">
 
 ```bash
 sudo dnf install clang lld llvm
 ```
 
-**macOS**
+</scalar-tab>
+
+<scalar-tab title="macOS">
 
 ```bash
 xcode-select --install
@@ -50,13 +62,22 @@ Xcode's command-line tools are enough to build native binaries. For the
 WebAssembly targets, install Homebrew's LLVM instead, as
 [INSTALL.md](../../INSTALL.md#macos) describes.
 
-## 2. Install the compiler
+</scalar-tab>
+
+</scalar-tabs>
+
+</scalar-step>
+
+<scalar-step title="Install the compiler">
 
 Either way below installs the same prebuilt compiler; nothing is compiled
 during the install.
 
-**With the install script.** This needs neither Node nor npm, only `sh`,
-`curl` and `tar`:
+<scalar-tabs>
+
+<scalar-tab title="Install script">
+
+This needs neither Node nor npm, only `sh`, `curl` and `tar`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
@@ -64,28 +85,38 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 
 The script installs into `~/.nish`. It ends by printing the `export PATH=…`
 line to add to your shell profile; run that line in your shell too, or open a
-new terminal. To upgrade later, run the same command again. Ending the
-command with `| sh -s -- --help` instead of `| sh` lists the script's other
-options: another directory, and uninstalling.
+new terminal. To upgrade later, run the same command again.
 
-**Or with npm.** This needs Node.js 22.18 or newer. The package and the
-command it installs are both `nish`:
+Ending the command with `| sh -s -- --help` instead of `| sh` lists the
+script's other options: another directory, and uninstalling.
+
+</scalar-tab>
+
+<scalar-tab title="npm">
+
+This needs Node.js 22.18 or newer. The package and the command it installs are
+both `nish`:
 
 ```bash
 npm install -g nish
 ```
 
 Install it without `-g` (`npm install --save-dev nish`) to pin the
-version per project in `package.json`, and run it as `npx nish`. Releases up
-to 0.18.0 were published as `@amritk/nish`; if you installed that, uninstall
-it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
+version per project in `package.json`, and run it as `npx nish`.
+
+Releases up to 0.18.0 were published as `@amritk/nish`; if you installed that,
+uninstall it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
+
+</scalar-tab>
+
+</scalar-tabs>
 
 Nish is pre-alpha and changes between minor releases, so you may want to pin
 an exact version: end the install script's command with `| sh -s 0.20.0`,
 or run `npm install -g nish@0.20.0`. Read the
 [changelog](../../../CHANGELOG.md) before you upgrade.
 
-### Checking where the download came from
+<scalar-detail title="Checking where the download came from">
 
 Every release lists a SHA-256 for each of its files in `SHA256SUMS`, and the
 install script refuses a download that does not match. Releases after 0.21.0
@@ -112,18 +143,27 @@ Each release also attaches a software bill of materials,
 release with its checksum, the LLVM, linker and Node.js versions that built
 each compiler, and the third-party code compiled into it.
 
-## 3. Check that it worked
+</scalar-detail>
+
+</scalar-step>
+
+<scalar-step title="Check that it worked">
 
 ```bash
 nish --version
 "${CC:-clang}" --version
 ```
 
-The first command prints `nish` and a version number, for example
-`nish 0.20.0`. If `nish` is not found, the directory it was installed into is
-not on your `PATH` yet. The second runs the C compiler `nish` will use, `$CC`
-if you set it and `clang` otherwise, and prints its LLVM version. If it is not
-found, `nish` cannot build a binary either.
+- The first command prints `nish` and a version number, for example
+  `nish 0.20.0`. If `nish` is not found, the directory it was installed into is
+  not on your `PATH` yet.
+- The second runs the C compiler `nish` will use, `$CC` if you set it and
+  `clang` otherwise, and prints its LLVM version. If it is not found, `nish`
+  cannot build a binary either.
+
+</scalar-step>
+
+</scalar-steps>
 
 The real test is building a program: see
 [Your first program](first-program.md). If `nish` cannot find a C compiler
