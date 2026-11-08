@@ -702,10 +702,11 @@ symbol: `build.sh` links `runtime-async.c` only when the IR declares one, and
 seed, which does not know what the release after it ships: the 0.37.0 seed
 refuses an object or function argument to `spawn`. Such a program is not
 skipped. `compare` reports it as an `exit` difference ("the candidate
-compiles it and the reference refuses it"), and three `DECLARED` entries,
+compiles it and the reference refuses it"), and four `DECLARED` entries,
 one per program and each naming only that `exit` surface, cover
-`async_spawn_fn_arg`, `async_spawn_shared` and
-`tests/link/async_spawn_shared_outlives`. They name this release's note
+`async_spawn_fn_arg`, `async_spawn_shared`,
+`tests/link/async_spawn_shared_outlives` and
+`docs/cookbook/async-spawn-shared.ts`. They name this release's note
 ("a spawned task may reach the objects its spawner owns") and go at the
 reseed that ships it, when the seed compiles them and they match nothing.
 

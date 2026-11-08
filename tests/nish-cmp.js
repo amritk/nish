@@ -150,6 +150,12 @@ const DECLARED = [
     changelog: "spawned task may reach the objects its spawner owns",
     why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
   },
+  {
+    program: "docs/cookbook/async-spawn-shared.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
 ]
 
 /**
