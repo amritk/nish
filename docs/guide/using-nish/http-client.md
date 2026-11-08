@@ -43,13 +43,14 @@ the response's head is in: `status`, `reason`, the `url` that answered and
 `readAll(limit)` answers it whole, or null past `limit` or on a failure, and
 `read(buf, off, n)` answers the next bytes as they arrive, 0 at the end and a
 negative code on a failure, for a stream you want as it comes; a read of 0
-bytes answers 0 at once. Once the body
-ends or fails, `fetchSync` closes its connection; read it to the end, or, when
-you only want the status, close it with `res.body.client.close()`, since an
-unread body holds its socket open until the program exits. A request
-carries a body when you set `req.body`, with its `Content-Length` sent for
-you. A header value holding a line break, or a method that is not a token, is
-refused before a byte is sent.
+bytes answers 0 at once.
+
+Once the body ends or fails, `fetchSync` closes its connection; read it to the
+end, or, when you only want the status, close it with
+`res.body.client.close()`, since an unread body holds its socket open until the
+program exits. A request carries a body when you set `req.body`, with its
+`Content-Length` sent for you. A header value holding a line break, or a method
+that is not a token, is refused before a byte is sent.
 
 ## Knowing why it failed
 
@@ -57,7 +58,9 @@ refused before a byte is sent.
 says why in `error` (an `HTTP_E_*` code; `httpErrorName` names it) and
 `errorText` (a sentence, such as `could not connect to example.com port 80
 (errno 111)`), and keeps the connection alive between fetches to the same
-place. A URL that `errorText` names is only its scheme, host, port and path,
+place.
+
+A URL that `errorText` names is only its scheme, host, port and path,
 with `?...` where a query or fragment was left out, and a URL that does not
 parse is not echoed at all. The URL is named as it parses: in
 `http://admin:8080/s3cret@example.com/` the `8080` is a port and the rest a
@@ -86,12 +89,13 @@ connection with an unread body closes it, and the old body's reader then
 answers an error rather than the next response's bytes. A connection is kept
 only when nothing is left on it past the response: a server that sends more
 than was asked for, or speaks while the connection sits idle, has it closed,
-and the next fetch opens a new one. A kept connection the server has closed is
-seen before the request is sent, and the request goes on a fresh one. If the
-server closes it under the request, before a byte of the answer, the request
-is sent once more on a fresh one for a GET, HEAD, OPTIONS, TRACE, PUT or
-DELETE, never for a POST; a request whose answer was cut off part way, or that
-was never answered, is not sent again.
+and the next fetch opens a new one.
+
+A kept connection the server has closed is seen before the request is sent, and
+the request goes on a fresh one. If the server closes it under the request,
+before a byte of the answer, the request is sent once more on a fresh one for a
+GET, HEAD, OPTIONS, TRACE, PUT or DELETE, never for a POST; a request whose
+answer was cut off part way, or that was never answered, is not sent again.
 
 ## Fetching without blocking
 
@@ -223,7 +227,9 @@ chain must end at a root you trust, it must be valid now by the wall clock,
 and it must name the URL's host (or its IP address, for an IP literal). The
 roots are read once per client, from `rootsPemPath` when you set it, else
 from the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, else from the system's
-bundle. A certificate that is expired, for another name, or from a root you
+bundle.
+
+A certificate that is expired, for another name, or from a root you
 do not trust is `HTTP_E_CERTIFICATE`, and so is a fetch when no root can be
 read at all, refused before any connection is opened. There is no switch that
 turns the check off: to talk to a server with its own certificate authority,
@@ -288,7 +294,9 @@ Under a policy:
 Two methods change what gets through. `policy.permit("10.20.0.0/16")` lets
 a prefix you trust through anyway, such as an internal API the program is
 meant to reach (its IPv4-mapped, NAT64 and 6to4 forms too); it answers false for text that is not an address and a prefix
-length. `policy.allowHost("api.example.com")` limits the names a URL, or any
+length.
+
+`policy.allowHost("api.example.com")` limits the names a URL, or any
 hop, may carry: once one is added, a host that is not on the list is
 `HTTP_E_BLOCKED` before it is looked up. A name is matched exactly, in any
 case and with or without its trailing dot; an entry with a leading dot,

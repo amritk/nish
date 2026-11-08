@@ -13,13 +13,14 @@ starts from evidence. It names functions rather than lines, so it holds at any c
 repaired, with its own `HTTP1_E_` code, and a refusal is final. The events,
 the de-chunked body and the error code are the same however the input is cut.
 A panic is only ever the program's own mistake (a `feed` window outside its
-buffer, more than 2^30 bytes fed and not read). Every cap is a number the
-program passes to the constructor, or a constant of the module. The writer
-counts and checks the whole head before it writes a byte, so a caller's
-string cannot end a line or frame the body. One finding is open: HC-1 (Low),
-the memory each response's fields leave in the arena in the default strings
-mode; a parser switched to spans mode (`fieldsAsSpans`) and reused with
-`reset` allocates nothing per response.
+buffer, more than 2^30 bytes fed and not read).
+
+Every cap is a number the program passes to the constructor, or a constant of
+the module. The writer counts and checks the whole head before it writes a
+byte, so a caller's string cannot end a line or frame the body. One finding is
+open: HC-1 (Low), the memory each response's fields leave in the arena in the
+default strings mode; a parser switched to spans mode (`fieldsAsSpans`) and
+reused with `reset` allocates nothing per response.
 
 ## Scope
 
@@ -38,13 +39,15 @@ stages that drive this parser, not to it.
 The attacker is the server, or anything on the path to it: every byte of the
 response is theirs, split anywhere, and they may send interim responses
 without end, a body slowly or never, more than one response for one request,
-and close the connection at any byte. A win is a panic, memory or time a
-server can make the client spend without bound, a response the program sees
-that a proxy on the path would frame differently (so that the next response
-on the connection is one the attacker wrote), a cut-short body taken for a
-whole one, or a request split by a caller's string. The program driving the
-parser is trusted; its mistakes panic or are refused, and what it asks the
-writer to send is checked so that its strings cannot end a line.
+and close the connection at any byte.
+
+A win is a panic, memory or time a server can make the client spend without
+bound, a response the program sees that a proxy on the path would frame
+differently (so that the next response on the connection is one the attacker
+wrote), a cut-short body taken for a whole one, or a request split by a
+caller's string. The program driving the parser is trusted; its mistakes panic
+or are refused, and what it asks the writer to send is checked so that its
+strings cannot end a line.
 
 ## Findings
 
@@ -56,17 +59,17 @@ writer to send is checked so that its strings cannot end a line.
 
 Fuzzed by `tests/fuzz/targets/http1-client.ts`, from its seed corpus in
 `tests/fuzz/corpus/http1-client/` (sixteen inputs: both framings, a body read
-until close, interim responses, pipelined keep-alives, HEAD, a CONNECT
-tunnel, the smuggling shapes, an obs-fold, a 101 and the small limits). The
-target's first byte picks small or usual limits, whether the response
-answers a HEAD or a CONNECT, whether each piece is fed as its own array and
-whether `finish()` follows the last piece; the next four bytes cut the rest
-into pieces. It reads the response whole and cut, and panics when the two
-digests of the events, statuses, fields, de-chunked body, tunnel and error
-code differ, on a status outside 100 to 999, on names and values of
-different lengths, on a body window outside its buffer, on more body than
-`maxBody`, on `HTTP1_UPGRADE` without a CONNECT, on an error code outside 1
-to 17 or an error that leaves bytes buffered, and on an unknown event.
+until close, interim responses, pipelined keep-alives, HEAD, a CONNECT tunnel,
+the smuggling shapes, an obs-fold, a 101 and the small limits). The target's
+first byte picks small or usual limits, whether the response answers a HEAD or
+a CONNECT, whether each piece is fed as its own array and whether `finish()`
+follows the last piece; the next four bytes cut the rest into pieces. It reads
+the response whole and cut, and panics when the two digests of the events,
+statuses, fields, de-chunked body, tunnel and error code differ, on a status
+outside 100 to 999, on names and values of different lengths, on a body window
+outside its buffer, on more body than `maxBody`, on `HTTP1_UPGRADE` without a
+CONNECT, on an error code outside 1 to 17 or an error that leaves bytes
+buffered, and on an unknown event.
 
 The sanitizer runtimes libFuzzer needs were not installed where this stage
 was written, so the target was built against `tests/fuzz/harness.c` with a
@@ -94,10 +97,11 @@ responses, a body read until close, HTTP/1.0 keep-alive, `Connection: close`,
 HEAD and 304, a CONNECT tunnel and a 407 to CONNECT, a body cut short and
 each smuggling shape is fed whole, cut in two at every byte and fed a byte at
 a time, and gives the same transcript every way (`… : the same cut at every
-byte and fed a byte at a time`). A refusal is decided by the same byte
-wherever the input was cut: a line over its limit is refused before the bare
-LF check, so `a status line over the limit, ended in a bare LF past it` is
-the same refusal however the LF arrives.
+byte and fed a byte at a time`).
+
+A refusal is decided by the same byte wherever the input was cut: a line over
+its limit is refused before the bare LF check, so `a status line over the
+limit, ended in a bare LF past it` is the same refusal however the LF arrives.
 
 **Response smuggling refused** (RFC 9112 §6.1, §6.3, §7.1): `Transfer-Encoding`
 with `Content-Length` (`HTTP1_E_FRAMING`, on a 204 too), two lengths or a
@@ -114,6 +118,7 @@ there is `HTTP1_E_BARE_LF`, even after data that ends in CR), and a 101 to a
 request that did not ask to switch (`HTTP1_E_SWITCH`; the target never
 calls `expectUpgrade`, whose 101 `tests/fuzz/targets/websocket-client.ts`
 drives) — each `refused with N (…)` line.
+
 A 2xx to CONNECT is a tunnel whose framing fields are ignored (RFC 9110
 §9.3.6), and any other answer to CONNECT has a body like any response.
 
@@ -141,16 +146,21 @@ then the 101 answers `HTTP1_HEAD`, `HTTP1_END` and `HTTP1_UPGRADE`, its
 bytes after its empty line are the new protocol's), and `tunnelBytes()`
 answers what was fed past the head (`a 101 to a request that asked to switch
 protocols, frame bytes glued to its head`, `a 101 that asked to switch
-protocols ignores its framing fields`). Any other answer to
-such a request is read as it would be without it (`a request that asked to
-switch protocols, answered 200, reads as any other`, `asked to switch, a 200
-ends`). The opt-in lasts one request: `expect` clears it (`refused: expect()
+protocols ignores its framing fields`).
+
+Any other answer to such a request is read as it would be without it (`a
+request that asked to switch protocols, answered 200, reads as any other`,
+`asked to switch, a 200 ends`).
+
+The opt-in lasts one request: `expect` clears it (`refused: expect()
 after expectUpgrade() asks for no switch again`), it does nothing once a
 response has begun (`refused: expectUpgrade() once a response has begun does
 nothing`, and a 101 after a 100 is refused, `a 101 after a 100 to a request
 that asked for no switch`), and the next response on a kept-alive connection
 is not asked to switch (`refused: the next response on the connection is not
-asked to switch`). `http1UpgradeRequestHead` writes `Upgrade` and
+asked to switch`).
+
+`http1UpgradeRequestHead` writes `Upgrade` and
 `Connection: Upgrade` itself and no body, and refuses an empty upgrade, one
 that is not a token or holds CR LF, the caller's own `Connection` or
 `Upgrade` in any case, and no `Host` (`http1UpgradeRequestHead writes Upgrade
@@ -166,23 +176,31 @@ a body exactly at `maxBody` handed out whole however it is framed (`… at the
 limit, whole`); a
 chunk-size line (`HTTP1_MAX_CHUNK_LINE`, 4,096 bytes) and the interim
 responses to one request (`HTTP1_MAX_INFORMATIONAL`, 32, counted again for
-each request). Negative limits are clamped to 0, each `i32` limit to 2^30 and
+each request).
+
+Negative limits are clamped to 0, each `i32` limit to 2^30 and
 `maxBody` to 2^53, so that no sum the parser makes overflows: with every
 `i32` limit at 2^31 - 1 and `maxBody` at 2^62 an ordinary response is read,
 a `Content-Length` of 2^53 is a head and one of 2^53 + 1 is over the body
 limit (`the largest limits read an ordinary response`, `one of 2^53 + 1 is
 over it`), and a chunked body with trailers is read (`the largest limits read
 a chunked body and its trailers`), where an unclamped trailer limit plus one
-would wrap. Each negative limit is shown alone, the others sane (`a negative
+would wrap.
+
+Each negative limit is shown alone, the others sane (`a negative
 maxBody is 0: a Content-Length of 0 is read`). A line longer than what the
 lines before it left of its section's budget is refused as it is found,
 whether it ends in CRLF, in a bare LF or not yet (`a field line past what the
-section has left, ended in a bare LF`, and the trailer's). A length past 2^63 or a chunk size past 64 bits is over the body
+section has left, ended in a bare LF`, and the trailer's).
+
+A length past 2^63 or a chunk size past 64 bits is over the body
 limit, not wrapped. A `Content-Length` past 2^53 given more than once is
 refused as values that differ, whatever the values, since two saturated
 values cannot be compared, on a 304 too. A
 `Content-Length` over `maxBody` on a response to HEAD is not refused, since
-no body is read. What is buffered is the input fed and not yet read: a line
+no body is read.
+
+What is buffered is the input fed and not yet read: a line
 in progress is held only up to its limit, body bytes are handed out as they
 arrive, and the program decides how much it feeds before it reads; a tunnel
 keeps what is fed after it for `tunnelBytes()` until the program stops
@@ -195,26 +213,29 @@ the buffer`).
 element of its list too, before its framing or the connection's fate is
 decided (`read: OWS …`).
 
-**What the program writes is checked** (`refused: …`). The writer refuses,
-with `HTTP1_REFUSED` and nothing written, a method that is not a token, a
-target that is not a form the method may send (origin-form or absolute-form,
-authority-form for CONNECT with a port of at most five digits and no
-userinfo, `*` for OPTIONS; a `host:port` with another method is well-formed
-absolute-form, the host its scheme, and is sent) or that holds a space, a control byte, DEL, a
-non-ASCII byte or a `#`; a field name that is not a token; a value holding CR,
-LF or another control byte; not exactly one `Host`; the caller's own
-`Content-Length` or `Transfer-Encoding`; a `Connection` that lists `upgrade`,
-which only `http1UpgradeRequestHead` writes (`refused: http1WriteRequestHead
-with a Connection that lists upgrade`);
-names and values of different lengths; a body length below -2. The head is
-counted in 64 bits before a byte is written, so `HTTP1_NO_ROOM` (one byte
-short, a negative offset, an offset past the end) and `HTTP1_REFUSED` leave
-the buffer untouched (`and writes nothing`), and `http1RequestHead` answers
-`null` for a head past 2^30 bytes, the most one array holds, rather than
-wrapping its size (`refused: a head past 2^30 bytes`, thirty-two fields
-sharing one 64 MiB value, past 2^31 in all). The server parser of
-`nish/net/http1-codec` reads what the writer writes (`the server parser reads the
-head`).
+**What the program writes is checked** (`refused: …`).
+
+The writer refuses, with `HTTP1_REFUSED` and nothing written, a method that is
+not a token, a target that is not a form the method may send (origin-form or
+absolute-form, authority-form for CONNECT with a port of at most five digits
+and no userinfo, `*` for OPTIONS; a `host:port` with another method is
+well-formed absolute-form, the host its scheme, and is sent) or that holds a
+space, a control byte, DEL, a non-ASCII byte or a `#`; a field name that is not
+a token; a value holding CR, LF or another control byte; not exactly one
+`Host`; the caller's own `Content-Length` or `Transfer-Encoding`; a
+`Connection` that lists `upgrade`, which only `http1UpgradeRequestHead` writes
+(`refused: http1WriteRequestHead with a Connection that lists upgrade`); names
+and values of different lengths; a body length below -2.
+
+The head is counted in 64 bits before a byte is written, so `HTTP1_NO_ROOM`
+(one byte short, a negative offset, an offset past the end) and `HTTP1_REFUSED`
+leave the buffer untouched (`and writes nothing`), and `http1RequestHead`
+answers `null` for a head past 2^30 bytes, the most one array holds, rather
+than wrapping its size (`refused: a head past 2^30 bytes`, thirty-two fields
+sharing one 64 MiB value, past 2^31 in all).
+
+The server parser of `nish/net/http1-codec` reads what the writer writes (`the
+server parser reads the head`).
 
 **A window outside the buffer panics.** `feed` with a window outside its
 array is the program's mistake and panics before anything is read, whichever
@@ -289,7 +310,9 @@ across a feed), CONNECT's `persistent = false` (`http1ClientStartHead` has
 already cleared it for that response, and nothing sets it before that branch),
 `next()`'s write of the closed state before it answers `HTTP1_CLOSED`, a
 writer offset test implied by the room test, and a saturation flag implied by
-the length test. The sweep predates `expectUpgrade`; each condition the opt-in added is
+the length test.
+
+The sweep predates `expectUpgrade`; each condition the opt-in added is
 pinned by one of the checks named under "A switch only when asked" above.
 Before them and the checks that kill the rest, the same sweep
 of the 594 mutants then in the module killed 367, left 223 and found 4

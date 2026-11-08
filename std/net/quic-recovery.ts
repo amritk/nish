@@ -14,15 +14,16 @@
  *     if (now >= recovery.deadline(blocked)) { recovery.onTimeout(now, blocked); }
  *
  * **What it tracks.** Each space keeps its ack-eliciting packets in a fixed
- * ring (`QuicSentPackets`), in the order they were sent, so the memory is
- * fixed when the connection is made and nothing is allocated per packet. A
- * packet that elicits no acknowledgement (one that carries only ACK, PADDING
- * or CONNECTION_CLOSE) is not recorded: it is never in flight, and neither
- * an RTT sample nor a loss is ever taken from it (RFC 9002 §2, §5.1). The
- * caller keeps what each packet carried in its own arrays, indexed by the
- * slot `onPacketSent` answers, and reads `acked` and `lost` after each
- * `onAck` and `onTimeout` to learn which slots were settled. A slot named
- * there keeps its packet number, time and size until the next call.
+ * ring (`QuicSentPackets`), in the order they were sent, so the memory is fixed
+ * when the connection is made and nothing is allocated per packet. A packet
+ * that elicits no acknowledgement (one that carries only ACK, PADDING or
+ * CONNECTION_CLOSE) is not recorded: it is never in flight, and neither an RTT
+ * sample nor a loss is ever taken from it (RFC 9002 §2, §5.1).
+ *
+ *  The caller keeps what each packet carried in its own arrays, indexed by the
+ *  slot `onPacketSent` answers, and reads `acked` and `lost` after each `onAck`
+ *  and `onTimeout` to learn which slots were settled. A slot named there keeps
+ *  its packet number, time and size until the next call.
  *
  * **Time and units.** Every time and every duration is the caller's
  * monotonic clock in milliseconds, which is also the timer granularity
@@ -52,18 +53,21 @@
  * **ECN** (§7.1, B.7; RFC 9000 §13.4.2 and its Appendix A.4). A caller that
  * marks its packets ECT(0) asks `ecnCodepoint()` what to mark with, says so
  * with `onEctSent` for every packet it marked, and hands an ACK_ECN frame's
- * counts to `onAckEcn`. The counts are validated against the packets marked
- * before they are used: an ACK that newly acknowledges a marked packet
- * without counts, a count that falls, counts past the packets marked, or an
- * increase in ECT(0) and ECN-CE short of the marked packets newly
- * acknowledged fails validation, as does every packet of the testing period
- * being lost, and a failed path is marked no more (`QUIC_RECOVERY_ECN_FAILED`).
- * Only the first `QUIC_RECOVERY_ECN_TESTING_PACKETS` are marked until one
- * validates. A rise in the ECN-CE count is a congestion event, from the
- * largest packet newly acknowledged, so it halves the window once per
- * recovery period as a loss does. Counts that arrive with an ACK that does
- * not raise the largest acknowledged are neither validated nor used: they
- * may be older than those already read.
+ * counts to `onAckEcn`.
+ *
+ *  The counts are validated against the packets marked before they are used: an
+ *  ACK that newly acknowledges a marked packet without counts, a count that
+ *  falls, counts past the packets marked, or an increase in ECT(0) and ECN-CE
+ *  short of the marked packets newly acknowledged fails validation, as does
+ *  every packet of the testing period being lost, and a failed path is marked no
+ *  more (`QUIC_RECOVERY_ECN_FAILED`). Only the first
+ *  `QUIC_RECOVERY_ECN_TESTING_PACKETS` are marked until one validates.
+ *
+ *  A rise in the ECN-CE count is a congestion event, from the largest packet
+ *  newly acknowledged, so it halves the window once per recovery period as a
+ *  loss does. Counts that arrive with an ACK that does not raise the largest
+ *  acknowledged are neither validated nor used: they may be older than those
+ *  already read.
  *
  * **What a peer cannot do.** Every input is checked: the ranges of an
  * acknowledgement are read only up to the count given and the array's

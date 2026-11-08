@@ -20,20 +20,23 @@
  * says it then has. The encoder writes a parameter only when it differs from
  * that default, plus the connection IDs, which have none.
  *
- * **What a parse refuses.** Each of these is a TRANSPORT_PARAMETER_ERROR
- * (§7.4, §18.2): an ID or a length that does not fit, a parameter running past the bytes, a
- * known parameter sent twice, a varint-valued parameter whose value is not
- * exactly one varint, `disable_active_migration` with a value, a server-only
- * parameter from a client (`original_destination_connection_id`,
- * `preferred_address`, `retry_source_connection_id`,
- * `stateless_reset_token`), a stateless reset token that is not 16 bytes, a
- * connection ID over 20 bytes, `max_udp_payload_size` below 1200,
- * `ack_delay_exponent` above 20, `max_ack_delay` at 2^14 or above,
- * `active_connection_id_limit` below 2, and a stream count above 2^60.
- * Unknown parameters, the reserved ones (31 × N + 27) among them, are
- * skipped, as §18.1 asks; a second copy of an unknown one is not noticed.
- * Whether `initial_source_connection_id` is present and right is the
- * connection's check, because it needs the packet the ID came in.
+ * **What a parse refuses.**
+ *
+ *  Each of these is a TRANSPORT_PARAMETER_ERROR (§7.4, §18.2): an ID or a length
+ *  that does not fit, a parameter running past the bytes, a known parameter sent
+ *  twice, a varint-valued parameter whose value is not exactly one varint,
+ *  `disable_active_migration` with a value, a server-only parameter from a
+ *  client (`original_destination_connection_id`, `preferred_address`,
+ *  `retry_source_connection_id`, `stateless_reset_token`), a stateless reset
+ *  token that is not 16 bytes, a connection ID over 20 bytes,
+ *  `max_udp_payload_size` below 1200, `ack_delay_exponent` above 20,
+ *  `max_ack_delay` at 2^14 or above, `active_connection_id_limit` below 2, and a
+ *  stream count above 2^60.
+ *
+ *  Unknown parameters, the reserved ones (31 × N + 27) among them, are skipped,
+ *  as §18.1 asks; a second copy of an unknown one is not noticed. Whether
+ *  `initial_source_connection_id` is present and right is the connection's
+ *  check, because it needs the packet the ID came in.
  *
  * **Provenance.** Written from RFC 9000 §18, in this module's own structure; nothing here is
  * ported from another implementation. Private names carry the

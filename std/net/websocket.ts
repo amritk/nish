@@ -657,13 +657,15 @@ export const websocketFrameSize = (len: i32, masked: boolean): i32 => {
  * `payload[off .. off + len)` and, when `mask` is not null, masked with that
  * 4-byte key. A client masks every frame with a fresh key from
  * `crypto.getRandomValues` (§5.3); a server passes null. The length takes the
- * shortest of its three forms. Answers where the frame ends, `WS_NO_ROOM` when
- * it does not fit, or `WS_REFUSED` for an opcode RFC 6455 does not define, a
- * control frame that is not FIN or is longer than 125 bytes, and a mask that
- * is not 4 bytes; on either refusal `out` is untouched. A window outside
- * `payload` panics, and so does a payload longer than 2^31 - 15 bytes. A text
- * frame's payload is not checked here, because a fragment may end inside a
- * character; `websocketIsUtf8` checks a whole message.
+ * shortest of its three forms.
+ *
+ * Answers where the frame ends, `WS_NO_ROOM` when it does not fit, or
+ * `WS_REFUSED` for an opcode RFC 6455 does not define, a control frame that is
+ * not FIN or is longer than 125 bytes, and a mask that is not 4 bytes; on
+ * either refusal `out` is untouched. A window outside `payload` panics, and so
+ * does a payload longer than 2^31 - 15 bytes. A text frame's payload is not
+ * checked here, because a fragment may end inside a character;
+ * `websocketIsUtf8` checks a whole message.
  *
  * @param out The buffer the frame is written into.
  * @param at The index in `out` the frame starts at; one outside `out` answers `WS_NO_ROOM`.
@@ -1127,18 +1129,20 @@ export class WsHandshake {
 /**
  * Reads the server's answer to `websocketUpgradeRequest(…, key, offered)`
  * (§4.1, the client's checks of the response): call it at the parser's
- * `HTTP1_HEAD`. It fails closed, and the connection is closed on any failure:
- * a status other than 101 (`WS_HS_STATUS`; a redirect is not followed), a
- * version other than HTTP/1.1, `Upgrade` absent, repeated or not `websocket`,
- * no `Connection` listing `upgrade`, `Sec-WebSocket-Accept` absent, repeated
- * or not `websocketAcceptKey(key)` (a forged or replayed answer, or any answer
- * when `key` is not a valid key), any
- * `Sec-WebSocket-Extensions` (this client offers none, so none may be in use),
- * and a `Sec-WebSocket-Protocol` that is present when nothing was offered,
- * repeated, a list, or not one of `offered`. On `WS_HS_OK` the parser's next
- * events are `HTTP1_END` and `HTTP1_UPGRADE`; its `tunnelBytes()` go to
- * `WsDecoder(false, …)`, and every frame the client sends is masked with a
- * fresh mask key from `crypto.getRandomValues` (§5.3).
+ * `HTTP1_HEAD`.
+ *
+ * It fails closed, and the connection is closed on any failure: a status other
+ * than 101 (`WS_HS_STATUS`; a redirect is not followed), a version other than
+ * HTTP/1.1, `Upgrade` absent, repeated or not `websocket`, no `Connection`
+ * listing `upgrade`, `Sec-WebSocket-Accept` absent, repeated or not
+ * `websocketAcceptKey(key)` (a forged or replayed answer, or any answer when
+ * `key` is not a valid key), any `Sec-WebSocket-Extensions` (this client offers
+ * none, so none may be in use), and a `Sec-WebSocket-Protocol` that is present
+ * when nothing was offered, repeated, a list, or not one of `offered`.
+ *
+ * On `WS_HS_OK` the parser's next events are `HTTP1_END` and `HTTP1_UPGRADE`;
+ * its `tunnelBytes()` go to `WsDecoder(false, …)`, and every frame the client
+ * sends is masked with a fresh mask key from `crypto.getRandomValues` (§5.3).
  *
  * @param response The client's parser, at the `HTTP1_HEAD` of the response.
  * @param key The key the request sent, from `websocketClientKey`.

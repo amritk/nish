@@ -22,24 +22,27 @@
  * terminal has: the kitty keyboard protocol (`CSI > 11 u`: key releases and
  * Ctrl-C as a key), mouse reports (1000, 1002 or 1003, in SGR form 1006, with
  * pixel coordinates 1016 when the terminal has them), bracketed paste (2004)
- * and focus reports (1004). Before each change reaches the terminal, the
- * runtime's restore string (`setTerminalRestore`) is set to undo everything —
- * cancel any half-written escape (CAN), end synchronized output,
- * delete the kitty image, pop the kitty keyboard flags, turn mouse, paste and
- * focus reports off, reset the style, show the cursor and leave the alternate
- * screen — so a panic or a signal leaves the terminal as it was.
+ * and focus reports (1004).
+ *
+ * Before each change reaches the terminal, the runtime's restore string
+ * (`setTerminalRestore`) is set to undo everything — cancel any half-written
+ * escape (CAN), end synchronized output, delete the kitty image, pop the kitty
+ * keyboard flags, turn mouse, paste and focus reports off, reset the style,
+ * show the cursor and leave the alternate screen — so a panic or a signal
+ * leaves the terminal as it was.
  *
  * `present()` draws the `Screen` and the `Framebuffer`, if the options gave
  * one, with the best backend the terminal has capped by the controller
  * (`min(caps.graphics, decision.backendCap)`), at the controller's resolution
- * divisor and palette, wrapped in synchronized output when the terminal has
- * it, as one write. It follows the frame with a DSR 5 query (`CSI 5 n`),
- * whose answer (`CSI 0 n`) acknowledges the frame to the controller and marks
- * the input before it as delivered to `KeyState`. No answer from the terminal
- * reaches the program: one that arrives after the probe gave up (a slow link)
- * is taken, and a cell size among them is learned. `close` reads the
- * acknowledgements still in flight before it leaves raw mode, so none is
- * echoed onto the shell's line.
+ * divisor and palette, wrapped in synchronized output when the terminal has it,
+ * as one write. It follows the frame with a DSR 5 query (`CSI 5 n`), whose
+ * answer (`CSI 0 n`) acknowledges the frame to the controller and marks the
+ * input before it as delivered to `KeyState`.
+ *
+ * No answer from the terminal reaches the program: one that arrives after the
+ * probe gave up (a slow link) is taken, and a cell size among them is learned.
+ * `close` reads the acknowledgements still in flight before it leaves raw mode,
+ * so none is echoed onto the shell's line.
  *
  * A frame's cost to the controller is the program's `update` and `render`
  * since the last frame plus encoding it, not the write: a write that blocks

@@ -23,20 +23,27 @@
  * as its text, which the core schema reads as an integer or a float. The text
  * ends with a line break.
  *
- * **A string is plain unless it could read as something else.** It is written
- * double-quoted when it is empty; when it reads as null, a boolean or a number
- * under YAML 1.2 or YAML 1.1 (`~`, `null`, `yes`, `on`, `y`, `true` in any
- * case; anything starting with a digit, or a sign or `.` and then a digit;
- * `.inf` and `.nan`, signed or not); when it starts with an indicator (`@`, `` ` ``, `\`, `*`,
- * `&`, `!`, `|`, `>`, `%`, `'`, `"`, `#`, `,`, `[`, `]`, `{`, `}`, or `-`, `?`
- * or `:` before a space or the end) or with `---` or `...`; when it holds
- * `: ` or ` #` or ends in `:`; when it starts or ends with a space; when it
- * holds a control character, a line break, U+2028, U+2029, U+FEFF, U+FFFE or
- * U+FFFF; and, as a key, when it is `<<`, which YAML reads as a merge key.
- * Keys and values follow the same rule. A quoted string escapes `"`, `\` and
- * every character just listed, so it stays on one line. A key whose written
- * form runs past the 1024 bytes YAML allows an implicit key is written as an
- * explicit one, `? key` and then `: value`.
+ * **A string is plain unless it could read as something else.**
+ *
+ *  It is written double-quoted
+ *  - when it is empty;
+ *  - when it reads as null, a boolean or a number under YAML 1.2 or YAML 1.1
+ *    (`~`, `null`, `yes`, `on`, `y`, `true` in any case; anything starting with
+ *    a digit, or a sign or `.` and then a digit; `.inf` and `.nan`, signed or
+ *    not);
+ *  - when it starts with an indicator (`@`, `` ` ``, `\`, `*`, `&`, `!`, `|`,
+ *    `>`, `%`, `'`, `"`, `#`, `,`, `[`, `]`, `{`, `}`, or `-`, `?` or `:` before
+ *    a space or the end) or with `---` or `...`;
+ *  - when it holds `: ` or ` #` or ends in `:`;
+ *  - when it starts or ends with a space;
+ *  - when it holds a control character, a line break, U+2028, U+2029, U+FEFF,
+ *    U+FFFE or U+FFFF;
+ *  - and, as a key, when it is `<<`, which YAML reads as a merge key.
+ *
+ *  Keys and values follow the same rule. A quoted string escapes `"`, `\` and
+ *  every character just listed, so it stays on one line. A key whose written
+ *  form runs past the 1024 bytes YAML allows an implicit key is written as an
+ *  explicit one, `? key` and then `: value`.
  *
  * **What it answers.** The YAML text, or `""` when `v` names no value or the
  * tree nests deeper than `JSON_WRITER_MAX_DEPTH` collections, the limit

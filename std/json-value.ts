@@ -31,14 +31,15 @@
  * largest request seen, parsing allocates nothing.
  *
  * A handle carries the generation of the document's contents it was made in,
- * which moves on at every `parse` and `clear`, so a handle kept from an
- * earlier request names nothing in the next one, even when the next one has
- * the same shape: it is `JSON_VALUE_NONE` to `kind`, and every reader answers
- * its empty value for it rather than another document's. The generation has
- * 511 values and moves by one at a `clear`, one at a parse and two at a parse
- * that fails, so the check misses only a handle kept across exactly a
- * multiple of 511 of those steps; a program must not keep handles across
- * documents, and this catches the mistake rather than licensing it. A
+ * which moves on at every `parse` and `clear`, so a handle kept from an earlier
+ * request names nothing in the next one, even when the next one has the same
+ * shape: it is `JSON_VALUE_NONE` to `kind`, and every reader answers its empty
+ * value for it rather than another document's.
+ *
+ * The generation has 511 values and moves by one at a `clear`, one at a parse
+ * and two at a parse that fails, so the check misses only a handle kept across
+ * exactly a multiple of 511 of those steps; a program must not keep handles
+ * across documents, and this catches the mistake rather than licensing it. A
  * negative handle, or one past the last value, is `JSON_VALUE_NONE` too.
  *
  * **The document's size is bounded.** Each value costs about 46 bytes of the
@@ -67,25 +68,28 @@
  * the range of bytes it was read from: `start(v)` and `end(v)` bound a value,
  * `keyStart(o, i)` and `keyEnd(o, i)` the key of member `i`, its quotes
  * included. They are offsets into the bytes `parseRanged` was given, or
- * `parseTextRanged`'s string, so a line index over that text
- * (`YamlLineIndex` is one) turns them into a line and a column. Under Node,
- * where `parseTextRanged` takes one byte per UTF-16 code unit (below), its
- * offsets count code units, so past the first non-ASCII character they differ
- * from a native build's, which count UTF-8 bytes. Ranges cost about 20 bytes
- * per value more: two offsets for the value, two for its key and about one on
- * the parse's stacks, which grow with the nesting and the members pending.
- * They are entry points of their own rather than a flag `parse` tests, so
- * that `parse` keeps the loop it had before ranges existed. A plain `parse`
- * writes nothing for them: ranges carry the generation they were written in,
- * which `clear` moves anyway, so after a `parse` every reader answers `-1`,
- * and their arrays are made on first use, so a document that never keeps
- * ranges allocates none. A
- * loader that builds a document from another text `clear`s, then gives each
- * value it makes its range with `setRange` and each key with `setKeyRange`;
- * until then a built value or key answers `-1`. `set` over an existing key
- * keeps the member's key range and takes the new value's own. Under
- * `JSON_VALUE_DUPLICATE_LAST` a repeated key's member keeps its first key's
- * range and holds the last value, with that value's.
+ * `parseTextRanged`'s string, so a line index over that text (`YamlLineIndex`
+ * is one) turns them into a line and a column.
+ *
+ *  Under Node, where `parseTextRanged` takes one byte per UTF-16 code unit
+ *  (below), its offsets count code units, so past the first non-ASCII character
+ *  they differ from a native build's, which count UTF-8 bytes. Ranges cost about
+ *  20 bytes per value more: two offsets for the value, two for its key and about
+ *  one on the parse's stacks, which grow with the nesting and the members
+ *  pending. They are entry points of their own rather than a flag `parse` tests,
+ *  so that `parse` keeps the loop it had before ranges existed.
+ *
+ *  A plain `parse` writes nothing for them: ranges carry the generation they
+ *  were written in, which `clear` moves anyway, so after a `parse` every reader
+ *  answers `-1`, and their arrays are made on first use, so a document that
+ *  never keeps ranges allocates none. A loader that builds a document from
+ *  another text `clear`s, then gives each value it makes its range with
+ *  `setRange` and each key with `setKeyRange`; until then a built value or key
+ *  answers `-1`. `set` over an existing key keeps the member's key range and
+ *  takes the new value's own.
+ *
+ *  Under `JSON_VALUE_DUPLICATE_LAST` a repeated key's member keeps its first
+ *  key's range and holds the last value, with that value's.
  *
  * **Objects keep insertion order**, the order the members were written in or
  * added. `get` finds a member by its key with a scan, so it is for a handful of
@@ -125,12 +129,13 @@
  * `set` can never contain itself: adding a value that is already in a
  * container, or a container to itself or to anything inside it, is
  * `JSON_VALUE_ERR_ATTACHED`, and writing always ends.
- * Strings handed to a builder are taken as their bytes, as `JsonWriter` takes
- * them, and a string read back is made from the stored bytes in one
- * allocation (`String.fromBytes`). Under Node a string is UTF-16, and
- * `parseText` and the builders take one byte per code unit, so non-ASCII text
- * is stored differently there than natively, where a string is its UTF-8
- * bytes; `parse` over a `u8[]` reads the same bytes both ways.
+ *
+ *  Strings handed to a builder are taken as their bytes, as `JsonWriter` takes
+ *  them, and a string read back is made from the stored bytes in one allocation
+ *  (`String.fromBytes`). Under Node a string is UTF-16, and `parseText` and the
+ *  builders take one byte per code unit, so non-ASCII text is stored differently
+ *  there than natively, where a string is its UTF-8 bytes; `parse` over a `u8[]`
+ *  reads the same bytes both ways.
  *
  * **Public is not the whole API.** The compiler ignores `private`, so every
  * member is reachable by a program; `private` and `@internal` mark what is

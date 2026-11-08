@@ -42,36 +42,38 @@
  * says the carrier is QUIC. 0-RTT and client authentication are not here:
  * an early-data offer is ignored.
  *
- * **Resumption.** A server the carrier calls `enableTickets` on, over TCP
- * only, resumes with a session ticket in `psk_dhe_ke` mode (RFC 8446 §2.2,
- * §4.2.11) and issues one after each handshake. The ticket keys and the
- * strike register are the program's, lent to each call and never kept: a
- * ClientHello that offers a ticket stops at `TLS_STATE_WAIT_TICKET`, and
- * `resume` reads the identities in the client's order, verifies the binder of
- * the one it selects, records its id, and answers a resumed flight — or a full
- * handshake when no identity can be used (`docs/security/tls.md`,
- * "Resumption"). Once connected, `issue` writes one NewSessionTicket at the
- * Application level. Sealing draws the ticket's nonce and `issue` the
- * `ticket_age_add` from the random device; nothing else here does. Over QUIC
- * the hand-off is never called, so a PSK offer gets a full handshake.
+ * **Resumption.** A server the carrier calls `enableTickets` on, over TCP only,
+ * resumes with a session ticket in `psk_dhe_ke` mode (RFC 8446 §2.2, §4.2.11)
+ * and issues one after each handshake. The ticket keys and the strike register
+ * are the program's, lent to each call and never kept: a ClientHello that
+ * offers a ticket stops at `TLS_STATE_WAIT_TICKET`, and `resume` reads the
+ * identities in the client's order, verifies the binder of the one it selects,
+ * records its id, and answers a resumed flight — or a full handshake when no
+ * identity can be used (`docs/security/tls.md`, "Resumption").
+ *
+ *  Once connected, `issue` writes one NewSessionTicket at the Application level.
+ *  Sealing draws the ticket's nonce and `issue` the `ticket_age_add` from the
+ *  random device; nothing else here does. Over QUIC the hand-off is never
+ *  called, so a PSK offer gets a full handshake.
  *
  * **Refusals are alerts.** `receive` and `sign` answer 0 or a TLS alert
  * description (`TLS_ALERT_*` in `nish/net/tls/codec`); after one the server
  * is in `TLS_STATE_FAILED` and answers the same alert to every call. Nothing
  * the peer sends can make it panic.
  *
- * **Secrets.** Every secret the server holds is a `Secret` (`nish:secret`):
- * the ECDHE secret and the words it is computed in, wiped on every path; the
+ * **Secrets.** Every secret the server holds is a `Secret` (`nish:secret`): the
+ * ECDHE secret and the words it is computed in, wiped on every path; the
  * ephemeral key, copied into the `ephemeral` field by `restart` with the
  * caller's array zeroed; and the handshake, traffic, exporter and resumption
  * secrets, and a resumed handshake's PSK, early secret and binder key, fields
  * of the two `TlsSecretPool`s, read only inside `expose`.
- * `wipe` zeroes them all, and `restart` calls it before the next connection;
- * the carriers call it when a connection ends, and `wipeSecret` and
- * `wipeEphemeral` as each secret's work is done. `fail` wipes the resumption
- * master secret and the PSK's secrets, and `issue` the resumption master
- * secret once the ticket is sealed (CLAUDE.md §Security; TLS-1 in
- * `docs/security/tls.md`).
+ *
+ *  `wipe` zeroes them all, and `restart` calls it before the next connection;
+ *  the carriers call it when a connection ends, and `wipeSecret` and
+ *  `wipeEphemeral` as each secret's work is done. `fail` wipes the resumption
+ *  master secret and the PSK's secrets, and `issue` the resumption master secret
+ *  once the ticket is sealed (CLAUDE.md §Security; TLS-1 in
+ *  `docs/security/tls.md`).
  *
  * **Memory.** A `TlsServer` keeps its state in buffers it allocates once —
  * the messages in and out, the transcript, the secrets, the HKDF scratch —
@@ -938,18 +940,19 @@ const tlsServerTicketCapacity = (state: TlsTicketState): i32 => {
  *
  * **What it allocates.** Everything it keeps is allocated by the constructor
  * and reused by `restart`: the input and output buffers, the transcript's
- * hashers, the HKDF scratch, the ephemeral key's 32 bytes, and HashLen bytes for every secret
- * under each hash, which each derivation writes over in place and `wipe`
- * zeroes before the next connection starts. `receive` and
- * `sign` do their work inside `using a = arena()` blocks, so the compiler has
- * proved that what they allocate on the way dies before they return. Four
- * things grow or are made outside those blocks: the input buffer, doubled up
- * to the largest message when a ClientHello does not fit (once per slot);
- * the Handshake-level output, when a signature is longer than an ECDSA one;
- * the `serverName` string, made when the client's host name differs from the
- * last one this server held; and, over QUIC only, the array the client's
- * transport parameters are copied into, which grows only when a client's
- * are longer than any before (TLS-3).
+ * hashers, the HKDF scratch, the ephemeral key's 32 bytes, and HashLen bytes
+ * for every secret under each hash, which each derivation writes over in place
+ * and `wipe` zeroes before the next connection starts. `receive` and `sign` do
+ * their work inside `using a = arena()` blocks, so the compiler has proved that
+ * what they allocate on the way dies before they return.
+ *
+ * Four things grow or are made outside those blocks: the input buffer, doubled
+ * up to the largest message when a ClientHello does not fit (once per slot);
+ * the Handshake-level output, when a signature is longer than an ECDSA one; the
+ * `serverName` string, made when the client's host name differs from the last
+ * one this server held; and, over QUIC only, the array the client's transport
+ * parameters are copied into, which grows only when a client's are longer than
+ * any before (TLS-3).
  */
 export class TlsServer {
   /** The configuration this server was built with: its certificate chain, ALPN list and QUIC transport parameters. */
@@ -2188,17 +2191,18 @@ export class TlsServer {
   }
 
   /**
-   * Once the handshake is done, at most once a connection: seals a ticket
-   * for it under `key`, which `info` describes, and writes the
-   * NewSessionTicket carrying it at the Application level, for the carrier
-   * to send under the server's application keys. Answers whether one was
-   * written: none is when tickets are off, the client did not list
-   * `psk_dhe_ke`, or the key does not seal. On a connected connection's
-   * first call the resumption master secret is wiped before it returns,
-   * written or not, so a carrier that issues no ticket still calls this, or
-   * `wipeResumption`. Before the handshake is done, or on a second call, it
-   * answers false and touches nothing: a secret wiped then would leave no
-   * ticket to issue, and one wiped already has nothing left to wipe.
+   * Once the handshake is done, at most once a connection: seals a ticket for
+   * it under `key`, which `info` describes, and writes the NewSessionTicket
+   * carrying it at the Application level, for the carrier to send under the
+   * server's application keys. Answers whether one was written: none is when
+   * tickets are off, the client did not list `psk_dhe_ke`, or the key does not
+   * seal. On a connected connection's first call the resumption master secret
+   * is wiped before it returns, written or not, so a carrier that issues no
+   * ticket still calls this, or `wipeResumption`.
+   *
+   * Before the handshake is done, or on a second call, it answers false and
+   * touches nothing: a secret wiped then would leave no ticket to issue, and
+   * one wiped already has nothing left to wipe.
    *
    * @param key The current ticket key, lent: read only inside `exposeWith`, and still the carrier's to wipe.
    * @param info The key's record, which counts the ticket when one is sealed.

@@ -25,17 +25,18 @@
  * built with `push` and `set` deeper than any parser allows compares as well
  * as a flat one, and nothing recurses.
  *
- * **What a call costs.** `jsonEqual` stops at the first difference. Up to
- * there it is linear in the values' size, except that each pair of objects
- * reads every key (one string each) and sorts them, `n log n` for `n`
- * members; it also allocates one string per string value, its stack, and
- * whatever `jsonNumberCompare` allocates per number pair. `jsonEqualCanonical`
- * builds the canonical text, about the size of the value written as JSON,
- * and sorts keys the same way. `jsonEqualHash` is FNV-1a of that text's
- * units: its bytes natively, its code units under Node. Every order and
- * length below is in those units too.
- * `jsonEqualFirstDuplicate` makes the canonical text of every element up to
- * the first repeat and keeps them in a `Map`.
+ * **What a call costs.** `jsonEqual` stops at the first difference. Up to there
+ * it is linear in the values' size, except that each pair of objects reads
+ * every key (one string each) and sorts them, `n log n` for `n` members; it
+ * also allocates one string per string value, its stack, and whatever
+ * `jsonNumberCompare` allocates per number pair. `jsonEqualCanonical` builds
+ * the canonical text, about the size of the value written as JSON, and sorts
+ * keys the same way. `jsonEqualHash` is FNV-1a of that text's units: its bytes
+ * natively, its code units under Node.
+ *
+ *  Every order and length below is in those units too. `jsonEqualFirstDuplicate`
+ *  makes the canonical text of every element up to the first repeat and keeps
+ *  them in a `Map`.
  *
  * **The hash is not keyed.** FNV-1a (public domain) is the same in every
  * process, so an attacker can make many values that share a hash, and a

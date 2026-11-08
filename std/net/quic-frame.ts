@@ -14,18 +14,21 @@
  *       at = frame.end;
  *     }
  *
- * **Coverage.** Every frame type of RFC 9000 is read, 0x00 to 0x1e, and RFC 9221's
- * DATAGRAM, 0x30 and 0x31, so a type outside those is the one parse error a
- * well-formed packet cannot produce. What
- * a frame *means* is `nish/net/quic`'s: this module checks only what §19 says
- * of the encoding itself, and answers the transport error the RFC names for
- * each break — `QUIC_ERROR_FRAME_ENCODING` for a truncated field, a length
- * past the packet, an ACK range below packet number zero, an offset past
- * 2^62 − 1, a stream count past 2^60, an empty NEW_TOKEN, a connection ID
- * outside 1 to 20 bytes or a Retire Prior To above its own sequence number;
- * `QUIC_ERROR_PROTOCOL_VIOLATION` for a frame type spelled in more bytes than
- * it needs (§12.4). Every read is bounds-checked against the window the caller
- * gives, so nothing a peer sends can make this module panic.
+ * **Coverage.** Every frame type of RFC 9000 is read, 0x00 to 0x1e, and RFC
+ * 9221's DATAGRAM, 0x30 and 0x31, so a type outside those is the one parse
+ * error a well-formed packet cannot produce.
+ *
+ *  What a frame *means* is `nish/net/quic`'s: this module checks only what §19
+ *  says of the encoding itself, and answers the transport error the RFC names
+ *  for each break — `QUIC_ERROR_FRAME_ENCODING` for a truncated field, a length
+ *  past the packet, an ACK range below packet number zero, an offset past 2^62 −
+ *  1, a stream count past 2^60, an empty NEW_TOKEN, a connection ID outside 1 to
+ *  20 bytes or a Retire Prior To above its own sequence number;
+ *  `QUIC_ERROR_PROTOCOL_VIOLATION` for a frame type spelled in more bytes than
+ *  it needs (§12.4).
+ *
+ *  Every read is bounds-checked against the window the caller gives, so nothing
+ *  a peer sends can make this module panic.
  *
  * **No copy of the bulk.** A CRYPTO, STREAM or DATAGRAM frame's data, a
  * NEW_TOKEN's token, a PATH_CHALLENGE's eight bytes and a CONNECTION_CLOSE's

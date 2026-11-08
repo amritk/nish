@@ -42,31 +42,35 @@
  * any well-formed UTF-8 (RFC 3629: no overlong form, no surrogate code point,
  * nothing past U+10FFFF, no sequence cut short), no raw byte below 0x20, and
  * the escapes of RFC 8259 §7. A `\u` escape of a high surrogate must be
- * followed at once by one of a low surrogate, and a low surrogate must follow
- * a high one: a lone surrogate escape is an error. RFC 8259 allows one, but it
- * names no Unicode character, decodes to no valid UTF-8, and is what a peer
- * smuggles past a check done on the decoded bytes, so this module takes the
- * stricter reading (`docs/security/json.md`, "Lone surrogates"). Nothing is decoded until
- * the caller asks: `stringInto` writes the decoded bytes of the current key
- * or string into the caller's array, and `keyEquals` compares them with a
- * string without writing them anywhere.
+ * followed at once by one of a low surrogate, and a low surrogate must follow a
+ * high one: a lone surrogate escape is an error.
+ *
+ *  RFC 8259 allows one, but it names no Unicode character, decodes to no valid
+ *  UTF-8, and is what a peer smuggles past a check done on the decoded bytes, so
+ *  this module takes the stricter reading (`docs/security/json.md`, "Lone
+ *  surrogates"). Nothing is decoded until the caller asks: `stringInto` writes
+ *  the decoded bytes of the current key or string into the caller's array, and
+ *  `keyEquals` compares them with a string without writing them anywhere.
  *
  * **Numbers are checked against the grammar and parsed on request.**
  * `numberF64` is correctly rounded, ties to even, in one of three ways. A
- * number of at most 19 significant digits is read into a `u64`. When that is
- * at most 2^53 and the decimal exponent is within ±22, the answer is one exact
- * multiply or divide of two exact doubles (Clinger's fast path). Any other
- * number of at most 19 digits is the Eisel–Lemire algorithm as fast_float
- * computes it: one or two 64×64-bit products with a truncated power of five,
- * which Mushtak and Lemire prove always decide the rounding for so few digits,
- * so it never needs a fallback. A number of more digits, or with an exponent
- * past `JSON_TOK_EXPONENT_CAP`, goes to the runtime's `parseFloat`, which is
- * `strtod`, from a function whose own arena scope releases the copy it reads,
- * so it leaves the arena where it was. `isInteger` and `numberI64` read a number
- * written without a fraction or an exponent that fits in an `i64`, and
- * `isU64` and `numberU64` one written without a sign either that fits in a
- * `u64`. Those go by spelling; `isIntegral` asks whether the value is whole,
- * however it is written (`1.0`, `1e2`), from the text and at any size.
+ * number of at most 19 significant digits is read into a `u64`. When that is at
+ * most 2^53 and the decimal exponent is within ±22, the answer is one exact
+ * multiply or divide of two exact doubles (Clinger's fast path).
+ *
+ *  Any other number of at most 19 digits is the Eisel–Lemire algorithm as
+ *  fast_float computes it: one or two 64×64-bit products with a truncated power
+ *  of five, which Mushtak and Lemire prove always decide the rounding for so few
+ *  digits, so it never needs a fallback. A number of more digits, or with an
+ *  exponent past `JSON_TOK_EXPONENT_CAP`, goes to the runtime's `parseFloat`,
+ *  which is `strtod`, from a function whose own arena scope releases the copy it
+ *  reads, so it leaves the arena where it was.
+ *
+ *  `isInteger` and `numberI64` read a number written without a fraction or an
+ *  exponent that fits in an `i64`, and `isU64` and `numberU64` one written
+ *  without a sign either that fits in a `u64`. Those go by spelling;
+ *  `isIntegral` asks whether the value is whole, however it is written (`1.0`,
+ *  `1e2`), from the text and at any size.
  *
  * **Runs are read in bulk.** A string's plain bytes, the blanks between
  * tokens and a number's digits are each stepped over by a loop that reads

@@ -16,19 +16,22 @@ A.4 (EdDSA) verify, and a flipped signature or payload byte in each fails.
 The two classic JWT forgeries are closed by construction: a key is made for
 one algorithm and the header's `alg` must name it exactly, so `alg: none`
 (JWT-P1) and an HS256 header in front of an RSA key (JWT-P2) are refused
-before any signature is computed. A duplicate `alg`, spelled plainly or with
-a JSON escape, `crit` and `b64` are refused (JWT-P3). The claims are read only
-after the signature holds, and `exp`, `nbf`, `iat` (with a bounded leeway),
-`iss`, `aud` and `sub` are checked as RFC 7519 §4.1 says (JWT-P5, JWT-P6).
-The HMAC tag is compared in constant time (JWT-P7), and base64url is strict,
-so each token has one spelling (JWT-P4). Review found two faults, both
-fixed with a test that failed before the fix: a wiped key still computed tags
-under its zeroed pads, which anyone can reproduce (JWT-6, Medium), and a
-`JwtKey` built by hand could pair an RS name with an HMAC check (JWT-7, Low).
-Five properties are recorded rather than changed, JWT-1 to JWT-5, all Low and
-accepted: public-key verifies allocate, the token is processed in variable
-time, unregistered members may repeat, `peekKid` is unauthenticated, and
-what the wipes cannot reach.
+before any signature is computed.
+
+A duplicate `alg`, spelled plainly or with a JSON escape, `crit` and `b64` are
+refused (JWT-P3). The claims are read only after the signature holds, and
+`exp`, `nbf`, `iat` (with a bounded leeway), `iss`, `aud` and `sub` are checked
+as RFC 7519 §4.1 says (JWT-P5, JWT-P6). The HMAC tag is compared in constant
+time (JWT-P7), and base64url is strict, so each token has one spelling
+(JWT-P4).
+
+Review found two faults, both fixed with a test that failed before the fix: a
+wiped key still computed tags under its zeroed pads, which anyone can reproduce
+(JWT-6, Medium), and a `JwtKey` built by hand could pair an RS name with an
+HMAC check (JWT-7, Low). Five properties are recorded rather than changed,
+JWT-1 to JWT-5, all Low and accepted: public-key verifies allocate, the token
+is processed in variable time, unregistered members may repeat, `peekKid` is
+unauthenticated, and what the wipes cannot reach.
 
 ## Scope
 
@@ -84,12 +87,13 @@ at the first step that fails: the window and the size limit, exactly two
 dots, the header decoded and checked, the signature decoded and its length
 compared with the key's, the signature checked, and only then the claims
 decoded and checked. The header's `alg` is compared with `jwtAlgName` of the
-key's algorithm; the token never selects a code path. JSON is read with
-`JwtJson`, the module's own RFC 8259 reader, one byte at a time; its keys
-compare decoded, so an escaped member name is the member it spells. HMAC goes through `HmacKey`, whose keyed
-midstates are copied per token rather than recomputed from the secret, so an
-HS verify touches the secret's derived state only through SHA-2's
-compression and a constant-time compare.
+key's algorithm; the token never selects a code path.
+
+JSON is read with `JwtJson`, the module's own RFC 8259 reader, one byte at a
+time; its keys compare decoded, so an escaped member name is the member it
+spells. HMAC goes through `HmacKey`, whose keyed midstates are copied per token
+rather than recomputed from the secret, so an HS verify touches the secret's
+derived state only through SHA-2's compression and a constant-time compare.
 
 **Tests.** `tests/link/crypto_jwt` (100 checks), and the same checks under
 `--number-mode f64` in `tests/link/crypto_jwt_f64`. Each refusal has a check
