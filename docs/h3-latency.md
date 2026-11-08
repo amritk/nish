@@ -134,7 +134,7 @@ CPU-bound, not parked. That is a second finding, below under
 
 ### The pacer: confirmed
 
-A local patch made `pacerDelay` (`std/net/quic-recovery.ts:836`) always
+A local patch made `pacerDelay` (`std/net/quic-recovery.ts:832`) always
 answer 0, so nothing is ever paced:
 
 Same sweep, same rounds, the stock server against the unpaced one:
@@ -150,7 +150,7 @@ With the pacer off, the millisecond tail is gone at every size, and 100 B
 does not move.
 
 A second local patch counted, in `flushSlot`
-(`std/net/http3-server.ts:852`), how often a slot was filed on the wheel at
+(`std/net/http3-server.ts:851`), how often a slot was filed on the wheel at
 the pacer's time rather than at the connection's own deadline:
 
 | body | requests | flushes | filed at the pacer's time |
@@ -179,13 +179,13 @@ A local patch raised the pacer's cap from the initial window to
 
 This helps large bodies, whose window has grown. It leaves the 4 kB tail
 where it was. A small response is application-limited, so its window never
-grows past the initial 12,000 bytes (`std/net/quic-recovery.ts:448`, RFC 9002
+grows past the initial 12,000 bytes (`std/net/quic-recovery.ts:444`, RFC 9002
 §7.8). For those responses the cap is not what binds; the millisecond refill
 is.
 
 ### Delayed ACKs: refuted by reading
 
-`QuicConnection.deadline()` (`std/net/quic.ts:2742`) covers the idle timer,
+`QuicConnection.deadline()` (`std/net/quic.ts:2726`) covers the idle timer,
 key retention and loss recovery only. The server has no ACK-delay timer. A
 pending ACK goes out with the next flush, which runs on every datagram read,
 so it is never held for a timer.
@@ -193,11 +193,11 @@ so it is never held for a timer.
 ### Not tested
 
 - The wheel moves its cursor to `now + 1` after a tick
-  (`std/net/http3-server.ts:939`). This matters only for slots filed for the
+  (`std/net/http3-server.ts:938`). This matters only for slots filed for the
   current millisecond, which the pacer never produces: `pacerDelay` answers
   at least 1.
 - Whether an ACK-only datagram should need a full datagram's pacer credit. It
-  does today (`std/net/quic-listener.ts:939`), but at 100 B the pacer never
+  does today (`std/net/quic-listener.ts:934`), but at 100 B the pacer never
   binds.
 - The issue's 100 B tail on its own machine. The counter shows the pacer
   parks nothing at 100 B here, so if that tail is real it has a second cause.
@@ -225,15 +225,15 @@ instructions per body byte. AES is about 1 % of the whole. The rest is
 loops that touch the body one byte at a time:
 
 - `streamWrite` copies the body into the stream's ring one byte per
-  iteration, with a bounds check each (`std/net/quic-stream.ts:1081`).
+  iteration, with a bounds check each (`std/net/quic-stream.ts:1075`).
 - Each ring index is `offset % size` on 64-bit integers, per byte
   (`std/net/quic-stream.ts:272`, about 8 % of instructions).
 - Acknowledged data is kept as one bit per byte: an ACK marks its range bit
-  by bit (`std/net/quic-stream.ts:1530`, the setter at :187), and the send
-  base advances by testing one bit per byte (`std/net/quic-stream.ts:1534`,
+  by bit (`std/net/quic-stream.ts:1524`, the setter at :187), and the send
+  base advances by testing one bit per byte (`std/net/quic-stream.ts:1528`,
   the test at :183). The two bitmap helpers are about 10 %.
 - `quicPacketCopy` copies a STREAM frame's payload into the datagram one
-  byte at a time (`std/net/quic-packet.ts:541`).
+  byte at a time (`std/net/quic-packet.ts:540`).
 
 Inclusively, processing incoming packets, mostly ACKs, is 46 % of the 16 kB
 profile; building and sealing datagrams 30 %, of which the frame copy is
@@ -247,8 +247,8 @@ millisecond clock. A response that finds the budget spent waits for the next
 tick, about a millisecond.**
 
 1. Every time in `std/net/quic-recovery.ts` is the caller's monotonic clock in
-   whole milliseconds (`std/net/quic-recovery.ts:28`).
-2. `pacerRefill` (`std/net/quic-recovery.ts:812`) earns `elapsed × cwnd × 5 /
+   whole milliseconds (`std/net/quic-recovery.ts:27`).
+2. `pacerRefill` (`std/net/quic-recovery.ts:808`) earns `elapsed × cwnd × 5 /
    (rtt × 4)` (line 819).
    - `elapsed` is in whole milliseconds, so nothing is earned between two
      ticks of the clock.
@@ -257,12 +257,12 @@ tick, about a millisecond.**
 3. The budget is capped at `QUIC_RECOVERY_INITIAL_WINDOW`, 12,000 bytes
    (line 821). With the window at its initial 12,000 bytes, one tick earns
    15,000, which the cap cuts to 12,000.
-4. `quicListenerTakeFlight` (`std/net/quic-listener.ts:925`) sends a
+4. `quicListenerTakeFlight` (`std/net/quic-listener.ts:920`) sends a
    datagram only while the pacer holds credit for a full 1,200-byte datagram
    (line 934). Each datagram is charged its real size.
 5. When credit runs out mid-response, `pacerDelay` answers at least 1 ms
-   (`std/net/quic-recovery.ts:845`). `flushSlot` then files the connection on
-   the timer wheel at that time (`std/net/http3-server.ts:852`). The rest of
+   (`std/net/quic-recovery.ts:841`). `flushSlot` then files the connection on
+   the timer wheel at that time (`std/net/http3-server.ts:851`). The rest of
    the response goes out on the next millisecond tick.
 
 A 4 kB response takes four datagrams, and the ACKs and HEADERS beside it take
@@ -290,14 +290,14 @@ before and after.
   resolution sends at once instead of being filed for the next tick. Loss
   delay and the PTO keep RFC 9002's 1 ms kGranularity floor
   (`QUIC_RECOVERY_GRANULARITY`, applied in `lossDelay` at
-  `std/net/quic-recovery.ts:515` and in `ptoBase` at :653); they read the
+  `std/net/quic-recovery.ts:511` and in `ptoBase` at :653); they read the
   same `smoothedRtt`, so the finer units must not lower their floor.
 - **Let the burst follow the window.** Cap the budget at `max(initial
   window, cwnd)`, as the second lead measured. It is not enough alone, but
   needed for large bodies once the clock is fixed. RFC 9002 §7.7 says a
   sender SHOULD NOT send a burst larger than the initial window unless it
   knows the path can absorb it, and `pacerRefill`'s comment
-  (`std/net/quic-recovery.ts:807`) calls the initial window the largest
+  (`std/net/quic-recovery.ts:803`) calls the initial window the largest
   burst it allows; a larger cap has to state that knowledge.
 - **Don't pace what isn't a burst.** Skip the credit check for an ACK-only
   datagram, or for a response's datagrams while nothing else is in flight.
