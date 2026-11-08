@@ -10750,7 +10750,6 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !3 = !{i32 8, !"sign-return-address", i32 1}
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 
-; WP49 stage 5: the loop over the executor in runtime-async.c (docs/wp49-async-server.md)
 declare i8* @nish_async_next()
 declare i8* @nish_async_enter(i8* nonnull)
 declare void @nish_async_leave(i8* nonnull, i8*)
@@ -27789,6 +27788,15 @@ declare noundef i64 @nish_region_new() #2
 declare i8* @nish_region_enter(i64 noundef) #2
 declare void @nish_region_leave(i64 noundef, i8*) #2
 declare void @nish_region_free(i64 noundef) #2
+declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef) #3
+declare i8* @nish_async_enter(i8* nonnull) #3
+declare void @nish_async_leave(i8* nonnull, i8*) #3
+declare void @nish_async_done(i8* nonnull) #3
+declare i8* @nish_async_next() #3
+declare noundef i64 @nish_async_sleep(i32 noundef) #3
+declare noundef i64 @nish_async_wait_fd(i32 noundef, i32 noundef) #3
+declare noundef i32 @nish_async_poll(i64 noundef) #3
+declare nonnull i8* @nish_async_copy_str(i8* nonnull) #3
 declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*) #3
 declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull) #3
 declare noundef i64 @nish_arena_used() #2
