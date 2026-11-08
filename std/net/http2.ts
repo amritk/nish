@@ -34,64 +34,77 @@
  *       // then conn.consume(sent)
  *     };
  *
- * **Events.** `next()` reads the frames `feed` handed it and answers the
- * first that means something to the program: `H2_REQUEST` (a stream opened
- * with a request's header section; `fields` holds it until the next header
- * block on the connection is read, for any stream, and a program copies what
- * it keeps past that: the next block empties `fields` and reuses the arrays
- * it pointed into), `H2_DATA` (some of a request body, a window onto the input
- * buffer that stays valid until the next `feed`), `H2_TRAILERS`, `H2_RESET`
- * (the stream is gone: the peer reset it, or broke a rule that resets it —
- * `errorCode` says which), `H2_WINDOW` (a send window that held `writeData`
- * back has opened: `stream`, or 0 for the connection's), `H2_GOAWAY` (the
- * peer is going away; `lastStreamId`), and
- * `H2_ERROR`, final: the connection broke a rule, a GOAWAY with `errorCode`
- * is queued, and every later call answers it again. `H2_NEED_MORE` asks for
- * more input, or for the output to drain: a frame is read only while the
- * output has room for whatever it makes the connection answer, so a peer
- * that sends PINGs or SETTINGS and never reads the acknowledgements stops
- * being read rather than growing a queue. Bodies move a frame at a time and
- * nothing buffers a whole one.
+ * **Events.**
  *
- * **What the connection refuses**, as RFC 9113 classes it. A connection error
- * sends GOAWAY and ends the connection: a bad preface or a first frame that is
- * not SETTINGS (PROTOCOL_ERROR, §3.4); every refusal of
- * `nish/net/http2-frame`; a frame other than CONTINUATION inside a header
- * block, or a CONTINUATION outside one (§6.10); a stream identifier that is
- * even or does not increase (§5.1.1); DATA, WINDOW_UPDATE or RST_STREAM on an
- * idle stream, and a PUSH_PROMISE from a client (PROTOCOL_ERROR); HEADERS on
- * a closed stream (STREAM_CLOSED); a header block HPACK cannot decode
- * (COMPRESSION_ERROR, RFC 7541 §2.3.2); DATA past the connection window, or a
- * window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR, §6.9); a setting
- * `http2SettingError` refuses; a header block longer than `maxHeaderBlock`
- * or cut into more than `H2_MAX_FRAGMENTS` frames, a header block that would
- * make the HPACK table copy past its budget (`HPACK_ERR_COPY_BUDGET`), and
- * more streams reset than `resetBudget` allows — by the peer, or by the
- * server for a stream error the peer caused (ENHANCE_YOUR_CALM, §10.5). A
- * stream error resets one stream and the connection lives: a malformed request
- * — any refusal of `nish/net/http-fields`, trailers without END_STREAM, a body
- * that disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or
- * HEADERS after the peer ended the stream (STREAM_CLOSED, §5.1); DATA past the
- * stream's window, or its window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR); a
- * stream past `maxStreams` (REFUSED_STREAM, §5.1.2); a stream that depends on
- * itself and a PRIORITY of the wrong length. A request whose header list is
- * longer than `maxHeaderListSize` is answered with a 431 and never reaches the
- * program (§10.5.1).
+ *  `next()` reads the frames `feed` handed it and answers the first that means
+ *  something to the program:
+ *  - `H2_REQUEST` (a stream opened with a request's header section; `fields`
+ *    holds it until the next header block on the connection is read, for any
+ *    stream, and a program copies what it keeps past that: the next block
+ *    empties `fields` and reuses the arrays it pointed into),
+ *  - `H2_DATA` (some of a request body, a window onto the input buffer that
+ *    stays valid until the next `feed`),
+ *  - `H2_TRAILERS`,
+ *  - `H2_RESET` (the stream is gone: the peer reset it, or broke a rule that
+ *    resets it — `errorCode` says which),
+ *  - `H2_WINDOW` (a send window that held `writeData` back has opened: `stream`,
+ *    or 0 for the connection's),
+ *  - `H2_GOAWAY` (the peer is going away; `lastStreamId`),
+ *  - and `H2_ERROR`, final: the connection broke a rule, a GOAWAY with
+ *    `errorCode` is queued, and every later call answers it again.
+ *
+ *  `H2_NEED_MORE` asks for more input, or for the output to drain: a frame is
+ *  read only while the output has room for whatever it makes the connection
+ *  answer, so a peer that sends PINGs or SETTINGS and never reads the
+ *  acknowledgements stops being read rather than growing a queue. Bodies move a
+ *  frame at a time and nothing buffers a whole one.
+ *
+ * **What the connection refuses**, as RFC 9113 classes it.
+ *
+ *  A connection error sends GOAWAY and ends the connection:
+ *  - a bad preface or a first frame that is not SETTINGS (PROTOCOL_ERROR, §3.4);
+ *  - every refusal of `nish/net/http2-frame`;
+ *  - a frame other than CONTINUATION inside a header block, or a CONTINUATION
+ *    outside one (§6.10);
+ *  - a stream identifier that is even or does not increase (§5.1.1);
+ *  - DATA, WINDOW_UPDATE or RST_STREAM on an idle stream, and a PUSH_PROMISE
+ *    from a client (PROTOCOL_ERROR);
+ *  - HEADERS on a closed stream (STREAM_CLOSED);
+ *  - a header block HPACK cannot decode (COMPRESSION_ERROR, RFC 7541 §2.3.2);
+ *  - DATA past the connection window, or a window pushed past 2^31 − 1
+ *    (FLOW_CONTROL_ERROR, §6.9);
+ *  - a setting `http2SettingError` refuses;
+ *  - a header block longer than `maxHeaderBlock` or cut into more than
+ *    `H2_MAX_FRAGMENTS` frames, a header block that would make the HPACK table
+ *    copy past its budget (`HPACK_ERR_COPY_BUDGET`), and more streams reset than
+ *    `resetBudget` allows — by the peer, or by the server for a stream error the
+ *    peer caused (ENHANCE_YOUR_CALM, §10.5).
+ *
+ *  A stream error resets one stream and the connection lives: a malformed
+ *  request — any refusal of `nish/net/http-fields`, trailers without END_STREAM,
+ *  a body that disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or
+ *  HEADERS after the peer ended the stream (STREAM_CLOSED, §5.1); DATA past the
+ *  stream's window, or its window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR); a
+ *  stream past `maxStreams` (REFUSED_STREAM, §5.1.2); a stream that depends on
+ *  itself and a PRIORITY of the wrong length. A request whose header list is
+ *  longer than `maxHeaderListSize` is answered with a 431 and never reaches the
+ *  program (§10.5.1).
  *
  * **Caps are start-up numbers**, all in `Http2Config`: the streams open at
  * once, the windows, the largest frame and header block accepted, the header
- * list, the output buffer and the reset budget. Every stream slot is
- * allocated by the constructor; the input, output and header-block buffers
- * are borrowed from an `Http2Pools` when first needed and given back, zeroed
- * as far as they were written, once each is empty or the connection ends, so
- * an idle connection holds none. A server shares one `Http2Pools` among its
- * slots; a connection on its own makes a private one that holds one buffer of
- * each. Once the pools are warm, reading DATA, writing DATA and every control
- * frame allocate nothing, and neither does a header block once the
- * decoder's arrays have grown to the largest block and header list seen: it
- * decodes into storage the connection owns, bounded by `maxHeaderBlock` and
- * `maxHeaderListSize` whether the stream is opened, refused or reset
- * (`docs/security/http2.md`, H2-1).
+ * list, the output buffer and the reset budget. Every stream slot is allocated
+ * by the constructor; the input, output and header-block buffers are borrowed
+ * from an `Http2Pools` when first needed and given back, zeroed as far as they
+ * were written, once each is empty or the connection ends, so an idle
+ * connection holds none.
+ *
+ *  A server shares one `Http2Pools` among its slots; a connection on its own
+ *  makes a private one that holds one buffer of each. Once the pools are warm,
+ *  reading DATA, writing DATA and every control frame allocate nothing, and
+ *  neither does a header block once the decoder's arrays have grown to the
+ *  largest block and header list seen: it decodes into storage the connection
+ *  owns, bounded by `maxHeaderBlock` and `maxHeaderListSize` whether the stream
+ *  is opened, refused or reset (`docs/security/http2.md`, H2-1).
  *
  * The server sends no PUSH_PROMISE and no PRIORITY, and reads PRIORITY only to
  * check it: RFC 9113 §5.3.2 deprecates the scheme. Every field it sends is a

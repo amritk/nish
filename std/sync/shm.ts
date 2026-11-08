@@ -16,13 +16,15 @@
  * **A region is a named POSIX shared-memory object** (`/dev/shm/<name>` on
  * Linux, `shm_open("/<name>")` on Darwin) mapped shared, so every process that
  * opens the name sees the same bytes. A name is 1 to 30 of `A-Z a-z 0-9 . _ -`,
- * not starting with `.`. `createRegion` makes it with mode 0600 and refuses a
- * name that exists (`SHM_EXISTS`), so a name another user planted is never
- * adopted; `openRegion` refuses a region this user does not own, that anyone
- * else may read or write, or (on Linux) that is not a regular file or has a
- * second hard link (`SHM_ACCESS`). The name stays until `unlinkRegion`,
- * even after every process has exited, which is how a process that starts later
- * finds it; the mapping goes away with `close` or with the process.
+ * not starting with `.`.
+ *
+ *  `createRegion` makes it with mode 0600 and refuses a name that exists
+ *  (`SHM_EXISTS`), so a name another user planted is never adopted; `openRegion`
+ *  refuses a region this user does not own, that anyone else may read or write,
+ *  or (on Linux) that is not a regular file or has a second hard link
+ *  (`SHM_ACCESS`). The name stays until `unlinkRegion`, even after every process
+ *  has exited, which is how a process that starts later finds it; the mapping
+ *  goes away with `close` or with the process.
  *
  * **Why named, and no anonymous region made before `fork`.** A Nish program
  * has no `fork`: `spawn` and `nish/net/prefork` start a program with `exec`,

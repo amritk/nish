@@ -23,14 +23,16 @@
  * cleartext until `install` gives it a suite and a traffic secret, then
  * TLSCiphertext (§5.2) under the AEAD the suite names. Each record's nonce is
  * the traffic IV XORed with the 64-bit record sequence number (§5.3), and its
- * additional data is the record's own header. Inside, the content is followed
- * by its real type and by zero padding (§5.4); `open` finds the type by
- * reading every byte of the decrypted record whatever the padding is, so how
- * much padding there was is not in its timing, and refuses a record that is
- * padding and nothing else. Both `seal` and `open` write into a buffer the
- * caller owns and answer a count, and what they allocate on the way dies with
- * the call (docs/LANGUAGE.md, "Memory model"), so a connection that has
- * finished its handshake moves records without moving the arena.
+ * additional data is the record's own header.
+ *
+ *  Inside, the content is followed by its real type and by zero padding (§5.4);
+ *  `open` finds the type by reading every byte of the decrypted record whatever
+ *  the padding is, so how much padding there was is not in its timing, and
+ *  refuses a record that is padding and nothing else. Both `seal` and `open`
+ *  write into a buffer the caller owns and answer a count, and what they
+ *  allocate on the way dies with the call (docs/LANGUAGE.md, "Memory model"), so
+ *  a connection that has finished its handshake moves records without moving the
+ *  arena.
  *
  * **Refusals are alerts.** Every function that can refuse answers the alert to
  * send, negated, as a negative count: `-TLS_ALERT_BAD_RECORD_MAC` for a record
@@ -41,17 +43,20 @@
  * sends can make it panic.
  *
  * **Secrets.** A traffic secret arrives as plain bytes, since that is how
- * `nish/net/tls` hands it over. The key, the IV and the AES key schedule
- * derived from it are held in the protection's fields, because a `Secret` may
- * not be one (NL2430), in arrays the protection reuses for every key it is
- * given, and are zeroed when it is installed again or cleared — the key and
- * IV with `secureZero`, the schedule with `aesKeyWipe`, the volatile `wipe`
- * of its round keys (the kernels' powers of H included) and of H. The key and
- * IV are derived straight into place, in an HKDF scratch that is wiped after
- * each derivation, and the schedule is expanded into place by `aesKeyInto`
- * (TLS-2 in `docs/security/tls.md`). A caller that holds the traffic secret
- * as a `Secret` installs it with `installHeld` and ratchets it in place with
- * `advanceHeld`, so the secret itself is never plain outside `exposeWith`.
+ * `nish/net/tls` hands it over.
+ *
+ *  The key, the IV and the AES key schedule derived from it are held in the
+ *  protection's fields, because a `Secret` may not be one (NL2430), in arrays
+ *  the protection reuses for every key it is given, and are zeroed when it is
+ *  installed again or cleared — the key and IV with `secureZero`, the schedule
+ *  with `aesKeyWipe`, the volatile `wipe` of its round keys (the kernels' powers
+ *  of H included) and of H. The key and IV are derived straight into place, in
+ *  an HKDF scratch that is wiped after each derivation, and the schedule is
+ *  expanded into place by `aesKeyInto` (TLS-2 in `docs/security/tls.md`).
+ *
+ *  A caller that holds the traffic secret as a `Secret` installs it with
+ *  `installHeld` and ratchets it in place with `advanceHeld`, so the secret
+ *  itself is never plain outside `exposeWith`.
  *
  * The record layer is sans-IO: `nish/net/tls/record-server` runs it over a
  * stream for `TlsServer`, and `nish/net/tls-tcp` puts that on a socket.
@@ -703,14 +708,15 @@ export class TlsRecordProtection {
    * `contentType`. Cleartext, the content is the body and the type the
    * header's: `application_data` is `unexpected_message`, since it is never
    * sent in the clear, and a body over 2^14 bytes is `record_overflow`.
+   *
    * Protected, the header's type must be `application_data`
    * (`unexpected_message` otherwise), the body must authenticate under this
    * record's nonce with the header as additional data (`bad_record_mac`), the
-   * decrypted record may be no longer than 2^14 + 1 bytes
-   * (`record_overflow`), and its last non-zero byte is the real type — one
-   * that is all zeros is `unexpected_message` (§5.4). Every refusal is the
-   * alert negated; a window outside `record`, a `len` that is not the
-   * header's, or too little room at `out[at]` is `-TLS_ALERT_INTERNAL_ERROR`.
+   * decrypted record may be no longer than 2^14 + 1 bytes (`record_overflow`),
+   * and its last non-zero byte is the real type — one that is all zeros is
+   * `unexpected_message` (§5.4). Every refusal is the alert negated; a window
+   * outside `record`, a `len` that is not the header's, or too little room at
+   * `out[at]` is `-TLS_ALERT_INTERNAL_ERROR`.
    *
    * A protected record that fails to authenticate leaves the sequence number
    * where it was; one that authenticates spends its number even when its

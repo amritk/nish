@@ -1,7 +1,7 @@
 // WP49: `spawn` starts a task and goes on. The task runs at once, up to the
 // first await that pends; a pending task is queued, and the driver finishes
-// the queue after `main` returns. Nothing pends in this release, so each task
-// here prints before `spawn` returns — TypeScript would print 7 and 0 first.
+// the queue after `main` returns. Nothing here waits on the kernel, so each
+// task prints before `spawn` returns — TypeScript would print 7 and 0 first.
 import { spawn } from "nish:async"
 
 async function double(x: i32): Promise<i32> {

@@ -14,24 +14,25 @@
  *     }
  *     const got: i32 = conn.read(buf, 0, buf.length);   // application data
  *
- * **What it adds to `TlsClient`.** Records around the handshake messages:
- * the ClientHello in the clear, then the client's Finished under the
- * handshake keys, and every key installed at the record boundary RFC 8446
- * §5.1 puts it on. The middlebox-compatibility `change_cipher_spec` of §D.4,
- * which a client that sends a session id (this one always does) owes: one,
- * in the clear, before its second ClientHello after a HelloRetryRequest, or
- * else before its first protected record; the server's is dropped from its
- * first handshake record until its Finished. Alerts (§6) both ways, as the
- * server has them: `close_notify` ends the server's stream, `user_canceled`
- * is passed over, any other alert ends the connection, and a refusal of this
- * module's or of `TlsClient`'s is sent as a fatal alert under whatever keys
- * the client writes with. KeyUpdate (§4.6.3) both ways, with the server's
- * limits: `TLS_RECORD_IDLE_LIMIT` records in a row that carry nothing, and
- * `TLS_RECORD_MAX_KEY_UPDATES` KeyUpdates. A NewSessionTicket is handed to
- * `TlsClient`, which checks and drops it; any other post-handshake message is
- * `unexpected_message` (no client certificate is offered, so no
- * CertificateRequest). A stream that ends without `close_notify` is
- * truncation.
+ * **What it adds to `TlsClient`.** Records around the handshake messages: the
+ * ClientHello in the clear, then the client's Finished under the handshake
+ * keys, and every key installed at the record boundary RFC 8446 §5.1 puts it
+ * on. The middlebox-compatibility `change_cipher_spec` of §D.4, which a client
+ * that sends a session id (this one always does) owes: one, in the clear,
+ * before its second ClientHello after a HelloRetryRequest, or else before its
+ * first protected record; the server's is dropped from its first handshake
+ * record until its Finished.
+ *
+ *  Alerts (§6) both ways, as the server has them: `close_notify` ends the
+ *  server's stream, `user_canceled` is passed over, any other alert ends the
+ *  connection, and a refusal of this module's or of `TlsClient`'s is sent as a
+ *  fatal alert under whatever keys the client writes with. KeyUpdate (§4.6.3)
+ *  both ways, with the server's limits: `TLS_RECORD_IDLE_LIMIT` records in a row
+ *  that carry nothing, and `TLS_RECORD_MAX_KEY_UPDATES` KeyUpdates. A
+ *  NewSessionTicket is handed to `TlsClient`, which checks and drops it; any
+ *  other post-handshake message is `unexpected_message` (no client certificate
+ *  is offered, so no CertificateRequest). A stream that ends without
+ *  `close_notify` is truncation.
  *
  * **Authentication is the caller's.** At `TlsClient`'s `WAIT_AUTH` the
  * records after the server's CertificateVerify stay in the reader and

@@ -62,7 +62,7 @@ import { astText } from "./ast-text"
 import { playBreak } from "./break"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
-import { agentDriven, styleFor } from "../std/cli"
+import { agentDriven, Style, styleFor } from "../std/cli"
 import { helpHint, helpText } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
 import { Compilation, EmittedModule } from "./compilation"
@@ -290,11 +290,42 @@ const perModule = (stems: string[], dir: string): string[] => {
  */
 const report = (compilation: Compilation, json: boolean): void => {
   if (!json) {
-    writeError(`${compilation.sink.format(20)}\n`)
+    writeError(`${compilation.sink.styledFormat(20, diagnosticStyle())}\n`)
     return
   }
   for (const diagnostic of compilation.sink.sorted()) {
     console.log(diagnostic.json())
+  }
+}
+
+/**
+ * How a diagnostic report on stderr is painted: the policy `--help` follows
+ * (`styleFor`), for a person at a terminal and never for an agent. It is asked
+ * only when there is a report to print, because on a terminal it forks
+ * `/bin/sh` for `tput`, and a clean compile pays nothing for it.
+ */
+const diagnosticStyle = (): Style => styleFor(2, agentDriven())
+
+/**
+ * The style the warning reports of one run share, built by the first of them
+ * that prints and kept for the rest, so a run with all three classes of
+ * warning still asks the terminal once.
+ */
+class WarningStyle {
+  style: Style | null
+
+  constructor() {
+    this.style = null
+  }
+
+  get(): Style {
+    const known = this.style
+    if (known !== null) {
+      return known
+    }
+    const made = diagnosticStyle()
+    this.style = made
+    return made
   }
 }
 
@@ -309,9 +340,14 @@ const report = (compilation: Compilation, json: boolean): void => {
  * an accident of placement: advice about code that does not compile is noise,
  * and the caller returns before this on an error.
  */
-const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
+const reportPerformance = (
+  compilation: Compilation,
+  enabled: boolean,
+  json: boolean,
+  style: WarningStyle
+): void => {
   if (enabled) {
-    reportWarnings(compilation.sink.warnings, "performance", json)
+    reportWarnings(compilation.sink.warnings, "performance", json, style)
   }
 }
 
@@ -320,8 +356,8 @@ const reportPerformance = (compilation: Compilation, enabled: boolean, json: boo
  * right after them. The list is empty unless `--warn-portability` ran the pass
  * (`Compilation.reportPortability`), so there is no flag to test here.
  */
-const reportPortability = (compilation: Compilation, json: boolean): void => {
-  reportWarnings(compilation.sink.portability, "portability", json)
+const reportPortability = (compilation: Compilation, json: boolean, style: WarningStyle): void => {
+  reportWarnings(compilation.sink.portability, "portability", json, style)
 }
 
 /**
@@ -330,15 +366,15 @@ const reportPortability = (compilation: Compilation, json: boolean): void => {
  * too: a deprecated call is one a later breaking release refuses, and the
  * program's author is the reader who has to hear it.
  */
-const reportDeprecations = (compilation: Compilation, json: boolean): void => {
-  reportWarnings(compilation.sink.deprecations, "deprecation", json)
+const reportDeprecations = (compilation: Compilation, json: boolean, style: WarningStyle): void => {
+  reportWarnings(compilation.sink.deprecations, "deprecation", json, style)
 }
 
 /**
  * One warning list: its objects on stdout under `--json`, else its report on
  * stderr, capped at the twenty the error report is; nothing when it is empty.
  */
-const reportWarnings = (warnings: Diagnostic[], kind: string, json: boolean): void => {
+const reportWarnings = (warnings: Diagnostic[], kind: string, json: boolean, style: WarningStyle): void => {
   if (warnings.length === 0) {
     return
   }
@@ -348,7 +384,7 @@ const reportWarnings = (warnings: Diagnostic[], kind: string, json: boolean): vo
     }
     return
   }
-  writeError(`${formatList(warnings, kind, 20)}\n`)
+  writeError(`${formatList(warnings, kind, 20, style.get())}\n`)
 }
 
 /**
@@ -1199,9 +1235,10 @@ export const main = (): number => {
       report(outcome.compilation, json)
       return 1
     }
-    reportDeprecations(outcome.compilation, json)
-    reportPerformance(outcome.compilation, warnPerformance, json)
-    reportPortability(outcome.compilation, json)
+    const warningStyle = new WarningStyle()
+    reportDeprecations(outcome.compilation, json, warningStyle)
+    reportPerformance(outcome.compilation, warnPerformance, json, warningStyle)
+    reportPortability(outcome.compilation, json, warningStyle)
     return 0
   }
 
@@ -1241,12 +1278,13 @@ export const main = (): number => {
     report(compilation, json)
     return 1
   }
-  reportDeprecations(compilation, json)
-  reportPerformance(compilation, warnPerformance, json)
+  const warningStyle = new WarningStyle()
+  reportDeprecations(compilation, json, warningStyle)
+  reportPerformance(compilation, warnPerformance, json, warningStyle)
   // `--emit-ts` writes its modules in memory here, ahead of the portability
   // report: a generic it writes as a throwing stub is one of those warnings.
   const ts = opts.emitTs.length > 0 ? emitTypeScript(compilation) : new EmittedProgram()
-  reportPortability(compilation, json)
+  reportPortability(compilation, json, warningStyle)
   // `--link` needs an entry point, and stage0 says so before it emits
   // anything rather than letting the linker answer `undefined reference to
   // main` two steps later. It is asked before the capability line too, so a
@@ -2344,9 +2382,9 @@ const sqliteCflags = (): string => {
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
- * key, moves the sixteen objects in with one `mv` -- a `rename` each, inside one
+ * key, moves the seventeen objects in with one `mv` -- a `rename` each, inside one
  * directory -- and writes the key last, so a key on disk always stands beside
- * sixteen whole objects of its own recipe (CLI-5). Two misses at once each compile
+ * seventeen whole objects of its own recipe (CLI-5). Two misses at once each compile
  * their own and move them over the other's; both sets are the same recipe's,
  * and an object is only ever replaced whole, so a link that reads one while
  * another lands reads a whole object either way.

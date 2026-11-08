@@ -15,59 +15,66 @@
  * **What it adds to `TlsServer`.** Records around the handshake messages:
  * ServerHello (or HelloRetryRequest) in the clear, the rest of the server's
  * flight — EncryptedExtensions through Finished — in as few records as fit
- * under the handshake keys once it is signed, which is one record for RFC
- * 8448 §3's trace, and every key installed at the record boundary RFC 8446
- * §5.1 puts it on. The middlebox-compatibility `change_cipher_spec` of §D.4:
- * the server sends one right after its first handshake message when the
- * client sent a session id, and drops the client's from its first ClientHello
- * until its Finished. Alerts (§6) both ways: `close_notify` ends the client's
- * stream, `user_canceled` is passed over, any other alert ends the
- * connection, and a refusal of this module's or of `TlsServer`'s is sent as a
- * fatal alert under whatever keys the server writes with. KeyUpdate (§4.6.3)
- * both ways: the client's moves the read keys on and, when it asks, the
- * server answers with its own; `keyUpdate` sends one, and the writer sends
- * one by itself before a key has protected `TLS_KEY_UPDATE_RECORDS` records.
- * More than `TLS_RECORD_IDLE_LIMIT` records in a row that carry nothing for
- * the caller — KeyUpdates among them, which each cost two key derivations —
- * are refused. A stream that ends without `close_notify` is truncation, but
- * only once the records still waiting for the caller have been read.
+ * under the handshake keys once it is signed, which is one record for RFC 8448
+ * §3's trace, and every key installed at the record boundary RFC 8446 §5.1 puts
+ * it on.
+ *
+ *  The middlebox-compatibility `change_cipher_spec` of §D.4: the server sends
+ *  one right after its first handshake message when the client sent a session
+ *  id, and drops the client's from its first ClientHello until its Finished.
+ *  Alerts (§6) both ways: `close_notify` ends the client's stream,
+ *  `user_canceled` is passed over, any other alert ends the connection, and a
+ *  refusal of this module's or of `TlsServer`'s is sent as a fatal alert under
+ *  whatever keys the server writes with.
+ *
+ *  KeyUpdate (§4.6.3) both ways: the client's moves the read keys on and, when
+ *  it asks, the server answers with its own; `keyUpdate` sends one, and the
+ *  writer sends one by itself before a key has protected
+ *  `TLS_KEY_UPDATE_RECORDS` records. More than `TLS_RECORD_IDLE_LIMIT` records
+ *  in a row that carry nothing for the caller — KeyUpdates among them, which
+ *  each cost two key derivations — are refused. A stream that ends without
+ *  `close_notify` is truncation, but only once the records still waiting for the
+ *  caller have been read.
  *
  * **Borrowed buffers.** The record being read, the record being opened, the
- * bytes to send and the application data waiting for the caller each live in
- * an array borrowed from a `TlsRecordPools` when the connection first needs
- * it, kept while the connection lasts, and given back zeroed with
- * `BufferPool.giveSecret` when it ends (`start`, `wipe`, `release`), so a
- * slot with no connection holds none of them, a connection that has finished
- * its handshake allocates nothing that outlives a record, and a slot can be
- * handed the next connection with `start`. Each give-back zeroes the whole
- * buffer, so it happens once a connection rather than once a record. The handshake's messages are
- * sealed straight out of `TlsServer`'s own buffers, and the application
- * secrets are copied into this slot's fields, so a slot that hands its
- * `TlsServer` the next connection with `restart` runs every handshake after
- * the first without moving the arena, whichever suite it negotiates; a
- * KeyUpdate's key install leaves nothing either (TLS-3 in
- * `docs/security/tls.md`). When the caller leaves application data unread
- * for long enough to fill its buffer, records stay in the reader and
- * `interest` stops asking for reads, which is how the peer is made to wait.
+ * bytes to send and the application data waiting for the caller each live in an
+ * array borrowed from a `TlsRecordPools` when the connection first needs it,
+ * kept while the connection lasts, and given back zeroed with
+ * `BufferPool.giveSecret` when it ends (`start`, `wipe`, `release`), so a slot
+ * with no connection holds none of them, a connection that has finished its
+ * handshake allocates nothing that outlives a record, and a slot can be handed
+ * the next connection with `start`.
+ *
+ *  Each give-back zeroes the whole buffer, so it happens once a connection
+ *  rather than once a record. The handshake's messages are sealed straight out
+ *  of `TlsServer`'s own buffers, and the application secrets are copied into
+ *  this slot's fields, so a slot that hands its `TlsServer` the next connection
+ *  with `restart` runs every handshake after the first without moving the arena,
+ *  whichever suite it negotiates; a KeyUpdate's key install leaves nothing
+ *  either (TLS-3 in `docs/security/tls.md`). When the caller leaves application
+ *  data unread for long enough to fill its buffer, records stay in the reader
+ *  and `interest` stops asking for reads, which is how the peer is made to wait.
  *
  * **Secrets.** Each traffic secret is a `Secret<u8[]>` (`nish:secret`):
  * `TlsServer` holds the handshake's in its `TlsSecretPool`s, and this slot
  * holds the two application traffic secrets in four readonly fields, one per
  * direction and hash length, with `readHash` and `writeHash` saying which of
- * each pair is live (0 when neither is). A secret is copied out of
- * `TlsServer` as it is installed and the server's copy is zeroed, as are the
- * handshake secret once the flight is signed and the ephemeral key once the
- * ServerHello is written, or the handshake fails; a KeyUpdate overwrites the
- * live field in place with the next secret. Every way the connection ends
- * wipes what it holds: a failure of any kind (`fail`, the client's error
- * alert, a truncated stream, `abort`) wipes both directions' keys, both
- * secrets and everything `TlsServer` still holds once the last alert is
- * sealed; the server's `close_notify`, once sealed, wipes the write
- * direction, the client's the read direction, and `close` the resumption
- * master secret; and `wipe` (which `wipeKeys` calls when the carrier closes
- * the slot) and `start` wipe the rest. No secret leaves either object but
- * through `expose`, so a secret cannot be logged or kept outside
- * this module and `nish/net/tls` (TLS-1 in `docs/security/tls.md`).
+ * each pair is live (0 when neither is).
+ *
+ *  A secret is copied out of `TlsServer` as it is installed and the server's
+ *  copy is zeroed, as are the handshake secret once the flight is signed and the
+ *  ephemeral key once the ServerHello is written, or the handshake fails; a
+ *  KeyUpdate overwrites the live field in place with the next secret.
+ *
+ *  Every way the connection ends wipes what it holds: a failure of any kind
+ *  (`fail`, the client's error alert, a truncated stream, `abort`) wipes both
+ *  directions' keys, both secrets and everything `TlsServer` still holds once
+ *  the last alert is sealed; the server's `close_notify`, once sealed, wipes the
+ *  write direction, the client's the read direction, and `close` the resumption
+ *  master secret; and `wipe` (which `wipeKeys` calls when the carrier closes the
+ *  slot) and `start` wipe the rest. No secret leaves either object but through
+ *  `expose`, so a secret cannot be logged or kept outside this module and
+ *  `nish/net/tls` (TLS-1 in `docs/security/tls.md`).
  *
  * Refusals are alerts, never panics. Written from RFC 8446 §4.6.3, §5, §6
  * and §D.4, not ported from another implementation.

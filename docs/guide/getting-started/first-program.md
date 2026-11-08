@@ -130,7 +130,10 @@ greet.ts:8:17: error: Argument 2 of `greet`: expected i32, got string
 ```
 
 An error names the file, the line and the column (`greet.ts:8:17`), says what
-is wrong, and underlines the place. Nothing runs, and `nish` exits with 1.
+is wrong, and underlines the place; on a terminal the label is red and the
+underlined code is picked out in colour
+([when colour is used](../using-nish/cli.md#colour-and-when-an-agent-runs-nish)).
+Nothing runs, and `nish` exits with 1.
 When a file has several errors, the compiler reports them in the order they
 appear in the file.
 

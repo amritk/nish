@@ -1057,15 +1057,18 @@ const urlFinish = (u: Url): Url | null => {
 
 /**
  * The absolute URL `s` split into its parts, or null when it is not one this
- * module accepts. `s` is refused when it has no scheme, holds a byte outside
- * printable ASCII (a control byte, a space, DEL or anything past 0x7F), a
- * backslash or a `%` not followed by two hex digits, or its authority has more
- * than one `@`, a host with a byte outside RFC 3986's unreserved set (so a
- * percent-encoded one), a host whose last label is numeric but that is not a
- * dotted-decimal IPv4 address, a malformed IPv6 literal or a port that is not
- * digits or is above 65535. An http, https, ws or wss URL needs a non-empty
- * host. The path's dot segments are removed, as RFC 3986 §5.2.2 removes them
- * from a reference with a scheme. Nothing is decoded. It allocates its answer.
+ * module accepts.
+ *
+ * `s` is refused when it has no scheme, holds a byte outside printable ASCII (a
+ * control byte, a space, DEL or anything past 0x7F), a backslash or a `%` not
+ * followed by two hex digits, or its authority has more than one `@`, a host
+ * with a byte outside RFC 3986's unreserved set (so a percent-encoded one), a
+ * host whose last label is numeric but that is not a dotted-decimal IPv4
+ * address, a malformed IPv6 literal or a port that is not digits or is
+ * above 65535. An http, https, ws or wss URL needs a non-empty host.
+ *
+ * The path's dot segments are removed, as RFC 3986 §5.2.2 removes them from a
+ * reference with a scheme. Nothing is decoded. It allocates its answer.
  *
  * @param s The absolute URL, such as `https://example.com/a?b#c`.
  * @returns The URL's parts, still percent-encoded, `scheme` and `host` lower-cased; or null when `s` is refused.

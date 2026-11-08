@@ -132,10 +132,16 @@ a body the program is echoing) sends no second response and ends the
 connection.
 
 **A control byte in a field value is refused wherever it falls**
-(`net_http1`, `_f64`): the scan for a line's end reads sixteen bytes at a time,
-stops at the first control byte or DEL of a block (the lowest set bit of its
-SWAR mask, exact because a borrow only carries upward from a true match), then
-reads the rest a byte at a time, and it is also the check of the value: a
+(`net_http1`, `_f64`): the scan for a line's end (`http1TakeLine`) loads
+sixteen bytes at a time as a `u8x16` and flags each lane below 32 or equal to
+127, `bitmask(or(lt(v, 32), eq(v, 127)))`. Each lane is compared on its own,
+so the mask is exactly the control bytes and DEL of the block, with no carry
+between lanes; the scan moves to the lowest set bit, the first such byte, and
+a block with none is skipped whole. A vector is loaded only while sixteen
+bytes are left before both the end of what has arrived and `buf`'s length, so
+it never reads a byte the peer has not sent or past the buffer; the tail
+shorter than a vector, and the bytes after a control byte, are read one at a
+time with the same predicate. It is also the check of the value: a
 control byte other than HTAB, or DEL, on a field line is a 400, with no second
 pass over the value.
 
@@ -145,6 +151,24 @@ At the block boundaries the stream is also cut at every byte, so a CR that ends
 what has arrived so far is read again with the byte after it, never taken as a
 line end or a refusal on its own.
 
+**The request target is visible ASCII, checked sixteen bytes at a time**
+(`net_http1_server`, `net_http1_parse_diff`, 2026-11-08). `http1RequestLine`
+loads the target as `u8x16` blocks and flags each lane outside 33 to 126 with
+`gt(subWrapping(v, 33), 93)`: the unsigned wrap sends 0 to 32 to 223 to 255
+and 127 to 255 to 94 to 222, all above 93, and 33 to 126 to 0 to 93, so the
+mask is exactly the bytes the scalar loop refuses, SP among them. The scan
+stops at the lowest set bit. The line has already been taken, so the byte at
+`lineEnd` is its CR, which the predicate flags: a block may load bytes past
+the line's end, all inside `buf`, but the scan stops at that CR or before it,
+so no byte of the next line is ever taken as target.
+A vector is loaded only while sixteen bytes are left in `buf`, the index is
+clamped to `lineEnd` after the vector loop, and the tail goes a byte at a
+time. Whatever stops the scan, the byte there must be the SP before the
+version or the line is a 400 (414 first if the target is past `maxTarget`),
+as before. `net_http1_server` refuses, counting from the target's first
+byte, a DEL on the second block's first lane, a byte above 126 on its second,
+and a tab on its sixth; `net_http1_parse_diff` covers every lane and the tail.
+
 **A faster parser gives the same answers** (`tests/link/net_http1_parse_diff`,
 2026-11-03). The parser's speed work (the line scan that jumps to its control
 byte, CRLF taken in one step, the branch-free token check, a field name
@@ -153,19 +177,23 @@ frozen beside it in `old.ts`: both are fed the same bytes in the same pieces,
 and after every event they must agree on the event, the status and reason,
 and everything a caller can read.
 
-The default run, seed 1175, is 190,276 cases (the fuzz corpus and its
+The default run, seed 1175, is 237,143 cases (the fuzz corpus and its
 regressions cut every way, every byte at every position of three requests, nine
 inserted bytes at every position, each limit at -1, 0 and +1, and 100,000
-grammar requests) and 2,176,872 events, among them 161,448 refusals, in about 8
+grammar requests) and 2,257,209 events, among them 202,969 refusals, in about 8
 s; it must print the summary in `expected.out`.
 
 A header section of maxHeaderBytes - 1 or maxHeaderBytes
 bytes, empty line included, as one field or two, reads a head, and one more
 byte is a 431. A soak of seeds 1 to 4 at 250,000 grammar requests each
-(1,361,104 cases) agreed. Shifting the
-byte a block's upper half reports by one makes the default run fail at case
-6,719 (a 400 for a control byte where main gives 431), so the test sees an
-off-by-one in the scan. No limit, status or reason string changed.
+(1,361,104 cases) agreed. The test sees a one-lane error in either vector
+scan (checked 2026-11-08): taking the byte after the first set bit in the
+line scan (`32 -` for `31 -`) fails the default run at case 19 (a 400 for "a
+malformed HTTP version" where main reads the head), the same in the target
+scan fails it at case 1 (a 400 for "a malformed request target"), and
+letting DEL into the target (`94` for `93`) fails it at case 16,366, where
+main refuses `GET \x7fa` and the mutant reads a head. No limit, status or
+reason string changed.
 
 **One exchange at a time, in order** (`net_http1_server`): pipelined requests
 are answered in the order they came, because the next head is not read until

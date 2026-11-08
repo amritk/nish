@@ -24,12 +24,14 @@
  * **The acknowledgement.** A frame is acknowledged when the terminal answers a
  * status query sent right after it: the terminal answers in order, so the
  * answer means every byte before it has been read and drawn. The query to send
- * is DSR 5, `CSI 5 n`, answered `CSI 0 n`. It is preferred over the cursor
- * position report (DSR 6, `CSI 6 n`, answered `CSI row ; col R`) because its
- * answer is one fixed string, and because a cursor report is the same bytes as
- * F3 with modifiers in the legacy key encoding (`CSI 1 ; mods R`), which a key
- * decoder would have to guess between. Two relays answer the query from their
- * own emulator, not from the terminal at the end of the link:
+ * is DSR 5, `CSI 5 n`, answered `CSI 0 n`.
+ *
+ *  It is preferred over the cursor position report (DSR 6, `CSI 6 n`, answered
+ *  `CSI row ; col R`) because its answer is one fixed string, and because a
+ *  cursor report is the same bytes as F3 with modifiers in the legacy key
+ *  encoding (`CSI 1 ; mods R`), which a key decoder would have to guess between.
+ *  Two relays answer the query from their own emulator, not from the terminal at
+ *  the end of the link:
  *
  * - tmux (commit 939e8e65) answers in `input.c` lines 1737–1747, the
  *   `INPUT_CSI_DSR` case, which replies `\033[0n` to 5 and the position to 6
@@ -50,62 +52,70 @@
  * **What is measured.** Four running averages (exponentially weighted, so
  * recent frames count most and none is stored): the round trip from a frame's
  * send to its acknowledgement (weight 1/8, as TCP smooths its round trip, so
- * one late answer moves it little); the bytes a second the link delivered;
- * the cost to build a frame and the bytes in one (weight 1/4 each, so a
- * change of scene shows within a few frames).
- * The bandwidth and the latency are kept apart, so neither can take the
- * other's share of a round trip. A frame sent before the previous answer, and
- * answered more than the latency after it, kept the link busy from that answer
- * to its own: its bytes over that time measure the bandwidth. A frame sent
- * onto an idle link makes a trip, kept with the last 16 and the probe's:
- * against the quickest kept trip, one twice its bytes or half, 2 ms or more
- * apart, measures the bandwidth from the difference, which the latency is no
- * part of.
- * Both kinds smooth the bytes and the time apart (weight 1/4 each), so answers
- * arriving in a burst, each taking almost no time, do not read as unbounded
- * bandwidth; answers under 2 ms apart measure nothing this way. A sample
- * counts for the decisions for 5 seconds with no newer one, so a link that
- * narrows is not held to its old rate; the bandwidth reported keeps it until
- * a newer sample, which starts the average afresh, replaces it, or three
- * trips in a row take over twice what it and the quickest trip kept when
- * it was taken predict. The figure
- * is at least the most of the last 16 answers' bytes over their whole round
- * trips, since the bytes took no longer than that, so a link that widens shows on its first quick answer; but that
- * bound counts the latency as bytes' time, so alone it never makes the
- * bandwidth known to the decisions. The base latency is the least, over the
- * kept trips, of the round trip less the trip's bytes at the bandwidth: the
- * probe's round trip (`probeRttMs`: the status query alone is a few bytes, so
- * its round trip is the latency) counts from the start, the frames' once the
- * bandwidth is known. The kept trips roll over, so a changed route shows
- * within 16 trips. With frames of one size sent one at a time onto
- * an idle link and no probe the latency and the bytes cannot be told apart:
- * the bandwidth is then not known, its load counts as 0, and the trip load
- * governs on the frame's measured round trip: a cut is taken to shorten none
- * of it and a restore to lengthen all of it, so detail is neither cut for a
- * gain nor restored at a cost that may not be there.
- * Acknowledgements match sent frames oldest first. A frame due while the
- * unacknowledged limit is reached is dropped and counted; one not answered
- * within `rateAckTimeoutMs` plus four round trips is given up and counted as
- * lost, so a lost answer
- * stalls drawing for seconds, not for ever. Its answer may still come late, and
- * would otherwise be matched to the next frame, so after a give-up no frame is
- * drawn until as many answers have arrived, or one more timeout has passed
- * without them. A time, cost or size that is not a finite number, or is
- * negative, is not measured, and an empty frame says nothing about bandwidth.
+ * one late answer moves it little); the bytes a second the link delivered; the
+ * cost to build a frame and the bytes in one (weight 1/4 each, so a change of
+ * scene shows within a few frames). The bandwidth and the latency are kept
+ * apart, so neither can take the other's share of a round trip.
  *
- * **What is decided.** The frame rate is a tier: 120 (only with `allow120` and
- * a `maxFps` of 120), 60, 30, 20, 15, 10 or 5. A tier fits when three loads
- * are all at most 1: the frame cost over 70% of the frame time, the bytes a
- * second the tier needs over 70% of the bytes a second the link delivers, and
- * the tier's frames times the round trip over 70% of the time the
- * unacknowledged limit allows (a link that answers in 100 ms carries at most
- * ten frames a second one at a time). The 30% left over absorbs a slow frame
- * without a dropped one. The rate falls to the best fitting tier after half a
- * second continuously over, and rises one tier after three seconds
- * continuously under the next tier's loads with a fifth to spare; after any
- * change it holds for a second, so the averages see the new rate before the
- * next decision. Falling fast and rising slowly keeps a flickering link from
- * flipping the rate.
+ *  A frame sent before the previous answer, and answered more than the latency
+ *  after it, kept the link busy from that answer to its own: its bytes over that
+ *  time measure the bandwidth. A frame sent onto an idle link makes a trip, kept
+ *  with the last 16 and the probe's: against the quickest kept trip, one twice
+ *  its bytes or half, 2 ms or more apart, measures the bandwidth from the
+ *  difference, which the latency is no part of.
+ *
+ *  Both kinds smooth the bytes and the time apart (weight 1/4 each), so answers
+ *  arriving in a burst, each taking almost no time, do not read as unbounded
+ *  bandwidth; answers under 2 ms apart measure nothing this way.
+ *
+ *  A sample counts for the decisions for 5 seconds with no newer one, so a link
+ *  that narrows is not held to its old rate; the bandwidth reported keeps it
+ *  until a newer sample, which starts the average afresh, replaces it, or three
+ *  trips in a row take over twice what it and the quickest trip kept when it was
+ *  taken predict.
+ *
+ *  The figure is at least the most of the last 16 answers' bytes over their
+ *  whole round trips, since the bytes took no longer than that, so a link that
+ *  widens shows on its first quick answer; but that bound counts the latency as
+ *  bytes' time, so alone it never makes the bandwidth known to the decisions.
+ *
+ *  The base latency is the least, over the kept trips, of the round trip less
+ *  the trip's bytes at the bandwidth: the probe's round trip (`probeRttMs`: the
+ *  status query alone is a few bytes, so its round trip is the latency) counts
+ *  from the start, the frames' once the bandwidth is known. The kept trips roll
+ *  over, so a changed route shows within 16 trips.
+ *
+ *  With frames of one size sent one at a time onto an idle link and no probe the
+ *  latency and the bytes cannot be told apart: the bandwidth is then not known,
+ *  its load counts as 0, and the trip load governs on the frame's measured round
+ *  trip: a cut is taken to shorten none of it and a restore to lengthen all of
+ *  it, so detail is neither cut for a gain nor restored at a cost that may not
+ *  be there. Acknowledgements match sent frames oldest first.
+ *
+ *  A frame due while the unacknowledged limit is reached is dropped and counted;
+ *  one not answered within `rateAckTimeoutMs` plus four round trips is given up
+ *  and counted as lost, so a lost answer stalls drawing for seconds, not for
+ *  ever. Its answer may still come late, and would otherwise be matched to the
+ *  next frame, so after a give-up no frame is drawn until as many answers have
+ *  arrived, or one more timeout has passed without them. A time, cost or size
+ *  that is not a finite number, or is negative, is not measured, and an empty
+ *  frame says nothing about bandwidth.
+ *
+ * **What is decided.**
+ *
+ *  The frame rate is a tier: 120 (only with `allow120` and a `maxFps` of 120),
+ *  60, 30, 20, 15, 10 or 5. A tier fits when three loads are all at most 1: the
+ *  frame cost over 70% of the frame time, the bytes a second the tier needs over
+ *  70% of the bytes a second the link delivers, and the tier's frames times the
+ *  round trip over 70% of the time the unacknowledged limit allows (a link that
+ *  answers in 100 ms carries at most ten frames a second one at a time).
+ *
+ *  The 30% left over absorbs a slow frame without a dropped one. The rate falls
+ *  to the best fitting tier after half a second continuously over, and rises one
+ *  tier after three seconds continuously under the next tier's loads with a
+ *  fifth to spare; after any change it holds for a second, so the averages see
+ *  the new rate before the next decision. Falling fast and rising slowly keeps a
+ *  flickering link from flipping the rate.
  *
  * It starts at the best tier on a local terminal: the probe answered under
  * 5 ms, or no `SSH_*` hint and no slow answer. Falling costs half a second and

@@ -29,17 +29,18 @@
  * must be definite and minimal (no `0x80`, no long form below 128, no leading
  * zero length octet), an INTEGER must be minimal in two's complement, a tag
  * must fit in one octet, every element must end inside its parent, and a
- * certificate must end where its outer SEQUENCE does. Anything else answers
- * `null`, never a panic. The reader takes the version, serial, algorithms,
- * the issuer and subject Names (their RDNs checked, their bytes kept whole),
- * validity, the subject public key and the signature, checks the order of what
- * follows the key (`[1]`, `[2]`, `[3]`), and decodes the extensions a path
- * validator needs: subjectAltName, basicConstraints, keyUsage, extKeyUsage,
- * nameConstraints and the two key identifiers. A duplicate or malformed one
- * refuses the certificate, and any other critical one sets `unknownCritical`.
- * It parses and does not validate: applying these to a chain is RFC 5280 §6
- * path validation, which `nish/crypto/pki`'s `pkiVerifyServer` does. The mint
- * writes two extensions of its own (below).
+ * certificate must end where its outer SEQUENCE does.
+ *
+ *  Anything else answers `null`, never a panic. The reader takes the version,
+ *  serial, algorithms, the issuer and subject Names (their RDNs checked, their
+ *  bytes kept whole), validity, the subject public key and the signature, checks
+ *  the order of what follows the key (`[1]`, `[2]`, `[3]`), and decodes the
+ *  extensions a path validator needs: subjectAltName, basicConstraints,
+ *  keyUsage, extKeyUsage, nameConstraints and the two key identifiers. A
+ *  duplicate or malformed one refuses the certificate, and any other critical
+ *  one sets `unknownCritical`. It parses and does not validate: applying these
+ *  to a chain is RFC 5280 §6 path validation, which `nish/crypto/pki`'s
+ *  `pkiVerifyServer` does. The mint writes two extensions of its own (below).
  *
  * **PEM is RFC 7468's strict grammar**, with standard base64 (`+` and `/`,
  * padded with `=`), not `base64url`: 64 characters a line and a shorter last
@@ -52,44 +53,47 @@
  * `serverCertificateHashes` accepts (W3C WebTransport, "custom certificate
  * requirements"): X.509 v3, an ECDSA P-256 key signed with ecdsa-with-SHA256,
  * and a validity period of at most fourteen days — `notAfter - notBefore`,
- * which is what Chromium compares, so `days` is 1 to 14. Subject and issuer
- * are the same single common name, as a UTF8String. It carries **two
- * extensions, both critical and both constant**: basicConstraints with cA
- * FALSE and keyUsage with digitalSignature alone. The W3C text requires no
- * extension, but Chromium does: the verifier behind `serverCertificateHashes`,
- * quiche's `WebTransportFingerprintProofVerifier`, parses the certificate
- * with `CertificateView::ParseSingleCertificate` before it compares the hash,
- * and that answers null when `[3] extensions` is absent
- * (`quiche/quic/core/crypto/certificate_view.cc:395`, at the quiche revision
- * 62826931 Chromium 141 pins), so the handshake fails with
- * CERTIFICATE_VERIFY_FAILED. It also holds every extension to `SEQUENCE {
- * OID, BOOLEAN OPTIONAL, OCTET STRING }` (`:413`–`:432`) and reads
- * subjectAltName only when one is present (`:434`), so no name is needed
- * there. The two chosen say what the certificate is, an end entity whose key
- * only signs handshakes, so a verifier that does build a path need not fall
- * back on its defaults; OpenSSL verifies it as its own trust anchor
- * (`tests/link/crypto_x509`'s header has the commands; X509-9 in
- * docs/security/crypto-x509.md). The key, the serial and the time are
- * parameters so the golden certificate is deterministic; a caller passes
- * `Date.now()` and, for the key and the serial, bytes from
- * `crypto.getRandomValues`. This module does not draw them itself,
- * because a call to the operating system would stop it compiling for wasm32;
- * `nish/crypto/x509-random`, which this module does not import, draws both
- * for a native program (X509-6).
+ * which is what Chromium compares, so `days` is 1 to 14. Subject and issuer are
+ * the same single common name, as a UTF8String. It carries **two extensions,
+ * both critical and both constant**: basicConstraints with cA FALSE and
+ * keyUsage with digitalSignature alone.
+ *
+ *  The W3C text requires no extension, but Chromium does: the verifier behind
+ *  `serverCertificateHashes`, quiche's `WebTransportFingerprintProofVerifier`,
+ *  parses the certificate with `CertificateView::ParseSingleCertificate` before
+ *  it compares the hash, and that answers null when `[3] extensions` is absent
+ *  (`quiche/quic/core/crypto/certificate_view.cc:395`, at the quiche revision
+ *  62826931 Chromium 141 pins), so the handshake fails with
+ *  CERTIFICATE_VERIFY_FAILED. It also holds every extension to `SEQUENCE { OID,
+ *  BOOLEAN OPTIONAL, OCTET STRING }` (`:413`–`:432`) and reads subjectAltName
+ *  only when one is present (`:434`), so no name is needed there.
+ *
+ *  The two chosen say what the certificate is, an end entity whose key only
+ *  signs handshakes, so a verifier that does build a path need not fall back on
+ *  its defaults; OpenSSL verifies it as its own trust anchor
+ *  (`tests/link/crypto_x509`'s header has the commands; X509-9 in
+ *  docs/security/crypto-x509.md). The key, the serial and the time are
+ *  parameters so the golden certificate is deterministic; a caller passes
+ *  `Date.now()` and, for the key and the serial, bytes from
+ *  `crypto.getRandomValues`. This module does not draw them itself, because a
+ *  call to the operating system would stop it compiling for wasm32;
+ *  `nish/crypto/x509-random`, which this module does not import, draws both for
+ *  a native program (X509-6).
  *
  * **Constant time.** A private key is the one secret that passes through here:
  * it is base64-decoded from PEM, lifted out of its DER, and handed to
  * `nish/crypto/p256`. Base64 is `nish/crypto/base64url`'s `base64StdPadDecode`,
  * which maps a character to its sextet by arithmetic on range masks and folds a
  * bad character into one word read after the whole text, so neither a branch
- * nor a table index depends on the key's bytes. PEM's framing is found by comparing
- * the start of each line with the fixed `-----BEGIN ` and `-----END `, which no
- * base64 character matches, so those comparisons end on a line's first byte
- * whatever the key is. The DER reader branches on tags and
- * lengths, which are the key's public framing, and copies its 32 octets with a
- * fixed loop. Signing is `p256SignSha256`, and checking a key against the
- * public key stored beside it compares public values. None of this is under
- * the disassembly check; it is discipline.
+ * nor a table index depends on the key's bytes.
+ *
+ *  PEM's framing is found by comparing the start of each line with the fixed
+ *  `-----BEGIN ` and `-----END `, which no base64 character matches, so those
+ *  comparisons end on a line's first byte whatever the key is. The DER reader
+ *  branches on tags and lengths, which are the key's public framing, and copies
+ *  its 32 octets with a fixed loop. Signing is `p256SignSha256`, and checking a
+ *  key against the public key stored beside it compares public values. None of
+ *  this is under the disassembly check; it is discipline.
  *
  * **The private key is a `Secret`** (`nish:secret`, docs/LANGUAGE.md
  * "Secrets"). `x509ParseP256PrivateKey` answers one and `x509MintSelfSigned`
@@ -2016,17 +2020,19 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
 }
 
 /**
- * `der` read as one Certificate (RFC 5280 §4.1), or `null` unless it is
- * exactly one in DER: `SEQUENCE { tbsCertificate, signatureAlgorithm,
- * signatureValue }`, where tbsCertificate holds an explicit version of v2 or
- * v3 or none (DER omits v1, the default), a minimal serial, an algorithm equal
- * to the outer one byte for byte (§4.1.1.2), issuer and subject Names, a
- * Validity of two valid times, a SubjectPublicKeyInfo whose key is whole
- * octets, then only the optional `[1]` and `[2]` unique identifiers (v2 and
- * v3) and `[3]` extensions (v3), in that order. Issuer and subject must be
- * sound Names. The signature algorithm is named in `sigAlg` (with `pssHash`
- * and `pssSaltLen` for RSA-PSS) and the key in `keyType`; `p256` and
- * `ecdsaSha256` say whether they are the ones `x509VerifySignature` checks.
+ * `der` read as one Certificate (RFC 5280 §4.1), or `null` unless it is exactly
+ * one in DER: `SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue
+ * }`, where tbsCertificate holds an explicit version of v2 or v3 or none (DER
+ * omits v1, the default), a minimal serial, an algorithm equal to the outer one
+ * byte for byte (§4.1.1.2), issuer and subject Names, a Validity of two valid
+ * times, a SubjectPublicKeyInfo whose key is whole octets, then only the
+ * optional `[1]` and `[2]` unique identifiers (v2 and v3) and `[3]` extensions
+ * (v3), in that order.
+ *
+ * Issuer and subject must be sound Names. The signature algorithm is named in
+ * `sigAlg` (with `pssHash` and `pssSaltLen` for RSA-PSS) and the key in
+ * `keyType`; `p256` and `ecdsaSha256` say whether they are the ones
+ * `x509VerifySignature` checks.
  *
  * Extensions are read: subjectAltName, basicConstraints, keyUsage,
  * extKeyUsage, nameConstraints and the two key identifiers are decoded into
@@ -2261,14 +2267,15 @@ const x509MintExtensions = (): u8[] => [
  * and issuer `CN=commonName`, valid from `notBeforeMs` (milliseconds since
  * 1970, rounded down to the second) for exactly `days` days, serial number
  * `serial`, carrying `x509MintExtensions`' basicConstraints and keyUsage, and
- * signed with ecdsa-with-SHA256 — see the module comment for why Chromium
- * needs an extension at all. `null` when `days` is below 1 or above
- * `X509_MAX_DAYS`, `notBeforeMs` is negative or the validity would end after
- * 9999, `commonName` is empty, longer than 64 bytes, not UTF-8 or holds a NUL
- * (it is written as a UTF8String), `priv` is not a P-256 private key, or
- * `serial` — big-endian, leading zeros ignored — is zero or
- * needs more than `X509_MAX_SERIAL` octets as a positive INTEGER (clear the top
- * bit of 20 random bytes, or use fewer).
+ * signed with ecdsa-with-SHA256 — see the module comment for why Chromium needs
+ * an extension at all.
+ *
+ * `null` when `days` is below 1 or above `X509_MAX_DAYS`, `notBeforeMs` is
+ * negative or the validity would end after 9999, `commonName` is empty, longer
+ * than 64 bytes, not UTF-8 or holds a NUL (it is written as a UTF8String),
+ * `priv` is not a P-256 private key, or `serial` — big-endian, leading zeros
+ * ignored — is zero or needs more than `X509_MAX_SERIAL` octets as a positive
+ * INTEGER (clear the top bit of 20 random bytes, or use fewer).
  *
  * @param priv The 32-byte P-256 private scalar, big-endian; read, and left for the caller to wipe.
  * @param commonName The subject's and issuer's common name, 1 to 64 bytes of UTF-8 without a NUL.
