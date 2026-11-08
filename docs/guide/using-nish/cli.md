@@ -507,21 +507,22 @@ terminal with no theme shows its built-in defaults). On a terminal whose
 than 8, as it does for `TERM=vt100`), the help marks headings and flags in
 bold and placeholders with an underline instead, and a diagnostic keeps its
 bold and faint parts without the colours, which a monochrome terminal still
-shows. Forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`) is always the
-theme's, whatever `TERM` says, because what reads it is a pager or an editor
-that paints the escapes itself. Your own tools can print a help that behaves the same way with
-[`nish/cli`](standard-library.md#nishcli).
+shows. Forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`) is always the theme's,
+whatever `TERM` says, because what reads it is a pager or an editor that
+paints the escapes itself. Your own tools can print a help that behaves the
+same way with [`nish/cli`](standard-library.md#nishcli).
 
-**Coding agents get plain output and a help with an extra section.** When `nish` runs
-under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything but empty
-or a no (`0`, `false`, `no`, `off`), or you set `NISH_AGENT` the same way
-(`NISH_AGENT=1`) — neither the help nor a diagnostic has colour, even on a
-terminal or with `FORCE_COLOR` set, and the help ends with an **Agents** section: the absolute path of
-`docs/AI.md` (the language as rules, traps first) in the installed package,
-and the flags an agent's loop needs —
-`--json`, `--fix` and `nish run`. `NISH_AGENT=0` (or `false`, `no`, `off`) turns this off
-when one of those variables is set for some other reason. If the package's
-`docs/AI.md` cannot be found, the section names it without a path.
+**Coding agents get plain output and a help with an extra section.** When
+`nish` runs under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything
+but empty or a no (`0`, `false`, `no`, `off`), or you set `NISH_AGENT` the
+same way (`NISH_AGENT=1`) — neither the help nor a diagnostic has colour, even
+on a terminal or with `FORCE_COLOR` set, and the help ends with an **Agents**
+section: the absolute path of `docs/AI.md` (the language as rules, traps
+first) in the installed package, and the flags an agent's loop needs —
+`--json`, `--fix` and `nish run`. `NISH_AGENT=0` (or `false`, `no`, `off`)
+turns this off when one of those variables is set for some other reason. If
+the package's `docs/AI.md` cannot be found, the section names it without a
+path.
 
 ## Exit codes
 

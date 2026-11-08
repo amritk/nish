@@ -300,8 +300,16 @@ export class Diagnostic {
    * for a warning, and bold alone on a terminal without colours.
    */
   severity(style: Style, text: string): string {
-    const warning = this.kind !== "error" && this.kind !== "syntax error"
-    return boldColour(style, text, warning ? SGR_YELLOW : SGR_RED)
+    return boldColour(style, text, this.isWarning() ? SGR_YELLOW : SGR_RED)
+  }
+
+  /**
+   * Whether this is a warning (`performance`, `portability`, `deprecation`)
+   * rather than an error or a syntax error. The colour of the label and the
+   * `--json` `severity` both read it, so the two cannot disagree.
+   */
+  isWarning(): boolean {
+    return this.kind !== "error" && this.kind !== "syntax error"
   }
 
   /**
@@ -397,7 +405,7 @@ export class Diagnostic {
   json(): string {
     const endLine = this.source.lineOf(this.end)
     const endColumn = this.source.columnOf(this.end)
-    const warning = this.kind !== "error" && this.kind !== "syntax error"
+    const warning = this.isWarning()
     const severity = warning ? this.kind : "error"
     const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)

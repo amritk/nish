@@ -48,6 +48,7 @@ struct Diagnostic (class) size=48 align=8 exported
   constructor -> @Diagnostic.constructor
   method summary -> @Diagnostic.summary
   method severity -> @Diagnostic.severity
+  method isWarning -> @Diagnostic.isWarning
   method excerpt -> @Diagnostic.excerpt
   method message -> @Diagnostic.message
   method styledMessage -> @Diagnostic.styledMessage
@@ -169,14 +170,19 @@ function Diagnostic.summary(this: Diagnostic, style: Style): string -> @Diagnost
   callee +1:27 Diagnostic.severity -> @Diagnostic.severity
   callee +1:68 paintText -> @paintText
 function Diagnostic.severity(this: Diagnostic, style: Style, text: string): string -> @Diagnostic.severity [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: boldColour nish_str_eq
-  pointer this: size=48 writesThrough=false captured=false
+  calls: Diagnostic.isWarning boldColour
+  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.isWarning#0
   pointer style: size=88 writesThrough=false captured=false passedTo=boldColour#0
   stackSites=0 stackLocals=0
-  local +0:11 warning: boolean (const)
-  callee +1:12 boldColour -> @boldColour
+  callee +0:12 boldColour -> @boldColour
+  callee +0:36 Diagnostic.isWarning -> @Diagnostic.isWarning
+function Diagnostic.isWarning(this: Diagnostic): boolean -> @Diagnostic.isWarning [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function Diagnostic.excerpt(this: Diagnostic, style: Style): string -> @Diagnostic.excerpt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Diagnostic.severity SourceFile.codeUnits SourceFile.lineIndex SourceFile.lineText StringBuilder.addChar StringBuilder.constructor StringBuilder.toText Style.faint isFourByteLead nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_new startsCharacter
@@ -240,14 +246,15 @@ function Diagnostic.styledMessage(this: Diagnostic, style: Style): string -> @Di
   callee +0:39 Diagnostic.excerpt -> @Diagnostic.excerpt
 function Diagnostic.json(this: Diagnostic): string -> @Diagnostic.json [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: Diagnostic.fixJson SourceFile.columnOf SourceFile.lineOf codeFor jsonQuote nish_str_concat nish_str_eq nish_str_from_i32
-  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.fixJson#0
+  calls: Diagnostic.fixJson Diagnostic.isWarning SourceFile.columnOf SourceFile.lineOf codeFor jsonQuote nish_str_concat nish_str_eq nish_str_from_i32
+  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.isWarning#0 Diagnostic.fixJson#0
   stackSites=0 stackLocals=0
   local +0:11 endLine: i32 (const)
   callee +0:21 SourceFile.lineOf -> @SourceFile.lineOf
   local +1:11 endColumn: i32 (const)
   callee +1:23 SourceFile.columnOf -> @SourceFile.columnOf
   local +2:11 warning: boolean (const)
+  callee +2:21 Diagnostic.isWarning -> @Diagnostic.isWarning
   local +3:11 severity: string (const)
   local +4:11 message: string (const)
   local +5:11 code: string (const)

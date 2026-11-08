@@ -522,6 +522,43 @@ const checkDiagnosticColour = (t: Suite, cli: Cli, env: boolean): void => {
   ]);
   t.eqStr("and is the plain warning once the escapes are gone", stripSgr(warnPainted.stderr), warnPlain.stderr);
 
+  // Every warning kind is yellow, not only `performance`: under
+  // `--warn-portability` the same line carries a WP33 portability warning too.
+  const port = cli.run("colour_port", forced, [warn, "--warn-portability", "-o", `${WORK}/colour-warn.ll`]);
+  t.containsAll("a portability warning is yellow too", port.stderr, [
+    `${esc}1m${warn}:5:17:${esc}0m ${esc}1;33mportability:${esc}0m ${esc}1;36m\`new Array<i32>(3 + i)\`${esc}0m`,
+    `  ${esc}2m  |${esc}0m                 ${esc}1;33m^~~~~~~~~~~~~~~~~~~~~${esc}0m\n`,
+  ]);
+
+  // A syntax error is an error: its label is red like `error:`.
+  const syntax = `${WORK}/colour-syntax.ts`;
+  writeFileSync(syntax, ["export const test = (): number => {", "  const x: i32 = (1;", "  return 0;", "};", ""].join("\n"));
+  const syntaxPlain = cli.run("colour_syntax_plain", plainEnv, [syntax, "-o", `${WORK}/colour.ll`]);
+  const syntaxPainted = cli.run("colour_syntax", forced, [syntax, "-o", `${WORK}/colour.ll`]);
+  t.containsAll("a syntax error's label is red", syntaxPainted.stderr, [
+    `${esc}1m${syntax}:2:20:${esc}0m ${esc}1;31msyntax error:${esc}0m ${esc}1mexpected ${esc}0m${esc}1;36m\`)\`${esc}0m`,
+    `  ${esc}2m  |${esc}0m                    ${esc}1;31m^${esc}0m\n`,
+  ]);
+  t.eqStr("and is the plain report once the escapes are gone", stripSgr(syntaxPainted.stderr), syntaxPlain.stderr);
+
+  // Past the cap of 20, the cut-off line is faint like the count under it.
+  const many = `${WORK}/colour-many.ts`;
+  const manyLines = ["export const test = (): number => {"];
+  for (let i = 0; i < 22; i++) {
+    manyLines.push(`  const v${i}: i32 = "s";`);
+  }
+  manyLines.push("  return 0;");
+  manyLines.push("};");
+  manyLines.push("");
+  writeFileSync(many, manyLines.join("\n"));
+  const manyPlain = cli.run("colour_many_plain", plainEnv, [many, "-o", `${WORK}/colour.ll`]);
+  const manyPainted = cli.run("colour_many", forced, [many, "-o", `${WORK}/colour.ll`]);
+  t.contains("more errors than the cap end in a faint cut-off line", manyPainted.stderr, `${esc}2m...and 2 more errors${esc}0m\n${esc}2m22 errors${esc}0m\n`);
+  t.eqStr("and that report is the plain one once the escapes are gone", stripSgr(manyPainted.stderr), manyPlain.stderr);
+
+  // The monochrome failsafe (bold and faint, no colour) is not reachable from
+  // here: it needs a terminal on stderr, and forced colour is always the theme's.
+
   // `NO_COLOR` and an agent each win over `FORCE_COLOR`, and a pipe with no
   // variable set is not a terminal: all three are the plain report exactly.
   const both = cli.run("colour_no_color", ["NO_COLOR=1", "FORCE_COLOR=1", "NISH_AGENT=0"], [bad, "-o", `${WORK}/colour.ll`]);
