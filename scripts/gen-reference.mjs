@@ -1418,7 +1418,9 @@ const configText = (text, pages) => {
   const after = ["/standard-library", "/run-under-node", "/install", "/benchmarks", "/changelog"]
   const written = Object.keys(reference.children).filter((k) => !(k in made))
   if (!written.includes("/standard-library")) {
-    throw new Error(`${configFile}: /reference has no /standard-library route, the overview the library reference sits beside`)
+    throw new Error(
+      `${configFile}: /reference has no /standard-library route, the overview the library reference sits beside`
+    )
   }
   const keys = [
     ...Object.keys(made),
