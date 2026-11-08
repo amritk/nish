@@ -2095,7 +2095,25 @@ async function run(): Promise<void> {
   arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
   `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`). Copy
-  numbers into it instead. A task may not itself spawn a task with an
+  numbers into it instead. The task keeps none of what it shares in memory
+  of its own: a shared object, or anything reachable from it, put into a
+  constructor argument, an array or object literal, a field or element
+  store, `push`, a `Map`'s `set` or a `Set`'s `add`, a method that may keep
+  its argument in its receiver, or a callee that stores one argument into
+  another is NL2610, as in a `region(...)` body
+  (`reject_async_spawn_keep_holder`). An object a helper makes may hold
+  what the helper was handed, so in a task a fresh helper's answer other
+  than a string, awaited or not, carries its arguments' origins too, and a
+  store through a holder a helper built from the shared object is NL2609
+  (`reject_async_spawn_keep_returned`). Read and update the shared object
+  in place instead. Three refusals are conservative, and known to refuse
+  sound programs: a call that hands a callee both a shared object it writes
+  into and any string or object of the task's, even when the callee writes
+  only numbers; a store into the shared object of what an `await` answers
+  (`const x = await helper(tally); tally.child = x`), since an awaited
+  answer is unknown to the walk; and a store of the task's memory into a
+  holder a helper answered from the shared object (`wrap(tally).note = s`),
+  which may be the task's alone. A task may not itself spawn a task with an
   object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
 - **A spawned task takes a function argument that captures nothing.** A

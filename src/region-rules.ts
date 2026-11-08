@@ -64,7 +64,7 @@ import {
   regionRoleOf,
 } from "./region-check"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { TypeTable } from "./types"
+import { T_STRING, TypeTable } from "./types"
 
 /** Not yet known: the walk has not reached a binding's value. Joins as nothing. */
 const ORIGIN_NONE: i32 = -1
@@ -156,18 +156,15 @@ const outerToRegionMessage = (who: string, what: string): string =>
   `${who}, and ${what}: memory outside a region kept by the region's memory ` +
   "may be released while the region still points at it; copy it into memory the region allocates instead"
 
-/** `outerToRegionMessage` for a value put in a literal. */
-const literalMessage = (who: string, program: CheckedProgram, value: Node): string =>
-  outerToRegionMessage(who, putsText(program, value))
-
-/** `outerToRegionMessage` for `arg` handed to `callee`. */
-const handsOuterMessage = (
-  who: string,
-  program: CheckedProgram,
-  arg: Node,
-  callee: string,
-  which: string
-): string => outerToRegionMessage(who, handsText(program, arg, callee, which))
+/**
+ * NL2610 in a task: what the task shares, kept in the task's own memory, is a
+ * holder the walk does not follow, through which the task's memory could be
+ * stored into what it shares.
+ */
+const taskKeepsOuterMessage = (who: string, what: string): string =>
+  `${who}, and ${what}: memory outside a region kept by the region's memory ` +
+  "may be released while the region still points at it, and lets the task store its own memory " +
+  "into what it shares; read and update the shared object in place instead"
 
 /** `regionToOuterMessage` for `arg` handed to `callee`. */
 const handsRegionMessage = (
@@ -429,14 +426,12 @@ class RegionWalk {
     this.freed = task ? "the task ends" : "`free` runs"
   }
 
-  /**
-   * `report` for memory outside the region kept by the region's: a task may
-   * keep its spawner's, which outlives it, so only a region's function is refused.
-   */
-  reportOuter(node: Node, message: string): void {
-    if (!this.task) {
-      this.report(node, message)
-    }
+  /** Memory outside the region, kept by the region's, at `node`, which `what` describes. */
+  reportOuter(node: Node, what: string): void {
+    this.report(
+      node,
+      this.task ? taskKeepsOuterMessage(this.who, what) : outerToRegionMessage(this.who, what)
+    )
   }
 
   report(node: Node, message: string): void {
@@ -584,9 +579,11 @@ class RegionWalk {
       // `enter` answers a scalar, `region` a handle: both copied, and typed so.
       return ORIGIN_UNKNOWN
     }
-    if (callee !== null && this.fresh.has(callee.name)) {
+    if (callee !== null && this.fresh.has(callee.name) && (!this.task || this.typeOf(call) === T_STRING)) {
       return ORIGIN_REGION
     }
+    // In a task, a fresh object may hold what it was handed (`wrap(shared)`
+    // answers a new holder of the shared object), so its arguments join in.
     let out = ORIGIN_REGION
     for (const arg of this.handedTo(call, callee)) {
       const a = unwrapParens(arg)
@@ -616,14 +613,14 @@ class RegionWalk {
       return
     }
     if (holder === ORIGIN_REGION && mayBeOuter(value)) {
-      this.reportOuter(at, outerToRegionMessage(this.who, what))
+      this.reportOuter(at, what)
     } else if (holder === ORIGIN_OUTER && mayBeRegion(value)) {
       this.report(at, regionToOuterMessage(this.who, what, this.freed))
     } else if (holder === ORIGIN_UNKNOWN) {
       if (value !== ORIGIN_OUTER) {
         this.report(at, regionToOuterMessage(this.who, what, this.freed))
       } else {
-        this.reportOuter(at, outerToRegionMessage(this.who, what))
+        this.reportOuter(at, what)
       }
     }
   }
@@ -698,7 +695,7 @@ class RegionWalk {
       const value = child.kind === N_PROPERTY ? child.children[child.children.length - 1] : child
       const o = this.origin(value)
       if (o !== ORIGIN_NONE && mayBeOuter(o)) {
-        this.reportOuter(child, literalMessage(this.who, this.program, value))
+        this.reportOuter(child, putsText(this.program, value))
       }
     }
   }
@@ -835,7 +832,7 @@ class RegionWalk {
       if (pp === null) {
         // A `string` has no pointer facts, so a constructor is taken to keep it.
         if (isNew && mayBeOuter(o)) {
-          this.reportOuter(node, handsOuterMessage(this.who, this.program, arg, name, "which may keep it"))
+          this.reportOuter(node, handsText(this.program, arg, name, "which may keep it"))
         }
         continue
       }
@@ -848,24 +845,32 @@ class RegionWalk {
         } else if (pp.writesReach && f.allocates) {
           this.report(node, handsGrowthMessage(this.who, this.program, arg, name))
         } else if (isNew && (pp.keptInThis || pp.captured)) {
-          this.reportOuter(node, handsOuterMessage(this.who, this.program, arg, name, "which keeps it"))
+          this.reportOuter(node, handsText(this.program, arg, name, "which keeps it"))
+        } else if (this.task && i > 0 && pp.captured && this.receiverMayBeRegion(node, callee, origins)) {
+          // `m.set(k, shared)`: a method of the task's own object may keep it there.
+          this.reportOuter(node, handsText(this.program, arg, name, "which may keep it in its receiver"))
         }
       } else if (pp.polluted && anyOuter) {
         this.reportOuter(
           node,
-          handsOuterMessage(
-            this.who,
-            this.program,
-            arg,
-            name,
-            "which may store memory outside the region into it"
-          )
+          handsText(this.program, arg, name, "which may store memory outside the region into it")
         )
       }
     }
     if (this.task) {
       this.judgeTaskCallee(node, f, handed, origins, offset, name)
     }
+  }
+
+  /** True when `call` is a method call whose receiver, the first of `origins`, may be the region's. */
+  receiverMayBeRegion(call: Node, callee: FunctionSig, origins: i32[]): boolean {
+    return (
+      call.kind !== N_NEW &&
+      callee.owner !== null &&
+      methodReceiver(call) !== null &&
+      origins.length > 0 &&
+      mayBeRegion(origins[0])
+    )
   }
 
   /**

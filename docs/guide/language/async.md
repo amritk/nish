@@ -247,6 +247,28 @@ export async function main(): Promise<void> {
 }
 ```
 
+Nor may the task keep a shared object in memory of its own: putting it into
+a new object, an array, a `Map` or a `Set` the task made is refused (NL2610),
+since the task could then store its own memory into the shared object through
+what it built. Read and update the shared object in place instead:
+
+```ts nish:err NL2610
+import { spawn } from "nish:async";
+
+class Tally {
+  hits: i32 = 0;
+}
+
+async function keep(tally: Tally, n: i32): Promise<void> {
+  const all: Tally[] = [tally];
+  all[0].hits = n;
+}
+
+export async function main(): Promise<void> {
+  spawn(keep(new Tally(), 1));
+}
+```
+
 A function argument must capture nothing: a top-level function, or an arrow
 that reads only its own parameters. Any other argument, such as an
 `Item | null`, is refused (NL2673); pass the value itself.

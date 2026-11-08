@@ -28,8 +28,9 @@ hint, not a reservation (ASYNC-9, open), and a task that never
 awaits holds the thread (ASYNC-5, decided). A task shares its spawner's
 objects but may store only numbers into them, so nothing it shares can point
 into its region once it ends (ASYNC-10), and nothing it shares can hold a part
-its spawner frees, wipes or closes on its own schedule (ASYNC-11). Eleven
-findings (ASYNC-1 to ASYNC-11): five fixed, three open, three decided.
+its spawner frees, wipes or closes on its own schedule (ASYNC-11), and the
+task keeps none of what it shares in memory of its own (ASYNC-12). Twelve
+findings (ASYNC-1 to ASYNC-12): six fixed, three open, three decided.
 
 ## Scope
 
@@ -76,6 +77,7 @@ later stage of WP49.
 | ASYNC-9 | Low | `runtime/runtime-async.c` (`nish_async_wait_fd`, `nish_async_fire`) | Readiness is a report, not a reservation. Two tasks waiting on one descriptor are both woken by one byte; the first to read takes it, and the second's read, on a blocking descriptor, blocks the thread and with it every task. | **Open.** One reader per descriptor is the program's to keep; a server gives each connection to one task. A non-blocking descriptor, which `nish:net` does not yet offer, would turn the loser's read into a short one. |
 | ASYNC-10 | Medium | `src/region-rules.ts` (`taskFindings`, the task-mode `RegionWalk`), `src/async-check.ts` (`recordSpawn`) | A task's own region is freed when it ends, and it shares the spawner's objects: a store of the task's memory into one (a `string` it built, an object it made), directly, through an alias, a method, a callee, a field or an element, would leave the spawner pointing at freed memory; so would growing a shared array, `Map` or `Set`, whose new storage would land in the region; and a task that spawned a task with an object could hand on memory of its own region. | **Fixed.** Each spawned function is walked by the region rules with its shared parameters as memory outside the region: a store of region memory is NL2609, growth NL2615; a task that feeds a task a shared argument is NL2689, a capturing function argument NL2690; a callee handed both a shared object it writes into and a string or object of the task's is refused, since a string has no pointer facts to say it is not kept (NL2609); a local the walk does not bind (an `awaitAll` name before this fix) is unknown, so storing it is NL2609; an object a `using arena()` block allocates may not reach a task that outlives the block, directly or through a function that spawns (NL2421). Before, `spawn` refused every object (NL2673); after, `reject_async_spawn_store_*`, `reject_async_spawn_grow*`, `reject_async_spawn_nested`, `reject_async_spawn_block_arg`, `reject_async_spawn_await_all` and `reject_async_spawn_using_arena*` are refused with those codes, and `async_spawn_shared` runs. |
 | ASYNC-11 | Medium | `src/region-rules.ts` (`taskShareObstacle`, the task-mode `RegionWalk`'s `visitBuiltin`) | ASYNC-10's rules looked at a shared argument's own type and at `push`, `set` and `add`, not at what the argument holds or at every builtin that appends. A shared object with a `Region` field, a `Secret` field, a `nish/threads` scope, lock, guard or channel, or a handle class a `using` block closes, was accepted, so the spawner could free, wipe or close that part while the task still waited and then read it; and `spawnPiped(argv, stdin, out, err)` appends to `out` and `err` as `push` does, so a task handed a shared array could grow it into its own region. | **Fixed.** `spawn` refuses a shared argument whose type reaches any of those parts, through nullables, arrays, `Result` arms, union variants and fields, naming the part (NL2691), and the task walk reads `spawnPiped`'s two output arguments as growth (NL2615), in a task and in a `region(...)` body alike. Before, all five compiled; after, `reject_async_spawn_region_field`, `reject_async_spawn_secret_field`, `reject_async_spawn_handle`, `reject_async_spawn_threads_field` and `reject_async_spawn_grow_piped` are refused with those codes, and `reject_async_spawn_grow_map` pins `Map.set` and `Set.add` on a shared field. |
+| ASYNC-12 | Medium | `src/region-rules.ts` (the task-mode `RegionWalk`: `reportOuter`, `callOrigin`, `judgeCallee`) | ASYNC-10's walk took every `new`, array and object literal in a task as the task's memory and let the task store the shared object into it (NL2610 was waived in tasks). The holder then reached the shared object, and a store of the task's memory through it (`new Holder(tally).t.label = s`, `[tally][0].label = s`, a `for...of` over such an array, an interface literal, a method of the holder) was the task's memory into the task's, so nothing was reported: the shared object pointed at freed memory once the task ended. A helper's fresh answer (`wrap(tally)`, an async helper, `awaitAll`) was taken as the task's alone in the same way, and `Map.set`/`Set.add` on a task-owned container kept the shared object unseen. | **Fixed.** In a task, putting memory outside the region into the task's own memory is NL2610, as in a `region(...)` body: a constructor argument, an array or object literal, a field or element store, `push`, a method that may keep its argument in its receiver (`Map.set`, `Set.add`, a user method), and a callee that stores one argument into another. A fresh helper's answer other than a string joins its arguments' origins, so a holder a helper builds from the shared object is not the task's alone and a store through it is NL2609. Before, all compiled and the spawner read the noise tasks' text; after, `reject_async_spawn_keep_holder` and `reject_async_spawn_keep_returned` are refused with those codes, and `async_spawn_shared` still runs. |
 
 ## Failures that stop the program
 
@@ -106,7 +108,8 @@ than run on in a state it cannot keep (`nish_async_die`):
 - **A spawned task's shared objects outlive it, and hold none of its memory.**
   The spawner and its callers keep what they allocated past the spawn, and the
   task-mode region walk refuses a store of the task's region memory or the
-  growth of a shared container (ASYNC-10).
+  growth of a shared container (ASYNC-10), and the shared object put into
+  the task's own memory (ASYNC-12).
 - **Its size is budgeted.** `tests/runtime-budgets.js` holds its `-Oz`
   `.text` to `RUNTIME_ASYNC_TEXT_BUDGET`.
 
@@ -121,6 +124,7 @@ than run on in a state it cannot keep (`nish_async_die`):
 - `tests/link/async_spawn_shared_outlives`, `tests/cases/async_spawn_shared`,
   `tests/cases/async_spawn_fn_arg`, `tests/cases/reject_async_spawn_store_*`,
   `tests/cases/reject_async_spawn_grow*`,
+  `tests/cases/reject_async_spawn_keep_*` (ASYNC-12),
   `tests/cases/reject_async_spawn_nested`,
   `tests/cases/reject_async_spawn_block_arg`,
   `tests/cases/reject_async_spawn_using_arena` (ASYNC-7, ASYNC-10)

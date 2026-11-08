@@ -654,14 +654,25 @@ or a table every task reads.
   region rules with each shared parameter as *outer* memory. Storing memory
   the task allocated into it (a string, an array, an object) is NL2609, and
   growing it (`push`, `Map.set`, `Set.add`, `spawnPiped` appending to its
-  output arrays) is NL2615, directly or through a
-  callee, a method or an arrow, by the same facts a `region(...)`
-  body is judged by. A callee handed both a shared object it writes into
-  and a string or object of the task's is refused outright: a string has
-  no pointer facts to say it is not kept. Reading it, and writing numbers, `boolean`s and enums
-  into it, is allowed: they are copied. Outer memory stored into the task's
-  own objects is allowed (NL2610 does not apply): the shared object outlives
-  the task.
+  output arrays) is NL2615, directly or through a callee, a method or an
+  arrow, by the same facts a `region(...)` body is judged by. A callee
+  handed both a shared object it writes into and a string or object of the
+  task's is refused outright: a string has no pointer facts to say it is
+  not kept. Reading it, and writing numbers, `boolean`s and enums into it,
+  is allowed: they are copied.
+- **The task keeps none of it.** Putting the shared object, or anything
+  reachable from it, into the task's own memory is NL2610, as in a
+  `region(...)` body: a constructor argument, an array or object literal, a
+  field or element store, `push`, a container's `set` or `add`, a method
+  that may keep its argument in its receiver, and a callee that stores one
+  argument into another. Kept there, the task could store its own memory
+  into the shared object through the holder, past the direct-store rule.
+  An object a helper makes may hold what the helper was handed, so in a
+  task a fresh helper's answer (other than a string) joins its arguments'
+  origins: a holder a helper, an async helper or `awaitAll` builds from the
+  shared object is not the task's alone, and a store through it is NL2609.
+  The task reads and updates the shared object in place, which is all
+  `serve` and the pool need.
 - **Interleaving.** The executor runs one task at a time on one thread, and
   a task gives way only at an `await`, so a read-modify-write of a field with
   no `await` inside it is atomic with respect to every other task.
@@ -673,6 +684,9 @@ or a table every task reads.
 | task stores through a method or a callee | walked through the callee's facts: NL2609 / NL2615 |
 | task hands a callee or method both a shared object it writes into and a string or object of its own | refused (NL2609): a string has no pointer facts, so the callee's facts cannot say the one is not stored into the other |
 | a local bound by `for...of`, a helper's answer, a callback's parameter, narrowing or `const [a, b] = await awaitAll(...)` | carries its value's origin; a local the walk does not bind is unknown, so storing it is NL2609 |
+| the shared object put into the task's own memory: constructor, array or object literal, field or element store, `push`, `Map.set`, `Set.add`, a method that keeps it, a callee that stores it into another argument | refused (NL2610) |
+| a holder of the shared object answered by a helper, an async helper or `awaitAll` | the answer joins its arguments' origins; a store through it is NL2609 |
+| a `using arena()` block inside the task | its memory is the task's; storing it into the shared object is NL2609 |
 | an object reachable through a field of the shared object | outer, as the field read answers outer memory |
 | an array of objects | outer elements; storing a task object into one is NL2609 |
 | the shared parameter aliased into a local, then stored through | the local is outer by the walk's fixpoint |

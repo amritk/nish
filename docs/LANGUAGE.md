@@ -3546,7 +3546,25 @@ async function run(): Promise<void> {
   arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
   `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`). Copy
-  numbers into it instead. A task may not itself spawn a task with an
+  numbers into it instead. The task keeps none of what it shares in memory
+  of its own: a shared object, or anything reachable from it, put into a
+  constructor argument, an array or object literal, a field or element
+  store, `push`, a `Map`'s `set` or a `Set`'s `add`, a method that may keep
+  its argument in its receiver, or a callee that stores one argument into
+  another is NL2610, as in a `region(...)` body
+  (`reject_async_spawn_keep_holder`). An object a helper makes may hold
+  what the helper was handed, so in a task a fresh helper's answer other
+  than a string, awaited or not, carries its arguments' origins too, and a
+  store through a holder a helper built from the shared object is NL2609
+  (`reject_async_spawn_keep_returned`). Read and update the shared object
+  in place instead. Three refusals are conservative, and known to refuse
+  sound programs: a call that hands a callee both a shared object it writes
+  into and any string or object of the task's, even when the callee writes
+  only numbers; a store into the shared object of what an `await` answers
+  (`const x = await helper(tally); tally.child = x`), since an awaited
+  answer is unknown to the walk; and a store of the task's memory into a
+  holder a helper answered from the shared object (`wrap(tally).note = s`),
+  which may be the task's alone. A task may not itself spawn a task with an
   object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
 - **A spawned task takes a function argument that captures nothing.** A
@@ -8325,7 +8343,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 | Refused | Code |
 | --- | --- |
 | region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant or [module storage](#module-storage), whose elements are pointer-free, and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`; a spawned task's region into what it shares, `reject_async_spawn_store_region`) |
-| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, a spawned task's shared object kept by its own memory, `reject_async_spawn_keep_holder`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
 | `enter`'s or `enterWith`'s `f` answering anything but a number, a `boolean`, an `enum` or a `Region`: an array, an object or a string | **NL2611** (`reject_region_enter_result`, `reject_region_enter_string`) |
 | `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | **NL2612** (`reject_region_threads`) |
 | a value whose type holds a `Region` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, a value sent on a channel | **NL2613** (`reject_region_task_arg_field`, `reject_region_task_answer`, `reject_region_channel_map`, `reject_region_parallel_capture`) |

@@ -1,2 +1,3 @@
 `new Tally()` may be allocated inside the `using arena()` block
 nothing proves it is gone when the block releases
+reject_async_spawn_using_arena_callee.ts:22:19
