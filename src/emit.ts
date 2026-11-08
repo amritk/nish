@@ -67,6 +67,8 @@ import {
   emitElementAccess,
   emitForOf,
   emitJsonPutF64Kernel,
+  storageDeclaration,
+  storageGlobals,
 } from "./emit-arrays"
 import {
   checksArgumentRange,
@@ -163,7 +165,7 @@ import {
 } from "./emit-strings"
 import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
-import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
+import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
 import {
   AES_HW,
   AES_SEAM_NONE,
@@ -249,7 +251,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader } from "./target"
-import { accessAlign, isForeignBuffer, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
+import { accessAlign, isForeignBuffer, isHostWindow, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -374,6 +376,8 @@ export class Emitter {
   stringRefs: string[]
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
+  /** WP50 S3: the module's panic sites on wasm32 (`PanicSiteTable`); null elsewhere. */
+  panicSites: PanicSiteTable | null
   /**
    * WP32: the libraries whose functions this module's code reaches are emitted
    * into this module as `internal` copies (`src/emit-map.ts`):
@@ -453,6 +457,7 @@ export class Emitter {
     this.strings = new StringMap()
     this.stringRefs = []
     this.debug = null
+    this.panicSites = isWasmBuild(opts) && opts.panicSites ? new PanicSiteTable() : null
     this.libraries = []
     this.jsonParts = []
     this.jsonPartNames = new StringSet()
@@ -482,6 +487,12 @@ export class Emitter {
     // `%struct.X = type { ... }` for every class or interface the module can see.
     for (const decl of structTypeDeclarations(this)) {
       this.module.addTypeDecl(decl)
+    }
+    // WP50 S3: module storage is static, so it is defined here and not built.
+    for (const info of this.program.constantList) {
+      if (info.storage && info.origin === this.program.source) {
+        storageGlobals(this, info)
+      }
     }
     for (const sig of this.program.functions) {
       // Typed JSON: an instantiation of `jsonDecode` or `jsonEncode` is never
@@ -525,6 +536,10 @@ export class Emitter {
       for (const flag of hardeningModuleFlags()) {
         this.module.addModuleFlag(flag)
       }
+    }
+    const sites = this.panicSites
+    if (sites !== null) {
+      return `${this.module.toText()}${sites.toText()}`
     }
     return this.module.toText()
   }
@@ -1097,7 +1112,8 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      params.push(this.hostAbi(sig.paramTypes[i]))
+      // WP50 S3: a window passes the array's data pointer (`emitHostWindow`).
+      params.push(isHostWindow(this.table, sig.paramTypes[i]) ? "i8*" : this.hostAbi(sig.paramTypes[i]))
       i = i + 1
     }
     const group = this.module.attrGroupFor([
@@ -1278,12 +1294,15 @@ export class Emitter {
    */
   emitStatement(stmt: Node): void {
     const saved = this.enterLocation(stmt)
+    const savedSite = this.fn.siteAt
+    this.enterSite(stmt)
     if (this.current.loopScopes.length > 0 && this.current.scopesPass(stmt)) {
       this.emitPass(stmt)
     } else {
       this.emitStatementKind(stmt)
     }
     this.fn.setLocation(saved)
+    this.fn.siteAt = savedSite
   }
 
   /**
@@ -1522,6 +1541,8 @@ export class Emitter {
   /** `emitExpression`, with the range entry at `expr` checked only when `checkRange` says so. */
   emitEntering(expr: Node, checkRange: boolean): string {
     const saved = this.enterLocation(expr)
+    const savedSite = this.fn.siteAt
+    this.enterSite(expr)
     const value = this.emitRawExpression(expr)
     // A class value used as an interface it implements: the interface's fields
     // are its first fields, so the recorded conversion is a pointer bitcast.
@@ -1546,7 +1567,21 @@ export class Emitter {
       }
     }
     this.fn.setLocation(saved)
+    this.fn.siteAt = savedSite
     return result
+  }
+
+  /**
+   * WP50 S3, wasm32 only: make `node`'s start the site a panic emitted for it
+   * reports. The caller restores `fn.siteAt` as it restores the location.
+   */
+  enterSite(node: Node): void {
+    const sites = this.panicSites
+    if (sites !== null) {
+      const source = this.program.source
+      this.fn.sites = sites
+      this.fn.siteAt = `${source.path}:${source.lineOf(node.start)}:${source.columnOf(node.start)}`
+    }
   }
 
   /**
@@ -1621,6 +1656,13 @@ export class Emitter {
    */
   emitIdentifier(expr: Node): string {
     const constant = this.program.nodeConstants[expr.id]
+    if (constant !== null && constant.storage) {
+      // WP50 S3: module storage is its static header, declared where imported.
+      if (constant.origin !== this.program.source) {
+        storageDeclaration(this, constant)
+      }
+      return `@${constant.storageSymbol}`
+    }
     if (constant !== null) {
       return constantText(this, constant)
     }

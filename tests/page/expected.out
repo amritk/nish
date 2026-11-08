@@ -1,0 +1,16 @@
+handles 1 2 size 2
+get b
+take a size 1
+taken RangeError
+zero RangeError forged RangeError fraction RangeError
+reused 1 c
+capacity 4 4
+push true true true waiting 3
+tick 3 input 0 output 3
+drain 2 4 -6 empty 0 0
+fill 4 free 0
+page push to a full ring false
+drain 10 11 12 13
+full from the page 4 free 0
+clear 0 0
+report nish: index out of range: 9 >= 4

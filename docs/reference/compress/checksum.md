@@ -55,7 +55,7 @@ CRC-32's lookup tables, built once and read by every `update`.
 
 <scalar-detail title="Keep a `Crc32`">
 
-A module has no global state, so CRC-32's tables live
+A module's only state is zero-filled storage, so CRC-32's tables live
 in a `Crc32` object: build one and keep it, because building it is 4,096
 table entries (about ten microseconds) and an update of a 5 KB body is
 under one. `crc32` is the one-off convenience that builds a table for one

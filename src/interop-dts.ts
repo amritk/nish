@@ -44,7 +44,16 @@ import {
   structsHoldingVectors,
   tsSignatureLine,
 } from "./interop-abi"
-import { hostFunctions, hostSpecifiers, wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
+import {
+  hostFunctions,
+  hostSpecifiers,
+  layoutTypes,
+  loaderGuarded,
+  storageLayouts,
+  wasmBridged,
+  wasmSkipReason,
+  wasmType,
+} from "./interop-wasm"
 import { FunctionSig } from "./program"
 import { T_I64, T_U64, TypeTable } from "./types"
 
@@ -97,9 +106,24 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push("/** A wasm i1 result: JS receives 0 or 1, never `true` / `false`. */")
   lines.push("export type WasmBool = 0 | 1;")
   lines.push("")
+  const guard = loaderGuarded(compilation)
+  if (guard) {
+    pushAll(lines, panicTypes())
+  }
+  // WP50 S3: with module storage the page builds its views from `layout`.
+  const layouts = storageLayouts(compilation)
+  if (layouts.length > 0) {
+    pushAll(lines, layoutTypes(layouts))
+  }
   lines.push("export interface Exports {")
   lines.push("  /** Linear memory of the instance (the arena and string constants live here). */")
   lines.push("  readonly memory: WebAssembly.Memory;")
+  if (layouts.length > 0) {
+    lines.push("  /** Where each module storage lives in `memory`. */")
+    lines.push("  readonly layout: Layout;")
+    lines.push("  /** Typed arrays over `memory.buffer`, rebuilt only after memory grew. */")
+    lines.push("  views(): Views;")
+  }
   if (bridge.needsRuntime) {
     lines.push(
       "  /** runtime-wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */"
@@ -150,13 +174,73 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push(" * `arrayBuffer()` in browsers. The companion `.mjs` next to this file")
   lines.push(" * implements it (examples/node-host.mjs shows the plain, scalar-only form).")
   lines.push(" */")
-  lines.push(
-    specifiers.length > 0
-      ? "export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;"
-      : "export function load(bytes: BufferSource): Promise<Exports>;"
-  )
+  if (specifiers.length > 0) {
+    lines.push("export function load(bytes: BufferSource, imports: Imports): Promise<Exports>;")
+  } else if (guard) {
+    lines.push("export function load(bytes: BufferSource, options?: LoadOptions): Promise<Exports>;")
+  } else {
+    lines.push("export function load(bytes: BufferSource): Promise<Exports>;")
+  }
+  if (guard) {
+    lines.push("/** `load` without the wait, for bytes already in hand: a worker, a test, a small module. */")
+    lines.push(
+      specifiers.length > 0
+        ? "export function loadSync(bytes: BufferSource, imports: Imports): Exports;"
+        : "export function loadSync(bytes: BufferSource, options?: LoadOptions): Exports;"
+    )
+  }
+  if (layouts.length > 0) {
+    lines.push("/** The instance `load` answers: its memory, its storage layout and its exports. */")
+    lines.push("export type Module = Exports;")
+  }
   lines.push("")
   return lines.join("\n")
+}
+
+/**
+ * WP50 S3 (`docs/wp50-wasm-host.md` §6): what a panic looks like to the page,
+ * the options `load` takes beside the host modules, and the two errors the
+ * loader throws. A guarded loader (`loaderGuarded`) has them, since every
+ * export runs in the guard that throws them; a plain one has none.
+ */
+const panicTypes = (): string[] => {
+  const lines: string[] = []
+  lines.push(
+    "/** A panic as `onPanic` hears of it: the message runtime.c would print, its kind and its site. */"
+  )
+  lines.push("export interface Panic {")
+  lines.push("  readonly message: string;")
+  lines.push("  readonly kind: string;")
+  lines.push("  /** The index into `<module>.wasm.sites.json`, or -1 where the module did not say. */")
+  lines.push("  readonly site: number;")
+  lines.push("}")
+  lines.push("")
+  lines.push("/** What `load` takes beside the host modules. */")
+  lines.push("export interface LoadOptions {")
+  lines.push(
+    "  /** Told once when the module panics, before the call throws; a trap or a host function's exception kills the module unannounced. Default: nish/page's reporter. */"
+  )
+  lines.push("  onPanic?: (panic: Panic) => void;")
+  lines.push(
+    "  /** `<module>.wasm.sites.json`, which build.sh writes, so a message ends `at path:line:col`. */"
+  )
+  lines.push("  sites?: readonly { readonly kind: string; readonly at: string }[];")
+  lines.push("}")
+  lines.push("")
+  lines.push(
+    "/** The module panicked, in this call or an earlier one: it is dead and every later call throws. */"
+  )
+  lines.push("export declare class NishPanic extends Error {")
+  lines.push("  readonly kind: string;")
+  lines.push("  readonly site: number;")
+  lines.push("}")
+  lines.push("")
+  lines.push(
+    "/** A call into the module while another call into it was running. The inner call never ran; an outer call that lets this escape kills the module. */"
+  )
+  lines.push("export declare class NishReentry extends Error {}")
+  lines.push("")
+  return lines
 }
 
 /** Whether some export on the bridge takes or answers a `HostHandle`. */
@@ -199,7 +283,7 @@ const importsType = (compilation: Compilation, specifiers: string[]): string[] =
   for (const specifier of specifiers) {
     modules.push(`typeof import("${specifier}")`)
   }
-  lines.push(`export type Imports = { host: ${modules.join(" & ")} };`)
+  lines.push(`export type Imports = LoadOptions & { host: ${modules.join(" & ")} };`)
   lines.push("")
   return lines
 }

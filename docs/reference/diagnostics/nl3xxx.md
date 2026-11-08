@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 49 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 50 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -621,4 +621,12 @@ export function main(): i32 {
 
 ```text
 `./host/plain` is a host module, and only a freestanding wasm build imports one: build with `--target wasm32`, or with `--emit-dts` and no `--target`
+```
+
+## NL3051
+
+The message of an error contains:
+
+```text
+` is the name the wasm loader answers the program's module storage under: …
 ```

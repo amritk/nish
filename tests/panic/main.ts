@@ -1,0 +1,80 @@
+// WP50 stage 3: how a wasm-host module panics, refuses re-entry and keeps its
+// arena flat. Each export takes one way out: an index past the end, an overflow,
+// a `panic`, an exit, an allocation `--memory 1` cannot hold, a host import that
+// calls back in, one that throws, and an argument of the wrong JavaScript type.
+import { boom, reenter } from "./host"
+
+export const count = new Array<u32>(1)
+export const cells = new Array<i32>(4)
+
+/** Bump the counter; answers its new value. */
+export const bump = (): u32 => {
+  count[0] += 1
+  return count[0]
+}
+
+/** Cell `i`: an index past 4 panics. */
+export const cell = (i: i32): i32 => cells[i]
+
+/** `a + b`, which panics on overflow. */
+export const sum = (a: i32, b: i32): i32 => a + b
+
+/** Panic with the page's own words. */
+export const fail = (): void => {
+  panic("the page asked")
+}
+
+/** Exit with `code`. */
+export const leave = (code: i32): void => {
+  process.exit(code)
+}
+
+/** Build an array of `n` cells in the arena; answers its last cell. */
+export const fill = (n: i32): i32 => {
+  const xs = new Array<i32>(n)
+  for (let i = 0; i < n; i++) {
+    xs[i] = i
+  }
+  return xs[n - 1]
+}
+
+/** Count a hundred, then ask the page, which calls back into the module. */
+export const nested = (): u32 => {
+  count[0] += 100
+  return reenter()
+}
+
+/** Ask the page, which throws. */
+export const thrown = (): void => {
+  boom()
+}
+
+/** A row of `n` cells, built in the arena and copied out to the page. */
+export const row = (n: i32): i32[] => {
+  const xs: i32[] = []
+  for (let i = 0; i < n; i++) {
+    xs.push(i * 2)
+  }
+  return xs
+}
+
+/** `x` back: a `bigint` argument, which a page can pass as a number. */
+export const wide = (x: i64): i64 => x
+
+/** `b` back: a `u8` the loader masks, which a page can pass as a `bigint`. */
+export const narrow = (b: u8): u8 => b
+
+/** The `Ok` payload or `Err` code: a packed `Result` argument the loader writes. */
+export const unpack = (r: Result<i32, i32>): i32 => (r.ok ? r.value : 0 - r.error)
+
+/** The `Ok` payload, or -1 for `Err`: an `f32` and a `boolean` arm. */
+export const scaled = (r: Result<f32, boolean>): f32 => (r.ok ? r.value * 2 : -1)
+
+/** The sum of `xs`: a typed-array argument the loader copies in. */
+export const total = (xs: i32[]): i32 => {
+  let s = 0
+  for (const x of xs) {
+    s += x
+  }
+  return s
+}

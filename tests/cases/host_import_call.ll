@@ -18,7 +18,7 @@ ovf.ok:
   ret i32 %2
 
 ovf.fail:
-  call void @nish_panic_overflow(i32 0)
+  call void @nish_panic_overflow(i32 0), !nish.site !{i32 0}
   unreachable
 }
 

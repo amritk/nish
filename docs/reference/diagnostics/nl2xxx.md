@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 665 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 680 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12449,21 +12449,10 @@ Host function `later` returns a `Promise`, which wasm cannot wait for: await it 
 The message of an error contains:
 
 ```text
-…, a buffer the page would lend wasm: buffer windows come in WP50 stage 3, so until then pass it through module storage
+…, a buffer the page would lend wasm: pass it through module storage
 ```
 
-[`nl2664_host_typed_array_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2664_host_typed_array_parameter.ts) (compiled with `--target wasm32 --host tests/wordings/host/buffer.ts`):
-
-```ts
-import { fill } from "./host/buffer"
-export function f(): i32 {
-  return 0
-}
-```
-
-```text
-Parameter `xs` of host function `fill` is `Float64Array`, a buffer the page would lend wasm: buffer windows come in WP50 stage 3, so until then pass it through module storage
-```
+**Retired**: a typed-array parameter of a host function refused until buffer windows landed (WP50 S3); a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683
 
 ## NL2665
 
@@ -12677,4 +12666,163 @@ The message of an error contains:
 
 ```text
 …, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
+```
+
+## NL2674
+
+The message of an error contains:
+
+```text
+` is a place, not a value: read and write its fields (`
+```
+
+## NL2675
+
+The message of an error contains:
+
+```text
+` cannot be passed as an argument: it is a place, not a value; pass the index, or the fields the callee needs
+```
+
+## NL2676
+
+The message of an error contains:
+
+```text
+` needs a length known at compile time: a literal, a module constant, or arithmetic over them, because the page reads its layout from the type
+```
+
+## NL2677
+
+The message of an error contains:
+
+```text
+` is a place, not a value: index it (`
+```
+
+## NL2678
+
+The message of an error contains:
+
+```text
+`, which is a place, not a value: loop over the index and use `
+```
+
+## NL2679
+
+The message of an error contains:
+
+```text
+… but its `new` makes …
+```
+
+## NL2680
+
+The message of an error contains:
+
+```text
+…; a storage holds from 1 to …
+```
+
+## NL2681
+
+The message of an error contains:
+
+```text
+…, and a buffer window lends only `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` or `f64[]` (or the typed array of each): copy the values into one of those
+```
+
+[`nl2681_host_window_element.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2681_host_window_element.ts) (compiled with `--target wasm32 --host tests/wordings/host/window_element.ts`):
+
+```ts
+import { fill } from "./host/window_element"
+export function f(): i32 {
+  return 0
+}
+```
+
+```text
+Parameter `xs` of host function `fill` is an array, and a buffer window lends only `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` or `f64[]` (or the typed array of each): copy the values into one of those
+```
+
+## NL2682
+
+The message of an error contains:
+
+```text
+…` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many
+```
+
+[`nl2682_host_window_missing.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2682_host_window_missing.ts) (compiled with `--target wasm32 --host tests/wordings/host/buffer.ts`):
+
+```ts
+import { fill } from "./host/buffer"
+export function f(): i32 {
+  return 0
+}
+```
+
+```text
+Parameter `xs` of host function `fill` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many
+```
+
+## NL2683
+
+The message of an error contains:
+
+```text
+…`: a window's index and count are `u32`, the width of a wasm32 address
+```
+
+[`nl2683_host_window_width.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2683_host_window_width.ts) (compiled with `--target wasm32 --host tests/wordings/host/window_width.ts`):
+
+```ts
+import { fill } from "./host/window_width"
+export function f(): i32 {
+  return 0
+}
+```
+
+```text
+Parameter `at` of host function `fill` is `u64`, the first element of the window `xs`: a window's index and count are `u32`, the width of a wasm32 address
+```
+
+## NL2684
+
+The message of an error contains:
+
+```text
+` go further than indexing: storage keeps its length, so a callee it is lent to only indexes the parameter, reads its `length`, loops over it, calls a method that reads it, or lends it on the same way — never passes it elsewhere, binds, returns or stores it, where it could be spelled `T[]` and resized
+```
+
+## NL2685
+
+The message of an error contains:
+
+```text
+…: a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record
+```
+
+## NL2686
+
+The message of an error contains:
+
+```text
+…: its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`
+```
+
+## NL2687
+
+The message of an error contains:
+
+```text
+…; give the type a zero member, or store the number and convert it where it is read
+```
+
+## NL2688
+
+The message of an error contains:
+
+```text
+` is not available: index it, and keep a count beside it for the slots in use
 ```

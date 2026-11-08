@@ -286,6 +286,10 @@ Inside `out/`:
 - **`entry.ts`** runs your `main` and exits with the number it returns. In a
   program with an `async` function it awaits `main`, then every task `spawn`
   started, before it exits.
+- **`nish-storage.ts`**, in a program with module storage, holds that storage
+  as the wasm loader lays it out: it exports `memory`, `layout`, `views`,
+  `loadSync` and `load`, so a page written against the loader runs against
+  this reading too.
 
 Imports are rewritten so Node can follow them. A `nish:` builtin becomes
 `nish/runtime`, the one package the output imports, `nish:secret` included

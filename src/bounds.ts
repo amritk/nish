@@ -5634,9 +5634,11 @@ const inertOperands = (program: CheckedProgram, args: Node[]): boolean => {
  * What `call` (an `N_CALL` or an `N_NEW`) may do, or `null` for "anything a
  * call can". A user function answers with its summary. A builtin, or a `new`
  * with no constructor, can reach memory only through what it is handed —
- * there is no mutable module state, and no function value to call back
- * through — so one handed nothing but numbers, booleans and strings stores
- * nothing and resizes nothing. `Arena` is the exception, and it is named: a
+ * there is no function value to call back through, and the one mutable
+ * module state, module storage, is named only by the program's code (its
+ * module's, or an importer's when it is exported), never by a builtin, and
+ * never changes length — so one handed nothing but numbers, booleans and
+ * strings stores nothing and resizes nothing. `Arena` is the exception, and it is named: a
  * release takes no reference and still hands the memory behind every array
  * built since the mark to whatever allocates next.
  */

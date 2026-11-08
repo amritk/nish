@@ -34,6 +34,8 @@ import {
   SIGNAL_REFUSAL,
   Walk,
 } from "./emit-ts-edits"
+import { STORAGE_FILE, STORAGE_NAMESPACE, storageFileText } from "./emit-ts-storage"
+import { storageLayouts } from "./interop-wasm"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { scriptMain } from "./script"
@@ -259,6 +261,10 @@ const braceList = (names: StringSet): string => {
   return sb.toText()
 }
 
+/** The line a module that writes a storage `new` imports `STORAGE_FILE` with, from `out`. */
+const storageImport = (out: string): string =>
+  `import * as ${STORAGE_NAMESPACE} from "${relativeSpecifier(out, STORAGE_FILE)}"\n`
+
 /** The line a non-empty name list is imported from the runtime by, or the empty string. */
 const runtimeImport = (keyword: string, names: StringSet): string =>
   names.size() === 0 ? "" : `${keyword} ${braceList(names)} from "${RUNTIME}"\n`
@@ -336,12 +342,14 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       result.unwritable = `--emit-ts cannot place ${unit.path}, which lies above the directory of the program's other modules`
       return result
     }
-    if (out === ENTRY_FILE || (out.length > 0 && holds(outputs, out))) {
+    if (out === ENTRY_FILE || out === STORAGE_FILE || (out.length > 0 && holds(outputs, out))) {
       result.unwritable = `--emit-ts would write ${unit.path} over another file at ${out}; rename or move the module`
       return result
     }
     outputs.push(out)
   }
+  // WP50 §5.4: every module storage is a view of one buffer in STORAGE_FILE.
+  const layouts = storageLayouts(compilation)
   let k = 0
   while (k < modules.length && k < outputs.length) {
     const unit = modules[k]
@@ -352,6 +360,18 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
+    let slot = 0
+    while (slot < layouts.length) {
+      const s = layouts[slot]
+      if (s.module === k - 1) {
+        walk.storageIds.push(s.newId)
+        walk.storageSlots.push(slot)
+      }
+      slot = slot + 1
+    }
+    if (walk.storageIds.length > 0) {
+      walk.storageImport = storageImport(out)
+    }
     // WP49: an async function is written as the TypeScript it already is, and
     // the launcher awaits `main` and every spawned task. Read from the tree,
     // not `program.functions`, which holds no generic nothing instantiates.
@@ -440,7 +460,8 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       runtimeImport("import", walk.helpers) +
       runtimeImport("import type", walk.widths) +
       (walk.hostHandle ? HOST_HANDLE_ALIAS : "") +
-      (walk.hostHandle && scriptFile ? "export {}\n" : "")
+      (walk.hostHandle && scriptFile ? "export {}\n" : "") +
+      (walk.usesStorage ? walk.storageImport : "")
     if (header.length > 0) {
       const at = importOffset(unit.source.text)
       // An import line is an edit like any other, so it goes in source order:
@@ -481,5 +502,8 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     k = k + 1
   }
   result.files.push(new EmittedFile(ENTRY_FILE, launcher(entryOut, script, anyAsync)))
+  if (layouts.length > 0) {
+    result.files.push(new EmittedFile(STORAGE_FILE, storageFileText(layouts)))
+  }
   return result
 }

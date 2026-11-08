@@ -57,6 +57,7 @@ import {
   RUNTIME_BUDGETS,
   TLS_TCP_START_BYTES,
   WASM_HOST_SIZE_BUDGETS,
+  WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
@@ -18717,7 +18718,8 @@ if (dealtHere("cliChecks")) {
       }
       const dts = fs.readFileSync(sidecar(stem, "d.ts"), "utf8")
       const mjs = fs.readFileSync(sidecar(stem, "mjs"), "utf8")
-      const exports = dts.slice(dts.indexOf("export interface Exports {"), dts.indexOf("\n}\n"))
+      const exportsAt = dts.indexOf("export interface Exports {")
+      const exports = dts.slice(exportsAt, dts.indexOf("\n}\n", exportsAt))
       const declaredExports = [...exports.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1])
       const missing = declaredExports.filter((name) => !new RegExp(`^ {4}${name}: `, "m").test(mjs))
       check(
@@ -29704,6 +29706,97 @@ if (!only || "vite".includes(only)) {
 
 // ---- WP50 stage 2: a wasm module imports the page's host functions --------------
 //
+// tests/host-window: WP50 stage 3's buffer windows (docs/wp50-wasm-host.md
+// §5.3). A host function lends a window of a module array: the import takes the
+// data pointer, `at` and `n`, the module checks `at + n` against the length in
+// 64 bits, and the loader hands the page a view of all memory and the absolute
+// first index. Named `host-import-window` so the `host-import` filter runs it.
+if (!only || "host-import-window".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`host-import-window: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "host-window")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "host-window"))) {
+      fs.copyFileSync(path.join(root, "tests", "host-window", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("host-import-window: a program lending windows compiles for wasm32 with --host", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const ir = fs.readFileSync(at("main.ll"), "utf8")
+      const declared = ["doubleU8", "doubleU16", "doubleU32", "doubleI32", "doubleF32"].every((name) =>
+        new RegExp(`^declare void @${name}\\(i8\\*, i32, i32\\) #\\d+$`, "m").test(ir)
+      )
+      check(
+        "host-import-window: a window is the data pointer then `at` and `n`, each an i32, in the import",
+        declared && /^declare double @sumF64\(i8\*, i32, i32\) #\d+$/m.test(ir),
+        ir.split("\n").filter((line) => line.startsWith("declare")).join("\n")
+      )
+      const body = (name) => {
+        const start = ir.indexOf(`@${name}(`, ir.indexOf("define"))
+        const from = ir.lastIndexOf("define", start)
+        return from < 0 ? "" : ir.slice(from, ir.indexOf("\n}\n", from))
+      }
+      check(
+        "host-import-window: `at + n` is added in i64 and held against the length, so a sum that wraps in 32 bits still panics",
+        /zext i32 [^\n]+ to i64[\s\S]*add i64[\s\S]*icmp ule i64[\s\S]*ffi\.length/.test(body("past")),
+        body("past")
+      )
+      check(
+        "host-import-window: lending `0, toU32(xs.length)` is proven, so the call has no window check",
+        body("whole") !== "" && !body("whole").includes("ffi.length"),
+        body("whole")
+      )
+      const linked = wasmHostLink([at("main.ll")], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      check("host-import-window: the module links with --profile wasm-host", linked.status === 0, shown(linked))
+      const loader = fs.readFileSync(at("main.mjs"), "utf8")
+      check(
+        "host-import-window: the loader's adapter passes a whole-memory view, the pointer as an index plus `at`, and `n`",
+        loader.includes("doubleF32: (a0, a1, a2) => host_doubleF32(win().f32, (a0 >>> 2) + (a1 >>> 0), a2 >>> 0),") &&
+          loader.includes("doubleU8: (a0, a1, a2) => host_doubleU8(win().u8, (a0 >>> 0) + (a1 >>> 0), a2 >>> 0),") &&
+          loader.includes("sumF64: (a0, a1, a2) => host_sumF64(win().f64, (a0 >>> 3) + (a1 >>> 0), a2 >>> 0),") &&
+          loader.includes("if (b !== windowBuffer) {"),
+        loader.split("\n").filter((line) => line.includes("win")).join("\n")
+      )
+      if (linked.status === 0) {
+        fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\", \"stored\", \"stored\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
+        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+        const lines = run.stdout.split("\n")
+        check(
+          "host-import-window: every element type crosses, and the page's writes through a mutable window are the module's",
+          run.status === 0 &&
+            ["u8s 15", "u16s 15", "u32s 15", "i32s 15", "f32s 15", "f64s 5", "whole 20"].every((line, i) => lines[i] === line),
+          shown(run)
+        )
+        check(
+          "host-import-window: module storage lends to a window, and the host's writes stay in storage for the next call",
+          lines[7] === "stored 15" && lines[8] === "stored 40",
+          shown(run)
+        )
+        const reach = "`doubleI32`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs)"
+        check(
+          "host-import-window: a window past the end panics before the page runs, and one whose `at + n` wraps does too",
+          lines[9] !== undefined &&
+            lines[9].startsWith(`past NishPanic ${reach}`) &&
+            lines[10] !== undefined &&
+            lines[10].startsWith(`wraps NishPanic ${reach}`),
+          shown(run)
+        )
+      }
+    }
+  }
+}
+
 // tests/host-import holds a host module with one function per kind of value that
 // crosses, a program that calls each, an entry for `--emit-ts`, and three pages
 // for tsc. Compiled with `--host`, each host function is a `declare` with the wasm
@@ -30068,6 +30161,659 @@ if (!only || "host-import".includes(only)) {
   }
 }
 
+// ---- WP50 stage 3: module storage a wasm page reads and writes in place --------
+//
+// tests/module-storage holds a program whose exported storage is an array of
+// records, an array of u32 and a Float64Array, and a page that writes the world
+// through the views the loader's `layout` places, steps the module, and reads
+// it back. `--emit-dts` types each length, stride and offset as its literal, so
+// tsc refuses a page written for another stride; the link exports each
+// `<name>.data`, and the loader fills `layout.<name>.at` from it.
+if (!only || "module-storage".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`module-storage: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "module-storage")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "module-storage"))) {
+      fs.copyFileSync(path.join(root, "tests", "module-storage", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("module-storage: a program with exported storage compiles for wasm32 with --emit-dts", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const dts = fs.readFileSync(at("main.d.ts"), "utf8")
+      check(
+        "module-storage: --emit-dts types each storage's length, stride and field offsets as literals",
+        dts.includes("bodies: { at: number; length: 8; stride: 16; fields: { x: 0; vx: 4; hits: 8; alive: 12 } }") &&
+          dts.includes("input: { at: number; length: 4; stride: 4 }") &&
+          dts.includes("scale: { at: number; length: 2; stride: 8 }") &&
+          dts.includes("readonly memory: WebAssembly.Memory;") &&
+          dts.includes("readonly layout: Layout;") &&
+          dts.includes("export type Module = Exports;"),
+        dts
+      )
+      const runtimeWasm = path.join(root, "runtime", "runtime-wasm.c")
+      const grown = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      const fixed = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("fixed.wasm"), "--profile", "wasm-host", "--memory", "1"])
+      check("module-storage: the program links under --profile wasm-host, growing and with --memory 1", grown.status === 0 && fixed.status === 0, shown(grown) + shown(fixed))
+      if (grown.status === 0 && fixed.status === 0) {
+        const exported = WebAssembly.Module.exports(new WebAssembly.Module(fs.readFileSync(at("main.wasm"))))
+          .filter((e) => e.kind === "global")
+          .map((e) => e.name)
+          .sort()
+        check(
+          "module-storage: the wasm-host link exports each storage's `.data` global",
+          exported.join(",") === "nish_storage_0_bodies.data,nish_storage_0_input.data,nish_storage_0_scale.data",
+          exported.join(",")
+        )
+        fs.writeFileSync(
+          at("drive.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import { loadSync } from "./main.mjs"',
+            'import { run } from "./page.ts"',
+            "const [wasm, grow] = process.argv.slice(2)",
+            'console.log(run(loadSync(readFileSync(wasm)), grow === "grow"))',
+            "",
+          ].join("\n")
+        )
+        const drive = (wasm) =>
+          spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
+            cwd: dir,
+            encoding: "utf8",
+          })
+        // Two steps: body 2 (the page woke it) moves 1.5 twice and is hit 3 a
+        // step; body 5 (the module woke it) moves -2 twice; scale[1] gains
+        // scale[0] twice. Each side reads what the other wrote.
+        const growing = drive("main.wasm")
+        check(
+          "module-storage: the page writes storage through views, the module reads and writes it, and the page reads it back",
+          growing.status === 0 && growing.stdout.startsWith("2,2 3 -4 6 -4 0.5 "),
+          shown(growing)
+        )
+        check(
+          "module-storage: growing memory detaches the old views, and views() answers new ones over the same storage",
+          growing.status === 0 && growing.stdout.trim().endsWith("0.5 true true 0.5"),
+          shown(growing)
+        )
+        const pinned = drive("fixed.wasm")
+        check(
+          "module-storage: with --memory the buffer never grows, so the views are never detached",
+          pinned.status === 0 && pinned.stdout.trim() === "2,2 3 -4 6 -4 0.5 fixed true true",
+          shown(pinned)
+        )
+      }
+
+      // The same page against the TypeScript reading (§5.4): nish-storage.ts's
+      // `loadSync` takes the module's exports where the wasm loader takes its
+      // bytes, and answers the same `memory`, `layout` and `views()`. Its heap
+      // never moves, so `grow` is refused and the page takes the pinned path.
+      fs.writeFileSync(at("start.ts"), 'import { step } from "./main"\n\nexport const main = (): void => {\n  step()\n}\n')
+      const tsDir = at("ts")
+      const emitted = spawnSync(NISH, [at("start.ts"), "--emit-ts", tsDir], { cwd: root, encoding: "utf8" })
+      check("module-storage: --emit-ts writes the program's reading and nish-storage.ts", emitted.status === 0 && fs.existsSync(path.join(tsDir, "nish-storage.ts")), shown(emitted))
+      if (emitted.status === 0) {
+        fs.writeFileSync(
+          at("drive-ts.mjs"),
+          [
+            'import * as m from "./ts/main.ts"',
+            'import { loadSync } from "./ts/nish-storage.ts"',
+            'import { run } from "./page.ts"',
+            "console.log(run(loadSync(m), true))",
+            "",
+          ].join("\n")
+        )
+        const reading = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+        check(
+          "module-storage: the same page prints the same world against the --emit-ts reading, whose memory cannot grow",
+          reading.status === 0 && reading.stdout.trim() === "2,2 3 -4 6 -4 0.5 fixed true true",
+          shown(reading)
+        )
+      }
+
+      // The page sees the module through main.d.ts alone, so it is checked in
+      // a directory without main.ts.
+      const pageDir = at("page")
+      fs.mkdirSync(pageDir)
+      for (const name of ["main.d.ts", "page.ts", "page-stride.ts"]) {
+        fs.copyFileSync(at(name), path.join(pageDir, name))
+      }
+      const typeCheckPage = (name, files) => {
+        const config = path.join(pageDir, `tsconfig.${name}.json`)
+        fs.writeFileSync(
+          config,
+          JSON.stringify({
+            extends: path.join(root, "tsconfig.json"),
+            compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+            include: [],
+            files: files.map((f) => path.join(pageDir, f)),
+          })
+        )
+        return typeCheckProject(config, root)
+      }
+      const page = typeCheckPage("page", ["main.d.ts", "page.ts"])
+      check("module-storage: the page type-checks against main.d.ts under tsc --strict", page.ok, page.output)
+      const stride = typeCheckPage("stride", ["main.d.ts", "page-stride.ts"])
+      check(
+        "module-storage: tsc refuses a page written for another stride",
+        !stride.ok && stride.output.includes("page-stride.ts") && stride.output.includes("'16'") && stride.output.includes("'12'"),
+        stride.output
+      )
+    }
+    // B4: a storage's symbols are `nish_storage_<module>_<name>`, so a storage
+    // named after a libc function does not take its symbol, and two modules
+    // may each keep a private storage of one name.
+    const names = path.join(dir, "names")
+    fs.mkdirSync(names, { recursive: true })
+    const named = (name, text) => {
+      fs.writeFileSync(path.join(names, name), text)
+      return path.join(names, name)
+    }
+    const writeSrc = named("write.ts", "const write = new Int32Array(4)\nwrite[1] = 7\nconsole.log(`write ${write[1]}`)\n")
+    const writeExe = path.join(names, "write")
+    const writeBuilt = spawnSync(NISH, [writeSrc, "-o", path.join(names, "write-out") + path.sep, "--link", writeExe], { cwd: root, encoding: "utf8" })
+    const writeRun = writeBuilt.status === 0 ? spawnSync(writeExe, [], { encoding: "utf8" }) : writeBuilt
+    check(
+      "module-storage: a storage named `write` keeps libc's `write`, natively",
+      writeRun.status === 0 && writeRun.stdout === "write 7\n",
+      shown(writeBuilt) + shown(writeRun)
+    )
+    named("a.ts", "const cache = new Int32Array(16)\nexport const bumpA = (i: u32): i32 => { cache[i] += 1; return cache[i] }\n")
+    named("b.ts", "const cache = new Int32Array(16)\nexport const bumpB = (i: u32): i32 => { cache[i] += 2; return cache[i] }\n")
+    const both = 'import { bumpA } from "./a"\nimport { bumpB } from "./b"\nexport const both = (i: u32): i32 => bumpA(i) * 100 + bumpB(i)\n'
+    const nativeMain = named("main.ts", both + "console.log(`${both(3)} ${both(3)}`)\n")
+    const twoExe = path.join(names, "two")
+    const twoBuilt = spawnSync(NISH, [nativeMain, "-o", path.join(names, "native") + path.sep, "--link", twoExe], { cwd: root, encoding: "utf8" })
+    const twoRun = twoBuilt.status === 0 ? spawnSync(twoExe, [], { encoding: "utf8" }) : twoBuilt
+    check(
+      "module-storage: two modules each keep a private `cache`, natively",
+      twoRun.status === 0 && twoRun.stdout === "102 204\n",
+      shown(twoBuilt) + shown(twoRun)
+    )
+    const wasmMain = named("page.ts", both)
+    const wasmDir = path.join(names, "wasm")
+    const twoWasm = spawnSync(
+      NISH,
+      [wasmMain, "--target", "wasm32", "--emit-dts", path.join(names, "page.d.ts"), "-o", wasmDir + path.sep],
+      { cwd: root, encoding: "utf8" }
+    )
+    const twoLinked =
+      twoWasm.status === 0
+        ? wasmHostLink(
+            ["page.ll", "a.ll", "b.ll"].map((f) => path.join(wasmDir, f)).concat([path.join(root, "runtime", "runtime-wasm.c")]),
+            ["-o", path.join(names, "page.wasm"), "--profile", "wasm-host"]
+          )
+        : twoWasm
+    const twoDts = twoWasm.status === 0 ? fs.readFileSync(path.join(names, "page.d.ts"), "utf8") : ""
+    const twoExports =
+      twoLinked.status === 0
+        ? WebAssembly.Module.exports(new WebAssembly.Module(fs.readFileSync(path.join(names, "page.wasm"))))
+            .filter((e) => e.kind === "global")
+            .map((e) => e.name)
+            .sort()
+            .join(",")
+        : ""
+    check(
+      "module-storage: two private `cache`s link under --profile wasm-host with distinct Layout keys",
+      twoLinked.status === 0 &&
+        twoExports === "nish_storage_1_cache.data,nish_storage_2_cache.data" &&
+        twoDts.includes("  cache: { at: number; length: 16; stride: 4 };") &&
+        twoDts.includes("  nish_storage_2_cache: { at: number; length: 16; stride: 4 };"),
+      shown(twoWasm) + shown(twoLinked) + twoExports + "\n" + twoDts
+    )
+  }
+}
+
+// ---- WP50 stage 3: a wasm-host panic the page can read ----------------------
+//
+// tests/panic holds a program whose exports each end one way: an index past
+// the end, an overflow, a `panic`, an exit, an allocation `--memory 1` cannot
+// hold, a host import that calls back in, a host import that throws. Under
+// --profile wasm-host the runtime calls the `nish.panic` import before it
+// traps; the loader names the site from the build's `.sites.json`, marks the
+// module dead, calls `onPanic` and throws NishPanic. Every export runs in the
+// arena's mark/release bracket, so a loop of allocating calls keeps memory flat.
+if (!only || "wasm-host-panic".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`panic: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "panic")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "panic"))) {
+      fs.copyFileSync(path.join(root, "tests", "panic", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("panic: a program with panic sites compiles for wasm32 with --emit-dts", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const ir = fs.readFileSync(at("main.ll"), "utf8")
+      check(
+        "panic: a wasm32 build tags each panic call with its site and lists the sites",
+        /call void @nish_panic_index\([^\n]*!nish\.site !\{i32 \d+\}/.test(ir) && /^; nish\.site \d+ index tests\/panic\/main\.ts:\d+:\d+|^; nish\.site \d+ index [^\n]*main\.ts:\d+:\d+/m.test(ir),
+        ir.split("\n").filter((l) => l.includes("nish.site")).join("\n")
+      )
+      const runtimeWasm = path.join(root, "runtime", "runtime-wasm.c")
+      const grown = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      const fixed = wasmHostLink([at("main.ll"), runtimeWasm], ["-o", at("fixed.wasm"), "--profile", "wasm-host", "--memory", "1"])
+      check("panic: the program links under --profile wasm-host, growing and with --memory 1", grown.status === 0 && fixed.status === 0, shown(grown) + shown(fixed))
+      if (grown.status === 0 && fixed.status === 0) {
+        const imported = WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(at("main.wasm"))))
+          .map((e) => `${e.module}.${e.name}`)
+          .sort()
+        check("panic: the wasm-host link imports nish.panic beside the host functions", imported.join(",") === "host.boom,host.reenter,nish.panic", imported.join(","))
+        const sites = fs.existsSync(at("main.wasm.sites.json")) ? JSON.parse(fs.readFileSync(at("main.wasm.sites.json"), "utf8")) : null
+        check(
+          "panic: the build writes <out>.sites.json, naming each site's kind and path:line:col",
+          Array.isArray(sites) && sites.some((s) => s.kind === "index" && /main\.ts:17:\d+$/.test(s.at)),
+          JSON.stringify(sites)
+        )
+        // The link rewrites tagged panic calls line by line. A string whose
+        // bytes spell the tag is a constant, not a call: it keeps its bytes,
+        // and only the real call is numbered. The module storage is what
+        // makes the link guard its panics at all.
+        fs.writeFileSync(
+          at("spelled.ts"),
+          [
+            "const kept = new Array<i32>(1)",
+            "export const keep = (): i32 => kept.length",
+            "export const tag = (): string => \", !nish.site !{i32 7}\"",
+            "export const tagLength = (): i32 => tag().length",
+            "export const pick = (xs: i32[], i: i32): i32 => xs[i]",
+            "",
+          ].join("\n")
+        )
+        const spelledIr = spawnSync(NISH, [at("spelled.ts"), "--target", "wasm32", "-o", at("spelled.ll")], { cwd: root, encoding: "utf8" })
+        const spelled =
+          spelledIr.status === 0 ? wasmHostLink([at("spelled.ll"), runtimeWasm], ["-o", at("spelled.wasm"), "--profile", "wasm-host"]) : spelledIr
+        const spelledSites = fs.existsSync(at("spelled.wasm.sites.json")) ? JSON.parse(fs.readFileSync(at("spelled.wasm.sites.json"), "utf8")) : null
+        let spelledLength = -1
+        if (spelled.status === 0) {
+          const module = new WebAssembly.Module(fs.readFileSync(at("spelled.wasm")))
+          const imports = {}
+          for (const e of WebAssembly.Module.imports(module)) {
+            imports[e.module] = imports[e.module] ?? {}
+            imports[e.module][e.name] = () => 0
+          }
+          spelledLength = new WebAssembly.Instance(module, imports).exports.tagLength()
+        }
+        check(
+          "panic: a string constant that spells the site tag is left alone by the link's rewrite; only the call is numbered",
+          spelled.status === 0 && spelledLength === 21 && Array.isArray(spelledSites) && spelledSites.length === 1 && spelledSites[0].kind === "index",
+          `${shown(spelled)} length ${spelledLength} sites ${JSON.stringify(spelledSites)}`
+        )
+        fs.writeFileSync(
+          at("drive.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import * as loader from "./main.mjs"',
+            'import { run } from "./page.ts"',
+            "const Real = WebAssembly.Instance",
+            "let raw = null",
+            "WebAssembly.Instance = function (module, imports) { const made = new Real(module, imports); raw = made.exports; return made }",
+            "const [wasm, sites, what] = process.argv.slice(2)",
+            'console.log(run(loader, readFileSync(wasm), JSON.parse(readFileSync(sites, "utf8")), what, () => raw.nish_arena_mark()).join("\\n"))',
+            "",
+          ].join("\n")
+        )
+        const drive = (wasm, what) => {
+          const res = spawnSync(
+            process.execPath,
+            ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
+            { cwd: dir, encoding: "utf8" }
+          )
+          return { res, lines: res.status === 0 ? res.stdout.trim().split("\n") : [] }
+        }
+        const index = drive("main.wasm", "index")
+        check(
+          "panic: an index past the end throws NishPanic with the native message and its site, and onPanic sees it",
+          index.lines[0] === "ok 0" &&
+            /^NishPanic\(index\) index out of range: 9 >= 4 at [^\n]*main\.ts:17:\d+$/.test(index.lines[1] ?? "") &&
+            /^seen index \d+ index out of range: 9 >= 4 at /.test(index.lines[3] ?? ""),
+          shown(index.res)
+        )
+        check(
+          "panic: a dead module answers every later call with NishPanic, before it runs",
+          /^NishPanic\(index\) the module is dead: index out of range/.test(index.lines[2] ?? "") && index.lines.length === 4,
+          shown(index.res)
+        )
+        const mark = drive("main.wasm", "mark")
+        check(
+          "panic: the arena mark after every call, an array result included, is the mark before it",
+          mark.lines.join("\n") ===
+            ["bump ok 1 held", "cell ok 0 held", "sum ok 42 held", "fill ok 4095 held", "row ok 0,2,4,6,8 held", "row ok 3000 held"].join("\n"),
+          shown(mark.res)
+        )
+        const overflow = drive("main.wasm", "overflow")
+        check(
+          "panic: an overflow names its operation",
+          /^NishPanic\(overflow\) attempt to add with overflow at [^\n]*main\.ts:20:\d+$/.test(overflow.lines[0] ?? ""),
+          shown(overflow.res)
+        )
+        const fail = drive("main.wasm", "fail")
+        check(
+          "panic: panic(message) carries the program's words, and a reporter that calls back in gets NishPanic",
+          /^NishPanic\(panic\) the page asked at [^\n]*main\.ts:24:\d+$/.test(fail.lines[0] ?? "") &&
+            fail.lines.includes("seen note -1 onPanic re-entry: true"),
+          shown(fail.res)
+        )
+        const exit = drive("main.wasm", "exit")
+        check(
+          "panic: process.exit ends the module as an exit with its code",
+          exit.lines[0] === "NishPanic(exit) the program exited with code 3" && exit.lines[1] === "seen exit -1 the program exited with code 3",
+          shown(exit.res)
+        )
+        // The page cannot reach `nish.panic`, but a module could hand it any
+        // (msg, len): one reaching past memory, or wrapping it, is not read.
+        fs.writeFileSync(
+          at("forged.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import * as loader from "./main.mjs"',
+            "const Real = WebAssembly.Instance",
+            "let linked = null",
+            "WebAssembly.Instance = function (module, imports) { linked = imports; return new Real(module, imports) }",
+            "const host = { reenter: () => 0, boom: () => {} }",
+            "const m = loader.loadSync(readFileSync(process.argv[2]), { host, onPanic: () => {} })",
+            "const size = m.memory.buffer.byteLength",
+            "const message = (msg, len) => { try { linked.nish.panic(0, -1, msg, len, 0, 0) } catch (e) { return e.message } }",
+            "console.log(message(size - 4, 8))",
+            "console.log(message(-16, 32))",
+            "console.log(message(16, -1))",
+            "console.log(JSON.stringify(message(size, 0)))",
+            "",
+          ].join("\n")
+        )
+        const forged = spawnSync(process.execPath, [at("forged.mjs"), at("main.wasm")], { cwd: dir, encoding: "utf8" })
+        check(
+          "panic: a panic message the module places past the end of memory, or wrapping it, is not read",
+          forged.status === 0 &&
+            forged.stdout ===
+              "panic (its message is outside memory)\npanic (its message is outside memory)\npanic (its message is outside memory)\n\"\"\n",
+          shown(forged)
+        )
+        const nested = drive("main.wasm", "nested")
+        check(
+          "panic: an import that calls back into an export throws NishReentry, and the inner call never ran",
+          nested.lines[0] === "ok 1" && /^NishReentry /.test(nested.lines[1] ?? "") && nested.lines[2] === "count 101",
+          shown(nested.res)
+        )
+        const thrown = drive("main.wasm", "thrown")
+        check(
+          "panic: an exception escaping a host import kills the module",
+          thrown.lines[0] === "Error the page threw" && /^NishPanic\(exception\) the module is dead: /.test(thrown.lines[1] ?? ""),
+          shown(thrown.res)
+        )
+        const badarg = drive("main.wasm", "badarg")
+        check(
+          "panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive",
+          badarg.lines.join("\n") ===
+            [
+              "TypeError wide: argument 1 (x) must be a bigint",
+              "TypeError narrow: argument 1 (b) must be a number",
+              "TypeError sum: argument 1 (a) must be a number",
+              "ok 7",
+              "ok 44",
+              "ok 1",
+            ].join("\n"),
+          shown(badarg.res)
+        )
+        const badshape = drive("main.wasm", "badshape")
+        check(
+          "panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive",
+          badshape.lines.join("\n") ===
+            [
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be a number",
+              "TypeError a Result payload must be a boolean",
+              "Error the page's getter threw",
+              "TypeError total: argument 1 (xs) must be an Int32Array",
+              "TypeError total: argument 1 (xs) must be an Int32Array",
+              "ok 0",
+              "ok 7",
+              "ok -3",
+              "ok 3",
+              "ok 6",
+              "ok 1",
+            ].join("\n"),
+          shown(badshape.res)
+        )
+        const flat = drive("main.wasm", "flat")
+        check(
+          "panic: every export runs in the arena's mark/release bracket, so 2000 allocating calls do not grow memory",
+          flat.lines[0] === "last 4095 grew false",
+          shown(flat.res)
+        )
+        const oom = drive("fixed.wasm", "oom")
+        check(
+          "panic: an allocation --memory 1 cannot hold panics out of memory",
+          /^NishPanic\(memory\) out of memory/.test(oom.lines[0] ?? ""),
+          shown(oom.res)
+        )
+      }
+
+      const pageDir = at("page")
+      fs.mkdirSync(pageDir)
+      for (const name of ["main.d.ts", "page.ts"]) {
+        fs.copyFileSync(at(name), path.join(pageDir, name))
+      }
+      const config = path.join(pageDir, "tsconfig.json")
+      fs.writeFileSync(
+        config,
+        JSON.stringify({
+          extends: path.join(root, "tsconfig.json"),
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+          include: [],
+          files: ["main.d.ts", "page.ts"].map((f) => path.join(pageDir, f)),
+        })
+      )
+      const page = typeCheckProject(config, root)
+      check("panic: the page type-checks against main.d.ts: Panic, LoadOptions, NishPanic, NishReentry", page.ok, page.output)
+    }
+  }
+}
+
+// ---- WH-2, the page half: ringOver over counts the module forged -----------
+//
+// docs/security/wasm-host.md WH-2: a ring's head and tail are words in module
+// storage, which the module (or a bug in it) can set to anything. The Nish
+// half reduces them before every use (tests/link/std_host_ring's `forged:`
+// lines); here runtime/page.mjs's `ringOver` reads counts of -7, 2^31 - 1 and
+// a size past the capacity, and every push and shift stays inside the ring's
+// words: the guard words on both sides keep their bytes, and `size` stays in
+// 0..capacity. Without the reduction, a head of -7 would read `w[2 + -7 % 4]`,
+// a word before the ring.
+if (!only || "module-storage".includes(only) || "wasm-host-page".includes(only)) {
+  const script = [
+    `import { ringOver } from ${JSON.stringify(pathToFileURL(path.join(root, "runtime", "page.mjs")).href)}`,
+    "const GUARD = 0x5a5a5a5a",
+    "const lines = []",
+    "for (const [head, tail] of [[-7, 0], [0, -7], [2147483647, 0], [0, 2147483647], [-2147483648, 2147483647], [0, 9], [3, 1000003]]) {",
+    "  const words = new Int32Array(16).fill(GUARD)",
+    "  const memory = { buffer: words.buffer }",
+    "  // The ring: 2 counts and 4 slots, at byte 16, guard words before and after.",
+    "  words.fill(0, 4, 10)",
+    "  words[4] = head",
+    "  words[5] = tail",
+    "  const ring = ringOver(memory, { at: 16, length: 6 })",
+    "  const sizes = [ring.size()]",
+    "  for (let i = 0; i < 6; i++) { ring.push(100 + i); sizes.push(ring.size()) }",
+    "  for (let i = 0; i < 6; i++) { ring.shift(); sizes.push(ring.size()) }",
+    "  ring.clear()",
+    "  sizes.push(ring.size())",
+    "  const guarded = [0, 1, 2, 3, 10, 11, 12, 13, 14, 15].every((k) => words[k] === GUARD)",
+    "  const inRange = sizes.every((n) => Number.isInteger(n) && n >= 0 && n <= ring.capacity)",
+    "  lines.push(`${head},${tail} ${guarded && inRange ? \"held\" : \"broke \" + JSON.stringify([...words]) + \" \" + sizes}`)",
+    "}",
+    "console.log(lines.join(\"\\n\"))",
+    "",
+  ].join("\n")
+  const forged = spawnSync(process.execPath, ["--input-type=module", "-e", script], { cwd: root, encoding: "utf8" })
+  check(
+    "WH-2: ringOver reads forged counts (-7, 2^31 - 1, a size past the capacity) without a word outside the ring",
+    forged.status === 0 &&
+      forged.stdout ===
+        ["-7,0", "0,-7", "2147483647,0", "0,2147483647", "-2147483648,2147483647", "0,9", "3,1000003"].map((p) => `${p} held\n`).join(""),
+    shown(forged)
+  )
+}
+
+// ---- WP50 stage 3: nish/page, the page half of a wasm-host module -----------
+//
+// tests/page holds a module with two `nish/host/ring` rings in module storage
+// and a page that drives them through runtime/page.mjs's `ringOver`, the page
+// filling one and draining the other; it also exercises `HostTable` (slot 0 is
+// never handed out, a taken or forged handle throws) and `reportPanic`. tsc
+// checks the page against main.d.ts and runtime/page.d.ts. The rings live in
+// module storage, so the `module-storage` filter runs this section too.
+if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`page: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "page")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "page"))) {
+      fs.copyFileSync(path.join(root, "tests", "page", name), path.join(dir, name))
+    }
+    fs.copyFileSync(path.join(root, "runtime", "page.mjs"), path.join(dir, "nish-page.mjs"))
+    fs.copyFileSync(path.join(root, "runtime", "page.d.ts"), path.join(dir, "nish-page.d.mts"))
+    const at = (name) => path.join(dir, name)
+    const compiled = spawnSync(NISH, [at("main.ts"), "--target", "wasm32", "--emit-dts", at("main.d.ts"), "-o", `${at("ll")}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("page: a module with two rings in module storage compiles for wasm32 with --emit-dts, one .ll per module", compiled.status === 0, shown(compiled))
+    const linked = compiled.status === 0 ? wasmHostLink([at("ll/main.ll"), at("ll/ring.ll")], ["-o", at("main.wasm"), "--profile", "wasm-host"]) : null
+    check("page: it links under --profile wasm-host", linked?.status === 0, linked === null ? "" : shown(linked))
+    if (linked?.status === 0) {
+      fs.writeFileSync(
+        at("drive.mjs"),
+        [
+          'import { readFileSync } from "node:fs"',
+          'import * as loader from "./main.mjs"',
+          'import { run } from "./page.ts"',
+          "console.log(run(loader, readFileSync(process.argv[2])).join(\"\\n\"))",
+          "",
+        ].join("\n")
+      )
+      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at("main.wasm")], {
+        cwd: dir,
+        encoding: "utf8",
+      })
+      const lines = res.status === 0 ? res.stdout.trim().split("\n") : []
+      const expected = fs.readFileSync(path.join(root, "tests", "page", "expected.out"), "utf8").trim().split("\n")
+      const tableLines = lines.filter((l) => /^(handles|get|take|taken|zero|reused) /.test(l))
+      check(
+        "page: HostTable hands out 1 and up, never 0, reuses a taken slot, and throws on a taken, zero, forged or fractional handle",
+        tableLines.join("\n") === expected.filter((l) => /^(handles|get|take|taken|zero|reused) /.test(l)).join("\n"),
+        shown(res)
+      )
+      check(
+        "page: ringOver reads and writes the module's rings both ways through memory and layout",
+        lines.filter((l) => !/^(handles|get|take|taken|zero|reused|report) /.test(l)).join("\n") ===
+          expected.filter((l) => !/^(handles|get|take|taken|zero|reused|report) /.test(l)).join("\n"),
+        shown(res)
+      )
+      check(
+        "page: reportPanic writes `nish: <message>` to console.error",
+        lines.includes("report nish: index out of range: 9 >= 4"),
+        shown(res)
+      )
+    }
+    // HostTable's check reads the slot, never the free list: with 200,000
+    // slots taken, 200,000 gets would be 4e10 steps if it searched. Only
+    // 2,000 of the gets are refused: a thrown RangeError costs microseconds
+    // of its own, and 200,000 of them would time the throw, not the check.
+    fs.writeFileSync(
+      at("table-cost.mjs"),
+      [
+        'import { HostTable } from "./nish-page.mjs"',
+        "const t = new HostTable()",
+        "const hs = []",
+        "for (let i = 0; i < 400000; i++) hs.push(t.add(i))",
+        "for (let i = 0; i < 400000; i += 2) t.take(hs[i])",
+        "const start = performance.now()",
+        "let sum = 0",
+        "for (let i = 1; i < 400000; i += 2) sum += t.get(hs[i])",
+        "let refused = 0",
+        "for (let i = 0; i < 400000; i += 200) { try { t.get(hs[i]) } catch { refused++ } }",
+        "console.log(sum, refused, t.size, performance.now() - start < 1000)",
+        "",
+      ].join("\n")
+    )
+    const cost = spawnSync(process.execPath, [at("table-cost.mjs")], { cwd: dir, encoding: "utf8" })
+    check(
+      "page: HostTable's check reads the slot, not the free list: 202,000 gets beside 200,000 taken slots take under a second",
+      cost.status === 0 && cost.stdout.trim() === "40000000000 2000 200000 true",
+      shown(cost)
+    )
+    // The same page against the TypeScript reading (§5.4): `--emit-ts` writes
+    // nish-storage.ts, whose `loadSync` takes the module's exports where the
+    // wasm loader takes its bytes and answers the same `memory`, `layout` and
+    // `views()`, and the page must print the same lines.
+    const tsDir = at("ts")
+    const emitted = spawnSync(NISH, [at("main.ts"), "--emit-ts", tsDir], { cwd: root, encoding: "utf8" })
+    check("page: --emit-ts writes the module's reading and nish-storage.ts", emitted.status === 0 && fs.existsSync(path.join(tsDir, "nish-storage.ts")), shown(emitted))
+    if (emitted.status === 0) {
+      fs.writeFileSync(
+        at("drive-ts.mjs"),
+        [
+          'import * as m from "./ts/main.ts"',
+          'import { loadSync } from "./ts/nish-storage.ts"',
+          'import { run } from "./page.ts"',
+          "console.log(run({ loadSync: () => loadSync(m) }, new Uint8Array(0)).join(\"\\n\"))",
+          "",
+        ].join("\n")
+      )
+      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+        cwd: dir,
+        encoding: "utf8",
+      })
+      const expected = fs.readFileSync(path.join(root, "tests", "page", "expected.out"), "utf8").trim()
+      check("page: the same page prints the same lines against the --emit-ts reading", res.status === 0 && res.stdout.trim() === expected, shown(res))
+    }
+    if (compiled.status === 0) {
+      const typedDir = at("typed")
+      fs.mkdirSync(typedDir)
+      for (const name of ["main.d.ts", "nish-page.d.mts", "page.ts"]) {
+        fs.copyFileSync(at(name), path.join(typedDir, name))
+      }
+      const config = path.join(typedDir, "tsconfig.json")
+      fs.writeFileSync(
+        config,
+        JSON.stringify({
+          extends: path.join(root, "tsconfig.json"),
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+          include: [],
+          files: ["main.d.ts", "nish-page.d.mts", "page.ts"].map((f) => path.join(typedDir, f)),
+        })
+      )
+      const typed = typeCheckProject(config, root)
+      check("page: the page type-checks against main.d.ts and runtime/page.d.ts", typed.ok, typed.output)
+    }
+  }
+}
+
 if (!only || "wasm-size".includes(only)) {
   // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
   const host = `${process.platform}-${process.arch}`
@@ -30086,6 +30832,8 @@ if (!only || "wasm-size".includes(only)) {
     }
     for (const { src, runtime, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
       const stem = path.basename(src, ".ts")
+      // The directory outlives a run: a sidecar an older build left must not pass for this one's.
+      fs.rmSync(path.join(dir, `${stem}.wasm.sites.json`), { force: true })
       const ll = wasmHostCompile(dir, stem)
       const link =
         ll === null
@@ -30116,6 +30864,37 @@ if (!only || "wasm-size".includes(only)) {
             "tests/runtime-budgets.js with the measurement and why"
         )
       }
+      // A program with no module storage and no host module gets main's bytes.
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === src)
+      const plain = wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], [
+        "-o",
+        path.join(dir, `${stem}.plain.wasm`),
+        "--profile",
+        "wasm",
+      ])
+      const digest = (file) =>
+        fs.existsSync(path.join(dir, file))
+          ? crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, file))).digest("hex")
+          : "missing"
+      const got = {
+        dts: digest(`${stem}.d.ts`),
+        loader: digest(`${stem}.mjs`),
+        wasm: plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain),
+        host: digest(`${stem}.wasm`),
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        `wasm-size: ${src}'s .d.ts, loader, --profile wasm and --profile wasm-host .wasm are main's bytes`,
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+      const imported = WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(path.join(dir, `${stem}.wasm`))))
+      const sidecar = fs.existsSync(path.join(dir, `${stem}.wasm.sites.json`))
+      check(
+        `wasm-size: ${stem}.wasm under --profile wasm-host imports nothing and writes no sites sidecar`,
+        imported.length === 0 && !sidecar,
+        `imports: ${JSON.stringify(imported)}; sidecar: ${sidecar}`
+      )
     }
   }
 }

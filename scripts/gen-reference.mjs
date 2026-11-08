@@ -1274,10 +1274,10 @@ const AREAS = [
   },
   {
     title: "Concurrency",
-    about: "Threads, locks, shared memory and queues between processes",
+    about: "Threads, locks, shared memory and queues between processes or a wasm page",
     key: "/concurrency/..",
     icon: "arrows-split",
-    names: ["threads", "sync"],
+    names: ["threads", "sync", "host"],
   },
   {
     title: "Data",

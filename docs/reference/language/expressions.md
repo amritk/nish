@@ -427,8 +427,11 @@ stores `calls`, keeps `i < xs.length` and `i < c.v.length`
 (`arr_range_call_loop`), and one that stores `v` ends `c.v`'s facts
 (`arr_range_call_rebind`). A builtin handed only numbers, booleans and
 strings — `console.log`, `panic`, a string method — has the empty summary,
-since without mutable module state or a function value what a call is handed
-is all it can reach.
+since without a function value what a call is handed is all it can reach:
+the one mutable module state, [module storage](declarations.md#module-storage), is named
+only by the program's code (its module's, or an importer's when it is
+exported), never reached by a builtin, and its length never changes, so no call can
+end a length fact about it.
 
 A function every call to which the compiler can see is **entered with what
 every call site proves** about its parameters: a floor and an upper bound of

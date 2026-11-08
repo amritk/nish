@@ -503,6 +503,17 @@
                     "type": "group",
                     "title": "Concurrency",
                     "children": {
+                      "/host": {
+                        "type": "group",
+                        "title": "host",
+                        "children": {
+                          "/ring": {
+                            "type": "page",
+                            "title": "ring",
+                            "filepath": "docs/reference/host/ring.md"
+                          }
+                        }
+                      },
                       "/sync": {
                         "type": "group",
                         "title": "sync",
@@ -1024,6 +1035,11 @@
                     "type": "page",
                     "title": "Browser host",
                     "filepath": "docs/security/runtime-browser.md"
+                  },
+                  "/wasm-host": {
+                    "type": "page",
+                    "title": "The wasm-host boundary",
+                    "filepath": "docs/security/wasm-host.md"
                   },
                   "/secret": {
                     "type": "page",

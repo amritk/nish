@@ -157,6 +157,67 @@ refused. An array of class instances, of an interface some class implements,
 or of a `T | null` holds a pointer to each element instead
 ([Arrays of records are contiguous](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-of-records-are-contiguous)).
 
+### Module storage
+
+A top-level `const` holding a `new` array of a constant length is *module
+storage*: a fixed block of memory, zero-filled when the program starts, that
+keeps its values from one call to the next. It is the one piece of state a
+module keeps, and no code runs to set it up.
+([Module storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#module-storage)).
+
+```ts nish:ok
+const SCORES = new Int32Array(4);
+
+const sum = (xs: Int32Array): i32 => {
+  let total: i32 = 0;
+  for (let i = 0; i < xs.length; i++) {
+    total += xs[i];
+  }
+  return total;
+};
+
+export const main = (): i32 => {
+  SCORES[0] = 30;
+  SCORES[3] = 4;
+  console.log(`${sum(SCORES)} ${SCORES[1]}`);   // 34 0
+  return 0;
+};
+```
+
+- **Its length is known when the program compiles**: a number, or a `const`
+  the compiler can work out, from 1 to 16,777,216, and the storage holds at
+  most 256 MiB. `new Array<T>(n)` and
+  `new Int32Array(n)`, `Float32Array`, `Float64Array` and `BigInt64Array` all
+  make one.
+- **Its elements are numbers, booleans, enums, handles, or records** of
+  those. A string, an array, a nullable element or a class is refused, and
+  so is an enum with no member equal to zero, since every element starts at
+  zero.
+- **It never grows and never moves.** No method may be called on it (`push`,
+  `pop` and `sort` included), nor may its `length` be assigned; keep a count
+  beside it for the slots in use:
+
+```ts nish:err NL2688
+const xs = new Int32Array(4);
+
+export const main = (): i32 => {
+  xs.push(1);
+  return 0;
+};
+```
+
+- **It is a place, not a value.** You index it and read its `length`; you do
+  not store, return or alias the array itself. The one way to hand it to
+  another function is a parameter spelled with a typed-array name, such as
+  `xs: Int32Array` above, which has no `push` either. An element of a
+  storage of records is a place too: `bodies[i].x = 1` writes a field and
+  `bodies[i] = bodies[j]` copies a whole element, but binding `bodies[i]` to
+  a name or passing it to a function is refused; pass the index instead.
+
+In a wasm module built for a page, module storage is the memory the page
+reads and writes directly
+([In a browser](../using-nish/interop.md#sharing-memory-with-the-page)).
+
 ## Strings
 
 A `string` is immutable UTF-8. `+` joins two strings, `===` compares them by

@@ -153,6 +153,15 @@ function isForeignBuffer(table: TypeTable, t: i32): boolean -> @isForeignBuffer 
   stackSites=0 stackLocals=0
   callee +0:13 TypeTable.kindOf -> @TypeTable.kindOf
   callee +0:44 TypeTable.refOf -> @TypeTable.refOf
+function isHostWindow(table: TypeTable, t: i32): boolean -> @isHostWindow [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: t
+  calls: TypeTable.kindOf TypeTable.refOf
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0
+  stackSites=0 stackLocals=0
+  callee +0:16 TypeTable.kindOf -> @TypeTable.kindOf
+  local +3:9 e: i32 (const)
+  callee +3:13 TypeTable.refOf -> @TypeTable.refOf
 function isHostType(table: TypeTable, t: i32): boolean -> @isHostType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t

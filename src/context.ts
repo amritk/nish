@@ -179,6 +179,12 @@ export class CheckContext {
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
   entryHasMain: boolean
+  /**
+   * Every module's context, this one's included, so a check may resolve a
+   * name in the scope of the module that wrote it. Filled by `Compilation`
+   * before bodies are checked; empty for a single module.
+   */
+  peers: CheckContext[]
   /** The function whose body is being checked, for `return` and `this`. */
   current: FunctionSig | null
   /**
@@ -337,6 +343,7 @@ export class CheckContext {
     this.pageModule = false
     this.sigs = new StringMap()
     this.entryHasMain = false
+    this.peers = []
     this.current = null
     this.loopKinds = []
     this.loopBreaks = []

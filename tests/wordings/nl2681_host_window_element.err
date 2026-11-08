@@ -1,0 +1,1 @@
+Parameter `xs` of host function `fill` is an array, and a buffer window lends only `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` or `f64[]` (or the typed array of each): copy the values into one of those

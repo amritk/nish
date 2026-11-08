@@ -877,6 +877,49 @@ export const WASM_HOST_SIZE_BUDGETS = [
     loader: [4560, 1602, 1399],
     inline: [6163, 1468, 1267],
   },
+  {
+    src: "examples/results.ts",
+    runtime: false,
+    wasm: [82, 99, 76],
+    loader: [2508, 1082, 943],
+    inline: [339, 234, 197],
+  },
+]
+
+/**
+ * What a program that uses no stage-2 or stage-3 feature gets is what it got before
+ * them (WP50 stage 3, docs/wp50-wasm-host.md §6): the sha-256 of the `--emit-dts`
+ * `.d.ts` and loader, and of the `.wasm` linked by `--profile wasm` and by
+ * `--profile wasm-host`, for each example. Only a program with module storage or a
+ * host module gets the guarded loader and the `nish.panic` import; results.ts pins the
+ * plain `{ ok, value }` packing a `Result` parameter gets. Taken from the
+ * 0.36.0 compiler and main's scripts/build.sh and runtime-wasm.c, with clang 18
+ * on linux-x64 and no wasm-opt; the `wasm-size` block of tests/run.js holds
+ * every build to them. A change that moves one is a change to every plain program's
+ * bytes: it updates the digest here and says why in its commit.
+ */
+export const WASM_PLAIN_DIGESTS = [
+  {
+    src: "examples/add.ts",
+    dts: "a778903f14bc84f10b073b3596be86f4afee5b2f6ef357f0259fd4398b506d2c",
+    loader: "8ff7c215c5a084df79f7bc3d88b82d0137422cddeb1bbea8bb958890c8cc792a",
+    wasm: "6440497d7438b6f38e8adbc6f31fa1b265825fde3f85e02fc253e4ddc5eeccdc",
+    host: "a57f2f52343518d5d351f91d2a7d40fa6281a20fb8b3be7d116d14e8db6daae6",
+  },
+  {
+    src: "examples/arrays.ts",
+    dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
+    loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
+    wasm: "04188e4288db9a287591844b1d1d8f8fc20f0c406f91625d15ac7189c2902d24",
+    host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
+  },
+  {
+    src: "examples/results.ts",
+    dts: "44fe9b7f259835e31570e83ddf00a31462e83032e733f378b75d6936ed2ca542",
+    loader: "a5c2128be043ae6cf8ed54608ed205d904d7db5dbd238c7fd82fd0d0413630d3",
+    wasm: "5040e616dfcf06673d5de62b5926e840734aaf550d2c0e1d8d7b1d1319c211a3",
+    host: "4a93551c63373e264d34dd074f3f1e9da4a1ff10b8ed0225087bc7b24e9c0c22",
+  },
 ]
 
 /**

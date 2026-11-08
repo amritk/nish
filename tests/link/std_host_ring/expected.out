@@ -1,0 +1,34 @@
+PASS  empty: capacity is the length less two
+PASS  empty: nothing waits
+PASS  empty: shift answers 0
+PASS  empty: shift leaves the head
+PASS  fill: 1
+PASS  fill: 2
+PASS  fill: 3
+PASS  fill: 4
+PASS  fill: a fifth is refused
+PASS  fill: the tail did not move
+PASS  fill: no room
+PASS  order: first in
+PASS  order: second
+PASS  wrap: a push after a shift lands in slot 0
+PASS  wrap: slot 0 holds it
+PASS  wrap: 13
+PASS  wrap: a negative word
+PASS  wrap: 15
+PASS  wrap: empty again
+PASS  counts: the head wrapped to 6
+PASS  counts: the tail wrapped to 6
+PASS  counts: a push across the wrap
+PASS  counts: one waits
+PASS  counts: 21
+PASS  clear: nothing waits
+PASS  forged: the size is capped at the capacity
+PASS  forged: a push is refused
+PASS  forged: a shift advanced the head
+PASS  forged: extreme counts still answer a size in range
+PASS  forged: and a shift stays in the ring
+PASS  short: no slots
+PASS  short: a push is refused
+PASS  short: a shift answers 0
+ring: 33 passed, 0 failed, 0 skipped

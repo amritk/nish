@@ -1,0 +1,1 @@
+Module storage `S` cannot be lent to `id`, which lets its parameter `a` go further than indexing

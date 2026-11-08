@@ -178,6 +178,7 @@ import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { isResultConstructor, resultLayout } from "./result"
 import {
   isForeignBuffer,
+  isHostWindow,
   isInteger,
   K_ARRAY,
   K_NULLABLE,
@@ -367,7 +368,8 @@ export class LoopScope {
  *
  * It lives here rather than in `emit-arrays.ts` because `FunctionFacts` is the
  * per-function record the emitter already carries (`Emitter.current`), and the
- * language has no module-level mutable state for a scope stack to live in --
+ * language's one module-level mutable state, module storage, is a fixed
+ * pointer-free array with no room for a scope stack --
  * which is how stage0's `src/codegen/emit/arrays.ts` holds the same thing.
  */
 export class HoistedHeader {
@@ -3165,15 +3167,26 @@ class FactCollector {
     // the array's own slots here, and a count that may be larger than a
     // buffer's length is held against it before the call
     // (`emitForeignBuffers`).
+    // WP50 S3: a host function's window is the same loan, its `at + n` held
+    // against the length the same way (`hostWindowProven`).
     let b = 0
     while (b < args.length && b < callee.paramTypes.length) {
       const buffer = args[b]
-      if (isForeignBuffer(this.table, callee.paramTypes[b])) {
+      if (lentBuffer(this.table, callee, b)) {
         if (!this.table.isReadonlyArray(callee.paramTypes[b])) {
           this.noteSlotWrite(call, buffer)
         }
-        const count = foreignBufferCount(this.table, callee, b)
-        const proven = foreignBufferCountProven(this.unit.program, this.table, call, b, count, this.known)
+        const proven = hostFunction(callee)
+          ? hostWindowProven(this.unit.program, this.table, call, b, this.known)
+          : foreignBufferCountProven(
+              this.unit.program,
+              this.table,
+              call,
+              b,
+              foreignBufferCount(this.table, callee, b),
+              this.known,
+              "toU64"
+            )
         if (!proven) {
           const tail: string[] = []
           panicTailCallees(tail)
@@ -3928,7 +3941,7 @@ const collectFacts = (
     let p = 0
     while (p < sig.paramTypes.length) {
       if (isPointerParam(table, sig.paramTypes[p])) {
-        if (isForeignBuffer(table, sig.paramTypes[p]) && !table.isReadonlyArray(sig.paramTypes[p])) {
+        if (lentBuffer(table, sig, p) && !table.isReadonlyArray(sig.paramTypes[p])) {
           facts.pointerParams[at].writesThrough = true
           facts.pointerParams[at].writesShared = true
         }
@@ -3950,7 +3963,8 @@ const collectFacts = (
     // block (docs/wp40-ffi-buffers-handles.md §3c), unlike the worst cases
     // above, which stay. Nor can C re-enter Nish to do it: an exported function
     // it calls back reaches no array the caller holds, because a module has no
-    // `let`, no array `const` and no `static` field to keep one in. It holds
+    // `let` and no `static` field to keep one in, and its one array `const`,
+    // module storage, has a static header whose length never moves. It holds
     // only while no header crosses: a stage that hands C a `nish_array *` sets
     // it back to `true` here, as `std/sync/shm.ts`'s `nishshm_close` does,
     // because closing a region empties every window it lent (`markShmWindow`).
@@ -5911,6 +5925,41 @@ const bodyMayExtend = (
   return false
 }
 
+/** Whether `sig` is a host module's export, a wasm import from the page (WP50 S2). */
+export const hostFunction = (sig: FunctionSig): boolean => {
+  const origin = sig.origin
+  return origin !== null && origin.host
+}
+
+/**
+ * Whether parameter `i` of the foreign function `sig` is a buffer lent for
+ * the call: a C function's `u8[]` (WP40 B1) or a host function's window
+ * (WP50 S3, `isHostWindow`). Either crosses as its data pointer.
+ */
+export const lentBuffer = (table: TypeTable, sig: FunctionSig, i: i32): boolean =>
+  hostFunction(sig) ? isHostWindow(table, sig.paramTypes[i]) : isForeignBuffer(table, sig.paramTypes[i])
+
+/**
+ * Whether the window check of buffer argument `index` of the host call `call`
+ * is proven (WP50 S3, §5.3): `at` is the literal `0` and `n` is
+ * `toU32(x.length)` of the buffer itself, which is `foreignBufferCountProven`'s
+ * rule with the count one argument further on and in the window's width.
+ */
+export const hostWindowProven = (
+  program: CheckedProgram,
+  table: TypeTable,
+  call: Node,
+  index: i32,
+  known: FactsTable | null
+): boolean => {
+  const at = call.children[1].children[index + 1]
+  return (
+    at.kind === N_NUMBER &&
+    at.text === "0" &&
+    foreignBufferCountProven(program, table, call, index, index + 2, known, "toU32")
+  )
+}
+
 /**
  * The parameter that counts buffer parameter `index` of the `declare function`
  * `sig`: the `u64` that closes its run, the first parameter after it that is
@@ -5944,7 +5993,8 @@ export const foreignBufferCountProven = (
   call: Node,
   index: i32,
   count: i32,
-  known: FactsTable | null
+  known: FactsTable | null,
+  conversion: string
 ): boolean => {
   if (known !== null && known.noElision) {
     return false
@@ -5956,7 +6006,7 @@ export const foreignBufferCountProven = (
     local === null ||
     local.mutable ||
     args[count].kind !== N_CALL ||
-    !isBuiltinConversion(program, args[count], "toU64")
+    !isBuiltinConversion(program, args[count], conversion)
   ) {
     return false
   }

@@ -239,8 +239,17 @@ export class Walk {
   stubWarnings: string[]
   /** An internal error the walk ran into, or the empty string. */
   failure: string
+  /** The import line `usesStorage` adds, written by the driver for a module with a storage `new`, else empty. */
+  storageImport: string
   /** The statements hoisted out of the current statement so far, in order. */
   preludes: string[]
+  /**
+   * WP50 §5.4: each module storage `new` of this module, by node id, and its
+   * index in the program's layouts, which `STORAGE_FILE` exports as `s<slot>`
+   * (`src/emit-ts-storage.ts`).
+   */
+  storageIds: i32[]
+  storageSlots: i32[]
   /** The next number `temporary` tries. */
   temps: i32
   /**
@@ -275,6 +284,8 @@ export class Walk {
    * stub, since the text JavaScript's meaning gives it may not be native's.
    */
   typeMiss: boolean
+  /** Set once a module storage `new` is written (`storageIds`), so the driver imports `STORAGE_FILE`. */
+  usesStorage: boolean
   /** Whether the module spells the ambient `HostHandle`, which the output declares for itself (`HOST_HANDLE_ALIAS`). */
   hostHandle: boolean
   /** The node being walked may hoist, by its position alone (`hoistChild`). */
@@ -300,6 +311,10 @@ export class Walk {
     }
     this.instanceNext = []
     this.instances = []
+    this.storageIds = []
+    this.storageSlots = []
+    this.storageImport = ""
+    this.usesStorage = false
     this.inInstance = false
     this.untyped = false
     this.repeat = false

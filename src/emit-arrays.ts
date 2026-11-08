@@ -63,7 +63,14 @@ import {
   Node,
 } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
-import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructInfo } from "./program"
+import {
+  ConstInfo,
+  elementLLVMType,
+  elementStride,
+  FieldInfo,
+  inlineElementStruct,
+  StructInfo,
+} from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa, sliceTbaa } from "./tbaa"
@@ -2035,4 +2042,33 @@ const bytePointer = (emitter: Emitter, arr: string, at: string): string => {
   const data = loadData(emitter, arr)
   const offset = emitter.fn.emitValue(`sext i32 ${at} to i64`)
   return emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${offset}`)
+}
+
+// ---- WP50 S3: module storage --------------------------------------------------------
+
+/**
+ * The two globals of module storage `info` (`src/module-storage.ts`): its
+ * elements, zero-filled, and a header that points at them. Both are static,
+ * so no code runs to build the storage and the header is the `%struct.nish_array`
+ * every array is, which every indexing path already reads. `len` and `cap` are
+ * the length, and nothing may change either. The data has external linkage
+ * so a `--profile wasm-host` link can export its address (`--export=<symbol>.data`,
+ * `docs/wp50-wasm-host.md` §5.2); a local symbol cannot be exported. Its
+ * symbol, `nish_storage_<module>_<name>` (`Compilation.nameStorage`), is the
+ * program's alone. The header is `internal` unless another module imports it.
+ */
+export const storageGlobals = (emitter: Emitter, info: ConstInfo): void => {
+  const slot = elementLLVMType(emitter.program, emitter.table, info.storageElem)
+  const data = `[${info.intValue} x ${slot}]`
+  emitter.declareType(ARRAY_TYPE)
+  emitter.declareGlobal(`@${info.storageSymbol}.data = global ${data} zeroinitializer, align 16`)
+  emitter.declareGlobal(
+    `@${info.storageSymbol} = ${info.exported ? "" : "internal "}global ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
+  )
+}
+
+/** The storage another module declares, as this module reaches it: by its header. */
+export const storageDeclaration = (emitter: Emitter, info: ConstInfo): void => {
+  emitter.declareType(ARRAY_TYPE)
+  emitter.declareGlobal(`@${info.storageSymbol} = external global ${ARRAY_STRUCT}, align 8`)
 }

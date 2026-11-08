@@ -78,6 +78,7 @@ import { isRegionSource, isRegionTemplate } from "./region-check"
 import { recordRegionCall, regionNewMessage } from "./region-rules"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
 import { simdCompareMessage } from "./simd"
+import { refuseStorageLength } from "./module-storage"
 import { Scope } from "./symbols"
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
 
@@ -821,6 +822,9 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
     )
   }
   if (ctx.table.isArray(receiver) && target.text === "length") {
+    if (refuseStorageLength(ctx, target)) {
+      return T_ERROR
+    }
     return ctx.errorType(
       target,
       `Cannot assign to \`length\` of ${ctx.table.typeName(receiver)} (array length is read-only; use \`push\`)`

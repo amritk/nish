@@ -10,7 +10,13 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
-import { aliasType, builtinTypeName, rejectRangedIntegerName, resolveType } from "./annotations"
+import {
+  aliasType,
+  builtinTypeName,
+  rejectRangedIntegerName,
+  resolveType,
+  typedArrayElement,
+} from "./annotations"
 import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression, WANT_INFERRED } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
@@ -105,6 +111,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
+import { checkStorageUses, isStorageNew, recheckStorage, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
 import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER, SORT_LOCAL, SORT_SPECIFIER } from "./std-modules"
 import {
@@ -133,6 +140,8 @@ import {
   checkImplements,
   collectStructMembers,
   declareStruct,
+  markTemplateImplements,
+  noteStructNames,
   referencedStructNames,
   signatureStructNames,
 } from "./structs"
@@ -298,6 +307,7 @@ export class Checker {
           const template = this.program.structTemplate(stmt.children[0].text)
           if (template !== null && template.decl === stmt) {
             resolveStructTemplateConstraints(template)
+            markTemplateImplements(this.program, stmt)
           }
           declareMethodTypeParameters(this.ctx, stmt)
         }
@@ -835,6 +845,9 @@ export class Checker {
     const exported = isExported(stmt)
     for (const decl of stmt.children[0].children) {
       const name = decl.children[0].text
+      if (decl.children[2].kind !== N_EMPTY && this.collectStorage(decl, name, exported)) {
+        continue
+      }
       if (decl.children[1].kind === N_EMPTY) {
         this.ctx.error(decl.children[0], `Module constant \`${name}\` needs a type annotation`)
         continue
@@ -868,6 +881,61 @@ export class Checker {
       info.scope = this.program
       this.program.addConstant(info)
     }
+  }
+
+  /**
+   * WP50 S3: `const sim = new Array<Sim>(4)` at the top level is module
+   * storage (`src/module-storage.ts`). Answers false when `decl` is not a
+   * storage `new`, so it is collected as a constant. The element and the
+   * length are checked when constants fold, once every interface knows
+   * whether a class implements it.
+   */
+  collectStorage(decl: Node, name: string, exported: boolean): boolean {
+    const init = storageNewNode(decl.children[2])
+    if (init.kind !== N_NEW || init.children[0].kind !== N_IDENT) {
+      return false
+    }
+    const typed = typedArrayElement(init.children[0].text)
+    if (!isStorageNew(init, typed)) {
+      return false
+    }
+    const typeArgs = init.children[1]
+    let elem = typed
+    if (typed < 0) {
+      if (typeArgs.children.length !== 1) {
+        this.ctx.error(init, "`new Array` needs exactly one type argument, e.g. `new Array<number>(n)`")
+        return true
+      }
+      elem = resolveType(typeArgs.children[0], this.ctx)
+    } else if (typeArgs.children.length > 0) {
+      this.ctx.error(init, `\`new ${init.children[0].text}\` takes no type argument`)
+      return true
+    }
+    if (elem === T_ERROR) {
+      return true
+    }
+    const type = this.ctx.table.arrayOf(elem)
+    if (decl.children[1].kind !== N_EMPTY) {
+      const declared = resolveType(decl.children[1], this.ctx)
+      if (declared !== T_ERROR && declared !== type) {
+        this.ctx.error(
+          decl.children[1],
+          `Module storage \`${name}\` is declared ${this.ctx.table.typeName(declared)} but its \`new\` makes ${this.ctx.table.typeName(type)}; annotate it ${this.ctx.table.typeName(type)}, or leave the annotation off`
+        )
+        return true
+      }
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(decl.children[0], `\`${name}\` is already declared in this module`)
+      return true
+    }
+    const info = new ConstInfo(name, type, decl, this.program.source)
+    info.exported = exported
+    info.scope = this.program
+    info.storage = true
+    info.storageElem = elem
+    this.program.addConstant(info)
+    return true
   }
 
   /**
@@ -1021,6 +1089,14 @@ export class Checker {
         signatureStructNames(this.ctx.table, sig, names)
         this.reachAll(declared, seen, pending, names)
       }
+      // So does an imported module storage: `cells[0].v` reads a `Cell` this
+      // module may never name (`tests/link/storage_import_record`).
+      const constant = imp.constant
+      if (constant !== null) {
+        const names = new StringSet()
+        noteStructNames(this.ctx.table, constant.type, names)
+        this.reachAll(declared, seen, pending, names)
+      }
     }
     while (pending.length > 0) {
       const info = pending.pop()
@@ -1055,6 +1131,39 @@ export class Checker {
       this.program.addStruct(name, info)
     }
     pending.push(info)
+  }
+
+  /**
+   * WP50 §5.1: every generic class's `implements` clause, marked again once
+   * imports are bound. Pass 1 marks it before `bindImports`, when an imported
+   * interface does not resolve yet, and module storage reads `implemented`
+   * when the constants fold, before any body asks for `Box<i32>`
+   * (`tests/link/reject_storage_import_generic_implementer`). Marking is
+   * idempotent, so a clause pass 1 already resolved changes nothing.
+   */
+  markBoundImplements(): void {
+    for (const stmt of this.program.file.children) {
+      if (stmt.kind === N_CLASS && stmt.children[0].kind !== N_EMPTY) {
+        const template = this.program.structTemplate(stmt.children[0].text)
+        if (template !== null && template.decl === stmt) {
+          markTemplateImplements(this.program, stmt)
+        }
+      }
+    }
+  }
+
+  /**
+   * WP50 §5.1: every module storage this module declares, checked again once
+   * every body and instantiation is checked. Whether an interface element has
+   * an implementer is read when the constants fold; this refuses one that
+   * gained an implementer after that, whatever route it took there.
+   */
+  recheckStorage(): void {
+    for (const info of this.program.constantList) {
+      if (info.storage && info.origin === this.program.source) {
+        recheckStorage(this.ctx, info)
+      }
+    }
   }
 
   bindImports(targets: CheckedProgram[]): void {
@@ -1526,7 +1635,7 @@ const declaredAlias = (target: CheckedProgram | null, name: string): AliasInfo |
  * WP33 R2: the typed-array name parameter `name` of `sig` is declared with,
  * or `""` — `this` and a signature with no parameter list of its own among them.
  */
-const parameterSpelling = (ctx: CheckContext, sig: FunctionSig, name: string): string => {
+export const parameterSpelling = (ctx: CheckContext, sig: FunctionSig, name: string): string => {
   const at = sig.decl.kind === N_CONSTRUCTOR ? 0 : 1
   if (sig.decl.children.length <= at || sig.decl.children[at].kind !== N_LIST) {
     return ""
@@ -1735,6 +1844,8 @@ export const checkSignatureBody = (
     // above — the walk reads types and bindings pass 2 has just written.
     const beforeElements = ctx.sink.count()
     checkElementReferences(ctx, body)
+    // WP50 S3: module storage is a place, never a value (`src/module-storage.ts`).
+    checkStorageUses(ctx, body)
     if (ctx.sink.count() > beforeElements) {
       sig.poisoned = true
       failed = true

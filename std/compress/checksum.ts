@@ -9,7 +9,7 @@
  *     let c: u32 = crc.update(toU32(0), body, 0, 100);
  *     c = crc.update(c, body, 100, toI32(body.length) - 100); // the same as one call
  *
- * **Keep a `Crc32`.** A module has no global state, so CRC-32's tables live
+ * **Keep a `Crc32`.** A module's only state is zero-filled storage, so CRC-32's tables live
  * in a `Crc32` object: build one and keep it, because building it is 4,096
  * table entries (about ten microseconds) and an update of a 5 KB body is
  * under one. `crc32` is the one-off convenience that builds a table for one

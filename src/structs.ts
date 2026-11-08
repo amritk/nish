@@ -42,6 +42,7 @@ import {
   FLAG_READONLY,
   FLAG_STATIC,
   FLAG_STATIC_FIRST,
+  N_CLASS,
   N_CONSTRUCTOR,
   N_EMPTY,
   N_FALSE,
@@ -59,6 +60,7 @@ import {
   Node,
 } from "./nodes"
 import {
+  CheckedProgram,
   FieldInfo,
   FunctionSig,
   ROLE_CONSTRUCTOR,
@@ -998,6 +1000,39 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
   const floor = computeLayout(ctx, info)
   info.collected = true
   reportWastefulPadding(ctx, info, floor, prefix)
+}
+
+/**
+ * A generic class's `implements` clause, marked on each plain interface it
+ * names when the template is declared rather than when it is instantiated.
+ * Whether an interface has an implementer decides whether `I[]` is laid out
+ * inline, and module storage (WP50 §5.1) reads that before any body has asked
+ * for `Box<i32>`; a template with no instantiation at all still makes `I` a
+ * view. An instantiated interface (`implements Container<T>` or
+ * `implements Container<i32>`) marks the interface's template instead, since
+ * which instantiation it reaches waits for `T`; the instantiation still
+ * resolves it with `T` bound for the layout check.
+ */
+export const markTemplateImplements = (program: CheckedProgram, decl: Node): void => {
+  if (decl.kind !== N_CLASS) {
+    return
+  }
+  for (const iface of decl.children[2].children) {
+    if (iface.kind !== N_TYPE_REF) {
+      continue
+    }
+    if (iface.children[0].children.length === 0) {
+      const target = program.struct(iface.text)
+      if (target !== null && target.kind === STRUCT_INTERFACE) {
+        target.implemented = true
+      }
+      continue
+    }
+    const template = program.structTemplate(iface.text)
+    if (template !== null && template.kind === STRUCT_INTERFACE) {
+      template.implemented = true
+    }
+  }
 }
 
 /**

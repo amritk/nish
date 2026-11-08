@@ -1,6 +1,6 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stages 1 and 2 built.** The owner accepted every
+**Status: accepted, 2026-11-06; stages 1, 2 and 3 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
@@ -8,8 +8,13 @@ loader's `loadSync` and `nish/vite`. Stage 2 is built: host modules
 (`--host`, `nish.host`, `src/host-module.ts`), their import attributes,
 `HostHandle<K>`, `Imports` in the `.d.ts`, the loader's adapters, the kept
 `import` under `--emit-ts`, the refusals NL2661–NL2670, NL3049 and NL3050, and
-the plugin's `host` option (`tests/run.js`, section `host-import`); stage 3 is
-the next. The anchors below are at `39a87b3b`.
+the plugin's `host` option (`tests/run.js`, section `host-import`). Stage 3 is
+built: module storage (`src/module-storage.ts`) and its codes, `Layout` and
+`views()`, buffer windows, the `nish.panic` import with site numbers and
+`<out>.sites.json`, the loader's re-entry and dead-module guard, `nish/page`
+and `nish/host/ring`, and the storage's TypeScript reading
+(`src/emit-ts-storage.ts`, which departs from §5.4's sketch as it says); its
+security record is `docs/security/wasm-host.md`. Stage 4 is the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design; `npm test` compiles stage 2's (host modules and
 `HostHandle`) and none of the later stages' yet.
@@ -265,8 +270,8 @@ export const sim: SimState[] = new Array<SimState>(1);
 ```
 
 ```llvm
-@instances.data = internal global [4096 x %struct.Instance] zeroinitializer, align 4
-@instances = global %struct.nish_array { i64 4096, i64 4096, i8* bitcast ([4096 x %struct.Instance]* @instances.data to i8*) }, align 8
+@nish_storage_0_instances.data = global [4096 x %struct.Instance] zeroinitializer, align 16
+@nish_storage_0_instances = global %struct.nish_array { i64 4096, i64 4096, i8* bitcast ([4096 x %struct.Instance]* @nish_storage_0_instances.data to i8*) }, align 8
 ```
 
 - **Fixed length.** `push`, `pop`, an assignment to `length`, and anything
@@ -277,9 +282,13 @@ export const sim: SimState[] = new Array<SimState>(1);
   spelling.
 - **Pointer-free elements only.** The element type is a scalar, an enum or a
   ranged integer whose zero is a member, a `HostHandle`, or an `interface`
-  that no class implements whose fields are all of those (recursively). A
-  string, an array, a class, `T | null` and a `Map` are refused, each with
-  its own code. This one rule carries the whole of §6's memory proof: module
+  that no class implements whose fields are all of those. A field may not be
+  another record: in the native layout a record field is a pointer to its
+  record, so a nested record would put a pointer in storage. Stage 3 refuses
+  it with its own message and asks for the inner fields spelled on the outer
+  record (an earlier draft said "recursively"; an inline value-record layout
+  is future work). A string, an array, a class, `T | null` and a `Map` are
+  refused, each with its own message. This one rule carries the whole of §6's memory proof: module
   storage can never point into the arena.
 - **Zero is the initial state.** There is no initialiser expression, so there
   is still no initialisation order, which is the property the "Module
@@ -323,7 +332,8 @@ The `.d.ts` spells `length`, `stride` and each field offset as literal types,
 so a page that hard-codes `24` where the stride became `28` fails `tsc` once
 the declarations are regenerated. `at` is the byte address of the data. Under
 `--profile wasm-host` the link exports each module-storage symbol
-(`--export=instances.data`), and wasm-ld exports a data symbol as a global
+(`--export=nish_storage_0_instances.data`; the symbol is
+`nish_storage_<module>_<name>`, unique across modules), and wasm-ld exports a data symbol as a global
 holding its address. The loader reads it into `layout.instances.at`.
 
 **Memory sized at instantiation, never grown.**
@@ -384,10 +394,11 @@ declare void @gpuWrite(i32, i32, i8*, i32, i32) #4
   the view is the array's own typed array and the index is `at` itself. Either
   way the page hands it straight to `queue.writeBuffer(gpuBuf, o, data, at, n)`,
   whose `dataOffset` and `size` are element counts for a typed array. Module
-  storage is a typed-array view in the TS reading (§5.4). Whether a local
-  `f32[]` is a `Float32Array` there today is a fact stage 3 checks. If it is
-  not, the TS reading converts at the call and pays an allocation the wasm
-  reading does not.
+  storage is a typed-array view in the TS reading (§5.4). Stage 3 checked
+  whether a local `f32[]` is a `Float32Array` there: it is not. A local
+  `new Float32Array(n)` is a plain zero-filled `Array` in the TS reading, and
+  it crosses as that array, unconverted, so a page that needs a real typed
+  array in both readings lends module storage.
 - **Write-through: WP40's rule unchanged.** A `u8[]` argument may be written
   by the host during the call, and the compiler records the call as a store.
   A `readonly` one may not. The rule is the declaration's word, as in C. The
@@ -428,11 +439,26 @@ export const input = new Uint32Array(heap, INPUT_AT, 256);
 // instances[i].yaw = a   →   F32[(INSTANCES_AT + i * 24 + 12) >> 2] = a
 ```
 
-A record array's field access is rewritten to index arithmetic over the
-matching view. That is why §5.1 refuses an element reference: with no
+**As built (stage 3), a record storage is not index arithmetic.** Each element
+is a plain object whose fields are accessors over the heap's views at
+`(at + i * stride + offset) >> shift`, so `instances[i].yaw = a` stays as it
+is written and runs a setter that writes the buffer, and a whole-element copy
+is `Object.assign`, field by field as the native copy is
+(`src/emit-ts-storage.ts`). The source needs no rewrite at each access, and
+the page sees the same bytes either way. The offsets are the reading's own,
+each storage on an 8-byte boundary from 0, so a page reads them from `layout`
+and never spells one. A scalar storage is the typed-array view sketched above
+(a `boolean` one is a byte view behind a proxy). The rule below still holds.
+That is why §5.1 refuses an element reference: with no
 interior pointer to represent, every access is `name[i].field`, and the
-rewrite is local. `load` for the TS reading returns the same
-`{ memory: { buffer: heap }, layout }`, so the page builds the same views.
+rewrite is local. `nish-storage.ts` also exports `views()`, `loadSync` and
+`load`, as the wasm loader does. Its loaders take the module's exports (the
+reading's instance) where the wasm loader takes its bytes, and answer
+`{ ...exports, memory, layout, views }`. `views()` answers one object for
+good, because `heap` never moves, and `memory.grow` throws a `RangeError`, as
+a wasm build pinned with `--memory` refuses to grow. tests/run.js's
+module-storage section runs the same `tests/module-storage/page.ts` against
+both readings.
 `--emit-ts` refuses module storage only where it would need an interior
 pointer. That case is unreachable after §5.1's rule, and `emit-ts-known.txt`
 says so if it ever is reached.
@@ -458,8 +484,9 @@ Together the two rules mean the arena's mark is the same at the end of every
 call as at its start. That is a property of the types, not of the program's
 care: no rewrite of the program can break it while it still compiles. In fixed
 memory (§5.2) the remaining bound is the largest single call's temporaries. A
-call that exceeds it panics with "out of memory" at a reported site, the same
-call every time for the same input. `nish_arena_used` and the mark are exports
+call that exceeds it panics with "out of memory", the same call every time for
+the same input. The arena is runtime code with no emitted call to tag, so that
+panic reports site `-1`: the page learns the call, not the line. `nish_arena_used` and the mark are exports
 the page or a test can read after each call, and W9 asserts the mark is equal
 after every frame for ten minutes.
 
@@ -468,35 +495,64 @@ page-free `malloc`. The arena bracket already gives per-call reclaim, and
 module storage gives per-match state, reset by an export that zero-fills it.
 WP46's region-per-match stays the native server's answer.
 
-**A panic reaches the page.** Under `--profile wasm-host`,
+**Which programs get it.** Everything below from here to the end of this
+section, the `nish.panic` import, the site table, the dead module, `NishPanic`,
+`NishReentry`, and the `onPanic` and `sites` options of `load` and
+`loadSync` (`loadSync` itself is in every loader), is for a program that
+uses stage 2 or 3: one with module storage (§5) or a host module (§4)
+(`Compilation.guardsPanics`). Any other program, `examples/add.ts` for one,
+gets the loader, the `.d.ts` and the `.wasm` it got before stage 3, byte for
+byte, under both profiles: a trap is a bare `RuntimeError`, the arena bracket
+releases what the call allocated, and the next call works. The trigger is in
+the program rather than a flag, so a page that adopts module storage or an
+import gets the guard without asking, and one that adopts neither pays
+nothing. The compiler marks such a program by ending its IR with a
+`; nish.sites <count>` line; that line, not the profile alone, is what
+`scripts/build.sh --profile wasm-host` reads to compile `runtime-wasm.c` with
+`NISH_WASM_HOST` and rewrite the sites. `tests/runtime-budgets.js`'s
+`WASM_PLAIN_DIGESTS` holds three examples to their earlier bytes:
+`add.ts`, `arrays.ts` and `results.ts`, whose `Result` parameter pins the
+plain `{ ok, value }` packing.
+
+**A panic reaches the page.** In such a program under `--profile wasm-host`,
 `runtime-wasm.c`'s panic entry points call one import before they trap:
 
 ```ts
 // the loader's own import, not the program's
-nish: { panic(kind: number, site: number, msg: number, len: number, a: bigint, b: bigint): void }
+nish: { panic(kind: number, site: number, msg: number, len: number, a: number, b: number): void }
 ```
 
+- **The operands `a` and `b` are `f64`**, not `bigint`: every entry point
+  converts its index, length or bound to `double`, so the import has no `i64`
+  parameter and a call allocates nothing. A `u64` operand past 2^53 is rounded
+  in the message; the trap and the site are exact.
 - **The loader formats the message**, so the runtime carries no formatting
   code: `index out of range: 7 >= 4` from the kind and the two operands, or the
   text of `panic(msg)` decoded from `(msg, len)`. It marks the instance dead
-  and calls the page's `onPanic({ message, kind, site })`. Then the trap
-  unwinds, and the export wrapper rethrows it as a `NishPanic` carrying the
-  same fields.
+  and calls the page's `onPanic({ message, kind, site })`, then throws the
+  `NishPanic` itself (`panicOf`), carrying the same fields; the exception
+  unwinds the module and the export wrapper lets it through.
 - **After a panic the module is dead.** Every wrapper throws `NishPanic` on
   entry from then on. The page re-instantiates; it never resumes. A JavaScript
   exception that escapes an import kills the module the same way: it unwinds
   through Nish frames that have no landing pads, so module storage may be half
   written.
-- **The site.** In a wasm build the emitter passes each panic call a site
-  number, the panic site's index in the order `--emit-panics` writes them.
+- **The site.** In a wasm build the emitter tags each panic call with a site
+  number (`!nish.site !{i32 N}`), numbered in the order it first writes each
+  (kind, position), and `scripts/build.sh --profile wasm-host` rewrites the
+  tagged call into the runtime's `_at` form that passes it
+  (`docs/IR_COOKBOOK.md` → "Panic sites").
   The build also writes `x.sites.json`, mapping each number to
   `{ kind, at: "path:line:col" }`, which a development page loads. The module
   carries no file names (Q9). Native IR and native panics are unchanged, so no
   native golden moves.
-- **Cost:** an `i32` argument per panic call, in wasm builds only. The import
-  exists only under `--profile wasm-host`. A module built with
-  `--profile wasm` still traps silently, as hand-written hosts that pass `{}`
-  expect.
+- **Cost:** none to a program without module storage or a host module. To
+  one with them, an `i32` argument per panic call, in wasm builds only. The
+  import exists only under `--profile wasm-host`. A module built with
+  `--profile wasm` imports nothing, as hand-written hosts that pass `{}`
+  expect: each panic is a bare trap with no message or site. For a program
+  with module storage or a host module the generated loader still marks the
+  module dead on that trap; any other program's loader is unchanged.
 
 **No re-entry.** An import may not call back into the module. The proof that
 re-entry would be safe does not exist: the attribute fixpoint treats a foreign
@@ -804,7 +860,7 @@ answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 | --- | --- | --- | --- |
 | 1 | **Link and load (W6, W8).** `--profile wasm-host`: explicit exports, `--memory`, a fixed stack, `wasm-opt` when present, `--inline`. Loader `load(source, imports)` and `loadSync`. The `nish/vite` plugin for exports (the page imports the module as TypeScript). The Vite-readiness test of the loader's text. The `wasm-size` guard with today's figures | Q5, Q10 | shrinks: −214 B on the hello world, −736 B on `arrays.ts` (raw) |
 | 2 | **Imports and handles (W1, W4).** Host modules (`--host`, `package.json`), reading their signatures and skipping bodies. Import attributes. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. The TS reading keeps the `import`. The refusals: a `string` result, an object, a function, a `Promise`, `declare function` in a wasm build, a host module in a native build. The plugin gains host modules | Q1, Q2, Q6 | about 20 B per imported function; nothing without one |
-| 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | the panic import and its site arguments: measured and stated by the stage |
+| 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | nothing to a program with no module storage and no host module: its loader, `.d.ts` and `.wasm` are the bytes it had before (`WASM_PLAIN_DIGESTS`, §6). One with either pays the `nish.panic` import and its site arguments. **Built**; record `docs/security/wasm-host.md` |
 | 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | the unit's size, measured before it lands; nothing to a program with no strings |
 | 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured |
 | 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |

@@ -362,9 +362,10 @@ where its memory lives and when it is reused.
    when nothing the function was handed can hold a pointer at all: every
    parameter, `this` included, is a number, a `boolean`, an `enum`, a
    `string`, or an object whose fields are all numbers, booleans and enums.
-   The language has no mutable global, so memory older than the call is
-   reachable only through those parameters, and none of it has a slot a
-   pointer fits in (`tests/cases/mem_callee_scope`, the Are We Fast Yet
+   The one mutable global is [module storage](declarations.md#module-storage), whose
+   elements are pointer-free, so memory older than the call that has a slot
+   a pointer fits in is reachable only through those parameters, and none
+   of it has one (`tests/cases/mem_callee_scope`, the Are We Fast Yet
    `List` benchmark; `mem_callee_scope_tree`, its `Storage` benchmark, where
    10000 runs leave `Arena.used()` where one left it). A callee that stores
    what it allocates into `this` or a parameter, a function that returns a

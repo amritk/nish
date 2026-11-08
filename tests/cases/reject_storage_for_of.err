@@ -1,0 +1,1 @@
+which is a place, not a value: loop over the index and use `sim[i].field`

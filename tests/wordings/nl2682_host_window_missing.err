@@ -1,0 +1,1 @@
+Parameter `xs` of host function `fill` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many

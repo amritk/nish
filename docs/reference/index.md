@@ -44,7 +44,7 @@ Terminal output and input, and command-line parsing: 8 modules.
 
 <scalar-card title="Concurrency" icon="phosphor/regular/arrows-split" href="#concurrency">
 
-Threads, locks, shared memory and queues between processes: 3 modules.
+Threads, locks, shared memory and queues between processes or a wasm page: 4 modules.
 
 </scalar-card>
 
@@ -153,6 +153,7 @@ Every diagnostic code, what it means and a program that provokes it.
 
 | Module | |
 | --- | --- |
+| [`nish/host/ring`](host/ring.md) | A single-producer, single-consumer ring of `i32` words over module storage, shared by a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §11). |
 | [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
 | [`nish/sync/shm`](sync/shm.md) | Memory that several processes map at once, and the atomics that order what they write to it. |
 | [`nish/threads`](threads.md) | Data parallelism, a scope for heterogeneous tasks, and a lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3). |

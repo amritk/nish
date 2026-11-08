@@ -12,7 +12,13 @@
 // `src/attributes.ts` reads: what a construct calls has to match what it
 // emits exactly, so both live beside the lowering they describe.
 
-import { foreignBufferCount, foreignBufferCountProven } from "./attributes"
+import {
+  foreignBufferCount,
+  foreignBufferCountProven,
+  hostFunction,
+  hostWindowProven,
+  lentBuffer,
+} from "./attributes"
 import { unwrapBoundsParens } from "./bounds"
 import { Emitter } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
@@ -582,14 +588,18 @@ export const emitForeignBuffers = (
   const fn = emitter.fn
   let i = 0
   while (i < callee.paramTypes.length && i < values.length) {
-    if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
+    if (hostFunction(callee) && lentBuffer(emitter.table, callee, i)) {
+      emitHostWindow(emitter, call, callee, i, operands, values)
+    } else if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
       const buffer = values[i]
       const count = foreignBufferCount(emitter.table, callee, i)
       // The checker gave every buffer a count parameter after it, so `count`
       // always names an argument.
       if (count >= 0 && count < values.length) {
         const counted = values[count]
-        if (!foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts)) {
+        if (
+          !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts, "toU64")
+        ) {
           const len = loadLength(emitter, buffer)
           const fits = fn.emitValue(`icmp ule i64 ${counted}, ${len}`)
           const okBlock = fn.newBlock("ffi.ok")
@@ -609,6 +619,45 @@ export const emitForeignBuffers = (
       }
     }
     i = i + 1
+  }
+}
+
+/**
+ * Window argument `i` of a host call (WP50 S3, `docs/wp50-wasm-host.md` §5.3):
+ * `at + n`, both `u32` and added in `i64` so the sum cannot wrap, held against
+ * the array's `len` unless `hostWindowProven`, and a larger one panics as
+ * `ffi-length`; then the operand is the array's data pointer, which the
+ * loader turns into an index into its view of the element.
+ */
+const emitHostWindow = (
+  emitter: Emitter,
+  call: Node,
+  callee: FunctionSig,
+  i: i32,
+  operands: string[],
+  values: string[]
+): void => {
+  const fn = emitter.fn
+  const buffer = values[i]
+  if (i + 2 < values.length && !hostWindowProven(emitter.program, emitter.table, call, i, emitter.facts)) {
+    const at = fn.emitValue(`zext i32 ${values[i + 1]} to i64`)
+    const n = fn.emitValue(`zext i32 ${values[i + 2]} to i64`)
+    const end = fn.emitValue(`add i64 ${at}, ${n}`)
+    const len = loadLength(emitter, buffer)
+    const fits = fn.emitValue(`icmp ule i64 ${end}, ${len}`)
+    const okBlock = fn.newBlock("ffi.ok")
+    const failBlock = fn.newBlock("ffi.length")
+    fn.emit(`br i1 ${fits}, label %${okBlock.label}, label %${failBlock.label}`)
+    fn.placeBlock(failBlock)
+    const message =
+      `\`${callee.sourceName}\`: argument ${i + 2} (${callee.paramNames[i + 1]}) plus argument ${i + 3} ` +
+      `(${callee.paramNames[i + 2]}) reaches past the end of argument ${i + 1} (${callee.paramNames[i]})`
+    emitPanicTail(emitter, emitter.stringConstant(message))
+    fn.placeBlock(okBlock)
+  }
+  const data = loadData(emitter, buffer)
+  if (i < operands.length) {
+    operands[i] = `i8* ${data}`
   }
 }
 
