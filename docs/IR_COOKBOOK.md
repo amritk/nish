@@ -11442,7 +11442,7 @@ Compiled with `--target wasm32`.
 ```ts
 const SCORES = new Int32Array(8)
 
-export function bump(i: u32): i32 {
+export const bump = (i: u32): i32 => {
   SCORES[i] += 1
   return SCORES[i]
 }
@@ -11964,7 +11964,7 @@ import { scale } from "./host/scale.ts"
 
 const DATA = new Float32Array(64)
 
-export function run(at: u32): f32 {
+export const run = (at: u32): f32 => {
   scale(DATA, at, 8)
   return DATA[at]
 }

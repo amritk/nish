@@ -196,6 +196,7 @@
         "examples/**/*.ts",
         "docs/cookbook/**/*.ts",
         "!docs/cookbook/fn-add-function.ts",
+        "!docs/cookbook/host/**",
         "bench/**/*.ts",
         "tests/self/**/*.ts",
         "tests/**/*.js",

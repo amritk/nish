@@ -194,10 +194,16 @@ const readingLoader = (layouts: StorageLayout[]): string[] => {
   }
   lines.push("  },")
   lines.push("}")
-  lines.push("/** Typed arrays over `memory.buffer`, the wasm loader's `views()`: one object, as the heap never moves. */")
+  lines.push(
+    "/** Typed arrays over `memory.buffer`, the wasm loader's `views()`: one object, as the heap never moves. */"
+  )
   lines.push("export const views = () => viewsOnce")
-  lines.push("/** The wasm loader's `loadSync` for this reading: `exports` (the module's namespace) with `memory`, `layout` and `views`. */")
-  lines.push("export const loadSync = <T extends object>(exports: T) => ({ ...exports, memory, layout, views })")
+  lines.push(
+    "/** The wasm loader's `loadSync` for this reading: `exports` (the module's namespace) with `memory`, `layout` and `views`. */"
+  )
+  lines.push(
+    "export const loadSync = <T extends object>(exports: T) => ({ ...exports, memory, layout, views })"
+  )
   lines.push("/** `loadSync` behind a promise, as the wasm loader's `load`. */")
   lines.push("export const load = async <T extends object>(exports: T) => loadSync(exports)")
   return lines

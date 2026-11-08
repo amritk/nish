@@ -47,7 +47,14 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
-import { CheckedProgram, ConstInfo, FunctionSig, StructInfo, elementStride, inlineElementStruct } from "./program"
+import {
+  CheckedProgram,
+  ConstInfo,
+  FunctionSig,
+  StructInfo,
+  elementStride,
+  inlineElementStruct,
+} from "./program"
 import { SORT_LOCAL } from "./std-modules"
 import { T_BOOL, TypeTable, isHostWindow, isNumeric } from "./types"
 

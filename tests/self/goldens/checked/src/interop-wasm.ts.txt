@@ -290,11 +290,11 @@ function wasmTypedIn(table: TypeTable, sig: FunctionSig, param: string, i: i32):
   local +0:9 t: i32 (const)
   local +1:9 kind: i32 (const)
   callee +1:16 TypeTable.kindOf -> @TypeTable.kindOf
-  local +2:9 scalar: string (const)
-  callee +2:18 TypeTable.isHostHandle -> @TypeTable.isHostHandle
-  callee +2:98 wasmType -> @wasmType
-  local +6:9 what: string (const)
-  callee +6:19 jsExportName -> @jsExportName
+  local +5:9 scalar: string (const)
+  callee +5:18 TypeTable.isHostHandle -> @TypeTable.isHostHandle
+  callee +5:53 wasmType -> @wasmType
+  local +9:9 what: string (const)
+  callee +9:19 jsExportName -> @jsExportName
 function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i32, guard: boolean): string -> @wasmOperand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i

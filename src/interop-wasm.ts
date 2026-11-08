@@ -503,7 +503,10 @@ const wasmRangeIn = (table: TypeTable, sig: FunctionSig, param: string, i: i32):
 const wasmTypedIn = (table: TypeTable, sig: FunctionSig, param: string, i: i32): string => {
   const t = sig.paramTypes[i]
   const kind = table.kindOf(t)
-  const scalar = table.isHostHandle(t) ? "number" : kind === K_ARRAY || kind === K_RESULT ? "" : wasmType(table, t, POS_PARAM)
+  if (kind === K_ARRAY || kind === K_RESULT) {
+    return ""
+  }
+  const scalar = table.isHostHandle(t) ? "number" : wasmType(table, t, POS_PARAM)
   if (scalar !== "number" && scalar !== "bigint" && scalar !== "boolean") {
     return ""
   }
@@ -512,7 +515,13 @@ const wasmTypedIn = (table: TypeTable, sig: FunctionSig, param: string, i: i32):
 }
 
 /** One non-array argument: packed, masked to its unsigned width, checked against its range or its type, or as it came. */
-const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i32, guard: boolean): string => {
+const wasmOperand = (
+  table: TypeTable,
+  sig: FunctionSig,
+  params: string[],
+  i: i32,
+  guard: boolean
+): string => {
   const t = sig.paramTypes[i]
   if (table.resultByValue(t)) {
     return wasmResultPack(table, params[i], t)
@@ -780,9 +789,11 @@ const panicLoader = (hosts: boolean): string[] => {
   lines.push("  refused.add(error);")
   lines.push("  return error;")
   lines.push("};")
-  lines.push("/** A scalar argument of the JavaScript type its declaration names, so the call's own conversion cannot throw. */")
+  lines.push(
+    "/** A scalar argument of the JavaScript type its declaration names, so the call's own conversion cannot throw. */"
+  )
   lines.push("const typedIn = (value, type, what) => {")
-  lines.push("  if (typeof value !== type) throw refuse(new TypeError(what + \" must be a \" + type));")
+  lines.push('  if (typeof value !== type) throw refuse(new TypeError(what + " must be a " + type));')
   lines.push("  return value;")
   lines.push("};")
   lines.push("")
@@ -912,7 +923,9 @@ const guardLoader = (needsRuntime: boolean): string[] => {
     lines.push("        try {")
     lines.push("          raw.nish_arena_release(mark);")
     lines.push("        } catch (e) {")
-    lines.push('          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);')
+    lines.push(
+      '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+    )
     lines.push("          throw e;")
     lines.push("        }")
     lines.push("      }")
