@@ -102,7 +102,7 @@ import {
 } from "nish/net/http1-client-codec"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { Url, urlDecode, urlDefaultPort, urlOrigin, urlParse, urlResolve } from "nish/net/url"
-import { DnsClient, dnsLoadSystem, resolveHost } from "nish/net/dns"
+import { DnsClient, dnsLoadSystem, dnsLookupWith, resolveHost } from "nish/net/dns"
 import { DnsConfig, DnsHosts } from "nish/net/dns-config"
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
 import {
@@ -294,6 +294,12 @@ export class HttpOptions {
    * `nish/net/outbound`). Null for none.
    */
   outbound: OutboundPolicy | null = null
+  /**
+   * The resolver settings a name is looked up with, as `dnsParseResolvConf`
+   * fills them; null reads `/etc/resolv.conf`. `/etc/hosts` is consulted
+   * either way. Only read, so one config can serve many fetches.
+   */
+  dns: DnsConfig | null = null
   /** The budget for the lookup and the connect together; 0 or less for none but the total. */
   connectTimeoutMs: i32 = 10000
   /** The longest wait for the server to send or take a byte; 0 or less for none. */
@@ -2068,7 +2074,8 @@ const httpClientWaitText = (code: i32, options: HttpOptions, text: string): stri
 /**
  * Looks `host` up within `start`..`until` into `addresses` and keeps those
  * the outbound policy allows: how many to try, or -1 with `fault` set (`code`
- * names the deadline a lookup that timed out ran past). The lookup blocks.
+ * names the deadline a lookup that timed out ran past), with `options.dns`
+ * when it is set. The lookup blocks: this is `fetchSync`'s.
  */
 const httpClientResolve = (
   host: string,
@@ -2087,7 +2094,15 @@ const httpClientResolve = (
     lookupMs = toI64(2147483647)
   }
   const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
-  const count: i32 = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
+  const dns: DnsConfig | null = options.dns
+  let count: i32 = 0
+  if (dns === null) {
+    count = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
+  } else {
+    const hosts: DnsHosts = new DnsHosts()
+    dnsLoadSystem(new DnsConfig(), hosts)
+    count = dnsLookupWith(dns, hosts, host, toI32(lookupMs), port, addresses, ttls)
+  }
   return httpClientAnswers(host, count, options, until, code, addresses, fault)
 }
 
@@ -2696,7 +2711,7 @@ const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<
 
 /**
  * Looks `host` up without blocking the process: a `DnsClient` on its own
- * poll loop, with the system's resolv.conf and hosts file, sends the queries
+ * poll loop, with `dns` (or the system's resolv.conf) and the hosts file, sends the queries
  * over non-blocking sockets and the task sleeps between non-blocking checks
  * of that loop, a slice that grows from 1 ms to `HTTP_CLIENT_DNS_SLICE_MS`
  * and never passes the resolver's next retry. A literal, localhost or a
@@ -2709,13 +2724,15 @@ const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<
 const httpClientLookupAsync = async (
   host: string,
   port: i32,
+  dns: DnsConfig | null,
   until: i64,
   addresses: u8[],
   ttls: i32[]
 ): Promise<i32> => {
-  const config: DnsConfig = new DnsConfig()
+  const system: DnsConfig = new DnsConfig()
   const hosts: DnsHosts = new DnsHosts()
-  dnsLoadSystem(config, hosts)
+  dnsLoadSystem(system, hosts)
+  const config: DnsConfig = dns !== null ? dns : system
   const loop: i32 = pollCreate()
   if (loop < 0) {
     return loop
@@ -2792,7 +2809,7 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
   }
   const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
   const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
-  const count = await httpClientLookupAsync(host, port, until, addresses, ttls)
+  const count = await httpClientLookupAsync(host, port, conn.options.dns, until, addresses, ttls)
   const usable: i32 = httpClientAnswers(host, count, conn.options, until, code, addresses, conn.fault)
   if (usable < 0) {
     return -1
