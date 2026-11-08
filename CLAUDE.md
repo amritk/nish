@@ -31,6 +31,11 @@ the whole `npm test` locally only when the change is to the suite itself
 (`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
 and say so in the PR body.
 
+A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
+comment, a `@param` per parameter and a `@returns` for a non-`void` return:
+`node scripts/gen-reference.mjs --check` fails on any gap
+`scripts/undocumented.txt` does not list, and that list only shrinks.
+
 A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
 trip with expected stdout, at least one negative test, its
 `docs/LANGUAGE.md` rule, cookbook entry and user-guide page — the checklist is
