@@ -1,0 +1,4 @@
+one at a time: 4 nodes
+after the first round of ten: 12 nodes
+after a thousand rounds: 12 nodes, peak 10 live, 0 live now
+a second kind: 16 nodes
