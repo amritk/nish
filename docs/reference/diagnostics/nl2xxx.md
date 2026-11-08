@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 682 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 683 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12902,4 +12902,12 @@ export async function main(): Promise<i32> {
 
 ```text
 `spawn` hands `later<(n) => ...>` an arrow that reads `base` of the function it is written in: a spawned task takes a function argument only when it captures nothing, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
+```
+
+## NL2691
+
+The message of an error contains:
+
+```text
+…a task shares with its spawner only objects and arrays whose every part outlives the spawner's call; pass the task what it needs of it instead
 ```

@@ -1,0 +1,2 @@
+hands `t.m` to `Map<string, i32>.set`, which may grow it
+storage outside the region that grows inside it

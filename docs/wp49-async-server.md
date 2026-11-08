@@ -637,17 +637,24 @@ or a table every task reads.
   above it and every loop pass around it lose their automatic scope, as a
   store into module state already makes them. `main`'s own allocations are
   released only after `@nish.async.drain`, when no task is left. A `using a =
-  arena()` block that releases under a spawn is refused (NL2689 for the spawn
-  itself, the using-arena rule for a callee that spawns).
+  arena()` block that releases under a spawn is refused (NL2421, the
+  using-arena rule, for the spawn itself and for a callee that spawns).
+  A shared argument that holds, in any field or element, a `Region`, a
+  `Secret`, a handle class a `using` block closes, or a `nish/threads`
+  scope, lock, guard or channel is refused at the spawn (NL2691,
+  `taskShareObstacle`): its spawner frees, wipes or closes that part on its
+  own schedule.
 - **Only from outside a task.** A function a task may run — a spawned
   function and everything it calls or awaits — allocates in the task's
   region, which is freed when the task ends; a nested task could outlive it.
-  So a shared argument there is refused (NL2690), and nested spawns keep
-  taking numbers and strings.
+  So a shared argument there is refused (NL2689), and nested spawns keep
+  taking numbers and strings. A function argument that captures a local is
+  refused as well (NL2690).
 - **What a task may do with it.** The spawned function is walked by the
   region rules with each shared parameter as *outer* memory. Storing memory
   the task allocated into it (a string, an array, an object) is NL2609, and
-  growing it (`push`, `Map.set`, `Set.add`) is NL2615, directly or through a
+  growing it (`push`, `Map.set`, `Set.add`, `spawnPiped` appending to its
+  output arrays) is NL2615, directly or through a
   callee, a getter, a method or an arrow, by the same facts a `region(...)`
   body is judged by. Reading it, and writing numbers, `boolean`s and enums
   into it, is allowed: they are copied. Outer memory stored into the task's
@@ -661,19 +668,26 @@ or a table every task reads.
 
 | Shape | Answer |
 | --- | --- |
-| task stores through a getter, a method or a callee | walked through the callee's facts: NL2609 / NL2615 |
+| task stores through a getter, a method or a callee | walked through the callee's facts: NL2609 / NL2615 (the method and callee have tests; the getter, walked as a callee, has none of its own) |
 | an object reachable through a field of the shared object | outer, as the field read answers outer memory |
 | an array of objects | outer elements; storing a task object into one is NL2609 |
 | the shared parameter aliased into a local, then stored through | the local is outer by the walk's fixpoint |
-| nested spawn from a task | a shared argument is refused (NL2690) |
+| nested spawn from a task | a shared argument is refused (NL2689) |
 | the spawner reassigns its local after the spawn | the task holds the object, not the local; the object stays |
-| `using` disposal of the argument | the spawner's `using arena()` around the spawn is refused (NL2689) |
+| `using` disposal of the argument | the spawner's `using arena()` around the spawn is refused (NL2421) |
+| a `Region`, `Secret`, `using` handle or `nish/threads` value inside the argument | refused at the spawn (NL2691) |
+| `spawnPiped` writing into a shared array | NL2615, as `push` |
 
 **Loose ends.** A binary whose program spawns nothing has no `nish_async`
 symbol: `build.sh` links `runtime-async.c` only when the IR declares one, and
 `tests/run.js` checks it. `tests/nish-cmp.js` compiles the corpus with the
-seed, which does not know a construct the release after it ships; a program
-the seed cannot compile is skipped there with its reason, never compared.
+seed, which does not know a construct the release after it ships: the 0.36.0
+seed refuses every program that imports `sleep` from `nish:async`. Such a
+program is not skipped. `compare` reports it as an `exit` difference
+("the candidate compiles it and the reference refuses it"), and today the
+last `DECLARED` entry, which names no program and no file, covers it, so the
+async programs are not compared until the next release's seed compiles
+them.
 
 ## Not in this work package
 

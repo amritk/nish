@@ -2069,21 +2069,28 @@ async function run(): Promise<void> {
   `T | null`, a `Region`, a `Secret` — is
   `` `spawn` hands `f` an argument of type `T`, which lives in the spawner's
   region and is freed when the spawner returns `` (NL2673,
-  `reject_async_spawn_array_arg`).
+  `reject_async_spawn_array_arg`). A shared object or array that holds, in
+  any field or element, a `Region`, a `Secret`, a handle class a `using`
+  block closes, or a scope, lock, guard or channel of `nish/threads` is
+  refused too, with what it holds named: its spawner may free, wipe or close
+  that part while the task still waits (NL2691,
+  `reject_async_spawn_region_field`, `reject_async_spawn_secret_field`,
+  `reject_async_spawn_handle`, `reject_async_spawn_threads_field`).
 - **A spawned task keeps its own memory out of what it shares.** The task's
   region is freed when the task ends, so the region rules hold it to a
   shared argument, and everything reachable from it, as memory outside its
-  region ([Regions](builtins.md#regions-nishregion)): storing an object or a `string` it made into
-  a field or an element is NL2609, directly, through an alias, a method or a
-  callee (`reject_async_spawn_store_region`, `reject_async_spawn_store_string`,
+  region ([Regions](builtins.md#regions-nishregion)): storing an object or a `string`
+  it made into a field or an element is NL2609, directly, through an alias,
+  a method or a callee (`reject_async_spawn_store_region`, `reject_async_spawn_store_string`,
   `reject_async_spawn_store_alias`, `reject_async_spawn_store_method`,
   `reject_async_spawn_store_callee`, `reject_async_spawn_store_reachable`,
   `reject_async_spawn_store_element`), and growing a shared array, `Map` or
-  `Set` — `push`, `set`, `add`, on the argument or on what a method answers
-  out of it — is NL2615 (`reject_async_spawn_grow`,
-  `reject_async_spawn_grow_method`). Copy numbers into it instead. A task may
-  not itself spawn a task with an object or an array, directly or through a
-  callee, since what it hands on may be its own region's (NL2689,
+  `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
+  arrays, on the argument or on what a method answers out of it — is NL2615
+  (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
+  `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`). Copy
+  numbers into it instead. A task may not itself spawn a task with an
+  object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
 - **A spawned task takes a function argument that captures nothing.** A
   top-level function, or an arrow written at the call that reads only its own
@@ -2175,7 +2182,7 @@ the resume order is not Node's, and these are declared differences:
 | A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
 | `spawn(f(x))` runs `f` to its first `await`, and the rest of `f` after the current task yields | `spawn(f(x))` runs `f` at once until it first waits on the outside world, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
 | `setTimeout` and socket callbacks run on libuv's loop, which keeps the process alive while anything is registered | `sleep`, `readable` and `writable` park a task on the executor; the program exits once `main` has returned and no task waits, a synchronous `main` included |
-| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; an object, array, `Map` or `Set` is shared, and the task may store only numbers into it (NL2609, NL2615); any other argument is refused (NL2673) |
+| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; an object, array, `Map` or `Set` is shared, and the task may store only numbers into it (NL2609, NL2615); one holding a `Region`, `Secret`, handle or `nish/threads` value is refused (NL2691), as is any other argument (NL2673) |
 | A task that never awaits holds the thread, as here | The same: the executor is cooperative and does not preempt a task |
 
 A program whose output does not depend on how its tasks interleave prints the

@@ -1,10 +1,13 @@
 // WP49 stage 5, part 3: a spawned task shares the objects and arrays its
 // spawner hands it. `start` makes a `Tally`, a list of counts and a map, hands
-// them with a function to three tasks, which read the map and grow nothing,, and returns while they still sleep;
-// the tasks update the numbers after `start` is gone. A spawner that feeds a
-// task an object releases no arena scope over it (`FunctionFacts.feedsTasks`),
-// so it outlives every task, and each task, whose own region is freed when it
-// ends, stores only numbers into it (NL2609, NL2615).
+// them with a function to three tasks, which read the map and grow nothing,
+// and returns while they still sleep; the tasks update the numbers after
+// `start` is gone. A spawner that feeds a task an object releases no arena
+// scope over it (`FunctionFacts.feedsTasks`), so it outlives every task, and
+// each task, whose own region is freed when it ends, stores only numbers into
+// it (NL2609, NL2615). This program pins the behaviour, not the lifetime: the
+// strong pin, with noise in the freed memory and `Arena.used()` read across
+// the spawn, is `tests/link/async_spawn_shared_outlives`.
 import { sleep, spawn } from "nish:async"
 
 class Tally {

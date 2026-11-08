@@ -15,8 +15,14 @@
 // lives on. A callee is judged by its facts (`PointerParamFacts`), never by
 // its body.
 
-import { FactsTable, FunctionFacts, PointerParamFacts } from "./attributes"
-import { arrayMethodName, isAssignmentOperator, methodReceiver, unwrapParens } from "./emit-util"
+import { FactsTable, FunctionFacts, PointerParamFacts, isResizeCall } from "./attributes"
+import {
+  arrayMethodName,
+  builtinNameOf,
+  isAssignmentOperator,
+  methodReceiver,
+  unwrapParens,
+} from "./emit-util"
 import { isScalarArgument } from "./escape"
 import { StringSet } from "./map"
 import {
@@ -46,7 +52,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
-import { capturesOf } from "./parallel"
+import { capturesOf, isThreadsLayout } from "./parallel"
 import { CheckedProgram, FunctionSig, ParallelCall } from "./program"
 import { FreshResults } from "./secret"
 import {
@@ -173,6 +179,9 @@ const handsRegionMessage = (
   which: string
 ): string => regionToOuterMessage(who, handsText(program, arg, callee, which), freed)
 
+/** The first argument `spawnPiped` appends to, its `stdout`; `stderr` follows. */
+const SPAWN_PIPED_FIRST_GROWN: i32 = 2
+
 /** `growthMessage` for `arg` handed to `callee`, which may grow it. */
 const handsGrowthMessage = (who: string, program: CheckedProgram, arg: Node, callee: string): string =>
   growthMessage(who, handsText(program, arg, callee, "which may grow it"))
@@ -217,6 +226,11 @@ const captureSpawnMessage = (task: FunctionSig, local: string): string =>
   `\`spawn\` hands ${fnName(task)} an arrow that reads \`${local}\` of the function it is written in: ` +
   "a spawned task takes a function argument only when it captures nothing, because the task may run after that function returns; " +
   "pass the value to the task as an argument of its own, or hand it a top-level function"
+
+/** A spawn argument that holds what the spawner's own rules end, at any depth (`taskShareObstacle`). */
+const sharedResourceMessage = (task: FunctionSig, param: string, type: string, why: string): string =>
+  `\`spawn\` hands ${fnName(task)} its parameter \`${param}\` of type ${type}, and ${why}: ` +
+  "a task shares with its spawner only objects and arrays whose every part outlives the spawner's call; pass the task what it needs of it instead"
 
 export const regionNewMessage = (): string =>
   "A `Region` is made by `region(f)` or `regionWith(arg, f)`, which run `f` in it, not by `new`"
@@ -273,6 +287,68 @@ const holdsRegionIn = (programs: CheckedProgram[], table: TypeTable, type: i32, 
     }
   }
   return false
+}
+
+/**
+ * Why a task may not share an argument of `type` with its spawner, or "" when
+ * it may: what the argument holds at any depth, an element, a field or an arm,
+ * that the spawner's own rules end when its call or block does. `seen` stops a
+ * recursive class.
+ */
+const taskShareObstacle = (programs: CheckedProgram[], table: TypeTable, type: i32, seen: i32[]): string => {
+  if (type < 0 || seen.indexOf(type) >= 0) {
+    return ""
+  }
+  seen.push(type)
+  if (table.isRegion(type)) {
+    return "it holds a `Region`, which the frame that made it frees, perhaps while the task still waits"
+  }
+  if (table.isSecret(type)) {
+    return "it holds a `Secret`, which its holder wipes, perhaps while the task still reads it"
+  }
+  if (table.isNullable(type)) {
+    return taskShareObstacle(programs, table, table.stripNull(type), seen)
+  }
+  if (table.isArray(type)) {
+    return taskShareObstacle(programs, table, table.refOf(type), seen)
+  }
+  if (table.isResult(type)) {
+    const ok = taskShareObstacle(programs, table, table.okOf(type), seen)
+    return ok.length > 0 ? ok : taskShareObstacle(programs, table, table.errOf(type), seen)
+  }
+  if (table.isUnion(type)) {
+    for (const variant of table.variantsOf(type)) {
+      const inner = taskShareObstacle(programs, table, variant, seen)
+      if (inner.length > 0) {
+        return inner
+      }
+    }
+    return ""
+  }
+  if (!table.isStruct(type)) {
+    return ""
+  }
+  const name = table.nameOf(type)
+  for (const program of programs) {
+    const info = program.struct(name)
+    if (info === null) {
+      continue
+    }
+    if (info.handle) {
+      return `it is the handle class \`${info.name}\`, which the \`using\` block that opened it closes when the spawner leaves it, perhaps while the task still waits`
+    }
+    if (isThreadsLayout(info)) {
+      return `it holds a \`${table.typeName(type)}\` of \`nish/threads\`, a scope, a lock, a guard or a channel, which is shared only by the rules of its own block`
+    }
+    for (const field of info.fields) {
+      const inner = taskShareObstacle(programs, table, field.type, seen)
+      if (inner.length > 0) {
+        return inner
+      }
+    }
+    return ""
+  }
+  return ""
 }
 
 /** The `N_RETURN` values of an arrow's block, not those of arrows nested in it. */
@@ -679,6 +755,23 @@ class RegionWalk {
     this.visit(node.children[0])
     this.visitArguments(node, handed, ORIGIN_SCALAR)
     const receiver = methodReceiver(node)
+    if (receiver === null && isResizeCall(this.program, this.table, node)) {
+      // `spawnPiped(argv, stdin, stdout, stderr)` appends to its last two
+      // arguments as `push` does: one outside the region is grown inside it.
+      const args = node.children[1].children
+      for (let i = SPAWN_PIPED_FIRST_GROWN; i < args.length; i++) {
+        const arg = args[i]
+        if (mayBeOuter(this.origin(arg))) {
+          const name = builtinNameOf(this.program, node)
+          this.report(
+            node,
+            growthMessage(this.who, `grows \`${textOf(this.program, arg)}\` with \`${name}\``)
+          )
+          return
+        }
+      }
+      return
+    }
     const method = arrayMethodName(this.program, this.table, node)
     if (receiver === null || method.length === 0) {
       return
@@ -956,6 +1049,17 @@ export const taskFindings = (
   for (let i = 0; i < task.paramTypes.length; i++) {
     const type = task.paramTypes[i]
     if (task.isCompileTime(i) || isCopied(table, type)) {
+      continue
+    }
+    const why = taskShareObstacle(programs, table, type, [])
+    if (why.length > 0) {
+      out.push(
+        new RegionFinding(
+          program,
+          site,
+          sharedResourceMessage(task, task.paramNames[i], table.typeName(type), why)
+        )
+      )
       continue
     }
     // A `string` argument is copied into the task's region when it starts.

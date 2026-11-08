@@ -1004,7 +1004,7 @@ function captureWriteRemedy(program: CheckedProgram, target: Node): string -> @c
   local +85:9 b: string (const)
   callee +85:13 freshName -> @freshName
   local +86:9 identity: string (const)
-function isThreadsLayout(info: StructInfo): boolean -> @isThreadsLayout
+function isThreadsLayout(info: StructInfo): boolean -> @isThreadsLayout [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: isThreadsModule nish_arena_mark nish_arena_release nish_str_eq threadsModuleName
   pointer info: size=168 writesThrough=false captured=false

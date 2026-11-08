@@ -249,6 +249,37 @@ A function argument must capture nothing: a top-level function, or an arrow
 that reads only its own parameters. Any other argument, such as an
 `Item | null`, is refused (NL2673); pass the value itself.
 
+A shared object may not hold anything its spawner frees, wipes or closes on
+its own schedule: a `Region`, a `Secret`, a handle a `using` block closes,
+or a lock, scope, guard or channel of `nish/threads`. The spawn names the
+part it found (NL2691); pass the task the numbers or strings it needs
+instead.
+
+```ts nish:err NL2691
+import { sleep, spawn } from "nish:async";
+import { Region, region } from "nish:region";
+
+class Box {
+  r: Region<i32[]>;
+  constructor(r: Region<i32[]>) {
+    this.r = r;
+  }
+}
+
+const build = (): i32[] => {
+  const xs: i32[] = [1, 2, 3];
+  return xs;
+};
+
+async function later(box: Box): Promise<void> {
+  await sleep(5);
+}
+
+export async function main(): Promise<void> {
+  spawn(later(new Box(region(build))));
+}
+```
+
 Each spawned task has memory of its own, which is given back when the task
 finishes, so a long-running program does not grow with every task it has run.
 

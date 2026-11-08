@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 842
+export const RULE_COUNT: i32 = 843
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -369,6 +369,8 @@ const diagnosticRules = (): string[] => [
   "NL2676",
   "`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`",
   "NL1062",
+  "a task shares with its spawner only objects and arrays whose every part outlives the spawner's call; pass the task what it needs of it instead",
+  "NL2691",
   "` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it",
   "NL2389",
   "` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many",

@@ -1,2 +1,2 @@
-may be allocated inside the `using arena()` block
+`new Tally()` may be allocated inside the `using arena()` block
 nothing proves it is gone when the block releases
