@@ -5,10 +5,44 @@ code. You write `.ts` files with the syntax you already know; the compiler
 checks that every value has one fixed type and layout, turns the program into
 LLVM IR, and LLVM turns that into a small executable for x86_64, ARM64 or
 WebAssembly. There is no interpreter, no garbage collector and nothing to ship
-beside the binary. What makes that possible is what Nish leaves out: `any`,
+beside the binary.
+
+What makes that possible is what Nish leaves out: `any`,
 exceptions, prototypes and the other parts of TypeScript that only make sense
 at run time are compile errors, each with a stable code and a message saying
 what to write instead.
+
+<scalar-grid cols="2">
+
+<scalar-card title="Getting started" icon="phosphor/regular/rocket-launch" href="getting-started/installation.md">
+
+Install Nish, build and run a first program, and see what changes coming from
+TypeScript.
+
+</scalar-card>
+
+<scalar-card title="The language" icon="phosphor/regular/code" href="language/types.md">
+
+Types, functions, unions, errors and `Result`, generics, modules, memory and
+the rest of what a program is written in.
+
+</scalar-card>
+
+<scalar-card title="Using Nish" icon="phosphor/regular/terminal-window" href="using-nish/cli.md">
+
+The command line, the standard library, threads, networking, databases, the
+sandbox and going back to TypeScript.
+
+</scalar-card>
+
+<scalar-card title="Reference" icon="phosphor/regular/book-open" href="../reference/index.md">
+
+Every module and builtin of the library, the compiler's flags and diagnostics,
+and the language specification.
+
+</scalar-card>
+
+</scalar-grid>
 
 > [!CAUTION]
 > **Nish is pre-alpha. Do not use it in production.** It is an early

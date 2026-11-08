@@ -111,7 +111,9 @@ listening on 8080
   then SIGKILL if it has not exited after five seconds. Listen with
   `SO_REUSEPORT` (`tcpListenFlags(host, port, backlog, 1)`) so both can hold
   the port at once, and answer SIGTERM by accepting what is queued and
-  finishing the connections you have accepted. On Linux, also turn on
+  finishing the connections you have accepted.
+
+  On Linux, also turn on
   `sudo sysctl -w net.ipv4.tcp_migrate_req=1` (Linux 5.14 and later): without
   it, closing the old listener resets any connection the kernel queued on it
   after the server's last accept, so an occasional request across a rebuild
@@ -156,7 +158,9 @@ likely to add to it:
   Every native profile links a hardened binary: position independent, with a
   read-only GOT (full RELRO), a non-executable stack, stack-clash probes,
   control-flow protection (CET on x86-64, BTI and pointer authentication on
-  arm64) and the stack protector in the C runtime. You do not need a flag for
+  arm64) and the stack protector in the C runtime.
+
+  You do not need a flag for
   it, and `node scripts/check-hardening.mjs <binary>` in a checkout reads the
   protections back from a binary's headers.
   On Linux every native binary also carries a GNU build id (an
@@ -288,7 +292,9 @@ Imports are rewritten so Node can follow them. A `nish:` builtin becomes
 (`nish:async` alone becomes `nish/runtime/async.mjs`):
 its `wipe` is the runtime's, and `std/secret.ts` is not written. A `nish/x` or relative
 import becomes a relative path ending in `.ts`. A host module (`--host`) is not
-written: the import points back at the page's own file, relative to `out/`. An imported interface or type
+written: the import points back at the page's own file, relative to `out/`.
+
+An imported interface or type
 alias is marked `import { type Pair }`. A module that needs none of this, and
 none of the rewrites below, is written byte for byte; one rewrite that reaches
 an otherwise plain module is `const s = "hi"`, written `const s: string = "hi"`
@@ -366,16 +372,22 @@ A generic nothing calls is written too: a function or method, or the methods
 and constructor of a class no type argument list names. The native build
 compiles no body for it, so there are no types to translate by. Where no type
 would change its text, it is written as it is, with only the rewrites that
-need no type, such as the bounds check on `a[i]`. Where a type would (a 64-bit
+need no type, such as the bounds check on `a[i]`.
+
+Where a type would (a 64-bit
 integer, an `f32`, a builtin call such as `toU32`, arithmetic whose width
 wraps, a string's `.length` or methods), it is written with a body that throws
 instead, and a warning (`portability:`, NL8012) names it and its line when it
-is the program's own; the standard library's are written without one. The
+is the program's own; the standard library's are written without one.
+
+The
 fifth refusal (NL4014) is a generic of your own whose body fills
 `new Array<T>(n)` with `T`'s zero, or copies an element into an array slot in a
 program that keeps records inline: which code those need depends on a `T` no
 call names, so it is refused rather than stubbed, even where a 64-bit integer
-or a builtin call in the same body would have made it a stub. Call it, or write a function per element type. The same
+or a builtin call in the same body would have made it a stub.
+
+Call it, or write a function per element type. The same
 body in the standard library is a stub, and the program is written.
 The sixth (NL4015) is a program that imports `nish:region`: the TypeScript
 runtime has no regions to allocate into yet, so keep that program native.
@@ -501,7 +513,9 @@ terminal with no theme shows its built-in defaults). On a terminal whose
 `TERM` terminfo entry declares no colours at all (`tput colors` prints fewer
 than 8, as it does for `TERM=vt100`), the help marks headings and flags in
 bold and placeholders with an underline instead, which a monochrome terminal
-still shows. Forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`) is always the
+still shows.
+
+Forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`) is always the
 theme's, whatever `TERM` says, because what reads it is a pager or an editor
 that paints the escapes itself. Your own tools can print a help that behaves the same way with
 [`nish/cli`](standard-library.md#nishcli).
@@ -513,7 +527,9 @@ or a no (`0`, `false`, `no`, `off`), or you set `NISH_AGENT` the same way
 `FORCE_COLOR` set, and ends with an **Agents** section: the absolute path of
 `docs/AI.md` (the language as rules, traps first) in the installed package,
 and the flags an agent's loop needs —
-`--json`, `--fix` and `nish run`. `NISH_AGENT=0` (or `false`, `no`, `off`) turns this off
+`--json`, `--fix` and `nish run`.
+
+`NISH_AGENT=0` (or `false`, `no`, `off`) turns this off
 when one of those variables is set for some other reason. If the package's
 `docs/AI.md` cannot be found, the section names it without a path.
 

@@ -25,7 +25,9 @@ runtime declarations' attributes), `src/emit-result.ts` (`orReturn`),
 The attacker controls the *input* of a well-typed program the compiler
 accepted: every byte it reads, every length or count it parses from that
 input, every file and directory it is pointed at, and how large those are.
-The attacker does not write the program and does not choose its flags. The
+The attacker does not write the program and does not choose its flags.
+
+The
 programmer is honest but writes ordinary code: a length taken from a header,
 a name returned from a directory listing, a task spawned on a record. A
 finding is a program the compiler accepts, without `uncheckedGet` or
@@ -89,6 +91,7 @@ panics instead, and no `nsw` the compiler writes is an assumption.
   families (`derived`, `bounds`, `pushpop`, `slice`, `alias`, `closure`,
   `arena`, `threads`), and makes about half of them end in a one-past variant
   of their last block, an access that reaches index `length` and no further.
+
   Each program is built twice at `clang -O2`, by default and with
   `--no-elision` (every proof-backed elision off: the oracle), and both runs
   must print and end the same. A program must also panic `index out of range`
@@ -96,7 +99,9 @@ panics instead, and no `nsw` the compiler writes is an assumption.
   removes the check both builds share, and its default build runs a third time
   under AddressSanitizer (`tests/differential/asan.js`: `sanitize_address` on
   every definition, the runtime built with `-fsanitize=address,undefined`),
-  where it must panic or finish cleanly as the first run did. A one-past read
+  where it must panic or finish cleanly as the first run did.
+
+  A one-past read
   that stays inside the array's block (`ASAN_BLIND`) is not counted as an ASan
   verdict, and `threads:mapinto`'s panic belongs to the library
   (`LIBRARY_CHECKED`). A failure is reduced by ddmin to a `min.ts` with the
@@ -230,7 +235,9 @@ the changes that introduced them.
   programs, whose `new Array(n)` takes a `number` `n` under f64 mode) are
   admitted today only by the existing every-program declaration about `!tbaa`
   element tags, which admits any difference in any file. A declaration of
-  their own would keep the next unrelated difference visible. *Since made
+  their own would keep the next unrelated difference visible.
+
+  *Since made
   moot: the reference is now 0.16.0, which carries these changes, so they no
   longer differ, and the four every-program declarations went with them. The
   one difference the `!tbaa` declaration was still absorbing was the output

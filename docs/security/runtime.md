@@ -56,12 +56,16 @@ A finding is any of these, reachable through a runtime entry point:
   entry) were made at and past the limit, read with a sparse file where the
   input is a file, and their `length` read back under `--number-mode i32`.
   Exactly 2^31 − 1 is checked to still succeed for a file read, a
-  concatenation and the host entry, so a limit one too low fails too. Those
+  concatenation and the host entry, so a limit one too low fails too.
+
+  Those
   three checks run in a child whose arena points at 4 GiB of address space
   reserved with no access: a private, `PROT_NONE` mapping of a sparse file,
   with one read-write page for the headers. The host entry's elements are
   never touched. The concatenation's source starts in the inaccessible
-  pages, and so does the file read's destination. The child faults on the
+  pages, and so does the file read's destination.
+
+  The child faults on the
   first byte copied, and its handler checks that the arena handed out the
   whole block for that length. Nothing commits more than a page, so each
   check costs about a millisecond and no memory, and a run that passes is
@@ -234,12 +238,15 @@ linked by `scripts/build.sh` from the same IR less the hardening, on x86-64
 Linux with clang 18, 11 interleaved rounds (21 where the first pass was
 unclear), the median of each, the first round dropped. Size grows by 328 to
 1,136 bytes per binary under `speed`, 328 to 944 under `size`, and about
-6.6 KB (5%) under `debug`. Time, under `speed`: 12 of 14 programs moved within
+6.6 KB (5%) under `debug`.
+
+Time, under `speed`: 12 of 14 programs moved within
 the noise band (a copy of the same binary moved up to ±1.5%, 4% on `lexer`);
 `cursor` is 6.1% and `aes-gcm` 3.6% slower, and a build without only
 `-fcf-protection` brings both back inside the band, so CET is the cost there
 (`endbr64` at each entry, `.plt.sec`, and the layout they shift). A build
 without the stack protector and FORTIFY measured the same as the full set.
+
 `fib`'s −9.9% (`speed`) and +16.4% (`size`), and `getbyte`'s +9.5% (`size`),
 are placement: their hot loops are the same instructions at a new address.
 Instructions retired (`bench/run.mjs --instructions`, cachegrind, `speed`):
@@ -248,7 +255,9 @@ Instructions retired (`bench/run.mjs --instructions`, cachegrind, `speed`):
 builders. The same guard on `str_from_digits` (a 21-byte digit buffer, run
 once per integer formatted) adds about 166,000 instructions to the map
 benchmarks that format each key: `map-wordcount` +0.11%, `map-presize`
-+0.24%. Those three baselines in `bench/instructions.json` move with this
++0.24%.
+
+Those three baselines in `bench/instructions.json` move with this
 change.
 The landing pads also end the `speed` link's LTO partitions on x86-64 and
 arm64 (`scripts/build.sh`): a partition boundary turns the internal functions
@@ -316,7 +325,9 @@ chunk the mark is in. A value bumped after the mark and still referenced after
 the release (the checker's escape rules are meant to make that impossible, and
 `nish_arena_keep` is the one sanctioned way out) reads memory that the next
 allocation reuses: freed chunks go back to `malloc`, the rewound part of the
-kept chunk to the next bump. Nothing traps; the program reads whatever was
+kept chunk to the next bump.
+
+Nothing traps; the program reads whatever was
 written there next. That is the use-after-free a compiler bug in the escape
 analysis would turn into, and today only review and the arena tests stand
 against it.

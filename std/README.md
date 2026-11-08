@@ -59,7 +59,9 @@ upstream notice: `crypto/aes.ts`'s `ghashMul32` is adapted from BearSSL,
 `crypto/p256.ts`'s field and scalar arithmetic is ported from fiat-crypto and
 its nonce's safegcd inversion from libsecp256k1, and `crypto/p384.ts`'s field
 and scalar arithmetic is ported from fiat-crypto
-([`THIRD_PARTY_NOTICES.md`](https://github.com/amritk/nish/blob/main/THIRD_PARTY_NOTICES.md)). Each reproduces its
+([`THIRD_PARTY_NOTICES.md`](https://github.com/amritk/nish/blob/main/THIRD_PARTY_NOTICES.md)).
+
+Each reproduces its
 specification's published vectors in its `tests/link/crypto_*` programs. The
 performance gate compiles every module with no diagnostics under both
 `--number-mode i32` and `f64`, and the hashes, HMAC, HKDF, X25519,
@@ -75,7 +77,9 @@ no array or string the runtime makes (a file read, a concatenation, a
 template) and no string built by `join` can pass 2^31 − 1 elements or bytes
 (K1-6, CG-3, closed), so `length` is right in both number modes, and the
 one-shot functions below refuse a longer input as each row says. **Private
-keys are `Secret`s.** `crypto/p256.ts`, `crypto/x25519.ts`, `crypto/ed25519.ts`,
+keys are `Secret`s.**
+
+`crypto/p256.ts`, `crypto/x25519.ts`, `crypto/ed25519.ts`,
 `crypto/x509.ts` and `crypto/x509-random.ts` take and give a private key as a `Secret<u8[]>` from
 `nish:secret`, compute on it only inside `expose`, and wipe every intermediate
 the key reaches before they return, with a store the optimiser may not remove
@@ -130,7 +134,9 @@ Three rules hold across the modules:
   255 steps, AES reads no table, P-256's comb and window read every entry of
   a table and keep one by mask, and base64url maps characters by arithmetic on range masks
   rather than a table. Every branch is on a length, a loop counter or a bit
-  position. WP34 N6 checks that the machine code kept that shape:
+  position.
+
+  WP34 N6 checks that the machine code kept that shape:
   `tests/ct-asm.js` disassembles golden fixtures on x86-64 and aarch64 and
   refuses a branch, a call, a secret-addressed load, or a divide or square
   root of a secret (whose latency follows its operands) in them. It reads what
@@ -167,7 +173,9 @@ Three rules hold across the modules:
     key or a signature: its digit, the fifteen-entry read of the precomputed
     table, the mixed addition, the masked keep, and one whole comb step; and
     the nonce's safegcd inversion: thirty divsteps, held to the module's loop
-    body, and both matrix updates. The check follows each call into the field
+    body, and both matrix updates.
+
+    The check follows each call into the field
     functions. The 64-window and 4-row loops, the window's table build, the
     field inversion, safegcd's limb conversions, the encodings and
     RFC 6979's nonce derivation remain discipline.
@@ -265,6 +273,7 @@ through both Finished messages) and `TLS_LEVEL_APPLICATION`. A carrier hands
 `receive` the bytes it got at a level, in any split, and sends what
 `takeOutput(level)` answers under that level's keys: TLS over TCP (T2) in
 records, QUIC (Q2) in CRYPTO frames of the matching packet number space.
+
 `writeKnown(level)` and `readKnown(level)` say when the server's and the
 client's traffic secret for the Handshake and Application levels is known
 (the Initial level has none); the secrets themselves are `Secret` fields of
@@ -272,7 +281,9 @@ client's traffic secret for the Handshake and Application levels is known
 `clientHandshake`, `serverApplication`, `clientApplication` and `exporter` —
 which a carrier reads only through `expose` (`installHeld` turns one into a
 record key), and `wipeSecret(TLS_SECRET_*)` zeroes one once the carrier has
-what it needs. The state says what is due: `TLS_STATE_WAIT_SIGNATURE` after the
+what it needs.
+
+The state says what is due: `TLS_STATE_WAIT_SIGNATURE` after the
 first flight is written, `TLS_STATE_WAIT_FINISHED` once it is signed,
 `TLS_STATE_CONNECTED` when the client's Finished verified, and
 `TLS_STATE_FAILED` with `alert` set after a refusal. Over QUIC, set `quic` in
@@ -283,7 +294,9 @@ ways (`clientTransportParameters` holds the client's).
 computed with, are `Secret`s wiped on every path, and `tlsSignEcdsaP256` takes
 its key as a `Secret`. The one-shot key-schedule functions of
 `nish/net/tls/schedule` and `tlsNextTrafficSecret` take and answer their
-secrets as `Secret<u8[]>`s, so a plain array there is a compile error. What `TlsServer` keeps for an open connection —
+secrets as `Secret<u8[]>`s, so a plain array there is a compile error.
+
+What `TlsServer` keeps for an open connection —
 the caller's ephemeral key, copied in by `restart`, and the handshake,
 traffic, exporter and resumption secrets — and the four traffic secrets
 `TlsRecordServer` keeps for KeyUpdate are `Secret` fields, readonly and read
@@ -293,6 +306,7 @@ zeroed once the carrier has what it needs from it and at every end of the
 connection (TLS-1 in
 [`docs/security/tls.md`](../docs/security/tls.md), the record that also lists
 what each refusal is and the test that pins it).
+
 `tests/link/net_tls_*` are the module's programs, each also run under
 `--number-mode f64`.
 
@@ -302,12 +316,16 @@ test or another transport. The program is the loop: there are no callbacks,
 so each call answers the slot's interest and the program re-arms the
 descriptor with `pollModify(loop, tls.fd(slot), wants & 3, slot)`, signs on
 `TLS_RECORD_SIGN`, reads on `TLS_RECORD_DATA` and calls `close(slot)` on
-`TLS_RECORD_DONE`. A slot's buffers — about 136 KB of resident memory, measured over a 400-slot pool, with the handshake's own state in them — are
+`TLS_RECORD_DONE`.
+
+A slot's buffers — about 136 KB of resident memory, measured over a 400-slot pool, with the handshake's own state in them — are
 allocated once, on the first accept into the slot, and after its handshake a connection allocates nothing that
 outlives a record. The handshake keeps its state in the slot, which `accept`
 restarts, and a KeyUpdate installs its keys in place, so neither leaves
 anything in the arena (TLS-3); a connection still takes at most
-`TLS_RECORD_MAX_KEY_UPDATES` (64) KeyUpdates from its client. The carrier
+`TLS_RECORD_MAX_KEY_UPDATES` (64) KeyUpdates from its client.
+
+The carrier
 has no clock, so
 closing quiet slots is the program's (TLS-4). On this path the record layer
 wipes `TlsServer`'s traffic and handshake secrets and the ephemeral key once
@@ -321,7 +339,9 @@ of `QUIC_CONN_STATIC_KEY_SIZE` bytes (the stateless reset key, which has to
 survive a restart to be any use, and the Retry token key) and whether to
 ask for Retry. `listener.release()` wipes the listener's seed and scratch
 when the server stops; the two keys are the caller's to wipe then, unless
-`Http3Server.stop` does it (QUIC-5). Route each datagram by
+`Http3Server.stop` does it (QUIC-5).
+
+Route each datagram by
 its first packet's DCID: to the connection whose `ownsConnectionId` says it
 is its, and anything else to `listener.handle(datagram, address, now)`, which
 answers what to send back or says to make a connection — and must see nothing
@@ -330,7 +350,9 @@ Make the connection when it says so, with `QUIC_CONN_ENTROPY_SIZE` bytes from
 `crypto.getRandomValues`: the TLS server random and x25519 key, the server's
 first connection ID and the seed its later IDs are derived from all come out
 of them, so a test injects fixed bytes and a recorded exchange replays byte
-for byte. Neither has a clock: `now` is the caller's monotonic time in
+for byte.
+
+Neither has a clock: `now` is the caller's monotonic time in
 milliseconds, and `deadline()` says when to call `handleTimer(now)` next.
 Hand the connection every datagram the client sends;
 when `signatureInput()` answers bytes, sign them (`tlsSignEcdsaP256`) and hand
@@ -339,7 +361,9 @@ answers `null`, to the address the datagram came from. `ownsConnectionId`
 says whether a datagram's DCID is the connection's, which is how a server
 with many routes them. Stream data comes out of `readStream()` in order per
 stream, and `writeStream` queues a reply within the credit the client gave.
-`state` says where it is, and `error` why it closed. The keys of each level
+`state` says where it is, and `error` why it closed.
+
+The keys of each level
 are wiped when the level is discarded, each key generation when an update
 replaces it, and the rest by `release()` or the idle timeout; what no wipe
 reaches is QUIC-2 in [`docs/security/quic.md`](../docs/security/quic.md).
@@ -374,7 +398,9 @@ specifier works at any depth and from outside this repository.
 §2), so an import of a `std/` module is not a link against a built library: the
 module is compiled with the program that imports it, and the whole-program
 attribute pass sees through it exactly as it sees through the program's own
-functions. A `std/` function is inlined, specialised or dropped on the same
+functions.
+
+A `std/` function is inlined, specialised or dropped on the same
 terms as a local one — and a module you import but never call is dropped
 whole. Measured at the `speed` and `size` profiles, both of which link with
 `-flto -Wl,--gc-sections`: a program importing three `std/text` functions and
@@ -431,7 +457,9 @@ that are *not* this package.
   `a.length` and `s.charCodeAt(i)` answer `number`, which *is* `f64` in that
   mode, so a module that declares every width of its own and still writes
   `let end: i32 = text.length` or `while (i < text.length)` does not compile
-  there at all. Read each of those through `toI32` —
+  there at all.
+
+  Read each of those through `toI32` —
   `const length: i32 = toI32(text.length)`, once per function rather than once
   per iteration — and the module means one program in both modes. The default
   mode pays nothing for it, because `toI32` on an `i32` is identity.
@@ -463,6 +491,7 @@ that are *not* this package.
   module into the corpus the stage1 oracles read
   ([`.claude/selfhost.md`](https://github.com/amritk/nish/blob/main/.claude/selfhost.md)): a `std/` module with no
   importer in `tests/link/` is compiled on no run.
+
   `testing.ts` has two, one per outcome — `tests/link/std_testing` (exit 0) and
   `tests/link/std_testing_fail` (exit 1, and the wording of every failure
   message) — and `text.ts` and `json.ts` have `tests/link/std_text` and

@@ -50,7 +50,9 @@ process. The goals considered are:
   with BigInt, with an injectable byte counter: the prefix is counted in the
   length field but never compressed. It takes its round constants and
   initial values from the std sources. It agreed with `node:crypto` on every
-  message of 0 to 299 bytes for all three hashes. It then produced the
+  message of 0 to 299 bytes for all three hashes.
+
+  It then produced the
   expected digests for counters just below 2^29, 2^31, 2^32, 2^61 and 2^64
   bytes, with tails that cross each boundary inside `update`, and tails long
   enough to push the length field into a second block. Separately, a
@@ -66,7 +68,9 @@ process. The goals considered are:
   bound, a bit position or the one final verdict. None is on a compared or
   decoded byte, and none exits the compare loop early. aarch64's `tbl` in
   the vectorised compare is a register shuffle with constant indices, not a
-  load. Then two fixtures were added to the assembly check, which refuses
+  load.
+
+  Then two fixtures were added to the assembly check, which refuses
   every conditional branch, every call and every secret-addressed load
   (`tests/cases/ct_asm_k1_ct`, `tests/cases/ct_asm_k1_base64url`, below). Each
   has a link program that holds its copies to the module. Mutating one
@@ -243,7 +247,9 @@ dkLen is an `i32`, so it never reaches RFC 8018's (2^32 − 1) × hLen bound and
 the block index never passes 2^26; the bound is checked by the type, not at
 run time. The time taken depends on the iteration count, dkLen and whether the
 password is longer than a block, which RFC 8018 and SCRAM treat as public, and
-on none of the password's bytes. The time is linear in the iteration count,
+on none of the password's bytes.
+
+The time is linear in the iteration count,
 and nothing in `pbkdf2HmacSha256` bounds it: 2^31 − 1 rounds is about 2^32
 compressions with no abort. A caller that takes the count from an untrusted
 peer must cap it first; SCRAM's `i=` comes from the server. No caller exists

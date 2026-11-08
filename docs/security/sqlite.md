@@ -33,7 +33,9 @@ handle, `(generation << 16) | index` into a thread-local table, and every
 adapter looks it up before it touches SQLite: an index past the table, an empty
 slot or a stale generation is `SQLITE_MISUSE`, so a handle used after `close`
 or `finalize`, or forged, reaches no freed or foreign object. Slot 0 is never
-handed out, so the zero handle names nothing. A freed slot's generation moves
+handed out, so the zero handle names nothing.
+
+A freed slot's generation moves
 on, and a slot whose generation reaches 32,767, the field's width, is retired
 rather than restarted, so no handle is ever handed out twice and a stale one
 can never come to name a live object. A table whose 65,535 slots are all live
@@ -50,7 +52,9 @@ Errors carry the connection's message only when SQLite set it. A code the
 adapter answers without SQLite — `SQLITE_MISUSE`, `SQLITE_RANGE`, and
 `SQLITE_NOMEM` from a full table or a value SQLite could not convert to text
 in `columnInto` — takes `sqlite3_errstr`'s message for the code instead of the
-connection's, which is still that of some earlier call. A read of a column that
+connection's, which is still that of some earlier call.
+
+A read of a column that
 is not there, or of any column when no row is current (before the first
 `step`, or after the last), is answered before SQLite and leaves the
 connection's message as it was. `close` frees the handle only when `sqlite3_close_v2` succeeds, so a

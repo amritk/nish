@@ -142,7 +142,9 @@ Reading a row allocates nothing unless you ask for a string. `columnText` makes
 a new string each time; `columnInto` copies the bytes into an array you own,
 so a loop over many rows can reuse one buffer. It copies only when the whole
 column fits: an answer larger than `buf.length - at` means nothing was written,
-and says how much room the column needs. `columnInto` with `at` outside
+and says how much room the column needs.
+
+`columnInto` with `at` outside
 `0..buf.length` answers `Err(SQLITE_MISUSE)`, and a column index past the
 last answers `Err(SQLITE_RANGE)`; the other reads answer 0, `SQLITE_NULL` or
 `null` for a column that is not there. With no current row, before the first

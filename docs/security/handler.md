@@ -18,14 +18,18 @@ fields, the body framing, the caps and the timeouts are the carrier's
 of the carrier, gathering a body, queueing whole requests and handing answers
 back — and each piece of it is bounded by a limit the program set: a body by
 `http.maxBody` (one MiB by default), a head by the carrier's head cap, the
-connections by `slots`. An answer for a request whose connection has closed,
+connections by `slots`.
+
+An answer for a request whose connection has closed,
 even one whose slot a new connection has taken since, is dropped and never
 reaches the new peer. Once warm, a request allocates nothing. Review
 before merge found four faults and fixed each with a test that failed
 before the fix (HANDLER-9 to HANDLER-12): a draining connection that kept
 reading pipelined requests, a listener that spun the loop when an accept
 failed for want of descriptors, length checks that missed bytes still
-pending, and `sendJson` sending a value no `json()` began. A fifth, a body
+pending, and `sendJson` sending a value no `json()` began.
+
+A fifth, a body
 trickled a byte at a time inside the carrier's idle timeout, holds a slot no
 longer than `bodyTimeout` (HANDLER-5). None is left open. Two properties are the program's, by design, and
 are recorded as accepted: how many taken requests it holds unanswered
@@ -49,7 +53,9 @@ library, and is not in scope.
 The attacker is the client: every byte of every request is theirs, they may
 open as many connections as the listener accepts, pipeline, send a body
 slowly or not at all, and leave at any moment, including while the program
-holds their request. A win is a panic, memory or time a request can make the
+holds their request.
+
+A win is a panic, memory or time a request can make the
 handler spend beyond the limits the program set, one peer receiving an
 answer meant for another, an answer sent out of request order on one
 connection, or a request routed differently from what its bytes spell. The

@@ -49,7 +49,9 @@ capabilities or with a container's default set, step 3 of §3 drops every
 capability before the adversary runs, and `NO_NEW_PRIVS` keeps an `exec`
 from gaining one back. The identity stays. A uid-0 process still owns
 root's files, so Landlock and the metadata-write rule are what hold it to
-the mask, not file modes. It can also signal other uid-0 processes, which
+the mask, not file modes.
+
+It can also signal other uid-0 processes, which
 open question 8's scoping limits from ABI 6. A user namespace the adversary
 creates gives it capabilities only over the namespace's own objects:
 `init_module`, `kexec_load`, `open_by_handle_at` and `bpf` check the initial
@@ -59,7 +61,9 @@ namespace, the domain and the filter stay attached, and Landlock refuses
 **What `ffi` code is allowed.** The mask is computed from the Nish code, so
 an `ffi` callee is held to what the Nish code reaches, not to what the C
 code needs (§1). That errs towards refusal: a C library that needs more is
-killed or refused, unless the policy grants it. A main that reaches `ffi`
+killed or refused, unless the policy grants it.
+
+A main that reaches `ffi`
 under an allowlist (`--allow`, the manifest's `allow`, or both, intersected)
 is widened by that list's `net`, `fs.read`, `fs.write` and `process.spawn`,
 less any denial, a directory scope kept as a scope (open question 13). The
@@ -152,13 +156,17 @@ constructor, and applies, in order:
    from 6), and one `path_beneath` rule on `/` grants back the rights the mask
    grants whole — `fs.read`: READ_FILE, READ_DIR; `fs.write`: WRITE_FILE, the
    MAKE_* and REMOVE_* rights, REFER, TRUNCATE; `process.spawn`: EXECUTE,
-   READ_FILE and IOCTL_DEV (open question 5). A scoped `fs.read` or
+   READ_FILE and IOCTL_DEV (open question 5).
+
+   A scoped `fs.read` or
    `fs.write` (the third and fourth operands, each a list of directories
    ended by a NUL and the list by a second, `null` for none) is left out of
    the rule on `/` and granted by one `path_beneath` rule per directory,
    opened `O_PATH` (a directory, or, for the fifth operand, a file); a path
    that cannot be opened refuses strict and, under best-effort, is named and
-   left out, which only narrows what is granted. The fifth operand, the exec
+   left out, which only narrows what is granted.
+
+   The fifth operand, the exec
    allowlist (a list in the same shape: the programs a dependency's
    `process.spawn=<program>` grants name, and the ELF interpreter or `#!`
    interpreter each needs), takes EXECUTE off the rule on `/` and grants it
@@ -223,7 +231,9 @@ counted. One finding is counted:
 - **A pathname Unix connect is not confined.** The sandbox uses no Landlock
   right that covers connecting to a pathname socket: a later ABI adds
   `LANDLOCK_ACCESS_FS_RESOLVE_UNIX`, which `runtime/runtime-sandbox.c` does
-  not ask for, and the abstract-socket scope covers abstract names only. A sandboxed program granted `net` can therefore
+  not ask for, and the abstract-socket scope covers abstract names only.
+
+  A sandboxed program granted `net` can therefore
   `unixConnect` to any pathname listener outside the sandbox whose file it
   may write and whose directories it may search, such as a system daemon's
   socket; `fs.read` and `fs.write` do not govern it. Recorded open: what

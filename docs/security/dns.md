@@ -3,7 +3,9 @@
 The record of the stub resolver (#986, #479), in two stages. The first is the DNS
 message codec (RFC 1035 §4, with RFC 2181 and RFC 4343's readings) that writes
 one A or AAAA question and reads the reply to it, and the readers of
-`/etc/resolv.conf` and `/etc/hosts` the resolver starts from. It says what each
+`/etc/resolv.conf` and `/etc/hosts` the resolver starts from.
+
+It says what each
 module refuses and with what, what it caps and where, and the test that pins
 each property. It is written with the code, against `main` at `2cdef4f`, and
 cites functions rather than lines. The second stage, the resolver that sends
@@ -15,12 +17,16 @@ compression loop, a pointer forwards or into the header, a seventeenth hop, a
 name past 255 bytes, a count larger than the message holds, a record whose
 RDATA runs past the end or has the wrong length for its type, and a reply that
 answers another question are each a negative `DNS_ERR_*` code, and the work is
-linear in the reply's length. Both files are read into tables of fixed size
+linear in the reply's length.
+
+Both files are read into tables of fixed size
 whose overflow is dropped and counted, and a literal is parsed into the
 table's own sixteen-byte buffer, so a file of any length leaves the arena where
 it found it (`flat arena: 1000 nameserver lines and 1501 hosts lines allocate
 nothing`). The one allocation is the exported `dnsParseAddress`'s, sixteen
-bytes a call, as its documentation says; the file parsers do not call it. Only the program's own mistakes — a
+bytes a call, as its documentation says; the file parsers do not call it.
+
+Only the program's own mistakes — a
 window outside its array, a port or ID that is not 16 bits, a query
 `dnsBuildQuery` did not write — panic. Four properties are recorded as
 accepted (DNS-1 to DNS-4); none is counted. The panics are not yet pinned by a
@@ -48,7 +54,9 @@ off-path spoofer guessing the ID, or the recursive server itself. They write
 every byte of a reply in any length up to the datagram. A win is a panic, a
 loop or work beyond linear, a read outside `msg[0, len)`, an address accepted
 for a name the program did not ask for, or a reply to another question read as
-this one's. The files are written by the machine's administrator or by a
+this one's.
+
+The files are written by the machine's administrator or by a
 DHCP client, and a hostile or broken one may be any size and contain anything;
 a win there is a panic, a table that grows past its cap, or a literal read in
 a way the C library would not (octal, a zone). The program calling the module
@@ -93,7 +101,9 @@ before any record is read. The name is compared without case
 start of the run of labels that holds it and after the header, so each hop
 moves backwards (`a forward pointer`, `a pointer into the header`,
 `a self-pointer`, `a label then a pointer back to its start`,
-`a two-pointer loop entered by a backward hop`: `DNS_ERR_POINTER`). Sixteen hops are read and a
+`a two-pointer loop entered by a backward hop`: `DNS_ERR_POINTER`).
+
+Sixteen hops are read and a
 seventeenth is `DNS_ERR_HOPS` (`built: a name of 16 hops`,
 `malformed: a name of 17 hops`). A name of 255 bytes in wire form is read and
 one of 256, directly or by a pointer, is `DNS_ERR_NAME_LONG`
@@ -104,7 +114,9 @@ one of 256, directly or by a pointer, is `DNS_ERR_NAME_LONG`
 **No count is believed past the bytes** (`65,535 answers in 61 bytes`,
 `an additional count past the end`: `DNS_ERR_COUNT`). The three record counts
 together may not exceed what the bytes after the question could hold at 11
-bytes a record, so the answer loop runs at most `len / 11` times. A record's
+bytes a record, so the answer loop runs at most `len / 11` times.
+
+A record's
 fixed fields or RDATA past the end is `DNS_ERR_SHORT` or `DNS_ERR_RDATA`
 (`a record's fixed fields cut short`, `the last RDATA one byte past the end`,
 `RDLENGTH 65,535`); an A that is not 4 bytes or an AAAA that is not 16 is
@@ -193,11 +205,15 @@ with another ID`, `drop: a reply to another question`, `drop: a malformed
 reply`, `drop: none of them ended the query`, `drop: the true reply still
 answers`; over sockets, `spoof: another port is droppedSource`, `spoof: another
 ID is droppedId`, `spoof: another question is droppedQuestion`, `spoof: the
-genuine address stands`). A reply after the query is done, or a datagram once
+genuine address stands`).
+
+A reply after the query is done, or a datagram once
 it moved to TCP, is counted and not read (`drop: a reply after the query is done
 is counted, not read`, `tc: a datagram once the query moved to TCP is dropped`),
 and a server that failed is not heard from again (`servfail: the first server's
-late reply is dropped by its source`). A reply that passes those checks with an
+late reply is dropped by its source`).
+
+A reply that passes those checks with an
 RCODE the resolver does not read, FORMERR or NOTIMP, fails the server at once
 rather than waiting out its deadline (`formerr: the next server is asked at
 once`, `formerr: it is not counted as malformed`, `notimp: fails the server
@@ -219,14 +235,18 @@ the deadline`, `timeout: both queries at the deadline`, `timeout: a dead
 server's queries go to the next one`, `attempts: each server, then each again,
 then no more`, `attempts: every try exhausted is DNS_RESOLVE_NO_ANSWER`,
 `attempts: no deadline is left`; `dead server: the next one answers`,
-`attempts: NO_ANSWER after every try`). A TCP reply dripped slowly is held to
+`attempts: NO_ANSWER after every try`).
+
+A TCP reply dripped slowly is held to
 the same deadline (`tc: a slow TCP reply is not ended before its deadline`,
 `tc: a slow TCP reply is ended by its deadline`). `dnsLookupWith` gives up at
 its own `timeoutMs` (`timeout: dnsLookupWith gives up`).
 
 **TC moves the query to TCP, once.** `reply.truncated` sends the same question
 over TCP with a new ID to the same server (`tc: reply.truncated sends the query
-over TCP`, `tc: big.test answered over TCP`). On the stream, a length prefix
+over TCP`, `tc: big.test answered over TCP`).
+
+On the stream, a length prefix
 under 12 or over `DNS_TCP_MAX_REPLY` (16384), a reply still truncated, a reply
 to another ID and a refused or broken connection each fail the server, which a
 stream cannot recover from, and the next server is asked over UDP (`tc: a length
@@ -234,10 +254,16 @@ under 12 fails the server, and the next is asked over UDP`, `tc: a length over
 DNS_TCP_MAX_REPLY fails the server, and the next is asked over UDP`, `tc: a
 reply still truncated fails the server, and the next is asked over UDP`, `tc: a
 reply with another ID fails the server, and the next is asked over UDP`, `tc: a
-refused or broken connection fails the server`). Bytes after the reply is whole
-are ignored (`tc: bytes after the query is done are ignored`). `DnsClient`
+refused or broken connection fails the server`).
+
+Bytes after the reply is whole
+are ignored (`tc: bytes after the query is done are ignored`).
+
+`DnsClient`
 stops reading a stream once the core has ended its try, so a hang-up seen on
-that connection is not held against a next try that reopens on the same fd. A UDP read is at
+that connection is not held against a next try that reopens on the same fd.
+
+A UDP read is at
 most `DNS_UDP_MAX_REPLY` (4096) bytes; a longer datagram is cut, fails to parse
 and is dropped.
 
@@ -250,7 +276,9 @@ queries`, `cname: a chain back to the name asked is DNS_RESOLVE_CNAME`, `cname:
 and asked it once more, not again`). A loop that closes inside one reply never
 reaches the chain's end, so the codec keeps no address and it reads as NODATA.
 
-**The search list is bounded.** A name with fewer dots than `ndots` is tried
+**The search list is bounded.**
+
+A name with fewer dots than `ndots` is tried
 under each suffix and then alone, one at or over it first; a trailing dot is
 the name alone; NXDOMAIN moves to the next candidate and NODATA stops the
 search, as musl's does, since the name exists; NXDOMAIN for one family with no
@@ -258,7 +286,9 @@ server reached for the other moves on too, keeping that error should no later
 candidate answer, so one unreachable family cannot end the search on the first
 candidate (`search: NXDOMAIN and no server for the other family move on`,
 `search: and the name under a later domain resolves`, `search: with no later
-answer, the unreachable family's error stands`). The NXDOMAIN that moves it is
+answer, the unreachable family's error stands`).
+
+The NXDOMAIN that moves it is
 the current name's own: each query clears it as it asks a new name, so an
 earlier candidate's, or an earlier lookup's in the same slot, cannot carry the
 search past a name that exists (`search: NODATA and an unreachable family after
@@ -277,7 +307,9 @@ table with TTL 0; `xlocalhost` and `localhost.example` are asked of the server
 A name with an empty label under it, `.localhost` or `x..localhost`, is
 refused (`localhost: still no packet sent`, `localhost: xlocalhost is not it, and is
 asked of the server`, `localhost: .localhost is not it`, `localhost: nor
-x..localhost`, `literal: no packet sent`, `hosts: no packet sent`). Over
+x..localhost`, `literal: no packet sent`, `hosts: no packet sent`).
+
+Over
 sockets, a `DnsClient` answering `localhost` and a hosts name opens no socket,
 and the server, drained after every blocking call, saw no query (`no packet:
 the client opened no socket`, `no packet: the server saw nothing`); both fail
@@ -335,7 +367,9 @@ query`, `DnsResolver.result` and `cancel` for a lookup not in progress or an
 `out` with no room, `DnsClient: a token base of … is negative`,
 `DnsClient.ready: the token … is not the client's` and `resolveHost: out or
 ttls has no room for DNS_RESOLVE_MAX_ADDRESSES` — are each a guard on the caller's arguments, reached by no byte of a
-reply or a file. A panic exits the program, so each needs a fixture of its own
+reply or a file.
+
+A panic exits the program, so each needs a fixture of its own
 with an `expected.stderr`, as `std_url_window` is; these stages' fixtures do
 not include one. Their fixtures are a follow-up.
 

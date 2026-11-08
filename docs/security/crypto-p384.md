@@ -13,7 +13,9 @@ this record, which branches from `2cdef4f`.
 **Result.** Every Wycheproof secp384r1 ECDSA vector of the five files the
 module covers answers what its file expects: 2,116 cases, 1,010 valid and
 1,106 invalid, none "acceptable". The two RFC 6979 §A.2.6 SHA-384 signatures
-verify. A key or signature of the wrong length, a key prefix other than 0x04,
+verify.
+
+A key or signature of the wrong length, a key prefix other than 0x04,
 a coordinate of p or more, a key off the curve, `r` or `s` outside [1, n) and
 a sum that is the identity each answer `false`, never a panic. Every check but
 five has a test that fails when that check alone is removed; the five are
@@ -130,7 +132,9 @@ claimed as tested on their own:
   and the sum is the identity, which is refused. The same holds for `s` = n,
   which is 0 mod n, so "s = n is refused" is backed by the identity check and
   does not pin `s` < n; "(r, 1 + n) is refused" does, since 1 + n is 1 mod n
-  and (r, 1) verifies. With `r` = 0, no affine x mod n of a non-identity sum
+  and (r, 1) verifies.
+
+  With `r` = 0, no affine x mod n of a non-identity sum
   equals 0 for the keys tried. Removed together with the identity check,
   "r = 0 over the digest 0 is refused" fails.
 - **`r` < n alone.** The final compare is against an x reduced below n, which

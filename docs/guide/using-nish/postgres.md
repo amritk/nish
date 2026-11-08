@@ -170,7 +170,9 @@ A row's columns are not copied: `colStart(c)` is an offset into
 valid until the next `next()`, which may move the unread input to the start
 of the buffer or replace the buffer with a larger one: fetch `inputBuffer()`
 again after every `next()` rather than keep it, and `outputBuffer()` after
-every builder call. `int`, `bool` and `isNull` read a column where
+every builder call.
+
+`int`, `bool` and `isNull` read a column where
 it lies; `columnText` makes a string. `conn.text` decodes the rest in place:
 `timestamp(b, start, length, out, at)` writes a `timestamptz` as
 `2024-01-02T03:04:05.123Z` into `out`, and a `PgArrayWalker` walks a `text[]`
@@ -258,7 +260,9 @@ the SQL text:
 The server answers groups in order, and an error skips only the rest of its own
 group. Up to `PgConfig.maxInFlight` groups may wait for their answers at once:
 send the next before the last is answered, and the round trips overlap.
-`canSend()` says whether another group may start. A builder call that may not
+`canSend()` says whether another group may start.
+
+A builder call that may not
 run now — before `PG_READY`, past the cap, a `prepare` inside an open bind, a
 `param...` call or `bindEnd()` with no bind open, a `paramBytes` window
 outside its array, a name or SQL holding a NUL byte, or a message that would
@@ -301,7 +305,9 @@ An element refused for room answers `false`, writes nothing and leaves the
 array open, so the elements already in it can still be sent: end the array
 and the Bind, and put the rest in the next statement. `arrayEnd()` is never
 refused. When not even the first element fits, `bindCancel()` drops the open
-bind, array and all, unsent, as if `bindStart` had never been called. While an
+bind, array and all, unsent, as if `bindStart` had never been called.
+
+While an
 array is open, `sync()`, `prepare`, `closeStatement` and `bindStart` answer
 `false`, as with any open bind. Using an array out of order
 is a bug, so it panics: an element or `arrayEnd()` with no `arrayStart()`, a
@@ -531,7 +537,9 @@ for (let slot: i32 = pool.wanted(); slot >= 0; slot = pool.wanted()) {
   writes, which pays on a lossy link to the server. Build its
   group on `connection(slot)` and end it with `send()`. Until it is sent,
   `dispatch()` answers `PG_POOL_NONE`: a request handed out and never sent
-  holds the pool. `send()` answers `false` when nothing was handed out, when
+  holds the pool.
+
+  `send()` answers `false` when nothing was handed out, when
   a bind is still open (finish it and call again), and when no message of the
   group was written. Then a live connection drops the request, and a failed
   one keeps it and reports it `PG_LOST` with the rest. A connection is made only when
@@ -695,7 +703,9 @@ yourself, as they arrive. The live suite's `explain` scenario
   first whose key would pass `maxBytes`, or that the connection refuses for
   room under `maxOutput`; the rest stay queued for the next take. It answers
   -1 and writes nothing when nothing waits, every run is in flight, or the
-  connection has no room even for the first key. `addText` refuses a key
+  connection has no room even for the first key.
+
+  `addText` refuses a key
   whose escaped text could never fit `maxBytes`, but one past what a
   connection could ever hold stays at the head of the queue. A take that
   fills `maxBytes` always fits a connection with nothing else unsent when
@@ -707,7 +717,9 @@ yourself, as they arrive. The live suite's `explain` scenario
   answered, or taken again — makes `row`, `end` and `fail` do nothing and
   `next` answer `PG_BATCH_NONE`, and counts the call in `stray`; so a server
   that answers twice, or a connection lost after its answer, cannot touch the
-  run's next batch. Only a caller's mistake panics: `row`, `end` or `fail`
+  run's next batch.
+
+  Only a caller's mistake panics: `row`, `end` or `fail`
   before `next(run)` answered `PG_BATCH_NONE`, a negative handle or one no
   take could answer, `addInt` on a text batcher, and `addText` on an int8 one
   or with a window outside its array.

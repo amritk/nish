@@ -17,7 +17,9 @@ each a negative code the program answers, and only a window outside its array
 program fixes, 100 by default. Three properties are recorded as accepted
 rather than open (URL-1 to URL-3): decoded bytes are not checked for UTF-8,
 a refused decode leaves what it wrote before the refusal, and a repeated key
-is answered by its first value. The URL parser answers null, never a panic,
+is answered by its first value.
+
+The URL parser answers null, never a panic,
 for anything it refuses, and refuses every host two readers could take for
 different hosts: a percent-encoded or non-unreserved byte, a second `@`, a
 numeric host that is not strict dotted-decimal IPv4, an IPv6 zone. Five
@@ -39,7 +41,9 @@ backslash read as `/`, tabs and newlines stripped, a host percent-decoded,
 `127.1` and `0x7f.1` read as IPv4), which `urlParse` refuses rather than
 repairs; IDNA, so a non-ASCII host is refused and a program passes the
 punycode `xn--` form; and name resolution, so what a host resolves to (a
-private address behind a public name) is the connecting code's to check. In
+private address behind a public name) is the connecting code's to check.
+
+In
 the byte API a path is split, not normalised: `..` and `.` are segments like
 any other, and a program that maps segments to files decides what they mean.
 `urlParse` and `urlResolve` remove dot segments, as RFC 3986 §5.2.4 does.
@@ -129,12 +133,17 @@ IPv6 host is bracketed, and any other scheme has none (null).
 seeded differential `tests/link/std_url/fuzz.ts`). With no flags
 `percentDecode` refuses a `%` not followed by two hex digits
 (`URL_DECODE_ERR_ESCAPE`, at the `%`) and `%00` (`URL_DECODE_ERR_NUL`), and
-copies `+` as it stands. `URL_DECODE_LENIENT` copies a malformed escape
+copies `+` as it stands.
+
+`URL_DECODE_LENIENT` copies a malformed escape
 unchanged, as the WHATWG percent-decode does; `URL_DECODE_FORM` reads `+` as a
 space; `URL_DECODE_ALLOW_NUL` is the only way `%00` decodes, so lenient alone
-still refuses it. The bytes either side of each hex range are not digits:
+still refuses it.
+
+The bytes either side of each hex range are not digits:
 `%:1`, `%@1`, `` %`1 `` and `%G1` are each refused at 0 (`strict %:1 -> -1 at 0 -`)
 and copied leniently (`` lenient %:1%@1%`1%G1 -> 12 at -1 253a31254031256031254731 ``).
+
 On 3,000 seeded inputs over an alphabet heavy in `%`, hex
 digits, `+`, `&` and `=`, with `:`, `@`, `` ` `` and `G` beside the hex ranges, mixed with UTF-8 sequences valid and invalid
 (2-, 3- and 4-byte, overlong, a surrogate, past U+10FFFF, a lone continuation,
@@ -157,7 +166,9 @@ meets it: `tests/link/std_url_escape` exits 1 on `%zz`.
 **The string forms check UTF-8 as RFC 3629 does** (`std_url`): `urlIsUtf8`,
 behind `urlDecode` and `urlQueryGet`, takes each lead's range and length and
 refuses an overlong form, a surrogate, a code point past U+10FFFF, a bad
-continuation byte and a sequence cut short. Each edge is a line of
+continuation byte and a sequence cut short.
+
+Each edge is a line of
 `expected.out`: the first and last of each range decode
 (`utf8 %E0%A0%80 -> e0a080`, `utf8 %ED%9F%BF -> ed9fbf`,
 `utf8 %F0%90%80%80 -> f0908080`, `utf8 %F4%8F%BF%BF -> f48fbfbf`) and the
@@ -171,8 +182,12 @@ each unrestricted lead, `E1`, `E3`..`EC`, `EE`, `F1`, `F2` and `F3`, takes
 `utf8 %F1%80%C0%80 -> null`, and the same line for each other lead), and
 so is a 2-, 3- or 4-byte sequence cut at the end, escaped (`utf8 %F0%9F%98 ->
 null`) and as raw bytes, where only the length check stops a read past the
-string (`raw f09f98 -> null`). `urlQueryGet` refuses the same
-(`get null` for `%F4%90%80%80`). Dropping any range bound, the truncation
+string (`raw f09f98 -> null`).
+
+`urlQueryGet` refuses the same
+(`get null` for `%F4%90%80%80`).
+
+Dropping any range bound, the truncation
 check or a continuation check, or refusing every 3- and 4-byte lead, fails
 `std_url` or the fuzz.
 
@@ -180,7 +195,9 @@ check or a continuation check, or refusing every 3- and 4-byte lead, fails
 on the raw `/` only, so `/a%2Fb/c` is the two segments `a/b` and `c`, and
 `percentDecodePathSegment` keeps `+` literal. Empty segments (`/a//b/`) are
 yielded, not merged; a malformed escape in one segment refuses that segment
-and the next is still read. A window at a non-zero offset is split on its own
+and the next is still read.
+
+A window at a non-zero offset is split on its own
 bytes: `XX/a%2Fb/cYY` from 2 for 8 is `a/b` and `c`
 (`path window 2 8 XX/a%2Fb/cYY -> [a/b] [c] count 2 again false`), a window
 that does not start with `/` is read as it stands (`path window 1 5 /ab/cd ->
@@ -208,13 +225,19 @@ leniently (`window cut 1 -> -1 at 2 lenient 1 25 segment -1 lenient 1 25`,
 `window cut 2 -> -1 at 2 lenient 2 2534 segment -1 lenient 2 2534`), a query
 value so cut decodes the same (`window query -> 1 value 2 -1 lenient 2 2534`),
 and a key cut before its escape's last digit matches nothing
-(`window find kA -> 0`, `window find kA whole -> 1`). Output that does not fit
+(`window find kA -> 0`, `window find kA whole -> 1`).
+
+Output that does not fit
 is `URL_DECODE_ERR_SPACE` at the byte with no room, and nothing is written
-past `out`'s end. A window outside its array panics with
+past `out`'s end.
+
+A window outside its array panics with
 `…: the window is outside the array`: `UrlQuery.reset`'s once in each of 50
 runs at 2 and at 8 threads (`std_url_window`), and `percentDecode`'s,
 `urlQueryStart`'s and `UrlPathSegments.reset`'s each in one program run once
-natively and once under Node (`tests/link/std_url/panic-*-window.ts`). A
+natively and once under Node (`tests/link/std_url/panic-*-window.ts`).
+
+A
 negative `len` is pinned for `percentDecode` only
 (`panic-decode-negative-len.ts`), and an `at` outside `out`, past its end or
 negative, panics with `percentDecode: at is outside out` in the same two runs

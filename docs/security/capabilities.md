@@ -9,7 +9,9 @@ capability lockfile after it, which refuses a dependency that reaches a
 capability `nish-capabilities.lock.json` does not record for it with NL2577;
 and of the arguments a grant may carry (a directory, a program, a host or a Unix socket path),
 which refuse a literal outside them with NL2594 and a lockfile row they
-outgrow with NL2593. It says what the check covers,
+outgrow with NL2593.
+
+It says what the check covers,
 what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.
 
@@ -26,14 +28,18 @@ dependency or a private helper is its own, and is refused unless the root's
 no flag and no dependency's own manifest adds one, and a grant
 never widens the root's own policy. The standard library is told apart by
 where a module was resolved, not by its package name, so a package named
-`nish` is a dependency like any other. The lockfile refuses any capability a
+`nish` is a dependency like any other.
+
+The lockfile refuses any capability a
 dependency's row does not record, whether the root grants it or not, and a
 file it cannot read whole stops the build rather than reading as a wider one.
 Nothing was found to fix or left open.
 Four limits are inherent to a compile-time check of the call graph and are
 recorded as accepted: install scripts (CAPS-5), the C behind a granted `ffi`
 (CAPS-6), function arguments blamed on the template that calls them (CAPS-7),
-and nothing confined at run time (CAPS-8). Two more are the lockfile's and
+and nothing confined at run time (CAPS-8).
+
+Two more are the lockfile's and
 are accepted too: a row is never tightened (CAPS-12), and the check holds only
 while a readable lockfile does (CAPS-13).
 A grant's arguments are checked at build time against the literals a
@@ -69,7 +75,9 @@ the standard library. A win is a dependency that reaches one of the six gated
 capabilities while the build succeeds without a grant naming it, or a
 refusal that names something other than the dependency, the capability and
 a function of that dependency, so the author grants or audits the wrong
-thing. For the lockfile, the attacker publishes an upgrade of a dependency
+thing.
+
+For the lockfile, the attacker publishes an upgrade of a dependency
 the author already locked, and the lockfile in the root is the author's: a
 win is the upgrade reaching a capability its row does not record while the
 build succeeds. For a grant with arguments, a win is the dependency reaching
@@ -182,6 +190,7 @@ order the sink prints them.
 `link/caps_lock_growth: rejected with "the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it"`
 (the root grants the `net` its row leaves out) and
 `link/caps_lock_no_row: rejected with "the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it"`.
+
 A capability the policy does not gate is held to the row as well:
 `link/caps_lock_ungated: rejected with "the dependency `pkg_mix` reaches `env` through `config`, which `nish-capabilities.lock.json` does not record for it"`
 (its row records `net`), and the writer records it: "capability lock:

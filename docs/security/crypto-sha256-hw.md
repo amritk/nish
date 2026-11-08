@@ -82,7 +82,9 @@ array in other code) is in the model, which is what a wipe is for.
    `hmacSha256` over the same lengths, keys of 63, 64, 65 and 128 bytes, and
    200 seeded keys of 0 to 200 bytes, 50 HS256 tokens signed and verified, and 10
    `pbkdf2HmacSha256` runs, whose every U_j resumes a hasher with
-   `hmacCopySha256`. Unset, each path called the kernel on this x86-64 with
+   `hmacCopySha256`.
+
+   Unset, each path called the kernel on this x86-64 with
    SHA-NI (17319, 2732, 974 and 8774 calls); under `soft`, none did. The
    measurements are below; `bench/sha256-block/README.md` has them in full and
    records why `sha256Compress` was left as it is.
@@ -147,7 +149,9 @@ The kernel branches only on the array headers and `at`, in its guard, and its
 loads and stores are at addresses those fix: `src->data + at` for sixteen
 words, `h->data` for eight, and the whole round-constant table, read in order
 from its first word to its last whatever the data. Each block runs the same
-instructions in the same order. The resolver's branches are on the CPU's
+instructions in the same order.
+
+The resolver's branches are on the CPU's
 feature bits and `NISH_SHA256`, never on data, and its answer is cached once
 per process. `tests/ct-asm-runtime.js` holds the assembly to that on x86-64 at
 both CPU levels and on aarch64, and holds the unit to exporting only the kernel

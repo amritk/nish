@@ -87,7 +87,9 @@ do without waiting (`read` and `write` answer `-11` when they would block,
 and `read` answers `-32` after `close`; after `shutdown` the client does
 not wait for the server's close_notify, and `readWait` answers `-32` once
 its own is sent), and `interest()`, `readable()` and `writable()` let the
-client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
+client join your own loop (`fd()` is its socket).
+
+`tlsConnectWith(addr,
 config, trust, timeoutMs)` takes a whole `TlsClientConfig` (to offer P-256,
 say) and the roots to trust; `tlsConnect` reads the system's roots on every
 call, within its timeout, so a program that connects often reads them once and passes them here.
@@ -100,7 +102,9 @@ certificate on it valid now and the name you passed in the leaf's
 subjectAltName (an IP address against its IP entries; the certificate's
 common name is never read). `tlsConnect` trusts the system's roots
 (`tlsClientSystemTrust()`, which honours `SSL_CERT_FILE` and
-`SSL_CERT_DIR`). To trust others, such as your own CA for a test server,
+`SSL_CERT_DIR`).
+
+To trust others, such as your own CA for a test server,
 build the trust from their certificates with `new TlsClientTrust(roots)`
 (each an `X509Certificate` from `nish/crypto/x509`), or from a
 `nish/crypto/pki-roots` bundle with `tlsClientTrust(roots)`, and pass it to

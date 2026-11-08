@@ -36,7 +36,9 @@ language says it is not.
   `Ok` or `Err` and read back through `orReturn`, `expect` or `unwrapOr`, a
   constructor's argument or its `this`, a method's `this`, a `for...of`
   binding, a later declarator of the same statement, an assignment used as a
-  value, an arrow's capture, and a task's argument (`s.spawn(entry, raw, …)`). The compound assignments (`+=`, `??=`,
+  value, an arrow's capture, and a task's argument (`s.spawn(entry, raw, …)`).
+
+  The compound assignments (`+=`, `??=`,
   `||=`) take no array, so they are no road.
 - Wrote a program for each one that reads the alias after `wipe`, and ran it
   against `main`'s compiler.
@@ -157,13 +159,17 @@ can name the field.
   chained member, an index, a template, `console.log`, a condition and
   `secret(h.k)`; the holder as an object literal, a JSON encode or decode
   target, a data-parallel capture, a task's argument wiped in its scope, and a
-  `using` binding. Review round 1 added: a function, an arrow or a generic
+  `using` binding.
+
+  Review round 1 added: a function, an arrow or a generic
   `id<T>` that returns the `Secret` it borrows; `wipe(h.k)` in a function,
   another method, a constructor, or through `this` handed out of one; a
   helper that wipes its `Secret` parameter; a constructor reached by `new`
   that zeroes the key in place inside `wipe()`; a field read through a nested
   member, `o.h.k`; and the header, typings and N-API shim of an exported
-  function that takes or returns a holder. Review round 2 added: a method
+  function that takes or returns a holder.
+
+  Review round 2 added: a method
   that returns the `Secret` it borrows; a ternary that picks between two
   borrowed keys; a helper that wipes its parameter, reached by `new` and by a
   method call; a holder's `wipe()` that wipes a nested holder's field,
@@ -321,7 +327,9 @@ reads. The wipe itself is out of scope here: it is the same volatile
   (`isSecretSource`), not a user function of the same name. `ownKeyOf`
   registers the `Secret` as an own object only when it is held by a `const`,
   `v` is syntactically `new`, an array literal or an object literal, and the
-  body passes the local straight to a `wipe`. What `v` holds is recorded as
+  body passes the local straight to a `wipe`.
+
+  What `v` holds is recorded as
   dirt on `.value` with `noteStore`, as a field store into an own object
   would be, so a constructor or literal that takes in a parameter or a
   captured array still makes the wipe a shared write. A moved local
@@ -346,7 +354,9 @@ made from a moved local, a call's answer or a record whose constructor is
 handed an object; one a call answers, whether the task wipes it or first
 hands it to a helper that writes it; one kept in a holder's field; and an
 array a call answered (`const st = initState()`), whose freshness the rule
-does not track across a return. A helper may write the task's own `Secret`
+does not track across a return.
+
+A helper may write the task's own `Secret`
 before the wipe (`cleared` in `tests/link/thread_task_wipe_secret`). A
 `Secret` of a literal holding a captured array, `secret([buf])`, cannot be
 written at all: `isSecretPayload` takes only an array of integers or a record
@@ -370,7 +380,9 @@ rule above already orders.
   a holder's `wipe()` are still refused
   (`tests/cases/reject_thread_wipe_secret_param`, `_field`, `_call_result`,
   `_moved`, `_borrowed`, `_holder`, `_let`, `_call_secret`,
-  `_call_secret_helper`, `_ctor_param`). A helper that hands an inner record
+  `_call_secret_helper`, `_ctor_param`).
+
+  A helper that hands an inner record
   of shared memory to another that writes it stays refused
   (`reject_thread_wipe_region_past`). A manual `opt -O2` of
   `tests/link/thread_task_wipe_secret` keeps its four wipes as volatile
@@ -409,7 +421,9 @@ to the instance as an extra argument. Three roads this opens were checked.
   only the value it is handed and its own parameters, and a copy of the key
   bytes could go only where its return value went. With the general rule
   lifted, `expose(k, (b) => { leak.set(b, 0); return 0 })` would copy the key
-  into `leak`, an array no `wipe` reaches. The arrow `expose` runs still
+  into `leak`, an array no `wipe` reaches.
+
+  The arrow `expose` runs still
   captures nothing: NL2335 refuses it when it is written at the `expose` call
   (`reject_secret_expose_capture`), and NL2589 when it reaches `expose` through
   another function's parameter (`reject_secret_expose_capture_forwarded`,

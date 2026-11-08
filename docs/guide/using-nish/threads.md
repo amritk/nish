@@ -77,7 +77,9 @@ export const main = (): i32 => {
   three; see below). It may
   look keys up in a `Map` or `Set` its element reaches (`get`, `has`, `size`),
   and it may `panic`: if several elements panic at once, only the first
-  prints its message, and the program exits 1. It may
+  prints its message, and the program exits 1.
+
+  It may
   build strings and arrays on the way to its answer; they are freed after each
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
@@ -87,7 +89,9 @@ export const main = (): i32 => {
   reuses its arena. Once every thread has finished, the caller takes those
   blocks into its own arena whole when they hold 64 KB or more, and copies the
   answers in when they hold less, so the array you get back holds strings you
-  own. They are freed like anything else your function allocates: a function
+  own.
+
+  They are freed like anything else your function allocates: a function
   that runs a map and returns only a number gives the result and its strings
   back when it returns, even when it passes the strings to a helper that only
   reads them, and a map may run inside
@@ -200,7 +204,9 @@ Each thread moves the strings its elements answer into blocks of its own, and
 the caller takes the blocks whole at the join rather than copying each string
 again, so the copy runs on every thread at once. A map of a million
 `` `s${x % 100000}` `` strings took a median of 24 ms on 4 threads (22 to 32 ms
-over nine runs), against 40 ms for the sequential loop. On one thread the same
+over nine runs), against 40 ms for the sequential loop.
+
+On one thread the same
 map takes as long as the loop, so a program that runs with
 `NISH_NUM_THREADS=1`, or on a single core, loses nothing by using it. Still,
 measure your own case: the threads pay off when each element does some work,
@@ -263,7 +269,9 @@ export const main = (): i32 => {
   fine beside a `dst` that is a `const` bound to its own array and that
   nothing was given before the call: not stored in a field or a list, not
   passed to a function, not bound to a second name, not built into an object
-  and not written by an earlier `parallelMapInto`. Indexing it, reading its
+  and not written by an earlier `parallelMapInto`.
+
+  Indexing it, reading its
   `length`, calling its methods and walking it with `for...of` give it to no
   one. After the call you may hand `dst` on, except inside a loop around the
   call that `dst` was declared outside of, where the next pass's call comes
@@ -369,14 +377,18 @@ export const main = (): i32 => {
   fresh array (`[0]`, `new Array<i32>(n)`) that you only index; never pass it
   on. Inside the block, don't read a destination, and don't write memory a
   task could read — through a constructor either: `new Bump(counter)` whose
-  constructor writes `counter` is refused like a call that does. Don't call a
+  constructor writes `counter` is refused like a call that does.
+
+  Don't call a
   `Map` or `Set` method that changes or walks the table either, even on one
   no task can reach or one you made in the block: the compiler judges the
   call, not which tables the tasks hold. Do it before the first `spawn`,
   after the block, or in a helper that makes and fills its own table. An object
   you make in the block is yours to write, until anything a task reads may
   have got into it: stored in a field or an element, pushed, added to a `Map`
-  or a `Set`, put in a literal, or handed to a function that keeps it. A field
+  or a `Set`, put in a literal, or handed to a function that keeps it.
+
+  A field
   or an element of it counts as much as the object itself. So a `Map`, a
   `Set` or an array you make there is yours to fill and walk, and what you
   read back out of it is yours to write when you put it there fresh.
@@ -386,7 +398,9 @@ export const main = (): i32 => {
   `process.exit` are all refused), answers a number, a `boolean`, an enum, a
   `string` or an array of numbers, booleans or enums when it has a
   destination — a string or an array is copied into the parent's memory when
-  the scope joins — and opens no scope of its own. Looking a key up
+  the scope joins — and opens no scope of its own.
+
+  Looking a key up
   in a shared `Map` or `Set` (`get`, `has`, `size`) is a read, so tasks may
   share a table that way; changing it, or walking it with `for...of`, is a
   write. Handing a helper a string from a shared array (`check(hashes[k])`)
@@ -396,7 +410,9 @@ export const main = (): i32 => {
   calls, allocates itself (`const buf = new Array<u8>(n)`) is its own, so
   `wipe(buf)` before it returns is not a write another thread can see.
   Wiping anything else is: its argument, a local it captured, a field, or an
-  array another call answered. A key shared with the tasks stays the parent's
+  array another call answered.
+
+  A key shared with the tasks stays the parent's
   — make the `Secret` before the block, let each task `expose` it, and
   `wipe` it after the block. A task may make a `Secret` of its own and wipe
   it, when the value is allocated right in the call:
@@ -411,7 +427,9 @@ export const main = (): i32 => {
   [`using a = arena()`](../language/memory.md#freeing-a-batch-yourself-using-a--arena)
   block around the scope gives back what it made, so an array you build and
   hand to a task is freed with the rest, unless the task answers it or you
-  keep it. Inside an arena block, declare the scope after the arena —
+  keep it.
+
+  Inside an arena block, declare the scope after the arena —
   `using a = arena(), s = scope()`, or a `using s = scope()` of its own
   further in — so it joins before the release; a scope declared before the
   arena, or before a second `arena()` of the same statement, joins after a
@@ -474,7 +492,9 @@ nothing a task reads changes while the task may be running. So a scope bound
 without `using` is refused, since its tasks might never be joined (NL2388).
 Reading a destination inside the block is refused, since its answer is not
 there yet, and so is writing memory a task reads, since the task would see
-whichever value was there when its thread got to it. Reading a `let` from an
+whichever value was there when its thread got to it.
+
+Reading a `let` from an
 arrow task is refused for the same reason (NL2506): the `let` could change
 before the task runs. [`nish --fix`](#letting-nish---fix-write-it) repairs the
 missing `using` and the captured `let`; a destination read early or a write a
@@ -501,7 +521,9 @@ wait, and the others go to a pool of worker threads, one per core besides the
 calling thread's (at most 63), started the first time a program divides work
 and parked between uses. A Node addon starts threads for each call instead,
 and on WASI everything runs on the one thread. A scope with more tasks than
-cores queues the rest, and a thread that finishes one takes the next. The core count follows what the process may actually use (its affinity
+cores queues the rest, and a thread that finishes one takes the next.
+
+The core count follows what the process may actually use (its affinity
 mask, a container's CPU quota), and `NISH_NUM_THREADS=2` lowers it to two,
 which is handy on a shared machine; `NISH_NUM_THREADS=1` runs everything on
 the calling thread. It never raises the count. A map's or a reduce's answer
@@ -534,7 +556,9 @@ export const main = (): i32 => {
 Everything else about it is a scope's. Its tasks all run on new threads, none
 on the thread that opened the scope. The size is rounded up to the page, and a
 guard page sits below it, so a task that still overflows faults instead of
-writing past the stack. If the system cannot start one, out of threads or of
+writing past the stack.
+
+If the system cannot start one, out of threads or of
 memory for the stack, the program ends with exit 1 and
 `nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack`.
 The smallest size is 131072 bytes (128 KiB). Below it,
@@ -593,7 +617,9 @@ export const main = (): i32 => {
 - **Use the guard only as `g.value`, and only to read or store a number, a
   `boolean`, an enum or a `string` through it.** A string you store is copied
   into memory the `Mutex` owns, and one you read is copied out to you, so
-  neither side keeps a pointer the other can free. You may hand `g` to a
+  neither side keeps a pointer the other can free.
+
+  You may hand `g` to a
   function of your own, called by name — `bump(g)` with
   `const bump = (g: MutexGuard<Counter>): void => { … }` — which uses it the
   same way. Don't bind `g` or `g.value` to another name, store or return
@@ -656,7 +682,9 @@ keep the guard past its block is refused. A helper is a plain function called
 by name. Binding, storing, returning or walking the guard itself is refused
 (NL2466), and handing `g` to a method, a constructor or a generic function is
 refused too (NL2536), since `this` or a type parameter is a way for the guard
-to be kept, and so is handing it twice in one call. Binding, storing,
+to be kept, and so is handing it twice in one call.
+
+Binding, storing,
 returning or walking an object read through the guard, `const c = g.value`, is
 refused (NL2467); storing anything but a number, a `boolean`, an enum or a
 `string` into it is refused (NL2468). `null` is stored only into a
@@ -1060,7 +1088,9 @@ bound without it (NL2388, NL2465); a task that answers a number or a
 `const answer = new Array<i32>(1)` for an `i32` task, above the scope and `, answer, 0` after its
 arguments (NL2511); a `let` an arrow task or a `parallelMap` arrow reads gets
 a `const` snapshot (NL2506, NL2500); and an arrow that uses a channel moves to
-a top-level `const`, `mainTask`, which the `spawn` names (NL2484). It writes a
+a top-level `const`, `mainTask`, which the `spawn` names (NL2484).
+
+It writes a
 repair only where your source alone decides it, so it leaves alone a `spawn`
 in a loop, where every task would write the one slot; a `let` another
 argument of the call names, or one a `for` header declares; and a channel

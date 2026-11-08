@@ -155,7 +155,9 @@ tarball's SHA-256 with the release's `SHA256SUMS` (or with the digest pinned
 for releases that predate it) and refuses a mismatch. For releases after
 0.21.0 it also checks the release's **build provenance attestation** when a
 signed-in GitHub CLI is present whose `gh attestation verify` takes the
-options below. The attestation
+options below.
+
+The attestation
 is a Sigstore-signed statement, made by `actions/attest-build-provenance` in
 the release workflow, that every file in `SHA256SUMS` was built by
 `.github/workflows/release.yml` at the release's tag on a GitHub-hosted
@@ -405,7 +407,9 @@ header — and `runtime/sqlite/`, SQLite's vendored source),
 `docs/AI.md` (the rules card). The
 compiler itself is not in it: it arrives as one prebuilt
 `@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
-whichever one npm installed. That package carries its own copy of all of
+whichever one npm installed.
+
+That package carries its own copy of all of
 these, and its `docs/AI.md` is the one an agent's `nish --help` names. `nish` locates the runtime, the script and `std/`
 relative to its own install directory, so a global install works from any
 working directory — and the binary runs from inside its own platform package
@@ -425,6 +429,7 @@ clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
 `runtime.c` is the part every program touches — the arena, strings, arrays,
 number formatting, the panics — and `runtime-os.c` wraps the system calls:
 files, directories, subprocesses, `getenv`, the monotonic clock.
+
 `runtime-parallel.c` divides work across threads for `nish/threads` (a
 program built with `--threads`, as every importer of `nish/threads` is, also
 needs `-DNISH_THREADS=1 -pthread` on the line), `runtime-cross.c` copies
@@ -441,10 +446,13 @@ keeps the portable path), `runtime-term.c` the stdin reads and terminal calls of
 over, `runtime-checksum.c` the CRC-32 kernels of `nish/compress/checksum`,
 `runtime-sandbox.c` the confinement a `--sandbox` build applies, and
 `runtime-shm.c` the shared-memory regions of `nish/sync/shm`.
+
 They are separate so that each carries its own measured size ceiling
 ([docs/wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md)); nothing in the core calls into the
 others, so a line that names only `runtime.c` and `runtime-os.c` still links a
-program that uses none of the other nine. `scripts/build.sh` compiles the other
+program that uses none of the other nine.
+
+`scripts/build.sh` compiles the other
 nine beside any
 `runtime.c` it is handed, so a build that goes through it — every `--link`,
 and every `--profile` recipe in these documents — needs to name only the one.
@@ -479,7 +487,9 @@ program, and makes every directory in the way of the IR, a sidecar or the
 binary itself. It looks for `scripts/build.sh` and the `runtime/*.c` files
 one level up from wherever it was invoked (and one level up from the file a
 symbolic link to it names), so it wants a checkout or an installed package
-around it the way `nish` does. It falls back to the working directory only
+around it the way `nish` does.
+
+It falls back to the working directory only
 when the compiler itself lies inside that directory, so a checkout you merely
 `cd` into cannot hand it a `scripts/build.sh` to run. Keep `bin/nish` beside
 `scripts/`, `runtime/` and `std/`, as every install above does, and keep that
@@ -538,7 +548,9 @@ nish run hello.ts
 `$XDG_CACHE_HOME/nish/run` (or `~/.cache/nish/run`) when that program has not
 been linked before, and starts it with the arguments after the file. The first
 run of a new edit pays for one link, and later runs start the cached binary.
-It needs clang only for that link. It needs `HOME` or `XDG_CACHE_HOME` set
+It needs clang only for that link.
+
+It needs `HOME` or `XDG_CACHE_HOME` set
 to an absolute path (a relative one is ignored, as if it were unset), and
 refuses the run without one rather than keep a binary in a shared directory.
 The first run that builds into the cache makes its root `0700`, so no other
@@ -547,7 +559,9 @@ user can plant a binary in it ([docs/security/cli.md](security/cli.md)).
 Every link with the debug, speed or size profile, `nish run`'s and `--link`'s
 alike, keeps the compiled C runtime in `$XDG_CACHE_HOME/nish/runtime` (or
 `~/.cache/nish/runtime`), one entry per profile, `-g`, `--threads`, `CC` and
-the version that compiler reports, made `0700` the same way. The first link
+the version that compiler reports, made `0700` the same way.
+
+The first link
 compiles the runtime's six files at once into it, and every later link
 compiles only the program's modules, also at once, and links against the
 entry: a `hello.ts` debug link goes from about half a second to about a

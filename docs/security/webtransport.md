@@ -6,7 +6,9 @@ the seam it needs in `nish/net/http3` and `nish/net/http3-frame` (extended
 CONNECT, the WebTransport SETTINGS, streams held until the program takes
 them). It says which draft it speaks, what it refuses and with what, what it
 caps and where the cap is set, what it keeps in memory and for how long, and
-the test that pins each property. HTTP/3 itself is [http3.md](http3.md), whose
+the test that pins each property.
+
+HTTP/3 itself is [http3.md](http3.md), whose
 findings H3-1 to H3-5 this lane inherits; the transport and its datagram rings
 are [quic.md](quic.md). It is written with the code rather than after an
 audit, so that the audit of the protocol stack starts from evidence.
@@ -17,11 +19,15 @@ CONNECTION_CLOSE, a stream error as a reset of that stream — and every other
 refusal is a status the program never sees or a counted drop; none is a panic,
 and a panic is only the program's own mistake (a cap out of range, a window
 outside its buffer, WebTransport turned on over a connection that takes no
-datagrams). Every cap is a number fixed at start-up and checked against the
+datagrams).
+
+Every cap is a number fixed at start-up and checked against the
 array it sizes. A warm session echoing datagrams and streams allocates
 nothing, session after session through one table slot allocates nothing, and
 connection after connection through one QUIC slot allocates nothing past the
-QUIC handshake. No lookup — of a session, a stream or a datagram's session —
+QUIC handshake.
+
+No lookup — of a session, a stream or a datagram's session —
 grows with a table: each is one probe of the QUIC connection's stream index,
 and the streams waiting for a session are filed in a salted hash. Five
 findings, each Low: WT-1 (what a handshake still keeps, H3-1's), WT-2 (no clock,
@@ -65,7 +71,9 @@ wtransport 0.7.0 client sent, recorded on 2026-10-06 from the test program's
 `record` mode (the Nish server on a real socket with a tap on QUIC's receive
 buffers) and built with cargo in the container this lane was written in: its
 SETTINGS, its CONNECT, a datagram, a bidirectional and a unidirectional
-stream, and its answer to the server's CLOSE. A Nish client replays it byte
+stream, and its answer to the server's CLOSE.
+
+A Nish client replays it byte
 for byte against the Nish server inside `npm test`, and what the server sends
 back is pinned byte for byte. Three runs differed only in the order of the
 client's SETTINGS (it builds them from a hash map) and the port in
@@ -96,7 +104,9 @@ They may ask for sessions, send datagrams for any quarter stream ID, open
 streams naming any session — one that exists, has gone, was never one, or has
 not arrived yet — send capsules of any type and length split anywhere, close
 or reset a CONNECT stream at any point, and send their SETTINGS late, wrong or
-not at all. A win is a panic, memory or time the server spends without bound,
+not at all.
+
+A win is a panic, memory or time the server spends without bound,
 a session the program sees that the draft would refuse, a stream or datagram
 delivered to the wrong session, a session's state that outlives it, a lookup a
 client can make cost the size of a table, or a cap a client can outgrow. The
@@ -131,7 +141,9 @@ unknown ones; each twice, or 0x08 or 0x33 above 1, is H3_SETTINGS_ERROR.
 HTTP datagrams and WebTransport is a session, answered 200 with
 `sec-webtransport-http3-draft: draft02` when the program accepts it; a request
 before the client's SETTINGS waits for them (draft-02 §3.1); two sessions
-share a connection, each datagram and stream reaching its own. Answered here
+share a connection, each datagram and stream reaching its own.
+
+Answered here
 and never seen by the program: SETTINGS without SETTINGS_H3_DATAGRAM, or
 without either WebTransport setting (400); another `:protocol` (501, RFC 8441
 §4); another `:scheme` (400); a session past `webtransportSessions` (429). An
@@ -154,18 +166,24 @@ streams on one session (more than QUIC lets be open at once) and 12
 unidirectional ones are each echoed, a unidirectional one on a stream of the
 server's that starts 0x4054, then the session ID; the server opens a
 bidirectional stream of its own (0x4041, then the session ID) and reads the
-client's answer on it. A stream for a session whose CONNECT has not arrived,
+client's answer on it.
+
+A stream for a session whose CONNECT has not arrived,
 or that is not yet answered, waits unread and is taken, in arrival order, once
 the session is accepted; past `maxPending` it is refused with
 WT_BUFFERED_STREAM_REJECTED; past `maxStreams` with H3_REQUEST_REJECTED, and
 the server may not open one past it (WT_LIMIT); a stream naming a session that
-is gone, refused or a plain request is refused with WT_SESSION_GONE. A session
+is gone, refused or a plain request is refused with WT_SESSION_GONE.
+
+A session
 ID that is no client-initiated bidirectional stream is H3_ID_ERROR, and the
 signal 0x41 after a request's HEADERS is H3_FRAME_ERROR. After this side's
 GOAWAY a session's new stream is still taken while a request is refused with
 H3_REQUEST_REJECTED; a stream naming a session at or past the GOAWAY's ID,
 which can never come, is refused as gone (WT_SESSION_GONE), is not counted as
-a request in flight and does not wait. A reset or STOP_SENDING from the client reaches the
+a request in flight and does not wait.
+
+A reset or STOP_SENDING from the client reaches the
 program with its HTTP/3 code and the application code it maps to (or -1, as
 wtransport's unmapped codes are); the server's own carry the mapped code, and
 its STOP_SENDING leaves its own side to write and finish. A stream naming a
@@ -179,7 +197,9 @@ closes with code 0 and no reason; the session's slot is free once both halves
 of its CONNECT stream are done. The server's `close` writes the capsule whole
 (0x6843, the length, the code, the reason) and the FIN, refuses a reason past
 1,024 bytes (H3_INVALID), and the client's CLOSE in answer ends the session
-quietly. DRAIN both ways, and an unknown capsule skipped. A CLOSE before the program
+quietly. DRAIN both ways, and an unknown capsule skipped.
+
+A CLOSE before the program
 answered the session ends it at once, the CONNECT stream reset both ways and
 the slot free; a close HTTP/3 itself made (a CONNECT whose DATA overruns its
 `content-length`) is not reported as the client's. Malformed, each

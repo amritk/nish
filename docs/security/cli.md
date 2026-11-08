@@ -26,11 +26,15 @@ Added after the audit, with the grouped `--help`: `paletteOf`
 the usage, unless a variable has already forced colour on or off, with a
 constant script that takes nothing from the arguments:
 `[ -t N ]`, N the descriptor 1 or 2, then `tput colors`, which reads how many
-colours `TERM`'s terminfo entry declares. `tput` is run as `/usr/bin/tput` or
+colours `TERM`'s terminfo entry declares.
+
+`tput` is run as `/usr/bin/tput` or
 `/bin/tput`, never looked up on `PATH`, so a `PATH` holding `.` or an empty
 entry cannot run a `tput` a checkout planted; with neither there the probe
 answers without it ("--help: the colour probe never runs a `tput` found on
-PATH"). The shell and `tput` inherit the environment as every spawn of `nish`
+PATH").
+
+The shell and `tput` inherit the environment as every spawn of `nish`
 does, so `TERM`, `TERMINFO` and `TERMINFO_DIRS` choose the terminfo file
 `tput` parses: the victim's own settings, the misconfiguration case of the
 threat model, and the answer is only ever a colour count. `usageText`
@@ -164,7 +168,9 @@ this is what is true now.
   the checker refuses all three on a wasm32 build, and `src/` is also linked
   as the web compiler (`web/`), which Nish-0 cannot leave a call out of. So
   `src/compile.ts` asks `/bin/sh`, through `spawnSyncTo`, which links under
-  wasi. Each owner-and-mode question is one `/bin/sh` that runs one
+  wasi.
+
+  Each owner-and-mode question is one `/bin/sh` that runs one
   `/bin/ls -ldn` (the type, the mode and the numeric owner, without following
   a link) and the shell's own `test -O` (the effective uid), so no `id` runs;
   the answer is the exit status. The `PATH` question is one `/bin/sh` that

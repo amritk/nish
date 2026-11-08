@@ -197,7 +197,9 @@ Nish reads only the host module's exported signatures, and skips each function
 body unread, so a body may use the DOM, closures and promises. Each function
 becomes a wasm import from module `host` under its own name. The `.d.ts` gains
 `Imports = { host: typeof import("./web/host") }`, so `tsc` refuses a page that
-passes a host object short of a function. The loader passes a function through
+passes a host object short of a function.
+
+The loader passes a function through
 as it stands when every value crosses unchanged (`i32`, `i64`, `f32`, `f64`,
 an enum, a handle, and a `u8` or `u16` argument), and wraps it once, at `load`,
 when a value needs converting: a `u32` or `u64` argument is read unsigned, a
@@ -217,7 +219,9 @@ function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
 `string` result (NL2667), and, for now, a typed array (NL2664) or a `string`
 parameter (NL2665). A host-module body the lexer cannot read, such as a regex
 literal or JSX, is refused with a message to move that code into a module the
-host file imports (NL3049). A host module exists only in a freestanding wasm
+host file imports (NL3049).
+
+A host module exists only in a freestanding wasm
 build: a native or WASI build that imports one is refused (NL3050), and so is a
 `declare function` in any build that makes a page module, `--target wasm32` or
 `--emit-dts` with no `--target` (NL2666), whose functions the page supplies
@@ -552,7 +556,9 @@ A handle is never copied, stored or returned: you call its methods, or lend
 it to a parameter of its own type. Several declarators in one `using` open
 one at a time, so an `orReturn()` in a later initialiser closes the ones
 before it. Falling off the end, `break` and `continue` close them in reverse
-order beside an `arena()`, a `scope()` or a lock. A `return` or an
+order beside an `arena()`, a `scope()` or a lock.
+
+A `return` or an
 `orReturn()` first waits for every `scope()`'s tasks, then computes its value,
 then closes the handles and gives back the locks, innermost first, and only
 then releases the arenas. A panic or `process.exit` ends

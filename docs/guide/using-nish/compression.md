@@ -234,7 +234,9 @@ compressed form only when it is worth it:
   `Http1Server` read from the connection's socket when it accepted it,
   where the platform reports one (`TCP_INFO` on Linux, `TCP_MAXSEG` on
   macOS; `Http1TlsServer` reads none); otherwise `HTTP_DEFAULT_MSS` (1448,
-  an Ethernet path's). `segmentMss(enc)` on the connection answers which.
+  an Ethernet path's).
+
+  `segmentMss(enc)` on the connection answers which.
   Each accept starts a connection with neither of its own set, so one
   peer's MSS never reaches the next. A response that already fits in one
   segment as it is, head and body, is sent as it is without running the

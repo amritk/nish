@@ -19,19 +19,25 @@ read or written outside the caller's windows. Output is bounded by the
 caller's `limit` and the end of `out`, so a small input cannot expand without
 bound, and a stream's cost is linear in its input and output. A gzip or zlib
 stream whose bytes were corrupted does not decompress to other bytes: its
-checksum refuses it. The `Accept-Encoding` parser reads any bytes in one pass
+checksum refuses it.
+
+The `Accept-Encoding` parser reads any bytes in one pass
 and allocates nothing. Two findings were fixed after the record was first
 written, each with a test that failed before the fix: `respondEncoded` could
 queue stale bytes for the wire after `H1_AGAIN` (COMP-11), and `GzipWriter`
 could panic on incompressible input written into exactly `bound(len)`
-(COMP-12). The CRC-32 kernels read only the window `Crc32.update` checked
+(COMP-12).
+
+The CRC-32 kernels read only the window `Crc32.update` checked
 and answer what the tables answer; a review of their first version found the
 AArch64 path reading four bytes past it, fixed before it shipped (COMP-13).
 Which kernel runs is decided once per process from the CPU alone: CPUID leaf
 1, ECX bits 1 (PCLMULQDQ) and 19 (SSE4.1), on x86-64; `getauxval(AT_HWCAP)`
 bit 7 (`HWCAP_CRC32`) on Linux AArch64, and
 `sysctlbyname("hw.optional.armv8_crc32")` on Darwin. Any other OS, and a
-big-endian or 32-bit target, gets the tables. The one input from outside is
+big-endian or 32-bit target, gets the tables.
+
+The one input from outside is
 `NISH_CRC32`, compared with the exact string `soft` and otherwise ignored,
 so whoever sets a process's environment can only send it to the tables,
 which answer the same.
@@ -60,7 +66,9 @@ that hand it a body or a field value (`http1-codec.md`, `http2.md`, `http3.md`).
 
 The attacker sends the compressed bytes — a request body, a WebSocket payload,
 a file — and the `Accept-Encoding` field: any bytes, any length, as many times
-as the carrier allows. A win is a panic, a read or write outside the windows
+as the carrier allows.
+
+A win is a panic, a read or write outside the windows
 the program passed, output past `limit`, time or memory beyond a constant
 times the input and output, a corrupted gzip or zlib stream accepted as other
 bytes, or a field value that makes the server send a coding the client did not
@@ -158,7 +166,9 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
   `std_compress_gzip_files` (the system `gzip`'s files read, and Nish's read
   back by it); `crc32 kernel: ${program} under NISH_CRC32=soft calls no
   kernel`; and `simd: --profile wasi links runtime-checksum.c, and
-  nish_crc32_hw answers 0 there`. The targets CI does not run are compiled
+  nish_crc32_hw answers 0 there`.
+
+  The targets CI does not run are compiled
   instead: `crc32 kernel: runtime-checksum.c for ${label} selects the kernel,
   asking the C library for ...` on x86-64 and arm64 Darwin, and `crc32
   kernel: runtime-checksum.c for ${label} is the stub, nish_crc32_hw and

@@ -3,7 +3,9 @@
 The record of `nish/net/outbound`, the policy a program sets on
 `nish/net/fetch` when it fetches URLs it did not choose (a webhook
 sender, a link previewer, an importer that takes a URL from a form), and of
-the hooks in the client that apply it. It says which addresses count as
+the hooks in the client that apply it.
+
+It says which addresses count as
 public, where the check runs and why a DNS answer cannot move a connection
 past it, what a redirect is checked against, what the host allowlist matches,
 and the test that pins each property. It is written with the code, at base
@@ -16,7 +18,9 @@ checked: `dial` resolves the name once, `outboundFilter` drops every refused
 address from that answer in place, and `tcpConnect` is given only what is
 left, so there is no second lookup a rebinding answer could change. Every
 redirect hop goes through the same `dial`, and through the host allowlist
-again, so a public URL that redirects inward is refused at the hop. Public is
+again, so a public URL that redirects inward is refused at the hop.
+
+Public is
 the IANA special-purpose registries read strictly; IPv4-mapped, NAT64 and
 6to4 addresses are judged by the IPv4 address they carry. A policy turns off
 the proxy, which would otherwise resolve and connect on the client's behalf,
@@ -45,13 +49,17 @@ does not cover (OB-6).
 The attacker chooses the URL, and may run the server it names and the DNS
 zone its name is in. They want the program to reach an address it can reach
 and they cannot: a loopback service, a host on a private network, a cloud
-metadata endpoint. Their tools are a literal address in any of its spellings
+metadata endpoint.
+
+Their tools are a literal address in any of its spellings
 (dotted IPv4, IPv4-mapped or NAT64 IPv6, `[::1]`, or a number written
 without dots, in octal or hex, or short, which the URL parser refuses before
 any lookup), a name that resolves to
 one, a name whose answer changes between two lookups (DNS rebinding), a
 public URL that redirects to one, the proxy a program was configured with,
-and a URL whose userinfo or host only resembles an allowed name. The
+and a URL whose userinfo or host only resembles an allowed name.
+
+The
 operator who builds the policy is trusted, as are `/etc/hosts` and the
 resolver configuration: the policy judges their answers too, but does not
 second-guess what they say a name is.
@@ -93,7 +101,9 @@ checks are in `tests/link/net_outbound/checks.ts`, run as
 `link/net_outbound: exits with 0 and stdout matches expected.out` (the
 template `link/${name}: exits with ${wantCode} and stdout matches
 expected.out` in `tests/run.js`), and again under `--number-mode f64` as
-`link/net_outbound_f64`; each check's own line is in `expected.out`. The test
+`link/net_outbound_f64`; each check's own line is in `expected.out`.
+
+The test
 is its own server on a loopback port and fetches it with and without a
 policy, so each refusal has a `without a policy, … is reached` twin showing
 the URL would otherwise connect, and a count of accepted connections showing
@@ -121,7 +131,9 @@ resolver answers `localhost` itself, with 127.0.0.1 and then ::1 (RFC 6761
   `with one, localhost is HTTP_E_BLOCKED, naming resolves to` and its `and no
   connection was made`; `outboundFilter keeps a lookup's public addresses, in
   order, and drops the rest`; `and keeps none of an answer with no public
-  address, which is left in place to be named`. That `dial` connects only to
+  address, which is left in place to be named`.
+
+  That `dial` connects only to
   what was kept is pinned on a mixed answer: `localhost` answers 127.0.0.1 and
   ::1, the server listens on 127.0.0.1 alone, and with only ::1 permitted
   `on a mixed answer only the addresses kept are dialled: ::1 permitted,

@@ -9,7 +9,9 @@ before `read`. The ioctl result is copied field by field into a two-element
 answer. Every index in `std/term` is checked. Two Low findings break the
 documented guarantee that the terminal is put back on every fatal signal:
 the caught-signal list is incomplete (TERM-1), and a signal can land between
-the `tcsetattr` and the flag (TERM-2). One Medium finding is a panic on attacker input: a pty
+the `tcsetattr` and the flag (TERM-2).
+
+One Medium finding is a panic on attacker input: a pty
 resized to a large size makes `Screen.resize` overflow an i32 multiply or
 run out of memory (TERM-3). One Low finding is a CSI parameter run the key
 decoder holds without a cap (TERM-4). One Low finding is doc drift in this
@@ -92,6 +94,7 @@ at the end of the stream").
 **A stop does not end a wait early, and EINTR loses no read.** After a
 SIGTSTP stop, `nish_stdin_ready` works out the time left and waits again.
 Any other signal ends the wait with `false`, which the docs say it does.
+
 `read` retries EINTR, and a readiness check that a signal interrupts answers
 -11 rather than falling through to a `read` that blocks ("term_pty: under a pseudo-terminal raw mode takes, and returning, a
 panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a

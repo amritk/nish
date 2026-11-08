@@ -4,7 +4,9 @@ The record of WP34's lane R1 past QPACK: `nish/net/http3-frame` (the frames,
 stream types, settings and error codes of RFC 9114), `nish/net/http3` (the
 server side of a connection, on the streams of a `QuicConnection`) and
 `nish/net/http3-server` (the connection over one UDP socket, with ALPN `h3`,
-in a pool of slots). It says what each refuses and with what, what it caps and
+in a pool of slots).
+
+It says what each refuses and with what, what it caps and
 where the cap is set, what it keeps in memory and for how long, and the test
 that pins each property. QPACK itself is `nish/net/qpack` (#464), the header
 model `nish/net/http-fields` ([http2.md](http2.md)), and the transport
@@ -17,14 +19,18 @@ code they name, as an application CONNECTION_CLOSE, and every stream error
 resets the one request both ways; none is a panic, and a panic is only ever
 the program's own mistake (a window outside its buffer, a cap out of range).
 Every cap is a number the program fixes at start-up and is checked against
-the buffer it bounds. A warm connection serving request after request
+the buffer it bounds.
+
+A warm connection serving request after request
 allocates nothing, and neither does anything a connection does after its
 handshake, connection after connection through one slot; a datagram an
 established connection reads, and every datagram it sends, allocates nothing
 in the carrier; nor does a handshake through a reused slot, from the first
 Initial to the close, nor a datagram no slot owns, whatever the listener
 answers it with. One finding is open, Low: H3-5, no clock at the HTTP/3
-layer. H3-1, what a handshake kept per connection, and H3-3, what a datagram
+layer.
+
+H3-1, what a handshake kept per connection, and H3-3, what a datagram
 no slot owns cost the listener, are closed: the first by keeping QUIC's
 handshake state in the slot and signing in scratch, the second by the
 listener reading a window and answering into scratch. H3-2, the copies of a
@@ -58,7 +64,9 @@ The attacker is the client: every byte after the QUIC handshake is theirs, on
 any stream they may open, split anywhere, and they may open streams, reset
 them, stop reading them, send frames in any order or on the wrong stream,
 close or reset the critical streams, and hold the connection open. Before the
-handshake, anyone may send the carrier datagrams from any address. A win is a
+handshake, anyone may send the carrier datagrams from any address.
+
+A win is a
 panic, memory or time a client can make the server spend without bound, a
 request the program sees that RFC 9114 calls malformed, a frame accepted that
 a rule forbids, a stream whose state outlives it, a cap a peer can outgrow,
@@ -88,7 +96,9 @@ prints no vectors, so each frame is written out by hand from the layouts of
 §7.1 and §7.2 — DATA, HEADERS with a two-byte length, CANCEL_PUSH, SETTINGS of
 the three pairs this endpoint sends (16,384 as the four-byte varint
 `80 00 40 00`), PUSH_PROMISE, GOAWAY, MAX_PUSH_ID, a reserved type of four
-bytes, a length of 2^62 − 1 — read from its bytes and written back to them. A
+bytes, a length of 2^62 − 1 — read from its bytes and written back to them.
+
+A
 header cut at any byte is not a header yet; a writer answers -1 for a frame
 that does not fit or a value no varint holds, and leaves the buffer alone.
 SETTINGS: an identifier twice, or one HTTP/2 used with no HTTP/3 setting (0x00,
@@ -119,7 +129,9 @@ a MAX_PUSH_ID that falls, a CANCEL_PUSH past the push IDs allowed (H3_ID_ERROR,
 encoder stream (QPACK_ENCODER_STREAM_ERROR), a Section Acknowledgment or an
 Insert Count Increment on the decoder stream (QPACK_DECODER_STREAM_ERROR), and
 a field section with a Required Insert Count, a static index past 98 or no
-prefix (QPACK_DECOMPRESSION_FAILED). Requests before the client's SETTINGS are
+prefix (QPACK_DECOMPRESSION_FAILED).
+
+Requests before the client's SETTINGS are
 served, as §6.2.1 allows.
 
 **Every stream error, and the connection lives** (`tests/link/net_http3`,
@@ -130,7 +142,9 @@ bad `content-length`, `te` but `trailers`, `:method` twice — is reset both
 ways with H3_MESSAGE_ERROR and never reaches the program (§4.1.2, §4.3); a body
 shorter or longer than its `content-length` is H3_MESSAGE_ERROR, which the
 program, holding the request, sees as H3_RESET; so are trailers with a
-pseudo-header. A request stream that ends before HEADERS, empty or after an
+pseudo-header.
+
+A request stream that ends before HEADERS, empty or after an
 unknown frame, is H3_REQUEST_INCOMPLETE (§4.1.1). Trailers past the
 field-section cap, in the frame or once decoded, are H3_EXCESSIVE_LOAD. A
 request on a stream at or past the GOAWAY this side sent is H3_REQUEST_REJECTED
@@ -166,7 +180,9 @@ DATA or trailers before the head, the FIN or trailers inside a DATA frame the
 last write did not finish — each H3_INVALID, and nothing is sent; a stream
 that is not an open request of the client's, or one already finished or reset,
 is H3_CLOSED; a head past the client's SETTINGS_MAX_FIELD_SECTION_SIZE (as
-§4.2.2 counts it) or past a stream's buffer is H3_TOO_LARGE. `set-cookie`,
+§4.2.2 counts it) or past a stream's buffer is H3_TOO_LARGE.
+
+`set-cookie`,
 `cookie`, `authorization` and `proxy-authorization` go as never-indexed
 literals (RFC 9204 §7.1.3), and the encoder never inserts.
 
@@ -174,16 +190,22 @@ literals (RFC 9204 §7.1.3), and the encoder never inserts.
 bytes reaches the program at most 16,384 bytes at a time while the client
 never sends past the credit QUIC gave it, and comes back whole through a
 32 KiB send buffer, in DATA frames of at most `writeChunk`, H3_WRITABLE
-naming the stream each time acknowledgements free room. One `writeData` of
+naming the stream each time acknowledgements free room.
+
+One `writeData` of
 20,000 bytes goes as two frames and is taken whole: a call answers short only
-when the buffer filled, so the event the program waits for always comes. A
+when the buffer filled, so the event the program waits for always comes.
+
+A
 HEADERS frame that must go whole and does not fit pads the buffer with a
 reserved frame the client skips, sized to fill the room exactly — its length
 written in a longer varint where the shortest would leave a byte over, as
 RFC 9000 §16 allows — so that QUIC names the stream once there is room
 (`arm`); trailers on streams with 0, 1, 66 and 300 bytes of room all arrive
 after their body, the padding skipped (66 is where the shortest length would
-have left a stray byte in the stream). A GOAWAY goes whole or not at all, and
+have left a stray byte in the stream).
+
+A GOAWAY goes whole or not at all, and
 not again when its ID has not fallen.
 
 **Concurrency** (`net_http3`): twelve requests open at once, ended in reverse;
@@ -195,12 +217,15 @@ a 300,000-byte response the pacer lets out over time, in GSO flights; a client
 whose handshake chose another ALPN closed with CRYPTO_ERROR
 no_application_protocol (0x0178) before any HTTP/3 byte, and its slot freed
 (RFC 9114 §3.1); an Initial when every slot is taken dropped and counted; the
-datagrams of H3-3 dropped, or answered, for nothing. The connection-ID index keeps every ID
+datagrams of H3-3 dropped, or answered, for nothing.
+
+The connection-ID index keeps every ID
 found across removals in the middle of probe runs, never files one twice or
 one over 20 bytes; the timer wheel answers the earliest deadline, files one
 past its horizon at the horizon and again when it comes round (a whole turn
 away after a tick, never "due now", so the loop does not spin), and runs at
 most its 2,048 buckets in one `tick`, from a turn ago when it is called late.
+
 A connection closed while its pacer has no credit still sends its
 CONNECTION_CLOSE before the slot is freed. A client on a clock in epoch
 milliseconds that sends only to acknowledge what arrived, with time moved
@@ -216,7 +241,9 @@ rather than by line). `writeHead` puts the connection's `date` straight after
 (HTTP/3 has no 1xx for a program to send); a program's own `date`
 (`http3NamesHoldDate`, which matches any ASCII case) is sent instead, so a head
 never carries two. A mixed-case `Date` never reaches it: `respond` refuses an
-uppercase name with `H3_INVALID` (§4.2). The date counts against the client's
+uppercase name with `H3_INVALID` (§4.2).
+
+The date counts against the client's
 SETTINGS_MAX_FIELD_SECTION_SIZE as any field does, 65 bytes (RFC 9114 §4.2.2): a
 head that fits a limit of 107 bytes exactly without it is refused with
 `H3_TOO_LARGE` with it. The server's own 431 counts 42 bytes bare and 107 with
@@ -224,7 +251,9 @@ the date, so `answerTooLarge` sends it without the date to a client whose limit
 has room only for the bare one, rather than resetting the stream with
 H3_EXCESSIVE_LOAD. QPACK's dynamic table has capacity 0, so the field is a
 literal and the encoder's streams carry nothing for it. A bare `Http3Connection`
-has no clock and sends none. `Http3Server` points every slot at its one
+has no clock and sends none.
+
+`Http3Server` points every slot at its one
 `HttpDate`, refreshed at `connection(slot)` and `ready()`, so a date is at most
 one turn of the program's loop stale. Connection after connection through one
 slot, the pinned clock a second on for each, keeps the arena at zero after the
@@ -249,9 +278,13 @@ the unknown settings kept (`H3_SETTINGS_KEEP`, 8), the client's unidirectional
 streams and this side's own (at least 3 each, checked), the slots, the
 datagrams one `receive` reads (`H3_SERVER_RECEIVE_BURST`, 256) and the answers
 to unowned datagrams (`H3_SERVER_ANSWER_BURST`, 16, one per
-`H3_SERVER_ANSWER_INTERVAL`, 100 ms). A cap out of range panics
+`H3_SERVER_ANSWER_INTERVAL`, 100 ms).
+
+A cap out of range panics
 (`net_http3_bad_config`, `net_http3_server_bad_config`), as does a write's
-window outside its buffer (`net_http3_write_window`). Every counter a peer
+window outside its buffer (`net_http3_write_window`).
+
+Every counter a peer
 drives saturates: requests rejected, sections answered 431, stream errors,
 connections accepted, Initials refused, answers limited, sends failed, unknown
 settings dropped.
@@ -268,12 +301,16 @@ connection — HEADERS and 1,000 bytes of DATA in, a 200 with two fields and
 slot keep 0 bytes for the reset and 0 for everything after each handshake
 (the client's streams, SETTINGS, ten requests, the close), from the second
 on; through the carrier, five connections in one slot keep 0 bytes for each
-handshake and 0 after it, from the second on (`net_http3_server`). The slot itself, built on the first Initial accepted into it and kept (`net_http3_server`, "the first client builds one slot, and takes it"): HTTP/3 adds 1,344
+handshake and 0 after it, from the second on (`net_http3_server`).
+
+The slot itself, built on the first Initial accepted into it and kept (`net_http3_server`, "the first client builds one slot, and takes it"): HTTP/3 adds 1,344
 bytes of buffers at the defaults (the control frame, scratch) and 108 bytes
 per QUIC stream slot to the QUIC slot's own (QUIC-3); the body chunk and the
 field section, 16,384 bytes each at the defaults, are lent per event from
 pools the carrier shares across its slots (see below), so an idle slot holds
-neither. On the interop server (80 stream slots, 64 KiB of stream credit),
+neither.
+
+On the interop server (80 stream slots, 64 KiB of stream credit),
 the resident memory an HTTP/3 slot adds went from 12,462 kB to 254 kB. Add
 the decoder's and the field copies' growth to the largest
 section seen (H3-2).
@@ -282,14 +319,18 @@ section seen (H3-2).
 (#806). `Http3Server.addresses[slot]` is the source of the slot's first
 datagram, which anyone may forge; `quic(slot).addressValidated` says when
 RFC 9000 §8.1 has proven it, by a Handshake packet or, with `retry` on, a
-Retry token the listener checked. The relay of `examples/relay`, which caps
+Retry token the listener checked.
+
+The relay of `examples/relay`, which caps
 sessions per address with `retry` off, claims an address's place only from
 that point, so Initials that name a real client's address and never answer
 the server's flight hold a slot each until the hello deadline, and none of
 the address's places (`net_relay_forged`, "they hold no place of the address
 and no global place, and none is shed", "two clients from that address then
 open sessions under its cap of two"); a validated client past the cap is
-still refused ("a third validated client from it is refused"). After the handshake the slot's
+still refused ("a third validated client from it is refused").
+
+After the handshake the slot's
 address follows the client when its NAT rebinds (QUIC-11 in
 [quic.md](quic.md)), first to an address not yet validated; the relay keeps
 the address it counted the session under, so a move neither frees nor takes a
@@ -301,7 +342,9 @@ one real address, forging nothing, can open every slot of the pool
 deadline, each answered within QUIC's amplification limit; when the cap was
 claimed at the first Initial it held one address to `maxPerPeer +
 spareSlots`. Forged sources could fill the pool that way already; now no
-forging is needed. `retry` on closes both this and the hole of #806, at a
+forging is needed.
+
+`retry` on closes both this and the hole of #806, at a
 round trip's cost to every client: the listener answers an Initial without a
 valid token with a Retry and gives it no slot (`net_relay_forged`, "with
 retry on, each of four Initials without a token is answered with a Retry",
@@ -318,13 +361,17 @@ for the server's life, and `Http3Server.stop` wipes it with the listener's
 seed and the configuration's static keys (QUIC-5). What
 the connection holds is application data — request field sections in
 `section`, the decoder's buffer and the field copies, bodies in `data` — which
-may carry credentials (`cookie`, `authorization`). `data` and `section` are
+may carry credentials (`cookie`, `authorization`).
+
+`data` and `section` are
 fixed-size buffers lent from pools an `Http3Server` shares across its slots
 (a standalone `Http3Connection` makes a private pool of one each): `section`
 for the one read and decode of a HEADERS frame, `data` for the window an
 `H3_DATA` event hands the program, kept across the `H3_DATA` events of a
 body read chunk by chunk and given back by the first `next()` call that
-answers any other event. Each
+answers any other event.
+
+Each
 is zeroed over the extent it was written as it goes back (`BufferPool.give`,
 a plain fill the next borrower's reads keep), so the next connection, or the
 next request of this one, borrows no byte of the last; the QUIC stream
@@ -333,6 +380,7 @@ buffers under them are lent and zeroed the same way (QUIC-3 in
 `secureZero`: a later borrower reads the buffer, so the fill is no dead store
 `-O2` may drop, and `secureZero` clears all 16,384 bytes where the fill costs
 the bytes the request wrote; before pooling, neither buffer was wiped at all.
+
 `WebTransportSession.data` is `h3.data` itself during a `WT_STREAM_DATA`
 event, not a copy, so it is lent and given back with it and is valid only
 until the next `next()`. Anchors at `af03b81a`: `std/net/http3.ts:770-778`

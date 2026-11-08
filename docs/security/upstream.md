@@ -16,7 +16,9 @@ refusal of the codec ends the call that was reading, as a failure with the
 codec's code. What the module adds is bookkeeping — a fixed pool of call slots
 and connections on the handler's poll loop — and each piece of it is bounded:
 the slots by `calls`, the connections by `connections`, a request head by
-`maxHead`, a body by `maxBody`, a call's time by `timeoutMs`. A connection
+`maxHead`, a body by `maxBody`, a call's time by `timeoutMs`.
+
+A connection
 whose call ended any way but whole is closed, so no byte a failed, late or
 over-long response left behind is read as the next call's answer, and a
 kept-alive connection is read once more before it is reused, so one the
@@ -24,6 +26,7 @@ origin closed or wrote to while it sat idle is closed instead. Under an
 `OutboundPolicy` the origin's host name is checked before the lookup and its
 addresses after it, and the pool connects only to the bytes that were checked,
 with no second lookup. Four faults were found and fixed, each with a test.
+
 Writing the record found one: the codec allocated each response's field names
 and values as strings, so the arena grew with every call (UPSTREAM-8, Medium).
 It is fixed in the codec, which now records a response's fields as spans of a
@@ -58,7 +61,9 @@ every response is theirs, they may answer slowly, never, out of turn, with
 more than one response, or close at any moment. When the origin itself comes
 from input (configuration, an environment variable, a request), the attacker
 also chooses it, and may point it at a private address or a name that
-resolves to one. A win is a panic, memory or time a call can make the program
+resolves to one.
+
+A win is a panic, memory or time a call can make the program
 spend beyond the limits it set, a stalled loop, one request receiving an
 answer meant for another, or a connection to an address the policy refuses.
 The program and its `UpstreamLimits` are trusted; misuse of the call API
@@ -140,7 +145,9 @@ origin closed while idle is not reused, and the next call is answered",
 call's response", "retry: a call the origin drops unanswered on a reused
 connection is made once more on a new one", "reset: a close-delimited body
 ends at the origin's close", "reset: a reset where the origin's close would
-end a close-delimited body fails the call UPSTREAM_E_RESET, not ok". The reset
+end a close-delimited body fails the call UPSTREAM_E_RESET, not ok".
+
+The reset
 check cannot tell a reset in the body from one before the head, since a reset
 may discard bytes the origin already sent; either way the call must not be
 `ok`.

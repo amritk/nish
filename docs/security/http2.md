@@ -6,7 +6,9 @@ model HTTP/2 and HTTP/3 share), `nish/net/http2-frame` (the frames of RFC 9113
 `nish/net/http2-tls` (the connection over `nish/net/tls-tcp` with ALPN `h2`).
 It says what each refuses and with what, what it caps and where the cap is
 set, what it keeps in memory and for how long, and the test that pins each
-property. HPACK itself is `nish/net/hpack` (#406), which has no record of its
+property.
+
+HPACK itself is `nish/net/hpack` (#406), which has no record of its
 own yet; what it cost this lane is H2-1 below. It is written with the code
 rather than after an audit, so that the audit of the protocol stack starts
 from evidence.
@@ -15,7 +17,9 @@ from evidence.
 (GOAWAY) or the stream error (RST_STREAM) the RFC classes it as, and none is
 a panic; a panic is only ever the program's own mistake (a window outside its
 buffer, a cap out of range, a frame no peer may accept). Every cap is a number
-the program fixes at start-up. The data path — DATA in, DATA out,
+the program fixes at start-up.
+
+The data path — DATA in, DATA out,
 WINDOW_UPDATE, PING, SETTINGS, RST_STREAM — allocates nothing, measured both
 by `Arena.used()` and by resident memory. Two findings are open: H2-2 (Low),
 frames that cost only CPU; and H2-3 (Low), no clock in the connection or the
@@ -41,7 +45,9 @@ S2's interop job, not here.
 
 The attacker is the client: every byte after the TLS handshake is theirs,
 split anywhere, and they may open streams, reset them, stop reading, send
-frames in any order, and hold the connection open. A win is a panic, memory or
+frames in any order, and hold the connection open.
+
+A win is a panic, memory or
 time a client can make the server spend without bound, a request the program
 sees that RFC 9113 calls malformed (the shapes that smuggle a second request
 through an HTTP/1.1 intermediary), a frame accepted that a rule forbids, a
@@ -85,7 +91,9 @@ SETTINGS_MAX_FRAME_SIZE (refused from its header, before the payload is
 waited for), a frame on the wrong stream for its type, a frame too short for
 its fixed fields or of the wrong length, padding as long as its frame, a
 WINDOW_UPDATE of zero — each the error RFC 9113 names, connection or stream;
-and every setting value §6.5.2 and RFC 8441 bound. A writer cannot produce
+and every setting value §6.5.2 and RFC 8441 bound.
+
+A writer cannot produce
 what its reader refuses: a frame on the wrong stream, padding past 255, a
 weight outside 1 to 256 or a setting out of range panics, as a window
 outside its buffer does; DATA on stream 0 (`net_http2_frame_bad_write`) and
@@ -107,6 +115,7 @@ peer sent them (the rapid reset of CVE-2023-44487) or provoked the server into
 sending them with a stream error or a stream past `maxStreams` (MadeYouReset,
 CVE-2025-8671, H2-4; `tests/link/net_http2_reset`), with a finished stream
 earning one back.
+
 Each sends GOAWAY naming the last stream the peer opened, the program sees
 H2_ERROR, every later call answers it again, input is dropped, and the
 program's writes answer H2_CLOSED.
@@ -120,7 +129,9 @@ past a stream's window, a stream window past 2^31 − 1 (FLOW_CONTROL_ERROR); a
 WINDOW_UPDATE of zero, a self-dependency in PRIORITY or HEADERS, a PRIORITY of
 the wrong length; a stream past `maxStreams` (REFUSED_STREAM). Each sends
 RST_STREAM once, tells the program with H2_RESET when it held the stream, and
-leaves the connection answering. A header block whose stream is reset is
+leaves the connection answering.
+
+A header block whose stream is reset is
 still decoded, so HPACK stays in step with the peer (§4.3). Frames still in
 flight for a stream the server reset are ignored (§5.4.2), for as many as
 `maxStreams` + 16 of the most recent resets — the program may reset every
@@ -137,7 +148,9 @@ connection-specific field, `te` but `trailers` included; a pseudo-header
 unknown, repeated, after a regular field, missing or where the shape forbids
 it; a `:method`, `:scheme`, `:path`, `:authority` or `:protocol` of the wrong
 syntax; a `host` naming another authority (letters compared without case, as
-a host name is); a bad or disagreeing `content-length`. These are the shapes that let one request become two when
+a host name is); a bad or disagreeing `content-length`.
+
+These are the shapes that let one request become two when
 it is turned back into HTTP/1.1. `:protocol` is read only where
 SETTINGS_ENABLE_CONNECT_PROTOCOL was sent (RFC 8441 §4).
 
@@ -145,6 +158,7 @@ SETTINGS_ENABLE_CONNECT_PROTOCOL was sent (RFC 8441 §4).
 a lowercase token, a value with CR, LF or NUL, a connection-specific field, a
 status outside 100 to 599 or 101 (§8.6), a second final head, a 1xx that ends
 a stream, a head no output could hold — each H2_INVALID, and nothing is sent.
+
 A head is encoded only once there is room for all of it, so the HPACK state
 never moves for a block that was not sent; Huffman coding is used only where
 it lengthens neither the name nor the value, so the room checked is never
@@ -169,7 +183,9 @@ read (`maxFrameSize`, 16,384, which sizes the input buffer), the header list
 never seen) and the compressed header block (`maxHeaderBlock`, 16,384), the
 HPACK table (`headerTableSize`, 4,096), the output buffer (`outputSize`, 64
 KiB, of which 128 bytes are kept for control frames) and the reset budget
-(`resetBudget`, 100). A cap RFC 9113 does not allow panics when the connection
+(`resetBudget`, 100).
+
+A cap RFC 9113 does not allow panics when the connection
 is made (`net_http2_bad_config`). The carrier uses one configuration for every
 slot, and makes slot 0's connection in its constructor, so a bad configuration
 is refused there with the connection's own words.
@@ -181,7 +197,9 @@ connection, and no other: `accept` makes a slot's connection the first time
 the carrier hands that slot out, and keeps it, restarting it on every later
 accept. `size()` stays the cap, and the pool never holds more than `size`
 connections, so the memory a full pool holds is what it was when every slot
-was made up front; what moves is when it is spent. A slot never accepted into
+was made up front; what moves is when it is spent.
+
+A slot never accepted into
 answers as a free one — no descriptor, `H2_ERROR` to `next`, done to `flush`,
 nothing to `rest` and `close` — and `connection(slot)` names slot 0's. A second
 accept into slot 0 moves `Arena.used()` by 0 bytes; the first into slot 1
@@ -211,7 +229,9 @@ twins; written against `main` at `f8643b9`, cited by function rather than by
 line). `encodeStatus` puts the connection's `date` straight after `:status` on
 every final head, an error's 431 included, and never on a 1xx or trailers; a
 program's own `date` (`http2NamesHoldDate`, which matches any ASCII case) is
-sent instead, so a head never carries two. A mixed-case `Date` never reaches it:
+sent instead, so a head never carries two.
+
+A mixed-case `Date` never reaches it:
 `sendHead` refuses an uppercase name with `H2_INVALID` (§8.2.1). The field goes
 as a literal without indexing, the static table's name and a value Huffman-coded
 when that is shorter, so the dynamic table stays empty: the encoder's table
@@ -219,11 +239,15 @@ holds no entry after a dated response. `sendHead` counts the field in its bound
 before it checks the output's room, so a head that does not fit waits
 (`H2_AGAIN`) or is refused (`H2_INVALID`) whole, with nothing written: a head
 whose bound fills a 1,024-byte output's room exactly is sent without the date
-and refused with it. The 431 a connection answers past its own
+and refused with it.
+
+The 431 a connection answers past its own
 `maxHeaderListSize` carries the date too, inside the control reserve. A bare
 `Http2Connection` has no clock and sends none. `Http2TlsServer` points every
 slot at its one `HttpDate`, refreshed at `connection(slot)` and `next(slot)`, so
-a date is at most one turn of the program's loop stale. Five responses with the
+a date is at most one turn of the program's loop stale.
+
+Five responses with the
 pinned clock a second on before each format it five times and move
 `Arena.used()` exactly as five on a still clock do (3,640 bytes, the new
 streams' own); two slots answered in one second share one format. Tests:
@@ -251,19 +275,24 @@ from an `Http2Pools` (`holdInput`, `holdOutput`, `gather`)
 and gives it back through `BufferPool.give` once it is empty — the output in
 `consume` when drained, the block once its HPACK decode is done, the input in
 `rest` when every byte is read — and every one in `drop` and `restart`.
+
 `give` zeroes the buffer as far as the connection wrote it (`inputUsed`,
 `outputUsed`, `blockUsed`, each a high-water mark since the take), so the next
 connection to borrow it reads none of the last one's requests, bodies or
 headers. `Http2TlsServer` shares one `Http2Pools` among its slots, each pool's
 ceiling the slot count, and calls `rest(slot)` after `readable`, `writable`,
 `signP256` and a `next` that stalls, and `drop` in `close`; a connection on its
-own makes a private pool of one buffer each. The zeroing is `give`'s plain
+own makes a private pool of one buffer each.
+
+The zeroing is `give`'s plain
 fill, not `giveSecret`'s `secureZero`: the bytes are application data, not
 keys, and the buffer stays reachable on the free list, so the fill is not a
 dead store. A slot whose TLS handshake is not done holds one output buffer,
 its SETTINGS written and waiting, until the handshake ends or the slot closes:
 a client that stalls its handshake keeps that one buffer, where it kept the
-slot's three before (TLS-4). What is not zeroed: a buffer still lent to an
+slot's three before (TLS-4).
+
+What is not zeroed: a buffer still lent to an
 idle connection that holds unread bytes, the stream slots' and HPACK tables' per-slot state, and
 the program's own copies. Tests: `link/net_http2: exits with 0 and stdout
 matches expected.out` (section 11, "zeroed, as far as each was written" and

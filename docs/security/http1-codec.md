@@ -5,7 +5,9 @@ and the response writers), `nish/net/http1-server` (the server side of a
 connection, and its two carriers: plain TCP on `nish:net` and TLS on
 `nish/net/tls-tcp` with ALPN `http/1.1`) and `nish/net/websocket` (RFC 6455
 framing and the opening handshake, both the server's accept and the client's
-request and check of the server's answer). It says what
+request and check of the server's answer).
+
+It says what
 each refuses and with what, what it caps and where the cap is set, what it
 keeps in memory and for how long, and the test that pins each property. It is
 written with the code rather than after an audit, so that the audit of the
@@ -17,7 +19,9 @@ panic. A panic is only ever the program's own mistake (a window outside its
 buffer, a cap out of range). Every cap is a number the program fixes at
 start-up. A warmed slot serves request after request — heads, bodies either
 way, responses with a length or chunked — with `Arena.used()` flat, over plain
-TCP and over TLS. H1-1 (Medium), a client that trickles the bytes of its head
+TCP and over TLS.
+
+H1-1 (Medium), a client that trickles the bytes of its head
 to keep its slot, is fixed by a deadline for the whole head. H1-5 (Medium), a
 response written at `H1_END` framed from a head already reset, is fixed by
 holding the head until the next request is asked for. Two findings are
@@ -45,7 +49,9 @@ run in S2's interop job against the `serve` mode of
 
 The attacker is the client: every byte is theirs, split anywhere, and they may
 pipeline requests, stop reading, send a body slowly or never, upgrade and send
-frames in any order, and hold the connection open. A win is a panic, memory
+frames in any order, and hold the connection open.
+
+A win is a panic, memory
 or time a client can make the server spend without bound, a request the
 program sees that a different HTTP/1.1 parser would frame differently (the
 shapes that smuggle a second request past an intermediary), a response split
@@ -59,7 +65,9 @@ plain TCP: every byte of the answer is theirs. They may answer with another
 status (a redirect, a 200 with a body), with HTTP/1.0, without `Upgrade` or
 `Connection`, with a forged `Sec-WebSocket-Accept` or one for another key, with
 an extension or a subprotocol the client never offered, or with frame bytes
-glued to the head. A win is a panic, a connection the client takes for a
+glued to the head.
+
+A win is a panic, a connection the client takes for a
 WebSocket that the server did not accept for its key, a protocol or extension
 it did not ask for, or frame bytes read as HTTP (or HTTP as frames). The
 client's randomness is the program's: the module draws none, and takes the
@@ -113,7 +121,9 @@ through the server): `Content-Length` with `Transfer-Encoding` (RFC 9112
 §6.1), two `Content-Length` fields, conflicting or not, one that is not a run
 of digits, `Transfer-Encoding` in HTTP/1.0 or not ending in `chunked`, an
 obs-fold, a bare LF, whitespace before a colon, a malformed chunk size or
-chunk terminator — each a 400, never a guess. Through the server each is
+chunk terminator — each a 400, never a guess.
+
+Through the server each is
 answered with its status, `Content-Length: 0` and `Connection: close`, and the
 connection ends: 400 (a chunk size that is not hex, both length fields, two
 lengths that disagree, an obs-fold, a missing `Host`), 413 (a body past
@@ -129,7 +139,9 @@ stops at the first control byte or DEL of a block (the lowest set bit of its
 SWAR mask, exact because a borrow only carries upward from a true match), then
 reads the rest a byte at a time, and it is also the check of the value: a
 control byte other than HTAB, or DEL, on a field line is a 400, with no second
-pass over the value. NUL, 0x01, 0x1f, DEL and a bare
+pass over the value.
+
+NUL, 0x01, 0x1f, DEL and a bare
 CR placed at each of the forty bytes of a long value are each refused, and
 HTAB and an obs-text byte at each of them are read. At the block boundaries
 the stream is also cut at every byte, so a CR that ends what has arrived so
@@ -142,12 +154,16 @@ byte, CRLF taken in one step, the branch-free token check, a field name
 lowercased while it is scanned in `head`) is checked against main's parser
 frozen beside it in `old.ts`: both are fed the same bytes in the same pieces,
 and after every event they must agree on the event, the status and reason,
-and everything a caller can read. The default run, seed 1175, is 190,276 cases
+and everything a caller can read.
+
+The default run, seed 1175, is 190,276 cases
 (the fuzz corpus and its regressions cut every way, every byte at every
 position of three requests, nine inserted bytes at every position, each limit
 at -1, 0 and +1, and 100,000 grammar requests) and 2,176,872 events, among
 them 161,448 refusals, in about 8 s; it must print the summary in
-`expected.out`. A header section of maxHeaderBytes - 1 or maxHeaderBytes
+`expected.out`.
+
+A header section of maxHeaderBytes - 1 or maxHeaderBytes
 bytes, empty line included, as one field or two, reads a head, and one more
 byte is a 431. A soak of seeds 1 to 4 at 250,000 grammar requests each
 (1,361,104 cases) agreed. Shifting the
@@ -173,7 +189,9 @@ keep-alive request answered there is not sent chunked (H1-5).
 **Streaming both ways, bounded** (`net_http1_server`): a 2 MiB body with a
 length and three hundred chunks in are echoed through a 4 KiB chunk and an 8
 KiB output, and no `H1_BODY` hands over more than `chunkSize`; a 2 MiB chunked
-response goes out as the socket drains. A write the output cannot take
+response goes out as the socket drains.
+
+A write the output cannot take
 answers what it took, the connection reads nothing until half the output is
 free (so the window the program writes from stays valid), and `H1_WRITE` says
 when to go on. The sans-IO checks drive each held-back path: a head, a chunk,
@@ -184,17 +202,23 @@ answers** (`net_http1_server_send_body`): `sendBody` gathers the queued output
 and a `Content-Length` body into one `netWrite2` and copies only what the
 socket did not take, through `write`, so the same back-pressure holds: under a
 4 KiB send buffer it answers short, a second call behind the held write
-answers `H1_AGAIN`, and `H1_WRITE` says when to go on. It keeps no reference
+answers `H1_AGAIN`, and `H1_WRITE` says when to go on.
+
+It keeps no reference
 to the caller's buffer once it returns, and only reads it: `sendBody` and
 `write` take a `readonly u8[]`, and a read-only body is sent whole and through
-the chunked fallback alike. Every exchange is run through `write`
+the chunked fallback alike.
+
+Every exchange is run through `write`
 and through `sendBody`, and the client reads the same bytes: a 3,000-byte body,
 a 4 MiB one under the small send buffer, a response pipelined behind one
 already queued (sent in order, in the same call), and the fallbacks, which
 copy as `write` does — chunked, `HEAD`, a 204, a socket that would block before
 anything goes, and a connection with no socket of its own (sans-IO, and
 `Http1TlsServer`, whose output is TLS records; `fd` is -1 there, so a socket
-number is never written to past `restart` or `abort`). A body past the length,
+number is never written to past `restart` or `abort`).
+
+A body past the length,
 or one after `respondEncoded` has finished the response, is refused as
 `write` refuses it. A send that fails other than by blocking (the peer reset
 the connection) aborts the connection and answers `H1_CLOSED`.
@@ -206,7 +230,9 @@ status outside 100 to 599, 101 through `respond`, a field the server decides
 character in a value or the reason, no body on a response that needs one, a
 head larger than the output, a second response, more body than the length,
 `end` while the length is owed — each `H1_INVALID` or `H1_CLOSED`, and nothing
-is written. `http1WriteResponseHead` counts the whole head before it writes a
+is written.
+
+`http1WriteResponseHead` counts the whole head before it writes a
 byte, so `HTTP1_NO_ROOM` and `HTTP1_REFUSED` leave the buffer untouched. A
 response to HEAD, a 204 and a 304 carry no body whatever the program writes; a
 chunked response to HTTP/1.0 goes unframed and ends with the connection.
@@ -216,17 +242,23 @@ chunked response to HTTP/1.0 goes unframed and ends with the connection.
 at `249cbe9`, cited by function rather than by line). Every final response,
 an error included, carries a `Date` (RFC 9110 §6.6.1) and a 1xx carries none;
 a program's own `date` field, in any case, is sent instead of the server's, so
-a response never carries two. On a final status `http1WriteResponseHead`
+a response never carries two.
+
+On a final status `http1WriteResponseHead`
 refuses a date that is not field text, so the date cannot split the head (a
 1xx never sends it, so there it is not read), and counts its 37 bytes
 before it writes, so `HTTP1_NO_ROOM` still leaves the buffer untouched. The
 largest head `fail` writes — 431's status line, the date, `Content-Length: 0`
 and `Connection: close` — is 123 bytes, inside the 256 kept for what the
-connection writes itself. `httpDateWrite` agrees with a calendar counted a
+connection writes itself.
+
+`httpDateWrite` agrees with a calendar counted a
 day at a time on every day from 1970 to 2399 and refuses, writing nothing, a
 second it cannot name in four digits or a buffer without the room. `HttpDate`
 formats once a second however often it is read, in either direction of a
-clock step, with `Arena.used()` flat; a pool's slots share one. Tests:
+clock step, with `Arena.used()` flat; a pool's slots share one.
+
+Tests:
 `link/net_http_date: exits with 0 and stdout matches expected.out`,
 `link/net_http_date_f64: exits with 0 and stdout matches expected.out`,
 `link/net_http1: exits with 0 and stdout matches expected.out`,
@@ -241,18 +273,25 @@ expected.out` in `tests/run.js`.
 checks each field value and the date sixteen bytes at a time (`http1BytesAreFieldText`, `http1LanesAreFieldText`): a lane
 below 32 that is not HTAB, or DEL, refuses, exactly `http1IsValueByte`, and
 the last vector ends at the last byte, overlapping the one before it; under
-sixteen bytes it is checked a byte at a time. It writes the status line and
+sixteen bytes it is checked a byte at a time.
+
+It writes the status line and
 the `Date: `, `Content-Length: ` and `Connection: ` names as one sixteen-byte
 store each (`http1PutStatusLine`, `http1PutFixed`), only where
 `at + 16` stays inside the head it has already counted (`need`), whose every
 byte from there on is written after, so the lanes past the text are
 overwritten and no byte past the head is touched; anywhere else they are
-written a byte at a time, as before. `http1PutText`, which the head writer,
+written a byte at a time, as before.
+
+`http1PutText`, which the head writer,
 `http1WriteLastChunk` and other callers share, tests once that the whole text
 fits (`0 <= at <= out.length - text.length`) and then copies it with no check
 in the loop; a text that does not fit takes the old loop, which writes the
 bytes that land inside `out` and none outside, and both answer `at +
-text.length`. Nothing it accepts or refuses changes.
+text.length`.
+
+Nothing it accepts or refuses changes.
+
 Tests: `the smallest head is 17 bytes`, `and the bytes after it are
 untouched`, `it fits a buffer of 17`, `and not one of 16`, `a head with every
 fixed field, at an offset, leaves the bytes either side of it alone`, `and fits
@@ -274,10 +313,13 @@ before, and `http1LowerName` then reads the copy's name a vector at a time:
 `http1NonTokenLanes` marks each lane outside 33 to 126 or among the
 seventeen delimiters, exactly the bytes `http1IsTokenByte` refuses, and the
 name ends at the lowest marked lane or at the line's end, whichever is first.
+
 Only the upper-case letters below that point are lowered; the vector is
 stored back with every other lane as it was read, so the colon, the value and
 the held head's bytes past the line (stale bytes of an earlier request
-included) are unchanged. Loads and stores stay inside `head`: the vector
+included) are unchanged.
+
+Loads and stores stay inside `head`: the vector
 runs only where `k <= head.length - 16`, and the last bytes before the
 buffer's end are read a byte at a time by the old loop. The method and a
 trailer's names keep the byte test. Nothing accepted or refused changes, and
@@ -309,7 +351,9 @@ in the middle of a response fails the write and frees the slot.
 accepted only when `websocketRequestKey` finds one (GET, HTTP/1.1, exactly
 `Upgrade: websocket` with `Connection: upgrade`, version 13, a valid key),
 and the 101 carries RFC 6455 §1.3's accept key. Bytes sent with the handshake
-are the first frames. A ping is answered with its pong and a close with a
+are the first frames.
+
+A ping is answered with its pong and a close with a
 close of its code (an empty close for none), from 256 bytes of output kept for
 what the connection writes itself. An unmasked frame is closed with 1002 and a
 message past `maxMessage` with 1009, refused from the frame's header. A frame
@@ -319,13 +363,17 @@ not be sent are refused.
 **WebSocket client** (`net_websocket`, `net_http1_client`, `net_loopback`):
 `websocketClientKey` makes a key only of a 16-byte nonce (`refused client key:
 a 15-byte nonce`, `a 17-byte nonce`, `no nonce`; `the §1.3 nonce gives the §1.3
-key`). `websocketUpgradeRequest` writes the request through
+key`).
+
+`websocketUpgradeRequest` writes the request through
 `http1UpgradeRequestHead`, so its host, target and protocols cannot end a line,
 and refuses an empty host, an invalid key, and a protocol that is empty, not a
 token or offered twice (the `refused request: …` checks: `an invalid key`, `a
 protocol that is not a token`, `a protocol holding a comma`, `an empty
 protocol`, `a protocol offered twice`, `CR LF in the host`, `an empty host`,
-`CR LF in the target`, `CR LF in a protocol`). `websocketCheckResponse` checks
+`CR LF in the target`, `CR LF in a protocol`).
+
+`websocketCheckResponse` checks
 RFC 6455 §4.1's list in order and answers the first failure: a status other
 than 101, a redirect included, is `WS_HS_STATUS` and never followed (`refused
 check 1: a 302 is not followed`, `a 200`); HTTP/1.0 is `WS_HS_VERSION`
@@ -341,11 +389,15 @@ key`, `an invalid key matches nothing`); any `Sec-WebSocket-Extensions` is
 Sec-WebSocket-Extensions`); and a protocol not offered, a list, the field
 twice, or one in another case is `WS_HS_PROTOCOL` (`refused check 7: a
 protocol when none was offered`, `a protocol that was not offered`, `a protocol
-list`, `Sec-WebSocket-Protocol twice`, `a protocol in another case`). A 101 is
+list`, `Sec-WebSocket-Protocol twice`, `a protocol in another case`).
+
+A 101 is
 read only by a parser told `expectUpgrade` (in
 [`http1-client-codec.md`](http1-client-codec.md)), so frame bytes glued to the head are
 handed over by `tunnelBytes` and read as frames, never as HTTP (`glued: the
-frame past the head is a message`, `and it says Hello`). Over the loopback,
+frame past the head is a message`, `and it says Hello`).
+
+Over the loopback,
 plain and TLS, each connection draws a fresh nonce and every frame a fresh mask
 from `crypto.getRandomValues` (`websocket: websocketCheckResponse accepts the
 101 and its accept for the random key`, `websocket: the second connection drew
@@ -360,14 +412,18 @@ kept for what the connection writes itself; a pool's slots borrow it from one
 `Http1OutputPool` while they write, below), a WebSocket message
 (`maxMessage`, 1 MiB), the idle timeout (`idleTimeout`, 60 s, read by
 `expire`) and the deadline for a whole head (`headTimeout`, 30 s, read by
-`expire`; H1-1). The slots are the pool's size. An `Http1Server` builds a slot's
+`expire`; H1-1).
+
+The slots are the pool's size. An `Http1Server` builds a slot's
 connection on the first accept into it and keeps it, so it never holds more
 than `size` connections, each within the caps above, and holds none it has
 not needed: a pool of 16,384 takes 16,688 bytes before its first connection
 (`HTTP1_SERVER_START_BYTES`, "net_http1_server: a 16,384-slot Http1Server
 takes at most HTTP1_SERVER_START_BYTES before its first connection"), and the
 connection past `size` busy slots is shed with `H1_POOL_FULL` without one
-being built. A slot never accepted into answers like a closed one
+being built.
+
+A slot never accepted into answers like a closed one
 (`net_http1_server`). `Http1TlsServer` does the same over a `TlsTcpServer`
 that does it too: a slot's `Http1Connection`, `TlsRecordServer` and server
 random are built on the first accept into it, so a pool of 16,384 takes
@@ -375,11 +431,15 @@ random are built on the first accept into it, so a pool of 16,384 takes
 templated "`${unit}: a 16,384-slot ${name} takes at most ${ceilingName}
 before its first connection`" run for `Http1TlsServer`), and the
 handshake is restarted with real randomness and the key on every accept, as
-it was (TLS record, "Slots built on the first accept"). A slot never built
+it was (TLS record, "Slots built on the first accept").
+
+A slot never built
 reads as a free one there too: its `connection`, `alpn` and `refused` answer a
 connection no slot holds, with no ALPN and not refused, never slot 0's
 ("TLS: while slot 0 is open, a slot never built reads as a free one: not held,
-no descriptor, no ALPN, not refused, not slot 0's connection"). `readable`,
+no descriptor, no ALPN, not refused, not slot 0's connection").
+
+`readable`,
 `next` and `flush` act only on a slot `live` names, one `tls` holds with its
 connection built, so a slot accepted on `tls` directly reads as free. A cap out of range
 panics when the connection is made (`net_http1_server_bad_config`). The input the connection
@@ -392,7 +452,9 @@ at 2^30, where growing further panics. So the constructor refuses a cap whose
 buffer could need more: `maxMessage` above 2^30 − 14, since a frame is buffered
 whole with its 14-byte header (`net_http1_server_bad_message`), and
 `maxTarget + maxHeaderBytes` above 2^30 − 44, since the head holds the request
-line beside the header section (`net_http1_server_bad_head`). At the largest
+line beside the header section (`net_http1_server_bad_head`).
+
+At the largest
 values accepted, an upgraded slot buffers exactly 2^30 bytes and an HTTP slot
 less (`net_http1_server`). The review of #468 found the first (R1-1): before
 it, a legal `maxMessage` of 2^30 let one frame panic the process.
@@ -402,7 +464,9 @@ POSTs on one plain connection, and fifty of each over TLS, move `Arena.used()`
 across the servers' calls and the program's answers by 0 bytes
 (`net_http1_server`). The parser keeps the head as spans in a buffer it grows
 to the largest head it has seen and keeps; `restart` and `reset` allocate
-nothing, so a slot is reused for the next connection as it is. The output is
+nothing, so a slot is reused for the next connection as it is.
+
+The output is
 borrowed, not kept: a slot holds a buffer only while it has bytes the socket
 has not taken, so the plain checks run on one buffer and a slot whose client
 stops reading holds one until it drains, then gives it back; fifty
@@ -415,12 +479,16 @@ and `Http1TlsServer.flush` and at `restart`) only while it rests: speaking
 HTTP, no request open, and `Http1Parser.resting()` (waiting for a request line,
 nothing fed and unread). A slot still reading a head, owing a response, holding
 pipelined bytes or upgraded keeps both, and `unpark` takes a buffer back in
-`feed` before any byte is copied in. A lent buffer is not cleared: it holds the
+`feed` before any byte is copied in.
+
+A lent buffer is not cleared: it holds the
 bytes of the request it last carried, a password in a body included, until the
 next slot to take it overwrites them. Nothing reads them, since a parser reads
 only the window `[start, end)` it was fed and `park` resets that window to
 empty; the bytes stay in the process's memory as they did before the option,
-when each slot kept its own buffer with the same bytes in it. Tests: `two slots
+when each slot kept its own buffer with the same bytes in it.
+
+Tests: `two slots
 served one after the other share one input and one head buffer`, `a
 connection with a request open keeps them`, `so do they while a byte of the
 next request is unread`, `and once nothing is open or unread both go back`,
@@ -429,17 +497,26 @@ next request is unread`, `and once nothing is open or unread both go back`,
 
 **A lent buffer is taken back by identity, and the layout moves only where
 fields sit** (`net_http1_server`, `_f64`, 2026-11-06, written against `main`
-at `98c4f9a7`). `Http1Parser`'s fields are ordered hot first (its buffers, the
+at `98c4f9a7`).
+
+`Http1Parser`'s fields are ordered hot first (its buffers, the
 window and scan state, the flags, then the request's numbers, the caps and,
 last, what only a `keepText` parser or a response reads), and it makes its
 `spans` before its other arrays, so a request on a cold slot touches fewer
 lines; `Http1Connection` makes its parser before its `HttpDate`.
-`Http1Parser`'s size stays 200 bytes and no slot holds a new buffer. `unpark` first compares a
+
+`Http1Parser`'s size stays 200 bytes and no slot holds a new buffer.
+
+`unpark` first compares a
 buffer with the slot's `noOutput`, which `park` put in its place, and only
-then runs the length test it ran before. The comparison is a speed-up and has
+then runs the length test it ran before.
+
+The comparison is a speed-up and has
 no behaviour of its own: `noOutput` is empty, so the length test alone takes
 the same branch, and an empty buffer that is not `noOutput` is still swapped
-for a lent one. What the parser accepts or refuses does not change. Tests: `a slot that lent its buffers holds
+for a lent one. What the parser accepts or refuses does not change.
+
+Tests: `a slot that lent its buffers holds
 its noOutput in their place`, `the first part of a request split across reads
 takes a lent buffer back`, `and the rest of it is answered, the buffer lent
 again after`, `a request that grows past the lent input buffer is answered, and
@@ -460,7 +537,9 @@ sees the end. It closes a slot whose head is past `headTimeout`, on either
 carrier, though bytes keep the slot from being idle — a head in pieces, a
 head pipelined behind an exchange, a TLS record trickled a byte at a time —
 and leaves a kept-alive slot whose exchange is over and a slow head that
-finishes in time (H1-1). A kept-alive slot quiet past `headTimeout` is not yet
+finishes in time (H1-1).
+
+A kept-alive slot quiet past `headTimeout` is not yet
 due, so it does not make every `expire` walk every slot (H1-4). The pool sheds
 a connection past its size.
 
@@ -480,7 +559,9 @@ HTTP/1.1 holds no key material: over TLS the record keys are TLS's
 parser's `head` and input buffers, bodies in the input and output buffers,
 WebSocket messages in the decoder's — which may carry credentials (`cookie`,
 `authorization`). None of it is wiped: each buffer is overwritten by the next
-request and zeroed by nothing, and it stays in the slot until then. An output
+request and zeroed by nothing, and it stays in the slot until then.
+
+An output
 buffer is the exception to staying in its slot: a pool's slots borrow it from
 an `Http1OutputPool` and give it back once sent, so the next connection to
 write, on any slot, writes over the last one's response from the start. A

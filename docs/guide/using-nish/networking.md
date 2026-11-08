@@ -259,7 +259,9 @@ it starts the program again once per worker, and `preforkWorkers` answers it
 only when they have all exited, with `-1` (`PREFORK_STOPPED`) after a shutdown
 or `-2` (`PREFORK_SPAWN_FAILED`) when a worker's first start failed or the
 supervisor could not set up its signal handling, in which case no worker
-starts. In each
+starts.
+
+In each
 worker it answers that worker's index, `0` up to one less than the count, at
 once. A worker is told its index by one extra argument at the end of its
 arguments; `preforkArgs(process.argv)` gives you the arguments without it, the
@@ -336,7 +338,9 @@ Pinning is for a machine the server has to itself: each worker owns a core,
 so `workers` should be at most `availableParallelism()`, and on Linux **more pinned
 workers than CPUs stops the program with a panic** rather than doubling two
 workers up on one core. That count is `availableParallelism()`, which a
-container's CPU quota or `NISH_NUM_THREADS` lowers. A CPU outside the ones the
+container's CPU quota or `NISH_NUM_THREADS` lowers.
+
+A CPU outside the ones the
 program may run on (`taskset`, a container's cpuset) is never taken, and worker
 `k` asks for CPU *number* `k`, not the `k`-th CPU allowed: under
 `taskset -c 4-7` every pin fails, each worker says so on stderr and runs
@@ -542,7 +546,9 @@ A lookup answers its address count, A records first, or a negative code:
 record), `-42` no server answered, `-43` an alias chain ran past eight aliases
 or led back to the name asked (a loop inside one reply reads as `-41`), and from
 `resolveHost` `-45` its time ran out. Another negative number is the errno of a
-socket or of `pollWait` that failed. `resolveHost` answers `start`'s codes too,
+socket or of `pollWait` that failed.
+
+`resolveHost` answers `start`'s codes too,
 and waits for both the A and the AAAA answer, so one family that answered is
 not returned on its own when the time runs out. `localhost`, an address literal and a name in the hosts table answer
 at once, with no packet. For a command-line tool or a program's start-up,
@@ -569,7 +575,9 @@ A TCP peer's address is proven: the handshake that `tcpAccept` completes needs
 answers sent to it. A UDP datagram's source address is only what its sender
 wrote, so anyone can send one that names another host. A server that caps or
 allows clients by address keys that on a UDP address only once a handshake has
-proven it. For QUIC, `Http3Server.addresses[slot]` is the source of the slot's
+proven it.
+
+For QUIC, `Http3Server.addresses[slot]` is the source of the slot's
 first datagram, and it is proven once `server.quic(slot).addressValidated` is
 set: by a Handshake packet from the client, or by a Retry token when the
 server's config turns `retry` on. The relay example in `examples/relay` counts

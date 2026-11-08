@@ -32,13 +32,17 @@ The attacker controls every byte handed to a parser: a certificate chain file
 or a peer's certificate (`x509ParseCertificate`, `x509ParseChain`,
 `x509DerSignatureRS`), a PEM file that should hold one private key
 (`x509ParseP256PrivateKey`, `pemToDer`), and the common name a caller passes to
-the mint. Since X509-10 that includes every extension the parser decodes: a
+the mint.
+
+Since X509-10 that includes every extension the parser decodes: a
 path validator (none is in `std/` yet; one is planned under #987) takes its answers — the CA bit, path length, key
 usage, the names a leaf is for and the subtrees a CA may issue under — as the
 certificate's, so a reader that answers more than the bytes say, or answers
 for a second spelling of an extension, moves a trust decision. The attacker does not control the private key or the serial a caller
 mints with, but a caller that draws them predictably is in scope as misuse the
-API must make hard. What the attacker wants: a panic, loop or unbounded
+API must make hard.
+
+What the attacker wants: a panic, loop or unbounded
 allocation (denial of service); a certificate or key accepted that the module
 promises to refuse; a second DER spelling of a certificate or signature that
 still verifies (so the hash a browser pins names only one of two identities);
@@ -76,7 +80,9 @@ or a signature check that passes for bytes nobody signed.
   four PEM files — cut at every length, every DER bit flipped, a random bit of
   every PEM character flipped, and 600 (DER) or 300 (PEM) random edits from a
   fixed xorshift32 seed: an octet set to a random or boundary value (`00 7f 80
-  81 82 84 ff`), deleted or inserted. **25,701 inputs**, about 4.7 s and 10 MB,
+  81 82 84 ff`), deleted or inserted.
+
+  **25,701 inputs**, about 4.7 s and 10 MB,
   run by `npm test` (25,281 until X509-9 gave the golden certificate its 34
   octets of extensions, which the corpus now cuts and flips too). Each input
   must return without a panic and must not come back as something it should
@@ -84,7 +90,9 @@ or a signature check that passes for bytes nobody signed.
   `x509.ts` before this change the same corpus also runs clean; the change
   moves its counts only where the tighter `[3]` check refuses more (the CA
   certificate, then the one fixture with extensions: 1,527 refused before, 1,547
-  after; the leaf-and-CA PEM: 1,917 before, 1,918 after). X509-10 moves them
+  after; the leaf-and-CA PEM: 1,917 before, 1,918 after).
+
+  X509-10 moves them
   again, only toward refusal: an edit inside the golden and CA certificates'
   basicConstraints and keyUsage, or the leaf's, that framed sound before now
   decodes as a malformed extension. Golden 1,479 refused before, 1,813 after;
@@ -95,22 +103,29 @@ or a signature check that passes for bytes nobody signed.
   answers `null`, `false` or `X509_SIG_UNKNOWN` was replaced by `false` in
   turn, and `crypto_x509` and `_audit` rerun; 49 of 51 failed. One survives:
   `x509DerIsAlgorithm`'s tag check, which predates the change and which the
-  P-256 key reader relies on. The other survivor, keyUsage's length check, is
+  P-256 key reader relies on.
+
+  The other survivor, keyUsage's length check, is
   now `n > 2` alone and pinned: `n < 1` was dead (an empty BIT STRING's unused-bits count is
   held to 0, so the lowest-bit check refuses it) and is removed, and `n > 2`
   keeps `1 << bit` below 32, which "a keyUsage of five octets" (bit 32 alone,
-  which a wrapping shift reads as digitalSignature) now pins. Ten clause mutations (duplicate, IA5 octets, NUL, a negative
+  which a wrapping shift reads as digitalSignature) now pins.
+
+  Ten clause mutations (duplicate, IA5 octets, NUL, a negative
   or five-octet path length, PSS's MGF hash and OID, the `unknownCritical`
   and both `ncUnsupported` assignments) each fail a named check.
   Nineteen more, one for each clause the review of the change added (PSS's
   salt and trailer DEFAULTs, otherName and registeredID, the empty dNSName,
   a subtree's minimum, maximum and trailing bytes, the empty key
   identifiers, the issuer's GeneralNames and serial), each fail one too.
+
   A second sweep then neutralised each operand of every compound condition in
   the new and changed functions, one at a time (`false` under `||`, `true`
   under `&&`), and found 29 operands that no check failed: 18 now have
   isolating checks (17 listed here, and `at > limit - 2` below), 10 are
-  equivalent (below), and keyUsage's `n < 1` was removed. With the extnID arc test's three clauses, which the review found,
+  equivalent (below), and keyUsage's `n < 1` was removed.
+
+  With the extnID arc test's three clauses, which the review found,
   that is 23 new checks in `crypto_x509`: the three arc clauses (`551d1301`,
   `551e13` and `2a1d13`, each holding a basicConstraints value with cA TRUE
   and read as an unknown extension with nothing decoded), an otherName
@@ -124,14 +139,20 @@ or a signature check that passes for bytes nobody signed.
   and as cA, a five-octet keyUsage, and `[1]`, `[2]` or `[3]` in a version
   that does not have them (one operand, three checks; the two BOOLEANs, the
   two name forms and the six trailing-bytes values are one operand each, so
-  17 operands make 20 checks). These are equivalent and stay unpinned:
+  17 operands make 20 checks).
+
+  These are equivalent and stay unpinned:
   `x509DerIsTrue`'s tag test (both callers peek for a BOOLEAN first) and
   `x509NameIsPrefix`'s soundness test of the base (each base RDN must equal,
-  byte for byte, an RDN of a name that is itself checked). The bounds tests
+  byte for byte, an RDN of a name that is itself checked).
+
+  The bounds tests
   that only keep a load in range (`k >= 0 && k < der.length`, six operands)
   and `x509DerReadInto`'s caller-contract guards `at < 0` and
   `limit > der.length` are equivalent too, since the length check that
-  follows refuses the same inputs. Its third guard, `at > limit - 2`, is not:
+  follows refuses the same inputs.
+
+  Its third guard, `at > limit - 2`, is not:
   without it an empty or one-byte input loads `der[at]` or `der[at + 1]` past
   the end and panics instead of answering null, and "an empty certificate"
   and "a one-byte certificate" now pin it. `x509ExtensionArc`'s `arc < 0x80`
@@ -182,7 +203,9 @@ Fuzzed by `tests/fuzz/targets/x509-der.ts`, `tests/fuzz/targets/x509-pem.ts`.
 | `x509-der` | `x509DerSignatureRS`, `x509DerSignatureRSWidth` at 48 and `x509ParseCertificate` over the input; a parsed certificate's signature at both widths and through `x509VerifySignature`, its issuer and directoryName constraints through `x509NameIsPrefix`, and its decoded extensions against their promised ranges (since X509-10) | 179,115,232 |
 | `x509-pem` | `pemToDer` for a certificate, `x509ParseChain` (each certificate verified against the next) and `x509ParseP256PrivateKey`, whose key and decoded DER are wiped | 12,181,605 |
 
-Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The `x509-der` count predates X509-10, whose extension, algorithm and Name readers it has not run against at length; the change adds the OpenSSL RSA, RSASSA-PSS, P-384, Ed25519, unknown-critical and every-extension certificates to its seed corpus, which CI replays, and a campaign over them is still to run. The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
+Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too).
+
+The `x509-der` count predates X509-10, whose extension, algorithm and Name readers it has not run against at length; the change adds the OpenSSL RSA, RSASSA-PSS, P-384, Ed25519, unknown-critical and every-extension certificates to its seed corpus, which CI replays, and a campaign over them is still to run. The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
 ## Properties verified
 

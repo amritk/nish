@@ -225,11 +225,13 @@ variant no test named, and an arm that assigns `s` leaves what it assigned.
 A test nested inside the arms counts too: when each arm returns if
 `s.kind === Kind.Circle`, `s` is not a `Circle` past the `if`, and the ways out
 of a `switch` join the same way.
+
 A narrowing of the union belongs to a variable or a parameter: a test of
 `a.b.kind` does not narrow `a.b`, so `a.b.r` is an error (NL2558) — copy it
 into a `const` and test that. The tag read through the path does stay
 narrowed, as in TypeScript, so a second `a.b.kind === Kind.Circle` after the
 first ruled it out is an error, until a store to `a.b`, `a.b.kind` or `a`.
+
 An index belongs to the path when it names one element, as in TypeScript: a
 number, a parameter, a `const` (after `const i = 0`, `xs[i]` is `xs[0]`, and
 so is `xs[j]` after `const j = i`), a module constant (after
@@ -303,16 +305,23 @@ const settled = (n: i32): boolean => {
 };
 ```
 
-A loop that holds a field path such as `h.k`, an assignment written inside
-another expression (an argument, an initializer, the inner `=` of
-`k = j = Kind.C`), a store of a field or method call read through an array
-element, a call's result or an object the loop itself creates (`gs[0].b`),
-a store of a `let` the loop declares or of a `const` it copies from another
-enum local (the `const t = a` of a swap), a ternary arm that reads the
-local where the condition leaves it nothing (`k = k === Kind.A ? Kind.B :
-k`), or a type of more than 29 members is read more loosely: there the
-local holds every member the body stores anywhere, or the whole enum, so a
-few comparisons TypeScript refuses still compile. The language reference lists
+A loop that holds any of these is read more loosely:
+
+- a field path such as `h.k`;
+- an assignment written inside another expression (an argument, an
+  initializer, the inner `=` of `k = j = Kind.C`);
+- a store of a field or method call read through an array element, a call's
+  result or an object the loop itself creates (`gs[0].b`);
+- a store of a `let` the loop declares or of a `const` it copies from another
+  enum local (the `const t = a` of a swap);
+- a ternary arm that reads the local where the condition leaves it nothing
+  (`k = k === Kind.A ? Kind.B : k`);
+- or a type of more than 29 members.
+
+There the local holds every member the body stores anywhere, or the whole
+enum, so a few comparisons TypeScript refuses still compile.
+
+The language reference lists
 these shapes under "Accepted here, refused by `tsc`".
 
 A comparison that can never be true is an error, as in TypeScript:
@@ -437,7 +446,9 @@ Only a union's own tag makes a `switch` complete. A `switch` on a plain enum
 never is, even with every member named, because a C caller can pass an enum
 any `i32`. Nor is one on the tag copied into a local, `const k: Kind =
 s.kind`, or on a field's tag that an earlier `if` narrowed, since a call in
-between could have replaced the field. Nor is one on an enum field given a
+between could have replaced the field.
+
+Nor is one on an enum field given a
 tag, `b.k = s.kind`: the field is still a `Kind`, and a call, an alias or a
 method can store any member in it. What counts is the subject itself, a
 variant's tag field read on a union value. TypeScript accepts all four. Give
