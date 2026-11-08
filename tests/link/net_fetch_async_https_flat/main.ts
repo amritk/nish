@@ -5,7 +5,8 @@
 // `net_http_fetch_tls`'s loopback TLS servers and re-runs itself as the
 // client; the arena is read between iterations of one loop, past a warm-up,
 // so no enclosing scope hides a leak. https is never pooled, so every fetch
-// is a full handshake.
+// is a full handshake, so RUNS is 200 against the http sibling's 2000 to keep
+// the fixture's CI cost bounded.
 import { writeFileSync } from "nish:fs"
 import { spawn as spawnProcess } from "nish:process"
 import { RequestInit, fetch } from "nish/net/fetch"

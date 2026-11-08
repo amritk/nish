@@ -139,18 +139,19 @@ Reads the system's resolver settings the way `resolveHost` does:
 `/etc/resolv.conf` into `config` (a missing file means the defaults) and
 `/etc/hosts` into `hosts` (a missing file adds no entry). A driver of its
 own, such as the async `fetch`'s, starts from this so every lookup in a
-program honours the same files.
+program honours the same files. Both reads are synchronous file reads.
 
 ```ts
 function dnsLoadSystem(
-  config: DnsConfig,
+  config: DnsConfig | null,
   hosts: DnsHosts,
 ): void
 ```
 
-<scalar-field name="config" type="DnsConfig" required>
+<scalar-field name="config" type="DnsConfig | null" required>
 
-A fresh `DnsConfig` to fill.
+A fresh `DnsConfig` to fill, or null to leave
+  `/etc/resolv.conf` unread (a caller with a configuration of its own).
 
 </scalar-field>
 

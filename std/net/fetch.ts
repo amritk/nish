@@ -2104,7 +2104,7 @@ const httpClientResolve = (
     count = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
   } else {
     const hosts: DnsHosts = new DnsHosts()
-    dnsLoadSystem(new DnsConfig(), hosts)
+    dnsLoadSystem(null, hosts)
     count = dnsLookupWith(dns, hosts, host, toI32(lookupMs), port, addresses, ttls)
   }
   return httpClientAnswers(host, count, options, until, code, addresses, fault)
@@ -2732,9 +2732,11 @@ const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<
  * poll loop, with `dns` (or the system's resolv.conf) and the hosts file, sends the queries
  * over non-blocking sockets and the task sleeps between non-blocking checks
  * of that loop, a slice that grows from 1 ms to `HTTP_CLIENT_DNS_SLICE_MS`
- * and never passes the resolver's next retry. An address literal is parsed
- * here, with no resolver and no file read; localhost or a hosts entry
- * answers without a query. Past `until` the lookup is cancelled
+ * and never passes the resolver's next retry. No network wait blocks; the
+ * hosts file (and resolv.conf, when `dns` is null) is read synchronously,
+ * once per lookup, as `resolveHost` reads them. An address literal (ASCII
+ * only, as the resolver's own check) is parsed here, with no resolver and
+ * no file read; localhost or a hosts entry answers without a query. Past `until` the lookup is cancelled
  * and answers `DNS_RESOLVE_TIMEOUT`. `readable` on the loop is not used: it
  * has no deadline, and a lookup must stop at `until` even when nothing comes.
  *
@@ -2750,17 +2752,27 @@ const httpClientLookupAsync = async (
   ttls: i32[]
 ): Promise<i32> => {
   const name: u8[] = new Array<u8>(host.length)
+  let ascii: boolean = true
   for (let i: i32 = 0; i < toI32(host.length); i += 1) {
-    name[i] = toU8(toI32(host.charCodeAt(i)) & 0xff)
+    const c: i32 = toI32(host.charCodeAt(i))
+    if (c > 127) {
+      ascii = false
+      break
+    }
+    name[i] = toU8(c)
   }
-  if (dnsParseAddress(name, 0, toI32(name.length), addresses, 0, port)) {
+  if (ascii && dnsParseAddress(name, 0, toI32(name.length), addresses, 0, port)) {
     ttls[0] = 0
     return 1
   }
-  const system: DnsConfig = new DnsConfig()
   const hosts: DnsHosts = new DnsHosts()
-  dnsLoadSystem(system, hosts)
-  const config: DnsConfig = dns !== null ? dns : system
+  let config: DnsConfig = new DnsConfig()
+  if (dns !== null) {
+    dnsLoadSystem(null, hosts)
+    config = dns
+  } else {
+    dnsLoadSystem(config, hosts)
+  }
   const loop: i32 = pollCreate()
   if (loop < 0) {
     return HTTP_CLIENT_LOOKUP_WAIT

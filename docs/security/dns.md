@@ -168,6 +168,11 @@ a name over 253 bytes is dropped and counted. A lookup compares without case
 and without a trailing dot, answers file order, stops at `max`, and answers A
 for an `::ffff:` address and AAAA for any other.
 
+**A slow lookup parks only its task** (`link/net_fetch_async_dns_slow: exits
+with 0 and stdout matches expected.out`). An async `fetch` whose name server
+answers late waits in its own task, and a sibling task's fetch by address
+completes meanwhile.
+
 ## The resolver
 
 `DnsResolver` is the core: it holds each lookup's queries, writes the packets
@@ -178,7 +183,8 @@ over `nish:net` on the caller's own loop; `resolveHost` and `dnsLookupWith`
 run a loop of their own. `dnsLoadSystem` reads `/etc/resolv.conf` and
 `/etc/hosts` into a `DnsConfig` and a `DnsHosts`, with the same bounds and the
 same fallbacks as before; `resolveHost` calls it, and so does the async
-`fetch` (`docs/security/fetch.md`, HF-11), which drives a `DnsResolver` of
+`fetch` (`docs/security/fetch.md`, HF-11), leaving `/etc/resolv.conf` unread
+when `HttpOptions.dns` gives a configuration, which drives a `DnsResolver` of
 one lookup through a `DnsClient` on a loop of its own, polling it without
 waiting and sleeping on the executor between polls, so its servers, tries,
 timeouts and hosts entries are `resolveHost`'s and it parks only its own task.
