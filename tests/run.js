@@ -9258,7 +9258,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's seventeen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's eighteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9329,7 +9329,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the seventeen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eighteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9338,7 +9338,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the seventeen runtime units once",
+      "runtime cache: the miss compiled each of the eighteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -29903,6 +29903,66 @@ if (!only || "host-import-text".includes(only)) {
           lines[13] === "echo overflow -1 untouched true",
           shown(run)
         )
+        // WH-9: only the module makes a string's (p, n) or its { i64 len }
+        // header, but a forged one is still read inside memory or not at all.
+        // The adapter is called with pairs past the end and wrapping it, and a
+        // string export is made to return a header whose count, or whose
+        // address, reaches past the end; three bytes that are not UTF-8 decode
+        // as U+FFFD.
+        fs.writeFileSync(
+          at("forged.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import { loadSync } from "./main.mjs"',
+            "const Real = WebAssembly.Instance",
+            "let linked = null",
+            "let forge = 0",
+            "WebAssembly.Instance = function (module, imports) {",
+            "  linked = imports",
+            "  const made = new Real(module, imports)",
+            "  return { exports: { ...made.exports, label: () => forge } }",
+            "}",
+            "const said = []",
+            "const host = { say: (s) => said.push(s), measure: () => 0 }",
+            "const load = () => loadSync(readFileSync(process.argv[2]), { host, onPanic: () => {} })",
+            "const caught = (f) => { try { return JSON.stringify(f()) } catch (e) { return e.constructor.name } }",
+            "let m = load()",
+            "const size = m.memory.buffer.byteLength",
+            "new Uint8Array(m.memory.buffer).set([0x68, 0xff, 0xc3], size - 3)",
+            "console.log(caught(() => linked.host.say(size - 4, 8)))",
+            "console.log(caught(() => linked.host.say(-16, 32)))",
+            "linked.host.say(size - 3, 3)",
+            "console.log(JSON.stringify(said))",
+            "const header = (len) => new DataView(m.memory.buffer).setBigUint64(size - 11, len, true)",
+            "forge = size - 11",
+            "header(3n)",
+            "console.log(caught(() => m.label(0)))",
+            "header(64n)",
+            "console.log(caught(() => m.label(0)))",
+            "console.log(caught(() => m.fixed()))",
+            "m = load()",
+            "forge = -8",
+            "console.log(caught(() => m.label(0)))",
+            "",
+          ].join("\n")
+        )
+        const forged = spawnSync(process.execPath, [at("forged.mjs"), at("main.wasm")], { cwd: dir, encoding: "utf8" })
+        check(
+          "host-import-text: WH-9: a forged string pair or header past the end of memory is a RangeError, and bytes that are not UTF-8 read as U+FFFD",
+          forged.status === 0 &&
+            forged.stdout ===
+              [
+                "RangeError",
+                "RangeError",
+                '["h\u{FFFD}\u{FFFD}"]',
+                '"h\u{FFFD}\u{FFFD}"',
+                "RangeError",
+                "NishPanic",
+                "RangeError",
+                "",
+              ].join("\n"),
+          shown(forged)
+        )
       }
     }
     // The parity corpus: one source, a native process and a wasm export.
@@ -31554,9 +31614,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all seventeen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eighteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 17 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 18 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")

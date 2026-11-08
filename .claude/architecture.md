@@ -71,7 +71,8 @@ Compilation                                                            src/compi
 
   | Unit | What it holds | Today | Ceiling |
   | --- | --- | --- | --- |
-  | `runtime/runtime.c` | the core every program touches, a closed set | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
+  | `runtime/runtime.c` | the core every program touches, a closed set | 1,723 (1,938 with `-DNISH_THREADS=1`) | 1,723 (1,938) |
+  | `runtime/runtime-text.c` | strings and number formatting, freestanding so a wasm module links it too | 1,787 | 1,787 |
   | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,530 | 1,536 |
   | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (905 threaded) | 320 (1,024) |
   | `runtime/runtime-cross.c` | the copies of a task's, a map's, a channel's or a guard's strings and arrays across arenas, and a map element kept as its chunk rewinds | 1,170 (1,235 threaded) | 1,280 (1,280) |

@@ -615,6 +615,14 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   `i32` links to 1,111, because `--gc-sections` drops the printer. The
   `wasm-size` check holds `label.ts` to those bytes
   (`WASM_HOST_SIZE_BUDGETS`).
+  Those figures are `--profile wasm-host`'s. `--profile wasm` links with
+  `--export-all` (`scripts/build.sh`), which exports, and so keeps, every
+  `runtime-text.c` function the link pulls in: there a string program keeps
+  `nish_f64_format` and its table though it formats no `f64`. The `i32`-only
+  template measured 14,514 bytes under `--profile wasm` against 1,085 under
+  `wasm-host` (the full `label.ts`: 14,590 against 13,046). A page that cares
+  about size builds with `wasm-host`; `wasm` is the profile that answers every
+  symbol for a hand-written loader.
 - **Built (stage 4).** The adapter is `text(p, n)`, a `new Uint8Array` over the
   memory decoded by the load's one `TextDecoder`, and an export's result is
   `stringOut`, read inside `guarded` or `scoped`. An export that takes a

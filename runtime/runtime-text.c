@@ -41,6 +41,36 @@ static int nish_text_cmp(const char *a, const char *b, uint64_t n) {
 #endif
 
 void *nish_alloc_struct(uint64_t size);
+#if !defined(NISH_TEXT_FREESTANDING) && !defined(NISH_ASAN) && !defined(__OPTIMIZE_SIZE__)
+/* runtime.c's bump fast path, repeated here so that this file's compile sees
+   it, as it did while strings lived in runtime.c. Behind a call the LTO link
+   does inline the allocator, but too late: `a + b` was then too big to inline
+   into the program, and strbuild ran 15% more instructions. The arena's layout
+   is ABI (nish.h), so the copy cannot drift silently. An ASan build keeps the
+   call, whose `nish_asan_alloc` poisons the rounding; a wasm build has its own
+   allocator, runtime-wasm.c's; and an -Os or -Oz build keeps the call too, since
+   the two inlined copies cost 41 bytes the size profile and this file's budget
+   do not have. */
+#ifdef NISH_THREADS
+#define NISH_TEXT_TLS _Thread_local
+#else
+#define NISH_TEXT_TLS
+#endif
+struct nish_arena { char *buf; uint64_t off; uint64_t cap; void *chunks; };
+extern NISH_TEXT_TLS struct nish_arena nish_arena;
+void *nish_arena_grow(uint64_t size);
+static inline void *nish_text_alloc(uint64_t size) {
+  size = (size + 7) & ~(uint64_t)7;
+  if (nish_arena.off + size <= nish_arena.cap) {
+    void *p = nish_arena.buf + nish_arena.off;
+    nish_arena.off += size;
+    return p;
+  }
+  return nish_arena_grow(size);
+}
+#else
+#define nish_text_alloc nish_alloc_struct
+#endif
 #ifdef NISH_TEXT_FREESTANDING
 /* runtime-wasm.c refuses any size past 2^64 - 8 as out of memory. Spelled this
    way rather than as a `nish_oom` there, because `--profile wasm` exports every
@@ -59,7 +89,7 @@ __attribute__((noreturn)) void nish_oom(void);
 typedef struct { uint64_t len; char data[]; } nish_str;
 
 nish_str *nish_str_new(const char *bytes, uint64_t len) {
-  nish_str *s = nish_alloc_struct(8 + len + 1);
+  nish_str *s = nish_text_alloc(8 + len + 1);
   s->len = len;
   if (len) memcpy(s->data, bytes, len);
   s->data[len] = 0;
@@ -74,7 +104,7 @@ nish_str *nish_str_new(const char *bytes, uint64_t len) {
 nish_str *nish_str_concat(const nish_str *a, const nish_str *b) {
   uint64_t len = a->len + b->len;
   if (len > NISH_ARRAY_MAX) nish_oom();
-  nish_str *s = nish_alloc_struct(8 + len + 1);
+  nish_str *s = nish_text_alloc(8 + len + 1);
   s->len = len;
   memcpy(s->data, a->data, a->len);
   memcpy(s->data + a->len, b->data, b->len);

@@ -17,11 +17,12 @@ refused before the module runs.
 Stage 4 (`docs/wp50-wasm-host.md` §7) adds strings to the boundary: a host
 import's string argument and an export's string result cross as UTF-8 bytes
 the loader decodes, and text the page writes reaches the module through a
-`u8[]` of module storage (`nish/host/text`). It adds no finding: the decode
-cannot read outside memory and the module's reader holds every count against
-its buffer (see "A string crosses as bytes inside memory" below).
+`u8[]` of module storage (`nish/host/text`). It adds WH-9: the decode is of
+a pair the module makes, which the loader reads inside memory or not at all,
+and the module's reader holds every count against its buffer (see "A string
+crosses as bytes inside memory" below).
 
-There are eight findings. Seven are fixed by the stage that found them, and
+There are nine findings. Eight are fixed by the stage that found them, and
 WH-8 is recorded open:
 
 - **WH-1 (High):** a window's `at + n`, added in 32 bits, wraps, so a host
@@ -39,6 +40,8 @@ WH-8 is recorded open:
   guard, so a page's mistake killed the module.
 - **WH-8 (Low, open):** storage holds what the page wrote, so an enum,
   ranged or `boolean` storage element can hold a value outside its type.
+- **WH-9 (Low):** a string's `(p, n)` or `{ i64 len }` header the module
+  places outside memory.
 
 ## Scope
 
@@ -47,7 +50,7 @@ WH-8 is recorded open:
 | `runtime/page.mjs`, `runtime/page.d.ts` | `HostTable` (`add`, `get`, `take`, `#check`), `ringOver`, `reportPanic` |
 | `std/host/ring.ts` | `ringCapacity`, `ringCount`, `ringSize`, `ringFree`, `ringPush`, `ringShift`, `ringClear` |
 | `runtime/runtime-wasm.c` | the `nish.panic` import (`nish_host_panic`, `NISH_DIE`) under `NISH_WASM_HOST` |
-| `src/interop-wasm.ts` | the generated loader: `panicText`, `panicOf`, `guardLoader` (`guarded`, `refuse`, `typedIn`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`hostFn`, `win`), `pushHostEntry`, and `layoutLoader` (`layout`, `views()`) |
+| `src/interop-wasm.ts` | the generated loader: `panicText`, `panicOf`, `guardLoader` (`guarded`, `refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`hostFn`, `win`, `text`), `pushHostEntry`, and `layoutLoader` (`layout`, `views()`) |
 | `src/interop-wasm.ts` | `wasmTypedIn`, `wasmPayloadWriter` and `refused`: where the generated wrapper checks each argument |
 | `src/emit-strings.ts` | `emitHostWindow`: a window's bound in the module |
 | `src/attributes.ts` | `hostWindowProven`: when a window's bound is proven and the check is left out |
@@ -104,6 +107,7 @@ code, and the guide says to read only `[at, at + n)`.
 | WH-6 | Low | `runtime/page.mjs:20`–`:65` (`HostTable`) | A handle the program forged, 0, a fraction or a taken slot read as `undefined`, which a host function would pass on. | **Fixed.** `#check` throws a `RangeError` for each, which inside an import kills the module (WH-3), and slot 0 is never handed out ("page: HostTable hands out 1 and up, never 0, reuses a taken slot, and throws on a taken, zero, forged or fractional handle"). A stale handle kept after `take` names the newer object once its slot is reused: the program is trusted (threat model), so that is its bug, not a win, and the table carries no generation count. |
 | WH-7 | Low | `src/interop-wasm.ts:750`–`:756` (`payloadIn`), `:757`–`:775` (`resultIn`), `:1088`–`:1114` (`arrayIn`) | Only a number of the wrong type was refused before the module ran. A malformed `Result`, a payload of the wrong JavaScript type, or a Proxy or re-prototyped `DataView` passed as a typed array threw from inside `guarded`, which then marked the module dead: one bad call from the page ended it for good. | **Fixed.** Every argument is checked before the call: a `Result` must be an object whose `ok` is a boolean and whose payload has its arm's JavaScript type, read once through a `try` so a throwing getter is the caller's error; an array must pass the `%TypedArray%` brand getter and is measured with the `length` getter, neither of which runs caller code. A typed array over a detached buffer is not refused: `length` reads 0, so it is copied in as an empty array and the call runs (pinned: the check expects `ok 0`). Each refusal is a `TypeError` tagged so `guarded` lets it through and the module stays alive ("panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive", whose lines include a BigInt given to an `i32`; "panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive"). |
 | WH-8 | Low | module storage, as the module reads it | The page can write any bits into storage, so an enum, ranged or `boolean` storage element may hold a value outside its type, and the module reads it as written. | **Open.** The page is trusted (threat model), so a value it forged is its own bug; a program that reads storage the page writes checks the value where it matters, as `std/host/ring` does (WH-2). See "Storage holds what the module wrote" below. |
+| WH-9 | Low | `src/interop-wasm.ts:1144`–`:1152` (`guardLoader`'s `stringOut`), `:1353`–`:1362` (`hostImportsOf`'s `text`) | A string crosses as a pair the module makes: `(p, n)` for a host import's argument, a `{ i64 len, data }` header for an export's result. A pair past the end of memory, or one whose address wraps, would read the wrong bytes or none, and bytes that are not UTF-8 would reach the page as whatever a decoder makes of them. Only the module makes these pairs, so this is hardening, the shape of WH-5. | **Fixed** (stage 4, by construction): each pair is read as `u32` into `new Uint8Array(buffer, p, n)` or a `DataView`, which throw a `RangeError` for any view past the end, so nothing outside memory is read; inside an export that error kills the module (WH-3); `TextDecoder` reads bytes that are not UTF-8 as U+FFFD ("host-import-text: WH-9: a forged string pair or header past the end of memory is a RangeError, and bytes that are not UTF-8 read as U+FFFD", which forges both through the adapter and through a string export). |
 
 ## Properties verified
 
@@ -144,9 +148,9 @@ module passes, `(p, n)`, and one it returns, `{ i64 len, data }`, as
 `new Uint8Array(memory.buffer, p, n)`. The constructor refuses a view past the end of the
 buffer with a `RangeError`, so a pair the module got wrong can never read
 outside its memory. Inside an import or an export call, that error kills the
-module (WH-3). Bytes that are not UTF-8 decode as U+FFFD. This holds by
-construction and is not pinned by a test of a forged pair: only the module
-makes these pairs, and the compiler builds them from a string's header.
+module (WH-3). Bytes that are not UTF-8 decode as U+FFFD. Only the module
+makes these pairs, from a string's header, so this holds by construction; WH-9
+pins it with forged ones.
 `textRead` and `textWrite` hold every count and offset against the buffer's
 length before they touch it, so a count the page forged (negative, or past
 the storage) answers `null` or -1 and writes nothing. Pinned by
