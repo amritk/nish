@@ -1276,7 +1276,7 @@ function PassWalk.visit(this: PassWalk, node: Node): void -> @PassWalk.visit [me
   callee +54:11 PassWalk.refuse -> @PassWalk.refuse
   local +58:13 value: Node (const)
   local +63:13 handsNothing: boolean (const)
-  callee +65:9 PassWalk.answersInRegister -> @PassWalk.answersInRegister
+  callee +65:33 PassWalk.answersInRegister -> @PassWalk.answersInRegister
   callee +66:55 PassWalk.isOld -> @PassWalk.isOld
   callee +68:9 PassWalk.refuse -> @PassWalk.refuse
   local +71:16 child: Node (const)
@@ -1294,9 +1294,9 @@ function within(outer: Node, node: Node): boolean -> @within
 function decideLoopScopes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, f: FunctionFacts, facts: FactsTable): void -> @decideLoopScopes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectLoopScopes
-  calls: FunctionSig.body collectLoopScopes
+  calls: FunctionSig.body TypeTable.resultByValue collectLoopScopes
   pointer unit: size=16 writesThrough=true captured=true passedTo=collectLoopScopes#0
-  pointer table: size=96 writesThrough=true captured=true passedTo=collectLoopScopes#1
+  pointer table: size=96 writesThrough=true captured=true passedTo=collectLoopScopes#1 TypeTable.resultByValue#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=FunctionSig.body#0
   pointer f: size=408 writesThrough=false captured=false passedTo=collectLoopScopes#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=collectLoopScopes#3
@@ -1304,9 +1304,11 @@ function decideLoopScopes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig
   local +0:9 body: Node | null (const)
   callee +0:16 FunctionSig.body -> @FunctionSig.body
   callee +4:5 collectLoopScopes -> @collectLoopScopes
-function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, node: Node): void -> @collectLoopScopes
+  callee +4:46 TypeTable.resultByValue -> @TypeTable.resultByValue
+function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, returnsByValue: boolean, node: Node): void -> @collectLoopScopes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
+  escaping: returnsByValue
   calls: LoopScope.constructor collectLoopScopes decidePass loopBody nish_alloc_struct nish_array_grow nish_panic_index
   pointer unit: size=16 writesThrough=true captured=true passedTo=decidePass#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0
   pointer table: size=96 writesThrough=true captured=true passedTo=decidePass#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1
@@ -1324,9 +1326,10 @@ function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFact
   callee +11:7 collectLoopScopes -> @collectLoopScopes
   callee +14:5 collectLoopScopes -> @collectLoopScopes
   callee +15:5 collectLoopScopes -> @collectLoopScopes
-function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, scope: LoopScope): void -> @decidePass
+function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, returnsByValue: boolean, scope: LoopScope): void -> @decidePass
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
+  escaping: returnsByValue
   calls: PassWalk.constructor PassWalk.refuse PassWalk.refuseCarriedStores PassWalk.visit within
   pointer unit: size=16 writesThrough=true captured=true passedTo=PassWalk.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=PassWalk.constructor#2
@@ -1334,8 +1337,8 @@ function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, fact
   pointer facts: size=24 writesThrough=true captured=true passedTo=PassWalk.constructor#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=PassWalk.constructor#4
   stackSites=1 stackLocals=1
-  local -18:9 walk: PassWalk (const)
-  callee -18:16 new PassWalk -> @PassWalk.constructor
+  local -19:9 walk: PassWalk (const)
+  callee -19:16 new PassWalk -> @PassWalk.constructor
   callee -16:5 PassWalk.refuse -> @PassWalk.refuse
   local -13:9 body: Node (const)
   local -12:14 node: Node (const)
