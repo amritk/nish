@@ -290,7 +290,7 @@ const perModule = (stems: string[], dir: string): string[] => {
  */
 const report = (compilation: Compilation, json: boolean): void => {
   if (!json) {
-    writeError(`${compilation.sink.format(20, diagnosticStyle())}\n`)
+    writeError(`${compilation.sink.styledFormat(20, diagnosticStyle())}\n`)
     return
   }
   for (const diagnostic of compilation.sink.sorted()) {

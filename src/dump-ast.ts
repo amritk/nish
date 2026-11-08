@@ -12,7 +12,6 @@
 // is 1, which is how the oracle knows the file needs grammar the subset does
 // not have yet rather than that the two disagree.
 
-import { Style } from "../std/cli"
 import { astLines } from "./ast-text"
 import { SourceFile } from "./diagnostics"
 import { Parser } from "./parser"
@@ -38,10 +37,8 @@ export const main = (): number => {
   astLines(file, 0, lines)
   write(`${lines.join("\n")}\n`)
 
-  // Plain, always: a test or a tool reads this, never a terminal.
-  const plain = new Style(false, false)
   for (const diagnostic of parser.diagnostics) {
-    writeError(`${diagnostic.message(plain)}\n`)
+    writeError(`${diagnostic.message()}\n`)
   }
   return parser.diagnostics.length > 0 ? 1 : 0
 }

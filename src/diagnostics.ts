@@ -368,8 +368,13 @@ export class Diagnostic {
     return `  ${numbered} ${shown}\n  ${blank} ${pad.toText()}${this.severity(style, marker.toText())}`
   }
 
-  /** The summary and the excerpt: what `CompileError.message` holds in stage0. */
-  message(style: Style): string {
+  /** The summary and the excerpt, plain: what `CompileError.message` holds in stage0. */
+  message(): string {
+    return this.styledMessage(new Style(false, false))
+  }
+
+  /** `message`, painted by `style` (`summary`, `excerpt`). */
+  styledMessage(style: Style): string {
     return `${this.summary(style)}\n${this.excerpt(style)}`
   }
 
@@ -685,11 +690,17 @@ export class DiagnosticSink {
   /**
    * The human-readable report: each error's summary and excerpt, at most
    * `max` of them, then `...and N more errors` and a count line. A lone error
-   * prints exactly its message, as stage0 does. `style` paints it
-   * (`Diagnostic.summary`, `Diagnostic.excerpt`); the two closing lines are
-   * faint.
+   * prints exactly its message, as stage0 does.
    */
-  format(max: i32, style: Style): string {
+  format(max: i32): string {
+    return this.styledFormat(max, new Style(false, false))
+  }
+
+  /**
+   * `format`, painted by `style` (`Diagnostic.styledMessage`); the two
+   * closing lines are faint.
+   */
+  styledFormat(max: i32, style: Style): string {
     return formatReport(this.sorted(), "error", max, style)
   }
 }
@@ -711,12 +722,12 @@ export const formatList = (list: Diagnostic[], kind: string, max: i32, style: St
  */
 const formatReport = (list: Diagnostic[], noun: string, max: i32, style: Style): string => {
   if (list.length === 1) {
-    return list[0].message(style)
+    return list[0].styledMessage(style)
   }
   const lines: string[] = []
   let i = 0
   while (i < list.length && i < max) {
-    lines.push(list[i].message(style))
+    lines.push(list[i].styledMessage(style))
     i = i + 1
   }
   const hidden = list.length - max
