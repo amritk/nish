@@ -324,7 +324,8 @@ const collisions = (t: Suite): void => {
 
 /**
  * A copy of the batcher's private `pgIntHash`, so the test can show that the
- * keys `colliding` builds do share one table hash.
+ * keys `colliding` builds do share one table hash. If the copy drifts from
+ * the real hash, the keys-array check in `collidingRows` fails.
  */
 const intHash = (key: i64): i32 => {
   const lo: u32 = toU32(key & LOW32);
