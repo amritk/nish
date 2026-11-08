@@ -224,10 +224,12 @@ requests served. Freed region chunks go back to a free list, so a warm
 server makes no `malloc` per request.
 
 A value a task stores where it outlives the task, such as module state or a
-cache, must not point into the task's region. WP46 stage 2's rules (NL2422,
-NL2557) already refuse that for
+cache, must not point into the task's region. The region rules of
+`nish:region` (NL2609 through NL2618, `src/region-rules.ts`) refuse that for
 `region(...)` blocks, and a task is a region block whose extent ends at the
-task's end. A program that wants a value to outlive the task copies it out.
+task's end: the same walk judges a spawned function's body against the
+objects it was handed ([Stage 5, part 3](#stage-5-part-3-a-task-reaches-what-its-spawner-owns)).
+A program that wants a value to outlive the task copies it out.
 
 **So this work package waits for WP46 stages 1 and 2.**
 
@@ -608,6 +610,68 @@ the TLS handshake would block, and a silent block is worse than a stated
 refusal. `--emit-ts` refuses a program that uses it, as it refuses
 `readable` and `writable` (NL4017). The record is
 [`security/fetch.md`](security/fetch.md#the-async-fetch) (HF-10, HF-11).
+
+## Stage 5, part 3: a task reaches what its spawner owns
+
+Until this part `spawn(f(x))` took only numbers, `boolean`s, enums and
+`string`s (NL2673): a handler could not be handed in, and no task could see
+state its spawner set up. A server wants both: `spawn(task(handle, state, i))`,
+where `handle` is the function each connection runs and `state` is a counter
+or a table every task reads.
+
+**The rule as built.**
+
+- **A function argument.** A compile-time function parameter (WP29) of the
+  spawned function is a position, not a value: the call is an instantiation
+  of its own, one task kind each, and nothing crosses at run time. It is
+  capture-free by WP29's rule, so it is accepted. The refusal names any other
+  argument's type as written, never the `void` a compile-time position holds
+  in `paramTypes`.
+- **A shared argument.** An object, array, `Map` or `Set` argument is
+  accepted when the spawner's memory outlives every task holding it. A
+  spawn retains its argument: the escape analysis reads the argument of a
+  spawned call as retained (`classifyUse`), so an allocation that reaches it
+  *leaks* (`allocLeaks`), and the spawner, every function on the call chain
+  above it and every loop pass around it lose their automatic scope, as a
+  store into module state already makes them. `main`'s own allocations are
+  released only after `@nish.async.drain`, when no task is left. A `using a =
+  arena()` block that releases under a spawn is refused (NL2689 for the spawn
+  itself, the using-arena rule for a callee that spawns).
+- **Only from outside a task.** A function a task may run — a spawned
+  function and everything it calls or awaits — allocates in the task's
+  region, which is freed when the task ends; a nested task could outlive it.
+  So a shared argument there is refused (NL2690), and nested spawns keep
+  taking numbers and strings.
+- **What a task may do with it.** The spawned function is walked by the
+  region rules with each shared parameter as *outer* memory. Storing memory
+  the task allocated into it (a string, an array, an object) is NL2609, and
+  growing it (`push`, `Map.set`, `Set.add`) is NL2615, directly or through a
+  callee, a getter, a method or an arrow, by the same facts a `region(...)`
+  body is judged by. Reading it, and writing numbers, `boolean`s and enums
+  into it, is allowed: they are copied. Outer memory stored into the task's
+  own objects is allowed (NL2610 does not apply): the shared object outlives
+  the task.
+- **Interleaving.** The executor runs one task at a time on one thread, and
+  a task gives way only at an `await`, so a read-modify-write of a field with
+  no `await` inside it is atomic with respect to every other task.
+
+**Soundness cases** (each has a test):
+
+| Shape | Answer |
+| --- | --- |
+| task stores through a getter, a method or a callee | walked through the callee's facts: NL2609 / NL2615 |
+| an object reachable through a field of the shared object | outer, as the field read answers outer memory |
+| an array of objects | outer elements; storing a task object into one is NL2609 |
+| the shared parameter aliased into a local, then stored through | the local is outer by the walk's fixpoint |
+| nested spawn from a task | a shared argument is refused (NL2690) |
+| the spawner reassigns its local after the spawn | the task holds the object, not the local; the object stays |
+| `using` disposal of the argument | the spawner's `using arena()` around the spawn is refused (NL2689) |
+
+**Loose ends.** A binary whose program spawns nothing has no `nish_async`
+symbol: `build.sh` links `runtime-async.c` only when the IR declares one, and
+`tests/run.js` checks it. `tests/nish-cmp.js` compiles the corpus with the
+seed, which does not know a construct the release after it ships; a program
+the seed cannot compile is skipped there with its reason, never compared.
 
 ## Not in this work package
 
