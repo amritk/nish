@@ -1276,10 +1276,10 @@ function PassWalk.visit(this: PassWalk, node: Node): void -> @PassWalk.visit [me
   callee +54:11 PassWalk.refuse -> @PassWalk.refuse
   local +58:13 value: Node (const)
   local +64:13 handsNothing: boolean (const)
-  callee +66:55 PassWalk.isOld -> @PassWalk.isOld
-  callee +68:9 PassWalk.refuse -> @PassWalk.refuse
-  local +71:16 child: Node (const)
-  callee +72:7 PassWalk.visit -> @PassWalk.visit
+  callee +65:55 PassWalk.isOld -> @PassWalk.isOld
+  callee +67:9 PassWalk.refuse -> @PassWalk.refuse
+  local +70:16 child: Node (const)
+  callee +71:7 PassWalk.visit -> @PassWalk.visit
 function loopBody(loop: Node): Node -> @loopBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
