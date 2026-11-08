@@ -16,7 +16,9 @@ import {
 } from "nish:secret";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Secret, exposeWith, secret, wipe } from "nish:secret"
 import { hmacSha256 } from "nish/crypto/hmac"
 
@@ -29,6 +31,8 @@ const message: u8[] = [1, 2, 3]
 const mac: u8[] = exposeWith(key, message, tag)
 wipe(key)
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

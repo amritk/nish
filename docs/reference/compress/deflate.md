@@ -35,7 +35,9 @@ import {
 } from "nish/compress/deflate";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Deflater, Inflater, DEFLATE_FAST, deflateBound } from "nish/compress/deflate";
 
 const deflater = new Deflater(DEFLATE_FAST); // tables, once
@@ -44,6 +46,8 @@ const end: i32 = deflater.compress(src, off, len, out, 0); // -1: no room
 const inflater = new Inflater();
 const n: i32 = inflater.decompress(out, 0, end, back, 0, limit); // < 0: an error
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

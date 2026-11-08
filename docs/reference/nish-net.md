@@ -47,7 +47,9 @@ import {
 } from "nish:net";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { netAddress, tcpListen, tcpAccept, netRead, netWrite, pollCreate, pollAdd, pollWait } from "nish:net";
 
 const server = tcpListen("::", 8080, 128);
@@ -58,6 +60,8 @@ const peer: u8[] = new Array<u8>(18);
 const n = pollWait(loop, ready, -1);
 const conn = tcpAccept(server, peer);  // -11 when none is waiting
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -411,13 +415,17 @@ one segment carries, so that one write can fill whole segments: Linux's
 and on Darwin. It never panics. The answer moves as the path does, so
 read it when it is needed rather than once.
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 // A batch of whole segments, or the caller's own size where there is no MSS.
 export const batch = (conn: i32, fallback: i32): i32 => {
   const mss = netMss(conn);
   return mss > 0 ? mss * 8 : fallback;
 };
 ```
+
+</scalar-code-group>
 
 ```ts
 function netMss(fd: i32): i32
@@ -1561,10 +1569,14 @@ The array the two descriptors are written into, as `fds[0]`
 delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
 so a server that wants a mode sets it again after every response.
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 // After each response: Linux may have left quick-ACK mode.
 export const answered = (conn: i32): i32 => netSetOption(conn, NET_TCP_QUICKACK, 1);
 ```
+
+</scalar-code-group>
 
 </scalar-card>
 

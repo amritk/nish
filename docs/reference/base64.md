@@ -12,7 +12,9 @@ import {
 } from "nish/base64";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { base64Encode, base64EncodeInto, base64EncodedLength } from "nish/base64";
 
 export const main = (): i32 => {
@@ -23,6 +25,8 @@ export const main = (): i32 => {
   return end;
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

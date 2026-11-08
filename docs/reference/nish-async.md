@@ -11,7 +11,9 @@ import {
 } from "nish:async";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { awaitAll, spawn } from "nish:async";
 
 async function double(x: i32): Promise<i32> {
@@ -27,6 +29,8 @@ async function run(): Promise<void> {
   spawn(log(c + d));
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

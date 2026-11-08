@@ -35,7 +35,9 @@ import {
 } from "nish/net/url";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { UrlQuery, UrlQueryLimits, URL_DECODE_FORM, URL_QUERY_PAIR, percentDecode, urlQueryFind, urlQueryStart } from "nish/net/url";
 
 const q: i32 = urlQueryStart(target, 0, len)    // -1: no `?`, so no query
@@ -50,6 +52,8 @@ if (q >= 0) {
   }   // else no such key, or URL_QUERY_ERR_PAIRS past the cap
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -227,17 +231,19 @@ A client
 that is handed `http://…` by a user, a redirect or a link needs its host and
 port before it connects, and the place each reference points to:
 
-```ts
-import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
-```
+<scalar-code-group>
 
-```ts
+```ts example.ts
+import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
+
 const base: Url | null = urlParse("https://example.com/a/b?q")
 if (base !== null) {
   const next: Url | null = urlResolve(base, "../c#top")  // https://example.com/c#top
   // next.host, next.port (-1: the default), urlOrigin(next) === "https://example.com:443"
 }
 ```
+
+</scalar-code-group>
 
 </scalar-detail>
 
@@ -517,15 +523,18 @@ The origin, such as `https://example.com:443`, or null for a scheme with no defa
 ### urlParse
 
 The absolute URL `s` split into its parts, or null when it is not one this
-module accepts. `s` is refused when it has no scheme, holds a byte outside
-printable ASCII (a control byte, a space, DEL or anything past 0x7F), a
-backslash or a `%` not followed by two hex digits, or its authority has more
-than one `@`, a host with a byte outside RFC 3986's unreserved set (so a
-percent-encoded one), a host whose last label is numeric but that is not a
-dotted-decimal IPv4 address, a malformed IPv6 literal or a port that is not
-digits or is above 65535. An http, https, ws or wss URL needs a non-empty
-host. The path's dot segments are removed, as RFC 3986 §5.2.2 removes them
-from a reference with a scheme. Nothing is decoded. It allocates its answer.
+module accepts.
+
+`s` is refused when it has no scheme, holds a byte outside printable ASCII (a
+control byte, a space, DEL or anything past 0x7F), a backslash or a `%` not
+followed by two hex digits, or its authority has more than one `@`, a host
+with a byte outside RFC 3986's unreserved set (so a percent-encoded one), a
+host whose last label is numeric but that is not a dotted-decimal IPv4
+address, a malformed IPv6 literal or a port that is not digits or is
+above 65535. An http, https, ws or wss URL needs a non-empty host.
+
+The path's dot segments are removed, as RFC 3986 §5.2.2 removes them from a
+reference with a scheme. Nothing is decoded. It allocates its answer.
 
 ```ts
 function urlParse(s: string): Url | null

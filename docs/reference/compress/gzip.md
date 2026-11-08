@@ -22,7 +22,9 @@ import {
 } from "nish/compress/gzip";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { DEFLATE_FAST, compressBound } from "nish/compress/deflate";
 import { GzipCompressor, GzipDecompressor } from "nish/compress/gzip";
 
@@ -33,6 +35,8 @@ const end: i32 = gz.compress(body, 0, n, out, 0); // -1: no room
 const gunzip = new GzipDecompressor();
 const got: i32 = gunzip.decompress(src, 0, len, back, 0, 1 << 20); // < 0: an error
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

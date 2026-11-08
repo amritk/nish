@@ -12,7 +12,9 @@ import {
 } from "nish/crypto/x509-random";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Secret, wipe } from "nish:secret";
 import { x509DrawP256Key, x509MintSelfSignedDrawn } from "nish/crypto/x509-random";
 
@@ -21,6 +23,8 @@ const der: u8[] | null = x509MintSelfSignedDrawn(priv, "localhost", toI64(Date.n
 // ... present `der` and sign the handshake with `priv` ...
 wipe(priv);
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

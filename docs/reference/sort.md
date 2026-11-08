@@ -10,13 +10,17 @@ import {
 } from "nish/sort";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 export const main = (): i32 => {
   const xs: i32[] = [3, 1, 2];
   xs.sort((a, b) => a - b); // xs is now [1, 2, 3], and the call answers xs
   return xs[0];
 };
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="A program does not import this module">
 

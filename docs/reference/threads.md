@@ -21,7 +21,9 @@ import {
 } from "nish/threads";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope, scopeWithStack } from "nish/threads";
 
 const sumOf = (xs: i32[]): i32 => {
@@ -53,6 +55,8 @@ export const main = (): i32 => {
   return total;
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -133,17 +137,18 @@ A scope of tasks, joined when the block that declares it ends (docs/wp29-thread-
 <scalar-detail title="What is written here is the meaning, not the implementation">
 
 Each body
-below is the sequential program, and it is what runs under Node, what
-`npm run check` type-checks, and what the compiler checks the call against.
-The compiler then recognises the exported templates by module and name
-and lowers an instance of `parallelMapInto`, `parallelFrom` or
-`parallelReduce` onto `nish_parallel_range` (runtime/runtime-parallel.c): it
-replaces the one call that walks the whole range — `mapRange` for a map,
-`fromRange` for a `parallelFrom`, `reduceBlocks` for a reduce — with a region
-that hands each thread a contiguous piece of it, and emits the rest of the
-body as written. `parallelMap` is `parallelMapInto` into an array it
-allocates first. So the length check, its message and the order a reduce combines in
-are this file's, whichever way the program is compiled.
+below is the sequential program, and it is what runs under Node, what `npm
+run check` type-checks, and what the compiler checks the call against.
+
+The compiler then recognises the exported templates by module and name and
+lowers an instance of `parallelMapInto`, `parallelFrom` or `parallelReduce`
+onto `nish_parallel_range` (runtime/runtime-parallel.c): it replaces the one
+call that walks the whole range — `mapRange` for a map, `fromRange` for a
+`parallelFrom`, `reduceBlocks` for a reduce — with a region that hands each
+thread a contiguous piece of it, and emits the rest of the body as written.
+`parallelMap` is `parallelMapInto` into an array it allocates first. So the
+length check, its message and the order a reduce combines in are this file's,
+whichever way the program is compiled.
 
 </scalar-detail>
 
@@ -155,10 +160,13 @@ nothing its caller could observe, may allocate only temporaries it drops
 before it returns — they are given back after every element — `dst` may not
 be reachable from an element of `src`, and the result type is a number, a
 `boolean` or an enum — or, for a map, a `string` or an array of those
-scalars, which the join copies out of the worker's arena. An arrow written at the call may read the `const` locals and
-the parameters of the function it is written in: each one is handed to the
-body as a parameter of its own, which no body may write through. Importing this module compiles the program with `--threads`,
-because every worker needs an arena of its own.
+scalars, which the join copies out of the worker's arena.
+
+An arrow written at the call may read the `const` locals and the parameters
+of the function it is written in: each one is handed to the body as a
+parameter of its own, which no body may write through. Importing this module
+compiles the program with `--threads`, because every worker needs an arena of
+its own.
 
 </scalar-detail>
 
@@ -435,7 +443,9 @@ A channel of scalars or strings between a scope's tasks (docs/wp29-thread-surfac
 receiver's at the loop: `send` from the tasks that produce, `for (const x of ch)` in the one
 that consumes, or in the parent once the scope has joined.
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const ch = new Channel<i32>()
 {
   using s = scope()
@@ -443,6 +453,8 @@ const ch = new Channel<i32>()
   s.spawn(consume, new Pipe(ch, 0), sums, 0)   // then the one receiver
 }
 ```
+
+</scalar-code-group>
 
 Nobody closes a channel: it closes when its scope has started to join and
 every task that may send on it has returned (docs/LANGUAGE.md, "Channels").

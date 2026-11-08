@@ -32,7 +32,9 @@ import {
 } from "nish/crypto/hmac";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { HmacSha256, hmacSha256, hmacSha256Verify } from "nish/crypto/hmac";
 
 const tag: u8[] = hmacSha256(key, message);
@@ -42,6 +44,8 @@ const mac = new HmacSha256(key);
 mac.update(record, off, len);
 const tag2: u8[] = mac.digest();
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -685,20 +689,25 @@ PBKDF2-HMAC-SHA256(P, S, c, dkLen) as RFC 8018 §5.2 defines it: the
 `dkLen`-byte key derived from the password `password` and the salt `salt`
 over `iterations` rounds, as a `Secret`.
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const salted: Secret<u8[]> | null = pbkdf2HmacSha256(password, salt, 4096, 32);
 ```
+
+</scalar-code-group>
 
 Bad input answers `null` and never panics: an iteration count or a length
 below 1, or a password or salt longer than 2^31 - 1 bytes. The password is
 read only inside `exposeWith`, and every U_j, every T_i, both keyed hashers
-and the working one are wiped before the key is answered; the digests on
-the way are wiped in the call that made them. The time taken depends on
+and the working one are wiped before the key is answered; the digests on the
+way are wiped in the call that made them. The time taken depends on
 `iterations`, `dkLen` and the password's length past a block, all of which
-RFC 8018 treats as public, and on nothing of the password's bytes. The time
-is linear in `iterations` and nothing here bounds it, so a caller that takes
-the count from an untrusted peer (a SCRAM server's `i=`) must cap it first:
-2^31 - 1 rounds is about 2^32 compressions.
+RFC 8018 treats as public, and on nothing of the password's bytes.
+
+The time is linear in `iterations` and nothing here bounds it, so a caller
+that takes the count from an untrusted peer (a SCRAM server's `i=`) must cap
+it first: 2^31 - 1 rounds is about 2^32 compressions.
 
 ```ts
 function pbkdf2HmacSha256(
@@ -750,12 +759,16 @@ key's pad blocks (RFC 2104 §4), held as a `Secret<u64[]>`. Every tag it
 makes or checks starts from them, so a tag costs the message's blocks and
 two finishing blocks, and never the key's two again.
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const key = new HmacKey(HMAC_SHA256, secretKey);   // once
 hmacKeyedInto(key, data, 0, data.length, tag, 0);  // per message
 const ok: boolean = hmacKeyedVerify(key, data, 0, data.length, tag, 0);
 key.wipe();                                        // when done
 ```
+
+</scalar-code-group>
 
 The tags are `hmacSha256`'s, `hmacSha384`'s and `hmacSha512`'s for the same
 key. The key itself is read only inside `exposeWith`, and the hashers that
@@ -800,12 +813,16 @@ HMAC-SHA-256 over hashers the caller owns: allocate one, then for each tag
 `begin` with the key, `update` with the message, and `finishInto` the
 caller's array. The tag is the one `hmacSha256` answers.
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const mac = new HmacSha256Scratch();          // once, outside the loop
 mac.begin(key, 0, key.length);
 mac.update(message, 0, message.length);
 mac.finishInto(tag, 0);                       // 32 bytes at tag[0]
 ```
+
+</scalar-code-group>
 
 The key block is wiped with `secureZero` once both hashers have absorbed
 it, and so is every digest on the way; `wipe` zeroes the hashers too, for a

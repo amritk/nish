@@ -182,7 +182,9 @@ checked.
 - **The template.** One heading scheme: the title is the only `#`, each kind
   of member (Functions, Classes, Interfaces, Objects, Types), Limits and
   Constants is a `##`, and each member a `###`; its parameters and return
-  are fields, not headings. Below the lead and the usage example, a grid of
+  are fields, not headings. A class's or interface's members are a table;
+  in a member's cell, paragraphs are a blank line apart and each list item
+  starts a line of its own. Below the lead and the usage example, a grid of
   cards links each function, class, interface and object, one icon per kind
   (a function, a cube, a hash for a constant), when the page has more than
   one; a section of constants with one card shows it without a grid. A card's title may break after a lower-case
@@ -255,8 +257,14 @@ instead.
    code blocks right after it, a blank line apart, join it. It is shown
    after the import line, fenced `ts` whether or not it parses, since an
    example may elide with `…`. Every other code block is fenced `ts` when it
-   parses and `text` otherwise.
-3. A list or code block belongs to the paragraph before it.
+   parses and `text` otherwise. A `ts` block is titled `example.ts` and
+   wrapped in a `<scalar-code-group>` of one, since Scalar shows a block's
+   title only as a code group's tab; a `text` block (a diagram, a table) has
+   no title. Code blocks with only a blank line between them are one block.
+3. A list or code block belongs to the paragraph before it, and so does a
+   paragraph whose first line is indented one space past the comment's `* `
+   (` *  More of the detail.`): a long detail or warning broken into
+   paragraphs stays under its title.
 4. **A warning** starts at any sentence that opens with bold text saying
    the module refuses, limits or caps something (`refus`, `limit`, `cap`),
    at the start of a paragraph or within one, and runs to the end of that

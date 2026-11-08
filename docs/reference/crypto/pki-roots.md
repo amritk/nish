@@ -19,7 +19,9 @@ import {
 } from "nish/crypto/pki-roots";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots";
 
 const store: PkiRoots = pkiLoadSystemRoots();
@@ -27,6 +29,8 @@ const store: PkiRoots = pkiLoadSystemRoots();
 // store.sources: the files they were read from, in order
 // store.skipped: the PEM blocks and files that were not a root
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

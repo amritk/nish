@@ -38,8 +38,9 @@
  * only as the iterable of a `for...of`, and `get`'s `V | undefined` only as a
  * `const`'s initialiser, the left of `??` or an operand of `=== undefined`,
  * none of which `tsc` can know (docs/LANGUAGE.md -> `Map` and `Set`).
- * `nish/map`'s `reserve` and `getOrInsert` are not declared here: they are
- * ordinary source, `std/map.ts`, which `tsconfig.json` maps `nish/*` to.
+ *
+ *  `nish/map`'s `reserve` and `getOrInsert` are not declared here: they are
+ *  ordinary source, `std/map.ts`, which `tsconfig.json` maps `nish/*` to.
  */
 
 // ---- Numeric widths (docs/LANGUAGE.md -> Types) ------------------------------
@@ -241,15 +242,18 @@ declare function Err<T, E>(error: E): Result<T, E>;
  * `nish/threads`'s scope, a `Mutex`'s lock, `arena()` or a handle class needs
  * no `"ESNext.Disposable"` in its `lib`. `nish` takes `using` only for a
  * `scope()`, a `lock()`, an `arena()` or a `new` of a handle class, and any
- * other `using` initialiser is refused. A handle class is a class with exactly
- * one `readonly` `CPtr` or `CPtr | null` field: it owns the C resource the
- * pointer names, and its `[Symbol.dispose](): void` is `close(this.file);` or
- * `const p = this.file; if (p !== null) { close(p); }` for a `declare function`
- * `close` of one parameter. `using` of a handle class closes it at every exit
- * of its block, once, in the reverse of the order the declarators opened; a
- * panic and `process.exit` do not close. `--deny ffi` refuses that `using`.
- * Any other class that declares `[Symbol.dispose]` is refused. The compiler
- * emits the join, the release, the unlock or the close itself, and
+ * other `using` initialiser is refused.
+ *
+ * A handle class is a class with exactly one `readonly` `CPtr` or `CPtr | null`
+ * field: it owns the C resource the pointer names, and its `[Symbol.dispose]():
+ * void` is `close(this.file);` or `const p = this.file; if (p !== null) {
+ * close(p); }` for a `declare function` `close` of one parameter. `using` of a
+ * handle class closes it at every exit of its block, once, in the reverse of
+ * the order the declarators opened; a panic and `process.exit` do not close.
+ * `--deny ffi` refuses that `using`. Any other class that declares
+ * `[Symbol.dispose]` is refused.
+ *
+ * The compiler emits the join, the release, the unlock or the close itself, and
  * `[Symbol.dispose]` is never called by name.
  */
 interface SymbolConstructor {
@@ -277,16 +281,18 @@ interface StringConstructor {
   /**
    * The bytes of `bytes[start..end)` as one string, with one range check, one
    * allocation and one copy. The range is `s.slice`'s, `0 <= start <= end <=
-   * bytes.length`, checked once after all three arguments are evaluated; anything
-   * else panics with `slice out of range: [start, end) of length len` and exits 1.
-   * `bytes` is a `u8[]` reached any way an array is, `readonly` or not; a wider
-   * element or a `u8[] | null` is refused (NL2268). Both ends are required (NL2060)
-   * and are numbers (NL2058). Nothing validates the bytes as UTF-8: a multi-byte
-   * character copied whole is that character, and a range that cuts one is bytes
-   * that are not a valid string. Natively the string's bytes are the array's, so
-   * `write` or `writeFileSync` sends any bytes back out unchanged; bytes that are
-   * not text go out through `writeBytes` and `writeFileBytesSync`, which agree on
-   * every host. Capability: none.
+   * bytes.length`, checked once after all three arguments are evaluated;
+   * anything else panics with `slice out of range: [start, end) of length len`
+   * and exits 1. `bytes` is a `u8[]` reached any way an array is, `readonly` or
+   * not; a wider element or a `u8[] | null` is refused (NL2268). Both ends are
+   * required (NL2060) and are numbers (NL2058).
+   *
+   * Nothing validates the bytes as UTF-8: a multi-byte character copied whole
+   * is that character, and a range that cuts one is bytes that are not a valid
+   * string. Natively the string's bytes are the array's, so `write` or
+   * `writeFileSync` sends any bytes back out unchanged; bytes that are not text
+   * go out through `writeBytes` and `writeFileBytesSync`, which agree on every
+   * host. Capability: none.
    *
    * @param bytes the buffer to read.
    * @param start the first byte taken.
@@ -389,12 +395,13 @@ declare var process: Process;
  * integer of the same width and another signedness keeps its bits. The float
  * rule is Rust's `as` cast, not JavaScript's modulo-2^32 `ToInt32`:
  * `toI32(5e10)` is `2147483647`, while the integer rule gives
- * `toI32(5000000000)` as `705032704`. The result of a `u8`, a `u16` or a ranged
- * integer lies in the declared range of `x`, so
- * `const r: integer<0, 255> = toI32(b)` costs no check for a `u8` `b`; under
- * `--number-mode f64` this is how a `number` enters an `integer<Lo, Hi>`. An
- * argument that is not a number is refused, as `` `toI32` expects a number
- * (i32, i64, or f64), got string ``. Capability: none.
+ * `toI32(5000000000)` as `705032704`.
+ *
+ * The result of a `u8`, a `u16` or a ranged integer lies in the declared range
+ * of `x`, so `const r: integer<0, 255> = toI32(b)` costs no check for a `u8`
+ * `b`; under `--number-mode f64` this is how a `number` enters an `integer<Lo,
+ * Hi>`. An argument that is not a number is refused, as `` `toI32` expects a
+ * number (i32, i64, or f64), got string ``. Capability: none.
  *
  * @param x the value to convert.
  * @returns `x` in 32 signed bits.
@@ -506,22 +513,25 @@ declare function f32ToBits(x: f32): i32;
  * never turned into a branch: `a` for an all-ones mask, `b` for zero. Every
  * operand is one type, `u32` or `u64`. Both are `number` here, so one generic
  * declaration stands for the two. Any other type is refused, as `` `ctEq` takes
- * u32 or u64 operands (convert with toU32 or toU64), got i64 `` (NL2399): `i32`,
- * `i64`, `u8`, `u16`, a ranged integer, `f32`, `f64` and `boolean` included, and
- * a boolean mask in particular. Operands of two types are `` `ctSelect` needs
- * every operand of one type, got u32 and u64 `` (NL2400). A bare numeric
- * literal takes its type from the first operand that is not one, wherever it
- * stands. The call takes exactly three arguments, and like every function it is
- * not a value. The all-ones-or-zero convention for the mask is not checked,
- * because the check would be a branch; any other mask is a defined bitwise
- * blend, so `ctSelect(0xf0f0f0f0, a, b)` takes the high nibble of each byte
- * from `a`. The promise is no branch and no secret-indexed load in the
- * primitive itself and nothing about the caller's own code, which branches on a
- * secret if it writes `if (ctEq(a, b) !== 0)`. On `wasm32` the same barrier is
- * emitted, but the engine compiles the module again, so nothing is promised
- * there. Under Node the runtime shim computes the same answer as a pure
- * function (over `u32`, put back in range with `>>> 0`; over `u64`, on BigInts),
- * and only the timing is not claimed. Capability: none.
+ * u32 or u64 operands (convert with toU32 or toU64), got i64 `` (NL2399):
+ * `i32`, `i64`, `u8`, `u16`, a ranged integer, `f32`, `f64` and `boolean`
+ * included, and a boolean mask in particular.
+ *
+ * Operands of two types are `` `ctSelect` needs every operand of one type, got
+ * u32 and u64 `` (NL2400). A bare numeric literal takes its type from the first
+ * operand that is not one, wherever it stands. The call takes exactly three
+ * arguments, and like every function it is not a value. The all-ones-or-zero
+ * convention for the mask is not checked, because the check would be a branch;
+ * any other mask is a defined bitwise blend, so `ctSelect(0xf0f0f0f0, a, b)`
+ * takes the high nibble of each byte from `a`.
+ *
+ * The promise is no branch and no secret-indexed load in the primitive itself
+ * and nothing about the caller's own code, which branches on a secret if it
+ * writes `if (ctEq(a, b) !== 0)`. On `wasm32` the same barrier is emitted, but
+ * the engine compiles the module again, so nothing is promised there. Under
+ * Node the runtime shim computes the same answer as a pure function (over
+ * `u32`, put back in range with `>>> 0`; over `u64`, on BigInts), and only the
+ * timing is not claimed. Capability: none.
  *
  * @param mask all ones to choose `a`, zero to choose `b`.
  * @param a the value an all-ones mask selects.
@@ -535,11 +545,13 @@ declare function ctSelect<T extends u32 | u64>(mask: T, a: T, b: T): T;
  * takes, so `ctSelect(ctEq(a, b), x, y)` never shows the optimiser a boolean.
  * Both operands are one type, `u32` or `u64`; any other type, a boolean and a
  * ranged integer included, is refused with NL2399, and operands of two types
- * with NL2400, as for `ctSelect`. A bare numeric literal takes its type from
- * the other operand, so `ctEq(0, x)` works, while `ctEq(1, 2)`, with no width to
- * take, is an `i32` and refused. The call takes exactly two arguments, and like
- * every function it is not a value. The no-branch promise and its limits are
- * `ctSelect`'s, and so are the `wasm32` and Node readings. Capability: none.
+ * with NL2400, as for `ctSelect`.
+ *
+ * A bare numeric literal takes its type from the other operand, so `ctEq(0, x)`
+ * works, while `ctEq(1, 2)`, with no width to take, is an `i32` and refused.
+ * The call takes exactly two arguments, and like every function it is not a
+ * value. The no-branch promise and its limits are `ctSelect`'s, and so are the
+ * `wasm32` and Node readings. Capability: none.
  *
  * @param a one operand.
  * @param b the other, of the same type.
@@ -550,42 +562,49 @@ declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
  * Every byte of `bytes` set to zero, in stores neither `-O2` nor `-flto` may
  * drop as dead (#385): how a key, a secret scalar or another secret is cleared
  * once it is used. A statement: used as a value it is `` `secureZero` returns
- * void and can only be used as a statement `` (NL2105), and it takes exactly one
- * argument (NL2061). It fills a `u8[]` only; anything else is `` `secureZero`
- * fills a `u8[]`, got i32[] `` (NL2402), a string included, which is immutable.
+ * void and can only be used as a statement `` (NL2105), and it takes exactly
+ * one argument (NL2061). It fills a `u8[]` only; anything else is ``
+ * `secureZero` fills a `u8[]`, got i32[] `` (NL2402), a string included, which
+ * is immutable.
+ *
  * The call writes its argument, so a `readonly u8[]` is `` Cannot `secureZero`
- * through readonly u8[] (declare it u8[] to write through it) `` (NL2264), and a
- * function that wipes a parameter does not get `readonly` on it; in a scope's
+ * through readonly u8[] (declare it u8[] to write through it) `` (NL2264), and
+ * a function that wipes a parameter does not get `readonly` on it; in a scope's
  * region it is refused where `fill` is (NL2394). An empty array is a call that
- * clears nothing. It clears the bytes of the array it is handed and nothing
- * else: a copy taken before (`slice`, a `push` into another array, an element
- * read into a local, a register spilled to the stack) is the program's to
- * clear, and nothing clears what the operating system swapped out. It works
- * under the wasi profile; a freestanding wasm module has no wipe. Under Node it
- * is a loop that sets every element to zero, and a collector that moved the
- * array may have left the old bytes behind. Capability: none.
+ * clears nothing.
+ *
+ * It clears the bytes of the array it is handed and nothing else: a copy taken
+ * before (`slice`, a `push` into another array, an element read into a local, a
+ * register spilled to the stack) is the program's to clear, and nothing clears
+ * what the operating system swapped out. It works under the wasi profile; a
+ * freestanding wasm module has no wipe. Under Node it is a loop that sets every
+ * element to zero, and a collector that moved the array may have left the old
+ * bytes behind. Capability: none.
  *
  * @param bytes the buffer to clear.
  */
 declare function secureZero(bytes: u8[]): void;
 /**
  * One `lstat` of `path`, so a symbolic link answers for itself and not for what
- * it names: the owner's uid in the high 32 bits and `st_mode` (the file type and
- * the permission bits) in the low 32, or -1 when the path does not resolve or
- * holds a NUL (#386). Both come out of one `lstat`, so they describe the same
- * file however the path changes in between. Take them apart with
- * `(om >> 32) & 0xffffffff` (the owner) and `om & 0xfff` (the permission bits)
- * or `om & 0xf000` (the type: `0x8000` a regular file, `0x4000` a directory,
- * `0xa000` a symbolic link). The mask on the owner is not optional: a uid of
- * 2^31 or more fills bit 63, which `>>` on an `i64` copies down, so `om >> 32`
- * alone answers a negative owner that never equals `geteuid()`. The answer is
- * an `i64` in both number modes, and an `i32` variable is refused rather than
- * truncated (`` Cannot initialize i32 variable `om` with i64 ``). It takes a
- * `string` path and exactly one argument. A wasm32 build is refused, with
- * `` `lstatOwnerModeSync` reaches the operating system, and a wasm32 build has
- * none to reach ``. Under Node the runtime shim packs `fs.lstatSync`'s `uid` and
- * `mode` the same way as a BigInt. It is a global, not a `nish:` export.
- * Capability: fs.read.
+ * it names: the owner's uid in the high 32 bits and `st_mode` (the file type
+ * and the permission bits) in the low 32, or -1 when the path does not resolve
+ * or holds a NUL (#386). Both come out of one `lstat`, so they describe the
+ * same file however the path changes in between.
+ *
+ * Take them apart with `(om >> 32) & 0xffffffff` (the owner) and `om & 0xfff`
+ * (the permission bits) or `om & 0xf000` (the type: `0x8000` a regular file,
+ * `0x4000` a directory, `0xa000` a symbolic link). The mask on the owner is not
+ * optional: a uid of 2^31 or more fills bit 63, which `>>` on an `i64` copies
+ * down, so `om >> 32` alone answers a negative owner that never equals
+ * `geteuid()`.
+ *
+ * The answer is an `i64` in both number modes, and an `i32` variable is refused
+ * rather than truncated (`` Cannot initialize i32 variable `om` with i64 ``).
+ * It takes a `string` path and exactly one argument. A wasm32 build is refused,
+ * with `` `lstatOwnerModeSync` reaches the operating system, and a wasm32 build
+ * has none to reach ``. Under Node the runtime shim packs `fs.lstatSync`'s
+ * `uid` and `mode` the same way as a BigInt. It is a global, not a `nish:`
+ * export. Capability: fs.read.
  *
  * @param path the path to stat, not followed through a final link.
  * @returns `(uid << 32) | st_mode`, or -1.
@@ -629,14 +648,16 @@ declare function isExecutableSync(path: string): boolean;
 /**
  * `xs[i]` with no bounds check: undefined behaviour when `i` is out of range,
  * which is the whole of the trade. The array holds numbers (`i32`, `i64`, `u8`,
- * `u16`, `u32`, `u64`, `f32` or `f64`) and nothing else, or it is `` `uncheckedGet`
- * takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or f64), got
- * string[] `` (NL2455). The index is an `i32`, so an `f64` one is `` `uncheckedGet`
- * expects an argument of type i32, got f64 ``. A `readonly` array may be read.
+ * `u16`, `u32`, `u64`, `f32` or `f64`) and nothing else, or it is ``
+ * `uncheckedGet` takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or
+ * f64), got string[] `` (NL2455). The index is an `i32`, so an `f64` one is ``
+ * `uncheckedGet` expects an argument of type i32, got f64 ``. A `readonly`
+ * array may be read.
+ *
  * To the bounds proof it is the load `xs[i]` is, less the check: it moves no
  * length, and it records no passed check, so a checked `xs[i]` after it keeps
- * its check. Under `--deny-panics` it is an allowed `unchecked` site. Under Node
- * the runtime shim reads `xs[i]`. Capability: unsafe.
+ * its check. Under `--deny-panics` it is an allowed `unchecked` site. Under
+ * Node the runtime shim reads `xs[i]`. Capability: unsafe.
  *
  * @param xs the array of numbers to read.
  * @param i the index, trusted to be in range.
@@ -650,12 +671,13 @@ declare function uncheckedGet<T extends number>(xs: readonly T[], i: i32): T;
  * array may not be written (`` Cannot `uncheckedSet` through readonly u8[] ``).
  * A number is copied in and held by nothing, so the store needs none of the
  * escape and inline-array reasoning `xs[i] = v` carries; an array field handed
- * to it is a value and is not stored inline. The store is a write of the array
- * for every rule that asks, the rule for a parallel body included. To the bounds
- * proof it is the store `xs[i] = v` is, less the check, and a resize in the
- * value stored still takes the length away. Under `--deny-panics` it is an
- * allowed `unchecked` site. Under Node the runtime shim stores `xs[i] = v`.
- * Capability: unsafe.
+ * to it is a value and is not stored inline.
+ *
+ * The store is a write of the array for every rule that asks, the rule for a
+ * parallel body included. To the bounds proof it is the store `xs[i] = v` is,
+ * less the check, and a resize in the value stored still takes the length away.
+ * Under `--deny-panics` it is an allowed `unchecked` site. Under Node the
+ * runtime shim stores `xs[i] = v`. Capability: unsafe.
  *
  * @param xs the array of numbers to write.
  * @param i the index, trusted to be in range.
@@ -665,12 +687,14 @@ declare function uncheckedSet<T extends number>(xs: T[], i: i32, v: T): void;
 /**
  * `a + b` wrapped to the operands' width, `i32` or `i64`: defined for every
  * pair, where the operator `+` panics on signed overflow. The two operands are
- * one type, which is also the answer: `` `wrappingMul` takes i32 or i64 operands
- * (convert with toI32 or toI64), got u32 `` is NL2454 (the unsigned words
- * already wrap), and two widths are `` `wrappingAdd` needs every operand of one
- * type, got i32 and i64 `` (NL2400). A bare literal takes the other operand's
- * type, wherever it stands. `wrappingAdd(2147483647, 1)` is `-2147483648`. In a
- * module constant's initialiser the call folds, wrapping, where
+ * one type, which is also the answer: `` `wrappingMul` takes i32 or i64
+ * operands (convert with toI32 or toI64), got u32 `` is NL2454 (the unsigned
+ * words already wrap), and two widths are `` `wrappingAdd` needs every operand
+ * of one type, got i32 and i64 `` (NL2400). A bare literal takes the other
+ * operand's type, wherever it stands. `wrappingAdd(2147483647, 1)` is
+ * `-2147483648`.
+ *
+ * In a module constant's initialiser the call folds, wrapping, where
  * `2147483647 + 1` is refused; it is the one call such an initialiser may make.
  * It is not a site under `--deny-panics`, as it cannot panic. Under Node the
  * runtime shim computes `(a + b) | 0` on an `i32` and `BigInt.asIntN(64, ...)`
@@ -705,21 +729,24 @@ declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
  * The `NUL`-terminated bytes at `p`, copied into a new string of the program's
  * own: undefined behaviour unless `p` is a live C string, since nothing proves
  * the bytes end (a dangling or freed pointer, or a buffer with no `NUL`). It is
- * the copy a `string` result of a `declare function` makes, for the pointers
- * C allocated for the caller to free, and C's buffer is never held past the
- * call, so `free(p)` straight after it is safe. The parameter is `CPtr`, so an
- * unnarrowed `CPtr | null` is refused (`` `readCString` expects an argument of
- * type CPtr, got CPtr | null ``) and `if (p !== null)` comes first; a
- * `declare function` whose result is declared `CPtr` gets no check, so declare
- * a result that may be `NULL` as `CPtr | null`. The copy is new on every call
- * and is the calling function's allocation, and it is refused inside a
- * `using a = arena()` block that would release one held outside it
- * (`` `readCString(p)` may be allocated inside the `using arena()` block ``).
- * Under `--deny-panics` it is an allowed `unchecked` site, with the copy's
- * `oom` beside it, and the pointer it reads is `ffi`. It lowers the same on
- * wasm32, where whether the program links is the `declare function`'s question.
- * It has no Node form, as a `CPtr` comes only from a `declare function`, which
- * Node cannot call. Capability: unsafe.
+ * the copy a `string` result of a `declare function` makes, for the pointers C
+ * allocated for the caller to free, and C's buffer is never held past the call,
+ * so `free(p)` straight after it is safe.
+ *
+ * The parameter is `CPtr`, so an unnarrowed `CPtr | null` is refused (``
+ * `readCString` expects an argument of type CPtr, got CPtr | null ``) and `if
+ * (p !== null)` comes first; a `declare function` whose result is declared
+ * `CPtr` gets no check, so declare a result that may be `NULL` as `CPtr |
+ * null`.
+ *
+ * The copy is new on every call and is the calling function's allocation, and
+ * it is refused inside a `using a = arena()` block that would release one held
+ * outside it (`` `readCString(p)` may be allocated inside the `using arena()`
+ * block ``). Under `--deny-panics` it is an allowed `unchecked` site, with the
+ * copy's `oom` beside it, and the pointer it reads is `ffi`. It lowers the same
+ * on wasm32, where whether the program links is the `declare function`'s
+ * question. It has no Node form, as a `CPtr` comes only from a `declare
+ * function`, which Node cannot call. Capability: unsafe.
  *
  * @param p the address a `declare function` handed back.
  * @returns a copy of the bytes before the first `NUL`.
@@ -755,14 +782,15 @@ declare function writeError(s: string): void;
  * — the one way to send bytes that are not text, a byte of 0x80 or above or a
  * zero byte included. A loop of `write(2)` sends them all, retried on an
  * interrupted call. A pipe whose reader has gone raises SIGPIPE natively, as it
- * does for `write`, where Node answers `-32` EPIPE. `off` and `len` are
- * `netWrite`'s buffer range, checked once after the arguments are evaluated:
- * `0 <= off`, `0 <= len` and `off + len <= bytes.length`, and anything else
- * panics, as `dst.set` does, with `slice out of range: [off, off+len) of length
- * n` and exits 1. The shape is `netWrite`'s with the descriptor fixed at 1.
- * Under Node the range is the same check and the bytes go to
- * `fs.writeSync(1, ...)`. A `wasm32` build has no stdout to reach and refuses it. Also exported
- * by `nish:io`. Capability: none.
+ * does for `write`, where Node answers `-32` EPIPE.
+ *
+ * `off` and `len` are `netWrite`'s buffer range, checked once after the
+ * arguments are evaluated: `0 <= off`, `0 <= len` and `off + len <=
+ * bytes.length`, and anything else panics, as `dst.set` does, with `slice out
+ * of range: [off, off+len) of length n` and exits 1. The shape is `netWrite`'s
+ * with the descriptor fixed at 1. Under Node the range is the same check and
+ * the bytes go to `fs.writeSync(1, ...)`. A `wasm32` build has no stdout to
+ * reach and refuses it. Also exported by `nish:io`. Capability: none.
  *
  * @param bytes the buffer to send.
  * @param off the first byte sent; `0 <= off`.
@@ -887,21 +915,24 @@ declare function renameSync(from: string, to: string): i32;
  */
 declare function unlinkSync(path: string): i32;
 /**
- * `writeFileSync` with an explicit `mode`: the file is exactly `mode`
- * (`0o600` for a secret) before a byte of `data` is in it, whatever the umask
- * or a file already there had. The open passes `mode` and an `fchmod(2)` sets
- * it before the first byte is written, so the umask cannot widen it, a file that
- * already existed at 0644 is narrowed before it holds the new contents, and no
- * reader that opens it afterwards finds the secret under the old mode. A
- * descriptor opened before, while the file was wider, is not revoked and still
- * reads what is written. A symbolic link at the path is refused (-40), its
- * target untouched. The file is truncated and written in place, so a crash or a
- * failed write leaves it empty or partial, and a file this process may write but
- * does not own is emptied before the mode change answers -1 (`EPERM`). For a file
- * that must be the old one or the new one, write a temporary name beside the
- * target with this and move it over with `renameSync`. Never an exit and never a
- * panic. A `wasm32` build refuses it, and a WASI build answers `-ENOSYS`, as
- * WASI has no file modes to set. Capability: fs.write.
+ * `writeFileSync` with an explicit `mode`: the file is exactly `mode` (`0o600`
+ * for a secret) before a byte of `data` is in it, whatever the umask or a file
+ * already there had. The open passes `mode` and an `fchmod(2)` sets it before
+ * the first byte is written, so the umask cannot widen it, a file that already
+ * existed at 0644 is narrowed before it holds the new contents, and no reader
+ * that opens it afterwards finds the secret under the old mode.
+ *
+ * A descriptor opened before, while the file was wider, is not revoked and
+ * still reads what is written. A symbolic link at the path is refused (-40),
+ * its target untouched. The file is truncated and written in place, so a crash
+ * or a failed write leaves it empty or partial, and a file this process may
+ * write but does not own is emptied before the mode change answers -1
+ * (`EPERM`).
+ *
+ * For a file that must be the old one or the new one, write a temporary name
+ * beside the target with this and move it over with `renameSync`. Never an exit
+ * and never a panic. A `wasm32` build refuses it, and a WASI build answers
+ * `-ENOSYS`, as WASI has no file modes to set. Capability: fs.write.
  *
  * @param path the file to write.
  * @param data its new contents.
@@ -975,8 +1006,10 @@ declare function isDirectorySync(path: string): boolean;
  * like every string comparison here, so it agrees with Node's `.sort()` for
  * ASCII names and can differ for names that are not. `null` when the directory
  * cannot be read at all — a missing path, a plain file, a parent that cannot be
- * searched. An empty directory is an empty array, so the null check is about
- * the directory and not about its contents. A WASI build always answers `null`:
+ * searched.
+ *
+ * An empty directory is an empty array, so the null check is about the
+ * directory and not about its contents. A WASI build always answers `null`:
  * `fd_readdir` lists a preopened directory rather than a path, which is a
  * different contract. Capability: fs.read.
  *
@@ -1033,17 +1066,18 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  * `stdin`'s bytes and then end of file, and whatever it prints is appended to
  * `stdout` and `stderr`, which keep what they held. The runtime writes `stdin`
  * and drains both outputs in one `poll` loop, so a child that fills one pipe
- * while the parent waits on another cannot deadlock it. When a stream passes
- * 16 MiB (`NISH_PIPED_CAP`) the child is killed with `SIGKILL` and that array
- * keeps the first 16 MiB. A child that exits without reading its stdin is not a
- * failure. The child inherits the environment and working directory, and no
- * descriptor of the program but its three streams; it starts with SIGPIPE as
- * the program had it, and the program's own SIGPIPE from writing to a child
- * that stopped reading is absorbed. The two output arrays are grown by the
- * runtime, so `readonly` is refused for them, as is a typed-array spelling
- * (`Int32Array`, ...), whose length is fixed. A `wasm32` build refuses it
- * (NL2404).
- * Capability: process.spawn.
+ * while the parent waits on another cannot deadlock it. When a stream passes 16
+ * MiB (`NISH_PIPED_CAP`) the child is killed with `SIGKILL` and that array
+ * keeps the first 16 MiB.
+ *
+ * A child that exits without reading its stdin is not a failure. The child
+ * inherits the environment and working directory, and no descriptor of the
+ * program but its three streams; it starts with SIGPIPE as the program had it,
+ * and the program's own SIGPIPE from writing to a child that stopped reading is
+ * absorbed. The two output arrays are grown by the runtime, so `readonly` is
+ * refused for them, as is a typed-array spelling (`Int32Array`, ...), whose
+ * length is fixed. A `wasm32` build refuses it (NL2404). Capability:
+ * process.spawn.
  *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
@@ -1115,13 +1149,14 @@ declare function kill(pid: i32, sig: i32): i32;
  * tuple). `pid` is a child's, or -1 for any child. After `signalFd()` a
  * blocking wait never sees EINTR, because that handler is installed with
  * `SA_RESTART` and the wait restarts, and it cannot be woken by SIGTERM either:
- * a supervisor that must answer a signal while its children run reaps with
- * flag 1 (WNOHANG) on each tick of a `pollWait` loop that also watches the
- * signal descriptor, and stops its children with `kill` when `readSignal`
- * answers. No reading under Node, which throws, naming itself. A `wasm32` build
- * refuses it (NL2404), and a scope's task or a parallel body that calls it is
- * refused as any shared write is. Also exported by `nish:process`.
- * Capability: process.spawn.
+ * a supervisor that must answer a signal while its children run reaps with flag
+ * 1 (WNOHANG) on each tick of a `pollWait` loop that also watches the signal
+ * descriptor, and stops its children with `kill` when `readSignal` answers.
+ *
+ * No reading under Node, which throws, naming itself. A `wasm32` build refuses
+ * it (NL2404), and a scope's task or a parallel body that calls it is refused
+ * as any shared write is. Also exported by `nish:process`. Capability:
+ * process.spawn.
  *
  * @param pid the child to wait for, or -1.
  * @param flags 0, or 1 for WNOHANG; any other bit is `[-22, 0]`, as is a pid
@@ -1165,11 +1200,12 @@ declare function totalMemory(): i64;
  * calling thread's and every thread started after it, so it belongs at the top
  * of `main`, before a `scope()` or a parallel loop starts the pool, and a task
  * or a parallel body that calls it is refused as any shared write is. It never
- * crashes the program: a failure is only the answer. A `wasm32` build refuses
- * it (NL2404). Throws under Node. Also exported by `nish:process`. The label is
- * `kill`'s: neither reaches another process, but the priority is the one the
- * program's children inherit, and a step down cannot always be taken back.
- * Capability: process.spawn.
+ * crashes the program: a failure is only the answer.
+ *
+ * A `wasm32` build refuses it (NL2404). Throws under Node. Also exported by
+ * `nish:process`. The label is `kill`'s: neither reaches another process, but
+ * the priority is the one the program's children inherit, and a step down
+ * cannot always be taken back. Capability: process.spawn.
  *
  * @param n the nice value, 0..19.
  * @returns 0, or a negative errno: `n` outside 0..19 is -22 (EINVAL), and `n`
@@ -1208,15 +1244,16 @@ declare function setIdlePriority(): i32;
 declare function setCpuAffinity(cpu: i32): i32;
 /**
  * One environment variable, as the call runs. The value is what `getenv(3)`
- * answers, so it is bytes: a variable holding something that is not valid
- * UTF-8 comes back as those bytes, as `readFileSync` does, and every offset
- * into it is a byte offset. The bytes are copied into the arena, so the result
- * is an ordinary string that outlives any later change to the environment, and
- * it is narrowed with `if (cc !== null)` like any other nullable. It is a call
- * and not `process.env.CC`, because a member access on a key chosen at runtime
- * is forbidden. Two reads of one variable are two calls: a `setenv` from linked
- * C may change the answer between them. Also exported by `nish:process`.
- * Capability: env.
+ * answers, so it is bytes: a variable holding something that is not valid UTF-8
+ * comes back as those bytes, as `readFileSync` does, and every offset into it
+ * is a byte offset. The bytes are copied into the arena, so the result is an
+ * ordinary string that outlives any later change to the environment, and it is
+ * narrowed with `if (cc !== null)` like any other nullable.
+ *
+ * It is a call and not `process.env.CC`, because a member access on a key
+ * chosen at runtime is forbidden. Two reads of one variable are two calls: a
+ * `setenv` from linked C may change the answer between them. Also exported by
+ * `nish:process`. Capability: env.
  *
  * @param name the variable's name.
  * @returns its value, or `null` when it is unset (an empty value, as `CC=`, is a
@@ -1264,9 +1301,11 @@ declare function statMtimeSync(path: string): f64;
  * A descriptor that becomes readable when SIGTERM or SIGINT arrives. It is the
  * read end of a pipe that a `sigaction` handler in the runtime's C writes one
  * byte to per signal, so the signals' default action (ending the process) never
- * runs. The handler runs in whichever thread the signal lands on, so a `scope()`
- * task or a parallel worker running when it is called cannot take the signal and
- * end the process, and nothing is blocked for a spawned child to inherit.
+ * runs. The handler runs in whichever thread the signal lands on, so a
+ * `scope()` task or a parallel worker running when it is called cannot take the
+ * signal and end the process, and nothing is blocked for a spawned child to
+ * inherit.
+ *
  * Installing the handler overrides a disposition the process started with, so a
  * signal its parent ignored is heard, as `process.on("SIGTERM")` hears it under
  * Node. Made once: every later call answers the same descriptor. A child that
@@ -1274,9 +1313,11 @@ declare function statMtimeSync(path: string): f64;
  * signal, because `exec` resets a caught signal to its default. Signals other
  * than SIGTERM and SIGINT are not in the language. A descriptor rather than a
  * handler, so a server's loop can wait on it beside its sockets with
- * `pollWait`. A `wasm32` build and the `wasi` profile refuse it (NL2404). No
- * reading under Node, which delivers a signal only to its event loop: it throws.
- * Also exported by `nish:process`. Capability: signal.
+ * `pollWait`.
+ *
+ * A `wasm32` build and the `wasi` profile refuse it (NL2404). No reading under
+ * Node, which delivers a signal only to its event loop: it throws. Also
+ * exported by `nish:process`. Capability: signal.
  *
  * @returns the descriptor, or -1 when it cannot be made.
  */
@@ -1349,20 +1390,27 @@ declare function netLocalPort(fd: i32): i32;
  */
 declare function tcpListen(host: string, port: i32, backlog: i32): i32;
 /**
- * `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket
- * for flag 2. Flag 1 lets several listeners that all ask for it share one port, each with its own
- * accept queue, whether one process holds them all or each of several processes holds one. On Linux
- * the connections are spread by a hash of the connection's 4-tuple and only listeners of the same
- * user may share; on Darwin the listeners share the port but one of them takes the connections, so
- * the flag buys a restart without a gap rather than a spread. Flag 2 sets `TCP_NODELAY` on every
- * connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each
- * accepted socket, and a connection on which it cannot be set is closed and its failure answered.
- * Flag 4, with flag 1, steers by CPU: a new connection goes to the group's listener whose bind
- * order is the index of the CPU that received it (Linux; -95 elsewhere); a CPU past the group's
- * size falls back to the hash. Flags add: 3 is both, 5 and 7 steer. Flag 0 is `tcpListen` exactly.
- * A port held by a listener without flag 1 is -98 to a listener that asks for it, and the other way
- * round. Refused at compile time on wasm32 and the WASI profile (NL2404). Not callable in a
- * `scope()` task or a parallel body. Capability: net.
+ * `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on
+ * each accepted socket for flag 2. Flag 1 lets several listeners that all ask
+ * for it share one port, each with its own accept queue, whether one process
+ * holds them all or each of several processes holds one.
+ *
+ * On Linux the connections are spread by a hash of the connection's 4-tuple and
+ * only listeners of the same user may share; on Darwin the listeners share the
+ * port but one of them takes the connections, so the flag buys a restart
+ * without a gap rather than a spread. Flag 2 sets `TCP_NODELAY` on every
+ * connection `tcpAccept` takes from the listener, on every platform: the
+ * runtime sets it on each accepted socket, and a connection on which it cannot
+ * be set is closed and its failure answered.
+ *
+ * Flag 4, with flag 1, steers by CPU: a new connection goes to the group's
+ * listener whose bind order is the index of the CPU that received it (Linux;
+ * -95 elsewhere); a CPU past the group's size falls back to the hash. Flags
+ * add: 3 is both, 5 and 7 steer. Flag 0 is `tcpListen` exactly. A port held by
+ * a listener without flag 1 is -98 to a listener that asks for it, and the
+ * other way round. Refused at compile time on wasm32 and the WASI profile
+ * (NL2404). Not callable in a `scope()` task or a parallel body. Capability:
+ * net.
  *
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
@@ -1548,18 +1596,24 @@ declare function udpSendTo(
   ecn: i32
 ): i32;
 /**
- * The next datagram, or several GRO coalesced, into `buf[off, off + len)` in one `recvmsg`, cut to
- * `len` if it is longer. An empty datagram is a datagram: the answer is 0 for it. Not `willreturn`,
- * as `udpSendTo`. The range is checked as `netRead`'s is, with the same panic. `meta` must be an
- * `i32[]` (NL2406), and none of the written arrays may be `readonly`. On a socket bound with
- * `udpBind` flag 2, one GSO send arrives as one datagram of up to 64 KB with `meta[0]` its segment
- * size, so walk the buffer in steps of that size, the last datagram possibly shorter; without it
- * the datagrams arrive apart with `meta[0]` 0. The kernel coalesces only datagrams of one flow that
- * arrive after the option is set. On Darwin `meta` is always `0, 0`, and a `meta[1]` of 0 is also
- * what a datagram that is not ECN-capable reads as. Not callable in a `scope()` task or a parallel
- * body. A call that writes `buf`, `from` or `meta` is refused in a scope's region on an array a
- * task may read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404).
- * Capability: net.
+ * The next datagram, or several GRO coalesced, into `buf[off, off + len)` in
+ * one `recvmsg`, cut to `len` if it is longer. An empty datagram is a datagram:
+ * the answer is 0 for it. Not `willreturn`, as `udpSendTo`. The range is
+ * checked as `netRead`'s is, with the same panic. `meta` must be an `i32[]`
+ * (NL2406), and none of the written arrays may be `readonly`.
+ *
+ * On a socket bound with `udpBind` flag 2, one GSO send arrives as one datagram
+ * of up to 64 KB with `meta[0]` its segment size, so walk the buffer in steps
+ * of that size, the last datagram possibly shorter; without it the datagrams
+ * arrive apart with `meta[0]` 0. The kernel coalesces only datagrams of one
+ * flow that arrive after the option is set. On Darwin `meta` is always `0, 0`,
+ * and a `meta[1]` of 0 is also what a datagram that is not ECN-capable reads
+ * as.
+ *
+ * Not callable in a `scope()` task or a parallel body. A call that writes
+ * `buf`, `from` or `meta` is refused in a scope's region on an array a task may
+ * read, as `fill` is. Refused at compile time on wasm32 and the WASI profile
+ * (NL2404). Capability: net.
  *
  * @param fd the UDP socket.
  * @param buf the buffer filled.
@@ -1638,18 +1692,23 @@ declare function pollModify(loop: i32, fd: i32, events: i32, token: i32): i32;
  */
 declare function pollRemove(loop: i32, fd: i32): i32;
 /**
- * Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events (1 readable, 2
- * writable, with 4 added for a hang-up or an error). Not `willreturn`, because it can wait forever.
- * It never writes past `ready.length`. `ready` must be an `i32[]` (the tokens are the program's own
- * `i32`s) and not `readonly`. A signal that interrupts the wait makes it answer 0, as a timeout
- * does, rather than wait past the deadline; the descriptor `signalFd()` answers can be added to the
- * loop, and is readable when SIGTERM or SIGINT arrives. A UDP socket is always writable, and on
- * Linux one whose both sides are shut is readable, writable and hung up, 7. On Darwin a descriptor
- * both readable and writable is one pair, 3; a descriptor watching nothing is never reported (epoll
- * still reports its hang-up or error as 4); and a peer's half-close is 5 (`1|4`) where Linux
- * reports 1. Not callable in a `scope()` task or a parallel body. A call that writes `ready` is
- * refused in a scope's region on an array a task may read, as `fill` is. Refused at compile time on
- * wasm32 and the WASI profile (NL2404). Capability: net.
+ * Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events
+ * (1 readable, 2 writable, with 4 added for a hang-up or an error). Not
+ * `willreturn`, because it can wait forever. It never writes past
+ * `ready.length`. `ready` must be an `i32[]` (the tokens are the program's own
+ * `i32`s) and not `readonly`. A signal that interrupts the wait makes it answer
+ * 0, as a timeout does, rather than wait past the deadline; the descriptor
+ * `signalFd()` answers can be added to the loop, and is readable when SIGTERM
+ * or SIGINT arrives.
+ *
+ * A UDP socket is always writable, and on Linux one whose both sides are shut
+ * is readable, writable and hung up, 7. On Darwin a descriptor both readable
+ * and writable is one pair, 3; a descriptor watching nothing is never reported
+ * (epoll still reports its hang-up or error as 4); and a peer's half-close is 5
+ * (`1|4`) where Linux reports 1. Not callable in a `scope()` task or a parallel
+ * body. A call that writes `ready` is refused in a scope's region on an array a
+ * task may read, as `fill` is. Refused at compile time on wasm32 and the WASI
+ * profile (NL2404). Capability: net.
  *
  * @param loop the loop from `pollCreate`.
  * @param ready receives the pairs; shorter than 2 is -22.
@@ -1734,22 +1793,29 @@ declare const NET_SO_SNDBUF: i32;
  */
 declare const NET_SO_RCVBUF: i32;
 /**
- * A listening Unix stream socket at `path` (`@name`: Linux's abstract namespace), its file mode
- * 0600, so only its owner may connect. A Unix socket is a descriptor like any other: `netRead`,
- * `netWrite`, `netShutdown`, `netClose` and the readiness loop take it, and a gone peer is -32. The
- * path is bytes up to the first NUL, so a NUL inside it is -22, as an empty path is. It must fit
- * `sun_path` with its NUL: 107 bytes on Linux, 103 on Darwin, measured on the string as written; a
- * longer one is -36 before a socket exists. An abstract name leaves no file; its name is at most
- * 107 bytes, a bare `@` is -22, and on Darwin every `@` path is -95. A file whose name starts with
- * `@` is spelled `./@name`. A bind never replaces a file. Closing a listener does not unlink its
- * file: `unlinkSync` it when the server stops, or let the next start's `NET_UNIX_UNLINK_STALE`
- * clear it. A failure after the bind closes the socket and unlinks the file it made. A connect
- * needs write permission on the file and search permission on every directory above it, which is
- * the real boundary: put the socket in a directory only the users who may connect can reach. With
- * `NET_UNIX_UNLINK_STALE`, the runtime connects to an existing socket file and unlinks it only on a
- * refusal; between the probe and the unlink another process can bind the path, so the directory
- * must be the program's own. Refused at compile time on wasm32 and the WASI profile (NL2404). Not
- * callable in a `scope()` task or a parallel body. Capability: net.
+ * A listening Unix stream socket at `path` (`@name`: Linux's abstract
+ * namespace), its file mode 0600, so only its owner may connect. A Unix socket
+ * is a descriptor like any other: `netRead`, `netWrite`, `netShutdown`,
+ * `netClose` and the readiness loop take it, and a gone peer is -32. The path
+ * is bytes up to the first NUL, so a NUL inside it is -22, as an empty path is.
+ *
+ * It must fit `sun_path` with its NUL: 107 bytes on Linux, 103 on Darwin,
+ * measured on the string as written; a longer one is -36 before a socket
+ * exists. An abstract name leaves no file; its name is at most 107 bytes, a
+ * bare `@` is -22, and on Darwin every `@` path is -95. A file whose name
+ * starts with `@` is spelled `./@name`. A bind never replaces a file. Closing a
+ * listener does not unlink its file: `unlinkSync` it when the server stops, or
+ * let the next start's `NET_UNIX_UNLINK_STALE` clear it.
+ *
+ * A failure after the bind closes the socket and unlinks the file it made. A
+ * connect needs write permission on the file and search permission on every
+ * directory above it, which is the real boundary: put the socket in a directory
+ * only the users who may connect can reach. With `NET_UNIX_UNLINK_STALE`, the
+ * runtime connects to an existing socket file and unlinks it only on a refusal;
+ * between the probe and the unlink another process can bind the path, so the
+ * directory must be the program's own. Refused at compile time on wasm32 and
+ * the WASI profile (NL2404). Not callable in a `scope()` task or a parallel
+ * body. Capability: net.
  *
  * @param path the socket file, or `@name`; it must be a `string`.
  * @param backlog the kernel's queue of unaccepted connections.
@@ -1809,14 +1875,17 @@ declare function unixAccept(fd: i32): i32;
  */
 declare function unixSocketPair(kind: i32, fds: i32[]): i32;
 /**
- * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the descriptor `fd`
- * (`SCM_RIGHTS`). The receiver's `recvFd` gets a new descriptor for the same open file, with its
- * offset and status flags shared, as `dup` gives; `fd` stays open here. The descriptor rides on at
- * least one byte of data, so the receiver's read is what tells it a descriptor came. A stream
- * socket can send short: the descriptor travels with the first bytes, so send the rest with
- * `netWrite`, not `sendFd`, or the receiver gets a second copy. The range is checked as `netRead`'s
- * is, with the same panic; `buf` may be `readonly`. Not callable in a `scope()` task or a parallel
- * body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
+ * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
+ * descriptor `fd` (`SCM_RIGHTS`). The receiver's `recvFd` gets a new descriptor
+ * for the same open file, with its offset and status flags shared, as `dup`
+ * gives; `fd` stays open here. The descriptor rides on at least one byte of
+ * data, so the receiver's read is what tells it a descriptor came. A stream
+ * socket can send short: the descriptor travels with the first bytes, so send
+ * the rest with `netWrite`, not `sendFd`, or the receiver gets a second copy.
+ *
+ * The range is checked as `netRead`'s is, with the same panic; `buf` may be
+ * `readonly`. Not callable in a `scope()` task or a parallel body. Refused at
+ * compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
  * @param sock the Unix socket.
  * @param fd the descriptor sent.
@@ -1829,19 +1898,25 @@ declare function unixSocketPair(kind: i32, fds: i32[]): i32;
  */
 declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 /**
- * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and the first descriptor
- * that came with them into `fd[0]`, or -1 when the message carried none. Every other descriptor in
- * the message is closed before the answer, so a peer cannot leave this process holding descriptors
- * it never asked for; room is made for 8, so the kernel drops the rest of a message that carries
- * more and the bytes are still answered. The one kept is close-on-exec, so a later `spawn` does not
- * hand it on, and keeps the sender's blocking mode (it is not made non-blocking, so `netRead` on a
- * blocking one waits: set what the program needs on it before it joins a loop). The range is
- * checked as `netRead`'s is, with the same panic. `buf` and `fd` must not be `readonly`, and `fd`
- * must be an `i32[]`. On Darwin the descriptor is made close-on-exec by a later `fcntl`, so a child
- * another thread spawns between the two inherits it. Not callable in a `scope()` task or a parallel
- * body. A call that writes `buf` or `fd` is refused in a scope's region on an array a task may
- * read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
- * net.
+ * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and
+ * the first descriptor that came with them into `fd[0]`, or -1 when the message
+ * carried none. Every other descriptor in the message is closed before the
+ * answer, so a peer cannot leave this process holding descriptors it never
+ * asked for; room is made for 8, so the kernel drops the rest of a message that
+ * carries more and the bytes are still answered.
+ *
+ * The one kept is close-on-exec, so a later `spawn` does not hand it on, and
+ * keeps the sender's blocking mode (it is not made non-blocking, so `netRead`
+ * on a blocking one waits: set what the program needs on it before it joins a
+ * loop). The range is checked as `netRead`'s is, with the same panic. `buf` and
+ * `fd` must not be `readonly`, and `fd` must be an `i32[]`. On Darwin the
+ * descriptor is made close-on-exec by a later `fcntl`, so a child another
+ * thread spawns between the two inherits it.
+ *
+ * Not callable in a `scope()` task or a parallel body. A call that writes `buf`
+ * or `fd` is refused in a scope's region on an array a task may read, as `fill`
+ * is. Refused at compile time on wasm32 and the WASI profile (NL2404).
+ * Capability: net.
  *
  * @param sock the Unix socket.
  * @param buf the buffer filled.
@@ -1854,14 +1929,17 @@ declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i
  */
 declare function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
 /**
- * The peer of the Unix socket `fd` as the kernel recorded it when the connection was made (the
- * `connect`, or the `socketpair`): `out` gets its pid, uid and gid. A peer that has since changed
- * its uid, passed the socket on or closed still reads as it was then. The pid is -1 where Darwin
- * has no `LOCAL_PEERPID` or the kernel refuses it. A uid or gid of 2^31 or above wraps (-2 is uid
- * 4294967294). `out` must be an `i32[]` and not `readonly`. Not callable in a `scope()` task or a
- * parallel body. A call that writes `out` is refused in a scope's region on an array a task may
- * read, as `fill` is. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
- * net.
+ * The peer of the Unix socket `fd` as the kernel recorded it when the
+ * connection was made (the `connect`, or the `socketpair`): `out` gets its pid,
+ * uid and gid. A peer that has since changed its uid, passed the socket on or
+ * closed still reads as it was then. The pid is -1 where Darwin has no
+ * `LOCAL_PEERPID` or the kernel refuses it. A uid or gid of 2^31 or above wraps
+ * (-2 is uid 4294967294). `out` must be an `i32[]` and not `readonly`. Not
+ * callable in a `scope()` task or a parallel body.
+ *
+ * A call that writes `out` is refused in a scope's region on an array a task
+ * may read, as `fill` is. Refused at compile time on wasm32 and the WASI
+ * profile (NL2404). Capability: net.
  *
  * @param fd the connected Unix socket.
  * @param out at least 3 slots, receiving pid, uid and gid.
@@ -1937,15 +2015,18 @@ declare const NET_UNIX_SEQPACKET: i32;
  */
 declare function readStdin(buf: u8[], off: i32, len: i32): i32;
 /**
- * Wait for stdin to be readable, or `timeoutMs` milliseconds to pass: the frame clock of a
- * terminal program, which costs nothing when a key arrives early. Its end and an error count
- * as readable, so the read after it answers at once, with 0 or a negative errno that is not
- * -11, which a loop treats as the end. A signal that ends the wait early gives `false`, except
- * a Ctrl-Z and `fg` once `setRawMode(true)` has caught SIGTSTP, after which the wait goes on
- * for what is left of the timeout; before raw mode the system's default stop decides (Linux
- * goes on with what is left, Darwin ends the wait). Not `willreturn`. Under `--profile wasi`
- * it waits at least 10 ms; under Node it throws; refused at compile time on a freestanding
- * wasm32 target. Capability: tty.
+ * Wait for stdin to be readable, or `timeoutMs` milliseconds to pass: the frame
+ * clock of a terminal program, which costs nothing when a key arrives early.
+ * Its end and an error count as readable, so the read after it answers at once,
+ * with 0 or a negative errno that is not -11, which a loop treats as the end.
+ *
+ * A signal that ends the wait early gives `false`, except a Ctrl-Z and `fg`
+ * once `setRawMode(true)` has caught SIGTSTP, after which the wait goes on for
+ * what is left of the timeout; before raw mode the system's default stop
+ * decides (Linux goes on with what is left, Darwin ends the wait). Not
+ * `willreturn`. Under `--profile wasi` it waits at least 10 ms; under Node it
+ * throws; refused at compile time on a freestanding wasm32 target. Capability:
+ * tty.
  *
  * @param timeoutMs the most milliseconds to wait; negative: forever.
  * @returns `true` when it is readable, `false` when the time passed or a signal ended the wait.
@@ -1972,32 +2053,45 @@ declare function isTerminal(fd: i32): boolean;
 declare function terminalSize(): i32[];
 /**
  * Raw mode on stdin's terminal, or the mode it had back. No echo, no line
- * editing, no CR-to-NL translation, no flow control (Ctrl-S, Ctrl-Q) and no parity stripping;
- * bytes are 8 bits wide, and a read answers as soon as one byte is there, so a key arrives as
- * its bytes (an arrow as the three of `ESC [ A`). `ISIG` stays on: Ctrl-C is still SIGINT and
- * ends the program, Ctrl-\ is still SIGQUIT and Ctrl-Z still stops it, so none of them arrives
- * as a byte (3, 28, 26); a program that wants Ctrl-C as a key asks for SIGINT through
- * `signalFd` and handles it in its loop. `OPOST` stays on, so "\n" still moves to the start of
- * the next line and output needs no "\r\n". Each `setRawMode(true)` that enters raw mode saves
- * the termios that was there; it comes back on `setRawMode(false)`, when `main` returns or
- * `process.exit` is called, on every panic, and on every signal whose default action ends the
- * program, SIGKILL aside (SIGINT, SIGTERM, SIGQUIT, SIGHUP, SIGPIPE, SIGALRM, SIGUSR1,
- * SIGUSR2, SIGPROF, SIGVTALRM, SIGXCPU, SIGXFSZ, SIGSYS, and the faults SIGILL, SIGTRAP,
- * SIGABRT, SIGFPE, SIGBUS and SIGSEGV). For each, a handler is installed only when the program
- * left it at its default action: it restores the terminal, puts the default back and raises
- * the signal again, so the program still dies of it and its parent sees that (exit status 143
- * for SIGTERM). A program that took SIGTERM or SIGINT through `signalFd` keeps it and puts
- * the terminal back itself, or by returning. SIGKILL leaves raw mode behind, and so does a
- * stack overflow on a thread other than the one that called `setRawMode(true)`; `stty sane`
- * undoes either, as it does a stop by SIGSTOP. Ctrl-Z (SIGTSTP) restores the terminal, stops
- * the program, and once `fg` or `bg` continues it enters raw mode again; a program continued
- * in the background stops again, by SIGTTOU, until `fg`. A program started in the background
- * (`app &`) that calls `setRawMode(true)` is stopped by SIGTTOU, as any program that sets the
- * terminal is, and enters raw mode on `fg`. Two threads that call it at once take turns, so
- * the termios saved is the one from before either. Asking for the mode it is already in
- * changes nothing and answers 0, so `setRawMode(false)` is always safe. Under `--profile
- * wasi`, on a pipe or a file, `true` is -25 and `false` is 0; under Node and in a browser it
- * throws; refused at compile time on a freestanding wasm32 target. Capability: tty.
+ * editing, no CR-to-NL translation, no flow control (Ctrl-S, Ctrl-Q) and no
+ * parity stripping; bytes are 8 bits wide, and a read answers as soon as one
+ * byte is there, so a key arrives as its bytes (an arrow as the three of `ESC [
+ * A`).
+ *
+ * `ISIG` stays on: Ctrl-C is still SIGINT and ends the program, Ctrl-\ is still
+ * SIGQUIT and Ctrl-Z still stops it, so none of them arrives as a byte (3, 28,
+ * 26); a program that wants Ctrl-C as a key asks for SIGINT through `signalFd`
+ * and handles it in its loop. `OPOST` stays on, so "\n" still moves to the
+ * start of the next line and output needs no "\r\n".
+ *
+ * Each `setRawMode(true)` that enters raw mode saves the termios that was
+ * there; it comes back on `setRawMode(false)`, when `main` returns or
+ * `process.exit` is called, on every panic, and on every signal whose default
+ * action ends the program, SIGKILL aside (SIGINT, SIGTERM, SIGQUIT, SIGHUP,
+ * SIGPIPE, SIGALRM, SIGUSR1, SIGUSR2, SIGPROF, SIGVTALRM, SIGXCPU, SIGXFSZ,
+ * SIGSYS, and the faults SIGILL, SIGTRAP, SIGABRT, SIGFPE, SIGBUS and SIGSEGV).
+ *
+ * For each, a handler is installed only when the program left it at its default
+ * action: it restores the terminal, puts the default back and raises the signal
+ * again, so the program still dies of it and its parent sees that (exit status
+ * 143 for SIGTERM). A program that took SIGTERM or SIGINT through `signalFd`
+ * keeps it and puts the terminal back itself, or by returning.
+ *
+ * SIGKILL leaves raw mode behind, and so does a stack overflow on a thread
+ * other than the one that called `setRawMode(true)`; `stty sane` undoes either,
+ * as it does a stop by SIGSTOP. Ctrl-Z (SIGTSTP) restores the terminal, stops
+ * the program, and once `fg` or `bg` continues it enters raw mode again; a
+ * program continued in the background stops again, by SIGTTOU, until `fg`. A
+ * program started in the background (`app &`) that calls `setRawMode(true)` is
+ * stopped by SIGTTOU, as any program that sets the terminal is, and enters raw
+ * mode on `fg`.
+ *
+ * Two threads that call it at once take turns, so the termios saved is the one
+ * from before either. Asking for the mode it is already in changes nothing and
+ * answers 0, so `setRawMode(false)` is always safe. Under `--profile wasi`, on
+ * a pipe or a file, `true` is -25 and `false` is 0; under Node and in a browser
+ * it throws; refused at compile time on a freestanding wasm32 target.
+ * Capability: tty.
  *
  * @param on `true` for raw mode, `false` for the mode before.
  * @returns 0, -25 when stdin is not a terminal, or the host's `-errno` when the terminal
@@ -2005,18 +2099,21 @@ declare function terminalSize(): i32[];
  */
 declare function setRawMode(on: boolean): i32;
 /**
- * Bytes the runtime writes to the terminal on stdout at exit, on a panic and
- * on every signal that ends the program (SIGKILL aside), before termios is
- * restored; raw mode or not, and setting them installs the same handlers. Typical bytes are
- * the escapes that leave an alternate screen, show the cursor or turn mouse reporting off.
- * Replaces the previous string; "" clears it. The cap is 4096
- * bytes. They are written to stdout once, with `write` alone, at most once however many of
- * those paths race, and after all the program printed (output is not buffered). Ctrl-Z and
- * `setRawMode(false)` do not end the program, so they write nothing. A signal that lands while
- * the string is replaced writes the old one or the new one, whole. A program sets them once it
- * has switched the terminal and again with each change, last the set that undoes them all.
- * Under `--profile wasi` it keeps nothing; under Node and in a browser it throws; refused at
- * compile time on a freestanding wasm32 target. Capability: tty.
+ * Bytes the runtime writes to the terminal on stdout at exit, on a panic and on
+ * every signal that ends the program (SIGKILL aside), before termios is
+ * restored; raw mode or not, and setting them installs the same handlers.
+ * Typical bytes are the escapes that leave an alternate screen, show the cursor
+ * or turn mouse reporting off. Replaces the previous string; "" clears it. The
+ * cap is 4096 bytes.
+ *
+ * They are written to stdout once, with `write` alone, at most once however
+ * many of those paths race, and after all the program printed (output is not
+ * buffered). Ctrl-Z and `setRawMode(false)` do not end the program, so they
+ * write nothing. A signal that lands while the string is replaced writes the
+ * old one or the new one, whole. A program sets them once it has switched the
+ * terminal and again with each change, last the set that undoes them all. Under
+ * `--profile wasi` it keeps nothing; under Node and in a browser it throws;
+ * refused at compile time on a freestanding wasm32 target. Capability: tty.
  *
  * @param bytes the bytes written at the end.
  * @returns 0, -25 when stdout is not a terminal (`""` is still 0 there), -7 (E2BIG) past
@@ -2034,19 +2131,23 @@ declare function setTerminalRestore(bytes: string): i32;
 /** The system's random source, with its one member. */
 declare var crypto: {
   /**
-   * Every byte of `bytes` from the kernel's CSPRNG (`getrandom(2)` on Linux, looping over
-   * `EINTR` and short reads; `getentropy(3)` in 256-byte chunks on macOS); at most 65,536
-   * bytes a call. A `u8[]` only, where the Web API takes any integer typed array: the byte is
-   * the unit a key or a nonce is written in, and anything else is refused at compile time
-   * (NL2402). A statement, where the Web API also answers its argument, which the caller
-   * already holds. An empty array is filled with nothing. The array is written, so a
-   * `readonly u8[]` is refused (and, inside a `scope()` region, an array a task may read).
-   * More than 65,536 bytes is a panic, `crypto.getRandomValues: <n> bytes asked for, and one
-   * call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is
-   * ever substituted. It is the source for a key. `crypto` has no other member (NL2403, for
-   * example `crypto.randomUUID`). Refused at compile time on wasm32 and the WASI profile
-   * (NL2404). Under Node the prelude fills a plain `u8[]` too and panics past 65,536 with the
-   * same words; without the prelude it takes only a typed array. Capability: entropy.
+   * Every byte of `bytes` from the kernel's CSPRNG (`getrandom(2)` on Linux,
+   * looping over `EINTR` and short reads; `getentropy(3)` in 256-byte chunks on
+   * macOS); at most 65,536 bytes a call. A `u8[]` only, where the Web API takes
+   * any integer typed array: the byte is the unit a key or a nonce is written
+   * in, and anything else is refused at compile time (NL2402). A statement,
+   * where the Web API also answers its argument, which the caller already
+   * holds. An empty array is filled with nothing.
+   *
+   * The array is written, so a `readonly u8[]` is refused (and, inside a
+   * `scope()` region, an array a task may read). More than 65,536 bytes is a
+   * panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at
+   * most 65536`, exit 1. A source that fails is a panic too; nothing weaker is
+   * ever substituted. It is the source for a key. `crypto` has no other member
+   * (NL2403, for example `crypto.randomUUID`). Refused at compile time on
+   * wasm32 and the WASI profile (NL2404). Under Node the prelude fills a plain
+   * `u8[]` too and panics past 65,536 with the same words; without the prelude
+   * it takes only a typed array. Capability: entropy.
    *
    * @param bytes the buffer filled.
    */
@@ -2402,14 +2503,16 @@ declare module "nish:process" {
   /**
    * The same run as `spawnSync`, with every stream a pipe: the child reads
    * `stdin`'s bytes and then end of file, and whatever it writes to its stdout
-   * and stderr is appended to `stdout` and `stderr`, which keep what they
-   * held. It is the run for a child that takes a secret on stdin, which `ps`
-   * and `/proc` do not show. A child that exits without reading its stdin is
-   * not a failure. The child inherits the environment and working directory,
-   * and no descriptor of the program but its three streams; it starts with
-   * SIGPIPE as the program had it, and the program's own SIGPIPE from writing
-   * to a child that stopped reading is absorbed. One `poll` loop writes and
-   * drains, so a child that fills one pipe cannot deadlock the parent.
+   * and stderr is appended to `stdout` and `stderr`, which keep what they held.
+   * It is the run for a child that takes a secret on stdin, which `ps` and
+   * `/proc` do not show. A child that exits without reading its stdin is not a
+   * failure.
+   *
+   * The child inherits the environment and working directory, and no descriptor
+   * of the program but its three streams; it starts with SIGPIPE as the program
+   * had it, and the program's own SIGPIPE from writing to a child that stopped
+   * reading is absorbed. One `poll` loop writes and drains, so a child that
+   * fills one pipe cannot deadlock the parent.
    *
    * @param argv The program and its arguments.
    * @param stdin The bytes the child reads.
@@ -4651,25 +4754,30 @@ declare const Arena: {
  * initialiser, and the binding is never read; under Node there is no arena and
  * the disposal does nothing.
  *
- * `arena()` anywhere but the initialiser of a `using` is NL2416, and reading the
- * binding is NL2417. A number, a `boolean` or an `enum` leaves the block freely,
- * as does a value older than it. These routes are refused for anything else
- * allocated inside: assigning it to a local declared outside the block (NL2418),
- * storing it into a field (NL2419) or an element (NL2420), storing it any other
- * way (NL2421), a `push` onto an array the block does not bind to a fresh array
- * (NL2422), a `return` or `orReturn()` (NL2423), a call to a function that
- * stores an allocation (NL2424) and a `spawn` on a scope declared outside the
- * block (NL2427), on a scope the same `using` declares ahead of `arena()`
- * (`using s = scope(), a = arena()`, NL2427, since `s` joins after the release)
- * or on one ahead of the statement's last `arena()`
- * (`using a = arena(), s = scope(), b = arena()`, NL2427, since `b` releases
- * before `s` joins). The rule is the escape analysis's, so it is conservative.
- * A parallel body or a task may not open one (NL2351). A map that answers numbers
- * or strings may run inside one, and a task filed on a scope the block declares
- * may read what it allocated. It nests with `scope()` and `lock()` on the same
- * stack, innermost first. A `return g(n)` whose arguments are all numbers is a
- * tail call with the release moved ahead of it, unless `g` reads the arena.
- * A panic ends the process. Capability: none.
+ * `arena()` anywhere but the initialiser of a `using` is NL2416, and reading
+ * the binding is NL2417. A number, a `boolean` or an `enum` leaves the block
+ * freely, as does a value older than it.
+ *
+ * These routes are refused for anything else allocated inside:
+ * - assigning it to a local declared outside the block (NL2418),
+ * - storing it into a field (NL2419) or an element (NL2420),
+ * - storing it any other way (NL2421),
+ * - a `push` onto an array the block does not bind to a fresh array (NL2422),
+ * - a `return` or `orReturn()` (NL2423),
+ * - a call to a function that stores an allocation (NL2424)
+ * - and a `spawn` on a scope declared outside the block (NL2427), on a scope
+ *   the same `using` declares ahead of `arena()` (`using s = scope(), a =
+ *   arena()`, NL2427, since `s` joins after the release) or on one ahead of the
+ *   statement's last `arena()` (`using a = arena(), s = scope(), b = arena()`,
+ *   NL2427, since `b` releases before `s` joins).
+ *
+ * The rule is the escape analysis's, so it is conservative. A parallel body or
+ * a task may not open one (NL2351). A map that answers numbers or strings may
+ * run inside one, and a task filed on a scope the block declares may read what
+ * it allocated. It nests with `scope()` and `lock()` on the same stack,
+ * innermost first. A `return g(n)` whose arguments are all numbers is a tail
+ * call with the release moved ahead of it, unless `g` reads the arena. A panic
+ * ends the process. Capability: none.
  *
  * @returns the scope the `using` declaration disposes.
  */
@@ -4677,18 +4785,20 @@ declare function arena(): Disposable;
 
 /**
  * `CPtr`: the address a `declare function` hands back, opaque and eight bytes
- * wide (`i8*` in the IR). It is C's, not arena memory, and its lifetime is the C
- * library's business. `docs/LANGUAGE.md` has the rules — it may be written in a
- * `declare function` signature and on a local that holds one, compared with
- * `null` or with another `CPtr`, assigned, and passed back to C, and that is all.
- * A field, an array element, a `Result` arm, a type argument, and the parameters
- * or return type of a function the program defines are each refused (`` `CPtr`
- * cannot be ...: a foreign pointer may only appear in a `declare function`
- * signature or on a local bound to one ``). There is no arithmetic (`p + 1`), no
- * index (`` Cannot index a value of type CPtr ``), no dereference and no member.
- * A `CPtr | null` reaches C only as the literal `null` or a pointer narrowed
- * with `!== null` (NL2539). `readCString` from `nish:unsafe` copies the string
- * at one.
+ * wide (`i8*` in the IR). It is C's, not arena memory, and its lifetime is the
+ * C library's business. `docs/LANGUAGE.md` has the rules — it may be written in
+ * a `declare function` signature and on a local that holds one, compared with
+ * `null` or with another `CPtr`, assigned, and passed back to C, and that is
+ * all.
+ *
+ * A field, an array element, a `Result` arm, a type argument, and the
+ * parameters or return type of a function the program defines are each refused
+ * (`` `CPtr` cannot be ...: a foreign pointer may only appear in a `declare
+ * function` signature or on a local bound to one ``). There is no arithmetic
+ * (`p + 1`), no index (`` Cannot index a value of type CPtr ``), no dereference
+ * and no member. A `CPtr | null` reaches C only as the literal `null` or a
+ * pointer narrowed with `!== null` (NL2539). `readCString` from `nish:unsafe`
+ * copies the string at one.
  *
  * An empty interface with a private brand rather than `unknown` or a type
  * alias: `tsc` has to refuse the arithmetic and the dereference `nish` refuses,
@@ -4975,26 +5085,28 @@ interface Math {
 /**
  * An array. `Int32Array`, `Float32Array`, `Float64Array` and `BigInt64Array`
  * name `i32[]`, `f32[]`, `f64[]` and `i64[]`, the same type with no second
- * layout, but a receiver spelled with one of the four refuses `push` and
- * `pop` (NL2415), because a typed array in TypeScript has a fixed length and a
- * call to either is a `TypeError` there: "`push` is not a method of
- * `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop".
- * Every other array operation is unchanged, and a `Float64Array` is an `f64[]`
- * wherever one is expected. The refusal follows the spelling the program
- * wrote, carried by: `new X(n)`; an identifier annotated with the name
- * (directly, as the one member of `X | null`, or through a `type` alias) or
- * unannotated and initialised with such a receiver; a field declared with the
- * name; a call whose callee declares it as its return type; a call of a
- * generic function whose return type is a type parameter that an argument
- * binds to such a receiver; a value read out of a `Map` whose value type is
- * spelled with a name; an element of an array spelled with a name; and a
- * ternary or `??` either of whose operands carries it. A member of a generic
- * class instantiated at one of the names does not carry it, and a typed array
- * that flows into a binding spelled `T[]` may be pushed there. A numeric
- * literal argument to `push`, `indexOf` or `fill` takes the element type, so
- * `wide.push(3)` on an `i64[]` pushes an `i64` three. An unknown method is
- * refused with the supported list: "Unknown method `shift` on i32[]"; there
- * is no `map`, `shift`, `slice` or `toString` on an array.
+ * layout, but a receiver spelled with one of the four refuses `push` and `pop`
+ * (NL2415), because a typed array in TypeScript has a fixed length and a call
+ * to either is a `TypeError` there: "`push` is not a method of `Float64Array`,
+ * whose length is fixed: declare it `f64[]` to push and pop". Every other array
+ * operation is unchanged, and a `Float64Array` is an `f64[]` wherever one is
+ * expected.
+ *
+ * The refusal follows the spelling the program wrote, carried by: `new X(n)`;
+ * an identifier annotated with the name (directly, as the one member of `X |
+ * null`, or through a `type` alias) or unannotated and initialised with such a
+ * receiver; a field declared with the name; a call whose callee declares it as
+ * its return type; a call of a generic function whose return type is a type
+ * parameter that an argument binds to such a receiver; a value read out of a
+ * `Map` whose value type is spelled with a name; an element of an array spelled
+ * with a name; and a ternary or `??` either of whose operands carries it.
+ *
+ * A member of a generic class instantiated at one of the names does not carry
+ * it, and a typed array that flows into a binding spelled `T[]` may be pushed
+ * there. A numeric literal argument to `push`, `indexOf` or `fill` takes the
+ * element type, so `wide.push(3)` on an `i64[]` pushes an `i64` three. An
+ * unknown method is refused with the supported list: "Unknown method `shift` on
+ * i32[]"; there is no `map`, `shift`, `slice` or `toString` on an array.
  */
 interface Array<T> {
   /** The element count, read-only: assigning to it is refused. */
@@ -5047,24 +5159,28 @@ interface Array<T> {
   join(separator?: string): string;
   /**
    * Store `value` into every slot of `[start, end)`, each end relative (a
-   * negative one counts back from the length) and then clamped into
-   * `[0, a.length]`, as `TypedArray.prototype.fill`'s are, so no range is out
-   * of range, a reversed range fills nothing, and `fill` never panics. Arrays
-   * of numbers only, of any width and ranged integers included (a ranged
-   * element checks `value` once, before the fill); on any other array it is
-   * refused: "`set` copies bytes, so it needs an array whose elements are
-   * numbers (`u8[]`, `i32[]`, `f64[]`, ...), got string[]" (NL2395). `value`
-   * is the element type ("`fill` expects u8 (the element type of u8[]), got
-   * string"), one to three arguments are taken (NL2398), and each end is a
+   * negative one counts back from the length) and then clamped into `[0,
+   * a.length]`, as `TypedArray.prototype.fill`'s are, so no range is out of
+   * range, a reversed range fills nothing, and `fill` never panics. Arrays of
+   * numbers only, of any width and ranged integers included (a ranged element
+   * checks `value` once, before the fill); on any other array it is refused:
+   * "`set` copies bytes, so it needs an array whose elements are numbers
+   * (`u8[]`, `i32[]`, `f64[]`, ...), got string[]" (NL2395).
+   *
+   * `value` is the element type ("`fill` expects u8 (the element type of u8[]),
+   * got string"), one to three arguments are taken (NL2398), and each end is a
    * number. It is a statement: its answer cannot be used as a value, and
-   * JavaScript's answer is the array the program already holds. A float end
-   * converts as JavaScript's `ToIntegerOrInfinity` does: `NaN` is `0`, a
-   * fraction truncates toward zero (`2.7` is `2`, `-0.5` is `0`), and an
+   * JavaScript's answer is the array the program already holds.
+   *
+   * A float end converts as JavaScript's `ToIntegerOrInfinity` does: `NaN` is
+   * `0`, a fraction truncates toward zero (`2.7` is `2`, `-0.5` is `0`), and an
    * infinity or a value past the `i64` range saturates, then clamps, so in f64
    * mode `a.fill(v, 0, 1 / 0)` fills all of it. An unsigned end is never
    * negative, whatever its width: a `u64` of 2^63 or more as a start fills
    * nothing and as an end fills to the length. Natively a `u8[]` fill is one
-   * `memset`. Under Node it is `Array.prototype.fill`, which has
+   * `memset`.
+   *
+   * Under Node it is `Array.prototype.fill`, which has
    * `TypedArray.prototype.fill`'s meaning for every argument Nish admits,
    * except that an `i64` or `u64` end is a `bigint` there and throws a
    * `TypeError`, as all 64-bit arithmetic does. A `readonly T[]` refuses it:
@@ -5084,17 +5200,19 @@ interface Array<T> {
    * "`sort` needs a comparator: write `xs.sort((a, b) => a - b)`") and is the
    * one argument (NL2619: "`sort` takes one comparator"); only "positive or
    * not" is read of its answer, so `-0` and `NaN` count as zero. A `readonly
-   * T[]` ("Cannot `sort` through readonly") and `process.argv`
-   * ("`process.argv` is read-only") are refused. The comparator is a
-   * compile-time function argument: a top-level function, or an arrow reading
-   * only the `const` locals and parameters of the function it is written in;
-   * an arrow reading a `let` is refused. The sort costs one scratch array of
-   * `n` elements, released before it returns. `(a, b) => a - b` is checked
-   * arithmetic on `i32` elements: two a full range apart (`[2147483647, -1]`)
-   * panic with `attempt to subtract with overflow`, where
-   * `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. Where
-   * JavaScript leaves the order to the implementation, so does Nish: an array
-   * holding `NaN` under `(a, b) => a - b`, or a comparator that is not a
+   * T[]` ("Cannot `sort` through readonly") and `process.argv` ("`process.argv`
+   * is read-only") are refused.
+   *
+   * The comparator is a compile-time function argument: a top-level function,
+   * or an arrow reading only the `const` locals and parameters of the function
+   * it is written in; an arrow reading a `let` is refused. The sort costs one
+   * scratch array of `n` elements, released before it returns. `(a, b) => a -
+   * b` is checked arithmetic on `i32` elements: two a full range apart
+   * (`[2147483647, -1]`) panic with `attempt to subtract with overflow`, where
+   * `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow.
+   *
+   * Where JavaScript leaves the order to the implementation, so does Nish: an
+   * array holding `NaN` under `(a, b) => a - b`, or a comparator that is not a
    * consistent order, comes out a permutation of its elements but not
    * necessarily Node's permutation; give `NaN` a place of its own in the
    * comparator to agree. Under Node and `--emit-ts` the call is the platform's
@@ -5109,31 +5227,34 @@ interface Array<T> {
   /**
    * Copy every element of `source` into this array from `offset` on, with
    * `TypedArray.prototype.set`'s meaning. Arrays of numbers only, of any width
-   * and ranged integers included, and `source` has this array's element type
-   * (a `readonly` array may be the source, since it is only read); another
-   * element type is refused: "`set` copies from an array of the receiver's
-   * element type, so it expects u8[], got i32[]" (NL2396), and a non-number
-   * receiver as for `fill` (NL2395). One or two arguments (NL2397). It is a
-   * statement: "`set` returns void and can only be used as a statement". The
-   * range written is checked: `0 <= offset` and
-   * `offset + source.length <= a.length`, or the program panics with
-   * `slice out of range: [offset, offset + src.length) of length
-   * a.length` and exits 1, the message `s.slice` gives; a range that ends
-   * exactly at `a.length`, and an empty `source` at `a.length`, are in range,
-   * where JavaScript throws a `RangeError` for exactly these offsets. An
-   * overlapping `source` (`a.set(a)`, or two headers over one buffer from a C
-   * host) is copied as if it were read first. A float offset converts as for
-   * `fill`'s ends (`NaN` is `0`, a fraction truncates, an infinity or a value
-   * past the `i64` range saturates), and a saturated offset fails the range
-   * check with the saturated value in the message, for example
-   * `slice out of range: [9223372036854775807, -9223372036854775808) of
-   * length 4` for `1e300`. An unsigned offset is never negative: a `u64` of
-   * 2^63 or more panics, printed signed. A `readonly T[]` refuses it:
-   * "Cannot `set` through readonly u8[] (declare it u8[] to write through
-   * it)". Under Node, `runtime/nish.mjs` adds `set` to `Array.prototype` with
-   * the copy-first semantics and the native panic; a TypeScript host without
-   * it has no `set` on a plain array, and an `i64` or `u64` offset is a
-   * `bigint` there and throws a `TypeError`. Capability: none.
+   * and ranged integers included, and `source` has this array's element type (a
+   * `readonly` array may be the source, since it is only read); another element
+   * type is refused: "`set` copies from an array of the receiver's element
+   * type, so it expects u8[], got i32[]" (NL2396), and a non-number receiver as
+   * for `fill` (NL2395). One or two arguments (NL2397). It is a statement:
+   * "`set` returns void and can only be used as a statement".
+   *
+   * The range written is checked: `0 <= offset` and `offset + source.length <=
+   * a.length`, or the program panics with `slice out of range: [offset,
+   * offset + src.length) of length a.length` and exits 1, the message `s.slice` gives;
+   * a range that ends exactly at `a.length`, and an empty `source` at
+   * `a.length`, are in range, where JavaScript throws a `RangeError` for
+   * exactly these offsets. An overlapping `source` (`a.set(a)`, or two headers
+   * over one buffer from a C host) is copied as if it were read first.
+   *
+   * A float offset converts as for `fill`'s ends (`NaN` is `0`, a fraction
+   * truncates, an infinity or a value past the `i64` range saturates), and a
+   * saturated offset fails the range check with the saturated value in the
+   * message, for example `slice out of range: [9223372036854775807,
+   * -9223372036854775808) of length 4` for `1e300`. An unsigned offset is never
+   * negative: a `u64` of 2^63 or more panics, printed signed. A `readonly T[]`
+   * refuses it: "Cannot `set` through readonly u8[] (declare it u8[] to write
+   * through it)".
+   *
+   * Under Node, `runtime/nish.mjs` adds `set` to `Array.prototype` with the
+   * copy-first semantics and the native panic; a TypeScript host without it has
+   * no `set` on a plain array, and an `i64` or `u64` offset is a `bigint` there
+   * and throws a `TypeError`. Capability: none.
    *
    * @param source the elements copied.
    * @param offset the first slot written, `0` by default.
@@ -5144,20 +5265,22 @@ interface Array<T> {
 /**
  * `readonly T[]`, or `ReadonlyArray<T>` under the other spelling: the same
  * array, which may not be written through. It is the same header, the same
- * pointer and the same layout as `T[]`; the annotation is a promise the
- * checker keeps, and a `--emit-header` prototype spells such a parameter
- * `const nish_array *`. Everything that reads works (`length`, `a[i]`,
- * `for...of`, `indexOf`, `join`, passing it on to another `readonly T[]`);
- * every write is refused under its own name, an element store
- * ("Cannot assign to an element of readonly i32[] (declare it i32[] to write
- * through it)"), `push`, `pop`, `set`, `fill` and `sort` included. A `T[]`
- * widens into a `readonly T[]`, and never back: "Argument 1 of `fill`:
- * expected i32[], got readonly i32[]". It is shallow, as TypeScript's is: the
- * element of a `readonly T[][]` is a mutable `T[]`. It is a type, not a
- * parameter modifier, so it is legal wherever an array type is (a class
- * field, a return type, a `const`'s annotation). `readonly` goes on an array
- * type and nothing else: "`readonly` is only permitted on an array type, got
- * i32". `process.argv` is read-only under a rule of its own.
+ * pointer and the same layout as `T[]`; the annotation is a promise the checker
+ * keeps, and a `--emit-header` prototype spells such a parameter `const
+ * nish_array *`.
+ *
+ * Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
+ * passing it on to another `readonly T[]`); every write is refused under its
+ * own name, an element store ("Cannot assign to an element of readonly i32[]
+ * (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
+ * `sort` included. A `T[]` widens into a `readonly T[]`, and never back:
+ * "Argument 1 of `fill`: expected i32[], got readonly i32[]". It is shallow, as
+ * TypeScript's is: the element of a `readonly T[][]` is a mutable `T[]`.
+ *
+ * It is a type, not a parameter modifier, so it is legal wherever an array type
+ * is (a class field, a return type, a `const`'s annotation). `readonly` goes on
+ * an array type and nothing else: "`readonly` is only permitted on an array
+ * type, got i32". `process.argv` is read-only under a rule of its own.
  */
 interface ReadonlyArray<T> {
   /** The element count. */
@@ -5239,15 +5362,16 @@ interface String {
   slice(start?: number, end?: number): string;
   /**
    * The first byte offset at or after `position` at which `searchString`
-   * occurs. `position` is clamped into `[0, s.length]` first, as in
-   * JavaScript: a negative start searches from `0`, a start past the end
-   * finds nothing, and the empty needle answers the clamped start, so
-   * `s.indexOf("")` is `0`, `s.indexOf("", 3)` is `3` and `s.indexOf("", 99)`
-   * is `s.length`. A float start converts as JavaScript's `ToIntegerOrInfinity`
-   * does (a fraction truncates and `NaN` is `0`), and an unsigned one is
-   * clamped from above only, so a `u64` past 2^63 is past the end. The search
-   * allocates nothing, so a loop `at = s.indexOf(sub, at + sub.length)`
-   * copies nothing. Under Node it is the same call to
+   * occurs. `position` is clamped into `[0, s.length]` first, as in JavaScript:
+   * a negative start searches from `0`, a start past the end finds nothing, and
+   * the empty needle answers the clamped start, so `s.indexOf("")` is `0`,
+   * `s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float
+   * start converts as JavaScript's `ToIntegerOrInfinity` does (a fraction
+   * truncates and `NaN` is `0`), and an unsigned one is clamped from above
+   * only, so a `u64` past 2^63 is past the end.
+   *
+   * The search allocates nothing, so a loop `at = s.indexOf(sub, at +
+   * sub.length)` copies nothing. Under Node it is the same call to
    * `String.prototype.indexOf`, whose answers differ only where every offset
    * does, on text that is not ASCII (NL8001). Capability: none.
    *
@@ -5291,42 +5415,49 @@ interface StringConstructor {
 
 /**
  * An insertion-ordered map with SameValueZero keys (`-0` is `+0` and `NaN` is
- * `NaN`), a builtin with no import. A key is a `string`, a number of any
- * width in either mode (`f32` and `f64` included), a `boolean`, an `enum` or a
- * class instance (by identity); not an interface, an array, a nullable or a
- * `Result`: "`Point` cannot be the key type of `Map<Point, i32>`: a key is
- * hashed and compared by value, or by identity for a class instance". A `-0`
- * key is stored as `+0` by every insert path, so a walk over `keys()` yields
- * `+0`. A value is anything but `void` and an interface, whose record would be
- * copied into the table rather than shared: "`Point` cannot be the value type
- * of `Map<string, Point>`". `new Map<K, V>()` takes no arguments ("`new
- * Map<string, i32>` takes no arguments in this version"); the type arguments
- * are written out, except that a `const` or `let` annotated with the type
- * takes them from the annotation, and a bare `new Map()` is refused: "`Map` is
- * generic: it must be written with its type arguments". The members are
- * JavaScript's, less `entries` and `forEach` (there is no destructuring, and
- * a method cannot take a function); anything else is refused as if it did not
- * exist. `set` answers the receiver, so calls chain. `keys()` and `values()`
- * are iterators, admitted only as the iterable of a `for...of`: stored,
- * passed, returned or dropped, they are refused (NL2372, NL2373, NL2374,
- * NL2358), and `for (const e of m)` needs `entries()` (NL2375). The walk
- * visits entries in insertion order, skips a deleted key not yet reached,
- * visits a key set during the walk later in the same walk, and keeps a
- * re-set key in its place, as JavaScript's does. At most 2^24 − 1 entries
- * (one fewer than Node's 2^24); one more panics with
+ * `NaN`), a builtin with no import. A key is a `string`, a number of any width
+ * in either mode (`f32` and `f64` included), a `boolean`, an `enum` or a class
+ * instance (by identity); not an interface, an array, a nullable or a `Result`:
+ * "`Point` cannot be the key type of `Map<Point, i32>`: a key is hashed and
+ * compared by value, or by identity for a class instance".
+ *
+ * A `-0` key is stored as `+0` by every insert path, so a walk over `keys()`
+ * yields `+0`. A value is anything but `void` and an interface, whose record
+ * would be copied into the table rather than shared: "`Point` cannot be the
+ * value type of `Map<string, Point>`".
+ *
+ * `new Map<K, V>()` takes no arguments ("`new Map<string, i32>` takes no
+ * arguments in this version"); the type arguments are written out, except that
+ * a `const` or `let` annotated with the type takes them from the annotation,
+ * and a bare `new Map()` is refused: "`Map` is generic: it must be written with
+ * its type arguments". The members are JavaScript's, less `entries` and
+ * `forEach` (there is no destructuring, and a method cannot take a function);
+ * anything else is refused as if it did not exist. `set` answers the receiver,
+ * so calls chain.
+ *
+ * `keys()` and `values()` are iterators, admitted only as the iterable of a
+ * `for...of`: stored, passed, returned or dropped, they are refused (NL2372,
+ * NL2373, NL2374, NL2358), and `for (const e of m)` needs `entries()` (NL2375).
+ * The walk visits entries in insertion order, skips a deleted key not yet
+ * reached, visits a key set during the walk later in the same walk, and keeps a
+ * re-set key in its place, as JavaScript's does.
+ *
+ * At most 2^24 − 1 entries (one fewer than Node's 2^24); one more panics with
  * `Map maximum size exceeded`, after first compacting away dead entries (not
- * while a loop walks the table). String keys are hashed with SipHash-1-3
- * under a per-process random key drawn from the system's entropy source
- * before `main`, and an integer, `boolean` or enum key under a per-process
- * random multiply-add-shift; if the entropy source fails the program panics
- * before `main`: "Map: the system's entropy source failed". A float key and a
- * class instance key are not keyed, so a program keying a table by floats a
- * peer chose converts them to a string or a scaled integer first. On wasm32
- * the key comes from WASI's `random_get`, and a reactor module is keyed only
- * once its host calls `_initialize`. A pair of `i32`s is one `i64` key:
- * `(toI64(hi) << toI64(32)) | toI64(toU32(lo))`. `nish/map` adds `reserve(m,
- * n)` and `getOrInsert(m, k, v)`, which JavaScript's `Map` has no call for.
- * A module that declares or imports its own `Map` gets no implicit import.
+ * while a loop walks the table). String keys are hashed with SipHash-1-3 under
+ * a per-process random key drawn from the system's entropy source before
+ * `main`, and an integer, `boolean` or enum key under a per-process random
+ * multiply-add-shift; if the entropy source fails the program panics before
+ * `main`: "Map: the system's entropy source failed".
+ *
+ * A float key and a class instance key are not keyed, so a program keying a
+ * table by floats a peer chose converts them to a string or a scaled integer
+ * first. On wasm32 the key comes from WASI's `random_get`, and a reactor module
+ * is keyed only once its host calls `_initialize`. A pair of `i32`s is one
+ * `i64` key: `(toI64(hi) << toI64(32)) | toI64(toU32(lo))`. `nish/map` adds
+ * `reserve(m, n)` and `getOrInsert(m, k, v)`, which JavaScript's `Map` has no
+ * call for. A module that declares or imports its own `Map` gets no implicit
+ * import.
  */
 interface Map<K, V> {
   /** The entry count, read-only: assigning to it is refused. */
@@ -5334,16 +5465,17 @@ interface Map<K, V> {
   /**
    * The value under `key`, one probe. The `V | undefined` is a maybe, admitted
    * only as the initialiser of a `const` (unannotated, or annotated with the
-   * maybe type), the left of `??`, or an operand of `=== undefined` or
-   * `!== undefined`. A `const` so bound reads as `V` in the region a test
-   * proves it present (`if (a === undefined) return` included), and nowhere
-   * else. Any other place is refused with a message naming it: a `let`
-   * (NL2361), an argument (NL2362), a `return` (NL2363), a field (NL2364), an
-   * array element (NL2365), a template literal hole (NL2366), an operand of
-   * another operator (NL2367), the default of another `??` (NL2371), a `const`
-   * annotated `V` (NL2368), or anywhere else (NL2369). When `V` is nullable,
-   * `??` replaces a stored `null` as well. `get` is called, never read as a
-   * value. Capability: none.
+   * maybe type), the left of `??`, or an operand of `=== undefined` or `!==
+   * undefined`. A `const` so bound reads as `V` in the region a test proves it
+   * present (`if (a === undefined) return` included), and nowhere else.
+   *
+   * Any other place is refused with a message naming it: a `let` (NL2361), an
+   * argument (NL2362), a `return` (NL2363), a field (NL2364), an array element
+   * (NL2365), a template literal hole (NL2366), an operand of another operator
+   * (NL2367), the default of another `??` (NL2371), a `const` annotated `V`
+   * (NL2368), or anywhere else (NL2369). When `V` is nullable, `??` replaces a
+   * stored `null` as well. `get` is called, never read as a value. Capability:
+   * none.
    *
    * @param key the key looked up.
    * @returns the value, or `undefined`.

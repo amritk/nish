@@ -12,7 +12,9 @@ import {
 } from "nish/net/quic-conn-cid";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { QuicCidTable } from "nish/net/quic-conn-cid";
 
 const ids = new QuicCidTable(4, 4)               // the limit advertised; local slots
@@ -23,6 +25,8 @@ const dcid: u8[] = ids.currentPeer()             // the ID this side sends to
 const error: i64 = ids.retireLocal(sequence, packet, dcidAt, dcidLength)
 // error is QUIC_ERROR_NO_ERROR, or QUIC_ERROR_PROTOCOL_VIOLATION to close with
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

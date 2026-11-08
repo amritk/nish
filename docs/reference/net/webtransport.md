@@ -31,7 +31,9 @@ import {
 } from "nish/net/webtransport";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { WebTransport, WebTransportConfig, WT_SESSION, WT_DATAGRAM } from "nish/net/webtransport";
 import { Http3Connection, H3_NEED_MORE, H3_ERROR } from "nish/net/http3";
 
@@ -50,6 +52,8 @@ const serve = (h3: Http3Connection): void => {
   }
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -87,24 +91,28 @@ The streams waiting for a session (draft-02 §4.5): at most `size`, filed by the
 
 <scalar-detail title="Events">
 
-`next()` answers a `WT_*` event, or one of `nish/net/http3`'s
-for a plain request, which passes through untouched so one connection can
-serve both: `WT_SESSION` (a session asked for: `sessionId`, the CONNECT
-stream's ID, and `fields`; the program `accept`s or `refuse`s it),
-`WT_DATAGRAM` (a datagram of an accepted session, a window onto `data`),
-`WT_STREAM` (the client opened a stream of an accepted session: `stream`,
-`bidirectional`), `WT_STREAM_DATA` (its bytes, a window onto `data`),
-`WT_STREAM_END` (its FIN), `WT_STREAM_RESET` (the client reset its side:
-`errorCode`, the HTTP/3 code, and `appCode`, the WebTransport code it maps
-to or -1), `WT_STREAM_STOPPED` (the client asked this side to stop writing:
-the same two codes), `WT_WRITABLE` (a stream, or a CONNECT stream whose
-capsule was held back, can take more), `WT_DRAIN` (the client sent
-DRAIN_WEBTRANSPORT_SESSION) and `WT_CLOSED` (the session is over:
-`errorCode`, the CLOSE capsule's code or 0, the reason a window onto
-`data`, and `closedByPeer`). Each event names its session in `sessionId`
-and in `session`, its index in the table, `0 .. webtransportSessions - 1`,
-for a program's own per-session arrays. A window is valid until the next
-call.
+`next()` answers a `WT_*` event, or one of `nish/net/http3`'s for a plain
+request, which passes through untouched so one connection can serve both:
+- `WT_SESSION` (a session asked for: `sessionId`, the CONNECT stream's ID,
+and `fields`; the program `accept`s or `refuse`s it),
+- `WT_DATAGRAM` (a datagram of an accepted session, a window onto `data`),
+- `WT_STREAM` (the client opened a stream of an accepted session: `stream`,
+`bidirectional`),
+- `WT_STREAM_DATA` (its bytes, a window onto `data`),
+- `WT_STREAM_END` (its FIN),
+- `WT_STREAM_RESET` (the client reset its side: `errorCode`, the HTTP/3 code,
+and `appCode`, the WebTransport code it maps to or -1),
+- `WT_STREAM_STOPPED` (the client asked this side to stop writing: the same
+two codes),
+- `WT_WRITABLE` (a stream, or a CONNECT stream whose capsule was held back,
+can take more),
+- `WT_DRAIN` (the client sent DRAIN_WEBTRANSPORT_SESSION) and `WT_CLOSED`
+(the session is over: `errorCode`, the CLOSE capsule's code or 0, the
+reason a window onto `data`, and `closedByPeer`).
+
+Each event names its session in `sessionId` and in `session`, its index in
+the table, `0 .. webtransportSessions - 1`, for a program's own per-session
+arrays. A window is valid until the next call.
 
 </scalar-detail>
 

@@ -13,7 +13,9 @@ import {
 } from "nish:io";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { write, writeError, writeBytes, panic } from "nish:io";
 
 write("progress: ");
@@ -23,6 +25,8 @@ if (writeBytes(bytes, 0, bytes.length) < 0) {
   panic("stdout refused the bytes");
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

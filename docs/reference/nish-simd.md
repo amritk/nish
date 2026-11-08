@@ -83,7 +83,9 @@ import {
 } from "nish:simd";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { u32x4, loadI32x4, store, extract, replace, addWrapping, xor, rotl } from "nish:simd";
 
 export const bumpFirst = (xs: i32[], at: i32): i32 => {
@@ -98,6 +100,8 @@ export const step = (a: u32x4, b: u32x4, d: u32x4): u32 => {
   return extract(rotl(xor(d, a2), 16), 0);
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

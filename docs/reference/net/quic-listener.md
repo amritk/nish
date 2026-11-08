@@ -31,7 +31,9 @@ import {
 } from "nish/net/quic-listener";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT, QUIC_LISTENER_ANSWER_SIZE } from "nish/net/quic-listener";
 import { QuicConnection } from "nish/net/quic";
 
@@ -46,6 +48,8 @@ if (listener.handleWindow(buf, at, len, fromAddress, now, answer) === QUIC_LISTE
   … send answer.reply back to fromAddress …
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -123,31 +127,35 @@ token, which ends the connection, to whoever sent it (RFC 9000 §21.11).
 
 <scalar-detail title="Retry tokens">
 
-**Retry tokens** (§8.1.4). They are this server's own format: a marker byte, the
-time the token was issued, and the client's original Destination
+**Retry tokens** (§8.1.4). They are this server's own format: a marker byte,
+the time the token was issued, and the client's original Destination
 Connection ID, then 16 bytes of HMAC-SHA256 under the configuration's
-`retryTokenKey` over all of that, the Retry's Source Connection ID (which
-the client's next Initial must be sent to) and the client's address as the
-caller gives it, port included. So a token is good only from the address
-it was sent to, only for the connection it was issued for, and only for
-`retryTokenLifetime` milliseconds. A token that carries the marker and fails
-any of that is an invalid Retry token, which closes the attempt with
-INVALID_TOKEN (§8.1.2); a token without the marker, which some other
-server issued, is treated as no token at all (§8.1.3).
+`retryTokenKey` over all of that, the Retry's Source Connection ID (which the
+client's next Initial must be sent to) and the client's address as the caller
+gives it, port included. So a token is good only from the address it was sent
+to, only for the connection it was issued for, and only for
+`retryTokenLifetime` milliseconds.
+
+A token that carries the marker and fails any of that is an invalid Retry
+token, which closes the attempt with INVALID_TOKEN (§8.1.2); a token without
+the marker, which some other server issued, is treated as no token at all
+(§8.1.3).
 
 </scalar-detail>
 
 <scalar-detail title="Stateless resets">
 
 **Stateless resets** (§10.3). They end in the token `quicStatelessResetToken`
-derives (computed in place, by `quicConnResetTokenInto`) from the configuration's static key and the packet's connection
-ID, so a server that restarted with the same key can end the connections
-it lost. RFC 9000 §10.3 and §10.3.3 bound them, and each bound is held
-here. A reset is sent only for a short header, and is always shorter than
-the datagram that caused it, so two endpoints resetting each other shrink
-to nothing; one byte shorter for a datagram of 43 bytes or fewer, and
-never under 21 bytes, so a datagram of 21 or fewer gets none. That also
-bounds amplification at less than one to one. They are rate limited:
+derives (computed in place, by `quicConnResetTokenInto`) from the
+configuration's static key and the packet's connection ID, so a server that
+restarted with the same key can end the connections it lost. RFC 9000 §10.3
+and §10.3.3 bound them, and each bound is held here.
+
+A reset is sent only for a short header, and is always shorter than the
+datagram that caused it, so two endpoints resetting each other shrink to
+nothing; one byte shorter for a datagram of 43 bytes or fewer, and never
+under 21 bytes, so a datagram of 21 or fewer gets none. That also bounds
+amplification at less than one to one. They are rate limited:
 `QUIC_LISTENER_RESET_BURST` at once, then one per
 `QUIC_LISTENER_RESET_INTERVAL` milliseconds. Each reset's other bytes are
 unpredictable, from the listener's own generator.
@@ -180,18 +188,19 @@ waits for more credit than one datagram, so the pace time can come first.
 
 **GSO and GRO** (`nish:net`'s `UDP_SEGMENT` and `UDP_GRO`). A carrier that
 sends with segmentation offload takes a whole flight at once:
-`quicListenerTakeFlight` writes as many datagrams as the pacer has credit
-for back to back into one buffer, every one `QUIC_CONN_DATAGRAM_SIZE`
-bytes but the last, which is what one `udpSendTo` with that segment size
-cuts back into datagrams; each is written in place, so a flight allocates
-nothing. The flight is paced as a whole: it is as long as the pacer's
-credit, and charged to it datagram by datagram, so a burst is never more
-than the initial window however the carrier sends it. It starts only on a
-millisecond's earning, up to four datagrams, so a fast connection's pacer,
-which earns by the microsecond, does not let it out a datagram per send;
-`quicListenerFlightTime` says when. On the receiving
-side, `quicListenerReceiveSegments` hands a connection the datagrams of
-one GRO receive, segment by segment, in place.
+`quicListenerTakeFlight` writes as many datagrams as the pacer has credit for
+back to back into one buffer, every one `QUIC_CONN_DATAGRAM_SIZE` bytes but
+the last, which is what one `udpSendTo` with that segment size cuts back into
+datagrams; each is written in place, so a flight allocates nothing.
+
+The flight is paced as a whole: it is as long as the pacer's credit, and
+charged to it datagram by datagram, so a burst is never more than the initial
+window however the carrier sends it. It starts only on a millisecond's
+earning, up to four datagrams, so a fast connection's pacer, which earns by
+the microsecond, does not let it out a datagram per send;
+`quicListenerFlightTime` says when. On the receiving side,
+`quicListenerReceiveSegments` hands a connection the datagrams of one GRO
+receive, segment by segment, in place.
 
 </scalar-detail>
 
@@ -204,11 +213,15 @@ the codepoint the connection marked it with: `conn.datagramEcn` after a
 One send carries one codepoint, so a flight ends before a datagram the
 connection would mark otherwise. The listener's own answers go unmarked.
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const flight = new QuicFlight();
 const n: i32 = quicListenerTakeFlight(conn, now, buf, 0, toI32(buf.length), flight);
 if (n > 0) { udpSendTo(fd, buf, 0, n, peer, flight.count > 1 ? flight.segment : 0, flight.ecn); }
 ```
+
+</scalar-code-group>
 
 </scalar-detail>
 
@@ -363,17 +376,18 @@ How many datagrams were handed over: always 1 when `segment` is 0 or less, whate
 ### quicListenerTakeFlight
 
 Writes the next flight `conn` sends at `now` into `buf[at .. at + cap)`,
-datagram after datagram, for one GSO send, and answers its length in
-bytes (0 for none); `flight` says how many datagrams it holds and the
-segment size. A flight starts only once the pacer has the credit
-`quicListenerFlightTime` waits for, a millisecond's earning of one to four
-datagrams; then each datagram goes only when the pacer has credit for a
-full one (RFC 9002 §7.7) and is charged at its real size, as
-`quicListenerTakePaced` does, so the flight is the pacer's whole credit
-and no more. It stops at the first datagram shorter than
-`QUIC_CONN_DATAGRAM_SIZE`, which can only be the last of a segmented send,
-at `QUIC_LISTENER_FLIGHT_MAX` datagrams, when `cap` has no room for
-another, and before a datagram whose ECN codepoint would not be the first's.
+datagram after datagram, for one GSO send, and answers its length in bytes (0
+for none); `flight` says how many datagrams it holds and the segment size.
+
+A flight starts only once the pacer has the credit `quicListenerFlightTime`
+waits for, a millisecond's earning of one to four datagrams; then each
+datagram goes only when the pacer has credit for a full one (RFC 9002 §7.7)
+and is charged at its real size, as `quicListenerTakePaced` does, so the
+flight is the pacer's whole credit and no more. It stops at the first
+datagram shorter than `QUIC_CONN_DATAGRAM_SIZE`, which can only be the last
+of a segmented send, at `QUIC_LISTENER_FLIGHT_MAX` datagrams, when `cap` has
+no room for another, and before a datagram whose ECN codepoint would not be
+the first's.
 
 ```ts
 function quicListenerTakeFlight(

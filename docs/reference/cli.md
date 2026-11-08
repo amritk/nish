@@ -51,7 +51,9 @@ import {
 } from "nish/cli";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { HelpMenu, agentDriven, styleFor } from "nish/cli";
 
 const menu = new HelpMenu(styleFor(1, agentDriven()), "greet", 30, 40);
@@ -62,6 +64,8 @@ menu.row("--shout", "", "in capitals");
 menu.row("--times", "<n>", "say it n times");
 console.log(menu.text());
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

@@ -26,7 +26,9 @@ import {
 } from "nish/net/prefork";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { tcpListenFlags } from "nish:net";
 import { preforkWorkers } from "nish/net/prefork";
 
@@ -37,6 +39,8 @@ export const main = (): number => {
   // ... the single-threaded readiness loop, unchanged ...
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -146,9 +150,10 @@ the supervisor keeps the other; `preforkSupervise` hands each readable end to
 a callback. With `serviceWorker` set, every other worker gets a pair to that
 worker. The ends go through `spawnWithFds`, from descriptor 3 in a fixed
 order: the supervisor channel, then a worker's service channel, or in the
-service worker its end to each other worker by index, skipping its own. Where
-they landed rides in `--nish-prefork-channels=` just before the worker flag,
-and `preforkSupervisorChannel`, `preforkServiceChannel` and
+service worker its end to each other worker by index, skipping its own.
+
+Where they landed rides in `--nish-prefork-channels=` just before the worker
+flag, and `preforkSupervisorChannel`, `preforkServiceChannel` and
 `preforkServiceChannelOf` read it back. A pair cannot be handed to a worker
 already running, so service channels make the workers one group: when any of
 them exits, the supervisor sends the rest SIGTERM (SIGKILL after `graceMs`),
@@ -161,25 +166,27 @@ its peer's exit as a hang-up.
 
 <scalar-detail title="Listeners and pinning">
 
-With `listenPort` set (0 or above), the
-supervisor binds one `SO_REUSEPORT` listener per worker itself, in index
-order, keeps them for its whole run and hands listener `k` to every start of
-worker `k` after the channel ends; `preforkListener(args)` answers it in the
-worker (`--nish-prefork-listener=`, before the channels flag), so a worker
-serves that descriptor instead of binding its own. Port 0 binds the first
-listener anywhere and the rest to its port. With `pin` on as well, each
-listener steers by CPU (`tcpListenFlags`' flag 4): the kernel hands a
-connection that arrived on CPU `k` to listener `k`, and a worker that is
-restarted takes the same listener, so the order holds across restarts,
-which it would not if each worker bound its own. `pin` alone makes each
-worker call `setCpuAffinity(k)` before `preforkWith` answers it, so worker
-`k` runs on CPU `k` only; a worker the kernel refuses (CPU `k` outside the
-process's mask) says so on stderr and runs unpinned. More workers than
-`availableParallelism()` is refused with a panic, since a worker past the
-last CPU would be pinned nowhere and, steered, handed nothing. Pinning and
-steering are Linux's: elsewhere the supervisor says once that the workers
-run unpinned, and the listeners are plain `SO_REUSEPORT` ones. Both are off
-by default.
+With `listenPort` set (0 or above), the supervisor
+binds one `SO_REUSEPORT` listener per worker itself, in index order, keeps
+them for its whole run and hands listener `k` to every start of worker `k`
+after the channel ends; `preforkListener(args)` answers it in the worker
+(`--nish-prefork-listener=`, before the channels flag), so a worker serves
+that descriptor instead of binding its own. Port 0 binds the first listener
+anywhere and the rest to its port.
+
+With `pin` on as well, each listener steers by CPU (`tcpListenFlags`' flag
+4): the kernel hands a connection that arrived on CPU `k` to listener `k`,
+and a worker that is restarted takes the same listener, so the order holds
+across restarts, which it would not if each worker bound its own. `pin` alone
+makes each worker call `setCpuAffinity(k)` before `preforkWith` answers it,
+so worker `k` runs on CPU `k` only; a worker the kernel refuses (CPU `k`
+outside the process's mask) says so on stderr and runs unpinned.
+
+More workers than `availableParallelism()` is refused with a panic, since a
+worker past the last CPU would be pinned nowhere and, steered, handed
+nothing. Pinning and steering are Linux's: elsewhere the supervisor says once
+that the workers run unpinned, and the listeners are plain `SO_REUSEPORT`
+ones. Both are off by default.
 
 </scalar-detail>
 
@@ -349,11 +356,12 @@ hung up: `events` is `pollWait`'s, 1 readable and 4 added on a hang-up or
 error. The callback reads what is waiting, since an end left readable wakes
 the loop again at once, and may write back, but never closes `fd`: the
 supervisor closes it after a hang-up, when the worker is reaped and when it
-stops, and a restarted worker comes with a new one. Panics, besides, when
-`serviceWorker` is not below the worker count or the count is above 64 with
-a service worker (63 with `listenPort`), the most `spawnWithFds` hands one
-child; when `pin`, on Linux, asks for more workers than
-`availableParallelism()`; and, through `preforkInvalid`, on seqpacket
+stops, and a restarted worker comes with a new one.
+
+Panics, besides, when `serviceWorker` is not below the worker count or the
+count is above 64 with a service worker (63 with `listenPort`), the most
+`spawnWithFds` hands one child; when `pin`, on Linux, asks for more workers
+than `availableParallelism()`; and, through `preforkInvalid`, on seqpacket
 channels off Linux. A listener that cannot bind answers
 `PREFORK_SPAWN_FAILED` before any worker starts.
 

@@ -24,24 +24,27 @@
  *
  * Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p384_32.c and fiat-c/src/p384_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto-p384.
  *
- * **What is ported and what is not.** The `p384Fiat*` functions are
- * fiat-crypto's generated, formally verified Montgomery arithmetic on twelve
- * `u32` limbs with `u64` products — `mul`, `add`, `sub`, `selectznz`,
- * `nonzero` and `set_one` mod p, and `mul` and `set_one` mod n — statement for
- * statement, with fiat's variable names, translated the way
- * `nish/crypto/p256` translates P-256's: C's out-pointers become a `u64`
- * answer, each of fiat's `addcarryx`, `subborrowx` and `mulx` helpers here
- * answering its two outputs packed, the first in the low 32 bits and the
- * second above them, and the caller declaring only the halves fiat goes on to
- * read; and each function opens with a length guard, so that the literal
- * indices after it compile with no bounds check. fiat's 64-bit `p384_64.c`
- * needs a 128-bit product, which Nish has not got, so the 32-bit files are the
- * ones ported. fiat's `square` is not: a square is a `mul` of an element by
- * itself, which costs verification a little time and saves this file 2,500
- * lines. The scalar functions use the field's four helpers, which fiat
- * generates identically for both. Everything else in this file — the curve,
- * the encodings, the inversions and ECDSA — is written for this module from
- * the documents it names.
+ * **What is ported and what is not.**
+ *
+ *  The `p384Fiat*` functions are fiat-crypto's generated, formally verified
+ *  Montgomery arithmetic on twelve `u32` limbs with `u64` products — `mul`,
+ *  `add`, `sub`, `selectznz`, `nonzero` and `set_one` mod p, and `mul` and
+ *  `set_one` mod n — statement for statement, with fiat's variable names,
+ *  translated the way `nish/crypto/p256` translates P-256's:
+ *  - C's out-pointers become a `u64` answer, each of fiat's `addcarryx`,
+ *    `subborrowx` and `mulx` helpers here answering its two outputs packed, the
+ *    first in the low 32 bits and the second above them, and the caller
+ *    declaring only the halves fiat goes on to read;
+ *  - and each function opens with a length guard, so that the literal indices
+ *    after it compile with no bounds check.
+ *
+ *  fiat's 64-bit `p384_64.c` needs a 128-bit product, which Nish has not got, so
+ *  the 32-bit files are the ones ported. fiat's `square` is not: a square is a
+ *  `mul` of an element by itself, which costs verification a little time and
+ *  saves this file 2,500 lines. The scalar functions use the field's four
+ *  helpers, which fiat generates identically for both. Everything else in this
+ *  file — the curve, the encodings, the inversions and ECDSA — is written for
+ *  this module from the documents it names.
  *
  * **The curve** is `y^2 = x^3 - 3x + b` over GF(p), p = 2^384 - 2^128 - 2^96
  * + 2^32 - 1, with the base point G and its order n from SEC 2 §2.5.1 (FIPS

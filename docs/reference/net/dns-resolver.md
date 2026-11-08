@@ -24,7 +24,9 @@ import {
 } from "nish/net/dns-resolver";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import {
   DNS_OUTGOING_MAX_BYTES, DNS_RESOLVE_MAX_ADDRESSES, DnsResolver,
 } from "nish/net/dns-resolver"
@@ -60,6 +62,8 @@ const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
 const status: i32 = resolver.result(lookup, addresses, ttls)
 // DNS_RESOLVE_PENDING, an address count, or a negative DNS_RESOLVE_* code
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="It never touches the outside world">
 

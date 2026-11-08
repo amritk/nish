@@ -40,7 +40,9 @@ import {
 } from "nish/net/http1-codec";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Http1Parser, HTTP1_NEED_MORE, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
 
 const p = new Http1Parser(maxTarget, maxHeaderBytes, maxHeaders, maxBody);
@@ -53,6 +55,8 @@ while (event !== HTTP1_NEED_MORE) {
   event = p.next();
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -717,14 +721,15 @@ the offset in `out` just past the five bytes, or `HTTP1_NO_ROOM` when they do no
 
 ### http1WriteResponseHead
 
-`http1ResponseHead`'s status line and header section, written into `out`
-at `at` with nothing allocated: field names and values are octets (as
-`nish/net/http-fields` holds them), and `connection`, when not empty, is
-sent as a `Connection` field after the caller's. `date`, when not empty, is
-sent as a `Date` field between the caller's fields and the framing ones
-(RFC 9110 §6.6.1), on a final status only, and not when the caller's fields
-already hold a `date` in any case: the caller's wins, so a response carries
-one. Answers where the head ends; `HTTP1_REFUSED` for everything
+`http1ResponseHead`'s status line and header section, written into `out` at
+`at` with nothing allocated: field names and values are octets (as
+`nish/net/http-fields` holds them), and `connection`, when not empty, is sent
+as a `Connection` field after the caller's. `date`, when not empty, is sent
+as a `Date` field between the caller's fields and the framing ones (RFC 9110
+§6.6.1), on a final status only, and not when the caller's fields already
+hold a `date` in any case: the caller's wins, so a response carries one.
+
+Answers where the head ends; `HTTP1_REFUSED` for everything
 `http1ResponseHead` refuses, a `Connection` among the caller's fields when
 `connection` is given, a `connection` that is not field text, and a `date`
 that is not field text on a final status, the only one it is sent on;

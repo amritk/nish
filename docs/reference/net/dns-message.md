@@ -45,7 +45,9 @@ import {
 } from "nish/net/dns-message";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import {
   DnsReply, DNS_ADDRESS_BYTES, DNS_NOERROR, DNS_QUERY_MAX_BYTES, DNS_TYPE_A,
   dnsBuildQuery, dnsParseReply,
@@ -62,6 +64,8 @@ if (status === DNS_NOERROR && !reply.truncated) {
   // reply.addresses[i * DNS_ADDRESS_BYTES, +18) for i < reply.count, each with reply.ttls[i]
 } // DNS_NXDOMAIN, DNS_SERVFAIL, DNS_REFUSED: the server's answer; < 0: a DNS_ERR_* code
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

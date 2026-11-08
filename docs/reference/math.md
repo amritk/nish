@@ -12,7 +12,9 @@ import {
 } from "nish/math";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 export const main = (): i32 => {
   const slope: f64 = Math.tan(0.5);
   const angle: f64 = Math.atan2(1.0, -1.0); // 3 * pi / 4
@@ -20,6 +22,8 @@ export const main = (): i32 => {
   return side === 5.0 ? 0 : 1;
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

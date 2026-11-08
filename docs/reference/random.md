@@ -10,7 +10,9 @@ import {
 } from "nish/random";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Rng } from "nish/random";
 
 export const main = (): i32 => {
@@ -20,6 +22,8 @@ export const main = (): i32 => {
   return die;
 };
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="The state is one 32-bit integer">
 
@@ -43,12 +47,14 @@ The two operations that wrap are spelled
 two's-complement wrap natively and answer `(a + b) | 0` and `Math.imul(a, b)`
 under Node (docs/LANGUAGE.md, "nish:unsafe"); every shift has a constant
 count, and `^` and `>>> 16` answer the same 32 bits in JavaScript as in the
-compiled program. `nextInt` reads its span and its draws as unsigned
-counts with no `u32` (whose conversions saturate under Node): the sign bit
-flipped orders them under a signed compare, and the remainder is taken in
-pieces that stay below 2^31. `nextF64` builds its double from integers
-below 2^53, so its products and sums are exact both ways. The program a test prints under
-Node is the one it prints compiled (docs/RUN_UNDER_NODE.md).
+compiled program.
+
+`nextInt` reads its span and its draws as unsigned counts with no `u32`
+(whose conversions saturate under Node): the sign bit flipped orders them
+under a signed compare, and the remainder is taken in pieces that stay below
+2^31. `nextF64` builds its double from integers below 2^53, so its products
+and sums are exact both ways. The program a test prints under Node is the one
+it prints compiled (docs/RUN_UNDER_NODE.md).
 
 </scalar-detail>
 

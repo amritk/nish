@@ -22,7 +22,9 @@ import {
 } from "nish/crypto/aes";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { aesKey, aesGcmSeal, aesGcmOpen, aesKeyWipe } from "nish/crypto/aes";
 
 const key = aesKey(keyBytes); // 16 or 32 bytes, else null
@@ -33,6 +35,8 @@ if (key !== null) {
   aesKeyWipe(key);
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -138,36 +142,40 @@ Four blocks at a time sit in eight `u64` words,
 `q[0..7]`, word `b` holding bit `b` of all 64 bytes. Inside a word, block `k`
 owns the 16 bits from `16k`, and in those the byte in row `r` and column `c`
 of the AES state is bit `4r + c`: each row is one nibble. That makes the two
-permutations cheap. ShiftRows turns row `r` by `r` columns, which is a
-rotation of nibble `r` by `r` bits; MixColumns needs each byte's neighbour
-in the next row of its column, which is the word rotated by four bits inside
-each 16-bit lane. Getting 64 bytes in and out of that layout is an 8 × 8
-bit-matrix transpose per byte lane (`aesTranspose`, three rounds of masked
-swaps between words) after placing each byte in the word and slot the
-transpose will carry to its bit (`aesPack`, `aesUnpack`).
+permutations cheap.
+
+ShiftRows turns row `r` by `r` columns, which is a rotation of nibble `r` by
+`r` bits; MixColumns needs each byte's neighbour in the next row of its
+column, which is the word rotated by four bits inside each 16-bit lane.
+Getting 64 bytes in and out of that layout is an 8 × 8 bit-matrix transpose
+per byte lane (`aesTranspose`, three rounds of masked swaps between words)
+after placing each byte in the word and slot the transpose will carry to its
+bit (`aesPack`, `aesUnpack`).
 
 </scalar-detail>
 
 <scalar-detail title="Constant time">
 
 No table is read anywhere, key schedule included: the
-S-box is the circuit, and `SubWord` in the key schedule runs the same
-circuit on a four-byte state. No branch or index depends on a key, a
-plaintext, a tag or H: every `if` and every loop bound is on a length, a
-block number or the round count. GHASH multiplies with no table and no
-data-dependent shift, and `aesGcmOpen` computes the whole tag and compares
-it with `aesGcmTagMask` — a difference ORed into one word and handed to
-`ctEq` — before it decrypts or returns anything. What `tests/ct-asm.js`
-verifies by disassembly on x86-64 and aarch64 is one full round
-(`aesBitslicedRound`: S-box circuit, ShiftRows, MixColumns, AddRoundKey),
-one GHASH multiply (`ghashMultiply`) and the tag compare
-(`aesGcmTagMask`). A golden case compiles to one module and cannot import
-this one, so `tests/cases/ct_asm_aes` holds a verbatim copy of those three
-and the helpers they call, and `tests/link/crypto_aes` checks that the copy
-and this module agree on generated inputs, so neither can drift from the
-other unnoticed. Everything around them — packing bytes, the key schedule,
-the loops over blocks — is the discipline above and not a verified
-property.
+S-box is the circuit, and `SubWord` in the key schedule runs the same circuit
+on a four-byte state. No branch or index depends on a key, a plaintext, a tag
+or H: every `if` and every loop bound is on a length, a block number or the
+round count.
+
+GHASH multiplies with no table and no data-dependent shift, and `aesGcmOpen`
+computes the whole tag and compares it with `aesGcmTagMask` — a difference
+ORed into one word and handed to `ctEq` — before it decrypts or returns
+anything. What `tests/ct-asm.js` verifies by disassembly on x86-64 and
+aarch64 is one full round (`aesBitslicedRound`: S-box circuit, ShiftRows,
+MixColumns, AddRoundKey), one GHASH multiply (`ghashMultiply`) and the tag
+compare (`aesGcmTagMask`).
+
+A golden case compiles to one module and cannot import this one, so
+`tests/cases/ct_asm_aes` holds a verbatim copy of those three and the helpers
+they call, and `tests/link/crypto_aes` checks that the copy and this module
+agree on generated inputs, so neither can drift from the other unnoticed.
+Everything around them — packing bytes, the key schedule, the loops over
+blocks — is the discipline above and not a verified property.
 
 </scalar-detail>
 
@@ -177,18 +185,18 @@ Four private functions do nearly all of the cipher's work,
 each called from exactly one place: `aesScheduleInto` (the key schedule),
 `aesBlockInto` (one block), `aesCtrInto` (GCTR over a run of bytes) and
 `ghashBlocksInto` (GHASH over a run of bytes). Each takes the arrays its
-caller passes, writes into them and allocates nothing the caller needs
-back, and its one caller checks every precondition it names first. That is
-what lets the compiler, natively, put each of those four calls behind a
-branch on the runtime's `nish_aes_hw` (`src/kernels.ts`, lowered in
+caller passes, writes into them and allocates nothing the caller needs back,
+and its one caller checks every precondition it names first.
+
+That is what lets the compiler, natively, put each of those four calls behind
+a branch on the runtime's `nish_aes_hw` (`src/kernels.ts`, lowered in
 `src/emit.ts`): on a CPU with AES-NI and PCLMULQDQ, or the ARMv8 AES and
-PMULL instructions, the call goes to a kernel in `runtime/runtime-aes.c`
-that does no bounds checks of its own; on any other CPU, under
-`NISH_AES=soft`, on wasm32 and under Node, the body here runs (WP38 S5,
-`docs/wp38-simd.md`). The bodies are the bitsliced code, and keep their
-own defensive checks. The kernel keeps its own layout in a key's
-`roundKeys`, which a process only ever reads under the one answer
-`nish_aes_hw` gives it.
+PMULL instructions, the call goes to a kernel in `runtime/runtime-aes.c` that
+does no bounds checks of its own; on any other CPU, under `NISH_AES=soft`, on
+wasm32 and under Node, the body here runs (WP38 S5, `docs/wp38-simd.md`). The
+bodies are the bitsliced code, and keep their own defensive checks. The
+kernel keeps its own layout in a key's `roundKeys`, which a process only ever
+reads under the one answer `nish_aes_hw` gives it.
 
 </scalar-detail>
 
@@ -498,13 +506,14 @@ size for it (or an `h` that is not two words), answers `false` and leaves
 arena scope may be put around; this stores numbers only, so a caller that
 keeps one `AesKey` per connection installs every key inside a `using a =
 arena()` block and leaves the arena where it was. The schedule and H are
-secret: the caller hands `out` to `aesKeyWipe` when it is done with the
-key. The schedule is written straight into `out.roundKeys`, and the
-working copies the bitsliced schedule and the block H passes through are
-wiped with `wipe`'s volatile stores before they are released. On a CPU
-that runs the runtime's kernels (the seams, in the module docs) those
-copies are the kernels' own, in `runtime/runtime-aes.c`, and what they
-leave in vector registers no wipe here reaches.
+secret: the caller hands `out` to `aesKeyWipe` when it is done with the key.
+
+The schedule is written straight into `out.roundKeys`, and the working copies
+the bitsliced schedule and the block H passes through are wiped with `wipe`'s
+volatile stores before they are released. On a CPU that runs the runtime's
+kernels (the seams, in the module docs) those copies are the kernels' own, in
+`runtime/runtime-aes.c`, and what they leave in vector registers no wipe here
+reaches.
 
 `aesKey` makes its key through this, so this is the one call of
 `aesScheduleInto`, and the checks its contract needs are made here.

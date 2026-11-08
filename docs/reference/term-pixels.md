@@ -25,7 +25,9 @@ import {
 } from "nish/term-pixels";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Framebuffer, fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes } from "nish/term-pixels"
 
 const fb = new Framebuffer(160, 90)
@@ -36,6 +38,8 @@ const out = new PixelBytes(1 << 16)
 kittyFrame(fb, rect, 1, out)
 // out.text() is the frame's bytes, for one write
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

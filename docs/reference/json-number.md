@@ -18,7 +18,9 @@ import {
 } from "nish/json-number";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { jsonNumberCompare, jsonNumberMultipleOf } from "nish/json-number"
 
 jsonNumberCompare("1.0", "1e0")                  // 0: the same value
@@ -26,6 +28,8 @@ jsonNumberCompare("0.1", "0.10000000000000001")  // -1, which f64 calls equal
 jsonNumberMultipleOf("0.3", "0.1")               // 1, which f64 calls 0
 jsonNumberMultipleOf("1e1000000000", "2")        // JSON_NUMBER_ERR_GAP
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -64,18 +68,18 @@ grammar exactly (what `JsonDocument.numberText` answers); anything else is
 
 <scalar-detail title="What a call costs">
 
-`jsonNumberCompare` reads each text once and
-allocates two records of a few fields, nothing in proportion to the text:
-time is linear in the texts' lengths. `jsonNumberCanonical` allocates the
-string it answers, at most the text's length plus an exponent.
-`jsonNumberMultipleOf` divides the value's digits, followed by as many
-zeros as its exponent is above the divisor's (the gap), by the divisor's
-digits: one step per digit of that dividend when the divisor has at most 18
+`jsonNumberCompare` reads each text once and allocates
+two records of a few fields, nothing in proportion to the text: time is
+linear in the texts' lengths. `jsonNumberCanonical` allocates the string it
+answers, at most the text's length plus an exponent.
+
+`jsonNumberMultipleOf` divides the value's digits, followed by as many zeros
+as its exponent is above the divisor's (the gap), by the divisor's digits:
+one step per digit of that dividend when the divisor has at most 18
 significant digits, and one per digit of the dividend per digit of the
 divisor otherwise, which then also allocates the remainder, one byte per
-divisor digit. A step of that long division is a shift, up to ten
-comparisons and up to nine subtractions of a byte each, so about twenty
-byte operations.
+divisor digit. A step of that long division is a shift, up to ten comparisons
+and up to nine subtractions of a byte each, so about twenty byte operations.
 
 </scalar-detail>
 

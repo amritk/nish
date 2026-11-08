@@ -31,7 +31,9 @@ import {
 } from "nish/net/http-compress";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { DEFLATE_FAST } from "nish/compress/deflate";
 import { HTTP_OFFER_GZIP, HttpCompressor, httpAcceptEncoding } from "nish/net/http-compress";
 
@@ -47,6 +49,8 @@ if (m >= 0) {
   h2.writeData(id, enc.output, 0, m, true);
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -93,18 +97,19 @@ smaller, answering -1 so the program sends the bytes as they are.
 
 <scalar-detail title="Compression that pays for itself">
 
-A body is sent compressed only when
-it saves at least `minSaving` bytes and `minSavingPercent` percent of the
-body; otherwise the compressed bytes are dropped and the body goes as it
-is. With `segmentMode` set, `respondEncoded` also sends it compressed only
-when the whole response, head included, takes fewer TCP segments of `mss`
-bytes (the connection's `mss` if set, else the compressor's, 1448 by
-default): a 1300-byte body that gzips to 700 still fits in one segment
-either way. After each call `decision` says why (`HTTP_COMPRESS_SENT`,
-`_NOT_ACCEPTED`, `_TOO_SMALL`, `_TOO_LARGE`, `_TOO_LITTLE_SAVED`,
-`_NO_FEWER_SEGMENTS`), for a program to count. A response whose identity
-form already fits one segment is `_NO_FEWER_SEGMENTS` without running gzip
-at all, as no compression could take fewer.
+A body is sent compressed only when it
+saves at least `minSaving` bytes and `minSavingPercent` percent of the body;
+otherwise the compressed bytes are dropped and the body goes as it is. With
+`segmentMode` set, `respondEncoded` also sends it compressed only when the
+whole response, head included, takes fewer TCP segments of `mss` bytes (the
+connection's `mss` if set, else the compressor's, 1448 by default): a
+1300-byte body that gzips to 700 still fits in one segment either way.
+
+After each call `decision` says why (`HTTP_COMPRESS_SENT`, `_NOT_ACCEPTED`,
+`_TOO_SMALL`, `_TOO_LARGE`, `_TOO_LITTLE_SAVED`, `_NO_FEWER_SEGMENTS`), for a
+program to count. A response whose identity form already fits one segment is
+`_NO_FEWER_SEGMENTS` without running gzip at all, as no compression could
+take fewer.
 
 </scalar-detail>
 
@@ -133,15 +138,17 @@ and accepts gzip is sent gzip whatever the policy (`compressAnyway`).
 
 **Negotiation** (`httpAcceptEncoding`) follows §12.5.3: each listed coding
 with its q-value, `x-gzip` as `gzip`, `*` for every coding not listed, and
-`identity` acceptable unless it is given q=0, directly or through `*`. Of
-the codings the program offers, the most preferred with q above 0 wins, the
-program's order (gzip, then deflate) breaking ties; it beats `identity` at
-an equal q, and beats an `identity` the field does not mention at any q. With no field at all the answer is
-`HTTP_CODING_IDENTITY` (the RFC allows any coding then, but a client that
-says nothing is safest sent nothing it may not read); an empty field asks
-for identity too. `HTTP_CODING_NONE` means nothing offered is acceptable
-and identity is refused: a server may answer 406 or send identity anyway.
-A malformed element is skipped. The parser allocates nothing.
+`identity` acceptable unless it is given q=0, directly or through `*`.
+
+Of the codings the program offers, the most preferred with q above 0 wins,
+the program's order (gzip, then deflate) breaking ties; it beats `identity`
+at an equal q, and beats an `identity` the field does not mention at any q.
+With no field at all the answer is `HTTP_CODING_IDENTITY` (the RFC allows any
+coding then, but a client that says nothing is safest sent nothing it may not
+read); an empty field asks for identity too. `HTTP_CODING_NONE` means nothing
+offered is acceptable and identity is refused: a server may answer 406 or
+send identity anyway. A malformed element is skipped. The parser allocates
+nothing.
 
 </scalar-detail>
 

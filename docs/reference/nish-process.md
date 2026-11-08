@@ -30,7 +30,9 @@ import {
 } from "nish:process";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { spawn, waitPid, kill, availableParallelism } from "nish:process";
 
 const pid = spawn(["sleep", "5"]);
@@ -40,6 +42,8 @@ if (pid > 0) {
 }
 const workers = availableParallelism();
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -443,14 +447,16 @@ The child's pid, or a negative errno: `-22` EINVAL for an empty
 
 The same run as `spawnSync`, with every stream a pipe: the child reads
 `stdin`'s bytes and then end of file, and whatever it writes to its stdout
-and stderr is appended to `stdout` and `stderr`, which keep what they
-held. It is the run for a child that takes a secret on stdin, which `ps`
-and `/proc` do not show. A child that exits without reading its stdin is
-not a failure. The child inherits the environment and working directory,
-and no descriptor of the program but its three streams; it starts with
-SIGPIPE as the program had it, and the program's own SIGPIPE from writing
-to a child that stopped reading is absorbed. One `poll` loop writes and
-drains, so a child that fills one pipe cannot deadlock the parent.
+and stderr is appended to `stdout` and `stderr`, which keep what they held.
+It is the run for a child that takes a secret on stdin, which `ps` and
+`/proc` do not show. A child that exits without reading its stdin is not a
+failure.
+
+The child inherits the environment and working directory, and no descriptor
+of the program but its three streams; it starts with SIGPIPE as the program
+had it, and the program's own SIGPIPE from writing to a child that stopped
+reading is absorbed. One `poll` loop writes and drains, so a child that
+fills one pipe cannot deadlock the parent.
 
 ```ts
 function spawnPiped(

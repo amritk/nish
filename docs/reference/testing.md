@@ -10,7 +10,9 @@ import {
 } from "nish/testing";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Suite } from "nish/testing";
 
 export const main = (): i32 => {
@@ -23,6 +25,8 @@ export const main = (): i32 => {
   return t.done();            // 0 when nothing failed, 1 otherwise
 };
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="It is the other half of `tests/run.js`">
 

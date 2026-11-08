@@ -24,12 +24,16 @@ import {
 } from "nish/crypto/chacha20poly1305";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { chacha20Poly1305Seal, chacha20Poly1305Open } from "nish/crypto/chacha20poly1305";
 
 const sealed: u8[] | null = chacha20Poly1305Seal(key, nonce, aad, plaintext);
 const opened: u8[] | null = chacha20Poly1305Open(key, nonce, aad, sealed);
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -126,6 +130,7 @@ number. RFC 8439 §3 asks for constant-time arithmetic without saying how;
 makes the arithmetic fit: a limb product is below 2^56, five of them sum
 below 2^58, and 2^130 = 5 (mod p) folds the top of a product back into the
 bottom as a multiply by five.
+
 `poly1305Block` says why each sum fits. The reduction is by carries and
 masks, and the final reduction into `[0, p)` picks between `h` and `h - p`
 with `ctSelect` on a mask made from a borrow, never with a comparison.
@@ -138,17 +143,18 @@ Nothing branches on, or indexes by, a key, a keystream
 word, the accumulator or a tag. Every `if` and every loop bound is on a
 length, an offset or a block number, all of which the peer already knows.
 `chacha20Poly1305Open` computes the tag over the received ciphertext and
-compares all sixteen bytes by ORing their differences into one word before
-it decrypts anything, and a mismatch is decided on that one word. Verified by
-disassembly (`tests/cases/ct_asm_chacha20poly1305`, read by
+compares all sixteen bytes by ORing their differences into one word before it
+decrypts anything, and a mismatch is decided on that one word.
+
+Verified by disassembly (`tests/cases/ct_asm_chacha20poly1305`, read by
 `tests/ct-asm.js` for x86-64 and aarch64): the key clamp, one Poly1305 block
 (the load, the multiply and the partial reduction), the final reduction and
 the addition of `s`, and the tag compare, each straight-line with no
 secret-addressed load. The fixture holds copies of those four functions,
-because the check reads one compiled module; `tests/link/crypto_chacha20poly1305`
-holds the copies to these originals. The ChaCha20 rounds and the loops that
-drive both halves are discipline, not proof: the check refuses a loop's own
-back-edge, so it cannot read them.
+because the check reads one compiled module;
+`tests/link/crypto_chacha20poly1305` holds the copies to these originals. The
+ChaCha20 rounds and the loops that drive both halves are discipline, not
+proof: the check refuses a loop's own back-edge, so it cannot read them.
 
 </scalar-detail>
 

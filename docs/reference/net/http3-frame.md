@@ -67,7 +67,9 @@ import {
 } from "nish/net/http3-frame";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import {
   Http3FrameHeader, h3ReadFrameHeader, h3PutFrameHeader, H3_FRAME_DATA, H3_FRAME_HEADER_MAX,
 } from "nish/net/http3-frame";
@@ -80,6 +82,8 @@ const out: u8[] = new Array<u8>(H3_FRAME_HEADER_MAX);
 const n: i32 = 3;
 const at: i32 = h3PutFrameHeader(out, 0, toI32(out.length), H3_FRAME_DATA, toI64(n));   // 2
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -209,16 +213,17 @@ the reserved `0x1f * N + 0x21` types that exercise that rule included
 **SETTINGS** (§7.2.4). `h3ReadSettings` reads a whole payload into an
 `Http3Settings`: the three identifiers this endpoint understands, and the
 first `H3_SETTINGS_KEEP` it does not, kept rather than dropped so that an
-extension can read them. The four that extended CONNECT and WebTransport
-read (RFC 9220's, RFC 9297's and the two of the WebTransport drafts) are
-also recorded in fields of their own, refused when repeated, so a peer
-cannot push them out of reach behind eight others. A payload that ends
-inside a pair is H3_FRAME_ERROR (§7.1); an identifier HTTP/2 defined with
-no HTTP/3 counterpart (0x00, 0x02 to 0x05), or one that appears twice, is
-H3_SETTINGS_ERROR (§7.2.4, §7.2.4.1). A repeat among the unknown ones is
-caught while they are kept, and past `H3_SETTINGS_KEEP` they are counted,
-not compared, so a peer cannot make the read cost more than a fixed number
-of compares per setting.
+extension can read them. The four that extended CONNECT and WebTransport read
+(RFC 9220's, RFC 9297's and the two of the WebTransport drafts) are also
+recorded in fields of their own, refused when repeated, so a peer cannot push
+them out of reach behind eight others.
+
+A payload that ends inside a pair is H3_FRAME_ERROR (§7.1); an identifier
+HTTP/2 defined with no HTTP/3 counterpart (0x00, 0x02 to 0x05), or one that
+appears twice, is H3_SETTINGS_ERROR (§7.2.4, §7.2.4.1). A repeat among the
+unknown ones is caught while they are kept, and past `H3_SETTINGS_KEEP` they
+are counted, not compared, so a peer cannot make the read cost more than a
+fixed number of compares per setting.
 
 </scalar-detail>
 

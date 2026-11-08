@@ -16,7 +16,9 @@ import {
 } from "nish/compress/zlib";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { DEFLATE_DEFAULT } from "nish/compress/deflate";
 import { ZlibCompressor, ZlibDecompressor } from "nish/compress/zlib";
 
@@ -24,6 +26,8 @@ const z = new ZlibCompressor(DEFLATE_DEFAULT);
 const end: i32 = z.compress(src, 0, n, out, 0); // -1: no room
 const got: i32 = new ZlibDecompressor().decompress(out, 0, end, back, 0, n); // < 0: an error
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

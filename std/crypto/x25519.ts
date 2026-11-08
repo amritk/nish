@@ -58,16 +58,17 @@
  * `f25519Square`, `f25519MulA24`, `f25519Add`, `f25519Sub`, `f25519Swap` and
  * one pass of `x25519Ladder`'s loop, and the check reads each one's `clang -O2`
  * machine code for x86-64 and aarch64 and finds no branch and no load or store
- * at an address the scalar bit or a limb reaches. They are copies because the
- * check refuses every branch, loop back-edges included, and this module's own
- * functions keep their loops and the early `return`s below; the copies drop the
- * guards and write `f25519Mul`'s outer loop out a row at a time, and the
- * fixture's `main` holds them to the same RFC 7748 vectors as this module. A
- * change to one of those functions belongs in that fixture too. What stays
- * discipline rather than proof is the rest: the loops around the step,
- * `f25519Decode`, `f25519Encode` and `f25519Invert`, whose branches are all on
- * public positions. Weekly, `tests/ct-timing.js` times the fixture's functions
- * on real x86-64 and aarch64 hardware as well.
+ * at an address the scalar bit or a limb reaches.
+ *
+ * They are copies because the check refuses every branch, loop back-edges
+ * included, and this module's own functions keep their loops and the early
+ * `return`s below; the copies drop the guards and write `f25519Mul`'s outer
+ * loop out a row at a time, and the fixture's `main` holds them to the same RFC
+ * 7748 vectors as this module. A change to one of those functions belongs in
+ * that fixture too. What stays discipline rather than proof is the rest: the
+ * loops around the step, `f25519Decode`, `f25519Encode` and `f25519Invert`,
+ * whose branches are all on public positions. Weekly, `tests/ct-timing.js`
+ * times the fixture's functions on real x86-64 and aarch64 hardware as well.
  *
  * **Loop bounds are literals.** A field element is always ten limbs and an
  * encoding always 32 bytes, and each function that indexes one opens with an

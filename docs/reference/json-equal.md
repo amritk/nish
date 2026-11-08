@@ -13,7 +13,9 @@ import {
 } from "nish/json-equal";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { jsonEqual, jsonEqualFirstDuplicate } from "nish/json-equal"
 
 const doc = new JsonDocument(new JsonLimits())
@@ -21,6 +23,8 @@ const a = doc.parseText('[{"x":1,"y":[true]},{"y":[true],"x":1.0}]')
 jsonEqual(doc, doc.at(a, 0), doc, doc.at(a, 1))   // true
 jsonEqualFirstDuplicate(doc, a)                    // 1
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -74,17 +78,18 @@ as a flat one, and nothing recurses.
 
 <scalar-detail title="What a call costs">
 
-`jsonEqual` stops at the first difference. Up to
-there it is linear in the values' size, except that each pair of objects
-reads every key (one string each) and sorts them, `n log n` for `n`
-members; it also allocates one string per string value, its stack, and
-whatever `jsonNumberCompare` allocates per number pair. `jsonEqualCanonical`
-builds the canonical text, about the size of the value written as JSON,
-and sorts keys the same way. `jsonEqualHash` is FNV-1a of that text's
-units: its bytes natively, its code units under Node. Every order and
-length below is in those units too.
-`jsonEqualFirstDuplicate` makes the canonical text of every element up to
-the first repeat and keeps them in a `Map`.
+`jsonEqual` stops at the first difference. Up to there
+it is linear in the values' size, except that each pair of objects reads
+every key (one string each) and sorts them, `n log n` for `n` members; it
+also allocates one string per string value, its stack, and whatever
+`jsonNumberCompare` allocates per number pair. `jsonEqualCanonical` builds
+the canonical text, about the size of the value written as JSON, and sorts
+keys the same way. `jsonEqualHash` is FNV-1a of that text's units: its bytes
+natively, its code units under Node.
+
+Every order and length below is in those units too. `jsonEqualFirstDuplicate`
+makes the canonical text of every element up to the first repeat and keeps
+them in a `Map`.
 
 </scalar-detail>
 

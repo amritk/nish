@@ -11,7 +11,9 @@ import {
 } from "nish/map";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { reserve, getOrInsert } from "nish/map"
 
 const counts = new Map<string, i32>()
@@ -21,6 +23,8 @@ for (const w of ["to", "be", "or", "not", "to", "be"]) {
 }
 counts.get("to")  // 2
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

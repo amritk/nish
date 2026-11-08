@@ -10,7 +10,9 @@ import {
 } from "nish/net/quic-datagram";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { QuicDatagramQueue } from "nish/net/quic-datagram";
 
 const outgoing: QuicDatagramQueue = new QuicDatagramQueue(16, 1200);  // 16 payloads, each 1200 bytes at most
@@ -20,6 +22,8 @@ at = outgoing.putFrame(packet, at, packetEnd);                         // `at` a
 const incoming: QuicDatagramQueue = new QuicDatagramQueue(16, 1200);
 const length: i32 = incoming.pop(into, 0, toI32(into.length));         // -1 empty, -2 `into` too small
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="Fixed">
 

@@ -41,7 +41,9 @@ import {
 } from "nish/crypto/pki";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { pkiLoadSystemRoots } from "nish/crypto/pki-roots";
 import { PKI_OK, PkiResult, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki";
 
@@ -62,6 +64,8 @@ export const main = (): i32 => {
   return check(chain, "example.com", store) ? 0 : 1;
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -119,22 +123,25 @@ checked and the name comparisons made by one call.
 
 </scalar-callout>
 
-The chain's first certificate is the leaf; the rest are a pool, in any
-order and possibly with extras, as servers send them. A path is searched
-for depth first from the leaf: an issuer is a root of the store, tried
-first, or a pool certificate, whose subject is the child's issuer Name byte
-for byte, and whose subjectKeyIdentifier, when both it and the child's
+The chain's first certificate is the leaf; the rest are a pool, in any order
+and possibly with extras, as servers send them. A path is searched for depth
+first from the leaf: an issuer is a root of the store, tried first, or a pool
+certificate, whose subject is the child's issuer Name byte for byte, and
+whose subjectKeyIdentifier, when both it and the child's
 authorityKeyIdentifier are present, is that identifier. A certificate is
-never twice in a path. A path ends at a root, whose own signature is not
-read, but whose validity, critical extensions, basicConstraints,
-extKeyUsage, name constraints and key identifiers are checked as an
-intermediate's are, as x509-limbo's cases ask. Every check of an issuer is
-made as it is added, against the certificates below it, so a refusal ends
-that branch at once; the leaf's profile (CA/Browser Forum Baseline
-Requirements §7.1) is checked once a path is found. When no path is
-accepted, the reason is that of the attempt that got nearest a root: one
-that reached a root beats any that did not, a longer one a shorter, and the
-first found a later one of the same length.
+never twice in a path.
+
+A path ends at a root, whose own signature is not read, but whose validity,
+critical extensions, basicConstraints, extKeyUsage, name constraints and key
+identifiers are checked as an intermediate's are, as x509-limbo's cases ask.
+Every check of an issuer is made as it is added, against the certificates
+below it, so a refusal ends that branch at once; the leaf's profile
+(CA/Browser Forum Baseline Requirements §7.1) is checked once a path is
+found.
+
+When no path is accepted, the reason is that of the attempt that got nearest
+a root: one that reached a root beats any that did not, a longer one a
+shorter, and the first found a later one of the same length.
 
 Revocation (CRLs, OCSP, Certificate Transparency), certificate policies,
 RFC 5280 §7.1's Name folding and an extension's criticality are not

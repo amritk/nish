@@ -11,7 +11,9 @@ import {
 } from "nish/collections";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const counts = new Map<string, i32>()
 const seen = new Set<string>()
 for (const w of ["to", "be", "or", "not", "to", "be"]) {
@@ -23,6 +25,8 @@ for (const w of counts.keys()) {
 }
 seen.size  // 4, and seen.has("or") is true
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

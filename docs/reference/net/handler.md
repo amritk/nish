@@ -16,7 +16,9 @@ import {
 } from "nish/net/handler";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const HOME: i32 = 0   // module constants, in the order the routes are added
 const USER: i32 = 1
 const router = new Router(new RouterLimits())
@@ -35,6 +37,8 @@ while (true) {
   }
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

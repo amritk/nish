@@ -47,7 +47,9 @@ import {
 } from "nish/sqlite";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { openDatabase, OPEN_READWRITE, OPEN_CREATE } from "nish/sqlite"
 
 const db = openDatabase("app.db", OPEN_READWRITE | OPEN_CREATE).expect("open")
@@ -66,6 +68,8 @@ while (rows.step().expect("step")) {
 }
 db.close().expect("close")  // finalizes `insert` and `rows` too
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

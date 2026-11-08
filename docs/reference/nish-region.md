@@ -17,7 +17,9 @@ import {
 } from "nish:region";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Region, enter, free, regionWith } from "nish:region"
 
 class Session {
@@ -38,6 +40,8 @@ const r: Region<Session> = regionWith(16, open)  // the Session lives in r
 const n: i32 = enter(r, hit)                      // 1: a number comes out
 free(r)                                           // r is dead from here
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

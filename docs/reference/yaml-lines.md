@@ -10,13 +10,17 @@ import {
 } from "nish/yaml-lines";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { YamlLineIndex } from "nish/yaml-lines"
 
 const lines = new YamlLineIndex(text)
 lines.line(offset)     // 1-based
 lines.column(offset)   // 1-based, in characters
 ```
+
+</scalar-code-group>
 
 <scalar-callout type="info">
 

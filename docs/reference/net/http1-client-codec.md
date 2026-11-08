@@ -34,7 +34,9 @@ import {
 } from "nish/net/http1-client-codec";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { HTTP1_NEED_MORE, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
 import { Http1ResponseParser } from "nish/net/http1-client-codec";
 
@@ -49,6 +51,8 @@ while (event !== HTTP1_NEED_MORE) {
   event = p.next();
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -102,19 +106,19 @@ anywhere, and calls `next()` until it answers `HTTP1_NEED_MORE`:
 </scalar-detail>
 
 The events are `HTTP1_INFORMATIONAL` (an interim 1xx response was read; the
-final one follows), `HTTP1_HEAD` (the final response's status line and
-header section are in), `HTTP1_BODY` (some body bytes, de-chunked),
-`HTTP1_END` (the response is complete; with `keepAlive()` the next one
-follows), `HTTP1_UPGRADE` (a CONNECT was answered with 2xx, or a request
-that `expectUpgrade` named was answered with 101, and the connection is a
-tunnel now: `tunnelBytes()` answers what was fed past the head),
-`HTTP1_CLOSED` (the connection is done: the server closed it between
-responses, or the last response was not kept alive) and
-`HTTP1_ERROR`. The last three repeat on every later call. Only complete
-lines are acted on, body bytes are counted, never guessed, and every
-refusal is decided by the same byte wherever the input was cut, so the
-sequence of events, the concatenated body and the error code do not depend
-on the split —
+final one follows), `HTTP1_HEAD` (the final response's status line and header
+section are in), `HTTP1_BODY` (some body bytes, de-chunked), `HTTP1_END` (the
+response is complete; with `keepAlive()` the next one follows),
+`HTTP1_UPGRADE` (a CONNECT was answered with 2xx, or a request that
+`expectUpgrade` named was answered with 101, and the connection is a tunnel
+now: `tunnelBytes()` answers what was fed past the head), `HTTP1_CLOSED` (the
+connection is done: the server closed it between responses, or the last
+response was not kept alive) and `HTTP1_ERROR`.
+
+The last three repeat on every later call. Only complete lines are acted on,
+body bytes are counted, never guessed, and every refusal is decided by the
+same byte wherever the input was cut, so the sequence of events, the
+concatenated body and the error code do not depend on the split —
 `tests/link/net_http1_client` feeds a corpus at every split point.
 
 <scalar-detail title="How a response ends">
@@ -133,16 +137,18 @@ which `finish()` reports. A connection closed anywhere else is
 **What it refuses**, each with its own code in `error`: a malformed status
 line, an HTTP major version other than 1, a bare LF, a malformed field line
 (an obs-fold, whitespace before the colon, a control byte in a value), a 101
-to a request that did not ask to switch protocols, `Transfer-Encoding` together
-with `Content-Length`, a transfer coding other than one `chunked` or one in
-an HTTP/1.0 response, a `Content-Length` that is not a decimal or whose
-repeats disagree, a malformed chunk, a status line, header section, field
-count, body or trailer section over the caller's limit, a chunk-size line
-over `HTTP1_MAX_CHUNK_LINE` and more than `HTTP1_MAX_INFORMATIONAL` interim
-responses. Each of these is a response-smuggling or a resource shape, and
-each is refused rather than repaired: a client that repairs one differently
-from a proxy disagrees with it about where the next response starts. An
-error is final.
+to a request that did not ask to switch protocols, `Transfer-Encoding`
+together with `Content-Length`, a transfer coding other than one `chunked` or
+one in an HTTP/1.0 response, a `Content-Length` that is not a decimal or
+whose repeats disagree, a malformed chunk, a status line, header section,
+field count, body or trailer section over the caller's limit, a chunk-size
+line over `HTTP1_MAX_CHUNK_LINE` and more than `HTTP1_MAX_INFORMATIONAL`
+interim responses.
+
+Each of these is a response-smuggling or a resource shape, and each is
+refused rather than repaired: a client that repairs one differently from a
+proxy disagrees with it about where the next response starts. An error is
+final.
 
 </scalar-callout>
 
@@ -278,8 +284,10 @@ early and let the rest be read as a field or a second request); `names` and
 `values` of different lengths; not exactly one `Host`; a `Content-Length` or
 `Transfer-Encoding` among the caller's fields, since the framing is decided
 here; a `Connection` that lists `upgrade`, which only
-`http1UpgradeRequestHead` may write; and a `bodyLength` below -2. Answers
-`HTTP1_NO_ROOM` when it is well formed but does not fit. Either way `out` is untouched.
+`http1UpgradeRequestHead` may write; and a `bodyLength` below -2.
+
+Answers `HTTP1_NO_ROOM` when it is well formed but does not fit. Either way
+`out` is untouched.
 
 ```ts
 function http1WriteRequestHead(

@@ -20,7 +20,9 @@ import {
 } from "nish/cli-args";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Cli, ROOT, finish } from "nish/cli-args";
 import { Style } from "nish/cli";
 
@@ -33,6 +35,8 @@ const r = cli.parse(process.argv, 1);
 finish(r, new Style(false, false), new Style(false, false));
 if (r.id === 1) console.log(r.value(limit) ?? "all");
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

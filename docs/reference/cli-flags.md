@@ -24,7 +24,9 @@ import {
 } from "nish/cli-flags";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { FlagTable } from "nish/cli-flags";
 
 const flags = new FlagTable("git-lite");
@@ -38,6 +40,8 @@ if (!got.ok) { got.exitUsage(); }
 got.command;                      // "remote add", or "" for none
 got.str("output"); got.num("jobs"); got.bool("verbose"); got.all("include");
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

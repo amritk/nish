@@ -11,7 +11,9 @@ import {
 } from "nish/net/http2-tls";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Secret } from "nish:secret";
 import { pollAdd, pollModify, tcpListen } from "nish:net";
 import { H2_ERROR, H2_NEED_MORE, H2_REQUEST, Http2Config, Http2Connection } from "nish/net/http2";
@@ -50,6 +52,8 @@ const serve = (loop: i32, server: Http2TlsServer, slot: i32, events: i32, key: S
 };
 ```
 
+</scalar-code-group>
+
 <scalar-callout type="info">
 
 It is `nish/net/tls-tcp`'s loop with one step added: `next` moves what TLS
@@ -74,23 +78,25 @@ program that serves both and calls `alpn(slot)` itself).
 
 <scalar-callout type="warning">
 
-**Slots, a cap; buffers, borrowed.** The constructor makes the TLS pool
-and slot 0's connection, but no other slot's and no frame buffer: a slot's
+**Slots, a cap; buffers, borrowed.** The constructor makes the TLS pool and
+slot 0's connection, but no other slot's and no frame buffer: a slot's
 connection is made by the first `accept` into it and kept, so a pool sized
 for its peak costs at start-up only what does not depend on the size, and
-holds at most `size` connections once the peak has come. A connection
-borrows its input, output and header-block buffers from the
+holds at most `size` connections once the peak has come.
+
+A connection borrows its input, output and header-block buffers from the
 server's `Http2Pools` when it first needs each, and gives each back once it
-is empty and when the slot closes, so a free or idle slot holds none. A
-slot whose handshake is not done holds one output buffer, its SETTINGS
-written and waiting on TLS, until the handshake ends or the slot closes:
-one client that stalls its handshake keeps one buffer, as it kept a whole
-slot before (`docs/security/tls.md`, TLS-4). Each pool's ceiling is the
-slot count, so a borrow never fails. `accept` resets
-the slot's connection, and once the pools are warm nothing a connection
-does allocates but a header block's HPACK decoding (`docs/security/http2.md`,
-H2-1). The caps are the `Http2Config`'s, one for every slot, so a program
-sets them once.
+is empty and when the slot closes, so a free or idle slot holds none. A slot
+whose handshake is not done holds one output buffer, its SETTINGS written and
+waiting on TLS, until the handshake ends or the slot closes: one client that
+stalls its handshake keeps one buffer, as it kept a whole slot before
+(`docs/security/tls.md`, TLS-4). Each pool's ceiling is the slot count, so a
+borrow never fails.
+
+`accept` resets the slot's connection, and once the pools are warm nothing a
+connection does allocates but a header block's HPACK decoding
+(`docs/security/http2.md`, H2-1). The caps are the `Http2Config`'s, one for
+every slot, so a program sets them once.
 
 </scalar-callout>
 

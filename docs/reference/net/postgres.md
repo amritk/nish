@@ -72,7 +72,9 @@ import {
 } from "nish/net/postgres";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { PG_FAILED, PG_NEED_MORE, PgConfig, PgConnection } from "nish/net/postgres";
 import { secret, wipe } from "nish:secret";
 
@@ -99,6 +101,8 @@ while (event !== PG_NEED_MORE && event !== PG_FAILED) {
   event = conn.next();
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -202,18 +206,20 @@ Decoders for PostgreSQL's text format, in place; a bad input sets `failed`, whic
 
 <scalar-detail title="Events">
 
-`next()` answers `PG_READY` once, when the server has
-authenticated the connection and is ready for queries; `PG_DESCRIBED` when a
-prepared statement has been described (`columns` and `columnType(c)` say
-what its rows hold, `columns` is 0 when it returns none); `PG_ROW` for each
-row, its columns as windows into the input buffer (`colStart(c)`,
-`colLength(c)`, -1 for NULL); `PG_COMPLETE` when an execution has finished
-(`tagIs("UPDATE")`, `tagRows()`); `PG_ERROR` when a statement in the current
-group failed (`lastError`); `PG_NOTICE` for a notice (`lastNotice`);
-`PG_GROUP_DONE` when a group has been answered to its end (`groupFailed`,
-`txStatus`); and `PG_FAILED`, final: the connection broke a rule or the
-server ended it, `failure` says which and `lastError` holds the server's
-reason when it gave one. `PG_NEED_MORE` asks for more input.
+`next()` answers `PG_READY` once, when the server has authenticated the
+connection and is ready for queries; `PG_DESCRIBED` when a prepared statement
+has been described (`columns` and `columnType(c)` say what its rows hold,
+`columns` is 0 when it returns none); `PG_ROW` for each row, its columns as
+windows into the input buffer (`colStart(c)`, `colLength(c)`, -1 for NULL);
+`PG_COMPLETE` when an execution has finished (`tagIs("UPDATE")`,
+`tagRows()`); `PG_ERROR` when a statement in the current group failed
+(`lastError`); `PG_NOTICE` for a notice (`lastNotice`); `PG_GROUP_DONE` when
+a group has been answered to its end (`groupFailed`, `txStatus`); and
+`PG_FAILED`, final: the connection broke a rule or the server ended it,
+`failure` says which and `lastError` holds the server's reason when it gave
+one.
+
+`PG_NEED_MORE` asks for more input.
 
 </scalar-detail>
 
@@ -238,6 +244,7 @@ of a group after an error, so one failed statement costs only its own group.
 In a failed group, `PG_DESCRIBED` comes once for each `prepare` the server
 parsed before the error: a program that counts them knows which statements
 exist (named ones last past the group) and which must be prepared again.
+
 Up to `maxInFlight` groups may wait for their answers at once; `canSend()`
 says whether another may start, and the builder calls refuse (and write
 nothing) when it may not. Nothing waits for a round trip that the protocol
@@ -248,68 +255,72 @@ flight.
 
 <scalar-detail title="Text results, no copies">
 
-Every parameter is in text format unless it
-is one of the binary integer arrays below, and every result column is text
-unless the bind asks otherwise. A row is read where it
-lies in the input buffer: `next()` frames each message once, validates its
-layout, and records each column's start and length in two reused arrays, so
-a row costs no allocation. `int`, `bool`, `isNull` and `PgText.timestamp`
-decode a column in place; `PgArrayWalker` walks a one-dimensional `text[]`
-in place. `columnText(c)` is the one that allocates, a string. An array
-parameter is a text array literal too: `paramIntArray` writes an `int8[]`
-from an `i64[]` window, and `arrayStart`, `arrayElement`, `arrayInt`,
-`arrayNull` and `arrayEnd` build an array one element at a time into the
-Bind, so a list needs no string built first. A program whose element was
-refused for room can drop the whole bind, unsent, with `bindCancel`.
+Every parameter is in text format unless it is
+one of the binary integer arrays below, and every result column is text
+unless the bind asks otherwise. A row is read where it lies in the input
+buffer: `next()` frames each message once, validates its layout, and records
+each column's start and length in two reused arrays, so a row costs no
+allocation. `int`, `bool`, `isNull` and `PgText.timestamp` decode a column in
+place; `PgArrayWalker` walks a one-dimensional `text[]` in place.
+`columnText(c)` is the one that allocates, a string.
+
+An array parameter is a text array literal too: `paramIntArray` writes an
+`int8[]` from an `i64[]` window, and `arrayStart`, `arrayElement`,
+`arrayInt`, `arrayNull` and `arrayEnd` build an array one element at a time
+into the Bind, so a list needs no string built first. A program whose element
+was refused for room can drop the whole bind, unsent, with `bindCancel`.
 
 </scalar-detail>
 
 <scalar-detail title="Binary integer arrays">
 
 `paramInt4Array` and `paramInt8Array` send an
-`i64[]` window as an `int4[]` or `int8[]` in PostgreSQL's binary layout:
-four or eight bytes an element and no digits to write or parse, which the
-benchmark (`bench/postgres/arrays.mjs`) measured at about a tenth of the
-text encoder's client CPU, and at 1,000 elements a 51% cut in the server's
-on `unnest` for `int8[]`, 30% for `int4[]`.
-`binaryArrayStart(oid)`, `binaryArrayInt` and `binaryArrayNull` build one
-element at a time, NULLs included, and `arrayEnd` closes it. The Bind's
-format codes stay a single zero word while every parameter is text; the
-first binary one makes `bindEnd` write a code for each, so an all-text bind
-costs nothing more. An `int4` element outside `int4` panics rather than
-wrapping. The element type must match the statement's parameter: the server
-answers a mismatch with `ErrorResponse` (42804) for that execution, and the
-connection goes on.
+`i64[]` window as an `int4[]` or `int8[]` in PostgreSQL's binary layout: four
+or eight bytes an element and no digits to write or parse, which the
+benchmark (`bench/postgres/arrays.mjs`) measured at about a tenth of the text
+encoder's client CPU, and at 1,000 elements a 51% cut in the server's on
+`unnest` for `int8[]`, 30% for `int4[]`. `binaryArrayStart(oid)`,
+`binaryArrayInt` and `binaryArrayNull` build one element at a time, NULLs
+included, and `arrayEnd` closes it.
+
+The Bind's format codes stay a single zero word while every parameter is
+text; the first binary one makes `bindEnd` write a code for each, so an
+all-text bind costs nothing more. An `int4` element outside `int4` panics
+rather than wrapping. The element type must match the statement's parameter:
+the server answers a mismatch with `ErrorResponse` (42804) for that
+execution, and the connection goes on.
 
 </scalar-detail>
 
 <scalar-detail title="Binary results">
 
 A bind opened with `bindStartBinary` instead of
-`bindStart` asks for every result column in binary format: an `int8` is
-eight bytes, a `timestamptz` eight bytes of microseconds since 2000, a
-`bool` one byte, so there is nothing to parse and less on the wire.
-`binaryInt`, `binaryBool` and `binaryFloat` read them in place, and
-`PgBinary`'s `timestamp` and `iso` write a time as `PgText.timestamp` does.
-A `text` column is the same bytes in either format, so `columnText` and the
-column windows read it unchanged. The program knows which of its binds
-asked for which, and reads each execution's rows with the matching
-decoders. A `PgBatcher` with `binary` set opens each batch this way and
-reads its routing ordinal with `binaryInt`, so its rows are binary too.
-`PgBinaryArray` walks a one-dimensional `int2[]`, `int4[]` or `int8[]`
-column in its binary layout, and refuses any other array (a `text[]` or a
-multi-dimensional one among them).
+`bindStart` asks for every result column in binary format: an `int8` is eight
+bytes, a `timestamptz` eight bytes of microseconds since 2000, a `bool` one
+byte, so there is nothing to parse and less on the wire. `binaryInt`,
+`binaryBool` and `binaryFloat` read them in place, and `PgBinary`'s
+`timestamp` and `iso` write a time as `PgText.timestamp` does. A `text`
+column is the same bytes in either format, so `columnText` and the column
+windows read it unchanged.
+
+The program knows which of its binds asked for which, and reads each
+execution's rows with the matching decoders. A `PgBatcher` with `binary` set
+opens each batch this way and reads its routing ordinal with `binaryInt`, so
+its rows are binary too. `PgBinaryArray` walks a one-dimensional `int2[]`,
+`int4[]` or `int8[]` column in its binary layout, and refuses any other array
+(a `text[]` or a multi-dimensional one among them).
 
 </scalar-detail>
 
 <scalar-detail title="Authentication">
 
-SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`).
-The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a
-holder that is wiped as soon as the proof is computed, or when the
-connection fails or is disposed. The server's signature is checked in
-constant time before `AuthenticationOk` is believed, and an
-`AuthenticationOk` that skips the end of an exchange SCRAM began is refused.
+SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`). The
+password arrives as a `Secret<u8[]>`; the connection keeps a copy in a holder
+that is wiped as soon as the proof is computed, or when the connection fails
+or is disposed. The server's signature is checked in constant time before
+`AuthenticationOk` is believed, and an `AuthenticationOk` that skips the end
+of an exchange SCRAM began is refused.
+
 Cleartext and MD5 passwords, and SASL mechanisms other than SCRAM-SHA-256,
 are refused: with no TLS here the first sends the password as it is, and the
 second is a hash any eavesdropper can replay. The password's bytes are used
@@ -325,13 +336,14 @@ non-ASCII one works only when it is already in the form SASLprep would give
 **Caps.** `PgConfig` bounds what a server can make the client hold: the
 longest message (`maxMessage`), the widest row (`maxColumns`) and the SCRAM
 iteration count (`minIterations`, `maxIterations`); and what a program can
-queue unsent (`maxOutput`), past which a builder call answers false. A
-message longer than the cap, a length below 4, a layout that does not add
-up, a message the protocol does not allow at that point (COPY among them),
-an encoding other than UTF-8, and a `DateStyle` other than ISO or a
-`TimeZone` other than UTC (at startup or after a `SET`), each fail the
-connection with their own `failure` code. The constructor panics on a cap
-out of range, as on a missing user or a short nonce.
+queue unsent (`maxOutput`), past which a builder call answers false.
+
+A message longer than the cap, a length below 4, a layout that does not add
+up, a message the protocol does not allow at that point (COPY among them), an
+encoding other than UTF-8, and a `DateStyle` other than ISO or a `TimeZone`
+other than UTC (at startup or after a `SET`), each fail the connection with
+their own `failure` code. The constructor panics on a cap out of range, as on
+a missing user or a short nonce.
 
 </scalar-callout>
 
@@ -340,15 +352,17 @@ out of range, as on a missing user or a short nonce.
 `PgPool` holds up to `size` connections to one server and a FIFO
 queue of up to `queueSize` requests, still sans-IO: `wanted()` names a slot
 that needs a socket, `connect(slot, nonce)` starts its connection, and the
-program moves its bytes as above through `connection(slot)`. A request is a
-ticket from `request()`; `dispatch()` gives the oldest to the ready
-connection with the fewest groups in flight (or, with `PgConfig.pack`, to the
-first ready one with room, so a burst fills few connections in fuller
-writes), the program builds its group and ends it with `send()`, and `next(slot)` reads that connection's events with
-`ticket` naming the request. Statements given to `register` are prepared on
-each connection ahead of its first request. A connection that fails reports
-`PG_LOST` for each request it took, then `PG_FAILED`; the program closes the
-socket and the slot is built again on its next use.
+program moves its bytes as above through `connection(slot)`.
+
+A request is a ticket from `request()`; `dispatch()` gives the oldest to the
+ready connection with the fewest groups in flight (or, with `PgConfig.pack`,
+to the first ready one with room, so a burst fills few connections in fuller
+writes), the program builds its group and ends it with `send()`, and
+`next(slot)` reads that connection's events with `ticket` naming the request.
+Statements given to `register` are prepared on each connection ahead of its
+first request. A connection that fails reports `PG_LOST` for each request it
+took, then `PG_FAILED`; the program closes the socket and the slot is built
+again on its next use.
 
 </scalar-detail>
 
@@ -365,23 +379,25 @@ the clock and the entropy source, and this one reaches none of them.
 
 `PgBatcher` turns many reads of one row shape by key — a user
 by id, an article by slug — into one execution of a statement over
-`unnest($1) with ordinality`. `addInt` or `addText` queues a request's key
-and tag; `take(conn)` binds the oldest waiting, each distinct key once (past
-`PG_BATCH_PROBES` slots of its table probe, a key is bound again), up
-to `maxRequests` and `maxBytes`, and answers a run's handle; `row`, `end`
-and `fail` take that execution's events (a handle already answered makes
-them a no-op counted in `stray`, so a server's late event cannot panic),
-routing each row by its ordinal (checked first: a server's ordinal is
-refused before it routes anything), and `next(run)` answers
-`PG_BATCH_ROW`, then `PG_BATCH_DONE`, `PG_BATCH_MISSING` or
-`PG_BATCH_FAILED`, for each request. The statement orders its rows by
-ordinal, so a key's last events come as soon as a later key's row does;
-with `sorted` false it does not (no Sort node, when `orderBy` is ""), rows
-are answered in whatever order they come, and every last event waits for
-the execution's end. It reads no clock, and the batcher
-itself allocates only in its constructor (the connection's output buffer a
-take writes into may still grow, up to its `maxOutput`); when to take is
-the program's.
+`unnest($1) with ordinality`.
+
+`addInt` or `addText` queues a request's key and tag; `take(conn)` binds the
+oldest waiting, each distinct key once (past `PG_BATCH_PROBES` slots of its
+table probe, a key is bound again), up to `maxRequests` and `maxBytes`, and
+answers a run's handle; `row`, `end` and `fail` take that execution's events
+(a handle already answered makes them a no-op counted in `stray`, so a
+server's late event cannot panic), routing each row by its ordinal (checked
+first: a server's ordinal is refused before it routes anything), and
+`next(run)` answers `PG_BATCH_ROW`, then `PG_BATCH_DONE`, `PG_BATCH_MISSING`
+or `PG_BATCH_FAILED`, for each request.
+
+The statement orders its rows by ordinal, so a key's last events come as soon
+as a later key's row does; with `sorted` false it does not (no Sort node,
+when `orderBy` is ""), rows are answered in whatever order they come, and
+every last event waits for the execution's end. It reads no clock, and the
+batcher itself allocates only in its constructor (the connection's output
+buffer a take writes into may still grow, up to its `maxOutput`); when to
+take is the program's.
 
 </scalar-detail>
 
@@ -442,20 +458,21 @@ The target; read `failure` before anything else.
 
 ### pgTargetUrl
 
-The target a `postgres://` or `postgresql://` URL names, as libpq reads
-one: `postgres://[user[:password]@][host][:port][/dbname][?key=value&...]`.
-The host, the port and every query key and value are percent-decoded, so a
-socket directory is written `%2Ftmp` or passed as `?host=/tmp`; a `host` or
-`port` in the query overrides the authority's, and other keys are ignored.
-The user, password and database are not read here, but a bad escape in them
-still refuses the URL. A `%` without two hex digits after it, `%00`, or a
-part that decodes to bytes that are not UTF-8 is `PG_TARGET_BAD_ESCAPE`.
+The target a `postgres://` or `postgresql://` URL names, as libpq reads one:
+`postgres://[user[:password]@][host][:port][/dbname][?key=value&...]`. The
+host, the port and every query key and value are percent-decoded, so a socket
+directory is written `%2Ftmp` or passed as `?host=/tmp`; a `host` or `port`
+in the query overrides the authority's, and other keys are ignored. The user,
+password and database are not read here, but a bad escape in them still
+refuses the URL. A `%` without two hex digits after it, `%00`, or a part that
+decodes to bytes that are not UTF-8 is `PG_TARGET_BAD_ESCAPE`.
+
 The user information ends at the first `@`, as in libpq; a raw `@` after a
-`?` or after that first `@` in the authority, or a raw NUL byte anywhere,
-is `PG_TARGET_BAD_HOST`, as is a URL with no host anywhere, where libpq
-would use its default socket directory. An empty port or query value is
-refused, where libpq would take it as unset.
-The decoded host is then resolved as `pgTarget` resolves one.
+`?` or after that first `@` in the authority, or a raw NUL byte anywhere, is
+`PG_TARGET_BAD_HOST`, as is a URL with no host anywhere, where libpq would
+use its default socket directory. An empty port or query value is refused,
+where libpq would take it as unset. The decoded host is then resolved as
+`pgTarget` resolves one.
 
 ```ts
 function pgTargetUrl(url: string): PgTarget
@@ -626,39 +643,41 @@ class PgBatchTurns
 
 ### PgBatcher
 
-Batches keyed reads of one statement shape, sans-IO like `PgConnection`:
-it reads no clock and makes no socket. Each request is a key and the
-caller's `tag`, queued by `addInt` or `addText`. When a connection is free,
-`take(conn)` binds up to `maxRequests` of them, and up to `maxBytes` of
-keys, as one execution of `sql`, each distinct key once (a key whose
-probe of the batcher's table passes 1024 slots, which takes keys chosen to
-collide, is bound again and answered the same), and answers the
-execution's run handle. Each `PG_ROW` of that execution goes to
-`row(run, conn)`, its `PG_COMPLETE` to `end(run)`, and an error or a lost
-connection to `fail(run)`; after each, `next(run)` answers events until
-`PG_BATCH_NONE`, `tag` naming the request each is about. Every row goes to
-every request for its key, and every request gets one last event:
-`PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`. Sorted (the
-default), rows come in key order and a key's last events come as soon as
-a later key's row does; with `sorted` false, rows come in any order, each
-answered at once, and every last event waits for `end` or `fail`, then
-comes in key order. A batch with
-`binary` set comes in binary format: its rows are read with the binary
-decoders, `binaryInt` for each ordinal, and the caller's `binary.failed`
-is left as it was.
+Batches keyed reads of one statement shape, sans-IO like `PgConnection`: it
+reads no clock and makes no socket. Each request is a key and the caller's
+`tag`, queued by `addInt` or `addText`. When a connection is free,
+`take(conn)` binds up to `maxRequests` of them, and up to `maxBytes` of keys,
+as one execution of `sql`, each distinct key once (a key whose probe of the
+batcher's table passes 1024 slots, which takes keys chosen to collide, is
+bound again and answered the same), and answers the execution's run handle.
 
-Nothing outlives its execution: a run is free again once the events
-`end` or `fail` owe are answered, and its handle is then spent. What the
-server or the network can send after that — a second `PG_COMPLETE`, a row
-or an error after one, a lost connection — goes to a spent handle, and
-`row`, `end` and `fail` count it in `stray` and do nothing, even once
-`take` has given the run out again under a new handle. The ordinal each
-row carries comes from the server and is checked before it routes
-anything. What panics is only the program's own misuse: a handle out of
-the range `take` can give (-1 or any negative, or `runs` * 2^20 or more),
-or `row`, `end` or `fail` before `next(run)` has answered `PG_BATCH_NONE`
-for the event before. A handle in that range that `take` never gave is
-spent like any other: counted in `stray`, not a panic.
+Each `PG_ROW` of that execution goes to `row(run, conn)`, its `PG_COMPLETE`
+to `end(run)`, and an error or a lost connection to `fail(run)`; after each,
+`next(run)` answers events until `PG_BATCH_NONE`, `tag` naming the request
+each is about. Every row goes to every request for its key, and every request
+gets one last event: `PG_BATCH_DONE`, `PG_BATCH_MISSING` or
+`PG_BATCH_FAILED`.
+
+Sorted (the default), rows come in key order and a key's last events come as
+soon as a later key's row does; with `sorted` false, rows come in any order,
+each answered at once, and every last event waits for `end` or `fail`, then
+comes in key order. A batch with `binary` set comes in binary format: its
+rows are read with the binary decoders, `binaryInt` for each ordinal, and the
+caller's `binary.failed` is left as it was.
+
+Nothing outlives its execution: a run is free again once the events `end` or
+`fail` owe are answered, and its handle is then spent. What the server or the
+network can send after that — a second `PG_COMPLETE`, a row or an error after
+one, a lost connection — goes to a spent handle, and `row`, `end` and `fail`
+count it in `stray` and do nothing, even once `take` has given the run out
+again under a new handle. The ordinal each row carries comes from the server
+and is checked before it routes anything.
+
+What panics is only the program's own misuse: a handle out of the range
+`take` can give (-1 or any negative, or `runs` * 2^20 or more), or `row`,
+`end` or `fail` before `next(run)` has answered `PG_BATCH_NONE` for the event
+before. A handle in that range that `take` never gave is spent like any
+other: counted in `stray`, not a panic.
 
 ```ts
 class PgBatcher
@@ -707,16 +726,17 @@ class PgBinary
 ### PgBinaryArray
 
 A walk over a one-dimensional `int2[]`, `int4[]` or `int8[]` column in
-PostgreSQL's binary array layout, in place: `begin` the column, then
-`next()` until `PG_ARRAY_END` or `PG_ARRAY_BAD`, and `int()` decodes the
-current element through `binary`. The header is `ndim`, `hasnull` and the
-element OID, then for `ndim` 1 the dimension's length and lower bound (the
-bound is read and not used); each element is a length word and its bytes,
-and a NULL is a length of -1 with no bytes. `ndim` 0 is the empty array.
-Every refusal sets `binary.failed`: an `ndim` above 1, another element
-type, an element whose length is not its type's size, a NULL when
-`hasnull` is 0, a column cut short, or bytes after the last element. The
-walk allocates nothing, and it reads nothing outside the column.
+PostgreSQL's binary array layout, in place: `begin` the column, then `next()`
+until `PG_ARRAY_END` or `PG_ARRAY_BAD`, and `int()` decodes the current
+element through `binary`. The header is `ndim`, `hasnull` and the element
+OID, then for `ndim` 1 the dimension's length and lower bound (the bound is
+read and not used); each element is a length word and its bytes, and a NULL
+is a length of -1 with no bytes. `ndim` 0 is the empty array.
+
+Every refusal sets `binary.failed`: an `ndim` above 1, another element type,
+an element whose length is not its type's size, a NULL when `hasnull` is 0, a
+column cut short, or bytes after the last element. The walk allocates
+nothing, and it reads nothing outside the column.
 
 ```ts
 class PgBinaryArray

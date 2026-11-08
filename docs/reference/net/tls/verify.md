@@ -19,11 +19,15 @@ import {
 } from "nish/net/tls/verify";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const trust: TlsClientTrust = tlsClientSystemTrust();
 // when conn.interest() says TLS_RECORD_AUTH:
 const alert: i32 = tlsClientAuthenticate(conn, trust, toI64(Date.now()));
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -78,13 +82,14 @@ must be one this client offered and fit the leaf's key — ECDSA P-256 with
 SHA-256 on a P-256 key, ECDSA P-384 with SHA-384 on a P-384 key, RSA-PSS
 (rsae, salt as long as the hash) on an RSA key of at least 2048 bits — and
 the signature must verify over `TlsClient.verifyContent()` under that key
-(RFC 8446 §4.4.3). Then the chain, from the leaf the server sent to a root
-in `trust`, for the name the caller dialled. A server with no certificate
-or a leaf that does not parse is `bad_certificate`, as is a leaf whose key
-is of any other kind (Ed25519, a short RSA modulus); a signature that does
-not verify, or a scheme that does not fit the key, is `decrypt_error`.
-The signature goes first so a forged CertificateVerify reads as what it is
-whatever the chain would have said.
+(RFC 8446 §4.4.3). Then the chain, from the leaf the server sent to a root in
+`trust`, for the name the caller dialled.
+
+A server with no certificate or a leaf that does not parse is
+`bad_certificate`, as is a leaf whose key is of any other kind (Ed25519, a
+short RSA modulus); a signature that does not verify, or a scheme that does
+not fit the key, is `decrypt_error`. The signature goes first so a forged
+CertificateVerify reads as what it is whatever the chain would have said.
 
 </scalar-detail>
 

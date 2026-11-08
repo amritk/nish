@@ -23,7 +23,9 @@ import {
 } from "nish/net/router";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const HOME: i32 = 0   // module constants, in the order the routes are added
 const USER: i32 = 1
 const router = new Router(new RouterLimits())
@@ -33,6 +35,8 @@ switch (router.match(p.head, p.methodStart, p.methodEnd, p.head, p.targetStart, 
   case HOME: ... case USER: ... case ROUTER_NOT_FOUND: ...
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

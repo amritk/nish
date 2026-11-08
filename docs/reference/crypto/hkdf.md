@@ -30,12 +30,16 @@ import {
 } from "nish/crypto/hkdf";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { hkdfExtractSha256, hkdfExpandSha256 } from "nish/crypto/hkdf";
 
 const prk: u8[] = hkdfExtractSha256(salt, secret);
 const okm: u8[] | null = hkdfExpandSha256(prk, info, 42);
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -200,9 +204,7 @@ struct {
     opaque label<7..255> = "tls13 " + Label;
     opaque context<0..255> = Context;
 } HkdfLabel;
-```
 
-```ts
 const key: u8[] = hkdfExpandLabelSha256(secret, "quic key", [], 16);
 ```
 
@@ -227,11 +229,15 @@ was. Each wipes the scratch before it returns, its last block and the
 keyed hashers of the hash it ran over, so no key material outlives the
 call there:
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const kdf = new HkdfScratch();                         // once
 hkdfExtractInto(kdf, 32, salt, ikm, prk, 0);           // 32 bytes at prk[0]
 hkdfExpandLabelInto(kdf, 32, prk, "key", context, 0, 0, key, 0, 16);
 ```
+
+</scalar-code-group>
 
 </scalar-detail>
 
@@ -253,10 +259,14 @@ which run both steps, hand the output back as a `Secret` and wipe the PRK
 between them, or with the `*Secret` twins of each step, HKDF-Expand-Label's
 among them:
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const okm: Secret<u8[]> | null = hkdfSha256Secret(salt, ikm, info, 42);
 const key: Secret<u8[]> = hkdfExpandLabelSha256Secret(prk, "key", context, 16);
 ```
+
+</scalar-code-group>
 
 </scalar-detail>
 
@@ -267,10 +277,14 @@ in place, and wipe the plain output they copied from. The destination may
 be the PRK itself; `hkdfExpandLabelHeldInto` writes a plain window instead,
 for output that is plain by design, a record layer's AEAD key and IV:
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 hkdfExpandLabelSha256Held(secret, secret, "traffic upd", none);
 hkdfExpandLabelHeldInto(32, secret, "key", none, key, 0, 16);
 ```
+
+</scalar-code-group>
 
 Written from RFC 5869 and RFC 8446 §7.1, not ported from another
 implementation.

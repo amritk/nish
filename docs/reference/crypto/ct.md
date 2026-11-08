@@ -11,11 +11,15 @@ import {
 } from "nish/crypto/ct";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { timingSafeEqual } from "nish/crypto/ct";
 
 const ok: boolean = timingSafeEqual(expectedTag, receivedTag);
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

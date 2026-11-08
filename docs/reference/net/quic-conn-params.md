@@ -33,7 +33,9 @@ import {
 } from "nish/net/quic-conn-params";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { QuicTransportParameters, quicEncodeTransportParameters,
          quicParseTransportParameters } from "nish/net/quic-conn-params";
 
@@ -46,6 +48,8 @@ if (theirs.error !== 0) {
   // close the connection with theirs.error; theirs.errorParameter names the parameter
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -92,20 +96,23 @@ that default, plus the connection IDs, which have none.
 
 <scalar-callout type="warning">
 
-**What a parse refuses.** Each of these is a TRANSPORT_PARAMETER_ERROR
-(§7.4, §18.2): an ID or a length that does not fit, a parameter running past the bytes, a
-known parameter sent twice, a varint-valued parameter whose value is not
-exactly one varint, `disable_active_migration` with a value, a server-only
-parameter from a client (`original_destination_connection_id`,
-`preferred_address`, `retry_source_connection_id`,
-`stateless_reset_token`), a stateless reset token that is not 16 bytes, a
-connection ID over 20 bytes, `max_udp_payload_size` below 1200,
-`ack_delay_exponent` above 20, `max_ack_delay` at 2^14 or above,
-`active_connection_id_limit` below 2, and a stream count above 2^60.
-Unknown parameters, the reserved ones (31 × N + 27) among them, are
-skipped, as §18.1 asks; a second copy of an unknown one is not noticed.
-Whether `initial_source_connection_id` is present and right is the
-connection's check, because it needs the packet the ID came in.
+**What a parse refuses.**
+
+Each of these is a TRANSPORT_PARAMETER_ERROR (§7.4, §18.2): an ID or a length
+that does not fit, a parameter running past the bytes, a known parameter sent
+twice, a varint-valued parameter whose value is not exactly one varint,
+`disable_active_migration` with a value, a server-only parameter from a
+client (`original_destination_connection_id`, `preferred_address`,
+`retry_source_connection_id`, `stateless_reset_token`), a stateless reset
+token that is not 16 bytes, a connection ID over 20 bytes,
+`max_udp_payload_size` below 1200, `ack_delay_exponent` above 20,
+`max_ack_delay` at 2^14 or above, `active_connection_id_limit` below 2, and a
+stream count above 2^60.
+
+Unknown parameters, the reserved ones (31 × N + 27) among them, are skipped,
+as §18.1 asks; a second copy of an unknown one is not noticed. Whether
+`initial_source_connection_id` is present and right is the connection's
+check, because it needs the packet the ID came in.
 
 </scalar-callout>
 

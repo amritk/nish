@@ -19,7 +19,9 @@ import {
 } from "nish/text";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
 
 export const main = (): i32 => {
@@ -30,6 +32,8 @@ export const main = (): i32 => {
   return toI32(words.length);
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -148,16 +152,17 @@ counted. Under Node the same `charCodeAt` reads UTF-16 units, where a byte
 rule would miscount: `"©®±"` is three units in `0x80`–`0xBF`, which are
 continuation bytes in UTF-8 but whole characters here. So the function asks
 which host it is on (`textUnitsAreBytes`) and, under Node, counts every unit
-except the low half of a surrogate pair. Both walks answer the same for any
-string literal, a lone surrogate escape included: it is three WTF-8 bytes
-with one leading byte natively, and one unit under Node. They differ for
-text built from bytes: `String.fromBytes` and `String.fromCharCode` give one
-unit per byte under Node, so a string decoded that way, as `nish/json`
-decodes a `\u` escape, counts its UTF-8 bytes there. They also differ for text
-that is not well-formed — bytes that are not UTF-8 natively, where each
-stray continuation byte counts nothing, or the two halves of a pair joined
-at run time, which are one string under Node and two lone surrogates
-natively.
+except the low half of a surrogate pair.
+
+Both walks answer the same for any string literal, a lone surrogate escape
+included: it is three WTF-8 bytes with one leading byte natively, and one
+unit under Node. They differ for text built from bytes: `String.fromBytes`
+and `String.fromCharCode` give one unit per byte under Node, so a string
+decoded that way, as `nish/json` decodes a `\u` escape, counts its UTF-8
+bytes there. They also differ for text that is not well-formed — bytes that
+are not UTF-8 natively, where each stray continuation byte counts nothing, or
+the two halves of a pair joined at run time, which are one string under Node
+and two lone surrogates natively.
 
 ```ts
 function codePointLength(text: string): i32

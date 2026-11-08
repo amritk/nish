@@ -29,7 +29,9 @@ import {
 } from "nish/sync/shm";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { createRegion, openRegion, unlinkRegion, ACQUIRE, RELEASE } from "nish/sync/shm"
 
 // The process that owns it: a fresh, zeroed region of 4096 bytes.
@@ -41,6 +43,8 @@ region.storeI64(0, toI64(42), RELEASE)
 const view = openRegion("jobs").expect("open")
 const n: i64 = view.loadI64(0, ACQUIRE) // 42 once the store is seen
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -87,15 +91,17 @@ Why a region could not be created, opened, unlinked or closed.
 **A region is a named POSIX shared-memory object** (`/dev/shm/<name>` on
 Linux, `shm_open("/<name>")` on Darwin) mapped shared, so every process that
 opens the name sees the same bytes. A name is 1 to 30 of `A-Z a-z 0-9 . _ -`,
-not starting with `.`. `createRegion` makes it with mode 0600 and refuses a
-name that exists (`SHM_EXISTS`), so a name another user planted is never
-adopted; `openRegion` refuses a region this user does not own, that anyone
-else may read or write, or (on Linux) that is not a regular file or has a
-second hard link (`SHM_ACCESS`). The name stays until `unlinkRegion`,
-even after every process has exited, which is how a process that starts later
-finds it; the mapping goes away with `close` or with the process.
+not starting with `.`.
 
 </scalar-callout>
+
+`createRegion` makes it with mode 0600 and refuses a name that exists
+(`SHM_EXISTS`), so a name another user planted is never adopted; `openRegion`
+refuses a region this user does not own, that anyone else may read or write,
+or (on Linux) that is not a regular file or has a second hard link
+(`SHM_ACCESS`). The name stays until `unlinkRegion`, even after every process
+has exited, which is how a process that starts later finds it; the mapping
+goes away with `close` or with the process.
 
 <scalar-detail title="Why named, and no anonymous region made before `fork`">
 

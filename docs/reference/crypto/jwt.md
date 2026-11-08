@@ -47,7 +47,9 @@ import {
 } from "nish/crypto/jwt";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Secret } from "nish:secret";
 import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtKey, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt";
 
@@ -69,6 +71,8 @@ const roundTrip = (secretKey: Secret<u8[]>, token: string, now: i64): string | n
   return minted;
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -156,14 +160,15 @@ Verifies compact JWS tokens and checks their claims, reusing its buffers: make o
 
 A `JwtKey` is made for
 one algorithm, and a token verifies only when its header's `alg` is that
-algorithm's name, spelled exactly. `none` names no key, so a token that
-says it is unsigned is refused like any other mismatch (`JWT_ERR_ALG`); an
-`HS256` header in front of an RSA key is refused before any MAC is taken,
-so an RSA public key can never be used as an HMAC secret (RFC 8725 §2.1,
-§3.1). The header must hold `alg` exactly once, as a string; `typ` and `kid`
-at most once, as strings; and no `crit` and no `b64` (RFC 7515 §4.1.11,
-RFC 7797), since this verifier understands no extension and a header that
-names one must be refused. Other header members are skipped.
+algorithm's name, spelled exactly. `none` names no key, so a token that says
+it is unsigned is refused like any other mismatch (`JWT_ERR_ALG`); an `HS256`
+header in front of an RSA key is refused before any MAC is taken, so an RSA
+public key can never be used as an HMAC secret (RFC 8725 §2.1, §3.1).
+
+The header must hold `alg` exactly once, as a string; `typ` and `kid` at most
+once, as strings; and no `crit` and no `b64` (RFC 7515 §4.1.11, RFC 7797),
+since this verifier understands no extension and a header that names one must
+be refused. Other header members are skipped.
 
 </scalar-detail>
 
@@ -614,7 +619,7 @@ class JwtVerifier
 | `subject: string \| null` | The `sub` a token must carry, or `null` for any. |
 | `typ: string \| null` | The header `typ` a token must carry (RFC 8725 §3.11), or `null` for any. |
 | `peekKid(src: u8[], off: i32, len: i32, out: u8[]): i32` | The header's `kid` of the token `src[off .. off + len)`, written at `out[0 ..)`: its length, or -1 when the token is malformed, has no `kid` or its `kid` does not fit `out`. This reads the header **before** any signature is checked, so it only chooses which key to verify with; the `kid` proves nothing until `verify` answers `JWT_OK` under that key. |
-| `verify(key: JwtKey, src: u8[], off: i32, len: i32, now: i64): i32` | Verifies the token `src[off .. off + len)` under `key` and checks its claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*` that applies, in this order: the window (`JWT_ERR_SIZE`); the three parts and the header's base64url (`JWT_ERR_FORMAT`); the header's members in the order written (`JWT_ERR_HEADER`, `JWT_ERR_ALG`), then a missing `alg` and, when the verifier names a `typ`, a missing or other one; signature text too long for any signature (`JWT_ERR_SIGNATURE`); the signature's base64url (`JWT_ERR_FORMAT`); its length, the key's fit and the signature itself (`JWT_ERR_SIGNATURE`); the payload's base64url (`JWT_ERR_FORMAT`); the payload's members in the order written and, while `requireExp` is set (the default), a missing `exp` (`JWT_ERR_CLAIMS`); and then `exp`, `nbf`, `iat`, `iss`, `aud` and `sub`, in that order. |
+| `verify(key: JwtKey, src: u8[], off: i32, len: i32, now: i64): i32` | Verifies the token `src[off .. off + len)` under `key` and checks its claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*` that applies, in this order:<br>- the window (`JWT_ERR_SIZE`);<br>- the three parts and the header's base64url (`JWT_ERR_FORMAT`);<br>- the header's members in the order written (`JWT_ERR_HEADER`, `JWT_ERR_ALG`), then a missing `alg` and, when the verifier names a `typ`, a missing or other one;<br>- signature text too long for any signature (`JWT_ERR_SIGNATURE`);<br>- the signature's base64url (`JWT_ERR_FORMAT`);<br>- its length, the key's fit and the signature itself (`JWT_ERR_SIGNATURE`);<br>- the payload's base64url (`JWT_ERR_FORMAT`);<br>- the payload's members in the order written and, while `requireExp` is set (the default), a missing `exp` (`JWT_ERR_CLAIMS`);<br>- and then `exp`, `nbf`, `iat`, `iss`, `aud` and `sub`, in that order. |
 | `verifyString(key: JwtKey, token: string, now: i64): i32` | `verify` on the bytes of `token`, copied into the verifier's own buffer first; a token longer than `maxToken` is refused before the copy. |
 
 ## Limits

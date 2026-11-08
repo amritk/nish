@@ -36,7 +36,9 @@ import {
 } from "nish/net/qpack";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { QpackDecoder, QpackEncoder, QPACK_OK } from "nish/net/qpack";
 
 const name: u8[] = [58, 112, 97, 116, 104];   // ":path"
@@ -52,6 +54,8 @@ if (dec.decode(section, 0, toI32(section.length)) === QPACK_OK) {
   // field i: dec.bytes[dec.nameStart[i], + dec.nameLength[i]), and the value alike
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -91,20 +95,21 @@ block on (§2.1.2) and nothing to acknowledge (§4.4.1).
 <scalar-callout type="warning">
 
 **What is refused.** `QpackDecoder.decode` answers QPACK_DECOMPRESSION_FAILED
-for a section that ends inside a representation, an integer past 2^62 - 1
-(or padded past the nine continuation bytes such an integer needs), a
-non-zero Required Insert Count (§4.5.1.1), a negative Base (§4.5.1.2), any
-reference to the dynamic table, relative or post-Base (§2.2.3), a static
-index past 98, and Huffman padding that is not EOS's prefix or an EOS inside
-a string. `receiveEncoderStream` answers QPACK_ENCODER_STREAM_ERROR for a Set
-Dynamic Table Capacity above 0 (§4.3.1), any Insert (§3.2.2: every entry is
-larger than the table) and any Duplicate (§2.2.3: there is nothing to
-duplicate). The encoder's `receiveDecoderStream` answers
-QPACK_DECODER_STREAM_ERROR for a Section Acknowledgment (§4.4.1: no section
-it sent needs one), any Insert Count Increment (§4.4.3: it has inserted
-nothing) and a stream ID past 2^62 - 1. Each of those is a connection error,
-so each is sticky: the same answer comes back from every later call without
-reading anything, and `reason` says which rule it was (`QPACK_REASON_*`).
+for a section that ends inside a representation, an integer past 2^62 - 1 (or
+padded past the nine continuation bytes such an integer needs), a non-zero
+Required Insert Count (§4.5.1.1), a negative Base (§4.5.1.2), any reference
+to the dynamic table, relative or post-Base (§2.2.3), a static index past 98,
+and Huffman padding that is not EOS's prefix or an EOS inside a string.
+
+`receiveEncoderStream` answers QPACK_ENCODER_STREAM_ERROR for a Set Dynamic
+Table Capacity above 0 (§4.3.1), any Insert (§3.2.2: every entry is larger
+than the table) and any Duplicate (§2.2.3: there is nothing to duplicate).
+The encoder's `receiveDecoderStream` answers QPACK_DECODER_STREAM_ERROR for a
+Section Acknowledgment (§4.4.1: no section it sent needs one), any Insert
+Count Increment (§4.4.3: it has inserted nothing) and a stream ID past
+2^62 - 1. Each of those is a connection error, so each is sticky: the same answer
+comes back from every later call without reading anything, and `reason` says
+which rule it was (`QPACK_REASON_*`).
 
 </scalar-callout>
 

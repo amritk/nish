@@ -10,11 +10,15 @@ import {
 } from "nish/pair";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Pair } from "nish/pair";
 
 const scanEscape = (at: i32): Pair<i32, boolean> => ({ first: at + 2, second: true });
 ```
+
+</scalar-code-group>
 
 <scalar-callout type="info">
 
@@ -49,11 +53,15 @@ pair, the second answer lives in a field on some object, written by the
 callee and read back by the caller three lines later. With one, both come
 back in the return:
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Pair } from "nish/pair";
 
 const scanEscape = (at: i32): Pair<i32, boolean> => ({ first: at + 2, second: true });
 ```
+
+</scalar-code-group>
 
 It is **for returning two values, not for storing them**. A struct held in an
 array or a class field should have named fields, and parallel arrays are the

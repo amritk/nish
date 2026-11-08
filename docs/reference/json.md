@@ -23,7 +23,9 @@ import {
 } from "nish/json";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { jsonField } from "nish/json";
 
 for (const line of splitLines(stdout)) {
@@ -36,6 +38,8 @@ for (const line of splitLines(stdout)) {
   }
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -131,16 +135,17 @@ answered as a string.
 
 <scalar-detail title="Two modes">
 
-**Two modes**, both off by default and both kept across `reset`, so a
-server sets them once. `setIndent(n)` and `setIndentTab()` write what
-`JSON.stringify(v, null, n)` and `JSON.stringify(v, null, "\t")` write:
-one member or element a line, `": "` after a key, an empty `{}` or `[]` on
-one line, and `n` clamped to 10. The indent is one byte stored as many times
-as the depth asks, so the indented text allocates no more than the minified
-one, and a `raw` fragment is copied as it is, not re-indented.
-`setStrict(true)` makes NaN and the infinities, which JSON cannot
-spell, the sticky `JSON_WRITE_NON_FINITE` instead of `null`: for a caller
-to whom a `null` where a number was due would be a silently corrupt record.
+**Two modes**, both off by default and both kept across `reset`, so a server
+sets them once. `setIndent(n)` and `setIndentTab()` write what
+`JSON.stringify(v, null, n)` and `JSON.stringify(v, null, "\t")` write: one
+member or element a line, `": "` after a key, an empty `{}` or `[]` on one
+line, and `n` clamped to 10. The indent is one byte stored as many times as
+the depth asks, so the indented text allocates no more than the minified one,
+and a `raw` fragment is copied as it is, not re-indented.
+
+`setStrict(true)` makes NaN and the infinities, which JSON cannot spell, the
+sticky `JSON_WRITE_NON_FINITE` instead of `null`: for a caller to whom a
+`null` where a number was due would be a silently corrupt record.
 
 </scalar-detail>
 
@@ -148,15 +153,17 @@ to whom a `null` where a number was due would be a silently corrupt record.
 
 **Misuse is a sticky code**, as in `nish/net/hpack`: never a panic, and no
 `Result` to carry on the hot path. The first call that cannot be honoured
-sets `failed` to a negative `JSON_WRITE_*` code — a value where a key is
-due, a key where a value is due, an unbalanced or mismatched `end*`,
-nesting past `JSON_WRITER_MAX_DEPTH`, a buffer with no room, a second
-top-level value, a bad `raw` window or `start`, a non-finite `f64` in strict
-mode — and every later call does nothing. A call that fails writes nothing
-past `buf.length` (a full buffer is checked before the bytes go in, never
-by the bounds check), so the caller writes the whole value, reads `failed`
-once at the end, and grows the buffer and retries or answers a 500. `complete()` says whether one
-whole value was written with every container closed.
+sets `failed` to a negative `JSON_WRITE_*` code — a value where a key is due,
+a key where a value is due, an unbalanced or mismatched `end*`, nesting past
+`JSON_WRITER_MAX_DEPTH`, a buffer with no room, a second top-level value, a
+bad `raw` window or `start`, a non-finite `f64` in strict mode — and every
+later call does nothing.
+
+A call that fails writes nothing past `buf.length` (a full buffer is checked
+before the bytes go in, never by the bounds check), so the caller writes the
+whole value, reads `failed` once at the end, and grows the buffer and retries
+or answers a 500. `complete()` says whether one whole value was written with
+every container closed.
 
 </scalar-detail>
 
@@ -237,15 +244,16 @@ stop at the same member.
 
 The answer is a fresh array and the only allocation besides the values. Each
 value is stored into it by a plain `values[k] = text` statement, and the
-array is only stored into, tested and returned, so the values travel with
-the array: the call lets nothing else out (LANGUAGE.md, "Memory model", a
-value stored into an array that is returned with it). A loop calling this
-keeps its per-pass release on a line older than the pass, as `jsonField`'s
-does, and a `using a = arena()` block may hold the call. On a line built in
-the pass neither reader keeps the release (LANGUAGE.md, "Memory model").
-Reading `values` back, passing it to a function, or storing it anywhere
-before the return would undo this; `tests/link/std_json` pins the flat
-arena and the `using` block.
+array is only stored into, tested and returned, so the values travel with the
+array: the call lets nothing else out (LANGUAGE.md, "Memory model", a value
+stored into an array that is returned with it). A loop calling this keeps its
+per-pass release on a line older than the pass, as `jsonField`'s does, and a
+`using a = arena()` block may hold the call.
+
+On a line built in the pass neither reader keeps the release (LANGUAGE.md,
+"Memory model"). Reading `values` back, passing it to a function, or storing
+it anywhere before the return would undo this; `tests/link/std_json` pins the
+flat arena and the `using` block.
 
 ```ts
 function jsonFields(
@@ -304,7 +312,9 @@ A JSON text written into a byte buffer the caller owns: `buf[start ..)`,
 up to `buf.length`, with `end` the cursor. Every comma and colon is the
 writer's, so the caller says only what the value is:
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const w = new JsonWriter(out, 0)
 w.beginObject()
 w.key("message")
@@ -314,6 +324,8 @@ if (w.complete()) {
   // out[0 .. w.end) is {"message":"Hello, World!"}
 }
 ```
+
+</scalar-code-group>
 
 No call allocates except `f64` (whose digits are a string the call
 releases before it returns) and `text`: a writer reset onto the same buffer

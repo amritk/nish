@@ -18,7 +18,9 @@ import {
 } from "nish/crypto/rsa";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { RSA_HASH_SHA256, RsaPublicKey, rsaParsePublicKey, rsaVerifyPkcs1v15, rsaVerifyPss } from "nish/crypto/rsa";
 
 // der: a PKCS#1 RSAPublicKey; sig: as long as the modulus
@@ -30,6 +32,8 @@ const verify = (der: u8[], message: u8[], sig: u8[]): boolean => {
   return rsaVerifyPkcs1v15(key, RSA_HASH_SHA256, message, sig) || rsaVerifyPss(key, RSA_HASH_SHA256, 32, message, sig);
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -78,14 +82,16 @@ certificate in use carries 65537 (RSA-3, docs/security/crypto-rsa.md).
 **Verification** answers `false`, never a panic, for an unknown hash id, a
 signature that is not exactly as long as the modulus or is not below it, a
 negative salt length, and any encoding that is not exactly the one RFC 8017
-defines. PKCS#1 v1.5 builds the whole encoded message it expects, `00 01 FF
-… FF 00 DigestInfo`, and compares it with what the signature opens to, so no
+defines. PKCS#1 v1.5 builds the whole encoded message it expects, `00 01 FF …
+FF 00 DigestInfo`, and compares it with what the signature opens to, so no
 part of the opened block is parsed (Bleichenbacher's 2006 forgery against a
-parser that skipped trailing bytes). The DigestInfo carries the NULL
-parameters RFC 8017 §9.2 note 1 prints; the form without them, which the
-RFC lets a verifier accept, is refused. PSS is RFC 8017 §8.1.2 and §9.1.2
-step by step, with MGF1 over the same hash as the message, the leftmost
-bits of the masked block checked to be zero and the 0x01 separator checked.
+parser that skipped trailing bytes).
+
+The DigestInfo carries the NULL parameters RFC 8017 §9.2 note 1 prints; the
+form without them, which the RFC lets a verifier accept, is refused. PSS is
+RFC 8017 §8.1.2 and §9.1.2 step by step, with MGF1 over the same hash as the
+message, the leftmost bits of the masked block checked to be zero and the
+0x01 separator checked.
 
 </scalar-detail>
 
@@ -101,19 +107,21 @@ not use `nish:secret` or `nish/crypto/ct`.
 
 <scalar-detail title="The arithmetic">
 
-**The arithmetic** is written for this module from the textbook. Numbers
-are little-endian `u32` limbs, products are taken in `u64`, and modular
+**The arithmetic** is written for this module from the textbook. Numbers are
+little-endian `u32` limbs, products are taken in `u64`, and modular
 multiplication is Montgomery's (P. L. Montgomery, "Modular multiplication
 without trial division", Math. Comp. 44, 1985) in the coarsely integrated
-operand scanning form of Ç. K. Koç, T. Acar and B. S. Kaliski, "Analyzing
-and comparing Montgomery multiplication algorithms" (IEEE Micro, 1996), the
-same algorithm as A. Menezes, P. van Oorschot and S. Vanstone, *Handbook of
+operand scanning form of Ç. K. Koç, T. Acar and B. S. Kaliski, "Analyzing and
+comparing Montgomery multiplication algorithms" (IEEE Micro, 1996), the same
+algorithm as A. Menezes, P. van Oorschot and S. Vanstone, *Handbook of
 Applied Cryptography* (1996), Algorithm 14.36, with one conditional
-subtraction at the end. The exponent is applied left to right by square
-and multiply (HAC Algorithm 14.79's binary special case). The closest
-upstream is BearSSL's `i31` code (`br_i31_montymul`, `br_i31_modpow`), and
-nothing here follows it: BearSSL keeps 31-bit words and a constant-time
-structure, this keeps 32-bit words and branches freely.
+subtraction at the end.
+
+The exponent is applied left to right by square and multiply (HAC Algorithm
+14.79's binary special case). The closest upstream is BearSSL's `i31` code
+(`br_i31_montymul`, `br_i31_modpow`), and nothing here follows it: BearSSL
+keeps 31-bit words and a constant-time structure, this keeps 32-bit words and
+branches freely.
 
 </scalar-detail>
 

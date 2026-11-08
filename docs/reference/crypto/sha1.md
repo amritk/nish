@@ -12,11 +12,15 @@ import {
 } from "nish/crypto/sha1";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { sha1 } from "nish/crypto/sha1";
 
 const digest: u8[] = sha1(message); // 20 bytes
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="This is not for security">
 

@@ -31,7 +31,9 @@ import {
 } from "nish/net/http3";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Http3Config, Http3Connection, H3_NEED_MORE, H3_ERROR, H3_END } from "nish/net/http3";
 import { httpFieldBytes } from "nish/net/http-fields";
 import { QuicConnection } from "nish/net/quic";
@@ -58,6 +60,8 @@ function serve(h3: Http3Connection): void {
   }
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -86,19 +90,22 @@ runs it over a UDP socket with ALPN `h3`.
 
 <scalar-detail title="Events">
 
-`next()` reads the streams the QUIC connection has news for and
-answers the first thing that means something to the program: `H3_REQUEST`
-(a request's field section, in `fields`), `H3_DATA` (a piece of its body, a
-window onto `data` valid until the next call), `H3_TRAILERS`, `H3_END` (the
-request ended, and its `content-length`, if any, matched), `H3_RESET` (the
-stream is gone: the client reset it or stopped it, or it broke a rule that
-resets it — `errorCode` says which, `resetByPeer` who), `H3_WRITABLE` (a
-stream whose write was held back can take more), `H3_GOAWAY` (the client is
-going away; `lastStreamId` is its push ID), and `H3_ERROR`, final: the
-connection broke a rule, it is closed with `errorCode`, and every later call
-answers it again. `H3_NEED_MORE` asks for more datagrams. A request's events
-come in order — REQUEST, DATA…, TRAILERS, END — and after `H3_RESET` its
-stream has no more.
+`next()` reads the streams the QUIC connection has news for and answers the
+first thing that means something to the program:
+- `H3_REQUEST` (a request's field section, in `fields`),
+- `H3_DATA` (a piece of its body, a window onto `data` valid until the next
+call),
+- `H3_TRAILERS`,
+- `H3_END` (the request ended, and its `content-length`, if any, matched),
+- `H3_RESET` (the stream is gone: the client reset it or stopped it, or it
+broke a rule that resets it — `errorCode` says which, `resetByPeer` who),
+- `H3_WRITABLE` (a stream whose write was held back can take more),
+- `H3_GOAWAY` (the client is going away; `lastStreamId` is its push ID),
+- and `H3_ERROR`, final: the connection broke a rule, it is closed with
+`errorCode`, and every later call answers it again.
+
+`H3_NEED_MORE` asks for more datagrams. A request's events come in order —
+REQUEST, DATA…, TRAILERS, END — and after `H3_RESET` its stream has no more.
 
 </scalar-detail>
 
@@ -135,29 +142,34 @@ A unidirectional stream of a type it does not know is asked to stop
 
 <scalar-callout type="warning">
 
-**What it refuses.** A connection error closes the QUIC connection with
-the code: a second control, encoder or decoder stream, or a push stream
-from a client (H3_STREAM_CREATION_ERROR, §6.2.1, §6.2.2); a control stream
-whose first frame is not SETTINGS (H3_MISSING_SETTINGS); the end, reset or
-STOP_SENDING of any critical stream, either side's (H3_CLOSED_CRITICAL_STREAM);
-a frame where it may not be — DATA or HEADERS on the control stream, a
+**What it refuses.**
+
+A connection error closes the QUIC connection with the code:
+- a second control, encoder or decoder stream, or a push stream from a client
+(H3_STREAM_CREATION_ERROR, §6.2.1, §6.2.2);
+- a control stream whose first frame is not SETTINGS (H3_MISSING_SETTINGS);
+- the end, reset or STOP_SENDING of any critical stream, either side's
+(H3_CLOSED_CRITICAL_STREAM);
+- a frame where it may not be — DATA or HEADERS on the control stream, a
 control frame on a request stream, a second SETTINGS, DATA before HEADERS,
 anything but the end after trailers, any PUSH_PROMISE from a client, and an
-HTTP/2 type HTTP/3 reserves (H3_FRAME_UNEXPECTED, §7.2.8); a frame cut off
-by its stream's end or a payload of the wrong length (H3_FRAME_ERROR, §7.1);
-a SETTINGS frame `nish/net/http3-frame` refuses (H3_SETTINGS_ERROR); a
-GOAWAY whose push ID rose, a MAX_PUSH_ID that fell, a CANCEL_PUSH past the
-push IDs allowed (H3_ID_ERROR, §5.2, §7.2.7, §7.2.3); a control frame past
-`H3_CONTROL_FRAME_MAX` (H3_EXCESSIVE_LOAD); and QPACK's three. A stream
-error resets one request, both ways, and the connection lives: a field
-section `nish/net/http-fields` refuses, and a body that disagrees with
+HTTP/2 type HTTP/3 reserves (H3_FRAME_UNEXPECTED, §7.2.8);
+- a frame cut off by its stream's end or a payload of the wrong length
+(H3_FRAME_ERROR, §7.1);
+- a SETTINGS frame `nish/net/http3-frame` refuses (H3_SETTINGS_ERROR);
+- a GOAWAY whose push ID rose, a MAX_PUSH_ID that fell, a CANCEL_PUSH past
+the push IDs allowed (H3_ID_ERROR, §5.2, §7.2.7, §7.2.3);
+- a control frame past `H3_CONTROL_FRAME_MAX` (H3_EXCESSIVE_LOAD);
+- and QPACK's three.
+
+A stream error resets one request, both ways, and the connection lives: a
+field section `nish/net/http-fields` refuses, and a body that disagrees with
 `content-length` (H3_MESSAGE_ERROR, §4.1.2); a request stream that ends
 before its HEADERS (H3_REQUEST_INCOMPLETE, §4.1.1); a request on a stream at
-or past the ID of the GOAWAY this side sent (H3_REQUEST_REJECTED, §5.2).
-A request whose field section is longer than `maxFieldSectionSize` — the
-frame, or the section once decoded — is answered with a 431, never reaches
-the program, and its stream is asked to stop with H3_NO_ERROR (§4.2.2,
-§4.1.2).
+or past the ID of the GOAWAY this side sent (H3_REQUEST_REJECTED, §5.2). A
+request whose field section is longer than `maxFieldSectionSize` — the frame,
+or the section once decoded — is answered with a 431, never reaches the
+program, and its stream is asked to stop with H3_NO_ERROR (§4.2.2, §4.1.2).
 
 </scalar-callout>
 
@@ -185,28 +197,30 @@ connection's own hash index (`QuicStreams.slotOf`), never a scan.
 
 <scalar-detail title="Extended CONNECT and WebTransport">
 
-With `extendedConnect` the
-connection sends SETTINGS_ENABLE_CONNECT_PROTOCOL 1 and a request may carry
-`:protocol` (RFC 9220); without it `:protocol` is malformed,
-H3_MESSAGE_ERROR. `webtransportSessions` above 0 turns that on and also
-sends SETTINGS_H3_DATAGRAM 1, draft-02's SETTINGS_ENABLE_WEBTRANSPORT 1 and
+With `extendedConnect` the connection
+sends SETTINGS_ENABLE_CONNECT_PROTOCOL 1 and a request may carry `:protocol`
+(RFC 9220); without it `:protocol` is malformed, H3_MESSAGE_ERROR.
+
+`webtransportSessions` above 0 turns that on and also sends
+SETTINGS_H3_DATAGRAM 1, draft-02's SETTINGS_ENABLE_WEBTRANSPORT 1 and
 draft-07's SETTINGS_WEBTRANSPORT_MAX_SESSIONS, and `nish/net/webtransport`
 runs its sessions on top: a request then waits for the client's SETTINGS
 (draft-02 §3.1), and a stream that opens with WebTransport's unidirectional
 type (0x54) or bidirectional signal (0x41) is read as far as its session ID,
-held unread and named in `H3_STREAM` until the program calls
-`acceptStream` (its bytes then come as H3_DATA, H3_END, H3_RESET and
-H3_STOPPED, and `writeStream` writes them as they are) or `refuseStream`.
-`openStream` opens one of this side's; `writeDataWhole` writes a capsule;
-a GOAWAY still lets a session's new stream in, and `H3_DROPPED` names a
-request stream that ended before its request reached the program. The
-client's SETTINGS_ENABLE_CONNECT_PROTOCOL and SETTINGS_H3_DATAGRAM must be
-0 or 1 (H3_SETTINGS_ERROR), a session ID that is no client-initiated
-bidirectional stream is H3_ID_ERROR, and the signal anywhere but a stream's
-start is H3_FRAME_ERROR. Holding every request, not only an extended
-CONNECT, until the client's SETTINGS keeps a decoded field section from
-having to be held per stream; it costs a request only when the client's
-control stream is lost or reordered.
+held unread and named in `H3_STREAM` until the program calls `acceptStream`
+(its bytes then come as H3_DATA, H3_END, H3_RESET and H3_STOPPED, and
+`writeStream` writes them as they are) or `refuseStream`.
+
+`openStream` opens one of this side's; `writeDataWhole` writes a capsule; a
+GOAWAY still lets a session's new stream in, and `H3_DROPPED` names a request
+stream that ended before its request reached the program. The client's
+SETTINGS_ENABLE_CONNECT_PROTOCOL and SETTINGS_H3_DATAGRAM must be 0 or 1
+(H3_SETTINGS_ERROR), a session ID that is no client-initiated bidirectional
+stream is H3_ID_ERROR, and the signal anywhere but a stream's start is
+H3_FRAME_ERROR. Holding every request, not only an extended CONNECT, until
+the client's SETTINGS keeps a decoded field section from having to be held
+per stream; it costs a request only when the client's control stream is lost
+or reordered.
 
 </scalar-detail>
 

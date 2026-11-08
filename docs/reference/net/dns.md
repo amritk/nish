@@ -14,7 +14,9 @@ import {
 } from "nish/net/dns";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { DnsClient, resolveHost } from "nish/net/dns"
 import { DNS_RESOLVE_MAX_ADDRESSES, DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver"
 import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config"
@@ -53,6 +55,8 @@ if (lookup >= 0) {
   // status: the address count, 18 bytes each in out, or a DNS_RESOLVE_* code
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

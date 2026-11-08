@@ -45,7 +45,9 @@ import {
 } from "nish/json-format";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { jsonFormatId, jsonFormatCheck, isEmail, JSON_FORMAT_VALID } from "nish/json-format"
 
 isEmail("joe.bloggs@example.com")           // true
@@ -53,6 +55,8 @@ const id = jsonFormatId("date-time")        // resolve the name once, when the s
 jsonFormatCheck(id, "1963-06-19T08:30:06Z") // JSON_FORMAT_VALID, for each instance
 jsonFormatValidate("idn-email", "x@y")      // JSON_FORMAT_UNKNOWN: not checked here
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

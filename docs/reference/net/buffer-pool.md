@@ -10,13 +10,17 @@ import {
 } from "nish/net/buffer-pool";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const pool = new BufferPool("TlsTcpServer.output", 33290, slots);
 // when a connection first needs room:
 const out: u8[] = pool.take();
 // ... write out[0 .. used) and send it ...
 pool.giveSecret(out, used); // or pool.give(out, used) for bytes that were never secret
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="The shape of `Http1OutputPool`">
 

@@ -15,13 +15,17 @@ import {
 } from "nish/net/outbound";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { OutboundPolicy } from "nish/net/outbound";
 import { HttpOptions } from "nish/net/fetch";
 
 const options = new HttpOptions();
 options.outbound = new OutboundPolicy();
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

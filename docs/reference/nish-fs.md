@@ -25,7 +25,9 @@ import {
 } from "nish:fs";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { readFileSyncOrNull, writeFileSyncMode, renameSync } from "nish:fs";
 
 const text = readFileSyncOrNull("config.json");
@@ -33,6 +35,8 @@ if (text !== null) {
   if (writeFileSyncMode("token.tmp", text, 0o600) >= 0) renameSync("token.tmp", "token");
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

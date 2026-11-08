@@ -11,7 +11,9 @@ import {
 } from "nish/net/quic-conn-ack";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { QuicAckRanges } from "nish/net/quic-conn-ack";
 
 const received: QuicAckRanges = new QuicAckRanges()
@@ -22,6 +24,8 @@ if (received.ackPending) {
   received.pushAck(payload, toI64(0))                    // appends ACK [7, 7], clears ackPending
 }
 ```
+
+</scalar-code-group>
 
 <scalar-detail title="Bounded">
 

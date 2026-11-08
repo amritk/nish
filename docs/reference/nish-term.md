@@ -15,7 +15,9 @@ import {
 } from "nish:term";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { readStdin, setRawMode, waitStdin } from "nish:term";
 
 export const main = (): number => {
@@ -40,6 +42,8 @@ export const main = (): number => {
   return 0;
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

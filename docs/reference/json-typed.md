@@ -36,7 +36,9 @@ import {
 } from "nish/json-typed";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonWriter } from "nish/json";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -50,6 +52,8 @@ if (jsonDecode(d, p) === 0) {
   jsonEncode(w, p);              // out[0 .. w.end) is {"x":..,"y":..}
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -177,19 +181,20 @@ A JSON number kept as the text it was written in, so that no digit is lost: an i
 
 <scalar-detail title="What is generated, and from what">
 
-`jsonDecode(d, out)` and
-`jsonEncode(w, value)` are generic, and the bodies written below are not
-what runs natively: the compiler lowers every call in place, in the module
-that makes it, to code it writes from the layout of the class the call
-binds `T` to (`src/json-typed.ts`, `src/emit-json.ts`). That code is
-straight-line calls into the methods of `JsonDecoder` and the functions
-here for each field, and into `JsonWriter`'s, so all of the parsing is the
-tokenizer's and all of the writing is the writer's. A field may be an
+`jsonDecode(d, out)` and `jsonEncode(w,
+value)` are generic, and the bodies written below are not what runs natively:
+the compiler lowers every call in place, in the module that makes it, to code
+it writes from the layout of the class the call binds `T` to
+(`src/json-typed.ts`, `src/emit-json.ts`).
+
+That code is straight-line calls into the methods of `JsonDecoder` and the
+functions here for each field, and into `JsonWriter`'s, so all of the parsing
+is the tokenizer's and all of the writing is the writer's. A field may be an
 `i32`, `u32`, `i64`, `u64`, `f64` (or `number`), `boolean` or `string`, a
 numeric enum (its number), a class decoded the same way, a `JsonNumber`, an
-array of any of those, a `Map<string, V>` (a JSON object) whose `V` is any
-of these, or a string, class, array or map `| null`; anything else is
-refused at the call, naming the field (docs/LANGUAGE.md, "Typed JSON").
+array of any of those, a `Map<string, V>` (a JSON object) whose `V` is any of
+these, or a string, class, array or map `| null`; anything else is refused at
+the call, naming the field (docs/LANGUAGE.md, "Typed JSON").
 
 </scalar-detail>
 
@@ -246,18 +251,22 @@ JsonNumber                    any number, kept as the text  d.number(n)     json
 
 A `Map`'s `V` is any type in this list, `| null` or not, a `Map` included;
 `JsonNumber` may stand alone, be `| null`, be an array's element or be a
-`Map`'s value. The code written for a nested class, an array's element
-class, a `| null` field's class and a `Map`'s values is the same code, so it
-recurses as the data does. Anything else is refused at the call's argument,
-naming the class and the field (NL2485 for a field type, such as an `f32`,
-an `i32[][]`, a `Level[][]`, a `Set`, an array of maps, a `Map` not keyed by
-`string` (an enum key included) or a `Map` whose values cannot be written,
-and a generic class of the program's own). An enum whose members are strings
-or a mix is not one the language declares (NL1043), and a `const enum` is
-refused where it is declared (NL2285). A value that is not a declared class
-(an interface, a generic class or any other type) is NL2486; decoding into an
-interface is left for a later version. A call inside a generic function is
-checked for each class an instantiation binds.
+`Map`'s value. The code written for a nested class, an array's element class,
+a `| null` field's class and a `Map`'s values is the same code, so it
+recurses as the data does.
+
+Anything else is refused at the call's argument, naming the class and the
+field (NL2485 for a field type, such as an `f32`, an `i32[][]`, a
+`Level[][]`, a `Set`, an array of maps, a `Map` not keyed by `string` (an
+enum key included) or a `Map` whose values cannot be written, and a generic
+class of the program's own). An enum whose members are strings or a mix is
+not one the language declares (NL1043), and a `const enum` is refused where
+it is declared (NL2285).
+
+A value that is not a declared class (an interface, a generic class or any
+other type) is NL2486; decoding into an interface is left for a later
+version. A call inside a generic function is checked for each class an
+instantiation binds.
 
 <scalar-detail title="Reading the class">
 
@@ -280,10 +289,11 @@ names of that length. Where three or more names share a length, it switches
 once more, on the key's byte at the one position where those names differ
 most, and calls `keyIs` for each name with that byte there, in declaration
 order; a byte none of them has is an unknown key at once. One or two names
-are compared in turn with `keyIs`. A key with an escape has no byte to switch
-on there and is compared with every name of its length, so `"id"` is
-the field `id`; a field name that is not ASCII is dispatched by its UTF-8
-bytes like any other.
+are compared in turn with `keyIs`.
+
+A key with an escape has no byte to switch on there and is compared with
+every name of its length, so `"id"` is the field `id`; a field name that is
+not ASCII is dispatched by its UTF-8 bytes like any other.
 
 </scalar-detail>
 
@@ -303,39 +313,44 @@ class Account {
 </scalar-detail>
 
 The compiler reads that literal; it is not a field. Every field is required
-but an optional one, whose missing key sets it to its initializer, a key
-may appear once, and a key that names no field is an error unless
-`ignoreUnknown` is set, when its value is stepped over, checked but not
-kept. A number must fit its field: an integer field takes
-an integer written without a fraction or an exponent and in the field's
-range, and `f64` takes any number. `null` is accepted only by a field whose
-type is `| null`. Fields are written to `out` as they are read, in the
-input's order: a nested object is decoded into the object the field already
-holds, an array's elements into the elements it already has, with new ones
-made past its end and the rest dropped (so a reused
-object reuses its arrays and objects, and `Arena.used()` stays flat: it is
-flat over 1,000 decodes of a three-level object), and a
-string field keeps the string it holds when the input's is equal. A string
-that changes is a new string, made by one `String.fromBytes`, straight from
-the input when it has no escape and from its unescaped bytes when it has one.
-A class the decoder has to make — an array element past the array's end, a
-`| null` field that holds `null`, or a map's value — is made with `new C()`.
-A map is emptied once the object opens, then each key is read as a new
-string and its value as a `V` made fresh for the key (a zero, `""`, the
-enum's first member, `null`, or a new object, array or map) and `set`, so
-the entries are the input's, in the input's order. A key the object gave
-already is `JSON_DECODE_DUPLICATE` before its value is read, however either
-is escaped. A value whose read fails is not `set`, so a map never holds a
-value the input did not give. Unlike the rest of a decode, a map's entries
-are made anew each time, so decoding into a map allocates its keys and
-values. Every map of one decoding takes at most `maxMapKeys` keys between
-them (4,096 unless set), the keys of a map inside another map included; the
-key past it is `JSON_DECODE_MAP_LIMIT` before it is read, and `reset`
-starts the count again. At `0` or below no map may take a key, and `{}` is
-the one map value accepted. Encoding writes the entries in the map's own
-order, which is insertion order. That differs from a JavaScript object in
-one case: a key that reads as an array index (`"1"`) keeps its place, where
-`JSON.parse` would move it first.
+but an optional one, whose missing key sets it to its initializer, a key may
+appear once, and a key that names no field is an error unless `ignoreUnknown`
+is set, when its value is stepped over, checked but not kept. A number must
+fit its field: an integer field takes an integer written without a fraction
+or an exponent and in the field's range, and `f64` takes any number.
+
+`null` is accepted only by a field whose type is `| null`. Fields are written
+to `out` as they are read, in the input's order: a nested object is decoded
+into the object the field already holds, an array's elements into the
+elements it already has, with new ones made past its end and the rest dropped
+(so a reused object reuses its arrays and objects, and `Arena.used()` stays
+flat: it is flat over 1,000 decodes of a three-level object), and a string
+field keeps the string it holds when the input's is equal.
+
+A string that changes is a new string, made by one `String.fromBytes`,
+straight from the input when it has no escape and from its unescaped bytes
+when it has one. A class the decoder has to make — an array element past the
+array's end, a `| null` field that holds `null`, or a map's value — is made
+with `new C()`.
+
+A map is emptied once the object opens, then each key is read as a new string
+and its value as a `V` made fresh for the key (a zero, `""`, the enum's first
+member, `null`, or a new object, array or map) and `set`, so the entries are
+the input's, in the input's order. A key the object gave already is
+`JSON_DECODE_DUPLICATE` before its value is read, however either is escaped.
+A value whose read fails is not `set`, so a map never holds a value the input
+did not give.
+
+Unlike the rest of a decode, a map's entries are made anew each time, so
+decoding into a map allocates its keys and values. Every map of one decoding
+takes at most `maxMapKeys` keys between them (4,096 unless set), the keys of
+a map inside another map included; the key past it is `JSON_DECODE_MAP_LIMIT`
+before it is read, and `reset` starts the count again. At `0` or below no map
+may take a key, and `{}` is the one map value accepted. Encoding writes the
+entries in the map's own order, which is insertion order.
+
+That differs from a JavaScript object in one case: a key that reads as an
+array index (`"1"`) keeps its place, where `JSON.parse` would move it first.
 
 <scalar-detail title="A class's options">
 
@@ -390,14 +405,15 @@ NL2592  a presence field that is not a `boolean`, is `readonly`, is the
 
 A spread or a computed key in the literal is refused as it is anywhere
 (NL1061, NL1041), a subclass by `extends`, and a second `static readonly
-json` is a duplicate member. The options are not a value: `User.json` names
-a class where a value is due, and is refused as any class name there is.
-Only `static readonly json` may leave out its type: written `static json =
-{ ... }`, or as an instance field, it is an ordinary field to the parser and
+json` is a duplicate member. The options are not a value: `User.json` names a
+class where a value is due, and is refused as any class name there is.
+
+Only `static readonly json` may leave out its type: written `static json = {
+... }`, or as an instance field, it is an ordinary field to the parser and
 needs one, and an instance field called `json` with a type is an ordinary
-field, read and written under its own name. A field or a method called
-`json` may come before or after the options. Under Node the literal is a
-static property of the class that nothing reads.
+field, read and written under its own name. A field or a method called `json`
+may come before or after the options. Under Node the literal is a static
+property of the class that nothing reads.
 
 <scalar-detail title="Which keys were given">
 
@@ -407,7 +423,9 @@ them apart. It names, for a field, a `boolean` field of the same class that
 each decoding sets to whether the input gave that field's key — true for a
 key given `null` too:
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 class UserPatch {
   static readonly json = { optional: ["name", "email"], presence: { name: "hasName", email: "hasEmail" } };
   name: string = "";
@@ -417,18 +435,22 @@ class UserPatch {
 }
 ```
 
+</scalar-code-group>
+
 </scalar-detail>
 
-Any field can be recorded, of any kind and optional or not. A presence
-field is off the wire: no key reads it, encoding leaves it out, and no option
+Any field can be recorded, of any kind and optional or not. A presence field
+is off the wire: no key reads it, encoding leaves it out, and no option
 renames it, makes it optional or records it. It is set when the object
-closes, from the flag the decoder already keeps per field to find a
-duplicate or a missing key, so recording costs one store per recorded field
-and allocates nothing, and a class that records nothing compiles to the code
-it did before. Each object sets its own, so a nested class or an array
-element answers for its own keys. A decoding that fails may set some of
-them and not others (when the input is not an object, none), so read them
-only when `jsonDecode` answered `JSON_DECODE_OK`.
+closes, from the flag the decoder already keeps per field to find a duplicate
+or a missing key, so recording costs one store per recorded field and
+allocates nothing, and a class that records nothing compiles to the code it
+did before.
+
+Each object sets its own, so a nested class or an array element answers for
+its own keys. A decoding that fails may set some of them and not others (when
+the input is not an object, none), so read them only when `jsonDecode`
+answered `JSON_DECODE_OK`.
 
 <scalar-detail title="A merge patch (RFC 7396)">
 

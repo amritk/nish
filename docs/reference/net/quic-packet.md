@@ -77,7 +77,9 @@ import {
 } from "nish/net/quic-packet";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { QuicHeader, QuicInitialSecrets, QuicKeys, QuicKeysSlot, QuicPacket, quicInitialSecrets,
          quicKeys, quicLongHeader, quicOpenPacket, quicParseHeader, quicSealPacket,
          QUIC_AEAD_AES_128_GCM, QUIC_PACKET_INITIAL, QUIC_PACKET_OK } from "nish/net/quic-packet"
@@ -106,6 +108,8 @@ if (secrets !== null) {
   slot.wipe()                                                         // once the level is done
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -383,10 +387,11 @@ which is what a server needs to send Version Negotiation, and reported as
 
 <scalar-callout type="warning">
 
-**What a parse refuses.** Every read is bounds-checked against the
-datagram, so nothing a peer sends can make this module panic. A header
-that runs past the datagram is `QUIC_ERR_TRUNCATED`; a clear fixed bit
-`QUIC_ERR_FIXED_BIT`; a connection ID over 20 bytes in a version 1 header
+**What a parse refuses.** Every read is bounds-checked against the datagram,
+so nothing a peer sends can make this module panic.
+
+A header that runs past the datagram is `QUIC_ERR_TRUNCATED`; a clear fixed
+bit `QUIC_ERR_FIXED_BIT`; a connection ID over 20 bytes in a version 1 header
 `QUIC_ERR_CID_LENGTH`; a Length field reaching past the datagram
 `QUIC_ERR_LENGTH`; a packet too short to sample for header protection
 `QUIC_ERR_SAMPLE`; a payload that does not authenticate `QUIC_ERR_DECRYPT`;
@@ -422,24 +427,24 @@ datagram starts. A short header has none, so it runs to the datagram's end.
 <scalar-detail title="Secrets">
 
 `QuicKeys` holds a packet key, an IV and a header-protection
-key, pointing into a `QuicKeysSlot`'s arrays. `quicKeys` and
-`quicKeysUpdate` take a traffic secret as a `Secret` from `nish:secret`
-and a slot the caller owns, and derive into the slot; a slot the caller
-owns is the caller's to wipe, and `QuicKeysSlot.wipe` zeroes it with
-stores no optimiser removes, AES schedules included (QUIC-1).
-`quicKeyUpdateSecret` answers the next secret as a `Secret`, and every
-derivation wipes its HKDF intermediates before it returns. `quicKeysWipe`
-zeroes the arrays one `QuicKeys` points at. The Initial keys are not
-secret, because anyone who reads the client's first DCID can derive them
-(RFC 9001 §5.2), so `quicInitialSecrets` answers plain arrays, and
-`quicKeysInto`, `quicKeysUpdateInto`, `quicKeyUpdateSecretInto` and
-`quicInitialSecretsInto` derive from plain secrets over a caller's
-`HkdfScratch`; the Handshake and 1-RTT keys are secret. Each derivation's
-own temporaries go with its arena block. A slot whose traffic secret is
-held as a `Secret` may also derive with `quicKeysHeldInto`, and ratchet
-the secret in place with `quicKeyUpdateSecretHeldInto`. Sealing and
-opening a packet wipe the nonce, which gives the IV away, and the
-header-protection mask once each is used (QUIC-2).
+key, pointing into a `QuicKeysSlot`'s arrays. `quicKeys` and `quicKeysUpdate`
+take a traffic secret as a `Secret` from `nish:secret` and a slot the caller
+owns, and derive into the slot; a slot the caller owns is the caller's to
+wipe, and `QuicKeysSlot.wipe` zeroes it with stores no optimiser removes, AES
+schedules included (QUIC-1). `quicKeyUpdateSecret` answers the next secret as
+a `Secret`, and every derivation wipes its HKDF intermediates before it
+returns. `quicKeysWipe` zeroes the arrays one `QuicKeys` points at.
+
+The Initial keys are not secret, because anyone who reads the client's first
+DCID can derive them (RFC 9001 §5.2), so `quicInitialSecrets` answers plain
+arrays, and `quicKeysInto`, `quicKeysUpdateInto`, `quicKeyUpdateSecretInto`
+and `quicInitialSecretsInto` derive from plain secrets over a caller's
+`HkdfScratch`; the Handshake and 1-RTT keys are secret. Each derivation's own
+temporaries go with its arena block. A slot whose traffic secret is held as a
+`Secret` may also derive with `quicKeysHeldInto`, and ratchet the secret in
+place with `quicKeyUpdateSecretHeldInto`. Sealing and opening a packet wipe
+the nonce, which gives the IV away, and the header-protection mask once each
+is used (QUIC-2).
 
 </scalar-detail>
 
@@ -778,21 +783,22 @@ True when `out` holds the next secret; false, `out` untouched, for a wrong lengt
 
 ### quicKeys
 
-The packet-protection keys of RFC 9001 §5.1 from a traffic secret, held as
-a `Secret` the caller still owns and wipes, derived into `slot`, which the
+The packet-protection keys of RFC 9001 §5.1 from a traffic secret, held as a
+`Secret` the caller still owns and wipes, derived into `slot`, which the
 caller owns too: the AEAD key (`quic key`), the IV (`quic iv`) and the
 header-protection key (`quic hp`), each HKDF-Expand-Label with an empty
-context under the hash `aead` pairs with, written into the slot's arrays
-and the AES schedules expanded there. The secret is read through a plain
-copy inside an arena block, which is zeroed, and the derivation's
-temporaries go with the block, so the call keeps in the arena only the
-`HkdfScratch` it makes for the derivation, which wipes itself before the
-derivation returns.
-Answers the slot's keys, which the next derivation into it overwrites and
-`QuicKeysSlot.wipe` zeroes, or `null`, deriving nothing, for an `aead`
-this module does not know or a secret that is not that hash's length. The
-Initial secrets are public (RFC 9001 §5.2), so a caller deriving Initial
-keys wraps a copy of one in `secret`, or uses `quicKeysInto`.
+context under the hash `aead` pairs with, written into the slot's arrays and
+the AES schedules expanded there.
+
+The secret is read through a plain copy inside an arena block, which is
+zeroed, and the derivation's temporaries go with the block, so the call keeps
+in the arena only the `HkdfScratch` it makes for the derivation, which wipes
+itself before the derivation returns. Answers the slot's keys, which the next
+derivation into it overwrites and `QuicKeysSlot.wipe` zeroes, or `null`,
+deriving nothing, for an `aead` this module does not know or a secret that is
+not that hash's length. The Initial secrets are public (RFC 9001 §5.2), so a
+caller deriving Initial keys wraps a copy of one in `secret`, or uses
+`quicKeysInto`.
 
 ```ts
 function quicKeys(
@@ -919,15 +925,16 @@ The traffic secret as a plain array, 32 bytes (48 for AES-256-GCM); only read, a
 ### quicKeysUpdate
 
 The next generation's keys in a key update (RFC 9001 §6), derived into
-`slot`, which the caller owns and which must not be the slot `keys` live
-in: the packet key and IV from `nextSecret`, which `quicKeyUpdateSecret`
-made from the current secret and the caller still owns, read through a
-plain copy inside an arena block that is zeroed, and `keys`'
-header-protection key kept, since header protection never changes with
-the phase. The new generation holds its own copy of that key and its own
-schedule, in the slot, so wiping one generation leaves the other usable.
-Answers the slot's keys, or `null`, deriving nothing, for keys `quicKeys`
-did not make, keys that live in `slot`, or a secret of the wrong length.
+`slot`, which the caller owns and which must not be the slot `keys` live in:
+the packet key and IV from `nextSecret`, which `quicKeyUpdateSecret` made
+from the current secret and the caller still owns, read through a plain copy
+inside an arena block that is zeroed, and `keys`' header-protection key kept,
+since header protection never changes with the phase.
+
+The new generation holds its own copy of that key and its own schedule, in
+the slot, so wiping one generation leaves the other usable. Answers the
+slot's keys, or `null`, deriving nothing, for keys `quicKeys` did not make,
+keys that live in `slot`, or a secret of the wrong length.
 
 ```ts
 function quicKeysUpdate(

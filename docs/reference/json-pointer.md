@@ -16,7 +16,9 @@ import {
 } from "nish/json-pointer";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { jsonPointerParse, jsonPointerResolve, isRelativeJsonPointer } from "nish/json-pointer"
 
 const doc = new JsonDocument(new JsonLimits())
@@ -27,6 +29,8 @@ jsonPointerResolve(doc, root, "/a~1b/-")    // JSON_POINTER_NONE
 jsonPointerResolve(doc, root, "a")          // JSON_POINTER_ERR_SYNTAX
 isRelativeJsonPointer("1/a~1b")             // true
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

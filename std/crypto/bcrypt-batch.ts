@@ -22,19 +22,19 @@
  * itself; this module holds them until there are enough, or until a short
  * window has passed.
  *
- * **When a batch is sent.** `run(now)` sends work when the queue holds at
- * least `width` requests, or when the oldest has waited `holdNanos`; a hold
- * of 0 sends whatever is queued at every `run`. It takes at most
- * `width × cores` requests a run, the oldest first, and spreads them evenly
- * over `min(cores, taken)` tasks, each running its share as one batch, so a
- * run takes about one batch's time and the event loop gets control back
- * between runs. Spreading rather than filling is deliberate: while a run is
- * going nothing else can use the free cores, and a batch of two on each of
- * three cores ends sooner than one of six on one. Under load the requests
- * that arrive during a run fill the next one, so the batches fill on their
- * own; at light load each request runs alone on a core, as a task per login
- * would. `waitNanos(now)` says how long the loop may sleep before a `run` is
- * due.
+ * **When a batch is sent.** `run(now)` sends work when the queue holds at least
+ * `width` requests, or when the oldest has waited `holdNanos`; a hold of 0
+ * sends whatever is queued at every `run`. It takes at most `width × cores`
+ * requests a run, the oldest first, and spreads them evenly over `min(cores,
+ * taken)` tasks, each running its share as one batch, so a run takes about one
+ * batch's time and the event loop gets control back between runs.
+ *
+ *  Spreading rather than filling is deliberate: while a run is going nothing
+ *  else can use the free cores, and a batch of two on each of three cores ends
+ *  sooner than one of six on one. Under load the requests that arrive during a
+ *  run fill the next one, so the batches fill on their own; at light load each
+ *  request runs alone on a core, as a task per login would. `waitNanos(now)`
+ *  says how long the loop may sleep before a `run` is due.
  *
  * **`run` blocks.** It opens a scope, runs the shares, one on the calling
  * thread, and returns once every share has finished: about one batch, 60–95

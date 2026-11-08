@@ -40,7 +40,9 @@ import {
 } from "nish/net/hpack";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { HpackDecoder, HpackEncoder, HPACK_INDEX_INCREMENTAL, HPACK_OK } from "nish/net/hpack";
 
 const name: u8[] = [58, 112, 97, 116, 104];   // ":path"
@@ -55,6 +57,8 @@ if (dec.decode(block, 0, toI32(block.length)) === HPACK_OK) {
   // dec.names[i], dec.values[i], dec.neverIndexed[i], until the next decode
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -160,12 +164,13 @@ five continuation bytes such an integer needs), an index of zero or past the
 end of the tables, Huffman padding longer than seven bits or not all ones,
 the EOS symbol inside a string, a table size update above the SETTINGS limit
 or after the block's first field, and a block that does not begin with the
-update a lowered limit requires (§4.2). Each of those is HTTP/2's
-COMPRESSION_ERROR, which closes the connection, so the code is sticky: every
-later `decode` answers it again without reading anything. So is
-`HPACK_ERR_COPY_BUDGET`, a block that would make the table copy more than
-`HPACK_COPY_FACTOR` times the larger of its size and the block's length,
-which HTTP/2 answers with ENHANCE_YOUR_CALM.
+update a lowered limit requires (§4.2).
+
+Each of those is HTTP/2's COMPRESSION_ERROR, which closes the connection, so
+the code is sticky: every later `decode` answers it again without reading
+anything. So is `HPACK_ERR_COPY_BUDGET`, a block that would make the table
+copy more than `HPACK_COPY_FACTOR` times the larger of its size and the
+block's length, which HTTP/2 answers with ENHANCE_YOUR_CALM.
 
 </scalar-callout>
 
@@ -549,21 +554,22 @@ class HpackCursor
 One HTTP/2 connection's receiving side: its dynamic table, the SETTINGS
 limit the table may grow to, and the header-list limit.
 
-`decode` answers the block's fields in `names`, `values` and
-`neverIndexed`, which it empties and refills on every call. Each name and
-value is an array the decoder owns, taken from its working storage's pools
-by its length and given back, emptied, at the next block, so **a field is
-valid until the next `decode`**: a caller that keeps one past it copies it,
-since the next block may refill the same array with another field. That is
-what keeps the storage a peer can make a connection hold bounded by the
-header-list limit, however many blocks it sends and whatever becomes of
+`decode` answers the block's fields in `names`, `values` and `neverIndexed`,
+which it empties and refills on every call. Each name and value is an array
+the decoder owns, taken from its working storage's pools by its length and
+given back, emptied, at the next block, so **a field is valid until the next
+`decode`**: a caller that keeps one past it copies it, since the next block
+may refill the same array with another field.
+
+That is what keeps the storage a peer can make a connection hold bounded by
+the header-list limit, however many blocks it sends and whatever becomes of
 their streams (`docs/security/http2.md`, H2-1): a class `j` array holds a
 field of at least 2^(j-1) octets, so no class ever holds more than about
-twice the limit, and only the classes up to log2 of the limit, plus one,
-hold any. `settingsLimit` is the SETTINGS_HEADER_TABLE_SIZE this endpoint
+twice the limit, and only the classes up to log2 of the limit, plus one, hold
+any. `settingsLimit` is the SETTINGS_HEADER_TABLE_SIZE this endpoint
 advertised and the peer acknowledged; the table starts at it.
-`maxHeaderListSize` counts each field as its name, its value and 32 bytes,
-as SETTINGS_MAX_HEADER_LIST_SIZE does (RFC 9113 §6.5.2).
+`maxHeaderListSize` counts each field as its name, its value and 32 bytes, as
+SETTINGS_MAX_HEADER_LIST_SIZE does (RFC 9113 §6.5.2).
 
 ```ts
 class HpackDecoder
@@ -632,14 +638,15 @@ Every entry's octets live in one store, `bytes`: its name, then its value,
 oldest entry first. An index says where each entry sits, two numbers to an
 entry — where it starts in `bytes` and how long its name is; its value runs
 to where the next one starts — oldest first from entry `first` on, so that
-adding one is two `push`es and evicting one moves `first`. The evicted
-prefix of the index, and of `bytes`, is shifted out in place once it is half
-of either, which keeps both amortised constant time without a ring's index
-arithmetic. Shifting and popping keep an array's storage, and `bytes` never
-holds more than three times `maxSize`, so a table the peer fills and empties
-for as long as it likes stops allocating once its arrays have grown that far
-(`docs/security/http2.md`, H2-1). Dynamic index 1, the newest entry, is the
-last.
+adding one is two `push`es and evicting one moves `first`.
+
+The evicted prefix of the index, and of `bytes`, is shifted out in place once
+it is half of either, which keeps both amortised constant time without a
+ring's index arithmetic. Shifting and popping keep an array's storage, and
+`bytes` never holds more than three times `maxSize`, so a table the peer
+fills and empties for as long as it likes stops allocating once its arrays
+have grown that far (`docs/security/http2.md`, H2-1). Dynamic index 1, the
+newest entry, is the last.
 
 ```ts
 class HpackTable

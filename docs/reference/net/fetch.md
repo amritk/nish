@@ -37,7 +37,9 @@ import {
 } from "nish/net/fetch";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
 
 const req = new HttpRequest("GET", "http://example.com/");
@@ -47,6 +49,8 @@ if (res !== null) {
   const body: u8[] | null = res.body.readAll(1048576);
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

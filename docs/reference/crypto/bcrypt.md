@@ -21,7 +21,9 @@ import {
 } from "nish/crypto/bcrypt";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt"
 import { Secret, secret } from "nish:secret"
 
@@ -30,6 +32,8 @@ const hash: Result<string, string> = bcryptHash(pw, randomBytes(16), 12)
 // "$2b$12$" + 22 salt characters + 31 digest characters
 const ok: Result<boolean, string> = bcryptVerify(pw, storedHash)
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -83,13 +87,15 @@ Whether each of `hashes` (six strings) is its lane's password's, as `bcryptVerif
 passwords (lane 0 always, a null lane skipped) and run their Blowfish
 encryptions interleaved in one loop, so one core does the work of several
 hashes in well under the time of as many; each result is the single path's,
-byte for byte. `bcryptVerifyN` groups lanes by the cost their hash names,
-and a malformed hash in any lane is an `Err` for the whole call, naming the
-lane, before anything is hashed. `bcryptHash4` and `bcryptVerify4` are the
-same for up to four. Which width is fastest depends on the core (how many
-loads it issues a cycle, how much L1 the states fill), so `bcryptCalibrate`
-measures it: it times widths one to six at cost 4 on throwaway passwords
-and answers the one with the least time per hash. Call it once, at startup.
+byte for byte. `bcryptVerifyN` groups lanes by the cost their hash names, and
+a malformed hash in any lane is an `Err` for the whole call, naming the lane,
+before anything is hashed. `bcryptHash4` and `bcryptVerify4` are the same for
+up to four.
+
+Which width is fastest depends on the core (how many loads it issues a cycle,
+how much L1 the states fill), so `bcryptCalibrate` measures it: it times
+widths one to six at cost 4 on throwaway passwords and answers the one with
+the least time per hash. Call it once, at startup.
 
 </scalar-detail>
 
@@ -113,14 +119,17 @@ The bytes up to the first NUL, then one NUL,
 repeated until 72 bytes are taken: a password longer than 72 bytes hashes as
 its first 72, and bytes after an embedded NUL are not read, as under
 `crypt_r`; docs/security/crypto-bcrypt.md says why a longer password is cut
-rather than refused. Bytes above 127 are unsigned, as `$2b$` and
-`$2y$` define them. A `$2a$` hash gets crypt_blowfish's countermeasure for
-the old sign-extension bug: when an 8-bit byte was sign-extended into a key
-word and yet the buggy and the correct key came out equal, one bit of the
-first P word is flipped, as crypt_blowfish flips it, so the `$2a$` digest of
-such a password (`\xff\xff\xa3`) is not its `$2y$` one. It takes an 8-bit
-byte after the first byte of a key word with only 0xff bytes before it, every
-such byte in all 18 words being so placed, which UTF-8 never holds. `$2x$` (the bug itself) is refused.
+rather than refused. Bytes above 127 are unsigned, as `$2b$` and `$2y$`
+define them.
+
+A `$2a$` hash gets crypt_blowfish's countermeasure for the old sign-extension
+bug: when an 8-bit byte was sign-extended into a key word and yet the buggy
+and the correct key came out equal, one bit of the first P word is flipped,
+as crypt_blowfish flips it, so the `$2a$` digest of such a password
+(`\xff\xff\xa3`) is not its `$2y$` one. It takes an 8-bit byte after the
+first byte of a key word with only 0xff bytes before it, every such byte in
+all 18 words being so placed, which UTF-8 never holds. `$2x$` (the bug
+itself) is refused.
 
 </scalar-detail>
 
@@ -157,18 +166,19 @@ milliseconds of one core; a server runs it off its event loop, on a task
 
 </scalar-detail>
 
-The algorithm is Provos and Mazières's ("A Future-Adaptable Password
-Scheme", USENIX 1999). The code is adapted from Solar Designer's
-crypt_blowfish 1.3, which carries the notice below, and the 1042 initial
-words, the hexadecimal digits of π, are its `BF_init_state`. Closest
-upstream for each part: `bcryptInitState` is `BF_init_state`;
-`bcryptEncrypt` and the rounds in `bcryptBody` are `BF_ENCRYPT`/`BF_ROUND`;
-`bcryptBody` is `BF_body`; `bcryptSetKey` is `BF_set_key`; `bcryptDecodeSalt`
-and `bcryptEncode` are `BF_decode` and `BF_encode`; `bcryptExposed` is the
-part of `BF_crypt` after the setting is parsed, and `bcryptParse` that
-parse. The state is one flat `u32[]` with P first (words 0–17) and the
-S-boxes after (18–1041), so the body walks it in one pass, and every S-box
-index is an `i32` masked to 0–255, which the checker proves in bounds
+The algorithm is Provos and Mazières's ("A Future-Adaptable Password Scheme",
+USENIX 1999). The code is adapted from Solar Designer's crypt_blowfish 1.3,
+which carries the notice below, and the 1042 initial words, the hexadecimal
+digits of π, are its `BF_init_state`. Closest upstream for each part:
+`bcryptInitState` is `BF_init_state`; `bcryptEncrypt` and the rounds in
+`bcryptBody` are `BF_ENCRYPT`/`BF_ROUND`; `bcryptBody` is `BF_body`;
+`bcryptSetKey` is `BF_set_key`; `bcryptDecodeSalt` and `bcryptEncode` are
+`BF_decode` and `BF_encode`; `bcryptExposed` is the part of `BF_crypt` after
+the setting is parsed, and `bcryptParse` that parse.
+
+The state is one flat `u32[]` with P first (words 0–17) and the S-boxes after
+(18–1041), so the body walks it in one pass, and every S-box index is an
+`i32` masked to 0–255, which the checker proves in bounds
 (`BCRYPT_STATE_WORDS`). The magic-string encryption, the parsing and the
 alphabet are separate functions so a several-lane kernel can share them.
 

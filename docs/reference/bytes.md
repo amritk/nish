@@ -38,7 +38,9 @@ import {
 } from "nish/bytes";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { getU32BE, setU16LE } from "nish/bytes";
 
 export const main = (): i32 => {
@@ -48,6 +50,8 @@ export const main = (): i32 => {
   return toI32(length);
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -244,17 +248,20 @@ has no bit cast for one.
 
 <scalar-detail title="Each access is an ordinary index">
 
-**Each access is an ordinary index**, so an offset whose bytes do not all lie in
-the array panics `index`, naming the first byte that does not. A guard in
-the caller does not yet remove these checks: in a loop guarded by
+**Each access is an ordinary index**, so an offset whose bytes do not all lie
+in the array panics `index`, naming the first byte that does not.
+
+A guard in the caller does not yet remove these checks: in a loop guarded by
 `off + 3 < b.length`, the checker proves an index it can see but not one
-inside a call, and after `getU32LE` inlines, LLVM keeps the checks on
-`off + 1` to `off + 3`, because the guard compares the length truncated to
-`i32` and the checks compare it unsigned at 64 bits. A loop that needs them
-gone indexes the bytes itself. `getU64BE`, and with it `getI64BE` and
-`getF64BE`, is the exception: it checks the whole range once and reads the
-eight bytes unchecked, which lowers to one load and a byte swap. An offset
-outside the range still goes byte by byte, so it panics as the others do.
+inside a call, and after `getU32LE` inlines, LLVM keeps the checks on `off +
+1` to `off + 3`, because the guard compares the length truncated to `i32` and
+the checks compare it unsigned at 64 bits. A loop that needs them gone
+indexes the bytes itself.
+
+`getU64BE`, and with it `getI64BE` and `getF64BE`, is the exception: it
+checks the whole range once and reads the eight bytes unchecked, which lowers
+to one load and a byte swap. An offset outside the range still goes byte by
+byte, so it panics as the others do.
 
 </scalar-detail>
 
@@ -287,11 +294,11 @@ the ASCII digits, the bytes a JSON string holds as themselves, the bytes a
 JSON writer copies without an escape — and `copyBytes` copies a
 window of one array into another, or into itself, as one move:
 
-```ts
-import { skipBlank, skipDigits } from "nish/bytes";
-```
+<scalar-code-group>
 
-```ts
+```ts example.ts
+import { skipBlank, skipDigits } from "nish/bytes";
+
 export const main = (): i32 => {
   const text: u8[] = [32, 32, 52, 50, 44]; // "  42,"
   const start = skipBlank(text, 0, 5); // 2
@@ -299,6 +306,8 @@ export const main = (): i32 => {
   return end - start;
 };
 ```
+
+</scalar-code-group>
 
 **The four runs clamp their range and never panic; `copyBytes` panics on a
 range outside its array.** Natively each is a runtime kernel
@@ -1149,14 +1158,15 @@ The index of the first byte in the clamped range that a JSON
 
 `skipBlank` for the bytes a JSON string holds as themselves: printable ASCII
 other than `"` and `\`, and every well-formed UTF-8 sequence (RFC 3629 §4)
-that ends before `to`. The run stops at the first quote, backslash or
-control byte, and at the lead byte of a sequence that is malformed — an
-overlong form, a surrogate, a code point past U+10FFFF, a stray continuation
-byte — or cut short by `to`. So a whole JSON string body with no escape is
-one call, and where it stops is the byte a decoder has to look at. Natively
-the scan is `nish_bytes_skip_json_text`: blocks of ASCII 16 or 32 bytes at a
-time, each multi-byte sequence a byte at a time. Variable-time, as
-`skipBlank` is.
+that ends before `to`. The run stops at the first quote, backslash or control
+byte, and at the lead byte of a sequence that is malformed — an overlong
+form, a surrogate, a code point past U+10FFFF, a stray continuation byte — or
+cut short by `to`.
+
+So a whole JSON string body with no escape is one call, and where it stops is
+the byte a decoder has to look at. Natively the scan is
+`nish_bytes_skip_json_text`: blocks of ASCII 16 or 32 bytes at a time, each
+multi-byte sequence a byte at a time. Variable-time, as `skipBlank` is.
 
 ```ts
 function skipJsonText(

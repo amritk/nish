@@ -19,7 +19,9 @@ import {
 } from "nish/sync/ring";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { createRegion, openRegion } from "nish/sync/shm"
 import { initSpscRing, attachSpscRing, spscRingBytes } from "nish/sync/ring"
 
@@ -32,6 +34,8 @@ const view = openRegion("jobs").expect("open")
 const rx = attachSpscRing(view, 0).expect("ring")
 const n = rx.popWait(buf, 0, 1000) // the record's length, or RING_EMPTY
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -117,13 +121,13 @@ rings may share a region at different bases.
 An `SpscRing` producer may write a record into the ring
 itself instead of copying one in, and a consumer may read one there:
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const w: u8[] = ring.reserve(n) // empty when there is no room now
 copyBytes(w, 0, body, 0, k)     // any u8[] writer, within w.length
 ring.commit(k)                  // publishes w[0, k) as one record
-```
 
-```ts
 const r: readonly u8[] = ring.peek() // the next record, in the ring
 if (r.length > 0) {
   use(r)
@@ -133,24 +137,28 @@ if (r.length > 0) {
 }
 ```
 
+</scalar-code-group>
+
 </scalar-detail>
 
-A window is a `SharedRegion.lend` window: the ring keeps one for its
-producer and one for its consumer and re-points them on every call, so
-neither path allocates or makes a system call. `commit`, `abandon` and
-`release` give the window back, which empties it: a reference kept past
-them indexes nothing (each index panics) until the next `reserve` or
-`peek` re-points it, and then sees that call's record. A reserved record
-is always contiguous: when the rest of the lap is too short, `commit`
-writes a skip marker there (a length word of -1, "the rest of this lap is
-padding") and the record starts at the next lap. Every pop steps over a
-marker. A record `tryPush` wrapped across the end cannot be lent, so `peek`
-answers an empty window for it and `tryPop` takes it, as it does for a
-record of length 0. A reservation is at most `capacity / 2 - 4` bytes, so
-a ring of 8 can never reserve (it panics) and one of 16 allows 4. The
-reserved bytes are not zeroed: `commit` only what was written. A consumer
-that polls `peek` on a doorbell ring has no wait call yet (`popWait` takes
-records, not windows).
+A window is a `SharedRegion.lend` window: the ring keeps one for its producer
+and one for its consumer and re-points them on every call, so neither path
+allocates or makes a system call. `commit`, `abandon` and `release` give the
+window back, which empties it: a reference kept past them indexes nothing
+(each index panics) until the next `reserve` or `peek` re-points it, and then
+sees that call's record.
+
+A reserved record is always contiguous: when the rest of the lap is too
+short, `commit` writes a skip marker there (a length word of -1, "the rest of
+this lap is padding") and the record starts at the next lap. Every pop steps
+over a marker.
+
+A record `tryPush` wrapped across the end cannot be lent, so `peek` answers
+an empty window for it and `tryPop` takes it, as it does for a record of
+length 0. A reservation is at most `capacity / 2 - 4` bytes, so a ring of 8
+can never reserve (it panics) and one of 16 allows 4. The reserved bytes are
+not zeroed: `commit` only what was written. A consumer that polls `peek` on a
+doorbell ring has no wait call yet (`popWait` takes records, not windows).
 
 <scalar-detail title="The format keeps its magic">
 
@@ -181,11 +189,12 @@ instead of spinning: `popWait` spins a little, then says it is sleeping in
 the header and sleeps on Linux's futex, and a push rings it only when that
 flag is set (one `SEQ_CST` store and load on each side, so neither can miss
 the other). A busy ring makes no system calls; an idle one makes two per
-record, the consumer's wait and the producer's wake. Without the doorbell a
-push is a release store and `popWait` answers `SHM_UNSUPPORTED`, as it does
-off Linux, where the consumer polls `tryPop`. `popWait` reads the monotonic
-clock for its deadline, so a program that imports this module reaches the
-`clock` capability as well as `ffi`.
+record, the consumer's wait and the producer's wake.
+
+Without the doorbell a push is a release store and `popWait` answers
+`SHM_UNSUPPORTED`, as it does off Linux, where the consumer polls `tryPop`.
+`popWait` reads the monotonic clock for its deadline, so a program that
+imports this module reaches the `clock` capability as well as `ffi`.
 
 </scalar-detail>
 

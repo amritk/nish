@@ -63,19 +63,20 @@
  *   "ascii"), `name` and `overrides`; each field's comment says where it
  *   comes from.
  *
- * The environment decides where the terminal cannot answer, and where the
- * user says so: `COLORTERM=truecolor` or `24bit` means true colour, as does
- * a DECRQSS that reads the 24-bit background back; otherwise a `TERM` with
- * `256color` in it means 256 colours, and anything else 16. `TERM=linux` is
- * the Linux console: 16 colours, ASCII graphics, no kitty keyboard and no
+ * The environment decides where the terminal cannot answer, and where the user
+ * says so: `COLORTERM=truecolor` or `24bit` means true colour, as does a
+ * DECRQSS that reads the 24-bit background back; otherwise a `TERM` with
+ * `256color` in it means 256 colours, and anything else 16. `TERM=linux` is the
+ * Linux console: 16 colours, ASCII graphics, no kitty keyboard and no
  * synchronized output, whatever it answered. `NO_COLOR` set to anything
  * (no-color.org) means 16 colours and touches nothing but colour.
+ *
  * `NISH_TERM_GRAPHICS` names a graphics backend to use instead of the one the
- * answers pick; a pixel backend the terminal did not answer for is refused
- * when it would come out as garbage or nothing — on the Linux console, under
- * a multiplexer, or when the terminal answered nothing at all. `overrides`
- * says what each variable did, refusals included. The match is exact:
- * `kitty`, `sixel`, `halfblock` or `ascii`, lower case, nothing around it.
+ * answers pick; a pixel backend the terminal did not answer for is refused when
+ * it would come out as garbage or nothing — on the Linux console, under a
+ * multiplexer, or when the terminal answered nothing at all. `overrides` says
+ * what each variable did, refusals included. The match is exact: `kitty`,
+ * `sixel`, `halfblock` or `ascii`, lower case, nothing around it.
  *
  * Under a multiplexer the probe sees the multiplexer first. tmux and screen
  * answer DA1 themselves, so `done()` comes on their answer, before any reply

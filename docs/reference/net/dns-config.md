@@ -30,7 +30,9 @@ import {
 } from "nish/net/dns-config";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseHosts, dnsParseResolvConf } from "nish/net/dns-config"
 import { DNS_ADDRESS_BYTES, DNS_TYPE_A } from "nish/net/dns-message"
 import { readFileBytesSync } from "nish:fs"
@@ -53,6 +55,8 @@ const out: u8[] = new Array<u8>(8 * DNS_ADDRESS_BYTES)
 const found: i32 = dnsHostsFind(hosts, "localhost", DNS_TYPE_A, 80, out, 8)
 // out[0, found * 18): the A addresses /etc/hosts gives localhost, on port 80
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

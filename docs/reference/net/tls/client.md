@@ -21,7 +21,9 @@ import {
 } from "nish/net/tls/client";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { TlsClient, TlsClientConfig } from "nish/net/tls/client";
 
 const client = new TlsClient(new TlsClientConfig("example.com", ["h2"]), random, x25519Key, p256Key);
@@ -31,6 +33,8 @@ client.start();
 // at TLS_CLIENT_STATE_WAIT_AUTH check peerCertificates() and the
 // signature, then client.authenticate(ok) (or client.reject(alert)).
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

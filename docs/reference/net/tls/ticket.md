@@ -28,7 +28,9 @@ import {
 } from "nish/net/tls/ticket";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import {
   TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketState, TlsTicketStrikes,
   tlsTicketKeyDraw, tlsTicketKeyDue, tlsTicketOpen, tlsTicketSeal, tlsTicketSize,
@@ -54,6 +56,8 @@ if (fresh && strikes.take(opened.id, opened.expiresAt(), now)) {
 }
 // when tlsTicketKeyDue(info, now), rotate as "Keys" below says; wipe(key) before it goes
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

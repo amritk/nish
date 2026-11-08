@@ -20,7 +20,9 @@ import {
 } from "nish/net/postgres-carrier";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { HttpRequest } from "nish/net/handler"
 import { PgConnection, pgTarget } from "nish/net/postgres"
 import {
@@ -65,6 +67,8 @@ while (running) {
 carrier.close()
 pool.dispose()
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

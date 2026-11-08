@@ -15,13 +15,17 @@ import {
 } from "nish:unsafe";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
 
 export const mix = (h: i32[], i: i32, x: i32): void => {
   uncheckedSet(h, i, wrappingAdd(uncheckedGet(h, i), x));
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

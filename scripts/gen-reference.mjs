@@ -261,9 +261,24 @@ const outsideCode = (s, f) =>
     })
     .join("")
 
-/** A code block's fence language: `ts` when TypeScript parses it, `text` for a diagram or a table. */
+/** The title of a code block that reads as TypeScript: Scalar shows it above the block. */
+const EXAMPLE = "example.ts"
+
+/**
+ * A code block's fence info: `ts` with the title `example.ts` when TypeScript
+ * parses it, `text` and no title for a diagram or a table.
+ */
 const fenceLang = (code) =>
-  ts.transpileModule(code, { reportDiagnostics: true }).diagnostics.length === 0 ? "ts" : "text"
+  ts.transpileModule(code, { reportDiagnostics: true }).diagnostics.length === 0 ? `ts ${EXAMPLE}` : "text"
+
+/**
+ * Each titled block that starts a line, in a code group of one: Scalar shows a
+ * block's title only as a code group's tab.
+ */
+const codeGroups = (md) =>
+  md.replace(new RegExp(`^\`\`\`ts ${EXAMPLE.replace(".", "\\.")}\n[\\s\\S]*?\n\`\`\`$`, "gm"), (block) =>
+    tag("scalar-code-group", "", block)
+  )
 
 const fence = (lines) => `\`\`\`${fenceLang(lines.join("\n"))}\n${lines.join("\n")}\n\`\`\``
 
@@ -379,10 +394,13 @@ const firstSentence = (para) => {
   return flat
 }
 
-/** Markdown on one line, for a table cell: a code block's lines become code spans. */
+/**
+ * Markdown on one line, for a table cell: a code block's lines become code
+ * spans, and each list item starts a line of its own.
+ */
 const cell = (md) =>
   md
-    .replace(/```\w*\n([\s\S]*?)```/g, (_, body) =>
+    .replace(/```[^\n]*\n([\s\S]*?)```/g, (_, body) =>
       body
         .trim()
         .split("\n")
@@ -390,7 +408,12 @@ const cell = (md) =>
         .join("<br>")
     )
     .split(/\n\s*\n/)
-    .map((para) => para.replace(/\s*\n\s*/g, " ").trim())
+    .map((para) =>
+      para
+        .replace(/\s*\n\s*((?:[-*+]|\d+[.)]) )/g, "<br>$1")
+        .replace(/\s*\n\s*/g, " ")
+        .trim()
+    )
     .join("<br><br>")
     .replace(/\|/g, "\\|")
 
@@ -646,18 +669,49 @@ const moduleProse = (comment, prose) => {
     }
     // Always `ts`: an example may elide with `…` and still be TypeScript to a reader.
     const lines = dedent(blocks.splice(usageAt, n).flatMap((b, i) => (i ? ["", ...b] : b)))
-    usage = `\`\`\`ts\n${lines.join("\n")}\n\`\`\``
+    usage = `\`\`\`ts ${EXAMPLE}\n${lines.join("\n")}\n\`\`\``
   }
-  // Each prose block with the lists and code blocks that follow it.
+  // A unit is a detail when it opens with bold: a title (`**Title.** rest`,
+  // `**Title**: rest`), or after the first unit, any bold phrase.
+  const boldTitle = (para) => /^\*\*(.+?)\*\*/.exec(para)
+  const isTitled = (para, bold) => /[.:]$/.test(bold[1]) || /^[.:]/.test(para.slice(bold[0].length))
+  const opensDetail = (para, i) => {
+    const bold = boldTitle(para)
+    return bold !== null && (i > 0 || isTitled(para, bold))
+  }
+  const warns = (title) => /\b(refus|limit|caps?\b)/i.test(title.replace(/`/g, ""))
+  // Where a sentence opening with a warning's bold phrase starts, outside code; -1 for none.
+  const warningAt = (para) => {
+    for (const m of para.matchAll(/(^|[.!?]\s+)\*\*([^*]+)\*\*/g)) {
+      const at = m.index + m[1].length
+      if (warns(m[2]) && (para.slice(0, at).match(/`/g) ?? []).length % 2 === 0) {
+        return at
+      }
+    }
+    return -1
+  }
+  // Each prose block with the lists and code blocks that follow it, and the
+  // paragraphs indented by one space: those carry on the paragraph before them,
+  // so a long detail or warning broken into paragraphs stays under its title.
   const units = []
+  const carriesOn = (b) => indentOf(b[0]) === 1
+  // Code blocks with only a blank line between them are one example, as the usage is.
+  const merged = []
   for (const b of blocks) {
+    if (isCode(b) && merged.length > 0 && isCode(merged.at(-1))) {
+      merged.at(-1).push("", ...b)
+    } else {
+      merged.push([...b])
+    }
+  }
+  for (const b of merged) {
     let body = b.map((l) => l.trim()).join("\n")
     if (isCode(b)) {
       body = code(b)
     } else if (isList(b)) {
       body = dedent(b).join("\n")
     }
-    if (units.length > 0 && (isCode(b) || isList(b))) {
+    if (units.length > 0 && (isCode(b) || isList(b) || carriesOn(b))) {
       units.at(-1).push(body)
     } else {
       units.push([body])
@@ -672,9 +726,8 @@ const moduleProse = (comment, prose) => {
     if (unit.length === 0) {
       return []
     }
-    const bold = /^\*\*(.+?)\*\*/.exec(unit[0])
-    const titled = bold !== null && (/[.:]$/.test(bold[1]) || /^[.:]/.test(unit[0].slice(bold[0].length)))
-    if (!titled && (i === 0 || !bold)) {
+    const bold = boldTitle(unit[0])
+    if (!opensDetail(unit[0], i)) {
       const [first, ...rest] = unit.map(prose)
       // The summary callout is one paragraph; what follows it is the page's body.
       return i === 0
@@ -683,20 +736,9 @@ const moduleProse = (comment, prose) => {
     }
     // The title keeps its code spans as written: an attribute cannot hold Markdown.
     const title = bold[1].replace(/[.:]$/, "")
-    const head = titled ? unit[0].slice(bold[0].length).replace(/^[.:]/, "").trim() : unit[0]
+    const head = isTitled(unit[0], bold) ? unit[0].slice(bold[0].length).replace(/^[.:]/, "").trim() : unit[0]
     const body = [head, ...unit.slice(1)].map(prose).join("\n\n").trim()
     return [tag("scalar-detail", `title="${attr(title)}"`, body)]
-  }
-  const warns = (title) => /\b(refus|limit|caps?\b)/i.test(title.replace(/`/g, ""))
-  // Where a sentence opening with a warning's bold phrase starts, outside code; -1 for none.
-  const warningAt = (para) => {
-    for (const m of para.matchAll(/(^|[.!?]\s+)\*\*([^*]+)\*\*/g)) {
-      const at = m.index + m[1].length
-      if (warns(m[2]) && (para.slice(0, at).match(/`/g) ?? []).length % 2 === 0) {
-        return at
-      }
-    }
-    return -1
   }
   const out = []
   for (const [i, unit] of units.entries()) {
@@ -975,7 +1017,7 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
     return h.github
   })
   let n = 0
-  const text = draft.replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`)
+  const text = codeGroups(draft.replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`))
   return { text, lead: lead || intro }
 }
 

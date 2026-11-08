@@ -16,7 +16,9 @@ import {
 } from "nish/net/http3-server";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { pollAdd, pollCreate, pollWait, udpBind } from "nish:net";
 import { monotonicNanos } from "nish:process";
 import { secret, wipe } from "nish:secret";
@@ -58,6 +60,8 @@ const run = (quicConfig: QuicServerConfig, privateKey: u8[], rounds: i32): void 
   server.stop();                             // releases every slot, wipes the static keys
 };
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
@@ -111,19 +115,19 @@ no_application_protocol (0x0178; RFC 9114 §3.1).
 GSO where the platform has it and one datagram at a time where it does not.
 Each flight goes with the ECN codepoint its connection marked it with
 (`QuicFlight.ecn`, RFC 9000 §13.4), so the peer's ACK_ECN counts are
-validated and a CE mark shrinks the window. Where the platform sends no
-ECN (Darwin, whose `udpSendTo` answers -95 to a marked send), the first
-marked send goes again unmarked and no slot marks after it. A -95 is also
-what a platform without segmentation offload answers, so a refused GSO
-send goes again one datagram at a time, still marked, and only a -95 to
-one of those turns marking off.
-The pacer counts the microseconds `clock` gives it, so on a path whose
-round trip is under a millisecond it neither waits for the next
-millisecond to earn credit nor holds a slot back for a whole one; without
-`clock` it counts whole milliseconds.
-A slot whose HTTP/3 side sent GOAWAY and whose requests have all finished,
-every byte acknowledged, is closed with H3_NO_ERROR; a closed slot is freed
-once its CONNECTION_CLOSE is out.
+validated and a CE mark shrinks the window. Where the platform sends no ECN
+(Darwin, whose `udpSendTo` answers -95 to a marked send), the first marked
+send goes again unmarked and no slot marks after it.
+
+A -95 is also what a platform without segmentation offload answers, so a
+refused GSO send goes again one datagram at a time, still marked, and only a
+-95 to one of those turns marking off. The pacer counts the microseconds
+`clock` gives it, so on a path whose round trip is under a millisecond it
+neither waits for the next millisecond to earn credit nor holds a slot back
+for a whole one; without `clock` it counts whole milliseconds. A slot whose
+HTTP/3 side sent GOAWAY and whose requests have all finished, every byte
+acknowledged, is closed with H3_NO_ERROR; a closed slot is freed once its
+CONNECTION_CLOSE is out.
 
 </scalar-detail>
 
@@ -142,15 +146,16 @@ horizon and filed again when it comes round. So no call scans the slots.
 
 **Caps, fixed at start-up**: the slots, and inside each the QUIC
 configuration's streams and buffers and the `Http3Config`'s field section,
-body chunk and DATA frame. A slot's connections and address are built on
-the first Initial accepted into it and kept, so a pool sized for its peak
-costs at start-up only its per-slot tables (the index, the wheel, the
-queues), and holds at most `size` connections once the peak has come;
-a datagram an established connection reads, and every datagram it sends,
-allocates nothing; nor does a datagram no slot owns, which the listener
-reads where it lies and answers into scratch made once, nor a handshake
-into a slot built before, whose state is the slot's —
-`docs/security/http3.md` (H3-1, H3-3).
+body chunk and DATA frame.
+
+A slot's connections and address are built on the first Initial accepted into
+it and kept, so a pool sized for its peak costs at start-up only its per-slot
+tables (the index, the wheel, the queues), and holds at most `size`
+connections once the peak has come; a datagram an established connection
+reads, and every datagram it sends, allocates nothing; nor does a datagram no
+slot owns, which the listener reads where it lies and answers into scratch
+made once, nor a handshake into a slot built before, whose state is the
+slot's — `docs/security/http3.md` (H3-1, H3-3).
 
 </scalar-callout>
 
@@ -232,7 +237,7 @@ class Http3Server
 | `receive(now: i64, key: Secret<u8[]>): i32` | Reads every datagram waiting on the socket, in at most `H3_SERVER_RECEIVE_BURST` receives, and hands each to its slot or the listener, signing a handshake's CertificateVerify with `key` (ECDSA P-256) when one asks. A GRO receive is cut into its datagrams in place. Answers how many datagrams it read. |
 | `serve(slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void` | Hands `slot`'s connection a datagram from `address`, signs when the handshake asks, and refiles its IDs and timer. The connection decides from the address whether the client moved (RFC 9000 §9.3); an address that is not 18 bytes long leaves it where it is. |
 | `size(): i32` | How many slots the pool has, built or not. |
-| `stop(): void` | Stops the server for good and wipes the keys it holds: every built slot's connection is released (`QuicConnection.release`, which sends nothing), as is one built after, by `connection` or `quic`; the listener is released; and the configuration's `statelessResetKey` and `retryTokenKey`, the index's salt, the connections' entropy scratch and the listener's last answer (a Retry's or a reset's token) are zeroed. From then on every datagram is dropped and no connection is accepted. The configuration's two keys are the server's once it is made with them: a program that keeps a copy of either, to start the next server with, wipes its own copy. The keys are zeroed in place, so give each server a `QuicServerConfig` of its own: any other listener, connection or server made with the same one would go on MACing Retry tokens and deriving stateless reset tokens under an all-zero key, which anyone can forge. |
+| `stop(): void` | Stops the server for good and wipes the keys it holds: every built slot's connection is released (`QuicConnection.release`, which sends nothing), as is one built after, by `connection` or `quic`; the listener is released; and the configuration's `statelessResetKey` and `retryTokenKey`, the index's salt, the connections' entropy scratch and the listener's last answer (a Retry's or a reset's token) are zeroed. From then on every datagram is dropped and no connection is accepted.<br><br>The configuration's two keys are the server's once it is made with them: a program that keeps a copy of either, to start the next server with, wipes its own copy. The keys are zeroed in place, so give each server a `QuicServerConfig` of its own: any other listener, connection or server made with the same one would go on MACing Retry tokens and deriving stateless reset tokens under an all-zero key, which anyone can forge. |
 | `tick(now: i64): void` | Runs the timers due by `now`, and marks each slot it ran for `flush`. |
 | `timeout(now: i64): i32` | Milliseconds until `tick` has a timer to run, for `pollWait`. |
 | `touch(slot: i32): void` | Marks `slot` as having news for the program, so that `ready` answers it, and something to send, so that the next `flush` sends it; a slot already marked is not marked twice. |

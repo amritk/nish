@@ -10,7 +10,9 @@ import {
 } from "nish/yaml-write";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { JsonDocument } from "nish/json-value"
 import { JsonLimits } from "nish/json-tokenizer"
 import { stringifyYaml } from "nish/yaml-write"
@@ -26,6 +28,8 @@ stringifyYaml(doc, root)
 // tags: {}
 ```
 
+</scalar-code-group>
+
 <scalar-detail title="Block style">
 
 An object is a block map and an array a block sequence,
@@ -39,16 +43,21 @@ ends with a line break.
 
 <scalar-detail title="A string is plain unless it could read as something else">
 
-It is written
-double-quoted when it is empty; when it reads as null, a boolean or a number
-under YAML 1.2 or YAML 1.1 (`~`, `null`, `yes`, `on`, `y`, `true` in any
-case; anything starting with a digit, or a sign or `.` and then a digit;
-`.inf` and `.nan`, signed or not); when it starts with an indicator (`@`, `` ` ``, `\`, `*`,
-`&`, `!`, `|`, `>`, `%`, `'`, `"`, `#`, `,`, `[`, `]`, `{`, `}`, or `-`, `?`
-or `:` before a space or the end) or with `---` or `...`; when it holds
-`: ` or ` #` or ends in `:`; when it starts or ends with a space; when it
-holds a control character, a line break, U+2028, U+2029, U+FEFF, U+FFFE or
-U+FFFF; and, as a key, when it is `<<`, which YAML reads as a merge key.
+It is written double-quoted
+- when it is empty;
+- when it reads as null, a boolean or a number under YAML 1.2 or YAML 1.1
+(`~`, `null`, `yes`, `on`, `y`, `true` in any case; anything starting with
+a digit, or a sign or `.` and then a digit; `.inf` and `.nan`, signed or
+not);
+- when it starts with an indicator (`@`, `` ` ``, `\`, `*`, `&`, `!`, `|`,
+`>`, `%`, `'`, `"`, `#`, `,`, `[`, `]`, `{`, `}`, or `-`, `?` or `:` before
+a space or the end) or with `---` or `...`;
+- when it holds `: ` or ` #` or ends in `:`;
+- when it starts or ends with a space;
+- when it holds a control character, a line break, U+2028, U+2029, U+FEFF,
+U+FFFE or U+FFFF;
+- and, as a key, when it is `<<`, which YAML reads as a merge key.
+
 Keys and values follow the same rule. A quoted string escapes `"`, `\` and
 every character just listed, so it stays on one line. A key whose written
 form runs past the 1024 bytes YAML allows an implicit key is written as an

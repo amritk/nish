@@ -13,13 +13,17 @@ import {
 } from "nish/compress/checksum";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { Crc32 } from "nish/compress/checksum";
 
 const crc = new Crc32(); // the tables, once
 let c: u32 = crc.update(toU32(0), body, 0, 100);
 c = crc.update(c, body, 100, toI32(body.length) - 100); // the same as one call
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

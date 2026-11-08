@@ -64,7 +64,9 @@ import {
 } from "nish/yaml";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { parseYaml, YAML_MAP } from "nish/yaml"
 
 const stream = parseYaml(text)
@@ -78,6 +80,8 @@ if (stream.kind(root) === YAML_MAP) {
   }
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

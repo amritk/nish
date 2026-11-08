@@ -33,7 +33,9 @@ import {
 } from "nish/net/http-fields";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 import { HttpFields, HTTP_FIELDS_OK } from "nish/net/http-fields";
 
 const request = new HttpFields();
@@ -41,6 +43,8 @@ if (request.readRequest(decoder.names, decoder.values, extendedConnect) === HTTP
   // request.method, request.path, request.get("content-type"), ...
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 

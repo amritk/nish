@@ -22,7 +22,9 @@ import {
 } from "nish/net/upstream";
 ```
 
-```ts
+<scalar-code-group>
+
+```ts example.ts
 const h = new HttpHandler(new HandlerLimits(), listener, router)
 const users = new Upstream(h, "http://127.0.0.1:9000", new UpstreamLimits())
 while (true) {
@@ -41,6 +43,8 @@ while (true) {
   }
 }
 ```
+
+</scalar-code-group>
 
 <scalar-grid cols="2">
 
