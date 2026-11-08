@@ -2149,12 +2149,21 @@ class PassWalk {
       }
       return this.isOld(e.children[1])
     }
-    if (e.kind === N_CALL) {
+    // A call that answers a `Result` in a register (WP17) is boxed by this
+    // function, in the pass, however little its callee allocates (#899).
+    if (e.kind === N_CALL && !this.answersInRegister(e)) {
       const callee = program.nodeCallees[e.id]
       const g: FunctionFacts | null = callee === null ? null : this.facts.get(callee.name)
       return g !== null && !g.allocates
     }
     return false
+  }
+
+  /** `expr` calls a function that answers a `Result` in a register, which the caller boxes (WP17). */
+  answersInRegister(expr: Node): boolean {
+    const e = unwrapParens(expr)
+    const callee: FunctionSig | null = e.kind === N_CALL ? this.unit.program.nodeCallees[e.id] : null
+    return callee !== null && this.table.resultByValue(callee.returnType)
   }
 
   /** A call of `callee` in the pass, at `node`. */
@@ -2300,8 +2309,12 @@ class PassWalk {
     } else if (node.kind === N_RETURN) {
       const value = node.children[0]
       // A block hands back nothing through a `void` call, and a register
-      // `Result` is packed before it releases (`emitReturnValue`).
-      const handsNothing = this.block && (this.returnsByValue || program.nodeTypes[value.id] === T_VOID)
+      // `Result` is packed before it releases (`emitReturnValue`). So is the
+      // one a pass hands on from a call that answers it in a register: the
+      // caller's box `isOld` counts as new is read out before the release.
+      const handsNothing =
+        (this.block && (this.returnsByValue || program.nodeTypes[value.id] === T_VOID)) ||
+        this.answersInRegister(value)
       if (value.kind !== N_EMPTY && !handsNothing && !this.isOld(value)) {
         this.scope.handsBack = true
         this.refuse(LOOP_RETURN, node, "")
