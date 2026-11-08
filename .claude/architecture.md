@@ -138,7 +138,8 @@ src/                the compiler, in Nish, built by the last release (see selfho
   emit*.ts …         attributes, escape analysis, target table, ir builder, runtime ABI
   interop-*.ts       C header, wasm .d.ts and N-API shim generators
 std/                 the standard library, in Nish
-runtime/             runtime.c (core), runtime-os.c (the syscall wrappers),
+runtime/             runtime.c (core), runtime-text.c (strings and number
+                     formatting), runtime-os.c (the syscall wrappers),
                      runtime-parallel.c (threads), runtime-host.c (clock, entropy,
                      file times, signals), runtime-net.c (sockets), nish.h,
                      nish.d.ts (the builtins, for npm run check), runtime-wasm.c,
