@@ -74,9 +74,10 @@ read past its arrays (PG-14).
 
 Its state is bounded by its config — at most `queueSize` requests and
 `queueBytes` of text keys waiting, `runs` executions of `maxRequests` requests
-each. A run holds two `i32` arrays of `maxRequests`, 512 KiB at the most,
-65,536, so 512 MiB at the most `runs`, 1024; with `sorted` false, a `boolean`
-array of `maxRequests` more, at most 64 KiB a run.
+each. A run holds two `i32` arrays of `maxRequests` entries: at the most
+`maxRequests`, 65,536, that is 512 KiB a run, and at the most `runs`, 1024,
+512 MiB in all. With `sorted` false, a run holds a `boolean` array of
+`maxRequests` more, at most 64 KiB.
 
 The queue is allocated in its constructor; the dedup table and each run's
 arrays grow, by doubling, only to the largest take the program's own `add`

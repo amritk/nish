@@ -595,7 +595,8 @@ goes.) Each distinct key is
 bound once however many requests ask for it, and each row goes back to every
 one of them. The one exception is keys chosen to collide in the batcher's
 table: past 1024 slots of probing a key is bound again rather than found,
-and each copy is answered the same.
+and each copy is answered the same. Such keys also cost more per request;
+see "Large batches" below.
 
 `PG_BATCH_INT` keys are bound as a text `int8[]`, one `arrayInt` each. The
 statement's `$1::int8[]` would take the [binary builder](#binary-integer-array-parameters)
@@ -691,10 +692,14 @@ yourself, as they arrive. The live suite's `explain` scenario
   waiting, and `queueBytes` (64 KiB) their text keys; `runs` (16) the
   executions in flight at once. A cap out of range, an empty `name` or
   `select`, or a NUL in them or in `orderBy` panics in the constructor.
-- **Large batches.** A take's cost per request stays flat as `maxRequests`
-  grows: memory grows with the largest take so far, not with the cap, and
-  finding a key's duplicate stops after 1024 probes, past which the key is
-  simply bound again. For a take of thousands of requests, raise the other
+- **Large batches.** For ordinary keys, a take's cost per request stays
+  flat as `maxRequests` grows: memory grows with the largest take so far,
+  not with the cap, and finding a key's duplicate stops after 1024 probes,
+  past which the key is simply bound again. Int keys built to share one
+  table hash are the exception: each still costs at most 1024 probes, but
+  from 1,024 to 65,536 such keys the measured time per key rose 2.3×
+  (2.8 µs to 6.4 µs, against a 35% noise band), where spread keys stayed
+  within noise. For a take of thousands of requests, raise the other
   caps with it: `queueSize` to at least `maxRequests`, `maxBytes` to fit
   every key's text (about 20 bytes an int8 key), the connection's `maxOutput`
   above `maxBytes`, and `maxMessage` if a single row is large.
