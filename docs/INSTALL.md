@@ -374,7 +374,8 @@ release exists, take its version from
 Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
 want it there. Keep the directory intact rather than moving the binary out of
 it: `--link` runs `scripts/build.sh` and compiles the C runtime
-(`runtime/runtime.c` and `runtime/runtime-os.c`, the system-call half), and the
+(`runtime/runtime.c`, `runtime/runtime-text.c`, the strings and number
+formatting, `runtime/runtime-os.c`, the system-call half, and the rest), and the
 compiler finds all of them relative to its own location — `bin/nish` alone in a
 directory can still emit IR with `-o`, but `--link` will tell you it cannot
 find `scripts/build.sh`.
@@ -450,12 +451,14 @@ kernels of `nish/compress/checksum`, `runtime-sandbox.c` the confinement a
 `nish/sync/shm`. They are separate so that each carries its own measured size
 ceiling
 ([docs/wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md));
-nothing in the core calls into the others, so a line that names only
-`runtime.c` and `runtime-os.c` still links a program that uses none of the
-other nine.
+the core is three files that call each other — `runtime-os.c` builds strings
+with `runtime-text.c`'s `nish_str_new` — and calls into none of the others, so a
+line that names only `runtime.c`, `runtime-text.c` and `runtime-os.c` links a
+program that uses none of the other fourteen. Leave out `runtime-text.c` and it
+does not link at all: `nish_str_new` is undefined.
 
 `scripts/build.sh` compiles the other
-nine beside any
+sixteen beside any
 `runtime.c` it is handed, so a build that goes through it — every `--link`,
 and every `--profile` recipe in these documents — needs to name only the one.
 

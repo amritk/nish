@@ -68,6 +68,7 @@
  * on linux-x64; the two halves sum to 3,510, 15 more than the one file, which is the
  * calls the compiler could inline across one file and now makes across two.
  */
+// TEXT here is the .text section of the core runtime.c, not runtime-text.c (next).
 const RUNTIME_TEXT_BUDGET = 1723
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-text.c`:
@@ -78,6 +79,7 @@ const RUNTIME_TEXT_BUDGET = 1723
  * Measured 1,787 on 2026-11-08 with clang 18.1.3 on linux-x64. The threads build is the
  * same size (nothing in the file is per-thread), so it has one row, not two.
  */
+// The .text of the unit runtime-text.c, the strings and number formatting.
 const RUNTIME_TEXT_UNIT_BUDGET = 1787
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.

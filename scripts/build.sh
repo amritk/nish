@@ -123,7 +123,7 @@
 #
 # The runtime compiled once (the debug, speed and size profiles only; `nish
 # --link` and `nish run` use these through their runtime cache, src/compile.ts):
-#   --runtime-objects <dir>  compile the runtime.c input and its seven siblings,
+#   --runtime-objects <dir>  compile the runtime.c input and its sixteen siblings,
 #                            one $CC -c each and all at once, into
 #                            <dir>/<unit>.o with the profile's compile flags,
 #                            and link nothing. speed and size store LTO bitcode,

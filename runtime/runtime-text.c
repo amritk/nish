@@ -57,8 +57,11 @@ void *nish_alloc_struct(uint64_t size);
 #define NISH_TEXT_TLS
 #endif
 struct nish_arena { char *buf; uint64_t off; uint64_t cap; void *chunks; };
-/* A copy of runtime.c's definition, which asserts the same four facts: a layout
-   that drifted from it would bump the wrong field and corrupt the heap. */
+/* A copy of nish.h's definition, kept rather than included because nish.h's
+   `nish_str` is a tagged struct and this file's is not. runtime.c asserts the
+   same layout: a copy that drifted from it would bump the wrong field and
+   corrupt the heap. */
+_Static_assert(offsetof(struct nish_arena, buf) == 0, "runtime.c's struct nish_arena: buf first");
 _Static_assert(sizeof(struct nish_arena) == 32, "runtime.c's struct nish_arena: four 8-byte fields");
 _Static_assert(offsetof(struct nish_arena, off) == 8, "runtime.c's struct nish_arena: off second");
 _Static_assert(offsetof(struct nish_arena, cap) == 16, "runtime.c's struct nish_arena: cap third");

@@ -52,7 +52,8 @@ extern "C" {
  * ELF refuses to link that against a non-TLS definition. `scripts/build.sh
  * --threads` passes the macro to every input, which is how `nish --threads
  * --link` keeps the two halves in step. The same definition is in
- * runtime/runtime.c and runtime/runtime-wasm.c. */
+ * runtime/runtime.c and runtime/runtime-wasm.c, and runtime/runtime-text.c
+ * repeats it for its inlined allocation fast path. */
 #ifdef NISH_THREADS
 #define NISH_TLS _Thread_local
 #else
@@ -95,7 +96,8 @@ static inline __attribute__((unused)) const char *nish_cpath(const nish_str *s) 
  * `off` and `cap` are `uint64_t` and not `size_t` because that `i64` is what
  * the inlined fast path bumps and compares on every target: under wasm32 a
  * `size_t` pair would put them at bytes 4 and 8 while compiled code reads 8
- * and 16. runtime.c and runtime-wasm.c static-assert these offsets. */
+ * and 16. runtime.c and runtime-wasm.c static-assert these offsets, and
+ * runtime-text.c, which keeps its own copy of the struct, asserts all four. */
 struct nish_arena {
   char *buf;
   uint64_t off;

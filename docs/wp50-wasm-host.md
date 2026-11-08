@@ -573,7 +573,7 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
 
 - **Out, to an import.** A `string` parameter of a host import crosses as the
   pointer to its bytes and its length, `(i32, i32)`. The adapter decodes them
-  with the one `TextDecoder` the loader made at `load`,
+  with a `TextDecoder` the loader made at `load`,
   `utf8.decode(U8.subarray(p, p + n))`, and the page's function receives a
   JavaScript `string`. The TS reading passes the string itself, so the page
   sees one signature in both readings. The decode allocates the string, which
@@ -624,7 +624,8 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   about size builds with `wasm-host`; `wasm` is the profile that answers every
   symbol for a hand-written loader.
 - **Built (stage 4).** The adapter is `text(p, n)`, a `new Uint8Array` over the
-  memory decoded by the load's one `TextDecoder`, and an export's result is
+  memory decoded by a `TextDecoder` made once per load (the export guard and
+  the import adapters each make one), and an export's result is
   `stringOut`, read inside `guarded` or `scoped`. An export that takes a
   `string` is left out of the bridge, and its `.d.ts` line tells the page to
   write module storage instead. `nish/host/text` is the module's half: `textRead`

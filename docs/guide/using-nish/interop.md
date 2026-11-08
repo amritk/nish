@@ -427,7 +427,8 @@ new TextDecoder().decode(app.views().storage.OUTBOX.subarray(0, end)); // "héll
 `textWriteF64`) takes the offset to write at and answers the offset after
 what it wrote, so writes chain; text that does not fit writes nothing and
 answers -1, and every writer passes a -1 offset straight through. The storage
-is lent to these functions as a `u8[]` parameter, which they only index.
+is lent to these functions as a `u8[]` parameter, which they only index, take
+the `.length` of, or copy out of with `String.fromBytes`.
 
 ### When the module panics
 
