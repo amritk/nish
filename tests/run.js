@@ -141,10 +141,11 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes`,
  * `runtime-sandbox.c` the `--sandbox` confinement and `runtime-shm.c` the
  * shared-memory regions of `nish/sync/shm` and `runtime-region.c` the arenas a program
- * makes and frees one at a time, split apart so that each carries its own `.text*`
+ * makes and frees one at a time and `runtime-async.c` the executor `spawn` parks tasks on, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same sixteen:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same seventeen
+ * (`runtime-async.c` among them, though a link takes its object only for async IR):
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -171,6 +172,7 @@ const RUNTIME_C = [
   "runtime/runtime-sandbox.c",
   "runtime/runtime-shm.c",
   "runtime/runtime-region.c",
+  "runtime/runtime-async.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -5587,9 +5589,10 @@ if (dealtHere("emitTs")) {
     ["NL4014", "refused/uncalled-ctor-zero", 6],
     ["NL4014", "refused/uncalled-field-zero", 7],
     ["NL4014", "refused/uncalled-wide-zero", 5],
+    ["NL4017", "async/refused-readable", 8],
   ]) {
-    // A `refused/` name is a program under tests/emit-ts, which has no `.out`
-    // and so is no fixture.
+    // A `refused/` or `async/` name is a program under tests/emit-ts, which
+    // has no `.out` and so is no fixture.
     const dir = path.join(work, name.replace("/", "-"))
     const src = name.includes("/") ? path.join(fixtures, `${name}.ts`) : path.join(casesDir, `${name}.ts`)
     const r = spawnSync(NISH, [src, "--json", "--emit-ts", dir], {
@@ -9253,7 +9256,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's sixteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's seventeen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9316,6 +9319,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-sandbox.c",
       "runtime-shm.c",
       "runtime-region.c",
+      "runtime-async.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -9323,7 +9327,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the sixteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the seventeen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9332,7 +9336,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the sixteen runtime units once",
+      "runtime cache: the miss compiled each of the seventeen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -31406,9 +31410,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all sixteen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all seventeen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 16 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 17 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")

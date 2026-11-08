@@ -6,6 +6,7 @@
     "src/break-*.ts",
     "std/*.ts",
     "tests/nish/*.ts",
+    "test/spec/*.ts",
     "tests/self/*.ts",
     "tests/fuzz/targets/*.ts",
     "tests/postgres/**/*.ts",

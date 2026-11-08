@@ -2,7 +2,7 @@
 
 # Diagnostics
 
-Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. This page lists all 840: the 4 of band 0, which no rule matches, and the 836 rules `src/codes.ts` holds, 65 of them retired.
+Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. This page lists all 844: the 4 of band 0, which no rule matches, and the 840 rules `src/codes.ts` holds, 65 of them retired.
 
 A rule is matched by a fragment of its message: the longest literal run of the message's template, with the names, types and counts it interpolates cut out. The fragment is matched as a substring, so `…` marks where the message goes on. Each example is a program from `tests/wordings/` that the suite compiles, and the message it gets, word for word. [Reading diagnostics](../guide/using-nish/cli.md#reading-diagnostics) in the guide says how to act on one; the [command-line reference](command-line.md) lists the flags that turn the warnings on and off.
 
@@ -13336,12 +13336,36 @@ The message of an error contains:
 …: its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`
 ```
 
+### NL2671
+
+The message of an error contains:
+
+```text
+` is a wait on the executor, written only where it is awaited: `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`, inside an `async` function
+```
+
+### NL2672
+
+The message of an error contains:
+
+```text
+` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on
+```
+
 ### NL2672
 
 The message of an error contains:
 
 ```text
 …; give the type a zero member, or store the number and convert it where it is read
+```
+
+### NL2673
+
+The message of an error contains:
+
+```text
+…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
 ```
 
 ### NL2673
@@ -14335,6 +14359,31 @@ The message of an error contains:
 ```
 
 **Retired**: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (WP49 stage 4, part 3; tests/emit-ts/async)
+
+### NL4017
+
+The message of an error contains:
+
+```text
+--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```
+
+[`nl4017_wait_on_descriptor.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4017_wait_on_descriptor.ts) (compiled with `--emit-ts build/test/wordings/nl4017_wait_on_descriptor`):
+
+```ts
+// NL4017: Node polls no descriptor JavaScript can name, so a task that awaits
+// `readable` has no translation, and `--emit-ts` refuses it at the wait.
+import { readable } from "nish:async"
+
+export async function main(): Promise<i32> {
+  const ok = await readable(0)
+  return ok ? 0 : 1
+}
+```
+
+```text
+--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```
 
 ## NL7xxx: deprecation warnings
 

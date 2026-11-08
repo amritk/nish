@@ -19,6 +19,13 @@ export const spawn = (task) => {
 
 export const awaitAll = (...tasks) => Promise.all(tasks);
 
+// `sleep` is a timer: `true` once `ms` milliseconds have passed, `false` for a
+// negative `ms`, as natively. `readable` and `writable` have no counterpart in
+// Node, whose descriptors are not polled from JavaScript, so `--emit-ts`
+// refuses them (NL4017) and this file does not export them.
+export const sleep = (ms) =>
+  ms < 0 ? Promise.resolve(false) : new Promise((resolve) => setTimeout(() => resolve(true), ms));
+
 export const settleTasks = async () => {
   for (let i = 0; i < pending.length; i++) {
     await pending[i];

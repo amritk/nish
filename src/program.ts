@@ -132,6 +132,12 @@ export class FunctionSig {
   /** WP49: the cycle walk's colour: 0 unvisited, 1 on the path, 2 done. */
   awaitMark: i32
   /**
+   * WP49 stage 5: whether the body awaits a wait on the executor
+   * (`sleep`, `readable`, `writable` from `nish:async`), which suspends it
+   * as an await of a function does but is no edge of the await graph.
+   */
+  waits: boolean
+  /**
    * WP29: on an arrow argument, the locals of the function it is written in
    * that its body reads, in the order it first reads them (docs/LANGUAGE.md,
    * "Function parameters" and "Data parallelism"). Each is a parameter of
@@ -275,7 +281,7 @@ export class FunctionSig {
    * writes and is not sure to return.
    */
   suspends(): boolean {
-    return this.isAsync() && this.awaits.length > 0
+    return this.isAsync() && (this.awaits.length > 0 || this.waits)
   }
 
   /**
@@ -308,6 +314,7 @@ export class FunctionSig {
     this.arrowCount = 0
     this.awaits = []
     this.awaitMark = 0
+    this.waits = false
     this.captures = []
     this.captureHost = null
     this.capturesForCall = false

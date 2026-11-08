@@ -652,6 +652,22 @@ const RUNTIME_REGION_TEXT_BUDGET = 768
 const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1024
 
 /**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-async.c`
+ * -- the executor of docs/wp49-async-server.md (stage 5, part 1): the node slabs, one per
+ * spawned kind, the epoll (kqueue on Darwin) set with its `(task, generation)` entries,
+ * the binary-heap timer list, `nish_async_next`'s one blocking wait, and the copy of a
+ * spawned `string` into the task's region (docs/security/async.md).
+ *
+ * Measured **2,596 bytes** on 2026-11-07 with clang 18.1.3 on linux-x64, the same with
+ * `-DNISH_THREADS=1`: the executor runs on the thread that called `main` and keeps no
+ * thread-local state, so it has one row. A sixteenth translation unit, linked only into a
+ * program whose IR declares a `nish_async_*` function (scripts/build.sh), so a program
+ * that never awaits a wait or spawns carries none of it. The budget is the next 256-byte
+ * boundary above the measurement.
+ */
+const RUNTIME_ASYNC_TEXT_BUDGET = 2816
+
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
  * -- the adapter `nish/sqlite` calls: the thread-local connection and statement tables
  * that turn SQLite's pointers into `i32` handles, and the `nishsqlite_*` entry points
@@ -827,6 +843,7 @@ export const RUNTIME_BUDGETS = [
     "RUNTIME_REGION_THREADS_TEXT_BUDGET",
     ["-DNISH_THREADS=1"],
   ],
+  ["runtime/runtime-async.c", RUNTIME_ASYNC_TEXT_BUDGET, "RUNTIME_ASYNC_TEXT_BUDGET", []],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 

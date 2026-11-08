@@ -3755,6 +3755,13 @@ class FactCollector {
     if (imported === "async.awaitAll") {
       return
     }
+    // WP49 stage 5: `await sleep(ms)` and the descriptor waits make a wait on
+    // the executor and may suspend the function at it.
+    if (imported === "async.sleep" || imported === "async.readable" || imported === "async.writable") {
+      this.facts.effect = EFFECT_WRITE
+      this.facts.willReturn = false
+      return
+    }
     this.noteBuiltinSite(node, imported.length > 0 ? imported : node.children[0].text)
     if (this.known !== null) {
       this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)

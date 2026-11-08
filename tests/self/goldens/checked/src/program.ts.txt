@@ -77,13 +77,14 @@ struct FunctionSig (class) size=176 align=8 exported
   field arrowCount: i32 index=15 offset=100
   field awaits: AwaitEdge[] index=16 offset=104
   field awaitMark: i32 index=17 offset=112
-  field captures: Local[] index=18 offset=120
-  field captureHost: FunctionSig | null index=19 offset=128
-  field capturesForCall: boolean index=20 offset=136
-  field returnSpelling: string index=21 offset=144
-  field keepsLength: i32[] index=22 offset=152
-  field defaults: FieldInfo | null[] index=23 offset=160
-  field restIndex: i32 index=24 offset=168
+  field waits: boolean index=18 offset=116
+  field captures: Local[] index=19 offset=120
+  field captureHost: FunctionSig | null index=20 offset=128
+  field capturesForCall: boolean index=21 offset=136
+  field returnSpelling: string index=22 offset=144
+  field keepsLength: i32[] index=23 offset=152
+  field defaults: FieldInfo | null[] index=24 offset=160
+  field restIndex: i32 index=25 offset=168
   constructor -> @FunctionSig.constructor
   method requiredArity -> @FunctionSig.requiredArity
   method defaultOf -> @FunctionSig.defaultOf

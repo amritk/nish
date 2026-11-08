@@ -2266,24 +2266,24 @@ function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: 
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteBuiltinSite#1 builtinNameOf#1 FactCollector.noteBuiltin#2 identifierBuiltinCalleesNamed#2 builtinCalleesNamed#3 FactCollector.noteWorld#1 identifierBuiltinCallees#2 FactCollector.noteWorld#1 isArenaCall#1 FactCollector.noteWrittenArguments#1 builtinNameOf#1
   stackSites=0 stackLocals=0
   local -7:11 imported: string (const)
-  callee +7:5 FactCollector.noteBuiltinSite -> @FactCollector.noteBuiltinSite
-  callee +9:7 FactCollector.noteBuiltin -> @FactCollector.noteBuiltin
-  callee +9:24 builtinNameOf -> @builtinNameOf
-  local +12:13 named: string[] (const)
-  callee +14:13 identifierBuiltinCalleesNamed -> @identifierBuiltinCalleesNamed
-  callee +15:13 builtinCalleesNamed -> @builtinCalleesNamed
-  callee +16:7 FactCollector.addCallees -> @FactCollector.addCallees
-  callee +17:7 FactCollector.noteWorld -> @FactCollector.noteWorld
-  local +19:13 plain: string[] (const)
-  callee +19:21 identifierBuiltinCallees -> @identifierBuiltinCallees
-  callee +20:7 FactCollector.addCallees -> @FactCollector.addCallees
-  callee +21:7 FactCollector.noteWorld -> @FactCollector.noteWorld
-  callee +23:9 isArenaCall -> @isArenaCall
-  callee +28:5 FactCollector.noteWrittenArguments -> @FactCollector.noteWrittenArguments
-  local +34:11 name: string (const)
-  callee +34:18 builtinNameOf -> @builtinNameOf
-  callee +37:62 isSimdLoad -> @isSimdLoad
-  callee +46:7 StringSet.add -> @StringSet.add
+  callee +14:5 FactCollector.noteBuiltinSite -> @FactCollector.noteBuiltinSite
+  callee +16:7 FactCollector.noteBuiltin -> @FactCollector.noteBuiltin
+  callee +16:24 builtinNameOf -> @builtinNameOf
+  local +19:13 named: string[] (const)
+  callee +21:13 identifierBuiltinCalleesNamed -> @identifierBuiltinCalleesNamed
+  callee +22:13 builtinCalleesNamed -> @builtinCalleesNamed
+  callee +23:7 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +24:7 FactCollector.noteWorld -> @FactCollector.noteWorld
+  local +26:13 plain: string[] (const)
+  callee +26:21 identifierBuiltinCallees -> @identifierBuiltinCallees
+  callee +27:7 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +28:7 FactCollector.noteWorld -> @FactCollector.noteWorld
+  callee +30:9 isArenaCall -> @isArenaCall
+  callee +35:5 FactCollector.noteWrittenArguments -> @FactCollector.noteWrittenArguments
+  local +41:11 name: string (const)
+  callee +41:18 builtinNameOf -> @builtinNameOf
+  callee +44:62 isSimdLoad -> @isSimdLoad
+  callee +53:7 StringSet.add -> @StringSet.add
 function initialisesFields(sig: FunctionSig): boolean -> @initialisesFields
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer sig: size=176 writesThrough=false captured=false

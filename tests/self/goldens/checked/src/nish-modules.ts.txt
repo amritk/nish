@@ -70,6 +70,10 @@ function simdSuffix(name: string, prefix: string): string -> @simdSuffix [export
   stackSites=0 stackLocals=0
   local +0:9 first: i32 (const)
   local +1:9 rest: string (const)
+function isAsyncExport(name: string): boolean -> @isAsyncExport
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
 function isNishModule(specifier: string): boolean -> @isNishModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: specifier
@@ -156,7 +160,7 @@ function isTermExport(name: string): boolean -> @isTermExport [exported]
 function nishExport(specifier: string, name: string): BuiltinExport | null -> @nishExport [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: BuiltinExport.constructor isNetExport isSimdExport isTermExport isUnsafeExport netOption nish_alloc_struct nish_str_concat nish_str_eq unsafeModule
+  calls: BuiltinExport.constructor isAsyncExport isNetExport isSimdExport isTermExport isUnsafeExport netOption nish_alloc_struct nish_str_concat nish_str_eq unsafeModule
   stackSites=0 stackLocals=0
   callee +0:14 new BuiltinExport -> @BuiltinExport.constructor
   callee +6:14 new BuiltinExport -> @BuiltinExport.constructor
@@ -171,7 +175,8 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   callee +47:33 new BuiltinExport -> @BuiltinExport.constructor
   callee +50:12 isSimdExport -> @isSimdExport
   callee +50:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +53:54 new BuiltinExport -> @BuiltinExport.constructor
+  callee +53:12 isAsyncExport -> @isAsyncExport
+  callee +53:34 new BuiltinExport -> @BuiltinExport.constructor
   callee +55:21 unsafeModule -> @unsafeModule
   callee +56:12 isUnsafeExport -> @isUnsafeExport
   callee +56:35 new BuiltinExport -> @BuiltinExport.constructor

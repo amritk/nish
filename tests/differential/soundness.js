@@ -154,6 +154,7 @@ const RUNTIME_C = [
   "runtime/runtime-sandbox.c",
   "runtime/runtime-shm.c",
   "runtime/runtime-region.c",
+  "runtime/runtime-async.c",
 ]
 const DRIVER_C = path.join(root, "tests", "driver.c")
 

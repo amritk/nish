@@ -20,7 +20,9 @@
 # <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`,
 # <dir>/runtime-sandbox.c, the confinement `--sandbox` applies,
 # <dir>/runtime-shm.c, the shared-memory regions of `nish/sync/shm`, and
-# <dir>/runtime-region.c, the arenas a program makes and frees one at a time. Each of those
+# <dir>/runtime-region.c, the arenas a program makes and frees one at a time, and,
+# only for a program whose IR declares one of its functions,
+# <dir>/runtime-async.c, the executor `spawn` and `nish:async`'s waits park tasks on. Each of those
 # files says why they are compiled and measured apart.
 #
 # Profiles:
@@ -335,6 +337,34 @@ for i in ${inputs[@]+"${inputs[@]}"}; do
     *.c) if [ -n "$sqlite_dir" ] && [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
   esac
 done
+# The async executor (runtime-async.c) is selected by the IR the same way: a
+# module that declares one of its `nish_async_*` functions -- every program
+# that spawns, awaits a kernel wait or runs an async main does -- gets it
+# compiled and linked beside runtime.c. Any other program links none of it, so
+# its binary holds no `nish_async` symbol and its bytes stay as they were.
+# `--runtime-objects` compiles it with the rest, so the runtime cache holds it,
+# and `--runtime-from` links its object only when it is wanted. A caller that
+# names it itself is left alone, as `halves` leaves a half.
+async_wanted=0
+if [ ${#lls[@]} -gt 0 ] && grep -Eq '^declare [^"]*@nish_async_' "${lls[@]}"; then
+  async_wanted=1
+fi
+if [ "$async_wanted" = 1 ]; then
+  for i in ${inputs[@]+"${inputs[@]}"}; do
+    case "$i" in
+      */runtime-async.c|runtime-async.c) async_wanted=0 ;;
+    esac
+  done
+fi
+if [ "$async_wanted" = 1 ] && [ -z "$objects_from" ]; then
+  for i in ${inputs[@]+"${inputs[@]}"}; do
+    case "$i" in
+      */runtime.c|runtime.c)
+        side="${i%runtime.c}runtime-async.c"
+        if [ -f "$side" ]; then inputs+=("$side"); fi ;;
+    esac
+  done
+fi
 if [ "$sqlite_wanted" = 1 ] && [ -z "$sqlite_dir" ]; then
   echo "error: the module calls SQLite, and $(dirname "$0")/../runtime/sqlite/ is not there" >&2
   exit 2
@@ -656,7 +686,7 @@ if [ -n "$objects_to" ]; then
   # the file `runtime.c` in the runtime's own directory, whichever directory
   # the first link that compiled it was run in.
   runtime_dir=$(dirname -- "$runtime")
-  for unit in runtime.c $halves; do
+  for unit in runtime.c $halves runtime-async.c; do
     (cd -- "$runtime_dir" && exec "$CC" "${compile[@]}" -c "$unit" -o "$objects_to/${unit%.c}.o") &
     pids+=("$!")
   done
@@ -694,6 +724,10 @@ if [ -n "$objects_from" ]; then
   for unit in runtime.c $halves; do
     objects+=("$objects_from/${unit%.c}.o")
   done
+  if [ "$async_wanted" = 1 ]; then
+    [ -f "$objects_from/runtime-async.o" ] || { echo "error: --runtime-from: $objects_from/runtime-async.o is missing" >&2; exit 2; }
+    objects+=("$objects_from/runtime-async.o")
+  fi
   inputs=("${objects[@]}")
   # clang runs dsymutil itself when one command compiles and links with -g on
   # macOS; a link of objects does not, so it is run here, while the program's
