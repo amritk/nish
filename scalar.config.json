@@ -1202,5 +1202,17 @@
       }
     }
   },
-  "siteConfig": { "isPrivate": true }
+  "assetsDir": "docs/site",
+  "siteConfig": {
+    "isPrivate": true,
+    "theme": "docs/site/theme.css",
+    "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
+    "head": {
+      "links": [
+        { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
+        { "rel": "icon", "type": "image/png", "href": "/favicon-32.png" },
+        { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" }
+      ]
+    }
+  }
 }
