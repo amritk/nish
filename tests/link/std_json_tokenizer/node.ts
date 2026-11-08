@@ -93,7 +93,7 @@ export const main = (): number => {
   // `isIntegral` by value: whole spellings, fractions, a number wider than an
   // i64 and an exponent past any i32 of each sign, then a string.
   console.log(nodeIntegral('[1.0,1e2,1.5,10e-2,12345678901234567890.0,1e400,1e99999999999,1e-99999999999,"1"]'));
-  // Every spelling #834 lists: the eleven integral ones, then the five that are
+  // Every spelling #843 lists: the eleven integral ones, then the five that are
   // not, so that Node is held to each as the native units are.
   console.log(
     nodeIntegral("[0,-0,0.0,-0.0e5,1.0,1.000,1e2,1E+2,100e-2,12345678901234567890.0,1e400,1.5,1e-1,10e-2,123.456e2,1e-400]")

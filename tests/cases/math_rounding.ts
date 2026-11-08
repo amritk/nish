@@ -4,7 +4,8 @@
 // routine when it does not; tests/run.js runs this twice, once with
 // `NISH_SIMD=scalar` pinning libm, and both print what Node prints.
 // The halves, the double just below 0.5 (whose `ceil` of the negative is -0),
-// 2^52 and the largest negative subnormal are #1044's edges.
+// 2^52 and -2.225073858507201e-308 (the negated subnormal of greatest
+// magnitude, one ulp below the smallest normal) are #1044's edges.
 // `x` is a parameter, so no call folds to a constant. A result is printed
 // beside its reciprocal, which is how a -0 shows: `${-0}` is "0", and
 // `1 / -0` is -Infinity.
