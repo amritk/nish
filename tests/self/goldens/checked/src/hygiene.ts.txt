@@ -250,10 +250,11 @@ function checkRepeatedCondition(ctx: CheckContext, node: Node): void -> @checkRe
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 condition: Node (const)
-  local +1:7 next: Node (let)
-  callee +3:9 sameValue -> @sameValue
-  callee +4:7 holdFinding -> @holdFinding
-  callee +7:14 CheckContext.textOf -> @CheckContext.textOf
+  local +4:7 next: Node (let)
+  callee +5:33 sameValue -> @sameValue
+  local +11:9 repeated: Node (const)
+  callee +12:3 holdFinding -> @holdFinding
+  callee +15:10 CheckContext.textOf -> @CheckContext.textOf
 function isZero(node: Node): boolean -> @isZero
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: hygieneUnwrap nish_str_eq
