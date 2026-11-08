@@ -37,7 +37,7 @@ The YAML text is the attacker's. The program chose the `JsonDocument`'s
 limits (`maxValues`, `JsonLimits.maxTotalBytes`) and the stream's parse
 options. A load must end in time linear in the stream and the limits, never
 build past `maxValues` values or `maxTotalBytes` of text, and never recurse
-deeper than the loader's `maxDepth` (`std/yaml-json.ts:218`, set to
+deeper than the loader's `maxDepth` (`std/yaml-json.ts:216`, set to
 `JSON_WRITER_MAX_DEPTH`, 64).
 
 ## Findings
@@ -58,14 +58,14 @@ tests are the checks of `tests/link/std_yaml_json`, run by the check
 check is named by its exact string.
 
 - **An alias bomb is refused before anything is built**: the count
-  (`std/yaml-json.ts:307`) runs over the nodes once, saturating at
+  (`std/yaml-json.ts:305`) runs over the nodes once, saturating at
   `maxValues + 1`, and a document that expands past `maxValues` is
   `YAML_JSON_ERR_EXPANSION` at its largest alias with nothing appended: "bomb:
   a billion laughs is refused", "bomb: at the first alias whose copy is past
   the limit", "bomb: nothing was built", "bomb: one past maxValues is
   refused", "bomb: no alias, too many values"; within the limit, "bomb: an
   expansion within maxValues loads".
-- **The text an alias copies is bounded while it is built** (`:476`,
+- **The text an alias copies is bounded while it is built** (`:474`,
   `tooMuchText`): past `JsonLimits.maxTotalBytes` the load is refused: "text
   bomb: copies of a long string past maxTotalBytes are refused", "text bomb:
   at the copy that does not fit", "text bomb: nothing is kept", "text bomb: no
@@ -81,7 +81,7 @@ check is named by its exact string.
   merging itself is refused by the parser" (`YAML_JSON_ERR_YAML`) and "merge
   bomb: at the alias to the unfinished map" (`*a`, since the anchor binds only
   when its map is finished). The loader's own self-guard, `markMerged(at)` in
-  `buildMap` (`:551`), is therefore not reached by any test; it stays as the
+  `buildMap` (`:549`), is therefore not reached by any test; it stays as the
   guard for a stream the parser did not build.
 - **A saturated count stays saturated** (YJ-2): "merge bomb: a saturated
   count stays saturated", "merge bomb: refused by the count, at the root".
@@ -92,11 +92,11 @@ check is named by its exact string.
   the loader refuses it at the value").
 - **With `merge` off, `<<` is an ordinary key**: "merge off: loads", "merge
   off: `<<` is an ordinary key".
-- **Depth is bounded** (`:456`; a chain of merges past `YAML_JSON_MERGE_HOPS`
-  is the same code, `:597`): "depth: 65 deep is refused", "depth:
+- **Depth is bounded** (`:454`; a chain of merges past `YAML_JSON_MERGE_HOPS`
+  is the same code, `:595`): "depth: 65 deep is refused", "depth:
   at the one too deep", "depth: 64 deep loads".
 - **`.inf`, `-.inf` and `.nan` are refused** with `YAML_JSON_ERR_NOT_FINITE`
-  at the scalar (`:499`; "not finite: ${cases[i]} is refused", "not finite:
+  at the scalar (`:497`; "not finite: ${cases[i]} is refused", "not finite:
   ${cases[i]} at its node"; and "not finite: a quoted or tagged one is a
   string"), and an over-long hex or octal integer with
   `YAML_JSON_ERR_NUMBER` ("numbers: a hex integer past 256 digits", "numbers:

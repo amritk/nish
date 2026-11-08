@@ -52,9 +52,9 @@ answered with `JSON_TOK_ERR_WINDOW` rather than a panic.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| JSON-1 | Low | `std/json-tokenizer.ts:937` (`keyEquals`), `:879` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
-| JSON-2 | Low | `std/json-tokenizer.ts:259` (`JSON_TOK_END_CEILING`), `:509` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve past a position below the end) can overflow and panic. The guard's other arm, that `off + len` is not added before `off <= src.length - len` has proven it fits, is pinned by "WINDOW: an offset and a length of 2^31 - 1, refused without overflow" and "WINDOW: a length of 2^31 - 1 from 0": with a naive `off + len > src.length` the first panics with `attempt to add with overflow`. The ceiling arm itself is not reached by any test: a window passes the first test only inside its array, so ending past 2,147,483,583 takes an array of at least that many bytes. The language allows such a `u8[]` (`NISH_ARRAY_MAX` in `runtime/runtime.c` is 2^31 − 1 elements), but it is 2 GiB of memory on the host that runs the suite, which is the reason, not a limit of the language. | **Open.** The ceiling is one compare in `reset`; a test of it would allocate 2 GiB. |
-| JSON-3 | Low | `std/json-tokenizer.ts:546` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Fixed for `jsonDecode` callers** (#573). The tokenizer itself is unchanged: it still reports what is there, and a program reading tokens itself still decides, as its module header says. `jsonDecode` refuses a duplicate of a field with `JSON_DECODE_DUPLICATE` before the second value is read, at every depth (`std/json-typed.ts`, `duplicateField`; [The typed layer](#the-typed-layer); "a duplicate key: code" and "nested: a duplicate key in an element" in `tests/link/std_json_typed`). The one exception is a key `ignoreUnknown` steps over, whose duplicates are not refused: that is JSON-4. |
+| JSON-1 | Low | `std/json-tokenizer.ts:933` (`keyEquals`), `:875` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
+| JSON-2 | Low | `std/json-tokenizer.ts:255` (`JSON_TOK_END_CEILING`), `:505` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve past a position below the end) can overflow and panic. The guard's other arm, that `off + len` is not added before `off <= src.length - len` has proven it fits, is pinned by "WINDOW: an offset and a length of 2^31 - 1, refused without overflow" and "WINDOW: a length of 2^31 - 1 from 0": with a naive `off + len > src.length` the first panics with `attempt to add with overflow`. The ceiling arm itself is not reached by any test: a window passes the first test only inside its array, so ending past 2,147,483,583 takes an array of at least that many bytes. The language allows such a `u8[]` (`NISH_ARRAY_MAX` in `runtime/runtime.c` is 2^31 − 1 elements), but it is 2 GiB of memory on the host that runs the suite, which is the reason, not a limit of the language. | **Open.** The ceiling is one compare in `reset`; a test of it would allocate 2 GiB. |
+| JSON-3 | Low | `std/json-tokenizer.ts:542` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Fixed for `jsonDecode` callers** (#573). The tokenizer itself is unchanged: it still reports what is there, and a program reading tokens itself still decides, as its module header says. `jsonDecode` refuses a duplicate of a field with `JSON_DECODE_DUPLICATE` before the second value is read, at every depth (`std/json-typed.ts`, `duplicateField`; [The typed layer](#the-typed-layer); "a duplicate key: code" and "nested: a duplicate key in an element" in `tests/link/std_json_typed`). The one exception is a key `ignoreUnknown` steps over, whose duplicates are not refused: that is JSON-4. |
 
 ## Properties verified
 
@@ -78,7 +78,7 @@ depth of 128 and are refused at the 129th opener. The Node check holds every
 `y_` file's token stream, strings as UTF-8 and numbers as `numberF64`'s bits,
 to a walk of `JSON.parse`'s value.
 
-**Depth bombs** (`std/json-tokenizer.ts:634`, `open`): an opener past
+**Depth bombs** (`std/json-tokenizer.ts:630`, `open`): an opener past
 `maxDepth` is refused with `JSON_TOK_ERR_DEPTH` at its byte, before anything is
 pushed, and the depth stack is `maxDepth` bytes allocated once in the
 constructor, so 100,000 openers cost the same as 129: "DEPTH: a bomb of
@@ -164,7 +164,7 @@ bounded before it is scanned at all ("TOTAL_LIMIT: three bytes fit a total of
 3", "TOTAL_LIMIT: four are refused before anything is read", "TOTAL_LIMIT:
 even a malformed window is refused for its size").
 
-**Invalid UTF-8** (`:333`, `jsonTokUtf8Length`): RFC 3629 §4's table row by
+**Invalid UTF-8** (`:329`, `jsonTokUtf8Length`): RFC 3629 §4's table row by
 row, the second byte's range set by the lead, which refuses overlong forms,
 surrogates, code points past U+10FFFF and stray or missing continuation bytes
 ("UTF8: C0, an overlong lead" through "UTF8: an invalid byte in a key", and
@@ -174,7 +174,7 @@ cuts short". A byte of 0x80 or above outside a
 string is a syntax error. So `stringInto` only ever hands the caller valid
 UTF-8.
 
-**Lone surrogates** (`:827`, `escapeCodePoint`): a `\u` escape of a high
+**Lone surrogates** (`:823`, `escapeCodePoint`): a `\u` escape of a high
 surrogate must be followed at once by a `\u` escape of a low one, and a low
 surrogate may not stand alone; anything else is `JSON_TOK_ERR_SURROGATE`
 ("SURROGATE: a lone high surrogate" and eight more). RFC 8259 §8.2 allows them,
@@ -184,7 +184,7 @@ refuses would see different strings, which is the disagreement this record's
 threat model counts as a win. Refusing is the stricter reading, and it is what
 lets `stringInto` promise UTF-8.
 
-**Trailing garbage** (`:546`, `next`): after the top-level value only the four
+**Trailing garbage** (`:542`, `next`): after the top-level value only the four
 RFC 8259 blanks may follow; anything else, a second document or a NUL
 included, is `JSON_TOK_ERR_TRAILING` at its byte ("TRAILING: a second
 document", "TRAILING: a NUL after the value").
@@ -313,7 +313,7 @@ chooses the class, the limits and `ignoreUnknown`.
 | JSON-14 | Low | `std/json-typed.ts` (`jsonEncodeNumber`), at `18f35868` | A `JsonNumber` is written with `w.raw`, its bytes as they are. What decoding and `setText` put there is one JSON number, checked by the tokenizer, but `bytes` and `count` are fields a program can assign, and bytes it assigns are written unchecked, as anything handed to `w.raw` is. A `count` past `bytes.length` is no overread: `text()` panics on the range, as `String.fromBytes` does, and `jsonEncode` stops with the writer's `JSON_WRITE_BAD_WINDOW` (-7). | **Accepted.** The program is trusted, and the input cannot reach those fields except through `number` and `setText`; docs/LANGUAGE.md ("Typed JSON") names the two ways to set one. |
 
 The layer closes the tokenizer's JSON-3: a duplicate of a field is
-`JSON_DECODE_DUPLICATE` at `std/json-typed.ts:324`, before the second value is
+`JSON_DECODE_DUPLICATE` at `std/json-typed.ts:310`, before the second value is
 read, and so is a duplicate key of a `Map` field, compared once decoded, so an
 escape does not hide one (`src/emit-json.ts:1158`, `emitJsonDecodeMapBody`).
 
@@ -342,7 +342,7 @@ read").
 an element", "nested: a missing key in a | null object").
 
 **Type confusion.** Each value is read by the reader of its field's type,
-which refuses every other token (`std/json-typed.ts:180`, `take`): a string
+which refuses every other token (`std/json-typed.ts:169`, `take`): a string
 for an integer, an array for a scalar or a class, an object for an array, a
 number for a string, `null` for a field that is not `| null`, and a top-level
 value that is not an object ("a string for an i32: code" through "null at the
@@ -350,7 +350,7 @@ top: code", "nested: an element that is not an object", "nested: an object
 where the array is", "nested: null for an array that is not | null").
 
 An integer field takes only an integer written without a fraction or an
-exponent, in its range (`std/json-typed.ts:393`): "a fraction for an i32", "an
+exponent, in its range (`std/json-typed.ts:379`): "a fraction for an i32", "an
 exponent for an i32", "2^31 for an i32", "-2^31 - 1 for an i32", "-1 for a
 u32", "2^32 for a u32", "2^63 for an i64", "-2^63 - 1 for an i64".
 
@@ -582,13 +582,13 @@ duplicate policy, and what it builds.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| JSON-8 | Low | `std/json-value.ts:1054` (`findKey`) | `get` and `set` find a key by scanning the object's members, so a program that calls `get` once per member of an object the peer sized does work quadratic in that size. The parse itself never scans: its duplicate check sorts. | **Accepted.** It is in the module header and the guide, which say to walk a large object once with `keyAt` and `at`; an index per object would cost every parse an allocation the reuse rule is there to avoid. |
-| JSON-10 | Low | `std/json-value.ts:948` (`newNode`) | A document keeps, for its life, 17 bytes of arrays per value (`kinds` 1, `first`, `count`, `room` and `parent` 4 each), 28 per member of a container (three slot arrays and four pending arrays, 4 bytes each), and the decoded bytes of every string, key and number. `[0,0,…]` is 2 bytes of input per element and 17 + 28 + 1 = 46 bytes of document, 23 times its size; the arrays grow by doubling, so their capacity is up to twice what is used and the copies they outgrew stay in the arena, about four times 46 bytes per value at worst. A document parsed with `parseRanged` keeps 20 bytes more per value (`valueStart` and `valueEnd` 4 each, `slotKeyStart` and `slotKeyEnd` 4 each per member, and `pendingKeyEnd` 4 per pending member), 66 in all; a document only ever parsed with `parse` never makes the range arrays and the figure is 46, while one that kept ranges before keeps those arrays at the size they grew to. A peer that sends the 16 MiB default `maxTotalBytes` of it could hold some 1.5 GB of a long-lived server's arena. | **Fixed.** `maxValues` caps the values one document holds, `JSON_VALUE_DEFAULT_MAX_VALUES` (262,144: about 12 MB of arrays in use, 48 MB at worst) unless the program sets it, at most `JSON_VALUE_MAX_VALUES` (4,194,304, about 193 MB in use), and one more is `JSON_VALUE_ERR_VALUES` at the byte of the value that does not fit ("values: a fourth is JSON_VALUE_ERR_VALUES at its first byte", "values: a builder past the cap"). The cap bounds the per-value arrays only: a document holds at most `maxValues` × 46 bytes of them (× 66 through `parseRanged`: about 17 MB at the default cap, 69 MB at worst, 277 MB at `JSON_VALUE_MAX_VALUES`), plus the decoded text of its strings, keys and numbers, which is O(input) and bounded by `JsonLimits.maxTotalBytes`, with the same doubling slack. The clamp to `JSON_VALUE_MAX_VALUES` is pinned without building four million values: the check sets the count in use to 2^22 − 1 by hand and holds the next value to `JSON_VALUE_ERR_VALUES` with `maxValues` at 2^31 − 1 ("values: the value at index 2^22 - 1 is made, the one at 2^22 is JSON_VALUE_ERR_VALUES whatever maxValues says"), which fails when the clamp is removed. |
-| JSON-11 | Low | `std/json-value.ts:970` (`index`) | A handle carries a 9-bit generation that moves on at every `parse` and `clear`, so a handle kept across documents names nothing in the next one. The generation has 511 values and moves by one at a `clear`, one at a parse and two at a parse that fails ("stale: a clear bumps the generation by one, a parse by one, a failed parse by two"), so a handle kept across exactly a multiple of 511 of those steps names a value of the current document again. | **Accepted.** Keeping a handle across documents is a program error the module header and the guide forbid; the generation catches it in all but one case of 511, and more generation bits would cap a document at fewer values. "stale: 511 generations later it names the new root, as documented" pins where the check stops. |
-| JSON-9 | Low | `std/json-value.ts:1471` (`append`) | A built container that outgrows its slots moves them to the end of the slot arrays and leaves the old ones unused until `clear` or the next `parse`, so building alternately into many containers holds up to about twice the slots it uses. Parsing does not do this: each container's members are placed once, at its close. | **Accepted.** What a program builds is the program's; the waste is bounded by a constant factor and released by `clear`. |
+| JSON-8 | Low | `std/json-value.ts:1049` (`findKey`) | `get` and `set` find a key by scanning the object's members, so a program that calls `get` once per member of an object the peer sized does work quadratic in that size. The parse itself never scans: its duplicate check sorts. | **Accepted.** It is in the module header and the guide, which say to walk a large object once with `keyAt` and `at`; an index per object would cost every parse an allocation the reuse rule is there to avoid. |
+| JSON-10 | Low | `std/json-value.ts:943` (`newNode`) | A document keeps, for its life, 17 bytes of arrays per value (`kinds` 1, `first`, `count`, `room` and `parent` 4 each), 28 per member of a container (three slot arrays and four pending arrays, 4 bytes each), and the decoded bytes of every string, key and number. `[0,0,…]` is 2 bytes of input per element and 17 + 28 + 1 = 46 bytes of document, 23 times its size; the arrays grow by doubling, so their capacity is up to twice what is used and the copies they outgrew stay in the arena, about four times 46 bytes per value at worst. A document parsed with `parseRanged` keeps 20 bytes more per value (`valueStart` and `valueEnd` 4 each, `slotKeyStart` and `slotKeyEnd` 4 each per member, and `pendingKeyEnd` 4 per pending member), 66 in all; a document only ever parsed with `parse` never makes the range arrays and the figure is 46, while one that kept ranges before keeps those arrays at the size they grew to. A peer that sends the 16 MiB default `maxTotalBytes` of it could hold some 1.5 GB of a long-lived server's arena. | **Fixed.** `maxValues` caps the values one document holds, `JSON_VALUE_DEFAULT_MAX_VALUES` (262,144: about 12 MB of arrays in use, 48 MB at worst) unless the program sets it, at most `JSON_VALUE_MAX_VALUES` (4,194,304, about 193 MB in use), and one more is `JSON_VALUE_ERR_VALUES` at the byte of the value that does not fit ("values: a fourth is JSON_VALUE_ERR_VALUES at its first byte", "values: a builder past the cap"). The cap bounds the per-value arrays only: a document holds at most `maxValues` × 46 bytes of them (× 66 through `parseRanged`: about 17 MB at the default cap, 69 MB at worst, 277 MB at `JSON_VALUE_MAX_VALUES`), plus the decoded text of its strings, keys and numbers, which is O(input) and bounded by `JsonLimits.maxTotalBytes`, with the same doubling slack. The clamp to `JSON_VALUE_MAX_VALUES` is pinned without building four million values: the check sets the count in use to 2^22 − 1 by hand and holds the next value to `JSON_VALUE_ERR_VALUES` with `maxValues` at 2^31 − 1 ("values: the value at index 2^22 - 1 is made, the one at 2^22 is JSON_VALUE_ERR_VALUES whatever maxValues says"), which fails when the clamp is removed. |
+| JSON-11 | Low | `std/json-value.ts:965` (`index`) | A handle carries a 9-bit generation that moves on at every `parse` and `clear`, so a handle kept across documents names nothing in the next one. The generation has 511 values and moves by one at a `clear`, one at a parse and two at a parse that fails ("stale: a clear bumps the generation by one, a parse by one, a failed parse by two"), so a handle kept across exactly a multiple of 511 of those steps names a value of the current document again. | **Accepted.** Keeping a handle across documents is a program error the module header and the guide forbid; the generation catches it in all but one case of 511, and more generation bits would cap a document at fewer values. "stale: 511 generations later it names the new root, as documented" pins where the check stops. |
+| JSON-9 | Low | `std/json-value.ts:1466` (`append`) | A built container that outgrows its slots moves them to the end of the slot arrays and leaves the old ones unused until `clear` or the next `parse`, so building alternately into many containers holds up to about twice the slots it uses. Parsing does not do this: each container's members are placed once, at its close. | **Accepted.** What a program builds is the program's; the waste is bounded by a constant factor and released by `clear`. |
 
 The tree closes JSON-3 for its callers: a repeated key is
-`JSON_VALUE_ERR_DUPLICATE` at `std/json-value.ts:734` (`:770` in `duplicateKeysRanged`), with `errorAt` at
+`JSON_VALUE_ERR_DUPLICATE` at `std/json-value.ts:729` (`:765` in `duplicateKeysRanged`), with `errorAt` at
 the first key that repeats an earlier one, unless the program sets
 `duplicates` to `JSON_VALUE_DUPLICATE_LAST`, which is `JSON.parse`'s reading.
 
@@ -632,7 +632,7 @@ object", "numbers: isIntegral is false on a handle from an earlier parse").
 **Handles.** A handle from before a `parse` or a `clear`, failed parses
 included, reads as no value in every reader and is refused by every builder,
 even when the document was refilled with one of the same shape
-(`std/json-value.ts:970`, `index`, which every public method goes through;
+(`std/json-value.ts:965`, `index`, which every public method goes through;
 "stale: the old root names nothing after a same-size refill" through "stale:
 and after a larger refill", and "stale: a clear bumps the generation by one, a
 parse by one, a failed parse by two"; under Node too, in
@@ -645,7 +645,7 @@ value"). Where the generation wraps is JSON-11.
 
 **Depth and termination.** The parse keeps its own stack of open containers,
 so the tokenizer's depth limit bounds the work and nothing recurses
-(`std/json-value.ts:407`, `parse`, and `:498`, `parseRanged`), and that limit is held to the writer's 64, so a
+(`std/json-value.ts:402`, `parse`, and `:493`, `parseRanged`), and that limit is held to the writer's 64, so a
 document the parse accepts always writes back ("depth: 64 nested arrays parse
 and write back whole", "depth: 65 is the tokenizer's DEPTH at the 65th
 bracket", "depth: 128, the tokenizer's own default, is refused at the same
@@ -653,7 +653,7 @@ bracket").
 
 A value is in at most one container, and adding
 one already in a container, a container to itself, or a container to anything
-inside it is `JSON_VALUE_ERR_ATTACHED` (`std/json-value.ts:1447`, `adoptable`;
+inside it is `JSON_VALUE_ERR_ATTACHED` (`std/json-value.ts:1442`, `adoptable`;
 "builders: push of an array into itself", "builders: push of the root into its
 own grandchild", "builders: set of an object on itself"), so a tree is finite.
 
@@ -687,7 +687,7 @@ std/json.ts compiled as a root is an ordinary module, so JsonWriter.f64 calls
 its walk and not the kernel").
 
 **The sort is n log n.** An object of more than eight members is checked by a
-bottom-up merge sort of its keys (`std/json-value.ts:800`, `sortPending`, and `:844`, `sortPendingRanged`), so no choice of
+bottom-up merge sort of its keys (`std/json-value.ts:795`, `sortPending`, and `:839`, `sortPendingRanged`), so no choice of
 keys makes the check quadratic, as a hash table's collisions could.
 
 **The arena.** Values read back whole after `churn()` has reused whatever a
@@ -704,7 +704,7 @@ document's bytes exactly as `key` and `string` escape a string of them
 and stringBytes as key and string write it"; `tests/link/std_json_writer`,
 "bytes: every byte value, minified, as string and key write it" and the lines
 after it). A window outside its array is `JSON_WRITE_BAD_WINDOW` before
-anything is written (`std/json.ts:1102`, `:1141`; "bytes: a
+anything is written (`std/json.ts:1098`, `:1137`; "bytes: a
 negative offset" through "bytes: keyBytes refuses a negative offset").
 
 ### Tests

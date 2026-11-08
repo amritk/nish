@@ -394,6 +394,28 @@ const firstSentence = (para) => {
   return flat
 }
 
+/** A list item's first line: its marker and the space after it. */
+const listMarker = /^\s*(?:[-*+]|\d+[.)]) /
+
+/**
+ * A paragraph's lines joined into one, each list item on a line of its own. A
+ * line that opens with `- ` or `1. ` is an item only where a list can be: as
+ * the paragraph's first line, after a line ending in a colon, or after another
+ * item. Elsewhere it is prose that wrapped there (`... costs\n- 1 ...`), and
+ * joins with a space.
+ */
+const joinLines = (para) => {
+  let inList = false
+  let out = ""
+  for (const [i, raw] of para.split("\n").entries()) {
+    const line = raw.trim()
+    const item = listMarker.test(line) && (i === 0 || inList || out.endsWith(":"))
+    inList = item || (inList && !listMarker.test(line) && line !== "")
+    out = i === 0 ? line : `${out}${item ? "<br>" : " "}${line}`
+  }
+  return out.trim()
+}
+
 /**
  * Markdown on one line, for a table cell: a code block's lines become code
  * spans, and each list item starts a line of its own.
@@ -408,14 +430,43 @@ const cell = (md) =>
         .join("<br>")
     )
     .split(/\n\s*\n/)
-    .map((para) =>
-      para
-        .replace(/\s*\n\s*((?:[-*+]|\d+[.)]) )/g, "<br>$1")
-        .replace(/\s*\n\s*/g, " ")
-        .trim()
-    )
+    .map(joinLines)
     .join("<br><br>")
     .replace(/\|/g, "\\|")
+
+/**
+ * What `cell` must make of a doc comment's lists, checked on every run: a
+ * paragraph that opens with a list, a list after a colon, and prose that
+ * wrapped onto a line opening with `- `.
+ */
+const CELL_CASES = [
+  ["- a\n- b\n- c", "- a<br>- b<br>- c"],
+  ["Values:\n- a\n- b", "Values:<br>- a<br>- b"],
+  ["costs\n- 1 more than", "costs - 1 more than"],
+  ["- a\n  continued\n- b", "- a continued<br>- b"],
+  ["1. x\n2. y", "1. x<br>2. y"],
+  ["- a", "- a"],
+]
+
+/**
+ * Section bodies and the lead `leadOf` gives each: a list item's unindented
+ * continuation keeps the list going, so later items stay out of the lead.
+ */
+const LEAD_CASES = [["- a\ncont\n- b\n- c", "a cont"]]
+
+/**
+ * Each `CELL_CASES` input whose cell, and each `LEAD_CASES` input whose lead,
+ * is not the one expected, as a problem.
+ */
+const cellCaseProblems = () => [
+  ...CELL_CASES.filter(([md, want]) => cell(md) !== want).map(
+    ([md, want]) => `cell(${JSON.stringify(md)}) is ${JSON.stringify(cell(md))}, not ${JSON.stringify(want)}`
+  ),
+  ...LEAD_CASES.filter(([md, want]) => leadOf(md.split("\n")) !== want).map(
+    ([md, want]) =>
+      `leadOf(${JSON.stringify(md)}) is ${JSON.stringify(leadOf(md.split("\n")))}, not ${JSON.stringify(want)}`
+  ),
+]
 
 /** The one icon of each kind of entry a page shows as a card. */
 const ICONS = {
@@ -1401,6 +1452,11 @@ const configText = (text, pages) => {
   // does not name keeps its place after them.
   const after = ["/standard-library", "/run-under-node", "/install", "/benchmarks", "/changelog"]
   const written = Object.keys(reference.children).filter((k) => !(k in made))
+  if (!written.includes("/standard-library")) {
+    throw new Error(
+      `${configFile}: /reference has no /standard-library route, the overview the library reference sits beside`
+    )
+  }
   const keys = [
     ...Object.keys(made),
     ...after.filter((k) => written.includes(k)),
@@ -1595,31 +1651,75 @@ const renderLanguage = (link) => {
   return out
 }
 
-/** A section's first sentence, for its card: its first paragraph of prose, links dropped. */
+/**
+ * A section's first sentence, for its card, links dropped: its first paragraph
+ * of prose, or, when the section opens with a list, its first item with the
+ * item's bold lead unmarked. A list item's continuation lines, indented or
+ * not, are the item's, never a paragraph of their own. As in `joinLines`, a
+ * line opening with `- ` or `1. ` inside prose starts a list only after a
+ * colon; elsewhere it is prose that wrapped there.
+ */
 const languageLead = (part) => {
   const { lines } = languageParts()
+  return leadOf(lines.slice(part.from + 1, part.to))
+}
+
+/** `languageLead` of a section's lines, its heading left out. */
+const leadOf = (lines) => {
   const para = []
   let inFence = false
-  for (const line of lines.slice(part.from + 1, part.to)) {
+  let inItem = false
+  let opened = false
+  for (const line of lines) {
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence
+      opened = true
       continue
     }
-    if (inFence || /^#/.test(line) || /^\s*[-*|>]/.test(line)) {
+    if (inFence) {
+      continue
+    }
+    if (listMarker.test(line)) {
+      if (para.length > 0 && !inItem && !para.at(-1).endsWith(":")) {
+        para.push(line.trim())
+        opened = true
+        continue
+      }
       if (para.length > 0) {
         break
       }
+      if (!opened) {
+        para.push(line.replace(listMarker, "").trim())
+      }
+      inItem = true
+      opened = true
       continue
     }
+    if (inItem && line.trim() !== "" && !/^\s*[#|>]/.test(line)) {
+      if (para.length > 0) {
+        para.push(line.trim())
+      }
+      continue
+    }
+    inItem = false
     if (line.trim() === "") {
       if (para.length > 0) {
         break
       }
       continue
     }
+    if (/^#/.test(line) || /^\s*[|>]/.test(line)) {
+      if (para.length > 0) {
+        break
+      }
+      opened = true
+      continue
+    }
     para.push(line.trim())
+    opened = true
   }
-  return firstSentence(para.join(" ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1"))
+  const lead = para.join(" ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+  return firstSentence(lead.replace(/^\*\*([\s\S]*?)\*\*/, "$1"))
 }
 
 // ---- The compiler reference -----------------------------------------------
@@ -2171,6 +2271,13 @@ const main = async () => {
       `gen-reference: ${unknown.length > 0 ? `unknown argument ${unknown.join(" ")}` : "--check writes nothing"}; the flags are --check, --update-baseline or --grow-baseline`
     )
     process.exit(2)
+  }
+  const cellProblems = cellCaseProblems()
+  if (cellProblems.length > 0) {
+    for (const p of cellProblems) {
+      console.error(`gen-reference: ${p}`)
+    }
+    process.exit(1)
   }
   const { project, gaps } = await readProject()
   // The baseline only shrinks: --update-baseline drops lines and refuses to
