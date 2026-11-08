@@ -699,13 +699,15 @@ or a table every task reads.
 **Loose ends.** A binary whose program spawns nothing has no `nish_async`
 symbol: `build.sh` links `runtime-async.c` only when the IR declares one, and
 `tests/run.js` checks it. `tests/nish-cmp.js` compiles the corpus with the
-seed, which does not know a construct the release after it ships: the 0.36.0
-seed refuses every program that imports `sleep` from `nish:async`. Such a
-program is not skipped. `compare` reports it as an `exit` difference
-("the candidate compiles it and the reference refuses it"), and today the
-last `DECLARED` entry, which names no program and no file, covers it, so the
-async programs are not compared until the next release's seed compiles
-them.
+seed, which does not know what the release after it ships: the 0.37.0 seed
+refuses an object or function argument to `spawn`. Such a program is not
+skipped. `compare` reports it as an `exit` difference ("the candidate
+compiles it and the reference refuses it"), and three `DECLARED` entries,
+one per program and each naming only that `exit` surface, cover
+`async_spawn_fn_arg`, `async_spawn_shared` and
+`tests/link/async_spawn_shared_outlives`. They name this release's note
+("a spawned task may reach the objects its spawner owns") and go at the
+reseed that ships it, when the seed compiles them and they match nothing.
 
 ## Not in this work package
 
