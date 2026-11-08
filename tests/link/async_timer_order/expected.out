@@ -1,0 +1,6 @@
+reader
+zero (0 ms)
+soon (10 ms)
+soon again (10 ms)
+middle (25 ms)
+late (40 ms)

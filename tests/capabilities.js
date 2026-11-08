@@ -131,14 +131,18 @@ const accepted = new Set([
 // exception is `nish:async`: `spawn` and `awaitAll` are operators on a direct
 // async call, which `src/async-check.ts` holds, not builtins a value or the
 // capability walk could reach. What such a call does is its callee's, so they
-// carry no row; the check is that the list is exactly those two.
+// carry no row. Its waits, `sleep`, `readable` and `writable`, park the task on
+// the executor: a timer, or the readiness of a descriptor some other builtin
+// opened under its own label, and they read no byte of it, so they carry no
+// row either. The check is that the list is exactly those five.
+const ASYNC_EXPORTS = "spawn, awaitAll, sleep, readable, writable"
 const moduleExports = declaration(modules, "nishModuleExports", "nish-modules.ts")
 const asyncList = /ASYNC_SPECIFIER\) \{\s*return "([^"]+)"/.exec(moduleExports)
 if (asyncList === null) {
   problems.push("nish-modules.ts: no `nish:async` export list to read in `nishModuleExports`")
-} else if (asyncList[1] !== "spawn, awaitAll") {
+} else if (asyncList[1] !== ASYNC_EXPORTS) {
   problems.push(
-    `nish-modules.ts: \`nish:async\` exports \`${asyncList[1]}\`, not the operators \`spawn, awaitAll\` this check knows`
+    `nish-modules.ts: \`nish:async\` exports \`${asyncList[1]}\`, not the operators and waits \`${ASYNC_EXPORTS}\` this check knows`
   )
 }
 const exportLists = [...moduleExports.matchAll(/return "([^"]+)"/g)].filter(

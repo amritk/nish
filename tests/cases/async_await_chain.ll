@@ -250,7 +250,7 @@ async.poll:
   br i1 %2, label %async.done, label %async.wait
 
 async.wait:
-  %3 = call i1 @nish.async.step()
+  %3 = call i1 @nish.async.run()
   br i1 %3, label %async.poll, label %async.stuck
 
 async.stuck:
@@ -277,88 +277,52 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !3 = !{i32 8, !"sign-return-address", i32 1}
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 
-@nish.async.head = internal global i8* null, align 8
-@nish.async.tail = internal global i8* null, align 8
+declare i8* @nish_async_next()
+declare i8* @nish_async_enter(i8* nonnull)
+declare void @nish_async_leave(i8* nonnull, i8*)
+declare void @nish_async_done(i8* nonnull)
 
-declare void @free(i8*)
-
-define hidden void @nish.async.enqueue(i8* %node) nounwind "probe-stack"="inline-asm" {
+define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
 entry:
-  %link = bitcast i8* %node to i8**
-  store i8* null, i8** %link, align 8
-  %tail = load i8*, i8** @nish.async.tail, align 8
-  %empty = icmp eq i8* %tail, null
-  br i1 %empty, label %first, label %append
-
-first:
-  store i8* %node, i8** @nish.async.head, align 8
-  br label %done
-
-append:
-  %prev = bitcast i8* %tail to i8**
-  store i8* %node, i8** %prev, align 8
-  br label %done
-
-done:
-  store i8* %node, i8** @nish.async.tail, align 8
-  ret void
-}
-
-define hidden i1 @nish.async.step() nounwind "probe-stack"="inline-asm" {
-entry:
-  %first = load i8*, i8** @nish.async.head, align 8
-  store i8* null, i8** @nish.async.head, align 8
-  store i8* null, i8** @nish.async.tail, align 8
   br label %loop
 
 loop:
-  %node = phi i8* [ %first, %entry ], [ %next, %advance ]
-  %progress = phi i1 [ false, %entry ], [ %progress.next, %advance ]
-  %more = icmp ne i8* %node, null
-  br i1 %more, label %run, label %out
+  %node = call i8* @nish_async_next()
+  %idle = icmp eq i8* %node, null
+  br i1 %idle, label %idle.out, label %got
 
-run:
-  %link = bitcast i8* %node to i8**
-  %next = load i8*, i8** %link, align 8
+idle.out:
+  ret i1 false
+
+got:
   %kind.at = getelementptr inbounds i8, i8* %node, i64 8
   %kind.ptr = bitcast i8* %kind.at to i32*
   %kind = load i32, i32* %kind.ptr, align 8
-  %frame = getelementptr inbounds i8, i8* %node, i64 16
+  %main = icmp slt i32 %kind, 0
+  br i1 %main, label %main.out, label %task
+
+main.out:
+  ret i1 true
+
+task:
+  %prev = call i8* @nish_async_enter(i8* %node)
+  %frame = getelementptr inbounds i8, i8* %node, i64 32
   %finished = call i1 @nish.async.resume(i32 %kind, i8* %frame)
-  br i1 %finished, label %release, label %again
+  call void @nish_async_leave(i8* %node, i8* %prev)
+  br i1 %finished, label %release, label %loop
 
 release:
-  call void @free(i8* %node)
-  br label %advance
-
-again:
-  call void @nish.async.enqueue(i8* %node)
-  br label %advance
-
-advance:
-  %progress.next = or i1 %progress, %finished
+  call void @nish_async_done(i8* %node)
   br label %loop
-
-out:
-  ret i1 %progress
 }
 
 define hidden void @nish.async.drain() nounwind "probe-stack"="inline-asm" {
 entry:
-  br label %check
+  br label %loop
 
-check:
-  %head = load i8*, i8** @nish.async.head, align 8
-  %empty = icmp eq i8* %head, null
-  br i1 %empty, label %done, label %step
-
-step:
-  %progress = call i1 @nish.async.step()
-  br i1 %progress, label %check, label %stuck
-
-stuck:
-  call void @llvm.trap()
-  unreachable
+loop:
+  %woke = call i1 @nish.async.run()
+  br i1 %woke, label %loop, label %done
 
 done:
   ret void

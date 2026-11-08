@@ -1,0 +1,4 @@
+reader: -11 before the wait
+main: readable(-1) false
+writer: writable true, wrote 2
+reader: readable true, 2 bytes, 104 105
