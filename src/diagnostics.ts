@@ -66,7 +66,7 @@
 
 import { SGR_CYAN, SGR_RED, SGR_YELLOW, Style } from "../std/cli"
 import { codeFor } from "./codes"
-import { compareStrings, jsonQuote, StringBuilder } from "./strings"
+import { compareStrings, jsonQuote, splitByte, StringBuilder } from "./strings"
 import { StringMap } from "./map"
 
 const CH_LF: i32 = 10
@@ -753,26 +753,22 @@ const boldColour = (style: Style, text: string, codes: string): string => {
  * its backticks included. An unpaired backtick leaves the rest bold.
  */
 const paintText = (style: Style, text: string): string => {
+  // Split on the backtick, an odd part is quoted when a later part closes it;
+  // the plain parts between two names are joined into one bold run.
+  const parts = splitByte(text, CH_BACKTICK)
   const out = new StringBuilder()
-  let from = 0
-  let i = 0
-  while (i < text.length) {
-    if (text.charCodeAt(i) === CH_BACKTICK) {
-      let close = i + 1
-      while (close < text.length && text.charCodeAt(close) !== CH_BACKTICK) {
-        close = close + 1
-      }
-      if (close < text.length) {
-        out.add(style.bold(text.substring(from, i)))
-        out.add(boldColour(style, text.substring(i, close + 1), SGR_CYAN))
-        from = close + 1
-        i = close
-      } else {
-        i = text.length
-      }
+  let run = ""
+  let k = 0
+  for (const part of parts) {
+    if (k % 2 === 1 && k < parts.length - 1) {
+      out.add(style.bold(run))
+      out.add(boldColour(style, `\`${part}\``, SGR_CYAN))
+      run = ""
+    } else {
+      run = k % 2 === 1 ? `${run}\`${part}` : `${run}${part}`
     }
-    i = i + 1
+    k = k + 1
   }
-  out.add(style.bold(text.substring(from, text.length)))
+  out.add(style.bold(run))
   return out.toText()
 }
