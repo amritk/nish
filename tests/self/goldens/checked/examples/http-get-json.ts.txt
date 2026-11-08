@@ -2440,13 +2440,13 @@ function httpClientBodyAsync(conn: HttpClientConn, res: FetchResponse, limit: i6
   pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0
   pointer res: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -36:7 buf: u8[] (let)
-  local -35:7 len: i32 (let)
-  local -34:7 event: i32 (let)
-  callee -34:26 httpClientPumpAsync -> @nish.httpClientPumpAsync
-  local -28:13 take: i32 (const)
-  local -27:13 need: i64 (const)
-  callee -21:9 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local -39:7 buf: u8[] (let)
+  local -38:7 len: i32 (let)
+  local -37:7 event: i32 (let)
+  callee -37:26 httpClientPumpAsync -> @nish.httpClientPumpAsync
+  local -31:13 take: i32 (const)
+  local -30:13 need: i64 (const)
+  callee -24:9 HttpClientFault.fail -> @nish.HttpClientFault.fail
   local -17:13 room: i64 (let)
   local -10:15 grown: u8[] (const)
   callee -9:9 copyBytes -> @nish.copyBytes
