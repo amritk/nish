@@ -14166,14 +14166,18 @@ if (dealtHere("runtimeChecks")) {
       fs.mkdirSync(asyncDir, { recursive: true })
       const asyncSymbols = (source) => {
         const exe = path.join(asyncDir, path.basename(source, ".ts"))
-        const r = spawnSync(NISH, [source, "-o", `${asyncDir}${path.sep}`, "--link", exe], {
+        // -g keeps the symbol table a plain link strips.
+        const r = spawnSync(NISH, ["-g", source, "-o", `${asyncDir}${path.sep}`, "--link", exe], {
           cwd: root,
           encoding: "utf8",
         })
         if (r.status !== 0) return { ok: false, detail: r.stderr, names: [] }
         const listed = spawnSync(nm, [exe], { encoding: "utf8" })
-        const names = listed.stdout.split("\n").filter((line) => line.includes("nish_async"))
-        return { ok: listed.status === 0, detail: listed.stderr, names }
+        const lines = listed.stdout.split("\n")
+        const names = lines.filter((line) => line.includes("nish_async"))
+        // A binary with no symbols at all would pass the negative check vacuously.
+        const read = listed.status === 0 && lines.some((line) => line.endsWith(" main"))
+        return { ok: read, detail: listed.stderr + (read ? "" : listed.stdout), names }
       }
       const plain = asyncSymbols("examples/hello.ts")
       check(
