@@ -251,6 +251,48 @@ misses a request turned into 0.66 read misses, and a read miss stalls the
 parse where a write miss can drain from the store buffer. That is a likely
 cause, not a measured one. On arm the two differ by 1%.
 
+### aarch64, wall clock and hardware counters
+
+GitHub's `ubuntu-24.04-arm` runner, 4 cores (the CPU model is not reported),
+Linux 7.0.0-1017-azure, `nish:simd` lowered to NEON, pinned to core 1, from
+the stages workflow on the runner branch. ns per request, median (min–max)
+over 15 rounds. Each base column is the `old` of its run, and `cut` is the
+`new` of the v0.35.0 run:
+
+| stage | v0.34.1 | v0.35.0 | main `17275317` | cut |
+| --- | ---: | ---: | ---: | ---: |
+| recv | 43.7 (43.2–46.0) | 49.4 (46.5–50.3) | 50.3 (46.6–52.3) | 50.0 (48.1–52.3) |
+| parse | 469.1 (468.6–469.8) | 474.3 (473.7–475.5) | 474.3 (473.4–476.2) | 314.5 (313.6–316.5) |
+| dispatch | 16.8 (16.1–17.2) | 16.9 (16.0–18.1) | 17.0 (16.7–17.4) | 16.1 (15.2–18.5) |
+| respond | 80.7 (80.4–81.4) | 87.1 (86.1–87.6) | 87.1 (86.2–87.6) | 90.3 (88.7–91.9) |
+| sendBody | 47.4 (47.0–47.8) | 64.9 (30.4–69.7) | 66.2 (30.5–72.2) | 70.8 (2.1–105.6) |
+| park | 7.4 (7.0–7.5) | 4.7 (4.5–5.7) | 4.7 (4.6–5.7) | 4.6 (4.0–5.8) |
+| total | 665.3 (663.3–667.1) | 696.9 (660.6–705.0) | 697.5 (663.7–707.8) | 545.8 (481.4–578.8) |
+| clock read | 31.1 | 31.1 | 31.1 | 31.2 |
+| `sendmsg` (kernel) | — | 674.2 | 674.7 | 669.3 |
+
+Parse is 0.663 of v0.35.0 here, against `old′`'s 1.001, a larger cut than on
+x86. The scans it replaces were a 64-bit word trick (the line's end) and a
+byte loop (the target).
+Respond is 1.037 of v0.35.0 with the ranges apart (`old′` 0.996). The cuts
+do not touch `respond`, so this is likely code layout; it is recorded, not
+explained. An earlier arm run, before the cuts, built the same std twice and
+put respond at 1.001.
+
+`node bench/http1-conn/counters.mjs` (`perf stat`, user mode, 7 rounds),
+per request, median (min–max):
+
+| build | cycles | instructions | L1D load misses | `ll_cache_miss_rd` |
+| --- | ---: | ---: | ---: | ---: |
+| v0.34.1 | 3,175 (3,169–3,180) | 8,553 | 8.50 (6.33–12.45) | 0.00 |
+| v0.35.0 | 3,364 (3,349–3,379) | 8,352 | 11.24 (6.27–22.18) | 0.00 |
+| main | 3,361 (3,351–3,398) | 8,352 | 12.36 (4.96–15.90) | 0.00 |
+| cut | 2,818 (2,813–2,855) | 6,812 | 8.57 (6.81–26.24) | 0.00 |
+
+The cut takes 1,540 instructions and 546 cycles a request off v0.35.0 on
+arm. The L1D miss ranges overlap; last-level misses are 0, as cachegrind
+counts on x86.
+
 ### The cuts
 
 Each is a `perf(net)` commit, measured by the deterministic cachegrind Ir
@@ -275,14 +317,21 @@ Tried and dropped, each against the tree it would have landed on:
 - **`EndOfHead` found by a `switch` on the byte after `\r\n`**: −45 Ir,
   inside the noise.
 
-Still above 0.5 µs: no single stage is. Parse, the largest, is ~312 ns on
-x86 (cut) and the whole library path ~590 ns, of which sendBody and respond
-are the copy and the response head. What is left in parse past the scans:
-the OWS trims (~220 Ir), `http1HeadIs`'s length check (92),
-`http1BytesAreToken` (74) and `http1MethodOverrun` (22).
+What is above 0.5 µs now: no single stage. Parse, the largest, is ~312 ns
+on x86 and ~315 ns on arm. The whole library path is ~590 ns on x86 and
+~546 ns on arm. What is left in parse past the scans: the OWS trims (~220
+Ir), `http1HeadIs`'s length check (92), `http1BytesAreToken` (74) and `http1MethodOverrun` (22).
 
 ### Idle RSS per connection
 
 `--shape rss`, peak RSS per idle connection at 10,000, median (min–max) of
 5 runs: v0.34.1 1,026 bytes, v0.35.0 1,036 (1,034–1,038), main 1,036, cut
 1,034 (1,034–1,035). The cuts allocate nothing.
+
+### The public API
+
+The cuts change no exported name or signature. As a check, the challenge
+server (`bench/http1-e2e/run.sh`'s `S` arm, built with this tree's
+`build/nish`) ran one short loadgen round on the full seed (500,000
+articles): `USERS=2000 RAMP=10 MEASURE=30 SKIP=5`, 60,006 requests, 0
+errors, 30,435 ns on-CPU per request (10,063 user).
