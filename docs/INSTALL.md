@@ -261,7 +261,7 @@ routes are
   # in the glibc container, where build/nish runs
   build/nish app.ts -o app.ll
   # on the musl host, with its own clang and the runtime from this repository
-  clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
+  clang app.ll runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c runtime/runtime-parallel.c \
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
     runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
     runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
@@ -416,19 +416,20 @@ any working directory — and the binary runs from inside its own platform
 package for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is sixteen files:
+on the `clang` line, and it is seventeen files:
 
 ```bash
-clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
+clang app.ll runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c runtime/runtime-parallel.c \
   runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
   runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
   runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
   runtime/runtime-shm.c runtime/runtime-region.c -lm -o app
 ```
 
-`runtime.c` is the part every program touches — the arena, strings, arrays,
-number formatting, the panics — and `runtime-os.c` wraps the system calls:
-files, directories, subprocesses, `getenv`, the monotonic clock.
+`runtime.c` is the part every program touches — the arena, arrays, the
+panics — `runtime-text.c` holds strings and number formatting, and
+`runtime-os.c` wraps the system calls: files, directories, subprocesses,
+`getenv`, the monotonic clock.
 
 `runtime-parallel.c` divides work across threads for `nish/threads` (a program
 built with `--threads`, as every importer of `nish/threads` is, also needs

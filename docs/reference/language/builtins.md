@@ -557,7 +557,8 @@ that caller. This builtin is the store that stays (#385).
   runtime, so by the rule [Builtin modules](#builtin-modules-nish) sets it may
   be imported, but no module exports it yet. It works under the wasi profile,
   which links `runtime.c`; a freestanding wasm module has no `nish_wipe`:
-  it links `runtime-wasm.c`, which supplies only the arena, and, when it uses
+  it links `runtime-wasm.c`, which supplies the arena, arrays, the panics and
+  `floor`/`ceil`/`trunc` but no wipe, and, when it uses
   strings, `runtime-text.c`, which has the strings and the digits but not the
   wipe.
 

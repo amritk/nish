@@ -619,7 +619,7 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   `--export-all` (`scripts/build.sh`), which exports, and so keeps, every
   `runtime-text.c` function the link pulls in: there a string program keeps
   `nish_f64_format` and its table though it formats no `f64`. The `i32`-only
-  template measured 14,514 bytes under `--profile wasm` against 1,085 under
+  template measured 14,514 bytes under `--profile wasm` against 1,111 under
   `wasm-host` (the full `label.ts`: 14,590 against 13,046). A page that cares
   about size builds with `wasm-host`; `wasm` is the profile that answers every
   symbol for a hand-written loader.

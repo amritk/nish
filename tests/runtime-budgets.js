@@ -888,7 +888,8 @@ export const RUNTIME_BUDGETS = [
  * `i32` and an `f64` links runtime-text.c beside runtime-wasm.c. Of its 13,046 bytes,
  * 10,296 are the shortest-f64 printer's power-of-ten table (the data section) and the
  * code is 2,502; the same template with only the `i32` links to 1,111 bytes, because
- * `--gc-sections` drops the printer and its table.
+ * `--gc-sections` drops the printer and its table. Its loader is 3,556 bytes (gzip
+ * 1,483, brotli 1,302): 28 of them the `ignoreBOM` option that keeps a leading U+FEFF.
  */
 export const WASM_HOST_SIZE_BUDGETS = [
   {
@@ -916,7 +917,7 @@ export const WASM_HOST_SIZE_BUDGETS = [
     src: "examples/label.ts",
     runtime: true,
     wasm: [13046, 11786, 11297],
-    loader: [3528, 1462, 1277],
+    loader: [3556, 1483, 1302],
     inline: [44371, 15639, 13682],
   },
 ]
@@ -960,7 +961,7 @@ export const WASM_PLAIN_DIGESTS = [
     // its .d.ts carries the string header, which a program with no string in a signature does not.
     src: "examples/label.ts",
     dts: "2908a99c7f6fbfdb2f974459751e1ef424fc31651f3d90905199af43572f7458",
-    loader: "f4b30752f31bfaa6629f92a09f4f73c6a2623a64a2e2d015e5eb71ed5627d51a",
+    loader: "8c8c983e487e7fce8d39053ce902bf0ad83851e4263f5f177de7438bb25c755b",
     wasm: "b0154ccf6e275cc7beb7dac812784c47bcf5ee2d54aaa82d3fc9b3142e7c3578",
     host: "ef8d59319dfcc282e9db6017e616dc07c6c65c913f388d00bdc9e0fe83a0b65f",
   },

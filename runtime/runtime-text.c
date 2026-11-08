@@ -46,7 +46,7 @@ void *nish_alloc_struct(uint64_t size);
    it, as it did while strings lived in runtime.c. Behind a call the LTO link
    does inline the allocator, but too late: `a + b` was then too big to inline
    into the program, and strbuild ran 15% more instructions. The arena's layout
-   is ABI (nish.h), so the copy cannot drift silently. An ASan build keeps the
+   is ABI (nish.h), and the asserts below hold the copy to it. An ASan build keeps the
    call, whose `nish_asan_alloc` poisons the rounding; a wasm build has its own
    allocator, runtime-wasm.c's; and an -Os or -Oz build keeps the call too, since
    the two inlined copies cost 41 bytes the size profile and this file's budget
@@ -57,6 +57,12 @@ void *nish_alloc_struct(uint64_t size);
 #define NISH_TEXT_TLS
 #endif
 struct nish_arena { char *buf; uint64_t off; uint64_t cap; void *chunks; };
+/* A copy of runtime.c's definition, which asserts the same four facts: a layout
+   that drifted from it would bump the wrong field and corrupt the heap. */
+_Static_assert(sizeof(struct nish_arena) == 32, "runtime.c's struct nish_arena: four 8-byte fields");
+_Static_assert(offsetof(struct nish_arena, off) == 8, "runtime.c's struct nish_arena: off second");
+_Static_assert(offsetof(struct nish_arena, cap) == 16, "runtime.c's struct nish_arena: cap third");
+_Static_assert(offsetof(struct nish_arena, chunks) == 24, "runtime.c's struct nish_arena: chunks last");
 extern NISH_TEXT_TLS struct nish_arena nish_arena;
 void *nish_arena_grow(uint64_t size);
 static inline void *nish_text_alloc(uint64_t size) {
@@ -839,9 +845,6 @@ static const uint64_t NISH_POW10_SIG[617][2] = {
   { 0xfcf62c1dee382c42u, 0x46729e03dd9ed7b5u },
 };
 
-/* The high 128 bits of the 192-bit product of `x_hi:x_lo` and `y`, dropping
-   the low word's carry exactly as upstream does: the table rounds down, and
-   the error that leaves is what the `+6` below absorbs. */
 /* The 128-bit product of `x` and `y`: the low half returned, the high in
    `*hi`. A 64-bit target has the one instruction for it. wasm32 has none, and
    `__uint128_t` there is a call to compiler-rt's `__multi3`, which a
@@ -861,6 +864,9 @@ static uint64_t nish_umul128(uint64_t x, uint64_t y, uint64_t *hi) {
 #endif
 }
 
+/* The high 128 bits of the 192-bit product of `x_hi:x_lo` and `y`, dropping
+   the low word's carry exactly as upstream does: the table rounds down, and
+   the error that leaves is what the `+6` below absorbs. */
 static void nish_umul192_hi128(uint64_t x_hi, uint64_t x_lo, uint64_t y,
                                uint64_t *hi, uint64_t *lo) {
   uint64_t p_hi, p_lo = nish_umul128(x_hi, y, &p_hi), q_hi;

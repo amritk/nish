@@ -1143,8 +1143,9 @@ export const generateWasmLoader = (
     lines.push("  };")
     if (returnsText(bridge.bridged)) {
       // WP50 S4: `{ i64 len, data[] }`; read before `guarded` or `scoped`
-      // releases the mark the bytes were allocated under.
-      lines.push("  const decoder = new TextDecoder();")
+      // releases the mark the bytes were allocated under. `ignoreBOM` keeps a
+      // leading U+FEFF, which a default decoder strips as a byte-order mark.
+      lines.push('  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });')
       lines.push("  /** Decode a string result out of the arena as a JS string. */")
       lines.push("  const stringOut = (p) => {")
       lines.push("    const n = Number(new DataView(memory.buffer).getBigUint64(p >>> 0, true));")
@@ -1352,9 +1353,10 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
   }
   if (hostsTakeText(hosts)) {
     // WP50 S4 (§7): one decoder for the load; a view past the end of memory
-    // is a RangeError, and bytes that are not UTF-8 decode as U+FFFD.
+    // is a RangeError, bytes that are not UTF-8 decode as U+FFFD, and a
+    // leading U+FEFF is the string's own (`ignoreBOM`).
     lines.push("  /** A string the module passed: its bytes' address and count, as UTF-8. */")
-    lines.push("  const decoder = new TextDecoder();")
+    lines.push('  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });')
     lines.push("  const text = (p, n) => {")
     lines.push(
       '    if (state.memory === null) throw new Error("a host import was passed a string before the module finished loading");'

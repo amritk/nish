@@ -44,3 +44,14 @@ export const readBack = (n: i32): string => {
   const text = textRead(INBOX, n)
   return text === null ? "refused" : `[${text}]`
 }
+
+// A leading U+FEFF is text, not a byte-order mark: the loader keeps it both ways.
+export const bom = (): string => {
+  say("\u{FEFF}A")
+  return "\u{FEFF}A"
+}
+
+// A -1 offset passes through every writer; the end of the buffer takes only
+// the empty text, and past it nothing.
+export const chained = (): string =>
+  `${textWrite(OUTBOX, -1, "a")} ${textWriteInt(OUTBOX, -1, toI64(1))} ${textWriteF64(OUTBOX, -1, 1.5)} ${textWrite(OUTBOX, 16, "")} ${textWrite(OUTBOX, 16, "a")} ${textWrite(OUTBOX, 17, "")}`

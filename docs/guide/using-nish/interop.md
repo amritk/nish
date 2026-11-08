@@ -418,6 +418,7 @@ export function echo(n: i32): i32 {
 const app = loadSync(bytes);
 const n = new TextEncoder().encodeInto("héllo", app.views().storage.INBOX).written;
 const end = app.echo(n);
+if (end === -1) throw new Error("echo: the text did not fit"); // subarray(0, -1) would read the rest
 new TextDecoder().decode(app.views().storage.OUTBOX.subarray(0, end)); // "héllo6"
 ```
 

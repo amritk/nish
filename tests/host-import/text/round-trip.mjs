@@ -37,3 +37,6 @@ console.log(`readBack ${show(m.readBack(w))} ${show(m.readBack(33))} ${show(m.re
 const big = new TextEncoder().encodeInto("x".repeat(20), storage.INBOX).written
 const kept = storage.OUTBOX.slice()
 console.log(`echo overflow ${m.echo(big)} untouched ${kept.every((b, i) => storage.OUTBOX[i] === b)}`)
+console.log(`bom ${show(m.bom())}`)
+const settled = storage.OUTBOX.slice()
+console.log(`chained ${m.chained()} untouched ${settled.every((b, i) => storage.OUTBOX[i] === b)}`)

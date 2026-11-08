@@ -466,22 +466,22 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   callee +68:20 guardLoader -> @guardLoader
   callee +98:62 refused -> @refused
   callee +119:9 returnsText -> @returnsText
-  callee +145:5 pushAll -> @pushAll
-  callee +145:20 wasmResultHelpers -> @wasmResultHelpers
   callee +146:5 pushAll -> @pushAll
-  callee +146:20 wasmRangeHelper -> @wasmRangeHelper
-  callee +148:7 pushAll -> @pushAll
-  callee +148:22 layoutLoader -> @layoutLoader
-  callee +155:5 pushAll -> @pushAll
-  callee +155:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +146:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +147:5 pushAll -> @pushAll
+  callee +147:20 wasmRangeHelper -> @wasmRangeHelper
+  callee +149:7 pushAll -> @pushAll
+  callee +149:22 layoutLoader -> @layoutLoader
   callee +156:5 pushAll -> @pushAll
-  callee +156:20 wasmRangeHelper -> @wasmRangeHelper
-  callee +158:7 pushAll -> @pushAll
-  callee +158:22 layoutLoader -> @layoutLoader
-  local +167:14 fn: ExternalFunction (const)
-  callee +168:16 tsSignatureLine -> @tsSignatureLine
-  local +169:16 line: string (const)
-  callee +169:24 wasmWrapper -> @wasmWrapper
+  callee +156:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +157:5 pushAll -> @pushAll
+  callee +157:20 wasmRangeHelper -> @wasmRangeHelper
+  callee +159:7 pushAll -> @pushAll
+  callee +159:22 layoutLoader -> @layoutLoader
+  local +168:14 fn: ExternalFunction (const)
+  callee +169:16 tsSignatureLine -> @tsSignatureLine
+  local +170:16 line: string (const)
+  callee +170:24 wasmWrapper -> @wasmWrapper
 function hostFunctions(compilation: Compilation): FunctionSig[] -> @hostFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn nish_array_grow
@@ -543,10 +543,10 @@ function hostImportsOf(table: TypeTable, hosts: FunctionSig[]): string[] -> @hos
   callee +20:9 TypeTable.isRanged -> @TypeTable.isRanged
   callee +32:7 hostsLendWindows -> @hostsLendWindows
   callee +55:7 hostsTakeText -> @hostsTakeText
-  local +67:9 entries: string[] (const)
-  local +68:14 sig: FunctionSig (const)
-  callee +69:5 pushHostEntry -> @pushHostEntry
-  callee +75:3 pushAll -> @pushAll
+  local +68:9 entries: string[] (const)
+  local +69:14 sig: FunctionSig (const)
+  callee +70:5 pushHostEntry -> @pushHostEntry
+  callee +76:3 pushAll -> @pushAll
 function pushHostEntry(table: TypeTable, sig: FunctionSig, lines: string[], entries: string[]): void -> @pushHostEntry
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

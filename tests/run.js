@@ -14261,7 +14261,7 @@ if (dealtHere("runtimeChecks")) {
     )
     const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
     check(
-      "runtime.c, runtime-text.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
+      "runtime.c, runtime-os.c, runtime-text.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
       rtRun !== null && rtRun.status === 0,
       String(rt.stderr) +
         (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -29912,6 +29912,16 @@ if (!only || "host-import-text".includes(only)) {
           lines[13] === "echo overflow -1 untouched true",
           shown(run)
         )
+        check(
+          "host-import-text: a leading U+FEFF reaches the page as text, through an import's argument and an export's result",
+          lines[14] === 'say "\u{FEFF}A"' && lines[15] === 'bom "\u{FEFF}A"',
+          shown(run)
+        )
+        check(
+          "host-import-text: a -1 offset passes through every writer, and the end of the buffer takes only the empty text",
+          lines[16] === "chained -1 -1 -1 16 -1 -1 untouched true",
+          shown(run)
+        )
         // WH-9: only the module makes a string's (p, n) or its { i64 len }
         // header, but a forged one is still read inside memory or not at all.
         // The adapter is called with pairs past the end and wrapping it, and a
@@ -29974,6 +29984,28 @@ if (!only || "host-import-text".includes(only)) {
         )
       }
     }
+    // The TypeScript reading calls host.ts's own `say` and `measure`, the
+    // functions the wasm page passes as `typeof import("./host")`: one signature,
+    // a JS string, in both readings.
+    const readingDir = at("emit-ts")
+    const reading = spawnSync(NISH, [at("reading.ts"), "--host", at("host.ts"), "--emit-ts", readingDir], { cwd: root, encoding: "utf8" })
+    const readingRan =
+      reading.status === 0
+        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(readingDir, "entry.ts")], {
+            cwd: readingDir,
+            encoding: "utf8",
+          })
+        : reading
+    const readingSource = reading.status === 0 ? fs.readFileSync(path.join(readingDir, "reading.ts"), "utf8") : ""
+    const pageDts = compiled.status === 0 ? fs.readFileSync(at("main.d.ts"), "utf8") : ""
+    check(
+      "host-import-text: the --emit-ts reading passes host.ts's say and measure a JS string, the signature the wasm page's import object takes",
+      readingRan.status === 0 &&
+        readingRan.stdout === 'say "clef \u{1D11E} é"\nmeasure 7 "é\u{1D11E}"\n3\n' &&
+        readingSource.includes('import { measure, say } from "../host.ts"') &&
+        pageDts.includes('export type Imports = LoadOptions & { host: typeof import("./host") };'),
+      shown(readingRan)
+    )
     // The parity corpus: one source, a native process and a wasm export.
     const expected = fs.readFileSync(at("parity.out"), "utf8")
     const native = spawnSync(NISH, [at("parity-main.ts"), "--link", at("parity-native")], { cwd: root, encoding: "utf8" })
@@ -30105,7 +30137,7 @@ if (!only || "host-import".includes(only)) {
     const dir = path.join(buildDir, "host-import")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    // text/ is WP50 stage 4's own fixture set, copied by host-import-text below.
+    // text/ is WP50 stage 4's own fixture set, copied by the host-import-text section.
     for (const entry of fs.readdirSync(path.join(root, "tests", "host-import"), { withFileTypes: true })) {
       if (entry.isFile()) {
         fs.copyFileSync(path.join(root, "tests", "host-import", entry.name), path.join(dir, entry.name))
