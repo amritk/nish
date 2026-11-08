@@ -227,9 +227,13 @@ export class HttpRequest {
    * @internal Set by `HttpHandler` in this module after routing; the param accessors check `k` against it.
    */
   paramCount: i32 = 0
+  /** Where the method starts in `head`; the method is `head[methodStart .. methodEnd)`, for a log line or a `Router.match`. */
   methodStart: i32 = 0
+  /** Where the method ends in `head`, one past its last byte. */
   methodEnd: i32 = 0
+  /** Where the request target (path and query) starts in `head`; the target is `head[targetStart .. targetEnd)`. */
   targetStart: i32 = 0
+  /** Where the request target ends in `head`, one past its last byte. */
   targetEnd: i32 = 0
   /**
    * Where the path ends: the target's first `?`, or its end.
@@ -241,9 +245,14 @@ export class HttpRequest {
    * @internal Set by `HttpHandler` in this module when it copies the head, and read by `header`.
    */
   headerCount: i32 = 0
+  /** How many bytes of `body` are the request's body, 0 for none; read the body as `body[0 .. bodyLength)`. */
   bodyLength: i32 = 0
   /** The connection's slot, and its generation when this request was read. */
   slot: i32 = 0
+  /**
+   * The slot's generation when this request was read.
+   * @internal Read by `HttpHandler` in this module, which drops a reply to a slot that has since closed and been reused.
+   */
   gen: i32 = 0
   /** Its index in the handler's pool. */
   index: i32 = 0
@@ -385,6 +394,7 @@ export class HttpRequest {
 
   /** The span `queryIndex` found, raw. */
   queryValueStart: i32 = 0
+  /** Where the raw value `queryIndex` found ends in `head`, one past its last byte; it starts at `queryValueStart`. */
   queryValueEnd: i32 = 0
 
   /**
@@ -463,6 +473,10 @@ export class HttpRequest {
  * requests. One per thread; nothing in it is shared.
  */
 export class HttpHandler {
+  /**
+   * The HTTP/1.1 carrier the handler drives.
+   * @internal Read only by this class, which accepts, reads, flushes and closes connections through it.
+   */
   server: Http1Server
   private router: Router
   /** Every request the pool has made, and the indices of the free ones. */
@@ -480,6 +494,10 @@ export class HttpHandler {
   private watchedFired: boolean[]
   /** `json` and `problem` write here. */
   scratch: u8[]
+  /**
+   * The JSON writer over `scratch`.
+   * @internal Read only by this class; programs get it from `json`.
+   */
   writer: JsonWriter
   /** `refuse`'s scratch for `Router.match`. */
   private probe: i32[]

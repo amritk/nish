@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 // Generate the library reference, docs/reference/**, from the sources.
 //
-//   node scripts/gen-reference.mjs           rewrite docs/reference/ and its routes
-//   node scripts/gen-reference.mjs --check   exit 1 naming each stale, missing or extra
-//                                            page and a stale route; write nothing
+//   node scripts/gen-reference.mjs                     rewrite docs/reference/ and its routes
+//   node scripts/gen-reference.mjs --check             exit 1 naming each stale, missing or extra
+//                                                      page, a stale route and each documentation
+//                                                      gap scripts/undocumented.txt disagrees with;
+//                                                      write nothing
+//   node scripts/gen-reference.mjs --update-baseline   also rewrite scripts/undocumented.txt,
+//                                                      refusing to add a line to it
+//   node scripts/gen-reference.mjs --grow-baseline     the same, adding lines: only for a change
+//                                                      to the rule itself
+//
+// A public declaration of std/ or nish.d.ts needs a doc comment, a `@param` per
+// parameter and a `@returns` for a return other than `void` or `never`
+// (findGaps). scripts/undocumented.txt lists the gaps that predate the rule and
+// only shrinks: a gap it does not list, or a line that is no longer a gap,
+// fails --check (and the plain run, once it has written the pages).
 //
 // TypeDoc reads every std/**/*.ts module and runtime/nish.d.ts in-process, with
 // scripts/typedoc-nish-widths.mjs keeping types as the source spells them, and
@@ -30,7 +42,7 @@
 // and routes are sorted here, and no page holds a time or an absolute path.
 import fs from "node:fs"
 import path from "node:path"
-import { Application } from "typedoc"
+import { Application, ReflectionKind } from "typedoc"
 import ts from "typescript"
 import { parseCodesRegistry } from "./codes-registry.js"
 
@@ -44,6 +56,7 @@ const languageTitle = "Language specification"
 const languageSource = "docs/LANGUAGE.md"
 const languagePage = `${outDir}/language.md`
 const width = 110
+const baselineFile = "scripts/undocumented.txt"
 
 const Kind = {
   module: 2,
@@ -75,7 +88,21 @@ const readProject = async () => {
       sourceLinkTemplate: `${repoUrl}/{path}#L{line}`,
       logLevel: "Warn",
       // A `{@link}` that names nothing fails the run; the rest is not checked.
-      validation: { invalidLink: true, notExported: false, notDocumented: false, rewrittenLink: false },
+      // A public declaration with no doc comment is a gap; findGaps collects them.
+      validation: { invalidLink: true, notExported: false, notDocumented: true, rewrittenLink: false },
+      requiredToBeDocumented: [
+        "Function",
+        "Class",
+        "Constructor",
+        "Interface",
+        "Method",
+        "Property",
+        "Accessor",
+        "Variable",
+        "TypeAlias",
+        "Enum",
+        "EnumMember",
+      ],
       // tsconfig.json's options for std/, without its `include`, so the run
       // checks only what it documents. An empty reader list keeps TypeDoc from
       // reading tsconfig.json or typedoc.json itself.
@@ -93,10 +120,18 @@ const readProject = async () => {
   )
   // TypeDoc only warns of a `{@link}` it cannot resolve; here it fails the
   // run. (Its other warnings, such as a `[text](-A)` it takes for a relative
-  // path, stay warnings.)
+  // path, stay warnings.) Its notDocumented warnings are taken, not logged:
+  // each names one undocumented reflection, and findGaps weighs them against
+  // the baseline.
   const unresolved = []
+  const undocumented = []
   const warn = app.logger.validationWarning.bind(app.logger)
   app.logger.validationWarning = (message, ...rest) => {
+    const gap = /^(.+) \(\w+\), defined in .+, does not have any documentation$/.exec(String(message))
+    if (gap) {
+      undocumented.push(gap[1])
+      return
+    }
     if (String(message).startsWith("Failed to resolve link")) {
       unresolved.push(String(message))
     }
@@ -112,7 +147,76 @@ const readProject = async () => {
     console.error(`gen-reference: a \`{@link}\` names nothing:\n${unresolved.join("\n")}`)
     process.exit(1)
   }
-  return app.serializer.projectToObject(project, root)
+  return { project: app.serializer.projectToObject(project, root), gaps: findGaps(project, undocumented) }
+}
+
+/**
+ * Every public declaration that lacks its documentation, as the sorted keys
+ * of scripts/undocumented.txt: `module.Name.member` for a declaration with no
+ * doc comment (TypeDoc's notDocumented names, passed in as `undocumented`),
+ * `module.Name#param:p` for a parameter with no `@param`, and
+ * `module.Name#returns` for a signature returning other than `void` or `never`
+ * with no `@returns`. The signatures read are a function's or method's, a
+ * constructor's, an accessor's and an interface's call signatures; a
+ * constructor or setter returns nothing to document.
+ *
+ * A member TypeScript's own lib declares is not ours to document: nish.d.ts
+ * merges into lib interfaces such as `Array`, and TypeDoc then names lib
+ * members (and the members of their type literals) as if nish.d.ts declared
+ * them. One is skipped when it, or a reflection above it, is declared only
+ * under node_modules/typescript/lib.
+ */
+const findGaps = (project, undocumented) => {
+  const lib = path.join(root, "node_modules", "typescript", "lib") + path.sep
+  const fromLib = (r) => {
+    for (let at = r; at && !at.isProject(); at = at.parent) {
+      const files = (at.sources ?? []).map((s) => s.fullFileName)
+      if (files.length > 0 && files.every((f) => f.startsWith(lib))) {
+        return true
+      }
+    }
+    return false
+  }
+  const byName = new Map()
+  for (const r of Object.values(project.reflections)) {
+    const name = r.getFriendlyFullName()
+    byName.set(name, [...(byName.get(name) ?? []), r])
+  }
+  const gaps = new Set()
+  for (const name of undocumented) {
+    const rs = byName.get(name) ?? []
+    if (rs.length === 0 || !rs.every(fromLib)) {
+      gaps.add(name)
+    }
+  }
+  const signed =
+    ReflectionKind.FunctionOrMethod |
+    ReflectionKind.Constructor |
+    ReflectionKind.Accessor |
+    ReflectionKind.Interface
+  for (const r of project.getReflectionsByKind(signed)) {
+    const name = r.getFriendlyFullName()
+    const sigs = [...(r.signatures ?? []), r.getSignature, r.setSignature].filter(Boolean)
+    for (const sig of sigs) {
+      if (fromLib(sig)) {
+        continue
+      }
+      for (const p of sig.parameters ?? []) {
+        if (!p.hasComment()) {
+          gaps.add(`${name}#param:${p.name}`)
+        }
+      }
+      // scripts/typedoc-nish-widths.mjs keeps a return type as its source text.
+      const silent =
+        ["void", "never"].includes(String(sig.type)) ||
+        sig.kind === ReflectionKind.ConstructorSignature ||
+        sig.kind === ReflectionKind.SetSignature
+      if (!silent && !(sig.comment ?? r.comment)?.getTag("@returns")) {
+        gaps.add(`${name}#returns`)
+      }
+    }
+  }
+  return [...gaps].sort()
 }
 
 // ---- Markdown helpers -----------------------------------------------------
@@ -1639,15 +1743,92 @@ const listFiles = (dir) => {
     .sort()
 }
 
+const baselineHeader = `# Public declarations of std/ and runtime/nish.d.ts that lack their documentation.
+#
+# This list only shrinks. \`node scripts/gen-reference.mjs --check\` fails on a gap
+# it does not list and on a line that is no longer a gap: document the
+# declaration and delete its line. \`--update-baseline\` rewrites the file and
+# refuses to add a line; \`--grow-baseline\` adds them, only for a change to the rule.
+# docs/README.md -> "The library reference" states the rule.
+#
+#   module.Name.member     the declaration has no doc comment
+#   module.Name#param:p    parameter p has no @param
+#   module.Name#returns    a return type other than void or never has no @returns
+`
+
+const baselineText = (gaps) => `${baselineHeader}\n${gaps.map((g) => `${g}\n`).join("")}`
+
+const baselineRead = () => {
+  const full = path.join(root, baselineFile)
+  return fs.existsSync(full) ? fs.readFileSync(full, "utf8") : ""
+}
+
+/** The gaps the baseline lists. */
+const baselineLines = () =>
+  new Set(
+    baselineRead()
+      .split("\n")
+      .filter((l) => l.trim() && !l.startsWith("#"))
+  )
+
+/** The baseline's disagreements with the gaps found, one line each. */
+const baselineProblems = (gaps) => {
+  const text = baselineRead()
+  const listed = baselineLines()
+  const found = new Set(gaps)
+  const problems = []
+  for (const g of gaps) {
+    if (!listed.has(g)) {
+      problems.push(
+        `undocumented: ${g}: a public declaration needs a doc comment, a @param per parameter and a @returns for a non-void return`
+      )
+    }
+  }
+  for (const l of listed) {
+    if (!found.has(l)) {
+      problems.push(`no longer a gap: ${l}: delete its line from ${baselineFile}`)
+    }
+  }
+  if (problems.length === 0 && text !== baselineText(gaps)) {
+    problems.push(
+      `stale: ${baselineFile} (its header or order); run \`node scripts/gen-reference.mjs --update-baseline\``
+    )
+  }
+  return problems
+}
+
 const main = async () => {
   const args = process.argv.slice(2)
-  const unknown = args.filter((a) => a !== "--check")
-  if (unknown.length > 0) {
-    console.error(`gen-reference: unknown argument ${unknown.join(" ")}; the one flag is --check`)
+  const flags = ["--check", "--update-baseline", "--grow-baseline"]
+  const unknown = args.filter((a) => !flags.includes(a))
+  const check = args.includes("--check")
+  const grow = args.includes("--grow-baseline")
+  const updateBaseline = grow || args.includes("--update-baseline")
+  if (unknown.length > 0 || (check && updateBaseline)) {
+    console.error(
+      `gen-reference: ${unknown.length > 0 ? `unknown argument ${unknown.join(" ")}` : "--check writes nothing"}; the flags are --check, --update-baseline or --grow-baseline`
+    )
     process.exit(2)
   }
-  const check = args.includes("--check")
-  const project = await readProject()
+  const { project, gaps } = await readProject()
+  // The baseline only shrinks: --update-baseline drops lines and refuses to
+  // add one. --grow-baseline adds them, for a change to the rule itself, and
+  // names each so the reviewer reads them.
+  if (updateBaseline) {
+    const added = gaps.filter((g) => !baselineLines().has(g))
+    if (added.length > 0 && !grow) {
+      for (const g of added) {
+        console.error(`gen-reference: undocumented: ${g}: document it; ${baselineFile} only shrinks`)
+      }
+      console.error(
+        "gen-reference: --update-baseline adds no line; only a change to the rule itself may pass --grow-baseline, and its PR shows each added line"
+      )
+      process.exit(1)
+    }
+    for (const g of added) {
+      console.log(`gen-reference: grows ${baselineFile}: ${g}`)
+    }
+  }
   const pages = collectPages(project)
   const configBefore = fs.readFileSync(path.join(root, configFile), "utf8")
   const configAfter = configText(configBefore, pages)
@@ -1691,15 +1872,23 @@ const main = async () => {
     }
     problems.push(`stale: ${configFile} (${drift.join(" and ") || "the layout of the /reference routes"})`)
   }
+  const gapProblems = updateBaseline ? [] : baselineProblems(gaps)
   if (check) {
+    for (const p of [...problems, ...gapProblems]) {
+      console.error(`gen-reference: ${p}`)
+    }
     if (problems.length > 0) {
-      for (const p of problems) {
-        console.error(`gen-reference: ${p}`)
-      }
       console.error("gen-reference: the reference is out of date; run `node scripts/gen-reference.mjs`")
+    }
+    if (gapProblems.length > 0) {
+      console.error(`gen-reference: the documentation gaps disagree with ${baselineFile}, which only shrinks`)
+    }
+    if (problems.length > 0 || gapProblems.length > 0) {
       process.exit(1)
     }
-    console.log(`gen-reference: ${want.size} pages and their routes are up to date`)
+    console.log(
+      `gen-reference: ${want.size} pages and their routes are up to date; ${gaps.length} gaps, each listed`
+    )
     return
   }
   for (const file of have) {
@@ -1713,6 +1902,15 @@ const main = async () => {
   }
   fs.writeFileSync(path.join(root, configFile), configAfter)
   console.log(`gen-reference: wrote ${want.size} pages; ${problems.length} changed`)
+  if (updateBaseline) {
+    fs.writeFileSync(path.join(root, baselineFile), baselineText(gaps))
+    console.log(`gen-reference: wrote ${baselineFile}; ${gaps.length} gaps`)
+  } else if (gapProblems.length > 0) {
+    for (const p of gapProblems) {
+      console.error(`gen-reference: ${p}`)
+    }
+    process.exit(1)
+  }
 }
 
 await main()

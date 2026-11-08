@@ -180,9 +180,13 @@ const TLS_RECORD_SCRATCH_SIZE: i32 = TLS_MAX_PLAINTEXT
  * (`BufferPool.giveSecret`): it held plaintext, or handshake bytes.
  */
 export class TlsRecordPools {
+  /** Lends each slot its `output` buffer, where sealed records wait to be sent. */
   output: BufferPool
+  /** Lends each slot its `plain` buffer, where opened application data waits to be read. */
   plain: BufferPool
+  /** Lends each slot the buffer a record's content is opened into. */
   scratch: BufferPool
+  /** Lends each slot its record reader's buffer. */
   reader: BufferPool
 
   /**
@@ -299,9 +303,12 @@ const tlsAdvanceHeld = (protection: TlsRecordProtection, held: Secret<u8[]>): bo
  * caller sets it.
  */
 export class TlsRecordServer {
+  /** The handshake underneath: read it for the suite, ALPN, server name and exporter secret. */
   tls: TlsServer
   private reader: TlsRecordReader
+  /** Opens the client's records; its sequence number counts the records read at the current keys. */
   readProtection: TlsRecordProtection
+  /** Seals the server's records; its sequence number counts the records written at the current keys. */
   writeProtection: TlsRecordProtection
   /** Bytes to send are `output[outputStart .. outputEnd)`; `empty` until a record is sealed. */
   output: u8[]
@@ -319,26 +326,39 @@ export class TlsRecordServer {
    * say which of a pair holds the secret, and are 0 before it is known.
    */
   readonly readTraffic256: Secret<u8[]>
+  /** The client's current application traffic secret when the hash is SHA-384, 48 bytes. */
   readonly readTraffic384: Secret<u8[]>
+  /** The server's current application traffic secret when the hash is SHA-256, 32 bytes. */
   readonly writeTraffic256: Secret<u8[]>
+  /** The server's current application traffic secret when the hash is SHA-384, 48 bytes. */
   readonly writeTraffic384: Secret<u8[]>
+  /** The hash length of the client's traffic secret in bytes (32 or 48), or 0 before it is known. */
   readHash: i32 = 0
+  /** The hash length of the server's traffic secret in bytes (32 or 48), or 0 before it is known. */
   writeHash: i32 = 0
   /** A post-handshake message the client has sent part of. */
   private postHandshake: u8[]
+  /** Where the connection stands: one of the `TLS_RECORD_STATE_*` constants. */
   state: i32 = 0
+  /** The alert this server sent, or 0. */
   alert: i32 = 0
+  /** The error alert the client sent, or -1 when it sent none. */
   peerAlert: i32 = -1
+  /** How many zero bytes each protected record the server writes carries after its content type (§5.4); 0 unless the caller sets it. */
   padding: i32 = 0
   /** The `TLS_LEVEL_*` the client's records are read at: Initial in the clear, then Handshake, then Application. */
   private readLevel: i32 = 0
   /** The `TLS_LEVEL_*` the server's records are written at. */
   writeLevel: i32 = 0
+  /** The index in `output` of the first byte still to send; `consume(sent)` moves it on. */
   outputStart: i32 = 0
+  /** One past the last byte still to send in `output`; `outputStart` when nothing is pending. */
   outputEnd: i32 = 0
   /** How far into `output` this borrowing has written, which says whether its give-back zeroes. */
   private outputUsed: i32 = 0
+  /** The index in `plain` of the first byte of application data the caller has not read. */
   plainStart: i32 = 0
+  /** One past the last unread byte in `plain`; `plainStart` when none is pending. */
   plainEnd: i32 = 0
   /** How far into `plain` this borrowing has written. */
   private plainUsed: i32 = 0
@@ -355,6 +375,7 @@ export class TlsRecordServer {
   keyUpdates: i32 = 0
   /** The server's flight is signed and finished, so its Handshake-level output may be sealed. */
   private flightReady: boolean = false
+  /** True once the client's `close_notify` has arrived. */
   peerClosed: boolean = false
   /**
    * The client's TCP stream ended. Without a `close_notify` before it, that is truncation and the connection failed.

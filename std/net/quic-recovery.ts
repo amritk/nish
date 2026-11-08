@@ -180,10 +180,16 @@ const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
  * acknowledged (§7.6.2).
  */
 export class QuicSentPackets {
+  /** @internal Read only by this module; `pnAt` answers for a slot. */
   pn: i64[]
+  /**
+   * When each slot's packet was sent, the `now` `onPacketSent` was given, in milliseconds;
+   * loss detection and RTT samples read it.
+   */
   timeSent: i64[]
   /** When each packet was sent on the pacer's clock, in microseconds. */
   fineSent: i64[]
+  /** @internal Read only by this module: each slot's packet size in bytes, for the congestion window. */
   size: i32[]
   /** Each slot's state, with `QUIC_RECOVERY_MARKED` set if its packet was sent marked ECT(0). */
   state: u8[]
@@ -203,16 +209,24 @@ export class QuicSentPackets {
   bytesInFlight: i64 = 0
   private capacity: i32 = 0
   private head: i32 = 0
+  /**
+   * How many packets the ring keeps, in flight and settled; a test reads it to see what a flight
+   * recorded.
+   */
   count: i32 = 0
   /** How many recorded packets are still in flight: neither acknowledged nor lost. */
   inFlight: i32 = 0
+  /** @internal Read by `net/quic.ts`: how many slots of `acked` the last `onAck` filled. */
   ackedCount: i32 = 0
+  /** How many slots of `lost` the last `onAck` or `onTimeout` filled. */
   lostCount: i32 = 0
   /** How many of this space's packets, recorded or not, were sent marked ECT(0). */
   ectSent: i64 = 0
   /** The ECN counts of the last ACK_ECN frame validated in this space (RFC 9000 §19.3.2). */
   ect0: i64 = 0
+  /** The ECT(1) count of the last ACK_ECN frame validated in this space. */
   ect1: i64 = 0
+  /** The ECN-CE count of the last ACK_ECN frame validated in this space; a rise is a congestion event. */
   ce: i64 = 0
 
   /**
@@ -474,6 +488,10 @@ const quicRecoveryInRanges = (ranges: i64[], count: i32, pn: i64): boolean => {
  * counts a test or a log reads (`congestionEvents`, `persistentCongestions`).
  */
 export class QuicRecovery {
+  /**
+   * The sent-packet ring of each packet number space, indexed by `QUIC_RECOVERY_INITIAL` and its
+   * siblings.
+   */
   spaces: QuicSentPackets[]
   /** latest_rtt (§5.1): the last sample, in milliseconds. */
   latestRtt: i64 = 0
@@ -495,6 +513,10 @@ export class QuicRecovery {
   recoveryStart: i64 = -1
   /** The pacer's credit in bytes (§7.7), and the time it was last topped up in microseconds, or -1. */
   pacerBudget: i64 = 0
+  /**
+   * When the pacer's credit was last topped up, in microseconds on the pacer's clock, or -1 before the
+   * first time.
+   */
   pacerTime: i64 = -1
   /** The smoothed RTT the pacer's rate is taken from, in microseconds: `smoothedRtt` on the pacer's clock. */
   pacerRtt: i64 = 0
@@ -506,6 +528,10 @@ export class QuicRecovery {
   timeoutSpace: i32 = -1
   /** How many congestion events reduced the window, and how many of them were persistent congestion. */
   congestionEvents: i32 = 0
+  /**
+   * How many of `congestionEvents` were persistent congestion (§7.6), which collapses the window to
+   * its minimum.
+   */
   persistentCongestions: i32 = 0
   /** How many congestion events a rise in the ECN-CE count caused (§7.1). */
   ecnCongestionEvents: i32 = 0
@@ -513,7 +539,15 @@ export class QuicRecovery {
   ecnState: i32 = 0
   /** The packets marked while testing, and of those recorded, how many and how many of them were lost. */
   ecnTestSent: i32 = 0
+  /**
+   * How many of the packets marked while testing ECN are recorded in a space's ring, so their loss can
+   * be seen.
+   */
   ecnTestRecorded: i32 = 0
+  /**
+   * How many marked packets were lost before ECN validated: once it reaches `ecnTestRecorded`, ECN
+   * fails (RFC 9000 A.4).
+   */
   ecnTestLost: i32 = 0
   /** Whether the handshake is confirmed (RFC 9001 §4.1.2), which the caller sets: the peer's max_ack_delay then bounds its ACK delays, and the Application Data space has a probe timeout. */
   handshakeConfirmed: boolean = false

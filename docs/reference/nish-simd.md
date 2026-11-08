@@ -1034,12 +1034,21 @@ Lane 0, an `f32`; `a1` to `a3` are lanes 1 to 3 in order.
 </scalar-field>
 
 <scalar-field name="a1" type="f32" required>
+
+Lane 1.
+
 </scalar-field>
 
 <scalar-field name="a2" type="f32" required>
+
+Lane 2.
+
 </scalar-field>
 
 <scalar-field name="a3" type="f32" required>
+
+Lane 3.
+
 </scalar-field>
 
 #### Returns
@@ -1067,6 +1076,9 @@ Lane 0, an `f64`; `a1` is lane 1.
 </scalar-field>
 
 <scalar-field name="a1" type="f64" required>
+
+Lane 1.
+
 </scalar-field>
 
 #### Returns
@@ -1169,12 +1181,21 @@ Lane 0, an `i32`; `a1` to `a3` are lanes 1 to 3 in order.
 </scalar-field>
 
 <scalar-field name="a1" type="i32" required>
+
+Lane 1.
+
 </scalar-field>
 
 <scalar-field name="a2" type="i32" required>
+
+Lane 2.
+
 </scalar-field>
 
 <scalar-field name="a3" type="i32" required>
+
+Lane 3.
+
 </scalar-field>
 
 #### Returns
@@ -2402,24 +2423,45 @@ Lane 0, a `u16`; `a1` to `a7` are lanes 1 to 7 in order.
 </scalar-field>
 
 <scalar-field name="a1" type="u16" required>
+
+Lane 1.
+
 </scalar-field>
 
 <scalar-field name="a2" type="u16" required>
+
+Lane 2.
+
 </scalar-field>
 
 <scalar-field name="a3" type="u16" required>
+
+Lane 3.
+
 </scalar-field>
 
 <scalar-field name="a4" type="u16" required>
+
+Lane 4.
+
 </scalar-field>
 
 <scalar-field name="a5" type="u16" required>
+
+Lane 5.
+
 </scalar-field>
 
 <scalar-field name="a6" type="u16" required>
+
+Lane 6.
+
 </scalar-field>
 
 <scalar-field name="a7" type="u16" required>
+
+Lane 7.
+
 </scalar-field>
 
 #### Returns
@@ -2452,12 +2494,21 @@ Lane 0, a `u32`; `a1` to `a3` are lanes 1 to 3 in order.
 </scalar-field>
 
 <scalar-field name="a1" type="u32" required>
+
+Lane 1.
+
 </scalar-field>
 
 <scalar-field name="a2" type="u32" required>
+
+Lane 2.
+
 </scalar-field>
 
 <scalar-field name="a3" type="u32" required>
+
+Lane 3.
+
 </scalar-field>
 
 #### Returns
@@ -2503,48 +2554,93 @@ Lane 0, a `u8`; `a1` to `a15` are lanes 1 to 15 in order.
 </scalar-field>
 
 <scalar-field name="a1" type="u8" required>
+
+Lane 1.
+
 </scalar-field>
 
 <scalar-field name="a2" type="u8" required>
+
+Lane 2.
+
 </scalar-field>
 
 <scalar-field name="a3" type="u8" required>
+
+Lane 3.
+
 </scalar-field>
 
 <scalar-field name="a4" type="u8" required>
+
+Lane 4.
+
 </scalar-field>
 
 <scalar-field name="a5" type="u8" required>
+
+Lane 5.
+
 </scalar-field>
 
 <scalar-field name="a6" type="u8" required>
+
+Lane 6.
+
 </scalar-field>
 
 <scalar-field name="a7" type="u8" required>
+
+Lane 7.
+
 </scalar-field>
 
 <scalar-field name="a8" type="u8" required>
+
+Lane 8.
+
 </scalar-field>
 
 <scalar-field name="a9" type="u8" required>
+
+Lane 9.
+
 </scalar-field>
 
 <scalar-field name="a10" type="u8" required>
+
+Lane 10.
+
 </scalar-field>
 
 <scalar-field name="a11" type="u8" required>
+
+Lane 11.
+
 </scalar-field>
 
 <scalar-field name="a12" type="u8" required>
+
+Lane 12.
+
 </scalar-field>
 
 <scalar-field name="a13" type="u8" required>
+
+Lane 13.
+
 </scalar-field>
 
 <scalar-field name="a14" type="u8" required>
+
+Lane 14.
+
 </scalar-field>
 
 <scalar-field name="a15" type="u8" required>
+
+Lane 15.
+
 </scalar-field>
 
 #### Returns

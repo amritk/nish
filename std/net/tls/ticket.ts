@@ -195,7 +195,9 @@ export class TlsTicketState {
   suite: i32
   /** The ticket's lifetime in seconds, at most `TLS_TICKET_LIFETIME_SECONDS`. */
   lifetime: i32
+  /** How many bytes of `serverName` the name fills, 0 to `TLS_TICKET_SERVER_NAME_MAX`; 0 when the client sent no name. */
   serverNameLength: i32
+  /** How many bytes of `psk` the PSK fills: 32 or 48, the suite's hash length. */
   pskLength: i32
 
   /**

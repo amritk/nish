@@ -338,6 +338,7 @@ export class TlsClient {
   alpnChosen: string = ""
   /** Which of the negotiated pool's secrets are known: bit `1 << TLS_SECRET_*` for each, as `TlsServer.held`. */
   private held: i32 = 0
+  /** Where the handshake is: one of the `TLS_CLIENT_STATE_*` values, `TLS_CLIENT_STATE_CONNECTED` once it has finished and `TLS_CLIENT_STATE_FAILED` once `alert` is set. */
   state: i32 = 0
   /** The alert the client failed with, or 0. */
   alert: i32 = 0

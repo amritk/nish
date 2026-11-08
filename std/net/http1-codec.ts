@@ -256,7 +256,13 @@ export class Http1Parser {
    * @internal Set by `http1TakeLine` and read by the field-line parser in this module.
    */
   lineControl: boolean = false
+  /** Whether the request's body is chunked (`Transfer-Encoding: chunked`), so it has no `contentLength`. */
   chunked: boolean = false
+  /**
+   * Whether the connection stays open after this request: HTTP/1.1 unless it
+   * sent `Connection: close`, HTTP/1.0 only when it sent `keep-alive`. A
+   * server closes after its response when this is false.
+   */
   keepAlive: boolean = false
   /** Whether the request asked to switch protocols (`upgrade` is its value when `keepText`). */
   upgrading: boolean = false
@@ -293,12 +299,17 @@ export class Http1Parser {
   left: i32 = 0
   /** The declared body length, or -1 when the request has none or is chunked. */
   contentLength: i32 = -1
+  /** Where the bytes the last `HTTP1_BODY` handed over start in `body`. */
   bodyOff: i32 = 0
+  /** How many bytes the last `HTTP1_BODY` handed over, from `body[bodyOff]`; 0 before the first. */
   bodyLen: i32 = 0
   /** The method is `head[methodStart .. methodEnd)` and the target `head[targetStart .. targetEnd)`. */
   methodStart: i32 = 0
+  /** Where the method ends in `head`, one past its last byte. */
   methodEnd: i32 = 0
+  /** Where the request target starts in `head`. */
   targetStart: i32 = 0
+  /** Where the request target ends in `head`, one past its last byte. */
   targetEnd: i32 = 0
 
   // --- limits, the caller's --------------------------------------------------
@@ -326,10 +337,13 @@ export class Http1Parser {
   maxChunk: i32 = 1073741824
 
   // --- what `keepText`, an error or a chunked body reads ----------------------
+  /** The request's method as text when `keepText` is on, else empty. */
   method: string = ""
+  /** The request target (path and query) as text when `keepText` is on, else empty. */
   target: string = ""
   /** The field names, in lowercase, in the order they arrived; `values` beside them. */
   names: string[]
+  /** The field values, in the order they arrived, each at its name's index in `names`; filled only when `keepText`. */
   values: string[]
   /** The `Upgrade` field when `Connection` asked for it, else empty. */
   upgrade: string = ""

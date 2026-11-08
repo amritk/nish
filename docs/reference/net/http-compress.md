@@ -319,12 +319,12 @@ class HttpCompressor
 | `encoderRuns: i32` | How many times `compress` and `compressAnyway` ran an encoder, from 0: a count for a test or a profile to read, never consulted by a decision. It wraps past 2^31 - 1 to -2^31 rather than panic, as a server can run that many; read it as a difference between two reads. |
 | `fixedLimit: i32` | The longest body `HTTP_ENCODER_AUTO` gives the fixed-Huffman encoder: 16384 by default. |
 | `minSaving: i32` | The least a compressed body must save to be sent: `minSaving` bytes and `minSavingPercent` percent of the body, whichever is more. 1 and 0 by default (any saving at all); a value below those counts as them. |
-| `minSavingPercent: i32` |  |
-| `mss: i32` |  |
+| `minSavingPercent: i32` | The percent of the body a compressed body must save, as well as `minSaving` bytes: 0 by default, 100 or more sends nothing compressed. |
+| `mss: i32` | The TCP segment size `segmentMode` counts in, in bytes: `HTTP_DEFAULT_MSS` by default, and 0 or less means that default. |
 | `readonly names: u8[][]` | The fields `addFields` built: the program's, then `Content-Encoding` and `Vary`. |
 | `readonly output: u8[]` | Where `compress` writes; valid until the next call. |
 | `segmentMode: boolean` | Whether `respondEncoded` also sends the compressed response only when, head included, it takes fewer TCP segments of `mss` bytes than the body as it is; off by default. `mss` is `HTTP_DEFAULT_MSS` unless the program sets it, or a connection's own `mss` overrides it. |
-| `readonly values: u8[][]` |  |
+| `readonly values: u8[][]` | The value of each field in `names`, at the same index; pass both to `respond`. |
 | `vary: boolean` | Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which a cache needs whenever the same resource may be sent either way. On by default; turn it off when the program sets its own `Vary`. |
 | `addFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields followed by `Content-Encoding: gzip` and, when `vary`, `Vary: Accept-Encoding`. The arrays are reused, so after the first few calls this allocates nothing; they hold until the next call. |
 | `compress(coding: i32, body: u8[], off: i32, len: i32): i32` | Compresses `body[off .. off + len)` into `output` when the length is in `[minLength, maxLength]`, `coding` is `HTTP_CODING_GZIP` and gzip saves what `minSaving` and `minSavingPercent` ask; answers the compressed length, or -1 to send the body as it is, and sets `decision` either way. `encoder` picks the encoder; the fixed-Huffman one stops as soon as its output passes what would be kept. A window outside `body` panics. |
