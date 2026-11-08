@@ -2585,11 +2585,11 @@ function httpClientLookupAsync(host: string, port: i32, dns: DnsConfig | null, u
   pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.dnsParseAddress#3 nish.DnsClient.result#2 nish.DnsClient.result#2
   pointer ttls: size=0 writesThrough=true captured=false passedTo=nish.DnsClient.result#3 nish.DnsClient.result#3
   stackSites=2 stackLocals=2
-  local -11:9 name: u8[] (const)
-  local -10:7 ascii: boolean (let)
-  local -9:12 i: i32 (let)
-  local -8:11 c: i32 (const)
-  callee -1:16 dnsParseAddress -> @nish.dnsParseAddress
+  local -10:7 high: i32 (let)
+  local -9:9 name: u8[] (const)
+  local -8:12 i: i32 (let)
+  local -7:11 c: i32 (const)
+  callee -1:22 dnsParseAddress -> @nish.dnsParseAddress
   local +3:9 hosts: DnsHosts (const)
   callee +3:27 new DnsHosts -> @nish.DnsHosts.constructor
   local +4:7 config: DnsConfig (let)
