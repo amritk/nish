@@ -480,17 +480,19 @@ function emitForeignString(emitter: Emitter, arg: Node, value: string, callee: F
 function emitForeignBuffers(emitter: Emitter, call: Node, callee: FunctionSig, operands: string[], values: string[]): void -> @emitForeignBuffers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: Emitter.stringConstant IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitHostWindow emitPanicTail foreignBufferCount foreignBufferCountProven hostFunction isForeignBuffer lentBuffer loadData loadLength nish_panic_index nish_str_concat nish_str_from_i32
-  pointer emitter: size=360 writesThrough=false captured=false passedTo=emitHostWindow#0 loadLength#0 emitPanicTail#0 Emitter.stringConstant#0 loadData#0
+  calls: Emitter.stringConstant IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitHostString emitHostWindow emitPanicTail foreignBufferCount foreignBufferCountProven hostFunction isForeignBuffer lentBuffer loadData loadLength nish_panic_index nish_str_concat nish_str_from_i32
+  pointer emitter: size=360 writesThrough=false captured=false passedTo=emitHostString#0 emitHostWindow#0 loadLength#0 emitPanicTail#0 Emitter.stringConstant#0 loadData#0
   pointer call: size=40 writesThrough=false captured=false passedTo=emitHostWindow#1 foreignBufferCountProven#2
-  pointer callee: size=176 writesThrough=false captured=false passedTo=hostFunction#0 lentBuffer#1 emitHostWindow#2 foreignBufferCount#1
-  pointer operands: size=0 writesThrough=true captured=false passedTo=emitHostWindow#4
-  pointer values: size=0 writesThrough=false captured=false passedTo=emitHostWindow#5
+  pointer callee: size=176 writesThrough=false captured=false passedTo=hostFunction#0 hostFunction#0 lentBuffer#1 emitHostWindow#2 foreignBufferCount#1
+  pointer operands: size=0 writesThrough=true captured=false passedTo=emitHostString#2 emitHostWindow#4
+  pointer values: size=0 writesThrough=false captured=false passedTo=emitHostString#3 emitHostWindow#5
   stackSites=0 stackLocals=0
-  local -30:9 fn: IRFunction (const)
-  local -29:7 i: i32 (let)
-  callee -27:9 hostFunction -> @hostFunction
-  callee -27:33 lentBuffer -> @lentBuffer
+  local -32:9 fn: IRFunction (const)
+  local -31:7 i: i32 (let)
+  callee -29:9 hostFunction -> @hostFunction
+  callee -28:7 emitHostString -> @emitHostString
+  callee -27:16 hostFunction -> @hostFunction
+  callee -27:40 lentBuffer -> @lentBuffer
   callee -26:7 emitHostWindow -> @emitHostWindow
   callee -25:16 isForeignBuffer -> @isForeignBuffer
   local -24:13 buffer: string (const)
@@ -514,6 +516,20 @@ function emitForeignBuffers(emitter: Emitter, call: Node, callee: FunctionSig, o
   callee -5:11 IRFunction.placeBlock -> @IRFunction.placeBlock
   local -2:13 data: string (const)
   callee -2:20 loadData -> @loadData
+function emitHostString(emitter: Emitter, i: i32, operands: string[], values: string[]): void -> @emitHostString
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: i
+  calls: IRFunction.emitValue loadStringLength nish_panic_index nish_str_concat stringData
+  pointer emitter: size=360 writesThrough=false captured=false passedTo=loadStringLength#0 stringData#0
+  pointer operands: size=0 writesThrough=true captured=false
+  pointer values: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -3:9 str: string (const)
+  local -2:9 n: string (const)
+  callee -2:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -2:47 loadStringLength -> @loadStringLength
+  callee +0:26 stringData -> @stringData
 function emitHostWindow(emitter: Emitter, call: Node, callee: FunctionSig, i: i32, operands: string[], values: string[]): void -> @emitHostWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
