@@ -9306,6 +9306,7 @@ if (dealtHere("runtimeCache")) {
     const runOut = (out, args = []) => spawnSync(path.join(rcDir, out), args, { encoding: "utf8" })
     const units = [
       "runtime.c",
+      "runtime-text.c",
       "runtime-os.c",
       "runtime-parallel.c",
       "runtime-cross.c",
@@ -18738,6 +18739,8 @@ if (dealtHere("cliChecks")) {
     }
     // Both halves of the skip message. No corpus program has a function whose
     // arguments all cross and whose *result* does not, so that one is written here.
+    // A `string` result crosses since WP50 stage 4, so `spell` is declared and
+    // `names`, whose `string[]` result still needs the full runtime, is skipped.
     const skipSrc = path.join(interopDir, "skip_reasons.ts")
     fs.writeFileSync(
       skipSrc,
@@ -18745,6 +18748,10 @@ if (dealtHere("cliChecks")) {
         "export function spell(n: i32): string {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return `${n}`;",
+        "}",
+        "export function names(n: i32): string[] {",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+        "  return [`${n}`];",
         "}",
         // WP30's negative half. Adding the unsigned widths to the typed-view
         // table moved the line between an element type that crosses and one that
@@ -18775,7 +18782,9 @@ if (dealtHere("cliChecks")) {
       "a skipped function names the argument or the result, and the type, that stopped it",
       stringsDts.includes(
         "  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`,"
-      ) && skipDts.includes("  // spell(n: number): string  -- not exported to JS: the result is `string`,"),
+      ) &&
+        skipDts.includes("  // names(n: number): string[]  -- not exported to JS: the result is `string[]`,") &&
+        skipDts.includes("  spell(n: number): string;"),
       stringsDts + skipDts
     )
     check(

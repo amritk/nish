@@ -94,8 +94,8 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push("// arguments are copied into the module's arena for the call (link")
   lines.push("// runtime/runtime-wasm.c), written-through arguments are copied back, and")
   lines.push("// an array result is copied out, so the typed arrays you see are your own.")
-  lines.push("// String functions are not callable from the freestanding wasm profile and")
-  lines.push("// are listed below as comments.")
+  lines.push("// A string result is decoded into a JS string; a function that takes a")
+  lines.push("// string, or answers what needs the full runtime, is listed below as a comment.")
   lines.push("")
   // WP50 S2: an export that takes or answers a host handle spells it as the
   // page's `tsc` reads one, so the type comes from the package's root types.
