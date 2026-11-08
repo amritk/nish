@@ -35,7 +35,6 @@
     "tests/differential/corpus/**",
     "tests/differential/arrow-parity/**",
     "tests/host-window/**",
-    "tests/host-text/**",
     "tests/module-storage/**",
     "tests/page/**",
     "tests/panic/**"

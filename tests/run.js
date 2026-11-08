@@ -29819,7 +29819,7 @@ if (!only || "host-import-window".includes(only)) {
   }
 }
 
-// tests/host-text: WP50 stage 4's strings (docs/wp50-wasm-host.md §7). A host
+// tests/host-import/text: WP50 stage 4's strings (docs/wp50-wasm-host.md §7). A host
 // import takes a string as its UTF-8 bytes, lent for the call; an export's string
 // result is decoded by the loader before the call's arena mark is released; and
 // `nish/host/text` reads and writes text in module storage. parity.ts is the
@@ -29833,8 +29833,8 @@ if (!only || "host-import-text".includes(only)) {
     const dir = path.join(buildDir, "host-text")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    for (const name of fs.readdirSync(path.join(root, "tests", "host-text"))) {
-      fs.copyFileSync(path.join(root, "tests", "host-text", name), path.join(dir, name))
+    for (const name of fs.readdirSync(path.join(root, "tests", "host-import", "text"))) {
+      fs.copyFileSync(path.join(root, "tests", "host-import", "text", name), path.join(dir, name))
     }
     const at = (name) => path.join(dir, name)
     const runtimeWasm = "runtime/runtime-wasm.c"
@@ -30105,8 +30105,11 @@ if (!only || "host-import".includes(only)) {
     const dir = path.join(buildDir, "host-import")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    for (const name of fs.readdirSync(path.join(root, "tests", "host-import"))) {
-      fs.copyFileSync(path.join(root, "tests", "host-import", name), path.join(dir, name))
+    // text/ is WP50 stage 4's own fixture set, copied by host-import-text below.
+    for (const entry of fs.readdirSync(path.join(root, "tests", "host-import"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        fs.copyFileSync(path.join(root, "tests", "host-import", entry.name), path.join(dir, entry.name))
+      }
     }
     const at = (name) => path.join(dir, name)
     const compiled = spawnSync(

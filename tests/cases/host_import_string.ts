@@ -3,7 +3,7 @@
 // the data pointer and the byte count, each an i32, and the call reads both
 // from the string's header. A string result of an export is decoded by the
 // loader; the IR returns the header pointer as it does natively.
-import { measure, say } from "../host-text/host"
+import { measure, say } from "../host-import/text/host"
 
 export function greet(n: i32): i32 {
   say(`hello ${n}`)
