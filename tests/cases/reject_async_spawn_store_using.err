@@ -1,3 +1,1 @@
-runs as a spawned task, in a region of its own that is freed when it ends, and stores `s` into `tally.label`
-runs as a spawned task, in a region of its own that is freed when it ends, and stores `t` into `tally.label`
-region memory kept by memory outside the region points at freed memory once the task ends
+and stores `tally` into `f.owner`

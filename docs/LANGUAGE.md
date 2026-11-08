@@ -3545,14 +3545,19 @@ async function run(): Promise<void> {
   `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
   arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
-  `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`). Copy
+  `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`), and so
+  is a builtin with no body of its own that does either, `reserve` on a
+  shared `Map` (`reject_async_spawn_grow_reserve`) or `jsonDecode` into a
+  shared object (`reject_async_spawn_store_json`). Copy
   numbers into it instead. The task keeps none of what it shares in memory
   of its own: a shared object, or anything reachable from it, put into a
   constructor argument, an array or object literal, a field or element
   store, `push`, a `Map`'s `set` or a `Set`'s `add`, a method that may keep
   its argument in its receiver, or a callee that stores one argument into
   another is NL2610, as in a `region(...)` body
-  (`reject_async_spawn_keep_holder`). An object a helper makes may hold
+  (`reject_async_spawn_keep_holder`, `reject_async_spawn_keep_literal`), and
+  so is an element read out of a shared array (`for (const t of shared)`,
+  `reject_async_spawn_keep_element`). An object a helper makes may hold
   what the helper was handed, so in a task a fresh helper's answer other
   than a string, awaited or not, carries its arguments' origins too, and a
   store through a holder a helper built from the shared object is NL2609
@@ -3657,7 +3662,7 @@ the resume order is not Node's, and these are declared differences:
 | A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
 | `spawn(f(x))` runs `f` to its first `await`, and the rest of `f` after the current task yields | `spawn(f(x))` runs `f` at once until it first waits on the outside world, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
 | `setTimeout` and socket callbacks run on libuv's loop, which keeps the process alive while anything is registered | `sleep`, `readable` and `writable` park a task on the executor; the program exits once `main` has returned and no task waits, a synchronous `main` included |
-| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; an object, array, `Map` or `Set` is shared, and the task may store only numbers into it (NL2609, NL2615); one holding a `Region`, `Secret`, handle or `nish/threads` value is refused (NL2691), as is any other argument (NL2673) |
+| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; an object, array, `Map` or `Set` is shared, and the task may store only numbers into it (NL2609, NL2615) and keep none of it in memory of its own (NL2610); one holding a `Region`, `Secret`, handle or `nish/threads` value is refused (NL2691), as is any other argument (NL2673) |
 | A task that never awaits holds the thread, as here | The same: the executor is cooperative and does not preempt a task |
 
 A program whose output does not depend on how its tasks interleave prints the

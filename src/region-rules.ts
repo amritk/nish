@@ -837,13 +837,15 @@ class RegionWalk {
         continue
       }
       if (mayBeOuter(o)) {
-        if (pp.polluted) {
+        // Growth first: a callee that grows its argument also stores the
+        // new storage into it, and the growth is what to name.
+        if (pp.writesReach && f.allocates) {
+          this.report(node, handsGrowthMessage(this.who, this.program, arg, name))
+        } else if (pp.polluted) {
           this.report(
             node,
             handsRegionMessage(this.who, this.freed, this.program, arg, name, "which stores into it")
           )
-        } else if (pp.writesReach && f.allocates) {
-          this.report(node, handsGrowthMessage(this.who, this.program, arg, name))
         } else if (isNew && (pp.keptInThis || pp.captured)) {
           this.reportOuter(node, handsText(this.program, arg, name, "which keeps it"))
         } else if (this.task && i > 0 && pp.captured && this.receiverMayBeRegion(node, callee, origins)) {

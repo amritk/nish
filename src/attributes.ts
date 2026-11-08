@@ -702,6 +702,12 @@ export class FunctionFacts {
    */
   wholeCallees: StringSet
   /**
+   * A `nish/map` instance lowered at every call (`markMapRoute`): its body
+   * is not what runs, so how far its routed callees write its receiver
+   * reaches it only along `passedToCallees` (`propagate`).
+   */
+  routed: boolean
+  /**
    * The arrays only this call reaches (`PrivateArray`). A store into one of
    * their own slots writes nothing a caller, a thread or a task can see.
    */
@@ -917,6 +923,7 @@ export class FunctionFacts {
     this.paramStores = []
     this.keepsUnknown = false
     this.wholeCallees = new StringSet()
+    this.routed = false
     this.privateArrays = []
     this.writesOutput = false
     this.writeSite = null
@@ -4190,6 +4197,7 @@ const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolea
  */
 const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void => {
   const routed = routeCalleesOf(table, sig)
+  facts.routed = true
   const receiver: PointerParamFacts | null =
     sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null
   for (const callee of routed) {
@@ -4401,6 +4409,14 @@ const markJsonRoute = (
     facts.resizesArray = true
     facts.callees.add("nish_array_grow")
     markParallelEntry(facts, "nish_alloc_struct", false)
+    // What it makes is stored below `out`: a region or a task that hands it
+    // an object of another's is told so (`judgeCallee`), as for a body that
+    // stores a fresh allocation there.
+    for (const pp of facts.pointerParams) {
+      pp.writesReach = true
+      pp.writesDeep = true
+      pp.polluted = true
+    }
   }
 }
 
@@ -4949,6 +4965,8 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
           let shared = true
           let captures = true
           let outlives = true
+          let reach = true
+          let deep = true
           if (g !== null) {
             const target = g.pointerParamAt(pp.passedToIndices[i])
             if (target !== null) {
@@ -4956,7 +4974,23 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
               shared = target.writesShared
               captures = target.captured
               outlives = target.outlives
+              reach = target.writesReach
+              deep = target.writesDeep
             }
+          }
+          // A routed instance (`markMapRoute`) has no body whose argument
+          // edges carry how far its routed callees write: this is the only
+          // path that reaches it by. A body's own edges carry it already
+          // (`callWrites`), and more narrowly. `polluted` is not carried:
+          // the routed table code is type-erased, so it would call a map of
+          // numbers dirty.
+          if (f.routed && reach && !pp.writesReach) {
+            pp.writesReach = true
+            changed = true
+          }
+          if (f.routed && deep && !pp.writesDeep) {
+            pp.writesDeep = true
+            changed = true
           }
           if (writes && !pp.writesThrough) {
             pp.writesThrough = true

@@ -1,9 +1,10 @@
 // WP49 stage 5, part 3: a task may not put the object it shares into memory
 // of its own (NL2610). Kept there, the task could store its own memory into
 // the shared object through the holder, past the rule that guards a direct
-// store. Every way in is refused: a constructor, an array or object literal,
-// a field or element store, `push`, a container's `set` or `add`, a method of
-// the task's object, and a callee that stores one argument into another.
+// store. Every way in is refused: a constructor, an array literal, a field or
+// element store, `push`, a container's `set` or `add`, a method of the task's
+// object, and a callee that stores one argument into another. An object
+// literal is `reject_async_spawn_keep_literal`.
 import { sleep, spawn } from "nish:async"
 
 class Tally {
@@ -15,10 +16,6 @@ class Holder {
   constructor(t: Tally) {
     this.t = t
   }
-}
-
-interface Box {
-  t: Tally
 }
 
 class Bag {
@@ -39,7 +36,6 @@ async function work(tally: Tally, ms: i32): Promise<void> {
   await sleep(ms)
   const a = new Holder(tally)
   const b = [tally]
-  const c: Box = { t: tally }
   const d = new Holder(new Tally())
   d.t = tally
   const e = [new Tally()]

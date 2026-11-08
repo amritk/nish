@@ -719,18 +719,18 @@ function RegionWalk.judgeCallee(this: RegionWalk, node: Node, callee: FunctionSi
   callee +27:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
   callee +27:34 handsText -> @handsText
   callee +31:11 mayBeOuter -> @mayBeOuter
-  callee +33:11 RegionWalk.report -> @RegionWalk.report
-  callee +35:13 handsRegionMessage -> @handsRegionMessage
-  callee +38:11 RegionWalk.report -> @RegionWalk.report
-  callee +38:29 handsGrowthMessage -> @handsGrowthMessage
-  callee +40:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +40:34 handsText -> @handsText
-  callee +41:57 RegionWalk.receiverMayBeRegion -> @RegionWalk.receiverMayBeRegion
-  callee +43:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +43:34 handsText -> @handsText
-  callee +46:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
-  callee +48:11 handsText -> @handsText
-  callee +53:7 RegionWalk.judgeTaskCallee -> @RegionWalk.judgeTaskCallee
+  callee +35:11 RegionWalk.report -> @RegionWalk.report
+  callee +35:29 handsGrowthMessage -> @handsGrowthMessage
+  callee +37:11 RegionWalk.report -> @RegionWalk.report
+  callee +39:13 handsRegionMessage -> @handsRegionMessage
+  callee +42:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +42:34 handsText -> @handsText
+  callee +43:57 RegionWalk.receiverMayBeRegion -> @RegionWalk.receiverMayBeRegion
+  callee +45:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +45:34 handsText -> @handsText
+  callee +48:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +50:11 handsText -> @handsText
+  callee +55:7 RegionWalk.judgeTaskCallee -> @RegionWalk.judgeTaskCallee
 function RegionWalk.receiverMayBeRegion(this: RegionWalk, call: Node, callee: FunctionSig, origins: i32[]): boolean -> @RegionWalk.receiverMayBeRegion [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: mayBeRegion methodReceiver
@@ -748,7 +748,7 @@ function RegionWalk.judgeTaskCallee(this: RegionWalk, node: Node, f: FunctionFac
   calls: FunctionFacts.pointerParamAt RegionWalk.report handsRegionMessage mayBeOuter mayBeRegion nish_panic_index nish_panic_overflow nish_str_concat textOf
   pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.report#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1
-  pointer f: size=408 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
+  pointer f: size=416 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
   pointer handed: size=0 writesThrough=true captured=false
   pointer origins: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
