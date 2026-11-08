@@ -2002,11 +2002,17 @@ const httpClientResolve = (
   const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
   const count: i32 = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
   if (count === DNS_RESOLVE_TIMEOUT && until < HTTP_CLIENT_NEVER) {
-    fault.fail(code, httpClientWaitText(code, options, `${host} was not looked up within ${options.connectTimeoutMs} ms`))
+    fault.fail(
+      code,
+      httpClientWaitText(code, options, `${host} was not looked up within ${options.connectTimeoutMs} ms`)
+    )
     return -1
   }
   if (count <= 0) {
-    fault.fail(HTTP_E_DNS, `${host} could not be looked up (${count === 0 ? "no address" : `resolver code ${count}`})`)
+    fault.fail(
+      HTTP_E_DNS,
+      `${host} could not be looked up (${count === 0 ? "no address" : `resolver code ${count}`})`
+    )
     return -1
   }
   let usable: i32 = count < DNS_RESOLVE_MAX_ADDRESSES ? count : DNS_RESOLVE_MAX_ADDRESSES
@@ -2309,7 +2315,7 @@ class HttpClientConn {
 }
 
 /** One read of the response into the parser, parking the task until the socket has bytes; false with the fault set. */
-async function httpClientFillAsync(conn: HttpClientConn): Promise<boolean> {
+const httpClientFillAsync = async (conn: HttpClientConn): Promise<boolean> => {
   if (conn.overdue()) {
     return false
   }
@@ -2340,7 +2346,7 @@ async function httpClientFillAsync(conn: HttpClientConn): Promise<boolean> {
 }
 
 /** The parser's next event, reading as it needs; -1 with the fault set. */
-async function httpClientPumpAsync(conn: HttpClientConn): Promise<i32> {
+const httpClientPumpAsync = async (conn: HttpClientConn): Promise<i32> => {
   let event: i32 = conn.parser.next()
   while (event === HTTP1_NEED_MORE) {
     const filled = await httpClientFillAsync(conn)
@@ -2357,7 +2363,7 @@ async function httpClientPumpAsync(conn: HttpClientConn): Promise<i32> {
 }
 
 /** Writes `bytes`, parking the task while the socket is full; false with the fault set. */
-async function httpClientWriteAsync(conn: HttpClientConn, bytes: u8[]): Promise<boolean> {
+const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<boolean> => {
   let at: i32 = 0
   const end: i32 = toI32(bytes.length)
   while (at < end) {
@@ -2387,7 +2393,7 @@ async function httpClientWriteAsync(conn: HttpClientConn, bytes: u8[]): Promise<
  * addresses in turn, parking the task while each connect is in flight: the
  * connected fd, or -1 with the fault set.
  */
-async function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): Promise<i32> {
+const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32): Promise<i32> => {
   const start: i64 = monotonicNanos()
   const budget: i32 = conn.options.connectTimeoutMs
   let until: i64 = budget > 0 ? start + toI64(budget) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
@@ -2436,7 +2442,12 @@ async function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32
  * so. False with the fault set; an https URL is refused before anything is
  * dialled, since its TLS handshake would block the process.
  */
-async function httpClientOpenAsync(conn: HttpClientConn, url: Url, pool: FetchPool | null, fresh: boolean): Promise<boolean> {
+const httpClientOpenAsync = async (
+  conn: HttpClientConn,
+  url: Url,
+  pool: FetchPool | null,
+  fresh: boolean
+): Promise<boolean> => {
   if (url.scheme === "https") {
     conn.fault.fail(
       HTTP_E_TLS,
@@ -2475,7 +2486,7 @@ async function httpClientOpenAsync(conn: HttpClientConn, url: Url, pool: FetchPo
 }
 
 /** Writes the request on `conn` and reads up to its final response's head; false with the fault set. */
-async function httpClientSendAsync(conn: HttpClientConn, url: Url, hop: HttpClientHop): Promise<boolean> {
+const httpClientSendAsync = async (conn: HttpClientConn, url: Url, hop: HttpClientHop): Promise<boolean> => {
   const head: u8[] | null = httpClientRequestHead(
     url,
     hop.method,
@@ -2520,7 +2531,7 @@ async function httpClientSendAsync(conn: HttpClientConn, url: Url, hop: HttpClie
  * Reads the body into `res`, at most `limit` bytes: 1 at its end, 0 when it
  * passed `limit` (the connection is then not reusable), -1 with the fault set.
  */
-async function httpClientBodyAsync(conn: HttpClientConn, res: FetchResponse, limit: i64): Promise<i32> {
+const httpClientBodyAsync = async (conn: HttpClientConn, res: FetchResponse, limit: i64): Promise<i32> => {
   let buf: u8[] = new Array<u8>(0)
   let len: i32 = 0
   let event: i32 = await httpClientPumpAsync(conn)
@@ -2562,13 +2573,13 @@ async function httpClientBodyAsync(conn: HttpClientConn, res: FetchResponse, lim
  * connection when a kept one turns out to be gone before any byte of an
  * idempotent request's answer came. Null with the fault set.
  */
-async function httpClientExchangeAsync(
+const httpClientExchangeAsync = async (
   conn: HttpClientConn,
   url: Url,
   hop: HttpClientHop,
   pool: FetchPool | null,
   redirectable: boolean
-): Promise<FetchResponse | null> {
+): Promise<FetchResponse | null> => {
   for (let attempt: i32 = 0; attempt < 2; attempt += 1) {
     const opened = await httpClientOpenAsync(conn, url, pool, attempt > 0)
     if (!opened) {
@@ -2580,12 +2591,17 @@ async function httpClientExchangeAsync(
       res.status = conn.parser.status
       res.reason = conn.parser.reason
       res.url = httpClientUrlText(url)
-      for (let i: i32 = 0; i < toI32(conn.parser.names.length) && i < toI32(conn.parser.values.length); i += 1) {
+      for (
+        let i: i32 = 0;
+        i < toI32(conn.parser.names.length) && i < toI32(conn.parser.values.length);
+        i += 1
+      ) {
         res.names.push(conn.parser.names[i])
         res.values.push(conn.parser.values[i])
       }
       // A redirect's own body is read only far enough to keep its connection.
-      const hopping: boolean = redirectable && httpClientIsRedirect(res.status) && res.header("location") !== null
+      const hopping: boolean =
+        redirectable && httpClientIsRedirect(res.status) && res.header("location") !== null
       const limit: i64 = hopping ? toI64(HTTP_CLIENT_DRAIN_BYTES) : httpClientBodyCap(conn.options)
       const read: i32 = await httpClientBodyAsync(conn, res, limit)
       if (read < 0) {
@@ -2609,7 +2625,11 @@ async function httpClientExchangeAsync(
 }
 
 /** `fetch` before its answer is wrapped: the response, or null with `fault` set. */
-async function httpClientFetchAsync(text: string, init: RequestInit, fault: HttpClientFault): Promise<FetchResponse | null> {
+const httpClientFetchAsync = async (
+  text: string,
+  init: RequestInit,
+  fault: HttpClientFault
+): Promise<FetchResponse | null> => {
   const options: HttpOptions = init.options
   const conn: HttpClientConn = new HttpClientConn(options)
   conn.fault = fault
@@ -2619,7 +2639,13 @@ async function httpClientFetchAsync(text: string, init: RequestInit, fault: Http
   }
   const hop: HttpClientHop = new HttpClientHop(init.method, init.body, init.names, init.values)
   while (url !== null) {
-    const res: FetchResponse | null = await httpClientExchangeAsync(conn, url, hop, init.pool, options.followRedirects)
+    const res: FetchResponse | null = await httpClientExchangeAsync(
+      conn,
+      url,
+      hop,
+      init.pool,
+      options.followRedirects
+    )
     if (res === null) {
       return null
     }
@@ -2645,7 +2671,10 @@ async function httpClientFetchAsync(text: string, init: RequestInit, fault: Http
  * @param init The method, fields, body, options and pool; null for a plain `GET`.
  * @returns The response with its body, or the failure: never a panic.
  */
-export async function fetch(url: string, init: RequestInit | null = null): Promise<Result<FetchResponse, FetchError>> {
+export const fetch = async (
+  url: string,
+  init: RequestInit | null = null
+): Promise<Result<FetchResponse, FetchError>> => {
   const req: RequestInit = init !== null ? init : new RequestInit()
   const fault: HttpClientFault = new HttpClientFault()
   const res: FetchResponse | null = await httpClientFetchAsync(url, req, fault)
