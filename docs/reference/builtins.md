@@ -18,7 +18,7 @@ The success value.
 
 </scalar-card>
 
-<scalar-card title="appendFileSync" icon="phosphor/regular/function" href="#appendfilesync">
+<scalar-card title="append​File​Sync" icon="phosphor/regular/function" href="#appendfilesync">
 
 `data` added at the end of the file, created at 0644 when missing; statement position.
 
@@ -30,49 +30,49 @@ The success value.
 
 </scalar-card>
 
-<scalar-card title="availableParallelism" icon="phosphor/regular/function" href="#availableparallelism">
+<scalar-card title="available​Parallelism" icon="phosphor/regular/function" href="#availableparallelism">
 
 How many CPUs the program may use, with or without `--threads`: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number — which can lower the count and never raise it.
 
 </scalar-card>
 
-<scalar-card title="bitsToF64" icon="phosphor/regular/function" href="#bitstof64">
+<scalar-card title="bits​To​F64" icon="phosphor/regular/function" href="#bitstof64">
 
 The inverse of `f64ToBits`: `bitsToF64(f64ToBits(x)) === x` for every `x` except `NaN`, which is not `===` to itself.
 
 </scalar-card>
 
-<scalar-card title="connectResult" icon="phosphor/regular/function" href="#connectresult">
+<scalar-card title="connect​Result" icon="phosphor/regular/function" href="#connectresult">
 
 How the connection of a `tcpConnect` went, asked once `fd` is writable.
 
 </scalar-card>
 
-<scalar-card title="createFileExclusiveSync" icon="phosphor/regular/function" href="#createfileexclusivesync">
+<scalar-card title="create​File​Exclusive​Sync" icon="phosphor/regular/function" href="#createfileexclusivesync">
 
 `data` in a new file of exactly `mode` (set as for `writeFileSyncMode`), created only if nothing is at `path` (`O_CREAT | O_EXCL`): -17 EEXIST when any name is, a dangling symbolic link included, which is never followed.
 
 </scalar-card>
 
-<scalar-card title="ctEq" icon="phosphor/regular/function" href="#cteq">
+<scalar-card title="ct​Eq" icon="phosphor/regular/function" href="#cteq">
 
 All-ones of the operands' type when `a === b`, zero otherwise, without a branch; the answer is only ever one of the two, and is the mask `ctSelect` takes, so `ctSelect(ctEq(a, b), x, y)` never shows the optimiser a boolean.
 
 </scalar-card>
 
-<scalar-card title="ctSelect" icon="phosphor/regular/function" href="#ctselect">
+<scalar-card title="ct​Select" icon="phosphor/regular/function" href="#ctselect">
 
 `(a & mask) | (b & ~mask)` with the mask hidden from the optimiser, so it is never turned into a branch: `a` for an all-ones mask, `b` for zero.
 
 </scalar-card>
 
-<scalar-card title="f32ToBits" icon="phosphor/regular/function" href="#f32tobits">
+<scalar-card title="f32​To​Bits" icon="phosphor/regular/function" href="#f32tobits">
 
 Reinterpret the 32 bits of an `f32`, never convert the value, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`.
 
 </scalar-card>
 
-<scalar-card title="f64ToBits" icon="phosphor/regular/function" href="#f64tobits">
+<scalar-card title="f64​To​Bits" icon="phosphor/regular/function" href="#f64tobits">
 
 Reinterpret the 64 bits of an `f64`, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`.
 
@@ -90,19 +90,19 @@ The effective user id, the one to compare an owner from `lstatOwnerModeSync` wit
 
 </scalar-card>
 
-<scalar-card title="isDirectorySync" icon="phosphor/regular/function" href="#isdirectorysync">
+<scalar-card title="is​Directory​Sync" icon="phosphor/regular/function" href="#isdirectorysync">
 
 Whether a directory is at `path` right now.
 
 </scalar-card>
 
-<scalar-card title="isExecutableSync" icon="phosphor/regular/function" href="#isexecutablesync">
+<scalar-card title="is​Executable​Sync" icon="phosphor/regular/function" href="#isexecutablesync">
 
 Whether the real user may run `path`: `access(path, X_OK)`, the shell's question.
 
 </scalar-card>
 
-<scalar-card title="isTerminal" icon="phosphor/regular/function" href="#isterminal">
+<scalar-card title="is​Terminal" icon="phosphor/regular/function" href="#isterminal">
 
 Whether descriptor `fd` is a terminal (`isatty`).
 
@@ -114,79 +114,79 @@ Send `sig` to `pid`.
 
 </scalar-card>
 
-<scalar-card title="lstatOwnerModeSync" icon="phosphor/regular/function" href="#lstatownermodesync">
+<scalar-card title="lstat​Owner​Mode​Sync" icon="phosphor/regular/function" href="#lstatownermodesync">
 
 One `lstat` of `path`, so a symbolic link answers for itself and not for what it names: the owner's uid in the high 32 bits and `st_mode` (the file type and the permission bits) in the low 32, or -1 when the path does not resolve or holds a NUL (#386).
 
 </scalar-card>
 
-<scalar-card title="mkdirSync" icon="phosphor/regular/function" href="#mkdirsync">
+<scalar-card title="mkdir​Sync" icon="phosphor/regular/function" href="#mkdirsync">
 
 One directory, not recursive, mode `0777 & ~umask`, exactly like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a failure and not a reason to create it.
 
 </scalar-card>
 
-<scalar-card title="mkdirSyncMode" icon="phosphor/regular/function" href="#mkdirsyncmode">
+<scalar-card title="mkdir​Sync​Mode" icon="phosphor/regular/function" href="#mkdirsyncmode">
 
 `mkdir(2)` of one level, made with `mode` less the umask (`0o700` is exact under any umask that leaves the owner's bits, as every usual one does; a wider mode may come out narrower).
 
 </scalar-card>
 
-<scalar-card title="monotonicNanos" icon="phosphor/regular/function" href="#monotonicnanos">
+<scalar-card title="monotonic​Nanos" icon="phosphor/regular/function" href="#monotonicnanos">
 
 `CLOCK_MONOTONIC` in nanoseconds, for timing a region of a program.
 
 </scalar-card>
 
-<scalar-card title="netAddress" icon="phosphor/regular/function" href="#netaddress">
+<scalar-card title="net​Address" icon="phosphor/regular/function" href="#netaddress">
 
 Write the address form of a numeric `host` and `port` into `out`.
 
 </scalar-card>
 
-<scalar-card title="netClose" icon="phosphor/regular/function" href="#netclose">
+<scalar-card title="net​Close" icon="phosphor/regular/function" href="#netclose">
 
 Close the descriptor.
 
 </scalar-card>
 
-<scalar-card title="netLocalPort" icon="phosphor/regular/function" href="#netlocalport">
+<scalar-card title="net​Local​Port" icon="phosphor/regular/function" href="#netlocalport">
 
 The port the socket `fd` is bound to, which is how a program that listened on port 0 learns the one the kernel chose.
 
 </scalar-card>
 
-<scalar-card title="netMss" icon="phosphor/regular/function" href="#netmss">
+<scalar-card title="net​Mss" icon="phosphor/regular/function" href="#netmss">
 
 A connected TCP socket's send MSS, the payload bytes one segment carries: Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above 0 and on Darwin.
 
 </scalar-card>
 
-<scalar-card title="netRead" icon="phosphor/regular/function" href="#netread">
+<scalar-card title="net​Read" icon="phosphor/regular/function" href="#netread">
 
 Up to `len` bytes into `buf[off, off + len)`.
 
 </scalar-card>
 
-<scalar-card title="netSetOption" icon="phosphor/regular/function" href="#netsetoption">
+<scalar-card title="net​Set​Option" icon="phosphor/regular/function" href="#netsetoption">
 
 Set one socket option from a whitelist: there is no raw level and option number, so a program cannot pass a level, a name and a length through to the kernel.
 
 </scalar-card>
 
-<scalar-card title="netShutdown" icon="phosphor/regular/function" href="#netshutdown">
+<scalar-card title="net​Shutdown" icon="phosphor/regular/function" href="#netshutdown">
 
 Shut one or both directions of a connection.
 
 </scalar-card>
 
-<scalar-card title="netWrite" icon="phosphor/regular/function" href="#netwrite">
+<scalar-card title="net​Write" icon="phosphor/regular/function" href="#netwrite">
 
 Up to `len` bytes of `buf[off, off + len)`.
 
 </scalar-card>
 
-<scalar-card title="netWrite2" icon="phosphor/regular/function" href="#netwrite2">
+<scalar-card title="net​Write2" icon="phosphor/regular/function" href="#netwrite2">
 
 `netWrite` of `a`'s range then `b`'s, in one system call (`sendmsg` with two buffers), so a header and a body leave together with no copy into one buffer.
 
@@ -198,145 +198,145 @@ Up to `len` bytes of `buf[off, off + len)`.
 
 </scalar-card>
 
-<scalar-card title="peerCredentials" icon="phosphor/regular/function" href="#peercredentials">
+<scalar-card title="peer​Credentials" icon="phosphor/regular/function" href="#peercredentials">
 
 The peer of the Unix socket `fd` as the kernel recorded it when the connection was made (the `connect`, or the `socketpair`): `out` gets its pid, uid and gid.
 
 </scalar-card>
 
-<scalar-card title="pollAdd" icon="phosphor/regular/function" href="#polladd">
+<scalar-card title="poll​Add" icon="phosphor/regular/function" href="#polladd">
 
 Watch `fd` for `events` under `token`.
 
 </scalar-card>
 
-<scalar-card title="pollCreate" icon="phosphor/regular/function" href="#pollcreate">
+<scalar-card title="poll​Create" icon="phosphor/regular/function" href="#pollcreate">
 
 A readiness loop, level-triggered: epoll on Linux, kqueue on Darwin.
 
 </scalar-card>
 
-<scalar-card title="pollModify" icon="phosphor/regular/function" href="#pollmodify">
+<scalar-card title="poll​Modify" icon="phosphor/regular/function" href="#pollmodify">
 
 New events or a new token for a watched `fd`.
 
 </scalar-card>
 
-<scalar-card title="pollRemove" icon="phosphor/regular/function" href="#pollremove">
+<scalar-card title="poll​Remove" icon="phosphor/regular/function" href="#pollremove">
 
 Stop watching `fd`.
 
 </scalar-card>
 
-<scalar-card title="pollWait" icon="phosphor/regular/function" href="#pollwait">
+<scalar-card title="poll​Wait" icon="phosphor/regular/function" href="#pollwait">
 
 Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events (1 readable, 2 writable, with 4 added for a hang-up or an error).
 
 </scalar-card>
 
-<scalar-card title="readCString" icon="phosphor/regular/function" href="#readcstring">
+<scalar-card title="read​CString" icon="phosphor/regular/function" href="#readcstring">
 
 The `NUL`-terminated bytes at `p`, copied into a new string of the program's own: undefined behaviour unless `p` is a live C string, since nothing proves the bytes end (a dangling or freed pointer, or a buffer with no `NUL`).
 
 </scalar-card>
 
-<scalar-card title="readFileBytesSync" icon="phosphor/regular/function" href="#readfilebytessync">
+<scalar-card title="read​File​Bytes​Sync" icon="phosphor/regular/function" href="#readfilebytessync">
 
 The file's bytes as they are on disk — nothing assumes UTF-8, so a zero byte, a byte of 0x80 or above and an invalid sequence all come back unchanged, and `length` is the file's size — or `null` for exactly the paths `readFileSyncOrNull` answers `null` for: missing, a directory, a parent that cannot be searched.
 
 </scalar-card>
 
-<scalar-card title="readFileSync" icon="phosphor/regular/function" href="#readfilesync">
+<scalar-card title="read​File​Sync" icon="phosphor/regular/function" href="#readfilesync">
 
 The whole file as one string; a path that cannot be read as one — missing, a directory, a parent that cannot be searched — prints `nish: cannot read <path>` to stderr and exits 1.
 
 </scalar-card>
 
-<scalar-card title="readFileSyncOrNull" icon="phosphor/regular/function" href="#readfilesyncornull">
+<scalar-card title="read​File​Sync​Or​Null" icon="phosphor/regular/function" href="#readfilesyncornull">
 
 The same read, answering `null` for every path the other exits over: a missing path, a directory, a parent that cannot be searched, a pipe with no length to ask for.
 
 </scalar-card>
 
-<scalar-card title="readSignal" icon="phosphor/regular/function" href="#readsignal">
+<scalar-card title="read​Signal" icon="phosphor/regular/function" href="#readsignal">
 
 Block until SIGTERM or SIGINT arrives.
 
 </scalar-card>
 
-<scalar-card title="readStdin" icon="phosphor/regular/function" href="#readstdin">
+<scalar-card title="read​Stdin" icon="phosphor/regular/function" href="#readstdin">
 
 Up to `len` bytes of stdin into `buf[off, off + len)`, never blocking. stdin is never made non-blocking, since that flag belongs to the open file description a shell shares with every program it starts: the call asks `select` with a timeout of 0 before it reads.
 
 </scalar-card>
 
-<scalar-card title="readdirSync" icon="phosphor/regular/function" href="#readdirsync">
+<scalar-card title="readdir​Sync" icon="phosphor/regular/function" href="#readdirsync">
 
 The directory's entries, sorted ascending by bytes (not by the file system's order, which neither `readdir(3)` nor Node's `fs.readdirSync` sorts) and without `.` or `..`; every other dotfile is an entry.
 
 </scalar-card>
 
-<scalar-card title="realpathSync" icon="phosphor/regular/function" href="#realpathsync">
+<scalar-card title="realpath​Sync" icon="phosphor/regular/function" href="#realpathsync">
 
 `path` with every symbolic link resolved and every `.`, `..` and repeated separator removed, as an absolute path — or `null` when it does not resolve, a path that does not exist included.
 
 </scalar-card>
 
-<scalar-card title="recvFd" icon="phosphor/regular/function" href="#recvfd">
+<scalar-card title="recv​Fd" icon="phosphor/regular/function" href="#recvfd">
 
 Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and the first descriptor that came with them into `fd[0]`, or -1 when the message carried none.
 
 </scalar-card>
 
-<scalar-card title="renameSync" icon="phosphor/regular/function" href="#renamesync">
+<scalar-card title="rename​Sync" icon="phosphor/regular/function" href="#renamesync">
 
 `rename(2)`: `from` takes the name `to`, replacing a file already there in one step on one file system, so a reader sees the old file or the new one and never neither — write a temporary next to the target, then rename it over.
 
 </scalar-card>
 
-<scalar-card title="secureZero" icon="phosphor/regular/function" href="#securezero">
+<scalar-card title="secure​Zero" icon="phosphor/regular/function" href="#securezero">
 
 Every byte of `bytes` set to zero, in stores neither `-O2` nor `-flto` may drop as dead (#385): how a key, a secret scalar or another secret is cleared once it is used.
 
 </scalar-card>
 
-<scalar-card title="sendFd" icon="phosphor/regular/function" href="#sendfd">
+<scalar-card title="send​Fd" icon="phosphor/regular/function" href="#sendfd">
 
 Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the descriptor `fd` (`SCM_RIGHTS`).
 
 </scalar-card>
 
-<scalar-card title="setCpuAffinity" icon="phosphor/regular/function" href="#setcpuaffinity">
+<scalar-card title="set​Cpu​Affinity" icon="phosphor/regular/function" href="#setcpuaffinity">
 
 Pin this process to CPU `cpu` alone (`sched_setaffinity`).
 
 </scalar-card>
 
-<scalar-card title="setIdlePriority" icon="phosphor/regular/function" href="#setidlepriority">
+<scalar-card title="set​Idle​Priority" icon="phosphor/regular/function" href="#setidlepriority">
 
 Move this process to `SCHED_IDLE` with `sched_setscheduler(0, SCHED_IDLE, ...)`, which runs it only when nothing else wants the CPU.
 
 </scalar-card>
 
-<scalar-card title="setNice" icon="phosphor/regular/function" href="#setnice">
+<scalar-card title="set​Nice" icon="phosphor/regular/function" href="#setnice">
 
 Set this process's nice value to `n` with `setpriority(PRIO_PROCESS, 0, n)`.
 
 </scalar-card>
 
-<scalar-card title="setRawMode" icon="phosphor/regular/function" href="#setrawmode">
+<scalar-card title="set​Raw​Mode" icon="phosphor/regular/function" href="#setrawmode">
 
 Raw mode on stdin's terminal, or the mode it had back.
 
 </scalar-card>
 
-<scalar-card title="setTerminalRestore" icon="phosphor/regular/function" href="#setterminalrestore">
+<scalar-card title="set​Terminal​Restore" icon="phosphor/regular/function" href="#setterminalrestore">
 
 Bytes the runtime writes to the terminal on stdout at exit, on a panic and on every signal that ends the program (SIGKILL aside), before termios is restored; raw mode or not, and setting them installs the same handlers.
 
 </scalar-card>
 
-<scalar-card title="signalFd" icon="phosphor/regular/function" href="#signalfd">
+<scalar-card title="signal​Fd" icon="phosphor/regular/function" href="#signalfd">
 
 A descriptor that becomes readable when SIGTERM or SIGINT arrives.
 
@@ -348,217 +348,217 @@ Start `argv[0]` through `PATH` exactly as `spawnSync` does — the same vector, 
 
 </scalar-card>
 
-<scalar-card title="spawnPiped" icon="phosphor/regular/function" href="#spawnpiped">
+<scalar-card title="spawn​Piped" icon="phosphor/regular/function" href="#spawnpiped">
 
 The same run with all three streams on pipes, all in memory: the child reads `stdin`'s bytes and then end of file, and whatever it prints is appended to `stdout` and `stderr`, which keep what they held.
 
 </scalar-card>
 
-<scalar-card title="spawnSync" icon="phosphor/regular/function" href="#spawnsync">
+<scalar-card title="spawn​Sync" icon="phosphor/regular/function" href="#spawnsync">
 
 Run `argv[0]`, searched on `PATH`, with `argv` as its argument vector, and wait for it.
 
 </scalar-card>
 
-<scalar-card title="spawnSyncTo" icon="phosphor/regular/function" href="#spawnsyncto">
+<scalar-card title="spawn​Sync​To" icon="phosphor/regular/function" href="#spawnsyncto">
 
 The same run with each stream sent to a file rather than inherited: each non-empty path is created or truncated at 0644, as `writeFileSync` does, and a symbolic link as its last component is refused, which answers -1.
 
 </scalar-card>
 
-<scalar-card title="spawnWithFds" icon="phosphor/regular/function" href="#spawnwithfds">
+<scalar-card title="spawn​With​Fds" icon="phosphor/regular/function" href="#spawnwithfds">
 
 `spawn` with the child holding `fds[i]` as descriptor `3 + i`, close-on-exec cleared there.
 
 </scalar-card>
 
-<scalar-card title="statMtimeSync" icon="phosphor/regular/function" href="#statmtimesync">
+<scalar-card title="stat​Mtime​Sync" icon="phosphor/regular/function" href="#statmtimesync">
 
 The modification time of `path` in milliseconds since the epoch, with the sub-millisecond fraction the file system keeps, computed as Node's `mtimeMs` is (seconds times 1e3 plus nanoseconds over 1e6, in doubles), so the two print the same digits.
 
 </scalar-card>
 
-<scalar-card title="tcpAccept" icon="phosphor/regular/function" href="#tcpaccept">
+<scalar-card title="tcp​Accept" icon="phosphor/regular/function" href="#tcpaccept">
 
 The next waiting connection, as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`.
 
 </scalar-card>
 
-<scalar-card title="tcpConnect" icon="phosphor/regular/function" href="#tcpconnect">
+<scalar-card title="tcp​Connect" icon="phosphor/regular/function" href="#tcpconnect">
 
 A new TCP socket, non-blocking and close-on-exec, that starts connecting to `addr`: an IPv4 address from an IPv4 socket, any other from an IPv6 one.
 
 </scalar-card>
 
-<scalar-card title="tcpListen" icon="phosphor/regular/function" href="#tcplisten">
+<scalar-card title="tcp​Listen" icon="phosphor/regular/function" href="#tcplisten">
 
 A listening TCP socket with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`.
 
 </scalar-card>
 
-<scalar-card title="tcpListenFlags" icon="phosphor/regular/function" href="#tcplistenflags">
+<scalar-card title="tcp​Listen​Flags" icon="phosphor/regular/function" href="#tcplistenflags">
 
 `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket for flag 2.
 
 </scalar-card>
 
-<scalar-card title="terminalSize" icon="phosphor/regular/function" href="#terminalsize">
+<scalar-card title="terminal​Size" icon="phosphor/regular/function" href="#terminalsize">
 
 The size of the terminal on stdout, else stderr, as a fresh array: read it again on each frame to follow a resize.
 
 </scalar-card>
 
-<scalar-card title="toF32" icon="phosphor/regular/function" href="#tof32">
+<scalar-card title="to​F32" icon="phosphor/regular/function" href="#tof32">
 
 `x` as an `f32`; from an `f64` it rounds to nearest, and an integer is converted as signed or unsigned by its own signedness.
 
 </scalar-card>
 
-<scalar-card title="toF64" icon="phosphor/regular/function" href="#tof64">
+<scalar-card title="to​F64" icon="phosphor/regular/function" href="#tof64">
 
 `x` as an `f64`; from an `f32` it is exact, and an integer is converted as signed or unsigned by its own signedness.
 
 </scalar-card>
 
-<scalar-card title="toI32" icon="phosphor/regular/function" href="#toi32">
+<scalar-card title="to​I32" icon="phosphor/regular/function" href="#toi32">
 
 `x` as an `i32`.
 
 </scalar-card>
 
-<scalar-card title="toI64" icon="phosphor/regular/function" href="#toi64">
+<scalar-card title="to​I64" icon="phosphor/regular/function" href="#toi64">
 
 `x` as an `i64`: a signed source is sign-extended, an unsigned one zero-extended, and a float saturates (NaN is 0, out of range clamps).
 
 </scalar-card>
 
-<scalar-card title="toU16" icon="phosphor/regular/function" href="#tou16">
+<scalar-card title="to​U16" icon="phosphor/regular/function" href="#tou16">
 
 `x` as a `u16`, by `toU8`'s rules at 16 bits: a float saturates into `0 .. 65535`.
 
 </scalar-card>
 
-<scalar-card title="toU32" icon="phosphor/regular/function" href="#tou32">
+<scalar-card title="to​U32" icon="phosphor/regular/function" href="#tou32">
 
 `x` as a `u32`, by `toU8`'s rules at 32 bits: a float saturates into `0 .. 2^32 - 1`.
 
 </scalar-card>
 
-<scalar-card title="toU64" icon="phosphor/regular/function" href="#tou64">
+<scalar-card title="to​U64" icon="phosphor/regular/function" href="#tou64">
 
 `x` as a `u64`.
 
 </scalar-card>
 
-<scalar-card title="toU8" icon="phosphor/regular/function" href="#tou8">
+<scalar-card title="to​U8" icon="phosphor/regular/function" href="#tou8">
 
 `x` as a `u8`: a wider integer is truncated, and a float saturates into `0 .. 255`, so a negative value is 0.
 
 </scalar-card>
 
-<scalar-card title="totalMemory" icon="phosphor/regular/function" href="#totalmemory">
+<scalar-card title="total​Memory" icon="phosphor/regular/function" href="#totalmemory">
 
 Bytes of physical memory — `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on Darwin.
 
 </scalar-card>
 
-<scalar-card title="udpBind" icon="phosphor/regular/function" href="#udpbind">
+<scalar-card title="udp​Bind" icon="phosphor/regular/function" href="#udpbind">
 
 A datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way `tcpListen`'s is, `"::"` and its IPv4 fallback included.
 
 </scalar-card>
 
-<scalar-card title="udpRecvFrom" icon="phosphor/regular/function" href="#udprecvfrom">
+<scalar-card title="udp​Recv​From" icon="phosphor/regular/function" href="#udprecvfrom">
 
 The next datagram, or several GRO coalesced, into `buf[off, off + len)` in one `recvmsg`, cut to `len` if it is longer.
 
 </scalar-card>
 
-<scalar-card title="udpSendTo" icon="phosphor/regular/function" href="#udpsendto">
+<scalar-card title="udp​Send​To" icon="phosphor/regular/function" href="#udpsendto">
 
 `buf[off, off + len)` to the address `to`, in one `sendmsg`.
 
 </scalar-card>
 
-<scalar-card title="uncheckedGet" icon="phosphor/regular/function" href="#uncheckedget">
+<scalar-card title="unchecked​Get" icon="phosphor/regular/function" href="#uncheckedget">
 
 `xs[i]` with no bounds check: undefined behaviour when `i` is out of range, which is the whole of the trade.
 
 </scalar-card>
 
-<scalar-card title="uncheckedSet" icon="phosphor/regular/function" href="#uncheckedset">
+<scalar-card title="unchecked​Set" icon="phosphor/regular/function" href="#uncheckedset">
 
 `xs[i] = v` with no bounds check: undefined behaviour when `i` is out of range.
 
 </scalar-card>
 
-<scalar-card title="unixAccept" icon="phosphor/regular/function" href="#unixaccept">
+<scalar-card title="unix​Accept" icon="phosphor/regular/function" href="#unixaccept">
 
 The next connection on a Unix listener, non-blocking and close-on-exec.
 
 </scalar-card>
 
-<scalar-card title="unixConnect" icon="phosphor/regular/function" href="#unixconnect">
+<scalar-card title="unix​Connect" icon="phosphor/regular/function" href="#unixconnect">
 
 A new socket, non-blocking and close-on-exec, connected to the listener at `path`.
 
 </scalar-card>
 
-<scalar-card title="unixListen" icon="phosphor/regular/function" href="#unixlisten">
+<scalar-card title="unix​Listen" icon="phosphor/regular/function" href="#unixlisten">
 
 A listening Unix stream socket at `path` (`@name`: Linux's abstract namespace), its file mode 0600, so only its owner may connect.
 
 </scalar-card>
 
-<scalar-card title="unixListenMode" icon="phosphor/regular/function" href="#unixlistenmode">
+<scalar-card title="unix​Listen​Mode" icon="phosphor/regular/function" href="#unixlistenmode">
 
 `unixListen` with the socket file's mode chosen, set between the bind and the listen so no connect gets in under a wider one.
 
 </scalar-card>
 
-<scalar-card title="unixSocketPair" icon="phosphor/regular/function" href="#unixsocketpair">
+<scalar-card title="unix​Socket​Pair" icon="phosphor/regular/function" href="#unixsocketpair">
 
 Two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec: a channel without a name for a child process or one side of a program.
 
 </scalar-card>
 
-<scalar-card title="unlinkSync" icon="phosphor/regular/function" href="#unlinksync">
+<scalar-card title="unlink​Sync" icon="phosphor/regular/function" href="#unlinksync">
 
 `unlink(2)`: the name `path` removed, and a symbolic link itself rather than what it names.
 
 </scalar-card>
 
-<scalar-card title="waitPid" icon="phosphor/regular/function" href="#waitpid">
+<scalar-card title="wait​Pid" icon="phosphor/regular/function" href="#waitpid">
 
 Reap a child and answer a fresh two-element array (the language has no tuple).
 
 </scalar-card>
 
-<scalar-card title="waitStdin" icon="phosphor/regular/function" href="#waitstdin">
+<scalar-card title="wait​Stdin" icon="phosphor/regular/function" href="#waitstdin">
 
 Wait for stdin to be readable, or `timeoutMs` milliseconds to pass: the frame clock of a terminal program, which costs nothing when a key arrives early.
 
 </scalar-card>
 
-<scalar-card title="wallClockNanos" icon="phosphor/regular/function" href="#wallclocknanos">
+<scalar-card title="wall​Clock​Nanos" icon="phosphor/regular/function" href="#wallclocknanos">
 
 `CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC, for dating an event: `Date.now`'s clock at a nanosecond's grain and as an `i64`.
 
 </scalar-card>
 
-<scalar-card title="wrappingAdd" icon="phosphor/regular/function" href="#wrappingadd">
+<scalar-card title="wrapping​Add" icon="phosphor/regular/function" href="#wrappingadd">
 
 `a + b` wrapped to the operands' width, `i32` or `i64`: defined for every pair, where the operator `+` panics on signed overflow.
 
 </scalar-card>
 
-<scalar-card title="wrappingMul" icon="phosphor/regular/function" href="#wrappingmul">
+<scalar-card title="wrapping​Mul" icon="phosphor/regular/function" href="#wrappingmul">
 
 `a * b` wrapped to the operands' width, by `wrappingAdd`'s rules: `wrappingMul(INT64_MAX, 2)` is `-2`.
 
 </scalar-card>
 
-<scalar-card title="wrappingSub" icon="phosphor/regular/function" href="#wrappingsub">
+<scalar-card title="wrapping​Sub" icon="phosphor/regular/function" href="#wrappingsub">
 
 `a - b` wrapped to the operands' width, by `wrappingAdd`'s rules, so `wrappingSub(0, x)` is a negation that wraps.
 
@@ -570,31 +570,31 @@ Wait for stdin to be readable, or `timeoutMs` milliseconds to pass: the frame cl
 
 </scalar-card>
 
-<scalar-card title="writeBytes" icon="phosphor/regular/function" href="#writebytes">
+<scalar-card title="write​Bytes" icon="phosphor/regular/function" href="#writebytes">
 
 `bytes[off .. off + len)` to stdout, every byte as it is, with no conversion — the one way to send bytes that are not text, a byte of 0x80 or above or a zero byte included.
 
 </scalar-card>
 
-<scalar-card title="writeError" icon="phosphor/regular/function" href="#writeerror">
+<scalar-card title="write​Error" icon="phosphor/regular/function" href="#writeerror">
 
 `s` to stderr, likewise: no trailing newline, no conversion, statement position, the same byte-for-byte rule for a string.
 
 </scalar-card>
 
-<scalar-card title="writeFileBytesSync" icon="phosphor/regular/function" href="#writefilebytessync">
+<scalar-card title="write​File​Bytes​Sync" icon="phosphor/regular/function" href="#writefilebytessync">
 
 The file's contents replaced by `bytes`, created at 0644 when missing, the array's bytes written as they are: `readFileBytesSync`'s other half.
 
 </scalar-card>
 
-<scalar-card title="writeFileSync" icon="phosphor/regular/function" href="#writefilesync">
+<scalar-card title="write​File​Sync" icon="phosphor/regular/function" href="#writefilesync">
 
 The file's contents replaced by `data`, created at 0644 when missing; statement position.
 
 </scalar-card>
 
-<scalar-card title="writeFileSyncMode" icon="phosphor/regular/function" href="#writefilesyncmode">
+<scalar-card title="write​File​Sync​Mode" icon="phosphor/regular/function" href="#writefilesyncmode">
 
 `writeFileSync` with an explicit `mode`: the file is exactly `mode` (`0o600` for a secret) before a byte of `data` is in it, whatever the umask or a file already there had.
 
@@ -642,13 +642,13 @@ The running process: its exit, its command line and its host.
 
 </scalar-card>
 
-<scalar-card title="ReadonlyArray" icon="phosphor/regular/cube" href="#readonlyarray">
+<scalar-card title="Readonly​Array" icon="phosphor/regular/cube" href="#readonlyarray">
 
 `readonly T[]`, or `ReadonlyArray<T>` under the other spelling: the same array, which may not be written through.
 
 </scalar-card>
 
-<scalar-card title="ResultMethods" icon="phosphor/regular/cube" href="#resultmethods">
+<scalar-card title="Result​Methods" icon="phosphor/regular/cube" href="#resultmethods">
 
 The methods every `Result` carries.
 
@@ -666,10 +666,10 @@ A string: UTF-8 bytes.
 
 </scalar-card>
 
-<scalar-card title="StringConstructor" icon="phosphor/regular/cube" href="#stringconstructor">
+<scalar-card title="String​Constructor" icon="phosphor/regular/cube" href="#stringconstructor">
 </scalar-card>
 
-<scalar-card title="SymbolConstructor" icon="phosphor/regular/cube" href="#symbolconstructor">
+<scalar-card title="Symbol​Constructor" icon="phosphor/regular/cube" href="#symbolconstructor">
 
 Returns a new unique Symbol value.
 
@@ -698,11 +698,11 @@ makes it legal TypeScript *semantics* too: reference it from a `tsconfig.json`
 your language server all accept `Result<T, E>`, `Ok(...)`, `i32` and the rest
 without a red squiggle.
 
+</scalar-callout>
+
 ```text
 { "include": ["src/**/*.ts", "node_modules/nish/runtime/nish.d.ts"] }
 ```
-
-</scalar-callout>
 
 <scalar-detail title="`nish` is still the authority">
 
@@ -739,7 +739,9 @@ none of which `tsc` can know (docs/LANGUAGE.md -> `Map` and `Set`).
 `nish/map`'s `reserve` and `getOrInsert` are not declared here: they are
 ordinary source, `std/map.ts`, which `tsconfig.json` maps `nish/*` to.
 
-## Err
+## Functions
+
+### Err
 
 The failure value, likewise: its `Result` type comes from the context.
 Capability: none.
@@ -748,15 +750,11 @@ Capability: none.
 function Err<T, E>(error: E): Result<T, E>
 ```
 
-#### Parameters
-
 <scalar-field name="error" type="E" required>
 
 the error payload.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="Result&lt;T, E&gt;">
 
@@ -764,7 +762,7 @@ a `Result` on its failure arm.
 
 </scalar-field>
 
-## Ok
+### Ok
 
 The success value. Its `Result` type comes from the context, as `null`'s
 does; `Ok()` with no argument is a `Result<void, E>`. In f64 mode a numeric
@@ -775,15 +773,11 @@ literal payload takes no type from the context, so `Ok(3)` for a
 function Ok<T, E>(value: T): Result<T, E>
 ```
 
-#### Parameters
-
 <scalar-field name="value" type="T" required>
 
 the payload.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="Result&lt;T, E&gt;">
 
@@ -797,15 +791,13 @@ The success of a `Result<void, E>`, with no payload. Capability: none.
 function Ok<E>(): Result<void, E>
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="Result&lt;void, E&gt;">
 
 a `Result<void, E>` on its success arm.
 
 </scalar-field>
 
-## appendFileSync
+### appendFileSync
 
 `data` added at the end of the file, created at 0644 when missing; statement
 position. A symbolic link as the last component is refused, as for
@@ -817,8 +809,6 @@ function appendFileSync(
   data: string,
 ): void
 ```
-
-#### Parameters
 
 <scalar-field name="path" type="string" required>
 
@@ -832,7 +822,7 @@ the text appended.
 
 </scalar-field>
 
-## arena
+### arena
 
 `using a = arena()` (docs/LANGUAGE.md -> Arena): everything the block
 allocates after this declaration is released when the block ends, on every
@@ -866,15 +856,13 @@ A panic ends the process. Capability: none.
 function arena(): Disposable
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="Disposable">
 
 the scope the `using` declaration disposes.
 
 </scalar-field>
 
-## availableParallelism
+### availableParallelism
 
 How many CPUs the program may use, with or without `--threads`: the smallest
 of the CPUs online, the ones its thread may run on (an affinity mask, a
@@ -891,15 +879,13 @@ Capability: none.
 function availableParallelism(): i32
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 at least 1.
 
 </scalar-field>
 
-## bitsToF64
+### bitsToF64
 
 The inverse of `f64ToBits`: `bitsToF64(f64ToBits(x)) === x` for every `x`
 except `NaN`, which is not `===` to itself. An argument that is not an `i64`
@@ -909,15 +895,11 @@ is refused. Capability: none.
 function bitsToF64(bits: i64): f64
 ```
 
-#### Parameters
-
 <scalar-field name="bits" type="i64" required>
 
 the 64 bits to read as a float.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="f64">
 
@@ -925,7 +907,7 @@ the `f64` those bits are.
 
 </scalar-field>
 
-## connectResult
+### connectResult
 
 How the connection of a `tcpConnect` went, asked once `fd` is writable. The kernel clears the
 failure as it is read, so a second call answers 0; the descriptor is closed with `netClose`
@@ -936,15 +918,11 @@ wasm32 and the WASI profile (NL2404). Capability: net.
 function connectResult(fd: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 the connecting socket.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -953,7 +931,7 @@ the connecting socket.
 
 </scalar-field>
 
-## createFileExclusiveSync
+### createFileExclusiveSync
 
 `data` in a new file of exactly `mode` (set as for `writeFileSyncMode`),
 created only if nothing is at `path` (`O_CREAT | O_EXCL`): -17 EEXIST when any
@@ -971,8 +949,6 @@ function createFileExclusiveSync(
   mode: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="path" type="string" required>
 
@@ -992,8 +968,6 @@ the file's mode, 0..0o777.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the byte count, or a negative errno as for `writeFileSyncMode`, `-17`
@@ -1001,7 +975,7 @@ the byte count, or a negative errno as for `writeFileSyncMode`, `-17`
 
 </scalar-field>
 
-## ctEq
+### ctEq
 
 All-ones of the operands' type when `a === b`, zero otherwise, without a
 branch; the answer is only ever one of the two, and is the mask `ctSelect`
@@ -1018,8 +992,6 @@ every function it is not a value. The no-branch promise and its limits are
 function ctEq<T extends u32 | u64>(a: T, b: T): T
 ```
 
-#### Parameters
-
 <scalar-field name="a" type="T" required>
 
 one operand.
@@ -1032,15 +1004,13 @@ the other, of the same type.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="T">
 
 a mask for `ctSelect`.
 
 </scalar-field>
 
-## ctSelect
+### ctSelect
 
 `(a & mask) | (b & ~mask)` with the mask hidden from the optimiser, so it is
 never turned into a branch: `a` for an all-ones mask, `b` for zero. Every
@@ -1071,8 +1041,6 @@ function ctSelect<T extends u32 | u64>(
 ): T
 ```
 
-#### Parameters
-
 <scalar-field name="mask" type="T" required>
 
 all ones to choose `a`, zero to choose `b`.
@@ -1091,15 +1059,13 @@ the value a zero mask selects.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="T">
 
 `a` or `b`, chosen without a branch.
 
 </scalar-field>
 
-## f32ToBits
+### f32ToBits
 
 Reinterpret the 32 bits of an `f32`, never convert the value, signed as an
 `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is
@@ -1111,15 +1077,11 @@ from a `DataView`. Capability: none.
 function f32ToBits(x: f32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="f32" required>
 
 the float whose bits are read.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -1127,7 +1089,7 @@ the same 32 bits as an `i32`.
 
 </scalar-field>
 
-## f64ToBits
+### f64ToBits
 
 Reinterpret the 64 bits of an `f64`, never convert the value: `toI64(1.5)`
 is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. A function that only
@@ -1138,15 +1100,11 @@ refused, as is a call with other than one argument. Capability: none.
 function f64ToBits(x: f64): i64
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="f64" required>
 
 the float whose bits are read.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i64">
 
@@ -1154,7 +1112,7 @@ the same 64 bits as an `i64`.
 
 </scalar-field>
 
-## getenv
+### getenv
 
 One environment variable, as the call runs. The value is what `getenv(3)`
 answers, so it is bytes: a variable holding something that is not valid
@@ -1171,15 +1129,11 @@ Capability: env.
 function getenv(name: string): string | null
 ```
 
-#### Parameters
-
 <scalar-field name="name" type="string" required>
 
 the variable's name.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="string | null">
 
@@ -1188,7 +1142,7 @@ its value, or `null` when it is unset (an empty value, as `CC=`, is a
 
 </scalar-field>
 
-## geteuid
+### geteuid
 
 The effective user id, the one to compare an owner from `lstatOwnerModeSync`
 with; compare it with `(om >> 32) & 0xffffffff`. The answer is an `i64` in
@@ -1200,15 +1154,13 @@ there is no user there. Under Node the runtime shim supplies
 function geteuid(): i64
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i64">
 
 the process's effective uid.
 
 </scalar-field>
 
-## isDirectorySync
+### isDirectorySync
 
 Whether a directory is at `path` right now. One `stat`, and never an exit.
 The answer is a fact about the file system as the call runs and can be stale
@@ -1220,15 +1172,11 @@ read a file without racing a check against it. Capability: fs.read.
 function isDirectorySync(path: string): boolean
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the path to ask about.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="boolean">
 
@@ -1237,7 +1185,7 @@ the path to ask about.
 
 </scalar-field>
 
-## isExecutableSync
+### isExecutableSync
 
 Whether the real user may run `path`: `access(path, X_OK)`, the shell's
 question. It is `false` for a path that does not resolve or holds a NUL, for
@@ -1251,15 +1199,11 @@ export. Capability: fs.read.
 function isExecutableSync(path: string): boolean
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to ask about.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="boolean">
 
@@ -1267,7 +1211,7 @@ whether it is executable by the real user.
 
 </scalar-field>
 
-## isTerminal
+### isTerminal
 
 Whether descriptor `fd` is a terminal (`isatty`). `false` for a pipe or a file and under
 `--profile wasi`; under Node it is `tty.isatty`, in a browser `false`; refused at compile
@@ -1277,15 +1221,11 @@ time on a freestanding wasm32 target. Capability: tty.
 function isTerminal(fd: i32): boolean
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 the descriptor asked about.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="boolean">
 
@@ -1293,7 +1233,7 @@ whether it is a terminal.
 
 </scalar-field>
 
-## kill
+### kill
 
 Send `sig` to `pid`. Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are
 accepted, whose numbers are the same on Linux and Darwin, so a number means
@@ -1308,8 +1248,6 @@ Capability: process.spawn.
 function kill(pid: i32, sig: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="pid" type="i32" required>
 
 the process signalled; 0 or below is -22, because `kill(2)` reads
@@ -1323,8 +1261,6 @@ the process signalled; 0 or below is -22, because `kill(2)` reads
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno: -3 (ESRCH) when no process has the pid, a
@@ -1333,7 +1269,7 @@ the process signalled; 0 or below is -22, because `kill(2)` reads
 
 </scalar-field>
 
-## lstatOwnerModeSync
+### lstatOwnerModeSync
 
 One `lstat` of `path`, so a symbolic link answers for itself and not for what
 it names: the owner's uid in the high 32 bits and `st_mode` (the file type and
@@ -1357,15 +1293,11 @@ Capability: fs.read.
 function lstatOwnerModeSync(path: string): i64
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the path to stat, not followed through a final link.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i64">
 
@@ -1373,7 +1305,7 @@ the path to stat, not followed through a final link.
 
 </scalar-field>
 
-## mkdirSync
+### mkdirSync
 
 One directory, not recursive, mode `0777 & ~umask`, exactly like Node's
 `fs.mkdirSync(p)` with no options, so a missing parent is a failure and not a
@@ -1385,15 +1317,11 @@ half of it. Capability: fs.write.
 function mkdirSync(path: string): boolean
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the directory to make.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="boolean">
 
@@ -1403,7 +1331,7 @@ the directory to make.
 
 </scalar-field>
 
-## mkdirSyncMode
+### mkdirSyncMode
 
 `mkdir(2)` of one level, made with `mode` less the umask (`0o700` is exact
 under any umask that leaves the owner's bits, as every usual one does; a
@@ -1418,8 +1346,6 @@ function mkdirSyncMode(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the directory to make.
@@ -1432,8 +1358,6 @@ its mode before the umask, 0..0o777.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno: `-2` ENOENT for a missing parent; -22 for a
@@ -1442,7 +1366,7 @@ its mode before the umask, 0..0o777.
 
 </scalar-field>
 
-## monotonicNanos
+### monotonicNanos
 
 `CLOCK_MONOTONIC` in nanoseconds, for timing a region of a program. The
 origin is arbitrary, so only the difference between two reads means anything:
@@ -1455,15 +1379,13 @@ Capability: clock.
 function monotonicNanos(): i64
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i64">
 
 nanoseconds since an arbitrary origin.
 
 </scalar-field>
 
-## netAddress
+### netAddress
 
 Write the address form of a numeric `host` and `port` into `out`. No `nish:net` call looks a name
 up; `nish/net/dns` resolves one first. An address is 18 bytes: the 16 bytes of an IPv6 address
@@ -1480,8 +1402,6 @@ function netAddress(
   port: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="out" type="u8[]" required>
 
@@ -1502,8 +1422,6 @@ the port, 0 to 65535.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or -22 for a name, a string with a NUL inside it, a port outside 0..65535 or an
@@ -1511,7 +1429,7 @@ the port, 0 to 65535.
 
 </scalar-field>
 
-## netClose
+### netClose
 
 Close the descriptor. The descriptor is gone whatever the answer, as `close(2)` promises on
 Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait. Not
@@ -1522,15 +1440,11 @@ profile (NL2404). Capability: net.
 function netClose(fd: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 the descriptor closed.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -1538,7 +1452,7 @@ the descriptor closed.
 
 </scalar-field>
 
-## netLocalPort
+### netLocalPort
 
 The port the socket `fd` is bound to, which is how a program that listened on port 0 learns the
 one the kernel chose. Not callable in a `scope()` task or a parallel body. Refused at compile
@@ -1548,15 +1462,11 @@ time on wasm32 and the WASI profile (NL2404). Capability: net.
 function netLocalPort(fd: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 a bound socket.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -1564,7 +1474,7 @@ the port, or a negative errno.
 
 </scalar-field>
 
-## netMss
+### netMss
 
 A connected TCP socket's send MSS, the payload bytes one segment carries: Linux's `TCP_INFO`
 `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above 0 and on Darwin. The answer moves
@@ -1588,15 +1498,11 @@ export const batch = (conn: i32, fallback: i32): i32 => {
 function netMss(fd: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 the socket.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -1606,7 +1512,7 @@ the MSS; -1, never an errno, for anything else (a descriptor that is not open, a
 
 </scalar-field>
 
-## netRead
+### netRead
 
 Up to `len` bytes into `buf[off, off + len)`. The range is checked in the compiled code before
 the call: one outside `0 <= off <= off + len <= buf.length`, or a negative `off` or `len`, panics
@@ -1624,8 +1530,6 @@ function netRead(
   len: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="fd" type="i32" required>
 
@@ -1651,15 +1555,13 @@ the most bytes read; a `len` of 0 answers 0 too, so ask for at least one byte.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the count, 0 at end of stream, or -11 when nothing is waiting.
 
 </scalar-field>
 
-## netSetOption
+### netSetOption
 
 Set one socket option from a whitelist: there is no raw level and option number, so a program
 cannot pass a level, a name and a length through to the kernel. The ids are the runtime's own
@@ -1682,8 +1584,6 @@ function netSetOption(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 the socket.
@@ -1702,8 +1602,6 @@ the option's value: 0 or 1 for the switches, a byte count for the buffer sizes.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno (-9 a closed descriptor, -88 not a socket, -95 for
@@ -1711,7 +1609,7 @@ the option's value: 0 or 1 for the switches, a byte count for the buffer sizes.
 
 </scalar-field>
 
-## netShutdown
+### netShutdown
 
 Shut one or both directions of a connection. Not callable in a `scope()` task or a parallel body.
 Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
@@ -1719,8 +1617,6 @@ Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net
 ```ts
 function netShutdown(fd: i32, how: i32): i32
 ```
-
-#### Parameters
 
 <scalar-field name="fd" type="i32" required>
 
@@ -1734,15 +1630,13 @@ the read side (0), the write side (1) or both (2).
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno; -22 for any other `how`.
 
 </scalar-field>
 
-## netWrite
+### netWrite
 
 Up to `len` bytes of `buf[off, off + len)`. A gone peer is -32, never SIGPIPE, so a closed
 connection cannot end the process. The range is checked as `netRead`'s is, with the same panic.
@@ -1758,8 +1652,6 @@ function netWrite(
   len: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="fd" type="i32" required>
 
@@ -1785,8 +1677,6 @@ the most bytes sent.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the count, which may be fewer than `len`, or a negative errno: -11 when the send
@@ -1794,7 +1684,7 @@ the count, which may be fewer than `len`, or a negative errno: -11 when the send
 
 </scalar-field>
 
-## netWrite2
+### netWrite2
 
 `netWrite` of `a`'s range then `b`'s, in one system call (`sendmsg` with two buffers), so a
 header and a body leave together with no copy into one buffer. The count may be fewer than `aLen
@@ -1814,8 +1704,6 @@ function netWrite2(
   bLen: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="fd" type="i32" required>
 
@@ -1859,8 +1747,6 @@ how many bytes of `b`.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the count of both, at most `aLen + bLen`, or a negative errno: -11 when the send
@@ -1868,7 +1754,7 @@ the count of both, at most `aLen + bLen`, or a negative errno: -11 when the send
 
 </scalar-field>
 
-## panic
+### panic
 
 `message` and a newline to stderr, then exit 1: it ends the program, with
 the same ending an out-of-range index has. It is how a program ends on an
@@ -1883,20 +1769,16 @@ shape `src/` uses everywhere in place of an assert. Also exported by
 function panic(message: string): never
 ```
 
-#### Parameters
-
 <scalar-field name="message" type="string" required>
 
 what stderr says before the exit.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="never">
 </scalar-field>
 
-## peerCredentials
+### peerCredentials
 
 The peer of the Unix socket `fd` as the kernel recorded it when the connection was made (the
 `connect`, or the `socketpair`): `out` gets its pid, uid and gid. A peer that has since changed
@@ -1911,8 +1793,6 @@ net.
 function peerCredentials(fd: i32, out: i32[]): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 the connected Unix socket.
@@ -1925,8 +1805,6 @@ at least 3 slots, receiving pid, uid and gid.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0; -22 an `out` shorter than 3, -9 a closed `fd`, -88 not a
@@ -1935,7 +1813,7 @@ at least 3 slots, receiving pid, uid and gid.
 
 </scalar-field>
 
-## pollAdd
+### pollAdd
 
 Watch `fd` for `events` under `token`. On Darwin a descriptor added watching nothing is known to
 the loop but never reported (a disabled read filter), and an add that answers -17 leaves the
@@ -1950,8 +1828,6 @@ function pollAdd(
   token: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="loop" type="i32" required>
 
@@ -1978,8 +1854,6 @@ an `i32` of the program's choosing, which `pollWait` reports it under as it went
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno: -17 for a descriptor the loop already watches, -22 for an
@@ -1987,7 +1861,7 @@ an `i32` of the program's choosing, which `pollWait` reports it under as it went
 
 </scalar-field>
 
-## pollCreate
+### pollCreate
 
 A readiness loop, level-triggered: epoll on Linux, kqueue on Darwin. The descriptor is
 close-on-exec. A descriptor still ready when the program waits again is reported again, so a loop
@@ -2017,15 +1891,13 @@ while (running) {
 function pollCreate(): i32
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the loop's descriptor, or a negative errno.
 
 </scalar-field>
 
-## pollModify
+### pollModify
 
 New events or a new token for a watched `fd`. Not callable in a `scope()` task or a parallel
 body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
@@ -2038,8 +1910,6 @@ function pollModify(
   token: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="loop" type="i32" required>
 
@@ -2065,15 +1935,13 @@ the number `pollWait` reports it under.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno: -2 for a descriptor the loop does not watch.
 
 </scalar-field>
 
-## pollRemove
+### pollRemove
 
 Stop watching `fd`. Closing a descriptor stops the watching too. Not callable in a `scope()` task
 or a parallel body. Refused at compile time on wasm32 and the WASI profile (NL2404). Capability:
@@ -2082,8 +1950,6 @@ net.
 ```ts
 function pollRemove(loop: i32, fd: i32): i32
 ```
-
-#### Parameters
 
 <scalar-field name="loop" type="i32" required>
 
@@ -2097,15 +1963,13 @@ the descriptor no longer watched.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno: -2 for a descriptor the loop does not watch.
 
 </scalar-field>
 
-## pollWait
+### pollWait
 
 Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events (1 readable, 2
 writable, with 4 added for a hang-up or an error). Not `willreturn`, because it can wait forever.
@@ -2128,8 +1992,6 @@ function pollWait(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="loop" type="i32" required>
 
 the loop from `pollCreate`.
@@ -2148,8 +2010,6 @@ the most milliseconds to wait; negative: forever (-1).
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 how many pairs, at most `ready.length / 2` and at most 64 (the rest stay ready for
@@ -2157,7 +2017,7 @@ how many pairs, at most `ready.length / 2` and at most 64 (the rest stay ready f
 
 </scalar-field>
 
-## readCString
+### readCString
 
 The `NUL`-terminated bytes at `p`, copied into a new string of the program's
 own: undefined behaviour unless `p` is a live C string, since nothing proves
@@ -2182,15 +2042,11 @@ Node cannot call. Capability: unsafe.
 function readCString(p: CPtr): string
 ```
 
-#### Parameters
-
 <scalar-field name="p" type="CPtr" required>
 
 the address a `declare function` handed back.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="string">
 
@@ -2198,7 +2054,7 @@ a copy of the bytes before the first `NUL`.
 
 </scalar-field>
 
-## readFileBytesSync
+### readFileBytesSync
 
 The file's bytes as they are on disk — nothing assumes UTF-8, so a zero byte,
 a byte of 0x80 or above and an invalid sequence all come back unchanged, and
@@ -2216,15 +2072,11 @@ function readFileBytesSync(
 ): u8[] | null
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to read.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="u8[] | null">
 
@@ -2232,7 +2084,7 @@ its bytes, or `null`.
 
 </scalar-field>
 
-## readFileSync
+### readFileSync
 
 The whole file as one string; a path that cannot be read as one — missing, a
 directory, a parent that cannot be searched — prints `nish: cannot read
@@ -2246,15 +2098,11 @@ Capability: fs.read.
 function readFileSync(path: string): string
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to read.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="string">
 
@@ -2262,7 +2110,7 @@ its contents.
 
 </scalar-field>
 
-## readFileSyncOrNull
+### readFileSyncOrNull
 
 The same read, answering `null` for every path the other exits over: a
 missing path, a directory, a parent that cannot be searched, a pipe with no
@@ -2278,15 +2126,11 @@ function readFileSyncOrNull(
 ): string | null
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to read.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="string | null">
 
@@ -2294,7 +2138,7 @@ its contents, or `null`.
 
 </scalar-field>
 
-## readSignal
+### readSignal
 
 Block until SIGTERM or SIGINT arrives. The argument is an `i32` in both number
 modes, as a descriptor is, and an `f64`, an `i64` or a string is refused
@@ -2306,15 +2150,11 @@ exported by `nish:process`. Capability: signal.
 function readSignal(fd: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 `signalFd()`'s descriptor.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -2323,7 +2163,7 @@ the signal's number, 15 or 2; -1 for any `fd` that is not
 
 </scalar-field>
 
-## readStdin
+### readStdin
 
 Up to `len` bytes of stdin into `buf[off, off + len)`, never blocking. stdin is never made
 non-blocking, since that flag belongs to the open file description a shell shares with every
@@ -2366,8 +2206,6 @@ function readStdin(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="buf" type="u8[]" required>
 
 the buffer filled.
@@ -2386,15 +2224,13 @@ the most bytes read; a `len` of 0 answers 0 too, so ask for at least one byte.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the count, 0 at end of stream, or -11 when nothing is waiting.
 
 </scalar-field>
 
-## readdirSync
+### readdirSync
 
 The directory's entries, sorted ascending by bytes (not by the file system's
 order, which neither `readdir(3)` nor Node's `fs.readdirSync` sorts) and
@@ -2413,15 +2249,11 @@ function readdirSync(
 ): string[] | null
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the directory to list.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="string[] | null">
 
@@ -2429,7 +2261,7 @@ the entry names, or `null`.
 
 </scalar-field>
 
-## realpathSync
+### realpathSync
 
 `path` with every symbolic link resolved and every `.`, `..` and repeated
 separator removed, as an absolute path — or `null` when it does not resolve,
@@ -2443,15 +2275,11 @@ Capability: fs.read.
 function realpathSync(path: string): string | null
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the path to resolve.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="string | null">
 
@@ -2459,7 +2287,7 @@ the resolved path, or `null`.
 
 </scalar-field>
 
-## recvFd
+### recvFd
 
 Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and the first descriptor
 that came with them into `fd[0]`, or -1 when the message carried none. Every other descriptor in
@@ -2484,8 +2312,6 @@ function recvFd(
   fd: i32[],
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="sock" type="i32" required>
 
@@ -2517,8 +2343,6 @@ receives the descriptor, or -1.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the bytes read, 0 at the end of the stream, -11 when nothing is waiting, or a
@@ -2527,7 +2351,7 @@ the bytes read, 0 at the end of the stream, -11 when nothing is waiting, or a
 
 </scalar-field>
 
-## renameSync
+### renameSync
 
 `rename(2)`: `from` takes the name `to`, replacing a file already there in
 one step on one file system, so a reader sees the old file or the new one and
@@ -2537,8 +2361,6 @@ Never a panic. A `wasm32` build refuses it. Capability: fs.write.
 ```ts
 function renameSync(from: string, to: string): i32
 ```
-
-#### Parameters
 
 <scalar-field name="from" type="string" required>
 
@@ -2552,8 +2374,6 @@ the name it takes.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno: `-2` ENOENT for a missing `from`, `-18`
@@ -2563,7 +2383,7 @@ the name it takes.
 
 </scalar-field>
 
-## secureZero
+### secureZero
 
 Every byte of `bytes` set to zero, in stores neither `-O2` nor `-flto` may
 drop as dead (#385): how a key, a secret scalar or another secret is cleared
@@ -2587,15 +2407,13 @@ array may have left the old bytes behind. Capability: none.
 function secureZero(bytes: u8[]): void
 ```
 
-#### Parameters
-
 <scalar-field name="bytes" type="u8[]" required>
 
 the buffer to clear.
 
 </scalar-field>
 
-## sendFd
+### sendFd
 
 Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the descriptor `fd`
 (`SCM_RIGHTS`). The receiver's `recvFd` gets a new descriptor for the same open file, with its
@@ -2615,8 +2433,6 @@ function sendFd(
   len: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="sock" type="i32" required>
 
@@ -2648,8 +2464,6 @@ how many bytes, at least 1.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the bytes sent, or a negative errno; -22 a zero `len` or a
@@ -2658,7 +2472,7 @@ the bytes sent, or a negative errno; -22 a zero `len` or a
 
 </scalar-field>
 
-## setCpuAffinity
+### setCpuAffinity
 
 Pin this process to CPU `cpu` alone (`sched_setaffinity`). Narrow-only: it
 never moves a process onto a CPU it was kept off. `availableParallelism()`
@@ -2671,15 +2485,11 @@ Capability: process.spawn.
 function setCpuAffinity(cpu: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="cpu" type="i32" required>
 
 the CPU index.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -2690,7 +2500,7 @@ the CPU index.
 
 </scalar-field>
 
-## setIdlePriority
+### setIdlePriority
 
 Move this process to `SCHED_IDLE` with `sched_setscheduler(0, SCHED_IDLE,
 ...)`, which runs it only when nothing else wants the CPU. Linux only. An
@@ -2706,8 +2516,6 @@ task or a parallel body that calls it is refused as any shared write is. A
 function setIdlePriority(): i32
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0, or a negative errno, and -95 where the host has no such policy
@@ -2715,7 +2523,7 @@ function setIdlePriority(): i32
 
 </scalar-field>
 
-## setNice
+### setNice
 
 Set this process's nice value to `n` with `setpriority(PRIO_PROCESS, 0, n)`.
 Lower-only, even as root, so the priority never rises. Children started
@@ -2733,15 +2541,11 @@ Capability: process.spawn.
 function setNice(n: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="n" type="i32" required>
 
 the nice value, 0..19.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -2750,7 +2554,7 @@ the nice value, 0..19.
 
 </scalar-field>
 
-## setRawMode
+### setRawMode
 
 Raw mode on stdin's terminal, or the mode it had back. No echo, no line
 editing, no CR-to-NL translation, no flow control (Ctrl-S, Ctrl-Q) and no parity stripping;
@@ -2784,15 +2588,11 @@ throws; refused at compile time on a freestanding wasm32 target. Capability: tty
 function setRawMode(on: boolean): i32
 ```
 
-#### Parameters
-
 <scalar-field name="on" type="boolean" required>
 
 `true` for raw mode, `false` for the mode before.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -2801,7 +2601,7 @@ function setRawMode(on: boolean): i32
 
 </scalar-field>
 
-## setTerminalRestore
+### setTerminalRestore
 
 Bytes the runtime writes to the terminal on stdout at exit, on a panic and
 on every signal that ends the program (SIGKILL aside), before termios is
@@ -2820,15 +2620,11 @@ compile time on a freestanding wasm32 target. Capability: tty.
 function setTerminalRestore(bytes: string): i32
 ```
 
-#### Parameters
-
 <scalar-field name="bytes" type="string" required>
 
 the bytes written at the end.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -2837,7 +2633,7 @@ the bytes written at the end.
 
 </scalar-field>
 
-## signalFd
+### signalFd
 
 A descriptor that becomes readable when SIGTERM or SIGINT arrives. It is the
 read end of a pipe that a `sigaction` handler in the runtime's C writes one
@@ -2860,15 +2656,13 @@ Also exported by `nish:process`. Capability: signal.
 function signalFd(): i32
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the descriptor, or -1 when it cannot be made.
 
 </scalar-field>
 
-## spawn
+### spawn
 
 Start `argv[0]` through `PATH` exactly as `spawnSync` does — the same vector,
 environment, streams and working directory — and answer at once, without
@@ -2885,15 +2679,11 @@ Capability: process.spawn.
 function spawn(argv: string[]): i32
 ```
 
-#### Parameters
-
 <scalar-field name="argv" type="string[]" required>
 
 the program and its arguments.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -2903,7 +2693,7 @@ the child's pid, or a negative errno: -22 (EINVAL) for an empty
 
 </scalar-field>
 
-## spawnPiped
+### spawnPiped
 
 The same run with all three streams on pipes, all in memory: the child reads
 `stdin`'s bytes and then end of file, and whatever it prints is appended to
@@ -2930,8 +2720,6 @@ function spawnPiped(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="argv" type="string[]" required>
 
 the program and its arguments.
@@ -2956,8 +2744,6 @@ receives what the child prints on stderr.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the status as `spawnSync` answers it (the exit code, `128 + n`, and
@@ -2966,7 +2752,7 @@ the status as `spawnSync` answers it (the exit code, `128 + n`, and
 
 </scalar-field>
 
-## spawnSync
+### spawnSync
 
 Run `argv[0]`, searched on `PATH`, with `argv` as its argument vector, and
 wait for it. The child inherits this process's environment, streams and
@@ -2979,15 +2765,11 @@ processes, and a WASI build always answers `-1`. Capability: process.spawn.
 function spawnSync(argv: string[]): number
 ```
 
-#### Parameters
-
 <scalar-field name="argv" type="string[]" required>
 
 the program and its arguments.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="number">
 
@@ -2997,7 +2779,7 @@ the exit status, or `128 + n` when signal `n` killed it (the shell's
 
 </scalar-field>
 
-## spawnSyncTo
+### spawnSyncTo
 
 The same run with each stream sent to a file rather than inherited: each
 non-empty path is created or truncated at 0644, as `writeFileSync` does, and
@@ -3014,8 +2796,6 @@ function spawnSyncTo(
   stderrPath: string,
 ): number
 ```
-
-#### Parameters
 
 <scalar-field name="argv" type="string[]" required>
 
@@ -3035,8 +2815,6 @@ the file the child's stderr goes to, or `""`.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="number">
 
 every answer `spawnSync` gives — the status, `128 + n`, and `-1` for
@@ -3045,7 +2823,7 @@ every answer `spawnSync` gives — the status, `128 + n`, and `-1` for
 
 </scalar-field>
 
-## spawnWithFds
+### spawnWithFds
 
 `spawn` with the child holding `fds[i]` as descriptor `3 + i`, close-on-exec
 cleared there. Its streams 0 to 2 are this process's, and no other descriptor
@@ -3065,8 +2843,6 @@ function spawnWithFds(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="argv" type="string[]" required>
 
 the program and its arguments.
@@ -3079,8 +2855,6 @@ the descriptors handed down, at most 64.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the child's pid, or a negative errno: -22 more than 64 descriptors
@@ -3090,7 +2864,7 @@ the child's pid, or a negative errno: -22 more than 64 descriptors
 
 </scalar-field>
 
-## statMtimeSync
+### statMtimeSync
 
 The modification time of `path` in milliseconds since the epoch, with the
 sub-millisecond fraction the file system keeps, computed as Node's `mtimeMs`
@@ -3106,15 +2880,11 @@ JavaScript's own answer for a time that is not one; test it with `m !== m`. A
 function statMtimeSync(path: string): f64
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to stat.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="f64">
 
@@ -3123,7 +2893,7 @@ milliseconds since the epoch, or NaN when it cannot be stat'd —
 
 </scalar-field>
 
-## tcpAccept
+### tcpAccept
 
 The next waiting connection, as a descriptor of its own, non-blocking and close-on-exec, with the
 peer's address written into `peer`. Not `willreturn`: on a blocking socket the program inherited
@@ -3134,8 +2904,6 @@ wasm32 and the WASI profile (NL2404). Capability: net.
 ```ts
 function tcpAccept(fd: i32, peer: u8[]): i32
 ```
-
-#### Parameters
 
 <scalar-field name="fd" type="i32" required>
 
@@ -3151,15 +2919,13 @@ at least 18 bytes, receiving the peer's address in the 18-byte form; it must not
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the connection's descriptor; -11 when none waits; -95 for a datagram socket.
 
 </scalar-field>
 
-## tcpConnect
+### tcpConnect
 
 A new TCP socket, non-blocking and close-on-exec, that starts connecting to `addr`: an IPv4
 address from an IPv4 socket, any other from an IPv6 one. It answers its descriptor at once, while
@@ -3185,15 +2951,11 @@ if (connectResult(fd) === 0) {
 function tcpConnect(addr: readonly u8[]): i32
 ```
 
-#### Parameters
-
 <scalar-field name="addr" type="readonly u8[]" required>
 
 the 18-byte address to connect to; a shorter one is -22 before any socket exists.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -3202,7 +2964,7 @@ the socket's descriptor, or a negative errno; any failure but -115 closes the so
 
 </scalar-field>
 
-## tcpListen
+### tcpListen
 
 A listening TCP socket with `SO_REUSEADDR`, so a restarted server rebinds a port its old
 connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with
@@ -3217,8 +2979,6 @@ function tcpListen(
   backlog: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="host" type="string" required>
 
@@ -3238,8 +2998,6 @@ the kernel's queue of unaccepted connections.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the listener's descriptor, or a negative errno: -98 when the port is in use, -22 for
@@ -3247,7 +3005,7 @@ the listener's descriptor, or a negative errno: -98 when the port is in use, -22
 
 </scalar-field>
 
-## tcpListenFlags
+### tcpListenFlags
 
 `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket
 for flag 2. Flag 1 lets several listeners that all ask for it share one port, each with its own
@@ -3273,8 +3031,6 @@ function tcpListenFlags(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="host" type="string" required>
 
 the numeric address to bind.
@@ -3299,8 +3055,6 @@ the kernel's queue of unaccepted connections.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the listener's descriptor, or a negative errno: -22 for any other bit (a negative
@@ -3309,7 +3063,7 @@ the listener's descriptor, or a negative errno: -22 for any other bit (a negativ
 
 </scalar-field>
 
-## terminalSize
+### terminalSize
 
 The size of the terminal on stdout, else stderr, as a fresh array: read it again on each
 frame to follow a resize. Under Node it is Node's `columns` and `rows`; in a browser
@@ -3319,8 +3073,6 @@ frame to follow a resize. Under Node it is Node's `columns` and `rows`; in a bro
 function terminalSize(): i32[]
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i32[]">
 
 `[columns, rows]`; `[-errno, 0]` when neither is a terminal, `[-25, 0]` for "not a
@@ -3329,7 +3081,7 @@ function terminalSize(): i32[]
 
 </scalar-field>
 
-## toF32
+### toF32
 
 `x` as an `f32`; from an `f64` it rounds to nearest, and an integer is
 converted as signed or unsigned by its own signedness. An `f32` is
@@ -3340,15 +3092,11 @@ Capability: none.
 function toF32(x: number | boolean): f32
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="f32">
 
@@ -3356,7 +3104,7 @@ the nearest `f32`.
 
 </scalar-field>
 
-## toF64
+### toF64
 
 `x` as an `f64`; from an `f32` it is exact, and an integer is converted as
 signed or unsigned by its own signedness. An `f64` is unchanged. A bare
@@ -3366,15 +3114,11 @@ literal argument is typed `f64`: `toF64(3)`. Capability: none.
 function toF64(x: number | boolean): f64
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="f64">
 
@@ -3382,7 +3126,7 @@ the value to convert.
 
 </scalar-field>
 
-## toI32
+### toI32
 
 `x` as an `i32`. An integer of 32 bits or more wraps to its low 32 bits, a
 narrower one is sign- or zero-extended by its own signedness, and a float
@@ -3401,15 +3145,11 @@ argument that is not a number is refused, as `` `toI32` expects a number
 function toI32(x: number | boolean): i32
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -3417,7 +3157,7 @@ the value to convert.
 
 </scalar-field>
 
-## toI64
+### toI64
 
 `x` as an `i64`: a signed source is sign-extended, an unsigned one
 zero-extended, and a float saturates (NaN is 0, out of range clamps). An
@@ -3427,15 +3167,11 @@ zero-extended, and a float saturates (NaN is 0, out of range clamps). An
 function toI64(x: number | boolean): i64
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i64">
 
@@ -3443,7 +3179,7 @@ the value to convert.
 
 </scalar-field>
 
-## toU16
+### toU16
 
 `x` as a `u16`, by `toU8`'s rules at 16 bits: a float saturates into
 `0 .. 65535`. Capability: none.
@@ -3452,15 +3188,11 @@ the value to convert.
 function toU16(x: number | boolean): u16
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="u16">
 
@@ -3468,7 +3200,7 @@ the value to convert.
 
 </scalar-field>
 
-## toU32
+### toU32
 
 `x` as a `u32`, by `toU8`'s rules at 32 bits: a float saturates into
 `0 .. 2^32 - 1`. From an `i32` the bits do not move, so no instruction is
@@ -3478,15 +3210,11 @@ emitted. Capability: none.
 function toU32(x: number | boolean): u32
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="u32">
 
@@ -3494,7 +3222,7 @@ the value to convert.
 
 </scalar-field>
 
-## toU64
+### toU64
 
 `x` as a `u64`. Widening sign-extends a signed source, so `toU64(-1: i32)`
 is 2^64 - 1, as `-1i32 as u64` is in Rust; a float saturates into
@@ -3506,15 +3234,11 @@ they are built this way: `toU64(0) - toU64(1)` is 2^64 - 1. Capability: none.
 function toU64(x: number | boolean): u64
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="u64">
 
@@ -3522,7 +3246,7 @@ the value to convert.
 
 </scalar-field>
 
-## toU8
+### toU8
 
 `x` as a `u8`: a wider integer is truncated, and a float saturates into
 `0 .. 255`, so a negative value is 0. An integer source of the same width
@@ -3535,15 +3259,11 @@ no context gives it that type: `toU8(255)`. Capability: none.
 function toU8(x: number | boolean): u8
 ```
 
-#### Parameters
-
 <scalar-field name="x" type="number | boolean" required>
 
 the value to convert.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="u8">
 
@@ -3551,7 +3271,7 @@ the value to convert.
 
 </scalar-field>
 
-## totalMemory
+### totalMemory
 
 Bytes of physical memory — `_SC_PHYS_PAGES` times the page size on Linux,
 `hw.memsize` on Darwin. It is the machine's, not a cgroup's limit. Under Node
@@ -3563,15 +3283,13 @@ exported by `nish:process`. Capability: none.
 function totalMemory(): i64
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i64">
 
 the byte count, or -1 when the host does not say.
 
 </scalar-field>
 
-## udpBind
+### udpBind
 
 A datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way
 `tcpListen`'s is, `"::"` and its IPv4 fallback included. The ECN bits of every datagram are
@@ -3585,8 +3303,6 @@ function udpBind(
   flags: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="host" type="string" required>
 
@@ -3608,15 +3324,13 @@ flag 1 `SO_REUSEPORT`, so several sockets that all ask for it share a port and
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the socket's descriptor, or a negative errno.
 
 </scalar-field>
 
-## udpRecvFrom
+### udpRecvFrom
 
 The next datagram, or several GRO coalesced, into `buf[off, off + len)` in one `recvmsg`, cut to
 `len` if it is longer. An empty datagram is a datagram: the answer is 0 for it. Not `willreturn`,
@@ -3641,8 +3355,6 @@ function udpRecvFrom(
   meta: i32[],
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="fd" type="i32" required>
 
@@ -3683,15 +3395,13 @@ at least 2 slots, receiving [GRO segment size, ECN]: `meta[0]` the size of each
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the datagram's length, or a negative errno: -11 when none is waiting.
 
 </scalar-field>
 
-## udpSendTo
+### udpSendTo
 
 `buf[off, off + len)` to the address `to`, in one `sendmsg`. Not `willreturn`: on a blocking
 socket the program inherited it waits. The range is checked as `netRead`'s is, with the same
@@ -3712,8 +3422,6 @@ function udpSendTo(
   ecn: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="fd" type="i32" required>
 
@@ -3760,8 +3468,6 @@ the two ECN bits of the IP header: 0 not ECN-capable, 1 ECT(1), 2 ECT(0), 3 CE.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the bytes sent, or a negative errno: -11 when the send buffer is full; -22 also for
@@ -3770,7 +3476,7 @@ the bytes sent, or a negative errno: -11 when the send buffer is full; -22 also 
 
 </scalar-field>
 
-## uncheckedGet
+### uncheckedGet
 
 `xs[i]` with no bounds check: undefined behaviour when `i` is out of range,
 which is the whole of the trade. The array holds numbers (`i32`, `i64`, `u8`,
@@ -3790,8 +3496,6 @@ function uncheckedGet<T extends number>(
 ): T
 ```
 
-#### Parameters
-
 <scalar-field name="xs" type="readonly T[]" required>
 
 the array of numbers to read.
@@ -3804,15 +3508,13 @@ the index, trusted to be in range.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="T">
 
 the element at `i`.
 
 </scalar-field>
 
-## uncheckedSet
+### uncheckedSet
 
 `xs[i] = v` with no bounds check: undefined behaviour when `i` is out of
 range. A statement. The array holds numbers, as for `uncheckedGet` (NL2455),
@@ -3835,8 +3537,6 @@ function uncheckedSet<T extends number>(
 ): void
 ```
 
-#### Parameters
-
 <scalar-field name="xs" type="T[]" required>
 
 the array of numbers to write.
@@ -3855,7 +3555,7 @@ the value stored.
 
 </scalar-field>
 
-## unixAccept
+### unixAccept
 
 The next connection on a Unix listener, non-blocking and close-on-exec. No peer address is
 written: a Unix client is seldom bound. Not callable in a `scope()` task or a parallel body.
@@ -3865,15 +3565,11 @@ Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net
 function unixAccept(fd: i32): i32
 ```
 
-#### Parameters
-
 <scalar-field name="fd" type="i32" required>
 
 the listener.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -3881,7 +3577,7 @@ the connection's descriptor; -11 when none is waiting.
 
 </scalar-field>
 
-## unixConnect
+### unixConnect
 
 A new socket, non-blocking and close-on-exec, connected to the listener at `path`. A relative
 path is the working directory's. Not callable in a `scope()` task or a parallel body. Refused at
@@ -3891,15 +3587,11 @@ compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 function unixConnect(path: string): i32
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the socket file, or `@name`; it must be a `string`.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -3909,7 +3601,7 @@ the socket's descriptor, or a negative errno: -111 when nothing listens there, -
 
 </scalar-field>
 
-## unixListen
+### unixListen
 
 A listening Unix stream socket at `path` (`@name`: Linux's abstract namespace), its file mode
 0600, so only its owner may connect. A Unix socket is a descriptor like any other: `netRead`,
@@ -3936,8 +3628,6 @@ function unixListen(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the socket file, or `@name`; it must be a `string`.
@@ -3956,8 +3646,6 @@ the kernel's queue of unaccepted connections.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the listener's descriptor, or a negative errno: a path that exists is -98, unless
@@ -3969,7 +3657,7 @@ the listener's descriptor, or a negative errno: a path that exists is -98, unles
 
 </scalar-field>
 
-## unixListenMode
+### unixListenMode
 
 `unixListen` with the socket file's mode chosen, set between the bind and the listen so no
 connect gets in under a wider one. Not callable in a `scope()` task or a parallel body. Refused
@@ -3983,8 +3671,6 @@ function unixListenMode(
   mode: i32,
 ): i32
 ```
-
-#### Parameters
 
 <scalar-field name="path" type="string" required>
 
@@ -4010,8 +3696,6 @@ the file's mode, 0 to 0o777 and no other bits.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the listener's descriptor, or a negative errno; -22 for a mode outside that range
@@ -4019,7 +3703,7 @@ the listener's descriptor, or a negative errno; -22 for a mode outside that rang
 
 </scalar-field>
 
-## unixSocketPair
+### unixSocketPair
 
 Two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec: a channel
 without a name for a child process or one side of a program. `fds` must be an `i32[]` and not
@@ -4034,8 +3718,6 @@ function unixSocketPair(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="kind" type="i32" required>
 
 `NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin), which keeps each write
@@ -4049,15 +3731,13 @@ at least 2 slots, receiving the pair.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 0; -22 another kind or an `fds` shorter than 2, before a socket exists.
 
 </scalar-field>
 
-## unlinkSync
+### unlinkSync
 
 `unlink(2)`: the name `path` removed, and a symbolic link itself rather than
 what it names. A directory is refused, not removed, with no fallback to
@@ -4067,15 +3747,11 @@ what it names. A directory is refused, not removed, with no fallback to
 function unlinkSync(path: string): i32
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the name to remove.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="i32">
 
@@ -4085,7 +3761,7 @@ the name to remove.
 
 </scalar-field>
 
-## waitPid
+### waitPid
 
 Reap a child and answer a fresh two-element array (the language has no
 tuple). `pid` is a child's, or -1 for any child. After `signalFd()` a
@@ -4103,8 +3779,6 @@ Capability: process.spawn.
 function waitPid(pid: i32, flags: i32): i32[]
 ```
 
-#### Parameters
-
 <scalar-field name="pid" type="i32" required>
 
 the child to wait for, or -1.
@@ -4118,8 +3792,6 @@ the child to wait for, or -1.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32[]">
 
 `[pid, status]`, the status as `spawnSync` answers it (the exit
@@ -4130,7 +3802,7 @@ the child to wait for, or -1.
 
 </scalar-field>
 
-## waitStdin
+### waitStdin
 
 Wait for stdin to be readable, or `timeoutMs` milliseconds to pass: the frame clock of a
 terminal program, which costs nothing when a key arrives early. Its end and an error count
@@ -4146,15 +3818,11 @@ wasm32 target. Capability: tty.
 function waitStdin(timeoutMs: i32): boolean
 ```
 
-#### Parameters
-
 <scalar-field name="timeoutMs" type="i32" required>
 
 the most milliseconds to wait; negative: forever.
 
 </scalar-field>
-
-#### Returns
 
 <scalar-field name="returns" type="boolean">
 
@@ -4162,7 +3830,7 @@ the most milliseconds to wait; negative: forever.
 
 </scalar-field>
 
-## wallClockNanos
+### wallClockNanos
 
 `CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC, for dating an event:
 `Date.now`'s clock at a nanosecond's grain and as an `i64`. It can go
@@ -4174,15 +3842,13 @@ Capability: clock.
 function wallClockNanos(): i64
 ```
 
-#### Returns
-
 <scalar-field name="returns" type="i64">
 
 nanoseconds since the epoch.
 
 </scalar-field>
 
-## wrappingAdd
+### wrappingAdd
 
 `a + b` wrapped to the operands' width, `i32` or `i64`: defined for every
 pair, where the operator `+` panics on signed overflow. The two operands are
@@ -4204,8 +3870,6 @@ function wrappingAdd<T extends i32 | i64>(
 ): T
 ```
 
-#### Parameters
-
 <scalar-field name="a" type="T" required>
 
 one operand.
@@ -4218,15 +3882,13 @@ the other, of the same type.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="T">
 
 the low bits of the sum.
 
 </scalar-field>
 
-## wrappingMul
+### wrappingMul
 
 `a * b` wrapped to the operands' width, by `wrappingAdd`'s rules:
 `wrappingMul(INT64_MAX, 2)` is `-2`. Under Node the runtime shim computes
@@ -4239,8 +3901,6 @@ function wrappingMul<T extends i32 | i64>(
 ): T
 ```
 
-#### Parameters
-
 <scalar-field name="a" type="T" required>
 
 one operand.
@@ -4253,15 +3913,13 @@ the other, of the same type.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="T">
 
 the low bits of the product.
 
 </scalar-field>
 
-## wrappingSub
+### wrappingSub
 
 `a - b` wrapped to the operands' width, by `wrappingAdd`'s rules, so
 `wrappingSub(0, x)` is a negation that wraps. Under Node the runtime shim
@@ -4273,8 +3931,6 @@ function wrappingSub<T extends i32 | i64>(
   b: T,
 ): T
 ```
-
-#### Parameters
 
 <scalar-field name="a" type="T" required>
 
@@ -4288,15 +3944,13 @@ the subtrahend, of the same type.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="T">
 
 the low bits of the difference.
 
 </scalar-field>
 
-## write
+### write
 
 `s` to stdout with no trailing newline and no conversion (a `string` only);
 statement position. A native string is `{len, bytes}`, never validated as
@@ -4312,15 +3966,13 @@ text. Also exported by `nish:io`. Capability: none.
 function write(s: string): void
 ```
 
-#### Parameters
-
 <scalar-field name="s" type="string" required>
 
 the text written.
 
 </scalar-field>
 
-## writeBytes
+### writeBytes
 
 `bytes[off .. off + len)` to stdout, every byte as it is, with no conversion
 — the one way to send bytes that are not text, a byte of 0x80 or above or a
@@ -4343,8 +3995,6 @@ function writeBytes(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="bytes" type="readonly u8[]" required>
 
 the buffer to send.
@@ -4363,8 +4013,6 @@ how many bytes; `0 <= len` and `off + len <= bytes.length`.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 `len`, or a negative errno if the stream refuses them (`-9` EBADF
@@ -4372,7 +4020,7 @@ how many bytes; `0 <= len` and `off + len <= bytes.length`.
 
 </scalar-field>
 
-## writeError
+### writeError
 
 `s` to stderr, likewise: no trailing newline, no conversion, statement
 position, the same byte-for-byte rule for a string. Also exported by
@@ -4382,15 +4030,13 @@ position, the same byte-for-byte rule for a string. Also exported by
 function writeError(s: string): void
 ```
 
-#### Parameters
-
 <scalar-field name="s" type="string" required>
 
 the text written.
 
 </scalar-field>
 
-## writeFileBytesSync
+### writeFileBytesSync
 
 The file's contents replaced by `bytes`, created at 0644 when missing, the
 array's bytes written as they are: `readFileBytesSync`'s other half. A
@@ -4406,8 +4052,6 @@ function writeFileBytesSync(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to write.
@@ -4420,8 +4064,6 @@ its new contents.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the byte count (`bytes.length`), or a negative errno: `-2` ENOENT
@@ -4430,7 +4072,7 @@ the byte count (`bytes.length`), or a negative errno: `-2` ENOENT
 
 </scalar-field>
 
-## writeFileSync
+### writeFileSync
 
 The file's contents replaced by `data`, created at 0644 when missing;
 statement position. A symbolic link as the last component of the path is
@@ -4446,8 +4088,6 @@ function writeFileSync(
 ): void
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to write.
@@ -4460,7 +4100,7 @@ its new contents.
 
 </scalar-field>
 
-## writeFileSyncMode
+### writeFileSyncMode
 
 `writeFileSync` with an explicit `mode`: the file is exactly `mode`
 (`0o600` for a secret) before a byte of `data` is in it, whatever the umask
@@ -4486,8 +4126,6 @@ function writeFileSyncMode(
 ): i32
 ```
 
-#### Parameters
-
 <scalar-field name="path" type="string" required>
 
 the file to write.
@@ -4506,8 +4144,6 @@ the file's mode, 0..0o777.
 
 </scalar-field>
 
-#### Returns
-
 <scalar-field name="returns" type="i32">
 
 the byte count, or a negative errno: -22 for a mode outside
@@ -4517,7 +4153,9 @@ the byte count, or a negative errno: -22 for a mode outside
 
 </scalar-field>
 
-## Array
+## Interfaces
+
+### Array
 
 An array. `Int32Array`, `Float32Array`, `Float64Array` and `BigInt64Array`
 name `i32[]`, `f32[]`, `f64[]` and `i64[]`, the same type with no second
@@ -4557,7 +4195,7 @@ interface Array<T>
 | `set(source: readonly T[], offset?: number): void` | Copy every element of `source` into this array from `offset` on, with `TypedArray.prototype.set`'s meaning. Arrays of numbers only, of any width and ranged integers included, and `source` has this array's element type (a `readonly` array may be the source, since it is only read); another element type is refused: "`set` copies from an array of the receiver's element type, so it expects u8[], got i32[]" (NL2396), and a non-number receiver as for `fill` (NL2395). One or two arguments (NL2397). It is a statement: "`set` returns void and can only be used as a statement". The range written is checked: `0 <= offset` and `offset + source.length <= a.length`, or the program panics with `slice out of range: [offset, offset + src.length) of length a.length` and exits 1, the message `s.slice` gives; a range that ends exactly at `a.length`, and an empty `source` at `a.length`, are in range, where JavaScript throws a `RangeError` for exactly these offsets. An overlapping `source` (`a.set(a)`, or two headers over one buffer from a C host) is copied as if it were read first. A float offset converts as for `fill`'s ends (`NaN` is `0`, a fraction truncates, an infinity or a value past the `i64` range saturates), and a saturated offset fails the range check with the saturated value in the message, for example `slice out of range: [9223372036854775807, -9223372036854775808) of length 4` for `1e300`. An unsigned offset is never negative: a `u64` of 2^63 or more panics, printed signed. A `readonly T[]` refuses it: "Cannot `set` through readonly u8[] (declare it u8[] to write through it)". Under Node, `runtime/nish.mjs` adds `set` to `Array.prototype` with the copy-first semantics and the native panic; a TypeScript host without it has no `set` on a plain array, and an `i64` or `u64` offset is a `bigint` there and throws a `TypeError`. Capability: none. |
 | `sort(compareFn?: (a: T, b: T) => number): this` | Sort in place, stably, as `Array.prototype.sort` does: element for element Node's order for any consistent comparator. The comparator is required (NL2620: `a.sort()` compares as strings in JavaScript and is refused, "`sort` needs a comparator: write `xs.sort((a, b) => a - b)`") and is the one argument (NL2619: "`sort` takes one comparator"); only "positive or not" is read of its answer, so `-0` and `NaN` count as zero. A `readonly T[]` ("Cannot `sort` through readonly") and `process.argv` ("`process.argv` is read-only") are refused. The comparator is a compile-time function argument: a top-level function, or an arrow reading only the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused. The sort costs one scratch array of `n` elements, released before it returns. `(a, b) => a - b` is checked arithmetic on `i32` elements: two a full range apart (`[2147483647, -1]`) panic with `attempt to subtract with overflow`, where `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. Where JavaScript leaves the order to the implementation, so does Nish: an array holding `NaN` under `(a, b) => a - b`, or a comparator that is not a consistent order, comes out a permutation of its elements but not necessarily Node's permutation; give `NaN` a place of its own in the comparator to agree. Under Node and `--emit-ts` the call is the platform's own `Array.prototype.sort`. Capability: none. |
 
-## CPtr
+### CPtr
 
 `CPtr`: the address a `declare function` hands back, opaque and eight bytes
 wide (`i8*` in the IR). It is C's, not arena memory, and its lifetime is the C
@@ -4587,7 +4225,7 @@ interface CPtr
 | --- | --- |
 | `readonly __nishForeignPointer: unique symbol` | The private brand that makes `CPtr` nominal. Not a field: nothing reads or writes it. |
 
-## Console
+### Console
 
 The two output streams, with Nish's one-argument signatures. Numbers print
 as JavaScript's `String(x)`: exact decimal for `i32`/`i64`, shortest
@@ -4603,7 +4241,7 @@ interface Console
 | `error(x: string \| number \| boolean): void` | The same, on stderr — the stream a compiler's diagnostics belong on. Identical rules and identical messages under its own name. Capability: none. |
 | `log(x: string \| number \| boolean): void` | Writes `x` and a newline to stdout with one `write(2)`; statement position only (as a value it is refused); exactly one argument. Arrays and objects are rejected: it accepts a string, a number or a boolean. In a parallel body it is refused, as output is a write the caller can see. Capability: none. |
 
-## Disposable
+### Disposable
 
 A value `using` may bind: one whose `[Symbol.dispose]()` ends its scope.
 
@@ -4615,7 +4253,7 @@ interface Disposable
 | --- | --- |
 | `[Symbol.dispose](): void` | Ends the value's scope. The compiler runs it on every exit from the `using` block; a call by name is refused. |
 
-## Map
+### Map
 
 An insertion-ordered map with SameValueZero keys (`-0` is `+0` and `NaN` is
 `NaN`), a builtin with no import. A key is a `string`, a number of any
@@ -4668,7 +4306,7 @@ interface Map<K, V>
 | `has(key: K): boolean` | Whether `key` is present. One probe. Capability: none. |
 | `set(key: K, value: V): this` | Put `value` under `key`, replacing any value there. A new key is appended past the end of the order; a key already there keeps its place. Calls chain. Capability: none. |
 
-## Math
+### Math
 
 `Math`. The f64-only functions (`sqrt`, `floor`, `ceil`, `trunc`, `sin`,
 `cos`, `tan`, `exp`, `log`, `pow`, `round`, `atan2`, `hypot`) refuse `i32`
@@ -4710,7 +4348,7 @@ interface Math
 | `tan(x: number): number` | The tangent, fdlibm's, compiled into the module so that no target calls libm: exact near every multiple of π/2 and within one ulp. Capability: none. |
 | `trunc(x: number): number` | `x` with its fraction dropped. Runs on the same two paths as `floor`, with the same bits on either. Capability: none. |
 
-## Process
+### Process
 
 The running process: its exit, its command line and its host.
 
@@ -4725,7 +4363,7 @@ interface Process
 | `readonly platform: string` | The operating system the program runs on, spelled as Node spells it: `"linux"`, `"darwin"`, or `"unknown"` for anything the compiler has no target triple for (every WASI build). It is settled when the runtime is compiled, so a cross build reports the target, and it cannot be assigned to. It carries no entry-point rule, so a wasm or N-API library may read it. Capability: none. |
 | `exit(code: i32): never` | Ends the program with `code`, through libc's `exit(code)`, which flushes stdio; the arena is abandoned to the operating system. Statement position, and a terminator: `never` is how TypeScript spells that, so a function ending in `process.exit(c)` satisfies its return type in `tsc` as it does in `nish`, and code after it is `Unreachable code after process.exit`. A numeric literal `code` is an `i32` in either number mode. In a parallel body it is refused, as output is. Capability: exit. |
 
-## ReadonlyArray
+### ReadonlyArray
 
 `readonly T[]`, or `ReadonlyArray<T>` under the other spelling: the same
 array, which may not be written through. It is the same header, the same
@@ -4754,7 +4392,7 @@ interface ReadonlyArray<T>
 | `indexOf(searchElement: T, fromIndex?: number): number` | The first index whose element is `=== searchElement`, as on `T[]`: one argument, strings by content, classes, interfaces and arrays by identity, and a `NaN` element is never found. Capability: none. |
 | `join(separator?: string): string` | The elements joined by `separator`, as on `string[]`: `string[]` only, and the result is held to 2^31 − 1 bytes. Capability: none. |
 
-## ResultMethods
+### ResultMethods
 
 The methods every `Result` carries. `r.ok` is the same bit as a plain
 `boolean`, `r.value` reads only where the checker proved `isOk()` and `r.error`
@@ -4775,7 +4413,7 @@ interface ResultMethods<T, E>
 | `orReturn(): T` | The success payload, or an early `return Err(error)` from the enclosing function — Rust's `?`. `nish` additionally requires that function to return a `Result` whose error arm accepts `E`, with no implicit error conversion (a mismatch is refused; convert by hand with `if (r.isErr()) { return Err(...); }`); `tsc` cannot check that. It is refused in a function that returns anything else, `main` returning `i32` included. Capability: none. |
 | `unwrapOr(fallback: T): T` | The success payload, or `fallback` when this is the failure arm. In f64 mode a numeric literal fallback takes no type from the `Result`, so write `toI32(...)` or the like. Capability: none. |
 
-## Set
+### Set
 
 An insertion-ordered set with SameValueZero members, a builtin with no
 import. A member is what a `Map` key may be (and `-0` is stored as `+0`).
@@ -4800,7 +4438,7 @@ interface Set<T>
 | `delete(value: T): boolean` | Remove `value`. Adding it again appends it at the end of the order. Capability: none. |
 | `has(value: T): boolean` | Whether `value` is a member. One probe. Capability: none. |
 
-## String
+### String
 
 A string: UTF-8 bytes. Every offset is a byte offset, like `length`, so
 cutting a multi-byte character in half is possible and produces bytes that
@@ -4824,7 +4462,7 @@ interface String
 | `startsWith(searchString: string, position?: number): boolean` | Whether `searchString`'s bytes are a prefix. One argument. Capability: none. |
 | `substring(start: number, end?: number): string` | The bytes of `[start, end)`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. In a loop, a bound the compiler cannot place in `[0, s.length]` keeps the clamp and is reported by a performance warning; a test that reaches the call (`if (a >= 0 && a <= s.length)`) removes it, and `slice` has no clamp at all. Capability: none. |
 
-## StringConstructor
+### StringConstructor
 
 `String.fromBytes` is Nish's, not JavaScript's, so it merges into the
 `StringConstructor` `lib.es2022` declares. Under `runtime/nish.mjs` each byte
@@ -4841,7 +4479,7 @@ interface StringConstructor
 | `fromBytes(bytes: readonly u8[], start: number, end: number): string` | The bytes of `bytes[start..end)` as one string, with one range check, one allocation and one copy. The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated; anything else panics with `slice out of range: [start, end) of length len` and exits 1. `bytes` is a `u8[]` reached any way an array is, `readonly` or not; a wider element or a `u8[] \| null` is refused (NL2268). Both ends are required (NL2060) and are numbers (NL2058). Nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Natively the string's bytes are the array's, so `write` or `writeFileSync` sends any bytes back out unchanged; bytes that are not text go out through `writeBytes` and `writeFileBytesSync`, which agree on every host. Capability: none. |
 | `fromCharCode(...codes: number[]): string` | The one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. One argument. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it. Under Node it is one UTF-16 unit, so ASCII agrees and a byte above 127 does not. Capability: none. |
 
-## SymbolConstructor
+### SymbolConstructor
 
 The disposable protocol `using` reads: declared here so that a program using
 `nish/threads`'s scope, a `Mutex`'s lock, `arena()` or a handle class needs
@@ -4866,7 +4504,9 @@ interface SymbolConstructor
 | --- | --- |
 | `readonly dispose: unique symbol` | The key of the method `using` calls when its block ends. |
 
-## Arena
+## Objects
+
+### Arena
 
 The arena the runtime allocates from, read. Both members are available in
 both number modes. `Arena` has no `release` and no `reset`: a call to either
@@ -4885,7 +4525,7 @@ const Arena: { ... }
 | `mark(): i64` | The current bump address. It only reads the arena, but is recorded as a write, so a caller is never hoisted across an allocation, and a function that calls it is never the callee of a tail call whose scope release moved ahead of it. Capability: none. |
 | `used(): i64` | Bytes bumped in the current chunk: the number the memory tests watch. Recorded as a write, as `mark` is. Capability: none. |
 
-## crypto
+### crypto
 
 The system's random source, with its one member.
 
@@ -4897,7 +4537,9 @@ const crypto: { ... }
 | --- | --- |
 | `getRandomValues(bytes: u8[]): void` | Every byte of `bytes` from the kernel's CSPRNG (`getrandom(2)` on Linux, looping over `EINTR` and short reads; `getentropy(3)` in 256-byte chunks on macOS); at most 65,536 bytes a call. A `u8[]` only, where the Web API takes any integer typed array: the byte is the unit a key or a nonce is written in, and anything else is refused at compile time (NL2402). A statement, where the Web API also answers its argument, which the caller already holds. An empty array is filled with nothing. The array is written, so a `readonly u8[]` is refused (and, inside a `scope()` region, an array a task may read). More than 65,536 bytes is a panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is ever substituted. It is the source for a key. `crypto` has no other member (NL2403, for example `crypto.randomUUID`). Refused at compile time on wasm32 and the WASI profile (NL2404). Under Node the prelude fills a plain `u8[]` too and panics past 65,536 with the same words; without the prelude it takes only a typed array. Capability: entropy. |
 
-## HostHandle
+## Types
+
+### HostHandle
 
 `HostHandle<"kind">`: an object the page holds (a canvas, a GPU buffer, a
 node), passed to and from a host module's functions as the small integer the
@@ -4917,7 +4559,7 @@ a handle stays assignable to `number`.
 type HostHandle<K extends string> = number & reflection | 0
 ```
 
-## Result
+### Result
 
 The outcome of an operation that can fail. `T` may be `void` for an
 operation with nothing to hand back, and then the `Result` carries no
@@ -4930,7 +4572,7 @@ stand as an expression statement, and a local that holds one must be read.
 type Result<T, E> = ResultOk<T> | ResultErr<E> & ResultMethods<T, E>
 ```
 
-## ResultErr
+### ResultErr
 
 The failure arm.
 
@@ -4938,7 +4580,7 @@ The failure arm.
 type ResultErr<E> = unknown
 ```
 
-## ResultOk
+### ResultOk
 
 The success arm of a `Result`, as the discriminant proves it.
 
@@ -4946,7 +4588,7 @@ The success arm of a `Result`, as the discriminant proves it.
 type ResultOk<T> = unknown
 ```
 
-## f32
+### f32
 
 A 32-bit IEEE-754 float. It is never the lowering of `number`, and `f32 + f64` is
 a type error; `toF32` converts to it.
@@ -4955,7 +4597,7 @@ a type error; `toF32` converts to it.
 type f32 = number
 ```
 
-## f64
+### f64
 
 A 64-bit IEEE-754 float: `number` in f64 mode, and JavaScript's `number`. It is
 available in both number modes.
@@ -4964,7 +4606,7 @@ available in both number modes.
 type f64 = number
 ```
 
-## i32
+### i32
 
 A 32-bit signed integer: `number` in i32 mode, and the type of an array index.
 Signed overflow panics (`wrappingAdd`, `wrappingSub` and `wrappingMul` from
@@ -4974,7 +4616,7 @@ Signed overflow panics (`wrappingAdd`, `wrappingSub` and `wrappingMul` from
 type i32 = number
 ```
 
-## i64
+### i64
 
 A 64-bit signed integer; it never mixes with an `i32` without `toI64` or `toI32`.
 It is never the lowering of `number`, a literal takes it only from context, signed
@@ -4984,7 +4626,7 @@ overflow panics, and it crosses to JavaScript as a `bigint`.
 type i64 = number
 ```
 
-## integer
+### integer
 
 An `i32` the compiler knows lies in `[Lo, Hi]`. The bounds are numeric
 literal types, and `tsc` checks only that; the range itself is `nish`'s.
@@ -5019,7 +4661,7 @@ number modes.
 type integer<Lo extends number, Hi extends number> = number
 ```
 
-## u16
+### u16
 
 A 16-bit unsigned integer. Its arithmetic wraps; `toU16` converts to it.
 
@@ -5027,7 +4669,7 @@ A 16-bit unsigned integer. Its arithmetic wraps; `toU16` converts to it.
 type u16 = number
 ```
 
-## u32
+### u32
 
 A 32-bit unsigned integer: same width as `i32`, the other signedness, so
 `u32 + i32` is a type error. Its arithmetic wraps; `toU32` converts to it.
@@ -5036,7 +4678,7 @@ A 32-bit unsigned integer: same width as `i32`, the other signedness, so
 type u32 = number
 ```
 
-## u64
+### u64
 
 A 64-bit unsigned integer: same width as `i64`, the other signedness. Its
 arithmetic wraps, `toU64` converts to it, and it crosses to JavaScript as a `bigint`.
@@ -5045,7 +4687,7 @@ arithmetic wraps, `toU64` converts to it, and it crosses to JavaScript as a `big
 type u64 = number
 ```
 
-## u8
+### u8
 
 An 8-bit unsigned integer, the element of a byte buffer (`u8[]`). Unsigned
 arithmetic wraps, in both number modes; `toU8` converts to it.
@@ -5058,7 +4700,7 @@ type u8 = number
 
 <scalar-grid cols="2">
 
-<scalar-card title="NET_SO_KEEPALIVE" icon="phosphor/regular/hash">
+<scalar-card title="NET_​SO_​KEEPALIVE" icon="phosphor/regular/hash">
 
 `NET_SO_KEEPALIVE: i32`
 
@@ -5067,7 +4709,7 @@ Capability: none.
 
 </scalar-card>
 
-<scalar-card title="NET_SO_RCVBUF" icon="phosphor/regular/hash">
+<scalar-card title="NET_​SO_​RCVBUF" icon="phosphor/regular/hash">
 
 `NET_SO_RCVBUF: i32`
 
@@ -5076,7 +4718,7 @@ value it stores. Capability: none.
 
 </scalar-card>
 
-<scalar-card title="NET_SO_SNDBUF" icon="phosphor/regular/hash">
+<scalar-card title="NET_​SO_​SNDBUF" icon="phosphor/regular/hash">
 
 `NET_SO_SNDBUF: i32`
 
@@ -5085,7 +4727,7 @@ it stores. Capability: none.
 
 </scalar-card>
 
-<scalar-card title="NET_TCP_NODELAY" icon="phosphor/regular/hash">
+<scalar-card title="NET_​TCP_​NODELAY" icon="phosphor/regular/hash">
 
 `NET_TCP_NODELAY: i32`
 
@@ -5096,7 +4738,7 @@ shadows the global spelling. Capability: none.
 
 </scalar-card>
 
-<scalar-card title="NET_TCP_QUICKACK" icon="phosphor/regular/hash">
+<scalar-card title="NET_​TCP_​QUICKACK" icon="phosphor/regular/hash">
 
 `NET_TCP_QUICKACK: i32`
 
@@ -5107,7 +4749,7 @@ Capability: none.
 
 </scalar-card>
 
-<scalar-card title="NET_UNIX_SEQPACKET" icon="phosphor/regular/hash">
+<scalar-card title="NET_​UNIX_​SEQPACKET" icon="phosphor/regular/hash">
 
 `NET_UNIX_SEQPACKET: i32`
 
@@ -5116,7 +4758,7 @@ Capability: none.
 
 </scalar-card>
 
-<scalar-card title="NET_UNIX_STREAM" icon="phosphor/regular/hash">
+<scalar-card title="NET_​UNIX_​STREAM" icon="phosphor/regular/hash">
 
 `NET_UNIX_STREAM: i32`
 
@@ -5124,7 +4766,7 @@ Capability: none.
 
 </scalar-card>
 
-<scalar-card title="NET_UNIX_UNLINK_STALE" icon="phosphor/regular/hash">
+<scalar-card title="NET_​UNIX_​UNLINK_​STALE" icon="phosphor/regular/hash">
 
 `NET_UNIX_UNLINK_STALE: i32`
 
