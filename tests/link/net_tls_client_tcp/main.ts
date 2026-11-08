@@ -7,6 +7,8 @@
 // `net_tls_client_tcp` block of tests/run.js drives that mode against
 // openssl s_server. With `exchange <port> <how> <reply> <last>` it opens
 // a client to that port and uses the blocking calls alone, as `exchange`
+// below says. With `talk <port> <groups> <reply> <last>` it opens a client
+// offering those groups and carries data both ways to a close, as `talk`
 // below says.
 //
 // The loopback server sends `chain.ts`'s leaves, and the client trusts only
@@ -243,6 +245,29 @@ const verifyChecks = (t: Suite): void => {
   t.eqI32("chain: a self-signed leaf with no extensions is bad_certificate", tlsClientChain(selfSigned, "localhost", toI64(1767225700) * toI64(1000), trust), TLS_ALERT_BAD_CERTIFICATE);
 };
 
+/**
+ * A client for `name` offering `protocols`, opened by `tlsConnectWith` to
+ * 127.0.0.1:`port` with the default groups, or with `groups` "both" X25519
+ * and P-256 offered and an X25519 share, or "p256" P-256 alone.
+ * @param port The server's port on 127.0.0.1.
+ * @param name The server name to send and check.
+ * @param protocols The ALPN protocols to offer.
+ * @param groups "both", "p256" or anything else for the defaults.
+ * @returns The client, open or failed.
+ */
+const dial = (port: i32, name: string, protocols: string[], groups: string): TlsTcpClient => {
+  const config = new TlsClientConfig(name, protocols);
+  if (groups === "both") {
+    config.groups = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1];
+  } else if (groups === "p256") {
+    config.groups = [TLS_GROUP_SECP256R1];
+    config.shareGroup = TLS_GROUP_SECP256R1;
+  }
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", port);
+  return tlsConnectWith(addr, config, tlsClientSystemTrust(), 10000);
+};
+
 /** Connect mode: one handshake against a third-party server, and one line of what it reached. */
 const connect = (port: i32, name: string, alpn: string, groups: string): i32 => {
   const protocols: string[] = [];
@@ -256,16 +281,7 @@ const connect = (port: i32, name: string, alpn: string, groups: string): i32 => 
     }
     protocols.push(alpn.substring(start, toI32(alpn.length)));
   }
-  const config = new TlsClientConfig(name, protocols);
-  if (groups === "both") {
-    config.groups = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1];
-  } else if (groups === "p256") {
-    config.groups = [TLS_GROUP_SECP256R1];
-    config.shareGroup = TLS_GROUP_SECP256R1;
-  }
-  const addr: u8[] = new Array<u8>(18);
-  netAddress(addr, "127.0.0.1", port);
-  const client: TlsTcpClient = tlsConnectWith(addr, config, tlsClientSystemTrust(), 10000);
+  const client: TlsTcpClient = dial(port, name, protocols, groups);
   const tls = client.conn.tls;
   const chose: string = tls.alpnChosen === "" ? "-" : tls.alpnChosen;
   const state: string = client.open() ? "open" : `failed ${client.failure()}`;
@@ -348,7 +364,58 @@ const exchange = (port: i32, how: string, reply: string, last: string): i32 => {
   return 0;
 };
 
+/**
+ * Talk mode: a client for `localhost` offering `groups` as `dial` does, that
+ * writes "ping" and reads until `reply` comes. With `last` "-" it then closes,
+ * sending its own close_notify, which the server reports; otherwise it writes
+ * `last` and reads to the end of the server's stream before closing. Prints
+ * one line of the suite and group, what it read and how the stream ended
+ * ("-" when the client ended it).
+ * @param port The server's port on 127.0.0.1.
+ * @param groups The groups to offer, as `dial` reads them.
+ * @param reply The text that ends the read.
+ * @param last The line to write after it, or "-" to close at once.
+ * @returns 0; the line says how far it got.
+ */
+const talk = (port: i32, groups: string, reply: string, last: string): i32 => {
+  const client: TlsTcpClient = dial(port, "localhost", [], groups);
+  const tls = client.conn.tls;
+  if (!client.open()) {
+    console.log(`failed ${client.failure()}`);
+    client.close();
+    return 0;
+  }
+  const buf: u8[] = new Array<u8>(64);
+  const ping: u8[] = ascii("ping\n");
+  const wrote: i32 = client.writeAll(ping, 0, toI32(ping.length), 10000);
+  let got: string = "";
+  let n: i32 = 1;
+  while (n > 0 && got.indexOf(reply) < 0) {
+    n = client.readWait(buf, 0, 64, 10000);
+    for (let k: i32 = 0; k < n; k++) {
+      got = got + String.fromCharCode(buf[k]);
+    }
+  }
+  let end: string = "-";
+  if (last !== "-") {
+    const bye: u8[] = ascii(`${last}\n`);
+    client.writeAll(bye, 0, toI32(bye.length), 10000);
+    let ended: i32 = 1;
+    while (ended > 0) {
+      ended = client.readWait(buf, 0, 64, 10000);
+    }
+    end = `${ended}`;
+  }
+  console.log(`open suite ${tls.suite} group ${tls.shareGroup} wrote ${wrote} read ${got.indexOf(reply) >= 0 ? reply : "-"} end ${end}`);
+  client.close();
+  return 0;
+};
+
 export const main = (): i32 => {
+  if (process.argv.length === 6 && process.argv[1] === "talk") {
+    const port: i32 = decimal(process.argv[2]);
+    return port > 0 ? talk(port, process.argv[3], process.argv[4], process.argv[5]) : 2;
+  }
   if (process.argv.length === 6 && process.argv[1] === "exchange") {
     const port: i32 = decimal(process.argv[2]);
     return port > 0 ? exchange(port, process.argv[3], process.argv[4], process.argv[5]) : 2;

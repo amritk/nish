@@ -3617,7 +3617,9 @@ if (!only || "net_tls_tcp".includes(only)) {
 // asking for the client's (s_server's `K`, typed only once the client's
 // data under its new key has arrived) and the end of the server's stream:
 // `-rev`'s close_notify, read as 0, and the default mode's `q`, which closes
-// TCP without one, read as the failure it is. openssl is on CI's runners, so
+// TCP without one, read as the failure it is. In `talk` mode it carries data
+// both ways and a close under each suite and group, and closes first once,
+// for s_server to report the client's close_notify. openssl is on CI's runners, so
 // a missing one is a failure here rather than a skip.
 if (!only || "net_tls_client_tcp".includes(only)) {
   const dir = path.join(buildDir, "net-tls-client")
@@ -3690,10 +3692,12 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     // (the intermediate, for a leaf under one) and `server`'s flags, and the
     // client against it: its mode, the port, then `args`. Each of `steps` is
     // a pattern and a line: once the server's output so far matches the
-    // pattern, the line goes to its stdin, in order. The answer is the
-    // client's exit status and output, and how many steps fired.
+    // pattern, the line goes to its stdin, in order. With `drain`, the server
+    // is given until its own exit (`-naccept 1` ends it after the connection)
+    // rather than killed once the client exits. The answer is the client's
+    // exit status and output, how many steps fired and the server's output.
     const issuers = { rsaleaf: "rsaca", p384leaf: "p384ca" }
-    const handshake = async (leaf, server, mode, args, steps = []) => {
+    const handshake = async (leaf, server, mode, args, steps = [], drain = false) => {
       const s = spawn(
         openssl,
         [
@@ -3739,10 +3743,12 @@ if (!only || "net_tls_client_tcp".includes(only)) {
               })
               c.on("close", (status) => resolve({ status, stdout, stderr }))
             })
-      s.kill("SIGKILL")
+      if (!drain) {
+        s.kill("SIGKILL")
+      }
       await ended
       clearTimeout(killer)
-      return { ...client, stepped: step }
+      return { ...client, stepped: step, server: out }
     }
     // 4865, 4866 and 4867 are TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384 and
     // TLS_CHACHA20_POLY1305_SHA256; 29 is X25519 and 23 secp256r1; 1027, 1283 and
@@ -3827,6 +3833,38 @@ if (!only || "net_tls_client_tcp".includes(only)) {
         `net_tls_client_tcp: openssl s_server, the blocking calls, ${what}`,
         got.status === 0 && got.stdout === `${want}\n` && got.stepped === steps.length,
         `exit ${got.status}, ${got.stepped} of ${steps.length} steps\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
+      )
+    }
+    // Data both ways and a close under each suite and each group the client
+    // offers. Against `-rev` the client writes "ping", reads "gnip" and
+    // writes CLOSE, and the server's close_notify ends its stream as 0.
+    // Against the default mode the server answers "ping" with "pong" and the
+    // client closes first: s_server is let run to its own exit, and its DONE
+    // is its read of the client's close_notify, where a TCP close with none
+    // is an unexpected EOF and an ERROR.
+    const rev = (...flags) => ["-tls1_3", "-rev", ...flags]
+    const talks = [
+      ["TLS_AES_128_GCM_SHA256", rev("-ciphersuites", "TLS_AES_128_GCM_SHA256"), "-", "gnip", "CLOSE", [],
+        "open suite 4865 group 29 wrote 5 read gnip end 0"],
+      ["TLS_AES_256_GCM_SHA384", rev("-ciphersuites", "TLS_AES_256_GCM_SHA384"), "-", "gnip", "CLOSE", [],
+        "open suite 4866 group 29 wrote 5 read gnip end 0"],
+      ["TLS_CHACHA20_POLY1305_SHA256", rev("-ciphersuites", "TLS_CHACHA20_POLY1305_SHA256"), "-", "gnip", "CLOSE", [],
+        "open suite 4867 group 29 wrote 5 read gnip end 0"],
+      ["an X25519 share", rev("-groups", "X25519"), "-", "gnip", "CLOSE", [],
+        "open suite 4865 group 29 wrote 5 read gnip end 0"],
+      ["a P-256 share", rev("-groups", "P-256"), "p256", "gnip", "CLOSE", [],
+        "open suite 4865 group 23 wrote 5 read gnip end 0"],
+      ["the client's close_notify", ["-tls1_3"], "-", "pong", "-", [[/ping\n/, "pong\n"]],
+        "open suite 4865 group 29 wrote 5 read pong end -"],
+    ]
+    for (const [what, server, groups, reply, last, steps, want] of talks) {
+      const clientCloses = last === "-"
+      const got = await handshake("p256", server, "talk", [groups, reply, last], steps, clientCloses)
+      const done = !clientCloses || /^DONE$/m.test(got.server)
+      check(
+        `net_tls_client_tcp: openssl s_server, data and a close, ${what}`,
+        got.status === 0 && got.stdout === `${want}\n` && got.stepped === steps.length && done,
+        `exit ${got.status}, ${got.stepped} of ${steps.length} steps\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}\nserver: ${got.server}`
       )
     }
   }
