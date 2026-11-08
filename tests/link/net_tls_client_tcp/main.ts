@@ -248,17 +248,21 @@ const verifyChecks = (t: Suite): void => {
 /**
  * A client for `name` offering `protocols`, opened by `tlsConnectWith` to
  * 127.0.0.1:`port` with the default groups, or with `groups` "both" X25519
- * and P-256 offered and an X25519 share, or "p256" P-256 alone.
+ * and P-256 offered and an X25519 share, "x25519" X25519 alone or "p256"
+ * P-256 alone.
  * @param port The server's port on 127.0.0.1.
  * @param name The server name to send and check.
  * @param protocols The ALPN protocols to offer.
- * @param groups "both", "p256" or anything else for the defaults.
+ * @param groups "both", "x25519", "p256" or anything else for the defaults.
  * @returns The client, open or failed.
  */
 const dial = (port: i32, name: string, protocols: string[], groups: string): TlsTcpClient => {
   const config = new TlsClientConfig(name, protocols);
   if (groups === "both") {
     config.groups = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1];
+  } else if (groups === "x25519") {
+    config.groups = [TLS_GROUP_X25519];
+    config.shareGroup = TLS_GROUP_X25519;
   } else if (groups === "p256") {
     config.groups = [TLS_GROUP_SECP256R1];
     config.shareGroup = TLS_GROUP_SECP256R1;

@@ -3841,7 +3841,8 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     // Against the default mode the server answers "ping" with "pong" and the
     // client closes first: s_server is let run to its own exit, and its DONE
     // is its read of the client's close_notify, where a TCP close with none
-    // is an unexpected EOF and an ERROR.
+    // is an unexpected EOF and an ERROR, which fails the check even beside a
+    // DONE. The X25519 case has the client offer X25519 alone.
     const rev = (...flags) => ["-tls1_3", "-rev", ...flags]
     const talks = [
       ["TLS_AES_128_GCM_SHA256", rev("-ciphersuites", "TLS_AES_128_GCM_SHA256"), "-", "gnip", "CLOSE", [],
@@ -3850,7 +3851,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
         "open suite 4866 group 29 wrote 5 read gnip end 0"],
       ["TLS_CHACHA20_POLY1305_SHA256", rev("-ciphersuites", "TLS_CHACHA20_POLY1305_SHA256"), "-", "gnip", "CLOSE", [],
         "open suite 4867 group 29 wrote 5 read gnip end 0"],
-      ["an X25519 share", rev("-groups", "X25519"), "-", "gnip", "CLOSE", [],
+      ["an X25519 share", rev("-groups", "X25519"), "x25519", "gnip", "CLOSE", [],
         "open suite 4865 group 29 wrote 5 read gnip end 0"],
       ["a P-256 share", rev("-groups", "P-256"), "p256", "gnip", "CLOSE", [],
         "open suite 4865 group 23 wrote 5 read gnip end 0"],
@@ -3860,7 +3861,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     for (const [what, server, groups, reply, last, steps, want] of talks) {
       const clientCloses = last === "-"
       const got = await handshake("p256", server, "talk", [groups, reply, last], steps, clientCloses)
-      const done = !clientCloses || /^DONE$/m.test(got.server)
+      const done = !clientCloses || (/^DONE$/m.test(got.server) && !/^ERROR$/m.test(got.server))
       check(
         `net_tls_client_tcp: openssl s_server, data and a close, ${what}`,
         got.status === 0 && got.stdout === `${want}\n` && got.stepped === steps.length && done,

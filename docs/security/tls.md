@@ -1120,13 +1120,13 @@ otherwise) and `writeAll` -32.
 
 **Data and a close against openssl s_server** (the same block, "data and a
 close"): under each of the three suites (`-ciphersuites`) and each group the
-client offers (`-groups X25519` with the default share, `-groups P-256` with a
-P-256 share), `tlsConnectWith` opens, the client writes a line and reads
+client offers (`-groups X25519` with X25519 alone offered, `-groups P-256`
+with P-256 alone), `tlsConnectWith` opens, the client writes a line and reads
 `-rev`'s answer, writes CLOSE and reads s_server's close_notify as 0. Against
 the default mode it reads the answer s_server is given, then `close`s first,
 and s_server, let run to its own exit, prints DONE: its read of the client's
 `close_notify`. A TCP close with none is an unexpected EOF there, printed
-ERROR, and fails the check — it does when `close` skips the `close_notify`.
+ERROR, and an ERROR fails the check even beside a DONE — it does when `close` skips the `close_notify`.
 
 **Against `TlsTcpServer` over loopback** (`net_tls_client_tcp`): the verdict
 reaches the server as an alert, ALPN and the name reach it, an IP literal
