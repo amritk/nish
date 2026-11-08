@@ -11,6 +11,10 @@
 # `node bench/http1-conn/run.mjs` leaves holding the base's std/ and a copy of
 # the compiler. Writes build/bench/http1-conn/misses/<build>-<shape>.txt (the
 # function summary) and <build>-<shape>-lines.txt (the annotated source).
+#
+# The stages shape runs under callgrind instead, whose call graph lets
+# stage-misses.mjs give each miss to the stage it happened in:
+# <build>-stages.txt holds misses per request per stage.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 connections="${1:-10000}"
@@ -49,7 +53,8 @@ for build in old new; do
   fi
   dir="$out/$build"
   mkdir -p "$dir"
-  cp "$root/bench/http1-conn/main.ts" "$dir/main.ts"
+  # run.mjs wrote each build's main.ts, rewritten for a base without sendBody.
+  cp "$root/build/bench/http1-conn/$build/main.ts" "$dir/main.ts"
   logged "$dir/compile.log" "$nish" "$dir/main.ts" -o "$dir/" --profile speed -g --link "$dir/conn"
   for shape in idle direct idle-dram direct-dram; do
     mode="${shape%-dram}"
@@ -72,4 +77,14 @@ for build in old new; do
       --annotate --no-show-percs --context 0 "$dir/$shape-0.cg" "$dir/$shape-$n.cg") > "$out/$build-$shape-lines.txt"
     echo "$build $shape: $n requests, $out/$build-$shape.txt"
   done
+  # The stages shape: 1 batch of N requests after the warm pass over every
+  # connection, less 0 requests.
+  for count in 0 "$requests"; do
+    logged "$dir/stages-$count.log" valgrind --tool=callgrind --cache-sim=yes \
+      --compress-strings=no --compress-pos=no --callgrind-out-file="$dir/stages-$count.cg" \
+      "$dir/conn" stages "$count" "$connections" 1
+  done
+  node "$root/bench/http1-conn/stage-misses.mjs" "$dir/stages-0.cg" "$dir/stages-$requests.cg" \
+    "$requests" "$src" > "$out/$build-stages.txt"
+  echo "$build stages: $requests requests, $out/$build-stages.txt"
 done
