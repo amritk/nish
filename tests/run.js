@@ -6079,6 +6079,15 @@ const MODULE_JOBS = Math.max(1, Math.floor(defaultJobs() / LINK_JOBS))
  * each with why. A program belongs here when other programs beside it change
  * what it measures (a wall-clock bound, a resident size), not when it shares a
  * file or a port: no program does (see `runLinkProgram`).
+ *
+ * Every other program stays in the pool, including the ones that look serial:
+ * fixed ports (the literal ports in tests/link are a server's argument or
+ * trace bytes; sockets bind port 0), timing (their bounds are not tighter than
+ * a loaded machine meets), panic-once programs (they write only under their
+ * own name) and the `thread_` and `par_` programs (each runs its own thread
+ * counts inside one program, `NISH_NUM_THREADS` handed to that spawn alone).
+ * A program that stops holding for one of these is added here with its
+ * reason, not made to retry.
  */
 const LINK_SERIAL = new Map([
   [
