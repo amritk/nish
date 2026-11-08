@@ -310,19 +310,19 @@ class RegionWalk {
   arrowOrigins: i32[]
   locals: Local[]
   localOrigins: i32[]
+  findings: RegionFinding[]
+  /** How a message opens on `fn` (`insideRegion`, `insideTask`). */
+  who: string
+  /** When `fn`'s region is freed, for a message. */
+  freed: string
   changed: boolean
   collect: boolean
-  findings: RegionFinding[]
   /**
    * WP49 stage 5, part 3: `fn` is a spawned task, not a region's function.
    * Its outside memory is what it shares with its spawner, which outlives it,
    * so only memory of its own region kept from outside is refused, and growth.
    */
   task: boolean
-  /** How a message opens on `fn` (`insideRegion`, `insideTask`). */
-  who: string
-  /** When `fn`'s region is freed, for a message. */
-  freed: string
 
   constructor(
     program: CheckedProgram,
@@ -330,6 +330,8 @@ class RegionWalk {
     facts: FactsTable,
     fn: FunctionSig,
     fresh: StringSet,
+    paramNames: string[],
+    paramOrigins: i32[],
     task: boolean
   ) {
     this.program = program
@@ -337,8 +339,8 @@ class RegionWalk {
     this.facts = facts
     this.fn = fn
     this.fresh = fresh
-    this.paramNames = []
-    this.paramOrigins = []
+    this.paramNames = paramNames
+    this.paramOrigins = paramOrigins
     this.arrowNames = []
     this.arrowOrigins = []
     this.locals = []
@@ -911,11 +913,7 @@ const walkFindings = (
   if (fnInstance !== null) {
     home.enterInstance(fnInstance)
   }
-  const walk = new RegionWalk(home, table, facts, fn, fresh, task)
-  for (let i = 0; i < seedNames.length; i++) {
-    walk.paramNames.push(seedNames[i])
-    walk.paramOrigins.push(seedOrigins[i])
-  }
+  const walk = new RegionWalk(home, table, facts, fn, fresh, seedNames, seedOrigins, task)
   // A run that changes anything adds a binding or raises one a step up
   // none, scalar, region or outer, unknown, and bindings are finite, so this
   // reaches the fixpoint; a cap would report from origins not yet settled.
