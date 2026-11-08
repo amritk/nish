@@ -307,6 +307,8 @@ const STAGE4_STRING_EXPORTS = [
   "tests/link/module_stem_clash/main.ts",
   "tests/link/net_fetch_async/main.ts",
   "tests/link/net_fetch_async_flat/main.ts",
+  "tests/link/net_fetch_async_https/main.ts",
+  "tests/link/net_fetch_async_https_flat/main.ts",
   "tests/link/net_fetch_async_overlap/main.ts",
   "tests/link/net_fetch_async_policy/main.ts",
   "tests/link/net_hpack/main.ts",
