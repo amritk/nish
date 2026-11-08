@@ -833,6 +833,11 @@ export const serverChecks = (): i32 => {
     toI32(400)
   );
   t.eqI32("refused with 400: an obs-fold", statusFor(lb, "GET / HTTP/1.1\r\nHost: a\r\nX: y\r\n z\r\n\r\n"), toI32(400));
+  // The target is scanned sixteen bytes at a time: a bad byte in the second
+  // vector, on its first lane and past it, is refused as one in the first is.
+  t.eqI32("refused with 400: a non-ASCII byte 17 bytes into the target", statusFor(lb, "GET /0123456789abcdef\u00e9 HTTP/1.1\r\nHost: a\r\n\r\n"), toI32(400));
+  t.eqI32("refused with 400: a DEL 16 bytes into the target", statusFor(lb, "GET /0123456789abcde\u007f HTTP/1.1\r\nHost: a\r\n\r\n"), toI32(400));
+  t.eqI32("refused with 400: a tab 21 bytes into the target", statusFor(lb, "GET /0123456789abcdefghij\tk HTTP/1.1\r\nHost: a\r\n\r\n"), toI32(400));
   t.eqI32("refused with 414: a target past maxTarget", statusFor(lb, `GET /${longTarget.join("")} HTTP/1.1\r\nHost: a\r\n\r\n`), toI32(414));
   t.eqI32("refused with 413: a Content-Length past maxBody", statusFor(lb, "POST /echo HTTP/1.1\r\nHost: a\r\nContent-Length: 99999999\r\n\r\n"), toI32(413));
   t.eqI32("refused with 501: a transfer coding other than chunked", statusFor(lb, "POST /echo HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n"), toI32(501));
