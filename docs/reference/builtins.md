@@ -200,13 +200,13 @@ Up to `len` bytes of `buf[off, off + len)`.
 
 <scalar-card title="parse​Float" icon="phosphor/regular/function" href="#parsefloat">
 
-Converts a string to a floating-point number.
+The decimal number at the start of `s`, as an `f64`: ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded.
 
 </scalar-card>
 
 <scalar-card title="parse​Int" icon="phosphor/regular/function" href="#parseint">
 
-Converts a string to an integer.
+The base-10 integer at the start of `s`, as an `i32`: ASCII whitespace, an optional sign, then digits, stopping at the first other character (`parseInt("42px")` is `42`).
 
 </scalar-card>
 
@@ -631,6 +631,9 @@ The two output streams, with Nish's one-argument signatures.
 </scalar-card>
 
 <scalar-card title="Date​Constructor" icon="phosphor/regular/cube" href="#dateconstructor">
+
+`Date`, merged into the `DateConstructor` `lib.es2022` declares.
+
 </scalar-card>
 
 <scalar-card title="Disposable" icon="phosphor/regular/cube" href="#disposable">
@@ -652,6 +655,9 @@ An insertion-ordered map with SameValueZero keys (`-0` is `+0` and `NaN` is `NaN
 </scalar-card>
 
 <scalar-card title="Number​Constructor" icon="phosphor/regular/cube" href="#numberconstructor">
+
+`Number(value)`: `value` as an `f64`, in both number modes.
+
 </scalar-card>
 
 <scalar-card title="Process" icon="phosphor/regular/cube" href="#process">
@@ -685,11 +691,14 @@ A string: UTF-8 bytes.
 </scalar-card>
 
 <scalar-card title="String​Constructor" icon="phosphor/regular/cube" href="#stringconstructor">
+
+`String.fromBytes` is Nish's, not JavaScript's, so it merges into the `StringConstructor` `lib.es2022` declares.
+
 </scalar-card>
 
 <scalar-card title="Symbol​Constructor" icon="phosphor/regular/cube" href="#symbolconstructor">
 
-Returns a new unique Symbol value.
+The disposable protocol `using` reads: declared here so that a program using `nish/threads`'s scope, a `Mutex`'s lock, `arena()` or a handle class needs no `"ESNext.Disposable"` in its `lib`.
 
 </scalar-card>
 
@@ -1813,21 +1822,6 @@ what stderr says before the exit.
 
 ### parseFloat
 
-Converts a string to a floating-point number.
-
-```ts
-function parseFloat(string: string): number
-```
-
-<scalar-field name="string" type="string" required>
-
-A string that contains a floating-point number.
-
-</scalar-field>
-
-<scalar-field name="returns" type="number">
-</scalar-field>
-
 The decimal number at the start of `s`, as an `f64`: ASCII whitespace,
 then the longest decimal literal (`[sign] digits [. digits] [e [sign]
 digits]`, `. digits`, or `[sign] Infinity`), correctly rounded.
@@ -1854,32 +1848,6 @@ the number, or `NaN` when there is none (`parseFloat("abc")`,
 </scalar-field>
 
 ### parseInt
-
-Converts a string to an integer.
-
-```ts
-function parseInt(
-  string: string,
-  radix?: number,
-): number
-```
-
-<scalar-field name="string" type="string" required>
-
-A string to convert into a number.
-
-</scalar-field>
-
-<scalar-field name="radix" type="number">
-
-A value between 2 and 36 that specifies the base of the number in `string`.
-If this argument is not supplied, strings with a prefix of '0x' are considered hexadecimal.
-All other strings are considered decimal.
-
-</scalar-field>
-
-<scalar-field name="returns" type="number">
-</scalar-field>
 
 The base-10 integer at the start of `s`, as an `i32`: ASCII whitespace,
 an optional sign, then digits, stopping at the first other character
@@ -4612,6 +4580,26 @@ number, or boolean, got i32[]". Capability: none.
 ```ts
 interface NumberConstructor
 ```
+
+`value` as an `f64`, by the rules on `NumberConstructor` above.
+Capability: none.
+
+```ts
+NumberConstructor(value?: any): number
+```
+
+<scalar-field name="value" type="any">
+
+a string, an `i32`, an `i64`, an `f64` or a `boolean`;
+  `nish` requires it, though `lib`'s signature marks it optional.
+
+</scalar-field>
+
+<scalar-field name="returns" type="number">
+
+an `f64`, in both number modes.
+
+</scalar-field>
 
 ### Process
 
