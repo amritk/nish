@@ -25,12 +25,14 @@ import {
 } from "nish:net";
 import { mkdirSync, readdirSync, unlinkSync, writeFileSync } from "nish:fs";
 
-const DIR: string = "build/test/net-unix-proc-fds/";
-const LIVE: string = "build/test/net-unix-proc-fds/live.sock";
-const DEAD: string = "build/test/net-unix-proc-fds/dead.sock";
-const FILE: string = "build/test/net-unix-proc-fds/file.sock";
-const CYCLE: string = "build/test/net-unix-proc-fds/cycle.sock";
-const IDLE: string = "build/test/net-unix-proc-fds/idle.sock";
+// The sockets sit in a directory of their own, inside the one `tests/run.js`
+// builds this program into, so no socket name meets a file the compiler wrote.
+const DIR: string = "build/test/net-unix-proc-fds/sock/";
+const LIVE: string = "build/test/net-unix-proc-fds/sock/live.sock";
+const DEAD: string = "build/test/net-unix-proc-fds/sock/dead.sock";
+const FILE: string = "build/test/net-unix-proc-fds/sock/file.sock";
+const CYCLE: string = "build/test/net-unix-proc-fds/sock/cycle.sock";
+const IDLE: string = "build/test/net-unix-proc-fds/sock/idle.sock";
 /** The one byte each message carries. */
 const byte = (): u8[] => [42];
 
@@ -138,16 +140,16 @@ const attempt = (k: i32, live: i32): i32 => {
     return unixConnect(DEAD);
   }
   if (k === 5) {
-    return unixConnect("build/test/net-unix-proc-fds/missing.sock");
+    return unixConnect("build/test/net-unix-proc-fds/sock/missing.sock");
   }
   if (k === 6) {
     return unixListen("@nish-net-unix-proc-fds\x00", 4, 0);
   }
   if (k === 7) {
-    return unixListenMode("build/test/net-unix-proc-fds/mode.sock", 4, 0, 0o1000);
+    return unixListenMode("build/test/net-unix-proc-fds/sock/mode.sock", 4, 0, 0o1000);
   }
   if (k === 8) {
-    return unixListen("build/test/net-unix-proc-fds/nowhere/x.sock", 4, 0);
+    return unixListen("build/test/net-unix-proc-fds/sock/nowhere/x.sock", 4, 0);
   }
   if (k === 9) {
     return unixSocketPair(3, [-1, -1]);
@@ -165,7 +167,7 @@ const attempt = (k: i32, live: i32): i32 => {
     return unixListen("", 4, 0);
   }
   if (k === 14) {
-    return unixListen("build/test/net-unix-proc-fds/flags.sock", 4, 2);
+    return unixListen("build/test/net-unix-proc-fds/sock/flags.sock", 4, 2);
   }
   if (k === 15) {
     return unixListenMode("@nish-net-unix-proc-fds", 4, 0, 0o600);

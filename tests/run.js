@@ -2942,8 +2942,9 @@ if (!only || "net_unix".includes(only)) {
     const built = spawnSync(NISH, [path.join(fdsDir, "fds.ts"), "-o", outDir + "/", "--link", exe], {
       cwd: root,
       encoding: "utf8",
+      ...NATIVE_RUN_LIMIT,
     })
-    const ran = built.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8" }) : built
+    const ran = built.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8", ...NATIVE_RUN_LIMIT }) : built
     check(
       "net_unix: no Unix-socket error path or round leaves a descriptor in /proc/self/fd",
       ran.status === 0 && ran.stdout === fs.readFileSync(path.join(fdsDir, "expected.out"), "utf8"),
