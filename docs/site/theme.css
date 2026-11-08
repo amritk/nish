@@ -5,14 +5,8 @@
   Logo palette: charcoal #1e2126, violet #9c42e9, mid #792cb9,
   deep #391072 / #33175d, darkest fill #211a30, tagline grey #b7b7c5.
 
-  Contrast (WCAG 2.x, measured on the rendered page):
-    light  body #1e2126 on #ffffff 16.1:1, muted #545866 7.1:1, faint
-           #6b6f7c on #f6f4fa 4.6:1, link #792cb9 7.3:1, sidebar current
-           page 6.5:1, code block #545866 on #f6f4fa 6.5:1
-    dark   body #e8e6ef on #1e2126 13.1:1, muted #b7b7c5 8.1:1, faint
-           #8f8f9d 5.1:1, link #b47cf0 5.4:1, sidebar current page 4.6:1,
-           code block #b7b7c5 on #191b20 8.7:1
-  Any colour change here re-measures these and the PR body's table.
+  Text colours meet WCAG AA (4.5:1) on the surfaces they sit on, in both
+  modes; the measured table is in PR #1291. A colour change re-measures it.
 
   Scalar reads a theme as CSS custom properties under .light-mode and
   .dark-mode (the class on <body>), the same shape as its built-in presets.
@@ -43,7 +37,7 @@
 
   --scalar-color-1: #1e2126;
   --scalar-color-2: #545866;
-  --scalar-color-3: #6b6f7c;
+  --scalar-color-3: #5f6370;
 
   --scalar-color-accent: var(--nish-violet-mid);
   --scalar-border-color: #e2deea;
@@ -51,7 +45,7 @@
 
   --scalar-color-green: #067a52;
   --scalar-color-red: #c8102e;
-  --scalar-color-yellow: #b88a00;
+  --scalar-color-yellow: #8a6700;
   --scalar-color-blue: #0b62a8;
   --scalar-color-orange: #b04400;
   --scalar-color-purple: var(--nish-violet-mid);
@@ -82,7 +76,7 @@
 
   --scalar-color-1: #e8e6ef;
   --scalar-color-2: #b7b7c5;
-  --scalar-color-3: #8f8f9d;
+  --scalar-color-3: #9d9dab;
 
   --scalar-color-accent: #b47cf0;
   --scalar-border-color: #363a44;
