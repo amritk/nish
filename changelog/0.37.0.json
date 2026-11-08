@@ -1,0 +1,333 @@
+{
+  "version": "0.37.0",
+  "date": "2026-11-08",
+  "tag": "v0.37.0",
+  "range": {
+    "from": "v0.36.0",
+    "to": "1b0b2d99"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-36-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.36.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "67cd88c"
+      ],
+      "pr": 1271,
+      "author": "github-actions[bot]",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "generate-the-diagnostic-index-and-the-command-line",
+      "type": "docs",
+      "scope": "reference",
+      "breaking": false,
+      "title": "generate the diagnostic index and the command-line reference",
+      "body": "The reference now covers the compiler itself, under a new Compiler reference group. Diagnostics lists every `NL` code `--json` can print, grouped by band. Each code has its anchor (`#nl2387`), its rule text, and the programs from `tests/wordings/` that provoke it, with their exact output. Command line lists every flag `nish --help` prints, read from the help table itself, so the page and the help cannot drift apart. The guide's CLI page links both.\n\n`scripts/gen-reference.mjs` reads `src/codes.ts` and `src/cli-style.ts` with the TypeScript parser, and never by running the compiler. It fails the run in four cases: the page's code count differs from `RULE_COUNT` plus the four band-0 codes, an example lacks its `.err`, a help statement or argument has a shape it cannot read, or a table is not where it expects it. `--check` reports either page as stale when its sources change.",
+      "metrics": [],
+      "refs": [
+        "docs/README.md#the-library-reference"
+      ],
+      "tests": [
+        "node scripts/gen-reference.mjs --check"
+      ],
+      "commits": [
+        "ba85d3e"
+      ],
+      "pr": 1274,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "plan-wp49-stage-5-and-bring-the-wp49",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "plan WP49 stage 5 and bring the WP49 plan statuses up to date",
+      "body": "Stage 5 splits into four pull requests: the executor (runtime-async.c, nish:async readable, writable and sleep, a slab per spawned kind, a region per task), async fetch with an eager body under a cap, serve with the async Postgres pool, and cancellation. The WP49 plan now marks the renames, Upstream and the carrier, the TFB database tests, regions and the async language as done, and points its executor section at the new plan.",
+      "metrics": [],
+      "refs": [
+        "#1278"
+      ],
+      "tests": [],
+      "commits": [
+        "d797a55"
+      ],
+      "pr": 1279,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "measure-http1server-cpu-per-request-end-to-end",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "measure Http1Server CPU per request end to end, 0.34.1 vs 0.35.0",
+      "body": "bench/http1-e2e runs the multicore-server-challenge submission under the\nchallenge's own loadgen (15,000 users, 60 s ramp, 120 s measure) and\nmeasures the HTTP workers' CPU per request in alternating rounds: A is\n0.34.1, B is 0.35.0 with the same source, C is 0.35.0 with sendBody.\naarch64 figures come from hardware counters; the x86 VM, which has no\nPMU, uses schedstat, cachegrind and a tracefs syscall trace.\n\nNeither 0.35.0 arm saves CPU beyond one arm's own spread (aarch64 A\n14,410 ns, B +9, C +32, spread 414-636; x86 A 17,818 ns, B +265,\nC +304, spread 638-1,179). Kernel time is 56-70% of the workers' CPU.\nThe library stages worth cutting are Jwt.verify's HMAC-SHA256 (~2.9 us\non x86), the http1 head parse (~1-1.25 us) and the JSON tokenizer\n(~0.47 us). None of the four socket knobs tried moved beyond the noise.\n\nMeasured: aarch64 5 rounds per arm, x86 4 rounds per arm; same-arm spread 414-1,179 ns/request\nRefs: bench/http1-e2e/README.md\nPart of #1275",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7c8185b"
+      ],
+      "pr": 1282,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "document-or-internalise-std-net-s-undocumented-public",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "document or internalise std/net's undocumented public fields",
+      "body": "Every public field in std/net's QUIC, TLS and HTTP modules now carries a doc comment, so the library reference describes what each one holds, its unit or range, and why a caller reads it. Before this change, 283 of those fields had no doc. Nine fields that only other std modules read are tagged `@internal` instead, which removes them from the reference. Each of those nine names its reader. Any field that a test, an example or a doc page reads gets a real comment.\n\nThe `@param` and `@returns` of `PgConnection.paramTextArray` now parse. A backslash inside a code span had been escaping the closing backtick, which swallowed both tags.\n\nOnly comments and `@internal` tags change. Every changed std file has the same comment-free AST as before, and the regenerated goldens move only by source line numbers.",
+      "metrics": [],
+      "refs": [
+        "#1277"
+      ],
+      "tests": [
+        "node tests/run.js quic",
+        "tls",
+        "postgres",
+        "net_webtransport"
+      ],
+      "commits": [
+        "1727531"
+      ],
+      "pr": 1281,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "fail-gen-reference-check-on-an-undocumented-public",
+      "type": "build",
+      "scope": "docs",
+      "breaking": false,
+      "title": "fail gen-reference --check on an undocumented public declaration",
+      "body": "`node scripts/gen-reference.mjs --check`, which CI already runs, now fails when a public declaration in std/ or runtime/nish.d.ts lacks documentation. A declaration needs a doc comment, a `@param` for each parameter, and a `@returns` for any return type other than void or never. TypeDoc's notDocumented validation covers functions, classes, interfaces, constructors, methods, properties, accessors, variables, type aliases, enums and enum members. It checks the same reflections the reference pages are built from, so `@internal` and private members are excluded, and it skips members inherited from TypeScript's lib. A second pass of the script's own checks `@param` and `@returns` on functions, methods, constructors, accessors and call signatures.\n\nToday's gaps live in scripts/undocumented.txt, one `module.Name.member` per line. The list only shrinks. `--check` fails on a gap the file does not list, and on a listed line that is no longer a gap. `--update-baseline` refuses to add a line, and only `--grow-baseline` adds one, for a change to the rule itself. The list holds 2 entries, the `HostHandle` brand member, down from 299 measured before this work. This change also documents the missing `@param` tags in runtime/nish.d.ts and `ResultErr.ok`.\n\nThe rule is written down in .claude/comments.md, CLAUDE.md's definition of done, and docs/README.md's \"The library reference\". src/ is out of scope, because the compiler's exports are not a user API.",
+      "metrics": [],
+      "refs": [
+        "#1277",
+        "#1254"
+      ],
+      "tests": [
+        "node scripts/gen-reference.mjs --check"
+      ],
+      "commits": [
+        "01a33a9"
+      ],
+      "pr": 1280,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "let-a-spec-first-module-s-emitted-test",
+      "type": "build",
+      "breaking": false,
+      "title": "let a spec-first module's emitted test sit in test/spec/",
+      "body": "A std module can land spec-first: one PR adds its spec, the contract that\nquotes it and the Nish test vector emits from it, and a second adds the\nmodule. The emitted test lives in test/spec/, a path vector's frozen gate\nfixes, and imports a module that does not exist until the second PR, so knip\nreported it as an unused file and failed lint:dead. Knip now takes\ntest/spec/*.ts as entries, and the orientation names the three directories and\nthe gates that judge them.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5d0ee2f"
+      ],
+      "pr": 1285,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "the-async-executor-and-nish-async-readable-writable",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "the async executor and nish:async readable, writable and sleep (WP49 stage 5, part 1)",
+      "body": "An async task can now wait on the kernel. `await readable(fd)`, `await writable(fd)` and `await sleep(ms)` from `nish:async` park the task on one executor per process (`runtime/runtime-async.c`: epoll on Linux, kqueue on Darwin, a timer heap), and the other tasks and `main` run in the meantime. A wait answers `false` when it cannot be made. A completion that arrives after its task finished is dropped by its generation.\n\nThe three debts stage 4 left are paid. Each spawned task allocates in a region of its own, freed when it finishes. A `string` passed to `spawn` is copied into the task's region, and any other non-value argument is refused (NL2673). A `main` that never awaits still runs every spawned task before the program exits. Tasks come from a slab per spawned kind instead of a `malloc` per spawn, and a stuck queue now waits on the kernel instead of trapping.\n\nA program with no `async` function links no executor and writes the same IR as before: 918 of 918 non-async cases are byte for byte. `--emit-ts` lowers `sleep` to `setTimeout` and refuses `readable`/`writable` (NL4017). wasm still refuses `async` (NL2652). The executor's security record is `docs/security/async.md`.",
+      "metrics": [],
+      "refs": [
+        "docs/wp49-async-server.md#stage-5-part-1"
+      ],
+      "tests": [
+        "tests/cases/async_sleep",
+        "tests/link/async_readable",
+        "tests/link/async_region_per_task",
+        "tests/link/async_spawn_args"
+      ],
+      "commits": [
+        "8556565"
+      ],
+      "pr": 1283,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "colour-diagnostics-on-a-terminal-1290",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "colour diagnostics on a terminal",
+      "body": "A compile error or warning printed to a terminal is now coloured: the location and message are bold, `error:` and `syntax error:` are bold red, the performance, portability and deprecation labels are bold yellow, each `name` the message quotes is bold cyan, the line-number gutter is faint, and the offending span in the source line and its `^~~` caret take the label's colour. The colours are the terminal theme's own sixteen, and a terminal with no colours keeps the bold and faint structure.\n\nThe same policy as `--help` decides it (`styleFor(2, agentDriven())` in std/cli.ts): a pipe, a redirect, `NO_COLOR`, `TERM=dumb` and an agent get plain text, and `FORCE_COLOR` or `CLICOLOR_FORCE` force colour. `--json` is never coloured. With colour off, every byte is what the compiler printed before, so every `.err` golden is unchanged. Padding and the caret column are computed on the plain text, so the caret still lands under the span after a tab or a non-ASCII character. The style is chosen only when there is something to report, so a clean compile forks nothing extra.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/cli.md"
+      ],
+      "tests": [
+        "tests/nish/cli.ts (checkDiagnosticColour)"
+      ],
+      "commits": [
+        "5289bba"
+      ],
+      "pr": 1290,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "scan-http-1-request-heads-sixteen-bytes-at",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "scan HTTP/1 request heads sixteen bytes at a time",
+      "body": "The HTTP/1 parser now finds a line's end with one vector compare per sixteen bytes, in place of the 64-bit SWAR word trick, and scans the request target sixteen bytes at a time with an unsigned range check in place of a byte loop. Parse is the largest per-request stage of Http1Server. On a cold keep-alive connection it falls from ~474 to ~315 ns on aarch64 (NEON), and from ~344 to ~312 ns on x86-64 (SSE2), where the wall-clock ranges overlap and the exact instruction count carries the claim. Accept and reject decisions are unchanged. net_http1_parse_diff runs the new parser against the frozen scalar one over 237,143 cases and catches three mutations of the new scans, and docs/security/http1-codec.md records both predicates, their bounds and those tests.\n\nbench/http1-conn gains a stages shape: 10,000 connections dealt round-robin, so every request lands on a cold connection, with each library stage timed separately (recv, parse, dispatch, respond, sendBody, park). misses.sh adds per-stage callgrind counts, and counters.mjs adds perf stat counts where the machine has a PMU. Its README records the per-stage table on v0.34.1, v0.35.0, main and this change. No std/net stage was above 0.5 µs per request on v0.35.0. It also gives a native timing of the challenge app's Jwt.verify (691–752 ns with SHA-NI), which shows the 2.9 µs cachegrind figure was Valgrind hiding SHA-NI.",
+      "metrics": [
+        "aarch64 perf stat, user instructions per request 8,352 -> 6,812, cycles 3,364 -> 2,818; parse 474.3 (473.7–475.5) -> 314.5 (313.6–316.5) ns, old′ 1.001; x86 callgrind 6,947 -> 6,429 Ir per request"
+      ],
+      "refs": [
+        "bench/http1-conn/README.md",
+        "docs/security/http1-codec.md"
+      ],
+      "tests": [
+        "tests/link/net_http1_server",
+        "tests/link/net_http1_parse_diff"
+      ],
+      "commits": [
+        "0230401"
+      ],
+      "pr": 1287,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "polish-the-generated-pages-split-diagnostics-and-the",
+      "type": "docs",
+      "scope": "reference",
+      "breaking": false,
+      "title": "polish the generated pages, split diagnostics and the spec, group the sidebar",
+      "body": "* docs(reference): polish the generated pages, split diagnostics and the spec, group the sidebar\n\nThe generated reference pages get one heading scheme (the page title as a\nplain H1, an H2 per kind of member, an H3 per member), one icon per kind,\ncard titles that break inside long identifiers so nothing overflows a\nphone's screen, and no grid of a single card.\n\nThe diagnostics page becomes an index with a card per band and one page\nper band, and the language specification an index with a card per section\nand one page per `##` section; every link into either is rewritten to the\npage that holds its heading, and the code-count check is kept across the\nband pages.\n\nThe library sidebar groups std/ by area, titled by module name, with the\nbuiltins a group of their own, and the Reference group lists the\nreferences first. The landing page leads with a card per reference and\nper area. The security records are grouped by area.\n\nRefs: docs/README.md#the-library-reference\n\n* docs(reference): break long doc comments up and title every example\n\nA module page shows no paragraph over 120 words now. The std and\nruntime/nish.d.ts doc comments are split into shorter paragraphs and\nlists, words kept; a paragraph indented one space past the comment's\n`* ` carries on the detail or warning before it, so a long one keeps its\ntitle. Every TypeScript code block is titled example.ts in a Scalar code\ngroup, the only place Scalar shows a block's title; code blocks a blank\nline apart are one example; list items in a member's table cell start\nlines of their own. docs/README.md states the new rules.\n\nThe screenshots under pr-screenshots/ are for the pull request and are\nremoved in the next commit.\n\n* docs(reference): remove the pull request's screenshots\n\nThey are linked from the pull request at the commit that added them.\n\n* docs(reference): keep a formula's + or - off the start of a doc-comment line\n\nA line that opens with \"+ \" or \"- \" reads as a list item and broke the\nP-256 and P-384 curve formulas, and an aLen + bLen count, into lists.\nThe lines are re-flowed with the words kept.\n\n* test(self): move the line numbers that std doc comments shifted\n\nThe re-flowed doc comments in `std/threads.ts`, `std/bytes.ts` and\n`std/text.ts` moved the lines three link programs' capability reports\ncite, so `caps_parallel`, `std_dns_caps` and `caps_package_named_nish`\ncarry the regenerated `expected.caps.json`. The security records and\ndesign notes that cite lines in the re-flowed files move the same way,\neach to the line holding the text it cited before; a paragraph that\nanchors its citations at a named commit keeps them.\n\nTests: tests/link/caps_parallel, tests/link/std_dns_caps, tests/link/caps_package_named_nish\n\n* test(self): move the std/threads.ts lines expected.panics pins\n\nThe std/threads.ts doc comments re-flowed in this branch move the line\nof every function after them; link/panics_parallel_length lists them in\nits --emit-panics report. Numbers only.\n\nTests: tests/link/panics_parallel_length",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "9924cf0"
+      ],
+      "pr": 1292,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "fix-the-hand-written-pages-layout-on-the",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "fix the hand-written pages' layout on the rendered site",
+      "body": "The guide, INSTALL, RUN_UNDER_NODE, the hand-kept BENCHMARKS sections,\nstd/README and the security records read as walls of text on the docs\nsite. They now have structure, and their wording is unchanged: a\nword-multiset check holds every non-guide file to main word for word.\n\n- The Introduction opens with a lead and a card grid into the guide's\n  four sections, with the pre-alpha caution directly under the lead.\n- Installation is a three-step sequence with tabs for the real\n  alternatives: Ubuntu / Debian, Fedora and macOS, and install script\n  or npm.\n- No rendered paragraph on a guide page exceeds 120 words. Paragraphs\n  are split at sentence boundaries; a split never moves a status\n  sentence or a run-in title to another finding.\n- Six language sections that taught without an example gain a short\n  compiled one (nish:ok, or nish:err NL2251 / NL2231).",
+      "metrics": [],
+      "refs": [
+        "#1286"
+      ],
+      "tests": [
+        "node tests/run.js guide (589 passed)"
+      ],
+      "commits": [
+        "54756bf"
+      ],
+      "pr": 1289,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "the-nish-logo-and-a-theme-built-around",
+      "type": "docs",
+      "scope": "site",
+      "breaking": false,
+      "title": "the Nish logo and a theme built around it",
+      "body": "The docs site carries the Nish logo and a light and dark theme taken\nfrom its colours, replacing Scalar's default greyscale preset.\n\n- The header shows the mark and \"nish\" (no tagline, which cannot be\n  read at header size), with a favicon set from the same mark.\n- docs/site/theme.css builds both modes from the logo's charcoal\n  (#1e2126) and violet (#9c42e9, #792cb9): violet links, current\n  sidebar item, info callouts and linked-card hover, and more space\n  between blocks (18px) and above headings (56px).\n- Body, muted, faint, link and code text all meet WCAG AA contrast in\n  both modes; the ratios are measured in the PR.\n- scalar.config.json changes only its site-level keys (siteConfig\n  theme, logo and head links; assetsDir docs/site). Its generated\n  navigation is untouched.",
+      "metrics": [],
+      "refs": [
+        "#1286"
+      ],
+      "tests": [],
+      "commits": [
+        "8480651"
+      ],
+      "pr": 1291,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "async-fetch-in-nish-net-fetch-wp49-stage",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "async fetch in nish/net/fetch (WP49 stage 5, part 2)",
+      "body": "An async program can now call `await fetch(url)` from `nish/net/fetch`, beside `fetchSync`, and the process keeps serving its other tasks while the request is in flight. A command-line `main` that awaits it simply waits, and `awaitAll(fetch(a), fetch(b))` runs both requests at once. `fetch(url, init: RequestInit | null = null)` answers a `Result<FetchResponse, FetchError>`.\n\nThe body is read whole before `fetch` answers, up to `RequestInit.maxBodyBytes` (256 MiB by default, `HTTP_E_BODY_TOO_LARGE` past it), so `res.text()` is a plain method: a method cannot be `async`, and a read body holds no connection. Policy, proxy, redirect and error handling are `fetchSync`'s own, now shared as helpers, so `OutboundPolicy`, `NO_PROXY`, credential stripping on a cross-origin redirect and the `HTTP_E_*` codes behave the same on both paths. Connections can be kept in an opt-in `FetchPool`.\n\nTwo differences are recorded in `docs/security/fetch.md`: name lookup still blocks the process (HF-11), and an `https:` URL answers `HTTP_E_TLS` and names `fetchSync`, which serves it. `fetch` does not run under `--emit-ts`.",
+      "metrics": [],
+      "refs": [
+        "docs/wp49-async-server.md#8-names"
+      ],
+      "tests": [
+        "tests/link/net_fetch_async",
+        "tests/link/net_fetch_async_overlap",
+        "tests/link/net_fetch_async_flat",
+        "tests/link/net_fetch_async_policy"
+      ],
+      "commits": [
+        "e6c842b"
+      ],
+      "pr": 1293,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "language-index-cards-and-pinned-citations-after-the",
+      "type": "fix",
+      "scope": "docs",
+      "breaking": false,
+      "title": "language index cards and pinned citations after the reference split",
+      "body": "Follow-up to #1292.\n\n- The language index's \"Semantics decisions\" card began mid-sentence\n  with a stray `**`. A section that opens with a list now leads with\n  its first item, and an item's continuation lines are never read as\n  prose.\n- In member-table cells and card leads, a line opening with `- ` or\n  `1. ` starts a list item only where a list can start: at the start\n  of a paragraph, after a line ending in a colon, or after another\n  item. Elsewhere it is wrapped prose. CELL_CASES and LEAD_CASES pin\n  this, and every run checks them, --check included.\n- configText fails again when /reference has no /standard-library\n  route.\n- #1292's reflow of std doc comments had moved citations pinned to a\n  revision. They are restored to the line each names at that revision:\n  docs/security/tls.md (4bbb392, 394c439), json.md, term.md, yaml.md\n  and docs/h3-latency.md (99b81d2). In crypto-x509.md, the quiche\n  certificate_view.cc lines at 62826931 are restored too.",
+      "metrics": [],
+      "refs": [
+        "#1286"
+      ],
+      "tests": [],
+      "commits": [
+        "0fd0465"
+      ],
+      "pr": 1294,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-07"
+    },
+    {
+      "id": "module-storage-buffer-windows-and-panics-a-wasm",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "module storage, buffer windows and panics a wasm page can read (WP50 stage 3)",
+      "body": "* feat(interop): module storage, buffer windows and panics a wasm page can read (WP50 stage 3)\n\nFirst slice: a top-level `const x = new Array<T>(N)` or typed-array `new`\nwith a compile-time length is module storage. The checker resolves its\npointer-free element and constant length (src/module-storage.ts), and the\nemitter lays it out as a zero-filled `@x.data` plus a fixed\n`%struct.nish_array` header `@x`, with no initialiser code.\n\nWork in progress: diagnostic codes, tests, wasm-host layout, windows,\npanics, the driven bracket, the ring and the page module follow.\n\nRefs: docs/wp50-wasm-host.md#5\n\n* feat(interop): refuse module storage misuse with its own codes\n\nEach refusal of a top-level storage binding gets its own code (NL2671 to\nNL2680) and a negative test: an element with a pointer, an enum or range\nwithout a zero, a method that would resize it, binding or passing an\nelement, for-of, a length not known at compile time, and an annotation\nthat disagrees with its new. NL2084 now points at module storage.\n\nRefs: docs/wp50-wasm-host.md\nTests: tests/cases/reject_storage_*, tests/cases/storage_module\n\n* feat(interop): a wasm page finds module storage through layout and views\n\n`--emit-dts` writes a `Layout` interface whose lengths, strides and field\noffsets are literal types, so a page written for another layout fails tsc.\nThe loader fills `layout.<name>.at` from the exported `<name>.data` global and\nanswers `views()`, typed arrays over the current buffer rebuilt only when the\nbuffer changes. Storage data now has external linkage so the wasm-host link\ncan export it.\n\nRefs: docs/wp50-wasm-host.md#5-module-storage\nTests: tests/module-storage, tests/cases/storage_module\n\n* feat(interop): report wasm-host panics through a nish.panic import (WIP)\n\nThe wasm-host runtime calls nish.panic(kind, site, msg, len, a, b) before\nit traps; the emitter tags each panic call with its site and the build\nwrites <out>.sites.json. The loader formats the message, marks the module\ndead, calls onPanic and throws NishPanic; every export runs guarded, in the\narena bracket, and refuses re-entry with NishReentry.\n\nRefs: docs/wp50-wasm-host.md\n\n* test(interop): drive every way a wasm-host module panics from a Node page\n\nThe wasm-host-panic section links tests/panic under --profile wasm-host and\nchecks the panic import, the sites file, NishPanic and the dead module,\nNishReentry, an escaping host exception, the arena bracket and out of memory.\nThe build.sh rewrite now keeps zero-argument panic calls well formed.\n\nTests: tests/panic\n\n* wip(interop): buffer windows for host imports\n\n* test(interop): a host-window round trip for every element type and both window panics\n\nTests: tests/host-window\n\n* fix(interop): take a window's element type node from the parser, so it has an id\n\n* fix(interop): give a typed-array window's element its empty type-argument list\n\n* fix(interop): link runtime-wasm.c for a wasm-host panic site and parenthesize a window's offset\n\nWIP: std/host/ring.ts and its test, which still needs module storage to\nbe lendable.\n\n* wip(interop): lend module storage to typed-array parameters; nish/host/ring and nish/page\n\nModule storage may be passed to a parameter spelled Int32Array,\nFloat32Array, Float64Array or BigInt64Array, or to a host function's\nbuffer window: neither can resize or keep it. std/host/ring.ts is a\nsingle-producer ring over an Int32Array; runtime/page.mjs holds the\npage half (HostTable, ringOver, reportPanic).\n\nTests: tests/link/std_host_ring\n\n* test(interop): drive nish/page's HostTable, ringOver and reportPanic against a wasm-host module\n\nTests: tests/page\n\n* test(codegen): pin module storage's effect on readnone/readonly and on parallel bodies\n\nReading storage leaves a function readonly, never readnone; writing it\ndrops readonly; a parallel body may read storage, as the global it is,\nand is refused for writing it.\n\nTests: tests/cases/storage_attributes, tests/cases/reject_storage_parallel_write, tests/link/storage_parallel_read\n\n* test(interop): lend module storage to a typed-array parameter and to a host window\n\nTests: tests/cases/storage_lend, tests/host-window\n\n* feat(interop): module storage in the --emit-ts reading\n\n`--emit-ts` writes nish-storage.ts beside a program with module storage:\none ArrayBuffer laid out as `layout` says, `memory` holding it, and each\nstorage as a view of it (a typed array for a scalar, accessor objects for\na record), so a page runs the same against the TypeScript reading as\nagainst the wasm build. tests/page now runs its page against both.\n\nRefs: docs/wp50-wasm-host.md#54\nTests: tests/page\n\n* fix(interop): type module storage in the --emit-ts reading; record the wasm-host boundary\n\nA storage's new is written as a cast view of nish-storage.ts, so tsc --strict\nreads its element type. HostTable checks a handle by reading its slot, not\nby searching the free list. docs/security/wasm-host.md records the boundary's\nsix findings, each fixed and pinned.\n\nRefs: docs/security/wasm-host.md\nTests: tests/page, tests/panic\n\n* test(interop): pass the host module to the forged panic-message probe\n\nRefs: docs/security/wasm-host.md\nTests: tests/panic\n\n* test(interop): keep the stage's page and panic fixtures out of knip's entry graph\n\nTests: tests/host-window, tests/module-storage, tests/page, tests/panic\n\n* fix(interop): build a storage's fields as a local so its module dumps the same under every entry\n\nstorageLayouts pushed through layout.fields, which the checker records as a\nshared write; which witness it reports then depended on the entry program,\nand the self goldens refuse a module that dumps two ways. layoutLoader and\npanicCallKind are no longer exported: nothing outside their modules reads\nthem.\n\nTests: tests/self/goldens.js\n\n* docs(interop): module storage, windows and panics in the language rules and the guide (in progress)\n\nRefs: docs/wp50-wasm-host.md\n\n* docs(interop): route the stage's guide pages\n\n* test(self): regenerate the checked goldens for the stage's compiler changes\n\nOnly src/ modules move, plus the new storage_* cases; no std/ module and no\nexisting case changes.\n\nTests: tests/self/goldens.js\n\n* docs(interop): module storage in AI.md, the IR cookbook, the architecture map and the WP50 plan\n\nThe reference gains the nish/host/ring page; the plan marks stage 3 built\nand records its deviations (a record storage reads through accessors in the\nTypeScript reading; a local f32[] is a plain array there). src/interop-wasm.ts\nand std/host/ring.ts are formatted.\n\nRefs: docs/wp50-wasm-host.md, docs/IR_COOKBOOK.md\n\n* test(interop): hold the interop and wasm-host checks to the stage-3 loader\n\nThe loader guards every export and declares load(bytes, options); a trap\nleaves the module dead until the page loads it again. runtime-wasm.c linked\nonly for the panic import exports no arena entry points, and std/host/ring\nreads a length through toI32 so it compiles under --number-mode f64.\n\nRefs: docs/wp50-wasm-host.md#6\nTests: tests/run.js interop, wasm-host, performance\n\n* docs(interop): cite the wasm-host record's lines at the branch head\n\nRefs: docs/security/wasm-host.md\n\n* test(interop): raise the wasm-host size ceilings by the panic import's cost\n\nA panic under --profile wasm-host is the page's nish.panic import, called\nwith its site, and every loader carries the guard and the panic decoder.\n\nMeasured: add.wasm 102 -> 157 B, arrays.wasm 2091 -> 2322 B, a one-index program 704 -> 886 B (clang 18, no wasm-opt, byte-exact)\nRefs: docs/wp50-wasm-host.md#6\nTests: tests/run.js wasm-size\n\n* fix(interop): bound module storage by bytes, report each overflow's own site, and iterate boolean storage in the TS reading\n\nA module storage whose elements are records could ask for more than 4 GiB\nand crash the backend; it is now refused at 256 MiB with NL2680, whose\nmessage names the element's size. Under wasm32 an overflow's fail block is\nkeyed per site, so a panic reports the site that overflowed, not the\nfunction's first; native IR is unchanged. The TypeScript reading's boolean\nstorage iterates as flags, and the loader takes its arena mark before it\nmarks the module busy.\n\nRefs: docs/wp50-wasm-host.md#5\nTests: tests/cases/reject_storage_too_many_bytes\n\n* test(self): regenerate the checked goldens and the language reference for the storage byte cap\n\nRefs: docs/LANGUAGE.md\nTests: tests/self/goldens/checked/src/module-storage.ts.txt\n\n* test(interop): match the guarded wasm export in the simd loader check\n\nThe wasm loader now wraps every export in `guarded`, so `twice` is\n`(x) => guarded(() => raw.twice(x))`, not `raw.twice`. The negative\nchecks looked for `name: raw.` and so passed vacuously; they now look\nfor a `raw.<name>` call, which both forms share.\n\nTests: tests/run.js simd\n\n* fix(interop): close the module storage and wasm-host review\n\nAnswers review round 1 of the stage-3 module storage and wasm-host work.\n\n- A plain wasm program pays nothing. Its loader, `.d.ts` and `.wasm`\n  keep main's bytes, pinned by WASM_PLAIN_DIGESTS. The panic guard, the\n  `nish.panic` import and the `<out>.sites.json` sidecar apply only to a\n  program with module storage or a host module.\n- The storage loader's `layout` and `views` names are reserved.\n  NL3051 refuses an export that collides with them. NL2684 and NL2685\n  are cited in LANGUAGE.md.\n- Panic sites keep internal globals out of the link. The awk site\n  rewrite matches only the guarded `_at` forms.\n- `win()` throws when a host import lends a window before the module\n  has loaded. The `.d.ts` contracts for onPanic and NishReentry say\n  what is announced and what kills the module.\n- emit-ts reads storage element widths safely. dump prints\n  `new Array<T>(N)`.\n- The security record, the guide, ARCHITECTURE and the wp50 plan\n  match what was built.\n\nTests: tests/cases/reject_storage_loader_name, tests/cases/export_loader_names_no_storage\n\n* style(interop): unnest the loader ternaries\n\nLint flagged two nested ternaries in the wasm loader and its .d.ts\nemitter; both become plain branches, and the touched files are\nformatted.\n\n* fix(interop): close the round-2 storage review\n\nRefuse module storage behind a generic interface's implementers, resolve a\nlending on in the callee's own module through every import path, keep a\nmodule alive after a bad argument, and give the TypeScript reading the\nloader's `views`, `loadSync` and `load`. The loader clears `busy` even when\nthe arena release traps, the reading's heap is summed in i64, and a build\nwith no panic sites removes a stale `<out>.sites.json`. The docs state the\npanic guard's scope, cross-module lending and the one mutable global.\n\nTests: tests/cases/reject_storage_*, tests/link/storage_lend_import, tests/panic\n\n* chore(interop): satisfy lint after taking in main\n\nFormat the storage and loader sources, replace a nested ternary in the\nloader's argument check, write the storage cookbook examples as const\narrows, and keep host-module examples, which must be function\ndeclarations, out of the function-declaration rule.\n\n* fix(checker): recheck storage types after binding; refuse bad loader arguments up front\n\nModule storage of an interface type is checked again once every module is\nbound and every generic instantiation drained, so an implementer that only\nappears through an import or an instantiation is refused (NL2663) instead of\nbeing laid out as a plain record. Lending an imported storage, by any alias,\nis refused as before.\n\nThe guarded loader now validates every argument shape before `guarded`\nruns: a `Result` must be an object with a boolean `ok` and a payload of its\narm's JavaScript type, read once so a throwing getter is the caller's error,\nand an array must pass the %TypedArray% brand getter and is measured by the\nlength getter, so a Proxy, a re-prototyped DataView or a detached buffer is\na TypeError and the module stays alive. The plain loader is unchanged.\n\nZero-field interface storage is laid out as a record with no view, and the\nTypeScript reading computes offsets in i64. Docs: the module-storage\nexception to \"a const is not a global\", the window check storage always\nkeeps, the loader's panic kinds and bad-argument behaviour, and where the\nTypeScript reading differs from wasm.\n\nTests: tests/link/reject_storage_import_generic_implementer, tests/link/reject_storage_import_generic_interface, tests/link/storage_import_record, tests/link/reject_storage_lend_import_alias, tests/run.js panic badarg and badshape\n\n* docs(security): re-anchor the wasm-host record and add WH-7, bad loader arguments\n\nThe record now cites the lines of the stage's final code, records that a\nreporter which calls back in gets NishPanic because the module is already\ndead, adds WH-7 (an argument of the wrong shape threw inside the guard and\nkilled the module, fixed by validating before the call), records storage\nvalues outside their type as open, and widens the index row's scope to the\nloader's argument checks, hostImportsOf, layoutLoader and hostWindowProven.\n\nRefs: docs/security/wasm-host.md\n\n* fix(interop): keep an unguarded program's Result loader byte-identical to main\n\nThe argument checks a by-value Result got in the previous round reached\nevery program's loader, so a plain program taking a Result no longer got\nmain's bytes. The payload writers, resultIn and the loader-local names now\ntake the guard: a program with no module storage and no host module gets\nmain's loader, byte for byte, pinned by examples/results.ts in\nWASM_PLAIN_DIGESTS. The guide and the security record say what a typed\narray over a detached buffer does (copied as length 0), and that a window\nof module storage always keeps its bounds check. src/codes.ts is back in\nthe order gen-diagnostic-codes checks. The security record names the open\nstorage item WH-8, records the loader hardening left as it is, and its\nscope names typedIn, refuse and wasmTypedIn.\n\nTests: tests/runtime-budgets.js (examples/results.ts)\n\n* docs(interop): date the wasm-host record's line citations to 924c5779\n\n* fix(interop): count WH-8 once, and keep unguarded wasm-host builds off the sites path\n\nThe security index counted the open WH-8 as fixed as well; the wasm-host row\nis now 0/1/3/3 fixed and the Low total 155. An unguarded --profile wasm-host\nbuild no longer touches <out>.sites.json, and a guarded program whose runtime\nis linked only for the panic import exports the arena entry points its loader\ncalls. The HostTable cost check times 2,000 refused gets, not 200,000 throws.\n\nTests: tests/run.js page, wasm-size\n\n* fix(checker): renumber the module-storage codes past main's async codes\n\nMain's nish:async work took NL2671 to NL2673, which this branch had given\nto three module-storage rules. Those rules are now NL2686 (element kind),\nNL2687 (no zero member) and NL2688 (no growing or moving), and the docs\nthat cite them follow.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1b0b2d9"
+      ],
+      "pr": 1273,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    }
+  ]
+}
