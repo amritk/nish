@@ -155,6 +155,19 @@ arrow or an `async` function, and the function that receives it awaits each
 call. A plain function cannot go there, and an `async` arrow cannot go where
 the type answers a plain value.
 
+```ts nish:ok
+async function twice(f: (n: i32) => Promise<i32>): Promise<i32> {
+  const a = await f(1);
+  const b = await f(2);
+  return a + b;
+}
+
+export async function main(): Promise<void> {
+  const total = await twice(async (n: i32): Promise<i32> => n * 10);
+  console.log(total);   // 30
+}
+```
+
 ## Not on WebAssembly
 
 A waiting task is resumed by the native event loop, which a WebAssembly

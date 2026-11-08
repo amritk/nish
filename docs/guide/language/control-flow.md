@@ -205,6 +205,14 @@ through — is refused rather than
 warned about. The same analysis is what checks that a non-`void` function
 returns on every path.
 
+```ts nish:err NL2251
+const f = (): i32 => {
+  return 1;
+  console.log("never");
+};
+export const main = (): i32 => f();
+```
+
 ## Checked arithmetic
 
 On `i32` and `i64`, `+`, `-`, `*`, unary `-`, `++`, `--` and the compound

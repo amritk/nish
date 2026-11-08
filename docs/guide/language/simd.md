@@ -94,6 +94,16 @@ field or an array, pass it to a function and return it. It has no operators:
 `+`, `===`, `<` and the others are refused, and so is printing one directly —
 use the functions below, and read the lanes with `extract`.
 
+```ts nish:err NL2231
+import { i32x4 } from "nish:simd";
+
+export const main = (): i32 => {
+  const a = i32x4(1, 2, 3, 4);
+  const b = a + a;
+  return 0;
+};
+```
+
 A vector cannot be a
 `Map` key, cannot be `null`, and cannot appear in the signature of a function
 that C or JavaScript calls: `--emit-header`, `--emit-napi` and `--emit-dts`

@@ -56,6 +56,26 @@ nothing to hand back on success returns `Result<void, E>` and succeeds with
 | `r.unwrapOr(d)` | the `T`, or `d` if `r` is a failure |
 | `r.expect(message)` | the `T`, or else print `message` and exit with status 1 |
 
+```ts nish:ok
+const half = (n: i32): Result<i32, string> => {
+  if (n % 2 !== 0) {
+    return Err(`${n} is odd`);
+  }
+  return Ok(n / 2);
+};
+
+const quarter = (n: i32): Result<i32, string> => {
+  const h = half(n).orReturn();
+  return half(h);
+};
+
+export const main = (): i32 => {
+  console.log(`${half(3).unwrapOr(-1)}`);       // -1
+  console.log(`${quarter(8).expect("8 is even")}`); // 2
+  return 0;
+};
+```
+
 ## The rules that stop a failure being ignored
 
 TypeScript lets you forget about an exception. Nish turns each way of
