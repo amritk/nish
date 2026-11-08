@@ -1,0 +1,163 @@
+/*
+  The Nish docs theme: colours from the logo (docs/site/logo-*.png), in a
+  light and a dark mode, plus the vertical rhythm between blocks.
+
+  Logo palette: charcoal #1e2126, violet #9c42e9, mid #792cb9,
+  deep #391072 / #33175d, darkest fill #211a30, tagline grey #b7b7c5.
+
+  Contrast (WCAG 2.x, measured on the rendered page):
+    light  body #1e2126 on #ffffff 16.1:1, muted #545866 7.1:1, faint
+           #6b6f7c on #f6f4fa 4.6:1, link #792cb9 7.3:1, sidebar current
+           page 6.5:1, code block #545866 on #f6f4fa 6.5:1
+    dark   body #e8e6ef on #1e2126 13.1:1, muted #b7b7c5 8.1:1, faint
+           #8f8f9d 5.1:1, link #b47cf0 5.4:1, sidebar current page 4.6:1,
+           code block #b7b7c5 on #191b20 8.7:1
+  Any colour change here re-measures these and the PR body's table.
+
+  Scalar reads a theme as CSS custom properties under .light-mode and
+  .dark-mode (the class on <body>), the same shape as its built-in presets.
+*/
+
+/* Rhythm: Scalar's defaults are 12px between blocks and 44px above a heading. */
+:root:root {
+  --scalar-block-spacing: 18px;
+  --scalar-heading-spacing: 56px;
+  --nish-violet: #9c42e9;
+  --nish-violet-mid: #792cb9;
+  --nish-violet-deep: #391072;
+}
+
+:root,
+:host {
+  --scalar-text-decoration: underline;
+  --scalar-text-decoration-hover: underline;
+}
+
+.light-mode {
+  --scalar-background-1: #ffffff;
+  --scalar-background-2: #f6f4fa;
+  --scalar-background-3: #ebe7f2;
+  --scalar-background-card: #ffffff;
+  --scalar-background-accent: color-mix(in srgb, var(--nish-violet), transparent 91%);
+
+  --scalar-color-1: #1e2126;
+  --scalar-color-2: #545866;
+  --scalar-color-3: #6b6f7c;
+
+  --scalar-color-accent: var(--nish-violet-mid);
+  --scalar-border-color: #e2deea;
+  --scalar-focus-color: var(--nish-violet);
+
+  --scalar-color-green: #067a52;
+  --scalar-color-red: #c8102e;
+  --scalar-color-yellow: #b88a00;
+  --scalar-color-blue: #0b62a8;
+  --scalar-color-orange: #b04400;
+  --scalar-color-purple: var(--nish-violet-mid);
+  --scalar-color-query: #007b80;
+
+  --scalar-link-color: var(--nish-violet-mid);
+  --scalar-link-color-hover: #5a1f8f;
+
+  --scalar-button-1: var(--nish-violet-mid);
+  --scalar-button-1-hover: #5a1f8f;
+  --scalar-button-1-color: #ffffff;
+
+  --scalar-tooltip-background: color-mix(in srgb, var(--scalar-background-1), transparent 10%);
+  --scalar-tooltip-color: var(--scalar-color-1);
+
+  --scalar-color-alert: color-mix(in srgb, var(--scalar-color-orange), var(--scalar-color-1) 20%);
+  --scalar-color-danger: color-mix(in srgb, var(--scalar-color-red), var(--scalar-color-1) 20%);
+  --scalar-background-alert: color-mix(in srgb, var(--scalar-color-orange), var(--scalar-background-1) 95%);
+  --scalar-background-danger: color-mix(in srgb, var(--scalar-color-red), var(--scalar-background-1) 95%);
+}
+
+.dark-mode {
+  --scalar-background-1: #1e2126;
+  --scalar-background-2: #262930;
+  --scalar-background-3: #30343c;
+  --scalar-background-card: #23262c;
+  --scalar-background-accent: color-mix(in srgb, var(--nish-violet), transparent 82%);
+
+  --scalar-color-1: #e8e6ef;
+  --scalar-color-2: #b7b7c5;
+  --scalar-color-3: #8f8f9d;
+
+  --scalar-color-accent: #b47cf0;
+  --scalar-border-color: #363a44;
+  --scalar-focus-color: #b47cf0;
+
+  --scalar-color-green: #3ccf8e;
+  --scalar-color-red: #f0605d;
+  --scalar-color-yellow: #f2c94c;
+  --scalar-color-blue: #6cb6f0;
+  --scalar-color-orange: #ff9a5c;
+  --scalar-color-purple: #c597f7;
+  --scalar-color-query: #65d4cf;
+
+  --scalar-link-color: #b47cf0;
+  --scalar-link-color-hover: #d2b0f8;
+
+  --scalar-button-1: var(--nish-violet);
+  --scalar-button-1-hover: #8a33d6;
+  --scalar-button-1-color: #ffffff;
+
+  --scalar-tooltip-background: color-mix(in srgb, var(--scalar-background-1), #ffffff 10%);
+  --scalar-tooltip-color: color-mix(in srgb, #ffffff, transparent 5%);
+
+  --scalar-color-alert: var(--scalar-color-orange);
+  --scalar-color-danger: color-mix(in srgb, var(--scalar-color-red), var(--scalar-background-1) 20%);
+  --scalar-background-alert: color-mix(in srgb, var(--scalar-color-orange), var(--scalar-background-1) 95%);
+  --scalar-background-danger: color-mix(in srgb, var(--scalar-color-red), var(--scalar-background-1) 95%);
+}
+
+/* Sidebar: the page you are on is violet on a violet tint. */
+.light-mode,
+.dark-mode {
+  --scalar-sidebar-background-1: var(--scalar-background-1);
+  --scalar-sidebar-color-1: var(--scalar-color-1);
+  --scalar-sidebar-color-2: var(--scalar-color-2);
+  --scalar-sidebar-border-color: var(--scalar-border-color);
+
+  --scalar-sidebar-item-hover-background: var(--scalar-background-2);
+  --scalar-sidebar-item-hover-color: var(--scalar-sidebar-color-1);
+
+  --scalar-sidebar-item-active-background: var(--scalar-background-accent);
+  --scalar-sidebar-color-active: var(--scalar-color-accent);
+
+  --scalar-sidebar-indent-border: var(--scalar-sidebar-border-color);
+  --scalar-sidebar-indent-border-hover: var(--scalar-sidebar-border-color);
+  --scalar-sidebar-indent-border-active: var(--scalar-color-accent);
+
+  --scalar-sidebar-search-background: var(--scalar-background-2);
+  --scalar-sidebar-search-color: var(--scalar-color-3);
+  --scalar-sidebar-search-border-color: var(--scalar-border-color);
+}
+
+/* Code blocks: a shade darker than the page in dark mode, on the charcoal. */
+body.dark-mode .t-editor__code {
+  --hljs-background: #191b20;
+}
+
+/* Callouts: info carries the violet; warning and danger keep their colours. */
+body.light-mode .t-editor__callout,
+body.dark-mode .t-editor__callout {
+  --callout-info-primary: var(--nish-violet);
+  --callout-info-secondary: color-mix(in srgb, var(--nish-violet), transparent 93%);
+}
+
+/* Cards: a violet border and tint on hover. */
+body .t-editor__card.card--has-link:has(.card-stretched-link:hover) {
+  background-color: var(--scalar-background-accent);
+  border-color: color-mix(in srgb, var(--nish-violet), transparent 40%);
+}
+
+/* The header logo: Scalar's 24px slot leaves the wordmark hard to read. */
+body img.logo.logo {
+  height: 32px;
+}
+@media (max-width: 1000px) {
+  body img.logo.logo {
+    height: 28px;
+  }
+}
