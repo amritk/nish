@@ -443,13 +443,30 @@ const CELL_CASES = [
   ["- a\n- b\n- c", "- a<br>- b<br>- c"],
   ["Values:\n- a\n- b", "Values:<br>- a<br>- b"],
   ["costs\n- 1 more than", "costs - 1 more than"],
+  ["- a\n  continued\n- b", "- a continued<br>- b"],
+  ["1. x\n2. y", "1. x<br>2. y"],
+  ["- a", "- a"],
 ]
 
-/** Each `CELL_CASES` input whose cell is not the one expected, as a problem. */
-const cellCaseProblems = () =>
-  CELL_CASES.filter(([md, want]) => cell(md) !== want).map(
+/**
+ * Section bodies and the lead `leadOf` gives each: a list item's unindented
+ * continuation keeps the list going, so later items stay out of the lead.
+ */
+const LEAD_CASES = [["- a\ncont\n- b\n- c", "a cont"]]
+
+/**
+ * Each `CELL_CASES` input whose cell, and each `LEAD_CASES` input whose lead,
+ * is not the one expected, as a problem.
+ */
+const cellCaseProblems = () => [
+  ...CELL_CASES.filter(([md, want]) => cell(md) !== want).map(
     ([md, want]) => `cell(${JSON.stringify(md)}) is ${JSON.stringify(cell(md))}, not ${JSON.stringify(want)}`
-  )
+  ),
+  ...LEAD_CASES.filter(([md, want]) => leadOf(md.split("\n")) !== want).map(
+    ([md, want]) =>
+      `leadOf(${JSON.stringify(md)}) is ${JSON.stringify(leadOf(md.split("\n")))}, not ${JSON.stringify(want)}`
+  ),
+]
 
 /** The one icon of each kind of entry a page shows as a card. */
 const ICONS = {
@@ -1637,18 +1654,23 @@ const renderLanguage = (link) => {
 /**
  * A section's first sentence, for its card, links dropped: its first paragraph
  * of prose, or, when the section opens with a list, its first item with the
- * item's bold lead unmarked. A list item's indented continuation lines are the
- * item's, never a paragraph of their own. As in `joinLines`, a line opening
- * with `- ` or `1. ` inside prose starts a list only after a colon; elsewhere
- * it is prose that wrapped there.
+ * item's bold lead unmarked. A list item's continuation lines, indented or
+ * not, are the item's, never a paragraph of their own. As in `joinLines`, a
+ * line opening with `- ` or `1. ` inside prose starts a list only after a
+ * colon; elsewhere it is prose that wrapped there.
  */
 const languageLead = (part) => {
   const { lines } = languageParts()
+  return leadOf(lines.slice(part.from + 1, part.to))
+}
+
+/** `languageLead` of a section's lines, its heading left out. */
+const leadOf = (lines) => {
   const para = []
   let inFence = false
   let inItem = false
   let opened = false
-  for (const line of lines.slice(part.from + 1, part.to)) {
+  for (const line of lines) {
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence
       opened = true
@@ -1673,7 +1695,7 @@ const languageLead = (part) => {
       opened = true
       continue
     }
-    if (inItem && /^\s+\S/.test(line)) {
+    if (inItem && line.trim() !== "" && !/^\s*[#|>]/.test(line)) {
       if (para.length > 0) {
         para.push(line.trim())
       }
