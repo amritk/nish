@@ -106,6 +106,7 @@ import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
 import checkStorageUses from "./module-storage" -> function @checkStorageUses
 import isStorageNew from "./module-storage" -> function @isStorageNew
+import recheckStorage from "./module-storage" -> function @recheckStorage
 import storageNewNode from "./module-storage" -> function @storageNewNode
 import declarationName from "./script" -> function @declarationName
 import lateUses from "./script" -> function @lateUses
@@ -148,6 +149,7 @@ import checkImplements from "./structs" -> function @checkImplements
 import collectStructMembers from "./structs" -> function @collectStructMembers
 import declareStruct from "./structs" -> function @declareStruct
 import markTemplateImplements from "./structs" -> function @markTemplateImplements
+import noteStructNames from "./structs" -> function @noteStructNames
 import referencedStructNames from "./structs" -> function @referencedStructNames
 import signatureStructNames from "./structs" -> function @signatureStructNames
 import handleHeaderMessage from "./handles" -> function @handleHeaderMessage
@@ -198,6 +200,8 @@ struct Checker (class) size=24 align=8 exported
   method closeReachableStructs -> @Checker.closeReachableStructs
   method reachAll -> @Checker.reachAll
   method reach -> @Checker.reach
+  method markBoundImplements -> @Checker.markBoundImplements
+  method recheckStorage -> @Checker.recheckStorage
   method bindImports -> @Checker.bindImports
   method bindTypeImports -> @Checker.bindTypeImports
   method claimTypeImport -> @Checker.claimTypeImport
@@ -653,10 +657,10 @@ function Checker.foldConstants(this: Checker): void -> @Checker.foldConstants [e
 function Checker.closeReachableStructs(this: Checker, declared: StructRegistry): void -> @Checker.closeReachableStructs [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Checker.reachAll
-  calls: Checker.reachAll StringSet.add StringSet.constructor nish_array_grow referencedStructNames signatureStructNames
-  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.reachAll#0 Checker.reachAll#0
-  pointer declared: size=16 writesThrough=false captured=false passedTo=Checker.reachAll#1 Checker.reachAll#1
-  stackSites=4 stackLocals=4
+  calls: Checker.reachAll StringSet.add StringSet.constructor nish_array_grow noteStructNames referencedStructNames signatureStructNames
+  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.reachAll#0 Checker.reachAll#0 Checker.reachAll#0
+  pointer declared: size=16 writesThrough=false captured=false passedTo=Checker.reachAll#1 Checker.reachAll#1 Checker.reachAll#1
+  stackSites=5 stackLocals=5
   local +0:11 pending: StructInfo[] (const)
   local +1:11 seen: StringSet (const)
   callee +1:18 new StringSet -> @StringSet.constructor
@@ -668,11 +672,16 @@ function Checker.closeReachableStructs(this: Checker, declared: StructRegistry):
   callee +13:23 new StringSet -> @StringSet.constructor
   callee +14:9 signatureStructNames -> @signatureStructNames
   callee +15:9 Checker.reachAll -> @Checker.reachAll
-  local +19:13 info: StructInfo (const)
-  local +20:13 names: StringSet (const)
-  callee +20:21 new StringSet -> @StringSet.constructor
-  callee +24:7 referencedStructNames -> @referencedStructNames
-  callee +25:7 Checker.reachAll -> @Checker.reachAll
+  local +19:13 constant: ConstInfo | null (const)
+  local +21:15 names: StringSet (const)
+  callee +21:23 new StringSet -> @StringSet.constructor
+  callee +22:9 noteStructNames -> @noteStructNames
+  callee +23:9 Checker.reachAll -> @Checker.reachAll
+  local +27:13 info: StructInfo (const)
+  local +28:13 names: StringSet (const)
+  callee +28:21 new StringSet -> @StringSet.constructor
+  callee +32:7 referencedStructNames -> @referencedStructNames
+  callee +33:7 Checker.reachAll -> @Checker.reachAll
 function Checker.reachAll(this: Checker, declared: StructRegistry, seen: StringSet, pending: StructInfo[], names: StringSet): void -> @Checker.reachAll [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Checker.reach
@@ -702,6 +711,24 @@ function Checker.reach(this: Checker, declared: StructRegistry, seen: StringSet,
   callee -5:18 StructRegistry.get -> @StructRegistry.get
   callee -1:10 StringMap.has -> @StringMap.has
   callee +1:7 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+function Checker.markBoundImplements(this: Checker): void -> @Checker.markBoundImplements [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via markTemplateImplements
+  calls: CheckedProgram.structTemplate markTemplateImplements nish_panic_index
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:16 stmt: Node (const)
+  local +2:15 template: StructTemplateInfo | null (const)
+  callee +2:26 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  callee +4:11 markTemplateImplements -> @markTemplateImplements
+function Checker.recheckStorage(this: Checker): void -> @Checker.recheckStorage [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via recheckStorage
+  calls: recheckStorage
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:16 info: ConstInfo (const)
+  callee +2:9 recheckStorage -> @recheckStorage
 function Checker.bindImports(this: Checker, targets: CheckedProgram[]): void -> @Checker.bindImports [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Checker.bindImport
@@ -860,7 +887,7 @@ function Checker.bindStructTemplateImport(this: Checker, index: i32, template: S
   escaping: index template
   calls: CheckContext.error CheckedProgram.addStructTemplateAs StringMap.has StringSet.has nish_panic_index nish_str_concat
   pointer this: size=24 writesThrough=false captured=false
-  pointer template: size=72 writesThrough=true captured=true passedTo=CheckedProgram.addStructTemplateAs#2
+  pointer template: size=64 writesThrough=true captured=true passedTo=CheckedProgram.addStructTemplateAs#2
   stackSites=0 stackLocals=0
   local -32:11 imp: ImportBinding (const)
   callee -30:7 CheckContext.error -> @CheckContext.error

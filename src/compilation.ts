@@ -1249,6 +1249,11 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.makeDeferredInstantiations()
     }
+    // WP50 §5.1: a generic class implementing an imported interface, which
+    // pass 1 could not resolve, before the constants fold and storage reads it.
+    for (const unit of this.modules) {
+      unit.checker.markBoundImplements()
+    }
     // After every module is bound, so a struct reached through a chain of
     // modules does not depend on the order they were bound in.
     const clashed = new StringSet()
@@ -1302,6 +1307,11 @@ export class Compilation {
           working = true
         }
       }
+    }
+    // WP50 §5.1: every storage element again, now that every implementer is
+    // known, so none that gained one after the fold is laid out as pointers.
+    for (const unit of this.modules) {
+      unit.checker.recheckStorage()
     }
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {

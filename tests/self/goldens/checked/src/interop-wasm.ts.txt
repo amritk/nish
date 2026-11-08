@@ -412,8 +412,10 @@ function wasmResultHelpers(table: TypeTable, bridged: ExternalFunction[], guard:
   stackSites=0 stackLocals=0
   local +0:9 lines: string[] (const)
   callee +1:8 wasmHasPackedResult -> @wasmHasPackedResult
-  callee +13:20 refused -> @refused
-  callee +20:7 wasmNeedsF32 -> @wasmNeedsF32
+  callee +14:20 refused -> @refused
+  callee +21:20 refused -> @refused
+  callee +41:20 refused -> @refused
+  callee +46:7 wasmNeedsF32 -> @wasmNeedsF32
 function panicLoader(hosts: boolean): string[] -> @panicLoader
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -460,23 +462,23 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   callee +61:20 hostImportsOf -> @hostImportsOf
   callee +68:5 pushAll -> @pushAll
   callee +68:20 guardLoader -> @guardLoader
-  callee +87:50 refused -> @refused
-  callee +114:5 pushAll -> @pushAll
-  callee +114:20 wasmResultHelpers -> @wasmResultHelpers
-  callee +115:5 pushAll -> @pushAll
-  callee +115:20 wasmRangeHelper -> @wasmRangeHelper
-  callee +117:7 pushAll -> @pushAll
-  callee +117:22 layoutLoader -> @layoutLoader
-  callee +124:5 pushAll -> @pushAll
-  callee +124:20 wasmResultHelpers -> @wasmResultHelpers
-  callee +125:5 pushAll -> @pushAll
-  callee +125:20 wasmRangeHelper -> @wasmRangeHelper
-  callee +127:7 pushAll -> @pushAll
-  callee +127:22 layoutLoader -> @layoutLoader
-  local +136:14 fn: ExternalFunction (const)
-  callee +137:16 tsSignatureLine -> @tsSignatureLine
-  local +138:16 line: string (const)
-  callee +138:24 wasmWrapper -> @wasmWrapper
+  callee +98:62 refused -> @refused
+  callee +135:5 pushAll -> @pushAll
+  callee +135:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +136:5 pushAll -> @pushAll
+  callee +136:20 wasmRangeHelper -> @wasmRangeHelper
+  callee +138:7 pushAll -> @pushAll
+  callee +138:22 layoutLoader -> @layoutLoader
+  callee +145:5 pushAll -> @pushAll
+  callee +145:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +146:5 pushAll -> @pushAll
+  callee +146:20 wasmRangeHelper -> @wasmRangeHelper
+  callee +148:7 pushAll -> @pushAll
+  callee +148:22 layoutLoader -> @layoutLoader
+  local +157:14 fn: ExternalFunction (const)
+  callee +158:16 tsSignatureLine -> @tsSignatureLine
+  local +159:16 line: string (const)
+  callee +159:24 wasmWrapper -> @wasmWrapper
 function hostFunctions(compilation: Compilation): FunctionSig[] -> @hostFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn nish_array_grow
@@ -641,7 +643,7 @@ function heapViewsNew(): string[] -> @heapViewsNew [exported]
   stackSites=0 stackLocals=0
 function layoutTypes(layouts: StorageLayout[]): string[] -> @layoutTypes [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: heapViews nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
+  calls: heapViews nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
   pointer layouts: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 lines: string[] (const)
@@ -653,7 +655,7 @@ function layoutTypes(layouts: StorageLayout[]): string[] -> @layoutTypes [export
   local +35:14 s: StorageLayout (const)
 function layoutLoader(layouts: StorageLayout[], memory: string): string[] -> @layoutLoader
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: heapViewsNew nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
+  calls: heapViewsNew nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
   pointer layouts: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 lines: string[] (const)

@@ -11364,6 +11364,8 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ### Module constants
 
 A top-level `const` is not a global: it emits no symbol and no initialiser.
+([Module storage](LANGUAGE.md#module-storage), a `const` holding a `new` of
+a compile-time length, is the one exception: it is a zero-filled global.)
 The checker folds it, and every use site carries the value — `AREA` reaches
 `nish_str_from_i32` as the literal `64`, and `ret i32 64` is the whole of
 `return AREA`. The template literal around it is still built at run time:
@@ -11944,17 +11946,8 @@ sums to `0x100000010` and fails, where a 32-bit sum would wrap to 16 and pass
 message naming the parameters; the operand is then the array's data pointer,
 which the loader turns into an index into its whole-memory view.
 
-The host module, `docs/cookbook/host/scale.ts`, is the page's:
-
-```ts
-import type { u32 } from "nish"
-
-export function scale(xs: Float32Array, at: u32, n: u32): void {
-  for (let i = at; i < at + n; i++) {
-    xs[i] = xs[i] * 2
-  }
-}
-```
+The host module, [`docs/cookbook/host/scale.ts`](cookbook/host/scale.ts), is
+the page's: `scale(xs, at, n)` doubles the `n` elements of `xs` from `at`.
 
 <!-- cookbook:begin storage-window -->
 Compiled with `--target wasm32 --host docs/cookbook/host/scale.ts`.
@@ -12045,9 +12038,12 @@ attributes #2 = { nounwind noreturn cold }
 
 `.str.0` is "`` `scale`: argument 2 (at) plus argument 3 (n) reaches past the
 end of argument 1 (xs) ``". The check is `ule`, not `ult`: a window may end
-exactly at the array's end, and `n = 0` lends nothing. A call the compiler
-can prove in range, `scale(DATA, 0, toU32(DATA.length))`, has no check at
-all (`tests/run.js`, section `host-import-window`).
+exactly at the array's end, and `n = 0` lends nothing. A window of module
+storage always keeps the check, even `scale(DATA, 0, toU32(DATA.length))`:
+the range pass proves facts about locals, not about storage. Only a window of
+a local array the compiler can prove in range, such as `0, toU32(xs.length)`
+on a local `xs`, has no check at all (`tests/run.js`, section
+`host-import-window`).
 
 ### Panic sites: a number per call, a table at the end
 
@@ -12055,16 +12051,11 @@ Under `--target wasm32` each call of a runtime panic (`@nish_panic_index`,
 `@nish_panic_slice`, `@nish_panic_overflow`, `@nish_panic_div`,
 `@nish_panic`) carries `!nish.site !{i32 N}`, numbered in the order the
 emitter first writes a (kind, position) pair, and the module ends with the
-table as comments:
-
-```llvm
-; nish.sites 2
-; nish.site 0 panic docs/cookbook/storage-window.ts:6:3
-; nish.site 1 index docs/cookbook/storage-window.ts:7:10
-```
-
-That is the window example above; the listings in this file drop `;` lines,
-so neither shows its table. The first line counts the sites, and it is also
+table as comments: a `; nish.sites <count>` line, then one
+`; nish.site <n> <kind> <path:line:col>` line per site. The window example
+above has two, the length check's `panic` and the read's `index`; the
+listings in this file drop `;` lines, so neither shows its table
+(`tests/run.js`, section `panic`, pins the format). The first line is also
 the mark `scripts/build.sh` reads: only a program whose loader guards panics
 (one with module storage or a host module) is written with it, and only such
 a program is linked with the `nish.panic` import. Any other links the bytes it
@@ -12072,8 +12063,9 @@ always did.
 
 The tag is unnamed metadata that code generation drops, so `--profile wasm`
 links the bytes it linked before. `scripts/build.sh --profile wasm-host`
-rewrites each tagged call into the runtime's `_at` form, which takes the
-site first (`call void @nish_panic_index_at(i32 1, i64 %8, i64 %10)`) and
+rewrites each tagged call into the runtime's `_at` form
+(`@nish_panic_index_at` for `@nish_panic_index`), which takes the site as an
+extra first `i32` and
 hands it to the page's `nish.panic` import, offsets each module's numbers
 past the previous module's, and writes the table to `<out>.sites.json` as
 `{ "kind": "index", "at": "sim.ts:7:10" }` entries. The loader reads the

@@ -497,7 +497,8 @@ WP46's region-per-match stays the native server's answer.
 
 **Which programs get it.** Everything below from here to the end of this
 section, the `nish.panic` import, the site table, the dead module, `NishPanic`,
-`NishReentry`, and `load`'s `options` and `loadSync`, is for a program that
+`NishReentry`, and the `onPanic` and `sites` options of `load` and
+`loadSync` (`loadSync` itself is in every loader), is for a program that
 uses stage 2 or 3: one with module storage (§5) or a host module (§4)
 (`Compilation.guardsPanics`). Any other program, `examples/add.ts` for one,
 gets the loader, the `.d.ts` and the `.wasm` it got before stage 3, byte for
@@ -526,9 +527,9 @@ nish: { panic(kind: number, site: number, msg: number, len: number, a: number, b
 - **The loader formats the message**, so the runtime carries no formatting
   code: `index out of range: 7 >= 4` from the kind and the two operands, or the
   text of `panic(msg)` decoded from `(msg, len)`. It marks the instance dead
-  and calls the page's `onPanic({ message, kind, site })`. Then the trap
-  unwinds, and the export wrapper rethrows it as a `NishPanic` carrying the
-  same fields.
+  and calls the page's `onPanic({ message, kind, site })`, then throws the
+  `NishPanic` itself (`panicOf`), carrying the same fields; the exception
+  unwinds the module and the export wrapper lets it through.
 - **After a panic the module is dead.** Every wrapper throws `NishPanic` on
   entry from then on. The page re-instantiates; it never resumes. A JavaScript
   exception that escapes an import kills the module the same way: it unwinds

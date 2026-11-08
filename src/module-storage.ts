@@ -255,6 +255,26 @@ const storageRecord = (program: CheckedProgram, table: TypeTable, elem: i32): St
   return instance !== null && instance.template.implemented ? null : info
 }
 
+/**
+ * Check `info`'s element again once every body and instantiation is checked:
+ * an interface element that gained an implementer after `checkStorage`
+ * accepted it would be laid out as a pointer per slot. Refused with the
+ * message `checkStorage` gives an implemented interface.
+ */
+export const recheckStorage = (ctx: CheckContext, info: ConstInfo): void => {
+  const scope = info.scope
+  const elem = info.storageElem
+  if (scope === null || storageElementFault(ctx, info, elem) !== FAULT_HOLD) {
+    return
+  }
+  if (storageRecord(scope, ctx.table, elem) !== null) {
+    return
+  }
+  const expr = storageNewNode(info.decl.children[2])
+  const at = expr.children[1].children.length > 0 ? expr.children[1].children[0] : expr
+  storageFaultReport(ctx, info, at, FAULT_HOLD, ctx.table.typeName(elem))
+}
+
 /** What is wrong with `elem` as a storage element or a record field, never looking inside a record. */
 const storageElementFault = (ctx: CheckContext, info: ConstInfo, elem: i32): i32 => {
   const table = ctx.table

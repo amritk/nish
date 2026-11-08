@@ -9,10 +9,6 @@ function viewShift(view: string): i32 -> @viewShift
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function align8(n: i32): i32 -> @align8
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
-  stackSites=0 stackLocals=0
 function align8Wide(n: i64): i64 -> @align8Wide
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div nish_panic_overflow
@@ -42,7 +38,7 @@ function fieldAccessors(name: string, view: string, offset: i32, flag: boolean):
   callee +2:17 heapView -> @heapView
 function storageFileText(layouts: StorageLayout[]): string -> @storageFileText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: align8 fieldAccessors nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 readingLoader storageEnd
+  calls: align8Wide fieldAccessors nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 readingLoader storageEnd
   pointer layouts: size=0 writesThrough=false captured=false passedTo=storageEnd#0 readingLoader#0
   stackSites=4 stackLocals=4
   local +0:9 lines: string[] (const)
@@ -53,24 +49,24 @@ function storageFileText(layouts: StorageLayout[]): string -> @storageFileText [
   local +13:14 view: string (const)
   local +16:7 anyFlag: boolean (let)
   local +17:14 s: StorageLayout (const)
-  local +51:7 at: i32 (let)
-  local +52:14 s: StorageLayout (const)
-  callee +53:10 align8 -> @align8
-  local +54:11 fields: string[] (const)
-  local +55:16 f: StorageField (const)
-  local +58:11 tail: string (const)
-  local +64:7 k: i32 (let)
-  local +65:14 s: StorageLayout (const)
-  callee +66:10 align8 -> @align8
-  local +68:13 view: string (const)
-  local +72:13 accessors: string[] (const)
-  local +73:18 f: StorageField (const)
-  callee +74:24 fieldAccessors -> @fieldAccessors
-  local +84:14 line: string (const)
-  callee +84:22 readingLoader -> @readingLoader
+  local +52:7 at: i64 (let)
+  local +53:14 s: StorageLayout (const)
+  callee +54:10 align8Wide -> @align8Wide
+  local +55:11 fields: string[] (const)
+  local +56:16 f: StorageField (const)
+  local +59:11 tail: string (const)
+  local +65:7 k: i32 (let)
+  local +66:14 s: StorageLayout (const)
+  callee +67:10 align8Wide -> @align8Wide
+  local +69:13 view: string (const)
+  local +73:13 accessors: string[] (const)
+  local +74:18 f: StorageField (const)
+  callee +75:24 fieldAccessors -> @fieldAccessors
+  local +85:14 line: string (const)
+  callee +85:22 readingLoader -> @readingLoader
 function readingLoader(layouts: StorageLayout[]): string[] -> @readingLoader
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: heapViewsNew nish_array_grow nish_str_concat nish_str_from_i32
+  calls: heapViewsNew nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
   pointer layouts: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 lines: string[] (const)

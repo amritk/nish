@@ -30562,11 +30562,35 @@ if (!only || "wasm-host-panic".includes(only)) {
             [
               "TypeError wide: argument 1 (x) must be a bigint",
               "TypeError narrow: argument 1 (b) must be a number",
+              "TypeError sum: argument 1 (a) must be a number",
               "ok 7",
               "ok 44",
               "ok 1",
             ].join("\n"),
           shown(badarg.res)
+        )
+        const badshape = drive("main.wasm", "badshape")
+        check(
+          "panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive",
+          badshape.lines.join("\n") ===
+            [
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be an integer",
+              "TypeError a Result payload must be a number",
+              "TypeError a Result payload must be a boolean",
+              "Error the page's getter threw",
+              "TypeError total: argument 1 (xs) must be an Int32Array",
+              "TypeError total: argument 1 (xs) must be an Int32Array",
+              "ok 0",
+              "ok 7",
+              "ok -3",
+              "ok 3",
+              "ok 6",
+              "ok 1",
+            ].join("\n"),
+          shown(badshape.res)
         )
         const flat = drive("main.wasm", "flat")
         check(

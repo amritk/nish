@@ -96,11 +96,49 @@ export const run = (l: typeof Loader, bytes: BufferSource, sites: Sites, what: s
     }
   } else if (what === "badarg") {
     // A bad argument is refused before the module is entered: it stays alive.
-    const loose = m as unknown as { wide: (x: unknown) => bigint; narrow: (b: unknown) => number }
+    const loose = m as unknown as {
+      wide: (x: unknown) => bigint
+      narrow: (b: unknown) => number
+      sum: (a: unknown, b: unknown) => number
+    }
     out.push(ended(l, () => loose.wide(5)))
     out.push(ended(l, () => loose.narrow(5n)))
+    out.push(ended(l, () => loose.sum(1n, 2)))
     out.push(ended(l, () => m.wide(7n)))
     out.push(ended(l, () => m.narrow(300)))
+    out.push(ended(l, () => m.bump()))
+  } else if (what === "badshape") {
+    // So is a Result payload or an array of the wrong shape: each is refused
+    // before the module is entered, however it would have failed inside it.
+    const loose = m as unknown as {
+      unpack: (r: unknown) => number
+      scaled: (r: unknown) => number
+      total: (xs: unknown) => number
+    }
+    out.push(ended(l, () => loose.unpack({ ok: true, value: 1.5 })))
+    out.push(ended(l, () => loose.unpack({ ok: true, value: "x" })))
+    out.push(ended(l, () => loose.unpack({ ok: true })))
+    out.push(ended(l, () => loose.unpack({ ok: false, error: 3n })))
+    out.push(ended(l, () => loose.scaled({ ok: true, value: 2n })))
+    out.push(ended(l, () => loose.scaled({ ok: false, error: 1 })))
+    out.push(
+      ended(l, () =>
+        loose.unpack({
+          get ok(): boolean {
+            throw new Error("the page's getter threw")
+          },
+        })
+      )
+    )
+    out.push(ended(l, () => loose.total(new Proxy(new Int32Array(2), {}))))
+    out.push(ended(l, () => loose.total(Object.setPrototypeOf(new DataView(new ArrayBuffer(8)), Int32Array.prototype))))
+    const detached = new Int32Array(2)
+    structuredClone(detached.buffer, { transfer: [detached.buffer] })
+    out.push(ended(l, () => m.total(detached)))
+    out.push(ended(l, () => m.unpack({ ok: true, value: 7 })))
+    out.push(ended(l, () => m.unpack({ ok: false, error: 3 })))
+    out.push(ended(l, () => m.scaled({ ok: true, value: 1.5 })))
+    out.push(ended(l, () => m.total(new Int32Array([1, 2, 3]))))
     out.push(ended(l, () => m.bump()))
   } else if (what === "oom") {
     out.push(ended(l, () => m.fill(1 << 20)))

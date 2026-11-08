@@ -63,3 +63,18 @@ export const wide = (x: i64): i64 => x
 
 /** `b` back: a `u8` the loader masks, which a page can pass as a `bigint`. */
 export const narrow = (b: u8): u8 => b
+
+/** The `Ok` payload or `Err` code: a packed `Result` argument the loader writes. */
+export const unpack = (r: Result<i32, i32>): i32 => (r.ok ? r.value : 0 - r.error)
+
+/** The `Ok` payload, or -1 for `Err`: an `f32` and a `boolean` arm. */
+export const scaled = (r: Result<f32, boolean>): f32 => (r.ok ? r.value * 2 : -1)
+
+/** The sum of `xs`: a typed-array argument the loader copies in. */
+export const total = (xs: i32[]): i32 => {
+  let s = 0
+  for (const x of xs) {
+    s += x
+  }
+  return s
+}

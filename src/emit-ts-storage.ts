@@ -47,9 +47,6 @@ const viewShift = (view: string): i32 => {
   return 2
 }
 
-/** `n` rounded up to a multiple of 8. */
-const align8 = (n: i32): i32 => n + ((8 - (n % 8)) % 8)
-
 /** `n` rounded up to a multiple of 8, in `i64`. */
 const align8Wide = (n: i64): i64 => n + ((toI64(8) - (n % toI64(8))) % toI64(8))
 
@@ -131,24 +128,25 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
   lines.push("  },")
   lines.push("}")
   lines.push("export const layout = {")
-  // Each storage starts on an 8-byte boundary, as `storageEnd` counts them.
-  let at = 0
+  // Each storage starts on an 8-byte boundary, as `storageEnd` counts them,
+  // and in `i64` for the same reason: offsets past 2^31 are legal.
+  let at = toI64(0)
   for (const s of layouts) {
-    at = align8(at)
+    at = align8Wide(at)
     const fields: string[] = []
     for (const f of s.fields) {
       fields.push(`${f.name}: ${f.offset}`)
     }
-    const tail = s.fields.length > 0 ? `, fields: { ${fields.join(", ")} }` : ""
+    const tail = s.view === "" ? `, fields: { ${fields.join(", ")} }` : ""
     lines.push(`  ${s.key}: { at: ${at}, length: ${s.length}, stride: ${s.stride}${tail} },`)
-    at = at + s.length * s.stride
+    at = at + toI64(s.length) * toI64(s.stride)
   }
   lines.push("}")
-  at = 0
+  at = toI64(0)
   let k = 0
   for (const s of layouts) {
-    at = align8(at)
-    if (s.fields.length === 0) {
+    at = align8Wide(at)
+    if (s.view !== "") {
       const view = `new ${s.view}(heap, ${at}, ${s.length})`
       // `any`: the module spells the storage's own type, which this file does not know.
       lines.push(`export const s${k}: any = ${s.flag ? `flags(${view})` : view}`)
@@ -162,7 +160,7 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
       lines.push(`  return { ${accessors.join(", ")} }`)
       lines.push("})")
     }
-    at = at + s.length * s.stride
+    at = at + toI64(s.length) * toI64(s.stride)
     k = k + 1
   }
   for (const line of readingLoader(layouts)) {
@@ -188,7 +186,7 @@ const readingLoader = (layouts: StorageLayout[]): string[] => {
   }
   lines.push("  storage: {")
   for (const s of layouts) {
-    if (s.fields.length === 0) {
+    if (s.view !== "") {
       lines.push(`    ${s.key}: new ${s.view}(buffer, layout.${s.key}.at, ${s.length}),`)
     }
   }

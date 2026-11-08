@@ -111,7 +111,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { checkStorageUses, isStorageNew, storageNewNode } from "./module-storage"
+import { checkStorageUses, isStorageNew, recheckStorage, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
 import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER, SORT_LOCAL, SORT_SPECIFIER } from "./std-modules"
 import {
@@ -141,6 +141,7 @@ import {
   collectStructMembers,
   declareStruct,
   markTemplateImplements,
+  noteStructNames,
   referencedStructNames,
   signatureStructNames,
 } from "./structs"
@@ -1088,6 +1089,14 @@ export class Checker {
         signatureStructNames(this.ctx.table, sig, names)
         this.reachAll(declared, seen, pending, names)
       }
+      // So does an imported module storage: `cells[0].v` reads a `Cell` this
+      // module may never name (`tests/link/storage_import_record`).
+      const constant = imp.constant
+      if (constant !== null) {
+        const names = new StringSet()
+        noteStructNames(this.ctx.table, constant.type, names)
+        this.reachAll(declared, seen, pending, names)
+      }
     }
     while (pending.length > 0) {
       const info = pending.pop()
@@ -1122,6 +1131,39 @@ export class Checker {
       this.program.addStruct(name, info)
     }
     pending.push(info)
+  }
+
+  /**
+   * WP50 §5.1: every generic class's `implements` clause, marked again once
+   * imports are bound. Pass 1 marks it before `bindImports`, when an imported
+   * interface does not resolve yet, and module storage reads `implemented`
+   * when the constants fold, before any body asks for `Box<i32>`
+   * (`tests/link/reject_storage_import_generic_implementer`). Marking is
+   * idempotent, so a clause pass 1 already resolved changes nothing.
+   */
+  markBoundImplements(): void {
+    for (const stmt of this.program.file.children) {
+      if (stmt.kind === N_CLASS && stmt.children[0].kind !== N_EMPTY) {
+        const template = this.program.structTemplate(stmt.children[0].text)
+        if (template !== null && template.decl === stmt) {
+          markTemplateImplements(this.program, stmt)
+        }
+      }
+    }
+  }
+
+  /**
+   * WP50 §5.1: every module storage this module declares, checked again once
+   * every body and instantiation is checked. Whether an interface element has
+   * an implementer is read when the constants fold; this refuses one that
+   * gained an implementer after that, whatever route it took there.
+   */
+  recheckStorage(): void {
+    for (const info of this.program.constantList) {
+      if (info.storage && info.origin === this.program.source) {
+        recheckStorage(this.ctx, info)
+      }
+    }
   }
 
   bindImports(targets: CheckedProgram[]): void {

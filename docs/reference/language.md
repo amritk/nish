@@ -1741,8 +1741,8 @@ having no top-level code and therefore no initialisation order.
 - **The initialiser is an ordinary Nish expression restricted to literals
   and other constants**: the operators of [Operators](#operators) over numeric,
   boolean, and string literals, other module constants (declared anywhere in
-  the module, or imported), and parentheses. Anything else — a call, a `new`, a
-  local, a parameter — is
+  the module, or imported), and parentheses. Anything else — a call, a `new` (other than
+  [module storage](#module-storage)'s), a local, a parameter — is
   `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
   There is deliberately no second, larger language inside `const`: a constant
@@ -6226,8 +6226,9 @@ types what the loader builds from it:
 program with [module storage](#module-storage) or a
 [host module](#host-modules-the-functions-a-page-supplies)
 (`tests/panic`, `docs/wp50-wasm-host.md` §6). The `nish.panic` import,
-`NishPanic`, the dead module, `NishReentry` (below), `load`'s `onPanic` and
-`sites`, and `loadSync` are for such a program only.
+`NishPanic`, the dead module, `NishReentry` (below), and the `onPanic` and
+`sites` options of `load` and `loadSync` are for such a program only;
+`loadSync` itself is in every loader.
 Any other program gets the `.wasm`, loader and `.d.ts` it got before: a panic
 is a bare `RuntimeError` trap, the module stays usable, and its next call
 runs. The module of such a program imports one function
@@ -6261,11 +6262,20 @@ exception:
   (`the module is dead: …`) before the module runs. An exception a host
   import throws out of a call ends the module the same way, since the call it
   interrupted never finished.
+- **A bad argument does not end it.** The loader checks every argument's
+  shape before the module runs: a number of the wrong type or range, a
+  `Result` that is not an object with a boolean `ok` and a payload of its arm's
+  type, an array argument whose brand (read off `%TypedArray%.prototype`, not
+  `instanceof`) is not the typed array it names. Each throws a `TypeError`; an
+  error a `Result` argument's getter throws reaches the caller as it is. Either
+  way the module never ran and stays alive (`tests/run.js`, section `panic`:
+  `badarg`, `badshape`).
 
-**One call at a time.** A host import, or the reporter, that calls an export
-while a call into the module is still running gets `NishReentry` (`a call into
-the module was made while another call into it was running`), and the inner
-call never runs. The outer call's state is half changed at that point, which
+**One call at a time.** A host import that calls an export while a call into
+the module is still running gets `NishReentry` (`a call into the module was
+made while another call into it was running`), and the inner call never runs.
+The reporter is different: the module is already dead when `onPanic` runs, so
+an export it calls throws `NishPanic` (`the module is dead: …`). The outer call's state is half changed at that point, which
 is why the loader refuses rather than runs it (`docs/security/wasm-host.md`,
 WH-3). Left uncaught, the `NishReentry` escapes the outer call too, and like
 any exception out of a call it ends the module. A page that needs the
@@ -6999,7 +7009,8 @@ stores `calls`, keeps `i < xs.length` and `i < c.v.length`
 strings — `console.log`, `panic`, a string method — has the empty summary,
 since without a function value what a call is handed is all it can reach:
 the one mutable module state, [module storage](#module-storage), is named
-only by its own module's code, and its length never changes, so no call can
+only by the program's code (its module's, or an importer's when it is
+exported), never reached by a builtin, and its length never changes, so no call can
 end a length fact about it.
 
 A function every call to which the compiler can see is **entered with what

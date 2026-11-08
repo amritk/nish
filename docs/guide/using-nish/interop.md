@@ -136,7 +136,9 @@ URL, so a bundler can take it as it is.
 
 Two flags work with `wasm-host` only. `--memory <MiB>` fixes the memory size,
 initial and maximum (1 to 4096); an allocation that outgrows it is a panic
-of kind `memory` ([below](#when-the-module-panics)). Without the flag the
+of kind `memory` ([below](#when-the-module-panics)) in a program that keeps
+storage or imports a host module, and a bare `RuntimeError` in one that does
+neither. Without the flag the
 memory grows on demand. `--inline <file.mjs>` writes the bytes
 module. Any other profile refuses either flag with exit 2. The stack is a
 fixed 64 KiB. If `wasm-opt` (binaryen) is on `PATH`, `build.sh` runs
@@ -303,6 +305,17 @@ The TypeScript reading behaves the same: `--emit-ts` writes one more file,
 `memory`, `layout` and `views` as the loader does, and `loadSync(exports)` and
 `load(exports)`, which add those three to the module's exports, so a page
 written against `memory.buffer`, `layout` and `views` runs against either build.
+It differs from the wasm build in five places:
+
+- `loadSync` and `load` take the module's exports, not wasm bytes; `load` is
+  `loadSync` behind a promise.
+- Its memory is fixed: `memory.grow` throws a `RangeError`.
+- Its `memory.buffer` holds only the storages, so the first one sits at
+  `at` 0. Read offsets from `layout`, never as constants.
+- There is no `NishPanic`, `onPanic` or `NishReentry`. A panic is the
+  TypeScript build's own throw, and the module is not ended by it.
+- An export never refuses an argument the way the loader's `TypeError` does:
+  the type checker is the guard.
 
 ### Lending an array to the page
 
@@ -370,7 +383,10 @@ try {
 ```
 
 - **`kind`** is one of `panic`, `index`, `slice`, `overflow`, `divide`,
-  `memory` and `exit`.
+  `memory` and `exit` for a panic the program reports, `trap` for a bare
+  WebAssembly trap, `reentry` for a call back into a busy module left
+  uncaught, and `exception` for anything else a host function throws that
+  escapes the module.
 - **`onPanic`** is called with `{ message, kind, site }` before the
   exception is thrown. Without one, the loader writes `nish: <message>` to
   the console, as `reportPanic` from `nish/page` does.
@@ -383,9 +399,17 @@ try {
   module is dead: …") before the module runs. Load the bytes again to start
   over. An exception a host function throws that escapes the module kills it
   the same way.
-- **One call at a time.** A host function, or `onPanic`, that calls back
-  into the module while a call is still running gets `NishReentry`, and the
-  inner call never runs. Left uncaught, it kills the module too.
+- **A bad argument does not.** A number of the wrong type, a `Result` that is
+  not `{ ok: true, value }` or `{ ok: false, error }` with a payload of the
+  right type, or an array argument that is not the typed array it names (a
+  `Proxy`, a re-prototyped `DataView` and a detached buffer included) throws a
+  `TypeError` before the module runs, and the module stays alive. So does a
+  getter on a `Result` argument that throws: its own error reaches the
+  caller.
+- **One call at a time.** A host function that calls back into the module
+  while a call is still running gets `NishReentry`, and the inner call never
+  runs. Left uncaught, it kills the module too. `onPanic` runs once the
+  module is already dead, so a call it makes throws `NishPanic` instead.
 
 ### `nish/page` and `nish/host/ring`
 

@@ -149,6 +149,22 @@ function storageRecord(program: CheckedProgram, table: TypeTable, elem: i32): St
   local +0:9 info: StructInfo | null (const)
   callee +0:16 inlineElementStruct -> @inlineElementStruct
   local +4:9 instance: StructInstantiation | null (const)
+function recheckStorage(ctx: CheckContext, info: ConstInfo): void -> @recheckStorage [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via storageFaultReport
+  calls: TypeTable.typeName nish_panic_index storageElementFault storageFaultReport storageNewNode storageRecord
+  pointer ctx: size=304 writesThrough=false captured=false passedTo=storageElementFault#0 storageFaultReport#0
+  pointer info: size=88 writesThrough=false captured=false passedTo=storageElementFault#1 storageFaultReport#1
+  stackSites=0 stackLocals=0
+  local +0:9 scope: CheckedProgram | null (const)
+  local +1:9 elem: i32 (const)
+  callee +2:25 storageElementFault -> @storageElementFault
+  callee +5:7 storageRecord -> @storageRecord
+  local +8:9 expr: Node (const)
+  callee +8:16 storageNewNode -> @storageNewNode
+  local +9:9 at: Node (const)
+  callee +10:3 storageFaultReport -> @storageFaultReport
+  callee +10:49 TypeTable.typeName -> @TypeTable.typeName
 function storageElementFault(ctx: CheckContext, info: ConstInfo, elem: i32): i32 -> @storageElementFault
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem

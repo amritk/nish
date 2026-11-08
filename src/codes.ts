@@ -461,7 +461,7 @@ const diagnosticRules = (): string[] => [
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
   "NL2010",
-  ", a buffer the page would lend wasm: buffer windows come in WP50 stage 3, so until then pass it through module storage",
+  ", a buffer the page would lend wasm: pass it through module storage",
   "NL2664",
   ".capabilities.dependencies` is an object that names each dependency once, with an array of the capabilities granted it",
   "NL3041",

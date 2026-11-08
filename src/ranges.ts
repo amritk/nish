@@ -13,9 +13,9 @@
 // instantiation, or stores to a field called `length`. A call with a summary
 // resizes no array, so the caller keeps every array length across it, and
 // every path whose fields and links the summary leaves alone. A builtin handed
-// only numbers, booleans and strings has the empty summary: with no mutable
-// module state and no function value, what a call is handed is all it can
-// reach (`isInertBuiltin`).
+// only numbers, booleans and strings has the empty summary: with no function
+// value, and module storage named only by the program's code and fixed in
+// length, what a call is handed is all it can reach (`isInertBuiltin`).
 //
 // **What a function is entered with.** `EntryFacts` per function, stated
 // against its parameters by position: a floor and a `maxIndex` per integer

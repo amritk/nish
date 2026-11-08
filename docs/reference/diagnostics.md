@@ -13133,7 +13133,7 @@ Host function `later` returns a `Promise`, which wasm cannot wait for: await it 
 The message of an error contains:
 
 ```text
-…, a buffer the page would lend wasm: buffer windows come in WP50 stage 3, so until then pass it through module storage
+…, a buffer the page would lend wasm: pass it through module storage
 ```
 
 **Retired**: a typed-array parameter of a host function refused until buffer windows landed (WP50 S3); a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683

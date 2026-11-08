@@ -53,7 +53,7 @@ Each of these assets comes from a decision taken for another reason.
 
 | Asset | What it buys |
 | --- | --- |
-| **No mutable global state.** Top-level `let`, static fields and top-level statements are refused, and a module `const` folds into the IR | Everything two threads can both reach arrived through a pointer somebody passed, which is what an analysis can follow. [wp23-language-surface.md](wp23-language-surface.md) §4 declined module-level `let` partly to keep this row |
+| **No mutable global state.** Top-level `let`, static fields and top-level statements are refused, and a module `const` folds into the IR. The one exception, since WP50, is [module storage](LANGUAGE.md#module-storage): a fixed-length, zero-filled array a `const` names | Everything two threads can both reach arrived through a pointer somebody passed, which is what an analysis can follow. [wp23-language-surface.md](wp23-language-surface.md) §4 declined module-level `let` partly to keep this row |
 | **No closures and no function values** | A parallel body or a task entry is a known function. The "what did the closure capture" problem, which costs Rust `move` plus `Send` and costs Go a GC, does not arise |
 | **A whole-program compiler** | A `Send`-shaped judgment is the existing fixpoint with one more fact, not a trait system |
 | **Checked immutability**: immutable strings, `readonly T[]` | A starting set of values that are safe to share |

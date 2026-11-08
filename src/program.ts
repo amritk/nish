@@ -671,10 +671,6 @@ export class StructTemplateInfo {
   decl: Node
   origin: SourceFile
   exported: boolean
-  /** How many instantiations it has produced, for the per-template cap. */
-  count: i32
-  /** The module that declares it; `TemplateInfo.home` one level up (WP18 G7). */
-  home: CheckContext
   /**
    * Whether a generic class names an instantiation of this interface in its
    * `implements` clause (`implements Cell<T>`, `implements Cell<i32>`). Which
@@ -683,6 +679,10 @@ export class StructTemplateInfo {
    * of the interface counts as implemented for storage (WP50 §5.1).
    */
   implemented: boolean
+  /** How many instantiations it has produced, for the per-template cap. */
+  count: i32
+  /** The module that declares it; `TemplateInfo.home` one level up (WP18 G7). */
+  home: CheckContext
 
   constructor(sourceName: string, kind: i32, decl: Node, origin: SourceFile, home: CheckContext) {
     this.sourceName = sourceName
