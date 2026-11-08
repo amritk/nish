@@ -1,8 +1,10 @@
 # HTTP client
 
 Two modules speak HTTP/1.1 as a client. `nish/net/fetch` is the one a
-command-line program wants: `fetchSync` takes a URL and blocks until the
-response is in, with a timeout on every wait and a cap on every body.
+program wants: `fetchSync` takes a URL and blocks until the response is in,
+with a timeout on every wait and a cap on every body, and `await fetch(url)`
+does the same without blocking the process, so other tasks run while it waits
+([Fetching without blocking](#fetching-without-blocking)).
 `nish/net/http1-client-codec`, below it, is the protocol alone: it writes a
 request's head and reads the response, bytes in and events out, and opens no
 socket, for a program that runs its own loop. Both are imported like any other
@@ -94,6 +96,97 @@ the request goes on a fresh one. If the server closes it under the request,
 before a byte of the answer, the request is sent once more on a fresh one for a
 GET, HEAD, OPTIONS, TRACE, PUT or DELETE, never for a POST; a request whose
 answer was cut off part way, or that was never answered, is not sent again.
+
+## Fetching without blocking
+
+In an `async` function, `await fetch(url, init)` fetches without holding up
+the process: while it connects, writes and waits for the answer, the program's
+other tasks run ([Async functions](../language/async.md)). Two fetches under
+`awaitAll` are in flight together:
+
+```ts nish:ok
+import { awaitAll } from "nish:async";
+import { FetchPool, RequestInit, fetch } from "nish/net/fetch";
+
+async function title(url: string, pool: FetchPool): Promise<string> {
+  const init = new RequestInit();
+  init.header("Accept", "text/plain");
+  init.pool = pool;
+  const r = await fetch(url, init);
+  if (r.isErr()) {
+    return r.error.text;
+  }
+  return `${r.value.status}: ${r.value.text()}`;
+}
+
+export async function main(): Promise<i32> {
+  const pool = new FetchPool();
+  const [a, b] = await awaitAll(
+    title("http://127.0.0.1:8080/a", pool),
+    title("http://127.0.0.1:8080/b", pool)
+  );
+  console.log(a);
+  console.log(b);
+  pool.close();
+  return 0;
+}
+```
+
+`fetch` answers a `Result`: a `FetchResponse` or a `FetchError`, whose `code`
+is the `HTTP_E_*` code `fetchSync`'s client would have set and whose `text`
+is its name and sentence, such as `refused: could not connect to 127.0.0.1
+port 8080 (errno 111)`. It never answers null and never panics. A 404 or a
+500 is a response, not an error: read `status`.
+
+**The body is read whole before `fetch` answers**, up to the options'
+`maxBodyBytes` (256 MiB unless you lower it; past it the fetch fails with
+`HTTP_E_BODY_TOO_LARGE`), so `text()` and `bytes()` are plain calls, not
+awaited. Set `maxBodyBytes` to what you expect from a server you do not run.
+A body is held in one array, so even a raised `maxBodyBytes` stops just under
+2 GiB.
+
+What a fetch allocates is freed when the `async` function that awaited it
+returns. A program that fetches in a long loop should await each fetch in a
+function of its own, as `title` above is, so each response goes when that
+function ends. A loop that awaits `fetch` directly in `main` keeps every
+response until `main` returns.
+`header(name)` reads a field in any case, `url` is the URL that answered.
+
+`RequestInit` holds the request: `method` (`GET` unless set), fields added
+with `header(name, value)`, `body` (a `u8[]`, with its `Content-Length` sent
+for you), `options` (an `HttpOptions`) and `pool`. Pass null, or nothing, for a
+plain `GET`. The options mean what they mean to `fetchSync`, redirects,
+proxies and the [outbound policy](#fetching-a-url-someone-else-chose)
+included, except for three limits on the waits:
+
+- `readTimeoutMs` bounds nothing yet: a wait on the socket has no deadline of
+  its own. Set `totalTimeoutMs` against a server you do not run. It is checked
+  each time a wait ends, so a server that never sends another byte holds the
+  fetch until the connection drops.
+- `connectTimeoutMs` bounds the name lookup only, and **the lookup blocks the
+  process**: every task waits while a name is resolved. Use an IP address, or
+  a name your resolver answers at once, where that matters.
+- **Only `http://` is driven this way.** An `https://` URL fails at once with
+  `HTTP_E_TLS`, whose text names `fetchSync`, before a connection is opened:
+  the TLS handshake would block the process, so it is refused rather than
+  done quietly in the way. Use `fetchSync` for https for now.
+
+A **`FetchPool`** keeps connections open between fetches: hand the same pool
+to each `RequestInit`, and a fetch to a place the pool holds an idle connection
+for takes it rather than dialling. A connection is kept only when its response
+was read to the end and nothing is left on it, at most `maxIdlePerOrigin` (4
+unless given to the constructor) for one origin or proxy and 64 in all. A kept
+connection the server closed, or wrote to unasked, is closed when it is next
+looked at, and a GET whose kept connection drops before a byte of the answer
+is sent once more on a fresh one, as `fetchSync` does. A fetch under an
+outbound policy neither keeps nor takes one. `pool.idle()` counts the idle
+connections and `pool.close()` closes them; without a pool, each fetch closes
+its own.
+
+`fetch` does not run under `--emit-ts`: it waits on its socket with
+`nish:async`'s `readable` and `writable`, which `nish --emit-ts` refuses
+([Async functions](../language/async.md)). A program that must also run as
+TypeScript uses `fetchSync`.
 
 ## Options
 
