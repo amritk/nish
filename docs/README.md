@@ -126,7 +126,10 @@ who write programs in Nish. A page there follows these rules:
   [`scalar.config.json`](../scalar.config.json) at the repository root, read
   by [Scalar Docs](https://scalar.com/products/docs); a new page gets a route
   there, and `node docs/check-links.mjs` fails on a page no route reaches or a
-  route to a missing file.
+  route to a missing file. Only the `/reference` routes below are generated;
+  every other route is written by hand, the "Security records" group under
+  `/security` with its sub-groups included, so a new record gets its route
+  there by hand, beside its index row.
 
 ## The library reference
 

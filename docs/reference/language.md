@@ -90,7 +90,7 @@ No `import` is needed; builtins are resolved by name.
 
 <scalar-card title="Semantics decisions" icon="phosphor/regular/book-open" href="language/semantics-decisions.md">
 
-`wrappingSub` and `wrappingMul` from `nish:unsafe` wrap.** Every user-level `i32`/`i64` `add`/`sub`/ `mul` — the binary operators, unary minus, `op=` on locals, fields and elements, `++`/`--` — either fits its type or stops the program with Rust's words, `attempt to add with overflow` (`subtract`, `multiply`, `negate` likewise), exit 1, the way checked integer division does.
+Signed integer overflow is a checked panic; `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap.
 
 </scalar-card>
 
