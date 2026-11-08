@@ -190,8 +190,8 @@ table with each message and the idiom to write instead.
 ## 4. What exists today
 
 There is **one compiler**, and it is written in the language it compiles:
-`src/`, 83 modules (`ls src/*.ts | wc -l`) and 72,739 lines of Nish
-(`cat src/*.ts | wc -l`), built by the last released `nish`, the seed (M6).
+`src/`, 119 modules (`ls src/*.ts | wc -l`) and 126,175 lines of Nish
+(`cat src/*.ts | wc -l`, 2026-11-08), built by the last released `nish`, the seed (M6).
 `.claude/orientation.md` is the ninety-second map, and
 [ARCHITECTURE.md](ARCHITECTURE.md)'s pipeline table maps each stage to its
 modules; the table below is the inventory.
@@ -205,11 +205,11 @@ modules; the table below is the inventory.
 | Debug info | done (WP10, WP17) | `src/debug.ts` |
 | Interop: C header, `.d.ts` and loader, N-API (sync and async), wasm, C calls through `declare function` | done (WP8, WP17, WP24, WP27, WP30) | `src/interop-*.ts` |
 | Packages: `package.json` `exports`, bare specifiers, real-path identity, the manifest's `nish` field | S1–S2 and half of S3 (WP21) | `src/manifest.ts`, `paths.ts` |
-| Runtime: fourteen translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
+| Runtime: eighteen C translation units (`runtime/*.c`, the freestanding wasm one among them), the WASI twin, the Node, browser and page shims and prelude | done | `runtime/` |
 | Threads: `parallelMapInto`, `parallelReduce`, `parallelMap`, `parallelFrom`, `using s = scope()`, `Mutex<T>`, `AtomicI32`/`AtomicI64`, `Channel<T>` | done (WP20, WP29) | `std/threads.ts`, `runtime/runtime-parallel.c` |
 | Standard library: testing, text, json, pair, collections, secret, threads, `nish/crypto/*`, `nish/net/*` | growing (WP26, WP34) | `std/`, [std/README.md](../std/README.md) |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, PGO | done (WP9) | `scripts/build.sh` |
-| Tests: 1,621 golden cases (946 of them `reject_*`), 335 `tests/link/` programs, `llvm-as`, native round trips, layout, runtime budgets, interop, packaging, `tests/fix/` | done | `tests/run.js`, `tests/cases/`, `link/`, `fix/` |
+| Tests: 3,384 golden cases (2,362 of them `reject_*`), 991 `tests/link/` programs, `llvm-as`, native round trips, layout, runtime budgets, interop, packaging, `tests/fix/` | done | `tests/run.js`, `tests/cases/`, `link/`, `fix/` |
 | Differential testing against Node and against the last release | done (WP13, WP19) | `tests/differential/`, `tests/nish-cmp.js` |
 | The bootstrap and the goldens that succeeded the stage0 oracles | done (WP14, WP19) | `scripts/bootstrap.sh`, `tests/self/` |
 | Benchmarks in Nish, C, Go and Rust | done (WP9) | `bench/`, [BENCHMARKS.md](BENCHMARKS.md) |
@@ -265,16 +265,16 @@ is its plan. [README.md](README.md) indexes them.
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
 | 37 | The OS sandbox | stages 1 and 2 built (`--sandbox`, `fs.read=<dir>` and `fs.write=<dir>` scopes); manifest scopes not built | [wp37](wp37-os-sandbox.md) |
-| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3a landed and S3 built (`nish:simd`, its bar met), S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S2's flag planned | [wp38](wp38-simd.md) |
-| 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
-| 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
-| 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; stage 1, the router, built | [wp43](wp43-http-app-layer.md) |
+| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met and its flag built, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3a landed and S3 built (`nish:simd`, its bar met), S6 (the JSON tokenizer on vectors) measured: S6a and S6b met their bars, S6c and S6d not reachable; S7 met by #561, S2's flag built with `x86-64-v3` (#660); AES-GCM on AES-NI and PMULL built | [wp38](wp38-simd.md) |
+| 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | Part A built but for submitting (D1, the owner's), Postgres over TLS and the `json`/`plaintext` entry on more than one core; of Part B, TLS resumption, the AES kernel, QUIC's address change, the `h2load` harness and the TLS client built, the rest open | [wp39](wp39-http-server.md) |
+| 42 | A multi-core server from pre-forked processes | built: `tcpListenFlags` with `SO_REUSEPORT`, the N12 process builtins and `nish/net/prefork` | [wp42](wp42-multicore-server.md) |
+| 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; the router, the handler over HTTP/1.1 and response compression (`nish/net/http-compress`) built; the handler over HTTP/2 and HTTP/3 and static files open | [wp43](wp43-http-app-layer.md) |
 | 44 | Streaming file reads: a descriptor, a positional read, a size and a close | proposed; design only, open questions for the owner | [wp44](wp44-streaming-files.md) |
 | 45 | Name resolution for `nish:net`: a DNS stub resolver | built: `nish/net/dns` on the caller's loop, `resolveHost` for start-up | [wp45](wp45-name-resolution.md) |
 | 46 | Memory for programs that do not exit: regions | stages 1 and 2 built: regions in the runtime and `nish:region` in the language | [wp46](wp46-long-running-memory.md) |
 | 47 | Shared work across cores: regions, atomics and rings | built: `nish/sync/shm`, `nish/sync/ring` and `examples/prefork-jobs.ts` | [wp47](wp47-shared-memory.md) |
 | 48 | Compressed 32-bit references: a whole-program mode against `i32` handles, measured | proposed; neither built, the lean node layout recommended | [wp48](wp48-compressed-references.md) |
-| 49 | `async`/`await` on the server, and the TechEmpower top | D1 accepted (reverses WP24 for a restricted `async`); stages 1 to 4 built — the renames, `nish/net/upstream` and the Postgres carrier, every TFB test type, and the language: `async`, `await`, `spawn`, `awaitAll` lowered to frames, tasks on an in-process queue; stage 5's executor over `pollWait` and stage 6 open | [wp49](wp49-async-server.md) |
+| 49 | `async`/`await` on the server, and the TechEmpower top | D1 accepted (reverses WP24 for a restricted `async`); stages 1 to 4 built — the renames, `nish/net/upstream` and the Postgres carrier, every TFB test type, and the language: `async`, `await`, `spawn`, `awaitAll` lowered to frames; stage 5's executor and async `fetch` built, its spawn reach, `serve`, async Postgres pool and cancellation planned; stage 6 open | [wp49](wp49-async-server.md) |
 | 50 | A WebAssembly module a TypeScript page drives: imports, handles, shared memory, strings, determinism, size | accepted 2026-11-06; stages 1–3 built (link and load, host imports and handles, module storage and the driven module); stage 4 next | [wp50](wp50-wasm-host.md) |
 
 A package's plan said where its work would be done, which for everything up
@@ -418,58 +418,66 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Next
 
-1. **WP34, hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)): the port
+As of 2026-11-08. The work in flight is first; the rest is ordered by what
+it unblocks.
+
+1. **WP49, `async` on the server** ([wp49-async-server.md](wp49-async-server.md)):
+   stage 5's executor and async `fetch` are built. Its parts 3 to 6 — a
+   spawned task reaching the objects its spawner owns, `serve` with one task
+   and one region per request, the async Postgres pool, and cancellation —
+   are planned in `.claude/plans/wp49-s5.plan.md`, and stage 6 rewrites the
+   TFB entry in the `async` style against §6's gate.
+2. **WP50, the wasm host** ([wp50-wasm-host.md](wp50-wasm-host.md)):
+   stages 1 to 3 are built; stage 4 is next.
+3. **WP34, hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)): the port
    of a browser game and its servers, starting with its Rust relay on a Nish
    network stack. Built: the compiler items N1, N2, N3, N5 and N6, every
    cryptography lane K1 to K6, and the stack — TLS 1.3 (T1, T2), the HTTP/1.1
    server and WebSocket (H1), HTTP/2 (H2), QUIC with loss recovery, streams
    and datagrams (Q1 to Q4), HTTP/3 with QPACK (R1) and WebTransport (R2) —
    and the relay itself, `examples/relay/` (A1), with every cap, timeout and
-   close code of cs's and N9's soak flat (0 bytes a session measured over 100,000),
-   the loopback suite across every carrier, and S2's interop job. Next:
-   moving the
-   key-holding structs onto `nish:secret` ([#430](https://github.com/amritk/nish/issues/430));
-   and, now that 0.17.0 carries R2, the cs side: `services/relay` replaced,
-   `boot-check`'s wire pass and `bench:offload` against the Rust relay. §5 of
-   the note has the lane table and what each lane left.
-2. **WP33, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
+   close code of cs's and N9's soak flat (0 bytes a session measured over
+   100,000), the loopback suite across every carrier, and S2's interop job.
+   The key-holding structs are on `nish:secret`
+   ([#430](https://github.com/amritk/nish/issues/430), closed with TLS-1,
+   TLS-2, QUIC-1, QUIC-2 and QUIC-5). Next is the cs side: `services/relay`
+   replaced, `boot-check`'s wire pass and `bench:offload` against the Rust
+   relay, outside this repository. §5 of the note has the lane table and what each
+   lane left.
+4. **WP33, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
    R1 (the `portability` class behind `--warn-portability`), R2 (the
    typed-array names lose `push` and `pop`), R5's exact half (`nish --fix`),
    R3 (the runtime split by host) and R4 (`--emit-ts <dir>` with its live
    differential, `tsc --strict` over its output and a fuzz mode) are built.
-   Next are R5's review tier and R6. Its rule binds: every construct states
-   its TypeScript reading, a class-C one ships its `--emit-ts` translation,
-   and no stage moves a `.ll` golden or raises `bench/instructions.json`.
-3. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
-   the process with Landlock and seccomp to the capabilities the compiler
-   computed, and accepts the `fs.read=<dir>` and `fs.write=<dir>` scopes
-   WP36 refuses without it. Its note,
-   [wp37-os-sandbox.md](wp37-os-sandbox.md), records stages 1 and 2 as
-   built; scopes in the manifest are not. WP35, the capability report
-   ([wp35-capabilities.md](wp35-capabilities.md)), and
+   Next are R5's review tier, whose new `--json` key is a contract change,
+   and R6. Its rule binds: every construct states its TypeScript reading, a
+   class-C one ships its `--emit-ts` translation, and no stage moves a `.ll`
+   golden or raises `bench/instructions.json`.
+5. **WP39 Part B, the general-purpose server**
+   ([wp39-http-server.md](wp39-http-server.md) §3): Part A is built but for
+   submitting (D1, the owner's call), Postgres over TLS and the `json` and
+   `plaintext` entry on more than one core. Of Part B, TLS resumption (G3),
+   the AES-NI and PMULL kernel (G4), following a QUIC peer's address change
+   (G5), the `h2load` harness (G8) and the TLS client (G10) are built. G1's
+   interop (`curl` and Autobahn on HTTP/1.1 and WebSocket), G2's open
+   timeouts (H1-2, H2-3, TLS-4, WT-2) and G7's one handler for every version
+   lead what is left; [WP43](wp43-http-app-layer.md)'s handler over HTTP/2
+   and HTTP/3 waits on G7, and its static files do not.
+6. **WP37, the OS sandbox** ([wp37-os-sandbox.md](wp37-os-sandbox.md)):
+   `--sandbox` has the native main wrapper confine the process with Landlock
+   and seccomp to the capabilities the compiler computed, and accepts the
+   `fs.read=<dir>` and `fs.write=<dir>` scopes WP36 refuses without it.
+   Stages 1 and 2 are built; scopes in the manifest are not. WP35, the
+   capability report ([wp35-capabilities.md](wp35-capabilities.md)), and
    WP36, the compile-time policy
    ([wp36-capability-policy.md](wp36-capability-policy.md)), are built.
-4. **WP39, the HTTP server** ([wp39-http-server.md](wp39-http-server.md)):
-   everything a server needs beyond the relay, in one list. Part A is a
-   TechEmpower entry on HTTP/1.1: more than one core by `SO_REUSEPORT` on TCP
-   ([#478](https://github.com/amritk/nish/issues/478)), `TCP_NODELAY`, a JSON
-   writer (WP34 N11's first half), an HTTP date, the `json` and `plaintext`
-   tests, a sans-IO Postgres client, and then `db`, `query`, `update`,
-   `cached-query` and `fortune`. Part B is the general-purpose server across
-   all three versions: the interop still missing (`curl`, Autobahn, Chrome
-   over TCP), the open timeouts and allocation findings, TLS resumption,
-   AES-GCM on AES-NI and PMULL as a runtime kernel, QUIC's congestion, ECN and
-   path MTU work, QUIC on more than one core, one handler for HTTP/1.1, 2 and
-   3 with `Alt-Svc` and h2c, and `h2load` numbers. Submitting to TechEmpower
-   is the owner's call (§4 there).
-5. **WP42, a multi-core server** ([wp42-multicore-server.md](wp42-multicore-server.md)):
-   all of [#478](https://github.com/amritk/nish/issues/478), WP39 E1 and the
-   supervisor WP34 N12 needs. Processes rather than
-   threads, because no `nish:net` call may run in a `scope()` task and a panic
-   ends the whole process: `tcpListenFlags` with `SO_REUSEPORT`, WP34 N12's
-   `spawn`, `kill`, `waitPid` and `availableParallelism`, a `std/net/prefork`
-   supervisor that restarts a dead worker and forwards `SIGTERM`, and the
-   bench at 1, 2 and 4 cores.
+7. **WP46 stage 3** ([wp46-long-running-memory.md](wp46-long-running-memory.md)):
+   the server of its §1 rewritten on regions as a `tests/link` soak, with
+   `Arena.mark()` and anonymous RSS flat over 2,000,000 requests.
+
+WP42, the multi-core server ([wp42-multicore-server.md](wp42-multicore-server.md)),
+was on this list and is built: `tcpListenFlags` with `SO_REUSEPORT`, WP34
+N12's process builtins and the `nish/net/prefork` supervisor.
 
 #### Additive and unscheduled
 

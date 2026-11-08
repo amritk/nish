@@ -1,9 +1,13 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
-**Status: D1 accepted; stages 1 to 4 built (§10), stages 5 and 6 open.** The
-language half — `async`, `await`, `Promise<T>`, `spawn`, `awaitAll` and the
-frame lowering — compiles, with its tasks on an in-process queue; the executor
-that waits on sockets and timers (stage 5) is not built. The anchors below
+**Status: D1 accepted; stages 1 to 4 built (§10), stage 5 parts 1 and 2
+built, the rest of stage 5 and stage 6 open.** The language half — `async`,
+`await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles.
+Stage 5's executor in `runtime/runtime-async.c` runs its tasks and waits on
+sockets and timers (`sleep`, `readable`, `writable` in `nish:async`), and
+`nish/net/fetch` has an async `fetch`. Parts 3 to 6 — a spawned task reaching
+its spawner's objects, `serve`, the async Postgres pool and cancellation —
+are planned in `.claude/plans/wp49-s5.plan.md` (*2026-11-08*). The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
 note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are

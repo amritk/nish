@@ -44,8 +44,10 @@ serving its other connections.
   exits 0 on SIGINT or SIGTERM.
 
 The approach is `Realistic`: the handler uses the standard library's server as
-any program would, with nothing of HTTP stripped out. It is one core until the
-prefork supervisor of #719 lands, which is WP39's follow-up for multi-core.
+any program would, with nothing of HTTP stripped out. It is one core: the
+prefork supervisor of #719 (`nish/net/prefork`) has landed and the database
+entry below runs on it, but `main.ts` does not yet, which is WP39's
+follow-up for multi-core.
 
 ## Building and running it
 

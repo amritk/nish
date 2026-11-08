@@ -570,10 +570,11 @@ Node cannot say (§4.5); the emitted corpus type-checks under `tsc --strict`; an
 the rewrites), and AI.md states the loop (§5.3). It went first because it
 needs no differential: a fix is attached only where it keeps the program's
 meaning, which the compiler decides on its own. The `review` tier, whose
-rewrites touch class-C rows, is the half that does need one, and it still
-waits for R4. R4 still comes before it on purpose: the way out is what makes
-the way in low-risk, and it is also what gives R5's `review` fixes their
-differential.
+rewrites touch class-C rows, is the half that does need one, and it waited
+for R4. R4 came before it on purpose: the way out is what makes the way in
+low-risk, and it is also what gives R5's `review` fixes their differential.
+R4 is built, so the `review` tier waits on nothing but its own `--json` key
+(§5.1).
 
 Every stage is held to §1 rule 6 by the tests `npm test` already runs: no
 `.ll` golden moves, and the instruction gate stays green without its baseline
