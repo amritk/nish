@@ -1410,12 +1410,14 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     }
     const callee = program.nodeCallees[owner.id]
     if (callee !== null) {
-      // WP49 stage 5: a spawned task keeps what it is handed for as long as
-      // it runs, past the spawner's return, so the spawner's region must too.
-      if (isSpawnedTask(unit, owner)) {
+      // WP49 stage 5: a spawned task holds an object or array it is handed
+      // in place for as long as it runs, past the spawner's return, so the
+      // spawner's region must too. A string is copied into the task's region.
+      const at = index + (callee.owner !== null ? 1 : 0)
+      if (at < callee.paramTypes.length && table.sharedWithTask(callee.paramTypes[at]) && isSpawnedTask(unit, owner)) {
         return use(USE_ESCAPE)
       }
-      return argumentUse(callee, index + (callee.owner !== null ? 1 : 0))
+      return argumentUse(callee, at)
     }
     // `xs.push(p)` stores `p` into the array, `Ok(p)` / `Err(p)` store it into
     // the `Result` they build (WP16), `r.unwrapOr(p)` hands it back as the

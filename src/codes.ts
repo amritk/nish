@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 841
+export const RULE_COUNT: i32 = 842
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -813,6 +813,8 @@ const diagnosticRules = (): string[] => [
   "NL2453",
   "`main` must return void or an i32 number (the process exit code), not ",
   "NL2140",
+  "a spawned task takes a function argument only when it captures nothing",
+  "NL2690",
   "another thread allocates from an arena of its own, not from the region",
   "NL2612",
   "Only relative import specifiers are supported (`./x` or `../x`), got `",

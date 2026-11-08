@@ -46,6 +46,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
+import { capturesOf } from "./parallel"
 import { CheckedProgram, FunctionSig, ParallelCall } from "./program"
 import { FreshResults } from "./secret"
 import {
@@ -206,6 +207,16 @@ const arenaStateMessage = (fn: FunctionSig): string =>
 const nestedSpawnMessage = (task: FunctionSig): string =>
   `${insideTask(task)}, and spawns a task with an object or an array, itself or through a callee: ` +
   "what a task hands on may be memory of its own region, freed while the task it spawned still holds it"
+
+/**
+ * A spawned task handed an arrow that captures (WP29): the captures ride in
+ * the task's frame as hidden arguments that neither the spawn's argument rule
+ * nor the task's region walk sees, so a task takes capture-free functions only.
+ */
+const captureSpawnMessage = (task: FunctionSig, local: string): string =>
+  `\`spawn\` hands ${fnName(task)} an arrow that reads \`${local}\` of the function it is written in: ` +
+  "a spawned task takes a function argument only when it captures nothing, because the task may run after that function returns; " +
+  "pass the value to the task as an argument of its own, or hand it a top-level function"
 
 export const regionNewMessage = (): string =>
   "A `Region` is made by `region(f)` or `regionWith(arg, f)`, which run `f` in it, not by `new`"
@@ -936,6 +947,11 @@ export const taskFindings = (
   }
   if (f.feedsTasks) {
     out.push(new RegionFinding(program, site, nestedSpawnMessage(task)))
+  }
+  const captures = capturesOf(task)
+  if (captures.length > 0) {
+    const first = captures[0]
+    out.push(new RegionFinding(program, site, captureSpawnMessage(task, first.arrow.captures[first.index].name)))
   }
   const seedNames: string[] = []
   const seedOrigins: i32[] = []
