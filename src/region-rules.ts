@@ -955,6 +955,13 @@ export const taskFindings = (
   const out: RegionFinding[] = []
   const f = facts.get(task.name)
   if (f === null) {
+    // Without facts nothing proves the task keeps its memory out of what it shares.
+    for (const type of task.paramTypes) {
+      if (table.sharedWithTask(type)) {
+        out.push(new RegionFinding(program, site, noFactsMessage(insideTask(task), task)))
+        return out
+      }
+    }
     return out
   }
   if (f.feedsTasks) {
