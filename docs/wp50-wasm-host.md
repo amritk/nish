@@ -451,8 +451,14 @@ and never spells one. A scalar storage is the typed-array view sketched above
 (a `boolean` one is a byte view behind a proxy). The rule below still holds.
 That is why §5.1 refuses an element reference: with no
 interior pointer to represent, every access is `name[i].field`, and the
-rewrite is local. `load` for the TS reading returns the same
-`{ memory: { buffer: heap }, layout }`, so the page builds the same views.
+rewrite is local. `nish-storage.ts` also exports `views()`, `loadSync` and
+`load`, as the wasm loader does. Its loaders take the module's exports (the
+reading's instance) where the wasm loader takes its bytes, and answer
+`{ ...exports, memory, layout, views }`. `views()` answers one object for
+good, because `heap` never moves, and `memory.grow` throws a `RangeError`, as
+a wasm build pinned with `--memory` refuses to grow. tests/run.js's
+module-storage section runs the same `tests/module-storage/page.ts` against
+both readings.
 `--emit-ts` refuses module storage only where it would need an interior
 pointer. That case is unreachable after §5.1's rule, and `emit-ts-known.txt`
 says so if it ever is reached.
@@ -540,8 +546,10 @@ nish: { panic(kind: number, site: number, msg: number, len: number, a: number, b
 - **Cost:** none to a program without module storage or a host module. To
   one with them, an `i32` argument per panic call, in wasm builds only. The
   import exists only under `--profile wasm-host`. A module built with
-  `--profile wasm` still traps silently, as hand-written hosts that pass `{}`
-  expect.
+  `--profile wasm` imports nothing, as hand-written hosts that pass `{}`
+  expect: each panic is a bare trap with no message or site. For a program
+  with module storage or a host module the generated loader still marks the
+  module dead on that trap; any other program's loader is unchanged.
 
 **No re-entry.** An import may not call back into the module. The proof that
 re-entry would be safe does not exist: the attribute fixpoint treats a foreign

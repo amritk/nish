@@ -1797,9 +1797,10 @@ export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
  * than about what the body does:
  *
  *  - **Memory older than the call is reachable only from the parameters.** The
- *    language has no mutable global: a module constant is a scalar or a
- *    string, a class has no `static` member, and `process.argv` refuses every
- *    store and `push` (`reject_argv_assign`, `reject_argv_push`). A callee can
+ *    one mutable global is module storage, whose elements are pointer-free;
+ *    every other module constant is a scalar or a string, a class has no
+ *    `static` member, and `process.argv` refuses every store and `push`
+ *    (`reject_argv_assign`, `reject_argv_push`). A callee can
  *    reach no more than it is handed, and what it is handed is either one of
  *    these parameters, something reached through them, or memory allocated
  *    during the call. C holds none of them past a call either: the only

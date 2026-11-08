@@ -1,7 +1,7 @@
 // WP50 stage 3: how a wasm-host module panics, refuses re-entry and keeps its
-// arena flat. Each export takes one way out: an index past the end, an
-// overflow, a `panic`, an exit, an allocation `--memory 1` cannot hold, a
-// host import that calls back into the module, a host import that throws.
+// arena flat. Each export takes one way out: an index past the end, an overflow,
+// a `panic`, an exit, an allocation `--memory 1` cannot hold, a host import that
+// calls back in, one that throws, and an argument of the wrong JavaScript type.
 import { boom, reenter } from "./host"
 
 export const count = new Array<u32>(1)
@@ -57,3 +57,9 @@ export const row = (n: i32): i32[] => {
   }
   return xs
 }
+
+/** `x` back: a `bigint` argument, which a page can pass as a number. */
+export const wide = (x: i64): i64 => x
+
+/** `b` back: a `u8` the loader masks, which a page can pass as a `bigint`. */
+export const narrow = (b: u8): u8 => b

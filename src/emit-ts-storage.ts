@@ -25,7 +25,7 @@
 // boundary from 0. A page reads them from `layout`, as it reads the wasm
 // build's, and never spells one.
 
-import { StorageLayout } from "./interop-wasm"
+import { StorageLayout, heapViewsNew } from "./interop-wasm"
 
 /** The file the storage of a whole program is written to, beside its modules. */
 export const STORAGE_FILE: string = "nish-storage.ts"
@@ -50,13 +50,19 @@ const viewShift = (view: string): i32 => {
 /** `n` rounded up to a multiple of 8. */
 const align8 = (n: i32): i32 => n + ((8 - (n % 8)) % 8)
 
-/** The size of the reading's heap: every storage of `layouts`, each from an 8-byte boundary. */
-const storageEnd = (layouts: StorageLayout[]): i32 => {
-  let at = 0
+/** `n` rounded up to a multiple of 8, in `i64`. */
+const align8Wide = (n: i64): i64 => n + ((toI64(8) - (n % toI64(8))) % toI64(8))
+
+/**
+ * The size of the reading's heap: every storage of `layouts`, each from an
+ * 8-byte boundary. Summed in `i64`, since nine storages at the cap pass 2^31.
+ */
+const storageEnd = (layouts: StorageLayout[]): i64 => {
+  let at = toI64(0)
   for (const s of layouts) {
-    at = align8(at) + s.length * s.stride
+    at = align8Wide(at) + toI64(s.length) * toI64(s.stride)
   }
-  return align8(at)
+  return align8Wide(at)
 }
 
 /** The heap-wide view a record field reads through, named for its type; `storageFileText` spells it inline. */
@@ -117,7 +123,13 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
     lines.push("    },")
     lines.push("  }) as unknown as boolean[]")
   }
-  lines.push("export const memory = { buffer: heap }")
+  lines.push("/** The reading's memory: `heap`, which never moves, so `grow` is refused. */")
+  lines.push("export const memory = {")
+  lines.push("  buffer: heap,")
+  lines.push("  grow: (_pages: number): number => {")
+  lines.push('    throw new RangeError("the TypeScript reading\'s memory is fixed: it cannot grow")')
+  lines.push("  },")
+  lines.push("}")
   lines.push("export const layout = {")
   // Each storage starts on an 8-byte boundary, as `storageEnd` counts them.
   let at = 0
@@ -153,6 +165,40 @@ export const storageFileText = (layouts: StorageLayout[]): string => {
     at = at + s.length * s.stride
     k = k + 1
   }
+  for (const line of readingLoader(layouts)) {
+    lines.push(line)
+  }
   lines.push("")
   return lines.join("\n")
+}
+
+/**
+ * `views()`, `loadSync` and `load` as the wasm loader offers them (§5.2), so a
+ * page runs the same against either reading. `heap` never moves, so `views()`
+ * answers one object for good. The loaders take the module's exports, the
+ * reading's instance, where the wasm build's take its bytes.
+ */
+const readingLoader = (layouts: StorageLayout[]): string[] => {
+  const lines: string[] = []
+  lines.push("const buffer = heap")
+  lines.push("const viewsOnce = {")
+  lines.push("  buffer,")
+  for (const entry of heapViewsNew()) {
+    lines.push(`  ${entry},`)
+  }
+  lines.push("  storage: {")
+  for (const s of layouts) {
+    if (s.fields.length === 0) {
+      lines.push(`    ${s.key}: new ${s.view}(buffer, layout.${s.key}.at, ${s.length}),`)
+    }
+  }
+  lines.push("  },")
+  lines.push("}")
+  lines.push("/** Typed arrays over `memory.buffer`, the wasm loader's `views()`: one object, as the heap never moves. */")
+  lines.push("export const views = () => viewsOnce")
+  lines.push("/** The wasm loader's `loadSync` for this reading: `exports` (the module's namespace) with `memory`, `layout` and `views`. */")
+  lines.push("export const loadSync = <T extends object>(exports: T) => ({ ...exports, memory, layout, views })")
+  lines.push("/** `loadSync` behind a promise, as the wasm loader's `load`. */")
+  lines.push("export const load = async <T extends object>(exports: T) => loadSync(exports)")
+  return lines
 }

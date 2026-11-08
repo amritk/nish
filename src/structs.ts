@@ -1008,19 +1008,29 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
  * Whether an interface has an implementer decides whether `I[]` is laid out
  * inline, and module storage (WP50 §5.1) reads that before any body has asked
  * for `Box<i32>`; a template with no instantiation at all still makes `I` a
- * view. An instantiated interface (`implements Container<T>`) is left to the
- * instantiation, which resolves it with `T` bound.
+ * view. An instantiated interface (`implements Container<T>` or
+ * `implements Container<i32>`) marks the interface's template instead, since
+ * which instantiation it reaches waits for `T`; the instantiation still
+ * resolves it with `T` bound for the layout check.
  */
 export const markTemplateImplements = (program: CheckedProgram, decl: Node): void => {
   if (decl.kind !== N_CLASS) {
     return
   }
   for (const iface of decl.children[2].children) {
-    if (iface.kind === N_TYPE_REF && iface.children[0].children.length === 0) {
+    if (iface.kind !== N_TYPE_REF) {
+      continue
+    }
+    if (iface.children[0].children.length === 0) {
       const target = program.struct(iface.text)
       if (target !== null && target.kind === STRUCT_INTERFACE) {
         target.implemented = true
       }
+      continue
+    }
+    const template = program.structTemplate(iface.text)
+    if (template !== null && template.kind === STRUCT_INTERFACE) {
+      template.implemented = true
     }
   }
 }

@@ -1,7 +1,7 @@
 %struct.nish_array = type { i64, i64, i8* }
 
-@SCORES.data = global [4 x i32] zeroinitializer, align 16
-@SCORES = global %struct.nish_array { i64 4, i64 4, i8* bitcast ([4 x i32]* @SCORES.data to i8*) }, align 8
+@nish_storage_0_SCORES.data = global [4 x i32] zeroinitializer, align 16
+@nish_storage_0_SCORES = internal global %struct.nish_array { i64 4, i64 4, i8* bitcast ([4 x i32]* @nish_storage_0_SCORES.data to i8*) }, align 8
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
 declare void @nish_free_arena() #1
@@ -111,8 +111,8 @@ ovf.fail:
 define void @nish_main() #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
-  call void @fill(%struct.nish_array* @SCORES, i32 10)
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 0
+  call void @fill(%struct.nish_array* @nish_storage_0_SCORES, i32 10)
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 0
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = icmp ult i64 3, %1
   br i1 %2, label %bounds.ok, label %bounds.fail
@@ -122,15 +122,15 @@ bounds.fail:
   unreachable
 
 bounds.ok:
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 2
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
   %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %5 = bitcast i8* %4 to i32*
   %6 = getelementptr inbounds i32, i32* %5, i64 3
   store i32 1, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %7 = call i32 @sum(%struct.nish_array* @SCORES)
+  %7 = call i32 @sum(%struct.nish_array* @nish_storage_0_SCORES)
   %8 = call i8* @nish_str_from_i32(i32 %7)
   %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 0
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 0
   %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %12 = icmp ult i64 0, %11
   br i1 %12, label %bounds.ok.1, label %bounds.fail.1
@@ -140,7 +140,7 @@ bounds.fail.1:
   unreachable
 
 bounds.ok.1:
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @SCORES, i64 0, i32 2
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
   %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %15 = bitcast i8* %14 to i32*
   %16 = getelementptr inbounds i32, i32* %15, i64 0

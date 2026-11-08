@@ -9,8 +9,9 @@
 // stage0 holds this as a table of objects and derives the diagnostics' lists
 // from its keys. Here it is an `if` chain and the lists are written out, for
 // the reason `builtins.ts` is an `if` chain: the language has no object
-// literal to key by name, and a `StringMap` built at module load needs a
-// mutable global the language does not have either. The lists therefore have
+// literal to key by name, and a `StringMap` built at module load needs
+// top-level code the language does not have either (its one mutable global,
+// module storage, is zero-filled and holds no map). The lists therefore have
 // to stay in the same order as stage0's table — the `.err` goldens match on
 // the whole sentence.
 

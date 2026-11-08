@@ -133,10 +133,10 @@ function checkStorageElement(ctx: CheckContext, info: ConstInfo, at: Node, elem:
   callee +17:13 storageElementFault -> @storageElementFault
   local +26:9 field: FieldInfo (const)
   local +28:9 nested: boolean (const)
-  callee +28:60 inlineElementStruct -> @inlineElementStruct
-  local +29:9 label: string (const)
-  callee +29:46 TypeTable.typeName -> @TypeTable.typeName
-  callee +30:10 storageFaultReport -> @storageFaultReport
+  callee +29:47 inlineElementStruct -> @inlineElementStruct
+  local +30:9 label: string (const)
+  callee +30:46 TypeTable.typeName -> @TypeTable.typeName
+  callee +31:10 storageFaultReport -> @storageFaultReport
 function storageElementFault(ctx: CheckContext, info: ConstInfo, elem: i32): i32 -> @storageElementFault
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem

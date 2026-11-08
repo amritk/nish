@@ -368,7 +368,8 @@ export class LoopScope {
  *
  * It lives here rather than in `emit-arrays.ts` because `FunctionFacts` is the
  * per-function record the emitter already carries (`Emitter.current`), and the
- * language has no module-level mutable state for a scope stack to live in --
+ * language's one module-level mutable state, module storage, is a fixed
+ * pointer-free array with no room for a scope stack --
  * which is how stage0's `src/codegen/emit/arrays.ts` holds the same thing.
  */
 export class HoistedHeader {

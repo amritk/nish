@@ -1874,9 +1874,15 @@ export const step = (): void => {
   buffer window. Anything else (binding it under another name, returning it,
   passing it to an `i32[]` parameter, which could `push`) is
   `` Module storage `X` cannot be lent to `f`, which lets its parameter `a` go further than indexing: … ``
-  (NL2684, `reject_storage_lend_respell_arg`, `_const`, `_return`), and so is
-  lending to a function another module declares, whose body this check does
-  not read.
+  (NL2684, `reject_storage_lend_respell_arg`, `_const`, `_return`). The
+  rule holds wherever the callee is declared: a function another module
+  declares is judged by its own body, read in its own module, so a lending
+  on from there resolves the next callee by that module's names — its
+  imports and import aliases (`import { good as sum }`) included — and is
+  judged the same way, for as many hops as it lends on
+  (`tests/link/storage_lend_import`, `reject_storage_lend_import`). A
+  callee name the calling function binds itself (a parameter, a local, a
+  pattern) is not a declared function and is refused.
 - **A record element is a place too.** `X[i].x` reads and writes a field,
   and `X[i] = X[j]` or `X[i] = v` copies a whole element, field by field.
   Binding, returning or storing `X[i]` is NL2674
@@ -1893,8 +1899,11 @@ export const step = (): void => {
   is refused as any shared write is (`reject_storage_parallel_write`).
 - **Under `--emit-ts` it is a typed view, and only it.** The reading writes
   one more file, `nish-storage.ts`, holding one `ArrayBuffer` laid out as the
-  wasm build's `layout` says, `memory` (`{ buffer }`), `layout` itself, and
-  each storage as a view of the buffer; the module's `new` is written as that
+  wasm build's `layout` says, `memory` (`{ buffer, grow }`, whose `grow`
+  throws: the buffer never moves), `layout` itself, `views()`, `loadSync` and
+  `load` as the wasm loader has them (they take the module's exports where the
+  wasm loader takes its bytes), and each storage as a view of the buffer; the
+  module's `new` is written as that
   view (`src/emit-ts-storage.ts`, `docs/wp50-wasm-host.md` §5.4). A scalar
   storage is the typed array its element reads as (`Int32Array`,
   `Float32Array`, …; a `boolean` one is a byte array behind a proxy that reads
@@ -6145,6 +6154,8 @@ copy:
 
 ```ts
 // host.ts, the page's
+import type { u32 } from "nish";
+
 export function doubleF32(xs: Float32Array, at: u32, n: u32): void {
   for (let i = at; i < at + n; i++) xs[i] *= 2;
 }
@@ -6203,8 +6214,15 @@ types what the loader builds from it:
   replaces `memory.buffer`, so a page calls it again after any call into the
   module rather than keeping one view across calls.
 
-**Under `--profile wasm-host` a panic is the page's to report**
-(`tests/panic`, `docs/wp50-wasm-host.md` §6). The module imports one function
+**Under `--profile wasm-host` a panic is the page's to report**, in a
+program with [module storage](#module-storage) or a
+[host module](#host-modules-the-functions-a-page-supplies)
+(`tests/panic`, `docs/wp50-wasm-host.md` §6). The `nish.panic` import,
+`NishPanic`, the dead module, `NishReentry` (below), `load`'s `onPanic` and
+`sites`, and `loadSync` are for such a program only.
+Any other program gets the `.wasm`, loader and `.d.ts` it got before: a panic
+is a bare `RuntimeError` trap, the module stays usable, and its next call
+runs. The module of such a program imports one function
 from module `nish`, `panic`, and every runtime panic calls it with its kind
 and the words it would print natively; the loader turns that into an
 exception:
@@ -6226,9 +6244,10 @@ exception:
   (`app.wasm.sites.json` for `-o app.wasm`),
   `[{ kind, at }]` with one entry per panic site, indexed by `site`. Passed to
   `load` (parsed), it ends each message with ` at path:line:col`; without it
-  the message is the native text alone. `--profile wasm` is unchanged: it
-  imports nothing, and each panic is a bare trap, though the loader still
-  marks the module dead.
+  the message is the native text alone. Under `--profile wasm` the module
+  imports nothing and each panic is a bare trap, with no message and no
+  site; the same loader still marks the module dead on it, so later calls
+  throw as above.
 - **A panic ends the module.** Its memory survives, as it was, for a page
   that reads it, but every later call throws `NishPanic`
   (`the module is dead: …`) before the module runs. An exception a host

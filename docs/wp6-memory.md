@@ -140,8 +140,9 @@ Containment has two proofs:
 
 - `!allocEscapes`, which counts *any* store of an allocation as an escape;
 - `rootsHoldNoPointer`: every parameter, `this` included, is a scalar, a
-  string, or an object with only scalar fields. With no mutable globals, older
-  memory is then reachable only through slots that cannot hold a pointer.
+  string, or an object with only scalar fields. The one mutable global, module
+  storage, is pointer-free, so older memory is then reachable only through
+  slots that cannot hold a pointer.
 
 A first version made containment its own fixpoint over callees. That was
 unsound: `k.f = mk(n).x` reads a nested allocation back out and stores it, and

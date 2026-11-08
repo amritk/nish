@@ -675,6 +675,14 @@ export class StructTemplateInfo {
   count: i32
   /** The module that declares it; `TemplateInfo.home` one level up (WP18 G7). */
   home: CheckContext
+  /**
+   * Whether a generic class names an instantiation of this interface in its
+   * `implements` clause (`implements Cell<T>`, `implements Cell<i32>`). Which
+   * instantiation a template's `Cell<T>` reaches is known only once the class
+   * is instantiated, after module storage is checked, so every instantiation
+   * of the interface counts as implemented for storage (WP50 §5.1).
+   */
+  implemented: boolean
 
   constructor(sourceName: string, kind: i32, decl: Node, origin: SourceFile, home: CheckContext) {
     this.sourceName = sourceName
@@ -686,6 +694,7 @@ export class StructTemplateInfo {
     this.exported = false
     this.count = 0
     this.home = home
+    this.implemented = false
   }
 }
 

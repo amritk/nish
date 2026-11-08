@@ -491,8 +491,28 @@ const wasmRangeIn = (table: TypeTable, sig: FunctionSig, param: string, i: i32):
   return `rangeIn(${param}, ${table.rangeLo(t)}, ${table.rangeHi(t)}, "${what}")`
 }
 
-/** One non-array argument: packed, masked to its unsigned width, checked against its range, or as it came. */
-const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i32): string => {
+/**
+ * A guarded loader's check that a scalar argument is the JavaScript type its
+ * declaration names, or `""`. Without it the call's own conversion is what
+ * fails, a `TypeError` for `5` where a `bigint` is wanted or for a `bigint`
+ * masked to its width, and it throws inside `guarded`, which cannot tell it
+ * from an exception out of the module and leaves the module dead. A
+ * `boolean`, `number` or `bigint` converts without running caller code, so
+ * once this passes the conversion cannot throw.
+ */
+const wasmTypedIn = (table: TypeTable, sig: FunctionSig, param: string, i: i32): string => {
+  const t = sig.paramTypes[i]
+  const kind = table.kindOf(t)
+  const scalar = table.isHostHandle(t) ? "number" : kind === K_ARRAY || kind === K_RESULT ? "" : wasmType(table, t, POS_PARAM)
+  if (scalar !== "number" && scalar !== "bigint" && scalar !== "boolean") {
+    return ""
+  }
+  const what = `${jsExportName(sig)}: argument ${i + 1} (${sig.paramNames[i]})`
+  return `typedIn(${param}, "${scalar}", "${what}")`
+}
+
+/** One non-array argument: packed, masked to its unsigned width, checked against its range or its type, or as it came. */
+const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i32, guard: boolean): string => {
   const t = sig.paramTypes[i]
   if (table.resultByValue(t)) {
     return wasmResultPack(table, params[i], t)
@@ -501,8 +521,10 @@ const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i3
   if (checked.length > 0) {
     return checked
   }
+  const typed = guard ? wasmTypedIn(table, sig, params[i], i) : ""
+  const param = typed.length > 0 ? typed : params[i]
   const mask = wasmUnsignedIn(table, t)
-  return mask.length > 0 ? `${params[i]} & ${mask}` : params[i]
+  return mask.length > 0 ? `${param} & ${mask}` : param
 }
 
 /** The call's value as JS should see it. The three cases are mutually exclusive. */
@@ -583,7 +605,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction, guard: boolean): st
     const operands: string[] = []
     i = 0
     while (i < sig.paramTypes.length) {
-      operands.push(wasmOperand(table, sig, params, i))
+      operands.push(wasmOperand(table, sig, params, i, guard))
       i = i + 1
     }
     const call = `${raw}(${operands.join(", ")})`
@@ -598,7 +620,7 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction, guard: boolean): st
   while (i < sig.paramTypes.length) {
     const view = views[i]
     if (view === null) {
-      args.push(wasmOperand(table, sig, params, i))
+      args.push(wasmOperand(table, sig, params, i, guard))
     } else {
       const param = sig.paramNames[i]
       body.push(
@@ -758,6 +780,11 @@ const panicLoader = (hosts: boolean): string[] => {
   lines.push("  refused.add(error);")
   lines.push("  return error;")
   lines.push("};")
+  lines.push("/** A scalar argument of the JavaScript type its declaration names, so the call's own conversion cannot throw. */")
+  lines.push("const typedIn = (value, type, what) => {")
+  lines.push("  if (typeof value !== type) throw refuse(new TypeError(what + \" must be a \" + type));")
+  lines.push("  return value;")
+  lines.push("};")
   lines.push("")
   lines.push(
     "/** The default `onPanic`: the reporter nish/page exports, inlined so this file imports nothing. */"
@@ -879,10 +906,17 @@ const guardLoader = (needsRuntime: boolean): string[] => {
   lines.push("      }")
   lines.push("      throw e;")
   lines.push("    } finally {")
-  if (needsRuntime) {
-    lines.push("      if (state.dead === null) raw.nish_arena_release(mark);")
-  }
   lines.push("      state.busy = false;")
+  if (needsRuntime) {
+    lines.push("      if (state.dead === null) {")
+    lines.push("        try {")
+    lines.push("          raw.nish_arena_release(mark);")
+    lines.push("        } catch (e) {")
+    lines.push('          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);')
+    lines.push("          throw e;")
+    lines.push("        }")
+    lines.push("      }")
+  }
   lines.push("    }")
   lines.push("  };")
   return lines
@@ -1437,8 +1471,8 @@ const heapViews = (): string[] => [
   "u64: BigUint64Array",
 ]
 
-/** `heapViews` as the loader makes them, each over `buffer`. */
-const heapViewsNew = (): string[] => [
+/** `heapViews` as the loader makes them, each over `buffer`; the TypeScript reading makes the same. */
+export const heapViewsNew = (): string[] => [
   "u8: new Uint8Array(buffer)",
   "i8: new Int8Array(buffer)",
   "u16: new Uint16Array(buffer)",

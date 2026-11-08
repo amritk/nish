@@ -11436,8 +11436,10 @@ export its address, and `@nish_storage_0_SCORES`, an ordinary
 whose data pointer is the first. The header is `internal` unless the storage
 is exported. Nothing runs to set either up.
 
+<!-- cookbook:begin storage-module -->
+Compiled with `--target wasm32`.
+
 ```ts
-// st.ts, compiled with `--target wasm32`
 const SCORES = new Int32Array(8)
 
 export function bump(i: u32): i32 {
@@ -11447,8 +11449,17 @@ export function bump(i: u32): i32 {
 ```
 
 ```llvm
+target datalayout = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
+target triple = "wasm32-unknown-unknown"
+
+%struct.nish_array = type { i64, i64, i8* }
+
 @nish_storage_0_SCORES.data = global [8 x i32] zeroinitializer, align 16
 @nish_storage_0_SCORES = internal global %struct.nish_array { i64 8, i64 8, i8* bitcast ([8 x i32]* @nish_storage_0_SCORES.data to i8*) }, align 8
+
+declare void @nish_panic_index(i64 noundef, i64 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
 define noundef i32 @bump(i32 noundef %i) #0 {
 entry:
@@ -11467,8 +11478,58 @@ bounds.ok:
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  ...
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 1)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %10, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %12 = zext i32 %i to i64
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 0
+  %14 = load i64, i64* %13, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %15 = icmp ult i64 %12, %14
+  br i1 %15, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 %12, i64 %14), !nish.site !{i32 1}
+  unreachable
+
+bounds.ok.1:
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %18 = bitcast i8* %17 to i32*
+  %19 = getelementptr inbounds i32, i32* %18, i64 %12
+  %20 = load i32, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %20
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !nish.site !{i32 2}
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+
 ```
+<!-- cookbook:end storage-module -->
 
 Every use goes through the header, as for any array, so indexing, the bounds
 check and lending it to an `Int32Array` parameter are the code an ordinary
@@ -11883,15 +11944,23 @@ sums to `0x100000010` and fails, where a 32-bit sum would wrap to 16 and pass
 message naming the parameters; the operand is then the array's data pointer,
 which the loader turns into an index into its whole-memory view.
 
-```ts
-// host.ts, the page's
-import type { u32 } from "nish"
-export function scale(xs: Float32Array, at: u32, n: u32): void { /* ... */ }
-```
+The host module, `docs/cookbook/host/scale.ts`, is the page's:
 
 ```ts
-// sim.ts, compiled with `--target wasm32 --host host.ts`
-import { scale } from "./host.ts"
+import type { u32 } from "nish"
+
+export function scale(xs: Float32Array, at: u32, n: u32): void {
+  for (let i = at; i < at + n; i++) {
+    xs[i] = xs[i] * 2
+  }
+}
+```
+
+<!-- cookbook:begin storage-window -->
+Compiled with `--target wasm32 --host docs/cookbook/host/scale.ts`.
+
+```ts
+import { scale } from "./host/scale.ts"
 
 const DATA = new Float32Array(64)
 
@@ -11902,12 +11971,25 @@ export function run(at: u32): f32 {
 ```
 
 ```llvm
+target datalayout = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
+target triple = "wasm32-unknown-unknown"
+
+%struct.nish_array = type { i64, i64, i8* }
+
+@nish_storage_0_DATA.data = global [64 x float] zeroinitializer, align 16
+@nish_storage_0_DATA = internal global %struct.nish_array { i64 64, i64 64, i8* bitcast ([64 x float]* @nish_storage_0_DATA.data to i8*) }, align 8
+@.str.0 = private unnamed_addr constant { i64, [85 x i8] } { i64 84, [85 x i8] c"`scale`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs)\00" }, align 8
+
+declare void @scale(i8*, i32, i32) #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+
 define noundef float @run(i32 noundef %at) #0 {
 entry:
   %0 = zext i32 %at to i64
   %1 = zext i32 8 to i64
   %2 = add i64 %0, %1
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @DATA, i64 0, i32 0
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_DATA, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %5 = icmp ule i64 %2, %4
   br i1 %5, label %ffi.ok, label %ffi.length
@@ -11917,11 +11999,49 @@ ffi.length:
   unreachable
 
 ffi.ok:
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @DATA, i64 0, i32 2
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_DATA, i64 0, i32 2
   %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   call void @scale(i8* %7, i32 %at, i32 8)
-  ...
+  %8 = zext i32 %at to i64
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_DATA, i64 0, i32 0
+  %10 = load i64, i64* %9, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %11 = icmp ult i64 %8, %10
+  br i1 %11, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %8, i64 %10), !nish.site !{i32 1}
+  unreachable
+
+bounds.ok:
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_DATA, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %14 = bitcast i8* %13 to float*
+  %15 = getelementptr inbounds float, float* %14, i64 %8
+  %16 = load float, float* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret float %16
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="scale" }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element float", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+
 ```
+<!-- cookbook:end storage-window -->
 
 `.str.0` is "`` `scale`: argument 2 (at) plus argument 3 (n) reaches past the
 end of argument 1 (xs) ``". The check is `ule`, not `ult`: a window may end
@@ -11938,9 +12058,17 @@ emitter first writes a (kind, position) pair, and the module ends with the
 table as comments:
 
 ```llvm
-; nish.site 0 panic sim.ts:6:3
-; nish.site 1 index sim.ts:7:10
+; nish.sites 2
+; nish.site 0 panic docs/cookbook/storage-window.ts:6:3
+; nish.site 1 index docs/cookbook/storage-window.ts:7:10
 ```
+
+That is the window example above; the listings in this file drop `;` lines,
+so neither shows its table. The first line counts the sites, and it is also
+the mark `scripts/build.sh` reads: only a program whose loader guards panics
+(one with module storage or a host module) is written with it, and only such
+a program is linked with the `nish.panic` import. Any other links the bytes it
+always did.
 
 The tag is unnamed metadata that code generation drops, so `--profile wasm`
 links the bytes it linked before. `scripts/build.sh --profile wasm-host`

@@ -299,8 +299,10 @@ v.storage.scores[0] = 42;                                    // the module sees 
 ```
 
 The TypeScript reading behaves the same: `--emit-ts` writes one more file,
-`nish-storage.ts`, holding a buffer laid out as `layout` says, so a page
-written against `memory.buffer` and `layout` runs against either build.
+`nish-storage.ts`, holding a buffer laid out as `layout` says. It exports
+`memory`, `layout` and `views` as the loader does, and `loadSync(exports)` and
+`load(exports)`, which add those three to the module's exports, so a page
+written against `memory.buffer`, `layout` and `views` runs against either build.
 
 ### Lending an array to the page
 
@@ -310,6 +312,8 @@ the program's own array, in place, with no copy:
 
 ```ts
 // web/host.ts
+import type { u32 } from "nish";
+
 export function scale(xs: Float32Array, at: u32, n: u32): void {
   for (let i = at; i < at + n; i++) xs[i] *= 2;
 }

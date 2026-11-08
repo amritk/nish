@@ -47,9 +47,9 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
-import { ConstInfo, FunctionSig, StructInfo, elementStride, inlineElementStruct } from "./program"
+import { CheckedProgram, ConstInfo, FunctionSig, StructInfo, elementStride, inlineElementStruct } from "./program"
 import { SORT_LOCAL } from "./std-modules"
-import { T_BOOL, isHostWindow, isNumeric } from "./types"
+import { T_BOOL, TypeTable, isHostWindow, isNumeric } from "./types"
 
 /** The most elements one storage may hold. */
 const STORAGE_MAX_LENGTH: i32 = 16777216
@@ -208,7 +208,7 @@ const checkStorageElement = (
     return storageFaultReport(ctx, info, at, fault, spelled)
   }
   const scope = info.scope
-  const record: StructInfo | null = scope === null ? null : inlineElementStruct(scope, table, elem)
+  const record: StructInfo | null = scope === null ? null : storageRecord(scope, table, elem)
   if (record === null) {
     return storageFaultReport(ctx, info, at, fault, spelled)
   }
@@ -231,6 +231,21 @@ const checkStorageElement = (
     inner === FAULT_HOLD && scope !== null && inlineElementStruct(scope, table, field.type) !== null
   const label = `${spelled}.${field.name} (${table.typeName(field.type)})`
   return storageFaultReport(ctx, info, at, nested ? FAULT_NESTED : inner, label)
+}
+
+/**
+ * The interface `elem` names when storage may lay it inline: one no class
+ * implements, and, for an instantiation (`Cell<i32>`), one whose template no
+ * generic class implements either, since `implements Cell<T>` reaches an
+ * instantiation only when the class is instantiated, after this check.
+ */
+const storageRecord = (program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null => {
+  const info = inlineElementStruct(program, table, elem)
+  if (info === null) {
+    return null
+  }
+  const instance = info.instance
+  return instance !== null && instance.template.implemented ? null : info
 }
 
 /** What is wrong with `elem` as a storage element or a record field, never looking inside a record. */
@@ -467,7 +482,7 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
   checkStorageUses(ctx, callee)
   for (let i = 0; i < args.children.length; i++) {
     const arg = args.children[i]
-    if (lendsStorage(ctx, callee, i, arg)) {
+    if (lendsStorage(ctx, call, i, arg)) {
       continue
     }
     const info = storageElementOf(ctx, arg)
@@ -495,12 +510,16 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
  * place and is never lent. A typed-array parameter the callee lets go is
  * refused here, at the argument, and answers true so the use is reported once.
  */
-const lendsStorage = (ctx: CheckContext, callee: Node, i: i32, arg: Node): boolean => {
+const lendsStorage = (ctx: CheckContext, call: Node, i: i32, arg: Node): boolean => {
+  const callee = call.children[0]
   const info = storageNamed(ctx, unwrapParens(arg))
   if (info === null || storageHoldsRecords(ctx, info) || callee.kind !== N_IDENT) {
     return false
   }
-  const sig = ctx.signature(callee.text)
+  // The function the checker bound this call to, never a lookup by name: a
+  // parameter, local or function value spelled like a declared function shadows
+  // it, and a call through a value is no lend (`nodeCallees` holds no sig).
+  const sig = ctx.program.nodeCallees[call.id]
   if (sig === null || i >= sig.paramNames.length) {
     return false
   }
@@ -670,6 +689,38 @@ const lentUseStays = (
   return false
 }
 
+/**
+ * Whether `decl`, a function, mentions `name` anywhere but as the callee of a
+ * direct call or as its own name: a parameter, a local, a binding pattern or a
+ * value use of it. Such a name may stand for something other than the module's
+ * function of that name, so a call through it is never judged a lend; this
+ * refuses more than it must and never less.
+ */
+const lendCalleeShadowed = (decl: Node, name: string): boolean => {
+  for (let k = 1; k < decl.children.length; k++) {
+    if (lendNameMentioned(decl.children[k], name, null)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** `lendCalleeShadowed` below `decl`'s name: `node`, whose parent is `parent`. */
+const lendNameMentioned = (node: Node, name: string, parent: Node | null): boolean => {
+  if (node.kind === N_IDENT && node.text === name) {
+    return parent === null || parent.kind !== N_CALL || parent.children[0] !== node
+  }
+  if (node.text === name && node.kind !== N_CALL && node.kind !== N_MEMBER) {
+    return true
+  }
+  for (const child of node.children) {
+    if (lendNameMentioned(child, name, node)) {
+      return true
+    }
+  }
+  return false
+}
+
 /** The context of the module that defines `sig`, or `null`. */
 const homeContext = (ctx: CheckContext, sig: FunctionSig): CheckContext | null => {
   if (sig.definedIn(ctx.source)) {
@@ -699,9 +750,12 @@ const lentOnStays = (
 ): boolean => {
   const callee = call.children[0]
   const home = homeContext(ctx, sig)
-  if (callee.kind !== N_IDENT || home === null) {
+  if (callee.kind !== N_IDENT || home === null || lendCalleeShadowed(sig.decl, callee.text)) {
     return false
   }
+  // Resolved by name in `sig`'s module, whose body may not be checked yet; a
+  // name `sig` binds itself (a parameter, a local, a function value) was
+  // refused just above, so the name can only reach a declared function.
   const next = home.signature(callee.text)
   if (next === null) {
     return false

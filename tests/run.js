@@ -30247,6 +30247,36 @@ if (!only || "module-storage".includes(only)) {
         )
       }
 
+      // The same page against the TypeScript reading (§5.4): nish-storage.ts's
+      // `loadSync` takes the module's exports where the wasm loader takes its
+      // bytes, and answers the same `memory`, `layout` and `views()`. Its heap
+      // never moves, so `grow` is refused and the page takes the pinned path.
+      fs.writeFileSync(at("start.ts"), 'import { step } from "./main"\n\nexport const main = (): void => {\n  step()\n}\n')
+      const tsDir = at("ts")
+      const emitted = spawnSync(NISH, [at("start.ts"), "--emit-ts", tsDir], { cwd: root, encoding: "utf8" })
+      check("module-storage: --emit-ts writes the program's reading and nish-storage.ts", emitted.status === 0 && fs.existsSync(path.join(tsDir, "nish-storage.ts")), shown(emitted))
+      if (emitted.status === 0) {
+        fs.writeFileSync(
+          at("drive-ts.mjs"),
+          [
+            'import * as m from "./ts/main.ts"',
+            'import { loadSync } from "./ts/nish-storage.ts"',
+            'import { run } from "./page.ts"',
+            "console.log(run(loadSync(m), true))",
+            "",
+          ].join("\n")
+        )
+        const reading = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+        check(
+          "module-storage: the same page prints the same world against the --emit-ts reading, whose memory cannot grow",
+          reading.status === 0 && reading.stdout.trim() === "2,2 3 -4 6 -4 0.5 fixed true true",
+          shown(reading)
+        )
+      }
+
       // The page sees the module through main.d.ts alone, so it is checked in
       // a directory without main.ts.
       const pageDir = at("page")
@@ -30525,6 +30555,19 @@ if (!only || "wasm-host-panic".includes(only)) {
           thrown.lines[0] === "Error the page threw" && /^NishPanic\(exception\) the module is dead: /.test(thrown.lines[1] ?? ""),
           shown(thrown.res)
         )
+        const badarg = drive("main.wasm", "badarg")
+        check(
+          "panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive",
+          badarg.lines.join("\n") ===
+            [
+              "TypeError wide: argument 1 (x) must be a bigint",
+              "TypeError narrow: argument 1 (b) must be a number",
+              "ok 7",
+              "ok 44",
+              "ok 1",
+            ].join("\n"),
+          shown(badarg.res)
+        )
         const flat = drive("main.wasm", "flat")
         check(
           "panic: every export runs in the arena's mark/release bracket, so 2000 allocating calls do not grow memory",
@@ -30695,9 +30738,9 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
       shown(cost)
     )
     // The same page against the TypeScript reading (§5.4): `--emit-ts` writes
-    // nish-storage.ts, whose `memory` and `layout` stand where the wasm
-    // instance's do, so a loader made of them and the module's exports is all
-    // the page needs, and it must print the same lines.
+    // nish-storage.ts, whose `loadSync` takes the module's exports where the
+    // wasm loader takes its bytes and answers the same `memory`, `layout` and
+    // `views()`, and the page must print the same lines.
     const tsDir = at("ts")
     const emitted = spawnSync(NISH, [at("main.ts"), "--emit-ts", tsDir], { cwd: root, encoding: "utf8" })
     check("page: --emit-ts writes the module's reading and nish-storage.ts", emitted.status === 0 && fs.existsSync(path.join(tsDir, "nish-storage.ts")), shown(emitted))
@@ -30706,9 +30749,9 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
         at("drive-ts.mjs"),
         [
           'import * as m from "./ts/main.ts"',
-          'import { memory, layout } from "./ts/nish-storage.ts"',
+          'import { loadSync } from "./ts/nish-storage.ts"',
           'import { run } from "./page.ts"',
-          "console.log(run({ loadSync: () => ({ ...m, memory, layout }) }, new Uint8Array(0)).join(\"\\n\"))",
+          "console.log(run({ loadSync: () => loadSync(m) }, new Uint8Array(0)).join(\"\\n\"))",
           "",
         ].join("\n")
       )

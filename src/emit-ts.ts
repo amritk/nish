@@ -261,11 +261,11 @@ const braceList = (names: StringSet): string => {
   return sb.toText()
 }
 
-/** The line a non-empty name list is imported from the runtime by, or the empty string. */
 /** The line a module that writes a storage `new` imports `STORAGE_FILE` with, from `out`. */
 const storageImport = (out: string): string =>
   `import * as ${STORAGE_NAMESPACE} from "${relativeSpecifier(out, STORAGE_FILE)}"\n`
 
+/** The line a non-empty name list is imported from the runtime by, or the empty string. */
 const runtimeImport = (keyword: string, names: StringSet): string =>
   names.size() === 0 ? "" : `${keyword} ${braceList(names)} from "${RUNTIME}"\n`
 

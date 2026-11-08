@@ -831,9 +831,11 @@ case "$profile" in
       # numbered across the inputs, runtime-wasm.c (compiled with
       # NISH_WASM_HOST) hands it to the page's `nish.panic` import, and the
       # sites are written to `<out>.sites.json` for the loader. A program
-      # without the `; nish.sites` line has no tag, no import and no sidecar.
+      # without the `; nish.sites` line has no tag, no import and no sidecar,
+      # so one an earlier build left beside `<out>` is removed.
       host_define=()
       host_inputs=("${inputs[@]}")
+      rm -f "$out.sites.json"
       if [ "$host_panics" = 1 ]; then
         host_define=(-DNISH_WASM_HOST)
         make_work
