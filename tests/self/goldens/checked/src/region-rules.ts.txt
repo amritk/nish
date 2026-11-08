@@ -665,15 +665,16 @@ function RegionWalk.visitBuiltin(this: RegionWalk, node: Node, handed: Node[]): 
   callee +2:22 methodReceiver -> @methodReceiver
   callee +3:30 isResizeCall -> @isResizeCall
   local +6:13 args: Node[] (const)
-  local +7:16 i: i32 (let)
-  local +8:15 arg: Node (const)
-  callee +9:13 mayBeOuter -> @mayBeOuter
-  callee +9:24 RegionWalk.origin -> @RegionWalk.origin
-  local +10:17 name: string (const)
-  callee +10:24 builtinNameOf -> @builtinNameOf
-  callee +11:11 RegionWalk.report -> @RegionWalk.report
-  callee +13:13 growthMessage -> @growthMessage
-  callee +13:48 textOf -> @textOf
+  local +7:11 grown: i32 (let)
+  local +8:16 i: i32 (let)
+  callee +9:45 mayBeOuter -> @mayBeOuter
+  callee +9:56 RegionWalk.origin -> @RegionWalk.origin
+  local +14:15 name: string (const)
+  callee +14:22 builtinNameOf -> @builtinNameOf
+  local +15:15 text: string (const)
+  callee +15:22 textOf -> @textOf
+  callee +16:9 RegionWalk.report -> @RegionWalk.report
+  callee +16:27 growthMessage -> @growthMessage
   local +20:11 method: string (const)
   callee +20:20 arrayMethodName -> @arrayMethodName
   local +24:11 holder: i32 (const)
@@ -851,41 +852,45 @@ function taskFindings(programs: CheckedProgram[], table: TypeTable, facts: Facts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: FactsTable.get FunctionSig.isCompileTime RegionFinding.constructor TypeTable.sharedWithTask TypeTable.typeName captureSpawnMessage capturesOf insideTask isCopied nestedSpawnMessage nish_alloc_struct nish_array_grow nish_panic_index noFactsMessage sharedResourceMessage taskShareObstacle walkFindings
-  pointer programs: size=0 writesThrough=false captured=false passedTo=taskShareObstacle#0 walkFindings#1
-  pointer table: size=96 writesThrough=true captured=true passedTo=isCopied#0 taskShareObstacle#1 TypeTable.typeName#0 TypeTable.sharedWithTask#0 walkFindings#2
+  pointer programs: size=0 writesThrough=false captured=false passedTo=taskShareObstacle#0 taskShareObstacle#0 walkFindings#1
+  pointer table: size=96 writesThrough=true captured=true passedTo=isCopied#0 taskShareObstacle#1 TypeTable.sharedWithTask#0 taskShareObstacle#1 TypeTable.typeName#0 walkFindings#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 walkFindings#3
   pointer program: size=696 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1
   pointer site: size=40 writesThrough=true captured=true passedTo=RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2
   pointer task: size=176 writesThrough=true captured=true passedTo=FunctionSig.isCompileTime#0 sharedResourceMessage#0 insideTask#0 noFactsMessage#1 nestedSpawnMessage#0 capturesOf#0 captureSpawnMessage#0 walkFindings#4
   pointer freshResults: size=40 writesThrough=true captured=false passedTo=walkFindings#5
-  stackSites=1 stackLocals=0
-  local -20:9 out: RegionFinding[] (const)
-  local -19:9 seedNames: string[] (const)
-  local -18:9 seedOrigins: i32[] (const)
-  local -17:12 i: i32 (let)
-  local -16:11 type: i32 (const)
-  callee -15:9 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee -15:34 isCopied -> @isCopied
-  local -12:11 why: string (const)
-  callee -12:17 taskShareObstacle -> @taskShareObstacle
-  callee -9:9 new RegionFinding -> @RegionFinding.constructor
-  callee -6:11 sharedResourceMessage -> @sharedResourceMessage
-  callee -6:59 TypeTable.typeName -> @TypeTable.typeName
+  stackSites=2 stackLocals=0
+  local -17:9 out: RegionFinding[] (const)
+  local -16:9 seedNames: string[] (const)
+  local -15:9 seedOrigins: i32[] (const)
+  local -13:7 refused: i32 (let)
+  local -12:12 i: i32 (let)
+  local -11:11 type: i32 (const)
+  callee -10:9 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee -10:34 isCopied -> @isCopied
+  callee -7:9 taskShareObstacle -> @taskShareObstacle
   callee +1:22 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
-  local +3:9 shares: boolean (const)
-  local +4:9 f: FunctionFacts | null (const)
-  callee +4:13 FactsTable.get -> @FactsTable.get
-  callee +8:16 new RegionFinding -> @RegionFinding.constructor
-  callee +8:49 noFactsMessage -> @noFactsMessage
-  callee +8:64 insideTask -> @insideTask
-  callee +13:14 new RegionFinding -> @RegionFinding.constructor
-  callee +13:47 nestedSpawnMessage -> @nestedSpawnMessage
-  local +15:9 captures: CaptureSlot[] (const)
-  callee +15:20 capturesOf -> @capturesOf
-  local +17:11 first: CaptureSlot (const)
-  callee +19:7 new RegionFinding -> @RegionFinding.constructor
-  callee +19:40 captureSpawnMessage -> @captureSpawnMessage
-  callee +23:5 walkFindings -> @walkFindings
+  local +4:11 type: i32 (const)
+  local +5:11 why: string (const)
+  callee +5:17 taskShareObstacle -> @taskShareObstacle
+  local +6:11 name: string (const)
+  callee +7:14 new RegionFinding -> @RegionFinding.constructor
+  callee +7:47 sharedResourceMessage -> @sharedResourceMessage
+  callee +7:81 TypeTable.typeName -> @TypeTable.typeName
+  local +9:9 shares: boolean (const)
+  local +10:9 f: FunctionFacts | null (const)
+  callee +10:13 FactsTable.get -> @FactsTable.get
+  callee +14:16 new RegionFinding -> @RegionFinding.constructor
+  callee +14:49 noFactsMessage -> @noFactsMessage
+  callee +14:64 insideTask -> @insideTask
+  callee +19:14 new RegionFinding -> @RegionFinding.constructor
+  callee +19:47 nestedSpawnMessage -> @nestedSpawnMessage
+  local +21:9 captures: CaptureSlot[] (const)
+  callee +21:20 capturesOf -> @capturesOf
+  local +23:11 first: CaptureSlot (const)
+  callee +25:7 new RegionFinding -> @RegionFinding.constructor
+  callee +25:40 captureSpawnMessage -> @captureSpawnMessage
+  callee +29:5 walkFindings -> @walkFindings
 function recordRegionCall(calls: ParallelCall[], node: Node, sig: FunctionSig): void -> @recordRegionCall [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

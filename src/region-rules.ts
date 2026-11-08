@@ -759,16 +759,16 @@ class RegionWalk {
       // `spawnPiped(argv, stdin, stdout, stderr)` appends to its last two
       // arguments as `push` does: one outside the region is grown inside it.
       const args = node.children[1].children
-      for (let i = SPAWN_PIPED_FIRST_GROWN; i < args.length; i++) {
-        const arg = args[i]
-        if (mayBeOuter(this.origin(arg))) {
-          const name = builtinNameOf(this.program, node)
-          this.report(
-            node,
-            growthMessage(this.who, `grows \`${textOf(this.program, arg)}\` with \`${name}\``)
-          )
-          return
+      let grown = -1
+      for (let i = 0; i < args.length && grown < 0; i++) {
+        if (i >= SPAWN_PIPED_FIRST_GROWN && mayBeOuter(this.origin(args[i]))) {
+          grown = i
         }
+      }
+      if (grown >= 0 && grown < args.length) {
+        const name = builtinNameOf(this.program, node)
+        const text = textOf(this.program, args[grown])
+        this.report(node, growthMessage(this.who, `grows \`${text}\` with \`${name}\``))
       }
       return
     }
@@ -1046,25 +1046,28 @@ export const taskFindings = (
   const out: RegionFinding[] = []
   const seedNames: string[] = []
   const seedOrigins: i32[] = []
+  // Only the first refused argument is reported: one finding per site.
+  let refused = -1
   for (let i = 0; i < task.paramTypes.length; i++) {
     const type = task.paramTypes[i]
     if (task.isCompileTime(i) || isCopied(table, type)) {
       continue
     }
-    const why = taskShareObstacle(programs, table, type, [])
-    if (why.length > 0) {
-      out.push(
-        new RegionFinding(
-          program,
-          site,
-          sharedResourceMessage(task, task.paramNames[i], table.typeName(type), why)
-        )
-      )
+    if (taskShareObstacle(programs, table, type, []).length > 0) {
+      if (refused < 0) {
+        refused = i
+      }
       continue
     }
     // A `string` argument is copied into the task's region when it starts.
     seedNames.push(task.paramNames[i])
     seedOrigins.push(table.sharedWithTask(type) ? ORIGIN_OUTER : ORIGIN_REGION)
+  }
+  if (refused >= 0 && refused < task.paramTypes.length && refused < task.paramNames.length) {
+    const type = task.paramTypes[refused]
+    const why = taskShareObstacle(programs, table, type, [])
+    const name = task.paramNames[refused]
+    out.push(new RegionFinding(program, site, sharedResourceMessage(task, name, table.typeName(type), why)))
   }
   const shares = seedOrigins.indexOf(ORIGIN_OUTER) >= 0
   const f = facts.get(task.name)
