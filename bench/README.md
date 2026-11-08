@@ -1743,6 +1743,9 @@ bytes.
 
 `run.mjs` then runs `scripts/check-hardening.mjs` on the twin and stops if it
 fails, so the C side is never timed with less hardening than the Nish side.
+The check needs a tool that reads the binary, `llvm-readelf` or `readelf` on
+Linux and `llvm-readobj` on macOS; without one `run.mjs` stops rather than
+time a twin it could not check.
 
 `NISH_SQLITE_CFLAGS` changes how the build compiles SQLite and the twin would
 not have it, so `run.mjs` refuses to run while it is set. Both sides open the
@@ -1942,7 +1945,8 @@ The calls one query makes, on each side:
   on, so the twin's code is built as the module's is.
   `scripts/check-hardening.mjs` passes on both binaries, and `run.mjs` stops
   when it does not pass on the twin: position independent, full RELRO, a
-  non-executable stack, and the x86 feature note naming IBT and SHSTK.
+  non-executable stack, and the x86 feature note naming IBT and SHSTK. It
+  needs `llvm-readelf` or `readelf` to read the twin, and stops without one.
 - **libpq** is the system's, 17 or later, found through `pg_config`. Here it
   is the PostgreSQL project's Ubuntu package (18.6-1.pgdg24.04+2), as its
   packagers built it: its code carries that build's flags, not the speed

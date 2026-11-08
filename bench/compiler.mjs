@@ -46,15 +46,15 @@ export const compilerFrom = (argv) => {
  * control-flow flag (-fcf-protection=full or -mbranch-protection=standard),
  * the stack protector, _FORTIFY_SOURCE and the ELF-only stack-clash, relro,
  * now and noexecstack flags come out as the build picks them for the speed
- * profile. Its PIE is clang's default, as it is the build's. Exits 2 when the
- * block cannot be found or run.
+ * profile. Its PIE is clang's default, as it is the build's. Throws when the
+ * block cannot be found or run, for the caller to report as it reports any
+ * other failure.
  */
 export const hardeningFlags = (cc) => {
   const script = fs.readFileSync(path.join(import.meta.dirname, "..", "scripts", "build.sh"), "utf8")
   const block = /^# Hardening, on every native profile[\s\S]*?^tls=\(\)$/m.exec(script)?.[0]
   if (block === undefined) {
-    console.error("scripts/build.sh has no hardening block ending at `tls=()` to read")
-    process.exit(2)
+    throw new Error("scripts/build.sh has no hardening block ending at `tls=()` to read")
   }
   const r = spawnSync(
     "bash",
@@ -62,8 +62,7 @@ export const hardeningFlags = (cc) => {
     { encoding: "utf8" }
   )
   if (r.status !== 0) {
-    console.error(`reading scripts/build.sh's hardening failed\n${r.stderr}`)
-    process.exit(2)
+    throw new Error(`reading scripts/build.sh's hardening failed\n${r.stderr}`)
   }
   return r.stdout.split("\n").filter((f) => f !== "")
 }

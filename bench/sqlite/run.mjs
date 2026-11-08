@@ -105,8 +105,16 @@ const SQLITE_DEFS = [
 const cc = process.env.CC || "clang"
 // scripts/build.sh's hardening, as bench/compiler.mjs reads it, all of it:
 // sqlite3.c is C in the link too, so the stack protector and _FORTIFY_SOURCE
-// reach it there as they do here.
-const HARDEN = hardeningFlags(cc)
+// reach it there as they do here. The compiles leave out the linker's flags,
+// as build.sh's own compiles do.
+const HARDEN = (() => {
+  try {
+    return hardeningFlags(cc)
+  } catch (e) {
+    return fail(e.message)
+  }
+})()
+const HARDEN_CC = HARDEN.filter((f) => !f.startsWith("-Wl,") && !f.startsWith("-fuse-ld="))
 if ((process.env.NISH_SQLITE_CFLAGS ?? "").trim() !== "") {
   fail("NISH_SQLITE_CFLAGS is set: the build would compile SQLite with it and the twin would not; unset it")
 }
@@ -159,7 +167,7 @@ const objects = []
 for (const unit of ["sqlite3.c", "twin.c"]) {
   const src = unit === "twin.c" ? path.join(here, unit) : path.join(sqliteDir, unit)
   const obj = path.join(outDir, unit.replace(/\.c$/, ".o"))
-  run(cc, [...CFLAGS, ...HARDEN, ...SQLITE_DEFS, "-I", sqliteDir, "-c", src, "-o", obj], `${cc} ${unit}`)
+  run(cc, [...CFLAGS, ...HARDEN_CC, ...SQLITE_DEFS, "-I", sqliteDir, "-c", src, "-o", obj], `${cc} ${unit}`)
   objects.push(obj)
 }
 run(cc, [...CFLAGS, ...HARDEN, ...LDFLAGS, ...objects, "-lm", "-o", twin], `${cc} twin`)
