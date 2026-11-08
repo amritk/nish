@@ -16,6 +16,8 @@
 
   Scalar reads a theme as CSS custom properties under .light-mode and
   .dark-mode (the class on <body>), the same shape as its built-in presets.
+  A theme file replaces the default preset rather than layering on it, so
+  every variable the preset sets is set here.
 */
 
 /* Rhythm: Scalar's defaults are 12px between blocks and 44px above a heading. */
@@ -24,7 +26,6 @@
   --scalar-heading-spacing: 56px;
   --nish-violet: #9c42e9;
   --nish-violet-mid: #792cb9;
-  --nish-violet-deep: #391072;
 }
 
 :root,
