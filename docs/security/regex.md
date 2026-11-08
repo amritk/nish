@@ -14,7 +14,9 @@ nothing outside its buffers. No pattern or subject panicked under fuzzing.
 Iterating every match (`findAll`, `count`, `replaceAll`, `split`) is
 quadratic in the subject when a preferred alternative reads far ahead before
 a short one wins (REGEX-4, accepted, and now documented where linear time was
-promised). For a pattern the attacker writes, the audit found compile time
+promised).
+
+For a pattern the attacker writes, the audit found compile time
 unbounded for nested exact repeats of an empty body (REGEX-1), parse time
 quadratic in a class's ranges (REGEX-2) and in named groups (REGEX-3), and
 compile memory of about 424 MiB for a 10 KB pattern (REGEX-5); each is fixed

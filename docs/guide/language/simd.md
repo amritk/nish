@@ -41,7 +41,9 @@ That prints `30` and `0.5`.
 `loadI32x4(xs, i)` reads `xs[i]` to `xs[i + 3]` into a vector, and
 `store(v, xs, i)` writes a vector's lanes back to the same places. The array's
 elements must be the lane type: an `i32x4` comes from an `i32[]`, a `u8x16`
-from a `u8[]`. The index is checked once for the whole vector, and if any of
+from a `u8[]`.
+
+The index is checked once for the whole vector, and if any of
 its lanes would fall outside the array the program stops with the
 `index out of range: … >= len` message an `xs[i]` gives. It names `i` when
 `i` itself is out of range, and otherwise the last lane, `i + N - 1`, where
@@ -90,14 +92,25 @@ export const main = (): i32 => {
 A vector is a value, like a number. You can keep one in a variable, a class
 field or an array, pass it to a function and return it. It has no operators:
 `+`, `===`, `<` and the others are refused, and so is printing one directly —
-use the functions below, and read the lanes with `extract`. A vector cannot be a
-`Map` key, cannot be `null`, and cannot appear in the signature of a function
-that C or JavaScript calls: `--emit-header`, `--emit-napi` and `--emit-dts`
-leave out a function whose parameter or result holds a vector anywhere — a
-vector, an array of them, a `Result` with a vector arm — and say why. In a C
-header, a class that holds a vector anywhere, even through another class, is
-declared without its fields, and a function taking a pointer to one keeps it
-as an opaque `struct Name *`.
+use the functions below, and read the lanes with `extract`.
+
+```ts nish:err NL2231
+import { i32x4 } from "nish:simd";
+
+export const main = (): i32 => {
+  const a = i32x4(1, 2, 3, 4);
+  const b = a + a;
+  return 0;
+};
+```
+
+A vector cannot be a `Map` key, cannot be `null`, and cannot appear in the
+signature of a function that C or JavaScript calls: `--emit-header`,
+`--emit-napi` and `--emit-dts` leave out a function whose parameter or result
+holds a vector anywhere — a vector, an array of them, a `Result` with a vector
+arm — and say why. In a C header, a class that holds a vector anywhere, even
+through another class, is declared without its fields, and a function taking a
+pointer to one keeps it as an opaque `struct Name *`.
 
 The same program prints the same thing natively, under `--profile wasi` and
 under Node, where each vector is a typed array that is never changed after it

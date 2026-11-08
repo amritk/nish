@@ -251,13 +251,14 @@ A Unix socket needs the `net` capability, which any of these calls reaches. A
 listener on a path also makes a file, which the kernel counts as a write: in
 a program that does not reach `fs.write`, `unixListen("app.sock", …)` answers
 `-13` and makes nothing. The compiler cannot see the path, so it does not
-grant `fs.write` for you; reach it elsewhere, or use an abstract name. On a
-kernel recent enough to scope abstract sockets, a sandboxed program can still
-listen on and connect to its own abstract names, but connecting to one made
-outside the sandbox answers `-1`. A descriptor that arrives through `recvFd`
-is not checked against the sandbox: it was opened by the sender, so a file
-outside the granted directory can be read through it. [The sandbox](sandbox.md)
-has the rest.
+grant `fs.write` for you; reach it elsewhere, or use an abstract name.
+
+On a kernel recent enough to scope abstract sockets, a sandboxed program can
+still listen on and connect to its own abstract names, but connecting to one
+made outside the sandbox answers `-1`. A descriptor that arrives through
+`recvFd` is not checked against the sandbox: it was opened by the sender, so a
+file outside the granted directory can be read through it. [The
+sandbox](sandbox.md) has the rest.
 
 ## Under Node
 

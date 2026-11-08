@@ -19,11 +19,12 @@ token stream `JSON.parse` gives it, numbers bit for bit, and every one of its
 188 `n_` files is refused. Nothing an input can hold panics, and no byte
 outside the window is read: 20,000 seeded mutants of the corpus each end with
 one verdict, alone, after a `reset` and inside a window padded with bytes that
-would change the verdict if a read strayed. Every limit has its own code, and
-each is checked before the work it bounds. A reused tokenizer keeps the arena
-flat. One finding is open, one is accepted, and JSON-3 is fixed by the typed
-layer, all Low; the typed layer's own findings follow in its section, where
-JSON-13 (Medium) is fixed.
+would change the verdict if a read strayed.
+
+Every limit has its own code, and each is checked before the work it bounds. A
+reused tokenizer keeps the arena flat. One finding is open, one is accepted,
+and JSON-3 is fixed by the typed layer, all Low; the typed layer's own findings
+follow in its section, where JSON-13 (Medium) is fixed.
 
 ## Scope
 
@@ -66,8 +67,9 @@ if it stops holding.
 "JSONTestSuite: every n_ file is refused", and "JSONTestSuite: every i_
 verdict is the one i-verdicts.txt records", which holds each of the 35
 implementation-defined files to the verdict and byte offset
-`tests/json-suite/i-verdicts.txt` records, so a change shows up as a diff. The
-`i_` files are read strictly: the ten number files are accepted (a huge
+`tests/json-suite/i-verdicts.txt` records, so a change shows up as a diff.
+
+The `i_` files are read strictly: the ten number files are accepted (a huge
 exponent is an infinity or zero, an integer past `i64` is read only as a
 double); every lone or inverted surrogate escape, invalid UTF-8 sequence,
 overlong form and code point past U+10FFFF is refused; UTF-16 input and a
@@ -92,6 +94,7 @@ it, an exponent stops being added up at 100,000 and the text goes to
 an exponent past the cap"). `numberI64` answers only when `isInteger` holds,
 whose overflow test accumulates negatively and so reaches −2^63 exactly
 ("isInteger(9223372036854775808)", "numberI64(-9223372036854775808)").
+
 `numberF64` is correctly rounded: Clinger's fast path for a significand of
 at most 2^53 and a decimal exponent within ±22, Eisel–Lemire (`:1414`,
 `jsonTokEiselLemire`) for any other of at most 19 significant digits, and
@@ -99,17 +102,21 @@ at most 2^53 and a decimal exponent within ±22, Eisel–Lemire (`:1414`,
 rounds to even", "numberF64(5e-324), the smallest subnormal", "numberF64 of 20
 digits goes to parseFloat", "numberF64 just above half the smallest
 subnormal", "numberF64(1.7976931348623159e308) rounds up to an infinity", and
-the JSONTestSuite check's bitwise comparison). Eisel–Lemire's run time is
-bounded per number whatever the text: two reads of the power-of-five table,
-at most two 64×64-bit products built from four 32-bit limb products each, and
-a fixed number of shifts, with no loop and no fallback, since for 19 digits
-Mushtak and Lemire prove the extended product always decides the rounding.
+the JSONTestSuite check's bitwise comparison).
+
+Eisel–Lemire's run time is bounded per number whatever the text: two reads of
+the power-of-five table, at most two 64×64-bit products built from four 32-bit
+limb products each, and a fixed number of shifts, with no loop and no fallback,
+since for 19 digits Mushtak and Lemire prove the extended product always
+decides the rounding.
+
 Its table index is `2 × (q + 342)` for a `q` already tested to lie in
 [−342, 308], so at most 1301, and `jsonTokPowerOfFive` answers 0 rather than
 reading anything past it. The table is generated, not transcribed: "json: the
 power-of-five table in std/json-tokenizer.ts is what
 scripts/gen-json-pow5.mjs generates" fails on a changed byte. Nothing new is
 unbounded: the slow path is the `parseFloat` call it always was.
+
 `numberU64` (at `2d9a369f`: `:1110`, and `:1122`, `unsignedScan`) answers
 only when `isU64` holds: digits alone, with no minus sign, `-0` included, and
 at most 20 of them. RFC 8259 allows no leading zero, so up to 19 digits is
@@ -124,7 +131,9 @@ the token's text and never a double, so it does not round. With F digits
 after the point, z of them trailing zeros and an exponent E, a number not all
 zeros is whole when E ≥ F − z. F − z is below the number's length, which
 `maxNumberBytes` holds in an `i32` whatever the limits (`JsonDocument` sets
-it to `i32`'s maximum). E is not added up: `jsonTokDigitsExceed` compares its
+it to `i32`'s maximum).
+
+E is not added up: `jsonTokDigitsExceed` compares its
 digits with that one bound, stopping as soon as the sum passes the bound and
 before it would leave an `i32`, so an exponent of any length is answered
 exactly, without overflow under Node or natively, and without the 100,000 cap
@@ -143,7 +152,9 @@ string is refused where it crosses `maxStringBytes`, not where it ends
 stops at the string limit", "scan: ...and is refused at its last byte by a
 limit of 999"), and a multi-byte step that jumps past the limit is caught
 after the loop ("STRING_LIMIT: a multi-byte character that steps past the
-limit"). The limit is clamped to the window before it is added
+limit").
+
+The limit is clamped to the window before it is added
 to an offset, so `maxStringBytes` of 2^31 − 1 cannot overflow.
 
 **Whole bodies** (`:527`, `reset`, at `03a2bee`): a window longer than
@@ -186,27 +197,32 @@ refused in `reset`. A run — a string's plain bytes, the blanks between
 tokens, a number's digits — is read by a loop whose every pass tests the
 index against the window's end and the array's length, from a floor checked
 once before it, so the run stops at the byte where `jsonTokByteAt` would have
-answered −1. A string's run is bounded by its limit, which is never past the
+answered −1.
+
+A string's run is bounded by its limit, which is never past the
 window's end, so the byte it stops at is judged exactly as before. The
 readers of a token already scanned (`numberF64`, `integerScan`,
 `unsignedScan`, `stringInto`'s copy of a string with no escape) are bounded
 the same way, and `numberSlow` hands `String.fromBytes` the token's own
-range only after checking it lies in the array. `reset` already keeps the
-window inside the array, so the array bound matters only when the caller
-shortens `src` after `next()` read it; "shrunk: ..." pins that case, with a
-`pop` that leaves the old bytes in the array's capacity, where a read past
-the length would find them: "shrunk: a blank run stops at the array's end",
-"shrunk: a digit run stops at the array's end", "shrunk: a string run stops
-at the array's end", "shrunk: isU64 is false once the token is past the
-array", "shrunk: isInteger is false", "shrunk: numberF64 is 0, through
-numberSlow" and "shrunk: stringInto copies only the bytes left". "scan: ..." in
-`expected.out` ends each run on the window's edge with a byte past it that
-would change the answer if it were read: a quote ("scan: a run of plain
-bytes the window cuts short is truncated, not closed by the quote past it"),
-blanks and a closer ("scan: blanks that run on past the window are truncated
-at its end"), a digit ("scan: an integer that ends on the window's last
-byte", "scan: parseFloat reads the token alone, not the digit past the
+range only after checking it lies in the array.
+
+`reset` already keeps the window inside the array, so the array bound matters
+only when the caller shortens `src` after `next()` read it; "shrunk: ..." pins
+that case, with a `pop` that leaves the old bytes in the array's capacity,
+where a read past the length would find them: "shrunk: a blank run stops at the
+array's end", "shrunk: a digit run stops at the array's end", "shrunk: a string
+run stops at the array's end", "shrunk: isU64 is false once the token is past
+the array", "shrunk: isInteger is false", "shrunk: numberF64 is 0, through
+numberSlow" and "shrunk: stringInto copies only the bytes left".
+
+"scan: ..." in `expected.out` ends each run on the window's edge with a byte
+past it that would change the answer if it were read: a quote ("scan: a run of
+plain bytes the window cuts short is truncated, not closed by the quote past
+it"), blanks and a closer ("scan: blanks that run on past the window are
+truncated at its end"), a digit ("scan: an integer that ends on the window's
+last byte", "scan: parseFloat reads the token alone, not the digit past the
 window"), and the string limit ("scan: a run stops at the string limit").
+
 The fuzz pins it: "fuzz: 20,000 mutants were tokenized, none panicked", "fuzz: every run
 stopped within one call per byte", and "fuzz: alone, after a reset and inside a
 padded window, every mutant has one verdict", with the seed's totals pinned
@@ -256,11 +272,12 @@ fields of its class: an unknown key, a key given twice and a field not given
 are each refused with their own sticky code, at every depth, and no value is
 taken as a type it is not. The recursion is the data's, so the tokenizer's
 depth limit bounds it, and an encoding of an object that holds itself stops at
-the writer's depth limit. Nothing an input holds panics. Six findings are
-accepted, all Low, and JSON-13 (Medium), the map keys a body can make
-collide, is fixed by a keyed string hash, with the limit on the keys of one
-decoding kept. JSON-15 (Medium), the same flood through integer keys, is fixed
-by a keyed integer hash; JSON-16 (Low), float keys, is open.
+the writer's depth limit. Nothing an input holds panics.
+
+Six findings are accepted, all Low, and JSON-13 (Medium), the map keys a body
+can make collide, is fixed by a keyed string hash, with the limit on the keys
+of one decoding kept. JSON-15 (Medium), the same flood through integer keys, is
+fixed by a keyed integer hash; JSON-16 (Low), float keys, is open.
 
 ### Scope
 
@@ -330,15 +347,18 @@ for an integer, an array for a scalar or a class, an object for an array, a
 number for a string, `null` for a field that is not `| null`, and a top-level
 value that is not an object ("a string for an i32: code" through "null at the
 top: code", "nested: an element that is not an object", "nested: an object
-where the array is", "nested: null for an array that is not | null"). An
-integer field takes only an integer written without a fraction or an exponent,
-in its range (`std/json-typed.ts:393`): "a fraction for an i32", "an exponent
-for an i32", "2^31 for an i32", "-2^31 - 1 for an i32", "-1 for a u32", "2^32
-for a u32", "2^63 for an i64", "-2^63 - 1 for an i64". `null` inside an array
-is a type error too ("null in an array of i32: code", "null in an array of
-objects: code", "null in an array of strings: code"). Which field types may be read at all is the compiler's rule, held at
-the call over every class the call reaches (`src/json-typed.ts:344`), with a
-negative case per way in: `tests/cases/json_reject_field_type`,
+where the array is", "nested: null for an array that is not | null").
+
+An integer field takes only an integer written without a fraction or an
+exponent, in its range (`std/json-typed.ts:393`): "a fraction for an i32", "an
+exponent for an i32", "2^31 for an i32", "-2^31 - 1 for an i32", "-1 for a
+u32", "2^32 for a u32", "2^63 for an i64", "-2^63 - 1 for an i64".
+
+`null` inside an array is a type error too ("null in an array of i32: code",
+"null in an array of objects: code", "null in an array of strings: code").
+Which field types may be read at all is the compiler's rule, held at the call
+over every class the call reaches (`src/json-typed.ts:344`), with a negative
+case per way in: `tests/cases/json_reject_field_type`,
 `json_reject_nested_field`, `json_reject_nullable_field`,
 `json_reject_nested_array`, `json_reject_generic_field`,
 `json_reject_enum_nested_array`, `json_reject_map_key`,
@@ -347,9 +367,10 @@ negative case per way in: `tests/cases/json_reject_field_type`,
 `json_reject_map_array`, `json_reject_set_field`, `json_reject_readonly_array`,
 `json_reject_readonly_enum_array`, `json_reject_map_value_readonly_array`,
 `json_reject_nullable_elements`, `json_reject_interface`,
-`json_reject_not_class` and `json_reject_through_generic`. A `readonly` field
-is refused for decoding (`json_reject_readonly`), and so is a class the
-decoder makes whose constructor takes parameters
+`json_reject_not_class` and `json_reject_through_generic`.
+
+A `readonly` field is refused for decoding (`json_reject_readonly`), and so is
+a class the decoder makes whose constructor takes parameters
 (`json_reject_constructor`, `json_reject_constructor_nullable`), a class a
 `Map` holds included (`json_reject_map_value_readonly`,
 `json_reject_map_value_constructor`). An enum the language does not declare
@@ -363,17 +384,22 @@ the tokenizer's `numberU64`, so it is exact to 2^64 - 1 and every number past
 it, below 0 (`-0` included) or with a fraction or an exponent is
 `JSON_DECODE_RANGE` ("u64: 2^64: code" through "u64: an exponent: code"); it
 is written as its digits from an array the call's own arena scope gives back
-("u64: Arena.used() is flat over 1,000 encodes past 2^63"). An enum's number
-is stored only when it is a member's value, so no enum field or element holds
-a value its type cannot ("enum: 1 names no member: code", "enum: and the field
-keeps the member it held", "enum array: the members before it are kept"). A
-`Map`'s duplicate key is refused raw and through an escape ("map: a duplicate
+("u64: Arena.used() is flat over 1,000 encodes past 2^63").
+
+An enum's number is stored only when it is a member's value, so no enum field
+or element holds a value its type cannot ("enum: 1 names no member: code",
+"enum: and the field keeps the member it held", "enum array: the members before
+it are kept").
+
+A `Map`'s duplicate key is refused raw and through an escape ("map: a duplicate
 key: code", "map: a duplicate key through an escape: code", "map: é and \u00e9
 are one key"), and its non-ASCII keys of two, three and four bytes are one key
 each way ("map: escaped non-ASCII keys decode"). `tests/run.js` holds
 `round-trip-kinds.txt`, decoded and encoded natively, to
 `JSON.stringify(JSON.parse(line))` with each integer past 2^53 kept exact
-(`check("link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact")`).
+(`check("link/std_json_typed: each of the ${kindsLines.length} lines of u64,
+enums and maps decoded and encoded natively is
+JSON.stringify(JSON.parse(line)), u64 exact")`).
 
 **A decoding's map keys are bounded** (JSON-13): a key past `maxMapKeys`,
 counted over every map of the decoding, is `JSON_DECODE_MAP_LIMIT` at its own
@@ -385,6 +411,7 @@ reset clears the count", "map limit: 4,096 keys by default", "map limit: and
 not 4,097"); at `0` and below a map takes no key and `{}` still decodes ("map
 limit: 0 refuses a map's first key", "map limit: -1 still takes {}"); and
 `mapRoom` answers the same under Node (`check("link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines")`).
+
 **A map's string hash is keyed** (JSON-13): 4,096 keys sharing one FNV-1a
 hash insert with no key compare, against 8,386,560 under FNV-1a, and two runs
 draw two keys ("map_hash_collide: 4096 keys with one FNV-1a hash insert with
@@ -392,10 +419,12 @@ under 16 key compares (8,386,560 unkeyed)", "map_hash_collide: the hash key is
 filled before main, and differently in two runs"); and the hash is SipHash-1-3
 bit for bit ("map_hash_kat: the string hash is SipHash-1-3 folded to 32 bits,
 as the reference computes it under key 00..0f").
+
 **A map's integer hash is keyed** (JSON-15): 8,192 `i32` keys whose `fmix32`
 share their low 16 bits after the fold insert and are found within 8 times of
 as many ordinary keys, where a build by the 0.28 compiler is about 215 times
 slower and prints `false` ("map_key_int_collide: native output matches .out").
+
 An enum read that fails stores and pushes nothing, so a failed `5.5`, `2^31`
 or `"x"` does not leave the member `0` behind ("enum: and the field keeps
 High, not Low, after 5.5", "enum array: nothing is pushed for 5.5"), and a
@@ -406,11 +435,12 @@ read before it", "map: and nothing is set for it").
 raw byte where names of that length differ, and `keyIs` compares the whole key
 before a field is read, so a key that shares a field's length and bytes but
 not its name is still unknown ("names: a key of a name's length and first
-bytes: code", "wide: a key of a field's length and first byte"). A key with an
-escape answers `-1` for its byte and is compared with every name of its length
-(`keyByte` in `std/json-typed.ts`), so an escape cannot route a key past its
-field or into another ("wide: every key escaped", "names: escaped field names
-decode", "names: a duplicate through an escape: code").
+bytes: code", "wide: a key of a field's length and first byte").
+
+A key with an escape answers `-1` for its byte and is compared with every name
+of its length (`keyByte` in `std/json-typed.ts`), so an escape cannot route a
+key past its field or into another ("wide: every key escaped", "names: escaped
+field names decode", "names: a duplicate through an escape: code").
 
 **The options and `JsonNumber`** (at `18f35868`). A class's
 `static readonly json` is read where the class is declared
@@ -421,23 +451,28 @@ or none, because two fields with one key are refused at compile time, a rename
 to another field's own name included (NL2497,
 `tests/cases/json_reject_options_wire_collides`), and a renamed field's own
 name is then an unknown key ("rename: the field's own name is unknown: code").
+
 A wire name is dispatched by its decoded bytes like a field name, so an escape
 neither hides it nor routes a key past it ("rename: escaped wire names
-decode", "rename: a wire name twice, once escaped: code"). An optional key
-that is given is read once and by its field's reader ("optional: given twice:
-code", "optional: of the wrong type: code"), every other missing key is still
-`JSON_DECODE_MISSING` ("optional: a required field missing: code"), and a
-missing one sets its field to its initializer, so an object decoded into again
-does not keep a value an earlier body gave it ("optional: sets the missing
-fields back to their initializers"). A `JsonNumber` takes only a number token
-(`number` in `std/json-typed.ts`): a string, `null` and an object are
-`JSON_DECODE_TYPE` ("number: a string: code", "number: null for a JsonNumber
-that is not | null", "number: an object"), its length is the tokenizer's
-`maxNumberBytes` ("number: past maxNumberBytes is the tokenizer's error"), and
-its bytes are reused, so the arena is flat over 1,000 decodes ("number:
-Arena.used() is flat over them"). It is written back raw (JSON-14). Every
-misuse of the options has its own negative case, and each way the literal can
-be reached is pinned: a module constant (`json_reject_options_alias`,
+decode", "rename: a wire name twice, once escaped: code").
+
+An optional key that is given is read once and by its field's reader
+("optional: given twice: code", "optional: of the wrong type: code"), every
+other missing key is still `JSON_DECODE_MISSING` ("optional: a required field
+missing: code"), and a missing one sets its field to its initializer, so an
+object decoded into again does not keep a value an earlier body gave it
+("optional: sets the missing fields back to their initializers").
+
+A `JsonNumber` takes only a number token (`number` in `std/json-typed.ts`): a
+string, `null` and an object are `JSON_DECODE_TYPE` ("number: a string: code",
+"number: null for a JsonNumber that is not | null", "number: an object"), its
+length is the tokenizer's `maxNumberBytes` ("number: past maxNumberBytes is the
+tokenizer's error"), and its bytes are reused, so the arena is flat over 1,000
+decodes ("number: Arena.used() is flat over them"). It is written back raw
+(JSON-14).
+
+Every misuse of the options has its own negative case, and each way the literal
+can be reached is pinned: a module constant (`json_reject_options_alias`,
 `json_reject_options_alias_whole`), a spread and a computed key, which Phase 0
 refuses (`reject_json_options_spread`, `json_reject_options_computed`), a
 subclass (`json_reject_options_subclass`) and a generic class
@@ -463,11 +498,12 @@ answers the value the field held or its type's zero.
 facts that say it writes through both arguments, keeps them, allocates and
 lets the allocation escape (`src/attributes.ts:3591`), so no caller's arena
 scope, loop pass or `using a = arena()` block reclaims what a decode stored
-(`tests/cases/json_reject_arena_block`, NL2424). An encoding hands the
-writer to the writer's methods and the helpers, whose own facts the
-fixpoint carries, and reads `value` only, which is what lets one run inside
-such a block ("encode: inside a using arena() block, every pass writes the
-same text"). No array a route reaches is laid out inline
+(`tests/cases/json_reject_arena_block`, NL2424).
+
+An encoding hands the writer to the writer's methods and the helpers, whose own
+facts the fixpoint carries, and reads `value` only, which is what lets one run
+inside such a block ("encode: inside a using arena() block, every pass writes
+the same text"). No array a route reaches is laid out inline
 (`src/inline-arrays.ts:752`), and a constructor the decoder calls in another
 module is made callable there rather than linked `internal`
 (`src/generics.ts:1642`).
@@ -515,7 +551,9 @@ are refused by the default for their repeated key, and parse to `JSON.parse`'s
 value under `JSON_VALUE_DUPLICATE_LAST`. Every other file gets the tokenizer's
 own verdict at the same byte, with the depth limit held to the writer's 64. A
 repeated key is refused by default, which closes JSON-3 for `JsonDocument`
-callers. The parse keeps its own stack, the duplicate check costs n log n
+callers.
+
+The parse keeps its own stack, the duplicate check costs n log n
 comparisons per object whatever the keys are, a tree built through `push` and
 `set` cannot hold itself, a handle from an earlier document reads as nothing,
 the document's memory is at most `maxValues` × 46 bytes of arrays plus the
@@ -573,13 +611,14 @@ decodes to the same key ("duplicates: a repeated key is refused at the
 repeat" through "duplicates: an escape that decodes to the same key is a
 repeat"), on the sorted path past eight members as on the pairwise one
 ("duplicates: a repeat of the first key at the end of forty", "duplicates: a
-repeat in the middle of forty is named before a later one"). Under
-`JSON_VALUE_DUPLICATE_LAST` the answer is `JSON.parse`'s on both paths
-("duplicates: LAST keeps the first place and the last value", "duplicates:
-LAST past eight members keeps each first place and each last value", and the
-two `y_` files, "JSONTestSuite: and merged as JSON.parse merges them under
-LAST"); the policy is read at each parse ("duplicates: switching back refuses
-again on the next parse").
+repeat in the middle of forty is named before a later one").
+
+Under `JSON_VALUE_DUPLICATE_LAST` the answer is `JSON.parse`'s on both paths
+("duplicates: LAST keeps the first place and the last value", "duplicates: LAST
+past eight members keeps each first place and each last value", and the two
+`y_` files, "JSONTestSuite: and merged as JSON.parse merges them under LAST");
+the policy is read at each parse ("duplicates: switching back refuses again on
+the next parse").
 
 **Numbers are kept.** A number's text is what is written back
 ("numbers: every one written back as its text, byte for byte"), and each reader
@@ -598,10 +637,11 @@ even when the document was refilled with one of the same shape
 and after a larger refill", and "stale: a clear bumps the generation by one, a
 parse by one, a failed parse by two"; under Node too, in
 `link/std_json_value: every public method of JsonDocument runs under the Node
-prelude and prints the expected lines`). So do a negative handle and one past
-the last value ("readers: kind of -1 is NONE", "clear: every handle names
-nothing", "errors: a failed parse leaves no value"). Where the generation wraps
-is JSON-11.
+prelude and prints the expected lines`).
+
+So do a negative handle and one past the last value ("readers: kind of -1 is
+NONE", "clear: every handle names nothing", "errors: a failed parse leaves no
+value"). Where the generation wraps is JSON-11.
 
 **Depth and termination.** The parse keeps its own stack of open containers,
 so the tokenizer's depth limit bounds the work and nothing recurses
@@ -609,11 +649,14 @@ so the tokenizer's depth limit bounds the work and nothing recurses
 document the parse accepts always writes back ("depth: 64 nested arrays parse
 and write back whole", "depth: 65 is the tokenizer's DEPTH at the 65th
 bracket", "depth: 128, the tokenizer's own default, is refused at the same
-bracket"). A value is in at most one container, and adding
+bracket").
+
+A value is in at most one container, and adding
 one already in a container, a container to itself, or a container to anything
 inside it is `JSON_VALUE_ERR_ATTACHED` (`std/json-value.ts:1447`, `adoptable`;
 "builders: push of an array into itself", "builders: push of the root into its
 own grandchild", "builders: set of an object on itself"), so a tree is finite.
+
 `write` recurses one level per container and stops at the writer's first
 failure, so a parsed tree deeper than the writer allows ends at
 `JSON_WRITE_TOO_DEEP` only for a built tree ("depth: a built tree 65 deep
@@ -632,7 +675,9 @@ through `jsonWriterPutF64`, which a native build lowers to one call of
 digits are formatted on the runtime's stack and copied only when all of them
 fit, so the write makes no string and a write that does not fit is the
 writer's `JSON_WRITE_FULL` with the cursor and the buffer as they were, as for
-every other write. NaN and the infinities never reach it: `f64` writes `null`
+every other write.
+
+NaN and the infinities never reach it: `f64` writes `null`
 for them, or fails strict. The bytes are `JSON.stringify`'s (`-0` is `0`;
 `link/std_json_writer` against Node, and "json_f64_seam: seam.ts built
 natively writes through the kernel and prints seam.out", which holds the
@@ -650,7 +695,9 @@ wrongly released array would have freed ("reuse: a parsed tree reads back
 whole after churn" and the four after it), and 10,000 parses, reads and
 writes into one reused document and buffer leave `Arena.used()` where they
 found it ("alloc: Arena.used() is flat across every one, parseFloat's numbers
-and the write included"). The write allocates nothing because strings and keys
+and the write included").
+
+The write allocates nothing because strings and keys
 go out through `keyBytes` and `stringBytes`, which escape a window of the
 document's bytes exactly as `key` and `string` escape a string of them
 ("JSONTestSuite: every key and string of every y_ file is written by keyBytes

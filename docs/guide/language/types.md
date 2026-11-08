@@ -110,6 +110,17 @@ Nish has no truthiness: `if (n)`, `if (s.length)` and `!xs.length` are
 errors. Compare instead — `n !== 0`, `s.length !== 0`. The
 [Control flow](control-flow.md#conditions) page has the details.
 
+```ts nish:ok
+export const main = (): i32 => {
+  const n: i32 = 3;
+  const s: string = "hi";
+  if (n !== 0 && s.length !== 0) {
+    console.log("both set");   // both set
+  }
+  return 0;
+};
+```
+
 ## Strings
 
 `string` is an immutable sequence of UTF-8 bytes. Strings compare by content
@@ -117,6 +128,15 @@ with `===`, concatenate with `+`, and are how you print a number, through a
 template literal: `` `${n}` ``. `String(n)` and `n.toString()` do not exist.
 The [Arrays and strings](arrays-and-strings.md#strings) page covers what you
 can do with one.
+
+```ts nish:ok
+export const main = (): i32 => {
+  const n: i32 = 42;
+  const s: string = "answer: " + `${n}`;
+  console.log(`${s === "answer: 42"}`);   // true
+  return 0;
+};
+```
 
 ## Nullable types: `T | null`
 

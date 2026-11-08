@@ -35,13 +35,14 @@ The `-e` is needed because an Nish program exports `main` rather than
 running anything at top level: `node … prog.ts` would load the module, never
 call `main`, print nothing and exit 0. The one-liner imports the module and calls
 `main` itself, which is what the native binary's entry point does, and exits
-with what `main` returns (0 for a `main` that returns `void`). An `async`
-`main` answers a promise, so the one-liner awaits it, and then waits for every
-task `spawn` started (`settleTasks`, from `nish:async` as the hook answers it),
-as the native driver drains its queue before the process exits; for a plain
-`main` both are no-ops. It is the form `tests/differential/unmodified.js`
-runs. The import path is resolved from the current directory, so keep the
-`./`.
+with what `main` returns (0 for a `main` that returns `void`).
+
+An `async` `main` answers a promise, so the one-liner awaits it, and then waits
+for every task `spawn` started (`settleTasks`, from `nish:async` as the hook
+answers it), as the native driver drains its queue before the process exits;
+for a plain `main` both are no-ops. It is the form
+`tests/differential/unmodified.js` runs. The import path is resolved from the
+current directory, so keep the `./`.
 
 An async program runs on Node's own async/await, so its tasks resume in
 Node's order, not the native one: an `await` always yields to the microtask
@@ -189,12 +190,12 @@ no prelude can reach it. They are language decisions
   agrees; `"héllo".length` is `5` under Node and `6` natively. To count
   characters, `codePointLength` from `nish/text` answers `5` on both. It
   answers differently for text built from bytes, which is one unit per byte
-  here (above): `String.fromBytes` of `é`'s two bytes, or `nish/json`'s decoding
-  of `"\u00e9"`, counts `1` natively and `2` under Node. It also answers
-  differently for text that is not well-formed: a byte that is not UTF-8, such
-  as `String.fromCharCode(0x80)`, counts nothing natively and one unit under
-  Node, and the two halves of a surrogate pair joined at run time are two lone
-  surrogates natively and one pair under Node
+  here (above): `String.fromBytes` of `é`'s two bytes, or `nish/json`'s
+  decoding of `"\u00e9"`, counts `1` natively and `2` under Node. It also
+  answers differently for text that is not well-formed: a byte that is not
+  UTF-8, such as `String.fromCharCode(0x80)`, counts nothing natively and one
+  unit under Node, and the two halves of a surrogate pair joined at run time
+  are two lone surrogates natively and one pair under Node
   (`tests/link/std_text_code_points_native` pins both hosts' answers).
 - **`a[i]` is unchecked.** Out of range is `undefined` here and an exit-1 panic
   natively, and `pop()` on an empty array likewise. Only a program that goes out
@@ -264,6 +265,7 @@ no prelude can reach it. They are language decisions
   cannot print, and the checker refuses a program that reads a destination, or
   writes what a task may read, before the block ends, so the two print the same
   — for guarded writes, when they commute, as the next item says.
+
   `s.spawn(entry, arg)` and `s.spawn(() => ...)` reach the same `spawn`, which
   sees that no slot was written (an omitted argument is `undefined`, neither
   below zero nor at or above it) and runs the task with nothing to store; an
@@ -276,7 +278,9 @@ no prelude can reach it. They are language decisions
   at once and its `[Symbol.dispose]` does nothing, because the tasks run one at
   a time, at their spawns, so their critical sections run in spawn order —
   one of the orders the native threads can run them in
-  ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-lock-that-owns-its-data-mutext)). A program
+  ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-lock-that-owns-its-data-mutext)).
+
+  A program
   whose guarded updates commute exactly (integer sums and counts, a histogram,
   not an `f64` sum) and whose tasks do not branch on what they read under the
   lock prints the same both ways; the checker refuses the parent locking what
@@ -287,7 +291,9 @@ no prelude can reach it. They are language decisions
   x of ch)` takes values off the front as it walks, through the channel's
   `[Symbol.iterator]`, and ends when the queue is empty: so a loop that stops
   early leaves the rest for the next one, and a loop over a drained channel
-  ends at once, as natively. Nothing waits, and nothing needs to: a task runs
+  ends at once, as natively.
+
+  Nothing waits, and nothing needs to: a task runs
   at its spawn, and the checker holds every task that may send on a channel to
   a `spawn` before the one receiver's, so every value has been sent when the
   receiver's loop starts ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#channels-channelt)). How
