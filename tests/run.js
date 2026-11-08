@@ -2929,6 +2929,28 @@ if (!only || "net_unix".includes(only)) {
       shown(loud)
     )
   }
+  // Every error path and round of the Unix calls gives back each descriptor it
+  // took, counted by the kernel's own list in `/proc/self/fd` rather than by
+  // probing numbers (`tests/cases/net_unix_fds` is the portable probe).
+  if (process.platform !== "linux") {
+    skip("net_unix: /proc/self/fd is Linux's; the descriptor count by /proc did not run")
+  } else {
+    const fdsDir = path.join(root, "tests/link/net_unix_proc_fds")
+    const outDir = path.join(buildDir, "net-unix-proc-fds")
+    fs.mkdirSync(outDir, { recursive: true })
+    const exe = path.join(outDir, "fds")
+    const built = spawnSync(NISH, [path.join(fdsDir, "fds.ts"), "-o", outDir + "/", "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+      ...NATIVE_RUN_LIMIT,
+    })
+    const ran = built.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8", ...NATIVE_RUN_LIMIT }) : built
+    check(
+      "net_unix: no Unix-socket error path or round leaves a descriptor in /proc/self/fd",
+      ran.status === 0 && ran.stdout === fs.readFileSync(path.join(fdsDir, "expected.out"), "utf8"),
+      shown(ran)
+    )
+  }
 }
 
 // `spawnWithFds` under the prelude, by its global spelling: it starts a child

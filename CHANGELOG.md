@@ -26,6 +26,43 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-08
+
+### Added
+
+- runtime: The async executor and nish:async readable, writable and sleep (WP49 stage 5, part 1) ([#1283](https://github.com/amritk/nish/pull/1283))
+- cli: Colour diagnostics on a terminal ([#1290](https://github.com/amritk/nish/pull/1290))
+- net: Async fetch in nish/net/fetch (WP49 stage 5, part 2) ([#1293](https://github.com/amritk/nish/pull/1293))
+- interop: Module storage, buffer windows and panics a wasm page can read (WP50 stage 3) ([#1273](https://github.com/amritk/nish/pull/1273))
+
+### Fixed
+
+- docs: Language index cards and pinned citations after the reference split ([#1294](https://github.com/amritk/nish/pull/1294))
+
+### Performance
+
+- net: Scan HTTP/1 request heads sixteen bytes at a time ([#1287](https://github.com/amritk/nish/pull/1287))
+
+### Documentation
+
+- reference: Generate the diagnostic index and the command-line reference ([#1274](https://github.com/amritk/nish/pull/1274))
+- plan: Plan WP49 stage 5 and bring the WP49 plan statuses up to date ([#1279](https://github.com/amritk/nish/pull/1279))
+- std: Document or internalise std/net's undocumented public fields ([#1281](https://github.com/amritk/nish/pull/1281))
+- reference: Polish the generated pages, split diagnostics and the spec, group the sidebar ([#1292](https://github.com/amritk/nish/pull/1292))
+- guide: Fix the hand-written pages' layout on the rendered site ([#1289](https://github.com/amritk/nish/pull/1289))
+- site: The Nish logo and a theme built around it ([#1291](https://github.com/amritk/nish/pull/1291))
+
+### Tests
+
+- net: Measure Http1Server CPU per request end to end, 0.34.1 vs 0.35.0 ([#1282](https://github.com/amritk/nish/pull/1282))
+
+### Build
+
+- Regenerate package-lock.json for v0.36.0 ([#1271](https://github.com/amritk/nish/pull/1271))
+- docs: Fail gen-reference --check on an undocumented public declaration ([#1280](https://github.com/amritk/nish/pull/1280))
+- Let a spec-first module's emitted test sit in test/spec/ ([#1285](https://github.com/amritk/nish/pull/1285))
+
+
 ## [0.36.0] - 2026-11-07
 
 ### Added
@@ -1710,3 +1747,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.34.1]: https://github.com/amritk/nish/releases/tag/v0.34.1
 [0.35.0]: https://github.com/amritk/nish/releases/tag/v0.35.0
 [0.36.0]: https://github.com/amritk/nish/releases/tag/v0.36.0
+[0.37.0]: https://github.com/amritk/nish/releases/tag/v0.37.0
