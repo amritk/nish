@@ -106,6 +106,27 @@ import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
 
+/** The two `--emit-header` comment lines the 0.37.0 seed writes. */
+const SEED_HEADER_LINES = [
+  " * C ABI of the Nish modules listed below. Link the .ll module(s) and",
+  " * runtime/runtime.c next to your C code; include runtime/nish.h's",
+].join("\n")
+
+/** The four lines WP50 stage 4 writes in their place, naming `runtime-text.c` and `runtime-os.c`. */
+const STAGE4_HEADER_LINES = [
+  " * C ABI of the Nish modules listed below. Link the .ll module(s),",
+  " * runtime/runtime.c, runtime/runtime-text.c (strings and number formatting)",
+  " * and runtime/runtime-os.c next to your C code, or hand runtime/runtime.c to",
+  " * scripts/build.sh, which adds the rest; include runtime/nish.h's",
+].join("\n")
+
+/**
+ * `text` with the stage 4 header comment put back as the seed wrote it. A
+ * declaration's `undo`: it touches only those four lines, so any other change
+ * to a `.h` still differs.
+ */
+const withoutStage4Header = (text) => text.split(STAGE4_HEADER_LINES).join(SEED_HEADER_LINES)
+
 /**
  * Output differences that are decided rather than broken, each with the words
  * `CHANGELOG.md` must carry before this run can go green. Shape:
@@ -131,7 +152,13 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
  * for one release: the reseed that ships a change makes its entries match
  * nothing, the full run says so, and they go.
  */
-const DECLARED = []
+const DECLARED = [
+  {
+    changelog: "Strings cross between a wasm module and its page",
+    why: "the --emit-header comment names the three core runtime files a C caller links, since runtime.c alone no longer defines nish_str_new",
+    undo: (text) => withoutStage4Header(text),
+  },
+]
 
 /**
  * The programs that reach one `std/` module by two routes: by a relative path
