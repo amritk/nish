@@ -778,34 +778,39 @@ function walkFindings(programs: CheckedProgram[], table: TypeTable, facts: Facts
 function taskFindings(programs: CheckedProgram[], table: TypeTable, facts: FactsTable, program: CheckedProgram, site: Node, task: FunctionSig, freshResults: FreshResults): RegionFinding[] -> @taskFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via capturesOf
-  calls: FactsTable.get FunctionSig.isCompileTime RegionFinding.constructor TypeTable.sharedWithTask captureSpawnMessage capturesOf isCopied nestedSpawnMessage nish_alloc_struct nish_array_grow nish_panic_index walkFindings
+  calls: FactsTable.get FunctionSig.isCompileTime RegionFinding.constructor TypeTable.sharedWithTask captureSpawnMessage capturesOf insideTask isCopied nestedSpawnMessage nish_alloc_struct nish_array_grow nish_panic_index noFactsMessage walkFindings
   pointer programs: size=0 writesThrough=false captured=false passedTo=walkFindings#0
-  pointer table: size=96 writesThrough=true captured=true passedTo=isCopied#0 TypeTable.sharedWithTask#0 walkFindings#1
+  pointer table: size=96 writesThrough=true captured=true passedTo=TypeTable.sharedWithTask#0 isCopied#0 TypeTable.sharedWithTask#0 walkFindings#1
   pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 walkFindings#2
-  pointer program: size=696 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1
-  pointer site: size=40 writesThrough=true captured=true passedTo=RegionFinding.constructor#2 RegionFinding.constructor#2
-  pointer task: size=176 writesThrough=true captured=true passedTo=nestedSpawnMessage#0 capturesOf#0 captureSpawnMessage#0 FunctionSig.isCompileTime#0 walkFindings#3
+  pointer program: size=696 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1
+  pointer site: size=40 writesThrough=true captured=true passedTo=RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2
+  pointer task: size=176 writesThrough=true captured=true passedTo=insideTask#0 noFactsMessage#1 nestedSpawnMessage#0 capturesOf#0 captureSpawnMessage#0 FunctionSig.isCompileTime#0 walkFindings#3
   pointer freshResults: size=40 writesThrough=true captured=false passedTo=walkFindings#4
   stackSites=2 stackLocals=2
   local +0:9 out: RegionFinding[] (const)
   local +1:9 f: FunctionFacts | null (const)
   callee +1:13 FactsTable.get -> @FactsTable.get
-  callee +6:14 new RegionFinding -> @RegionFinding.constructor
-  callee +6:47 nestedSpawnMessage -> @nestedSpawnMessage
-  local +8:9 captures: CaptureSlot[] (const)
-  callee +8:20 capturesOf -> @capturesOf
-  local +10:11 first: CaptureSlot (const)
-  callee +12:7 new RegionFinding -> @RegionFinding.constructor
-  callee +12:40 captureSpawnMessage -> @captureSpawnMessage
-  local +15:9 seedNames: string[] (const)
-  local +16:9 seedOrigins: i32[] (const)
-  local +17:12 i: i32 (let)
-  local +18:11 type: i32 (const)
-  callee +19:9 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee +19:34 isCopied -> @isCopied
-  callee +24:22 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
-  local +29:14 finding: RegionFinding (const)
-  callee +29:25 walkFindings -> @walkFindings
+  local +4:16 type: i32 (const)
+  callee +5:11 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
+  callee +6:18 new RegionFinding -> @RegionFinding.constructor
+  callee +6:51 noFactsMessage -> @noFactsMessage
+  callee +6:66 insideTask -> @insideTask
+  callee +13:14 new RegionFinding -> @RegionFinding.constructor
+  callee +13:47 nestedSpawnMessage -> @nestedSpawnMessage
+  local +15:9 captures: CaptureSlot[] (const)
+  callee +15:20 capturesOf -> @capturesOf
+  local +17:11 first: CaptureSlot (const)
+  callee +19:7 new RegionFinding -> @RegionFinding.constructor
+  callee +19:40 captureSpawnMessage -> @captureSpawnMessage
+  local +22:9 seedNames: string[] (const)
+  local +23:9 seedOrigins: i32[] (const)
+  local +24:12 i: i32 (let)
+  local +25:11 type: i32 (const)
+  callee +26:9 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +26:34 isCopied -> @isCopied
+  callee +31:22 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
+  local +36:14 finding: RegionFinding (const)
+  callee +36:25 walkFindings -> @walkFindings
 function recordRegionCall(calls: ParallelCall[], node: Node, sig: FunctionSig): void -> @recordRegionCall [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
