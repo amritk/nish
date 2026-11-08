@@ -68,15 +68,16 @@ Some come with limits: `for...of` walks an array (or a `Map` or `Set`), a
 `switch` is on an integer or an enum (a clause without `break` falls through
 into the next, as in TypeScript; see
 [`switch`](../language/control-flow.md#switch)), and an enum value can only be
-compared with `===` and `!==`.
+compared with `===` and `!==`. The [language
+pages](../language/control-flow.md) give the details.
 
-The [language pages](../language/control-flow.md) give the details.
-`if`, `while`, `do...while`, `break`, `continue`,
-`===` and named `import` and `export` work too. The package ships type
-declarations for `i32`, `Result` and the other built-in names
-(`runtime/nish.d.ts`), so `tsc` and your editor understand a Nish file. The
-reverse does not hold: `nish` is the authority, as the reference's
-[It is still TypeScript](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#it-is-still-typescript) says.
+`if`, `while`, `do...while`, `break`, `continue`, `===` and named `import` and
+`export` work too. The package ships type declarations for `i32`, `Result` and
+the other built-in names (`runtime/nish.d.ts`), so `tsc` and your editor
+understand a Nish file. The reverse does not hold: `nish` is the authority, as
+the reference's [It is still
+TypeScript](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#it-is-still-typescript)
+says.
 
 `Math` carries over too, with JavaScript's answers down to the corner cases —
 `Math.round(-0.3)` is `-0`, `Math.max(1, NaN)` is `NaN`, `Math.imul` wraps —

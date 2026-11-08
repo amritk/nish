@@ -104,14 +104,13 @@ export const main = (): i32 => {
 };
 ```
 
-A vector cannot be a
-`Map` key, cannot be `null`, and cannot appear in the signature of a function
-that C or JavaScript calls: `--emit-header`, `--emit-napi` and `--emit-dts`
-leave out a function whose parameter or result holds a vector anywhere — a
-vector, an array of them, a `Result` with a vector arm — and say why. In a C
-header, a class that holds a vector anywhere, even through another class, is
-declared without its fields, and a function taking a pointer to one keeps it
-as an opaque `struct Name *`.
+A vector cannot be a `Map` key, cannot be `null`, and cannot appear in the
+signature of a function that C or JavaScript calls: `--emit-header`,
+`--emit-napi` and `--emit-dts` leave out a function whose parameter or result
+holds a vector anywhere — a vector, an array of them, a `Result` with a vector
+arm — and say why. In a C header, a class that holds a vector anywhere, even
+through another class, is declared without its fields, and a function taking a
+pointer to one keeps it as an opaque `struct Name *`.
 
 The same program prints the same thing natively, under `--profile wasi` and
 under Node, where each vector is a typed array that is never changed after it

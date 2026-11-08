@@ -271,11 +271,11 @@ export const main = (): i32 => {
   passed to a function, not bound to a second name, not built into an object
   and not written by an earlier `parallelMapInto`.
 
-  Indexing it, reading its
-  `length`, calling its methods and walking it with `for...of` give it to no
-  one. After the call you may hand `dst` on, except inside a loop around the
-  call that `dst` was declared outside of, where the next pass's call comes
-  after it; a loop that declares its own `dst` each pass is fine.
+  Indexing it, reading its `length`, calling its methods and walking it with
+  `for...of` give it to no one. After the call you may hand `dst` on, except
+  inside a loop around the call that `dst` was declared outside of, where the
+  next pass's call comes after it; a loop that declares its own `dst` each pass
+  is fine.
 
 ```ts nish:ok
 import { parallelMap, parallelMapInto } from "nish/threads";
@@ -379,14 +379,13 @@ export const main = (): i32 => {
   task could read — through a constructor either: `new Bump(counter)` whose
   constructor writes `counter` is refused like a call that does.
 
-  Don't call a
-  `Map` or `Set` method that changes or walks the table either, even on one
-  no task can reach or one you made in the block: the compiler judges the
-  call, not which tables the tasks hold. Do it before the first `spawn`,
-  after the block, or in a helper that makes and fills its own table. An object
-  you make in the block is yours to write, until anything a task reads may
-  have got into it: stored in a field or an element, pushed, added to a `Map`
-  or a `Set`, put in a literal, or handed to a function that keeps it.
+  Don't call a `Map` or `Set` method that changes or walks the table either,
+  even on one no task can reach or one you made in the block: the compiler
+  judges the call, not which tables the tasks hold. Do it before the first
+  `spawn`, after the block, or in a helper that makes and fills its own table.
+  An object you make in the block is yours to write, until anything a task
+  reads may have got into it: stored in a field or an element, pushed, added to
+  a `Map` or a `Set`, put in a literal, or handed to a function that keeps it.
 
   A field
   or an element of it counts as much as the object itself. So a `Map`, a
@@ -684,15 +683,14 @@ by name. Binding, storing, returning or walking the guard itself is refused
 refused too (NL2536), since `this` or a type parameter is a way for the guard
 to be kept, and so is handing it twice in one call.
 
-Binding, storing,
-returning or walking an object read through the guard, `const c = g.value`, is
-refused (NL2467); storing anything but a number, a `boolean`, an enum or a
-`string` into it is refused (NL2468). `null` is stored only into a
-`string | null` slot; into a slot that holds an object, `next: Link | null`,
-it is refused (NL2537), since a guard stores no object.
-A guard bound with `const` would never be released (NL2465). A second lock
-inside a guard's block is refused because two tasks each holding one lock and
-waiting for the other would wait forever.
+Binding, storing, returning or walking an object read through the guard, `const
+c = g.value`, is refused (NL2467); storing anything but a number, a `boolean`,
+an enum or a `string` into it is refused (NL2468). `null` is stored only into a
+`string | null` slot; into a slot that holds an object, `next: Link | null`, it
+is refused (NL2537), since a guard stores no object. A guard bound with `const`
+would never be released (NL2465). A second lock inside a guard's block is
+refused because two tasks each holding one lock and waiting for the other would
+wait forever.
 
 ```ts nish:err NL2536
 import { Mutex, MutexGuard } from "nish/threads";
@@ -1090,13 +1088,13 @@ arguments (NL2511); a `let` an arrow task or a `parallelMap` arrow reads gets
 a `const` snapshot (NL2506, NL2500); and an arrow that uses a channel moves to
 a top-level `const`, `mainTask`, which the `spawn` names (NL2484).
 
-It writes a
-repair only where your source alone decides it, so it leaves alone a `spawn`
-in a loop, where every task would write the one slot; a `let` another
-argument of the call names, or one a `for` header declares; and a channel
-arrow that captures a local or leaves a parameter's or its result's type out,
-which would not check at the top level; those stay refused for you to fix by hand. The reference lists each case:
-[What `nish --fix` writes for a thread program](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
+It writes a repair only where your source alone decides it, so it leaves alone
+a `spawn` in a loop, where every task would write the one slot; a `let` another
+argument of the call names, or one a `for` header declares; and a channel arrow
+that captures a local or leaves a parameter's or its result's type out, which
+would not check at the top level; those stay refused for you to fix by hand.
+The reference lists each case: [What `nish --fix` writes for a thread
+program](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
 
 ## Refused, and what to write instead
 

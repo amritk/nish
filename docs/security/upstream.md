@@ -18,11 +18,10 @@ and connections on the handler's poll loop — and each piece of it is bounded:
 the slots by `calls`, the connections by `connections`, a request head by
 `maxHead`, a body by `maxBody`, a call's time by `timeoutMs`.
 
-A connection
-whose call ended any way but whole is closed, so no byte a failed, late or
-over-long response left behind is read as the next call's answer, and a
-kept-alive connection is read once more before it is reused, so one the
-origin closed or wrote to while it sat idle is closed instead. Under an
+A connection whose call ended any way but whole is closed, so no byte a failed,
+late or over-long response left behind is read as the next call's answer, and a
+kept-alive connection is read once more before it is reused, so one the origin
+closed or wrote to while it sat idle is closed instead. Under an
 `OutboundPolicy` the origin's host name is checked before the lookup and its
 addresses after it, and the pool connects only to the bytes that were checked,
 with no second lookup. Four faults were found and fixed, each with a test.
@@ -147,10 +146,9 @@ connection is made once more on a new one", "reset: a close-delimited body
 ends at the origin's close", "reset: a reset where the origin's close would
 end a close-delimited body fails the call UPSTREAM_E_RESET, not ok".
 
-The reset
-check cannot tell a reset in the body from one before the head, since a reset
-may discard bytes the origin already sent; either way the call must not be
-`ok`.
+The reset check cannot tell a reset in the body from one before the head, since
+a reset may discard bytes the origin already sent; either way the call must not
+be `ok`.
 
 **Caps before the wire** (UPSTREAM-4, UPSTREAM-5, UPSTREAM-6): "connections:
 three calls with one connection allowed share it, one after another",

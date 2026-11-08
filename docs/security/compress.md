@@ -15,18 +15,17 @@ change them on the head that merges this record.
 
 **Result.** Every malformed stream answers a negative `DEFLATE_ERR_*`,
 `GZIP_ERR_*` or `ZLIB_ERR_*` code; none panics, and nothing a stream holds is
-read or written outside the caller's windows. Output is bounded by the
-caller's `limit` and the end of `out`, so a small input cannot expand without
-bound, and a stream's cost is linear in its input and output. A gzip or zlib
-stream whose bytes were corrupted does not decompress to other bytes: its
-checksum refuses it.
+read or written outside the caller's windows. Output is bounded by the caller's
+`limit` and the end of `out`, so a small input cannot expand without bound, and
+a stream's cost is linear in its input and output. A gzip or zlib stream whose
+bytes were corrupted does not decompress to other bytes: its checksum refuses
+it. The `Accept-Encoding` parser reads any bytes in one pass and allocates
+nothing.
 
-The `Accept-Encoding` parser reads any bytes in one pass
-and allocates nothing. Two findings were fixed after the record was first
-written, each with a test that failed before the fix: `respondEncoded` could
-queue stale bytes for the wire after `H1_AGAIN` (COMP-11), and `GzipWriter`
-could panic on incompressible input written into exactly `bound(len)`
-(COMP-12).
+Two findings were fixed after the record was first written, each with a test
+that failed before the fix: `respondEncoded` could queue stale bytes for the
+wire after `H1_AGAIN` (COMP-11), and `GzipWriter` could panic on incompressible
+input written into exactly `bound(len)` (COMP-12).
 
 The CRC-32 kernels read only the window `Crc32.update` checked
 and answer what the tables answer; a review of their first version found the
@@ -37,14 +36,12 @@ bit 7 (`HWCAP_CRC32`) on Linux AArch64, and
 `sysctlbyname("hw.optional.armv8_crc32")` on Darwin. Any other OS, and a
 big-endian or 32-bit target, gets the tables.
 
-The one input from outside is
-`NISH_CRC32`, compared with the exact string `soft` and otherwise ignored,
-so whoever sets a process's environment can only send it to the tables,
-which answer the same.
-Two properties are accepted: compressing a response that mixes a
-secret with attacker-chosen bytes leaks the secret through the length
-(COMP-9, the BREACH class), and a stream of many small dynamic blocks makes
-the decoder rebuild its tables for each (COMP-8).
+The one input from outside is `NISH_CRC32`, compared with the exact string
+`soft` and otherwise ignored, so whoever sets a process's environment can only
+send it to the tables, which answer the same. Two properties are accepted:
+compressing a response that mixes a secret with attacker-chosen bytes leaks the
+secret through the length (COMP-9, the BREACH class), and a stream of many
+small dynamic blocks makes the decoder rebuild its tables for each (COMP-8).
 
 ## Scope
 

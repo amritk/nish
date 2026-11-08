@@ -97,14 +97,14 @@ of exiting: `0` (or the bytes written) on success and a negative errno on
 failure, such as `-2` for a missing path or `-18` when the two names are on
 different filesystems, so the program decides what to say.
 
-Bytes that are
-not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
-through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
-[File I/O](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#file-io). A native string built by
-`String.fromBytes` carries any bytes, and `write` and `writeFileSync` send it
-as it is, but under `--emit-ts` `String.fromBytes` decodes UTF-8 and an
-invalid sequence becomes U+FFFD, so `writeBytes` and `writeFileBytesSync` are
-the route that is exact everywhere.
+Bytes that are not text, a `u8[]` from `readFileBytesSync` or a codec, go out
+as they are through `writeFileBytesSync` and, on stdout, `writeBytes` from
+`nish:io`; see [File
+I/O](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#file-io). A
+native string built by `String.fromBytes` carries any bytes, and `write` and
+`writeFileSync` send it as it is, but under `--emit-ts` `String.fromBytes`
+decodes UTF-8 and an invalid sequence becomes U+FFFD, so `writeBytes` and
+`writeFileBytesSync` are the route that is exact everywhere.
 
 Writing a secret to disk, a key or a token, takes three things
 `writeFileSync` does not give. `writeFileSyncMode(path, data, 0o600)` leaves
@@ -320,17 +320,14 @@ letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
 one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`,
 nor `[a-z]`, `\p{Lu}` or `\p{Ll}`.
 
-That keeps an ASCII pattern under `i`
-ASCII: it folds `A`–`Z` to `a`–`z` with no table, and its search, its
-vectorised prefix scan included, never has to look for those two letters'
-three-byte and two-byte forms.
-Under `i` both still count as word characters to `\w`, `\W`, `\b` and `\B`,
-as they do in JavaScript with `iu`.
-Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in JavaScript:
-`\P{Lu}` is everything outside `\p{Lu}`, closed under folding, so it
-matches `A` through `a`, while `[^\p{Lu}]` negates the folded class
-`[\p{Lu}]`, which holds every cased letter, so it matches neither `A` nor
-`a`.
+That keeps an ASCII pattern under `i` ASCII: it folds `A`–`Z` to `a`–`z` with
+no table, and its search, its vectorised prefix scan included, never has to
+look for those two letters' three-byte and two-byte forms. Under `i` both still
+count as word characters to `\w`, `\W`, `\b` and `\B`, as they do in JavaScript
+with `iu`. Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in
+JavaScript: `\P{Lu}` is everything outside `\p{Lu}`, closed under folding, so
+it matches `A` through `a`, while `[^\p{Lu}]` negates the folded class
+`[\p{Lu}]`, which holds every cased letter, so it matches neither `A` nor `a`.
 
 Finding every match is one search per match, so `findAll`, `count`,
 `replaceAll` and `split` are quadratic when a long branch is preferred to a
@@ -604,11 +601,11 @@ unless you set `d.ignoreUnknown = true` before decoding. Nothing panics: the
 first problem sets a negative code in `d.failed` and the byte it was found at
 in `d.errorAt`, and `jsonDecode` returns it.
 
-The tokenizer's limits in
-`JsonLimits` — nesting depth, string, number and body size — apply as they
-would to any JSON you read. The depth limit is also how deep the decoder
-recurses, so keep it to a few thousand at most; and the writer stops at 64
-levels, so an object decoded from deeper than that cannot be encoded back.
+The tokenizer's limits in `JsonLimits` — nesting depth, string, number and body
+size — apply as they would to any JSON you read. The depth limit is also how
+deep the decoder recurses, so keep it to a few thousand at most; and the writer
+stops at 64 levels, so an object decoded from deeper than that cannot be
+encoded back.
 
 Decoding into the same object again reuses what it already holds: nested
 objects, arrays and any string that has not changed. A server can keep one
@@ -624,12 +621,11 @@ and a negative number is a range error for it. An enum is read and written as
 its number: a number that is not one of its members' values is a type error,
 and the field keeps the member it held.
 
-An enum whose members are strings is
-not something the language has, so it cannot be a field either; use a
-`string` field and check its value yourself. A `Map<string, V>` is a JSON object
-whose keys you do not know in advance: decoding empties the map and fills it
-in the order the keys arrive, a key given twice is an error, and encoding
-writes the entries in the map's order.
+An enum whose members are strings is not something the language has, so it
+cannot be a field either; use a `string` field and check its value yourself. A
+`Map<string, V>` is a JSON object whose keys you do not know in advance:
+decoding empties the map and fills it in the order the keys arrive, a key given
+twice is an error, and encoding writes the entries in the map's order.
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";
@@ -677,23 +673,21 @@ first and then, where three or more field names share that length, by its
 byte at one position, before the whole key is compared, so a key is usually
 compared with one name rather than with each in turn.
 
-All the maps of one
-decode take at most `d.maxMapKeys` keys between them, 4,096 unless you set it;
-a body with more is refused with `JSON_DECODE_MAP_LIMIT` rather than left to
-slow the maps down, and `d.reset` starts the count again. Set it to `0` (or
-below) and no map may take a key at all: `{}` is then the only map value
-accepted.
+All the maps of one decode take at most `d.maxMapKeys` keys between them, 4,096
+unless you set it; a body with more is refused with `JSON_DECODE_MAP_LIMIT`
+rather than left to slow the maps down, and `d.reset` starts the count again.
+Set it to `0` (or below) and no map may take a key at all: `{}` is then the
+only map value accepted.
 
 When the JSON's keys are not the names you want for your fields, or some keys
 may be left out, say so in one `static readonly json` object literal in the
 class. `rename` gives a field the key it has on the wire, and `optional` lists
 the fields whose key may be missing: a missing one sets the field back to its
-initializer, so an optional field needs one.
+initializer, so an optional field needs one. Every other key is still required.
 
-Every other key is still
-required. The literal is read by the compiler and is not a field. A name that
-is not one of the class's fields, two fields with the same key, or anything
-that is not written out as a literal, is a compile error.
+The literal is read by the compiler and is not a field. A name that is not one
+of the class's fields, two fields with the same key, or anything that is not
+written out as a literal, is a compile error.
 
 A `JsonNumber` field keeps a number exactly as it was written, so a number
 wider than a `u64` or with more digits than an `f64` comes back byte for byte.
@@ -742,8 +736,7 @@ partial update, say — `presence` names, for each field you want to know
 about, a `boolean` field of the same class. Every decoding sets it to whether
 the input gave that field's key, and a key given `null` counts as given.
 
-A
-presence field has no key of its own: decoding never reads it from the input,
+A presence field has no key of its own: decoding never reads it from the input,
 encoding leaves it out, and no other option may name it. Recording a field
 allocates nothing, and a class that records none decodes exactly as fast as
 before. Read the presence fields only when `jsonDecode` answered
@@ -885,11 +878,11 @@ and the byte in `doc.errorAt`. Nothing in the input can make it panic. The
 nesting depth is capped at 64, the writer's own limit, so every document a
 parse accepts can be written back.
 
-A document holds at most `doc.maxValues`
-values, 262,144 unless you raise it; one more is `JSON_VALUE_ERR_VALUES`. Each
-value costs the document about 46 bytes (66 with ranges, below), kept for as long as the document is,
-so that cap, with the input's own size limit for the text the document
-copies, is what bounds a long-lived server's memory.
+A document holds at most `doc.maxValues` values, 262,144 unless you raise it;
+one more is `JSON_VALUE_ERR_VALUES`. Each value costs the document about 46
+bytes (66 with ranges, below), kept for as long as the document is, so that
+cap, with the input's own size limit for the text the document copies, is what
+bounds a long-lived server's memory.
 
 **Duplicate keys are refused.** `{"a":1,"a":2}` is `JSON_VALUE_ERR_DUPLICATE`,
 because two programs that read different members of one text can disagree
@@ -916,11 +909,10 @@ the byte offsets of the value's first byte and one past its last, and
 `keyStart(o, i)` and `keyEnd(o, i)` the same for the key of member `i` of
 object `o`; a string's and a key's range includes its quotes.
 
-The offsets are
-into the array you gave `parseRanged`, or into the string `parseTextRanged`
-read. Under Node, where `parseTextRanged` reads one byte per UTF-16 code unit, its offsets
-count code units, so past the first non-ASCII character they differ from a
-native build's, which count UTF-8 bytes.
+The offsets are into the array you gave `parseRanged`, or into the string
+`parseTextRanged` read. Under Node, where `parseTextRanged` reads one byte per
+UTF-16 code unit, its offsets count code units, so past the first non-ASCII
+character they differ from a native build's, which count UTF-8 bytes.
 
 ```ts nish:ok
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1212,23 +1204,22 @@ the last matching step reached; `pathMatch` says how many steps matched and
 `pathPair` answers the last pair it stepped through, whose `key` is where a
 message about that setting should point.
 
-A key is matched by `keyText`, the
-text it was written as, so `1` and `01` are different keys and a null key
-(`~`, `null`) is matched by `""`. When a map repeats a key, the last one
-wins. A step onto an empty value (`a:`) matches, so `pathMatch` counts it and
-`pathPair` names its pair, but it reaches no node: `pathNode` answers `-1`.
+A key is matched by `keyText`, the text it was written as, so `1` and `01` are
+different keys and a null key (`~`, `null`) is matched by `""`. When a map
+repeats a key, the last one wins. A step onto an empty value (`a:`) matches, so
+`pathMatch` counts it and `pathPair` names its pair, but it reaches no node:
+`pathNode` answers `-1`.
 
 **Merge keys.** A path follows `<<` merge keys (a plain `<<`, untagged or
 `!!merge`): a key a map does not hold is looked up in the maps its `<<` keys
 name — a map, an alias to one, or a sequence of those or an alias to one — in
 the order they are written.
 
-The map's own keys win,
-then the first merged map that has the key, and the node and pair found are
-the ones inside that map, so a message points at the line that set it. A
-recursive alias ends the search. A `<<` whose value names no map is an error,
-`BAD_MERGE`. The nodes themselves are not changed: a map still holds the pairs
-it was written with.
+The map's own keys win, then the first merged map that has the key, and the
+node and pair found are the ones inside that map, so a message points at the
+line that set it. A recursive alias ends the search. A `<<` whose value names
+no map is an error, `BAD_MERGE`. The nodes themselves are not changed: a map
+still holds the pairs it was written with.
 
 ```ts nish:ok
 import { parseYaml, pathNode, pathPair } from "nish/yaml";
@@ -1282,12 +1273,11 @@ JSON reads YAML with the same code. `load(stream, d, doc)` clears `doc` and
 answers the root, with every value's range (`start`, `end`) and every key's
 (`keyStart`, `keyEnd`) set to the YAML node's bytes.
 
-A scalar is typed by the
-core schema: `0x1F` and `0o17` load as the exact decimal numbers `31` and
-`15`, and `.inf`, `-.inf` and `.nan`, which JSON cannot hold, are refused. An
-alias loads as a copy of its anchor's value, a `<<` merge key adds the merged
-maps' keys the map does not have itself, and a key that is not a string loads
-as its source text (`1`, `[ a, b ]`).
+A scalar is typed by the core schema: `0x1F` and `0o17` load as the exact
+decimal numbers `31` and `15`, and `.inf`, `-.inf` and `.nan`, which JSON
+cannot hold, are refused. An alias loads as a copy of its anchor's value, a
+`<<` merge key adds the merged maps' keys the map does not have itself, and a
+key that is not a string loads as its source text (`1`, `[ a, b ]`).
 
 Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
@@ -1366,10 +1356,8 @@ tags:
 empty: {}
 ```
 
-**Which strings are quoted.**
-
-A string is written plain unless YAML would read it as something else, and
-then double-quoted:
+**Which strings are quoted.** A string is written plain unless YAML would read
+it as something else, and then double-quoted:
 
 - an empty string;
 - `~` and the words `null`, `true`, `false`, `yes`, `no`, `on`, `off`, `y` and
@@ -1383,8 +1371,10 @@ then double-quoted:
   inside;
 - a key `<<`, which would be a merge key;
 - and a string holding a control character, a line break, U+2028, U+2029,
-  U+FEFF, U+FFFE or U+FFFF, which are escaped. A key longer than
-1024 bytes as written is an explicit key, `? key` and then `: value`.
+  U+FEFF, U+FFFE or U+FFFF, which are escaped.
+
+A key longer than 1024 bytes as written is an explicit key, `? key` and then
+`: value`.
 
 ## `nish/pair`
 
@@ -1546,13 +1536,12 @@ first one says `usage:`, the rest line up under it), `section(title)`,
 `row(flag, placeholder, description)`, `note(text)` for a line of prose and
 `value(text)` for a path or value to copy.
 
-`title(version, summary)` is
-`header` without its blank line after, and `line(text)` adds a line exactly
-as given, so a menu can put a rule or a banner under its title (paint it with
-the same `Style`, and keep it to the menu's width). An empty placeholder or
-description is left out. A flag too long for its column keeps two spaces
-before its description. `text()` answers the whole menu. Columns are counted
-in bytes, so they line up for ASCII text.
+`title(version, summary)` is `header` without its blank line after, and
+`line(text)` adds a line exactly as given, so a menu can put a rule or a banner
+under its title (paint it with the same `Style`, and keep it to the menu's
+width). An empty placeholder or description is left out. A flag too long for
+its column keeps two spaces before its description. `text()` answers the whole
+menu. Columns are counted in bytes, so they line up for ASCII text.
 
 **The colours are your terminal's own.** A `Style` paints headings in bold
 magenta, flags in cyan, placeholders in yellow and descriptions faint, using
@@ -1682,13 +1671,12 @@ help and a description: `string`, `number` and `repeatable` take a value,
 `boolean` does not. `command(path, shape, description)` declares a
 subcommand of one or more words, with what follows it in the help.
 
-A name
-declared twice panics, because the table is your program's own text, and so
-does one no command line could match: a flag name with a leading `-`, an `=`
+A name declared twice panics, because the table is your program's own text, and
+so does one no command line could match: a flag name with a leading `-`, an `=`
 or whitespace, a command word with a leading `-`, or a flag `no-x` beside a
-boolean `x`, whose `--no-x` it would be.
-`parseFrom(process.argv, 1)` reads the command line after the program's own
-path, and `parse(args)` reads every string in `args`.
+boolean `x`, whose `--no-x` it would be. `parseFrom(process.argv, 1)` reads the
+command line after the program's own path, and `parse(args)` reads every string
+in `args`.
 
 **The grammar** is the long-option one most tools share, without short
 options:
@@ -1714,12 +1702,11 @@ words were given. `str`, `num`, `bool` and `all` read a flag of that kind by
 name; a flag that was not given reads as `""`, `0`, `false` or no values,
 and `has(name)` tells that apart from one given as such.
 
-A number is a
-finite `f64` written in decimal: an optional sign, digits with an optional
-fraction, and an optional exponent (`-2.5`, `.5`, `1e3`), in ASCII. Hex and
-binary, `Infinity`, an empty value, spaces round it, and a value too large
-for an `f64` (`1e999`) are refused, the same natively as under Node. Asking for a name the table does not declare, or
-as the wrong kind, panics.
+A number is a finite `f64` written in decimal: an optional sign, digits with an
+optional fraction, and an optional exponent (`-2.5`, `.5`, `1e3`), in ASCII.
+Hex and binary, `Infinity`, an empty value, spaces round it, and a value too
+large for an `f64` (`1e999`) are refused, the same natively as under Node.
+Asking for a name the table does not declare, or as the wrong kind, panics.
 
 **A usage error is data.** `parse` stops at the first one: an unknown flag
 (any `-x` with one dash is one), a flag missing its value, a number that is
@@ -1781,13 +1768,12 @@ has no function values; instead every declaration answers a handle, an
 by a name a typo could miss. Each command gets an id you choose, which a
 `switch` on `r.id` dispatches on.
 
-A mistake in the declarations — a flag
-declared twice in one scope, a bad spec, a required argument after an
-optional one, a command id used twice or negative, a required flag on a
-command that holds commands or with a default, a flag a `--no-` negation
-would shadow — panics at the call that made it, naming it. A module constant
-can only be a number, a boolean or a string, so build the tree in `main` or
-in a class's constructor.
+A mistake in the declarations — a flag declared twice in one scope, a bad spec,
+a required argument after an optional one, a command id used twice or negative,
+a required flag on a command that holds commands or with a default, a flag a
+`--no-` negation would shadow — panics at the call that made it, naming it. A
+module constant can only be a number, a boolean or a string, so build the tree
+in `main` or in a class's constructor.
 
 **Declaring.** `new Cli(name, version, description)` is the root, `ROOT`.
 `group(parent, name, description)` adds a command that only holds commands;
@@ -1851,11 +1837,10 @@ command or long flag gets the nearest declared one within two edits, or a
 third of its length if that is more (a swap of two letters is one edit), so
 `--lmt` finds `--limit`; an unknown short flag gets no guess.
 
-Help lists a
-command's arguments, its own flags and the global ones, descriptions lined
-up at the widest flag, up to column 32. It appends a default as
-`(default: …)`, and `(required)` and `(repeatable)` to the flags declared so,
-so a description need not say it.
+Help lists a command's arguments, its own flags and the global ones,
+descriptions lined up at the widest flag, up to column 32. It appends a default
+as `(default: …)`, and `(required)` and `(repeatable)` to the flags declared
+so, so a description need not say it.
 
 **What it costs and reaches.** Declaring builds no help text, and parsing
 looks each argument up once in a map: on a tree of 500 commands with 8 flags
@@ -2145,14 +2130,13 @@ export const main = (): i32 => {
 group filled out with `=`. It is what kitty's graphics protocol carries an
 image in.
 
-`base64Encode(bytes)` answers a string;
-`base64EncodeInto(src, off, len, dst, at)` writes the encoding of
-`src[off..off+len)` into `dst` from `at`, allocating nothing, and answers the
-index after the last character, for a program that builds its output in one
-buffer. `base64EncodedLength(n)` is how many characters `n` bytes take, so the
-buffer can be sized first. A range outside its array panics before anything
-is written. The module only encodes; the URL-safe, unpadded decoder for
-tokens and keys is `nish/crypto/base64url`.
+`base64Encode(bytes)` answers a string; `base64EncodeInto(src, off, len, dst,
+at)` writes the encoding of `src[off..off+len)` into `dst` from `at`,
+allocating nothing, and answers the index after the last character, for a
+program that builds its output in one buffer. `base64EncodedLength(n)` is how
+many characters `n` bytes take, so the buffer can be sized first. A range
+outside its array panics before anything is written. The module only encodes;
+the URL-safe, unpadded decoder for tokens and keys is `nish/crypto/base64url`.
 
 ```ts nish:ok
 import { base64Encode, base64EncodeInto, base64EncodedLength } from "nish/base64";
@@ -2515,11 +2499,10 @@ instructions, and `nish/crypto/chacha20poly1305` makes ChaCha20's keystream
 eight blocks at a time with AVX2 on x86-64, or four with NEON on AArch64 (a
 message of 256 bytes or more; a shorter one stays on the Nish code).
 
-The program checks the CPU once, when
-it first hashes or encrypts. Setting `NISH_SHA256=soft`, `NISH_AES=soft` or
-`NISH_CHACHA20=soft` in the environment the program starts in keeps that
-primitive on its portable Nish code, which is how to compare the two paths or
-rule one out; any other value is ignored. A
+The program checks the CPU once, when it first hashes or encrypts. Setting
+`NISH_SHA256=soft`, `NISH_AES=soft` or `NISH_CHACHA20=soft` in the environment
+the program starts in keeps that primitive on its portable Nish code, which is
+how to compare the two paths or rule one out; any other value is ignored. A
 WebAssembly build always takes the portable code.
 
 A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
@@ -2567,12 +2550,11 @@ that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 `Http1Server` and `Http1TlsServer` pools), `nish/net/http2-tls` and
 `nish/net/http3-server`; like `nish:net` itself, they are native only.
 
-Your
-loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
-its interest changed, so a keep-alive request costs one `recv` and one `send`
-and no `pollModify`. A slot borrows its output buffer only while it writes, so
-an idle connection costs a few KiB, not `outputSize`. Over plain TCP,
-`Http1Connection.sendBody(buf, off, len)` sends a `Content-Length` body
+Your loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)`
+says its interest changed, so a keep-alive request costs one `recv` and one
+`send` and no `pollModify`. A slot borrows its output buffer only while it
+writes, so an idle connection costs a few KiB, not `outputSize`. Over plain
+TCP, `Http1Connection.sendBody(buf, off, len)` sends a `Content-Length` body
 straight from your array, in one `sendmsg` with whatever output is queued
 before it, and copies only what the socket did not take; it answers as `write`
 does and keeps no hold on `buf`, so the array is yours again once it returns.
@@ -2581,33 +2563,31 @@ does and keeps no hold on `buf`, so the array is yours again once it returns.
 as a ring's `peek`, is handed over as it is. A chunked or compressed response, an `Http1TlsServer` slot, and a write still
 held back are copied as `write` copies them.
 
-Set
-`Http1Config.idleInput` and a slot lends its input and head buffers back too,
-whenever it has answered a request and holds no byte of the next: a server
+Set `Http1Config.idleInput` and a slot lends its input and head buffers back
+too, whenever it has answered a request and holds no byte of the next: a server
 holding tens of thousands of keep-alive connections that each send a request
 now and then keeps those buffers only for the connections mid-request, for two
-pool operations a request. It is off by default. An `Http1Server` builds
-a slot's connection on the first accept into it and keeps it for the next, so
-a pool sized for 16,384 connections costs some 16 KiB until they come;
+pool operations a request. It is off by default. An `Http1Server` builds a
+slot's connection on the first accept into it and keeps it for the next, so a
+pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core.
 
-Call `expire(now)` on an
-`Http1Server` or `Http1TlsServer` from your loop, with `monotonicNanos()`, now
-and then: it closes a slot that has moved no byte for `idleTimeout`
-milliseconds, and one whose request head has been arriving for longer than
-`headTimeout` (30 s by default), so a client that trickles its head a byte at
-a time cannot hold a slot. Over TLS the head's clock starts with the first
-bytes after the handshake, so a client that finishes its handshake and then
-sends nothing is closed after `headTimeout` too. Both are `Http1Config`
+Call `expire(now)` on an `Http1Server` or `Http1TlsServer` from your loop, with
+`monotonicNanos()`, now and then: it closes a slot that has moved no byte for
+`idleTimeout` milliseconds, and one whose request head has been arriving for
+longer than `headTimeout` (30 s by default), so a client that trickles its head
+a byte at a time cannot hold a slot. Over TLS the head's clock starts with the
+first bytes after the handshake, so a client that finishes its handshake and
+then sends nothing is closed after `headTimeout` too. Both are `Http1Config`
 fields, and a value of 0 or less stops start-up.
 
-Calling `expire` on every
-turn of the loop is cheap: it walks the slots only when one can be due, about
-once per the shorter of the two timeouts, and `expireScans` counts the walks. `TlsTcpServer`,
-`Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
-way, on the first connection accepted into it (an `Http2TlsServer` builds slot
-0 in its constructor), so a pool's size is a ceiling on its connections. What
-start-up still takes grows with it: the tables sized from the cap, such as an
+Calling `expire` on every turn of the loop is cheap: it walks the slots only
+when one can be due, about once per the shorter of the two timeouts, and
+`expireScans` counts the walks. `TlsTcpServer`, `Http1TlsServer`,
+`Http2TlsServer` and `Http3Server` build a slot the same way, on the first
+connection accepted into it (an `Http2TlsServer` builds slot 0 in its
+constructor), so a pool's size is a ceiling on its connections. What start-up
+still takes grows with it: the tables sized from the cap, such as an
 `Http3Server`'s connection-ID index, timer wheel and rings.
 
 `nish/net/tls/client` and `nish/net/tls/record-client` are the client side of
@@ -2659,17 +2639,16 @@ restarts the ones that exit and stops them all on SIGTERM. It is native only;
 [Networking](networking.md#a-server-on-every-core-nishnetprefork) shows it.
 
 Every final response an `Http1Connection` sends carries a `Date` field, and so
-does every final response an `Http2TlsServer` or `Http3Server` slot sends, as
-a lowercase `date` field straight after `:status`. A 1xx response and trailers
+does every final response an `Http2TlsServer` or `Http3Server` slot sends, as a
+lowercase `date` field straight after `:status`. A 1xx response and trailers
 carry none. Each server's `HttpDate` formats the date at most once a second,
-and a pool's slots share one. Set your own `date` field and it is sent
-instead: in any case on HTTP/1.1, and lowercase on HTTP/2 and HTTP/3, which
-refuse an uppercase field name (`H2_INVALID`, `H3_INVALID`).
+and a pool's slots share one. Set your own `date` field and it is sent instead:
+in any case on HTTP/1.1, and lowercase on HTTP/2 and HTTP/3, which refuse an
+uppercase field name (`H2_INVALID`, `H3_INVALID`). On HTTP/3 the date counts
+against the client's field-section limit like any other field.
 
-On HTTP/3 the
-date counts against the client's field-section limit like any other field. In
-a test that compares the bytes, call `date.pin(unixMs)` on the server, or on a
-lone HTTP/1.1 connection; give a lone `Http2Connection` or `Http3Connection`
+In a test that compares the bytes, call `date.pin(unixMs)` on the server, or on
+a lone HTTP/1.1 connection; give a lone `Http2Connection` or `Http3Connection`
 the bytes to send in its `date`. The formatter itself, `httpDateWrite` in
 `nish/net/http-fields`, reads no clock, so a wasm32 build can use it.
 
@@ -2721,15 +2700,14 @@ A TLS server that resumes sessions seals its tickets with
 `nish/net/tls/ticket`: `tlsTicketSeal` and `tlsTicketOpen` take the ticket key
 as a borrowed `Secret<u8[]>`, so your program keeps the current and previous
 keys in locals — draw both with `tlsTicketKeyDraw` at start-up, each into its
-own `TlsTicketKeyInfo` — and runs the rotation itself when `tlsTicketKeyDue` says so —
-`wipe(previous)`, `previous = current`, `previousInfo.copyFrom(currentInfo)`,
-`current = tlsTicketKeyDraw(currentInfo, now)`.
+own `TlsTicketKeyInfo` — and runs the rotation itself when `tlsTicketKeyDue`
+says so — `wipe(previous)`, `previous = current`,
+`previousInfo.copyFrom(currentInfo)`, `current = tlsTicketKeyDraw(currentInfo,
+now)`. Every time it takes is `monotonicNanos()`, read by you and passed in.
 
-Every time it takes is
-`monotonicNanos()`, read by you and passed in. The servers strike each
-ticket they resume in a `TlsTicketStrikes` you make and lend them: its `take`
-answers false for a replay, and for every ticket once the register is full,
-so make it as large as the tickets you issue in two hours.
+The servers strike each ticket they resume in a `TlsTicketStrikes` you make and
+lend them: its `take` answers false for a replay, and for every ticket once the
+register is full, so make it as large as the tickets you issue in two hours.
 
 Resumption is off until you turn it on. Call `enableTickets()` on the
 `TlsServer` (`conn.tls` of a `TlsRecordServer`) or on the `TlsTcpServer`,
@@ -2742,20 +2720,18 @@ checks its binder, strikes it and answers the hello, resumed with
 `psk_dhe_ke` (no certificate, no signature, so no `TLS_RECORD_SIGN`) or as a
 full handshake when the ticket is refused.
 
-Once the connection is open, call
-`issue(current, currentInfo, now)` to send it one ticket, whether or not it
-resumed. On a `TlsRecordServer`, `resume` answers 0 or the alert it failed
-with, and `issue` whether it sent a ticket; on a `TlsTcpServer` both take the
-`slot` first and answer the slot's new interest bits.
+Once the connection is open, call `issue(current, currentInfo, now)` to send it
+one ticket, whether or not it resumed. On a `TlsRecordServer`, `resume` answers
+0 or the alert it failed with, and `issue` whether it sent a ticket; on a
+`TlsTcpServer` both take the `slot` first and answer the slot's new interest
+bits.
 
-A ticket the server
-cannot use (an unknown or retired key, an expired or replayed ticket, another
-suite's hash or another server name, a full register) falls back to a full
-handshake; a selected ticket whose binder does not verify fails the
-connection with `decrypt_error`. QUIC
-never resumes: `enableTickets` on a QUIC connection's `TlsServer` leaves
-tickets off. A resumed handshake costs the server about 0.6x a full one
-(`tests/link/net_tls_resume_bench`).
+A ticket the server cannot use (an unknown or retired key, an expired or
+replayed ticket, another suite's hash or another server name, a full register)
+falls back to a full handshake; a selected ticket whose binder does not verify
+fails the connection with `decrypt_error`. QUIC never resumes: `enableTickets`
+on a QUIC connection's `TlsServer` leaves tickets off. A resumed handshake
+costs the server about 0.6x a full one (`tests/link/net_tls_resume_bench`).
 
 ```ts
 // In the loop, for a slot `poll` says is readable:
@@ -2919,12 +2895,12 @@ decodes `%00` to a 0 byte. All three together decode as `URLSearchParams`
 does for valid UTF-8; where it replaces an invalid sequence with U+FFFD,
 `percentDecode` keeps the bytes.
 
-A buffer as long as the input is always big
-enough; one shorter than the decoded result answers `URL_DECODE_ERR_SPACE`,
-with the bytes before it written. Test every answer before you read `out`:
-a peer's `%zz` makes it negative, and `String.fromBytes(out, 0, n)` with a
-negative `n` panics. `percentDecodeErrorAt`, called with the same
-arguments, answers the offset of the byte an error is at, or -1.
+A buffer as long as the input is always big enough; one shorter than the
+decoded result answers `URL_DECODE_ERR_SPACE`, with the bytes before it
+written. Test every answer before you read `out`: a peer's `%zz` makes it
+negative, and `String.fromBytes(out, 0, n)` with a negative `n` panics.
+`percentDecodeErrorAt`, called with the same arguments, answers the offset of
+the byte an error is at, or -1.
 
 **A path is split before it is decoded**, so `%2F` stays inside its segment:
 `/a%2Fb/c` is the two segments `a/b` and `c`, never three. `+` is literal in a
@@ -2951,14 +2927,13 @@ A client handed a URL by a user, a redirect or a link needs its parts:
 for a link, removing `.` and `..` so a path never climbs above `/`.
 `urlSerialize` writes a `Url` back.
 
-The scheme and host are lower-cased;
-everything else is kept as written, still percent-encoded. `port` is -1 when
-the URL names none; `urlDefaultPort(scheme)` is 80 or 443, and
-`urlOrigin(u)` writes `scheme://host:port` with the port always there, so
-origins compare as plain strings. A host is compared as written, so
-`http://a.com./` (a trailing dot) and `http://[0::1]/` are different origins
-from `http://a.com/` and `http://[::1]/`: an equal string is the same origin,
-and a split errs toward "different".
+The scheme and host are lower-cased; everything else is kept as written, still
+percent-encoded. `port` is -1 when the URL names none; `urlDefaultPort(scheme)`
+is 80 or 443, and `urlOrigin(u)` writes `scheme://host:port` with the port
+always there, so origins compare as plain strings. A host is compared as
+written, so `http://a.com./` (a trailing dot) and `http://[0::1]/` are
+different origins from `http://a.com/` and `http://[::1]/`: an equal string is
+the same origin, and a split errs toward "different".
 
 ```ts nish:ok
 import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
@@ -3199,14 +3174,13 @@ program already runs, so a lookup never stops a server from serving. `new
 DnsClient(resolver, loop, tokenBase)` joins your `pollCreate` loop under the
 tokens `tokenBase` to `tokenBase + client.tokens() - 1`.
 
-Start a lookup with
-`client.start(name, port, now)`, pass `client.timeoutMs(now, yours)` to
-`pollWait`, hand every ready token `client.owns(token)` claims to
-`client.ready(token, events, now)`, call `client.tick(now)` after each wake,
-and read `client.result(lookup, out, ttls)` until it is not
-`DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket with a random ID,
-and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32) datagrams, so a
-flood on the port cannot keep your loop inside the client.
+Start a lookup with `client.start(name, port, now)`, pass
+`client.timeoutMs(now, yours)` to `pollWait`, hand every ready token
+`client.owns(token)` claims to `client.ready(token, events, now)`, call
+`client.tick(now)` after each wake, and read `client.result(lookup, out, ttls)`
+until it is not `DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket
+with a random ID, and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32)
+datagrams, so a flood on the port cannot keep your loop inside the client.
 
 ```ts nish:ok
 import { DnsClient } from "nish/net/dns";

@@ -43,13 +43,12 @@ the response's head is in: `status`, `reason`, the `url` that answered and
 negative code on a failure, for a stream you want as it comes; a read of 0
 bytes answers 0 at once.
 
-Once the body
-ends or fails, `fetchSync` closes its connection; read it to the end, or, when
-you only want the status, close it with `res.body.client.close()`, since an
-unread body holds its socket open until the program exits. A request
-carries a body when you set `req.body`, with its `Content-Length` sent for
-you. A header value holding a line break, or a method that is not a token, is
-refused before a byte is sent.
+Once the body ends or fails, `fetchSync` closes its connection; read it to the
+end, or, when you only want the status, close it with
+`res.body.client.close()`, since an unread body holds its socket open until the
+program exits. A request carries a body when you set `req.body`, with its
+`Content-Length` sent for you. A header value holding a line break, or a method
+that is not a token, is refused before a byte is sent.
 
 ## Knowing why it failed
 
@@ -90,12 +89,11 @@ only when nothing is left on it past the response: a server that sends more
 than was asked for, or speaks while the connection sits idle, has it closed,
 and the next fetch opens a new one.
 
-A kept connection the server has closed is
-seen before the request is sent, and the request goes on a fresh one. If the
-server closes it under the request, before a byte of the answer, the request
-is sent once more on a fresh one for a GET, HEAD, OPTIONS, TRACE, PUT or
-DELETE, never for a POST; a request whose answer was cut off part way, or that
-was never answered, is not sent again.
+A kept connection the server has closed is seen before the request is sent, and
+the request goes on a fresh one. If the server closes it under the request,
+before a byte of the answer, the request is sent once more on a fresh one for a
+GET, HEAD, OPTIONS, TRACE, PUT or DELETE, never for a POST; a request whose
+answer was cut off part way, or that was never answered, is not sent again.
 
 ## Options
 

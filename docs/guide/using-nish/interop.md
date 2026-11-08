@@ -199,14 +199,13 @@ becomes a wasm import from module `host` under its own name. The `.d.ts` gains
 `Imports = { host: typeof import("./web/host") }`, so `tsc` refuses a page that
 passes a host object short of a function.
 
-The loader passes a function through
-as it stands when every value crosses unchanged (`i32`, `i64`, `f32`, `f64`,
-an enum, a handle, and a `u8` or `u16` argument), and wraps it once, at `load`,
-when a value needs converting: a `u32` or `u64` argument is read unsigned, a
-`u8` or `u16` result is masked to its width (a `u32` or `u64` one wraps as
-wasm's own conversion to `i32` or `i64` makes it), a `boolean` crosses as
-0 or 1, and a ranged integer result is range-checked (`RangeError` naming the
-function).
+The loader passes a function through as it stands when every value crosses
+unchanged (`i32`, `i64`, `f32`, `f64`, an enum, a handle, and a `u8` or `u16`
+argument), and wraps it once, at `load`, when a value needs converting: a `u32`
+or `u64` argument is read unsigned, a `u8` or `u16` result is masked to its
+width (a `u32` or `u64` one wraps as wasm's own conversion to `i32` or `i64`
+makes it), a `boolean` crosses as 0 or 1, and a ranged integer result is
+range-checked (`RangeError` naming the function).
 
 `HostHandle<"kind">` names an object the page keeps in its own table: an `i32`
 index of its own nominal type. Handles of different kinds do not mix, under

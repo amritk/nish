@@ -109,14 +109,14 @@ the record that found it. The notes below the table name each such finding.
    fixed by the stage that found it, and is counted as a fixed Medium; its
    anchors are in `src/`, not in the runtime.
 
-   RT-15 (Medium), a `string` a
-   `declare function` returns (WP27 S3.2), is counted the same way. So is RT-16 (Medium), `readCString` and the literal `null` a `CPtr | null`
-   parameter takes (WP27 S3.3), and RT-18 (Medium), a `u8[]` lent to C with its
-   count checked (WP40 B1.2), and RT-20 (Medium), the C resource a `using`
-   owns (#861). RT-21 (Low), `nish_argv_init` testing `malloc`'s answer for
-   null only after computing from it, was found by #888's harness stage while
-   building the runtime under UBSan, fixed there, and is counted as a fixed
-   Low.
+   RT-15 (Medium), a `string` a `declare function` returns (WP27 S3.2), is
+   counted the same way. So is RT-16 (Medium), `readCString` and the literal
+   `null` a `CPtr | null` parameter takes (WP27 S3.3), and RT-18 (Medium), a
+   `u8[]` lent to C with its count checked (WP40 B1.2), and RT-20 (Medium), the
+   C resource a `using` owns (#861). RT-21 (Low), `nish_argv_init` testing
+   `malloc`'s answer for null only after computing from it, was found by #888's
+   harness stage while building the runtime under UBSan, fixed there, and is
+   counted as a fixed Low.
 
    RT-24 and RT-25 (Medium), the mode race and the link a secret's
    write could follow, and RT-26 (Low), the umask on `mkdirSyncMode`, were
@@ -134,12 +134,11 @@ the record that found it. The notes below the table name each such finding.
    RT-34 (Low), the stale-socket unlink racing another binder, is counted as
    an open Low: its boundary is the socket's directory.
 
-   RT-37 (Low), the
-   descriptors `recvFd` closes and the family check, and RT-40 (Low),
-   `spawnWithFds`' self-dups and collisions, were found and fixed by the stage
-   that added descriptor passing, and are counted as fixed. RT-38 (Low), the
-   window on Darwin before a received descriptor is close-on-exec, is counted
-   as an open Low. RT-39, what `peerCredentials` reads and when, is a
+   RT-37 (Low), the descriptors `recvFd` closes and the family check, and RT-40
+   (Low), `spawnWithFds`' self-dups and collisions, were found and fixed by the
+   stage that added descriptor passing, and are counted as fixed. RT-38 (Low),
+   the window on Darwin before a received descriptor is close-on-exec, is
+   counted as an open Low. RT-39, what `peerCredentials` reads and when, is a
    decision and is not counted. RT-17 and RT-19 were amended there, not
    reopened.
 
@@ -224,31 +223,29 @@ the record that found it. The notes below the table name each such finding.
     key generation or the connection ends, the end of the closing or draining
     period included. It is counted as a fixed Low.
 
-    QUIC-5 (Low), the server's static keys and the listener's seed, was
-    closed for #430 too: `QuicListener.release` wipes the listener's seed,
-    scratch, INVALID_TOKEN keys and last answer, and `Http3Server.stop` the
-    configuration's stateless reset and Retry token keys with every
-    connection. A copy of a key the caller keeps stays the caller's to wipe,
-    and a configuration shared with another server is left keyed with zeros.
+    QUIC-5 (Low), the server's static keys and the listener's seed, was closed
+    for #430 too: `QuicListener.release` wipes the listener's seed, scratch,
+    INVALID_TOKEN keys and last answer, and `Http3Server.stop` the
+    configuration's stateless reset and Retry token keys with every connection.
+    A copy of a key the caller keeps stays the caller's to wipe, and a
+    configuration shared with another server is left keyed with zeros. It is
+    counted as a fixed Low.
 
-    It is counted as a fixed Low.
-    QUIC-1 (Low), the `QuicKeys` the one-shot key forms answered, was left
-    open by #430's secret-boundary stage and closed by #674's secret-fields
-    stage: `quicKeys` and `quicKeysUpdate` now derive into a `QuicKeysSlot`
-    the caller passes, leave in the arena only the `HkdfScratch` each makes,
-    which wipes its hashers and output blocks before the call returns, and a
-    slot the caller owns is the caller's to wipe.
+    QUIC-1 (Low), the `QuicKeys` the one-shot key forms answered, was left open
+    by #430's secret-boundary stage and closed by #674's secret-fields stage:
+    `quicKeys` and `quicKeysUpdate` now derive into a `QuicKeysSlot` the caller
+    passes, leave in the arena only the `HkdfScratch` each makes, which wipes
+    its hashers and output blocks before the call returns, and a slot the
+    caller owns is the caller's to wipe. It is counted as a fixed Low.
 
-    It is counted as a fixed Low.
-    QUIC-6 (Low), RFC 9001 §6.6's AEAD limits, and QUIC-7 (Low), an
-    optimistic ACK, were closed by #784: a write key
-    starts a key update at three quarters of its confidentiality limit and
-    the connection closes with AEAD_LIMIT_REACHED at it when none can be made
-    or past the integrity limit, and the server skips a 1-RTT packet number
-    every 128 to 1,024 packets and closes with PROTOCOL_VIOLATION on an ACK
-    of one.
+    QUIC-6 (Low), RFC 9001 §6.6's AEAD limits, and QUIC-7 (Low), an optimistic
+    ACK, were closed by #784: a write key starts a key update at three quarters
+    of its confidentiality limit and the connection closes with
+    AEAD_LIMIT_REACHED at it when none can be made or past the integrity limit,
+    and the server skips a 1-RTT packet number every 128 to 1,024 packets and
+    closes with PROTOCOL_VIOLATION on an ACK of one. Each is counted as a fixed
+    Low.
 
-    Each is counted as a fixed Low.
     QUIC-10 (Low), ECN counts parsed and ignored, was closed by #914, which
     has the carriers mark ECT(0); it is counted as a fixed Low.
     QUIC-11 (Low), a peer's address change not followed, was closed by
@@ -301,13 +298,12 @@ the record that found it. The notes below the table name each such finding.
     collidable key hashing, were found by the batcher's first review and
     fixed before it merged.
 
-    PG-18, PG-19 and PG-20 are the shapes a
-    connection target can take; PG-18 and PG-19 hold and are not findings,
-    and PG-20 (Medium), a URL's user information ending at its last `@`
-    where libpq ends it at the first, was found by the Unix-socket targets'
-    first review and fixed before it merged. PG-21 (Low), a socket another
-    local user can create, and PG-22 (Low), a socket file taken as its
-    directory, are accepted and not counted.
+    PG-18, PG-19 and PG-20 are the shapes a connection target can take; PG-18
+    and PG-19 hold and are not findings, and PG-20 (Medium), a URL's user
+    information ending at its last `@` where libpq ends it at the first, was
+    found by the Unix-socket targets' first review and fixed before it merged.
+    PG-21 (Low), a socket another local user can create, and PG-22 (Low), a
+    socket file taken as its directory, are accepted and not counted.
 
     PG-23 (Medium), a carrier
     query held for ever by a server that accepts and never answers, and

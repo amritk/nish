@@ -151,11 +151,11 @@ words, `h->data` for eight, and the whole round-constant table, read in order
 from its first word to its last whatever the data. Each block runs the same
 instructions in the same order.
 
-The resolver's branches are on the CPU's
-feature bits and `NISH_SHA256`, never on data, and its answer is cached once
-per process. `tests/ct-asm-runtime.js` holds the assembly to that on x86-64 at
-both CPU levels and on aarch64, and holds the unit to exporting only the kernel
-and the resolver, so a second kernel cannot go unread
+The resolver's branches are on the CPU's feature bits and `NISH_SHA256`, never
+on data, and its answer is cached once per process. `tests/ct-asm-runtime.js`
+holds the assembly to that on x86-64 at both CPU levels and on aarch64, and
+holds the unit to exporting only the kernel and the resolver, so a second
+kernel cannot go unread
 ([ct-verification.md](ct-verification.md#the-runtimes-aes-kernels) gives the
 model, which this unit shares with `runtime-aes.c`).
 

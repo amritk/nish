@@ -37,9 +37,8 @@ language says it is not.
   constructor's argument or its `this`, a method's `this`, a `for...of`
   binding, a later declarator of the same statement, an assignment used as a
   value, an arrow's capture, and a task's argument (`s.spawn(entry, raw, …)`).
-
-  The compound assignments (`+=`, `??=`,
-  `||=`) take no array, so they are no road.
+  The compound assignments (`+=`, `??=`, `||=`) take no array, so they are no
+  road.
 - Wrote a program for each one that reads the alias after `wipe`, and ran it
   against `main`'s compiler.
 
@@ -329,14 +328,13 @@ reads. The wipe itself is out of scope here: it is the same volatile
   `v` is syntactically `new`, an array literal or an object literal, and the
   body passes the local straight to a `wipe`.
 
-  What `v` holds is recorded as
-  dirt on `.value` with `noteStore`, as a field store into an own object
-  would be, so a constructor or literal that takes in a parameter or a
-  captured array still makes the wipe a shared write. A moved local
-  (`secret(buf)`) or a call's answer (`secret(make(n))`) is not syntactically
-  fresh, so it stays foreign; a parameter or field is refused earlier by the
-  sole-reference rule; a `Secret` parameter cannot be wiped by its callee; and
-  a holder's `wipe()` writes its own field, which stays shared.
+  What `v` holds is recorded as dirt on `.value` with `noteStore`, as a field
+  store into an own object would be, so a constructor or literal that takes in
+  a parameter or a captured array still makes the wipe a shared write. A moved
+  local (`secret(buf)`) or a call's answer (`secret(make(n))`) is not
+  syntactically fresh, so it stays foreign; a parameter or field is refused
+  earlier by the sole-reference rule; a `Secret` parameter cannot be wiped by
+  its callee; and a holder's `wipe()` writes its own field, which stays shared.
 
 ### Findings
 
@@ -349,21 +347,20 @@ now admitted when `v` is allocated in the call (see Method); the IR is
 unchanged, and the program prints the same at 1, 2 and 8 threads
 (`tests/link/thread_task_wipe_secret`).
 
-What the rule does not admit, by design: a `Secret` held by a `let`; one
-made from a moved local, a call's answer or a record whose constructor is
-handed an object; one a call answers, whether the task wipes it or first
-hands it to a helper that writes it; one kept in a holder's field; and an
-array a call answered (`const st = initState()`), whose freshness the rule
-does not track across a return.
+What the rule does not admit, by design: a `Secret` held by a `let`; one made
+from a moved local, a call's answer or a record whose constructor is handed an
+object; one a call answers, whether the task wipes it or first hands it to a
+helper that writes it; one kept in a holder's field; and an array a call
+answered (`const st = initState()`), whose freshness the rule does not track
+across a return. A helper may write the task's own `Secret` before the wipe
+(`cleared` in `tests/link/thread_task_wipe_secret`).
 
-A helper may write the task's own `Secret`
-before the wipe (`cleared` in `tests/link/thread_task_wipe_secret`). A
-`Secret` of a literal holding a captured array, `secret([buf])`, cannot be
+A `Secret` of a literal holding a captured array, `secret([buf])`, cannot be
 written at all: `isSecretPayload` takes only an array of integers or a record
-of integer fields, so no negative test exists for it. The supported pattern
-for a shared key is that the parent makes the `Secret`, each task `expose`s
-it read-only, and the parent wipes it after the scope joins, which the region
-rule above already orders.
+of integer fields, so no negative test exists for it. The supported pattern for
+a shared key is that the parent makes the `Secret`, each task `expose`s it
+read-only, and the parent wipes it after the scope joins, which the region rule
+above already orders.
 
 ### Properties verified
 

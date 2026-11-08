@@ -114,10 +114,9 @@ Before, that was the overflow check on the loop's `off + i`; now it is the
 index check on the fast path's `b[off + 1]`. The set of inputs that panic is
 the same.
 
-Any other
-offset goes to `getU64BEByByte`, the earlier loop, which checks each index and
-panics `index` on the first byte not in the array, so the panic text is
-unchanged. An array longer than 2^31-1 (BYTES-1) makes `toI32(b.length)`
+Any other offset goes to `getU64BEByByte`, the earlier loop, which checks each
+index and panics `index` on the first byte not in the array, so the panic text
+is unchanged. An array longer than 2^31-1 (BYTES-1) makes `toI32(b.length)`
 negative, or smaller than the real length, so the guard can only refuse an
 in-range read, never pass one that is out of range. The fixtures pin a read
 ending on the array's last byte, one byte short, an empty array, the first

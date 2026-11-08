@@ -28,11 +28,10 @@ constant script that takes nothing from the arguments:
 `[ -t N ]`, N the descriptor 1 or 2, then `tput colors`, which reads how many
 colours `TERM`'s terminfo entry declares.
 
-`tput` is run as `/usr/bin/tput` or
-`/bin/tput`, never looked up on `PATH`, so a `PATH` holding `.` or an empty
-entry cannot run a `tput` a checkout planted; with neither there the probe
-answers without it ("--help: the colour probe never runs a `tput` found on
-PATH").
+`tput` is run as `/usr/bin/tput` or `/bin/tput`, never looked up on `PATH`, so
+a `PATH` holding `.` or an empty entry cannot run a `tput` a checkout planted;
+with neither there the probe answers without it ("--help: the colour probe
+never runs a `tput` found on PATH").
 
 The shell and `tput` inherit the environment as every spawn of `nish`
 does, so `TERM`, `TERMINFO` and `TERMINFO_DIRS` choose the terminfo file

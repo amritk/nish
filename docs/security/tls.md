@@ -12,14 +12,13 @@ Finished and the ECDHE secret are compared in constant time; RFC 8448 §3 is
 reproduced byte for byte. The ECDHE secret and the copy of the ephemeral key
 it is computed with are `Secret`s, wiped on every path.
 
-The secrets the
-handshake keeps in `TlsServer`'s fields and hands its carrier are wiped with
-`secureZero` once the carrier has what it needs from them and at every end of
-the connection (#430's TLS stage, below), and since #674's secret-fields
-stage every one of them is a `Secret` field, which nothing outside `expose`
-reads (below). One Low finding is left open, as CLAUDE.md §Security
-requires: TLS-4, the carrier's missing timeout (T2's result, below). TLS-1
-is closed.
+The secrets the handshake keeps in `TlsServer`'s fields and hands its carrier
+are wiped with `secureZero` once the carrier has what it needs from them and at
+every end of the connection (#430's TLS stage, below), and since #674's
+secret-fields stage every one of them is a `Secret` field, which nothing
+outside `expose` reads (below). One Low finding is left open, as CLAUDE.md
+§Security requires: TLS-4, the carrier's missing timeout (T2's result, below).
+TLS-1 is closed.
 
 **T2's result.** Every record the trace prints is reproduced byte for byte,
 and every refusal of the record layer is an alert, never a panic. Records are
@@ -57,13 +56,12 @@ everything is wiped: both directions' keys, IVs and AES schedules, both
 traffic secrets the slot keeps for KeyUpdate, and everything `TlsServer`
 holds, the resumption master secret and the exchange's words included.
 
-After
-a clean `close` the resumption master secret is wiped at once and the write
-direction once the server's `close_notify` is sealed; the read direction waits
-for the client's `close_notify`, and the rest for `wipeKeys`, which the
-carrier's slot close calls and a program driving `TlsRecordServer` itself
-calls after the connection closes. A slot handed its next connection is wiped
-by `restart` (`TlsServer`'s arrays) and `TlsRecordServer.start` (the keys and
+After a clean `close` the resumption master secret is wiped at once and the
+write direction once the server's `close_notify` is sealed; the read direction
+waits for the client's `close_notify`, and the rest for `wipeKeys`, which the
+carrier's slot close calls and a program driving `TlsRecordServer` itself calls
+after the connection closes. A slot handed its next connection is wiped by
+`restart` (`TlsServer`'s arrays) and `TlsRecordServer.start` (the keys and
 traffic secrets). TLS-2 is closed, and TLS-1 is narrowed to the one-shot
 answers and what an open connection needs.
 
@@ -76,14 +74,13 @@ derive as one: `tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`,
 typed `Secret<u8[]>`, so the checker refuses a plain array there
 (`reject_secret_tls_plain_key`).
 
-Each reads a key only inside
-`exposeWith` and wipes, with `wipe`'s volatile store, what it derives on the
-way: the zero salt and input of the early secret, the "derived" salts, the
-master secret's zero input and `finished_key`; HMAC and HKDF wipe their own
-key blocks (`std/crypto/hmac.ts`). The `Secret` a derivation answers is the
-caller's to wipe, and the checker refuses a function that neither returns nor
-wipes one it made. TLS-1 is narrowed to the secrets an open connection keeps
-in fields.
+Each reads a key only inside `exposeWith` and wipes, with `wipe`'s volatile
+store, what it derives on the way: the zero salt and input of the early secret,
+the "derived" salts, the master secret's zero input and `finished_key`; HMAC
+and HKDF wipe their own key blocks (`std/crypto/hmac.ts`). The `Secret` a
+derivation answers is the caller's to wipe, and the checker refuses a function
+that neither returns nor wipes one it made. TLS-1 is narrowed to the secrets an
+open connection keeps in fields.
 
 **#674's secret-fields stage.** Those fields are `Secret`s now. `TlsServer`
 holds the ephemeral key as a readonly `Secret<u8[]>` field that `restart`
@@ -93,17 +90,16 @@ early secret and binder key, in two `TlsSecretPool`s, one per hash, whose
 ten secrets are readonly `Secret` fields; a bitmask, `held`,
 says which are derived, where `null` pointers into the pools did.
 
-Its
-`readSecret` and `writeSecret`, which answered a traffic secret as a plain
+Its `readSecret` and `writeSecret`, which answered a traffic secret as a plain
 array, are gone: a carrier asks `readKnown` and `writeKnown` and reads the
 secret through `expose`. `TlsRecordServer` keeps the traffic secrets for
 KeyUpdate in four readonly `Secret` fields, one per direction and hash, that
-KeyUpdate ratchets in place. Each holder's `wipe()` wipes every one, which
-the checker proves (NL2541), and the checker refuses binding one to a local
+KeyUpdate ratchets in place. Each holder's `wipe()` wipes every one, which the
+checker proves (NL2541), and the checker refuses binding one to a local
 (`reject_secret_field_tls_read`), handing it to `console.log`
-(`reject_secret_field_tls_log`) or replacing it (`reject_secret_field_tls_store`).
-`TlsTcpServer` no longer keeps a copy of each slot's ephemeral key. TLS-1 is
-closed.
+(`reject_secret_field_tls_log`) or replacing it
+(`reject_secret_field_tls_store`). `TlsTcpServer` no longer keeps a copy of
+each slot's ephemeral key. TLS-1 is closed.
 
 **TLS-5** (Low) was found in review of the resumption design: every
 ChaCha20-Poly1305 seal and open left a copy of its key in ChaCha20 state that
@@ -233,10 +229,9 @@ them — and every traffic key and IV; the ServerHello, EncryptedExtensions,
 Certificate, CertificateVerify and Finished the server writes; the CertificateVerify input; and acceptance
 of the trace's client Finished, fed whole and a byte at a time.
 
-The trace
-signs with RSA-PSS, which the stack does not have and which is randomised, so
-its signature is injected through the hand-off and every byte after it is
-checked.
+The trace signs with RSA-PSS, which the stack does not have and which is
+randomised, so its signature is injected through the hand-off and every byte
+after it is checked.
 
 The same server answering a ClientHello that offers only
 `TLS_AES_256_GCM_SHA384` is checked against an independent Python model: its
@@ -328,13 +323,12 @@ both `close_notify`s — sealed by `TlsRecordProtection` under the trace's keys
 at the trace's sequence numbers, and each opened back by its reader; the
 ClientHello record is read whatever its legacy version says (§5.1).
 
-Replayed
-through `TlsRecordServer`, the trace's ClientHello record brings back the
-trace's ServerHello record and, once signed, its flight record, and the
-client's Finished, data and `close_notify` records open the connection, read
-as the fifty bytes and end the stream. Over a socket
-(`net_tls_record_tcp`, `_f64`), a Nish client sends the same records to the
-carrier and gets the same ServerHello and flight records back.
+Replayed through `TlsRecordServer`, the trace's ClientHello record brings back
+the trace's ServerHello record and, once signed, its flight record, and the
+client's Finished, data and `close_notify` records open the connection, read as
+the fifty bytes and end the stream. Over a socket (`net_tls_record_tcp`,
+`_f64`), a Nish client sends the same records to the carrier and gets the same
+ServerHello and flight records back.
 
 **Where the stream is cut changes nothing.** The client's stream through
 `TlsRecordReader` cut in two at each of its 354 inner points, fed a byte at a
@@ -425,25 +419,23 @@ P-256 leaf through one slot, their ClientHello padded past the first input
 buffer so the first one grows it: every byte the recorded one, and
 `Arena.mark()` unmoved after the first.
 
-A thousand rounds in that slot of a
-HelloRetryRequest, a `restart` and the same plain handshake: every plain one
-the recorded bytes, so `restart` undoes `retried` and the `message_hash`
-transcript, and `Arena.mark()` unmoved. A thousand connections over loopback
-through `TlsTcpServer`'s pool under AES-256-GCM-SHA384 — accepted,
-handshaken and closed — the same: every byte the recorded one,
-`Arena.mark()` unmoved, every slot free after. The slot's AES schedules are
-secret and stay in it while the connection is open; `wipeKeys` (what
-`TlsTcpServer.close` calls) and `start` (a slot handed its next connection)
-zero both directions', which `net_tls_memory` pins.
+A thousand rounds in that slot of a HelloRetryRequest, a `restart` and the same
+plain handshake: every plain one the recorded bytes, so `restart` undoes
+`retried` and the `message_hash` transcript, and `Arena.mark()` unmoved. A
+thousand connections over loopback through `TlsTcpServer`'s pool under
+AES-256-GCM-SHA384 — accepted, handshaken and closed — the same: every byte the
+recorded one, `Arena.mark()` unmoved, every slot free after. The slot's AES
+schedules are secret and stay in it while the connection is open; `wipeKeys`
+(what `TlsTcpServer.close` calls) and `start` (a slot handed its next
+connection) zero both directions', which `net_tls_memory` pins.
 
-`aesKeyInto` reproduces
-FIPS 197 Appendix C and `aesKey`'s schedule word for word, refuses a key of
-another length or a schedule of the wrong size, and leaves the arena unmoved
-inside `using a = arena()` (`crypto_aes_into`).
-The HMAC and HKDF scratch the schedule runs in reproduce RFC 4231 and RFC
-5869 and leave the arena unmoved inside `using a = arena()`
-(`crypto_hkdf_scratch`). `restart` with randomness of the wrong length fails
-the server with `internal_error`, as the constructor does.
+`aesKeyInto` reproduces FIPS 197 Appendix C and `aesKey`'s schedule word for
+word, refuses a key of another length or a schedule of the wrong size, and
+leaves the arena unmoved inside `using a = arena()` (`crypto_aes_into`). The
+HMAC and HKDF scratch the schedule runs in reproduce RFC 4231 and RFC 5869 and
+leave the arena unmoved inside `using a = arena()` (`crypto_hkdf_scratch`).
+`restart` with randomness of the wrong length fails the server with
+`internal_error`, as the constructor does.
 
 **No key reaches another connection.** `accept` copies the caller's ephemeral
 key and server random into the slot and wipes the caller's key array, so a
@@ -482,24 +474,22 @@ client sends, until the client's own `close_notify` wipes it; the carrier's
 slot close then wipes the rest, and over loopback
 `TlsTcpServer.close` leaves every key of the slot zero.
 
-A program that drives
-`TlsRecordServer` itself, without `TlsTcpServer`, calls `wipeKeys` after the
-connection closes, as the carrier's slot close does: a clean close leaves the
-exporter secret, which is the caller's to read, and the client Finished the
-server expected in `TlsServer` until then. `TlsServer.restart` wipes every
-secret array of both hashes, the CertificateVerify input's too, and
-`TlsRecordServer.start` both directions' keys, IVs and AES schedules and both
-traffic secrets, so that after the two, as a slot is handed its next
-connection, all of them read zero.
+A program that drives `TlsRecordServer` itself, without `TlsTcpServer`, calls
+`wipeKeys` after the connection closes, as the carrier's slot close does: a
+clean close leaves the exporter secret, which is the caller's to read, and the
+client Finished the server expected in `TlsServer` until then.
+`TlsServer.restart` wipes every secret array of both hashes, the
+CertificateVerify input's too, and `TlsRecordServer.start` both directions'
+keys, IVs and AES schedules and both traffic secrets, so that after the two, as
+a slot is handed its next connection, all of them read zero.
 
-Before each end of an open connection (a
-failure, a close, the slot close, a restart) each key, IV, round-key and H
-array, both traffic secrets of the suite's hash and the resumption and
-exporter secrets are read as not zero on its own, so that none of those wipes
-is shown by an array that was empty; the failures before the handshake is
-done check only that the slot holds something, and `TlsServer`'s handshake
-arrays (its pool's secrets and scratch, the client Finished it expects) are
-pinned by the `-O2` counts rather than by such a read.
+Before each end of an open connection (a failure, a close, the slot close, a
+restart) each key, IV, round-key and H array, both traffic secrets of the
+suite's hash and the resumption and exporter secrets are read as not zero on
+its own, so that none of those wipes is shown by an array that was empty; the
+failures before the handshake is done check only that the slot holds something,
+and `TlsServer`'s handshake arrays (its pool's secrets and scratch, the client
+Finished it expects) are pinned by the `-O2` counts rather than by such a read.
 
 A handshake that fails before it is done leaves every key zero
 too, whether aborted while it waits for the CertificateVerify signature or
@@ -510,13 +500,12 @@ signed. After a KeyUpdate the client asks to be answered, both traffic
 secrets are the next generation written over the one they replace and the
 next-secret scratch of both directions reads zero.
 
-The exchange's words, the
-handshake secret and the ephemeral key read zero after a handshake, and so do
-the client's handshake and application secrets `TlsServer` handed over; the
-exchange's words read zero after an exchange refused for a low-order share.
-On `ab9099e`, before the stage, 39 of the 98 checks it then had fail; each wipe the
-read-backs pin was also deleted in turn, on this stage's head, to show a
-read-back or an `-O2` count fail.
+The exchange's words, the handshake secret and the ephemeral key read zero
+after a handshake, and so do the client's handshake and application secrets
+`TlsServer` handed over; the exchange's words read zero after an exchange
+refused for a low-order share. On `ab9099e`, before the stage, 39 of the 98
+checks it then had fail; each wipe the read-backs pin was also deleted in turn,
+on this stage's head, to show a read-back or an `-O2` count fail.
 
 The check `tls: the wipes survive opt -O2 (both directions' keys, IVs and AES schedules; the traffic, handshake, exporter and resumption secrets; the exchange's words; a resumed handshake's PSK, early secret, binder key and salt)`
 (`tests/wipes/tls.js`) counts each of those wipes after `opt -O2`, exactly,
@@ -537,12 +526,12 @@ closes clients that hang up or reset mid-handshake as a cut stream and as a
 socket failure, and frees every slot, with every record buffer back in its
 pool.
 
-With tickets on, `net_tls_resume`'s ten
-`tcp:` checks take a full handshake through one slot of a `TlsTcpServer` to a
-ticket `TlsTcpServer.issue` sends, resume a second connection accepted into
-the restarted slot through `TlsTcpServer.resume`, unsigned and on identity 0,
-refuse the same ticket a third time as a replay, and answer `resume` and
-`issue` on a slot the carrier does not hold with `TLS_RECORD_DONE`.
+With tickets on, `net_tls_resume`'s ten `tcp:` checks take a full handshake
+through one slot of a `TlsTcpServer` to a ticket `TlsTcpServer.issue` sends,
+resume a second connection accepted into the restarted slot through
+`TlsTcpServer.resume`, unsigned and on identity 0, refuse the same ticket a
+third time as a replay, and answer `resume` and `issue` on a slot the carrier
+does not hold with `TLS_RECORD_DONE`.
 
 ## Properties verified: resumption
 
@@ -550,44 +539,41 @@ What the psk-wire (#673), ticket-seal (#680), server-resume and interop-resume s
 where the code departs from the design under "Resumption" below, which is
 kept as written.
 
-**Tests.**
-
-Each is a link test, named by the link loop's check
-`` link/${name}: exits with ${wantCode} and stdout matches expected.out ``:
-`net_tls_psk_wire` and `net_tls_psk_wire_f64` (the codec's half of the
-fallback table and RFC 8448's resumption values), `net_tls_ticket` and
-`net_tls_ticket_f64` (the seal, the open, the keys' rotation and the strike
-register), and `net_tls_resume` and `net_tls_resume_f64`, 148 checks: rows 1
-to 18 of the fallback and abort table, each with a negative case, and four
-offers of two identities where the first is refused (rows 4, 5 and 6 then a
-ticket that resumes, and a replay then none); the PSK, early secret, binder
-key, salt, opened PSK and handshake secret read back as zero after rows 1 to
-9 and 17, and the resumption master secret after rows 9 and 17 and once rows
-2 to 7 are issued their tickets; the ephemeral key read back as zero once
-the ServerHello is written, after a resumed run (row 1) and a
-ticket-offering fallback (row 2), which keeping it on every ticket-enabled
-or every resumed connection fails; every ServerHello's x25519 share, resumed,
-a ticket-offering fallback or resumed after a HelloRetryRequest (row 15),
-equal to the server's own public key and not the zero scalar's; `issue` pinned (a second call answers false and writes
-nothing, `TLS_RECORD_TICKET` drops, a lifetime of 7200, the nonce `[0]`, a
+**Tests.** Each is a link test, named by the link loop's check `` link/${name}:
+exits with ${wantCode} and stdout matches expected.out ``: `net_tls_psk_wire`
+and `net_tls_psk_wire_f64` (the codec's half of the fallback table and RFC
+8448's resumption values), `net_tls_ticket` and `net_tls_ticket_f64` (the seal,
+the open, the keys' rotation and the strike register), and `net_tls_resume` and
+`net_tls_resume_f64`, 148 checks: rows 1 to 18 of the fallback and abort table,
+each with a negative case, and four offers of two identities where the first is
+refused (rows 4, 5 and 6 then a ticket that resumes, and a replay then none);
+the PSK, early secret, binder key, salt, opened PSK and handshake secret read
+back as zero after rows 1 to 9 and 17, and the resumption master secret after
+rows 9 and 17 and once rows 2 to 7 are issued their tickets; the ephemeral key
+read back as zero once the ServerHello is written, after a resumed run (row 1)
+and a ticket-offering fallback (row 2), which keeping it on every
+ticket-enabled or every resumed connection fails; every ServerHello's x25519
+share, resumed, a ticket-offering fallback or resumed after a HelloRetryRequest
+(row 15), equal to the server's own public key and not the zero scalar's;
+`issue` pinned (a second call answers false and writes nothing,
+`TLS_RECORD_TICKET` drops, a lifetime of 7200, the nonce `[0]`, a
 `ticket_age_add` that differs across connections, and no ticket for a server
 name over 255 bytes, whose resumption master secret is zeroed); a resumed
-ClientHello with a low-order x25519 share failing with the salt zeroed;
-`QUIC: enableTickets leaves tickets off`; 100 rounds through one restarted
-slot, 90 resumed and 10 replays that fall back to a signed full handshake,
-each issued a ticket, with `Arena.mark()` unmoved after the first fallback;
-and twelve `tcp:` checks through `TlsTcpServer` over loopback (the carrier
-paragraph above), the resumed and the fallback ServerHello's share among
-them.
+ClientHello with a low-order x25519 share failing with the salt zeroed; `QUIC:
+enableTickets leaves tickets off`; 100 rounds through one restarted slot, 90
+resumed and 10 replays that fall back to a signed full handshake, each issued a
+ticket, with `Arena.mark()` unmoved after the first fallback; and twelve `tcp:`
+checks through `TlsTcpServer` over loopback (the carrier paragraph above), the
+resumed and the fallback ServerHello's share among them. `net_tls_resume_bench`
+is the measurement.
 
-`net_tls_resume_bench` is the measurement.
 `net_interop_server` and `net_interop_server_f64` run the interop server's
 in-process checks, the HTTP/2 port's tickets among them, over loopback:
-`tickets: a first connection is a full handshake, its Finished verified, and issued a ticket`,
-`its ticket resumes the next connection, the server's Finished verified, and a new ticket issued`,
-`the same ticket replayed falls back to a full handshake`,
-`/close on the resumed connection: 200, its body, then GOAWAY`,
-`and the server closes the connection`.
+`tickets: a first connection is a full handshake, its Finished verified, and
+issued a ticket`, `its ticket resumes the next connection, the server's
+Finished verified, and a new ticket issued`, `the same ticket replayed falls
+back to a full handshake`, `/close on the resumed connection: 200, its body,
+then GOAWAY`, `and the server closes the connection`.
 
 Then two rotation turns, each made by `rotateTickets` in `h2.ts`, the
 function `run`'s own turn calls, after the caller's `wipe` of its previous key:
@@ -599,22 +585,19 @@ function `run`'s own turn calls, after the caller's `wipe` of its previous key:
 Every ticket in them comes from a full handshake and is offered once, so the
 second turn's refusal is the retired key's, not the strike register's.
 
-That
-the retired key is wiped is not read back at run time: a `Secret` cannot be
-read after its wipe, and the turn cannot leave it unwiped, since `previous`
-cannot be assigned again while it holds an unwiped `Secret` (NL2442).
-The rest of `run`'s rotation wiring in `cli.ts` is checked by reading only:
-the `tlsTicketKeyDue` gate, `previous = current` before `rotateTickets`, and
-the order of the keys passed to `step` (current, then previous).
+That the retired key is wiped is not read back at run time: a `Secret` cannot
+be read after its wipe, and the turn cannot leave it unwiped, since `previous`
+cannot be assigned again while it holds an unwiped `Secret` (NL2442). The rest
+of `run`'s rotation wiring in `cli.ts` is checked by reading only: the
+`tlsTicketKeyDue` gate, `previous = current` before `rotateTickets`, and the
+order of the keys passed to `step` (current, then previous).
 
-The checks
-above call `rotateTickets` directly, and in CI the server never runs long
-enough, or seals enough tickets, for `run` to rotate. The `-O2` wipe-count
+The checks above call `rotateTickets` directly, and in CI the server never runs
+long enough, or seals enough tickets, for `run` to rotate. The `-O2` wipe-count
 pin on `ticketRotationTurns` (below) covers the rotation turn in
 `tests/link/net_tls_ticket`, written against `std/net/tls/ticket.ts`, not the
-interop server's.
-The interop job's checks against curl and Chromium are in the paragraph
-below.
+interop server's. The interop job's checks against curl and Chromium are in the
+paragraph below.
 
 **The saving.** `link/net_tls_resume_bench: a resumed handshake costs the
 server under 0.85x a full one` reads the medians the bench prints over 41
@@ -629,22 +612,20 @@ the x25519 exchange, and leaves out the certificate and the P-256 signature.
 On the wire a full handshake is 854 bytes and a resumed one 637, both sides
 and the NewSessionTicket counted.
 
-**Wipes.**
-
-The resumption roots of `tls: the wipes survive opt -O2 (both
+**Wipes.** The resumption roots of `tls: the wipes survive opt -O2 (both
 directions' keys, IVs and AES schedules; the traffic, handshake, exporter and
 resumption secrets; the exchange's words; a resumed handshake's PSK, early
 secret, binder key and salt)`: `nish.TlsServer.exchangeKeys` 6,
 `masterSecretStep` 9, `sign` 17, `selectTicket` 20 (the opened PSK on each
-refusal, and `tlsTicketOpen` under both keys), `bindTicket` 8 (the opened
-PSK once it is in the pool; the plain copies of the PSK, early secret and
-binder key; the PSK's and binder key's arms of `zero`; and the early
-secret's and binder key's derivations, 1 each), `saltFromEarly` 1, `writeResumedHello` 3,
+refusal, and `tlsTicketOpen` under both keys), `bindTicket` 8 (the opened PSK
+once it is in the pool; the plain copies of the PSK, early secret and binder
+key; the PSK's and binder key's arms of `zero`; and the early secret's and
+binder key's derivations, 1 each), `saltFromEarly` 1, `writeResumedHello` 3,
 `resume` 72, `resumptionPsk` 1, `writeTicket` 10 (the issued ticket's PSK and
-`tlsTicketSeal`'s 8), `issue` 11, `TlsServer.wipe` 25 (one for the
-ephemeral key and twelve for each of the two `TlsSecretPool`s: its ten
-secrets, the expected client Finished and the CertificateVerify input),
-`restart` 29 and `fail` 6.
+`tlsTicketSeal`'s 8), `issue` 11, `TlsServer.wipe` 25 (one for the ephemeral
+key and twelve for each of the two `TlsSecretPool`s: its ten secrets, the
+expected client Finished and the CertificateVerify input), `restart` 29 and
+`fail` 6.
 
 Each was shown counted by deleting it and watching
 its root drop, but one: without `resume`'s arm of `zero` for the early
@@ -662,36 +643,30 @@ slot's turn calls `TlsTcpServer.resume` on a ticket offer and
 `TlsTcpServer.issue` once the connection is open, and logs `tls: full` or
 `tls: resumed` once per connection.
 
-A GET of `/close` answers `closing` and
-sends GOAWAY, so the next request has to open a new connection. The curl
-job's step
-`curl --http2 resumes a TLS 1.3 session`
-runs the pinned curl (BoringSSL, without `--ssl-sessions`) once over two
-`/close` URLs, so it keeps the first connection's ticket for the second, and
-checks
-`curl --http2 opens a new connection for the second /close`
-(`num_connects` reads `1 1`; two URLs on one connection read `1 0`) and
-`the server resumed curl's second connection`
-(the log's new handshake lines are exactly `tls: full` then `tls: resumed`).
+A GET of `/close` answers `closing` and sends GOAWAY, so the next request has
+to open a new connection. The curl job's step `curl --http2 resumes a TLS 1.3
+session` runs the pinned curl (BoringSSL, without `--ssl-sessions`) once over
+two `/close` URLs, so it keeps the first connection's ticket for the second,
+and checks `curl --http2 opens a new connection for the second /close`
+(`num_connects` reads `1 1`; two URLs on one connection read `1 0`) and `the
+server resumed curl's second connection` (the log's new handshake lines are
+exactly `tls: full` then `tls: resumed`).
 
-The chrome job's step
-`Chromium resumes a TLS 1.3 session on a second connection`,
-under both its certificates, runs `tests/interop/chrome-resume.py`: it reads
-the certificate from the HTTP/2 port, checks its SHA-256 against the
-server's `--hash-file`, waits for the server to log that read's handshake
-and close, launches Playwright's Chromium with
-`--ignore-certificate-errors-spki-list` set to the base64 SHA-256 of its
+The chrome job's step `Chromium resumes a TLS 1.3 session on a second
+connection`, under both its certificates, runs
+`tests/interop/chrome-resume.py`: it reads the certificate from the HTTP/2
+port, checks its SHA-256 against the server's `--hash-file`, waits for the
+server to log that read's handshake and close, launches Playwright's Chromium
+with `--ignore-certificate-errors-spki-list` set to the base64 SHA-256 of its
 SubjectPublicKeyInfo, and navigates to `/close` twice; it passes only if the
-server logged `tls: full` for the first navigation, then closed that
-connection (a close line after that handshake's), and logged `tls: resumed`
-for the second, and a wait on the log that runs out fails naming what never
-came.
+server logged `tls: full` for the first navigation, then closed that connection
+(a close line after that handshake's), and logged `tls: resumed` for the
+second, and a wait on the log that runs out fails naming what never came. The
+verdict is the server's log in both jobs, not the client's.
 
-The
-verdict is the server's log in both jobs, not the client's. **Outcome:**
-Chromium 141.0.7390.37 (Playwright 1.56.0) resumes under the SPKI pin, with
-the minted certificate and with one openssl makes; so does curl 8.17 with
-BoringSSL, and curl 8.5 with OpenSSL run by hand.
+**Outcome:** Chromium 141.0.7390.37 (Playwright 1.56.0) resumes under the SPKI
+pin, with the minted certificate and with one openssl makes; so does curl 8.17
+with BoringSSL, and curl 8.5 with OpenSSL run by hand.
 
 **As built.** Where the code departs from the design below:
 
@@ -761,21 +736,19 @@ through `wipeKeys`, and in `start`, which also resets the reader;
 `wipeKeys`, drops what is left unsent or unread and gives all four back, so
 a free slot holds none when `start` hands it its next connection.
 
-`used` is
-how far the borrower wrote, so `outputUsed` and `plainUsed` are the furthest
-end each buffer reached since it was taken; the scratch and the reader are
-given back with all of their size. `sealRecord` counts a record's room in
-`outputUsed` before it seals, so a seal that refuses part-way still has what
-it wrote zeroed. A free slot is marked failed when it is built
-(`TlsTcpServer.make`, which `build` calls on the first accept into it), as
-it was when its first handshake was refused for empty randomness, but without sealing an alert, so a stray call on it fails closed
-and borrows nothing.
+`used` is how far the borrower wrote, so `outputUsed` and `plainUsed` are the
+furthest end each buffer reached since it was taken; the scratch and the reader
+are given back with all of their size. `sealRecord` counts a record's room in
+`outputUsed` before it seals, so a seal that refuses part-way still has what it
+wrote zeroed. A free slot is marked failed when it is built
+(`TlsTcpServer.make`, which `build` calls on the first accept into it), as it
+was when its first handshake was refused for empty randomness, but without
+sealing an alert, so a stray call on it fails closed and borrows nothing.
 
-`giveSecret` zeroes the whole buffer
-whenever `used` is above 0, so a buffer goes back once a connection, not
-once a record: giving all four back after every record, as this stage first
-did, zeroed some 96 KB a request and cut HTTPS/1.1 throughput to 0.37 of
-what it was.
+`giveSecret` zeroes the whole buffer whenever `used` is above 0, so a buffer
+goes back once a connection, not once a record: giving all four back after
+every record, as this stage first did, zeroed some 96 KB a request and cut
+HTTPS/1.1 throughput to 0.37 of what it was.
 
 The key-bearing arrays do not move: the traffic secrets, both directions'
 keys, IVs and AES schedules, and `TlsServer` with its secret arrays stay in
@@ -842,14 +815,13 @@ takes the slot closed last from a free stack (`free`), else the next slot
 past the high-water mark (`fds.length`), else answers `TLS_TCP_POOL_FULL`
 and closes the socket without building anything.
 
-A slot past the mark is
-built there, by `build`, and kept for every later connection: so the first
-accepts take slots 0, 1, 2 …, finding a slot is O(1), and `size()` answers
-the cap. `Http1TlsServer` builds the slot's `Http1Connection` beside it, on
-the same accept, and `Http2TlsServer` its `Http2Connection` (#767), except
-slot 0's, which its constructor builds so that an `Http2Config` RFC 9113
-does not allow is refused when the server is made rather than at a client's
-first accept.
+A slot past the mark is built there, by `build`, and kept for every later
+connection: so the first accepts take slots 0, 1, 2 …, finding a slot is O(1),
+and `size()` answers the cap. `Http1TlsServer` builds the slot's
+`Http1Connection` beside it, on the same accept, and `Http2TlsServer` its
+`Http2Connection` (#767), except slot 0's, which its constructor builds so that
+an `Http2Config` RFC 9113 does not allow is refused when the server is made
+rather than at a client's first accept.
 
 `build` makes what the constructor used to make for each slot, in the same
 way: a 32-byte server random of the slot's own, a 32-byte zero key standing
@@ -857,12 +829,11 @@ in for the private key of a first handshake that never runs, and a
 `TlsRecordServer` over a `TlsServer` of the two, marked failed without
 sealing an alert, with tickets on if `enableTickets` has run.
 
-Neither array
-reaches a handshake: `accept` copies the connection's own randomness into
-the slot's random and hands it, with the caller's ephemeral key, to
-`TlsServer.restart` before `start`, on every accept, exactly as it did to a
-prebuilt slot, so the handshake's randomness and key are what they were and
-a slot built this way is in the state a prebuilt one was in when its first
+Neither array reaches a handshake: `accept` copies the connection's own
+randomness into the slot's random and hands it, with the caller's ephemeral
+key, to `TlsServer.restart` before `start`, on every accept, exactly as it did
+to a prebuilt slot, so the handshake's randomness and key are what they were
+and a slot built this way is in the state a prebuilt one was in when its first
 connection came.
 
 What a stray call can reach is unchanged too: a slot never
@@ -924,10 +895,10 @@ HTTP/2 pool, whose TLS slots this built lazily while its connections were
 still prebuilt, was 27.8 MB where it had been 78.2 at 1,024 slots; all pools
 together were 281.7 MB where they had been 358.7.
 
-Once `Http2TlsServer`
-built its connections on the first accept too (#767, measured in #787), that
-pool was 11.7 MB at 1,024 slots, 7 kB a slot where it was 23
-(`HTTP2_TLS_SERVER_START_BYTES` in `tests/runtime-budgets.js` records how).
+Once `Http2TlsServer` built its connections on the first accept too (#767,
+measured in #787), that pool was 11.7 MB at 1,024 slots, 7 kB a slot where it
+was 23 (`HTTP2_TLS_SERVER_START_BYTES` in `tests/runtime-budgets.js` records
+how).
 
 ## The client
 
@@ -973,13 +944,12 @@ key, and with one byte of the content flipped does not ("at WAIT_AUTH: the
 signature verifies under the leaf's key", "at WAIT_AUTH: not over other
 content").
 
-It holds a bad Finished at
-`WAIT_AUTH` ("a bad Finished is held", "waits on the caller"), and
-`authenticate(false)` sends `bad_certificate` ("the caller refuses the
-chain"); `reject(alert)` sends the caller's alert ("the caller's own alert"),
-`bad_certificate` for one outside 1 to 255 ("an alert out of range"), and
-`internal_error` before a verdict is due ("a refusal before one is due");
-through `TlsRecordClient` the server reads the caller's alert
+It holds a bad Finished at `WAIT_AUTH` ("a bad Finished is held", "waits on the
+caller"), and `authenticate(false)` sends `bad_certificate` ("the caller
+refuses the chain"); `reject(alert)` sends the caller's alert ("the caller's
+own alert"), `bad_certificate` for one outside 1 to 255 ("an alert out of
+range"), and `internal_error` before a verdict is due ("a refusal before one is
+due"); through `TlsRecordClient` the server reads the caller's alert
 (`net_tls_client_record`, "refusal: the server reads it").
 
 The states between
@@ -1017,10 +987,9 @@ changes only the cookie is answered with the same share and the cookie echoed
 checked and dropped, the client staying `CONNECTED` ("a NewSessionTicket is
 dropped").
 
-A secp256r1 share goes to `p256Ecdh`,
-which validates the point before it multiplies (RFC 8446 §4.2.8.2); its
-shared secret is the product's x, which SEC 1 lets be zero, so it has no
-all-zero check (TLS-8).
+A secp256r1 share goes to `p256Ecdh`, which validates the point before it
+multiplies (RFC 8446 §4.2.8.2); its shared secret is the product's x, which SEC
+1 lets be zero, so it has no all-zero check (TLS-8).
 
 **The record layer** mirrors `TlsRecordServer`: the compatibility
 `change_cipher_spec` is sent once, and the server's is tolerated only between
@@ -1085,19 +1054,18 @@ Finished verify data, the caller's key arrays, the plaintext buffers)` in
 was deleted in turn to show its root's count move (a `Secret` field's wipe
 cannot be deleted: NL2541 refuses the holder).
 
-Both private keys are copied
-into `Secret` fields and the caller's arrays zeroed in the constructor; the
-key of the group not picked is wiped when the server picks
-(`wipeUnpicked`), both once the exchange is done (`wipeKeys`); the ECDHE and
-early secrets are wiped before `exchangeKeys` returns; the handshake, traffic
-and exporter secrets are `Secret` fields `wipe` reaches, each wiped once the
-record layer has installed it; `fail` and `TlsRecordClient`'s `fail`,
+Both private keys are copied into `Secret` fields and the caller's arrays
+zeroed in the constructor; the key of the group not picked is wiped when the
+server picks (`wipeUnpicked`), both once the exchange is done (`wipeKeys`); the
+ECDHE and early secrets are wiped before `exchangeKeys` returns; the handshake,
+traffic and exporter secrets are `Secret` fields `wipe` reaches, each wiped
+once the record layer has installed it; `fail` and `TlsRecordClient`'s `fail`,
 `abort`, `close` and `wipe` wipe everything left.
 
-What a `Secret` cannot
-reach is what TLS-1 lists for the server: registers and spills while HMAC,
-HKDF and AEAD run, and the plain clone `tlsClientInstallHeld` and
-`tlsClientAdvanceHeld` `secureZero` before their arena block ends.
+What a `Secret` cannot reach is what TLS-1 lists for the server: registers and
+spills while HMAC, HKDF and AEAD run, and the plain clone
+`tlsClientInstallHeld` and `tlsClientAdvanceHeld` `secureZero` before their
+arena block ends.
 
 ## The client carrier and verify
 
@@ -1147,8 +1115,8 @@ data, and its close_notify ends the client's stream as 0; the default
 mode's `q`, which closes TCP with no close_notify, is read as the failure
 it is, -104, not as an end.
 
-After `close`, `readWait` answers how the
-stream ended (-104 failed, -32 otherwise) and `writeAll` -32.
+After `close`, `readWait` answers how the stream ended (-104 failed, -32
+otherwise) and `writeAll` -32.
 
 **Against `TlsTcpServer` over loopback** (`net_tls_client_tcp`): the verdict
 reaches the server as an alert, ALPN and the name reach it, an IP literal
@@ -1163,8 +1131,7 @@ answer"), the server's
 client's stream"), the client ends closed with `TLS_RECORD_DONE`, and a read
 after `close` answers -32.
 
-A
-wrong host, an untrusted root, an expired leaf and a forged CertificateVerify
+A wrong host, an untrusted root, an expired leaf and a forged CertificateVerify
 are refused with the alerts above, and the server reads each.
 
 **`tlsConnect` is bounded** (`net_tls_client_tcp`): a refused connection
@@ -1176,30 +1143,27 @@ and a `writeAll` before the handshake ends each answer `-110`. A
 config the client refuses (an empty ALPN protocol) is never dialled: it
 answers its alert, `internal_error`, with no socket.
 
-**Not exercised.**
-
-That the server reads the client's own `close_notify`
-(each test checks only that the client ends closed); the system's root
-store as `tlsConnect` finds it with no `SSL_CERT_FILE` (the distribution's
-bundle, or `SSL_CERT_DIR`), since no test dials a public host; an empty
-`serverName`; a leaf with no usable key (RSA under 2048 bits, Ed25519),
-which the code answers `bad_certificate`; that a forged CertificateVerify is
-refused with `decrypt_error` before a chain that would also fail is looked
-at (the forged case has a good chain); the rsa_pss_pss schemes, which are
-never offered and so refused; a KeyUpdate that does not ask for the
-peer's, from either end; name resolution, which the client does not do
-(the address is numeric and the TLS name is always the caller's); any
-public host; a `writeAll` that times out part way through a message, which
-leaves the stream unusable, as its comment says; and a refusal of the
-server's certificate whose alert cannot be flushed before the deadline,
-which `tlsConnect` answers with the alert, not `-110`; a `writeAll` that
-answers -104 because the connection fails during the call (the tests pin
-only the -32 of a call on a client already closed or failed); `shutdown`
-followed by `readWait`, which answers -32 once the `close_notify` is sent,
-and data already read off the socket still reading after `shutdown`; and
-`tlsConnect`'s wait for its last flight when that write would block
-(`-11`): the client's Finished always leaves in the same flush, so the
-tests pin that nothing is queued when `tlsConnect` returns, not that path.
+**Not exercised.** That the server reads the client's own `close_notify` (each
+test checks only that the client ends closed); the system's root store as
+`tlsConnect` finds it with no `SSL_CERT_FILE` (the distribution's bundle, or
+`SSL_CERT_DIR`), since no test dials a public host; an empty `serverName`; a
+leaf with no usable key (RSA under 2048 bits, Ed25519), which the code answers
+`bad_certificate`; that a forged CertificateVerify is refused with
+`decrypt_error` before a chain that would also fail is looked at (the forged
+case has a good chain); the rsa_pss_pss schemes, which are never offered and so
+refused; a KeyUpdate that does not ask for the peer's, from either end; name
+resolution, which the client does not do (the address is numeric and the TLS
+name is always the caller's); any public host; a `writeAll` that times out part
+way through a message, which leaves the stream unusable, as its comment says;
+and a refusal of the server's certificate whose alert cannot be flushed before
+the deadline, which `tlsConnect` answers with the alert, not `-110`; a
+`writeAll` that answers -104 because the connection fails during the call (the
+tests pin only the -32 of a call on a client already closed or failed);
+`shutdown` followed by `readWait`, which answers -32 once the `close_notify` is
+sent, and data already read off the socket still reading after `shutdown`; and
+`tlsConnect`'s wait for its last flight when that write would block (`-11`):
+the client's Finished always leaves in the same flush, so the tests pin that
+nothing is queued when `tlsConnect` returns, not that path.
 
 ## What is not checked here
 
@@ -1232,11 +1196,11 @@ tests pin, with every place the code departs from the design, is under
 "Properties verified: resumption" below; the design text is kept as written,
 so a reader can see each departure against it.
 
-Names of files, functions and
-tests are those the stages use, and RFC sections are RFC 8446's; the existing code it describes is as of commit b515c1b,
-and its `file:line` anchors are at 394c439. What #652 and #665 changed when
-`main` was merged at 4bbb392 is described as of 4bbb392, and each sentence
-that says so names it.
+Names of files, functions and tests are those the stages use, and RFC sections
+are RFC 8446's; the existing code it describes is as of commit b515c1b, and its
+`file:line` anchors are at 394c439. What #652 and #665 changed when `main` was
+merged at 4bbb392 is described as of 4bbb392, and each sentence that says so
+names it.
 
 Before the server-resume stage a `pre_shared_key` offer was checked for
 being the last extension (§4.2.11) and otherwise ignored, so every connection
@@ -1324,13 +1288,12 @@ interop server does not.
   window, and `tlsTicketOpen` refuses a ticket under a key past 14 hours, so
   the client gets a full handshake.
 
-  A ticket sealed at the last moment of its
-  key's issue window expires exactly as its key stops opening, so no ticket
-  outlives its key, and a key rotated at the end of its issue window ends no
-  ticket early. A rotation before that — at the seal cap, or when the program
-  chooses — wipes the previous key, and with it whatever of that key's tickets
-  were still within their lifetime, if the previous rotation was less than
-  one lifetime before.
+  A ticket sealed at the last moment of its key's issue window expires exactly
+  as its key stops opening, so no ticket outlives its key, and a key rotated at
+  the end of its issue window ends no ticket early. A rotation before that — at
+  the seal cap, or when the program chooses — wipes the previous key, and with
+  it whatever of that key's tickets were still within their lifetime, if the
+  previous rotation was less than one lifetime before.
 
   The design accepts that: those clients get a full
   handshake and nothing else, and keeping a third key to spare them would
@@ -1402,14 +1365,13 @@ interop server does not.
   start is after its issue time, fails to open, since only a holder of the
   ticket key can seal such a ticket and this server never does.
 
-  A resumed connection
-  issues a ticket that carries the chain's start forward, so resumption cannot
-  extend a certificate-authenticated session's keying material for ever
-  (§4.6.1 RECOMMENDS a limit); a client resuming every hour pays one full
-  handshake a day. A ticket whose issue time is after `now`, which a
-  monotonic clock gives only to a ticket sealed under another process's
-  clock, fails to open. The `ticket_lifetime` sent is 7200 seconds, under §4.6.1's
-  604,800 cap.
+  A resumed connection issues a ticket that carries the chain's start forward,
+  so resumption cannot extend a certificate-authenticated session's keying
+  material for ever (§4.6.1 RECOMMENDS a limit); a client resuming every hour
+  pays one full handshake a day. A ticket whose issue time is after `now`,
+  which a monotonic clock gives only to a ticket sealed under another process's
+  clock, fails to open. The `ticket_lifetime` sent is 7200 seconds, under
+  §4.6.1's 604,800 cap.
 
 Pinned (#680) by `net_tls_ticket` and `net_tls_ticket_f64` (round trip, a flipped bit in each region,
 expiry at each bound, retired and unknown key ids, the chain bound; a ticket
@@ -1429,33 +1391,33 @@ with one, of the plaintext, and a second #680 added (As built, below); and the
 test's rotation turn, `ticketRotationTurns`, pinned at its total, 55. Each wipe of open and seal is shown
 counted on its own by deleting it and watching its root's count drop.
 
-The
-rotation turn's `wipe(previous)` needs no deletion step: the checker enforces
-it, since `previous` cannot be assigned again while the `Secret` it holds is
-neither wiped nor returned (NL2442), so a turn without it does not compile;
-its root shows only that the wipes survive `opt -O2`.
+The rotation turn's `wipe(previous)` needs no deletion step: the checker
+enforces it, since `previous` cannot be assigned again while the `Secret` it
+holds is neither wiped nor returned (NL2442), so a turn without it does not
+compile; its root shows only that the wipes survive `opt -O2`.
 
-Two more, under
-"What stays in memory" below, are roots #652 already counts in
-`tests/wipes/tls.js` at 4bbb392 (the check named, since the server-resume stage, `tls: the wipes survive opt -O2 (both directions' keys, IVs and AES schedules; the traffic, handshake, exporter and resumption secrets; the exchange's words; a resumed handshake's PSK, early secret, binder key and salt)`), whose counts move:
-`nish.TlsServer.exchangeKeys`, which counts `tlsExchange`'s wipes, now at 6
-(What stays in memory), and `nish.TlsServer.sign`, whose master-secret wipe moves to a new root
-beside it, the master-secret step `TlsServer.masterSecretStep`, run once the
-server Finished is sent.
+Two more, under "What stays in memory" below, are roots #652 already counts in
+`tests/wipes/tls.js` at 4bbb392 (the check named, since the server-resume
+stage, `tls: the wipes survive opt -O2 (both directions' keys, IVs and AES
+schedules; the traffic, handshake, exporter and resumption secrets; the
+exchange's words; a resumed handshake's PSK, early secret, binder key and
+salt)`), whose counts move: `nish.TlsServer.exchangeKeys`, which counts
+`tlsExchange`'s wipes, now at 6 (What stays in memory), and
+`nish.TlsServer.sign`, whose master-secret wipe moves to a new root beside it,
+the master-secret step `TlsServer.masterSecretStep`, run once the server
+Finished is sent.
 
 `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
 `Secret` (NL2445) and has nothing of its own to wipe.
 
-The count shows that each
-wipe exists and survives `opt -O2`; it matches calls, not paths, so that the
-wipe is reached on every path is for review to check.
+The count shows that each wipe exists and survives `opt -O2`; it matches calls,
+not paths, so that the wipe is reached on every path is for review to check.
 
-Each of open and seal
-wipes its plaintext once, at a point every path reaches — after the branch on the tag and on the parse, as
-`chacha20Poly1305Open` wipes its state once after its branch — not once on
-each path: `opt -O2` merges a wipe placed on each of two paths into one
-store, and the count could then not see either go missing
-(`tests/wipes/crypto.js`).
+Each of open and seal wipes its plaintext once, at a point every path reaches —
+after the branch on the tag and on the parse, as `chacha20Poly1305Open` wipes
+its state once after its branch — not once on each path: `opt -O2` merges a
+wipe placed on each of two paths into one store, and the count could then not
+see either go missing (`tests/wipes/crypto.js`).
 
 **As built (#680).** `tlsTicketSeal` wipes its plaintext twice, not once. The
 function it hands `exposeWith`, `tlsTicketSealExposed`, takes the key id,
@@ -1560,14 +1522,13 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   exchange on the attacker's side too, sustained for as long as the effect is
   wanted. That is the cost to an attacker without a ticket key.
 
-  One that holds
-  a live key (Forward secrecy and a leaked ticket key, below) seals tickets
-  under PSKs of its own choosing, binds ClientHellos to them, and never
-  finishes: each id is recorded once its binder verifies, so it fills the
-  register at the speed it can send ClientHellos, for as long as the key
-  opens tickets. A key opens tickets until the program wipes it, or until 14
-  hours of awake time after its draw, whichever is first; rotating it once
-  does not stop it, since it then opens as the previous key for 2 hours more.
+  One that holds a live key (Forward secrecy and a leaked ticket key, below)
+  seals tickets under PSKs of its own choosing, binds ClientHellos to them, and
+  never finishes: each id is recorded once its binder verifies, so it fills the
+  register at the speed it can send ClientHellos, for as long as the key opens
+  tickets. A key opens tickets until the program wipes it, or until 14 hours of
+  awake time after its draw, whichever is first; rotating it once does not stop
+  it, since it then opens as the previous key for 2 hours more.
 
   A program that believes a key leaked retires it at once rather than waiting
   out its window: a previous key it wipes on the spot, and a current one it
@@ -1614,12 +1575,12 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   one holds one ticket, and its other connections are full handshakes: a cost
   in CPU, accepted for bounded per-connection work.
 
-  A client whose
-  `psk_key_exchange_modes` does not list `psk_dhe_ke`, or that sent none, is
-  issued no ticket (§4.2.9: SHOULD NOT send tickets incompatible with the
-  advertised modes). Nor is a connection whose current key is past its issue
-  window or at its seal cap, until the program rotates. The `ticket_nonce` is
-  one byte, 0, unique among the one ticket a connection gets (§4.6.1).
+  A client whose `psk_key_exchange_modes` does not list `psk_dhe_ke`, or that
+  sent none, is issued no ticket (§4.2.9: SHOULD NOT send tickets incompatible
+  with the advertised modes). Nor is a connection whose current key is past its
+  issue window or at its seal cap, until the program rotates. The
+  `ticket_nonce` is one byte, 0, unique among the one ticket a connection gets
+  (§4.6.1).
 
 Pinned by `net_tls_ticket` and `net_tls_ticket_f64` (replay refused; the register full refusing
 and counting each refusal, and taking ids again once entries expire;
@@ -1713,13 +1674,12 @@ As TLS-1 records for the other secrets:
   as a plain `u8[]`, empty when the tag fails; what the AEAD makes on the way
   is wiped by the primitive (TLS-5).
 
-  Outside `expose`,
-  `tlsTicketOpen` parses that array into the caller's `TlsTicketState`,
-  copying the PSK into the state's own array, and wipes the plaintext with
-  `secureZero` once, after the branch on the tag and on the parse, so the one
-  wipe covers every path, a failed parse's included. On a failed parse it
-  also wipes the state's PSK array before it answers, so no partial copy
-  stays.
+  Outside `expose`, `tlsTicketOpen` parses that array into the caller's
+  `TlsTicketState`, copying the PSK into the state's own array, and wipes the
+  plaintext with `secureZero` once, after the branch on the tag and on the
+  parse, so the one wipe covers every path, a failed parse's included. On a
+  failed parse it also wipes the state's PSK array before it answers, so no
+  partial copy stays.
 
   Sealing is the same
   shape the other way: the plaintext is built outside `expose` from bytes
@@ -1761,16 +1721,14 @@ As TLS-1 records for the other secrets:
   the exchange's alert, so a refused exchange leaves it zero too (4bbb392),
   and the salt's words are wiped with the key's by that store.
 
-  `tlsExchange`
-  reads the salt's words at its top, beside the key's and before any of its
-  returns (an `internal_error`, or `illegal_parameter` for a low-order
-  share). The extract needs the
-  salt as bytes, and the function `exposeWith` runs cannot wipe its argument
-  (NL2450), so `tlsExchange` rebuilds the salt array from the words at its
-  top, where it reads them, and wipes it with `secureZero` once, at a point
-  every path reaches: the two early refusals set their alert rather than
-  return, the extract runs only when no alert is set, and the wipe follows
-  it, before the one return.
+  `tlsExchange` reads the salt's words at its top, beside the key's and before
+  any of its returns (an `internal_error`, or `illegal_parameter` for a
+  low-order share). The extract needs the salt as bytes, and the function
+  `exposeWith` runs cannot wipe its argument (NL2450), so `tlsExchange`
+  rebuilds the salt array from the words at its top, where it reads them, and
+  wipes it with `secureZero` once, at a point every path reaches: the two early
+  refusals set their alert rather than return, the extract runs only when no
+  alert is set, and the wipe follows it, before the one return.
 
   A wipe before each return instead is one `opt
   -O2` may merge, as under Ticket keys. `tlsExchange` needs no flag to tell
@@ -1840,26 +1798,24 @@ the 7 the design expected (two more than its 5 at 4bbb392): its own
 `tlsExchange`'s rebuilt salt array both run on every handshake, full or
 resumed, and deleting either gives 5, so each is counted.
 
-The master-secret step
-`TlsServer.masterSecretStep` is pinned at 9 and `nish.TlsServer.sign`, which
-`opt` inlines it into, at 17, the master secret's `secureZero` shown counted
-on its own by deleting it, as the open and seal wipes are.
+The master-secret step `TlsServer.masterSecretStep` is pinned at 9 and
+`nish.TlsServer.sign`, which `opt` inlines it into, at 17, the master secret's
+`secureZero` shown counted on its own by deleting it, as the open and seal
+wipes are.
 
-Each other
-resumption root and its total is under Properties verified: resumption.
+Each other resumption root and its total is under Properties verified:
+resumption.
 
-And
-by `net_tls_resume` and `net_tls_resume_f64` (the PSK, the PSK early secret, the
-binder key, the salt's bytes and its words in `TlsExchangeWords`, the
-handshake secret and the resumption master secret zero after a resumed
-handshake, and the same arrays zero after
-row 2, after row 3 (an expired ticket), after a row 4 to 8 fallback, after row
-9 and after row 17 (the resumption master secret, which a fallback that
-opens keeps for its own ticket, once rows 2 to 7 are issued theirs); a
-resumed ClientHello whose x25519 share is low-order,
-after which the salt's words in `TlsExchangeWords` and its bytes are zero; 0 bytes per resumed
-handshake through a reused slot, and per replayed one that falls back to a
-signed full handshake, each issued its ticket).
+And by `net_tls_resume` and `net_tls_resume_f64` (the PSK, the PSK early
+secret, the binder key, the salt's bytes and its words in `TlsExchangeWords`,
+the handshake secret and the resumption master secret zero after a resumed
+handshake, and the same arrays zero after row 2, after row 3 (an expired
+ticket), after a row 4 to 8 fallback, after row 9 and after row 17 (the
+resumption master secret, which a fallback that opens keeps for its own ticket,
+once rows 2 to 7 are issued theirs); a resumed ClientHello whose x25519 share
+is low-order, after which the salt's words in `TlsExchangeWords` and its bytes
+are zero; 0 bytes per resumed handshake through a reused slot, and per replayed
+one that falls back to a signed full handshake, each issued its ticket).
 
 ### Fallback and abort table
 
@@ -1903,20 +1859,19 @@ rows 9 and 14 gets row 9's `decrypt_error`: whether the server authenticates
 by certificate, and so whether row 14 applies, is known only once the binder
 is decided, and a binder that fails is an abort §4.2.11 requires.
 
-Row 9 is the one place a ticket that
-opened can fail a connection, and it tells the attacker that the identity
-opened and was not recorded (§E.6). Tickets are in the clear in the
-ClientHello, the attacker cannot seal one, and what it learns is whether a
-ticket it saw is still unspent; the design accepts that.
+Row 9 is the one place a ticket that opened can fail a connection, and it tells
+the attacker that the identity opened and was not recorded (§E.6). Tickets are
+in the clear in the ClientHello, the attacker cannot seal one, and what it
+learns is whether a ticket it saw is still unspent; the design accepts that.
 
-Over QUIC, rows 1 to
-9, 17 and 18 are all a full handshake or today's handling, since its
-connections never open a ticket, and rows 10 to 15 hold as over TCP, the
-codec being shared. Of row 16, the first half holds over QUIC (the extension
-is ignored); the second does not apply, since QUIC carries no TLS records and
-its 0-RTT packets are the QUIC record's (`quic.md`), not this one's. A ClientHello with no `pre_shared_key` is handled as today,
-but for `psk_key_exchange_modes`: the codec reads it from every ClientHello to
-decide issuance, so a malformed one is row 13's `decode_error` with or without
+Over QUIC, rows 1 to 9, 17 and 18 are all a full handshake or today's handling,
+since its connections never open a ticket, and rows 10 to 15 hold as over TCP,
+the codec being shared. Of row 16, the first half holds over QUIC (the
+extension is ignored); the second does not apply, since QUIC carries no TLS
+records and its 0-RTT packets are the QUIC record's (`quic.md`), not this
+one's. A ClientHello with no `pre_shared_key` is handled as today, but for
+`psk_key_exchange_modes`: the codec reads it from every ClientHello to decide
+issuance, so a malformed one is row 13's `decode_error` with or without
 `pre_shared_key`.
 
 Pinned by `net_tls_psk_wire` and `net_tls_psk_wire_f64` (rows 10 to 13 as codec refusals, and a

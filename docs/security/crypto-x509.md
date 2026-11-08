@@ -141,16 +141,15 @@ or a signature check that passes for bytes nobody signed.
   two name forms and the six trailing-bytes values are one operand each, so
   17 operands make 20 checks).
 
-  These are equivalent and stay unpinned:
-  `x509DerIsTrue`'s tag test (both callers peek for a BOOLEAN first) and
-  `x509NameIsPrefix`'s soundness test of the base (each base RDN must equal,
-  byte for byte, an RDN of a name that is itself checked).
+  These are equivalent and stay unpinned: `x509DerIsTrue`'s tag test (both
+  callers peek for a BOOLEAN first) and `x509NameIsPrefix`'s soundness test of
+  the base (each base RDN must equal, byte for byte, an RDN of a name that is
+  itself checked).
 
-  The bounds tests
-  that only keep a load in range (`k >= 0 && k < der.length`, six operands)
-  and `x509DerReadInto`'s caller-contract guards `at < 0` and
-  `limit > der.length` are equivalent too, since the length check that
-  follows refuses the same inputs.
+  The bounds tests that only keep a load in range (`k >= 0 && k < der.length`,
+  six operands) and `x509DerReadInto`'s caller-contract guards `at < 0` and
+  `limit > der.length` are equivalent too, since the length check that follows
+  refuses the same inputs.
 
   Its third guard, `at > limit - 2`, is not:
   without it an empty or one-byte input loads `der[at]` or `der[at + 1]` past

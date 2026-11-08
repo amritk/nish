@@ -10,9 +10,8 @@ listener's pacer (WP34 Q3), and for streams and datagrams,
 reusable slot that allocates nothing per packet, and the listener's GSO
 flight (WP34 Q4).
 
-It says which
-functions hold secrets and which of them are wiped, as CLAUDE.md §Security
-asks, and it names the tests that pin the modules' refusals.
+It says which functions hold secrets and which of them are wiped, as CLAUDE.md
+§Security asks, and it names the tests that pin the modules' refusals.
 
 ## Scope
 
@@ -50,15 +49,14 @@ frame in it is attacker input: `quicParseFrame`, `quicParseTransportParameters`
 (the client's parameters arrive inside its ClientHello), `QuicAckRanges` and
 `QuicCidTable` all read values the peer chose.
 
-A win for the attacker there is
-a panic, a buffer it can grow without bound, a state the connection reaches
-that RFC 9000 forbids (data delivered past its final size or credit, a frame
-acted on in a packet type that may not carry it, a 1-RTT packet processed
-before the handshake completes), more bytes sent to an unvalidated address
-than three times what it sent (RFC 9000 §8.1), or a secret the connection
-holds learned from memory. A key update the client starts is attacker input
-too: the Key Phase bit costs nothing to flip, and every update it really
-makes costs the server two key derivations.
+A win for the attacker there is a panic, a buffer it can grow without bound, a
+state the connection reaches that RFC 9000 forbids (data delivered past its
+final size or credit, a frame acted on in a packet type that may not carry it,
+a 1-RTT packet processed before the handshake completes), more bytes sent to an
+unvalidated address than three times what it sent (RFC 9000 §8.1), or a secret
+the connection holds learned from memory. A key update the client starts is
+attacker input too: the Key Phase bit costs nothing to flip, and every update
+it really makes costs the server two key derivations.
 
 `QuicListener.handle` takes every datagram no connection owns, from anyone,
 from any address. A win for the attacker there is a Retry token it can forge,
@@ -82,12 +80,11 @@ the pace of it: a client opens streams, sends data out of order and past
 what it was given, resets and stops streams, asks for credit it was not
 given, and sends datagrams as fast as it likes.
 
-A win for the attacker there
-is a buffer it can grow (a stream's, the connection's, the queue of
-datagrams or of owed frames), a stream it can open past the limit or bring
-back after it finished, data delivered past a final size, a state RFC 9000
-§3 forbids, or arena memory the server keeps per packet, which over a long
-connection is the same as a buffer without a bound.
+A win for the attacker there is a buffer it can grow (a stream's, the
+connection's, the queue of datagrams or of owed frames), a stream it can open
+past the limit or bring back after it finished, data delivered past a final
+size, a state RFC 9000 §3 forbids, or arena memory the server keeps per packet,
+which over a long connection is the same as a buffer without a bound.
 
 ## Findings
 
@@ -354,12 +351,11 @@ replayed byte for byte from a Nish UDP client.
   original DCID, the connection ID the Retry told the client to use, and the
   client's address and port, compared in constant time (§8.1.4).
 
-  A changed MAC
-  byte, a changed time, a token cut short, a DCID length that runs past it,
-  another address or port, another destination ID, a token a lifetime old and
-  one issued later than now are each refused with INVALID_TOKEN in an Initial
-  the client can read (§8.1.2), and the one returned a millisecond inside its
-  lifetime is accepted.
+  A changed MAC byte, a changed time, a token cut short, a DCID length that
+  runs past it, another address or port, another destination ID, a token a
+  lifetime old and one issued later than now are each refused with
+  INVALID_TOKEN in an Initial the client can read (§8.1.2), and the one
+  returned a millisecond inside its lifetime is accepted.
 
   A token is good for `retryTokenLifetime`, at most a
   minute, which is what limits its replay (§8.1.4 asks for replay to be

@@ -422,14 +422,13 @@ module's answer.
   a name below breaks, as the web PKI's validators do (PKI-18, PKI-21). A
   root's pathLenConstraint binds the CAs below it.
 
-  Each structural rule on a
-  root was first run over the 118 roots Debian's `ca-certificates` ships
-  from Mozilla's store (`/etc/ssl/certs/ca-certificates.crt`): v3,
-  basicConstraints present with `cA` TRUE, an authorityKeyIdentifier with a
-  keyIdentifier equal to the subjectKeyIdentifier on a self-issued root, an
-  authorityKeyIdentifier on one that is not, and keyCertSign in a keyUsage
-  each refuse none, and are kept, but for keyUsage, which no limbo case
-  tests on a root.
+  Each structural rule on a root was first run over the 118 roots Debian's
+  `ca-certificates` ships from Mozilla's store
+  (`/etc/ssl/certs/ca-certificates.crt`): v3, basicConstraints present with
+  `cA` TRUE, an authorityKeyIdentifier with a keyIdentifier equal to the
+  subjectKeyIdentifier on a self-issued root, an authorityKeyIdentifier on one
+  that is not, and keyCertSign in a keyUsage each refuse none, and are kept,
+  but for keyUsage, which no limbo case tests on a root.
 
   A subjectKeyIdentifier refuses one, TWCA Global Root CA,
   so a root need not carry one (PKI-32). Validity, unknown critical
@@ -517,10 +516,10 @@ The module was then run against x509-limbo
 (<https://github.com/C2SP/x509-limbo>, commit `1080e565`), by
 `tests/link/crypto_pki_limbo`. Of the file's server-authentication cases it
 keeps the 670 the module claims: one expected peer name, no CRL, no
-max_chain_depth, no ML-DSA key and no key usage of their own, and one in
-20 of the BetterTLS name-constraint cases (`generate.mjs` there says how).
-Each verdict is printed with its reason, and a case whose verdict is not
-limbo's must be listed in `divergences.ts` with the finding that keeps it.
+max_chain_depth, no ML-DSA key and no key usage of their own, and one in 20 of
+the BetterTLS name-constraint cases (`generate.mjs` there says how). Each
+verdict is printed with its reason, and a case whose verdict is not limbo's
+must be listed in `divergences.ts` with the finding that keeps it.
 
 Before PKI-18 and PKI-21 to PKI-24, 63 cases diverged; 30 do now, all listed
 under PKI-25 to PKI-32. No limbo case trusts a CA with a pathLenConstraint,

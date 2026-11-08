@@ -35,12 +35,12 @@ slot or a stale generation is `SQLITE_MISUSE`, so a handle used after `close`
 or `finalize`, or forged, reaches no freed or foreign object. Slot 0 is never
 handed out, so the zero handle names nothing.
 
-A freed slot's generation moves
-on, and a slot whose generation reaches 32,767, the field's width, is retired
-rather than restarted, so no handle is ever handed out twice and a stale one
-can never come to name a live object. A table whose 65,535 slots are all live
-or retired answers `SQLITE_NOMEM`. Tests: `tests/link/std_sqlite` (a handle
-after `close` and after `finalize`, a forged handle).
+A freed slot's generation moves on, and a slot whose generation reaches 32,767,
+the field's width, is retired rather than restarted, so no handle is ever
+handed out twice and a stale one can never come to name a live object. A table
+whose 65,535 slots are all live or retired answers `SQLITE_NOMEM`. Tests:
+`tests/link/std_sqlite` (a handle after `close` and after `finalize`, a forged
+handle).
 
 The tables are per thread: a handle passed to another thread names nothing
 there and answers `SQLITE_MISUSE`. A thread's tables are not freed when it
@@ -54,13 +54,13 @@ adapter answers without SQLite — `SQLITE_MISUSE`, `SQLITE_RANGE`, and
 in `columnInto` — takes `sqlite3_errstr`'s message for the code instead of the
 connection's, which is still that of some earlier call.
 
-A read of a column that
-is not there, or of any column when no row is current (before the first
-`step`, or after the last), is answered before SQLite and leaves the
-connection's message as it was. `close` frees the handle only when `sqlite3_close_v2` succeeds, so a
-close that fails leaves the connection and its message readable; its
-statements are already finalized. `columnText` reads a value SQLite fails
-to convert under memory pressure as `null`, the same as SQL `NULL` (SQL-2).
+A read of a column that is not there, or of any column when no row is current
+(before the first `step`, or after the last), is answered before SQLite and
+leaves the connection's message as it was. `close` frees the handle only when
+`sqlite3_close_v2` succeeds, so a close that fails leaves the connection and
+its message readable; its statements are already finalized. `columnText` reads
+a value SQLite fails to convert under memory pressure as `null`, the same as
+SQL `NULL` (SQL-2).
 
 SQL text, file names and `bindText`'s string reach C as `const char *`, where
 a NUL byte would end them early. The FFI checks each one before the call and

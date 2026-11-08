@@ -123,13 +123,11 @@ checked against the CA/Browser Forum's profile: it may not sign
 certificates, carry name constraints or allow any extended key usage, and its
 key must be RSA of 2048 bits or more, P-256, P-384 or Ed25519.
 
-A certificate
-that breaks the profile is refused as `PKI_ERR_MALFORMED`: one below the root
-without an authorityKeyIdentifier, a serial number of zero or of more than 20
-octets, or a DNS name with an underscore, which some private CAs still issue.
-The checks
-follow the x509-limbo test suite, and the cases where they differ are
-listed in the security record.
+A certificate that breaks the profile is refused as `PKI_ERR_MALFORMED`: one
+below the root without an authorityKeyIdentifier, a serial number of zero or of
+more than 20 octets, or a DNS name with an underscore, which some private CAs
+still issue. The checks follow the x509-limbo test suite, and the cases where
+they differ are listed in the security record.
 
 The security record,
 [crypto-pki.md](../../security/crypto-pki.md#path-validation-nishcryptopki),

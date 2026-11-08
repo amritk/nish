@@ -7,10 +7,18 @@ LLVM IR, and LLVM turns that into a small executable for x86_64, ARM64 or
 WebAssembly. There is no interpreter, no garbage collector and nothing to ship
 beside the binary.
 
-What makes that possible is what Nish leaves out: `any`,
-exceptions, prototypes and the other parts of TypeScript that only make sense
-at run time are compile errors, each with a stable code and a message saying
-what to write instead.
+What makes that possible is what Nish leaves out: `any`, exceptions,
+prototypes and the other parts of TypeScript that only make sense at run time
+are compile errors, each with a stable code and a message saying what to write
+instead.
+
+> [!CAUTION]
+> **Nish is pre-alpha. Do not use it in production.** It is an early
+> experiment, not a tool to build on yet: expect miscompilations, crashes,
+> missing features and confusing diagnostics. Until 1.0 the language, the
+> command-line flags and the output all change without notice, often between
+> one minor release and the next. If you try it, pin an exact version and read
+> the [changelog](../../CHANGELOG.md) before you upgrade.
 
 <scalar-grid cols="2">
 
@@ -43,14 +51,6 @@ and the language specification.
 </scalar-card>
 
 </scalar-grid>
-
-> [!CAUTION]
-> **Nish is pre-alpha. Do not use it in production.** It is an early
-> experiment, not a tool to build on yet: expect miscompilations, crashes,
-> missing features and confusing diagnostics. Until 1.0 the language, the
-> command-line flags and the output all change without notice, often between
-> one minor release and the next. If you try it, pin an exact version and read
-> the [changelog](../../CHANGELOG.md) before you upgrade.
 
 ## A first look
 

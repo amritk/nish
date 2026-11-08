@@ -289,16 +289,16 @@ Inside `out/`:
 
 Imports are rewritten so Node can follow them. A `nish:` builtin becomes
 `nish/runtime`, the one package the output imports, `nish:secret` included
-(`nish:async` alone becomes `nish/runtime/async.mjs`):
-its `wipe` is the runtime's, and `std/secret.ts` is not written. A `nish/x` or relative
-import becomes a relative path ending in `.ts`. A host module (`--host`) is not
-written: the import points back at the page's own file, relative to `out/`.
+(`nish:async` alone becomes `nish/runtime/async.mjs`): its `wipe` is the
+runtime's, and `std/secret.ts` is not written. A `nish/x` or relative import
+becomes a relative path ending in `.ts`. A host module (`--host`) is not
+written: the import points back at the page's own file, relative to `out/`. An
+imported interface or type alias is marked `import { type Pair }`.
 
-An imported interface or type
-alias is marked `import { type Pair }`. A module that needs none of this, and
-none of the rewrites below, is written byte for byte; one rewrite that reaches
-an otherwise plain module is `const s = "hi"`, written `const s: string = "hi"`
-so TypeScript does not narrow `s` to the literal.
+A module that needs none of this, and none of the rewrites below, is written
+byte for byte; one rewrite that reaches an otherwise plain module is `const s =
+"hi"`, written `const s: string = "hi"` so TypeScript does not narrow `s` to
+the literal.
 
 Some constructs JavaScript spells differently are rewritten too:
 
@@ -374,21 +374,20 @@ compiles no body for it, so there are no types to translate by. Where no type
 would change its text, it is written as it is, with only the rewrites that
 need no type, such as the bounds check on `a[i]`.
 
-Where a type would (a 64-bit
-integer, an `f32`, a builtin call such as `toU32`, arithmetic whose width
-wraps, a string's `.length` or methods), it is written with a body that throws
-instead, and a warning (`portability:`, NL8012) names it and its line when it
-is the program's own; the standard library's are written without one.
+Where a type would (a 64-bit integer, an `f32`, a builtin call such as `toU32`,
+arithmetic whose width wraps, a string's `.length` or methods), it is written
+with a body that throws instead, and a warning (`portability:`, NL8012) names
+it and its line when it is the program's own; the standard library's are
+written without one.
 
-The
-fifth refusal (NL4014) is a generic of your own whose body fills
-`new Array<T>(n)` with `T`'s zero, or copies an element into an array slot in a
+The fifth refusal (NL4014) is a generic of your own whose body fills `new
+Array<T>(n)` with `T`'s zero, or copies an element into an array slot in a
 program that keeps records inline: which code those need depends on a `T` no
 call names, so it is refused rather than stubbed, even where a 64-bit integer
-or a builtin call in the same body would have made it a stub.
+or a builtin call in the same body would have made it a stub. Call it, or write
+a function per element type.
 
-Call it, or write a function per element type. The same
-body in the standard library is a stub, and the program is written.
+The same body in the standard library is a stub, and the program is written.
 The sixth (NL4015) is a program that imports `nish:region`: the TypeScript
 runtime has no regions to allocate into yet, so keep that program native.
 

@@ -91,12 +91,12 @@ else, generic classes and interfaces included, can be renamed with `as`.
   library's function of that name to print, read files, allocate memory and
   compute, so they would reach yours instead.
 
-  The same holds when you build
-  for wasm or for Node through N-API, where the exported name is the one
-  JavaScript calls. A private function can have any of these names, and so
-  can a method: the compiler gives a private one a symbol the C library
-  cannot clash with. Importing the built-in `write` from `nish:io` or `exit`
-  from `nish:process` is fine too: those are not functions of your program.
+  The same holds when you build for wasm or for Node through N-API, where the
+  exported name is the one JavaScript calls. A private function can have any of
+  these names, and so can a method: the compiler gives a private one a symbol
+  the C library cannot clash with. Importing the built-in `write` from
+  `nish:io` or `exit` from `nish:process` is fine too: those are not functions
+  of your program.
 
 ```ts nish:err NL3037
 export const write = (line: string): i32 => toI32(line.length);

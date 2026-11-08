@@ -43,13 +43,12 @@ a program does with a decoded parameter.
 The attacker is the client: the method and the target are theirs, any bytes of
 any length, and they may send as many requests as the carrier lets them.
 
-A
-win is a panic, time or memory a target can make a lookup spend beyond its own
-length and the table's size, a write outside `params`, a request routed to a
-route its path does not spell, or two programs with the same routes routing
-one target differently because they added the routes in a different order.
-The route table is the program's and is trusted; its mistakes are refusal
-codes from `add`, or a panic in the constructor for a limit out of range.
+A win is a panic, time or memory a target can make a lookup spend beyond its
+own length and the table's size, a write outside `params`, a request routed to
+a route its path does not spell, or two programs with the same routes routing
+one target differently because they added the routes in a different order. The
+route table is the program's and is trusted; its mistakes are refusal codes
+from `add`, or a panic in the constructor for a limit out of range.
 
 ## Findings
 

@@ -16,20 +16,19 @@ wait has a deadline, and `totalTimeoutMs` bounds a whole fetch, so a server
 that drips its body cannot hold one forever. A body is capped by
 `maxBodyBytes` and by what `readAll` is asked for.
 
-A redirect is followed only
-when asked, never from https to http, and to another origin only when asked
-too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. A
-connection holding a byte past its last response is never used again, and an
-error names a URL without its password or query.
+A redirect is followed only when asked, never from https to http, and to
+another origin only when asked too, without the caller's credentials.
+`HTTP_PROXY` is ignored under CGI. A connection holding a byte past its last
+response is never used again, and an error names a URL without its password or
+query.
 
-Seven findings were fixed
-while the module was written (HF-1 and HF-4 to HF-9, Low); two are open (HF-2
-and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
-server's chain is checked under the caller's roots, or the system's, at the
-wall clock's time and for the URL's host before a byte of the request is
-sent; no root to trust is a refusal before any connection; there is no switch
-that turns the check off; and a body is whole only once the server's
-`close_notify` or its framing says so. Revocation is not checked
+Seven findings were fixed while the module was written (HF-1 and HF-4 to HF-9,
+Low); two are open (HF-2 and HF-3, Low). https is TLS 1.3 through
+`TlsRecordClient`: the server's chain is checked under the caller's roots, or
+the system's, at the wall clock's time and for the URL's host before a byte of
+the request is sent; no root to trust is a refusal before any connection; there
+is no switch that turns the check off; and a body is whole only once the
+server's `close_notify` or its framing says so. Revocation is not checked
 ([PKI-17](crypto-pki.md#pki-17-medium-revocation-is-not-checked)).
 
 ## Scope
@@ -64,14 +63,13 @@ for, a request split or rewritten by a value the server chose (a `Location`),
 a body cut short taken for a whole one, a POST sent twice, or a proxy setting
 the attacker controls (the CGI `Proxy:` header).
 
-The program driving the
-client, its options and its environment are trusted; so are the proxy
-variables outside CGI, the root files (`rootsPemPath`, `SSL_CERT_FILE`,
-`SSL_CERT_DIR`, the system bundle), and the wall clock a certificate's
-validity is judged by. Over https, a win is also a connection to a server
-whose certificate the roots do not vouch for, for that host, now; a request
-sent before the server is authenticated; or a truncation by the path taken
-for the end of a body.
+The program driving the client, its options and its environment are trusted; so
+are the proxy variables outside CGI, the root files (`rootsPemPath`,
+`SSL_CERT_FILE`, `SSL_CERT_DIR`, the system bundle), and the wall clock a
+certificate's validity is judged by. Over https, a win is also a connection to
+a server whose certificate the roots do not vouch for, for that host, now; a
+request sent before the server is authenticated; or a truncation by the path
+taken for the end of a body.
 
 ## Findings
 
@@ -112,13 +110,12 @@ value with CR LF is refused before a byte is sent`, `and so is a method that
 is not a token`); a URL that is not absolute http or https is `HTTP_E_URL`
 (`an ftp URL is HTTP_E_URL`, `and so is a relative one`).
 
-The request line is
-origin-form, and `Host` comes from the URL unless the caller gives one (`the
-request line is origin-form, and Host comes first from the URL`, `a caller's
-Host is sent in place of the URL's`); its `Proxy-Authorization` goes only to
-an http proxy (HF-5). A body goes with its `Content-Length`
-(`a POST body goes with its Content-Length`, `an empty body sends
-Content-Length: 0, and no body sends none`).
+The request line is origin-form, and `Host` comes from the URL unless the
+caller gives one (`the request line is origin-form, and Host comes first from
+the URL`, `a caller's Host is sent in place of the URL's`); its
+`Proxy-Authorization` goes only to an http proxy (HF-5). A body goes with its
+`Content-Length` (`a POST body goes with its Content-Length`, `an empty body
+sends Content-Length: 0, and no body sends none`).
 
 **Framing is the parser's.** Two `Content-Length` fields that disagree are
 `HTTP_E_PROTOCOL`, the parser's code named in `errorText` (`two
@@ -171,22 +168,19 @@ old reader answers an error rather than the next response's bytes (`a body
 left unread answers an error once the next fetch starts`, `and the next fetch
 went on a new connection`); a body read to its end answers 0 again (HF-1).
 
-A
-stale reader leaves the later fetch's error alone, and a body its client
-closed early answers an error (HF-6). A
-kept connection the server closed while idle is seen closed before a request
-is written on it, so the request goes on a new one, a POST included (`the
-close is seen before a GET is sent, and it goes on a fresh connection`, `and
-so does a POST, which no retry could send`).
+A stale reader leaves the later fetch's error alone, and a body its client
+closed early answers an error (HF-6). A kept connection the server closed while
+idle is seen closed before a request is written on it, so the request goes on a
+new one, a POST included (`the close is seen before a GET is sent, and it goes
+on a fresh connection`, `and so does a POST, which no retry could send`).
 
-One the server closes under a
-request, before a byte of the answer, is retried once on a new connection for
-an idempotent method and never for a POST (`a GET a kept connection closes
-under, before any byte of answer, is sent again on a new one`, the same for a
-PUT and a DELETE, `a POST is not sent twice: it fails with HTTP_E_IO`); a
-request whose answer was cut off part way, or that a kept connection never
-answers, is not sent again (`a GET whose answer was cut off part way is not
-sent again`, `nor one a kept connection never answers: it is
+One the server closes under a request, before a byte of the answer, is retried
+once on a new connection for an idempotent method and never for a POST (`a GET
+a kept connection closes under, before any byte of answer, is sent again on a
+new one`, the same for a PUT and a DELETE, `a POST is not sent twice: it fails
+with HTTP_E_IO`); a request whose answer was cut off part way, or that a kept
+connection never answers, is not sent again (`a GET whose answer was cut off
+part way is not sent again`, `nor one a kept connection never answers: it is
 HTTP_E_READ_TIMEOUT`).
 
 Bytes past a response close its connection (HF-7). A response that says `Connection:
@@ -211,33 +205,29 @@ Allowed to another origin, the hop drops `Authorization`,
 from https to http is refused whatever the options say (`a redirect from
 https to http is refused even with crossOriginRedirects`, below).
 
-The method and body
-change as RFC 9110 §15.4 says (`a POST redirected by 303 becomes a GET without
-its body`, `and so does one redirected by 302`, `307 keeps the method and the
-body`, `and so does 308, its relative Location resolved`), a 302 turns only a POST
-into a GET (`a 302 turns only a POST into a GET: a PUT keeps its method and
-body`), and a HEAD stays a HEAD through a 303 (`a HEAD redirected by 303 stays
-a HEAD`). A refused `Location` is named by its scheme, host, port and path
-alone, never echoed when it does not parse (HF-8).
+The method and body change as RFC 9110 §15.4 says (`a POST redirected by 303
+becomes a GET without its body`, `and so does one redirected by 302`, `307
+keeps the method and the body`, `and so does 308, its relative Location
+resolved`), a 302 turns only a POST into a GET (`a 302 turns only a POST into a
+GET: a PUT keeps its method and body`), and a HEAD stays a HEAD through a 303
+(`a HEAD redirected by 303 stays a HEAD`). A refused `Location` is named by its
+scheme, host, port and path alone, never echoed when it does not parse (HF-8).
 
-**Proxies.**
+**Proxies.** `HTTP_PROXY` is ignored under CGI (`proxy variables: HTTP_PROXY is
+ignored under CGI (httpoxy)`); https never falls back to the http proxy
+(`httpProxyFor: https never falls back to the http proxy`); `NO_PROXY` matches
+a name and the names under it, never a name that only ends the same way, an
+address only exactly (`NO_PROXY: but not a name that only ends the same way`,
+`NO_PROXY: an IPv4 address matches only itself, never as a suffix`); a proxy
+that is not `http://` is `HTTP_E_PROXY`; an https fetch goes through `CONNECT`
+with the proxy's credentials, and a refused `CONNECT` is `HTTP_E_PROXY_REFUSED`
+(`a proxy that is not http:// is HTTP_E_PROXY`, `an https fetch through a proxy
+is tunnelled with CONNECT, the proxy authorised`, `a CONNECT the proxy answers
+with 407 is HTTP_E_PROXY_REFUSED`).
 
-`HTTP_PROXY` is ignored under CGI (`proxy variables: HTTP_PROXY
-is ignored under CGI (httpoxy)`); https never falls back to the http proxy
-(`httpProxyFor: https never falls back to the http proxy`); `NO_PROXY`
-matches a name and the names under it, never a name that only ends the same
-way, an address only exactly (`NO_PROXY: but not a name that only ends the
-same way`, `NO_PROXY: an IPv4 address matches only itself, never as a
-suffix`); a proxy that is not `http://` is `HTTP_E_PROXY`; an https fetch
-goes through `CONNECT` with the proxy's credentials, and a refused `CONNECT`
-is `HTTP_E_PROXY_REFUSED` (`a proxy that is not http:// is HTTP_E_PROXY`, `an
-https fetch through a proxy is tunnelled with CONNECT, the proxy authorised`,
-`a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED`).
-
-Through an
-http proxy, a caller's `Proxy-Authorization` is sent in place of the one made
-from the proxy URL's userinfo (`a caller's Proxy-Authorization goes to the
-proxy in place of the userinfo's`); a proxy setting an error names is its
+Through an http proxy, a caller's `Proxy-Authorization` is sent in place of the
+one made from the proxy URL's userinfo (`a caller's Proxy-Authorization goes to
+the proxy in place of the userinfo's`); a proxy setting an error names is its
 scheme, host, port and path alone, and one that does not parse or has no host
 is not echoed (HF-8).
 
@@ -251,11 +241,11 @@ reuses the TLS connection`); an IP literal is matched against the
 certificate's IP name (`an IP literal is matched against the certificate's IP
 name, on its own connection`).
 
-A client reads its roots once: a root file
-changed under it does not change what its next connection trusts (`a client
-reads its roots once, not again for each connection`). `fetchSync` ends its
-connection with a `close_notify` once its body is read (HF-4; `and once its
-body is read, it ends the connection with a close_notify`).
+A client reads its roots once: a root file changed under it does not change
+what its next connection trusts (`a client reads its roots once, not again for
+each connection`). `fetchSync` ends its connection with a `close_notify` once
+its body is read (HF-4; `and once its body is read, it ends the connection with
+a close_notify`).
 
 Every certificate the roots do not vouch for,
 for this host, now, is `HTTP_E_CERTIFICATE` (`an expired certificate is
@@ -274,18 +264,17 @@ HTTP_E_TLS, not a short body`), while a body with no length ends cleanly at
 the server's `close_notify` (`a body with no length ends at the server's
 close_notify`, `and read again, it answers 0 with no error`).
 
-A pooled TLS
-connection the server dropped, ended with a fatal alert, or ended with a
-`close_notify` while idle, is retried on a new one (`a pooled TLS connection
-the server dropped is retried on a new one`, `a pooled TLS connection the
-server ends with an alert is retried on a new one`, `a pooled TLS connection
-the server ended with a close_notify is retried on a new one`).
+A pooled TLS connection the server dropped, ended with a fatal alert, or ended
+with a `close_notify` while idle, is retried on a new one (`a pooled TLS
+connection the server dropped is retried on a new one`, `a pooled TLS
+connection the server ends with an alert is retried on a new one`, `a pooled
+TLS connection the server ended with a close_notify is retried on a new one`).
 
-A fresh
-connection the server ends with an alert is `HTTP_E_TLS`, and the error names
-the alert (`a fresh TLS connection the server ends with an alert is
-HTTP_E_TLS`, `and the error names the alert the server sent`), and a server silent through the handshake is a read timeout, not a TLS
-failure (`a server that never answers the handshake is HTTP_E_READ_TIMEOUT`).
+A fresh connection the server ends with an alert is `HTTP_E_TLS`, and the error
+names the alert (`a fresh TLS connection the server ends with an alert is
+HTTP_E_TLS`, `and the error names the alert the server sent`), and a server
+silent through the handshake is a read timeout, not a TLS failure (`a server
+that never answers the handshake is HTTP_E_READ_TIMEOUT`).
 
 A redirect from https to http is refused even
 when cross-origin hops are allowed (`a redirect from https to http is refused
@@ -293,13 +282,13 @@ even with crossOriginRedirects`), and https through a proxy is a `CONNECT`
 tunnel with TLS to the origin inside it (`https through an http proxy is a
 CONNECT tunnel, then TLS to the origin`).
 
-The origin inside the tunnel is sent
-no `Proxy-Authorization`, the caller's included, while the `CONNECT` carries
-the proxy URL's (`through a tunnel the origin is sent no Proxy-Authorization,
-not even the caller's`, `and the CONNECT carries the proxy URL's user and
-password`). Bytes the proxy sends in the segment of its `200` belong to the
-tunnel, so an alert there ends the handshake at once (`an alert the proxy sends
-in the same segment as its 200 is read by TLS, not lost`).
+The origin inside the tunnel is sent no `Proxy-Authorization`, the caller's
+included, while the `CONNECT` carries the proxy URL's (`through a tunnel the
+origin is sent no Proxy-Authorization, not even the caller's`, `and the CONNECT
+carries the proxy URL's user and password`). Bytes the proxy sends in the
+segment of its `200` belong to the tunnel, so an alert there ends the handshake
+at once (`an alert the proxy sends in the same segment as its 200 is read by
+TLS, not lost`).
 
 **What no check reaches.** A failure of the poll loop itself (`pollCreate` or
 `pollAdd` failing), a write that fails with an errno other than a reset, the
@@ -317,14 +306,12 @@ HF-8's redaction at each of its seven call sites and in each of its cuts, of
 `fill`'s `overdue`, of `maxHeaderBytes`, of the empty read, and of the TLS
 read of bytes that arrive with a proxy's `200` (T9) is killed.
 
-A response the
-server closes part way through counts as a lost connection, as one closed
-before any byte does, so the dropped `gotByte` term is killed on every run by
-`a GET whose answer was cut off part way is not sent again`, which needs no
-timing. The reset check behind it waits until `/proc/net/tcp` shows the
-client has read the bytes before it resets, and when it fails it says on
-stderr how the server closed and what the client saw. These survive, and
-stay:
+A response the server closes part way through counts as a lost connection, as
+one closed before any byte does, so the dropped `gotByte` term is killed on
+every run by `a GET whose answer was cut off part way is not sent again`, which
+needs no timing. The reset check behind it waits until `/proc/net/tcp` shows
+the client has read the bytes before it resets, and when it fails it says on
+stderr how the server closed and what the client saw. These survive, and stay:
 
 - `L1`, `L2`, `L12`: HF-7 is closed twice, by `release` dropping a connection
   that holds a byte and by `open` reusing one only when `quiet`. Either alone

@@ -57,21 +57,20 @@ nothing to hand back on success returns `Result<void, E>` and succeeds with
 | `r.expect(message)` | the `T`, or else print `message` and exit with status 1 |
 
 ```ts nish:ok
-const half = (n: i32): Result<i32, string> => {
-  if (n % 2 !== 0) {
-    return Err(`${n} is odd`);
+const checkAge = (age: i32): Result<i32, string> => {
+  if (age < 0) {
+    return Err(`${age} is not an age`);
   }
-  return Ok(n / 2);
-};
-
-const quarter = (n: i32): Result<i32, string> => {
-  const h = half(n).orReturn();
-  return half(h);
+  return Ok(age);
 };
 
 export const main = (): i32 => {
-  console.log(`${half(3).unwrapOr(-1)}`);       // -1
-  console.log(`${quarter(8).expect("8 is even")}`); // 2
+  const r = checkAge(30);
+  if (r.isOk()) {
+    console.log(`${r.value}`); // 30
+  }
+  console.log(`${checkAge(-1).unwrapOr(0)}`); // 0
+  console.log(`${checkAge(7).expect("7 is an age")}`); // 7
   return 0;
 };
 ```

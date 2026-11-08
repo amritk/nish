@@ -249,13 +249,13 @@ run time. The time taken depends on the iteration count, dkLen and whether the
 password is longer than a block, which RFC 8018 and SCRAM treat as public, and
 on none of the password's bytes.
 
-The time is linear in the iteration count,
-and nothing in `pbkdf2HmacSha256` bounds it: 2^31 − 1 rounds is about 2^32
-compressions with no abort. A caller that takes the count from an untrusted
-peer must cap it first; SCRAM's `i=` comes from the server. No caller exists
-at `804120e`: the first one (the SCRAM client of #868) caps the count before
-the call, and its own record pins the cap (K1-9). A null answer is the `Secret` forms' contract
-(HKDF's, K1-7): a `Result` cannot hold a `Secret`.
+The time is linear in the iteration count, and nothing in `pbkdf2HmacSha256`
+bounds it: 2^31 − 1 rounds is about 2^32 compressions with no abort. A caller
+that takes the count from an untrusted peer must cap it first; SCRAM's `i=`
+comes from the server. No caller exists at `804120e`: the first one (the SCRAM
+client of #868) caps the count before the call, and its own record pins the cap
+(K1-9). A null answer is the `Secret` forms' contract (HKDF's, K1-7): a
+`Result` cannot hold a `Secret`.
 
 **Not reached**, and recorded rather than claimed: the caller's password array,
 which is theirs to `wipe` as the `Secret` it is; the derived key once

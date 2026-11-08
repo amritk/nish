@@ -234,14 +234,13 @@ compressed form only when it is worth it:
   `Http1Server` read from the connection's socket when it accepted it,
   where the platform reports one (`TCP_INFO` on Linux, `TCP_MAXSEG` on
   macOS; `Http1TlsServer` reads none); otherwise `HTTP_DEFAULT_MSS` (1448,
-  an Ethernet path's).
+  an Ethernet path's). `segmentMss(enc)` on the connection answers which.
 
-  `segmentMss(enc)` on the connection answers which.
-  Each accept starts a connection with neither of its own set, so one
-  peer's MSS never reaches the next. A response that already fits in one
-  segment as it is, head and body, is sent as it is without running the
-  encoder at all, and carries no `Vary`: gzip could not make it arrive any
-  sooner. Larger responses are compressed first and then compared.
+  Each accept starts a connection with neither of its own set, so one peer's
+  MSS never reaches the next. A response that already fits in one segment as it
+  is, head and body, is sent as it is without running the encoder at all, and
+  carries no `Vary`: gzip could not make it arrive any sooner. Larger responses
+  are compressed first and then compared.
 
 When a body does not pay, it goes out as it is and the compressed bytes are
 dropped. After each call, `decision` says what happened and why:

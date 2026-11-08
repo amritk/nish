@@ -262,13 +262,13 @@ group. Up to `PgConfig.maxInFlight` groups may wait for their answers at once:
 send the next before the last is answered, and the round trips overlap.
 `canSend()` says whether another group may start.
 
-A builder call that may not
-run now — before `PG_READY`, past the cap, a `prepare` inside an open bind, a
-`param...` call or `bindEnd()` with no bind open, a `paramBytes` window
-outside its array, a name or SQL holding a NUL byte, or a message that would
-put more than `PgConfig.maxOutput` bytes (1 MiB) waiting to be sent — answers
-`false` and writes nothing. `sync()` and `terminate()` are never refused for
-room. Send what is queued and call `sent(n)`, and the room comes back.
+A builder call that may not run now — before `PG_READY`, past the cap, a
+`prepare` inside an open bind, a `param...` call or `bindEnd()` with no bind
+open, a `paramBytes` window outside its array, a name or SQL holding a NUL
+byte, or a message that would put more than `PgConfig.maxOutput` bytes (1 MiB)
+waiting to be sent — answers `false` and writes nothing. `sync()` and
+`terminate()` are never refused for room. Send what is queued and call
+`sent(n)`, and the room comes back.
 
 ### Array parameters
 
@@ -307,11 +307,10 @@ and the Bind, and put the rest in the next statement. `arrayEnd()` is never
 refused. When not even the first element fits, `bindCancel()` drops the open
 bind, array and all, unsent, as if `bindStart` had never been called.
 
-While an
-array is open, `sync()`, `prepare`, `closeStatement` and `bindStart` answer
-`false`, as with any open bind. Using an array out of order
-is a bug, so it panics: an element or `arrayEnd()` with no `arrayStart()`, a
-second `arrayStart()`, or any other `param...` call or `bindEnd()` before
+While an array is open, `sync()`, `prepare`, `closeStatement` and `bindStart`
+answer `false`, as with any open bind. Using an array out of order is a bug, so
+it panics: an element or `arrayEnd()` with no `arrayStart()`, a second
+`arrayStart()`, or any other `param...` call or `bindEnd()` before
 `arrayEnd()`. So do an `arrayElement` window outside its array and a
 `paramIntArray` range outside `values`.
 

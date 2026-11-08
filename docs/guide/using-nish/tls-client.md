@@ -89,12 +89,12 @@ not wait for the server's close_notify, and `readWait` answers `-32` once
 its own is sent), and `interest()`, `readable()` and `writable()` let the
 client join your own loop (`fd()` is its socket).
 
-`tlsConnectWith(addr,
-config, trust, timeoutMs)` takes a whole `TlsClientConfig` (to offer P-256,
-say) and the roots to trust; `tlsConnect` reads the system's roots on every
-call, within its timeout, so a program that connects often reads them once and passes them here.
-`new TlsTcpClient(addr, config, trust)` starts
-the same connection without blocking, for a loop you already run.
+`tlsConnectWith(addr, config, trust, timeoutMs)` takes a whole
+`TlsClientConfig` (to offer P-256, say) and the roots to trust; `tlsConnect`
+reads the system's roots on every call, within its timeout, so a program that
+connects often reads them once and passes them here. `new TlsTcpClient(addr,
+config, trust)` starts the same connection without blocking, for a loop you
+already run.
 
 **The server is always checked.** Its signature must verify under its
 certificate's key, and its chain must lead to a root you trust, with every

@@ -29,11 +29,11 @@ reading pipelined requests, a listener that spun the loop when an accept
 failed for want of descriptors, length checks that missed bytes still
 pending, and `sendJson` sending a value no `json()` began.
 
-A fifth, a body
-trickled a byte at a time inside the carrier's idle timeout, holds a slot no
-longer than `bodyTimeout` (HANDLER-5). None is left open. Two properties are the program's, by design, and
-are recorded as accepted: how many taken requests it holds unanswered
-(HANDLER-7) and what it does with a parameter or query value (HANDLER-8).
+A fifth, a body trickled a byte at a time inside the carrier's idle timeout,
+holds a slot no longer than `bodyTimeout` (HANDLER-5). None is left open. Two
+properties are the program's, by design, and are recorded as accepted: how many
+taken requests it holds unanswered (HANDLER-7) and what it does with a
+parameter or query value (HANDLER-8).
 
 ## Scope
 

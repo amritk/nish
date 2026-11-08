@@ -1,19 +1,18 @@
 # Security record: a dependency's capabilities
 
 The record of the dependency policy
-([wp40-dependency-capabilities.md](https://github.com/amritk/nish/blob/main/docs/wp40-dependency-capabilities.md)): a
-dependency that reaches `unsafe`, `ffi`, `fs.read`, `fs.write`, `net` or
+([wp40-dependency-capabilities.md](https://github.com/amritk/nish/blob/main/docs/wp40-dependency-capabilities.md)):
+a dependency that reaches `unsafe`, `ffi`, `fs.read`, `fs.write`, `net` or
 `process.spawn` the root package does not grant it is refused at compile time
 with NL2576, naming the dependency, the capability and the function; of the
 capability lockfile after it, which refuses a dependency that reaches a
 capability `nish-capabilities.lock.json` does not record for it with NL2577;
-and of the arguments a grant may carry (a directory, a program, a host or a Unix socket path),
-which refuse a literal outside them with NL2594 and a lockfile row they
-outgrow with NL2593.
+and of the arguments a grant may carry (a directory, a program, a host or a
+Unix socket path), which refuse a literal outside them with NL2594 and a
+lockfile row they outgrow with NL2593.
 
-It says what the check covers,
-what it cannot reach, and the test that pins each property. It is written
-with the code rather than after an audit.
+It says what the check covers, what it cannot reach, and the test that pins
+each property. It is written with the code rather than after an audit.
 
 Anchors are function names in the files below at the commit that adds the
 check, the squash merge of #905, and, for the lockfile, at the squash merge
@@ -30,23 +29,21 @@ never widens the root's own policy. The standard library is told apart by
 where a module was resolved, not by its package name, so a package named
 `nish` is a dependency like any other.
 
-The lockfile refuses any capability a
-dependency's row does not record, whether the root grants it or not, and a
-file it cannot read whole stops the build rather than reading as a wider one.
-Nothing was found to fix or left open.
-Four limits are inherent to a compile-time check of the call graph and are
-recorded as accepted: install scripts (CAPS-5), the C behind a granted `ffi`
-(CAPS-6), function arguments blamed on the template that calls them (CAPS-7),
-and nothing confined at run time (CAPS-8).
+The lockfile refuses any capability a dependency's row does not record, whether
+the root grants it or not, and a file it cannot read whole stops the build
+rather than reading as a wider one. Nothing was found to fix or left open. Four
+limits are inherent to a compile-time check of the call graph and are recorded
+as accepted: install scripts (CAPS-5), the C behind a granted `ffi` (CAPS-6),
+function arguments blamed on the template that calls them (CAPS-7), and nothing
+confined at run time (CAPS-8).
 
-Two more are the lockfile's and
-are accepted too: a row is never tightened (CAPS-12), and the check holds only
-while a readable lockfile does (CAPS-13).
-A grant's arguments are checked at build time against the literals a
-dependency hands the builtins that reach them, and held at run time by
-`--sandbox` for directories and programs; two limits are accepted (CAPS-17,
-CAPS-18) and one is open: a `net=<host>` grant binds no computed host at run
-time, since seccomp cannot read a socket's address (CAPS-19).
+Two more are the lockfile's and are accepted too: a row is never tightened
+(CAPS-12), and the check holds only while a readable lockfile does (CAPS-13). A
+grant's arguments are checked at build time against the literals a dependency
+hands the builtins that reach them, and held at run time by `--sandbox` for
+directories and programs; two limits are accepted (CAPS-17, CAPS-18) and one is
+open: a `net=<host>` grant binds no computed host at run time, since seccomp
+cannot read a socket's address (CAPS-19).
 
 ## Scope
 

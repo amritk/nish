@@ -27,13 +27,12 @@ accepted: every byte it reads, every length or count it parses from that
 input, every file and directory it is pointed at, and how large those are.
 The attacker does not write the program and does not choose its flags.
 
-The
-programmer is honest but writes ordinary code: a length taken from a header,
-a name returned from a directory listing, a task spawned on a record. A
+The programmer is honest but writes ordinary code: a length taken from a
+header, a name returned from a directory listing, a task spawned on a record. A
 finding is a program the compiler accepts, without `uncheckedGet` or
-`uncheckedSet`, whose run reads or writes outside an object, reads freed memory, races, or
-reaches LLVM undefined behaviour because of a check the compiler removed or
-an attribute it emitted.
+`uncheckedSet`, whose run reads or writes outside an object, reads freed
+memory, races, or reaches LLVM undefined behaviour because of a check the
+compiler removed or an attribute it emitted.
 
 Signed overflow was undefined behaviour by the language's own rule when this
 audit ran (`--wrapping` defined it), so a proof that leaned on `nsw` was sound
@@ -101,12 +100,11 @@ panics instead, and no `nsw` the compiler writes is an assumption.
   every definition, the runtime built with `-fsanitize=address,undefined`),
   where it must panic or finish cleanly as the first run did.
 
-  A one-past read
-  that stays inside the array's block (`ASAN_BLIND`) is not counted as an ASan
-  verdict, and `threads:mapinto`'s panic belongs to the library
-  (`LIBRARY_CHECKED`). A failure is reduced by ddmin to a `min.ts` with the
-  one-past block kept whole. CI runs 600 programs from seed 20261024 on every
-  pull request (`nish-cmp`, both architectures), and
+  A one-past read that stays inside the array's block (`ASAN_BLIND`) is not
+  counted as an ASan verdict, and `threads:mapinto`'s panic belongs to the
+  library (`LIBRARY_CHECKED`). A failure is reduced by ddmin to a `min.ts` with
+  the one-past block kept whole. CI runs 600 programs from seed 20261024 on
+  every pull request (`nish-cmp`, both architectures), and
   `.github/workflows/soundness-fuzz.yml` runs 20 000 from a random, printed
   seed each week. The results are under "The generated-program pass" below.
 

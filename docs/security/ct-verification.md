@@ -176,12 +176,11 @@ configuration measured there: out of domain, in the full driver. On the two
 CI runners it did not differ in the one reading each has: out of domain, in
 the full driver, on today's fixture.
 
-`clang -O2` compiles `ladderStep` and
-the field functions it calls, for x86-64, to `mov`, `lea`, `add`, `sub`,
-`neg`, `and`, `xor`, `sar`, SSE moves, `paddq`, `psubq` and `imulq`, and
-calls to `condSwap` and `fieldMul`: no divide and no branch,
-which `tests/ct-asm.js` already pins on both targets, and none of those is
-documented as taking an operand-dependent time on current x86-64 cores.
+`clang -O2` compiles `ladderStep` and the field functions it calls, for x86-64,
+to `mov`, `lea`, `add`, `sub`, `neg`, `and`, `xor`, `sar`, SSE moves, `paddq`,
+`psubq` and `imulq`, and calls to `condSwap` and `fieldMul`: no divide and no
+branch, which `tests/ct-asm.js` already pins on both targets, and none of those
+is documented as taking an operand-dependent time on current x86-64 cores.
 
 **What it did not, at 300,000.** The 35–42 was never re-run on the host that
 produced it. The harness has not changed since #377, but the fixture has (#426
@@ -246,13 +245,12 @@ sum or difference of two reduced elements, signed and below 2^27 in magnitude
 reduced elements, below 2^26 in magnitude, limb 1's final carry out of limb 0
 included (`f25519Carry`); and the swap bit is 0 or 1.
 
-`ct_signed_limbs` in
-`tests/ct-timing/dudect.c` makes each secret limb signed with a magnitude
-below the bound, after `ct_fill`, in both classes, so zero stays zero and the
-class is still only in `ct_fill`'s mask. The run fails with exit 2 when a
-fixture in `DOMAINS` is gone, when its entry names a function it does not
-time or misses one it does, and when an entry narrows a secret its function
-does not take or leaves one unnarrowed.
+`ct_signed_limbs` in `tests/ct-timing/dudect.c` makes each secret limb signed
+with a magnitude below the bound, after `ct_fill`, in both classes, so zero
+stays zero and the class is still only in `ct_fill`'s mask. The run fails with
+exit 2 when a fixture in `DOMAINS` is gone, when its entry names a function it
+does not time or misses one it does, and when an entry narrows a secret its
+function does not take or leaves one unnarrowed.
 
 **The domain's own controls.** For each limb bound and scalar mask a domain
 uses, the driver also times a leak written in C (`ct_first_nonzero`, which
@@ -301,14 +299,14 @@ None crossing in 940 bounds the rate on this VM below 0.32% a function-run (95%
 upper bound); a Gaussian fit to the tail puts it near 0.012%, or about 1% of
 weekly runs of some 92 function-runs on two runners.
 
-On the runners
-themselves, dispatch run 39733213208 of `ct-timing.yml` (`aa_runs: 10`, head
-`6717ff9`) found 0 of 540 function-runs above 4.5 on the x86-64 runner, an AMD
-EPYC 9V74, and 0 of 540 on the arm64 runner. None in 540 bounds each runner's
-rate below 0.55% a function-run (95% upper bound); it does not make it zero,
-and CT-19's one crossing in the weekly runs before it stands. Each timing run
-now measures its own runner's null as well ([the CPU fingerprint and the
-same-runner null](#the-cpu-fingerprint-and-the-same-runner-null)).
+On the runners themselves, dispatch run 39733213208 of `ct-timing.yml`
+(`aa_runs: 10`, head `6717ff9`) found 0 of 540 function-runs above 4.5 on the
+x86-64 runner, an AMD EPYC 9V74, and 0 of 540 on the arm64 runner. None in 540
+bounds each runner's rate below 0.55% a function-run (95% upper bound); it does
+not make it zero, and CT-19's one crossing in the weekly runs before it stands.
+Each timing run now measures its own runner's null as well ([the CPU
+fingerprint and the same-runner
+null](#the-cpu-fingerprint-and-the-same-runner-null)).
 
 **`macEqual` beside its neighbours.** The 102 tests of each function, dumped
 from six runs at 1,000,000 samples (seeds 11 to 66), on this VM:
@@ -336,12 +334,11 @@ it was read in is kept, rather than a driver linked for it alone. The seed is
 derived from the run's (`seed × 0x9e3779b97f4a7c15 mod 2^64`, named on the
 table's first line as "re-measured on seed").
 
-The function is a finding, exit
-1, only when it crosses on both. One that crosses once and not again stays in
-the table with its second |t|, as "crossed once, did not repeat", and is named
-in the summary line; the run passes, and the report job comments on the open
-`ct-timing` issue, or opens one when none is open, so that a function that
-crosses once every week is seen.
+The function is a finding, exit 1, only when it crosses on both. One that
+crosses once and not again stays in the table with its second |t|, as "crossed
+once, did not repeat", and is named in the summary line; the run passes, and
+the report job comments on the open `ct-timing` issue, or opens one when none
+is open, so that a function that crosses once every week is seen.
 
 A re-measure seconds later on the same shared
 runner is not independent of the first, so the rule's own false-positive rate
@@ -379,12 +376,11 @@ readable. A part is named only where it can be cited (`ARM_PARTS`: implementer
 0x41 with 0xd0c Neoverse N1, 0xd40 V1, 0xd49 N2, 0xd4f V2, from each core's
 TRM and Linux's `cputype.h`); any other prints its raw values.
 
-The line also
-gives the `hypervisor` flag, the cpufreq `boost` and intel_pstate `no_turbo`
-state and the kernel release. A field the kernel does not give prints
-"unreadable", never a default. On a host with no `/proc/cpuinfo` the line
-reads `ct-timing: CPU from os.cpus() only (…)` and says what it fell back to.
-On this VM it reads:
+The line also gives the `hypervisor` flag, the cpufreq `boost` and intel_pstate
+`no_turbo` state and the kernel release. A field the kernel does not give
+prints "unreadable", never a default. On a host with no `/proc/cpuinfo` the
+line reads `ct-timing: CPU from os.cpus() only (…)` and says what it fell back
+to. On this VM it reads:
 
 ```
 ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs): x64 GenuineIntel family 6 model 85 stepping 7 microcode 0x1 "Intel(R) Xeon(R) Processor @ 2.80GHz"; hypervisor flag set; cpufreq boost unreadable; intel_pstate no_turbo unreadable; kernel 6.18.44-fc-v140; 4 logical CPUs
@@ -407,13 +403,12 @@ It reports and never decides. The exit code is the timing pass's alone: a
 quiet null does not clear a finding, a noisy one does not excuse it, and the
 controls must still differ on their first measurement (exit 2).
 
-When the A/A
-pass crosses on a function the timing pass flagged, once or twice, the summary
-line says so: `the same-runner A/A pass crossed on … too, so this machine's
-noise reaches the same function: re-run before reading it as a leak`. The
-report job of `ct-timing.yml` puts each runner's fingerprint line and A/A line
-above its table in the issue comment, and files a run whose A/A pass crossed
-as it files a function that crossed once.
+When the A/A pass crosses on a function the timing pass flagged, once or twice,
+the summary line says so: `the same-runner A/A pass crossed on … too, so this
+machine's noise reaches the same function: re-run before reading it as a leak`.
+The report job of `ct-timing.yml` puts each runner's fingerprint line and A/A
+line above its table in the issue comment, and files a run whose A/A pass
+crossed as it files a function that crossed once.
 
 Shown with a scratch copy of the harness whose threshold was 1.5, at
 `--quick`: 38 of 54 functions crossed in the A/A pass and were named, 25 of
@@ -435,21 +430,19 @@ Signed `+ - *` became a checked panic after this record was written
 (`docs/LANGUAGE.md`, "Semantics decisions"), and the check is a conditional
 branch, on a secret when the operands are secret.
 
-So the constant-time code
-does its arithmetic where nothing is checked: secret sums and products in
-`u32` or `u64`, which wrap by definition and have the bits the old signed
-arithmetic had wherever it did not overflow — `base64urlRangeMask`, which
-both base64 alphabets' character maps in `std/crypto/base64url.ts` share
-(x509's own copy, `x509RangeMask`, went when its padded base64 moved there),
-those maps, and x25519's limbs through
-`f25519Add64`, `f25519Sub64` and `f25519Mul64`, whose bounds the module
-already proves in its comments — and the public offsets of the loads and
-stores the fixtures read (`at + k`) in `u32` too.
+So the constant-time code does its arithmetic where nothing is checked: secret
+sums and products in `u32` or `u64`, which wrap by definition and have the bits
+the old signed arithmetic had wherever it did not overflow —
+`base64urlRangeMask`, which both base64 alphabets' character maps in
+`std/crypto/base64url.ts` share (x509's own copy, `x509RangeMask`, went when
+its padded base64 moved there), those maps, and x25519's limbs through
+`f25519Add64`, `f25519Sub64` and `f25519Mul64`, whose bounds the module already
+proves in its comments — and the public offsets of the loads and stores the
+fixtures read (`at + k`) in `u32` too.
 
-Every fixture's
-copy changed with its module, and each still passes its link test against the
-module. A check the compiler proves away — a loop counter, a masked value —
-is no branch at all, and the fixtures rely on that too.
+Every fixture's copy changed with its module, and each still passes its link
+test against the module. A check the compiler proves away — a loop counter, a
+masked value — is no branch at all, and the fixtures rely on that too.
 
 ## Functions still held by discipline only
 
@@ -510,14 +503,13 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
   `p256EncodePoint`, `p256DigestScalar`, `p256NonceKey`, `p256SignScalar`,
   `p256PublicKey`, `p256Sign`, `p256SignSha256`.
 
-  (The field and scalar
-  multiplies, add, subtract and conditional move, the point doubling and
-  addition, the table move and select, and one window step are read as copies
-  or reshaped copies, as are the comb's digit, fifteen-entry select, mixed
-  addition, masked keep and one comb step, and safegcd's thirty divsteps and
-  its two matrix updates: `ct_asm_p256`'s `p256Divsteps30`, the module's
-  divstep loop unrolled thirty times, which `tests/run.js` holds to the
-  module's loop body text, and `p256UpdateDe30` and `p256UpdateFg30` with
+  (The field and scalar multiplies, add, subtract and conditional move, the
+  point doubling and addition, the table move and select, and one window step
+  are read as copies or reshaped copies, as are the comb's digit, fifteen-entry
+  select, mixed addition, masked keep and one comb step, and safegcd's thirty
+  divsteps and its two matrix updates: `ct_asm_p256`'s `p256Divsteps30`, the
+  module's divstep loop unrolled thirty times, which `tests/run.js` holds to
+  the module's loop body text, and `p256UpdateDe30` and `p256UpdateFg30` with
   their limb loops unrolled.) `p256Verify` handles only public data.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
@@ -568,12 +560,11 @@ listing with the loops gone cannot pass vacuously, and the functions the unit
 exports (its `.globl` symbols) must be exactly the four kernels and
 `nish_aes_hw`, so a fifth kernel cannot be added unread.
 
-The model's corners for
-these additions (a public loop bound; a data byte as the bound; a secret the
-back edge brings to an index; a forward jump past the code that cleared a
-secret; a vector instruction between a compare and its branch; a shift of a
-secret before a branch; `cbz` on a secret; GHASH's H as a bound) run when the
-module loads.
+The model's corners for these additions (a public loop bound; a data byte as
+the bound; a secret the back edge brings to an index; a forward jump past the
+code that cleared a secret; a vector instruction between a compare and its
+branch; a shift of a secret before a branch; `cbz` on a secret; GHASH's H as a
+bound) run when the module loads.
 
 `tests/simd/aes-leaky.c` is the negative case in real compiler
 output: `nish_aes_leaky_table` indexes an S-box by a data byte and
@@ -589,11 +580,11 @@ on the first call only, on `NISH_AES` (`getenv`, `:451`) and on the CPU's
 feature bits (`nish_aes_cpu`: CPUID leaf 1's AES, PCLMULQDQ and SSSE3 bits at
 `:412`, AT_HWCAP's AES and PMULL at `:423`).
 
-Neither depends on a key or data,
-and the answer is fixed for the life of the process, so whether a key's
-operations run the kernel or the bitsliced Nish code is a property of the
-machine and its environment, not of the key. `NISH_AES=soft` pins the
-bitsliced path, whose constant time is the Nish code's own (above).
+Neither depends on a key or data, and the answer is fixed for the life of the
+process, so whether a key's operations run the kernel or the bitsliced Nish
+code is a property of the machine and its environment, not of the key.
+`NISH_AES=soft` pins the bitsliced path, whose constant time is the Nish code's
+own (above).
 
 **The lowering** (anchors at `7890aee`). The compiler asks `nish_aes_hw` again
 in front of each of the four seam calls (`src/emit.ts:1443`,
@@ -604,15 +595,14 @@ asked once per call rather than once per process, and its answer is the
 stored one after the first call, so it is a branch on the machine and the
 environment, never on a key or data.
 
-Every key a process makes is scheduled
-and used under that one answer, which is what keeps the kernel's round-key
-layout and the bitsliced one from meeting in one array. A wasm32 build
-(`--target wasm32…` or `--profile wasi`) emits the call as written and
-references no `nish_aes_` symbol. What the branch does not change: which of
-the two bodies a call runs is read here (the kernel) or by `ct_asm_aes` and
-the discipline in `std/crypto/aes.ts`'s header (the walker), and the
-lowering adds no secret-dependent instruction of its own, only the call, a
-compare of its answer with zero and the branch.
+Every key a process makes is scheduled and used under that one answer, which is
+what keeps the kernel's round-key layout and the bitsliced one from meeting in
+one array. A wasm32 build (`--target wasm32…` or `--profile wasi`) emits the
+call as written and references no `nish_aes_` symbol. What the branch does not
+change: which of the two bodies a call runs is read here (the kernel) or by
+`ct_asm_aes` and the discipline in `std/crypto/aes.ts`'s header (the walker),
+and the lowering adds no secret-dependent instruction of its own, only the
+call, a compare of its answer with zero and the branch.
 
 **What it does not model.** The instructions' own timing: AESENC,
 AESENCLAST, AESKEYGENASSIST and PCLMULQDQ, and AESE, AESMC and PMULL, are
@@ -622,14 +612,13 @@ list), and Arm among those FEAT_DIT makes so; the kernels do not set
 PSTATE.DIT, so on aarch64 that is the cores' behaviour rather than a
 guarantee, and a core where it does not hold is outside this check.
 
-Microcode,
-frequency effects of the AES units, and the cost of the resolver's first call,
-which reads the environment and the CPU but nothing secret. A build other than
-`clang -O2` for the baseline CPU or `x86-64-v3` (CT-16): the `speed` profile's `-O3` with LTO
-and the `debug` profile's `-O0` are not what was read, and `-O0` keeps every
-value on the stack. And what the register allocator spills: the stack model
-follows a spill and its reload, but a spill is a copy of a secret no wipe
-reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
+Microcode, frequency effects of the AES units, and the cost of the resolver's
+first call, which reads the environment and the CPU but nothing secret. A build
+other than `clang -O2` for the baseline CPU or `x86-64-v3` (CT-16): the `speed`
+profile's `-O3` with LTO and the `debug` profile's `-O0` are not what was read,
+and `-O0` keeps every value on the stack. And what the register allocator
+spills: the stack model follows a spill and its reload, but a spill is a copy
+of a secret no wipe reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 
 ## Properties verified
 

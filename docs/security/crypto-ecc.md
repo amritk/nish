@@ -57,9 +57,8 @@ every assignment and every store to `out1`) and did the same to the Nish
 translation, undoing its three documented changes (the packed `u64` results,
 the length guard, and `square`'s limbs read into locals first).
 
-Every one of
-the ten ported functions — field `mul`, `square`, `add`, `sub`, `nonzero`,
-`selectznz`, `set_one`, and scalar `mul`, `add`, `set_one` — matched
+Every one of the ten ported functions — field `mul`, `square`, `add`, `sub`,
+`nonzero`, `selectznz`, `set_one`, and scalar `mul`, `add`, `set_one` — matched
 statement for statement: 359, 359, 33, 25, 2, 16, 8, 415, 33 and 8 statements.
 Where Nish leaves out one half of a helper's result, the script checked that
 fiat never reads that half.
@@ -112,10 +111,9 @@ when this was audited and is a checked panic since #426, so either way
 limbs below 2^27 in magnitude. Each output limb collects ten products, each
 scaled by at most 2 × 19, so each limb is below 380 × 2^54 < 2^62.6.
 
-Every
-partial sum is bounded by the same sum of absolute values. `wide[k + 10] × 19`
-plus `wide[k]` stays below 362 × 2^54, and the carries `f25519Carry` then adds
-are below 2^38. Every call site in the ladder was checked to pass reduced
+Every partial sum is bounded by the same sum of absolute values. `wide[k + 10]
+× 19` plus `wide[k]` stays below 362 × 2^54, and the carries `f25519Carry` then
+adds are below 2^38. Every call site in the ladder was checked to pass reduced
 elements, or one sum or difference of two.
 
 **Differential testing.** Two reference implementations were written in Python
@@ -319,16 +317,15 @@ arithmetic, conditional swap and ladder step have no branch, no call the
 checker cannot follow, and no load or store at a secret address, on x86-64 and
 aarch64. The fixtures' copies were checked above to match the module code.
 
-The
-loops around these steps, the inversions (square-and-multiply on the public
+The loops around these steps, the inversions (square-and-multiply on the public
 exponents p − 2 and n − 2, or X25519's fixed addition chain; since #758 the
 nonce's is safegcd's twenty fixed batches, whose divsteps and matrix updates
-ct_asm reads as copies, ECC-4), the encodings
-and the nonce derivation branch only on public positions. That was confirmed
-by reading, and it remains discipline rather than proof, as the module headers
-say. The one branch on a secret is RFC 6979's retry when a candidate nonce is
-not below n. The RFC prescribes it, it happens about once in 2^32 signatures,
-and it reveals only that a discarded value was large.
+ct_asm reads as copies, ECC-4), the encodings and the nonce derivation branch
+only on public positions. That was confirmed by reading, and it remains
+discipline rather than proof, as the module headers say. The one branch on a
+secret is RFC 6979's retry when a candidate nonce is not below n. The RFC
+prescribes it, it happens about once in 2^32 signatures, and it reveals only
+that a discarded value was large.
 
 **The fixed-base comb** (#663, after this audit; anchors at `6e11fa6`).
 `p256PublicKey` and `p256Sign` now compute k·G with `p256BaseMult`

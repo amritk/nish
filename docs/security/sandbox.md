@@ -63,13 +63,12 @@ an `ffi` callee is held to what the Nish code reaches, not to what the C
 code needs (§1). That errs towards refusal: a C library that needs more is
 killed or refused, unless the policy grants it.
 
-A main that reaches `ffi`
-under an allowlist (`--allow`, the manifest's `allow`, or both, intersected)
-is widened by that list's `net`, `fs.read`, `fs.write` and `process.spawn`,
-less any denial, a directory scope kept as a scope (open question 13). The
-widening is the person building the program choosing what the C code may
-reach; it never exceeds what the policy writes, and without an allowlist
-nothing is widened.
+A main that reaches `ffi` under an allowlist (`--allow`, the manifest's
+`allow`, or both, intersected) is widened by that list's `net`, `fs.read`,
+`fs.write` and `process.spawn`, less any denial, a directory scope kept as a
+scope (open question 13). The widening is the person building the program
+choosing what the C code may reach; it never exceeds what the policy writes,
+and without an allowlist nothing is widened.
 
 **What runs before the call.** The dynamic loader, `LD_AUDIT`, `LD_PRELOAD`'s
 interposition and libc's own start-up run first. They are the launcher's
@@ -158,13 +157,12 @@ constructor, and applies, in order:
    MAKE_* and REMOVE_* rights, REFER, TRUNCATE; `process.spawn`: EXECUTE,
    READ_FILE and IOCTL_DEV (open question 5).
 
-   A scoped `fs.read` or
-   `fs.write` (the third and fourth operands, each a list of directories
-   ended by a NUL and the list by a second, `null` for none) is left out of
-   the rule on `/` and granted by one `path_beneath` rule per directory,
-   opened `O_PATH` (a directory, or, for the fifth operand, a file); a path
-   that cannot be opened refuses strict and, under best-effort, is named and
-   left out, which only narrows what is granted.
+   A scoped `fs.read` or `fs.write` (the third and fourth operands, each a list
+   of directories ended by a NUL and the list by a second, `null` for none) is
+   left out of the rule on `/` and granted by one `path_beneath` rule per
+   directory, opened `O_PATH` (a directory, or, for the fifth operand, a file);
+   a path that cannot be opened refuses strict and, under best-effort, is named
+   and left out, which only narrows what is granted.
 
    The fifth operand, the exec
    allowlist (a list in the same shape: the programs a dependency's

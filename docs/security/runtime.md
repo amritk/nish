@@ -58,12 +58,11 @@ A finding is any of these, reachable through a runtime entry point:
   Exactly 2^31 − 1 is checked to still succeed for a file read, a
   concatenation and the host entry, so a limit one too low fails too.
 
-  Those
-  three checks run in a child whose arena points at 4 GiB of address space
-  reserved with no access: a private, `PROT_NONE` mapping of a sparse file,
-  with one read-write page for the headers. The host entry's elements are
-  never touched. The concatenation's source starts in the inaccessible
-  pages, and so does the file read's destination.
+  Those three checks run in a child whose arena points at 4 GiB of address
+  space reserved with no access: a private, `PROT_NONE` mapping of a sparse
+  file, with one read-write page for the headers. The host entry's elements are
+  never touched. The concatenation's source starts in the inaccessible pages,
+  and so does the file read's destination.
 
   The child faults on the
   first byte copied, and its handler checks that the arena handed out the
@@ -255,17 +254,15 @@ Instructions retired (`bench/run.mjs --instructions`, cachegrind, `speed`):
 builders. The same guard on `str_from_digits` (a 21-byte digit buffer, run
 once per integer formatted) adds about 166,000 instructions to the map
 benchmarks that format each key: `map-wordcount` +0.11%, `map-presize`
-+0.24%.
++0.24%. Those three baselines in `bench/instructions.json` move with this change.
 
-Those three baselines in `bench/instructions.json` move with this
-change.
-The landing pads also end the `speed` link's LTO partitions on x86-64 and
-arm64 (`scripts/build.sh`): a partition boundary turns the internal functions
-called across it into external ones, each opening with `endbr64`, and `fib`
-ran 492,835,930 instructions with two to eight partitions against 462,974,845
-with one (+6.5%; `Permute` +3.9%, `Towers` +3.2%). One partition costs link
-time instead: 11.5 s against 8.3 s for `tests/link/net_relay_f64` on four
-cores, compile included.
+The landing pads also end the `speed` link's LTO partitions on x86-64 and arm64
+(`scripts/build.sh`): a partition boundary turns the internal functions called
+across it into external ones, each opening with `endbr64`, and `fib` ran
+492,835,930 instructions with two to eight partitions against 462,974,845 with
+one (+6.5%; `Permute` +3.9%, `Towers` +3.2%). One partition costs link time
+instead: 11.5 s against 8.3 s for `tests/link/net_relay_f64` on four cores,
+compile included.
 
 **What it does not cover.**
 

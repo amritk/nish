@@ -186,13 +186,13 @@ run their hashes interleaved on the calling thread, since the chains of table
 lookups overlap where one would leave the core waiting. Lane 0 is always given
 and a `null` lane is skipped.
 
-Each lane answers what `bcryptHash` or
-`bcryptVerify` would (a skipped lane answers `""` or `false`), `salts` is the
-six 16-byte salts end to end (96 bytes), `hashes` is six strings, and a verify
-of hashes with different costs runs each cost as its own group. A malformed
-hash in any given lane makes the whole verify an `Err` that names the lane,
-before anything is hashed. `bcryptHash4` and `bcryptVerify4` are the same for
-up to four passwords, with 64 bytes of salts.
+Each lane answers what `bcryptHash` or `bcryptVerify` would (a skipped lane
+answers `""` or `false`), `salts` is the six 16-byte salts end to end (96
+bytes), `hashes` is six strings, and a verify of hashes with different costs
+runs each cost as its own group. A malformed hash in any given lane makes the
+whole verify an `Err` that names the lane, before anything is hashed.
+`bcryptHash4` and `bcryptVerify4` are the same for up to four passwords, with
+64 bytes of salts.
 
 How many lanes are fastest per hash depends on the core: a core that issues
 more instructions a cycle gains from wider batches, and on one Xeon five and

@@ -37,13 +37,12 @@ call `main`, print nothing and exit 0. The one-liner imports the module and call
 `main` itself, which is what the native binary's entry point does, and exits
 with what `main` returns (0 for a `main` that returns `void`).
 
-An `async`
-`main` answers a promise, so the one-liner awaits it, and then waits for every
-task `spawn` started (`settleTasks`, from `nish:async` as the hook answers it),
-as the native driver drains its queue before the process exits; for a plain
-`main` both are no-ops. It is the form `tests/differential/unmodified.js`
-runs. The import path is resolved from the current directory, so keep the
-`./`.
+An `async` `main` answers a promise, so the one-liner awaits it, and then waits
+for every task `spawn` started (`settleTasks`, from `nish:async` as the hook
+answers it), as the native driver drains its queue before the process exits;
+for a plain `main` both are no-ops. It is the form
+`tests/differential/unmodified.js` runs. The import path is resolved from the
+current directory, so keep the `./`.
 
 An async program runs on Node's own async/await, so its tasks resume in
 Node's order, not the native one: an `await` always yields to the microtask

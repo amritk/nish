@@ -8,10 +8,10 @@ them). It says which draft it speaks, what it refuses and with what, what it
 caps and where the cap is set, what it keeps in memory and for how long, and
 the test that pins each property.
 
-HTTP/3 itself is [http3.md](http3.md), whose
-findings H3-1 to H3-5 this lane inherits; the transport and its datagram rings
-are [quic.md](quic.md). It is written with the code rather than after an
-audit, so that the audit of the protocol stack starts from evidence.
+HTTP/3 itself is [http3.md](http3.md), whose findings H3-1 to H3-5 this lane
+inherits; the transport and its datagram rings are [quic.md](quic.md). It is
+written with the code rather than after an audit, so that the audit of the
+protocol stack starts from evidence.
 
 **Result.** Every rule draft-02, RFC 9220 and RFC 9297 give a code to is
 refused with that code — a connection error as an application
@@ -73,13 +73,13 @@ buffers) and built with cargo in the container this lane was written in: its
 SETTINGS, its CONNECT, a datagram, a bidirectional and a unidirectional
 stream, and its answer to the server's CLOSE.
 
-A Nish client replays it byte
-for byte against the Nish server inside `npm test`, and what the server sends
-back is pinned byte for byte. Three runs differed only in the order of the
-client's SETTINGS (it builds them from a hash map) and the port in
-`:authority`. What it showed: wtransport opens no QPACK streams, sends no
-`origin`, and answers CLOSE_WEBTRANSPORT_SESSION by closing the whole QUIC
-connection with H3_NO_ERROR. Chrome through Playwright is S2's interop job.
+A Nish client replays it byte for byte against the Nish server inside `npm
+test`, and what the server sends back is pinned byte for byte. Three runs
+differed only in the order of the client's SETTINGS (it builds them from a hash
+map) and the port in `:authority`. What it showed: wtransport opens no QPACK
+streams, sends no `origin`, and answers CLOSE_WEBTRANSPORT_SESSION by closing
+the whole QUIC connection with H3_NO_ERROR. Chrome through Playwright is S2's
+interop job.
 
 ## Scope
 
@@ -143,13 +143,12 @@ HTTP datagrams and WebTransport is a session, answered 200 with
 before the client's SETTINGS waits for them (draft-02 §3.1); two sessions
 share a connection, each datagram and stream reaching its own.
 
-Answered here
-and never seen by the program: SETTINGS without SETTINGS_H3_DATAGRAM, or
-without either WebTransport setting (400); another `:protocol` (501, RFC 8441
-§4); another `:scheme` (400); a session past `webtransportSessions` (429). An
-extended CONNECT without `:path` is malformed, reset both ways with
-H3_MESSAGE_ERROR. A session the program refuses gets its status and the
-client is asked to stop with H3_NO_ERROR.
+Answered here and never seen by the program: SETTINGS without
+SETTINGS_H3_DATAGRAM, or without either WebTransport setting (400); another
+`:protocol` (501, RFC 8441 §4); another `:scheme` (400); a session past
+`webtransportSessions` (429). An extended CONNECT without `:path` is malformed,
+reset both ways with H3_MESSAGE_ERROR. A session the program refuses gets its
+status and the client is asked to stop with H3_NO_ERROR.
 
 **Datagrams** (`sessions.ts`, `refusals.ts`): a datagram is echoed with its
 quarter stream ID first; at the largest payload the server may send (1,167
@@ -175,13 +174,12 @@ WT_BUFFERED_STREAM_REJECTED; past `maxStreams` with H3_REQUEST_REJECTED, and
 the server may not open one past it (WT_LIMIT); a stream naming a session that
 is gone, refused or a plain request is refused with WT_SESSION_GONE.
 
-A session
-ID that is no client-initiated bidirectional stream is H3_ID_ERROR, and the
-signal 0x41 after a request's HEADERS is H3_FRAME_ERROR. After this side's
-GOAWAY a session's new stream is still taken while a request is refused with
-H3_REQUEST_REJECTED; a stream naming a session at or past the GOAWAY's ID,
-which can never come, is refused as gone (WT_SESSION_GONE), is not counted as
-a request in flight and does not wait.
+A session ID that is no client-initiated bidirectional stream is H3_ID_ERROR,
+and the signal 0x41 after a request's HEADERS is H3_FRAME_ERROR. After this
+side's GOAWAY a session's new stream is still taken while a request is refused
+with H3_REQUEST_REJECTED; a stream naming a session at or past the GOAWAY's ID,
+which can never come, is refused as gone (WT_SESSION_GONE), is not counted as a
+request in flight and does not wait.
 
 A reset or STOP_SENDING from the client reaches the
 program with its HTTP/3 code and the application code it maps to (or -1, as
@@ -199,15 +197,15 @@ of its CONNECT stream are done. The server's `close` writes the capsule whole
 1,024 bytes (H3_INVALID), and the client's CLOSE in answer ends the session
 quietly. DRAIN both ways, and an unknown capsule skipped.
 
-A CLOSE before the program
-answered the session ends it at once, the CONNECT stream reset both ways and
-the slot free; a close HTTP/3 itself made (a CONNECT whose DATA overruns its
-`content-length`) is not reported as the client's. Malformed, each
-resetting the CONNECT stream and ending the session: a CLOSE shorter than its
-code or with a reason past 1,024 bytes, a DRAIN with a payload, the stream
-ending inside a capsule (H3_DATAGRAM_ERROR, RFC 9297 §3.3), and anything after
-a CLOSE (H3_MESSAGE_ERROR, draft-02 §5; with this side's half finished
-already, as STOP_SENDING). A CLOSE of exactly 1,024 bytes of reason is read.
+A CLOSE before the program answered the session ends it at once, the CONNECT
+stream reset both ways and the slot free; a close HTTP/3 itself made (a CONNECT
+whose DATA overruns its `content-length`) is not reported as the client's.
+Malformed, each resetting the CONNECT stream and ending the session: a CLOSE
+shorter than its code or with a reason past 1,024 bytes, a DRAIN with a
+payload, the stream ending inside a capsule (H3_DATAGRAM_ERROR, RFC 9297 §3.3),
+and anything after a CLOSE (H3_MESSAGE_ERROR, draft-02 §5; with this side's
+half finished already, as STOP_SENDING). A CLOSE of exactly 1,024 bytes of
+reason is read.
 
 **Each call's refusals** (`refusals.ts`): `accept` and `refuse` of a session
 not asked for, `refuse` with a status outside 400 to 599, a datagram, stream or

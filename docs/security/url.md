@@ -19,14 +19,14 @@ rather than open (URL-1 to URL-3): decoded bytes are not checked for UTF-8,
 a refused decode leaves what it wrote before the refusal, and a repeated key
 is answered by its first value.
 
-The URL parser answers null, never a panic,
-for anything it refuses, and refuses every host two readers could take for
-different hosts: a percent-encoded or non-unreserved byte, a second `@`, a
-numeric host that is not strict dotted-decimal IPv4, an IPv6 zone. Five
-properties are accepted (URL-4 to URL-8): IPv6 hosts are compared as written,
-`user:@` writes back as `user@`, an empty path stays empty, the input's
-length is the caller's to bound, and a host's trailing dot is kept, so
-`a.com.` is a different origin from `a.com`.
+The URL parser answers null, never a panic, for anything it refuses, and
+refuses every host two readers could take for different hosts: a
+percent-encoded or non-unreserved byte, a second `@`, a numeric host that is
+not strict dotted-decimal IPv4, an IPv6 zone. Five properties are accepted
+(URL-4 to URL-8): IPv6 hosts are compared as written, `user:@` writes back as
+`user@`, an empty path stays empty, the input's length is the caller's to
+bound, and a host's trailing dot is kept, so `a.com.` is a different origin
+from `a.com`.
 
 ## Scope
 
@@ -43,8 +43,7 @@ repairs; IDNA, so a non-ASCII host is refused and a program passes the
 punycode `xn--` form; and name resolution, so what a host resolves to (a
 private address behind a public name) is the connecting code's to check.
 
-In
-the byte API a path is split, not normalised: `..` and `.` are segments like
+In the byte API a path is split, not normalised: `..` and `.` are segments like
 any other, and a program that maps segments to files decides what they mean.
 `urlParse` and `urlResolve` remove dot segments, as RFC 3986 §5.2.4 does.
 
@@ -187,9 +186,8 @@ string (`raw f09f98 -> null`).
 `urlQueryGet` refuses the same
 (`get null` for `%F4%90%80%80`).
 
-Dropping any range bound, the truncation
-check or a continuation check, or refusing every 3- and 4-byte lead, fails
-`std_url` or the fuzz.
+Dropping any range bound, the truncation check or a continuation check, or
+refusing every 3- and 4-byte lead, fails `std_url` or the fuzz.
 
 **A path is split before it is decoded** (`std_url`): `UrlPathSegments` splits
 on the raw `/` only, so `/a%2Fb/c` is the two segments `a/b` and `c`, and
@@ -227,15 +225,14 @@ value so cut decodes the same (`window query -> 1 value 2 -1 lenient 2 2534`),
 and a key cut before its escape's last digit matches nothing
 (`window find kA -> 0`, `window find kA whole -> 1`).
 
-Output that does not fit
-is `URL_DECODE_ERR_SPACE` at the byte with no room, and nothing is written
-past `out`'s end.
+Output that does not fit is `URL_DECODE_ERR_SPACE` at the byte with no room,
+and nothing is written past `out`'s end.
 
-A window outside its array panics with
-`…: the window is outside the array`: `UrlQuery.reset`'s once in each of 50
-runs at 2 and at 8 threads (`std_url_window`), and `percentDecode`'s,
-`urlQueryStart`'s and `UrlPathSegments.reset`'s each in one program run once
-natively and once under Node (`tests/link/std_url/panic-*-window.ts`).
+A window outside its array panics with `…: the window is outside the array`:
+`UrlQuery.reset`'s once in each of 50 runs at 2 and at 8 threads
+(`std_url_window`), and `percentDecode`'s, `urlQueryStart`'s and
+`UrlPathSegments.reset`'s each in one program run once natively and once under
+Node (`tests/link/std_url/panic-*-window.ts`).
 
 A
 negative `len` is pinned for `percentDecode` only

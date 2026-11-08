@@ -21,12 +21,12 @@ A corrupt ring is a panic that names the record. What remains is the
 mapping's own size: a same-user peer that shrinks the object makes a later
 access a `SIGBUS` (SHM-3, open).
 
-A window, a `u8[]` lent over the region's
-bytes, is emptied by `giveBack` and by `close`, so no index through it
-outlives the mapping (SHM-4), and so does a ring's in-place window: `commit`,
-`abandon` and `release` empty it, and a record the consumer lends is checked
-against the published tail and the ring's data (SHM-7, SHM-8). Eight findings
-(SHM-1 to SHM-8): five fixed, one open, two decided.
+A window, a `u8[]` lent over the region's bytes, is emptied by `giveBack` and
+by `close`, so no index through it outlives the mapping (SHM-4), and so does a
+ring's in-place window: `commit`, `abandon` and `release` empty it, and a
+record the consumer lends is checked against the published tail and the ring's
+data (SHM-7, SHM-8). Eight findings (SHM-1 to SHM-8): five fixed, one open, two
+decided.
 
 ## Scope
 
@@ -124,9 +124,8 @@ says why", where `${what}` is the case named below.
   ("outside", "byte window at 60 is outside the region of 64 bytes"), and the
   window's length is in the program's own header, not in the region, so a
   peer that writes the bytes can change what an index reads but not how far
-  it reaches.
+  it reaches. The bytes are not atomic and are as untrusted as `read`'s copy.
 
-  The bytes are not atomic and are as untrusted as `read`'s copy.
   The compiler marks both calls (and `close`) as possibly changing any
   array's length, so no length the bounds proof knew survives them
   (`tests/link/sync_shm_window/expected.ir` pins the calls). These run in
@@ -154,15 +153,15 @@ says why", where `${what}` is the case named below.
   freed, `peek` only a published record that lies in one run (SHM-7), and
   each end keeps one window header (SHM-6).
 
-  A second reservation
-  ("reserve-twice"), `tryPush` during one ("push-reserved"), `commit` or
-  `abandon` without one ("commit-none", "abandon-none"), `commit` past it
-  ("commit-long"), a reservation outside 1 to half the ring less 4
-  ("reserve-none", "reserve-long", "sixteen"), any reservation on a ring of 8
-  ("tiny": "an SPSC ring of 8 bytes cannot reserve"), and `peek`, `tryPop` or `popBatch` while a
-  record is lent ("peek-twice", "pop-peeked", "batch-peeked", and "popwait-peeked", whose message names `tryPop`) each panic, as
-  does `release` with nothing lent ("release-none") and a `commit` of a
-  window a `push` moved ("pushed", SHM-5).
+  A second reservation ("reserve-twice"), `tryPush` during one
+  ("push-reserved"), `commit` or `abandon` without one ("commit-none",
+  "abandon-none"), `commit` past it ("commit-long"), a reservation outside 1 to
+  half the ring less 4 ("reserve-none", "reserve-long", "sixteen"), any
+  reservation on a ring of 8 ("tiny": "an SPSC ring of 8 bytes cannot
+  reserve"), and `peek`, `tryPop` or `popBatch` while a record is lent
+  ("peek-twice", "pop-peeked", "batch-peeked", and "popwait-peeked", whose
+  message names `tryPop`) each panic, as does `release` with nothing lent
+  ("release-none") and a `commit` of a window a `push` moved ("pushed", SHM-5).
 
   `commit`, `abandon` and `release`
   empty the window, and an index after one inside a loop bounded by the

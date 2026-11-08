@@ -72,17 +72,18 @@ ordinal that is NULL, not an integer, outside the keys it bound, or (when
 so a server cannot hand one request's rows to another, nor make the helper
 read past its arrays (PG-14).
 
-Its state is bounded by its config — at most
-`queueSize` requests and `queueBytes` of text keys waiting, `runs` executions
-of `maxRequests` requests each. A run holds two `i32` arrays of `maxRequests`,
-512 KiB at the most, 65,536, so 512 MiB at the most `runs`, 1024; with `sorted` false, a `boolean` array of `maxRequests` more, at most 64 KiB a run.
+Its state is bounded by its config — at most `queueSize` requests and
+`queueBytes` of text keys waiting, `runs` executions of `maxRequests` requests
+each. A run holds two `i32` arrays of `maxRequests`, 512 KiB at the most,
+65,536, so 512 MiB at the most `runs`, 1024; with `sorted` false, a `boolean`
+array of `maxRequests` more, at most 64 KiB a run.
 
-The queue is allocated in its constructor;
-the dedup table and each run's arrays grow, by doubling, only to the largest
-take the program's own `add` calls queued, never past `maxRequests`, so no
-server answer makes it grow. A key refused for room, by `maxBytes` or by the
-connection's `maxOutput`, is not a panic: the take stops there, cancels the
-bind when nothing was bound, and the request waits.
+The queue is allocated in its constructor; the dedup table and each run's
+arrays grow, by doubling, only to the largest take the program's own `add`
+calls queued, never past `maxRequests`, so no server answer makes it grow. A
+key refused for room, by `maxBytes` or by the connection's `maxOutput`, is not
+a panic: the take stops there, cancels the bind when nothing was bound, and the
+request waits.
 
 `pgTarget` and `pgTargetUrl` turn a host and port, or a `postgres://` URL,
 into the socket path or TCP host a program connects to; they open nothing.
@@ -119,11 +120,11 @@ connection that believes a server knows the password when it does not, a
 password or key the client leaves in memory after it is done with it, or a
 statement's parameters interpreted as SQL.
 
-The program's own clients are
-attackers too, through the keys a program hands `PgBatcher`: a key reaches
-the server only as an element of the bound array parameter, never in SQL
-text, and a win for them is a panic, one client's key failing or reading
-another's requests, or time a chosen key makes a take spend beyond its caps.
+The program's own clients are attackers too, through the keys a program hands
+`PgBatcher`: a key reaches the server only as an element of the bound array
+parameter, never in SQL text, and a win for them is a panic, one client's key
+failing or reading another's requests, or time a chosen key makes a take spend
+beyond its caps.
 
 So is whoever wrote the URL `pgTargetUrl` reads: a win for them is a panic,
 or a target other than the one the URL spells — a socket path cut short, or
@@ -147,11 +148,10 @@ was tried. PG-9 to PG-11 are accepted. PG-12 and PG-13 were found by the
 first review of this module and fixed before it merged; PG-15 to PG-17 by the
 batcher's first review, and fixed before it merged.
 
-PG-18 to PG-20 are the
-shapes a URL can take, checked as the parser was written; PG-21 and PG-22
-are accepted. PG-23 to PG-27 are the carrier's (`std/net/postgres-carrier.ts`):
-PG-23 and PG-24 were found as it was written and fixed before it merged,
-PG-25 holds, and PG-26 and PG-27 are accepted.
+PG-18 to PG-20 are the shapes a URL can take, checked as the parser was
+written; PG-21 and PG-22 are accepted. PG-23 to PG-27 are the carrier's
+(`std/net/postgres-carrier.ts`): PG-23 and PG-24 were found as it was written
+and fixed before it merged, PG-25 holds, and PG-26 and PG-27 are accepted.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -356,13 +356,12 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   request behind it: each take answers -1 and none is ever sent, which is why
   the sizing rule below matters.
 
-  A take whose array
-  fills `maxBytes` fits a connection with nothing else unsent when
-  `maxBytes + name.length + 32 <= maxOutput` (the Bind's head of 11 and the
-  name, the array's length word of 4, and `PG_TAIL`'s 17): "a full take fits
-  maxOutput at the bound", "and a byte past it is refused". The guide states
-  that bound; the batcher does not read the connection's
-  caps when it is made, since one batcher serves every connection of a pool.
+  A take whose array fills `maxBytes` fits a connection with nothing else
+  unsent when `maxBytes + name.length + 32 <= maxOutput` (the Bind's head of 11
+  and the name, the array's length word of 4, and `PG_TAIL`'s 17): "a full take
+  fits maxOutput at the bound", "and a byte past it is refused". The guide
+  states that bound; the batcher does not read the connection's caps when it is
+  made, since one batcher serves every connection of a pool.
 
 ## Properties verified
 
@@ -383,12 +382,11 @@ are replayed, each must end `PG_FAILED` with a code from 1 to 10, and the
 count of each code and a checksum over codes and logs are pinned ("fuzz: the
 seed's mutants, by the code they ended with").
 
-The end-state check cannot
-fail on its own, since `closed()` always leaves `PG_FAILED`; what fails is a
-panic, which ends the run, or a moved count or checksum. That a field is
-never read past its message's end, rather than merely inside the buffer,
-rests on the targeted negatives under "Fields inside a message" below, not on
-the fuzz.
+The end-state check cannot fail on its own, since `closed()` always leaves
+`PG_FAILED`; what fails is a panic, which ends the run, or a moved count or
+checksum. That a field is never read past its message's end, rather than merely
+inside the buffer, rests on the targeted negatives under "Fields inside a
+message" below, not on the fuzz.
 
 **Framing** (PG-1): "a length under 4 is a framing failure", "a failed
 connection stays failed", "a message over maxMessage is refused before it is
@@ -459,18 +457,17 @@ every text element quoted, \" and \\ escaped, UTF-8 as it is", so an element
 of `NULL`, `,`, `{`, `}` or a quote cannot end the element or the array (the
 live `arrays` scenario reads each back through `unnest`).
 
-The size is exact
-before a byte is written: "an int8[] that would pass maxOutput is refused"
-("its exact size is asked for: one value less fits"), "an element whose
-escapes pass maxOutput is refused" ("its escapes are counted: one less
-fits"), "an element that would pass maxOutput is refused" "and the refused
+The size is exact before a byte is written: "an int8[] that would pass
+maxOutput is refused" ("its exact size is asked for: one value less fits"), "an
+element whose escapes pass maxOutput is refused" ("its escapes are counted: one
+less fits"), "an element that would pass maxOutput is refused" "and the refused
 one left nothing behind", and room for the closing `}` is held for each
 element, so "the array still ends".
 
-With an array open, "no sync while an
-array is open", "no prepare", "no closeStatement", "no bindStart"; a
-compaction under it leaves "the array's length patched where it moved to";
-and "terminate drops an open array with its bind".
+With an array open, "no sync while an array is open", "no prepare", "no
+closeStatement", "no bindStart"; a compaction under it leaves "the array's
+length patched where it moved to"; and "terminate drops an open array with its
+bind".
 
 **Binary integer arrays**: `paramInt4Array`, `paramInt8Array` and the binary
 builder write PostgreSQL's array wire form (`array_send`): ndim 1, the
@@ -478,25 +475,23 @@ has-nulls flag, the element OID (23 or 20), the length and lower bound 1, then
 each element as its length word (4 or 8, or −1 for NULL) and its big-endian
 bytes; an empty array is ndim 0 with no dimension, 12 bytes.
 
-Every byte is the
-program's own integer, so nothing a client hands it can end the array early or
-be read as another element: "an int4[] in binary: format code 1, then ndim 1,
-no NULLs, OID 23, length 2, lower bound 1, each element 4 bytes", "an empty
-int8[] in a binary bind: ndim 0 and no dimension, 12 bytes", "a NULL element
-is length -1", and `PgBinaryArray` reads each back, int4 and int8 minimum and
-maximum included. An `int4` element past int4 is a panic, never a value cut to
-32 bits that would match another row.
+Every byte is the program's own integer, so nothing a client hands it can end
+the array early or be read as another element: "an int4[] in binary: format
+code 1, then ndim 1, no NULLs, OID 23, length 2, lower bound 1, each element 4
+bytes", "an empty int8[] in a binary bind: ndim 0 and no dimension, 12 bytes",
+"a NULL element is length -1", and `PgBinaryArray` reads each back, int4 and
+int8 minimum and maximum included. An `int4` element past int4 is a panic,
+never a value cut to 32 bits that would match another row.
 
-A Bind with a binary parameter carries
-one format code per parameter: the first binary one holds room for a code per
-parameter so far and one more, each later parameter holds two bytes, and
-`bindEnd` moves the parameters down and writes the codes into room already
-counted against `maxOutput` ("a binary parameter among text ones: a code for
-each, text 0 but its own 1", "an int4[] one element too long is refused",
-"one that fits is taken", "and bindEnd and Sync stay within maxOutput").
+A Bind with a binary parameter carries one format code per parameter: the first
+binary one holds room for a code per parameter so far and one more, each later
+parameter holds two bytes, and `bindEnd` moves the parameters down and writes
+the codes into room already counted against `maxOutput` ("a binary parameter
+among text ones: a code for each, text 0 but its own 1", "an int4[] one element
+too long is refused", "one that fits is taken", "and bindEnd and Sync stay
+within maxOutput").
 
-A
-bind with no binary parameter keeps its single zero word, so text binds are
+A bind with no binary parameter keeps its single zero word, so text binds are
 byte for byte what they were ("a bind after a cancelled binary one owes no
 codes", "a text int array after a binary one keeps code 0"). The element OID
 must be the statement's: an `int4[]` sent to an `int8[]` parameter is the
@@ -536,22 +531,20 @@ after it; three clients' keys go out in one execution, which the backend
 counts, after the handler took all three in one turn, and each client
 gets its own row or 404.
 
-With the backend holding a
-slow query, another client is answered while it is held, and the held one
-only once the backend goes on. A connection that ends fails its plain query
-and its batch (PG-24) and closes its socket (PG-25), an execution of three
-keys lost with its connection fails all three requests, and the next
-queries are answered on new connections.
+With the backend holding a slow query, another client is answered while it is
+held, and the held one only once the backend goes on. A connection that ends
+fails its plain query and its batch (PG-24) and closes its socket (PG-25), an
+execution of three keys lost with its connection fails all three requests, and
+the next queries are answered on new connections.
 
-A statement the backend refuses
-with an ErrorResponse reaches its own request as `PG_CARRIER_ERROR`, with
-the server's SQLSTATE, then `PG_CARRIER_FAILED` with failure 0; a refused
-batch fails each of its requests, with failure 0 and no `PG_CARRIER_ERROR`;
-and the connection that refused them, still open, answers the queries after
-them. `close()` with a query held by the backend sends `Terminate` and
-closes that connection, which the backend sees end, and the handler goes on
-answering; the held query gets no further event, which `close()`'s
-documentation states.
+A statement the backend refuses with an ErrorResponse reaches its own request
+as `PG_CARRIER_ERROR`, with the server's SQLSTATE, then `PG_CARRIER_FAILED`
+with failure 0; a refused batch fails each of its requests, with failure 0 and
+no `PG_CARRIER_ERROR`; and the connection that refused them, still open,
+answers the queries after them. `close()` with a query held by the backend
+sends `Terminate` and closes that connection, which the backend sees end, and
+the handler goes on answering; the held query gets no further event, which
+`close()`'s documentation states.
 
 After it, a second `close()` does nothing, the
 carrier answers `PG_CARRIER_FULL` to a query and `PG_CARRIER_NONE` to
@@ -583,15 +576,14 @@ creation times as its `stamps_text` batch.
 empty array", "one int4", "1000 elements", "a NULL with hasnull 1" and "int2
 elements" read in place and end with `PG_ARRAY_END`.
 
-Each refusal sets
-`binary.failed`: "ndim 2", "another element type: text", "a 3-byte int4
-element", "a 4-byte element in an int2 array", "a hasnull that is not 0 or
-1", "a NULL with hasnull 0", "a negative dimension", "more elements promised
-than given", "bytes after an empty array", "truncated inside the element",
-"truncated inside the length word", "truncated inside the header", "a window
-past the buffer" and "a window before it". The live `binary` scenario reads
-int4[] and int8[] columns, each empty, one element or 1000, in binary and in
-text, and gets the same line for each.
+Each refusal sets `binary.failed`: "ndim 2", "another element type: text", "a
+3-byte int4 element", "a 4-byte element in an int2 array", "a hasnull that is
+not 0 or 1", "a NULL with hasnull 0", "a negative dimension", "more elements
+promised than given", "bytes after an empty array", "truncated inside the
+element", "truncated inside the length word", "truncated inside the header", "a
+window past the buffer" and "a window before it". The live `binary` scenario
+reads int4[] and int8[] columns, each empty, one element or 1000, in binary and
+in text, and gets the same line for each.
 
 **Terminate**: "Terminate drops an open bind", so a half-built Bind is never
 sent, and "terminate drops an open array with its bind".
@@ -602,13 +594,12 @@ register; the 257th is refused", "a NUL in a name is refused", "a NUL in SQL
 is refused". Its scheduling: "a full connection takes no more", "in FIFO
 order", "the next to the one with fewer in flight".
 
-Its failures: "a
-connection that fails loses each request it took, oldest first", "a
-connection that fails starting, none ready, takes the oldest request with
-it", "a request being built when its connection fails is lost", "it answers
-nothing after PG_FAILED", "two slots fail starting, none ready: the first
-takes the oldest". Its isolation: an error in the second of three groups on
-one connection fails only that group ("the error is its own"). Its password:
+Its failures: "a connection that fails loses each request it took, oldest
+first", "a connection that fails starting, none ready, takes the oldest request
+with it", "a request being built when its connection fails is lost", "it
+answers nothing after PG_FAILED", "two slots fail starting, none ready: the
+first takes the oldest". Its isolation: an error in the second of three groups
+on one connection fails only that group ("the error is its own"). Its password:
 "dispose wipes the pool's password" "and its connections'". It passes as
 `link/std_postgres_pool: exits with 0 and stdout matches expected.out`.
 
@@ -649,34 +640,29 @@ defined failure"), no target it accepts may hold a NUL in its host or path
 gives must end `/.s.PGSQL.<port>` within 107 bytes, or 108 for an `@` name
 ("and each socket target fits sun_path"), and some must be sockets ("some of them sockets").
 
-A panic
-ends the run, so the line after it is missing and the comparison fails.
+A panic ends the run, so the line after it is missing and the comparison fails.
 
 **Against a live server**: `tests/postgres/live/run.mjs` runs the pool and
 `tests/postgres/carrier.ts` against PostgreSQL 18, in CI's `postgres-live`
 job against a `postgres:18` service.
 
-It checks that a wrong password is
-refused with `28P01` — the client refuses MD5 and cleartext, so the server
-got that far only through SCRAM; that 100 pipelined requests over four
-connections, every one of which carries groups, four of which violate a
-unique key, fail only those four, whose connections recover, and that the
-rows the other 96 inserted are committed while the failed groups' are not
-(read back with a fresh connection); that a backend
-ended by `pg_terminate_backend` is reported lost and made again; that a
-division by zero fails only its own group in a pipeline; that text[], int8[]
-and int4[] parameters come back through `unnest` element for element — NULLs,
-quotes, backslashes, braces, commas, the text `NULL`, the empty string,
-multibyte UTF-8, the empty array and the extreme int8 values — with the
-int4[] literal coerced by the server; that the `batch` scenario's three
-batchers (users by int8 id over two takes, articles by text slug, and
-tags by article, several rows a key in name order), each with a duplicate
-key and a key with no row, answer every request its own rows and no
-other's through a pooled connection; and that the conduit
-article list decodes, escapes and truncates as its golden says.
-
-The carrier
-serves HTTP while a query sleeps.
+It checks that a wrong password is refused with `28P01` — the client refuses
+MD5 and cleartext, so the server got that far only through SCRAM; that 100
+pipelined requests over four connections, every one of which carries groups,
+four of which violate a unique key, fail only those four, whose connections
+recover, and that the rows the other 96 inserted are committed while the failed
+groups' are not (read back with a fresh connection); that a backend ended by
+`pg_terminate_backend` is reported lost and made again; that a division by zero
+fails only its own group in a pipeline; that text[], int8[] and int4[]
+parameters come back through `unnest` element for element — NULLs, quotes,
+backslashes, braces, commas, the text `NULL`, the empty string, multibyte
+UTF-8, the empty array and the extreme int8 values — with the int4[] literal
+coerced by the server; that the `batch` scenario's three batchers (users by
+int8 id over two takes, articles by text slug, and tags by article, several
+rows a key in name order), each with a duplicate key and a key with no row,
+answer every request its own rows and no other's through a pooled connection;
+and that the conduit article list decodes, escapes and truncates as its golden
+says. The carrier serves HTTP while a query sleeps.
 
 Its `refused` check points it at a port
 with nothing listening: the query fails at once, `failure 9, socket -111`
@@ -688,9 +674,8 @@ the startup message: the query fails `failure 9, socket -104` (ECONNRESET),
 and the carrier ends the connection there rather than leave the readable
 socket to spin.
 
-Its
-`unix` scenario connects through a `postgres://` URL whose host is the
-percent-encoded socket directory: the server asks for no password (`peer`
-for a cluster `run.mjs` starts, `trust` in CI's service), so a password the
-server would refuse still logs in, and its copy is wiped; and a multi-row read comes back over the socket,
-where `inet_server_addr()` is NULL.
+Its `unix` scenario connects through a `postgres://` URL whose host is the
+percent-encoded socket directory: the server asks for no password (`peer` for a
+cluster `run.mjs` starts, `trust` in CI's service), so a password the server
+would refuse still logs in, and its copy is wiped; and a multi-row read comes
+back over the socket, where `inet_server_addr()` is NULL.

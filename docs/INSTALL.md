@@ -157,13 +157,13 @@ for releases that predate it) and refuses a mismatch. For releases after
 signed-in GitHub CLI is present whose `gh attestation verify` takes the
 options below.
 
-The attestation
-is a Sigstore-signed statement, made by `actions/attest-build-provenance` in
-the release workflow, that every file in `SHA256SUMS` was built by
-`.github/workflows/release.yml` at the release's tag on a GitHub-hosted
-runner. A failed verification refuses the install; with no `gh`, a signed-out
-one or one too old for those options, the check is skipped with a note saying so, and the
-SHA-256 still applies. The same command by hand, on a tarball you downloaded:
+The attestation is a Sigstore-signed statement, made by
+`actions/attest-build-provenance` in the release workflow, that every file in
+`SHA256SUMS` was built by `.github/workflows/release.yml` at the release's tag
+on a GitHub-hosted runner. A failed verification refuses the install; with no
+`gh`, a signed-out one or one too old for those options, the check is skipped
+with a note saying so, and the SHA-256 still applies. The same command by hand,
+on a tarball you downloaded:
 
 ```bash
 gh attestation verify nish-<version>-<asset>.tar.gz \
@@ -409,11 +409,11 @@ compiler itself is not in it: it arrives as one prebuilt
 `@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
 whichever one npm installed.
 
-That package carries its own copy of all of
-these, and its `docs/AI.md` is the one an agent's `nish --help` names. `nish` locates the runtime, the script and `std/`
-relative to its own install directory, so a global install works from any
-working directory — and the binary runs from inside its own platform package
-for exactly that reason.
+That package carries its own copy of all of these, and its `docs/AI.md` is the
+one an agent's `nish --help` names. `nish` locates the runtime, the script and
+`std/` relative to its own install directory, so a global install works from
+any working directory — and the binary runs from inside its own platform
+package for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
 on the `clang` line, and it is sixteen files:
@@ -489,13 +489,13 @@ one level up from wherever it was invoked (and one level up from the file a
 symbolic link to it names), so it wants a checkout or an installed package
 around it the way `nish` does.
 
-It falls back to the working directory only
-when the compiler itself lies inside that directory, so a checkout you merely
-`cd` into cannot hand it a `scripts/build.sh` to run. Keep `bin/nish` beside
-`scripts/`, `runtime/` and `std/`, as every install above does, and keep that
-directory's parent writable only by you: the package root is the parent of
-the compiler's directory, so a compiler at `/tmp/x/nish` would trust
-`/tmp/scripts/build.sh` (CLI-9 in [docs/security/cli.md](security/cli.md)).
+It falls back to the working directory only when the compiler itself lies
+inside that directory, so a checkout you merely `cd` into cannot hand it a
+`scripts/build.sh` to run. Keep `bin/nish` beside `scripts/`, `runtime/` and
+`std/`, as every install above does, and keep that directory's parent writable
+only by you: the package root is the parent of the compiler's directory, so a
+compiler at `/tmp/x/nish` would trust `/tmp/scripts/build.sh` (CLI-9 in
+[docs/security/cli.md](security/cli.md)).
 
 Because the seed is the last release, `src/` may only *use* in its own
 source the constructs that release compiles. A new construct is implemented
@@ -550,25 +550,24 @@ been linked before, and starts it with the arguments after the file. The first
 run of a new edit pays for one link, and later runs start the cached binary.
 It needs clang only for that link.
 
-It needs `HOME` or `XDG_CACHE_HOME` set
-to an absolute path (a relative one is ignored, as if it were unset), and
-refuses the run without one rather than keep a binary in a shared directory.
-The first run that builds into the cache makes its root `0700`, so no other
-user can plant a binary in it ([docs/security/cli.md](security/cli.md)).
+It needs `HOME` or `XDG_CACHE_HOME` set to an absolute path (a relative one is
+ignored, as if it were unset), and refuses the run without one rather than keep
+a binary in a shared directory. The first run that builds into the cache makes
+its root `0700`, so no other user can plant a binary in it
+([docs/security/cli.md](security/cli.md)).
 
 Every link with the debug, speed or size profile, `nish run`'s and `--link`'s
 alike, keeps the compiled C runtime in `$XDG_CACHE_HOME/nish/runtime` (or
 `~/.cache/nish/runtime`), one entry per profile, `-g`, `--threads`, `CC` and
 the version that compiler reports, made `0700` the same way.
 
-The first link
-compiles the runtime's six files at once into it, and every later link
-compiles only the program's modules, also at once, and links against the
-entry: a `hello.ts` debug link goes from about half a second to about a
-tenth. `--link` with no absolute `HOME` or `XDG_CACHE_HOME`, or with a root
-it cannot make private, compiles the runtime itself as it always did; the
-wasi profile and `scripts/build.sh` called directly never use the cache.
-Removing the directory is always safe.
+The first link compiles the runtime's six files at once into it, and every
+later link compiles only the program's modules, also at once, and links against
+the entry: a `hello.ts` debug link goes from about half a second to about a
+tenth. `--link` with no absolute `HOME` or `XDG_CACHE_HOME`, or with a root it
+cannot make private, compiles the runtime itself as it always did; the wasi
+profile and `scripts/build.sh` called directly never use the cache. Removing
+the directory is always safe.
 
 <a id="4-exit-codes" style="scroll-margin-top: 65px"></a>
 
