@@ -405,17 +405,22 @@ const checkSameOperands = (ctx: CheckContext, node: Node): void => {
  */
 const checkRepeatedCondition = (ctx: CheckContext, node: Node): void => {
   const condition = node.children[0]
+  // The first repeat of this branch's condition. A later one is found from the
+  // `else if` in between, which the walk reaches as an `if` of its own, so the
+  // message is built once, outside the loop.
   let next = node.children[2]
-  while (next.kind === N_IF) {
-    if (sameValue(ctx.program, condition, next.children[0])) {
-      holdFinding(
-        ctx,
-        next.children[0],
-        `\`${ctx.textOf(next.children[0])}\` is already tested by an earlier branch of this \`if\`, so this branch never runs; test something else, or merge the two branches`
-      )
-    }
+  while (next.kind === N_IF && !sameValue(ctx.program, condition, next.children[0])) {
     next = next.children[2]
   }
+  if (next.kind !== N_IF) {
+    return
+  }
+  const repeated = next.children[0]
+  holdFinding(
+    ctx,
+    repeated,
+    `\`${ctx.textOf(repeated)}\` is already tested by an earlier branch of this \`if\`, so this branch never runs; test something else, or merge the two branches`
+  )
 }
 
 const isZero = (node: Node): boolean => {
