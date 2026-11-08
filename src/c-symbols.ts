@@ -545,6 +545,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "nan" ||
   name === "nanf" ||
   name === "nanl" ||
+  name === "nanosleep" ||
   name === "nearbyint" ||
   name === "nearbyintf" ||
   name === "nearbyintl" ||
