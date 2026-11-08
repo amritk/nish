@@ -1,6 +1,6 @@
 # WP40: byte buffers and owned handles across `declare function`
 
-**Status: decided (owner, 2026-10-19), and building.** B1.1 is built: the
+**Status: decided (owner, 2026-10-19), and built.** B1.1 is built: the
 `u8[]` parameter rule, the run-and-count rule and the refusals of §8. B1.2 is
 built: a call to a buffer-taking declaration lowers (§3a), with the
 `ffi-length` check, and NL2554, which refused every such call under B1.1, is
@@ -42,8 +42,9 @@ refused as captures (`reject_ffi_handle_closure_capture`,
 
 Every claim about today's compiler is anchored at commit `8790ea3`
 (`8790ea338464432dafb88ca381872626389538a1`), on `main` after S3.3. The tests
-§2 cites exist, as do those marked existing. Every other test named here is
-planned.
+§2 cites exist, as do those marked existing. Every other test named here
+exists too, bar `reject_ffi_simd_param`, which waits for WP38's first stage
+(§8).
 
 ## 1. The decision
 
