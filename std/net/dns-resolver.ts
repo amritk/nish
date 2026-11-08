@@ -1198,9 +1198,9 @@ const dnsResolverSameName = (a: u8[], b: u8[]): boolean => {
  * an NXDOMAIN, such an error is the lookup's, since the name may well exist.
  * Otherwise the name has no address: NXDOMAIN from both moves the search on,
  * and NODATA ends it, as musl's resolver does, since the name exists and only
- * lacks the type asked: `DNS_RESOLVE_NOT_FOUND`, even after an earlier
- * candidate left an error to fall back on, as that error stands only when no
- * later candidate answers.
+ * lacks the type asked. NODATA is `DNS_RESOLVE_NOT_FOUND` even after an
+ * earlier candidate left an error to fall back on: that error stands only
+ * when no later candidate answers.
  */
 const dnsResolverDone = (r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): void => {
   if (r.state[q] === DNS_Q_UDP || r.state[q] === DNS_Q_TCP) {

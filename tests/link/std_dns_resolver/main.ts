@@ -681,7 +681,7 @@ export const main = (): number => {
   {
     // A later candidate's NODATA names the name, so the error an earlier one
     // left to fall back on does not stand: host.corp is NXDOMAIN for A with
-    // AAAA reaching no server, then host answers NODATA for both.
+    // AAAA answering SERVFAIL, then host answers NODATA for both.
     const r: DnsResolver = new DnsResolver(config(ONE + "search corp\noptions attempts:1\n"), null, 1)
     const l: i32 = r.start("host", 80, zero)
     const a: Sent = take(r, 1)

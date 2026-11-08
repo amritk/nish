@@ -3234,10 +3234,10 @@ blocks** until the lookup ends or `timeoutMs` passes
 (`DNS_RESOLVE_TIMEOUT`), so it is for a command-line tool or a program's
 start-up, not a server's loop. It waits for both the A and the AAAA answer
 until `timeoutMs` passes; then a family that answered with addresses is
-returned on its own, and only a lookup with none yet is `DNS_RESOLVE_TIMEOUT`. A
-`pollWait` that fails cancels the lookup and its negative errno is the answer;
-a name `start` refuses answers `start`'s code. `dnsLookupWith` is the same with a
-configuration you give it.
+returned on its own, and only a lookup with none yet is
+`DNS_RESOLVE_TIMEOUT`. A `pollWait` that fails cancels the lookup and its
+negative errno is the answer; a name `start` refuses answers `start`'s code.
+`dnsLookupWith` is the same with a configuration you give it.
 
 ```ts nish:ok
 import { resolveHost } from "nish/net/dns";

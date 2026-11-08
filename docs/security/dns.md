@@ -30,6 +30,7 @@ is not 16 bits, a query `dnsBuildQuery` did not write — panic. Four properties
 are recorded as accepted (DNS-1 to DNS-4); none is counted. The panics are not
 yet pinned by a fixture of their own ([Not pinned](#not-pinned)). The resolver
 stage closes DNS-1's follow-up and fixed one Medium finding of its own, DNS-5.
+The fallback-and-timeout stage fixed two Low findings, DNS-6 and DNS-7.
 
 ## Scope
 
