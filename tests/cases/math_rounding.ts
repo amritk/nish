@@ -3,6 +3,8 @@
 // `nish_trunc`, which run SSE4.1's `roundsd` when the CPU has it and libm's
 // routine when it does not; tests/run.js runs this twice, once with
 // `NISH_SIMD=scalar` pinning libm, and both print what Node prints.
+// The halves, the double just below 0.5 (whose `ceil` of the negative is -0),
+// 2^52 and the largest negative subnormal are #1044's edges.
 // `x` is a parameter, so no call folds to a constant. A result is printed
 // beside its reciprocal, which is how a -0 shows: `${-0}` is "0", and
 // `1 / -0` is -Infinity.
@@ -40,6 +42,7 @@ export function test(): i32 {
   round(5e-324);
   round(-5e-324);
   round(2.225073858507201e-308);
+  round(-2.225073858507201e-308);
   others(0);
   others(-0);
   others(-0.5);
@@ -48,6 +51,15 @@ export function test(): i32 {
   others(5e-324);
   others(-5e-324);
   others(2.225073858507201e-308);
+  others(-2.225073858507201e-308);
+  others(1.5);
+  others(-1.5);
+  others(2.5);
+  others(-2.5);
+  others(0.49999999999999994);
+  others(-0.49999999999999994);
+  others(4503599627370496);
+  others(-4503599627370496);
   others(-2.7);
   others(2.7);
   others(4503599627370495.5);
