@@ -518,18 +518,18 @@ function emitForeignBuffers(emitter: Emitter, call: Node, callee: FunctionSig, o
   callee -2:20 loadData -> @loadData
 function emitHostString(emitter: Emitter, i: i32, operands: string[], values: string[]): void -> @emitHostString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:3
   escaping: i
   calls: IRFunction.emitValue loadStringLength nish_panic_index nish_str_concat stringData
   pointer emitter: size=360 writesThrough=false captured=false passedTo=loadStringLength#0 stringData#0
   pointer operands: size=0 writesThrough=true captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -3:9 str: string (const)
-  local -2:9 n: string (const)
-  callee -2:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee -2:47 loadStringLength -> @loadStringLength
-  callee +0:26 stringData -> @stringData
+  local -2:9 str: string (const)
+  local -1:9 n: string (const)
+  callee -1:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -1:47 loadStringLength -> @loadStringLength
+  callee +0:24 stringData -> @stringData
 function emitHostWindow(emitter: Emitter, call: Node, callee: FunctionSig, i: i32, operands: string[], values: string[]): void -> @emitHostWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
