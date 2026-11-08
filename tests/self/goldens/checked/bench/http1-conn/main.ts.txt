@@ -4311,7 +4311,6 @@ import and from "nish:simd" -> builtin and
 import any from "nish:simd" -> builtin any
 import bitmask from "nish:simd" -> builtin bitmask
 import eq from "nish:simd" -> builtin eq
-import extract from "nish:simd" -> builtin extract
 import gt from "nish:simd" -> builtin gt
 import loadU8x16 from "nish:simd" -> builtin loadU8x16
 import lt from "nish:simd" -> builtin lt
@@ -4567,32 +4566,11 @@ function http1StartRequest(p: Http1Parser): void -> @nish.http1StartRequest
   sharedWrite: +0:3
   pointer p: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function http1ControlBits(x: u64): u64 -> @nish.http1ControlBits
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local +0:9 ones32: u64 (const)
-  local +1:9 ones: u64 (const)
-  local +2:9 low32: u64 (const)
-  local +3:9 all: u64 (const)
-  local +4:9 high: u64 (const)
-  local +5:9 below: u64 (const)
-  local +6:9 y: u64 (const)
-  local +7:9 del: u64 (const)
-function http1FirstByte(bits: u64): i32 -> @nish.http1FirstByte
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.ctlz.i32 nish_panic_overflow
-  stackSites=0 stackLocals=0
-  local +0:9 mask32: u64 (const)
-  local +1:9 lo: u32 (const)
-  local +5:9 hi: u32 (const)
-function http1Lanes(v: u8x16, at: i32): u64 -> @nish.http1Lanes
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nish.http1TakeLine
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: overStatus
-  calls: nish.http1ControlBits nish.http1Fail nish.http1FirstByte nish.http1Lanes nish_panic_index nish_panic_overflow
+  calls: llvm.ctlz.i32 nish.http1Fail nish_panic_index nish_panic_overflow
   pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0
   stackSites=0 stackLocals=0
   local -6:9 buf: u8[] (const)
@@ -4601,18 +4579,11 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   local +2:9 stop: i32 (const)
   local +11:9 found: boolean (let)
   local +13:13 v: u8x16 (const)
-  local +14:13 low: u64 (const)
-  callee +14:24 http1ControlBits -> @nish.http1ControlBits
-  callee +14:41 http1Lanes -> @nish.http1Lanes
-  callee +16:14 http1FirstByte -> @nish.http1FirstByte
-  local +19:15 high: u64 (const)
-  callee +19:27 http1ControlBits -> @nish.http1ControlBits
-  callee +19:44 http1Lanes -> @nish.http1Lanes
-  callee +21:20 http1FirstByte -> @nish.http1FirstByte
-  local +34:9 c: i32 (let)
-  callee +43:16 http1Fail -> @nish.http1Fail
-  callee +46:16 http1Fail -> @nish.http1Fail
-  callee +66:12 http1Fail -> @nish.http1Fail
+  local +14:13 bad: i32 (const)
+  local +28:9 c: i32 (let)
+  callee +37:16 http1Fail -> @nish.http1Fail
+  callee +40:16 http1Fail -> @nish.http1Fail
+  callee +60:12 http1Fail -> @nish.http1Fail
 function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -34084,6 +34055,9 @@ function pkiLoadSystemRoots(): PkiRoots -> @nish.pkiLoadSystemRoots [exported]
   callee +0:3 pkiLoadRootsFor -> @nish.pkiLoadRootsFor
   callee +0:86 pkiSystemBundles -> @nish.pkiSystemBundles
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
+import netRead from "nish:net" -> builtin netRead
+import netWrite2 from "nish:net" -> builtin netWrite2
+import unixSocketPair from "nish:net" -> builtin unixSocketPair
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
 import H1_BODY from "nish/net/http1-server" -> const H1_BODY
 import H1_END from "nish/net/http1-server" -> const H1_END
@@ -34096,6 +34070,7 @@ import HttpDate from "nish/net/http1-server" -> struct HttpDate
 import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
 const IDLE_FIRST_INPUT: i32 = 1024
 const IDLE_FIRST_HEAD: i32 = 256
+const VIA_SEND_BODY: boolean = true
 struct Bench (class) size=56 align=8
   field req: u8[] index=0 offset=0
   field body: u8[] index=1 offset=8
@@ -34397,25 +34372,112 @@ function idle(shape: string, requests: i32, count: i32, batches: i32, evictMib: 
   callee +29:9 IdlePool.serve -> @IdlePool.serve
   callee +32:9 IdlePool.serve -> @IdlePool.serve
   local +40:11 ns: i64 (const)
+function articles(): u8[] -> @articles
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: ascii nish_alloc_struct nish_array_grow nish_str_concat nish_str_new
+  stackSites=1 stackLocals=1
+  local +0:9 alphabet: string (const)
+  local +1:9 parts: string[] (const)
+  local +2:7 x: i32 (let)
+  local +3:12 n: i32 (let)
+  callee +7:10 ascii -> @ascii
+function articleList(): u8[] -> @articleList
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: ascii nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local -16:9 parts: string[] (const)
+  local -15:7 len: i32 (let)
+  local -14:7 k: i32 (let)
+  local -12:11 item: string (const)
+  local -5:9 tail: string (const)
+  local -2:9 out: u8[] (const)
+  callee -2:21 ascii -> @ascii
+function stages(requests: i32, count: i32, batches: i32, calibrate: boolean): i32 -> @stages
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via IdlePool.constructor
+  escaping: count requests
+  calls: IdlePool.constructor IdlePool.flush IdlePool.next IdlePool.readable articleList articles ascii nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.sendBody nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_net_read nish_net_write2 nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 nish_unix_socket_pair
+  stackSites=6 stackLocals=6
+  local +0:9 b: IdlePool (const)
+  callee +0:23 new IdlePool -> @IdlePool.constructor
+  local +1:9 req: u8[] (const)
+  callee +1:21 articles -> @articles
+  local +2:9 body: u8[] (const)
+  callee +2:22 articleList -> @articleList
+  local +3:9 n: i32 (const)
+  local +4:9 names: u8[][] (const)
+  callee +4:26 ascii -> @ascii
+  local +5:9 values: u8[][] (const)
+  callee +5:27 ascii -> @ascii
+  local +6:9 pair: i32[] (const)
+  local +10:9 drain: u8[] (const)
+  local +11:12 i: i32 (let)
+  local +14:7 sum: i64 (let)
+  local +15:7 headLen: i32 (let)
+  local +16:7 bestSpans: i64 (let)
+  local +17:7 bestStages: i64[] (let)
+  local +19:12 pass: i32 (let)
+  local +20:11 at: i64[] (const)
+  local +21:9 k: i32 (let)
+  local +22:9 slot: i32 (let)
+  local +23:11 total: i32 (const)
+  local +25:13 conn: Http1Connection (const)
+  local +26:13 t0: i64 (const)
+  callee +27:11 IdlePool.readable -> @IdlePool.readable
+  local +30:13 t1: i64 (const)
+  callee +31:11 IdlePool.next -> @IdlePool.next
+  local +34:13 t2: i64 (const)
+  callee +35:11 IdlePool.next -> @IdlePool.next
+  local +38:13 t3: i64 (const)
+  callee +39:11 Http1Connection.respond -> @nish.Http1Connection.respond
+  local +42:13 t4: i64 (const)
+  local +45:13 sent: i32 (const)
+  callee +45:25 Http1Connection.sendBody -> @nish.Http1Connection.sendBody
+  callee +46:7 Http1Connection.end -> @nish.Http1Connection.end
+  local +47:13 t5: i64 (const)
+  callee +48:11 IdlePool.next -> @IdlePool.next
+  local +51:13 t6: i64 (const)
+  callee +52:11 IdlePool.flush -> @IdlePool.flush
+  local +55:13 t7: i64 (const)
+  local +63:11 got: i32 (let)
+  local +77:9 spans: i64 (let)
+  local +78:14 s: i32 (let)
+  local +87:7 clock: i64 (let)
+  local +88:7 writev: i64 (let)
+  local +89:12 pass: i32 (let)
+  local +90:11 started: i64 (const)
+  local +91:9 last: i64 (let)
+  local +92:14 k: i32 (let)
+  local +95:11 c: i64 (const)
+  local +100:11 head: u8[] (const)
+  local +101:9 w: i64 (let)
+  local +102:14 k: i32 (let)
+  local +103:13 before: i64 (const)
+  local +106:11 got: i32 (let)
+  local +116:9 cells: string[] (const)
+  local +118:9 named: string[] (const)
+  local +119:12 s: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via idle
-  calls: Bench.constructor Bench.serve idle llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64
+  sharedWrite: via stages
+  calls: Bench.constructor Bench.serve idle llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 stages
   stackSites=1 stackLocals=1
   local +0:9 shape: string (const)
   local +1:9 requests: i32 (const)
   local +2:7 count: i32 (let)
   local +3:9 batches: i32 (const)
   local +4:9 evictMib: i32 (const)
-  callee +10:12 idle -> @idle
-  local +15:9 b: Bench (const)
-  callee +15:20 new Bench -> @Bench.constructor
-  local +18:12 i: i32 (let)
-  callee +19:5 Bench.serve -> @Bench.serve
-  local +24:7 best: i64 (let)
-  local +25:7 at: i32 (let)
-  local +26:12 batch: i32 (let)
-  local +27:11 started: i64 (const)
-  local +28:14 k: i32 (let)
-  callee +29:7 Bench.serve -> @Bench.serve
-  local +35:11 ns: i64 (const)
+  callee +12:12 stages -> @stages
+  callee +15:12 idle -> @idle
+  local +20:9 b: Bench (const)
+  callee +20:20 new Bench -> @Bench.constructor
+  local +23:12 i: i32 (let)
+  callee +24:5 Bench.serve -> @Bench.serve
+  local +29:7 best: i64 (let)
+  local +30:7 at: i32 (let)
+  local +31:12 batch: i32 (let)
+  local +32:11 started: i64 (const)
+  local +33:14 k: i32 (let)
+  callee +34:7 Bench.serve -> @Bench.serve
+  local +40:11 ns: i64 (const)

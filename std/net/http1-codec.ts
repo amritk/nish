@@ -86,7 +86,6 @@ import {
   any,
   bitmask,
   eq,
-  extract,
   gt,
   loadU8x16,
   lt,
@@ -671,73 +670,6 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.headHeld = false
 }
 
-/**
- * The bytes of `x` below 32 or equal to 127 — a control byte or DEL, which
- * `http1TakeLine` stops at — as their high bits: zero when there is none,
- * and else the lowest set bit is the first such byte's. Two of the bit
- * tricks of "Bit Twiddling Hacks" (S. E. Anderson, public domain): a byte
- * below `n` leaves its high bit set in `(x - n * ones) & ~x`, for `n` up to
- * 128, and `127` is the byte that is zero in `x ^ 127 * ones`. A byte from
- * 128 up has its high bit set in `x`, so `~x` clears it: obs-text never
- * matches. A borrow only runs up from a byte that matched, so the bits above
- * the first match may be false and the lowest is exact, in each mask and so
- * in their union. Each subtraction is masked to 64 bits because a `u64` is a
- * BigInt under Node, which does not wrap; natively the mask is a no-op.
- */
-const http1ControlBits = (x: u64): u64 => {
-  const ones32: u64 = toU64(16843009)
-  const ones: u64 = (ones32 << toU64(32)) | ones32
-  const low32: u64 = 0xffffffff
-  const all: u64 = (low32 << toU64(32)) | low32
-  const high: u64 = ones * toU64(128)
-  const below: u64 = (x - ones * toU64(32)) & all & ~x & high
-  const y: u64 = x ^ (ones * toU64(127))
-  const del: u64 = (y - ones) & all & ~y & high
-  return below | del
-}
-
-/** Which byte of a word `bits`'s lowest set bit is in, 0 to 7; `bits` is not zero. */
-const http1FirstByte = (bits: u64): i32 => {
-  const mask32: u64 = 0xffffffff
-  const lo: u32 = toU32(bits & mask32)
-  if (lo !== toU32(0)) {
-    return (toI32(31) - toI32(Math.clz32(lo & (toU32(0) - lo)))) >> toI32(3)
-  }
-  const hi: u32 = toU32(bits >> toU64(32))
-  return toI32(4) + ((toI32(31) - toI32(Math.clz32(hi & (toU32(0) - hi)))) >> toI32(3))
-}
-
-/**
- * Lanes `at` to `at + 7` of `v`, the first the lowest byte: eight bytes of a
- * sixteen-byte load as one word, which `opt` folds to a bitcast of the
- * vector's half. One load is one bounds check for sixteen bytes, where eight
- * reads of `buf[i + k]` would be eight.
- */
-const http1Lanes = (v: u8x16, at: i32): u64 => {
-  if (at === 0) {
-    return (
-      toU64(extract(v, 0)) |
-      (toU64(extract(v, 1)) << toU64(8)) |
-      (toU64(extract(v, 2)) << toU64(16)) |
-      (toU64(extract(v, 3)) << toU64(24)) |
-      (toU64(extract(v, 4)) << toU64(32)) |
-      (toU64(extract(v, 5)) << toU64(40)) |
-      (toU64(extract(v, 6)) << toU64(48)) |
-      (toU64(extract(v, 7)) << toU64(56))
-    )
-  }
-  return (
-    toU64(extract(v, 8)) |
-    (toU64(extract(v, 9)) << toU64(8)) |
-    (toU64(extract(v, 10)) << toU64(16)) |
-    (toU64(extract(v, 11)) << toU64(24)) |
-    (toU64(extract(v, 12)) << toU64(32)) |
-    (toU64(extract(v, 13)) << toU64(40)) |
-    (toU64(extract(v, 14)) << toU64(48)) |
-    (toU64(extract(v, 15)) << toU64(56))
-  )
-}
-
 /** `http1TakeLine`'s answer when a whole line is ready; never an event. */
 const HTTP1_LINE: i32 = -1
 
@@ -770,18 +702,12 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
     let found: boolean = false
     while (!found && i >= 0 && i <= stop - 16 && i <= toI32(buf.length) - 16) {
       const v: u8x16 = loadU8x16(buf, i)
-      const low: u64 = http1ControlBits(http1Lanes(v, 0))
-      if (low !== toU64(0)) {
-        i += http1FirstByte(low)
+      const bad: i32 = bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127))))
+      if (bad !== 0) {
+        i += toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
         found = true
       } else {
-        const high: u64 = http1ControlBits(http1Lanes(v, 8))
-        if (high !== toU64(0)) {
-          i += 8 + http1FirstByte(high)
-          found = true
-        } else {
-          i += 16
-        }
+        i += 16
       }
     }
     while (!found && i >= 0 && i < stop && i < toI32(buf.length) && buf[i] >= 32 && buf[i] !== 127) {
