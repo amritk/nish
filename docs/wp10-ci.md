@@ -98,7 +98,7 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the two sections there that are dealt (`term-io` and
   `--emit-ts`): about 200 s of setup, stage1 and pre-link sections per shard
-  (the figure under the table's history below). Shard 1 runs every section after them
+  (measured in the paragraph on the eight-way split, below). Shard 1 runs every section after them
   that is not dealt, together with the link programs whose output a later
   check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
   `tests/run.js`: term-io, `--emit-ts`, WP14 self-hosting, crypto-bench, the
