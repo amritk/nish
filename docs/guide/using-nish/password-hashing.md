@@ -91,7 +91,9 @@ only in how old implementations handled 8-bit bytes and long passwords, and
 each is checked the way libxcrypt and crypt_blowfish check it. Other
 implementations answer otherwise for a few passwords: one with a NUL byte, one
 over 72 bytes, or one whose 8-bit bytes each follow only 0xff bytes in their
-four-byte key word (such as `\xff\xff\xa3`) under `$2a$`. A hash another implementation made of such a
+four-byte key word (such as `\xff\xff\xa3`) under `$2a$`.
+
+A hash another implementation made of such a
 password may not verify here; the
 [interoperability table](../../security/crypto-bcrypt.md#interoperability) in
 the security record says which, implementation by implementation. Text in
@@ -182,13 +184,15 @@ too, where the tasks run one after another.
 `bcryptVerifyN(p0, p1, p2, p3, p4, p5, hashes)` take up to six passwords and
 run their hashes interleaved on the calling thread, since the chains of table
 lookups overlap where one would leave the core waiting. Lane 0 is always given
-and a `null` lane is skipped. Each lane answers what `bcryptHash` or
-`bcryptVerify` would (a skipped lane answers `""` or `false`), `salts` is the
-six 16-byte salts end to end (96 bytes), `hashes` is six strings, and a verify
-of hashes with different costs runs each cost as its own group. A malformed
-hash in any given lane makes the whole verify an `Err` that names the lane,
-before anything is hashed. `bcryptHash4` and `bcryptVerify4` are the same for
-up to four passwords, with 64 bytes of salts.
+and a `null` lane is skipped.
+
+Each lane answers what `bcryptHash` or `bcryptVerify` would (a skipped lane
+answers `""` or `false`), `salts` is the six 16-byte salts end to end (96
+bytes), `hashes` is six strings, and a verify of hashes with different costs
+runs each cost as its own group. A malformed hash in any given lane makes the
+whole verify an `Err` that names the lane, before anything is hashed.
+`bcryptHash4` and `bcryptVerify4` are the same for up to four passwords, with
+64 bytes of salts.
 
 How many lanes are fastest per hash depends on the core: a core that issues
 more instructions a cycle gains from wider batches, and on one Xeon five and

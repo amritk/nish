@@ -235,7 +235,7 @@ panic deliberately by calling `panic("message")`. A failure the caller is
 expected to handle is reported with a `Result` instead; see
 [Errors and `Result`](../language/errors.md).
 
-## Next
+## Where next
 
 - [Coming from TypeScript](from-typescript.md): what carries over, what Nish
   refuses, and what to write instead.

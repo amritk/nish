@@ -55,12 +55,15 @@ A script parsed each C function into its statement list (every `mulx`,
 `addcarryx`, `subborrowx` and `cmovznz` call with its outputs and arguments,
 every assignment and every store to `out1`) and did the same to the Nish
 translation, undoing its three documented changes (the packed `u64` results,
-the length guard, and `square`'s limbs read into locals first). Every one of
-the ten ported functions — field `mul`, `square`, `add`, `sub`, `nonzero`,
-`selectznz`, `set_one`, and scalar `mul`, `add`, `set_one` — matched
+the length guard, and `square`'s limbs read into locals first).
+
+Every one of the ten ported functions — field `mul`, `square`, `add`, `sub`,
+`nonzero`, `selectznz`, `set_one`, and scalar `mul`, `add`, `set_one` — matched
 statement for statement: 359, 359, 33, 25, 2, 16, 8, 415, 33 and 8 statements.
 Where Nish leaves out one half of a helper's result, the script checked that
-fiat never reads that half. The script was also shown to catch a change: one
+fiat never reads that half.
+
+The script was also shown to catch a change: one
 constant in `p256FiatMul` altered by one bit was reported at once. The four
 helpers were read against upstream by hand: `subborrowx` keeps bit 32 of a
 difference that wraps modulo 2^64, which is the borrow; `cmovznz` is
@@ -106,10 +109,11 @@ disassembly check proves the shape of the code that ships.
 when this was audited and is a checked panic since #426, so either way
 `f25519Mul`'s bound was re-derived rather than trusted. Inputs have
 limbs below 2^27 in magnitude. Each output limb collects ten products, each
-scaled by at most 2 × 19, so each limb is below 380 × 2^54 < 2^62.6. Every
-partial sum is bounded by the same sum of absolute values. `wide[k + 10] × 19`
-plus `wide[k]` stays below 362 × 2^54, and the carries `f25519Carry` then adds
-are below 2^38. Every call site in the ladder was checked to pass reduced
+scaled by at most 2 × 19, so each limb is below 380 × 2^54 < 2^62.6.
+
+Every partial sum is bounded by the same sum of absolute values. `wide[k + 10]
+× 19` plus `wide[k]` stays below 362 × 2^54, and the carries `f25519Carry` then
+adds are below 2^38. Every call site in the ladder was checked to pass reduced
 elements, or one sum or difference of two.
 
 **Differential testing.** Two reference implementations were written in Python
@@ -126,6 +130,7 @@ program linked against the modules was then compared with them:
   2^256 − 1, (n ± 1)/2 and 40 random scalars. Signatures under 24 keys (1, 2,
   n − 2, n − 1 and 20 random) of digests of lengths 0, 1, 2, 20, 31, 32, 33,
   48 and 64, and of the digests 0, 1, n − 1, n, n + 1, 2^256 − 1 and p.
+
   Verification of every one of those signatures, and of its high-`s` twin, a
   one-bit flip, `r + n`, `s + n`, the digest `z + n`, a digest that puts the
   sum at infinity, and a digest that makes the final addition a doubling. And
@@ -210,7 +215,9 @@ would fail if it stopped holding.
   with x = 5 + p is refused", "a key with y = p is refused", "a key with prefix
   0x03 is refused", "the identity's SEC 1 encoding, 0x00, is refused", "65
   zero bytes are refused", "0x04 then (0, 0) is refused", and the 64- and
-  66-byte cases. P-256 has cofactor 1, so a point on the curve is in the prime
+  66-byte cases.
+
+  P-256 has cofactor 1, so a point on the curve is in the prime
   order group, and no invalid-curve or small-subgroup key survives the curve
   equation.
 - A sum u1·G + u2·Q at the identity is refused: "a sum u1 G + u2 Q at the
@@ -308,16 +315,17 @@ arithmetic, its conditional move, the table read by a secret digit, the
 complete addition and doubling and one window step, and the X25519 field
 arithmetic, conditional swap and ladder step have no branch, no call the
 checker cannot follow, and no load or store at a secret address, on x86-64 and
-aarch64. The fixtures' copies were checked above to match the module code. The
-loops around these steps, the inversions (square-and-multiply on the public
+aarch64. The fixtures' copies were checked above to match the module code.
+
+The loops around these steps, the inversions (square-and-multiply on the public
 exponents p − 2 and n − 2, or X25519's fixed addition chain; since #758 the
 nonce's is safegcd's twenty fixed batches, whose divsteps and matrix updates
-ct_asm reads as copies, ECC-4), the encodings
-and the nonce derivation branch only on public positions. That was confirmed
-by reading, and it remains discipline rather than proof, as the module headers
-say. The one branch on a secret is RFC 6979's retry when a candidate nonce is
-not below n. The RFC prescribes it, it happens about once in 2^32 signatures,
-and it reveals only that a discarded value was large.
+ct_asm reads as copies, ECC-4), the encodings and the nonce derivation branch
+only on public positions. That was confirmed by reading, and it remains
+discipline rather than proof, as the module headers say. The one branch on a
+secret is RFC 6979's retry when a candidate nonce is not below n. The RFC
+prescribes it, it happens about once in 2^32 signatures, and it reveals only
+that a discarded value was large.
 
 **The fixed-base comb** (#663, after this audit; anchors at `6e11fa6`).
 `p256PublicKey` and `p256Sign` now compute k·G with `p256BaseMult`
@@ -330,18 +338,19 @@ entry point then (`p256Ecdh` came later, see "P-256 ECDH"); the ECDH below is th
 `ecdh_secp256r1_ecpoint` private keys multiplied through `p256ScalarMult` in
 `tests/link/crypto_p256_agree`.
 
-- **Agreement.** The comb answers what `p256ScalarMult(G, k)` answers, byte
-  for byte, on RFC 6979 A.2.5's three scalars, 986 edge and per-digit scalars
-  (every one of the table's 240 entries is the only entry read at least
-  once), the `r` and `s` of all 1,104 64-byte signatures of Wycheproof's two
-  P1363 files taken as scalars, the 355 private keys of
-  `ecdh_secp256r1_ecpoint` (330 shared secrets as published, 25 keys
-  refused), and a seeded corpus of 10,000 scalars, 625 of them also signing
-  through both `p256SignSha256` and `p256SignSha256Into`: "p256 agree: the
-  fixed-base comb and the variable-base window give the same bytes for every
-  scalar of tests/link/crypto_p256_agree, natively", and under Node's WASI,
-  "p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints
-  the same expected.out under Node's WASI". The table is what the generator
+- **Agreement.** The comb answers what `p256ScalarMult(G, k)` answers, byte for
+  byte, on RFC 6979 A.2.5's three scalars, 986 edge and per-digit scalars
+  (every one of the table's 240 entries is the only entry read at least once),
+  the `r` and `s` of all 1,104 64-byte signatures of Wycheproof's two P1363
+  files taken as scalars, the 355 private keys of `ecdh_secp256r1_ecpoint` (330
+  shared secrets as published, 25 keys refused), and a seeded corpus of 10,000
+  scalars, 625 of them also signing through both `p256SignSha256` and
+  `p256SignSha256Into`: "p256 agree: the fixed-base comb and the variable-base
+  window give the same bytes for every scalar of tests/link/crypto_p256_agree,
+  natively", and under Node's WASI, "p256 agree: the \`--profile wasi\` build
+  (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI".
+
+  The table is what the generator
   writes: "p256: the comb table in std/crypto/p256.ts is what
   scripts/gen-p256-table.mjs generates".
 - **What ct_asm reads.** `tests/cases/ct_asm_p256` adds copies of the digit
@@ -350,24 +359,22 @@ entry point then (`p256Ecdh` came later, see "P-256 ECDH"); the ECDH below is th
   and Batina's Algorithm 5), the masked keep (`p256BaseKeep`, `:4643`) and one
   whole step of the comb (`p256BaseStep`, the body of `p256BaseMultWith`'s
   inner loop), and its `main` reproduces A.2.5's public key and both `r`s
-  through them. Each passes on x86-64 and aarch64, following its calls into
-  the field functions:
-  `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}`, for `p256BaseDigit`, `p256BaseSelect`,
-  `p256PointAddMixed`, `p256BaseKeep` and `p256BaseStep` with the promise "no
-  branch, call, secret-indexed access or secret-dependent latency". The read
-  it replaces, one entry loaded at the digit's offset, is seeded to fail:
-  `ct_asm_refused`'s `leakyBaseRead`, "refused for a load or store at a secret
-  address" on both targets.
+  through them. Each passes on x86-64 and aarch64, following its calls into the
+  field functions: `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}`,
+  for `p256BaseDigit`, `p256BaseSelect`, `p256PointAddMixed`, `p256BaseKeep`
+  and `p256BaseStep` with the promise "no branch, call, secret-indexed access
+  or secret-dependent latency". The read it replaces, one entry loaded at the
+  digit's offset, is seeded to fail: `ct_asm_refused`'s `leakyBaseRead`,
+  "refused for a load or store at a secret address" on both targets.
 - **What remains discipline.** The copies compute their offsets with
   `wrappingAdd` / `wrappingMul` and read with `uncheckedGet`, so they hold no
   branch at all; the module's own functions do not. Its `p256BaseSelect`
   computes `(c * 15 + j - 1) * 16` (`:4582`) with checked arithmetic, whose
-  overflow test branches on the public `c` and `j`; `p256BaseDigit` guards
-  its byte index (`:4565`) and `p256BaseKeep` its lengths, on public
-  positions and lengths; and the 4-row and 16-column loops of
-  `p256BaseMultWith`, with its `r < 3` before each doubling (`:4681`), branch
-  on loop counters. None of these is read by ct_asm; each was read here and
-  depends on no bit of the scalar.
+  overflow test branches on the public `c` and `j`; `p256BaseDigit` guards its
+  byte index (`:4565`) and `p256BaseKeep` its lengths, on public positions and
+  lengths; and the 4-row and 16-column loops of `p256BaseMultWith`, with its `r
+  < 3` before each doubling (`:4681`), branch on loop counters. None of these
+  is read by ct_asm; each was read here and depends on no bit of the scalar.
 - **The wipe.** `p256BaseMultWith` wipes the selected entry before it
   returns, and its callers wipe the scratch's sum and the accumulator, as for
   the window:
@@ -375,7 +382,9 @@ entry point then (`p256Ecdh` came later, see "P-256 ECDH"); the ECDH below is th
   a group of `tests/wipes/crypto.js` that pins `p256BaseMultWith` at 3
   volatile wipes, `p256PublicKeyExposed` at 18, `p256SignExposed` at 93 and
   `p256SignSha256Into` at 56 (96 and 59 since #758 added the nonce's
-  inversion and `p256ScalarInverse`'s own 3, ECC-4). **Not
+  inversion and `p256ScalarInverse`'s own 3, ECC-4).
+
+  **Not
   reached:** the digit, the `ctEq` mask and the scalar's byte, which live in
   registers or spill slots no store in the language names, as ECC-2 records
   for the ladder's `swap` and `bit`. The table is a function of G alone and

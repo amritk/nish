@@ -20,7 +20,9 @@ is `50af350c`.
 name, or else the first system bundle and `/etc/ssl/certs`, and gives them
 parsed, with no two alike. A file the loader cannot use never stops a load.
 Neither does a PEM block it cannot use: each is counted in `skipped`, and
-loading moves on to the next. The work a hostile file can cause is bounded in
+loading moves on to the next.
+
+The work a hostile file can cause is bounded in
 bytes per file, files per load and roots per load (PKI-R1). A FIFO or device
 is never opened (PKI-R2). The module does not compile for wasm32, where it
 would have no file system to answer (PKI-R4). Nothing was found to fix.
@@ -418,14 +420,17 @@ module's answer.
   refuses an expired root, a root without basicConstraints, one with an
   unknown critical extension, one with an EKU and one whose name constraints
   a name below breaks, as the web PKI's validators do (PKI-18, PKI-21). A
-  root's pathLenConstraint binds the CAs below it. Each structural rule on a
-  root was first run over the 118 roots Debian's `ca-certificates` ships
-  from Mozilla's store (`/etc/ssl/certs/ca-certificates.crt`): v3,
-  basicConstraints present with `cA` TRUE, an authorityKeyIdentifier with a
-  keyIdentifier equal to the subjectKeyIdentifier on a self-issued root, an
-  authorityKeyIdentifier on one that is not, and keyCertSign in a keyUsage
-  each refuse none, and are kept, but for keyUsage, which no limbo case
-  tests on a root. A subjectKeyIdentifier refuses one, TWCA Global Root CA,
+  root's pathLenConstraint binds the CAs below it.
+
+  Each structural rule on a root was first run over the 118 roots Debian's
+  `ca-certificates` ships from Mozilla's store
+  (`/etc/ssl/certs/ca-certificates.crt`): v3, basicConstraints present with
+  `cA` TRUE, an authorityKeyIdentifier with a keyIdentifier equal to the
+  subjectKeyIdentifier on a self-issued root, an authorityKeyIdentifier on one
+  that is not, and keyCertSign in a keyUsage each refuse none, and are kept,
+  but for keyUsage, which no limbo case tests on a root.
+
+  A subjectKeyIdentifier refuses one, TWCA Global Root CA,
   so a root need not carry one (PKI-32). Validity, unknown critical
   extensions, pathLenConstraint, name constraints and extKeyUsage are
   security-bearing and checked on every root whatever the store holds: two
@@ -511,10 +516,11 @@ The module was then run against x509-limbo
 (<https://github.com/C2SP/x509-limbo>, commit `1080e565`), by
 `tests/link/crypto_pki_limbo`. Of the file's server-authentication cases it
 keeps the 670 the module claims: one expected peer name, no CRL, no
-max_chain_depth, no ML-DSA key and no key usage of their own, and one in
-20 of the BetterTLS name-constraint cases (`generate.mjs` there says how).
-Each verdict is printed with its reason, and a case whose verdict is not
-limbo's must be listed in `divergences.ts` with the finding that keeps it.
+max_chain_depth, no ML-DSA key and no key usage of their own, and one in 20 of
+the BetterTLS name-constraint cases (`generate.mjs` there says how). Each
+verdict is printed with its reason, and a case whose verdict is not limbo's
+must be listed in `divergences.ts` with the finding that keeps it.
+
 Before PKI-18 and PKI-21 to PKI-24, 63 cases diverged; 30 do now, all listed
 under PKI-25 to PKI-32. No limbo case trusts a CA with a pathLenConstraint,
 so `generate.mjs` adds two cases of its own from limbo's certificates (its
@@ -652,6 +658,7 @@ under an Ed25519 key. SHA-1, an unknown algorithm, and an algorithm the
 issuer's key cannot make are `PKI_ERR_UNSUPPORTED_ALGORITHM`. RSA is accepted
 as PKCS#1 v1.5 with SHA-256, SHA-384 or SHA-512, or as RSASSA-PSS with the
 hash and salt length the certificate names, under an RSA key only.
+
 `pkiRsaCode` hands the key to `nish/crypto/rsa`, which refuses a modulus
 outside 1,024 to 8,192 bits as a bad signature, and then refuses a modulus
 under `PKI_MIN_RSA_BITS` (2048) as `PKI_ERR_WEAK_KEY`, before any signature

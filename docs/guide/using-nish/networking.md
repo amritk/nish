@@ -259,12 +259,13 @@ it starts the program again once per worker, and `preforkWorkers` answers it
 only when they have all exited, with `-1` (`PREFORK_STOPPED`) after a shutdown
 or `-2` (`PREFORK_SPAWN_FAILED`) when a worker's first start failed or the
 supervisor could not set up its signal handling, in which case no worker
-starts. In each
-worker it answers that worker's index, `0` up to one less than the count, at
-once. A worker is told its index by one extra argument at the end of its
-arguments; `preforkArgs(process.argv)` gives you the arguments without it, the
-same list in every process, so read your port and options from that. Workers
-share nothing, so each one is the single-threaded server it was before.
+starts.
+
+In each worker it answers that worker's index, `0` up to one less than the
+count, at once. A worker is told its index by one extra argument at the end of
+its arguments; `preforkArgs(process.argv)` gives you the arguments without it,
+the same list in every process, so read your port and options from that.
+Workers share nothing, so each one is the single-threaded server it was before.
 
 - **How many workers.** The `NISH_WORKERS` environment variable when it is a
   positive whole number, such as `NISH_WORKERS=2`; anything else in it is
@@ -336,16 +337,17 @@ Pinning is for a machine the server has to itself: each worker owns a core,
 so `workers` should be at most `availableParallelism()`, and on Linux **more pinned
 workers than CPUs stops the program with a panic** rather than doubling two
 workers up on one core. That count is `availableParallelism()`, which a
-container's CPU quota or `NISH_NUM_THREADS` lowers. A CPU outside the ones the
-program may run on (`taskset`, a container's cpuset) is never taken, and worker
-`k` asks for CPU *number* `k`, not the `k`-th CPU allowed: under
-`taskset -c 4-7` every pin fails, each worker says so on stderr and runs
-unpinned, and a connection received on CPU 4 or above, past the listeners,
-falls back to the kernel's hash. Run a pinned server on CPUs that start at 0.
-Off Linux the workers run
-unpinned and unsteered, and the supervisor says so on stderr. A `listenPort`
-outside `-1..65535`, a `listenBacklog` of 0 or less, or other `listenFlags`
-stop the program with a panic.
+container's CPU quota or `NISH_NUM_THREADS` lowers.
+
+A CPU outside the ones the program may run on (`taskset`, a container's cpuset)
+is never taken, and worker `k` asks for CPU *number* `k`, not the `k`-th CPU
+allowed: under `taskset -c 4-7` every pin fails, each worker says so on stderr
+and runs unpinned, and a connection received on CPU 4 or above, past the
+listeners, falls back to the kernel's hash. Run a pinned server on CPUs that
+start at 0. Off Linux the workers run unpinned and unsteered, and the
+supervisor says so on stderr. A `listenPort` outside `-1..65535`, a
+`listenBacklog` of 0 or less, or other `listenFlags` stop the program with a
+panic.
 
 ### Workers that are not restarted
 
@@ -542,12 +544,14 @@ A lookup answers its address count, A records first, or a negative code:
 record), `-42` no server answered, `-43` an alias chain ran past eight aliases
 or led back to the name asked (a loop inside one reply reads as `-41`), and from
 `resolveHost` `-45` its time ran out. Another negative number is the errno of a
-socket or of `pollWait` that failed. `resolveHost` answers `start`'s codes too,
-and waits for both the A and the AAAA answer, so one family that answered is
-not returned on its own when the time runs out. `localhost`, an address literal and a name in the hosts table answer
-at once, with no packet. For a command-line tool or a program's start-up,
-`resolveHost(name, timeoutMs, port, out, ttls)` reads `/etc/resolv.conf` and
-`/etc/hosts` and blocks until the lookup ends. The
+socket or of `pollWait` that failed.
+
+`resolveHost` answers `start`'s codes too, and waits for both the A and the
+AAAA answer, so one family that answered is not returned on its own when the
+time runs out. `localhost`, an address literal and a name in the hosts table
+answer at once, with no packet. For a command-line tool or a program's
+start-up, `resolveHost(name, timeoutMs, port, out, ttls)` reads
+`/etc/resolv.conf` and `/etc/hosts` and blocks until the lookup ends. The
 [standard library page](standard-library.md#nishnetdns) has both in full.
 
 ## TLS to a server: `tlsConnect`
@@ -569,7 +573,9 @@ A TCP peer's address is proven: the handshake that `tcpAccept` completes needs
 answers sent to it. A UDP datagram's source address is only what its sender
 wrote, so anyone can send one that names another host. A server that caps or
 allows clients by address keys that on a UDP address only once a handshake has
-proven it. For QUIC, `Http3Server.addresses[slot]` is the source of the slot's
+proven it.
+
+For QUIC, `Http3Server.addresses[slot]` is the source of the slot's
 first datagram, and it is proven once `server.quic(slot).addressValidated` is
 set: by a Handshake packet from the client, or by a Retry token when the
 server's config turns `retry` on. The relay example in `examples/relay` counts
