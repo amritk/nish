@@ -131,12 +131,51 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
  * for one release: the reseed that ships a change makes its entries match
  * nothing, the full run says so, and they go.
  */
+const DNS_FALLBACK =
+  "A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout"
+const dnsFallback = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: DNS_FALLBACK, why }))
+  )
 const ASYNC_FETCH = "Async fetch speaks https and resolves names without blocking"
 const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
   )
 const DECLARED = [
+  // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
+  // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
+  // program that reaches them. These come first: dns.ll also carries this
+  // PR's `dnsLoadSystem` change, and the first entry that matches is the one
+  // reported, so #1304's line is never swallowed by the async fetch line.
+  ...dnsFallback(
+    "#1304 adds settle to DnsResolver and DnsClient so a search fallback waits out a NODATA, which moves both DNS modules' IR",
+    {
+      "examples/http-get-json.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_http_fetch/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_outbound/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_outbound_f64/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_upstream/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_upstream_release/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/std_dns/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+      "tests/link/std_dns_caps/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+      "tests/link/std_dns_soak/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+    }
+  ),
+  ...dnsFallback(
+    "#1304's test calls DnsResolver.settle, a method the reference's std/net/dns-resolver.ts does not have, so only the candidate compiles it",
+    {
+      "tests/link/std_dns_resolver/main.ts": ["exit"],
+    }
+  ),
   // `HttpOptions` gains `dns` and `HttpClientConn` the TLS session, so every
   // program that reaches std/net/fetch.ts lays both out again; dns.ts's
   // `dnsLoadSystem` takes a nullable config and skips resolv.conf without one.
