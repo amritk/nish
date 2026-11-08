@@ -2313,8 +2313,7 @@ class PassWalk {
       // the release (`emitReturnValue`), whatever its form: `f()`,
       // `c ? f() : g()` or `a ?? f()` from a pass, as from a block. The
       // caller's box `isOld` counts as new is read out before the release.
-      const handsNothing =
-        this.returnsByValue || (this.block && program.nodeTypes[value.id] === T_VOID)
+      const handsNothing = this.returnsByValue || (this.block && program.nodeTypes[value.id] === T_VOID)
       if (value.kind !== N_EMPTY && !handsNothing && !this.isOld(value)) {
         this.scope.handsBack = true
         this.refuse(LOOP_RETURN, node, "")
