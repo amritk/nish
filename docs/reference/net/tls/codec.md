@@ -2207,29 +2207,29 @@ class TlsClientHello
 | `new TlsClientHello()` | Makes an empty hello, every field empty and every flag false, for `tlsParseClientHello` to fill. |
 | `alert: i32` | 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. |
 | `alpn: u8[][]` | The ALPN protocol names offered, each as its bytes (RFC 7301 §3.1). |
-| `cipherSuites: i32[]` |  |
+| `cipherSuites: i32[]` | `cipher_suites`, 16-bit values in the client's order. |
 | `extensionTypes: i32[]` | Every extension type read, in order. |
 | `groups: i32[]` | `supported_groups`, in the client's order. |
-| `hasAlpn: boolean` |  |
-| `hasKeyShare: boolean` |  |
-| `hasPreSharedKey: boolean` |  |
-| `hasPskModes: boolean` |  |
-| `hasQuicTransportParameters: boolean` |  |
-| `hasServerName: boolean` |  |
-| `hasSignatureAlgorithms: boolean` |  |
-| `hasSupportedGroups: boolean` |  |
-| `hasSupportedVersions: boolean` |  |
-| `hasX25519Share: boolean` |  |
-| `legacyVersion: i32` |  |
+| `hasAlpn: boolean` | Whether the hello carried ALPN. |
+| `hasKeyShare: boolean` | Whether the hello carried `key_share`, even an empty one. |
+| `hasPreSharedKey: boolean` | Whether the hello carried `pre_shared_key`, which must be its last extension (§4.2.11). |
+| `hasPskModes: boolean` | Whether the hello carried `psk_key_exchange_modes`, without which a server must not resume (§4.2.9). |
+| `hasQuicTransportParameters: boolean` | Whether the hello carried `quic_transport_parameters`, which a QUIC handshake requires (RFC 9001 §8.2). |
+| `hasServerName: boolean` | Whether the hello carried `server_name` with a `host_name` in it. |
+| `hasSignatureAlgorithms: boolean` | Whether the hello carried `signature_algorithms`. |
+| `hasSupportedGroups: boolean` | Whether the hello carried `supported_groups`. |
+| `hasSupportedVersions: boolean` | Whether the hello carried `supported_versions`: without it the client does not offer TLS 1.3 (§4.2.1). |
+| `hasX25519Share: boolean` | Whether `key_share` offered an x25519 share, so `x25519Share` holds one. |
+| `legacyVersion: i32` | `legacy_version` as sent; TLS 1.3 fixes it at 0x0303 and negotiates the real version in `supported_versions` (§4.1.2). |
 | `nullCompressionOnly: boolean` | Whether `legacy_compression_methods` is the single null method TLS 1.3 requires (§4.1.2). |
 | `pskBinders: u8[][]` | `pre_shared_key`'s binders, one an identity. |
 | `pskBindersPrefix: i32` | How many bytes of the body come before `binders`: the body truncated there, after its handshake header, is what each binder covers (§4.2.11.2). |
 | `pskDheKe: boolean` | Whether `psk_key_exchange_modes` lists `psk_dhe_ke`. |
 | `pskIdentities: u8[][]` | `pre_shared_key`'s identities, in the client's order, and each one's obfuscated ticket age (§4.2.11). |
 | `pskModes: u8[]` | `psk_key_exchange_modes`, one byte a mode. |
-| `pskTicketAges: u32[]` |  |
+| `pskTicketAges: u32[]` | Each identity's `obfuscated_ticket_age`, as sent: entry `i` belongs to `pskIdentities[i]`. |
 | `quicTransportParameters: u8[]` | The client's `quic_transport_parameters`, opaque (RFC 9001 §8.2). |
-| `random: u8[]` |  |
+| `random: u8[]` | The client's 32-byte `random`. |
 | `serverName: string` | The `host_name` of `server_name`, or empty. |
 | `sessionId: u8[]` | `legacy_session_id`, which a server echoes (§4.1.3). |
 | `shareGroups: i32[]` | Every group a key share was offered for, in order. |
@@ -2257,55 +2257,55 @@ class TlsClientHelloView
 | `new TlsClientHelloView()` | Makes an empty view, every window empty and every flag false, for `tlsReadClientHello` to fill. |
 | `alert: i32` | 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. |
 | `alpnAt: i32` | ALPN's `protocol_name_list`, each name a length byte and its bytes (RFC 7301 §3.1). |
-| `alpnLength: i32` |  |
+| `alpnLength: i32` | The ALPN list's length in bytes, its length bytes included; 0 when ALPN was absent. |
 | `extensionsAt: i32` | The extensions block, every extension in it. |
-| `extensionsLength: i32` |  |
+| `extensionsLength: i32` | The extensions block's length in bytes, 0 for a hello with none. |
 | `groupsAt: i32` | `supported_groups`, 16-bit values. |
-| `groupsLength: i32` |  |
-| `hasAlpn: boolean` |  |
-| `hasKeyShare: boolean` |  |
-| `hasPreSharedKey: boolean` |  |
-| `hasPskModes: boolean` |  |
-| `hasQuicTransportParameters: boolean` |  |
-| `hasServerName: boolean` |  |
-| `hasSignatureAlgorithms: boolean` |  |
-| `hasSupportedGroups: boolean` |  |
-| `hasSupportedVersions: boolean` |  |
-| `hasX25519Share: boolean` |  |
-| `legacyVersion: i32` |  |
+| `groupsLength: i32` | The `supported_groups` window's length in bytes, two a group; 0 when the extension was absent. |
+| `hasAlpn: boolean` | Whether the hello carried ALPN. |
+| `hasKeyShare: boolean` | Whether the hello carried `key_share`, even an empty one. |
+| `hasPreSharedKey: boolean` | Whether the hello carried `pre_shared_key`, which must be its last extension (§4.2.11). |
+| `hasPskModes: boolean` | Whether the hello carried `psk_key_exchange_modes`, without which a server must not resume (§4.2.9). |
+| `hasQuicTransportParameters: boolean` | Whether the hello carried `quic_transport_parameters`, which a QUIC handshake requires (RFC 9001 §8.2). |
+| `hasServerName: boolean` | Whether the hello carried `server_name` with a `host_name` in it. |
+| `hasSignatureAlgorithms: boolean` | Whether the hello carried `signature_algorithms`. |
+| `hasSupportedGroups: boolean` | Whether the hello carried `supported_groups`. |
+| `hasSupportedVersions: boolean` | Whether the hello carried `supported_versions`: without it the client does not offer TLS 1.3 (§4.2.1). |
+| `hasX25519Share: boolean` | Whether `key_share` offered an x25519 share, so `x25519ShareAt` names one. |
+| `legacyVersion: i32` | `legacy_version` as sent; TLS 1.3 fixes it at 0x0303 and negotiates the real version in `supported_versions` (§4.1.2). |
 | `nullCompressionOnly: boolean` | Whether `legacy_compression_methods` is the single null method TLS 1.3 requires (§4.1.2). |
 | `pskBinderAt: i32` | That identity's binder, the entry of the same index in `binders`. |
-| `pskBinderCount: i32` |  |
-| `pskBinderLength: i32` |  |
+| `pskBinderCount: i32` | How many binders `binders` holds, one an identity. |
+| `pskBinderLength: i32` | The chosen binder's length in bytes, 32 to 255: `tlsReadPreSharedKey` refuses a shorter one when it parses the extension. It must equal the suite's hash length. |
 | `pskBindersAt: i32` | `pre_shared_key`'s `binders` list: each a PskBinderEntry<32..255>. |
-| `pskBindersLength: i32` |  |
+| `pskBindersLength: i32` | The `binders` window's length in bytes, 0 when `pre_shared_key` was absent. |
 | `pskBindersPrefixAt: i32` | Where `binders`' two-byte length starts: the ClientHello up to here, its handshake header included, is what each binder is computed over (§4.2.11.2). |
 | `pskDheKe: boolean` | Whether `ke_modes` lists `psk_dhe_ke`, the one mode the server resumes in. |
 | `pskIdentitiesAt: i32` | `pre_shared_key`'s `identities` list (§4.2.11): each an identity<1..2^16-1> and a 32-bit obfuscated age. |
-| `pskIdentitiesLength: i32` |  |
+| `pskIdentitiesLength: i32` | The `identities` window's length in bytes, 0 when `pre_shared_key` was absent. |
 | `pskIdentityAt: i32` | The identity `tlsSelectPskIdentity` last chose: its bytes and its obfuscated ticket age. |
-| `pskIdentityCount: i32` |  |
-| `pskIdentityLength: i32` |  |
+| `pskIdentityCount: i32` | How many identities `identities` holds; the binder count must match it (§4.2.11). |
+| `pskIdentityLength: i32` | The chosen identity's length in bytes, 0 until `tlsSelectPskIdentity` chooses one. |
 | `pskModesAt: i32` | `psk_key_exchange_modes`' `ke_modes`, one byte a mode (§4.2.9). |
-| `pskModesLength: i32` |  |
-| `pskTicketAge: u32` |  |
+| `pskModesLength: i32` | The `ke_modes` window's length in bytes, one a mode; 0 when the extension was absent. |
+| `pskTicketAge: u32` | The chosen identity's `obfuscated_ticket_age`, as sent: the ticket's age in milliseconds plus its `ticket_age_add`, modulo 2^32 (§4.2.11.1). |
 | `quicAt: i32` | The client's `quic_transport_parameters`, opaque (RFC 9001 §8.2). |
-| `quicLength: i32` |  |
-| `randomAt: i32` |  |
+| `quicLength: i32` | The QUIC transport parameters' length in bytes, 0 when the extension was absent. |
+| `randomAt: i32` | Where the client's 32-byte `random` starts in `data`; its length is always 32. |
 | `schemesAt: i32` | `signature_algorithms`, 16-bit values. |
-| `schemesLength: i32` |  |
+| `schemesLength: i32` | The `signature_algorithms` window's length in bytes, two a scheme; 0 when the extension was absent. |
 | `serverNameAt: i32` | The `host_name` of `server_name`, or empty. |
-| `serverNameLength: i32` |  |
+| `serverNameLength: i32` | The `host_name`'s length in bytes, 0 when `server_name` was absent. |
 | `sessionIdAt: i32` | `legacy_session_id`, which a server echoes (§4.1.3). |
-| `sessionIdLength: i32` |  |
+| `sessionIdLength: i32` | The `legacy_session_id`'s length in bytes, 0 to 32. |
 | `sharesAt: i32` | The `client_shares` list of `key_share`, every entry in it. |
-| `sharesLength: i32` |  |
+| `sharesLength: i32` | The `client_shares` window's length in bytes; 0 when `key_share` was absent. |
 | `suitesAt: i32` | `cipher_suites`, 16-bit values in the client's order. |
-| `suitesLength: i32` |  |
+| `suitesLength: i32` | The `cipher_suites` window's length in bytes, two a suite. |
 | `versionsAt: i32` | `supported_versions`, 16-bit values. |
-| `versionsLength: i32` |  |
+| `versionsLength: i32` | The `supported_versions` window's length in bytes, two a version; 0 when the extension was absent. |
 | `x25519ShareAt: i32` | The x25519 share's key_exchange, as sent; its length is the server's to check. |
-| `x25519ShareLength: i32` |  |
+| `x25519ShareLength: i32` | The x25519 share's length in bytes as sent, 0 when none was offered; a usable share is 32. |
 
 ## TlsServerFlightView
 
@@ -2334,33 +2334,33 @@ class TlsServerFlightView
 | `new TlsServerFlightView()` | Makes an empty view, every window empty and every flag false, for the `tlsRead*` functions to fill. |
 | `alert: i32` | 0 when the message parsed, else `decode_error`. |
 | `alpnAt: i32` | EncryptedExtensions' ALPN: the one protocol the server chose (RFC 7301 §3.1). |
-| `alpnLength: i32` |  |
-| `certificateCount: i32` |  |
+| `alpnLength: i32` | The chosen protocol name's length in bytes, 0 when ALPN was absent. |
+| `certificateCount: i32` | How many entries `certificate_list` holds; the first is the server's own certificate. |
 | `certificatesAt: i32` | Certificate's `certificate_list`, every entry in it, and how many there are. |
-| `certificatesLength: i32` |  |
-| `compression: i32` |  |
+| `certificatesLength: i32` | The `certificate_list` window's length in bytes. |
+| `compression: i32` | `legacy_compression_method`, which must be 0 (§4.1.3). |
 | `contextLength: i32` | Certificate's `certificate_request_context`, which must be empty for a server's (§4.4.2). |
 | `cookieAt: i32` | A HelloRetryRequest's `cookie`, which the second ClientHello echoes (§4.2.2). |
-| `cookieLength: i32` |  |
+| `cookieLength: i32` | The cookie's length in bytes, 0 when none was sent. |
 | `extensionAlert: i32` | 0 when the extensions are ones this message may carry, else `illegal_parameter` or `unsupported_extension`. |
-| `hasAlpn: boolean` |  |
-| `hasCookie: boolean` |  |
-| `hasKeyShare: boolean` |  |
-| `hasSupportedVersions: boolean` |  |
+| `hasAlpn: boolean` | Whether EncryptedExtensions carried ALPN. |
+| `hasCookie: boolean` | Whether a HelloRetryRequest carried `cookie`. |
+| `hasKeyShare: boolean` | Whether the message carried `key_share`. |
+| `hasSupportedVersions: boolean` | Whether the message carried `supported_versions`: a TLS 1.3 ServerHello must (§4.2.1). |
 | `isRetry: boolean` | A ServerHello whose `random` is the HelloRetryRequest value (§4.1.3). |
-| `legacyVersion: i32` |  |
-| `randomAt: i32` |  |
+| `legacyVersion: i32` | ServerHello's `legacy_version` as sent; a TLS 1.3 server sends 0x0303 and names 1.3 in `supported_versions` (§4.1.3). |
+| `randomAt: i32` | Where the server's 32-byte `random` starts in `data`; the client checks it for the downgrade sentinel (§4.1.3). |
 | `scheme: i32` | CertificateVerify's scheme and signature (§4.4.3). |
-| `selectedVersion: i32` |  |
+| `selectedVersion: i32` | `supported_versions`' `selected_version`, 0 when the extension was absent; 0x0304 for TLS 1.3. |
 | `serverNameAcknowledged: boolean` | EncryptedExtensions' empty `server_name`, the acknowledgement of RFC 6066 §3. |
-| `sessionIdAt: i32` |  |
-| `sessionIdLength: i32` |  |
-| `shareAt: i32` |  |
+| `sessionIdAt: i32` | `legacy_session_id_echo`, which must equal the session id the client sent (§4.1.3). |
+| `sessionIdLength: i32` | The echoed session id's length in bytes, 0 to 32. |
+| `shareAt: i32` | Where the ServerHello's key_exchange starts in `data`. |
 | `shareGroup: i32` | `key_share`: a ServerHello's entry, or a HelloRetryRequest's `selected_group` with an empty share. |
-| `shareLength: i32` |  |
-| `signatureAt: i32` |  |
-| `signatureLength: i32` |  |
-| `suite: i32` |  |
+| `shareLength: i32` | The key_exchange's length in bytes as sent, 0 for a HelloRetryRequest; an x25519 share is 32. |
+| `signatureAt: i32` | Where CertificateVerify's signature starts in `data`. |
+| `signatureLength: i32` | The signature's length in bytes. |
+| `suite: i32` | The cipher suite the server chose, a 16-bit value. |
 
 ## Constants
 

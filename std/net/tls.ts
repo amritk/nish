@@ -727,10 +727,15 @@ const TLS_CERTIFICATE_VERIFY_PREFIX: i32 = 98
  * `wipe` zeroes them too (TLS-1).
  */
 export class TlsSecretPool {
+  /** `handshake_secret` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. */
   readonly handshake: Secret<u8[]>
+  /** `client_handshake_traffic_secret` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. */
   readonly clientHandshake: Secret<u8[]>
+  /** `server_handshake_traffic_secret` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. */
   readonly serverHandshake: Secret<u8[]>
+  /** `client_application_traffic_secret_0` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. */
   readonly clientApplication: Secret<u8[]>
+  /** `server_application_traffic_secret_0` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. */
   readonly serverApplication: Secret<u8[]>
   /** `exporter_master_secret` (RFC 8446 §7.5), for a caller's own exporters. */
   readonly exporter: Secret<u8[]>
@@ -947,6 +952,7 @@ const tlsServerTicketCapacity = (state: TlsTicketState): i32 => {
  * are longer than any before (TLS-3).
  */
 export class TlsServer {
+  /** The configuration this server was built with: its certificate chain, ALPN list and QUIC transport parameters. */
   config: TlsServerConfig
   private serverRandom: u8[]
   /** The connection's x25519 private key, copied in by `restart` and wiped by the record layer once the ServerHello is written. */
@@ -980,6 +986,7 @@ export class TlsServer {
   private none: u8[]
   /** The secrets under each hash (`TlsSecretPool`); `secrets()` answers the negotiated hash's. */
   secrets256: TlsSecretPool
+  /** The secrets under SHA-384, for TLS_AES_256_GCM_SHA384. */
   secrets384: TlsSecretPool
   /** The ClientHello last read, as windows into `input`. */
   private hello: TlsClientHelloView
@@ -1022,6 +1029,7 @@ export class TlsServer {
    * bit, since its place is still the one it was derived into.
    */
   held: i32 = 0
+  /** Where the handshake stands: one of the `TLS_STATE_*` constants, `TLS_STATE_CONNECTED` once it is done and `TLS_STATE_FAILED` after an alert. */
   state: i32 = 0
   /** The alert the server failed with, or 0. */
   alert: i32 = 0

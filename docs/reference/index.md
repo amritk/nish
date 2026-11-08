@@ -2,7 +2,7 @@
 
 # Library reference
 
-Every module a Nish program can import, one page each, generated from the doc comments of its source. The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish.
+Every module a Nish program can import, one page each, generated from the doc comments of its source. The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish. The compiler itself has its own reference: its [command line](command-line.md) and its [diagnostics](diagnostics.md).
 
 ## Builtins
 

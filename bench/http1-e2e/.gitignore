@@ -1,0 +1,3 @@
+# Per-round scratch (loadgen output, server logs, traces, perf.data): large, and
+# reproducible from run.sh. The round JSONs next to it are the raw results.
+results/**/.work/

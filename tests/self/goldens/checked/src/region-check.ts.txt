@@ -26,7 +26,7 @@ function isRegionSource(program: CheckedProgram): boolean -> @isRegionSource [ex
 function isRegionTemplate(template: StructTemplateInfo): boolean -> @isRegionTemplate [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isRegionSource nish_str_eq
-  pointer template: size=64 writesThrough=false captured=false
+  pointer template: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:39 isRegionSource -> @isRegionSource
 function roleNamed(name: string): i32 -> @roleNamed

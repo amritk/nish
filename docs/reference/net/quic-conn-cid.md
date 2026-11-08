@@ -140,12 +140,9 @@ class QuicCidEntry
 | --- | --- |
 | `new QuicCidEntry()` | Makes an unused slot, with room for the longest connection ID and its reset token. |
 | `announced: boolean` | For a local ID: whether a NEW_CONNECTION_ID frame announced it yet. Sequence 0 needs none. |
-| `cid: u8[]` |  |
-| `hasToken: boolean` |  |
-| `length: i32` |  |
+| `length: i32` | How many bytes of `cid` the ID takes, 0 to 20. |
 | `resetToken: u8[]` | The stateless reset token issued with it (RFC 9000 §10.3); `hasToken` is false for a peer's sequence 0. |
-| `sequence: i64` |  |
-| `used: boolean` |  |
+| `sequence: i64` | The ID's sequence number, as issued in NEW_CONNECTION_ID; 0 for the ID of the handshake. |
 
 ## QuicCidTable
 
@@ -159,10 +156,10 @@ class QuicCidTable
 | Member | |
 | --- | --- |
 | `new QuicCidTable(limit: i64, localCapacity: i32)` | A table for an advertised `limit` (2 to 8 in practice) with `localCapacity` slots for this side's IDs. |
-| `local: QuicCidEntry[]` |  |
+| `local: QuicCidEntry[]` | The slots for the IDs this side issued, so a caller can walk them, used or not. |
 | `nextLocal: i64` | The next local sequence number to issue. |
-| `peer: QuicCidEntry[]` |  |
-| `retireCount: i32` |  |
+| `peer: QuicCidEntry[]` | The slots for the IDs the peer issued, used or not, as `limit` bounds them; a caller walks them to see each ID and its reset token. |
+| `retireCount: i32` | How many RETIRE_CONNECTION_ID frames this side still owes the peer, at most twice `limit`. |
 | `activeLocal(): i32` | How many local IDs are active: a retired one leaves its slot. |
 | `activePeer(): i32` | How many peer IDs are active: retired ones leave their slots. |
 | `addLocal(cid: u8[], resetToken: u8[]): i64` | Issues `cid`, up to its first 20 bytes, as the next local ID, with its 16-byte reset token (or none, empty, for sequence 0), and answers its sequence number; -1 when every local slot is taken. |

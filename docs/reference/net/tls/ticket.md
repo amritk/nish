@@ -436,9 +436,9 @@ class TlsTicketState
 | `issuedAt: i64` | When the ticket was issued, in `monotonicNanos()`: `tlsTicketSeal` writes its `now` here. |
 | `lifetime: i32` | The ticket's lifetime in seconds, at most `TLS_TICKET_LIFETIME_SECONDS`. |
 | `psk: u8[]` | The resumption PSK, `pskLength` bytes of it: the suite's hash length. |
-| `pskLength: i32` |  |
+| `pskLength: i32` | How many bytes of `psk` the PSK fills: 32 or 48, the suite's hash length. |
 | `serverName: u8[]` | The server name the session agreed, `serverNameLength` bytes of it; none when the client sent none. |
-| `serverNameLength: i32` |  |
+| `serverNameLength: i32` | How many bytes of `serverName` the name fills, 0 to `TLS_TICKET_SERVER_NAME_MAX`; 0 when the client sent no name. |
 | `suite: i32` | The cipher suite the session agreed. |
 | `expiresAt(): i64` | When the ticket stops opening: its issue time plus its lifetime. It opens at that instant, and not after. |
 

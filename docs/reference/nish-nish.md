@@ -21,11 +21,15 @@ import {
 
 ## HostHandle
 
+A host object's handle, the global `HostHandle`'s twin, spelled alike so the two are one type.
+
 ```ts
 type HostHandle<K extends string> = number & reflection | 0
 ```
 
 ## f32
+
+A 32-bit float, a `number` on the page.
 
 ```ts
 type f32 = number
@@ -33,17 +37,23 @@ type f32 = number
 
 ## f64
 
+A 64-bit float, a `number` on the page.
+
 ```ts
 type f64 = number
 ```
 
 ## i32
 
+A 32-bit signed integer, a `number` on the page.
+
 ```ts
 type i32 = number
 ```
 
 ## i64
+
+A 64-bit signed integer, a `bigint` on the page.
 
 ```ts
 type i64 = bigint
@@ -59,11 +69,15 @@ type integer<Lo extends number, Hi extends number> = number
 
 ## u16
 
+A 16-bit unsigned integer, a `number` on the page.
+
 ```ts
 type u16 = number
 ```
 
 ## u32
+
+A 32-bit unsigned integer, a `number` on the page.
 
 ```ts
 type u32 = number
@@ -71,11 +85,15 @@ type u32 = number
 
 ## u64
 
+A 64-bit unsigned integer, a `bigint` on the page.
+
 ```ts
 type u64 = bigint
 ```
 
 ## u8
+
+An 8-bit unsigned integer, a `number` on the page.
 
 ```ts
 type u8 = number

@@ -35,7 +35,12 @@
 /** Head, tail: the two words in front of the slots. */
 const RING_HEADER: i32 = 2
 
-/** The number of slots, the ring's length less its header; 0 for a ring too short to have one. */
+/**
+ * The number of slots, the ring's length less its header.
+ *
+ * @param ring - the ring's storage: head, tail, then its slots
+ * @returns the slot count, or 0 for a ring too short to have one
+ */
 export const ringCapacity = (ring: Int32Array): i32 => {
   const length: i32 = toI32(ring.length)
   return length > RING_HEADER ? length - RING_HEADER : 0
@@ -48,7 +53,12 @@ const ringCount = (count: i32, capacity: i32): i32 => {
   return r < 0 ? r + m : r
 }
 
-/** The number of words put and not yet taken, at most the capacity. */
+/**
+ * The number of words put and not yet taken.
+ *
+ * @param ring - the ring's storage: head, tail, then its slots
+ * @returns the words waiting, at most the capacity
+ */
 export const ringSize = (ring: Int32Array): i32 => {
   const capacity: i32 = ringCapacity(ring)
   if (capacity === 0) {
@@ -58,10 +68,21 @@ export const ringSize = (ring: Int32Array): i32 => {
   return size > capacity ? capacity : size
 }
 
-/** The number of words `ringPush` would still take. */
+/**
+ * The number of words `ringPush` would still take.
+ *
+ * @param ring - the ring's storage: head, tail, then its slots
+ * @returns the free slots
+ */
 export const ringFree = (ring: Int32Array): i32 => ringCapacity(ring) - ringSize(ring)
 
-/** Puts `word` at the tail and answers true, or answers false and changes nothing when the ring is full. */
+/**
+ * Puts `word` at the tail, or changes nothing when the ring is full.
+ *
+ * @param ring - the ring's storage: head, tail, then its slots
+ * @param word - the word to put
+ * @returns true when the word was put, false when the ring was full
+ */
 export const ringPush = (ring: Int32Array, word: i32): boolean => {
   const capacity: i32 = ringCapacity(ring)
   if (capacity === 0 || ringSize(ring) >= capacity) {
@@ -76,6 +97,9 @@ export const ringPush = (ring: Int32Array, word: i32): boolean => {
 /**
  * Takes the word at the head. On an empty ring it answers 0 and changes
  * nothing, so a caller that cannot tell 0 from empty asks `ringSize` first.
+ *
+ * @param ring - the ring's storage: head, tail, then its slots
+ * @returns the word taken, or 0 on an empty ring
  */
 export const ringShift = (ring: Int32Array): i32 => {
   const capacity: i32 = ringCapacity(ring)
@@ -88,7 +112,11 @@ export const ringShift = (ring: Int32Array): i32 => {
   return word
 }
 
-/** Empties the ring: the head catches up with the tail, and the slots keep their stale words. */
+/**
+ * Empties the ring: the head catches up with the tail, and the slots keep their stale words.
+ *
+ * @param ring - the ring's storage: head, tail, then its slots
+ */
 export const ringClear = (ring: Int32Array): void => {
   if (toI32(ring.length) >= RING_HEADER) {
     ring[0] = ring[1]

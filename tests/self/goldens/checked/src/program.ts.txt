@@ -145,7 +145,7 @@ struct TemplateInfo (class) size=64 align=8 exported
   field count: i32 index=7 offset=52
   field home: CheckContext index=8 offset=56
   constructor -> @TemplateInfo.constructor
-struct StructTemplateInfo (class) size=64 align=8 exported
+struct StructTemplateInfo (class) size=72 align=8 exported
   field sourceName: string index=0 offset=0
   field kind: i32 index=1 offset=8
   field typeParams: string[] index=2 offset=16
@@ -155,6 +155,7 @@ struct StructTemplateInfo (class) size=64 align=8 exported
   field exported: boolean index=6 offset=48
   field count: i32 index=7 offset=52
   field home: CheckContext index=8 offset=56
+  field implemented: boolean index=9 offset=64
   constructor -> @StructTemplateInfo.constructor
 struct StructInstantiation (class) size=40 align=8 exported
   field template: StructTemplateInfo index=0 offset=0
@@ -630,7 +631,7 @@ function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: st
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: decl home kind origin sourceName
   calls: ConstraintList.constructor nish_alloc_struct
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=32 writesThrough=true captured=true
   pointer home: size=304 writesThrough=true captured=true
@@ -640,7 +641,7 @@ function StructInstantiation.constructor(this: StructInstantiation, template: St
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: bindings info template typeArgs
   pointer this: size=40 writesThrough=true captured=false
-  pointer template: size=64 writesThrough=true captured=true
+  pointer template: size=72 writesThrough=true captured=true
   pointer typeArgs: size=0 writesThrough=true captured=true
   pointer info: size=168 writesThrough=true captured=true
   pointer bindings: size=40 writesThrough=true captured=true
@@ -782,7 +783,7 @@ function DeferredConstraint.constructor(this: DeferredConstraint, template: Stru
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: args at template
   pointer this: size=24 writesThrough=true captured=false
-  pointer template: size=64 writesThrough=true captured=true
+  pointer template: size=72 writesThrough=true captured=true
   pointer args: size=0 writesThrough=true captured=true
   pointer at: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -1069,7 +1070,7 @@ function CheckedProgram.addStructTemplate(this: CheckedProgram, info: StructTemp
   sharedWrite: via CheckedProgram.addStructTemplateAs
   calls: CheckedProgram.addStructTemplateAs
   pointer this: size=688 writesThrough=false captured=false passedTo=CheckedProgram.addStructTemplateAs#0
-  pointer info: size=64 writesThrough=true captured=true passedTo=CheckedProgram.addStructTemplateAs#2
+  pointer info: size=72 writesThrough=true captured=true passedTo=CheckedProgram.addStructTemplateAs#2
   stackSites=0 stackLocals=0
   callee +0:5 CheckedProgram.addStructTemplateAs -> @CheckedProgram.addStructTemplateAs
 function CheckedProgram.addStructTemplateAs(this: CheckedProgram, name: string, info: StructTemplateInfo): void -> @CheckedProgram.addStructTemplateAs [exported method]
@@ -1078,7 +1079,7 @@ function CheckedProgram.addStructTemplateAs(this: CheckedProgram, name: string, 
   escaping: info name
   calls: StringMap.set nish_array_grow
   pointer this: size=688 writesThrough=false captured=false
-  pointer info: size=64 writesThrough=true captured=true
+  pointer info: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
 function CheckedProgram.structInstance(this: CheckedProgram, name: string): StructInstantiation | null -> @CheckedProgram.structInstance [exported method]

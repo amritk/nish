@@ -406,6 +406,7 @@ export class HttpCompressor {
   readonly output: u8[]
   /** The fields `addFields` built: the program's, then `Content-Encoding` and `Vary`. */
   readonly names: u8[][]
+  /** The value of each field in `names`, at the same index; pass both to `respond`. */
   readonly values: u8[][]
   private readonly contentEncodingName: u8[]
   private readonly gzipValue: u8[]
@@ -420,6 +421,7 @@ export class HttpCompressor {
    * default (any saving at all); a value below those counts as them.
    */
   minSaving: i32
+  /** The percent of the body a compressed body must save, as well as `minSaving` bytes: 0 by default, 100 or more sends nothing compressed. */
   minSavingPercent: i32
   /**
    * Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which
@@ -434,6 +436,7 @@ export class HttpCompressor {
    * sets it, or a connection's own `mss` overrides it.
    */
   segmentMode: boolean
+  /** The TCP segment size `segmentMode` counts in, in bytes: `HTTP_DEFAULT_MSS` by default, and 0 or less means that default. */
   mss: i32
   /** `HTTP_ENCODER_AUTO` (the default), `HTTP_ENCODER_FIXED` or `HTTP_ENCODER_LEVEL`. */
   encoder: i32

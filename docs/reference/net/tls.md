@@ -476,16 +476,16 @@ class TlsSecretPool
 | --- | --- |
 | `new TlsSecretPool(hashLength: i32)` | Allocates every array of the pool once, all zero, so a connection never allocates one for a secret. |
 | `readonly binderKey: Secret<u8[]>` | The binder key, from the selected ticket's early secret. |
-| `readonly clientApplication: Secret<u8[]>` |  |
+| `readonly clientApplication: Secret<u8[]>` | `client_application_traffic_secret_0` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. |
 | `clientFinished: u8[]` | The client Finished's `verify_data`, known once the server's Finished is written. |
-| `readonly clientHandshake: Secret<u8[]>` |  |
+| `readonly clientHandshake: Secret<u8[]>` | `client_handshake_traffic_secret` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. |
 | `readonly early: Secret<u8[]>` | The PSK early secret, on a resumed handshake only. |
 | `readonly exporter: Secret<u8[]>` | `exporter_master_secret` (RFC 8446 §7.5), for a caller's own exporters. |
-| `readonly handshake: Secret<u8[]>` |  |
+| `readonly handshake: Secret<u8[]>` | `handshake_secret` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. |
 | `readonly psk: Secret<u8[]>` | The PSK the selected ticket opened to, on a resumed handshake only. |
 | `readonly resumption: Secret<u8[]>` | `resumption_master_secret` (RFC 8446 §7.1), derived by `sign` and the connection's once the client's Finished is accepted: what a NewSessionTicket's PSK would be derived from. |
-| `readonly serverApplication: Secret<u8[]>` |  |
-| `readonly serverHandshake: Secret<u8[]>` |  |
+| `readonly serverApplication: Secret<u8[]>` | `server_application_traffic_secret_0` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. |
+| `readonly serverHandshake: Secret<u8[]>` | `server_handshake_traffic_secret` (RFC 8446 §7.1), hash-length bytes; read it inside `expose`. |
 | `toBeSigned: u8[]` | The CertificateVerify input, 98 bytes longer than the rest. |
 
 ## TlsServer
@@ -527,7 +527,7 @@ class TlsServer
 | `alert: i32` | The alert the server failed with, or 0. |
 | `alpn: string` | The ALPN protocol chosen, one of the configuration's, or empty. |
 | `clientTransportParameters: u8[]` | The client's `quic_transport_parameters`, opaque; empty unless the carrier is QUIC. |
-| `config: TlsServerConfig` |  |
+| `config: TlsServerConfig` | The configuration this server was built with: its certificate chain, ALPN list and QUIC transport parameters. |
 | `readonly ephemeral: Secret<u8[]>` | The connection's x25519 private key, copied in by `restart` and wiped by the record layer once the ServerHello is written. |
 | `exchange: TlsExchangeWords` | The exchange's words (`tlsExchange`). |
 | `held: i32` | Which of the negotiated pool's secrets the handshake has derived: bit `1 << TLS_SECRET_*` for each. A secret wiped by `wipeSecret` keeps its bit, since its place is still the one it was derived into. |
@@ -538,9 +538,9 @@ class TlsServer
 | `retried: boolean` | Whether a HelloRetryRequest was sent, so a second miss is fatal. |
 | `salt: u8[]` | The salt the handshake secret is extracted under, HashLen bytes of it: the `TLS_DERIVED_SALT_*` constant on a full handshake, derived from the PSK early secret on a resumed one. `exchangeKeys` reads it into the exchange's words and zeroes it. |
 | `secrets256: TlsSecretPool` | The secrets under each hash (`TlsSecretPool`); `secrets()` answers the negotiated hash's. |
-| `secrets384: TlsSecretPool` |  |
+| `secrets384: TlsSecretPool` | The secrets under SHA-384, for TLS_AES_256_GCM_SHA384. |
 | `serverName: string` | The client's `host_name`, or empty. |
-| `state: i32` |  |
+| `state: i32` | Where the handshake stands: one of the `TLS_STATE_*` constants, `TLS_STATE_CONNECTED` once it is done and `TLS_STATE_FAILED` after an alert. |
 | `suite: i32` | The negotiated cipher suite, or 0 before the first ClientHello is read. |
 | `tickets: boolean` | Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. |
 | `enableTickets(): void` | Turns resumption on: from the next ClientHello, a hello offering a ticket in `psk_dhe_ke` waits in `TLS_STATE_WAIT_TICKET` for `resume`, and a connection whose client lists `psk_dhe_ke` may be issued a ticket by `issue`. Kept across `restart`. A QUIC server never resumes, so on one this does nothing. |

@@ -31,7 +31,7 @@ export function tick(): void {
 
 <scalar-card title="ringCapacity" icon="phosphor/regular/function" href="#ringcapacity">
 
-The number of slots, the ring's length less its header; 0 for a ring too short to have one.
+The number of slots, the ring's length less its header.
 
 </scalar-card>
 
@@ -49,7 +49,7 @@ The number of words `ringPush` would still take.
 
 <scalar-card title="ringPush" icon="phosphor/regular/function" href="#ringpush">
 
-Puts `word` at the tail and answers true, or answers false and changes nothing when the ring is full.
+Puts `word` at the tail, or changes nothing when the ring is full.
 
 </scalar-card>
 
@@ -61,7 +61,7 @@ Takes the word at the head.
 
 <scalar-card title="ringSize" icon="phosphor/regular/function" href="#ringsize">
 
-The number of words put and not yet taken, at most the capacity.
+The number of words put and not yet taken.
 
 </scalar-card>
 
@@ -91,7 +91,7 @@ and a size past the capacity reads as full, so `ringPush` refuses and
 
 ## ringCapacity
 
-The number of slots, the ring's length less its header; 0 for a ring too short to have one.
+The number of slots, the ring's length less its header.
 
 ```ts
 function ringCapacity(ring: Int32Array): i32
@@ -100,11 +100,17 @@ function ringCapacity(ring: Int32Array): i32
 #### Parameters
 
 <scalar-field name="ring" type="Int32Array" required>
+
+the ring's storage: head, tail, then its slots
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the slot count, or 0 for a ring too short to have one
+
 </scalar-field>
 
 ## ringClear
@@ -118,6 +124,9 @@ function ringClear(ring: Int32Array): void
 #### Parameters
 
 <scalar-field name="ring" type="Int32Array" required>
+
+the ring's storage: head, tail, then its slots
+
 </scalar-field>
 
 ## ringFree
@@ -131,16 +140,22 @@ function ringFree(ring: Int32Array): i32
 #### Parameters
 
 <scalar-field name="ring" type="Int32Array" required>
+
+the ring's storage: head, tail, then its slots
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the free slots
+
 </scalar-field>
 
 ## ringPush
 
-Puts `word` at the tail and answers true, or answers false and changes nothing when the ring is full.
+Puts `word` at the tail, or changes nothing when the ring is full.
 
 ```ts
 function ringPush(
@@ -152,14 +167,23 @@ function ringPush(
 #### Parameters
 
 <scalar-field name="ring" type="Int32Array" required>
+
+the ring's storage: head, tail, then its slots
+
 </scalar-field>
 
 <scalar-field name="word" type="i32" required>
+
+the word to put
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="boolean">
+
+true when the word was put, false when the ring was full
+
 </scalar-field>
 
 ## ringShift
@@ -174,16 +198,22 @@ function ringShift(ring: Int32Array): i32
 #### Parameters
 
 <scalar-field name="ring" type="Int32Array" required>
+
+the ring's storage: head, tail, then its slots
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the word taken, or 0 on an empty ring
+
 </scalar-field>
 
 ## ringSize
 
-The number of words put and not yet taken, at most the capacity.
+The number of words put and not yet taken.
 
 ```ts
 function ringSize(ring: Int32Array): i32
@@ -192,9 +222,15 @@ function ringSize(ring: Int32Array): i32
 #### Parameters
 
 <scalar-field name="ring" type="Int32Array" required>
+
+the ring's storage: head, tail, then its slots
+
 </scalar-field>
 
 #### Returns
 
 <scalar-field name="returns" type="i32">
+
+the words waiting, at most the capacity
+
 </scalar-field>

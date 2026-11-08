@@ -6,7 +6,9 @@ Everything Nish does goes through one command, `nish`. It has two shapes:
 language needs to call your code. This page covers the flags you will reach
 for; `nish --help` prints the whole list on stdout and exits 0, grouped by what
 the flags are for (Build, Check, Capabilities, Interop, Inspect, Code
-generation) and followed by the exit codes and a few examples.
+generation) and followed by the exit codes and a few examples. The
+[command-line reference](../../reference/command-line.md) is that list as a
+page, generated from the same source.
 
 ```
 usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
@@ -428,6 +430,9 @@ bad.ts:3:7: error: Loose equality is forbidden; use === / !==
     |       ^~~~~~
 ```
 
+Every code, with its rule and an example program that provokes it, is in the
+[diagnostic index](../../reference/diagnostics.md).
+
 A compile reports every error it finds, in source order, up to 20. Besides
 errors there are **performance warnings** — the compiler took a slow path and
 names the faster one — which are on by default, print on stderr and never
@@ -450,7 +455,8 @@ $ nish bad.ts --json
   next release; the wording of `message` may improve. The first digit names
   the stage that found it: `NL1xxx` forbidden syntax, `NL2xxx` the type
   checker, `NL3xxx` modules and the driver, `NL4xxx` the interop sidecars,
-  `NL7xxx` deprecations, `NL8xxx` portability, `NL9xxx` performance.
+  `NL7xxx` deprecations, `NL8xxx` portability, `NL9xxx` performance; the
+  [diagnostic index](../../reference/diagnostics.md) lists them all.
 - **`severity`** is `"error"`, `"performance"`, `"portability"` or
   `"deprecation"`. Only errors fail a compile.
 - Failures with no source position — no usable `clang`, an internal error —

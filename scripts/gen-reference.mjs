@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 // Generate the library reference, docs/reference/**, from the sources.
 //
-//   node scripts/gen-reference.mjs           rewrite docs/reference/ and its routes
-//   node scripts/gen-reference.mjs --check   exit 1 naming each stale, missing or extra
-//                                            page and a stale route; write nothing
+//   node scripts/gen-reference.mjs                     rewrite docs/reference/ and its routes
+//   node scripts/gen-reference.mjs --check             exit 1 naming each stale, missing or extra
+//                                                      page, a stale route and each documentation
+//                                                      gap scripts/undocumented.txt disagrees with;
+//                                                      write nothing
+//   node scripts/gen-reference.mjs --update-baseline   also rewrite scripts/undocumented.txt,
+//                                                      refusing to add a line to it
+//   node scripts/gen-reference.mjs --grow-baseline     the same, adding lines: only for a change
+//                                                      to the rule itself
+//
+// A public declaration of std/ or nish.d.ts needs a doc comment, a `@param` per
+// parameter and a `@returns` for a return other than `void` or `never`
+// (findGaps). scripts/undocumented.txt lists the gaps that predate the rule and
+// only shrinks: a gap it does not list, or a line that is no longer a gap,
+// fails --check (and the plain run, once it has written the pages).
 //
 // TypeDoc reads every std/**/*.ts module and runtime/nish.d.ts in-process, with
 // scripts/typedoc-nish-widths.mjs keeping types as the source spells them, and
@@ -15,17 +27,24 @@
 // without an `@module` tag. docs/README.md -> "The library reference" states
 // how that comment is laid out, and so how it renders.
 //
+// The compiler reference is generated beside it: docs/reference/diagnostics.md
+// from the rule tables of src/codes.ts, with each tests/wordings/ example and
+// its .err, and tests/wordings/unreachable.txt's reason for a code no program
+// provokes; docs/reference/command-line.md from `helpText` in
+// src/cli-style.ts, read as a TypeScript AST.
+//
 // The routes go to scalar.config.json under /reference: /reference/language
-// for docs/LANGUAGE.md, and the /reference/library group holding every
-// generated page. Only the /reference group's text is rewritten, in the
+// for docs/LANGUAGE.md, the /reference/library group holding every library
+// page, and the /reference/compiler group holding the two compiler pages. Only the /reference group's text is rewritten, in the
 // one-line-when-it-fits layout the rest of the file keeps.
 //
 // Output is byte-deterministic: TypeDoc sorts each module's members, modules
 // and routes are sorted here, and no page holds a time or an absolute path.
 import fs from "node:fs"
 import path from "node:path"
-import { Application } from "typedoc"
+import { Application, ReflectionKind } from "typedoc"
 import ts from "typescript"
+import { parseCodesRegistry } from "./codes-registry.js"
 
 const root = path.resolve(import.meta.dirname, "..")
 const outDir = "docs/reference"
@@ -37,6 +56,7 @@ const languageTitle = "Language specification"
 const languageSource = "docs/LANGUAGE.md"
 const languagePage = `${outDir}/language.md`
 const width = 110
+const baselineFile = "scripts/undocumented.txt"
 
 const Kind = {
   module: 2,
@@ -68,7 +88,21 @@ const readProject = async () => {
       sourceLinkTemplate: `${repoUrl}/{path}#L{line}`,
       logLevel: "Warn",
       // A `{@link}` that names nothing fails the run; the rest is not checked.
-      validation: { invalidLink: true, notExported: false, notDocumented: false, rewrittenLink: false },
+      // A public declaration with no doc comment is a gap; findGaps collects them.
+      validation: { invalidLink: true, notExported: false, notDocumented: true, rewrittenLink: false },
+      requiredToBeDocumented: [
+        "Function",
+        "Class",
+        "Constructor",
+        "Interface",
+        "Method",
+        "Property",
+        "Accessor",
+        "Variable",
+        "TypeAlias",
+        "Enum",
+        "EnumMember",
+      ],
       // tsconfig.json's options for std/, without its `include`, so the run
       // checks only what it documents. An empty reader list keeps TypeDoc from
       // reading tsconfig.json or typedoc.json itself.
@@ -86,10 +120,18 @@ const readProject = async () => {
   )
   // TypeDoc only warns of a `{@link}` it cannot resolve; here it fails the
   // run. (Its other warnings, such as a `[text](-A)` it takes for a relative
-  // path, stay warnings.)
+  // path, stay warnings.) Its notDocumented warnings are taken, not logged:
+  // each names one undocumented reflection, and findGaps weighs them against
+  // the baseline.
   const unresolved = []
+  const undocumented = []
   const warn = app.logger.validationWarning.bind(app.logger)
   app.logger.validationWarning = (message, ...rest) => {
+    const gap = /^(.+) \(\w+\), defined in .+, does not have any documentation$/.exec(String(message))
+    if (gap) {
+      undocumented.push(gap[1])
+      return
+    }
     if (String(message).startsWith("Failed to resolve link")) {
       unresolved.push(String(message))
     }
@@ -105,7 +147,76 @@ const readProject = async () => {
     console.error(`gen-reference: a \`{@link}\` names nothing:\n${unresolved.join("\n")}`)
     process.exit(1)
   }
-  return app.serializer.projectToObject(project, root)
+  return { project: app.serializer.projectToObject(project, root), gaps: findGaps(project, undocumented) }
+}
+
+/**
+ * Every public declaration that lacks its documentation, as the sorted keys
+ * of scripts/undocumented.txt: `module.Name.member` for a declaration with no
+ * doc comment (TypeDoc's notDocumented names, passed in as `undocumented`),
+ * `module.Name#param:p` for a parameter with no `@param`, and
+ * `module.Name#returns` for a signature returning other than `void` or `never`
+ * with no `@returns`. The signatures read are a function's or method's, a
+ * constructor's, an accessor's and an interface's call signatures; a
+ * constructor or setter returns nothing to document.
+ *
+ * A member TypeScript's own lib declares is not ours to document: nish.d.ts
+ * merges into lib interfaces such as `Array`, and TypeDoc then names lib
+ * members (and the members of their type literals) as if nish.d.ts declared
+ * them. One is skipped when it, or a reflection above it, is declared only
+ * under node_modules/typescript/lib.
+ */
+const findGaps = (project, undocumented) => {
+  const lib = path.join(root, "node_modules", "typescript", "lib") + path.sep
+  const fromLib = (r) => {
+    for (let at = r; at && !at.isProject(); at = at.parent) {
+      const files = (at.sources ?? []).map((s) => s.fullFileName)
+      if (files.length > 0 && files.every((f) => f.startsWith(lib))) {
+        return true
+      }
+    }
+    return false
+  }
+  const byName = new Map()
+  for (const r of Object.values(project.reflections)) {
+    const name = r.getFriendlyFullName()
+    byName.set(name, [...(byName.get(name) ?? []), r])
+  }
+  const gaps = new Set()
+  for (const name of undocumented) {
+    const rs = byName.get(name) ?? []
+    if (rs.length === 0 || !rs.every(fromLib)) {
+      gaps.add(name)
+    }
+  }
+  const signed =
+    ReflectionKind.FunctionOrMethod |
+    ReflectionKind.Constructor |
+    ReflectionKind.Accessor |
+    ReflectionKind.Interface
+  for (const r of project.getReflectionsByKind(signed)) {
+    const name = r.getFriendlyFullName()
+    const sigs = [...(r.signatures ?? []), r.getSignature, r.setSignature].filter(Boolean)
+    for (const sig of sigs) {
+      if (fromLib(sig)) {
+        continue
+      }
+      for (const p of sig.parameters ?? []) {
+        if (!p.hasComment()) {
+          gaps.add(`${name}#param:${p.name}`)
+        }
+      }
+      // scripts/typedoc-nish-widths.mjs keeps a return type as its source text.
+      const silent =
+        ["void", "never"].includes(String(sig.type)) ||
+        sig.kind === ReflectionKind.ConstructorSignature ||
+        sig.kind === ReflectionKind.SetSignature
+      if (!silent && !(sig.comment ?? r.comment)?.getTag("@returns")) {
+        gaps.add(`${name}#returns`)
+      }
+    }
+  }
+  return [...gaps].sort()
 }
 
 // ---- Markdown helpers -----------------------------------------------------
@@ -576,8 +687,8 @@ const moduleProse = (comment, prose) => {
 
 // ---- Pages ----------------------------------------------------------------
 
-const header = (source) =>
-  `<!-- Generated by scripts/gen-reference.mjs from ${source}. Do not edit by hand: change the source's doc comments and run \`node scripts/gen-reference.mjs\`. -->`
+const header = (source, change = "the source's doc comments") =>
+  `<!-- Generated by scripts/gen-reference.mjs from ${source}. Do not edit by hand: change ${change} and run \`node scripts/gen-reference.mjs\`. -->`
 
 const byText = (a, b) => Number(a > b) - Number(a < b)
 const sortByName = (xs) => [...xs].sort((a, b) => byText(a.name, b.name))
@@ -846,7 +957,9 @@ const renderIndex = (pages) => {
     header("std/**/*.ts and runtime/nish.d.ts"),
     "# Library reference",
     "Every module a Nish program can import, one page each, generated from the doc comments of its source. " +
-      "The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish.",
+      "The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish. " +
+      `The compiler itself has its own reference: its [command line](${path.posix.relative(outDir, commandLinePage)}) ` +
+      `and its [diagnostics](${path.posix.relative(outDir, diagnosticsPage)}).`,
     "## Builtins",
     ["| Module | |", "| --- | --- |", ...builtin.map(row)].join("\n"),
     "## Standard library",
@@ -1053,7 +1166,7 @@ const objectLines = (lines, key, from) => {
 }
 
 /**
- * scalar.config.json with /reference's /language and /library routes and the
+ * scalar.config.json with /reference's /language, /library and /compiler routes and the
  * header's "Language reference" link regenerated. Every other line, the
  * hand-written /reference children included, is kept byte for byte.
  */
@@ -1067,12 +1180,20 @@ const configText = (text, pages) => {
   const made = {
     "/language": { type: "page", title: languageTitle, filepath: languagePage },
     "/library": libraryRoutes(pages),
+    "/compiler": {
+      type: "group",
+      title: "Compiler reference",
+      children: {
+        "/command-line": { type: "page", title: "Command line", filepath: commandLinePage },
+        "/diagnostics": { type: "page", title: "Diagnostics", filepath: diagnosticsPage },
+      },
+    },
   }
   const keys = Object.keys(reference.children).filter((k) => !(k in made))
   const at = keys.indexOf("/standard-library")
   if (at < 0) {
     throw new Error(
-      `${configFile}: /reference has no /standard-library route to place /language and /library after`
+      `${configFile}: /reference has no /standard-library route to place /language, /library and /compiler after`
     )
   }
   keys.splice(at + 1, 0, ...Object.keys(made))
@@ -1176,6 +1297,438 @@ const renderLanguage = (link) => {
   return out.join("\n")
 }
 
+// ---- The compiler reference -----------------------------------------------
+
+const codesSource = "src/codes.ts"
+const wordingsDir = "tests/wordings"
+const unreachableSource = `${wordingsDir}/unreachable.txt`
+const diagnosticsPage = `${outDir}/diagnostics.md`
+const helpSource = "src/cli-style.ts"
+const brandingSource = "src/branding.ts"
+const commandLinePage = `${outDir}/command-line.md`
+const guideCli = "docs/guide/using-nish/cli.md"
+
+/** What each band of codes is about, in the guide's words for `--json`'s bands. */
+const bands = [
+  ["0", "syntax errors and the run"],
+  ["1", "forbidden syntax"],
+  ["2", "the type checker"],
+  ["3", "modules and the driver"],
+  ["4", "the interop sidecars"],
+  ["7", "deprecation warnings"],
+  ["8", "portability warnings"],
+  ["9", "performance warnings"],
+]
+
+/**
+ * Band 0's codes, from their constants in `src/codes.ts`: each with the doc
+ * comment above it, or above the declaration it follows when two share one.
+ */
+const bandZero = (text) => {
+  const lines = text.split("\n")
+  const out = []
+  let shared = ""
+  for (const [i, line] of lines.entries()) {
+    const m = /^(?:export )?const ([A-Z]+): string = "(NL0\d{3})"$/.exec(line)
+    if (!m) {
+      shared = ""
+      continue
+    }
+    shared = commentAbove(lines, i) || shared
+    if (!shared) {
+      throw new Error(`${codesSource}:${i + 1}: ${m[1]} has no doc comment to render`)
+    }
+    out.push({ code: m[2], name: m[1], prose: shared.trim() })
+  }
+  return out
+}
+
+/** `unreachable.txt`'s `CODE  reason` lines, by code. */
+const unreachableCodes = (text) =>
+  new Map(
+    text
+      .split("\n")
+      .filter((l) => /^NL\d{4} {2}/.test(l))
+      .map((l) => [l.slice(0, 6), l.slice(8).trim()])
+  )
+
+/** Every `tests/wordings/nl####_*.ts` example, with its `.err` and `.args`, by code. */
+const wordingExamples = () => {
+  const out = new Map()
+  const dir = path.join(root, wordingsDir)
+  for (const name of fs.readdirSync(dir).sort()) {
+    const m = /^nl(\d{4})_.*\.ts$/.exec(name)
+    if (!m) {
+      continue
+    }
+    const base = path.join(dir, name.slice(0, -3))
+    // Each file word for word, less the newline that ends it; only `.args` is optional.
+    const read = (ext, optional) => {
+      if (!fs.existsSync(base + ext)) {
+        if (optional) {
+          return ""
+        }
+        throw new Error(`${wordingsDir}/${name}: no ${path.basename(base + ext)} beside it`)
+      }
+      return fs.readFileSync(base + ext, "utf8").replace(/\r?\n$/, "")
+    }
+    const code = `NL${m[1]}`
+    const list = out.get(code) ?? []
+    list.push({
+      file: `${wordingsDir}/${name}`,
+      source: read(".ts"),
+      err: read(".err"),
+      args: read(".args", true).trim(),
+    })
+    out.set(code, list)
+  }
+  return out
+}
+
+/**
+ * A rule's fragment as matched text: a fragment is a substring of the message,
+ * so `…` marks an end that is cut. The examples say exactly where the message
+ * starts and ends; with none, the markers are a guess: a start is whole when
+ * it is capitalised or opens on code, and an end is cut when it stops on a
+ * space or on punctuation that expects more.
+ */
+const fragmentText = (fragment, examples) => {
+  const errs = examples.map((e) => e.err).filter((e) => e.includes(fragment))
+  const whole =
+    errs.length > 0
+      ? [errs.some((e) => e.startsWith(fragment)), errs.some((e) => e.endsWith(fragment))]
+      : [/^[A-Z`]/.test(fragment), !/[\s:;,(<=-]$/.test(fragment)]
+  return `${whole[0] ? "" : "…"}${fragment}${whole[1] ? "" : "…"}`
+}
+
+/** A page's link to `target`, written relative to the page itself; a target that does not exist fails the run. */
+const linkFrom = (link, page) => (target) => {
+  const to = link(target, page, page)
+  if (to === null) {
+    throw new Error(`${page}: broken link ${target}`)
+  }
+  return to
+}
+
+/** The fence a block of text needs: one backtick longer than any run inside it. */
+const fenceOf = (lang, text) => {
+  const run = Math.max(2, ...[...text.matchAll(/`+/g)].map((m) => m[0].length))
+  const ticks = "`".repeat(run + 1)
+  return `${ticks}${lang}\n${text}\n${ticks}`
+}
+
+/**
+ * docs/reference/diagnostics.md: every code, by band, with the rule it names,
+ * whether a program can still provoke it, and each `tests/wordings` program
+ * that does with the message it gets.
+ */
+const renderDiagnostics = (link) => {
+  const text = fs.readFileSync(path.join(root, codesSource), "utf8")
+  const ruleCount = Number(/\bRULE_COUNT: i32 = (\d+)/.exec(text)?.[1])
+  if (!Number.isInteger(ruleCount)) {
+    throw new Error(`${codesSource}: no \`RULE_COUNT: i32 = <n>\` to hold the page to`)
+  }
+  const tables = [
+    ["diagnosticRules", "an error"],
+    ["portabilityRules", "a warning `--warn-portability` turns on"],
+    ["performanceRules", "a warning `--no-warn-performance` turns off"],
+    ["deprecationRules", "a warning"],
+  ]
+  // Which table a code is in, from where the fragment line sits in the file.
+  const starts = tables.map(([name, kind]) => {
+    const at = text.indexOf(`const ${name} = `)
+    if (at < 0) {
+      throw new Error(`${codesSource}: no ${name} table`)
+    }
+    return { at, kind }
+  })
+  const kindAt = (code) => {
+    const at = new RegExp(`^\\s*"${code}",?$`, "m").exec(text).index
+    const before = starts.filter((s) => s.at < at)
+    if (before.length === 0) {
+      throw new Error(`${codesSource}: ${code} sits before every rule table`)
+    }
+    return before.reduce((a, b) => (b.at > a.at ? b : a)).kind
+  }
+  const rules = parseCodesRegistry(text, codesSource).map(({ fragment, code }) => ({
+    code,
+    fragment,
+    kind: kindAt(code),
+  }))
+  const zero = bandZero(text)
+  const unreachable = unreachableCodes(fs.readFileSync(path.join(root, unreachableSource), "utf8"))
+  const examples = wordingExamples()
+  const all = [...zero.map((z) => ({ code: z.code, name: z.name, prose: z.prose })), ...rules].sort((a, b) =>
+    byText(a.code, b.code)
+  )
+  const page = diagnosticsPage
+  const to = linkFrom(link, page)
+  const retired = [...unreachable.values()].filter((r) => r.startsWith("retired")).length
+  const out = [
+    header(`${codesSource}, ${wordingsDir}/ and ${unreachableSource}`, "those files"),
+    "",
+    "# Diagnostics",
+    "",
+    `Every diagnostic Nish prints carries a stable code, the \`code\` field of its [\`--json\`](${to(`../../${guideCli}#--json-for-tools`)}) object. ` +
+      "A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. " +
+      `This page lists all ${all.length}: the ${zero.length} of band 0, which no rule matches, and the ${ruleCount} rules \`${codesSource}\` holds, ${retired} of them retired.`,
+    "",
+    "A rule is matched by a fragment of its message: the longest literal run of the message's template, with the names, types and counts it interpolates cut out. " +
+      "The fragment is matched as a substring, so `…` marks where the message goes on. " +
+      `Each example is a program from \`${wordingsDir}/\` that the suite compiles, and the message it gets, word for word. ` +
+      `[Reading diagnostics](${to(`../../${guideCli}#reading-diagnostics`)}) in the guide says how to act on one; ` +
+      "the [command-line reference](command-line.md) lists the flags that turn the warnings on and off.",
+    "",
+  ]
+  let count = 0
+  for (const [band, about] of bands) {
+    const inBand = all.filter((r) => r.code[2] === band)
+    if (inBand.length === 0) {
+      throw new Error(`${codesSource}: band NL${band}xxx has no code`)
+    }
+    out.push(`## NL${band}xxx: ${about}`, "")
+    for (const r of inBand) {
+      count++
+      const seen = examples.get(r.code) ?? []
+      out.push(`### ${r.code}`, "")
+      if (r.prose) {
+        out.push(`\`${r.name}\` in \`${codesSource}\`. ${escapeProse(r.prose)}`, "")
+      } else {
+        out.push(
+          `The message of ${r.kind} contains:`,
+          "",
+          fenceOf("text", fragmentText(r.fragment, seen)),
+          ""
+        )
+      }
+      const why = unreachable.get(r.code)
+      if (why?.startsWith("retired")) {
+        out.push(`**Retired**${escapeProse(why.slice("retired".length))}`, "")
+      } else if (why) {
+        out.push(`**No program provokes it**: ${escapeProse(why)}`, "")
+      }
+      for (const e of seen) {
+        const flags = e.args ? ` (compiled with \`${e.args.split(/\s+/).join(" ")}\`)` : ""
+        out.push(
+          `[\`${path.posix.basename(e.file)}\`](${to(`../../${e.file}`)})${flags}:`,
+          "",
+          fenceOf("ts", e.source),
+          "",
+          fenceOf("text", e.err),
+          ""
+        )
+      }
+    }
+  }
+  if (count !== ruleCount + zero.length || zero.length !== 4) {
+    throw new Error(
+      `${diagnosticsPage}: rendered ${count} codes, but ${codesSource} holds ${ruleCount} rules and 4 band-0 codes`
+    )
+  }
+  const missing = [...examples.keys(), ...unreachable.keys()].filter((c) => !all.some((r) => r.code === c))
+  if (missing.length > 0) {
+    throw new Error(`${diagnosticsPage}: ${missing.join(", ")} is not a code ${codesSource} holds`)
+  }
+  return `${out.join("\n").trimEnd()}\n`
+}
+
+/** The string a help argument spells: a literal, or a template whose only hole is `CLI`. */
+const helpString = (node, sf, cli) => {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text
+  }
+  if (
+    ts.isTemplateExpression(node) &&
+    node.templateSpans.every((s) => ts.isIdentifier(s.expression) && s.expression.text === "CLI")
+  ) {
+    return node.head.text + node.templateSpans.map((s) => cli + s.literal.text).join("")
+  }
+  const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1
+  throw new Error(
+    `${helpSource}:${line}: \`${node.getText(sf)}\` is not a string literal or a \`CLI\` template`
+  )
+}
+
+/**
+ * `helpText`'s calls on its HelpMenu, in order, read from the TypeScript AST:
+ * `{ method, args, agent }`, `agent` for the calls under `if (guide...)`. The
+ * title and its rule carry the version and are not the page's to show; the
+ * agent section's `value(guide)` is the rules card's path, known only at run
+ * time, and comes back as `{ method: "guide" }`.
+ */
+const helpCalls = () => {
+  const brand = ts.createSourceFile(
+    brandingSource,
+    fs.readFileSync(path.join(root, brandingSource), "utf8"),
+    ts.ScriptTarget.Latest,
+    true
+  )
+  let cli = null
+  for (const s of brand.statements) {
+    for (const d of ts.isVariableStatement(s) ? s.declarationList.declarations : []) {
+      if (
+        ts.isIdentifier(d.name) &&
+        d.name.text === "CLI" &&
+        d.initializer &&
+        ts.isStringLiteral(d.initializer)
+      ) {
+        cli = d.initializer.text
+      }
+    }
+  }
+  if (cli === null) {
+    throw new Error(`${brandingSource}: no \`const CLI = "<name>"\``)
+  }
+  const sf = ts.createSourceFile(
+    helpSource,
+    fs.readFileSync(path.join(root, helpSource), "utf8"),
+    ts.ScriptTarget.Latest,
+    true
+  )
+  const decl = sf.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((s) => s.declarationList.declarations)
+    .find((d) => ts.isIdentifier(d.name) && d.name.text === "helpText")
+  if (!decl?.initializer || !ts.isArrowFunction(decl.initializer) || !ts.isBlock(decl.initializer.body)) {
+    throw new Error(`${helpSource}: no \`const helpText = (...) => { ... }\``)
+  }
+  const calls = []
+  // How many arguments each rendered `menu` method takes.
+  const arity = { usage: 2, section: 1, row: 3, note: 1 }
+  const at = (node) => `${helpSource}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`
+  // Every statement is a declaration, the `return`, a `menu.*` call, or the
+  // agents-only `if (guide.length > 0) { ... }`; anything else could hide a
+  // row from the page, so it fails the run.
+  const visit = (statements, agent) => {
+    for (const s of statements) {
+      if (ts.isVariableStatement(s) || ts.isReturnStatement(s)) {
+        continue
+      }
+      if (
+        !agent &&
+        ts.isIfStatement(s) &&
+        s.expression.getText(sf) === "guide.length > 0" &&
+        ts.isBlock(s.thenStatement) &&
+        !s.elseStatement
+      ) {
+        visit(s.thenStatement.statements, true)
+        continue
+      }
+      const call = ts.isExpressionStatement(s) ? s.expression : null
+      if (
+        !call ||
+        !ts.isCallExpression(call) ||
+        !ts.isPropertyAccessExpression(call.expression) ||
+        call.expression.expression.getText(sf) !== "menu"
+      ) {
+        throw new Error(
+          `${at(s)}: helpText holds a statement this page cannot read; only \`menu.*\` calls are rendered`
+        )
+      }
+      const method = call.expression.name.text
+      if (method === "title" || method === "line") {
+        continue
+      }
+      if (method === "value" && call.arguments.length === 1 && call.arguments[0].getText(sf) === "guide") {
+        calls.push({ method: "guide", args: [], agent })
+        continue
+      }
+      if (!(method in arity)) {
+        throw new Error(`${at(s)}: helpText calls menu.${method}, which this page does not render`)
+      }
+      if (call.arguments.length !== arity[method]) {
+        throw new Error(
+          `${at(s)}: menu.${method} takes ${arity[method]} arguments here, not ${call.arguments.length}`
+        )
+      }
+      calls.push({ method, args: call.arguments.map((a) => helpString(a, sf, cli)), agent })
+    }
+  }
+  visit(decl.initializer.body.statements, false)
+  return { cli, calls }
+}
+
+/**
+ * docs/reference/command-line.md: `nish --help` as a page, one section per
+ * section of the help, in its order, read from `helpText` in src/cli-style.ts.
+ */
+const renderCommandLine = (link) => {
+  const { cli, calls } = helpCalls()
+  const page = commandLinePage
+  const to = linkFrom(link, page)
+  const guide = (hash) => to(`../../${guideCli}${hash}`)
+  const columns = (pairs) => {
+    const w = Math.max(...pairs.map(([a]) => a.length))
+    return pairs.map(([a, b]) => (b ? `${a.padEnd(w + 2)}${b}` : a)).join("\n")
+  }
+  const usage = calls.filter((c) => c.method === "usage").map((c) => [`${cli} ${c.args[0]}`, c.args[1]])
+  const out = [
+    header(`${helpSource} (\`helpText\`)`, "that function"),
+    "",
+    "# Command line",
+    "",
+    `Every flag \`${cli} --help\` lists, in the order and the groups it lists them. ` +
+      `[The CLI](${guide("")}) in the guide shows them at work; ` +
+      "the [diagnostic index](diagnostics.md) lists every code a check can report.",
+    "",
+    "## Usage",
+    "",
+    fenceOf("text", columns(usage)),
+  ]
+  let section = null
+  let rows = []
+  const flush = () => {
+    if (section === "Examples") {
+      out.push("", fenceOf("sh", columns(rows.map(([a, , d]) => [a, d ? `# ${d}` : ""]))))
+    } else {
+      for (const [flag, arg, desc] of rows) {
+        out.push(
+          "",
+          tag("scalar-field", `name="${attr(flag)}"${arg ? ` type="${attr(arg)}"` : ""}`, escapeProse(desc))
+        )
+      }
+    }
+    rows = []
+  }
+  for (const c of calls) {
+    if (c.method === "usage") {
+      continue
+    }
+    if (c.method === "section") {
+      flush()
+      section = c.args[0]
+      out.push("", `## ${section}`)
+      if (c.agent) {
+        out.push(
+          "",
+          tag(
+            "scalar-callout",
+            'type="info"',
+            `\`${cli} --help\` prints this section only when an agent runs it: [Colour, and when an agent runs ${cli}](${guide("#colour-and-when-an-agent-runs-nish")}) says how it tells.`
+          )
+        )
+      }
+    } else if (c.method === "row") {
+      rows.push(c.args)
+    } else if (c.method === "note" && section === "Exit codes") {
+      out.push(
+        "",
+        fenceOf("text", c.args[0]),
+        "",
+        `What each one means is the guide's [exit codes](${guide("#exit-codes")}) table.`
+      )
+    } else if (c.method === "note") {
+      out.push("", escapeProse(c.args[0]))
+    } else if (c.method === "guide") {
+      out.push("", `[\`docs/AI.md\`](${to("../AI.md")}), at the path the install put it.`)
+    } else {
+      throw new Error(`${helpSource}: helpText calls menu.${c.method}, which this page does not render`)
+    }
+  }
+  flush()
+  return `${out.join("\n")}\n`
+}
+
 // ---- Main -----------------------------------------------------------------
 
 const listFiles = (dir) => {
@@ -1190,15 +1743,92 @@ const listFiles = (dir) => {
     .sort()
 }
 
+const baselineHeader = `# Public declarations of std/ and runtime/nish.d.ts that lack their documentation.
+#
+# This list only shrinks. \`node scripts/gen-reference.mjs --check\` fails on a gap
+# it does not list and on a line that is no longer a gap: document the
+# declaration and delete its line. \`--update-baseline\` rewrites the file and
+# refuses to add a line; \`--grow-baseline\` adds them, only for a change to the rule.
+# docs/README.md -> "The library reference" states the rule.
+#
+#   module.Name.member     the declaration has no doc comment
+#   module.Name#param:p    parameter p has no @param
+#   module.Name#returns    a return type other than void or never has no @returns
+`
+
+const baselineText = (gaps) => `${baselineHeader}\n${gaps.map((g) => `${g}\n`).join("")}`
+
+const baselineRead = () => {
+  const full = path.join(root, baselineFile)
+  return fs.existsSync(full) ? fs.readFileSync(full, "utf8") : ""
+}
+
+/** The gaps the baseline lists. */
+const baselineLines = () =>
+  new Set(
+    baselineRead()
+      .split("\n")
+      .filter((l) => l.trim() && !l.startsWith("#"))
+  )
+
+/** The baseline's disagreements with the gaps found, one line each. */
+const baselineProblems = (gaps) => {
+  const text = baselineRead()
+  const listed = baselineLines()
+  const found = new Set(gaps)
+  const problems = []
+  for (const g of gaps) {
+    if (!listed.has(g)) {
+      problems.push(
+        `undocumented: ${g}: a public declaration needs a doc comment, a @param per parameter and a @returns for a non-void return`
+      )
+    }
+  }
+  for (const l of listed) {
+    if (!found.has(l)) {
+      problems.push(`no longer a gap: ${l}: delete its line from ${baselineFile}`)
+    }
+  }
+  if (problems.length === 0 && text !== baselineText(gaps)) {
+    problems.push(
+      `stale: ${baselineFile} (its header or order); run \`node scripts/gen-reference.mjs --update-baseline\``
+    )
+  }
+  return problems
+}
+
 const main = async () => {
   const args = process.argv.slice(2)
-  const unknown = args.filter((a) => a !== "--check")
-  if (unknown.length > 0) {
-    console.error(`gen-reference: unknown argument ${unknown.join(" ")}; the one flag is --check`)
+  const flags = ["--check", "--update-baseline", "--grow-baseline"]
+  const unknown = args.filter((a) => !flags.includes(a))
+  const check = args.includes("--check")
+  const grow = args.includes("--grow-baseline")
+  const updateBaseline = grow || args.includes("--update-baseline")
+  if (unknown.length > 0 || (check && updateBaseline)) {
+    console.error(
+      `gen-reference: ${unknown.length > 0 ? `unknown argument ${unknown.join(" ")}` : "--check writes nothing"}; the flags are --check, --update-baseline or --grow-baseline`
+    )
     process.exit(2)
   }
-  const check = args.includes("--check")
-  const project = await readProject()
+  const { project, gaps } = await readProject()
+  // The baseline only shrinks: --update-baseline drops lines and refuses to
+  // add one. --grow-baseline adds them, for a change to the rule itself, and
+  // names each so the reviewer reads them.
+  if (updateBaseline) {
+    const added = gaps.filter((g) => !baselineLines().has(g))
+    if (added.length > 0 && !grow) {
+      for (const g of added) {
+        console.error(`gen-reference: undocumented: ${g}: document it; ${baselineFile} only shrinks`)
+      }
+      console.error(
+        "gen-reference: --update-baseline adds no line; only a change to the rule itself may pass --grow-baseline, and its PR shows each added line"
+      )
+      process.exit(1)
+    }
+    for (const g of added) {
+      console.log(`gen-reference: grows ${baselineFile}: ${g}`)
+    }
+  }
   const pages = collectPages(project)
   const configBefore = fs.readFileSync(path.join(root, configFile), "utf8")
   const configAfter = configText(configBefore, pages)
@@ -1211,6 +1841,8 @@ const main = async () => {
   }
   want.set(`${outDir}/index.md`, renderIndex(pages))
   want.set(languagePage, renderLanguage(link))
+  want.set(diagnosticsPage, renderDiagnostics(link))
+  want.set(commandLinePage, renderCommandLine(link))
   const have = listFiles(outDir)
   const problems = []
   for (const [file, text] of [...want].sort(([a], [b]) => (a < b ? -1 : 1))) {
@@ -1240,17 +1872,23 @@ const main = async () => {
     }
     problems.push(`stale: ${configFile} (${drift.join(" and ") || "the layout of the /reference routes"})`)
   }
+  const gapProblems = updateBaseline ? [] : baselineProblems(gaps)
   if (check) {
+    for (const p of [...problems, ...gapProblems]) {
+      console.error(`gen-reference: ${p}`)
+    }
     if (problems.length > 0) {
-      for (const p of problems) {
-        console.error(`gen-reference: ${p}`)
-      }
-      console.error(
-        "gen-reference: the library reference is out of date; run `node scripts/gen-reference.mjs`"
-      )
+      console.error("gen-reference: the reference is out of date; run `node scripts/gen-reference.mjs`")
+    }
+    if (gapProblems.length > 0) {
+      console.error(`gen-reference: the documentation gaps disagree with ${baselineFile}, which only shrinks`)
+    }
+    if (problems.length > 0 || gapProblems.length > 0) {
       process.exit(1)
     }
-    console.log(`gen-reference: ${want.size} pages and their routes are up to date`)
+    console.log(
+      `gen-reference: ${want.size} pages and their routes are up to date; ${gaps.length} gaps, each listed`
+    )
     return
   }
   for (const file of have) {
@@ -1264,6 +1902,15 @@ const main = async () => {
   }
   fs.writeFileSync(path.join(root, configFile), configAfter)
   console.log(`gen-reference: wrote ${want.size} pages; ${problems.length} changed`)
+  if (updateBaseline) {
+    fs.writeFileSync(path.join(root, baselineFile), baselineText(gaps))
+    console.log(`gen-reference: wrote ${baselineFile}; ${gaps.length} gaps`)
+  } else if (gapProblems.length > 0) {
+    for (const p of gapProblems) {
+      console.error(`gen-reference: ${p}`)
+    }
+    process.exit(1)
+  }
 }
 
 await main()

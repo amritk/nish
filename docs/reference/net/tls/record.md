@@ -282,13 +282,13 @@ class TlsRecordProtection
 | --- | --- |
 | `new TlsRecordProtection()` | Makes a cleartext direction and every array it will fill, so that no install allocates. The record limit starts at `TLS_KEY_UPDATE_RECORDS`. |
 | `aes: AesKey \| null` | The AES key schedule for the two AES-GCM suites, the one of the installed key's size. |
-| `aes128: AesKey` |  |
-| `aes256: AesKey` |  |
+| `aes128: AesKey` | The expanded AES-128 key schedule `aes` points to under AES-128-GCM, 10 rounds; `clear` wipes it. |
+| `aes256: AesKey` | The expanded AES-256 key schedule `aes` points to under AES-256-GCM, 14 rounds; `clear` wipes it. |
 | `contentType: i32` | The real content type of the last record `open` answered. |
 | `iv: u8[]` | The 12-byte traffic IV (§7.3), zeroed while the direction is cleartext. |
 | `key: u8[]` | The AEAD key (§7.3): the suite's key length, zeroed while the direction is cleartext. |
 | `key16: u8[]` | The arrays `key` and `aes` point into: AES-128's and ChaCha20's or AES-256's. |
-| `key32: u8[]` |  |
+| `key32: u8[]` | The 32-byte key array `key` points into for ChaCha20-Poly1305 and AES-256-GCM; `clear` zeroes it. |
 | `next: u8[]` | Where `advance` derives the next traffic secret: HashLen bytes of it. |
 | `recordLimit: i64` | The sequence number at which a writer moves to the next key. Readable and writable, so a test can bring the key update forward; a reader ignores it. |
 | `sequence: i64` | The next record's sequence number (§5.3). |

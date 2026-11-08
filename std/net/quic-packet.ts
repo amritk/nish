@@ -250,10 +250,18 @@ export class QuicHeader {
    * windows out into the arrays above.
    */
   dcidStart: i32 = 0
+  /**
+   * The Destination Connection ID's length in bytes, 0 to 20; a short header's is the length the
+   * reader passed.
+   */
   dcidLength: i32 = 0
+  /** Where the Source Connection ID starts in the datagram; 0 for a short header. */
   scidStart: i32 = 0
+  /** The Source Connection ID's length in bytes, 0 to 20; 0 for a short header. */
   scidLength: i32 = 0
+  /** Where an Initial's or a Retry's token starts in the datagram; 0 for every other type. */
   tokenStart: i32 = 0
+  /** An Initial's or a Retry's token length in bytes; 0 for every other type. */
   tokenLength: i32 = 0
 
   /**
@@ -1335,13 +1343,21 @@ export const quicKeysWipe = (keys: QuicKeys): void => {
 export class QuicKeysSlot {
   /** The keys, pointing into the arrays below; `aead` is 0 until something is derived. */
   keys: QuicKeys
+  /** The 16-byte packet key an AES-128-GCM suite uses. */
   key16: u8[]
+  /** The 32-byte packet key an AES-256-GCM or ChaCha20-Poly1305 suite uses. */
   key32: u8[]
+  /** The 16-byte header-protection key an AES-128-GCM suite uses. */
   hp16: u8[]
+  /** The 32-byte header-protection key an AES-256-GCM or ChaCha20-Poly1305 suite uses. */
   hp32: u8[]
+  /** The AES-128 key schedule for packet protection, expanded from `key16`. */
   packet128: AesKey
+  /** The AES-256 key schedule for packet protection, expanded from `key32`. */
   packet256: AesKey
+  /** The AES-128 key schedule for header protection, expanded from `hp16`. */
   hp128: AesKey
+  /** The AES-256 key schedule for header protection, expanded from `hp32`. */
   hp256: AesKey
 
   /**

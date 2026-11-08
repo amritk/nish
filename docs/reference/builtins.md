@@ -800,6 +800,9 @@ function Ok<E>(): Result<void, E>
 #### Returns
 
 <scalar-field name="returns" type="Result&lt;void, E&gt;">
+
+a `Result<void, E>` on its success arm.
+
 </scalar-field>
 
 ## appendFileSync
@@ -4582,7 +4585,7 @@ interface CPtr
 
 | Member | |
 | --- | --- |
-| `readonly __nishForeignPointer: unique symbol` |  |
+| `readonly __nishForeignPointer: unique symbol` | The private brand that makes `CPtr` nominal. Not a field: nothing reads or writes it. |
 
 ## Console
 

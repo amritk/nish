@@ -860,7 +860,7 @@ function Checker.bindStructTemplateImport(this: Checker, index: i32, template: S
   escaping: index template
   calls: CheckContext.error CheckedProgram.addStructTemplateAs StringMap.has StringSet.has nish_panic_index nish_str_concat
   pointer this: size=24 writesThrough=false captured=false
-  pointer template: size=64 writesThrough=true captured=true passedTo=CheckedProgram.addStructTemplateAs#2
+  pointer template: size=72 writesThrough=true captured=true passedTo=CheckedProgram.addStructTemplateAs#2
   stackSites=0 stackLocals=0
   local -32:11 imp: ImportBinding (const)
   callee -30:7 CheckContext.error -> @CheckContext.error

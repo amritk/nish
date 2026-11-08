@@ -183,14 +183,14 @@ struct RequestSite (class) size=24 align=8
 function isCollectionTemplate(template: StructTemplateInfo): boolean -> @isCollectionTemplate [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.isCollections nish_str_eq
-  pointer template: size=64 writesThrough=false captured=false
+  pointer template: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 CheckedProgram.isCollections -> @CheckedProgram.isCollections
 function collectionArgumentRefusal(ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string -> @collectionArgumentRefusal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName instanceDisplayName isCollectionKey isInterfaceType nish_panic_index nish_str_concat
   pointer ctx: size=304 writesThrough=false captured=false passedTo=isCollectionKey#0 isInterfaceType#0
-  pointer template: size=64 writesThrough=false captured=false
+  pointer template: size=72 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -411,7 +411,7 @@ function expandingStructAncestor(ctx: CheckContext, from: StructInstantiation | 
   calls: StructExpansion.constructor growingArgument nish_alloc_struct
   pointer ctx: size=304 writesThrough=false captured=false passedTo=growingArgument#0
   pointer from: size=40 writesThrough=true captured=true
-  pointer template: size=64 writesThrough=false captured=false
+  pointer template: size=72 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=growingArgument#2
   stackSites=0 stackLocals=0
   local +0:7 at: StructInstantiation | null (let)
@@ -508,7 +508,7 @@ function nonTerminatingStructMessage(table: TypeTable, template: StructTemplateI
   escaping: index
   calls: TypeTable.typeName instanceDisplayName nish_panic_index nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=instanceDisplayName#0 instanceDisplayName#0 TypeTable.typeName#0
-  pointer template: size=64 writesThrough=false captured=false
+  pointer template: size=72 writesThrough=false captured=false
   pointer ancestor: size=40 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
@@ -540,7 +540,7 @@ function instantiateWritten(ctx: CheckContext, template: StructTemplateInfo, wri
   sharedWrite: +0:5
   calls: CheckContext.error instantiateStruct nish_array_grow nish_panic_index nish_str_concat resolveType
   pointer ctx: size=304 writesThrough=true captured=true passedTo=CheckContext.error#0 resolveType#1 instantiateStruct#0
-  pointer template: size=64 writesThrough=true captured=true passedTo=instantiateStruct#1
+  pointer template: size=72 writesThrough=true captured=true passedTo=instantiateStruct#1
   pointer written: size=40 writesThrough=false captured=false
   pointer at: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 instantiateStruct#3
   stackSites=0 stackLocals=0
@@ -645,7 +645,7 @@ function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args
   sharedWrite: via instantiateStructHere
   calls: RequestSite.constructor instantiateStructHere registerForeignLayouts
   pointer ctx: size=304 writesThrough=true captured=true passedTo=RequestSite.constructor#1 registerForeignLayouts#0
-  pointer template: size=64 writesThrough=true captured=true passedTo=instantiateStructHere#1
+  pointer template: size=72 writesThrough=true captured=true passedTo=instantiateStructHere#1
   pointer args: size=0 writesThrough=true captured=true passedTo=instantiateStructHere#2
   pointer at: size=40 writesThrough=true captured=true passedTo=instantiateStructHere#3
   stackSites=1 stackLocals=0
@@ -659,7 +659,7 @@ function instantiateStructHere(ctx: CheckContext, template: StructTemplateInfo, 
   sharedWrite: +0:7
   calls: CheckContext.error CheckedProgram.addStruct CheckedProgram.addStructInstance CheckedProgram.isCollections CheckedProgram.structInstance StringMap.constructor StringMap.set StructInfo.constructor StructInstantiation.constructor TypeTable.markSecret adoptArgumentLayouts checkStructConstraints collectInstanceMembers collectionArgumentRefusal expandingStructAncestor holdsAnyUnion instanceDisplayName instanceStructType instanceSymbol isCollectionTemplate isSecretPayload isSecretTemplate nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingStructMessage rejectForeignPointer rejectHandleArgument rejectStoredMask secretArgumentRefusal secretShapeMessage unionArgumentMessage
   pointer ctx: size=304 writesThrough=true captured=true passedTo=adoptArgumentLayouts#0 checkStructConstraints#0 expandingStructAncestor#0 collectInstanceMembers#0
-  pointer template: size=64 writesThrough=true captured=true passedTo=isCollectionTemplate#0 collectionArgumentRefusal#1 isSecretTemplate#0 checkStructConstraints#1 expandingStructAncestor#2 nonTerminatingStructMessage#1 StructInstantiation.constructor#1 isSecretTemplate#0
+  pointer template: size=72 writesThrough=true captured=true passedTo=isCollectionTemplate#0 collectionArgumentRefusal#1 isSecretTemplate#0 checkStructConstraints#1 expandingStructAncestor#2 nonTerminatingStructMessage#1 StructInstantiation.constructor#1 isSecretTemplate#0
   pointer args: size=0 writesThrough=true captured=true passedTo=collectionArgumentRefusal#2 secretArgumentRefusal#2 holdsAnyUnion#1 instanceDisplayName#2 adoptArgumentLayouts#1 checkStructConstraints#2 instanceSymbol#2 expandingStructAncestor#3 nonTerminatingStructMessage#3 instanceStructType#2 StructInstantiation.constructor#2
   pointer at: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 checkStructConstraints#3 rejectForeignPointer#3 rejectStoredMask#3 rejectHandleArgument#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer site: size=24 writesThrough=false captured=false passedTo=adoptArgumentLayouts#2
@@ -1610,7 +1610,7 @@ function resolveStructTemplateConstraints(template: StructTemplateInfo): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resolveConstraints
   calls: resolveConstraints structTypeParameterList
-  pointer template: size=64 writesThrough=false captured=false
+  pointer template: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 resolveConstraints -> @resolveConstraints
   callee +3:5 structTypeParameterList -> @structTypeParameterList
@@ -1664,7 +1664,7 @@ function checkStructConstraints(home: CheckContext, template: StructTemplateInfo
   sharedWrite: +0:5
   calls: DeferredConstraint.constructor checkConstraints nish_alloc_struct nish_array_grow resolveStructTemplateConstraints
   pointer home: size=304 writesThrough=false captured=false passedTo=checkConstraints#1
-  pointer template: size=64 writesThrough=true captured=true passedTo=resolveStructTemplateConstraints#0 DeferredConstraint.constructor#1
+  pointer template: size=72 writesThrough=true captured=true passedTo=resolveStructTemplateConstraints#0 DeferredConstraint.constructor#1
   pointer args: size=0 writesThrough=true captured=true passedTo=DeferredConstraint.constructor#2 checkConstraints#5
   pointer at: size=40 writesThrough=true captured=true passedTo=DeferredConstraint.constructor#3 checkConstraints#6
   pointer asker: size=304 writesThrough=true captured=false passedTo=checkConstraints#0

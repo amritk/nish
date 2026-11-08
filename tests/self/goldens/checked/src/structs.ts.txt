@@ -515,13 +515,15 @@ function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @col
 function markTemplateImplements(program: CheckedProgram, decl: Node): void -> @markTemplateImplements [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: CheckedProgram.struct nish_panic_index
-  pointer program: size=688 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  calls: CheckedProgram.struct CheckedProgram.structTemplate nish_panic_index
+  pointer program: size=688 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -4:14 iface: Node (const)
+  local -7:14 iface: Node (const)
   local -2:13 target: StructInfo | null (const)
   callee -2:22 CheckedProgram.struct -> @CheckedProgram.struct
+  local +4:11 template: StructTemplateInfo | null (const)
+  callee +4:22 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
 function checkImplements(ctx: CheckContext, cls: StructInfo): void -> @checkImplements [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

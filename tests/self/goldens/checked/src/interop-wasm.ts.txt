@@ -280,12 +280,27 @@ function wasmRangeIn(table: TypeTable, sig: FunctionSig, param: string, i: i32):
   callee +4:19 jsExportName -> @jsExportName
   callee +5:31 TypeTable.rangeLo -> @TypeTable.rangeLo
   callee +5:52 TypeTable.rangeHi -> @TypeTable.rangeHi
-function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i32): string -> @wasmOperand
+function wasmTypedIn(table: TypeTable, sig: FunctionSig, param: string, i: i32): string -> @wasmTypedIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  calls: TypeTable.resultByValue nish_panic_index nish_str_concat wasmRangeIn wasmResultPack wasmUnsignedIn
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 wasmResultPack#0 wasmRangeIn#0 wasmUnsignedIn#0
-  pointer sig: size=176 writesThrough=false captured=false passedTo=wasmRangeIn#1
+  calls: TypeTable.isHostHandle TypeTable.kindOf jsExportName nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 wasmType
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.isHostHandle#0 wasmType#0
+  pointer sig: size=176 writesThrough=false captured=false passedTo=jsExportName#0
+  stackSites=0 stackLocals=0
+  local +0:9 t: i32 (const)
+  local +1:9 kind: i32 (const)
+  callee +1:16 TypeTable.kindOf -> @TypeTable.kindOf
+  local +2:9 scalar: string (const)
+  callee +2:18 TypeTable.isHostHandle -> @TypeTable.isHostHandle
+  callee +2:98 wasmType -> @wasmType
+  local +6:9 what: string (const)
+  callee +6:19 jsExportName -> @jsExportName
+function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i32, guard: boolean): string -> @wasmOperand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: TypeTable.resultByValue nish_panic_index nish_str_concat wasmRangeIn wasmResultPack wasmTypedIn wasmUnsignedIn
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 wasmResultPack#0 wasmRangeIn#0 wasmTypedIn#0 wasmUnsignedIn#0
+  pointer sig: size=176 writesThrough=false captured=false passedTo=wasmRangeIn#1 wasmTypedIn#1
   pointer params: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:9 t: i32 (const)
@@ -293,8 +308,11 @@ function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i3
   callee +2:12 wasmResultPack -> @wasmResultPack
   local +4:9 checked: string (const)
   callee +4:19 wasmRangeIn -> @wasmRangeIn
-  local +8:9 mask: string (const)
-  callee +8:16 wasmUnsignedIn -> @wasmUnsignedIn
+  local +8:9 typed: string (const)
+  callee +8:25 wasmTypedIn -> @wasmTypedIn
+  local +9:9 param: string (const)
+  local +10:9 mask: string (const)
+  callee +10:16 wasmUnsignedIn -> @wasmUnsignedIn
 function wasmReturned(table: TypeTable, sig: FunctionSig, ret: TypedView | null, call: string): string -> @wasmReturned
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: call
@@ -618,7 +636,7 @@ function storageLayouts(compilation: Compilation): StorageLayout[] -> @storageLa
 function heapViews(): string[] -> @heapViews
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function heapViewsNew(): string[] -> @heapViewsNew
+function heapViewsNew(): string[] -> @heapViewsNew [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function layoutTypes(layouts: StorageLayout[]): string[] -> @layoutTypes [exported]

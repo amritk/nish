@@ -186,10 +186,13 @@ const tlsClientAdvanceHeld = (protection: TlsRecordProtection, held: Secret<u8[]
  * record the client writes carries after its content type (§5.4).
  */
 export class TlsRecordClient {
+  /** The handshake underneath: read it for the suite, ALPN, the server's certificates and the exporter secret. */
   tls: TlsClient
   /** @internal Read by `net/fetch.ts`. */
   reader: TlsRecordReader
+  /** Opens the server's records; its sequence number counts the records read at the current keys. */
   readProtection: TlsRecordProtection
+  /** Seals the client's records; its sequence number counts the records written at the current keys. */
   writeProtection: TlsRecordProtection
   /** Never installed: seals the compatibility record in the clear once the write side is protected. */
   private clearProtection: TlsRecordProtection
@@ -208,15 +211,21 @@ export class TlsRecordClient {
   private writeHash: i32 = 0
   /** The header of a post-handshake message the server has sent part of, and a KeyUpdate's body. */
   private postHandshake: u8[]
+  /** Where the connection stands: one of the `TLS_RECORD_STATE_*` constants. */
   state: i32 = 0
+  /** The alert this client sent, or 0. */
   alert: i32 = 0
+  /** The error alert the server sent, or -1 when it sent none. */
   peerAlert: i32 = -1
+  /** How many zero bytes each protected record the client writes carries after its content type (§5.4). */
   padding: i32 = 0
   /** The `TLS_LEVEL_*` the server's records are read at. */
   private readLevel: i32 = 0
   /** The `TLS_LEVEL_*` the client's records are written at. */
   private writeLevel: i32 = 0
+  /** The index in `output` of the first byte still to send; `consume(sent)` moves it on. */
   outputStart: i32 = 0
+  /** One past the last byte still to send in `output`; `outputStart` when nothing is pending. */
   outputEnd: i32 = 0
   /** @internal Read by `net/fetch.ts`. */
   plainStart: i32 = 0
@@ -231,7 +240,9 @@ export class TlsRecordClient {
   /** How many body bytes of a NewSessionTicket are still to come, handed to `TlsClient` as they arrive. */
   private ticketLeft: i32 = 0
   private idleRecords: i32 = 0
+  /** How many KeyUpdates from the server this client has taken, up to `TLS_RECORD_MAX_KEY_UPDATES`. */
   keyUpdates: i32 = 0
+  /** True once the server's `close_notify` has arrived. */
   peerClosed: boolean = false
   /** @internal Read by `net/fetch.ts`. */
   ended: boolean = false

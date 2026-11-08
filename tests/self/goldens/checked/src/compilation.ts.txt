@@ -1504,7 +1504,7 @@ function Compilation.reportTemplateClash(this: Compilation, unit: ModuleUnit, te
   calls: DiagnosticSink.report nish_panic_index nish_str_concat
   pointer this: size=208 writesThrough=false captured=false
   pointer unit: size=88 writesThrough=false captured=false
-  pointer template: size=64 writesThrough=false captured=false
+  pointer template: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: Node (const)
   local +1:11 kindWord: string (const)
