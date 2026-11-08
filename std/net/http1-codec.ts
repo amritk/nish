@@ -1126,7 +1126,23 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   const methodEnd: i32 = i
   i += 1
   const targetStart: i32 = i
-  while (i >= 0 && i < b && i < toI32(buf.length) && buf[i] > 32 && buf[i] < 127) {
+  // The target is visible ASCII, 33 to 126: sixteen bytes at a time, as far
+  // as the first that is not or the line's end, and a byte at a time for a
+  // tail shorter than a vector before `buf`'s end.
+  let found: boolean = false
+  while (!found && i >= 0 && i < b && i <= toI32(buf.length) - 16) {
+    const bad: i32 = bitmask(gt(subWrapping(loadU8x16(buf, i), splatU8x16(33)), splatU8x16(93)))
+    if (bad !== 0) {
+      i += toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+      found = true
+    } else {
+      i += 16
+    }
+  }
+  if (i > b) {
+    i = b
+  }
+  while (!found && i >= 0 && i < b && i < toI32(buf.length) && buf[i] > 32 && buf[i] < 127) {
     i += 1
   }
   if (i - targetStart > p.maxTarget) {

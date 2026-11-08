@@ -2496,18 +2496,20 @@ function http1MethodOverrun(p: Http1Parser): boolean -> @nish.http1MethodOverrun
 function http1RequestLine(p: Http1Parser): i32 -> @nish.http1RequestLine
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.http1Fail nish.http1HeadAppend nish.http1IsTokenByte nish.http1Text nish_panic_index nish_panic_overflow
+  calls: llvm.ctlz.i32 nish.http1Fail nish.http1HeadAppend nish.http1IsTokenByte nish.http1Text nish_panic_index nish_panic_overflow
   pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1HeadAppend#0
   stackSites=0 stackLocals=0
-  local -44:9 buf: u8[] (const)
-  local -43:9 n: i32 (const)
-  local -42:9 a: i32 (const)
-  local -41:9 b: i32 (const)
-  local -40:7 i: i32 (let)
-  callee -39:54 http1IsTokenByte -> @nish.http1IsTokenByte
-  callee -35:12 http1Fail -> @nish.http1Fail
-  local -33:9 methodEnd: i32 (const)
-  local -31:9 targetStart: i32 (const)
+  local -60:9 buf: u8[] (const)
+  local -59:9 n: i32 (const)
+  local -58:9 a: i32 (const)
+  local -57:9 b: i32 (const)
+  local -56:7 i: i32 (let)
+  callee -55:54 http1IsTokenByte -> @nish.http1IsTokenByte
+  callee -51:12 http1Fail -> @nish.http1Fail
+  local -49:9 methodEnd: i32 (const)
+  local -47:9 targetStart: i32 (const)
+  local -43:7 found: boolean (let)
+  local -41:11 bad: i32 (const)
   callee -26:12 http1Fail -> @nish.http1Fail
   callee -23:12 http1Fail -> @nish.http1Fail
   local -21:9 targetEnd: i32 (const)

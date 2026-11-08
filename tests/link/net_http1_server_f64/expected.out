@@ -46,6 +46,9 @@ PASS  a bad chunk size once the response has started: no second response, and th
 PASS  refused with 400: Content-Length and Transfer-Encoding together (RFC 9112 §6.1)
 PASS  refused with 400: two Content-Length fields that disagree
 PASS  refused with 400: an obs-fold
+PASS  refused with 400: a non-ASCII byte 17 bytes into the target
+PASS  refused with 400: a DEL 16 bytes into the target
+PASS  refused with 400: a tab 21 bytes into the target
 PASS  refused with 414: a target past maxTarget
 PASS  refused with 413: a Content-Length past maxBody
 PASS  refused with 501: a transfer coding other than chunked
@@ -239,4 +242,4 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 241 passed, 0 failed, 0 skipped
+http1 server: 244 passed, 0 failed, 0 skipped
