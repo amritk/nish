@@ -22,17 +22,20 @@
  * bytes are its IEEE 754 bits (`f64ToBits`). There is no `f32`: the language
  * has no bit cast for one.
  *
- * **Each access is an ordinary index**, so an offset whose bytes do not all lie in
- * the array panics `index`, naming the first byte that does not. A guard in
- * the caller does not yet remove these checks: in a loop guarded by
- * `off + 3 < b.length`, the checker proves an index it can see but not one
- * inside a call, and after `getU32LE` inlines, LLVM keeps the checks on
- * `off + 1` to `off + 3`, because the guard compares the length truncated to
- * `i32` and the checks compare it unsigned at 64 bits. A loop that needs them
- * gone indexes the bytes itself. `getU64BE`, and with it `getI64BE` and
- * `getF64BE`, is the exception: it checks the whole range once and reads the
- * eight bytes unchecked, which lowers to one load and a byte swap. An offset
- * outside the range still goes byte by byte, so it panics as the others do.
+ * **Each access is an ordinary index**, so an offset whose bytes do not all lie
+ * in the array panics `index`, naming the first byte that does not.
+ *
+ *  A guard in the caller does not yet remove these checks: in a loop guarded by
+ *  `off + 3 < b.length`, the checker proves an index it can see but not one
+ *  inside a call, and after `getU32LE` inlines, LLVM keeps the checks on `off +
+ *  1` to `off + 3`, because the guard compares the length truncated to `i32` and
+ *  the checks compare it unsigned at 64 bits. A loop that needs them gone
+ *  indexes the bytes itself.
+ *
+ *  `getU64BE`, and with it `getI64BE` and `getF64BE`, is the exception: it
+ *  checks the whole range once and reads the eight bytes unchecked, which lowers
+ *  to one load and a byte swap. An offset outside the range still goes byte by
+ *  byte, so it panics as the others do.
  *
  * **The in-range answers are byte for byte those of the copies `std/` keeps for
  * itself**: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
@@ -456,14 +459,15 @@ export const skipDigits = (b: u8[], from: i32, to: i32): i32 => {
 /**
  * `skipBlank` for the bytes a JSON string holds as themselves: printable ASCII
  * other than `"` and `\`, and every well-formed UTF-8 sequence (RFC 3629 §4)
- * that ends before `to`. The run stops at the first quote, backslash or
- * control byte, and at the lead byte of a sequence that is malformed — an
- * overlong form, a surrogate, a code point past U+10FFFF, a stray continuation
- * byte — or cut short by `to`. So a whole JSON string body with no escape is
- * one call, and where it stops is the byte a decoder has to look at. Natively
- * the scan is `nish_bytes_skip_json_text`: blocks of ASCII 16 or 32 bytes at a
- * time, each multi-byte sequence a byte at a time. Variable-time, as
- * `skipBlank` is.
+ * that ends before `to`. The run stops at the first quote, backslash or control
+ * byte, and at the lead byte of a sequence that is malformed — an overlong
+ * form, a surrogate, a code point past U+10FFFF, a stray continuation byte — or
+ * cut short by `to`.
+ *
+ * So a whole JSON string body with no escape is one call, and where it stops is
+ * the byte a decoder has to look at. Natively the scan is
+ * `nish_bytes_skip_json_text`: blocks of ASCII 16 or 32 bytes at a time, each
+ * multi-byte sequence a byte at a time. Variable-time, as `skipBlank` is.
  *
  * @param b The bytes scanned; they are not changed.
  * @param from Where the scan starts, clamped into `[0, to]`.

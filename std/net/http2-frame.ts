@@ -27,22 +27,23 @@
  *       const end: i32 = http2WriteData(out, at, streamId, body, 0, n, H2_FLAG_END_STREAM, -1);
  *     };
  *
- * **What a parse refuses**, as the error code RFC 9113 names, which closes
- * the connection: a frame longer than the receiver's SETTINGS_MAX_FRAME_SIZE
- * (FRAME_SIZE_ERROR, §4.2); DATA, HEADERS, PRIORITY, RST_STREAM,
- * PUSH_PROMISE or CONTINUATION on stream 0, and SETTINGS, PING or GOAWAY on
- * any other (PROTOCOL_ERROR); a frame too short for its fixed fields, a
- * RST_STREAM or WINDOW_UPDATE that is not four bytes, a PING that is not
- * eight, a SETTINGS whose length is not a multiple of six or an ACK with a
- * payload, and a GOAWAY under eight (FRAME_SIZE_ERROR); padding as long as
- * what it pads or longer (PROTOCOL_ERROR, §6.1); and a WINDOW_UPDATE of zero
- * on the connection (PROTOCOL_ERROR, §6.9). Two refusals only reset the
- * stream, and come back in `streamError` with a parse that answers 0: a
- * PRIORITY of the wrong length (FRAME_SIZE_ERROR, §6.3), and a WINDOW_UPDATE
- * of zero on a stream (PROTOCOL_ERROR). A HEADERS or PRIORITY that makes a
- * stream depend on itself is the same (PROTOCOL_ERROR, §5.3.1). A frame of a
- * type this module does not know is read and answers 0: §4.1 says it is
- * ignored, and that is the connection's to do.
+ * **What a parse refuses**, as the error code RFC 9113 names, which closes the
+ * connection: a frame longer than the receiver's SETTINGS_MAX_FRAME_SIZE
+ * (FRAME_SIZE_ERROR, §4.2); DATA, HEADERS, PRIORITY, RST_STREAM, PUSH_PROMISE
+ * or CONTINUATION on stream 0, and SETTINGS, PING or GOAWAY on any other
+ * (PROTOCOL_ERROR); a frame too short for its fixed fields, a RST_STREAM or
+ * WINDOW_UPDATE that is not four bytes, a PING that is not eight, a SETTINGS
+ * whose length is not a multiple of six or an ACK with a payload, and a GOAWAY
+ * under eight (FRAME_SIZE_ERROR); padding as long as what it pads or longer
+ * (PROTOCOL_ERROR, §6.1); and a WINDOW_UPDATE of zero on the connection
+ * (PROTOCOL_ERROR, §6.9).
+ *
+ *  Two refusals only reset the stream, and come back in `streamError` with a
+ *  parse that answers 0: a PRIORITY of the wrong length (FRAME_SIZE_ERROR,
+ *  §6.3), and a WINDOW_UPDATE of zero on a stream (PROTOCOL_ERROR). A HEADERS or
+ *  PRIORITY that makes a stream depend on itself is the same (PROTOCOL_ERROR,
+ *  §5.3.1). A frame of a type this module does not know is read and answers 0:
+ *  §4.1 says it is ignored, and that is the connection's to do.
  *
  * SETTINGS values are checked one at a time by `http2SettingError`, because
  * which value a refusal names is the reader's business (§6.5.2): an

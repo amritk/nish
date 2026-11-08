@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 820
+export const RULE_COUNT: i32 = 824
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -159,6 +159,8 @@ const diagnosticRules = (): string[] => [
   "NL2326",
   "`: a captured value is the task's argument, and a `Mutex` reaches a task as an argument or as a field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer",
   "NL2510",
+  ", which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region",
+  "NL2673",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
   "NL2323",
   "` cannot hold a `Secret`: an element, a `Result` payload or a type argument outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter",
@@ -311,8 +313,12 @@ const diagnosticRules = (): string[] => [
   "NL2503",
   "` hands it — returns it, stores it or passes it where it is kept — and the key would outlive the `Secret` unwiped; return a value computed from it instead",
   "NL2449",
+  "` is a wait on the executor, written only where it is awaited: `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`, inside an `async` function",
+  "NL2671",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2441",
+  "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native",
+  "NL4017",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
@@ -545,6 +551,8 @@ const diagnosticRules = (): string[] => [
   "NL2165",
   "; a `declare function` binds the C symbol of its name in every package, so rename the defined function",
   "NL3040",
+  "` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on",
+  "NL2672",
   "`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear",
   "NL2359",
   ", and a handle starts as `0`, the handle that names nothing: every other one is given out by the page",

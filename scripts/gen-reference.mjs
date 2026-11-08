@@ -55,6 +55,8 @@ const languageRoute = "/reference/language"
 const languageTitle = "Language specification"
 const languageSource = "docs/LANGUAGE.md"
 const languagePage = `${outDir}/language.md`
+/** One page per `##` section of the spec, beside its index. */
+const languageDir = `${outDir}/language`
 const width = 110
 const baselineFile = "scripts/undocumented.txt"
 
@@ -259,9 +261,24 @@ const outsideCode = (s, f) =>
     })
     .join("")
 
-/** A code block's fence language: `ts` when TypeScript parses it, `text` for a diagram or a table. */
+/** The title of a code block that reads as TypeScript: Scalar shows it above the block. */
+const EXAMPLE = "example.ts"
+
+/**
+ * A code block's fence info: `ts` with the title `example.ts` when TypeScript
+ * parses it, `text` and no title for a diagram or a table.
+ */
 const fenceLang = (code) =>
-  ts.transpileModule(code, { reportDiagnostics: true }).diagnostics.length === 0 ? "ts" : "text"
+  ts.transpileModule(code, { reportDiagnostics: true }).diagnostics.length === 0 ? `ts ${EXAMPLE}` : "text"
+
+/**
+ * Each titled block that starts a line, in a code group of one: Scalar shows a
+ * block's title only as a code group's tab.
+ */
+const codeGroups = (md) =>
+  md.replace(new RegExp(`^\`\`\`ts ${EXAMPLE.replace(".", "\\.")}\n[\\s\\S]*?\n\`\`\`$`, "gm"), (block) =>
+    tag("scalar-code-group", "", block)
+  )
 
 const fence = (lines) => `\`\`\`${fenceLang(lines.join("\n"))}\n${lines.join("\n")}\n\`\`\``
 
@@ -336,6 +353,7 @@ const headings = (text) => {
       const level = m[1].length
       out.push({
         index,
+        level,
         github: number(slugOfHeading(m[2], false), 0),
         site: level <= 4 ? number(slugOfHeading(m[2], true), 1) : null,
       })
@@ -376,10 +394,13 @@ const firstSentence = (para) => {
   return flat
 }
 
-/** Markdown on one line, for a table cell: a code block's lines become code spans. */
+/**
+ * Markdown on one line, for a table cell: a code block's lines become code
+ * spans, and each list item starts a line of its own.
+ */
 const cell = (md) =>
   md
-    .replace(/```\w*\n([\s\S]*?)```/g, (_, body) =>
+    .replace(/```[^\n]*\n([\s\S]*?)```/g, (_, body) =>
       body
         .trim()
         .split("\n")
@@ -387,9 +408,34 @@ const cell = (md) =>
         .join("<br>")
     )
     .split(/\n\s*\n/)
-    .map((para) => para.replace(/\s*\n\s*/g, " ").trim())
+    .map((para) =>
+      para
+        .replace(/\s*\n\s*((?:[-*+]|\d+[.)]) )/g, "<br>$1")
+        .replace(/\s*\n\s*/g, " ")
+        .trim()
+    )
     .join("<br><br>")
     .replace(/\|/g, "\\|")
+
+/** The one icon of each kind of entry a page shows as a card. */
+const ICONS = {
+  function: "phosphor/regular/function",
+  class: "phosphor/regular/cube",
+  interface: "phosphor/regular/cube",
+  object: "phosphor/regular/cube",
+  type: "phosphor/regular/shapes",
+  constant: "phosphor/regular/hash",
+}
+
+/**
+ * A card's title, with a zero-width space where a long identifier may break
+ * (`hkdfExpand`, `TLS_MAX`): a card title does not wrap inside a word, and an
+ * unbroken name is wider than a phone's screen.
+ */
+const cardTitle = (s) => s.replace(/([a-z0-9])(?=[A-Z])|_(?=\w)/g, (m) => `${m}\u200b`)
+
+/** Cards in a grid, or the one card alone: a grid of one is a lone card stretched oddly. */
+const grid = (cards) => (cards.length === 1 ? cards[0] : tag("scalar-grid", 'cols="2"', cards.join("\n\n")))
 
 /** Wrap `body` in a Scalar block tag, with the blank lines its Markdown body needs. */
 const tag = (name, attrs, body) => {
@@ -427,8 +473,15 @@ const makeLinker = (routed) => (target, source, page) => {
   if (rel.startsWith("..") || !fs.existsSync(path.join(root, rel))) {
     return null
   }
-  const hash = frag === undefined ? "" : `#${frag}`
-  const to = rel === languageSource ? languagePage : rel
+  let hash = frag === undefined ? "" : `#${frag}`
+  let to = rel
+  if (rel === languageSource) {
+    const at = languageTarget(frag)
+    if (at === null) {
+      return null
+    }
+    ;({ page: to, hash } = at)
+  }
   if (routed.has(to)) {
     return `${path.posix.relative(path.posix.dirname(page), to)}${hash}`
   }
@@ -616,18 +669,49 @@ const moduleProse = (comment, prose) => {
     }
     // Always `ts`: an example may elide with `…` and still be TypeScript to a reader.
     const lines = dedent(blocks.splice(usageAt, n).flatMap((b, i) => (i ? ["", ...b] : b)))
-    usage = `\`\`\`ts\n${lines.join("\n")}\n\`\`\``
+    usage = `\`\`\`ts ${EXAMPLE}\n${lines.join("\n")}\n\`\`\``
   }
-  // Each prose block with the lists and code blocks that follow it.
+  // A unit is a detail when it opens with bold: a title (`**Title.** rest`,
+  // `**Title**: rest`), or after the first unit, any bold phrase.
+  const boldTitle = (para) => /^\*\*(.+?)\*\*/.exec(para)
+  const isTitled = (para, bold) => /[.:]$/.test(bold[1]) || /^[.:]/.test(para.slice(bold[0].length))
+  const opensDetail = (para, i) => {
+    const bold = boldTitle(para)
+    return bold !== null && (i > 0 || isTitled(para, bold))
+  }
+  const warns = (title) => /\b(refus|limit|caps?\b)/i.test(title.replace(/`/g, ""))
+  // Where a sentence opening with a warning's bold phrase starts, outside code; -1 for none.
+  const warningAt = (para) => {
+    for (const m of para.matchAll(/(^|[.!?]\s+)\*\*([^*]+)\*\*/g)) {
+      const at = m.index + m[1].length
+      if (warns(m[2]) && (para.slice(0, at).match(/`/g) ?? []).length % 2 === 0) {
+        return at
+      }
+    }
+    return -1
+  }
+  // Each prose block with the lists and code blocks that follow it, and the
+  // paragraphs indented by one space: those carry on the paragraph before them,
+  // so a long detail or warning broken into paragraphs stays under its title.
   const units = []
+  const carriesOn = (b) => indentOf(b[0]) === 1
+  // Code blocks with only a blank line between them are one example, as the usage is.
+  const merged = []
   for (const b of blocks) {
+    if (isCode(b) && merged.length > 0 && isCode(merged.at(-1))) {
+      merged.at(-1).push("", ...b)
+    } else {
+      merged.push([...b])
+    }
+  }
+  for (const b of merged) {
     let body = b.map((l) => l.trim()).join("\n")
     if (isCode(b)) {
       body = code(b)
     } else if (isList(b)) {
       body = dedent(b).join("\n")
     }
-    if (units.length > 0 && (isCode(b) || isList(b))) {
+    if (units.length > 0 && (isCode(b) || isList(b) || carriesOn(b))) {
       units.at(-1).push(body)
     } else {
       units.push([body])
@@ -642,28 +726,19 @@ const moduleProse = (comment, prose) => {
     if (unit.length === 0) {
       return []
     }
-    const bold = /^\*\*(.+?)\*\*/.exec(unit[0])
-    const titled = bold !== null && (/[.:]$/.test(bold[1]) || /^[.:]/.test(unit[0].slice(bold[0].length)))
-    if (!titled && (i === 0 || !bold)) {
-      const text = unit.map(prose).join("\n\n")
-      return [i === 0 ? tag("scalar-callout", 'type="info"', text) : text]
+    const bold = boldTitle(unit[0])
+    if (!opensDetail(unit[0], i)) {
+      const [first, ...rest] = unit.map(prose)
+      // The summary callout is one paragraph; what follows it is the page's body.
+      return i === 0
+        ? [tag("scalar-callout", 'type="info"', first), ...rest]
+        : [[first, ...rest].join("\n\n")]
     }
     // The title keeps its code spans as written: an attribute cannot hold Markdown.
     const title = bold[1].replace(/[.:]$/, "")
-    const head = titled ? unit[0].slice(bold[0].length).replace(/^[.:]/, "").trim() : unit[0]
+    const head = isTitled(unit[0], bold) ? unit[0].slice(bold[0].length).replace(/^[.:]/, "").trim() : unit[0]
     const body = [head, ...unit.slice(1)].map(prose).join("\n\n").trim()
     return [tag("scalar-detail", `title="${attr(title)}"`, body)]
-  }
-  const warns = (title) => /\b(refus|limit|caps?\b)/i.test(title.replace(/`/g, ""))
-  // Where a sentence opening with a warning's bold phrase starts, outside code; -1 for none.
-  const warningAt = (para) => {
-    for (const m of para.matchAll(/(^|[.!?]\s+)\*\*([^*]+)\*\*/g)) {
-      const at = m.index + m[1].length
-      if (warns(m[2]) && (para.slice(0, at).match(/`/g) ?? []).length % 2 === 0) {
-        return at
-      }
-    }
-    return -1
   }
   const out = []
   for (const [i, unit] of units.entries()) {
@@ -734,7 +809,7 @@ const memberRow = (m, owner, ctx) => {
  * return. A builtin module's undocumented re-declaration takes the global's.
  */
 const renderFunction = (f, ctx, fallback) => {
-  const out = [`## ${f.name}`]
+  const out = [`### ${f.name}`]
   const sigs = f.signatures ?? []
   const doc = (sig, i) => {
     if (sig.comment) {
@@ -752,7 +827,6 @@ const renderFunction = (f, ctx, fallback) => {
     }
     out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``)
     if (sig.parameters?.length) {
-      out.push("#### Parameters")
       for (const [j, p] of sig.parameters.entries()) {
         const req = p.flags?.isOptional || p.defaultValue !== undefined ? "" : " required"
         const pc = c.parameters?.[j]?.comment ?? p.comment
@@ -767,7 +841,6 @@ const renderFunction = (f, ctx, fallback) => {
     }
     const ret = typeText(sig.type)
     if (ret !== "void") {
-      out.push("#### Returns")
       out.push(
         tag("scalar-field", `name="returns" type="${attr(ret)}"`, blockTag(c.comment, "@returns", ctx))
       )
@@ -777,7 +850,7 @@ const renderFunction = (f, ctx, fallback) => {
 }
 
 const renderType = (t, ctx) => {
-  const out = [`## ${t.name}`]
+  const out = [`### ${t.name}`]
   const desc = summary(t.comment, ctx)
   if (desc) {
     out.push(desc)
@@ -787,7 +860,7 @@ const renderType = (t, ctx) => {
 }
 
 const renderClass = (c, ctx) => {
-  const out = [`## ${c.name}`]
+  const out = [`### ${c.name}`]
   const desc = summary(c.comment, ctx)
   if (desc) {
     out.push(desc)
@@ -802,7 +875,7 @@ const renderClass = (c, ctx) => {
 }
 
 const renderObject = (o, ctx) => {
-  const out = [`## ${o.name}`]
+  const out = [`### ${o.name}`]
   const desc = summary(o.comment, ctx)
   if (desc) {
     out.push(desc)
@@ -845,9 +918,9 @@ const renderConstants = (heading, vars, ctx) => {
     const value = v.defaultValue === undefined || v.defaultValue === "..." ? null : valueTitle(v.defaultValue)
     const desc = summary(v.comment, ctx)
     const body = [`\`${v.name}: ${typeText(v.type)}\``, desc].filter(Boolean).join("\n\n")
-    return tag("scalar-card", `title="${attr(value ?? v.name)}" icon="phosphor/regular/hash"`, body)
+    return tag("scalar-card", `title="${attr(cardTitle(value ?? v.name))}" icon="${ICONS.constant}"`, body)
   })
-  return `## ${heading}\n\n${tag("scalar-grid", 'cols="2"', cards.join("\n\n"))}`
+  return `## ${heading}\n\n${grid(cards)}`
 }
 
 /**
@@ -869,9 +942,9 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
   const objects = of(Kind.variable).filter((v) => v.type?.type === "reflection")
   const vars = of(Kind.variable).filter((v) => v.type?.type !== "reflection")
   const { lead, usage, body } = moduleProse(comment, prose)
-  // A module's name is code, and Scalar cuts a heading at a bare colon
-  // (`# nish:fs` renders as "nish"); a code span keeps it whole.
-  const out = [header(source), spec === null ? `# ${title}` : `# \`${title}\``]
+  // Scalar cuts a heading at a bare colon (`# nish:fs` renders as "nish");
+  // an escaped one is a colon on both sites.
+  const out = [header(source), `# ${title.replace(/:/g, "\\:")}`]
   if (lead || intro) {
     out.push(lead || intro)
   }
@@ -891,31 +964,32 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
       : m.comment
     const first = firstSentence(summary(doc, ctx).split(/\n\s*\n/)[0] ?? "")
     // The anchor is filled in once the page's headings are known (see below).
-    return tag(
-      "scalar-card",
-      `title="${attr(m.name)}" icon="phosphor/regular/${icon}" href="#${CARD}"`,
-      first
-    )
+    return tag("scalar-card", `title="${attr(cardTitle(m.name))}" icon="${icon}" href="#${CARD}"`, first)
   }
-  const sections = [...funcs, ...classes, ...objects]
-  const cards = sections.map((m) => cardOf(m, m.kind === Kind.func ? "function" : "cube"))
-  if (cards.length > 0) {
-    out.push(tag("scalar-grid", 'cols="2"', cards.join("\n\n")))
+  const interfaces = classes.filter((c) => c.kind === Kind.iface)
+  const klasses = classes.filter((c) => c.kind === Kind.klass)
+  const sections = [...funcs, ...klasses, ...interfaces, ...objects]
+  const kindOf = (m) =>
+    ({ [Kind.func]: "function", [Kind.klass]: "class", [Kind.iface]: "interface" })[m.kind] ?? "object"
+  // A page of one member has its section right below; a card would only repeat it.
+  if (sections.length > 1) {
+    out.push(grid(sections.map((m) => cardOf(m, ICONS[kindOf(m)]))))
   }
   if (body) {
     out.push(body)
   }
-  for (const f of funcs) {
-    out.push(renderFunction(f, ctx, fallback?.get(f.name)))
-  }
-  for (const c of classes) {
-    out.push(renderClass(c, ctx))
-  }
-  for (const o of objects) {
-    out.push(renderObject(o, ctx))
-  }
-  for (const t of types) {
-    out.push(renderType(t, ctx))
+  // One H2 per kind of member, one H3 per member under it.
+  const byKind = [
+    ["Functions", funcs, (f) => renderFunction(f, ctx, fallback?.get(f.name))],
+    ["Classes", klasses, (c) => renderClass(c, ctx)],
+    ["Interfaces", interfaces, (c) => renderClass(c, ctx)],
+    ["Objects", objects, (o) => renderObject(o, ctx)],
+    ["Types", types, (t) => renderType(t, ctx)],
+  ]
+  for (const [heading, list, render] of byKind) {
+    if (list.length > 0) {
+      out.push(`## ${heading}`, ...list.map(render))
+    }
   }
   const limits = vars.filter(isLimit)
   const constants = vars.filter((v) => !isLimit(v))
@@ -926,14 +1000,14 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
     out.push(renderConstants("Constants", constants, ctx))
   }
   const draft = `${out.join("\n\n")}\n`
-  // Each card links to its member's own `## name` heading, the first one
+  // Each card links to its member's own `### name` heading, the first one
   // after the previous card's: `sha256` and `Sha256` share a slug, and the
   // second is numbered (`#sha256-1`), the same on GitHub and the docs site.
   const lines = draft.split("\n")
   const hs = headings(draft)
   let at = 0
   const anchors = sections.map((m) => {
-    while (at < hs.length && lines[hs[at].index] !== `## ${m.name}`) {
+    while (at < hs.length && lines[hs[at].index] !== `### ${m.name}`) {
       at++
     }
     const h = hs[at++]
@@ -943,27 +1017,60 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
     return h.github
   })
   let n = 0
-  const text = draft.replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`)
+  const text = codeGroups(draft.replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`))
   return { text, lead: lead || intro }
 }
 
-/** The overview page: every module, linked, with its lead sentence. */
+/** The overview page: a card per reference and per area, then every module, linked, with its lead sentence. */
 const renderIndex = (pages) => {
-  const row = (p) =>
-    `| [${p.spec ? `\`${p.title}\`` : p.title}](${path.posix.relative(outDir, p.page)}) | ${cell(p.first)} |`
+  const rel = (file) => path.posix.relative(outDir, file)
+  const row = (p) => `| [${p.spec ? `\`${p.title}\`` : p.title}](${rel(p.page)}) | ${cell(p.first)} |`
+  const table = (ps) => ["| Module | |", "| --- | --- |", ...ps.map(row)].join("\n")
+  const card = (title, icon, href, body) =>
+    tag("scalar-card", `title="${title}" icon="phosphor/regular/${icon}" href="${href}"`, body)
   const builtin = pages.filter((p) => !p.spec || p.spec.startsWith("nish:"))
   const std = pages.filter((p) => p.spec?.startsWith("nish/"))
+  const byArea = AREAS.map((area) => ({ area, ps: std.filter((p) => areaOf(p.spec) === area) }))
+  const cards = [
+    card(
+      "Language specification",
+      "book-open",
+      rel(languagePage),
+      "The normative rules: what the compiler accepts and what it means."
+    ),
+    card(
+      "Builtins",
+      "cube",
+      rel(`${outDir}/builtins.md`),
+      `The globals and the ${builtin.length - 1} \`nish:\` modules that come with the compiler.`
+    ),
+    ...byArea.map(({ area, ps }) =>
+      card(
+        area.title,
+        area.icon,
+        `#${slugOfHeading(area.title, false)}`,
+        `${area.about}: ${ps.length} module${ps.length === 1 ? "" : "s"}.`
+      )
+    ),
+    card("Command line", "terminal", rel(commandLinePage), "Every command, flag and exit code of `nish`."),
+    card(
+      "Diagnostics",
+      "warning-circle",
+      rel(diagnosticsPage),
+      "Every diagnostic code, what it means and a program that provokes it."
+    ),
+  ]
   return `${[
     header("std/**/*.ts and runtime/nish.d.ts"),
     "# Library reference",
     "Every module a Nish program can import, one page each, generated from the doc comments of its source. " +
-      "The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish. " +
-      `The compiler itself has its own reference: its [command line](${path.posix.relative(outDir, commandLinePage)}) ` +
-      `and its [diagnostics](${path.posix.relative(outDir, diagnosticsPage)}).`,
+      "The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish and grouped here by area. " +
+      "The language specification and the compiler's own command line and diagnostics are references too.",
+    tag("scalar-grid", 'cols="2"', cards.join("\n\n")),
     "## Builtins",
-    ["| Module | |", "| --- | --- |", ...builtin.map(row)].join("\n"),
+    table(builtin),
     "## Standard library",
-    ["| Module | |", "| --- | --- |", ...std.map(row)].join("\n"),
+    ...byArea.flatMap(({ area, ps }) => [`### ${area.title}`, table(ps)]),
   ].join("\n\n")}\n`
 }
 
@@ -1033,7 +1140,7 @@ const collectPages = (project) => {
       intro:
         `The \`${m.name}\` builtin module: the globals of the same names, importable. ` +
         "Its members are declared in `runtime/nish.d.ts`; " +
-        "[the language reference](language.md#builtin-modules-nish) is the normative list.",
+        `[the language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${name}.md`)}) is the normative list.`,
       fallback: globals,
     })
   }
@@ -1057,7 +1164,7 @@ const collectPages = (project) => {
       note: builtin
         ? `The \`${spec}\` builtin module, whose source is \`${source}\`. ` +
           `A program imports it as \`${spec}\`; the compiler refuses \`nish/${rel}\`. ` +
-          "[The language reference](language.md#builtin-modules-nish) is the normative list."
+          `[The language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${rel}.md`)}) is the normative list.`
         : "",
     })
   }
@@ -1066,54 +1173,153 @@ const collectPages = (project) => {
 
 // ---- Routes ---------------------------------------------------------------
 
+/** The /reference/language group: the spec's index, then its sections in order. */
+const languageRoutes = () => {
+  const [index, ...sections] = languageParts().parts
+  const children = { "/": { type: "page", title: "Overview", filepath: index.page } }
+  for (const sec of sections) {
+    children[`/${sec.slug}`] = { type: "page", title: sec.title.replace(/`/g, ""), filepath: sec.page }
+  }
+  return { type: "group", title: languageTitle, children }
+}
+
 const routeTitle = (p) => (p.spec === null ? "Globals" : p.title)
 
-/** The /reference/library group: the overview, the builtins, then std/ by directory. */
+/**
+ * The library's areas, in reading order, each with the top-level names of
+ * `std/` it holds (a directory's whole tree goes with its name). A module in
+ * no area fails the run, so a new one is placed before it is published. `key`
+ * is the area's route: a directory keeps its own, and `/<area>/..` keeps a
+ * loose module's route at /reference/library/<module>.
+ */
+const AREAS = [
+  {
+    title: "Core",
+    about: "Numbers, bytes, sorting, randomness and the test runner",
+    key: "/core/..",
+    icon: "atom",
+    names: ["base64", "bytes", "math", "pair", "random", "sort", "testing"],
+  },
+  {
+    title: "Collections",
+    about: "`Map`, `Set` and the operations JavaScript lacks on them",
+    key: "/collections-area/..",
+    icon: "stack",
+    names: ["collections", "map"],
+  },
+  {
+    title: "Text",
+    about: "Strings, regular expressions, JSON and YAML",
+    key: "/text-area/..",
+    icon: "text-aa",
+    names: ["text", "regex", "json*", "yaml*"],
+  },
+  {
+    title: "Terminal and CLI",
+    about: "Terminal output and input, and command-line parsing",
+    key: "/terminal/..",
+    icon: "terminal-window",
+    names: ["term*", "cli*"],
+  },
+  {
+    title: "Concurrency",
+    about: "Threads, locks, shared memory and queues between processes",
+    key: "/concurrency/..",
+    icon: "arrows-split",
+    names: ["threads", "sync"],
+  },
+  {
+    title: "Data",
+    about: "SQLite and compression",
+    key: "/data/..",
+    icon: "database",
+    names: ["sqlite", "compress"],
+  },
+  {
+    title: "Networking",
+    about: "DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server",
+    key: "/net",
+    icon: "globe",
+    names: ["net"],
+  },
+  {
+    title: "Cryptography",
+    about: "Hashes, ciphers, signatures, certificates and passwords",
+    key: "/crypto",
+    icon: "lock-key",
+    names: ["crypto"],
+  },
+]
+/** The area a `std/` module (`nish/<path>`) sits in. */
+const areaOf = (spec) => {
+  const top = spec.slice("nish/".length).split("/")[0]
+  const area = AREAS.find((a) =>
+    a.names.some((n) =>
+      n.endsWith("*") ? top === n.slice(0, -1) || top.startsWith(`${n.slice(0, -1)}-`) : top === n
+    )
+  )
+  if (!area) {
+    throw new Error(`${spec}: in no area of AREAS in scripts/gen-reference.mjs; add it to one`)
+  }
+  return area
+}
+
+/** The /reference/library group: the overview, the builtins, then std/ by area. */
 const libraryRoutes = (pages) => {
   const page = (title, filepath) => ({ type: "page", title, filepath })
   const builtins = { "/": page("Globals", `${outDir}/builtins.md`) }
-  const std = {}
+  const areas = new Map(AREAS.map((a) => [a, {}]))
   for (const p of pages) {
     if (p.spec?.startsWith("nish:")) {
       builtins[`/${path.posix.basename(p.page, ".md")}`] = page(routeTitle(p), p.page)
     } else if (p.spec?.startsWith("nish/")) {
+      const area = areaOf(p.spec)
+      // A directory that is the area itself (net, crypto) is not a level of its own.
       const parts = p.spec.slice("nish/".length).split("/")
-      let node = std
-      for (const [i, dir] of parts.slice(0, -1).entries()) {
+      const inner = area.key === `/${parts[0]}` ? parts.slice(1) : parts
+      let node = areas.get(area)
+      if (inner.length === 0) {
+        node["/"] = page(parts[0], p.page)
+        continue
+      }
+      for (const dir of inner.slice(0, -1)) {
         const key = `/${dir}`
         if (node[key]?.type === "page") {
-          node[key] = { type: "group", title: node[key].title, children: { "/": node[key] } }
+          node[key] = { type: "group", title: dir, children: { "/": node[key] } }
         }
-        node[key] ??= { type: "group", title: `nish/${parts.slice(0, i + 1).join("/")}`, children: {} }
+        node[key] ??= { type: "group", title: dir, children: {} }
         node = node[key].children
       }
-      const key = `/${parts.at(-1)}`
+      const name = inner.at(-1)
+      const key = `/${name}`
       if (node[key]?.type === "group") {
-        node[key].children = { "/": page(p.title, p.page), ...node[key].children }
+        node[key].children = { "/": page(name, p.page), ...node[key].children }
       } else {
-        node[key] = page(p.title, p.page)
+        node[key] = page(name, p.page)
       }
     }
   }
-  const sortTree = (children) => {
+  const sortTree = (tree) => {
     // "/" (the group's own page) first, then by name.
-    const keys = Object.keys(children).sort((a, b) => byText(a !== "/", b !== "/") || byText(a, b))
+    const keys = Object.keys(tree).sort((a, b) => byText(a !== "/", b !== "/") || byText(a, b))
     const out = {}
     for (const k of keys) {
-      const v = children[k]
+      const v = tree[k]
       out[k] = v.type === "group" ? { ...v, children: sortTree(v.children) } : v
     }
     return out
   }
-  return {
-    type: "group",
-    title: "Library reference",
-    children: {
-      "/": page("Overview", `${outDir}/index.md`),
-      "/builtins": { type: "group", title: "Builtins", children: sortTree(builtins) },
-      ...sortTree(std),
-    },
+  const children = {
+    "/": page("Overview", `${outDir}/index.md`),
+    "/builtins": { type: "group", title: "Builtins", children: sortTree(builtins) },
   }
+  for (const [area, tree] of areas) {
+    if (Object.keys(tree).length === 0) {
+      throw new Error(`AREAS in scripts/gen-reference.mjs: ${area.title} holds no module`)
+    }
+    children[area.key] = { type: "group", title: area.title, children: sortTree(tree) }
+  }
+  return { type: "group", title: "Library reference", children }
 }
 
 const oneLine = (v) => {
@@ -1167,8 +1373,9 @@ const objectLines = (lines, key, from) => {
 
 /**
  * scalar.config.json with /reference's /language, /library and /compiler routes and the
- * header's "Language reference" link regenerated. Every other line, the
- * hand-written /reference children included, is kept byte for byte.
+ * header's "Language reference" link regenerated, and /reference's children put
+ * in the order the sidebar shows them. Every other line, the hand-written
+ * /reference children included, is kept byte for byte.
  */
 const configText = (text, pages) => {
   const config = JSON.parse(text)
@@ -1178,25 +1385,27 @@ const configText = (text, pages) => {
     throw new Error(`${configFile}: the header has no "Language reference" link to point at ${languageRoute}`)
   }
   const made = {
-    "/language": { type: "page", title: languageTitle, filepath: languagePage },
+    "/language": languageRoutes(),
     "/library": libraryRoutes(pages),
     "/compiler": {
       type: "group",
       title: "Compiler reference",
       children: {
         "/command-line": { type: "page", title: "Command line", filepath: commandLinePage },
-        "/diagnostics": { type: "page", title: "Diagnostics", filepath: diagnosticsPage },
+        "/diagnostics": diagnosticsRoutes(),
       },
     },
   }
-  const keys = Object.keys(reference.children).filter((k) => !(k in made))
-  const at = keys.indexOf("/standard-library")
-  if (at < 0) {
-    throw new Error(
-      `${configFile}: /reference has no /standard-library route to place /language, /library and /compiler after`
-    )
-  }
-  keys.splice(at + 1, 0, ...Object.keys(made))
+  // The references first, then the hand-written pages: the overview of std/,
+  // running under Node, then release material. A hand-written page this list
+  // does not name keeps its place after them.
+  const after = ["/standard-library", "/run-under-node", "/install", "/benchmarks", "/changelog"]
+  const written = Object.keys(reference.children).filter((k) => !(k in made))
+  const keys = [
+    ...Object.keys(made),
+    ...after.filter((k) => written.includes(k)),
+    ...written.filter((k) => !after.includes(k)),
+  ]
   const lines = text.split("\n")
   const [refOpen, refClose] = objectLines(lines, "/reference", 0)
   const [open, close] = objectLines(lines, "children", refOpen)
@@ -1243,58 +1452,174 @@ const configText = (text, pages) => {
 
 // ---- The language reference ----------------------------------------------
 
+let languageCache = null
 /**
- * docs/LANGUAGE.md as the docs site's page: its relative links rewritten for
- * docs/reference/, and an `<a id>` above each heading whose ID the docs site
- * spells differently from GitHub, so the anchors written for GitHub hold.
+ * docs/LANGUAGE.md cut at its `##` headings: the part before the first (the
+ * index's opening text), then one part per section, each with its lines
+ * `[from, to)` and its page; and `home`, the part holding each heading by its
+ * GitHub ID in the whole file, which is what every link into the spec names.
+ */
+const languageParts = () => {
+  if (languageCache === null) {
+    const lines = fs.readFileSync(path.join(root, languageSource), "utf8").split("\n")
+    const hs = headings(lines.join("\n"))
+    const parts = [{ page: languagePage, from: 0, title: null, slug: null }]
+    for (const h of hs.filter((x) => x.level === 2)) {
+      const title = lines[h.index].replace(/^##\s+/, "").trim()
+      parts.push({ page: `${languageDir}/${h.github}.md`, from: h.index, title, slug: h.github })
+    }
+    for (const [i, part] of parts.entries()) {
+      part.to = parts[i + 1]?.from ?? lines.length
+      part.headings = hs.filter((h) => h.index >= part.from && h.index < part.to)
+    }
+    const home = new Map(hs.map((h) => [h.github, parts.findLast((p) => p.from <= h.index)]))
+    languageCache = { lines, parts, home }
+  }
+  return languageCache
+}
+
+/**
+ * Where the spec's anchor `frag` (none for the spec itself) is on the site:
+ * its part's page, and the fragment, which a section's own title does not
+ * need; null for an anchor the spec has no heading for.
+ */
+const languageTarget = (frag) => {
+  const { parts, home } = languageParts()
+  const part = frag === undefined ? parts[0] : home.get(frag.toLowerCase())
+  if (part === undefined) {
+    return null
+  }
+  return { page: part.page, hash: frag === undefined || frag.toLowerCase() === part.slug ? "" : `#${frag}` }
+}
+
+/** The link from `page` to the spec's anchor `frag`. */
+const languageLink = (frag, page) => {
+  const at = languageTarget(frag)
+  if (at === null) {
+    throw new Error(`${languageSource}: no heading #${frag}`)
+  }
+  return `${path.posix.relative(path.posix.dirname(page), at.page)}${at.hash}`
+}
+
+/**
+ * docs/LANGUAGE.md as the docs site's pages: an index (its title, its opening
+ * text and a card per section) and one page per `##` section, that heading
+ * the page's title and each below it one level up. Links are rewritten for
+ * where each page lives, a `#fragment` to the page holding its heading, and
+ * an `<a id>` written above each heading whose ID on its page, on GitHub or
+ * the docs site, is not its ID in the whole spec, so every anchor written for
+ * LANGUAGE.md holds.
  */
 const renderLanguage = (link) => {
-  const text = fs.readFileSync(path.join(root, languageSource), "utf8")
-  const lines = text.split("\n")
-  const anchors = new Map(
-    headings(text)
-      .filter((h) => h.site !== h.github)
-      .map((h) => [h.index, h.github])
-  )
-  const relink = (target) => {
-    if (/^(https?:|mailto:|#)/.test(target)) {
+  const { lines, parts } = languageParts()
+  const relink = (target, page) => {
+    if (/^(https?:|mailto:)/.test(target)) {
       return target
     }
-    const to = link(target, languageSource, languagePage)
+    if (target.startsWith("#")) {
+      return languageTarget(target.slice(1))?.page === page ? target : languageLink(target.slice(1), page)
+    }
+    const to = link(target, languageSource, page)
     if (to === null) {
       throw new Error(`${languageSource}: broken link ${target}`)
     }
     return to
   }
-  const out = [
-    `<!-- Generated by scripts/gen-reference.mjs from ${languageSource}. ` +
-      "Do not edit by hand: change that file and run `node scripts/gen-reference.mjs`. -->",
-    "",
-  ]
+  const out = new Map()
+  for (const part of parts) {
+    let inFence = false
+    const body = lines.slice(part.from, part.to).map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence
+      }
+      return !inFence && part.slug !== null && /^#{2,6}\s/.test(line) ? line.slice(1) : line
+    })
+    // Each heading's IDs on this page, beside the one the whole spec gave it.
+    const local = headings(body.join("\n"))
+    const anchors = new Map()
+    for (const [k, h] of local.entries()) {
+      const wanted = part.headings[k].github
+      if (h.github !== wanted || h.site !== wanted) {
+        const taken = local.some((o, j) => j !== k && (o.github === wanted || o.site === wanted))
+        if (taken || [...anchors.values()].includes(wanted)) {
+          throw new Error(`${part.page}: #${wanted} names two headings once the spec is split`)
+        }
+        anchors.set(h.index, wanted)
+      }
+    }
+    const text = [
+      `<!-- Generated by scripts/gen-reference.mjs from ${languageSource}. ` +
+        "Do not edit by hand: change that file and run `node scripts/gen-reference.mjs`. -->",
+      "",
+    ]
+    inFence = false
+    for (const [i, line] of body.entries()) {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence
+      }
+      if (anchors.has(i)) {
+        text.push(`<a id="${anchors.get(i)}" style="scroll-margin-top: 65px"></a>`, "")
+      }
+      if (inFence) {
+        text.push(line)
+        continue
+      }
+      // Links outside code spans: a `[` inside one is code, not a link.
+      const code = [...line.matchAll(/(`+)[^`]*?\1/g)].map((m) => [m.index, m.index + m[0].length])
+      const inCode = (at) => code.some(([a, b]) => at > a && at < b)
+      text.push(
+        line
+          .replace(/\]\(([^)\s]+)((?:\s+"[^"]*")?)\)/g, (whole, target, title, at) =>
+            inCode(at) ? whole : `](${relink(target, part.page)}${title})`
+          )
+          .replace(/^(\s*\[[^\]]+\]:\s*)(\S+)/, (_, head, target) => `${head}${relink(target, part.page)}`)
+      )
+    }
+    if (part.slug === null) {
+      while (text.at(-1) === "") {
+        text.pop()
+      }
+      const cards = parts
+        .slice(1)
+        .map((sec) =>
+          tag(
+            "scalar-card",
+            `title="${attr(sec.title.replace(/`/g, ""))}" icon="phosphor/regular/book-open" href="${path.posix.relative(outDir, sec.page)}"`,
+            languageLead(sec)
+          )
+        )
+      text.push("", tag("scalar-grid", 'cols="2"', cards.join("\n\n")), "")
+    }
+    out.set(part.page, text.join("\n"))
+  }
+  return out
+}
+
+/** A section's first sentence, for its card: its first paragraph of prose, links dropped. */
+const languageLead = (part) => {
+  const { lines } = languageParts()
+  const para = []
   let inFence = false
-  for (const [i, line] of lines.entries()) {
+  for (const line of lines.slice(part.from + 1, part.to)) {
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence
-    }
-    if (anchors.has(i)) {
-      out.push(`<a id="${anchors.get(i)}" style="scroll-margin-top: 65px"></a>`, "")
-    }
-    if (inFence) {
-      out.push(line)
       continue
     }
-    // Links outside code spans: a `[` inside one is code, not a link.
-    const code = [...line.matchAll(/(`+)[^`]*?\1/g)].map((m) => [m.index, m.index + m[0].length])
-    const inCode = (at) => code.some(([a, b]) => at > a && at < b)
-    out.push(
-      line
-        .replace(/\]\(([^)\s]+)((?:\s+"[^"]*")?)\)/g, (whole, target, title, at) =>
-          inCode(at) ? whole : `](${relink(target)}${title})`
-        )
-        .replace(/^(\s*\[[^\]]+\]:\s*)(\S+)/, (_, head, target) => `${head}${relink(target)}`)
-    )
+    if (inFence || /^#/.test(line) || /^\s*[-*|>]/.test(line)) {
+      if (para.length > 0) {
+        break
+      }
+      continue
+    }
+    if (line.trim() === "") {
+      if (para.length > 0) {
+        break
+      }
+      continue
+    }
+    para.push(line.trim())
   }
-  return out.join("\n")
+  return firstSentence(para.join(" ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1"))
 }
 
 // ---- The compiler reference -----------------------------------------------
@@ -1303,6 +1628,8 @@ const codesSource = "src/codes.ts"
 const wordingsDir = "tests/wordings"
 const unreachableSource = `${wordingsDir}/unreachable.txt`
 const diagnosticsPage = `${outDir}/diagnostics.md`
+/** One page per band of codes, beside the index. */
+const bandPage = (band) => `${outDir}/diagnostics/nl${band}xxx.md`
 const helpSource = "src/cli-style.ts"
 const brandingSource = "src/branding.ts"
 const commandLinePage = `${outDir}/command-line.md`
@@ -1319,6 +1646,15 @@ const bands = [
   ["8", "portability warnings"],
   ["9", "performance warnings"],
 ]
+
+/** The /reference/compiler/diagnostics group: the index, then one page per band. */
+const diagnosticsRoutes = () => {
+  const children = { "/": { type: "page", title: "Overview", filepath: diagnosticsPage } }
+  for (const [band, about] of bands) {
+    children[`/nl${band}xxx`] = { type: "page", title: `NL${band}xxx: ${about}`, filepath: bandPage(band) }
+  }
+  return { type: "group", title: "Diagnostics", children }
+}
 
 /**
  * Band 0's codes, from their constants in `src/codes.ts`: each with the doc
@@ -1462,35 +1798,58 @@ const renderDiagnostics = (link) => {
     byText(a.code, b.code)
   )
   const page = diagnosticsPage
-  const to = linkFrom(link, page)
+  // A link to a file of the repository, from `from`.
+  const toFile = (from) => (file) => linkFrom(link, from)(path.posix.relative(path.posix.dirname(from), file))
+  const to = toFile(page)
   const retired = [...unreachable.values()].filter((r) => r.startsWith("retired")).length
-  const out = [
-    header(`${codesSource}, ${wordingsDir}/ and ${unreachableSource}`, "those files"),
+  const source = header(`${codesSource}, ${wordingsDir}/ and ${unreachableSource}`, "those files")
+  const index = [
+    source,
     "",
     "# Diagnostics",
     "",
-    `Every diagnostic Nish prints carries a stable code, the \`code\` field of its [\`--json\`](${to(`../../${guideCli}#--json-for-tools`)}) object. ` +
+    `Every diagnostic Nish prints carries a stable code, the \`code\` field of its [\`--json\`](${to(`${guideCli}#--json-for-tools`)}) object. ` +
       "A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. " +
-      `This page lists all ${all.length}: the ${zero.length} of band 0, which no rule matches, and the ${ruleCount} rules \`${codesSource}\` holds, ${retired} of them retired.`,
+      `These pages list all ${all.length}, one page per band: the ${zero.length} of band 0, which no rule matches, and the ${ruleCount} rules \`${codesSource}\` holds, ${retired} of them retired.`,
     "",
     "A rule is matched by a fragment of its message: the longest literal run of the message's template, with the names, types and counts it interpolates cut out. " +
       "The fragment is matched as a substring, so `…` marks where the message goes on. " +
       `Each example is a program from \`${wordingsDir}/\` that the suite compiles, and the message it gets, word for word. ` +
-      `[Reading diagnostics](${to(`../../${guideCli}#reading-diagnostics`)}) in the guide says how to act on one; ` +
-      "the [command-line reference](command-line.md) lists the flags that turn the warnings on and off.",
+      `[Reading diagnostics](${to(`${guideCli}#reading-diagnostics`)}) in the guide says how to act on one; ` +
+      `the [command-line reference](${to(commandLinePage)}) lists the flags that turn the warnings on and off.`,
     "",
   ]
+  const pages = new Map()
+  const cards = []
   let count = 0
   for (const [band, about] of bands) {
     const inBand = all.filter((r) => r.code[2] === band)
     if (inBand.length === 0) {
       throw new Error(`${codesSource}: band NL${band}xxx has no code`)
     }
-    out.push(`## NL${band}xxx: ${about}`, "")
+    const at = bandPage(band)
+    const toHere = toFile(at)
+    const codes = `${inBand.length} code${inBand.length === 1 ? "" : "s"}`
+    cards.push(
+      tag(
+        "scalar-card",
+        `title="NL${band}xxx" icon="phosphor/regular/warning-circle" href="${path.posix.relative(outDir, at)}"`,
+        `${about[0].toUpperCase()}${about.slice(1)}: ${codes}.`
+      )
+    )
+    // Scalar cuts a heading at a bare colon; an escaped one is a colon on both sites.
+    const out = [
+      source,
+      "",
+      `# NL${band}xxx\\: ${about}`,
+      "",
+      `The ${codes} of band ${band}. [Diagnostics](${toHere(diagnosticsPage)}) says what a code promises and how a rule's fragment is matched.`,
+      "",
+    ]
     for (const r of inBand) {
       count++
       const seen = examples.get(r.code) ?? []
-      out.push(`### ${r.code}`, "")
+      out.push(`## ${r.code}`, "")
       if (r.prose) {
         out.push(`\`${r.name}\` in \`${codesSource}\`. ${escapeProse(r.prose)}`, "")
       } else {
@@ -1510,7 +1869,7 @@ const renderDiagnostics = (link) => {
       for (const e of seen) {
         const flags = e.args ? ` (compiled with \`${e.args.split(/\s+/).join(" ")}\`)` : ""
         out.push(
-          `[\`${path.posix.basename(e.file)}\`](${to(`../../${e.file}`)})${flags}:`,
+          `[\`${path.posix.basename(e.file)}\`](${toHere(e.file)})${flags}:`,
           "",
           fenceOf("ts", e.source),
           "",
@@ -1519,7 +1878,10 @@ const renderDiagnostics = (link) => {
         )
       }
     }
+    pages.set(at, `${out.join("\n").trimEnd()}\n`)
   }
+  index.push(tag("scalar-grid", 'cols="2"', cards.join("\n\n")))
+  pages.set(page, `${index.join("\n").trimEnd()}\n`)
   if (count !== ruleCount + zero.length || zero.length !== 4) {
     throw new Error(
       `${diagnosticsPage}: rendered ${count} codes, but ${codesSource} holds ${ruleCount} rules and 4 band-0 codes`
@@ -1529,7 +1891,7 @@ const renderDiagnostics = (link) => {
   if (missing.length > 0) {
     throw new Error(`${diagnosticsPage}: ${missing.join(", ")} is not a code ${codesSource} holds`)
   }
-  return `${out.join("\n").trimEnd()}\n`
+  return pages
 }
 
 /** The string a help argument spells: a literal, or a template whose only hole is `CLI`. */
@@ -1840,8 +2202,12 @@ const main = async () => {
     want.set(p.page, text)
   }
   want.set(`${outDir}/index.md`, renderIndex(pages))
-  want.set(languagePage, renderLanguage(link))
-  want.set(diagnosticsPage, renderDiagnostics(link))
+  for (const [file, text] of renderLanguage(link)) {
+    want.set(file, text)
+  }
+  for (const [file, text] of renderDiagnostics(link)) {
+    want.set(file, text)
+  }
   want.set(commandLinePage, renderCommandLine(link))
   const have = listFiles(outDir)
   const problems = []

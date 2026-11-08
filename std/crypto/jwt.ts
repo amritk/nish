@@ -27,14 +27,15 @@
  *
  * **The key decides the algorithm, never the token.** A `JwtKey` is made for
  * one algorithm, and a token verifies only when its header's `alg` is that
- * algorithm's name, spelled exactly. `none` names no key, so a token that
- * says it is unsigned is refused like any other mismatch (`JWT_ERR_ALG`); an
- * `HS256` header in front of an RSA key is refused before any MAC is taken,
- * so an RSA public key can never be used as an HMAC secret (RFC 8725 §2.1,
- * §3.1). The header must hold `alg` exactly once, as a string; `typ` and `kid`
- * at most once, as strings; and no `crit` and no `b64` (RFC 7515 §4.1.11,
- * RFC 7797), since this verifier understands no extension and a header that
- * names one must be refused. Other header members are skipped.
+ * algorithm's name, spelled exactly. `none` names no key, so a token that says
+ * it is unsigned is refused like any other mismatch (`JWT_ERR_ALG`); an `HS256`
+ * header in front of an RSA key is refused before any MAC is taken, so an RSA
+ * public key can never be used as an HMAC secret (RFC 8725 §2.1, §3.1).
+ *
+ *  The header must hold `alg` exactly once, as a string; `typ` and `kid` at most
+ *  once, as strings; and no `crit` and no `b64` (RFC 7515 §4.1.11, RFC 7797),
+ *  since this verifier understands no extension and a header that names one must
+ *  be refused. Other header members are skipped.
  *
  * **Nothing in the payload is read before the signature holds.** The verifier
  * reads the header, decodes the signature and checks it, and only then decodes
@@ -1360,18 +1361,20 @@ export class JwtVerifier {
 
   /**
    * Verifies the token `src[off .. off + len)` under `key` and checks its
-   * claims at `now` (seconds since 1970): `JWT_OK`, or the first
-   * `JWT_ERR_*` that applies, in this order: the window (`JWT_ERR_SIZE`);
-   * the three parts and the header's base64url (`JWT_ERR_FORMAT`); the
-   * header's members in the order written (`JWT_ERR_HEADER`, `JWT_ERR_ALG`),
-   * then a missing `alg` and, when the verifier names a `typ`, a missing or
-   * other one; signature text too long for any signature
-   * (`JWT_ERR_SIGNATURE`); the signature's base64url (`JWT_ERR_FORMAT`); its
-   * length, the key's fit and the signature itself (`JWT_ERR_SIGNATURE`); the
-   * payload's base64url (`JWT_ERR_FORMAT`); the payload's members in the
-   * order written and, while `requireExp` is set (the default), a missing
-   * `exp` (`JWT_ERR_CLAIMS`); and then `exp`,
-   * `nbf`, `iat`, `iss`, `aud` and `sub`, in that order.
+   * claims at `now` (seconds since 1970): `JWT_OK`, or the first `JWT_ERR_*`
+   * that applies, in this order:
+   * - the window (`JWT_ERR_SIZE`);
+   * - the three parts and the header's base64url (`JWT_ERR_FORMAT`);
+   * - the header's members in the order written (`JWT_ERR_HEADER`,
+   *   `JWT_ERR_ALG`), then a missing `alg` and, when the verifier names a
+   *   `typ`, a missing or other one;
+   * - signature text too long for any signature (`JWT_ERR_SIGNATURE`);
+   * - the signature's base64url (`JWT_ERR_FORMAT`);
+   * - its length, the key's fit and the signature itself (`JWT_ERR_SIGNATURE`);
+   * - the payload's base64url (`JWT_ERR_FORMAT`);
+   * - the payload's members in the order written and, while `requireExp` is set
+   *   (the default), a missing `exp` (`JWT_ERR_CLAIMS`);
+   * - and then `exp`, `nbf`, `iat`, `iss`, `aud` and `sub`, in that order.
    *
    * @param key The key to verify with; it alone decides the algorithm, and a
    *   wiped one verifies nothing.

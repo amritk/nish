@@ -31,11 +31,13 @@
  * **Neither direction indexes or branches on the data.** What is encoded here
  * is usually a key, a nonce or a MAC, and a lookup table indexed by a secret
  * sextet leaves its trace in the cache. So a sextet becomes a character, and a
- * character a sextet, by arithmetic on range masks: `(lo - 1 - c) & (c - hi - 1)`
- * is negative exactly when `lo <= c <= hi`, and an arithmetic shift by 31 turns
- * that sign into an all-ones or all-zeros mask. A malformed character is not
- * refused where it is found either: the verdict is ORed into one word and read
- * once, after the whole text. The text's length is public and is tested first.
+ * character a sextet, by arithmetic on range masks: `(lo - 1 - c) & (c - hi -
+ * 1)` is negative exactly when `lo <= c <= hi`, and an arithmetic shift by 31
+ * turns that sign into an all-ones or all-zeros mask.
+ *
+ *  A malformed character is not refused where it is found either: the verdict is
+ *  ORed into one word and read once, after the whole text. The text's length is
+ *  public and is tested first.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.

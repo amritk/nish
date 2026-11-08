@@ -43,21 +43,23 @@
  * the alias's range, where it is used.
  *
  * **An alias bomb is refused before anything is built.** The values the
- * document expands to are counted first, from the nodes, with each node's
- * count kept, so the count costs one step per node however far the aliases
- * multiply it. Past the document's `maxValues` the load is
- * `YAML_JSON_ERR_EXPANSION`, at the first alias whose copy is the largest
- * (the first whose copy alone is past the limit, in a bomb), or
- * `JSON_VALUE_ERR_VALUES` when the document has no alias. A merged map counts
- * all its keys, also those the merging map overrides, so a document within a
- * few values of the limit can be refused for merges that would have fit.
- * The loader's merging is linear too: a map is merged into a given map at
- * most once, however many paths through the merge keys reach it, and the
- * pairs every merge visits and the items of every merge sequence it walks are
- * charged to a budget of `maxValues` plus the stream's node count, past which
- * the load is `YAML_JSON_ERR_EXPANSION` at the merge key. `parseYaml`'s own
- * merge check is not bounded this way: it walks a shared merge sequence once
- * for each merge key that names it.
+ * document expands to are counted first, from the nodes, with each node's count
+ * kept, so the count costs one step per node however far the aliases multiply
+ * it. Past the document's `maxValues` the load is `YAML_JSON_ERR_EXPANSION`, at
+ * the first alias whose copy is the largest (the first whose copy alone is past
+ * the limit, in a bomb), or `JSON_VALUE_ERR_VALUES` when the document has no
+ * alias.
+ *
+ *  A merged map counts all its keys, also those the merging map overrides, so a
+ *  document within a few values of the limit can be refused for merges that
+ *  would have fit. The loader's merging is linear too: a map is merged into a
+ *  given map at most once, however many paths through the merge keys reach it,
+ *  and the pairs every merge visits and the items of every merge sequence it
+ *  walks are charged to a budget of `maxValues` plus the stream's node count,
+ *  past which the load is `YAML_JSON_ERR_EXPANSION` at the merge key.
+ *
+ *  `parseYaml`'s own merge check is not bounded this way: it walks a shared
+ *  merge sequence once for each merge key that names it.
  *
  * **A merge key's value** is a mapping, an alias to one, or a sequence of
  * those; anything else is refused at the value, by the parser as

@@ -934,13 +934,14 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
  * Bad input answers `null` and never panics: an iteration count or a length
  * below 1, or a password or salt longer than 2^31 - 1 bytes. The password is
  * read only inside `exposeWith`, and every U_j, every T_i, both keyed hashers
- * and the working one are wiped before the key is answered; the digests on
- * the way are wiped in the call that made them. The time taken depends on
+ * and the working one are wiped before the key is answered; the digests on the
+ * way are wiped in the call that made them. The time taken depends on
  * `iterations`, `dkLen` and the password's length past a block, all of which
- * RFC 8018 treats as public, and on nothing of the password's bytes. The time
- * is linear in `iterations` and nothing here bounds it, so a caller that takes
- * the count from an untrusted peer (a SCRAM server's `i=`) must cap it first:
- * 2^31 - 1 rounds is about 2^32 compressions.
+ * RFC 8018 treats as public, and on nothing of the password's bytes.
+ *
+ * The time is linear in `iterations` and nothing here bounds it, so a caller
+ * that takes the count from an untrusted peer (a SCRAM server's `i=`) must cap
+ * it first: 2^31 - 1 rounds is about 2^32 compressions.
  *
  * @param password The password P, read only inside `exposeWith`; the caller
  *   still owns and wipes it.

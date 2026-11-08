@@ -45,5 +45,7 @@ export declare function awaitAll<A, B, C, D, E, F, G, H>(
   g: Promise<G>,
   h: Promise<H>,
 ): Promise<[A, B, C, D, E, F, G, H]>;
+/** `true` once `ms` milliseconds have passed; `false` at once for a negative `ms`. */
+export declare function sleep(ms: number): Promise<boolean>;
 /** Waits for every task `spawn` started, the tasks those tasks start included. */
 export declare function settleTasks(): Promise<void>;

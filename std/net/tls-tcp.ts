@@ -29,36 +29,40 @@
  * stops asking to be written. An event with the hang-up bit (4) goes to
  * `readable`, which is where a closed or failed socket is noticed.
  *
- * **Slots, built on first use; record buffers, borrowed.** The pool's size
- * is a cap: the constructor builds no slot, and the first `accept` into a
- * slot builds its handshake state and keys (TLS-3) and keeps them, so a pool
- * sized for its peak costs at start-up only what does not depend on the
- * size. `accept` hands the next connection the slot closed last, or failing
- * that the next never used, and reuses it once the program `close`s it
- * (WP34 N9). The record buffers — the bytes to send, the plaintext waiting
- * for the program, the record being opened and the record being read — are
- * borrowed from pools this server owns while a connection uses the slot, and
- * given back zeroed (`BufferPool.giveSecret`) when it ends, so a free slot
- * holds none of them ("What moves between connections" in
- * `docs/security/tls.md`). When every slot is busy a new connection is
- * accepted and closed at once, so the listener does not stay readable; the
- * program sees `TLS_TCP_POOL_FULL`. Each slot keeps its own `TlsServer`, which `accept` restarts for the connection, so neither the
- * handshake nor application data allocates anything that outlives a call:
- * a thousand connections through one slot leave `Arena.mark()` where the
- * first left it, under every suite (TLS-3 in `docs/security/tls.md`,
- * `tests/link/net_tls_memory`).
+ * **Slots, built on first use; record buffers, borrowed.** The pool's size is a
+ * cap: the constructor builds no slot, and the first `accept` into a slot
+ * builds its handshake state and keys (TLS-3) and keeps them, so a pool sized
+ * for its peak costs at start-up only what does not depend on the size.
+ * `accept` hands the next connection the slot closed last, or failing that the
+ * next never used, and reuses it once the program `close`s it (WP34 N9).
+ *
+ *  The record buffers — the bytes to send, the plaintext waiting for the
+ *  program, the record being opened and the record being read — are borrowed
+ *  from pools this server owns while a connection uses the slot, and given back
+ *  zeroed (`BufferPool.giveSecret`) when it ends, so a free slot holds none of
+ *  them ("What moves between connections" in `docs/security/tls.md`). When every
+ *  slot is busy a new connection is accepted and closed at once, so the listener
+ *  does not stay readable; the program sees `TLS_TCP_POOL_FULL`.
+ *
+ *  Each slot keeps its own `TlsServer`, which `accept` restarts for the
+ *  connection, so neither the handshake nor application data allocates anything
+ *  that outlives a call: a thousand connections through one slot leave
+ *  `Arena.mark()` where the first left it, under every suite (TLS-3 in
+ *  `docs/security/tls.md`, `tests/link/net_tls_memory`).
  *
  * **Randomness is the caller's.** `accept` takes the 32-byte server random and
  * the 32-byte x25519 private key the handshake uses, as `TlsServer` does, so a
  * test replays RFC 8448's trace and a server draws them with
  * `crypto.getRandomValues`. `accept` copies both into the slot and wipes the
  * caller's key array, so one buffer of each refilled for every `accept` is
- * safe, and refuses either when it is not 32 bytes before taking a
- * connection; the slot's copy of the key is wiped once the ServerHello is
- * written, when the handshake fails, or when the slot is closed. **Signing is the caller's**, as `TlsServer`'s is: `signP256` signs
- * the CertificateVerify with a P-256 key the caller holds as a `Secret` and
- * borrows for the call, and `signatureInput` / `sign` hand the input out and
- * take any signature back.
+ * safe, and refuses either when it is not 32 bytes before taking a connection;
+ * the slot's copy of the key is wiped once the ServerHello is written, when the
+ * handshake fails, or when the slot is closed.
+ *
+ *  **Signing is the caller's**, as `TlsServer`'s is: `signP256` signs the
+ *  CertificateVerify with a P-256 key the caller holds as a `Secret` and borrows
+ *  for the call, and `signatureInput` / `sign` hand the input out and take any
+ *  signature back.
  *
  * **Resumption is opt-in, and its keys are the caller's.** After
  * `enableTickets`, a slot whose interest says `TLS_RECORD_TICKET` waits on
@@ -75,23 +79,25 @@
  * `close` frees the slot at once; `shutdown` sends the `close_notify` as the
  * socket takes it, and the slot is done when its interest says so.
  *
- * **A closed connection lingers until the client hangs up.** Once a
- * connection the server closed has sent everything, the slot shuts the
- * socket's write side — the client reads the response, the `close_notify`
- * and then the end of the stream — and reads and throws away what the
- * client still sends, until its own end of stream, before its interest says
- * `TLS_RECORD_DONE` (RFC 9112 §9.6's staged close). A socket closed with
- * the client's bytes unread, or that the client writes to after the close,
- * answers with a TCP reset, and a client may report that reset instead of
- * the response it was sent: Chromium's `ERR_CONNECTION_RESET` after an HTTP/2
- * `GOAWAY`, when its SETTINGS acknowledgement crossed the server's close. A
- * lingering slot holds no key and no record buffer, asks only to be read,
- * and gives up past `TLS_TCP_LINGER_LIMIT` bytes. A connection that failed,
- * whose client sent its own `close_notify` (it writes nothing after it,
- * RFC 8446 §6.1) or whose client's stream had already ended, is done at
- * once. A client that never hangs up keeps its slot, as one that never sends
- * does: how long a slot may wait is the program's (`docs/security/tls.md`,
- * TLS-6 and TLS-4).
+ * **A closed connection lingers until the client hangs up.** Once a connection
+ * the server closed has sent everything, the slot shuts the socket's write side
+ * — the client reads the response, the `close_notify` and then the end of the
+ * stream — and reads and throws away what the client still sends, until its own
+ * end of stream, before its interest says `TLS_RECORD_DONE` (RFC 9112 §9.6's
+ * staged close).
+ *
+ *  A socket closed with the client's bytes unread, or that the client writes to
+ *  after the close, answers with a TCP reset, and a client may report that reset
+ *  instead of the response it was sent: Chromium's `ERR_CONNECTION_RESET` after
+ *  an HTTP/2 `GOAWAY`, when its SETTINGS acknowledgement crossed the server's
+ *  close. A lingering slot holds no key and no record buffer, asks only to be
+ *  read, and gives up past `TLS_TCP_LINGER_LIMIT` bytes.
+ *
+ *  A connection that failed, whose client sent its own `close_notify` (it writes
+ *  nothing after it, RFC 8446 §6.1) or whose client's stream had already ended,
+ *  is done at once. A client that never hangs up keeps its slot, as one that
+ *  never sends does: how long a slot may wait is the program's
+ *  (`docs/security/tls.md`, TLS-6 and TLS-4).
  *
  * Written from RFC 8446 and docs/LANGUAGE.md's `nish:net`, not ported from
  * another implementation.
@@ -1317,17 +1323,18 @@ const tlsTcpDeadline = (timeoutMs: i32): i64 => monotonicNanos() + toI64(timeout
 
 /**
  * Opens a TLS 1.3 connection to the server at `addr` (`nish:net`'s 18-byte
- * form) for `serverName`, offering `alpn`, authenticated against the
- * system's roots, and waits in a loop of its own until the handshake is done
- * and the client's last flight sent, or it fails, or `timeoutMs` milliseconds
- * pass, reading the roots included. Answers the client either way:
- * `open()` says whether it opened; otherwise `failure()` says why — the TCP
- * failure, the alert, or `TLS_TCP_TIMED_OUT`, the client closed. Nothing is
- * looked up: to reach a name, resolve it first with `nish/net/dns`'s
+ * form) for `serverName`, offering `alpn`, authenticated against the system's
+ * roots, and waits in a loop of its own until the handshake is done and the
+ * client's last flight sent, or it fails, or `timeoutMs` milliseconds pass,
+ * reading the roots included. Answers the client either way: `open()` says
+ * whether it opened; otherwise `failure()` says why — the TCP failure, the
+ * alert, or `TLS_TCP_TIMED_OUT`, the client closed.
+ *
+ * Nothing is looked up: to reach a name, resolve it first with `nish/net/dns`'s
  * `resolveHost`; the name the certificate must carry is always `serverName`,
  * never one taken from `addr`. The open client's socket is in no loop: the
- * program adds it to its own, or uses `writeAll` and `readWait`. The roots
- * are read on every call; a program that connects often reads them once with
+ * program adds it to its own, or uses `writeAll` and `readWait`. The roots are
+ * read on every call; a program that connects often reads them once with
  * `tlsClientSystemTrust` and passes them to `tlsConnectWith`.
  *
  * @param addr The server's address and port in `nish:net`'s 18-byte form.

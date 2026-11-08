@@ -23,15 +23,17 @@
  *     const next: i32 = streams.putNextChunk(out, at, end)       // `at` when no frame fits
  *
  * **IDs** (§2.1). The low bit says who opened a stream (0 the client, 1 the
- * server) and the next one whether it carries data both ways (0) or only
- * from its opener (1). This side is a server: it opens IDs 1 and 3 modulo 4,
- * and the client 0 and 2. A frame for a stream of the client's that is past
- * the limit this side advertised is STREAM_LIMIT_ERROR; for one of the
- * server's that it has not opened, STREAM_STATE_ERROR; and a frame that only
- * makes sense on a side the stream does not have (STREAM, RESET_STREAM or
- * STREAM_DATA_BLOCKED on the server's unidirectional stream; MAX_STREAM_DATA
- * or STOP_SENDING on the client's) is STREAM_STATE_ERROR (§19.4-§19.13). A
- * client's stream opens every lower one of its type with it (§3.2).
+ * server) and the next one whether it carries data both ways (0) or only from
+ * its opener (1).
+ *
+ *  This side is a server: it opens IDs 1 and 3 modulo 4, and the client 0 and 2.
+ *  A frame for a stream of the client's that is past the limit this side
+ *  advertised is STREAM_LIMIT_ERROR; for one of the server's that it has not
+ *  opened, STREAM_STATE_ERROR; and a frame that only makes sense on a side the
+ *  stream does not have (STREAM, RESET_STREAM or STREAM_DATA_BLOCKED on the
+ *  server's unidirectional stream; MAX_STREAM_DATA or STOP_SENDING on the
+ *  client's) is STREAM_STATE_ERROR (§19.4-§19.13). A client's stream opens every
+ *  lower one of its type with it (§3.2).
  *
  * **Fixed slots.** The table is sized once, from the configuration: one slot
  * per stream that may be open at once — as many client-opened bidirectional
@@ -43,31 +45,34 @@
  *
  * **Lent buffers.** A slot holds no buffers of its own. A side borrows a
  * `bufferSize`-byte buffer, and a bit per byte beside it, from the table's
- * `QuicStreamPools` when it first needs one: the receive side on the first
- * byte that lands, the send side on the first byte written. Each goes back,
- * its used extent zeroed, once it is done with: the receive side once the
- * application has read to the final size or the stream is reset, the send
- * side once every byte up to the final size is acknowledged or the stream
- * is reset, never before, since a lost byte is resent from the send buffer.
- * The pools hold two buffers per slot at most, the reserve's included, so a
- * borrow never fails, and
- * a server shares one pool across all its connections (`share`), so what it
- * holds follows the streams moving bytes, not the slots it was sized for.
- * Once the pools are warm, nothing a peer sends and nothing the application
- * writes allocates.
+ * `QuicStreamPools` when it first needs one: the receive side on the first byte
+ * that lands, the send side on the first byte written.
+ *
+ *  Each goes back, its used extent zeroed, once it is done with: the receive
+ *  side once the application has read to the final size or the stream is reset,
+ *  the send side once every byte up to the final size is acknowledged or the
+ *  stream is reset, never before, since a lost byte is resent from the send
+ *  buffer.
+ *
+ *  The pools hold two buffers per slot at most, the reserve's included, so a
+ *  borrow never fails, and a server shares one pool across all its connections
+ *  (`share`), so what it holds follows the streams moving bytes, not the slots
+ *  it was sized for. Once the pools are warm, nothing a peer sends and nothing
+ *  the application writes allocates.
  *
  * **Receiving** (§3.2, §2.2). Data lands in the receive buffer at its offset
  * modulo the buffer's size, in any order and overlapping, with a bit set per
- * byte; what continues the stream from the last byte read is what
- * `read` hands out. The credit this side gives a stream (MAX_STREAM_DATA) is
- * never more than what the buffer can hold past the last byte read, so a
- * byte beyond it is FLOW_CONTROL_ERROR and the buffer cannot overflow; it is
- * raised by a whole buffer once the application has read half of one. The
- * connection's credit (MAX_DATA) is raised the same way, by `windowData`
- * once half of it is read. A FIN or RESET_STREAM fixes the final size, and
- * a frame that disagrees with it, or a size below what already arrived, is
- * FINAL_SIZE_ERROR (§4.5). A reset stream's bytes count as read for the
- * connection's credit.
+ * byte; what continues the stream from the last byte read is what `read` hands
+ * out. The credit this side gives a stream (MAX_STREAM_DATA) is never more than
+ * what the buffer can hold past the last byte read, so a byte beyond it is
+ * FLOW_CONTROL_ERROR and the buffer cannot overflow; it is raised by a whole
+ * buffer once the application has read half of one.
+ *
+ *  The connection's credit (MAX_DATA) is raised the same way, by `windowData`
+ *  once half of it is read. A FIN or RESET_STREAM fixes the final size, and a
+ *  frame that disagrees with it, or a size below what already arrived, is
+ *  FINAL_SIZE_ERROR (§4.5). A reset stream's bytes count as read for the
+ *  connection's credit.
  *
  * **Sending** (§3.1). The application writes into the send buffer as far as
  * it has room, a chunk at a time: what `write` takes is its back-pressure,
@@ -247,33 +252,34 @@ export const quicStreamSetBit = (bits: u8[], k: i32, on: boolean): void => {
 const quicStreamMin = (a: i64, b: i64): i64 => (a < b ? a : b)
 
 /**
- * The buffers a connection's streams borrow: `data` lends the receive and
- * send buffers of `bufferSize` bytes, `bits` the bitmaps beside them, a bit
- * per byte. One table makes a private set for itself; a server makes one set
- * for every slot and hands it to each connection's table with
- * `QuicStreams.share`, so the memory follows the streams moving bytes rather
- * than the slots the server was sized for. Each pool's ceiling is two
- * buffers for every stream it serves, one a side, which is what holding
- * every buffer at once costs. The reserve below counts against it too, so a
- * send side that finds the pools out takes the reserve's last buffer
- * (`lendSend`): with that side holding none, not every buffer is lent, and
- * the one left over is in the reserve.
+ * The buffers a connection's streams borrow: `data` lends the receive and send
+ * buffers of `bufferSize` bytes, `bits` the bitmaps beside them, a bit per
+ * byte. One table makes a private set for itself; a server makes one set for
+ * every slot and hands it to each connection's table with `QuicStreams.share`,
+ * so the memory follows the streams moving bytes rather than the slots the
+ * server was sized for. Each pool's ceiling is two buffers for every stream it
+ * serves, one a side, which is what holding every buffer at once costs.
+ *
+ * The reserve below counts against it too, so a send side that finds the pools
+ * out takes the reserve's last buffer (`lendSend`): with that side holding
+ * none, not every buffer is lent, and the one left over is in the reserve.
  *
  * Frames are handled inside the arena scope a packet is opened in, where
  * nothing may allocate, grow a list or push onto one. So the frames lend and
- * take back receive buffers through a reserve the pools keep beside their
- * free lists, by index alone: `lend` hands one out, `keep` takes one back
- * zeroed. Before each scope `prime` trims the reserve to `hold` buffers,
- * giving the rest to the pools, and tops it up to as many as the packet
- * could start receive sides, taking them. `hold` is one connection's stream
- * count, and the reserve three times that long, so a packet that lends
- * nothing and takes back every buffer its connection held still fits. Once
- * warm, the reserve mostly circulates on its own and `prime` costs a handful
- * of comparisons, with no take or give. The pools count the reserve's
- * buffers as lent. `prime` and the `drain` before each give-back outside a
- * packet trim it to `hold` for the whole server, not each connection, but
- * `keep` inside a packet can raise it to three times `hold`, and it stays
- * there until the next `prime` or `drain`.
+ * take back receive buffers through a reserve the pools keep beside their free
+ * lists, by index alone: `lend` hands one out, `keep` takes one back zeroed.
+ * Before each scope `prime` trims the reserve to `hold` buffers, giving the
+ * rest to the pools, and tops it up to as many as the packet could start
+ * receive sides, taking them.
+ *
+ * `hold` is one connection's stream count, and the reserve three times that
+ * long, so a packet that lends nothing and takes back every buffer its
+ * connection held still fits. Once warm, the reserve mostly circulates on its
+ * own and `prime` costs a handful of comparisons, with no take or give. The
+ * pools count the reserve's buffers as lent. `prime` and the `drain` before
+ * each give-back outside a packet trim it to `hold` for the whole server, not
+ * each connection, but `keep` inside a packet can raise it to three times
+ * `hold`, and it stays there until the next `prime` or `drain`.
  */
 export class QuicStreamPools {
   /** The pool of stream buffers, `bufferSize` bytes each, that the send and receive sides borrow. */

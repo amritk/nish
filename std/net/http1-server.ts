@@ -45,15 +45,16 @@
  *
  * **Streaming both ways.** A request body arrives a chunk at a time, at most
  * `chunkSize` bytes in each `H1_BODY`, whether it was sent with
- * `Content-Length` or chunked. A response is written with a length or
- * chunked, a `write` at a time into the output buffer; a `write` takes what
- * fits and answers how much, and when it could not take everything the
- * connection answers `H1_NEED_MORE` until the socket has drained half the
- * output, then `H1_WRITE`. Until then it reads nothing, so the window the
- * program is writing from stays valid: back-pressure on the way out. Nothing
- * buffers a whole body. On an `Http1Server` slot `sendBody` sends a body with
- * a length from the program's own array, the queued output with it, and
- * copies only what the socket did not take, under the same rules.
+ * `Content-Length` or chunked. A response is written with a length or chunked,
+ * a `write` at a time into the output buffer; a `write` takes what fits and
+ * answers how much, and when it could not take everything the connection
+ * answers `H1_NEED_MORE` until the socket has drained half the output, then
+ * `H1_WRITE`. Until then it reads nothing, so the window the program is writing
+ * from stays valid: back-pressure on the way out.
+ *
+ *  Nothing buffers a whole body. On an `Http1Server` slot `sendBody` sends a
+ *  body with a length from the program's own array, the queued output with it,
+ *  and copies only what the socket did not take, under the same rules.
  *
  * **What the server decides.** The framing field (`Content-Length` or
  * `Transfer-Encoding: chunked`) and the `Connection` field are the server's;
@@ -92,18 +93,20 @@
  * instead of requests, the bytes that followed the request included. A ping
  * is answered with a pong and a close with a close, by the connection.
  *
- * **Caps are start-up numbers**, all in `Http1Config`: the request target,
- * the header section and its field count, a request body, the chunk handed
- * over, the output buffer, a WebSocket message, the idle timeout and the
- * deadline for a whole request head (`headTimeout`, against slowloris); the
- * slots are the pool's size. `Http1Server` builds a slot's connection on the
- * first accept into it and keeps it, so a pool sized for its peak costs at
- * start-up only what does not depend on the size, and holds at most `size`
- * connections once the peak has come; `Http1TlsServer` does the same for a
- * slot's connection and, through `TlsTcpServer`, its TLS state. Every buffer
- * is allocated with its slot or grown to its cap on first use and kept, so a
- * warmed slot serves request after request with `Arena.used()` flat.
- * Accepting a WebSocket allocates (the accept key), once a connection.
+ * **Caps are start-up numbers**, all in `Http1Config`: the request target, the
+ * header section and its field count, a request body, the chunk handed over,
+ * the output buffer, a WebSocket message, the idle timeout and the deadline for
+ * a whole request head (`headTimeout`, against slowloris); the slots are the
+ * pool's size.
+ *
+ *  `Http1Server` builds a slot's connection on the first accept into it and
+ *  keeps it, so a pool sized for its peak costs at start-up only what does not
+ *  depend on the size, and holds at most `size` connections once the peak has
+ *  come; `Http1TlsServer` does the same for a slot's connection and, through
+ *  `TlsTcpServer`, its TLS state. Every buffer is allocated with its slot or
+ *  grown to its cap on first use and kept, so a warmed slot serves request after
+ *  request with `Arena.used()` flat. Accepting a WebSocket allocates (the accept
+ *  key), once a connection.
  *
  * **Output is borrowed.** The pools' slots share an `Http1OutputPool`: a
  * connection takes an `outputSize` buffer when it first needs room to write
@@ -1361,21 +1364,22 @@ export class Http1Connection {
   }
 
   /**
-   * `write` of `buf[off .. off + len)`, sent from `buf` itself where it can
-   * be: under a `Content-Length` response on a connection whose carrier
-   * named its socket (`fd`, set by `Http1Server.accept`) and with no write
-   * held back, the queued output and the body leave in one `netWrite2`, and
-   * only what the socket did not take is copied into the output, the way
-   * `write` copies it (what does not fit is answered short, and `H1_WRITE`
-   * says when to send the rest). Once it returns the connection holds no
-   * reference to `buf`, so the caller may reuse or give back its bytes at
-   * once. A chunked or empty response, a write held back (`H1_AGAIN` or a
-   * short answer not yet followed by `H1_WRITE`), and a connection with no
-   * socket (`Http1TlsServer`, a sans-IO carrier) copy all of it: it is
-   * `write`, with the same bytes on the wire. Answers what `write` answers,
-   * `H1_INVALID` for more than the response still owes; `H1_CLOSED` also
-   * when the socket failed during the send, which aborts the connection. A
-   * window outside `buf` panics.
+   * `write` of `buf[off .. off + len)`, sent from `buf` itself where it can be:
+   * under a `Content-Length` response on a connection whose carrier named its
+   * socket (`fd`, set by `Http1Server.accept`) and with no write held back, the
+   * queued output and the body leave in one `netWrite2`, and only what the
+   * socket did not take is copied into the output, the way `write` copies it
+   * (what does not fit is answered short, and `H1_WRITE` says when to send the
+   * rest).
+   *
+   * Once it returns the connection holds no reference to `buf`, so the caller
+   * may reuse or give back its bytes at once. A chunked or empty response, a
+   * write held back (`H1_AGAIN` or a short answer not yet followed by
+   * `H1_WRITE`), and a connection with no socket (`Http1TlsServer`, a sans-IO
+   * carrier) copy all of it: it is `write`, with the same bytes on the wire.
+   * Answers what `write` answers, `H1_INVALID` for more than the response still
+   * owes; `H1_CLOSED` also when the socket failed during the send, which aborts
+   * the connection. A window outside `buf` panics.
    *
    * @param buf the body bytes to send, free for the caller to reuse once this returns
    * @param off where in `buf` the window starts
@@ -1521,24 +1525,24 @@ export class Http1Connection {
   /**
    * Answers the current request with all of `body[off .. off + len)` in one
    * call: `respond`, `write` and `end`, the body compressed by `enc` when
-   * `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it,
-   * with `Content-Encoding: gzip` and the compressed `Content-Length`, and
-   * otherwise sent as it is; `Vary: Accept-Encoding` while `enc.vary` is set
-   * and the choice turned on the request (`HttpCompressor.varies`). Under
-   * `enc.segmentMode` the compressed response goes out only when, head
-   * included, it takes fewer segments of `segmentMss(enc)` bytes than the
-   * body as it is, and a response that fits one segment as it is goes so
-   * without compressing (`enc.oneSegment`); `enc.decision`
-   * says what was chosen. A request that refuses identity (`identityRefused`)
-   * is sent gzip whatever the length, the saving or the segments
-   * (`enc.compressAnyway`).
-   * The program's fields may not name `Content-Encoding` or, with
-   * `enc.vary`, `Vary`. The whole response is written or none of
-   * it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says
-   * when to try again, compressing again), `H1_INVALID` for a response
-   * larger than the output could ever hold or one `respond` refuses,
-   * `H1_CLOSED` with no request to answer; 0 once it is queued. A window
-   * outside `body` panics.
+   * `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it, with
+   * `Content-Encoding: gzip` and the compressed `Content-Length`, and otherwise
+   * sent as it is; `Vary: Accept-Encoding` while `enc.vary` is set and the
+   * choice turned on the request (`HttpCompressor.varies`).
+   *
+   * Under `enc.segmentMode` the compressed response goes out only when, head
+   * included, it takes fewer segments of `segmentMss(enc)` bytes than the body
+   * as it is, and a response that fits one segment as it is goes so without
+   * compressing (`enc.oneSegment`); `enc.decision` says what was chosen. A
+   * request that refuses identity (`identityRefused`) is sent gzip whatever the
+   * length, the saving or the segments (`enc.compressAnyway`). The program's
+   * fields may not name `Content-Encoding` or, with `enc.vary`, `Vary`.
+   *
+   * The whole response is written or none of it: `H1_AGAIN` when the output has
+   * no room for it yet (`H1_WRITE` says when to try again, compressing again),
+   * `H1_INVALID` for a response larger than the output could ever hold or one
+   * `respond` refuses, `H1_CLOSED` with no request to answer; 0 once it is
+   * queued. A window outside `body` panics.
    *
    * @param status the HTTP status code to send, as `respond` takes it
    * @param names the program's field names, without `Content-Encoding` (or `Vary` under `enc.vary`)

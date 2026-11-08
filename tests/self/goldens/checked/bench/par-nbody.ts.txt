@@ -4,10 +4,10 @@ entry: bench/par-nbody.ts
 module std/threads.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
-unsafe import 69:10 wrappingAdd from "nish:unsafe"
-unsafe import 69:23 wrappingSub from "nish:unsafe"
-unsafe call 575:18 wrappingAdd (node 1394)
-unsafe call 587:18 wrappingSub (node 1424)
+unsafe import 73:10 wrappingAdd from "nish:unsafe"
+unsafe import 73:23 wrappingSub from "nish:unsafe"
+unsafe call 579:18 wrappingAdd (node 1394)
+unsafe call 591:18 wrappingSub (node 1424)
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 const MIN_STACK: i32 = 131072

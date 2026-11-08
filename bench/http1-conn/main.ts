@@ -49,6 +49,7 @@
 // differently disagree on it.
 
 import { copyBytes } from "nish/bytes"
+import { netRead, netWrite2, unixSocketPair } from "nish:net"
 import { monotonicNanos } from "nish:process"
 import {
   H1_BODY,
@@ -510,6 +511,210 @@ const idle = (shape: string, requests: i32, count: i32, batches: i32, evictMib: 
   return 0
 }
 
+/**
+ * The GET the challenge's load generator sends for an article list, its
+ * headers in its order, with an `Authorization: Token` the length of the
+ * HS256 JWT it signs (147 bytes): about 300 head bytes and no body.
+ */
+const articles = (): u8[] => {
+  const alphabet: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+  const parts: string[] = ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."]
+  let x: i32 = 11
+  for (let n: i32 = 37; n < 147; n += 1) {
+    x = (x * 1103 + 12345) & 65535
+    parts.push(n === 103 ? "." : alphabet.substring(x & 63, (x & 63) + 1))
+  }
+  return ascii(
+    "GET /api/articles?limit=10&offset=20 HTTP/1.1\r\n" +
+      "Host: 127.0.0.1:8080\r\n" +
+      "User-Agent: conduit-loadgen/1\r\n" +
+      "Accept: application/json\r\n" +
+      "Accept-Encoding: gzip\r\n" +
+      `Authorization: Token ${parts.join("")}\r\n` +
+      "\r\n"
+  )
+}
+
+/** A 2,600-byte JSON answer, the size of the article list the challenge returns. */
+const articleList = (): u8[] => {
+  const parts: string[] = ['{"articles":[']
+  let len: i32 = 13
+  let k: i32 = 0
+  while (len < 2560) {
+    const item: string =
+      `${k > 0 ? "," : ""}{"slug":"article-${k}","title":"Title ${k}","favoritesCount":${k * 7},` +
+      `"author":{"username":"user${k}","following":false}}`
+    parts.push(item)
+    len += item.length
+    k += 1
+  }
+  const tail: string = `],"articlesCount":${k}}`
+  parts.push(tail)
+  len += tail.length
+  const out: u8[] = ascii(parts.join(""))
+  while (toI32(out.length) < 2600) {
+    out.push(toU8(32))
+  }
+  return out
+}
+
+/** The answer goes out through `sendBody`; run.mjs builds a base without it with `write`. */
+const VIA_SEND_BODY: boolean = true
+
+/**
+ * The stages shape: `count` slots of an `IdlePool` answering the load
+ * generator's GET with 2,600 bytes through `sendBody`, each slot's socket one
+ * end of a Unix stream pair the bench drains between requests, so the
+ * response really crosses `sendmsg`. Requests go round-robin, so each lands
+ * on a connection that has rested while every other one was served.
+ *
+ * A request is cut by a clock read between stages, eight in all:
+ *   recv      `readable`: room, the read into the scratch, `feed` (and the
+ *             lending `unpark` does), `headArrived`, and its `settle`
+ *   parse     the `next` that answers `H1_REQUEST`: the head parsed
+ *   dispatch  the `next` that answers `H1_END`, and the `next` after the
+ *             answer that answers `H1_NEED_MORE`: the event path
+ *   respond   `respond`: the head built, `Date` and all
+ *   sendBody  `sendBody` and `end`: the write path, the `sendmsg` included
+ *   park      `flush`: `send`, `release`, `isDone`, `park`, the interest
+ * Each span holds one clock read. Before the requests, the same number of
+ * bare clock reads and of bare `netWrite2` calls on the same socket with the
+ * same head and body lengths, each between two clock reads, are timed the
+ * same way; run.mjs subtracts the first from every span and the second from
+ * `sendBody`, leaving the library's own cost.
+ *
+ * Prints `stages <ns> <requests> <checksum> <made...>` for the batch with the
+ * smallest total, `<ns>` the sum of its spans, then a second line:
+ * `clock <ns> writev <ns>` and `<stage> <ns>` for each stage, every figure a
+ * total over `requests`.
+ */
+const stages = (requests: i32, count: i32, batches: i32, calibrate: boolean): i32 => {
+  const b: IdlePool = new IdlePool(count, false, 0)
+  const req: u8[] = articles()
+  const body: u8[] = articleList()
+  const n: i32 = toI32(body.length)
+  const names: u8[][] = [ascii("Content-Type")]
+  const values: u8[][] = [ascii("application/json")]
+  const pair: i32[] = [-1, -1]
+  if (unixSocketPair(1, pair) !== 0) {
+    panic("bench: no Unix socket pair")
+  }
+  const drain: u8[] = new Array<u8>(65536)
+  for (let i: i32 = 0; i < count; i += 1) {
+    b.connections[i].fd = pair[0] // sendBody only
+  }
+  let sum: i64 = 0
+  let headLen: i32 = 0
+  let bestSpans: i64 = 0
+  let bestStages: i64[] = []
+  // One untimed pass: every slot has served the GET and parked.
+  for (let pass: i32 = 0; pass <= batches; pass += 1) {
+    const at: i64[] = [0, 0, 0, 0, 0, 0, 0]
+    let k: i32 = 0
+    let slot: i32 = 0
+    const total: i32 = pass === 0 ? count : requests
+    while (k < total) {
+      const conn: Http1Connection = b.connections[slot]
+      const t0: i64 = monotonicNanos()
+      if (b.readable(slot, req) !== 1) {
+        panic("bench: the connection does not want to read")
+      }
+      const t1: i64 = monotonicNanos()
+      if (b.next(slot) !== H1_REQUEST) {
+        panic("bench: no request")
+      }
+      const t2: i64 = monotonicNanos()
+      if (b.next(slot) !== H1_END) {
+        panic("bench: the GET did not end")
+      }
+      const t3: i64 = monotonicNanos()
+      if (conn.respond(200, names, values, n) !== 0) {
+        panic("bench: the response was refused")
+      }
+      const t4: i64 = monotonicNanos()
+      headLen = conn.outputEnd - conn.outputStart
+      sum = sum + toI64(headLen) + toI64(conn.output[conn.outputStart + 9])
+      const sent: i32 = conn.sendBody(body, 0, n)
+      conn.end()
+      const t5: i64 = monotonicNanos()
+      if (b.next(slot) !== H1_NEED_MORE) {
+        panic("bench: an event after the answer")
+      }
+      const t6: i64 = monotonicNanos()
+      if (b.flush(slot) !== 1) {
+        panic("bench: the connection does not want to read")
+      }
+      const t7: i64 = monotonicNanos()
+      sum = sum + toI64(sent)
+      at[0] = at[0] + (t1 - t0)
+      at[1] = at[1] + (t2 - t1)
+      at[2] = at[2] + (t3 - t2) + (t6 - t5)
+      at[3] = at[3] + (t4 - t3)
+      at[4] = at[4] + (t5 - t4)
+      at[5] = at[5] + (t7 - t6)
+      let got: i32 = 1
+      while (got > 0) {
+        got = netRead(pair[1], drain, 0, toI32(drain.length))
+      }
+      k += 1
+      slot += 1
+      if (slot === count) {
+        slot = 0
+      }
+    }
+    if (pass === 0) {
+      sum = 0
+      continue
+    }
+    let spans: i64 = 0
+    for (let s: i32 = 0; s < 6; s += 1) {
+      spans = spans + at[s]
+    }
+    if (pass === 1 || spans < bestSpans) {
+      bestSpans = spans
+      bestStages = at
+    }
+  }
+  // The clock alone: as many reads as the requests make spans, back to back.
+  let clock: i64 = 0
+  let writev: i64 = 0
+  for (let pass: i32 = 0; calibrate && pass < batches; pass += 1) {
+    const started: i64 = monotonicNanos()
+    let last: i64 = started
+    for (let k: i32 = 0; k < requests; k += 1) {
+      last = monotonicNanos()
+    }
+    const c: i64 = last - started
+    if (pass === 0 || c < clock) {
+      clock = c
+    }
+    // `sendBody`'s system call alone, on the same socket with the same lengths.
+    const head: u8[] = new Array<u8>(headLen)
+    let w: i64 = 0
+    for (let k: i32 = 0; VIA_SEND_BODY && k < requests; k += 1) {
+      const before: i64 = monotonicNanos()
+      netWrite2(pair[0], head, 0, headLen, body, 0, n)
+      w = w + (monotonicNanos() - before)
+      let got: i32 = 1
+      while (got > 0) {
+        got = netRead(pair[1], drain, 0, toI32(drain.length))
+      }
+    }
+    if (pass === 0 || w < writev) {
+      writev = w
+    }
+  }
+  console.log(`stages ${bestSpans} ${requests} ${sum} ${b.inputs.made} ${b.heads.made} ${b.outputs.made}`)
+  const cells: string[] = [`clock ${clock} writev ${writev}`]
+  // The stages one request is cut into, in the order they run.
+  const named: string[] = ["recv", "parse", "dispatch", "respond", "sendBody", "park"]
+  for (let s: i32 = 0; s < 6; s += 1) {
+    cells.push(`${named[s]} ${bestStages[s]}`)
+  }
+  console.log(cells.join(" "))
+  return 0
+}
+
 export const main = (): i32 => {
   const shape: string = process.argv.length > 1 ? process.argv[1] : "hot"
   const requests: i32 = process.argv.length > 2 ? parseInt(process.argv[2]) : 1000000
@@ -519,6 +724,11 @@ export const main = (): i32 => {
   // The ring is evictMib * 1048576 bytes in an i32: 2048 MiB is past it.
   if (evictMib < 0 || evictMib > 2047) {
     panic("bench: the eviction ring must be 0 to 2047 MiB")
+  }
+  // stages-loop is the stages shape without its calibration, for counting
+  // the loop alone under perf stat.
+  if (shape === "stages" || shape === "stages-loop") {
+    return stages(requests, count, batches, shape === "stages")
   }
   if (shape === "idle" || shape === "direct" || shape === "rss") {
     return idle(shape, requests, count, batches, evictMib)
