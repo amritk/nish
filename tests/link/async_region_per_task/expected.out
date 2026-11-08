@@ -1,0 +1,8 @@
+live after two spawns: 2
+each task allocates in an arena of its own: yes
+main's arena is as it was: yes
+a's string survives b's turn: yes
+live after a finishes: 1
+b's string survives a's end: yes
+live after b finishes: 0
+a reused node gets a fresh region: yes

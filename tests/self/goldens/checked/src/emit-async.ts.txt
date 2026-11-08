@@ -18,17 +18,17 @@ import StringBuilder from "./strings" -> struct StringBuilder
 import roundUpTo from "./structs" -> function @roundUpTo
 import Local from "./symbols" -> struct Local
 import HARDENING_ATTRS from "./target" -> const HARDENING_ATTRS
+import T_STRING from "./types" -> const T_STRING
 const ASYNC_AWAIT: i32 = 0 [exported]
 const ASYNC_SPAWN: i32 = 1
 const ASYNC_ALL: i32 = 2
-const NODE_HEADER: i32 = 16
+const NODE_HEADER: i32 = 32
 const MARK_END: string = "\u0001"
 const MARK_START: string = "\u0001async."
 const KIDS_MARK: string = "\u0001async.kids:"
 const OFF_MARK: string = "\u0001async.off:"
 const BYTES_MARK: string = "\u0001async.bytes:"
-const ENQUEUE_DECL: string = "declare hidden void @nish.async.enqueue(i8*)"
-const STEP_DECL: string = "declare hidden i1 @nish.async.step()"
+const RUN_DECL: string = "declare hidden i1 @nish.async.run()"
 const DRAIN_DECL: string = "declare hidden void @nish.async.drain()"
 const FLAG_WORDS: string = " nuw nsw exact disjoint nneg fast nnan ninf nsz arcp contract afn reassoc volatile atomic tail musttail notail fastcc ccc coldcc tailcc noalias nonnull noundef zeroext signext inreg "
 const BINARY_OPS: string = " add sub mul udiv sdiv urem srem shl lshr ashr and or xor fadd fsub fmul fdiv frem fneg "
@@ -300,62 +300,92 @@ function emitAsyncCall(emitter: Emitter, expr: Node, sig: FunctionSig, operandTy
   callee +18:3 emitPoll -> @emitPoll
   callee +19:10 loadAnswer -> @loadAnswer
 function emitSpawnedFrame(emitter: Emitter, sig: FunctionSig, id: i32, head: string, operandTypes: string[], operandValues: string[]): void -> @emitSpawnedFrame
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: head id
-  calls: AsyncRegistry.spawnKindOf Emitter.declare IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock IRModule.addRawDefinition nish_str_concat nish_str_from_i32 storeHead
-  pointer emitter: size=352 writesThrough=false captured=false passedTo=Emitter.declare#0 Emitter.declare#0 Emitter.declare#0 Emitter.declare#0 storeHead#0
+  calls: AsyncRegistry.spawnKindOf Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock IRModule.addRawDefinition nish_array_grow nish_str_concat nish_str_from_i32 storeHead
+  pointer emitter: size=352 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 storeHead#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer sig: size=176 writesThrough=false captured=false
   pointer operandTypes: size=0 writesThrough=false captured=false passedTo=storeHead#3
-  pointer operandValues: size=0 writesThrough=false captured=false passedTo=storeHead#4
-  stackSites=0 stackLocals=0
+  pointer operandValues: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
   local -3:9 registry: AsyncRegistry (const)
   local -2:9 fn: IRFunction (const)
   local -1:9 kind: i32 (const)
   callee -1:16 AsyncRegistry.spawnKindOf -> @AsyncRegistry.spawnKindOf
-  callee +4:3 Emitter.declare -> @Emitter.declare
-  callee +5:3 Emitter.declare -> @Emitter.declare
-  callee +6:3 Emitter.declare -> @Emitter.declare
-  callee +7:3 Emitter.declare -> @Emitter.declare
-  local +8:9 attrs: string (const)
-  callee +9:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
-  local +12:9 node: string (const)
-  callee +12:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local +13:9 none: string (const)
-  callee +13:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local +14:9 oom: IRBlock (const)
-  callee +14:15 IRFunction.newBlock -> @IRFunction.newBlock
-  local +15:9 go: IRBlock (const)
-  callee +15:14 IRFunction.newBlock -> @IRFunction.newBlock
-  callee +16:3 IRFunction.emit -> @IRFunction.emit
-  callee +17:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +18:3 IRFunction.emit -> @IRFunction.emit
-  callee +19:3 IRFunction.emit -> @IRFunction.emit
-  callee +20:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +21:9 frame: string (const)
-  callee +21:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +22:3 storeHead -> @storeHead
-  local +23:9 finished: string (const)
-  callee +23:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local +24:9 done: IRBlock (const)
-  callee +24:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local +25:9 queue: IRBlock (const)
-  callee +25:17 IRFunction.newBlock -> @IRFunction.newBlock
-  local +26:9 join: IRBlock (const)
-  callee +26:16 IRFunction.newBlock -> @IRFunction.newBlock
-  callee +27:3 IRFunction.emit -> @IRFunction.emit
-  callee +28:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +4:9 attrs: string (const)
+  callee +5:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  local +8:9 node: string (const)
+  callee +8:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +9:17 Emitter.useRuntime -> @Emitter.useRuntime
+  local +11:9 prev: string (const)
+  callee +11:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:41 Emitter.useRuntime -> @Emitter.useRuntime
+  local +12:9 values: string[] (const)
+  local +13:7 k: i32 (let)
+  local +16:9 value: string (let)
+  callee +18:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +18:40 Emitter.useRuntime -> @Emitter.useRuntime
+  local +23:9 frame: string (const)
+  callee +23:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +24:3 storeHead -> @storeHead
+  local +25:9 finished: string (const)
+  callee +25:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +26:3 IRFunction.emit -> @IRFunction.emit
+  callee +26:24 Emitter.useRuntime -> @Emitter.useRuntime
+  local +27:9 done: IRBlock (const)
+  callee +27:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +28:9 join: IRBlock (const)
+  callee +28:16 IRFunction.newBlock -> @IRFunction.newBlock
   callee +29:3 IRFunction.emit -> @IRFunction.emit
-  callee +30:3 IRFunction.emit -> @IRFunction.emit
-  callee +31:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +32:9 kindByte: string (const)
-  callee +32:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local +33:9 kindAt: string (const)
-  callee +33:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +34:3 IRFunction.emit -> @IRFunction.emit
-  callee +35:3 IRFunction.emit -> @IRFunction.emit
-  callee +36:3 IRFunction.emit -> @IRFunction.emit
-  callee +37:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +30:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +31:3 IRFunction.emit -> @IRFunction.emit
+  callee +31:24 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +32:3 IRFunction.emit -> @IRFunction.emit
+  callee +33:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+function emitKernelWait(emitter: Emitter, expr: Node, builtin: string): string -> @emitKernelWait [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: Emitter.emitExpression Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock asyncFail nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 suspends
+  pointer emitter: size=352 writesThrough=true captured=false passedTo=asyncFail#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer expr: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -26:9 fn: IRFunction (const)
+  local -25:9 owner: FunctionSig | null (const)
+  callee -24:8 suspends -> @suspends
+  callee -23:5 asyncFail -> @asyncFail
+  local -20:9 arg: string (const)
+  callee -20:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local -19:7 token: string (let)
+  callee -17:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -17:38 Emitter.useRuntime -> @Emitter.useRuntime
+  local -15:11 dir: i32 (const)
+  callee -14:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -14:38 Emitter.useRuntime -> @Emitter.useRuntime
+  local -12:9 slot: string (const)
+  callee -12:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee -11:3 IRFunction.emit -> @IRFunction.emit
+  local -10:9 poll: IRBlock (const)
+  callee -10:16 IRFunction.newBlock -> @IRFunction.newBlock
+  callee -9:3 IRFunction.emit -> @IRFunction.emit
+  callee -8:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local -7:9 held: string (const)
+  callee -7:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local -6:9 answer: string (const)
+  callee -6:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -6:43 Emitter.useRuntime -> @Emitter.useRuntime
+  local -5:9 pends: string (const)
+  callee -5:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local -4:9 ready: IRBlock (const)
+  callee -4:17 IRFunction.newBlock -> @IRFunction.newBlock
+  local -3:9 pending: IRBlock (const)
+  callee -3:19 IRFunction.newBlock -> @IRFunction.newBlock
+  callee -2:3 IRFunction.emit -> @IRFunction.emit
+  callee -1:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +1:3 IRFunction.emit -> @IRFunction.emit
+  callee +2:3 IRFunction.emit -> @IRFunction.emit
+  callee +3:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +4:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitSpawn(emitter: Emitter, expr: Node): string -> @emitSpawn [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -483,18 +513,18 @@ function emitAsyncMain(emitter: Emitter, fn: IRFunction, userMain: FunctionSig):
   callee +26:20 IRFunction.emitValue -> @IRFunction.emitValue
   callee +27:3 IRFunction.emit -> @IRFunction.emit
   callee +28:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +29:9 progress: string (const)
-  callee +29:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +30:3 IRFunction.emit -> @IRFunction.emit
-  callee +31:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +32:3 IRFunction.emit -> @IRFunction.emit
+  local +32:9 woke: string (const)
+  callee +32:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee +33:3 IRFunction.emit -> @IRFunction.emit
   callee +34:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee +35:3 IRFunction.emit -> @IRFunction.emit
-  callee +36:7 Emitter.llvm -> @Emitter.llvm
-  local +39:9 at: string (const)
-  callee +39:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +40:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +36:3 IRFunction.emit -> @IRFunction.emit
+  callee +37:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +38:3 IRFunction.emit -> @IRFunction.emit
+  callee +39:7 Emitter.llvm -> @Emitter.llvm
+  local +42:9 at: string (const)
+  callee +42:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +43:10 IRFunction.emitValue -> @IRFunction.emitValue
 function isNameByte(c: i32): boolean -> @isNameByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -1137,8 +1167,8 @@ function AsyncLayout.resolve(this: AsyncLayout, text: string): string -> @AsyncL
   local +21:11 value: i32 (let)
   callee +23:17 AsyncLayout.kids -> @AsyncLayout.kids
   callee +23:27 leadingNumber -> @leadingNumber
-  callee +25:36 AsyncLayout.units -> @AsyncLayout.units
-  callee +25:47 leadingNumber -> @leadingNumber
+  callee +25:22 AsyncLayout.units -> @AsyncLayout.units
+  callee +25:33 leadingNumber -> @leadingNumber
   local +27:15 pair: string (const)
   local +28:15 dot: i32 (const)
   callee +29:17 AsyncLayout.offset -> @AsyncLayout.offset
@@ -1155,26 +1185,25 @@ function removeLine(text: string, line: string): string -> @removeLine
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
 function driverText(registry: AsyncRegistry, text: string): string -> @driverText
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
   pointer registry: size=64 writesThrough=false captured=false
-  stackSites=2 stackLocals=2
+  stackSites=3 stackLocals=3
   local +0:9 attrs: string (const)
   local +1:9 out: StringBuilder (const)
   callee +1:15 new StringBuilder -> @StringBuilder.constructor
   callee +2:3 StringBuilder.add -> @StringBuilder.add
-  callee +3:3 StringBuilder.add -> @StringBuilder.add
-  callee +4:3 StringBuilder.add -> @StringBuilder.add
-  callee +6:5 StringBuilder.add -> @StringBuilder.add
-  callee +9:5 StringBuilder.add -> @StringBuilder.add
-  local +11:7 kind: i32 (let)
-  callee +14:7 StringBuilder.add -> @StringBuilder.add
-  callee +18:3 StringBuilder.add -> @StringBuilder.add
-  local +104:9 cases: string[] (const)
-  callee +110:3 StringBuilder.add -> @StringBuilder.add
-  callee +113:5 StringBuilder.add -> @StringBuilder.add
-  callee +118:3 StringBuilder.add -> @StringBuilder.add
-  callee +119:10 StringBuilder.toText -> @StringBuilder.toText
+  local +3:9 runtime: string[] (const)
+  local +10:14 line: string (const)
+  callee +13:7 StringBuilder.add -> @StringBuilder.add
+  local +16:7 kind: i32 (let)
+  callee +19:7 StringBuilder.add -> @StringBuilder.add
+  callee +23:3 StringBuilder.add -> @StringBuilder.add
+  local +73:9 cases: string[] (const)
+  callee +79:3 StringBuilder.add -> @StringBuilder.add
+  callee +82:5 StringBuilder.add -> @StringBuilder.add
+  callee +87:3 StringBuilder.add -> @StringBuilder.add
+  callee +88:10 StringBuilder.toText -> @StringBuilder.toText
 function finalizeAsync(registry: AsyncRegistry, texts: string[]): string[] -> @finalizeAsync [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via AsyncLayout.resolve
@@ -1192,5 +1221,4 @@ function finalizeAsync(registry: AsyncRegistry, texts: string[]): string[] -> @f
   local +7:9 text: string (let)
   callee +8:12 removeLine -> @removeLine
   callee +9:12 removeLine -> @removeLine
-  callee +10:12 removeLine -> @removeLine
-  callee +11:24 driverText -> @driverText
+  callee +10:24 driverText -> @driverText

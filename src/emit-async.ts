@@ -20,13 +20,14 @@
  * pass (`finalizeAsync`) replaces once every module is emitted, since a
  * callee's frame may live in another module.
  *
- * `spawn(f(x))` puts `f`'s frame in a `malloc`ed node, resumes it once, and
- * files it on the in-process queue when it pends. The queue and its driver
- * (`@nish.async.step`, `@nish.async.drain`) are appended to one module by
- * `finalizeAsync`; it resumes a task through a switch on the task's kind,
- * never through a function pointer. Stage 5 replaces the queue, the `malloc`
- * and the trap on a stuck queue with the executor in `runtime-async.c`
- * (docs/wp49-async-server.md, "Stage 4, part 2").
+ * `spawn(f(x))` puts `f`'s frame in a node from the executor's slab for its
+ * kind (`runtime-async.c`), in a region of its own, and resumes it once. The
+ * loop over the executor (`@nish.async.run`, `@nish.async.drain`) is
+ * appended to one module by `finalizeAsync`; it resumes a task through a
+ * switch on the task's kind, never through a function pointer. A task pends
+ * only at `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`
+ * (`emitKernelWait`), and is resumed when the kernel says the wait is over
+ * (docs/wp49-async-server.md, "Stage 5, part 1").
  */
 
 import { Emitter } from "./emit"
@@ -42,14 +43,15 @@ import { StringBuilder } from "./strings"
 import { roundUpTo } from "./structs"
 import { Local } from "./symbols"
 import { HARDENING_ATTRS } from "./target"
+import { T_STRING } from "./types"
 
 /** How `emitCall` lowers a call to a suspending function: awaited, spawned, or one of an `awaitAll`. */
 export const ASYNC_AWAIT: i32 = 0
 const ASYNC_SPAWN: i32 = 1
 const ASYNC_ALL: i32 = 2
 
-/** The bytes of a spawned task's node ahead of its frame: the queue link and the task kind. */
-const NODE_HEADER: i32 = 16
+/** The bytes of a spawned task's node ahead of its frame: runtime-async.c's `nish_task` (`NISH_ASYNC_HEADER`). */
+const NODE_HEADER: i32 = 32
 
 /**
  * A placeholder opens and closes with a byte `irEscape` always writes as `\01`,
@@ -62,8 +64,7 @@ const KIDS_MARK: string = "\x01async.kids:"
 const OFF_MARK: string = "\x01async.off:"
 const BYTES_MARK: string = "\x01async.bytes:"
 
-const ENQUEUE_DECL: string = "declare hidden void @nish.async.enqueue(i8*)"
-const STEP_DECL: string = "declare hidden i1 @nish.async.step()"
+const RUN_DECL: string = "declare hidden i1 @nish.async.run()"
 const DRAIN_DECL: string = "declare hidden void @nish.async.drain()"
 
 /** Whether `sig` is lowered to a frame: an async function whose body awaits. */
@@ -303,7 +304,14 @@ export const emitAsyncCall = (
   return loadAnswer(emitter, sig, "%async.kids", head, operandTypes.length, expr, calleePrivate)
 }
 
-/** `spawn`'s node: allocated, started, and freed at once or filed on the queue. */
+/**
+ * `spawn`'s node, from the executor's slab for its kind (`nish_async_spawn`),
+ * with a region of its own: the task is entered, its string arguments copied
+ * into its region (the checker refuses any other argument that points at
+ * memory, NL2673), started, and left; a task that finished at once gives its
+ * node back, and one that waits is resumed by `@nish.async.run` when the
+ * kernel says its wait is over.
+ */
 const emitSpawnedFrame = (
   emitter: Emitter,
   sig: FunctionSig,
@@ -319,40 +327,78 @@ const emitSpawnedFrame = (
   if (registry.driverModule < 0) {
     registry.driverModule = registry.module
   }
-  emitter.declare("declare noalias i8* @malloc(i64)")
-  emitter.declare("declare void @free(i8*)")
-  emitter.declare("declare void @llvm.trap()")
-  emitter.declare(ENQUEUE_DECL)
   const attrs = emitter.module.definitionAttrs.length > 0 ? ` ${emitter.module.definitionAttrs}` : ""
   emitter.module.addRawDefinition(
     `define weak_odr hidden i1 @nish.async.task.${kind}(i8* %frame) nounwind${attrs} {\nentry:\n  %done = call i1 @${sig.name}.resume(i8* %frame)\n  ret i1 %done\n}`
   )
-  const node = fn.emitValue(`call noalias i8* @malloc(i64 ${BYTES_MARK}${id}${MARK_END})`)
-  const none = fn.emitValue(`icmp eq i8* ${node}, null`)
-  const oom = fn.newBlock("spawn.oom")
-  const go = fn.newBlock("spawn.go")
-  fn.emit(`br i1 ${none}, label %${oom.label}, label %${go.label}`)
-  fn.placeBlock(oom)
-  fn.emit("call void @llvm.trap()")
-  fn.emit("unreachable")
-  fn.placeBlock(go)
+  const node = fn.emitValue(
+    `call i8* ${emitter.useRuntime("nish_async_spawn")}(i32 ${kind}, i64 ${BYTES_MARK}${id}${MARK_END})`
+  )
+  const prev = fn.emitValue(`call i8* ${emitter.useRuntime("nish_async_enter")}(i8* ${node})`)
+  const values: string[] = []
+  let k = 0
+  while (k < operandValues.length) {
+    // Read before the call, which ends the length facts.
+    let value = operandValues[k]
+    if (k < sig.paramTypes.length && sig.paramTypes[k] === T_STRING) {
+      value = fn.emitValue(`call i8* ${emitter.useRuntime("nish_async_copy_str")}(i8* ${value})`)
+    }
+    values.push(value)
+    k = k + 1
+  }
   const frame = fn.emitValue(`getelementptr inbounds i8, i8* ${node}, i64 ${NODE_HEADER}`)
-  storeHead(emitter, frame, head, operandTypes, operandValues)
+  storeHead(emitter, frame, head, operandTypes, values)
   const finished = fn.emitValue(`call i1 @${sig.name}.resume(i8* ${frame})`)
+  fn.emit(`call void ${emitter.useRuntime("nish_async_leave")}(i8* ${node}, i8* ${prev})`)
   const done = fn.newBlock("spawn.done")
-  const queue = fn.newBlock("spawn.queue")
   const join = fn.newBlock("spawn.join")
-  fn.emit(`br i1 ${finished}, label %${done.label}, label %${queue.label}`)
+  fn.emit(`br i1 ${finished}, label %${done.label}, label %${join.label}`)
   fn.placeBlock(done)
-  fn.emit(`call void @free(i8* ${node})`)
-  fn.emit(`br label %${join.label}`)
-  fn.placeBlock(queue)
-  const kindByte = fn.emitValue(`getelementptr inbounds i8, i8* ${node}, i64 8`)
-  const kindAt = fn.emitValue(`bitcast i8* ${kindByte} to i32*`)
-  fn.emit(`store i32 ${kind}, i32* ${kindAt}`)
-  fn.emit(`call void @nish.async.enqueue(i8* ${node})`)
+  fn.emit(`call void ${emitter.useRuntime("nish_async_done")}(i8* ${node})`)
   fn.emit(`br label %${join.label}`)
   fn.placeBlock(join)
+}
+
+/**
+ * `await sleep(ms)`, `await readable(fd)` or `await writable(fd)` from
+ * `nish:async`: the executor makes the wait and answers a token, kept in a
+ * frame slot; the poll block reads it until the wait is over, suspending the
+ * function at a state of its own while it pends. The answer is an `i1`: true
+ * when the time passed or the descriptor is ready, false when the wait could
+ * not be made (a negative `ms`, a closed or bad descriptor).
+ */
+export const emitKernelWait = (emitter: Emitter, expr: Node, builtin: string): string => {
+  const fn = emitter.fn
+  const owner = emitter.currentSig
+  if (!suspends(owner)) {
+    asyncFail(emitter, `\`${builtin}\` outside a suspending function`)
+    return ""
+  }
+  const arg = emitter.emitExpression(expr.children[1].children[0])
+  let token = ""
+  if (builtin === "async.sleep") {
+    token = fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_sleep")}(i32 ${arg})`)
+  } else {
+    const dir = builtin === "async.writable" ? 1 : 0
+    token = fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_wait_fd")}(i32 ${arg}, i32 ${dir})`)
+  }
+  const slot = fn.emitAlloca("async.wait", "i64", 8)
+  fn.emit(`store i64 ${token}, i64* ${slot}`)
+  const poll = fn.newBlock("wait.poll")
+  fn.emit(`br label %${poll.label}`)
+  fn.placeBlock(poll)
+  const held = fn.emitValue(`load i64, i64* ${slot}`)
+  const answer = fn.emitValue(`call i32 ${emitter.useRuntime("nish_async_poll")}(i64 ${held})`)
+  const pends = fn.emitValue(`icmp slt i32 ${answer}, 0`)
+  const ready = fn.newBlock("wait.ready")
+  const pending = fn.newBlock("wait.pending")
+  fn.emit(`br i1 ${pends}, label %${pending.label}, label %${ready.label}`)
+  fn.placeBlock(pending)
+  emitter.asyncPolls.push(poll.label)
+  fn.emit(`store i32 ${emitter.asyncPolls.length}, i32* %async.state`)
+  fn.emit("br label %async.suspend")
+  fn.placeBlock(ready)
+  return fn.emitValue(`icmp ne i32 ${answer}, 0`)
 }
 
 /** `spawn(f(x))`: a leaf `f` runs to completion here; a suspending one becomes a task. */
@@ -475,8 +521,13 @@ const bindAwaitAllName = (emitter: Emitter, local: Local, value: string, name: N
 }
 
 /**
- * An async `main`: run it, with the queue, until it finishes, then run the
- * queue dry, and answer its exit code. Emitted into the C `main` wrapper.
+ * An async `main`: run it, with the loop, until it finishes, then run the
+ * loop until nothing is ready and nothing waits, and answer its exit code.
+ * Emitted into the C `main` wrapper. A `main` that awaits nothing is called
+ * as a plain function and the loop run after it returns, so the tasks it
+ * spawned finish before the process exits. A `main` that is not `async`
+ * cannot start a task (`spawn` is written only inside an `async` function),
+ * so it has no loop to run.
  */
 export const emitAsyncMain = (emitter: Emitter, fn: IRFunction, userMain: FunctionSig): string => {
   const registry = emitter.asyncRegistry
@@ -493,7 +544,7 @@ export const emitAsyncMain = (emitter: Emitter, fn: IRFunction, userMain: Functi
     fn.emit("call void @nish.async.drain()")
     return code
   }
-  emitter.declare(STEP_DECL)
+  emitter.declare(RUN_DECL)
   emitter.declare("declare void @llvm.trap()")
   const type = `%frame.${userMain.name}`
   const slot = fn.emitAlloca("async.main", type, 16)
@@ -509,8 +560,11 @@ export const emitAsyncMain = (emitter: Emitter, fn: IRFunction, userMain: Functi
   const finished = fn.emitValue(`call i1 @${userMain.name}.resume(i8* ${raw})`)
   fn.emit(`br i1 ${finished}, label %${done.label}, label %${wait.label}`)
   fn.placeBlock(wait)
-  const progress = fn.emitValue("call i1 @nish.async.step()")
-  fn.emit(`br i1 ${progress}, label %${poll.label}, label %${stuck.label}`)
+  // The loop runs tasks until one of main's own waits is over (true), or
+  // answers false with nothing left to wait for, which main's wait is: a
+  // wait that is never answered cannot be made, so this traps on a bug only.
+  const woke = fn.emitValue("call i1 @nish.async.run()")
+  fn.emit(`br i1 ${woke}, label %${poll.label}, label %${stuck.label}`)
   fn.placeBlock(stuck)
   fn.emit("call void @llvm.trap()")
   fn.emit("unreachable")
@@ -1733,7 +1787,7 @@ class AsyncLayout {
       if (mark.startsWith(KIDS_MARK)) {
         value = this.kids(leadingNumber(mark.substring(KIDS_MARK.length)))
       } else if (mark.startsWith(BYTES_MARK)) {
-        value = NODE_HEADER + 16 * this.units(leadingNumber(mark.substring(BYTES_MARK.length)))
+        value = 16 * this.units(leadingNumber(mark.substring(BYTES_MARK.length)))
       } else {
         const pair = mark.substring(OFF_MARK.length)
         const dot = pair.indexOf(".")
@@ -1757,18 +1811,29 @@ const removeLine = (text: string, line: string): string => {
   return text.substring(0, at) + text.substring(at + line.length + 1)
 }
 
-/** The queue, its driver, and the resume switch over the task kinds, for the module that holds them. */
+/**
+ * The loop over the executor (`runtime-async.c`) and the resume switch over
+ * the task kinds, for the module that holds them. `@nish.async.run` resumes
+ * the tasks `nish_async_next` answers, each inside its region, until `main`'s
+ * own wait is over (true) or nothing is ready and nothing waits (false);
+ * `@nish.async.drain` runs it until the second.
+ */
 const driverText = (registry: AsyncRegistry, text: string): string => {
   const attrs = `nounwind ${HARDENING_ATTRS}`
   const out = new StringBuilder()
-  out.add("\n; WP49 stage 4: the in-process task queue (docs/wp49-async-server.md)\n")
-  out.add("@nish.async.head = internal global i8* null, align 8\n")
-  out.add("@nish.async.tail = internal global i8* null, align 8\n\n")
-  if (text.indexOf("declare void @free(i8*)") < 0) {
-    out.add("declare void @free(i8*)\n")
-  }
-  if (text.indexOf("declare void @llvm.trap()") < 0) {
-    out.add("declare void @llvm.trap()\n")
+  out.add("\n; WP49 stage 5: the loop over the executor in runtime-async.c (docs/wp49-async-server.md)\n")
+  const runtime = [
+    "declare i8* @nish_async_next()",
+    "declare i8* @nish_async_enter(i8* nonnull)",
+    "declare void @nish_async_leave(i8* nonnull, i8*)",
+    "declare void @nish_async_done(i8* nonnull)",
+    "declare void @llvm.trap()",
+  ]
+  for (const line of runtime) {
+    // A module that names one has declared it.
+    if (text.indexOf(line.substring(line.indexOf("@"), line.indexOf("(") + 1)) < 0) {
+      out.add(`${line}\n`)
+    }
   }
   let kind = 0
   while (kind < registry.spawnFrames.length) {
@@ -1778,83 +1843,47 @@ const driverText = (registry: AsyncRegistry, text: string): string => {
     kind = kind + 1
   }
   out.add(`
-define hidden void @nish.async.enqueue(i8* %node) ${attrs} {
+define hidden i1 @nish.async.run() ${attrs} {
 entry:
-  %link = bitcast i8* %node to i8**
-  store i8* null, i8** %link, align 8
-  %tail = load i8*, i8** @nish.async.tail, align 8
-  %empty = icmp eq i8* %tail, null
-  br i1 %empty, label %first, label %append
-
-first:
-  store i8* %node, i8** @nish.async.head, align 8
-  br label %done
-
-append:
-  %prev = bitcast i8* %tail to i8**
-  store i8* %node, i8** %prev, align 8
-  br label %done
-
-done:
-  store i8* %node, i8** @nish.async.tail, align 8
-  ret void
-}
-
-define hidden i1 @nish.async.step() ${attrs} {
-entry:
-  %first = load i8*, i8** @nish.async.head, align 8
-  store i8* null, i8** @nish.async.head, align 8
-  store i8* null, i8** @nish.async.tail, align 8
   br label %loop
 
 loop:
-  %node = phi i8* [ %first, %entry ], [ %next, %advance ]
-  %progress = phi i1 [ false, %entry ], [ %progress.next, %advance ]
-  %more = icmp ne i8* %node, null
-  br i1 %more, label %run, label %out
+  %node = call i8* @nish_async_next()
+  %idle = icmp eq i8* %node, null
+  br i1 %idle, label %idle.out, label %got
 
-run:
-  %link = bitcast i8* %node to i8**
-  %next = load i8*, i8** %link, align 8
+idle.out:
+  ret i1 false
+
+got:
   %kind.at = getelementptr inbounds i8, i8* %node, i64 8
   %kind.ptr = bitcast i8* %kind.at to i32*
   %kind = load i32, i32* %kind.ptr, align 8
+  %main = icmp slt i32 %kind, 0
+  br i1 %main, label %main.out, label %task
+
+main.out:
+  ret i1 true
+
+task:
+  %prev = call i8* @nish_async_enter(i8* %node)
   %frame = getelementptr inbounds i8, i8* %node, i64 ${NODE_HEADER}
   %finished = call i1 @nish.async.resume(i32 %kind, i8* %frame)
-  br i1 %finished, label %release, label %again
+  call void @nish_async_leave(i8* %node, i8* %prev)
+  br i1 %finished, label %release, label %loop
 
 release:
-  call void @free(i8* %node)
-  br label %advance
-
-again:
-  call void @nish.async.enqueue(i8* %node)
-  br label %advance
-
-advance:
-  %progress.next = or i1 %progress, %finished
+  call void @nish_async_done(i8* %node)
   br label %loop
-
-out:
-  ret i1 %progress
 }
 
 define hidden void @nish.async.drain() ${attrs} {
 entry:
-  br label %check
+  br label %loop
 
-check:
-  %head = load i8*, i8** @nish.async.head, align 8
-  %empty = icmp eq i8* %head, null
-  br i1 %empty, label %done, label %step
-
-step:
-  %progress = call i1 @nish.async.step()
-  br i1 %progress, label %check, label %stuck
-
-stuck:
-  call void @llvm.trap()
-  unreachable
+loop:
+  %woke = call i1 @nish.async.run()
+  br i1 %woke, label %loop, label %done
 
 done:
   ret void
@@ -1898,8 +1927,7 @@ export const finalizeAsync = (registry: AsyncRegistry, texts: string[]): string[
   if (registry.usesDriver) {
     const host = registry.host >= 0 ? registry.host : registry.driverModule
     let text = out[host]
-    text = removeLine(text, ENQUEUE_DECL)
-    text = removeLine(text, STEP_DECL)
+    text = removeLine(text, RUN_DECL)
     text = removeLine(text, DRAIN_DECL)
     out[host] = text + driverText(registry, text)
   }

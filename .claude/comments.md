@@ -119,6 +119,15 @@ export interface LocalVar {
 Some comments here are load-bearing rather than decorative. Keep them accurate
 when you touch the code next to them:
 
+- **The library's public surface is documented, and CI checks it.** Every
+  declaration `std/` exports or `runtime/nish.d.ts` declares carries a doc
+  comment, a `@param` per parameter and a `@returns` unless it returns `void`
+  or `never`; its reference page is made from them.
+  `node scripts/gen-reference.mjs --check` fails on a gap
+  `scripts/undocumented.txt` does not list and on a line there that is no
+  longer a gap. That file only shrinks: document the declaration and delete
+  its line, never add one (`docs/README.md` → "The library reference").
+
 - **Every LLVM attribute cites its proof.** `src/attributes.ts` writes
   the reason an attribute is sound beside the code that emits it. An attribute
   with no reason is removed, not kept on faith.
