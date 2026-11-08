@@ -4,7 +4,8 @@
  * runtime next to compiled Nish modules. Everything here is a contract shared
  * with `src/runtime.ts` (the IR side) and the implementation, which is
  * several translation units: `runtime/runtime.c` holds the core every program
- * touches — the arena, strings, arrays, number formatting, the panics —
+ * touches — the arena, arrays, the panics — `runtime/runtime-text.c` holds
+ * strings and number formatting (freestanding, so a wasm module links it too),
  * `runtime/runtime-os.c` holds everything that wraps a system call: the file
  * functions, the directory and subprocess calls, `nish_getenv`, the monotonic
  * clock, `nish_platform` / `nish_arch` — and runtime-parallel.c, runtime-host.c,
@@ -248,7 +249,7 @@ nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);
 /* The bytes `nish_str_from_f64` would hold, written into `out` with no NUL;
    returns the length. 32 bytes is room to spare: the longest spelling,
-   -0.0000012345678901234567, is 25 (runtime.c says why, and runtime-test.c
+   -0.0000012345678901234567, is 25 (runtime-text.c says why, and runtime-test.c
    pins it). For a caller that writes numbers into its own buffer. */
 #define NISH_F64_MAX 32
 int nish_f64_format(double v, char out[NISH_F64_MAX]);

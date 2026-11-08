@@ -61,6 +61,7 @@ const asanDir = path.join(lib.buildDir, "asan")
  */
 const RUNTIME_UNITS = [
   "",
+  "-text",
   "-os",
   "-parallel",
   "-cross",

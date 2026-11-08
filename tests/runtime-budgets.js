@@ -956,9 +956,10 @@ export const WASM_PLAIN_DIGESTS = [
     host: "4a93551c63373e264d34dd074f3f1e9da4a1ff10b8ed0225087bc7b24e9c0c22",
   },
   {
-    // WP50 stage 4: new with the string bridge, so its bytes have no earlier build to match.
+    // WP50 stage 4: new with the string bridge, so its bytes have no earlier build to match;
+    // its .d.ts carries the string header, which a program with no string in a signature does not.
     src: "examples/label.ts",
-    dts: "f37f58b8777d3a756c94bc9c745d78457946f1bf5adce8d24f4a090ddb043cc1",
+    dts: "2908a99c7f6fbfdb2f974459751e1ef424fc31651f3d90905199af43572f7458",
     loader: "f4b30752f31bfaa6629f92a09f4f73c6a2623a64a2e2d015e5eb71ed5627d51a",
     wasm: "b0154ccf6e275cc7beb7dac812784c47bcf5ee2d54aaa82d3fc9b3142e7c3578",
     host: "ef8d59319dfcc282e9db6017e616dc07c6c65c913f388d00bdc9e0fe83a0b65f",

@@ -67,7 +67,7 @@ while IFS=$'\t' read -r label src budget constant flags; do
   row "$label" "$(text_sum "$obj")" \
     "clang -Oz ${flags:+$flags }-c $src && size -A (.text*; budget $budget, $constant)"
 done <<< "$budgets"
-row rodata "$(sect .rodata build/size/runtime_c.o)" "the core object's .rodata (no budget; the Zmij table lives here)"
+row rodata "$(sect .rodata build/size/runtime_text_c.o)" "the text object's .rodata (no budget; the Zmij table lives here)"
 if [ "$budgets_only" = 1 ]; then exit 0; fi
 # `scripts/build.sh` compiles runtime-os.c beside any runtime.c it is handed, so naming the
 # core here builds the whole runtime -- and `--gc-sections` then drops whatever this module

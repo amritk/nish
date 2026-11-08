@@ -55,7 +55,7 @@ import {
   wasmType,
 } from "./interop-wasm"
 import { FunctionSig } from "./program"
-import { T_I64, T_U64, TypeTable } from "./types"
+import { T_I64, T_STRING, T_U64, TypeTable } from "./types"
 
 /**
  * ` Throws a RangeError unless day is an integer in [1, 7].`: the ranges the
@@ -94,8 +94,15 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[], d
   lines.push("// arguments are copied into the module's arena for the call (link")
   lines.push("// runtime/runtime-wasm.c), written-through arguments are copied back, and")
   lines.push("// an array result is copied out, so the typed arrays you see are your own.")
-  lines.push("// A string result is decoded into a JS string; a function that takes a")
-  lines.push("// string, or answers what needs the full runtime, is listed below as a comment.")
+  // WP50 S4: a module with no string in any signature keeps the header it had
+  // before strings crossed, byte for byte (WASM_PLAIN_DIGESTS).
+  if (namesString(fns)) {
+    lines.push("// A string result is decoded into a JS string; a function that takes a")
+    lines.push("// string, or answers what needs the full runtime, is listed below as a comment.")
+  } else {
+    lines.push("// String functions are not callable from the freestanding wasm profile and")
+    lines.push("// are listed below as comments.")
+  }
   lines.push("")
   // WP50 S2: an export that takes or answers a host handle spells it as the
   // page's `tsc` reads one, so the type comes from the package's root types.
@@ -241,6 +248,21 @@ const panicTypes = (): string[] => {
   lines.push("export declare class NishReentry extends Error {}")
   lines.push("")
   return lines
+}
+
+/** Whether any external function takes or answers a string. */
+const namesString = (fns: ExternalFunction[]): boolean => {
+  for (const fn of fns) {
+    if (fn.sig.returnType === T_STRING) {
+      return true
+    }
+    for (const t of fn.sig.paramTypes) {
+      if (t === T_STRING) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 /** Whether some export on the bridge takes or answers a `HostHandle`. */

@@ -3150,12 +3150,14 @@ class FactCollector {
       this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
     }
     // WP27 S3.1: a string that may hold a NUL is searched for one before C
-    // reads it, and a hit panics (`emitForeignString`).
+    // reads it, and a hit panics (`emitForeignString`). A host function reads
+    // the string as `(p, n)`, so it has no such check (WP50 S4).
     const args = call.children[1].children
+    const host = hostFunction(callee)
     let i = 0
     while (i < args.length && i < callee.paramTypes.length) {
       const arg = args[i]
-      if (this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
+      if (!host && this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
         const checks: string[] = []
         foreignStringCallees(checks)
         this.addCallees(checks)

@@ -99,9 +99,10 @@ console.log(stats.mean(new Float64Array([1, 2, 3, 4])));       // 2.5
 `load(source, imports)` takes the bytes or a compiled `WebAssembly.Module`, and
 an import object. It defaults to `{}`, unless the module imports a host module
 (below): then it is required, `{ host }`, and the `.d.ts` types it. The `wasm` profile
-is freestanding — no C library — so functions that take a string, or do I/O,
-are not callable from it; the generated `.d.ts` lists them as
-comments. A whole program that does need them can be built for WASI instead,
+is freestanding — no C library. An export may return a `string`, which the
+loader decodes into a JS string, and a host import may take one (see
+[Strings and the page](#strings-and-the-page) below). Functions that *take* a string, or do I/O, are not
+callable from it; the generated `.d.ts` lists them as comments. A whole program that does need them can be built for WASI instead,
 with `nish app.ts --link app.wasm --profile wasi` (which needs a WASI sysroot;
 see [INSTALL.md](../../INSTALL.md#wasi-optional-for---profile-wasi)), and run
 under any WASI host.
