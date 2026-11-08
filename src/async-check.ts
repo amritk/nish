@@ -318,14 +318,16 @@ export const checkAsyncBuiltin = (
   }
   let refused = -1
   for (let i = 0; i < callee.paramTypes.length && refused < 0; i++) {
-    if (!isSpawnable(ctx, callee.paramTypes[i])) {
+    // A compile-time function argument is not in the frame: the call is an
+    // instantiation with the function in its body (WP29).
+    if (!callee.isCompileTime(i) && !isSpawnable(ctx, callee.paramTypes[i])) {
       refused = i
     }
   }
   if (refused >= 0) {
     return ctx.errorType(
       call,
-      `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(callee.paramTypes[refused])}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region`
+      `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(callee.paramTypes[refused])}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region, and objects and arrays, which it shares with the spawner`
     )
   }
   return T_VOID
@@ -338,7 +340,13 @@ export const checkAsyncBuiltin = (
  * a `string` the task copies into its own region when it starts.
  */
 const isSpawnable = (ctx: CheckContext, type: i32): boolean =>
-  type === T_ERROR || isNumeric(type) || type === T_BOOL || type === T_STRING || ctx.table.isEnum(type)
+  type === T_ERROR ||
+  isNumeric(type) ||
+  type === T_BOOL ||
+  type === T_STRING ||
+  ctx.table.isEnum(type) ||
+  ctx.table.sharedWithTask(type)
+
 
 /**
  * `const [a, b] = await awaitAll(f(x), g(y))`, read off the tree: a

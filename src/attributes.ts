@@ -794,6 +794,14 @@ export class FunctionFacts {
    * (`arenaMessage`), and what a region's own `f` is not refused for.
    */
   usesRegion: boolean
+  /**
+   * WP49 stage 5, part 3: spawns a task with an object or array it shares,
+   * directly or through a callee (fixpoint). The task holds it past the call
+   * and past the spawner's return, in the executor's queue, which is a root
+   * no parameter names: so no scope of this function's may release what the
+   * call allocated, whatever `contained` reads off its roots.
+   */
+  feedsTasks: boolean
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
@@ -944,6 +952,7 @@ export class FunctionFacts {
     this.readsArenaState = false
     this.opensArena = false
     this.usesRegion = false
+    this.feedsTasks = false
     this.callSites = []
     this.escapingNodes = []
     this.carriedStores = []
@@ -1351,6 +1360,42 @@ const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node):
   return field !== null && field.inline()
 }
 
+/**
+ * Whether the `spawn(...)` at `node` hands its task an object or array it
+ * shares (`TypeTable.sharedWithTask`): a value the task holds in place.
+ */
+const spawnsShared = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
+  const args = node.children[1].children
+  if (args.length !== 1) {
+    return false
+  }
+  const callee = program.nodeCallees[unwrapParens(args[0]).id]
+  if (callee === null) {
+    return false
+  }
+  for (let i = 0; i < callee.paramTypes.length; i++) {
+    if (!callee.isCompileTime(i) && table.sharedWithTask(callee.paramTypes[i])) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `call` is the task of a `spawn(...)` from `nish:async`. */
+const isSpawnedTask = (unit: AnalysisUnit, call: Node): boolean => {
+  let node = call
+  let parent = unit.parents.parentOf(node)
+  while (parent !== null && parent.kind === N_PAREN) {
+    node = parent
+    parent = unit.parents.parentOf(node)
+  }
+  if (parent === null) {
+    return false
+  }
+  const spawn = unit.parents.parentOf(parent)
+  return spawn !== null && spawn.kind === N_CALL && unit.program.nodeBuiltins[spawn.id] === "async.spawn"
+}
+
 /** An argument of `f(...)` or `new C(...)`: the list is the parent, the call is above it. */
 const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, node: Node): ParamUse => {
   const program = unit.program
@@ -1365,6 +1410,11 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     }
     const callee = program.nodeCallees[owner.id]
     if (callee !== null) {
+      // WP49 stage 5: a spawned task keeps what it is handed for as long as
+      // it runs, past the spawner's return, so the spawner's region must too.
+      if (isSpawnedTask(unit, owner)) {
+        return use(USE_ESCAPE)
+      }
       return argumentUse(callee, index + (callee.owner !== null ? 1 : 0))
     }
     // `xs.push(p)` stores `p` into the array, `Ok(p)` / `Err(p)` store it into
@@ -3750,6 +3800,9 @@ class FactCollector {
     if (imported === "async.spawn") {
       this.facts.effect = EFFECT_WRITE
       this.facts.willReturn = false
+      if (spawnsShared(this.unit.program, this.table, node)) {
+        this.facts.feedsTasks = true
+      }
       return
     }
     if (imported === "async.awaitAll") {
@@ -4482,10 +4535,10 @@ export const analyzeFunctions = (
   propagate(facts, runtime)
   propagateCapabilities(facts)
   for (const f of facts.list) {
-    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation
+    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.feedsTasks
     // What a function stores into a parameter it fills is its caller's, so
-    // no scope of its own may release it.
-    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0
+    // no scope of its own may release it; nor what a task it spawned holds.
+    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0 && !f.feedsTasks
   }
   scopeParallelBodies(units, facts)
   settleCalleeScopes(facts)
@@ -5001,6 +5054,10 @@ const propagateCallee = (
     }
     if (calleeFacts.usesRegion && !f.usesRegion) {
       f.usesRegion = true
+      changed = true
+    }
+    if (calleeFacts.feedsTasks && !f.feedsTasks) {
+      f.feedsTasks = true
       changed = true
     }
   }

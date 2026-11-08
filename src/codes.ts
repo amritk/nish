@@ -163,7 +163,7 @@ const diagnosticRules = (): string[] => [
   "NL2326",
   "`: a captured value is the task's argument, and a `Mutex` reaches a task as an argument or as a field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer",
   "NL2510",
-  ", which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region",
+  ", which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner",
   "NL2673",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
   "NL2323",
