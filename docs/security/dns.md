@@ -1,6 +1,6 @@
 # Security record: `nish/net/dns` — the stub resolver, its wire codec and its files
 
-The record of the stub resolver (#986, #479), in two stages. The first is the DNS
+The record of the stub resolver (#986, #479), in three stages. The first is the DNS
 message codec (RFC 1035 §4, with RFC 2181 and RFC 4343's readings) that writes
 one A or AAAA question and reads the reply to it, and the readers of
 `/etc/resolv.conf` and `/etc/hosts` the resolver starts from.
@@ -9,7 +9,9 @@ It says what each module refuses and with what, what it caps and where, and the
 test that pins each property. It is written with the code, against `main` at
 `2cdef4f`, and cites functions rather than lines. The second stage, the
 resolver that sends the queries and the client that drives it over sockets, is
-[The resolver](#the-resolver), written against `20ce936`.
+[The resolver](#the-resolver), written against `20ce936`. The third, a
+later candidate's NODATA and the timeout that keeps an answered family (DNS-6,
+DNS-7), is recorded in the same section.
 
 **Result.** Nothing a peer or a file sends panics, loops or allocates: a
 compression loop, a pointer forwards or into the header, a seventeenth hop, a

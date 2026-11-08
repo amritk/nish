@@ -518,6 +518,10 @@ const WWW_AAAA: string = "20010db8000000000000000000000001"
 const CHILD_A: i32 = 0
 const CHILD_TIMEOUT: i32 = 3
 const CHILD_OTHER: i32 = 4
+/** `serveChild`'s answer when the child ran out its ten seconds and was killed. */
+const CHILD_KILLED: i32 = 5
+/** `serveChild`'s answer when `waitPid` failed, whose status would otherwise read as 0. */
+const CHILD_UNREAPED: i32 = 6
 
 /**
  * The child: `dnsLookupWith` of `noaaaa.test` against the parent's server on
@@ -534,7 +538,10 @@ const lookupChild = (port: i32): i32 => {
   return n === DNS_RESOLVE_TIMEOUT ? CHILD_TIMEOUT : CHILD_OTHER
 }
 
-/** Serves `loop` until child `pid` exits, or ten seconds pass and it is killed: its exit status. */
+/**
+ * Serves `loop` until child `pid` exits: its exit status, `CHILD_KILLED` when
+ * ten seconds pass and it is killed, or `CHILD_UNREAPED` when `waitPid` fails.
+ */
 const serveChild = (s: Server, loop: i32, pid: i32): i32 => {
   const ready: i32[] = new Array<i32>(32)
   const end: i64 = monotonicNanos() + toI64(10000) * 1000000
@@ -552,9 +559,10 @@ const serveChild = (s: Server, loop: i32, pid: i32): i32 => {
   }
   if (st[0] === 0) {
     kill(pid, 9)
-    st = waitPid(pid, 0)
+    waitPid(pid, 0)
+    return CHILD_KILLED
   }
-  return st[1]
+  return st[0] < 0 ? CHILD_UNREAPED : st[1]
 }
 
 export const main = (): number => {
