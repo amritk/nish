@@ -51,8 +51,8 @@
  *  Everything else in this file — the curve, the encodings, the other inversions
  *  and ECDSA — is written for this module from the documents it names.
  *
- * **The curve** is `y^2 = x^3 - 3x + b` over GF(p), p = 2^256 - 2^224 + 2^192
- * + 2^96 - 1, with the base point G and its order n from SEC 2 §2.4.2 (FIPS
+ * **The curve** is `y^2 = x^3 - 3x + b` over GF(p),
+ * p = 2^256 - 2^224 + 2^192 + 2^96 - 1, with the base point G and its order n from SEC 2 §2.4.2 (FIPS
  * 186-4 §D.1.2.3). Points are projective (X : Y : Z), Z = 0 the identity, and
  * are added and doubled with the complete formulas of J. Renes, C. Costello and
  * L. Batina, "Complete addition formulas for prime order elliptic curves"

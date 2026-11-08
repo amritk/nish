@@ -347,8 +347,8 @@ const rsaSubInPlace = (a: u32[], n: u32[], count: i32): void => {
  * Acar and Kaliski's CIOS. `t` is scratch of `count + 2` limbs. Each row adds
  * `a b[i]` into `t`, then the multiple `m n` of the modulus that clears the
  * low limb, and shifts down a limb; `t` stays below 2n, and one subtraction
- * of `n` brings it below `n`. Every sum is at most (2^32 - 1) + (2^32 - 1)^2
- * + (2^32 - 1) = 2^64 - 1, so a `u64` holds it.
+ * of `n` brings it below `n`. Every sum is
+ * at most (2^32 - 1) + (2^32 - 1)^2 + (2^32 - 1) = 2^64 - 1, so a `u64` holds it.
  */
 const rsaMontMul = (out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t: u32[], count: i32): void => {
   if (

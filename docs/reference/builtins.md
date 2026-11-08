@@ -1702,8 +1702,8 @@ the count, which may be fewer than `len`, or a negative errno: -11 when the send
 ### netWrite2
 
 `netWrite` of `a`'s range then `b`'s, in one system call (`sendmsg` with two buffers), so a
-header and a body leave together with no copy into one buffer. The count may be fewer than `aLen
-+ bLen` and may end inside `a`; the program sends the rest, as after a short `netWrite`. A gone
+header and a body leave together with no copy into one buffer. The count may be fewer than
+`aLen + bLen` and may end inside `a`; the program sends the rest, as after a short `netWrite`. A gone
 peer is -32, never SIGPIPE. Both ranges are checked as `netRead`'s is, `a`'s first, and either
 may be empty. Not callable in a `scope()` task or a parallel body. Refused at compile time on
 wasm32 and the WASI profile (NL2404). Capability: net.
