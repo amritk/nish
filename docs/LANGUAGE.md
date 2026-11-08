@@ -7419,7 +7419,7 @@ argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 
 ### Numeric conversions
 
-The reference for each conversion, with its parameter and its answer, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
+The reference for each conversion, with its parameter and its answer, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts), on [the globals page](reference/builtins.md) (`Number` under `NumberConstructor`); the rules are here.
 
 | Signature | Semantics | Test |
 | --- | --- | --- |
@@ -8559,7 +8559,7 @@ been asked to stop. All four are C in `runtime/runtime-host.c`, a translation
 unit of its own with its own `.text*` ceiling, which `scripts/build.sh` compiles
 beside `runtime.c` as it does the others.
 
-Reference: [`nish:fs`](reference/nish-fs.md), [`nish:process`](reference/nish-process.md).
+Reference: [`nish:fs`](reference/nish-fs.md), [`nish:process`](reference/nish-process.md), and [the globals page](reference/builtins.md) for `Date.now` (under `DateConstructor`) and `crypto`.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
