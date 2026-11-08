@@ -81,7 +81,7 @@
 //
 // `nish/json`'s `JsonWriter.f64` hands its digits to one private walk,
 // `jsonPutF64Walk(buf, at, v)`, lowered S1's way (`isJsonPutF64Walk`): the
-// call becomes `nish_json_put_f64` (runtime.c), which formats into its own
+// call becomes `nish_json_put_f64` (runtime-text.c), which formats into its own
 // stack with the formatter `${v}` uses and copies into the array, so no
 // string is built. The kernel checks `at` and the room itself, as the walk
 // does, and answers what the walk answers: the new end, or -1 with nothing

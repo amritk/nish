@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the power-of-ten table `runtime/runtime.c` uses for Zmij.
+"""Regenerate the power-of-ten table `runtime/runtime-text.c` uses for Zmij.
 
     python3 scripts/gen-pow10-table.py
 

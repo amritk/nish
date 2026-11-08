@@ -60,8 +60,25 @@
  * links alone (a C host's one file, and the direct `clang` lines in `tests/run.js`) and
  * its own panics call it: defined in `runtime-term.c` the core measured 3,675, and a
  * lone `runtime.c` no longer linked.
+ *
+ * Lowered by 1,975, to 1,723, by WP50 stage 4: strings and number formatting (the
+ * concatenation, the comparisons, `String(x)` and the Zmij shortest-`f64` printer) moved to
+ * `runtime/runtime-text.c`, which compiles freestanding for wasm32 and has a ceiling of its
+ * own below. Measured 1,723 against 3,495 before the move on 2026-11-08 with clang 18.1.3
+ * on linux-x64; the two halves sum to 3,510, 15 more than the one file, which is the
+ * calls the compiler could inline across one file and now makes across two.
  */
-const RUNTIME_TEXT_BUDGET = 3698
+const RUNTIME_TEXT_BUDGET = 1723
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-text.c`:
+ * strings (`nish_str_*`) and the number formatting (`nish_f64_format`, the Zmij tables'
+ * code), moved out of `runtime.c` by WP50 stage 4 so that a wasm module can link them
+ * without the rest of the host runtime.
+ *
+ * Measured 1,787 on 2026-11-08 with clang 18.1.3 on linux-x64. The threads build is the
+ * same size (nothing in the file is per-thread), so it has one row, not two.
+ */
+const RUNTIME_TEXT_UNIT_BUDGET = 1787
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -174,8 +191,12 @@ const RUNTIME_OS_TEXT_BUDGET = 4864
  *
  * Raised by 14, to 3,899, for `nish_fatal_exit` (as above), measured 3,899 against 3,885
  * on 2026-10-23 with clang 18 on linux-x64.
+ *
+ * Lowered by 1,961, to 1,938, by WP50 stage 4's move of strings and number formatting to
+ * `runtime-text.c` (as above): measured 1,938 against 3,710 before it on 2026-11-08 with
+ * clang 18.1.3 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3899
+const RUNTIME_THREADS_TEXT_BUDGET = 1938
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -808,6 +829,7 @@ export const HTTP2_TLS_SERVER_START_BYTES = 58624
  */
 export const RUNTIME_BUDGETS = [
   ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET", []],
+  ["runtime/runtime-text.c", RUNTIME_TEXT_UNIT_BUDGET, "RUNTIME_TEXT_UNIT_BUDGET", []],
   ["runtime/runtime-os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET", []],
   ["runtime/runtime.c", RUNTIME_THREADS_TEXT_BUDGET, "RUNTIME_THREADS_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
   ["runtime/runtime-parallel.c", RUNTIME_PARALLEL_TEXT_BUDGET, "RUNTIME_PARALLEL_TEXT_BUDGET", []],

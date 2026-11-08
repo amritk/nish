@@ -69,13 +69,14 @@ export const runtimeCacheRoot = (): string => {
 
 /**
  * The runtime's translation units, in the order `scripts/build.sh` compiles
- * and links them: `runtime.c`, the fifteen it pairs with it, and `runtime-async.c`, which
+ * and links them: `runtime.c`, the sixteen it pairs with it, and `runtime-async.c`, which
  * `--runtime-objects` compiles with them and `--runtime-from` links only for
  * IR that declares one of its functions. One list for both
  * keys below and for the objects a runtime entry holds.
  */
 export const runtimeUnits = (): string[] => [
   "runtime.c",
+  "runtime-text.c",
   "runtime-os.c",
   "runtime-parallel.c",
   "runtime-cross.c",

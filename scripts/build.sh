@@ -3,8 +3,9 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasm-host|wasi|napi]
 #
-# The C runtime is sixteen translation units and is named as one: an input
-# <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
+# The C runtime is seventeen translation units and is named as one: an input
+# <dir>/runtime.c also compiles <dir>/runtime-text.c, the strings and the digits
+# of numbers, <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
 # threads, <dir>/runtime-cross.c, the copies that carry a string or an array
@@ -267,8 +268,8 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is sixteen translation units, and a caller names one: whoever passes
-# <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
+# The runtime is seventeen translation units, and a caller names one: whoever passes
+# <dir>/runtime.c gets <dir>/runtime-text.c, <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
 # <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-chacha20.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,
 # <dir>/runtime-bytes.c, <dir>/runtime-sandbox.c, <dir>/runtime-shm.c and <dir>/runtime-region.c compiled beside it, on every profile,
@@ -280,7 +281,7 @@ fi
 # compiles to two functions that refuse to run, which no wasm build calls, and
 # runtime-shm.c answers -95 for every region. They were one file until the
 # operating-system half was split out for its own size budget, and the parallel
-# half followed for the same reason (each file's header comment says why), and
+# and text halves followed for the same reason (each file's header comment says why), and
 # a link line is where those splits
 # would otherwise leak: `nish --link` builds its command line in
 # src/compile.ts, the published package's recipe in every document and
@@ -288,7 +289,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-chacha20.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
+halves="runtime-text.c runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-chacha20.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -808,6 +809,21 @@ case "$profile" in
     if [ "$bytes_wanted" = 1 ] && [ "$bytes_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-bytes.c")
     fi
+    # IR that builds a string (`+`, a template, `String(x)`, a number's digits)
+    # calls runtime-text.c, which compiles freestanding for wasm32 (WP50 stage 4).
+    # It is added the same way, only for such IR and only when the caller has not
+    # named it; it allocates through runtime-wasm.c's arena, so that is linked too.
+    text_named=0
+    text_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        */runtime-text.c|runtime-text.c) text_named=1 ;;
+        *.ll) if grep -qE '@nish_(str_|f64_format|json_put_f64)' "$i"; then text_wanted=1; fi ;;
+      esac
+    done
+    if [ "$text_wanted" = 1 ] && [ "$text_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-text.c")
+    fi
     # IR compiled for the host rounds through runtime-simd.c's `nish_floor` and its
     # kin behind the constructor `nish_round_init` (#943). runtime-wasm.c has their
     # wasm32 bodies, and it is added the same way when such IR does not name it.
@@ -819,6 +835,7 @@ case "$profile" in
         *.ll) if grep -q '@nish_round_init' "$i"; then round_wanted=1; fi ;;
       esac
     done
+    if [ "$text_wanted" = 1 ]; then round_wanted=1; fi
     # Under wasm-host a program whose loader guards panics (one with module
     # storage or a host module: the compiler ends its IR with a
     # `; nish.sites <count>` line) reports each panic through the page's

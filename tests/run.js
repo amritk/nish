@@ -128,7 +128,8 @@ process.env.XDG_CACHE_HOME = suiteCache
 
 /**
  * The C runtime's translation units, as a direct `clang` line has to spell
- * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
+ * them: `runtime.c` is the core every program touches, `runtime-text.c` builds
+ * strings and spells numbers, `runtime-os.c` wraps the
  * system calls, `runtime-parallel.c` divides work across threads,
  * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
@@ -144,7 +145,7 @@ process.env.XDG_CACHE_HOME = suiteCache
  * makes and frees one at a time and `runtime-async.c` the executor `spawn` parks tasks on, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same seventeen
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eighteen
  * (`runtime-async.c` among them, though a link takes its object only for async IR):
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
@@ -157,6 +158,7 @@ process.env.XDG_CACHE_HOME = suiteCache
  */
 const RUNTIME_C = [
   "runtime/runtime.c",
+  "runtime/runtime-text.c",
   "runtime/runtime-os.c",
   "runtime/runtime-parallel.c",
   "runtime/runtime-cross.c",
@@ -12600,7 +12602,7 @@ if (dealtHere("arrayChecks")) {
     const shrinkLl = path.join(buildDir, "arr_bounds_shrink_panic.ll")
     if (fs.existsSync(shrinkLl)) {
       const exe = path.join(buildDir, "arr_bounds_shrink_panic")
-      const cc = spawnSync("clang", ["-Wno-override-module", "-O2", shrinkLl, "runtime/runtime.c", "-o", exe], {
+      const cc = spawnSync("clang", ["-Wno-override-module", "-O2", shrinkLl, "runtime/runtime.c", "runtime/runtime-text.c", "-o", exe], {
         cwd: root,
       })
       const run = cc.status === 0 ? spawnSync(exe) : null
@@ -13160,7 +13162,7 @@ if (dealtHere("arrayChecks")) {
       const exe = path.join(buildDir, "str_slice_panic")
       const cc = spawnSync(
         "clang",
-        ["-Wno-override-module", "-O2", slicePanicLl, "runtime/runtime.c", "-o", exe],
+        ["-Wno-override-module", "-O2", slicePanicLl, "runtime/runtime.c", "runtime/runtime-text.c", "-o", exe],
         {
           cwd: root,
         }
@@ -14258,7 +14260,7 @@ if (dealtHere("runtimeChecks")) {
     )
     const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
     check(
-      "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
+      "runtime.c, runtime-text.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
       rtRun !== null && rtRun.status === 0,
       String(rt.stderr) +
         (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -14317,22 +14319,22 @@ if (dealtHere("runtimeChecks")) {
       String(cc.stderr) + (run ? `exit ${run.status} ${run.signal ?? ""} ${run.stderr}\n${lines} lines\n${first}` : "")
     )
     // The power-of-ten table is derived, not transcribed: the generator's output
-    // must appear in runtime.c byte for byte.
+    // must appear in runtime-text.c byte for byte.
     const gen = spawnSync("python3", ["-I", "scripts/gen-pow10-table.py"], { cwd: root, encoding: "utf8" })
-    const runtimeC = fs.readFileSync(path.join(root, "runtime/runtime.c"), "utf8")
+    const runtimeC = fs.readFileSync(path.join(root, "runtime/runtime-text.c"), "utf8")
     check(
-      "runtime.c's NISH_POW10_SIG is what scripts/gen-pow10-table.py prints",
+      "runtime-text.c's NISH_POW10_SIG is what scripts/gen-pow10-table.py prints",
       gen.status === 0 && gen.stdout.length > 0 && runtimeC.includes(gen.stdout),
-      gen.status === 0 ? "the generated block is not in runtime/runtime.c; paste it over NISH_POW10_SIG" : `${gen.error ?? ""} ${gen.stderr}`
+      gen.status === 0 ? "the generated block is not in runtime/runtime-text.c; paste it over NISH_POW10_SIG" : `${gen.error ?? ""} ${gen.stderr}`
     )
     // NISH_F64_MAX is stated three times, in three files no one compile sees
     // together; they must agree.
-    const sizes = ["runtime/runtime.c", "runtime/nish.h", "tests/runtime-test.c"].map((f) => {
+    const sizes = ["runtime/runtime-text.c", "runtime/nish.h", "tests/runtime-test.c"].map((f) => {
       const m = /^#define NISH_F64_MAX (\d+)$/m.exec(fs.readFileSync(path.join(root, f), "utf8"))
       return `${f}: ${m ? m[1] : "missing"}`
     })
     check(
-      "runtime.c, nish.h and runtime-test.c state one NISH_F64_MAX",
+      "runtime-text.c, nish.h and runtime-test.c state one NISH_F64_MAX",
       new Set(sizes.map((s) => s.split(": ")[1])).size === 1 && !sizes[0].endsWith("missing"),
       sizes.join("\n")
     )
@@ -14466,6 +14468,7 @@ if (dealtHere("runtimeChecks")) {
         "-O2",
         tlsSmokeLl,
         "runtime/runtime.c",
+        "runtime/runtime-text.c",
         "tests/ir/alloc-smoke-main.c",
         "-lm",
         "-o",
@@ -17482,6 +17485,7 @@ if (dealtHere("cliChecks")) {
         sidecar("add", "ll"),
         sidecar("export_fn", "ll"),
         path.join(runtimeDir, "runtime.c"),
+        path.join(runtimeDir, "runtime-text.c"),
         driver,
         "-o",
         exe,
@@ -17755,6 +17759,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("interop_generic_fn", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           genDriver,
           "-o",
           genExe,
@@ -17939,6 +17944,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("gen_method_export", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           methodDriver,
           "-o",
           methodExe,
@@ -18017,6 +18023,7 @@ if (dealtHere("cliChecks")) {
           "-pedantic",
           sidecar("interop_generic_collision", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           clashDriver,
           "-o",
           clashExe,
@@ -18418,6 +18425,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("res_export", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           resDriver,
           "-o",
           resExe,
@@ -18937,6 +18945,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("arrays", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           path.join(runtimeDir, "runtime-os.c"),
           arraysDriver,
           "-o",
@@ -21552,7 +21561,10 @@ if (dealtHere("releaseChecks")) {
         "bin/launcher.js",
         "bin/packaging.js",
         "runtime/runtime.c",
-        // Zmij's licence, which runtime.c's formatter is adapted under: the Boost
+        // The strings and the digits of numbers (WP50 S4): build.sh pairs it with
+        // runtime.c, and every program that builds or prints a string calls it.
+        "runtime/runtime-text.c",
+        // Zmij's licence, which runtime-text.c's formatter is adapted under: the Boost
         // licence asks for it in every source copy, and the tarball is one
         // (THIRD_PARTY_NOTICES.md).
         "runtime/LICENSE-zmij",
@@ -22127,6 +22139,7 @@ if (dealtHere("releaseChecks")) {
           const wantedInPlatform = [
             "bin/nish",
             "runtime/runtime.c",
+            "runtime/runtime-text.c",
             "runtime/runtime-os.c",
             "runtime/nish.h",
             "scripts/build.sh",
@@ -28265,7 +28278,7 @@ if (!only || "std_json_writer".includes(only)) {
 }
 
 // The f64 seam: a native `JsonWriter.f64` writes its digits through
-// `nish_json_put_f64` (runtime/runtime.c) straight into the writer's buffer,
+// `nish_json_put_f64` (runtime/runtime-text.c) straight into the writer's buffer,
 // where the Nish body, `jsonPutF64Walk` in std/json.ts, builds `${v}` first.
 // `tests/link/std_json_writer/seam.ts` prints -0, 1e21, 5e-324 and the longest
 // spelling in an array, a write one byte short of fitting and an exact fit;
@@ -31537,7 +31550,7 @@ if (!only || "hardening".includes(only)) {
 
 // ---- Third-party code keeps its own licence -------------------------------------------
 // Some files are copied, ported or adapted from code written elsewhere: Zmij in
-// runtime/runtime.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
+// runtime/runtime-text.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
 // Yet ports and the tests that reproduce parts of them. Their licences ask for the
 // upstream notice in every copy, and a copy is easy to make without it, so
 // THIRD_PARTY_NOTICES.md lists each file with the notice it carries and the licence text
