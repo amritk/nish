@@ -2033,7 +2033,7 @@ class PassWalk {
    * function, and the stores the loop rule leaves to `escapingNodes` are named.
    */
   block: boolean
-  /** The function returns a `Result` packed into a register (WP17), which a block may hand back. */
+  /** The function returns a `Result` packed into a register (WP17), which a block, or a pass from a register call, may hand back. */
   returnsByValue: boolean
   /**
    * The block's own `using` declarators ahead of its `arena()`: disposed
@@ -2314,7 +2314,7 @@ class PassWalk {
       // caller's box `isOld` counts as new is read out before the release.
       const handsNothing =
         (this.block && (this.returnsByValue || program.nodeTypes[value.id] === T_VOID)) ||
-        this.answersInRegister(value)
+        (this.returnsByValue && this.answersInRegister(value))
       if (value.kind !== N_EMPTY && !handsNothing && !this.isOld(value)) {
         this.scope.handsBack = true
         this.refuse(LOOP_RETURN, node, "")
@@ -2354,7 +2354,7 @@ export const decideLoopScopes = (
   // A function that allocates nothing, itself or through a callee, has no
   // pass to reclaim and no loop the arena-loop diagnostic could name.
   if (body !== null && f.allocates) {
-    collectLoopScopes(unit, table, f, facts, body)
+    collectLoopScopes(unit, table, f, facts, table.resultByValue(sig.returnType), body)
   }
 }
 
@@ -2368,14 +2368,15 @@ const collectLoopScopes = (
   table: TypeTable,
   f: FunctionFacts,
   facts: FactsTable,
+  returnsByValue: boolean,
   node: Node
 ): void => {
   const kind = node.kind
   if (kind === N_FOR || kind === N_FOR_OF || kind === N_WHILE || kind === N_DO) {
     const scope = new LoopScope(node, loopBody(node))
-    decidePass(unit, table, f, facts, scope)
+    decidePass(unit, table, f, facts, returnsByValue, scope)
     f.loopScopes.push(scope)
-    collectLoopScopes(unit, table, f, facts, scope.body)
+    collectLoopScopes(unit, table, f, facts, returnsByValue, scope.body)
   } else if (
     kind === N_BLOCK ||
     kind === N_LABELED ||
@@ -2385,11 +2386,11 @@ const collectLoopScopes = (
     kind === N_DEFAULT
   ) {
     for (const child of node.children) {
-      collectLoopScopes(unit, table, f, facts, child)
+      collectLoopScopes(unit, table, f, facts, returnsByValue, child)
     }
   } else if (kind === N_IF) {
-    collectLoopScopes(unit, table, f, facts, node.children[1])
-    collectLoopScopes(unit, table, f, facts, node.children[2])
+    collectLoopScopes(unit, table, f, facts, returnsByValue, node.children[1])
+    collectLoopScopes(unit, table, f, facts, returnsByValue, node.children[2])
   }
 }
 
@@ -2398,9 +2399,11 @@ const decidePass = (
   table: TypeTable,
   f: FunctionFacts,
   facts: FactsTable,
+  returnsByValue: boolean,
   scope: LoopScope
 ): void => {
   const walk = new PassWalk(unit, table, facts, scope)
+  walk.returnsByValue = returnsByValue
   if (f.managesArena) {
     walk.refuse(LOOP_CONTROL, null, "")
     return
