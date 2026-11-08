@@ -750,9 +750,8 @@ const lengthWritten = (member: Node, grand: Node | null): boolean => {
 }
 
 /** Whether `use` is the bytes argument, in `args`, of `call`, a `String.fromBytes`. */
-const copiesBytes = (call: Node, args: Node, use: Node): boolean => {
-  return dottedName(call.children[0]) === "String.fromBytes" && args.children.length > 0 && args.children[0] === use
-}
+const copiesBytes = (call: Node, args: Node, use: Node): boolean =>
+  dottedName(call.children[0]) === "String.fromBytes" && args.children.length > 0 && args.children[0] === use
 
 /**
  * Whether `decl`, a function, mentions `name` anywhere but as the callee of a
