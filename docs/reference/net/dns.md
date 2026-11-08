@@ -9,6 +9,7 @@ import {
   DNS_CLIENT_MAX_DATAGRAMS,
   DNS_UDP_MAX_REPLY,
   DnsClient,
+  dnsLoadSystem,
   dnsLookupWith,
   resolveHost,
 } from "nish/net/dns";
@@ -59,6 +60,12 @@ if (lookup >= 0) {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="dns​Load​System" icon="phosphor/regular/function" href="#dnsloadsystem">
+
+Reads the system's resolver settings the way `resolveHost` does: `/etc/resolv.conf` into `config` (a missing file means the defaults) and `/etc/hosts` into `hosts` (a missing file adds no entry).
+
+</scalar-card>
 
 <scalar-card title="dns​Lookup​With" icon="phosphor/regular/function" href="#dnslookupwith">
 
@@ -125,6 +132,33 @@ Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
 
 ## Functions
+
+### dnsLoadSystem
+
+Reads the system's resolver settings the way `resolveHost` does:
+`/etc/resolv.conf` into `config` (a missing file means the defaults) and
+`/etc/hosts` into `hosts` (a missing file adds no entry). A driver of its
+own, such as the async `fetch`'s, starts from this so every lookup in a
+program honours the same files.
+
+```ts
+function dnsLoadSystem(
+  config: DnsConfig,
+  hosts: DnsHosts,
+): void
+```
+
+<scalar-field name="config" type="DnsConfig" required>
+
+A fresh `DnsConfig` to fill.
+
+</scalar-field>
+
+<scalar-field name="hosts" type="DnsHosts" required>
+
+A fresh `DnsHosts` to fill.
+
+</scalar-field>
 
 ### dnsLookupWith
 

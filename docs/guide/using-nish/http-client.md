@@ -100,8 +100,9 @@ answer was cut off part way, or that was never answered, is not sent again.
 ## Fetching without blocking
 
 In an `async` function, `await fetch(url, init)` fetches without holding up
-the process: while it connects, writes and waits for the answer, the program's
-other tasks run ([Async functions](../language/async.md)). Two fetches under
+the process: while it looks the name up, connects, runs the TLS handshake of
+an https URL, writes and waits for the answer, the program's other tasks run
+([Async functions](../language/async.md)). Two fetches under
 `awaitAll` are in flight together:
 
 ```ts nish:ok
@@ -157,19 +158,32 @@ with `header(name, value)`, `body` (a `u8[]`, with its `Content-Length` sent
 for you), `options` (an `HttpOptions`) and `pool`. Pass null, or nothing, for a
 plain `GET`. The options mean what they mean to `fetchSync`, redirects,
 proxies and the [outbound policy](#fetching-a-url-someone-else-chose)
-included, except for three limits on the waits:
+included, except for the limits on the waits:
 
-- `readTimeoutMs` bounds nothing yet: a wait on the socket has no deadline of
-  its own. Set `totalTimeoutMs` against a server you do not run. It is checked
-  each time a wait ends, so a server that never sends another byte holds the
-  fetch until the connection drops.
-- `connectTimeoutMs` bounds the name lookup only, and **the lookup blocks the
-  process**: every task waits while a name is resolved. Use an IP address, or
-  a name your resolver answers at once, where that matters.
-- **Only `http://` is driven this way.** An `https://` URL fails at once with
-  `HTTP_E_TLS`, whose text names `fetchSync`, before a connection is opened:
-  the TLS handshake would block the process, so it is refused rather than
-  done quietly in the way. Use `fetchSync` for https for now.
+- **A wait on the socket has no deadline of its own** until a task can be
+  cancelled: `readTimeoutMs` bounds nothing yet. Set `totalTimeoutMs` against
+  a server you do not run. It is checked each time a wait ends, so a server
+  that never sends another byte, or never answers the TLS handshake, holds
+  the fetch until the connection drops.
+- `connectTimeoutMs` bounds the name lookup, which parks only its own task:
+  the query goes out on a non-blocking socket, with the servers, tries and
+  timeouts of `/etc/resolv.conf` (or of `options.dns`), and the other tasks
+  run until it answers. An address literal, `localhost` and a name in
+  `/etc/hosts` need no query. A lookup still unanswered at `connectTimeoutMs`
+  fails with `HTTP_E_CONNECT_TIMEOUT`.
+
+**https** is the same TLS 1.3 as `fetchSync`'s, with the same certificate
+checks, the same roots (`rootsPemPath`) and the same errors: a certificate
+that is expired, for another name or from a root you do not trust is
+`HTTP_E_CERTIFICATE` with the sentence `fetchSync` gives. Through a proxy it
+is a `CONNECT` tunnel. An https connection is never kept in a `FetchPool`:
+each https fetch runs its own handshake and closes its connection once the
+body is read.
+
+Run fetches that hold large bodies side by side as tasks you `spawn`, not
+under `awaitAll`, for now: two `awaitAll` tasks that each hold a large
+allocation across an `await` can corrupt each other's memory, a fault in the
+async runtime that is being fixed.
 
 A **`FetchPool`** keeps connections open between fetches: hand the same pool
 to each `RequestInit`, and a fetch to a place the pool holds an idle connection
@@ -184,8 +198,8 @@ connections and `pool.close()` closes them; without a pool, each fetch closes
 its own.
 
 `fetch` does not run under `--emit-ts`: it waits on its socket with
-`nish:async`'s `readable` and `writable`, which `nish --emit-ts` refuses
-([Async functions](../language/async.md)). A program that must also run as
+`nish:async`'s `readable` and `writable`, which `nish --emit-ts` refuses with
+NL4017 ([Async functions](../language/async.md)). A program that must also run as
 TypeScript uses `fetchSync`.
 
 ## Options
@@ -205,6 +219,7 @@ TypeScript uses `fetchSync`.
 | `useEnvProxy` | true | Whether the proxy variables are read |
 | `rootsPemPath` | null | A PEM file of the roots an https server must chain to, in place of the system's |
 | `outbound` | null | The [outbound policy](#fetching-a-url-someone-else-chose) for URLs your program did not choose |
+| `dns` | null | The resolver settings a name is looked up with, a `DnsConfig` as `dnsParseResolvConf` fills it, in place of `/etc/resolv.conf`; `/etc/hosts` is read either way |
 
 A server that sends its body a byte at a time, each inside `readTimeoutMs`,
 holds a fetch until `totalTimeoutMs`: set it when the server is not yours.

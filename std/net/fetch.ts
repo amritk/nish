@@ -2482,7 +2482,12 @@ const httpClientReadRawAsync = async (conn: HttpClientConn, want: i32): Promise<
 }
 
 /** Writes `bytes[off, off + len)` to the socket, parking the task while it is full; false with the fault set. */
-const httpClientWriteRawAsync = async (conn: HttpClientConn, bytes: u8[], off: i32, len: i32): Promise<boolean> => {
+const httpClientWriteRawAsync = async (
+  conn: HttpClientConn,
+  bytes: u8[],
+  off: i32,
+  len: i32
+): Promise<boolean> => {
   let at: i32 = off
   const end: i32 = off + len
   while (at < end) {
@@ -2580,7 +2585,12 @@ const httpClientSecureAsync = async (conn: HttpClientConn, host: string, early: 
  * Asks `proxy`, on the fresh socket, for a tunnel to `host:port`. True once
  * the proxy answers 2xx, every byte after its head belonging to the tunnel.
  */
-const httpClientTunnelAsync = async (conn: HttpClientConn, host: string, port: i32, proxy: Url): Promise<boolean> => {
+const httpClientTunnelAsync = async (
+  conn: HttpClientConn,
+  host: string,
+  port: i32,
+  proxy: Url
+): Promise<boolean> => {
   const head: u8[] | null = httpClientConnectHead(host, port, proxy, conn.fault)
   if (head === null) {
     return false

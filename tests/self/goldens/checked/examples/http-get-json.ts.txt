@@ -1049,10 +1049,18 @@ import urlDefaultPort from "nish/net/url" -> function @nish.urlDefaultPort
 import urlOrigin from "nish/net/url" -> function @nish.urlOrigin
 import urlParse from "nish/net/url" -> function @nish.urlParse
 import urlResolve from "nish/net/url" -> function @nish.urlResolve
+import DnsClient from "nish/net/dns" -> struct DnsClient
+import dnsLoadSystem from "nish/net/dns" -> function @nish.dnsLoadSystem
+import dnsLookupWith from "nish/net/dns" -> function @nish.dnsLookupWith
 import resolveHost from "nish/net/dns" -> function @nish.resolveHost
+import DnsConfig from "nish/net/dns-config" -> struct DnsConfig
+import DnsHosts from "nish/net/dns-config" -> struct DnsHosts
+import dnsParseAddress from "nish/net/dns-config" -> function @nish.dnsParseAddress
 import DNS_ADDRESS_BYTES from "nish/net/dns-message" -> const DNS_ADDRESS_BYTES
 import DNS_RESOLVE_MAX_ADDRESSES from "nish/net/dns-resolver" -> const DNS_RESOLVE_MAX_ADDRESSES
+import DNS_RESOLVE_PENDING from "nish/net/dns-resolver" -> const DNS_RESOLVE_PENDING
 import DNS_RESOLVE_TIMEOUT from "nish/net/dns-resolver" -> const DNS_RESOLVE_TIMEOUT
+import DnsResolver from "nish/net/dns-resolver" -> struct DnsResolver
 import OutboundPolicy from "nish/net/outbound" -> struct OutboundPolicy
 import outboundAddressText from "nish/net/outbound" -> function @nish.outboundAddressText
 import outboundFilter from "nish/net/outbound" -> function @nish.outboundFilter
@@ -1068,6 +1076,7 @@ import pollRemove from "nish:net" -> builtin pollRemove
 import pollWait from "nish:net" -> builtin pollWait
 import tcpConnect from "nish:net" -> builtin tcpConnect
 import readable from "nish:async" -> builtin async.readable
+import sleep from "nish:async" -> builtin async.sleep
 import writable from "nish:async" -> builtin async.writable
 import getenv from "nish:process" -> builtin getenv
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
@@ -1118,6 +1127,8 @@ const HTTP_CLIENT_WOULD_BLOCK: i32 = -11
 const HTTP_CLIENT_READABLE: i32 = 1
 const HTTP_CLIENT_WRITABLE: i32 = 2
 const HTTP_CLIENT_TLS_KEY_BYTES: i32 = 32
+const HTTP_CLIENT_DNS_SLICE_MS: i32 = 16
+const HTTP_CLIENT_EIO: i32 = -5
 const FETCH_POOL_SLOTS: i32 = 64
 struct HttpRequest (class) size=40 align=8 exported
   field method: string index=0 offset=0
@@ -1127,18 +1138,19 @@ struct HttpRequest (class) size=40 align=8 exported
   field body: u8[] | null index=4 offset=32 initialized
   constructor -> @nish.HttpRequest.constructor
   method header -> @nish.HttpRequest.header
-struct HttpOptions (class) size=48 align=8 exported
+struct HttpOptions (class) size=56 align=8 exported
   field maxBodyBytes: i64 index=0 offset=0 initialized
   field rootsPemPath: string | null index=1 offset=8 initialized
   field outbound: OutboundPolicy | null index=2 offset=16 initialized
-  field connectTimeoutMs: i32 index=3 offset=24 initialized
-  field readTimeoutMs: i32 index=4 offset=28 initialized
-  field totalTimeoutMs: i32 index=5 offset=32 initialized
-  field maxRedirects: i32 index=6 offset=36 initialized
-  field maxHeaderBytes: i32 index=7 offset=40 initialized
-  field followRedirects: boolean index=8 offset=44 initialized
-  field crossOriginRedirects: boolean index=9 offset=45 initialized
-  field useEnvProxy: boolean index=10 offset=46 initialized
+  field dns: DnsConfig | null index=3 offset=24 initialized
+  field connectTimeoutMs: i32 index=4 offset=32 initialized
+  field readTimeoutMs: i32 index=5 offset=36 initialized
+  field totalTimeoutMs: i32 index=6 offset=40 initialized
+  field maxRedirects: i32 index=7 offset=44 initialized
+  field maxHeaderBytes: i32 index=8 offset=48 initialized
+  field followRedirects: boolean index=9 offset=52 initialized
+  field crossOriginRedirects: boolean index=10 offset=53 initialized
+  field useEnvProxy: boolean index=11 offset=54 initialized
 struct HttpResponse (class) size=48 align=8 exported
   field status: i32 index=0 offset=0 initialized
   field reason: string index=1 offset=8 initialized
@@ -1270,7 +1282,7 @@ struct RequestInit (class) size=48 align=8 exported
   field pool: FetchPool | null index=5 offset=40 initialized
   constructor -> @nish.RequestInit.constructor
   method header -> @nish.RequestInit.header
-struct HttpClientConn (class) size=80 align=8
+struct HttpClientConn (class) size=104 align=8
   field deadline: i64 index=0 offset=0
   field options: HttpOptions index=1 offset=8
   field parser: Http1ResponseParser index=2 offset=16
@@ -1284,6 +1296,9 @@ struct HttpClientConn (class) size=80 align=8
   field gotByte: boolean index=10 offset=76 initialized
   field lost: boolean index=11 offset=77 initialized
   field reused: boolean index=12 offset=78 initialized
+  field tls: TlsRecordClient | null index=13 offset=80 initialized
+  field plain: u8[] index=14 offset=88
+  field trust: TlsClientTrust | null index=15 offset=96 initialized
   constructor -> @nish.HttpClientConn.constructor
   method overdue -> @nish.HttpClientConn.overdue
   method close -> @nish.HttpClientConn.close
@@ -1360,7 +1375,7 @@ function FetchSyncClient.constructor(this: FetchSyncClient, options: HttpOptions
   escaping: options
   calls: nish.httpClientEnvProxies nish.httpClientParser nish_panic
   pointer this: size=160 writesThrough=true captured=false
-  pointer options: size=48 writesThrough=true captured=true passedTo=nish.httpClientParser#0 nish.httpClientEnvProxies#0
+  pointer options: size=56 writesThrough=true captured=true passedTo=nish.httpClientParser#0 nish.httpClientEnvProxies#0
   stackSites=0 stackLocals=0
   callee +0:19 httpClientParser -> @nish.httpClientParser
   local +4:11 proxies: string[] (const)
@@ -1451,61 +1466,42 @@ function FetchSyncClient.open(this: FetchSyncClient, url: Url): boolean -> @nish
 function FetchSyncClient.loadTrust(this: FetchSyncClient): boolean -> @nish.FetchSyncClient.loadTrust [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.FetchSyncClient.fail nish.pkiLoadRoots nish.pkiLoadSystemRoots nish.tlsClientTrust nish_str_concat
+  calls: nish.FetchSyncClient.fail nish.httpClientLoadTrust
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
-  stackSites=2 stackLocals=0
-  local -7:11 path: string | null (const)
-  local -6:11 roots: PkiRoots (const)
-  callee -6:45 pkiLoadRoots -> @nish.pkiLoadRoots
-  callee -6:74 pkiLoadSystemRoots -> @nish.pkiLoadSystemRoots
-  local -4:13 where: string (const)
-  callee -3:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
-  callee +0:18 tlsClientTrust -> @nish.tlsClientTrust
+  stackSites=1 stackLocals=1
+  local -1:11 fault: HttpClientFault (const)
+  callee +0:18 httpClientLoadTrust -> @nish.httpClientLoadTrust
+  callee +2:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
 function FetchSyncClient.secure(this: FetchSyncClient, host: string, early: u8[]): boolean -> @nish.FetchSyncClient.secure [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: host
-  calls: nish.FetchSyncClient.fail nish.FetchSyncClient.failTls nish.FetchSyncClient.flushTls nish.FetchSyncClient.receiveTls nish.TlsClient.constructor nish.TlsClientConfig.constructor nish.TlsRecordClient.authenticate nish.TlsRecordClient.constructor nish.TlsRecordClient.interest nish.TlsRecordClient.receive nish.TlsRecordClient.reject nish.tlsClientVerdict nish_alloc_struct nish_panic nish_random_fill nish_str_concat nish_str_from_i32 nish_wall_clock_nanos
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.failTls#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.receiveTls#0
-  pointer early: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordClient.receive#1
-  stackSites=0 stackLocals=0
-  local -15:11 trust: TlsClientTrust | null (const)
-  callee -13:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
-  local -10:11 random: u8[] (const)
-  local -9:11 x25519: u8[] (const)
-  local -8:11 p256: u8[] (const)
-  local -3:11 conn: TlsRecordClient (const)
-  callee -3:35 new TlsRecordClient -> @nish.TlsRecordClient.constructor
-  callee -2:7 new TlsClient -> @nish.TlsClient.constructor
-  callee -2:21 new TlsClientConfig -> @nish.TlsClientConfig.constructor
-  callee +5:7 TlsRecordClient.receive -> @nish.TlsRecordClient.receive
-  callee +10:12 TlsRecordClient.interest -> @nish.TlsRecordClient.interest
-  local +11:15 verdict: i32 (const)
-  callee +11:30 tlsClientVerdict -> @nish.tlsClientVerdict
-  callee +13:11 TlsRecordClient.reject -> @nish.TlsRecordClient.reject
-  callee +14:11 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
-  callee +20:9 TlsRecordClient.authenticate -> @nish.TlsRecordClient.authenticate
-  callee +23:9 FetchSyncClient.failTls -> @nish.FetchSyncClient.failTls
-  local +26:13 moved: boolean (const)
-  callee +26:66 FetchSyncClient.flushTls -> @nish.FetchSyncClient.flushTls
-  callee +26:88 FetchSyncClient.receiveTls -> @nish.FetchSyncClient.receiveTls
+  calls: nish.FetchSyncClient.fail nish.FetchSyncClient.flushTls nish.FetchSyncClient.receiveTls nish.httpClientTlsOpening nish.httpClientTlsStart nish.httpClientTlsVerify nish_panic
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.receiveTls#0
+  pointer early: size=0 writesThrough=false captured=false passedTo=nish.httpClientTlsStart#1
+  stackSites=1 stackLocals=1
+  local -6:11 trust: TlsClientTrust | null (const)
+  callee -4:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
+  local -1:11 conn: TlsRecordClient (const)
+  callee -1:35 httpClientTlsStart -> @nish.httpClientTlsStart
+  local +4:11 fault: HttpClientFault (const)
+  callee +7:12 httpClientTlsOpening -> @nish.httpClientTlsOpening
+  callee +8:12 httpClientTlsVerify -> @nish.httpClientTlsVerify
+  callee +9:9 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
+  local +12:13 moved: boolean (const)
+  callee +12:66 FetchSyncClient.flushTls -> @nish.FetchSyncClient.flushTls
+  callee +12:88 FetchSyncClient.receiveTls -> @nish.FetchSyncClient.receiveTls
 function FetchSyncClient.tunnel(this: FetchSyncClient, host: string, port: i32, proxy: Url): boolean -> @nish.FetchSyncClient.tunnel [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: host
-  calls: nish.FetchSyncClient.fail nish.FetchSyncClient.head nish.FetchSyncClient.pump nish.FetchSyncClient.writeAll nish.Http1ResponseParser.expect nish.http1RequestHead nish.httpClientHostText nish.httpClientProxyAuth nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.head#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.pump#0 nish.FetchSyncClient.pump#0
-  pointer proxy: size=64 writesThrough=false captured=false passedTo=nish.httpClientProxyAuth#0
-  stackSites=2 stackLocals=2
-  local -17:11 authority: string (const)
-  callee -17:34 httpClientHostText -> @nish.httpClientHostText
-  local -16:11 names: string[] (const)
-  local -15:11 values: string[] (const)
-  local -14:11 auth: string | null (const)
-  callee -14:33 httpClientProxyAuth -> @nish.httpClientProxyAuth
-  callee -12:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
+  escaping: host port
+  calls: nish.FetchSyncClient.fail nish.FetchSyncClient.head nish.FetchSyncClient.pump nish.FetchSyncClient.writeAll nish.Http1ResponseParser.expect nish.httpClientConnectHead nish.httpClientHostText nish_str_concat nish_str_from_i32
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.head#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.pump#0 nish.FetchSyncClient.pump#0
+  pointer proxy: size=64 writesThrough=false captured=false passedTo=nish.httpClientConnectHead#2
+  stackSites=1 stackLocals=1
+  local -6:11 fault: HttpClientFault (const)
   local -5:11 head: u8[] | null (const)
-  callee -5:31 http1RequestHead -> @nish.http1RequestHead
+  callee -5:31 httpClientConnectHead -> @nish.httpClientConnectHead
   callee -3:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
   callee +1:5 Http1ResponseParser.expect -> @nish.Http1ResponseParser.expect
   callee +2:10 FetchSyncClient.writeAll -> @nish.FetchSyncClient.writeAll
@@ -1513,8 +1509,9 @@ function FetchSyncClient.tunnel(this: FetchSyncClient, host: string, port: i32, 
   callee +5:22 FetchSyncClient.head -> @nish.FetchSyncClient.head
   local +9:11 status: i32 (const)
   callee +11:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
-  callee +15:13 FetchSyncClient.pump -> @nish.FetchSyncClient.pump
-  callee +17:15 FetchSyncClient.pump -> @nish.FetchSyncClient.pump
+  callee +13:39 httpClientHostText -> @nish.httpClientHostText
+  callee +18:13 FetchSyncClient.pump -> @nish.FetchSyncClient.pump
+  callee +20:15 FetchSyncClient.pump -> @nish.FetchSyncClient.pump
 function FetchSyncClient.send(this: FetchSyncClient, url: Url, method: string, names: string[], values: string[], body: u8[] | null): HttpResponse | null -> @nish.FetchSyncClient.send [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1624,16 +1621,15 @@ function FetchSyncClient.flushTls(this: FetchSyncClient, conn: TlsRecordClient):
   callee +2:9 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
   callee +5:7 TlsRecordClient.consume -> @nish.TlsRecordClient.consume
 function FetchSyncClient.failTls(this: FetchSyncClient, conn: TlsRecordClient): void -> @nish.FetchSyncClient.failTls [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.FetchSyncClient.fail
-  calls: nish.FetchSyncClient.fail nish.TlsRecordClient.failure nish_str_concat nish_str_from_i32
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0
-  pointer conn: size=184 writesThrough=false captured=false passedTo=nish.TlsRecordClient.failure#0
-  stackSites=0 stackLocals=0
-  callee +0:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
-  callee +2:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
-  callee +4:7 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
-  callee +4:65 TlsRecordClient.failure -> @nish.TlsRecordClient.failure
+  calls: nish.FetchSyncClient.fail nish.httpClientTlsFault
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
+  pointer conn: size=184 writesThrough=false captured=false passedTo=nish.httpClientTlsFault#0
+  stackSites=1 stackLocals=1
+  local +0:11 fault: HttpClientFault (const)
+  callee +1:5 httpClientTlsFault -> @nish.httpClientTlsFault
+  callee +2:5 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
 function FetchSyncClient.writeAll(this: FetchSyncClient, bytes: u8[], off: i32, len: i32): boolean -> @nish.FetchSyncClient.writeAll [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -1748,12 +1744,11 @@ function FetchSyncClient.readDeadline(this: FetchSyncClient): i64 -> @nish.Fetch
 function FetchSyncClient.drop(this: FetchSyncClient): void -> @nish.FetchSyncClient.drop [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.FetchSyncClient.unwatch nish.TlsRecordClient.close nish.TlsRecordClient.wipe nish_net_close nish_net_write nish_panic_overflow nish_panic_slice
+  calls: nish.FetchSyncClient.unwatch nish.httpClientTlsClose nish_net_close
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.unwatch#0
   stackSites=0 stackLocals=0
-  local -9:11 conn: TlsRecordClient | null (const)
-  callee -7:7 TlsRecordClient.close -> @nish.TlsRecordClient.close
-  callee -1:7 TlsRecordClient.wipe -> @nish.TlsRecordClient.wipe
+  local -3:11 conn: TlsRecordClient | null (const)
+  callee -1:7 httpClientTlsClose -> @nish.httpClientTlsClose
   callee +3:7 FetchSyncClient.unwatch -> @nish.FetchSyncClient.unwatch
 function FetchSyncClient.drain(this: FetchSyncClient): void -> @nish.FetchSyncClient.drain [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1836,7 +1831,7 @@ function fetchSync(req: HttpRequest, options: HttpOptions): HttpResponse | null 
   sharedWrite: via nish.FetchSyncClient.constructor
   calls: nish.FetchSyncClient.close nish.FetchSyncClient.constructor nish.FetchSyncClient.fetch nish_alloc_struct
   pointer req: size=40 writesThrough=false captured=false passedTo=nish.FetchSyncClient.fetch#1
-  pointer options: size=48 writesThrough=true captured=true passedTo=nish.FetchSyncClient.constructor#1
+  pointer options: size=56 writesThrough=true captured=true passedTo=nish.FetchSyncClient.constructor#1
   stackSites=0 stackLocals=0
   local +0:9 client: FetchSyncClient (const)
   callee +0:35 new FetchSyncClient -> @nish.FetchSyncClient.constructor
@@ -1882,7 +1877,7 @@ function httpNoProxyMatch(noProxy: string, host: string, port: i32): boolean -> 
 function httpClientParser(options: HttpOptions): Http1ResponseParser -> @nish.httpClientParser
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=192
   calls: nish.Http1ResponseParser.constructor nish.httpClientBodyCap nish_alloc_struct
-  pointer options: size=48 writesThrough=false captured=false passedTo=nish.httpClientBodyCap#0
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientBodyCap#0
   stackSites=0 stackLocals=0
   callee +0:3 new Http1ResponseParser -> @nish.Http1ResponseParser.constructor
   callee +4:5 httpClientBodyCap -> @nish.httpClientBodyCap
@@ -1893,18 +1888,18 @@ function httpClientSamePolicy(a: OutboundPolicy | null, b: OutboundPolicy | null
   stackSites=0 stackLocals=0
 function httpClientBodyCap(options: HttpOptions): i64 -> @nish.httpClientBodyCap
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer options: size=48 writesThrough=false captured=false
+  pointer options: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 policy: OutboundPolicy | null (const)
 function httpClientTotalMs(options: HttpOptions): i32 -> @nish.httpClientTotalMs
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer options: size=48 writesThrough=false captured=false
+  pointer options: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 policy: OutboundPolicy | null (const)
   local +1:9 own: i32 (const)
 function httpClientMaxRedirects(options: HttpOptions): i32 -> @nish.httpClientMaxRedirects
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer options: size=48 writesThrough=false captured=false
+  pointer options: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 policy: OutboundPolicy | null (const)
 function httpClientIsRedirect(status: i32): boolean -> @nish.httpClientIsRedirect
@@ -2018,7 +2013,7 @@ function httpClientEnvProxies(options: HttpOptions): string[] -> @nish.httpClien
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish.httpChooseProxy nish_getenv
-  pointer options: size=48 writesThrough=false captured=false
+  pointer options: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 cgi: boolean (const)
   callee +2:5 httpChooseProxy -> @nish.httpChooseProxy
@@ -2028,7 +2023,7 @@ function httpClientDeadline(options: HttpOptions): i64 -> @nish.httpClientDeadli
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   calls: nish.httpClientTotalMs nish_monotonic_nanos nish_panic_overflow
-  pointer options: size=48 writesThrough=false captured=false passedTo=nish.httpClientTotalMs#0
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientTotalMs#0
   stackSites=0 stackLocals=0
   local +0:9 total: i32 (const)
   callee +0:22 httpClientTotalMs -> @nish.httpClientTotalMs
@@ -2038,10 +2033,95 @@ function HttpClientFault.fail(this: HttpClientFault, code: i32, text: string): v
   escaping: code text
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function httpClientLoadTrust(options: HttpOptions, fault: HttpClientFault): TlsClientTrust | null -> @nish.httpClientLoadTrust
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.pkiLoadRoots
+  calls: nish.HttpClientFault.fail nish.pkiLoadRoots nish.pkiLoadSystemRoots nish.tlsClientTrust nish_str_concat
+  pointer options: size=56 writesThrough=false captured=false
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0
+  stackSites=2 stackLocals=0
+  local +0:9 path: string | null (const)
+  local +1:9 roots: PkiRoots (const)
+  callee +1:43 pkiLoadRoots -> @nish.pkiLoadRoots
+  callee +1:72 pkiLoadSystemRoots -> @nish.pkiLoadSystemRoots
+  local +3:11 where: string (const)
+  callee +4:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +7:10 tlsClientTrust -> @nish.tlsClientTrust
+function httpClientTlsStart(host: string, early: u8[]): TlsRecordClient -> @nish.httpClientTlsStart
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
+  sharedWrite: via nish_random_fill
+  escaping: host
+  calls: nish.TlsClient.constructor nish.TlsClientConfig.constructor nish.TlsRecordClient.constructor nish.TlsRecordClient.receive nish_alloc_struct nish_panic nish_random_fill
+  pointer early: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordClient.receive#1
+  stackSites=0 stackLocals=0
+  local +0:9 random: u8[] (const)
+  local +1:9 x25519: u8[] (const)
+  local +2:9 p256: u8[] (const)
+  local +7:9 conn: TlsRecordClient (const)
+  callee +7:33 new TlsRecordClient -> @nish.TlsRecordClient.constructor
+  callee +8:5 new TlsClient -> @nish.TlsClient.constructor
+  callee +8:19 new TlsClientConfig -> @nish.TlsClientConfig.constructor
+  callee +11:5 TlsRecordClient.receive -> @nish.TlsRecordClient.receive
+function httpClientTlsOpening(conn: TlsRecordClient): boolean -> @nish.httpClientTlsOpening
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer conn: size=184 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function httpClientTlsFault(conn: TlsRecordClient, fault: HttpClientFault): void -> @nish.httpClientTlsFault
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HttpClientFault.fail
+  calls: nish.HttpClientFault.fail nish.TlsRecordClient.failure nish_str_concat nish_str_from_i32
+  pointer conn: size=184 writesThrough=false captured=false passedTo=nish.TlsRecordClient.failure#0
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
+  stackSites=0 stackLocals=0
+  callee +0:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +2:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +4:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +4:64 TlsRecordClient.failure -> @nish.TlsRecordClient.failure
+function httpClientTlsVerify(conn: TlsRecordClient, trust: TlsClientTrust, host: string, fault: HttpClientFault): boolean -> @nish.httpClientTlsVerify
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsClientVerdict
+  calls: nish.HttpClientFault.fail nish.TlsRecordClient.authenticate nish.TlsRecordClient.interest nish.TlsRecordClient.reject nish.httpClientTlsFault nish.tlsClientVerdict nish_str_concat nish_str_from_i32 nish_wall_clock_nanos
+  pointer conn: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.interest#0 nish.TlsRecordClient.reject#0 nish.TlsRecordClient.authenticate#0 nish.httpClientTlsFault#0
+  pointer trust: size=8 writesThrough=false captured=false passedTo=nish.tlsClientVerdict#1
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.httpClientTlsFault#1
+  stackSites=0 stackLocals=0
+  callee +0:8 TlsRecordClient.interest -> @nish.TlsRecordClient.interest
+  local +1:11 verdict: i32 (const)
+  callee +1:26 tlsClientVerdict -> @nish.tlsClientVerdict
+  callee +3:7 TlsRecordClient.reject -> @nish.TlsRecordClient.reject
+  callee +4:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +7:5 TlsRecordClient.authenticate -> @nish.TlsRecordClient.authenticate
+  callee +10:5 httpClientTlsFault -> @nish.httpClientTlsFault
+function httpClientTlsClose(conn: TlsRecordClient, fd: i32): void -> @nish.httpClientTlsClose
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.TlsRecordClient.close
+  calls: nish.TlsRecordClient.close nish.TlsRecordClient.wipe nish_net_write nish_panic_overflow nish_panic_slice
+  pointer conn: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.close#0 nish.TlsRecordClient.wipe#0
+  stackSites=0 stackLocals=0
+  callee +0:3 TlsRecordClient.close -> @nish.TlsRecordClient.close
+  callee +4:3 TlsRecordClient.wipe -> @nish.TlsRecordClient.wipe
+function httpClientConnectHead(host: string, port: i32, proxy: Url, fault: HttpClientFault): u8[] | null -> @nish.httpClientConnectHead
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HttpClientFault.fail
+  escaping: host
+  calls: nish.HttpClientFault.fail nish.http1RequestHead nish.httpClientHostText nish.httpClientProxyAuth nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
+  pointer proxy: size=64 writesThrough=false captured=false passedTo=nish.httpClientProxyAuth#0
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
+  stackSites=2 stackLocals=2
+  local +0:9 authority: string (const)
+  callee +0:32 httpClientHostText -> @nish.httpClientHostText
+  local +1:9 names: string[] (const)
+  local +2:9 values: string[] (const)
+  local +3:9 auth: string | null (const)
+  callee +3:31 httpClientProxyAuth -> @nish.httpClientProxyAuth
+  callee +5:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +12:9 head: u8[] | null (const)
+  callee +12:29 http1RequestHead -> @nish.http1RequestHead
+  callee +14:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
 function httpClientHostRefusal(options: HttpOptions, url: Url): string -> @nish.httpClientHostRefusal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.httpClientRedact nish.outboundHostAllowed nish_str_concat
-  pointer options: size=48 writesThrough=false captured=false
+  pointer options: size=56 writesThrough=false captured=false
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientRedact#0
   stackSites=0 stackLocals=0
   local +0:9 policy: OutboundPolicy | null (const)
@@ -2052,7 +2132,7 @@ function httpClientTarget(text: string, options: HttpOptions, fault: HttpClientF
   sharedWrite: via nish.urlParse
   escaping: text
   calls: nish.HttpClientFault.fail nish.httpClientHostRefusal nish.httpClientRedact nish.urlParse nish_str_concat nish_str_eq
-  pointer options: size=48 writesThrough=false captured=false passedTo=nish.httpClientHostRefusal#0
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientHostRefusal#0
   pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
   stackSites=0 stackLocals=0
   local +0:9 url: Url | null (const)
@@ -2080,7 +2160,7 @@ function httpClientRedirect(hop: HttpClientHop, options: HttpOptions, url: Url, 
   escaping: location
   calls: nish.HttpClientFault.fail nish.httpClientDropField nish.httpClientHostRefusal nish.httpClientMaxRedirects nish.httpClientRedact nish.urlOrigin nish.urlResolve nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32
   pointer hop: size=40 writesThrough=true captured=false
-  pointer options: size=48 writesThrough=false captured=false passedTo=nish.httpClientMaxRedirects#0 nish.httpClientHostRefusal#0
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientMaxRedirects#0 nish.httpClientHostRefusal#0
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.urlResolve#0 nish.urlOrigin#0
   pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
   stackSites=0 stackLocals=0
@@ -2114,7 +2194,7 @@ function httpClientRoute(url: Url, options: HttpOptions, httpProxy: string, http
   escaping: httpProxy httpsProxy noProxy
   calls: nish.HttpClientFault.fail nish.httpClientHostText nish.httpClientProxyUrl nish.httpClientRedact nish.httpProxyFor nish.urlDefaultPort nish.urlParse nish_alloc_struct nish_str_concat nish_str_eq nish_str_from_i32 nish_str_index_of nish_str_index_of_from
   pointer url: size=64 writesThrough=false captured=false
-  pointer options: size=48 writesThrough=false captured=false
+  pointer options: size=56 writesThrough=false captured=false
   pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0
   stackSites=0 stackLocals=0
   local +0:9 way: HttpClientRoute (const)
@@ -2173,7 +2253,7 @@ function httpClientParserFault(parser: Http1ResponseParser, event: i32, options:
   sharedWrite: via nish.HttpClientFault.fail
   calls: nish.HttpClientFault.fail nish.httpClientBodyCap nish_str_concat nish_str_from_i32 nish_str_from_i64
   pointer parser: size=192 writesThrough=false captured=false
-  pointer options: size=48 writesThrough=false captured=false passedTo=nish.httpClientBodyCap#0
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientBodyCap#0
   pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
   stackSites=0 stackLocals=0
   callee +0:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
@@ -2185,30 +2265,46 @@ function httpClientWaitText(code: i32, options: HttpOptions, text: string): stri
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
   calls: nish.httpClientTotalMs nish_str_concat nish_str_from_i32
-  pointer options: size=48 writesThrough=false captured=false passedTo=nish.httpClientTotalMs#0
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientTotalMs#0
   stackSites=0 stackLocals=0
   callee +0:34 httpClientTotalMs -> @nish.httpClientTotalMs
 function httpClientResolve(host: string, port: i32, options: HttpOptions, start: i64, until: i64, code: i32, addresses: u8[], fault: HttpClientFault): i32 -> @nish.httpClientResolve
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.resolveHost
-  escaping: code host port
-  calls: nish.HttpClientFault.fail nish.httpClientWaitText nish.outboundAddressText nish.outboundFilter nish.resolveHost nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer options: size=48 writesThrough=false captured=false passedTo=nish.httpClientWaitText#1
-  pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.resolveHost#3 nish.outboundFilter#1 nish.outboundAddressText#0
-  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
-  stackSites=0 stackLocals=0
+  escaping: code host port until
+  calls: nish.DnsConfig.constructor nish.DnsHosts.constructor nish.dnsLoadSystem nish.dnsLookupWith nish.httpClientAnswers nish.resolveHost nish_alloc_struct nish_panic nish_panic_overflow
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientAnswers#2
+  pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.resolveHost#3 nish.dnsLookupWith#5 nish.httpClientAnswers#5
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.httpClientAnswers#6
+  stackSites=1 stackLocals=0
   local +0:7 lookupMs: i64 (let)
   local +6:9 ttls: i32[] (const)
-  local +7:9 count: i32 (const)
-  callee +7:22 resolveHost -> @nish.resolveHost
-  callee +9:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee +11:7 httpClientWaitText -> @nish.httpClientWaitText
-  callee +16:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  local +22:7 usable: i32 (let)
-  local +23:9 policy: OutboundPolicy | null (const)
-  callee +26:14 outboundFilter -> @nish.outboundFilter
-  callee +28:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee +30:32 outboundAddressText -> @nish.outboundAddressText
+  local +7:9 dns: DnsConfig | null (const)
+  local +8:7 count: i32 (let)
+  callee +10:13 resolveHost -> @nish.resolveHost
+  local +12:11 hosts: DnsHosts (const)
+  callee +12:29 new DnsHosts -> @nish.DnsHosts.constructor
+  callee +13:5 dnsLoadSystem -> @nish.dnsLoadSystem
+  callee +13:19 new DnsConfig -> @nish.DnsConfig.constructor
+  callee +14:13 dnsLookupWith -> @nish.dnsLookupWith
+  callee +16:10 httpClientAnswers -> @nish.httpClientAnswers
+function httpClientAnswers(host: string, count: i32, options: HttpOptions, until: i64, code: i32, addresses: u8[], fault: HttpClientFault): i32 -> @nish.httpClientAnswers
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HttpClientFault.fail
+  escaping: code count
+  calls: nish.HttpClientFault.fail nish.httpClientWaitText nish.outboundAddressText nish.outboundFilter nish_str_concat nish_str_from_i32
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientWaitText#1
+  pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.outboundFilter#1 nish.outboundAddressText#0
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
+  stackSites=0 stackLocals=0
+  callee +0:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +2:7 httpClientWaitText -> @nish.httpClientWaitText
+  callee +7:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +13:7 usable: i32 (let)
+  local +14:9 policy: OutboundPolicy | null (const)
+  callee +17:14 outboundFilter -> @nish.outboundFilter
+  callee +19:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +21:32 outboundAddressText -> @nish.outboundAddressText
 function FetchError.constructor(this: FetchError, code: i32, text: string): void -> @nish.FetchError.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: code text
@@ -2299,57 +2395,161 @@ function HttpClientConn.constructor(this: HttpClientConn, options: HttpOptions):
   sharedWrite: via nish.httpClientDeadline
   escaping: options
   calls: nish.httpClientDeadline nish.httpClientEnvProxies nish.httpClientParser nish_alloc_struct nish_panic
-  pointer this: size=80 writesThrough=true captured=false
-  pointer options: size=48 writesThrough=true captured=true passedTo=nish.httpClientDeadline#0 nish.httpClientParser#0 nish.httpClientEnvProxies#0
+  pointer this: size=104 writesThrough=true captured=false
+  pointer options: size=56 writesThrough=true captured=true passedTo=nish.httpClientDeadline#0 nish.httpClientParser#0 nish.httpClientEnvProxies#0
   stackSites=0 stackLocals=0
   callee +0:21 httpClientDeadline -> @nish.httpClientDeadline
   callee +1:19 httpClientParser -> @nish.httpClientParser
-  local +4:11 proxies: string[] (const)
-  callee +4:31 httpClientEnvProxies -> @nish.httpClientEnvProxies
+  local +5:11 proxies: string[] (const)
+  callee +5:31 httpClientEnvProxies -> @nish.httpClientEnvProxies
 function HttpClientConn.overdue(this: HttpClientConn): boolean -> @nish.HttpClientConn.overdue [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   calls: nish.HttpClientFault.fail nish.httpClientWaitText nish_monotonic_nanos
-  pointer this: size=80 writesThrough=false captured=false
+  pointer this: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
   callee +0:45 httpClientWaitText -> @nish.httpClientWaitText
 function HttpClientConn.close(this: HttpClientConn): void -> @nish.HttpClientConn.close [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_net_close
-  pointer this: size=80 writesThrough=true captured=false
+  calls: nish.httpClientTlsClose nish_net_close
+  pointer this: size=104 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -3:11 conn: TlsRecordClient | null (const)
+  callee -1:7 httpClientTlsClose -> @nish.httpClientTlsClose
 function HttpClientConn.release(this: HttpClientConn, pool: FetchPool | null): void -> @nish.HttpClientConn.release [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.FetchPool.put nish.Http1ResponseParser.buffered nish.Http1ResponseParser.keepAlive nish.HttpClientConn.close
-  pointer this: size=80 writesThrough=true captured=false passedTo=nish.HttpClientConn.close#0
+  pointer this: size=104 writesThrough=true captured=false passedTo=nish.HttpClientConn.close#0
   pointer pool: size=32 writesThrough=false captured=false passedTo=nish.FetchPool.put#0
   stackSites=0 stackLocals=0
   callee -4:7 Http1ResponseParser.keepAlive -> @nish.Http1ResponseParser.keepAlive
   callee -3:7 Http1ResponseParser.buffered -> @nish.Http1ResponseParser.buffered
   callee -1:7 FetchPool.put -> @nish.FetchPool.put
   callee +3:5 HttpClientConn.close -> @nish.HttpClientConn.close
-function httpClientFillAsync(conn: HttpClientConn): boolean -> @nish.httpClientFillAsync
+function httpClientReadRawAsync(conn: HttpClientConn, want: i32): i32 -> @nish.httpClientReadRawAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:16
-  calls: nish.Http1ResponseParser.feed nish.Http1ResponseParser.finish nish.HttpClientConn.overdue nish.HttpClientFault.fail nish_net_read nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
-  pointer conn: size=80 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0 nish.HttpClientConn.overdue#0
+  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish_net_read nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0 nish.HttpClientConn.overdue#0
   stackSites=0 stackLocals=0
   callee -3:7 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
   local +0:7 n: i32 (let)
   local +2:11 ready: boolean (const)
   callee +4:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
   callee +7:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
-  callee +14:5 Http1ResponseParser.feed -> @nish.Http1ResponseParser.feed
-  callee +18:5 Http1ResponseParser.finish -> @nish.Http1ResponseParser.finish
-  callee +22:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +14:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+function httpClientWriteRawAsync(conn: HttpClientConn, bytes: u8[], off: i32, len: i32): boolean -> @nish.httpClientWriteRawAsync
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: off
+  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish_net_write nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -16:7 at: i32 (let)
+  local -15:9 end: i32 (const)
+  callee -13:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
+  local -10:11 n: i32 (const)
+  local -6:13 ready: boolean (const)
+  callee -4:9 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +1:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
+function httpClientReceiveTlsAsync(conn: HttpClientConn, tls: TlsRecordClient): boolean -> @nish.httpClientReceiveTlsAsync
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HttpClientFault.fail
+  calls: nish.HttpClientFault.fail nish.TlsRecordClient.abort nish.TlsRecordClient.end nish.TlsRecordClient.receive nish.TlsRecordClient.space nish.httpClientReadRawAsync
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientReadRawAsync#0
+  pointer tls: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.space#0 nish.TlsRecordClient.abort#0 nish.TlsRecordClient.end#0 nish.TlsRecordClient.receive#0
+  stackSites=0 stackLocals=0
+  local +0:9 room: i32 (const)
+  callee +0:21 TlsRecordClient.space -> @nish.TlsRecordClient.space
+  local +1:9 want: i32 (const)
+  callee +3:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +6:9 n: i32 (const)
+  callee +6:19 httpClientReadRawAsync -> @nish.httpClientReadRawAsync
+  callee +8:5 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
+  callee +13:5 TlsRecordClient.end -> @nish.TlsRecordClient.end
+  callee +15:5 TlsRecordClient.receive -> @nish.TlsRecordClient.receive
+function httpClientFlushTlsAsync(conn: HttpClientConn, tls: TlsRecordClient): boolean -> @nish.httpClientFlushTlsAsync
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.httpClientWriteRawAsync
+  calls: nish.TlsRecordClient.abort nish.TlsRecordClient.consume nish.httpClientWriteRawAsync nish_panic_overflow
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientWriteRawAsync#0
+  pointer tls: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.abort#0 nish.TlsRecordClient.consume#0
+  stackSites=0 stackLocals=0
+  local +0:11 len: i32 (const)
+  local +1:11 wrote: boolean (const)
+  callee +1:25 httpClientWriteRawAsync -> @nish.httpClientWriteRawAsync
+  callee +3:7 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
+  callee +6:5 TlsRecordClient.consume -> @nish.TlsRecordClient.consume
+function httpClientSecureAsync(conn: HttpClientConn, host: string, early: u8[]): boolean -> @nish.httpClientSecureAsync
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: host
+  calls: nish.HttpClientFault.fail nish.httpClientFlushTlsAsync nish.httpClientReceiveTlsAsync nish.httpClientTlsOpening nish.httpClientTlsStart nish.httpClientTlsVerify nish_panic
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientFlushTlsAsync#0 nish.httpClientReceiveTlsAsync#0
+  pointer early: size=0 writesThrough=false captured=false passedTo=nish.httpClientTlsStart#1
+  stackSites=0 stackLocals=0
+  local -6:9 trust: TlsClientTrust | null (const)
+  callee -4:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local -1:9 tls: TlsRecordClient (const)
+  callee -1:32 httpClientTlsStart -> @nish.httpClientTlsStart
+  callee +4:10 httpClientTlsOpening -> @nish.httpClientTlsOpening
+  callee +5:10 httpClientTlsVerify -> @nish.httpClientTlsVerify
+  local +8:9 moved: boolean (let)
+  callee +10:21 httpClientFlushTlsAsync -> @nish.httpClientFlushTlsAsync
+  callee +12:21 httpClientReceiveTlsAsync -> @nish.httpClientReceiveTlsAsync
+function httpClientTunnelAsync(conn: HttpClientConn, host: string, port: i32, proxy: Url): boolean -> @nish.httpClientTunnelAsync
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: host port
+  calls: nish.Http1ResponseParser.expect nish.HttpClientFault.fail nish.httpClientConnectHead nish.httpClientHostText nish.httpClientPumpAsync nish.httpClientWriteRawAsync nish_str_concat nish_str_from_i32
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientWriteRawAsync#0 nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0
+  pointer proxy: size=64 writesThrough=false captured=false passedTo=nish.httpClientConnectHead#2
+  stackSites=0 stackLocals=0
+  local -4:9 head: u8[] | null (const)
+  callee -4:29 httpClientConnectHead -> @nish.httpClientConnectHead
+  callee +1:3 Http1ResponseParser.expect -> @nish.Http1ResponseParser.expect
+  local +2:9 wrote: boolean (const)
+  callee +2:23 httpClientWriteRawAsync -> @nish.httpClientWriteRawAsync
+  local +6:7 event: i32 (let)
+  callee +6:26 httpClientPumpAsync -> @nish.httpClientPumpAsync
+  callee +8:19 httpClientPumpAsync -> @nish.httpClientPumpAsync
+  callee +14:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +17:9 status: i32 (const)
+  callee +19:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +21:37 httpClientHostText -> @nish.httpClientHostText
+  callee +26:17 httpClientPumpAsync -> @nish.httpClientPumpAsync
+  callee +28:19 httpClientPumpAsync -> @nish.httpClientPumpAsync
+function httpClientFillAsync(conn: HttpClientConn): boolean -> @nish.httpClientFillAsync
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.Http1ResponseParser.feed nish.Http1ResponseParser.finish nish.HttpClientConn.overdue nish.TlsRecordClient.read nish.httpClientFlushTlsAsync nish.httpClientReadRawAsync nish.httpClientReceiveTlsAsync nish.httpClientTlsFault
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientReadRawAsync#0 nish.HttpClientConn.overdue#0 nish.httpClientFlushTlsAsync#0 nish.httpClientReceiveTlsAsync#0
+  stackSites=0 stackLocals=0
+  local -4:9 tls: TlsRecordClient | null (const)
+  local -2:11 n: i32 (const)
+  callee -2:21 httpClientReadRawAsync -> @nish.httpClientReadRawAsync
+  callee +1:7 Http1ResponseParser.feed -> @nish.Http1ResponseParser.feed
+  callee +3:7 Http1ResponseParser.finish -> @nish.Http1ResponseParser.finish
+  callee +7:7 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
+  local +10:7 got: i32 (let)
+  callee +10:18 TlsRecordClient.read -> @nish.TlsRecordClient.read
+  local +12:11 flushed: boolean (const)
+  callee +12:27 httpClientFlushTlsAsync -> @nish.httpClientFlushTlsAsync
+  local +16:11 received: boolean (const)
+  callee +16:28 httpClientReceiveTlsAsync -> @nish.httpClientReceiveTlsAsync
+  callee +20:11 TlsRecordClient.read -> @nish.TlsRecordClient.read
+  callee +24:5 Http1ResponseParser.feed -> @nish.Http1ResponseParser.feed
+  callee +29:5 Http1ResponseParser.finish -> @nish.Http1ResponseParser.finish
+  callee +33:3 httpClientTlsFault -> @nish.httpClientTlsFault
 function httpClientPumpAsync(conn: HttpClientConn): i32 -> @nish.httpClientPumpAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1ResponseParser.next nish.httpClientFillAsync nish.httpClientParserFault
-  pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientFillAsync#0
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientFillAsync#0
   stackSites=0 stackLocals=0
   local -9:7 event: i32 (let)
   callee -9:20 Http1ResponseParser.next -> @nish.Http1ResponseParser.next
@@ -2360,23 +2560,72 @@ function httpClientPumpAsync(conn: HttpClientConn): i32 -> @nish.httpClientPumpA
 function httpClientWriteAsync(conn: HttpClientConn, bytes: u8[]): boolean -> @nish.httpClientWriteAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish_net_write nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
-  pointer conn: size=80 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0
-  pointer bytes: size=0 writesThrough=false captured=false
+  calls: nish.TlsRecordClient.write nish.httpClientFlushTlsAsync nish.httpClientTlsFault nish.httpClientWriteRawAsync nish_panic_overflow
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientWriteRawAsync#0 nish.httpClientFlushTlsAsync#0 nish.httpClientFlushTlsAsync#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.httpClientWriteRawAsync#1 nish.TlsRecordClient.write#1
   stackSites=0 stackLocals=0
-  local -16:7 at: i32 (let)
-  local -15:9 end: i32 (const)
-  callee -13:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
-  local -10:11 n: i32 (const)
-  local -6:13 ready: boolean (const)
-  callee -4:9 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee +1:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local -12:9 tls: TlsRecordClient | null (const)
+  local -10:11 wrote: boolean (const)
+  callee -10:25 httpClientWriteRawAsync -> @nish.httpClientWriteRawAsync
+  local -7:7 at: i32 (let)
+  local -6:9 end: i32 (const)
+  local -4:11 n: i32 (const)
+  callee -4:20 TlsRecordClient.write -> @nish.TlsRecordClient.write
+  callee +1:7 httpClientTlsFault -> @nish.httpClientTlsFault
+  local +4:11 flushed: boolean (const)
+  callee +4:27 httpClientFlushTlsAsync -> @nish.httpClientFlushTlsAsync
+  local +9:9 done: boolean (const)
+  callee +9:22 httpClientFlushTlsAsync -> @nish.httpClientFlushTlsAsync
+function httpClientLookupAsync(host: string, port: i32, dns: DnsConfig | null, until: i64, addresses: u8[], ttls: i32[]): i32 -> @nish.httpClientLookupAsync
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: dns host port
+  calls: nish.DnsClient.cancel nish.DnsClient.constructor nish.DnsClient.owns nish.DnsClient.ready nish.DnsClient.result nish.DnsClient.start nish.DnsClient.tick nish.DnsClient.timeoutMs nish.DnsConfig.constructor nish.DnsHosts.constructor nish.DnsResolver.constructor nish.dnsLoadSystem nish.dnsParseAddress nish_alloc_struct nish_monotonic_nanos nish_net_close nish_panic nish_panic_index nish_panic_overflow nish_poll_create nish_poll_wait
+  pointer dns: size=72 writesThrough=true captured=true
+  pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.dnsParseAddress#3 nish.DnsClient.result#2 nish.DnsClient.result#2
+  pointer ttls: size=0 writesThrough=true captured=false passedTo=nish.DnsClient.result#3 nish.DnsClient.result#3
+  stackSites=2 stackLocals=2
+  local -5:9 name: u8[] (const)
+  local -4:12 i: i32 (let)
+  callee -1:7 dnsParseAddress -> @nish.dnsParseAddress
+  local +3:9 system: DnsConfig (const)
+  callee +3:29 new DnsConfig -> @nish.DnsConfig.constructor
+  local +4:9 hosts: DnsHosts (const)
+  callee +4:27 new DnsHosts -> @nish.DnsHosts.constructor
+  callee +5:3 dnsLoadSystem -> @nish.dnsLoadSystem
+  local +6:9 config: DnsConfig (const)
+  local +7:9 loop: i32 (const)
+  local +11:9 client: DnsClient (const)
+  callee +11:29 new DnsClient -> @nish.DnsClient.constructor
+  callee +11:43 new DnsResolver -> @nish.DnsResolver.constructor
+  local +12:9 lookup: i32 (const)
+  callee +12:23 DnsClient.start -> @nish.DnsClient.start
+  local +17:9 ready: i32[] (const)
+  local +18:7 slice: i32 (let)
+  local +19:7 status: i32 (let)
+  callee +19:21 DnsClient.result -> @nish.DnsClient.result
+  local +21:11 now: i64 (const)
+  callee +23:7 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +27:9 own: i32 (let)
+  local +29:13 left: i64 (const)
+  local +34:11 wait: i32 (const)
+  callee +34:23 DnsClient.timeoutMs -> @nish.DnsClient.timeoutMs
+  local +36:13 slept: boolean (const)
+  callee +38:9 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +43:11 count: i32 (const)
+  local +44:11 after: i64 (const)
+  callee +46:7 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +50:14 k: i32 (let)
+  callee +51:11 DnsClient.owns -> @nish.DnsClient.owns
+  callee +52:9 DnsClient.ready -> @nish.DnsClient.ready
+  callee +55:5 DnsClient.tick -> @nish.DnsClient.tick
+  callee +56:14 DnsClient.result -> @nish.DnsClient.result
 function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): i32 -> @nish.httpClientDialAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   escaping: host port
-  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish.copyBytes nish.httpClientResolve nish.httpClientWaitText nish_connect_result nish_monotonic_nanos nish_net_close nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_tcp_connect
-  pointer conn: size=80 writesThrough=false captured=false passedTo=nish.HttpClientConn.overdue#0
+  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish.copyBytes nish.httpClientAnswers nish.httpClientLookupAsync nish.httpClientWaitText nish_connect_result nish_monotonic_nanos nish_net_close nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_tcp_connect
+  pointer conn: size=104 writesThrough=false captured=false passedTo=nish.HttpClientConn.overdue#0
   stackSites=0 stackLocals=0
   local +0:9 start: i64 (const)
   local +1:9 budget: i32 (const)
@@ -2385,39 +2634,52 @@ function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): i32
   callee +9:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
   callee +9:27 httpClientWaitText -> @nish.httpClientWaitText
   local +12:9 addresses: u8[] (const)
-  local +13:9 usable: i32 (const)
-  callee +13:23 httpClientResolve -> @nish.httpClientResolve
-  local +17:9 one: u8[] (const)
-  local +18:7 last: i32 (let)
-  local +19:12 i: i32 (let)
-  callee +20:5 copyBytes -> @nish.copyBytes
-  local +21:11 fd: i32 (const)
-  local +26:11 ready: boolean (const)
-  callee +27:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
-  local +31:11 result: i32 (const)
-  callee +38:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +13:9 ttls: i32[] (const)
+  local +14:9 count: i32 (const)
+  callee +14:23 httpClientLookupAsync -> @nish.httpClientLookupAsync
+  local +15:9 usable: i32 (const)
+  callee +15:23 httpClientAnswers -> @nish.httpClientAnswers
+  local +19:9 one: u8[] (const)
+  local +20:7 last: i32 (let)
+  local +21:12 i: i32 (let)
+  callee +22:5 copyBytes -> @nish.copyBytes
+  local +23:11 fd: i32 (const)
+  local +28:11 ready: boolean (const)
+  callee +29:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
+  local +33:11 result: i32 (const)
+  callee +40:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
 function httpClientOpenAsync(conn: HttpClientConn, url: Url, pool: FetchPool | null, fresh: boolean): boolean -> @nish.httpClientOpenAsync
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.FetchPool.take nish.HttpClientFault.fail nish.httpClientDialAsync nish.httpClientParser nish.httpClientRedact nish.httpClientRoute nish_str_concat nish_str_eq
-  pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientDialAsync#0
-  pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientRedact#0 nish.httpClientRoute#0
+  calls: nish.FetchPool.take nish.Http1ResponseParser.tunnelBytes nish.HttpClientConn.close nish.httpClientDialAsync nish.httpClientLoadTrust nish.httpClientParser nish.httpClientRoute nish.httpClientSecureAsync nish.httpClientTunnelAsync nish_str_eq
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientDialAsync#0 nish.httpClientTunnelAsync#0 nish.HttpClientConn.close#0 nish.httpClientSecureAsync#0 nish.HttpClientConn.close#0
+  pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientRoute#0
   pointer pool: size=32 writesThrough=false captured=false passedTo=nish.FetchPool.take#0
   stackSites=0 stackLocals=0
-  callee -17:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee -15:10 httpClientRedact -> @nish.httpClientRedact
+  local -12:9 secure: boolean (const)
   local -11:9 way: HttpClientRoute | null (const)
   callee -11:39 httpClientRoute -> @nish.httpClientRoute
   callee +1:17 httpClientParser -> @nish.httpClientParser
   local +4:11 kept: i32 (const)
   callee +4:23 FetchPool.take -> @nish.FetchPool.take
-  local +11:9 fd: i32 (const)
-  callee +11:25 httpClientDialAsync -> @nish.httpClientDialAsync
+  callee +13:18 httpClientLoadTrust -> @nish.httpClientLoadTrust
+  local +18:9 fd: i32 (const)
+  callee +18:25 httpClientDialAsync -> @nish.httpClientDialAsync
+  local +26:7 early: u8[] (let)
+  local +27:9 proxy: Url | null (const)
+  local +29:11 tunnelled: boolean (const)
+  callee +29:29 httpClientTunnelAsync -> @nish.httpClientTunnelAsync
+  callee +31:7 HttpClientConn.close -> @nish.HttpClientConn.close
+  callee +34:13 Http1ResponseParser.tunnelBytes -> @nish.Http1ResponseParser.tunnelBytes
+  callee +35:19 httpClientParser -> @nish.httpClientParser
+  local +37:9 secured: boolean (const)
+  callee +37:25 httpClientSecureAsync -> @nish.httpClientSecureAsync
+  callee +39:5 HttpClientConn.close -> @nish.HttpClientConn.close
 function httpClientSendAsync(conn: HttpClientConn, url: Url, hop: HttpClientHop): boolean -> @nish.httpClientSendAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: nish.Http1ResponseParser.expect nish.HttpClientFault.fail nish.httpClientPumpAsync nish.httpClientRequestHead nish.httpClientWriteAsync nish_str_at nish_str_concat nish_str_eq nish_str_from_i32
-  pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientWriteAsync#0 nish.httpClientWriteAsync#0 nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientWriteAsync#0 nish.httpClientWriteAsync#0 nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientRequestHead#0
   pointer hop: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2437,7 +2699,7 @@ function httpClientBodyAsync(conn: HttpClientConn, res: FetchResponse, limit: i6
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.HttpClientFault.fail nish.copyBytes nish.httpClientPumpAsync nish_panic nish_panic_overflow nish_str_concat nish_str_from_i64
-  pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0
   pointer res: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -39:7 buf: u8[] (let)
@@ -2458,7 +2720,7 @@ function httpClientExchangeAsync(conn: HttpClientConn, url: Url, hop: HttpClient
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.httpClientOpenAsync
   calls: nish.FetchResponse.constructor nish.FetchResponse.header nish.HttpClientConn.close nish.HttpClientConn.release nish.HttpClientFault.fail nish.httpClientBodyAsync nish.httpClientBodyCap nish.httpClientIdempotent nish.httpClientIsRedirect nish.httpClientOpenAsync nish.httpClientSendAsync nish.httpClientUrlText nish_alloc_struct nish_array_grow nish_panic_index
-  pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientOpenAsync#0 nish.httpClientSendAsync#0 nish.httpClientBodyAsync#0 nish.HttpClientConn.close#0 nish.HttpClientConn.close#0 nish.HttpClientConn.release#0 nish.HttpClientConn.close#0
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.httpClientOpenAsync#0 nish.httpClientSendAsync#0 nish.httpClientBodyAsync#0 nish.HttpClientConn.close#0 nish.HttpClientConn.close#0 nish.HttpClientConn.release#0 nish.HttpClientConn.close#0
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientOpenAsync#1 nish.httpClientSendAsync#1 nish.httpClientUrlText#0
   pointer hop: size=40 writesThrough=false captured=false passedTo=nish.httpClientSendAsync#2
   pointer pool: size=32 writesThrough=false captured=false passedTo=nish.httpClientOpenAsync#2 nish.HttpClientConn.release#1
@@ -5182,23 +5444,31 @@ function dnsClientReadStream(c: DnsClient, q: i32, fd: i32, hungUp: boolean, now
   callee +8:5 DnsResolver.receiveStream -> @nish.DnsResolver.receiveStream
   callee +9:5 DnsClient.pump -> @nish.DnsClient.pump
 function resolveHost(name: string, timeoutMs: i32, port: i32, out: u8[], ttls: i32[]): i32 -> @nish.resolveHost [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_read_file_bytes
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.dnsLoadSystem
   escaping: name port timeoutMs
-  calls: nish.DnsConfig.constructor nish.DnsHosts.constructor nish.dnsLookupWith nish.dnsParseHosts nish.dnsParseResolvConf nish_alloc_struct nish_read_file_bytes
+  calls: nish.DnsConfig.constructor nish.DnsHosts.constructor nish.dnsLoadSystem nish.dnsLookupWith nish_alloc_struct
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.dnsLookupWith#5
   pointer ttls: size=0 writesThrough=true captured=false passedTo=nish.dnsLookupWith#6
-  stackSites=1 stackLocals=0
+  stackSites=0 stackLocals=0
   local +0:9 config: DnsConfig (const)
   callee +0:29 new DnsConfig -> @nish.DnsConfig.constructor
-  local +1:9 conf: u8[] | null (const)
-  callee +3:5 dnsParseResolvConf -> @nish.dnsParseResolvConf
-  callee +5:5 dnsParseResolvConf -> @nish.dnsParseResolvConf
-  local +7:9 hosts: DnsHosts (const)
-  callee +7:27 new DnsHosts -> @nish.DnsHosts.constructor
-  local +8:9 hostsFile: u8[] | null (const)
-  callee +10:5 dnsParseHosts -> @nish.dnsParseHosts
-  callee +12:10 dnsLookupWith -> @nish.dnsLookupWith
+  local +1:9 hosts: DnsHosts (const)
+  callee +1:27 new DnsHosts -> @nish.DnsHosts.constructor
+  callee +2:3 dnsLoadSystem -> @nish.dnsLoadSystem
+  callee +3:10 dnsLookupWith -> @nish.dnsLookupWith
+function dnsLoadSystem(config: DnsConfig, hosts: DnsHosts): void -> @nish.dnsLoadSystem [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file_bytes
+  calls: nish.dnsParseHosts nish.dnsParseResolvConf nish_arena_mark nish_arena_release nish_read_file_bytes
+  pointer config: size=72 writesThrough=true captured=false passedTo=nish.dnsParseResolvConf#3 nish.dnsParseResolvConf#3
+  pointer hosts: size=72 writesThrough=true captured=false passedTo=nish.dnsParseHosts#3
+  stackSites=1 stackLocals=0
+  local +0:9 conf: u8[] | null (const)
+  callee +2:5 dnsParseResolvConf -> @nish.dnsParseResolvConf
+  callee +4:5 dnsParseResolvConf -> @nish.dnsParseResolvConf
+  local +6:9 hostsFile: u8[] | null (const)
+  callee +8:5 dnsParseHosts -> @nish.dnsParseHosts
 function dnsLookupWith(config: DnsConfig, hosts: DnsHosts | null, name: string, timeoutMs: i32, port: i32, out: u8[], ttls: i32[]): i32 -> @nish.dnsLookupWith [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_create
