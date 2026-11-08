@@ -187,3 +187,102 @@ Not taken:
   on `old`), against `old′`'s 1.6% gap on `idle`, and 0.2% under it in
   `-dram` on `new`. That is not enough to change `Http1Server`'s read path
   for every carrier, so it stays in the bench.
+
+## Measured: library stages per request, v0.34.1 to now (2026-11-08)
+
+The `stages` shape times one cold keep-alive request through each step of
+`Http1Server`'s path, 10,000 connections, the clock read and `sendmsg`
+taken out. What the library itself spends per request:
+
+    node bench/http1-conn/run.mjs --shape stages --connections 10000 --rounds 15 --base <ref>
+
+### x86-64, wall clock
+
+Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores (AVX2, SSE4.2, SHA-NI),
+Linux 6.18.44, builds at `--profile speed` with `nish:simd` lowered to SSE2,
+pinned to core 1. Each column is the `old` column of a run against that
+base; `cut` is this branch's `new` against v0.35.0. ns per request, median
+(min–max) over 15 rounds:
+
+| stage | v0.34.1 | v0.35.0 | main `17275317` | cut |
+| --- | ---: | ---: | ---: | ---: |
+| recv | 46.3 (44.3–49.0) | 46.9 (41.7–52.3) | 48.9 (46.1–51.1) | 48.9 (46.9–53.1) |
+| parse | 308.9 (301.2–326.0) | 344.1 (320.4–360.1) | 346.3 (337.8–365.9) | 312.4 (303.4–327.2) |
+| dispatch | 29.3 (18.6–30.3) | 28.2 (23.6–30.9) | 28.0 (25.5–30.8) | 29.3 (27.6–32.5) |
+| respond | 96.3 (94.8–98.7) | 102.9 (96.0–110.0) | 103.8 (99.7–108.7) | 106.1 (102.8–111.3) |
+| sendBody | 58.5 (55.7–61.9) | 73.5 (35.8–94.3) | 75.9 (61.2–97.7) | 77.1 (50.4–101.5) |
+| park | 16.1 (12.2–17.1) | 12.1 (10.0–13.2) | 12.1 (11.2–13.5) | 12.8 (11.5–15.2) |
+| total | 554.0 (539.6–572.9) | 604.6 (539.7–657.3) | 617.4 (582.1–651.1) | 587.9 (553.7–640.2) |
+| clock read | 27.6 | 27.3 | 27.3 | 27.2 |
+| `sendmsg` (kernel) | — | 486.9 | 494.7 | 492.9 |
+
+In the v0.35.0 run, `old′` (a second build of v0.35.0) put parse at 346.5,
+1.007 of `old`; `cut` is 0.908 of it, with the ranges apart. The other
+stages of `cut` sit within their `old′` bands (1.002 to 1.026 of `old`).
+v0.34.1 has no `Http1Connection.sendBody`: `run.mjs` builds its bench with
+`write`, so its sendBody row times a different call and it has no bare
+`sendmsg` to take out.
+
+### x86-64, cachegrind: instructions and misses per request
+
+Valgrind gives no hardware counters here, so `bash bench/http1-conn/misses.sh`
+(cachegrind, D1 48 KiB 12-way, LL 512 MiB 32-way, the stages loop at 0 and N
+requests diffed) stands in for them. Valgrind's CPUID hides SHA-NI, which
+touches nothing on this path. Ir / D1 read misses / D1 write misses per
+request:
+
+| stage | v0.34.1 | v0.35.0 = main | cut |
+| --- | ---: | ---: | ---: |
+| recv | 573 / 5.82 / 0.25 | 574 / 4.46 / 0 | 574 / 4.46 / 0 |
+| next (parse) | 4,486 / 2.12 / 1.88 | 4,488 / 2.78 / 1.22 | 3,970 / 2.78 / 1.22 |
+| respond | 1,258 / 0 / 0 | 1,258 / 0 / 0 | 1,258 / 0 / 0 |
+| sendBody | 468 / 0 / 0 | 86 / 0.11 / 0 | 86 / 0.11 / 0 |
+| park | 82 / 0 / 0 | 68 / 0 / 0 | 68 / 0 / 0 |
+| other | 364 / 0 / 0 | 634 / 0.13 / 0 | 634 / 0.13 / 0 |
+| total | 7,231 / 8.07 / 2.13 | 7,108 / 7.47 / 1.22 | 6,590 / 7.47 / 1.22 |
+
+Last-level misses are 0 in every stage of every build: on this shape the
+connection's lines come from L2 or L3, never DRAM. The cut removes 518
+instructions a request from the parse and moves no miss.
+
+Parse is ~35 ns slower on v0.35.0 than on v0.34.1 on x86, with the same
+instruction count. The only difference cachegrind sees in `next` is 0.66 write
+misses a request turned into 0.66 read misses, and a read miss stalls the
+parse where a write miss can drain from the store buffer. That is a likely
+cause, not a measured one. On arm the two differ by 1%.
+
+### The cuts
+
+Each is a `perf(net)` commit, measured by the deterministic cachegrind Ir
+count of the stages loop (same build flags, `-g`):
+
+| change | Ir / request before → after |
+| --- | ---: |
+| `http1TakeLine` finds `\r\n` with one 16-byte compare per block | 7,051 → 6,710 (−4.8%) |
+| `http1RequestLine` checks the target sixteen bytes at a time for a byte outside `!`..`~` | 6,710 → 6,534 (−2.6%) |
+
+`misses.sh`'s count of the same trees runs 56 to 57 Ir above this one
+(7,108 → 6,590), and the two cuts together come to 517 by one count and 518
+by the other.
+
+Tried and dropped, each against the tree it would have landed on:
+
+- **The request target's tail vectorised** (an overlapping last 16-byte
+  load for targets shorter than a block): +176 Ir, slower than the byte loop
+  on the 1 to 15 bytes it covers.
+- **A clamp on the tail loop's bound** instead of `if (i > b)`: −31 Ir,
+  inside the wall clock's noise.
+- **`EndOfHead` found by a `switch` on the byte after `\r\n`**: −45 Ir,
+  inside the noise.
+
+Still above 0.5 µs: no single stage is. Parse, the largest, is ~312 ns on
+x86 (cut) and the whole library path ~590 ns, of which sendBody and respond
+are the copy and the response head. What is left in parse past the scans:
+the OWS trims (~220 Ir), `http1HeadIs`'s length check (92),
+`http1BytesAreToken` (74) and `http1MethodOverrun` (22).
+
+### Idle RSS per connection
+
+`--shape rss`, peak RSS per idle connection at 10,000, median (min–max) of
+5 runs: v0.34.1 1,026 bytes, v0.35.0 1,036 (1,034–1,038), main 1,036, cut
+1,034 (1,034–1,035). The cuts allocate nothing.
