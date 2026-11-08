@@ -382,11 +382,77 @@ interface Process {
 declare var process: Process;
 
 // ---- Numeric conversions (there is no cast in Nish) ----------------------
-// `Number`, `parseInt` and `parseFloat` are `lib.es2022`'s and are not
-// declared here; docs/LANGUAGE.md -> Numeric conversions has their rules.
 // Nothing converts implicitly: a mixed operation, an initializer of another
 // numeric type and a call with the wrong numeric type are each refused until
-// one of the functions below is written.
+// one of the functions below is written. `Number`, `parseInt` and
+// `parseFloat` are `lib.es2022`'s too. `Number`'s call repeats lib's signature;
+// `parseInt` and `parseFloat` add Nish's own as an overload beside lib's, as
+// `runtime/core/numbers.d.ts` declares them. An `i32` and an `f64` are both
+// `number` to `tsc`, so what it accepts does not change; `nish` refuses lib's
+// radix.
+
+/**
+ * `Number(value)`: `value` as an `f64`, in both number modes. Nish has no
+ * `new Number` and no member of `Number`; the call is the conversion, merged
+ * into the `NumberConstructor` `lib.es2022` declares.
+ *
+ * A string is parsed with JavaScript's `Number(s)` rules: ASCII whitespace
+ * (` \t\n\v\f\r`, not the Unicode spaces JavaScript also trims) is trimmed
+ * on both sides, then the whole string must be one literal, so `Number("")`
+ * and `Number("   ")` are `0`, `Number("  7.5  ")` is `7.5`, and
+ * `Number("12px")`, `Number("1e")` and `Number("nan")` are `NaN`.
+ * `Number("0x1A")` is `26`, as in JavaScript, and a hex float such as `0x1p3`
+ * is also accepted, which JavaScript rejects; the `0b` and `0o` prefixes are
+ * `NaN`, which JavaScript reads.
+ *
+ * An `i32` or an `i64` converts as `toF64` does, a `boolean` is `1` or `0`,
+ * and an `f64` is itself. A numeric literal argument is typed `f64`
+ * (`Number(2.5)` works in i32 mode). Exactly one argument; anything other than
+ * a string, a number or a boolean is refused: "`Number` expects a string,
+ * number, or boolean, got i32[]". Capability: none.
+ */
+interface NumberConstructor {
+  /**
+   * `value` as an `f64`, by the rules on `NumberConstructor` above.
+   * Capability: none.
+   *
+   * @param value a string, an `i32`, an `i64`, an `f64` or a `boolean`;
+   *   `nish` requires it, though `lib`'s signature marks it optional.
+   * @returns an `f64`, in both number modes.
+   */
+  (value?: any): number;
+}
+
+/**
+ * The base-10 integer at the start of `s`, as an `i32`: ASCII whitespace,
+ * an optional sign, then digits, stopping at the first other character
+ * (`parseInt("42px")` is `42`). Three deviations from JavaScript: there is no
+ * `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`,
+ * `parseInt("")`); a value beyond the `i32` range saturates as `toI32` does
+ * (`parseInt("99999999999")` is `2147483647`); and a `0x` prefix is not
+ * hexadecimal (`parseInt("0x10")` is `0`). Always an `i32`, under
+ * `--number-mode f64` too, where `Number` reads a wider value. Exactly one
+ * argument: there is no radix, since base 10 is the only one. A non-string is
+ * refused: "`parseInt` expects a string, got i32". Capability: none.
+ *
+ * @param s the text read.
+ * @returns the integer, or `0` when there are no digits.
+ */
+declare function parseInt(s: string): i32;
+/**
+ * The decimal number at the start of `s`, as an `f64`: ASCII whitespace,
+ * then the longest decimal literal (`[sign] digits [. digits] [e [sign]
+ * digits]`, `. digits`, or `[sign] Infinity`), correctly rounded.
+ * `parseFloat("3.14xyz")` is `3.14` and `parseFloat("1e")` is `1`. One
+ * deviation from JavaScript: a `0x` prefix is read as hexadecimal
+ * (`parseFloat("0x1A")` is `26`, where JavaScript stops at the `x` and gives
+ * `0`). Exactly one argument. Capability: none.
+ *
+ * @param s the text read.
+ * @returns the number, or `NaN` when there is none (`parseFloat("abc")`,
+ *   `parseFloat("")`, `parseFloat(".")`).
+ */
+declare function parseFloat(s: string): f64;
 
 /**
  * `x` as an `i32`. An integer of 32 bits or more wraps to its low 32 bits, a
@@ -2123,10 +2189,34 @@ declare function setTerminalRestore(bytes: string): i32;
 
 // ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
 //
-// `lib.es2022` already declares `Date`, whose `now()` is Nish's one member of it,
-// so nothing is added: `tsc` accepting `new Date()` is `tsc` not being Nish's
-// checker. `crypto` is a Web API that `lib.es2022` leaves out, so it is
-// declared with its one member, typed as Nish types it.
+// `lib.es2022` already declares `Date`, whose `now()` is Nish's one member of it;
+// `DateConstructor` below repeats lib's signature of it to document it, and adds
+// nothing: `tsc` accepting `new Date()` is `tsc` not being Nish's checker.
+// `crypto` is a Web API that `lib.es2022` leaves out, so it is declared with its
+// one member, typed as Nish types it.
+
+/**
+ * `Date`, merged into the `DateConstructor` `lib.es2022` declares. Nish has no
+ * `Date` object: `Date.now()` is its one member, and `new Date()`, `Date()`,
+ * `Date.parse`, `Date.UTC`, any other member, and `Date` or `Date.now` used as
+ * a value are each refused: "`new Date()` is refused: Nish has no `Date`
+ * object; the one `Date` member is `Date.now()`, the wall clock in
+ * milliseconds" (NL2401).
+ */
+interface DateConstructor {
+  /**
+   * The wall clock, `CLOCK_REALTIME`, in whole milliseconds since 1970-01-01
+   * UTC, as JavaScript answers it: the milliseconds are counted as integers and
+   * then converted, so the value is exact and a time before 1970 floors. An
+   * `f64` in both number modes, because an `i32` of milliseconds overflowed in
+   * January 1970. It can go backwards when the clock is corrected, so an
+   * interval is `monotonicNanos`'s job, not this one's. A wasm32 build has no
+   * operating system to ask, and refuses it. Capability: clock.
+   *
+   * @returns the milliseconds, an `f64`.
+   */
+  now(): number;
+}
 
 /** The system's random source, with its one member. */
 declare var crypto: {
@@ -5444,6 +5534,10 @@ interface String {
   endsWith(searchString: string, endPosition?: number): boolean;
 }
 
+/**
+ * `String.fromCharCode`, `lib.es2022`'s own member of `StringConstructor`,
+ * repeated so that its byte meaning in Nish is documented.
+ */
 interface StringConstructor {
   /**
    * The one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. One

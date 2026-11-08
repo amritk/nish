@@ -45,7 +45,7 @@ function test(): i32 -> @test [exported]
   callee +18:3 round -> @round$
   callee +19:3 round -> @round$
   callee +20:3 round -> @round$
-  callee +21:3 others -> @others
+  callee +21:3 round -> @round$
   callee +22:3 others -> @others
   callee +23:3 others -> @others
   callee +24:3 others -> @others
@@ -61,3 +61,13 @@ function test(): i32 -> @test [exported]
   callee +34:3 others -> @others
   callee +35:3 others -> @others
   callee +36:3 others -> @others
+  callee +37:3 others -> @others
+  callee +38:3 others -> @others
+  callee +39:3 others -> @others
+  callee +40:3 others -> @others
+  callee +41:3 others -> @others
+  callee +42:3 others -> @others
+  callee +43:3 others -> @others
+  callee +44:3 others -> @others
+  callee +45:3 others -> @others
+  callee +46:3 others -> @others

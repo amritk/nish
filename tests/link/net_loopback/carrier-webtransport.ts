@@ -112,6 +112,7 @@ const wtWireRebind = (t: Suite, lp: UdpLoop, p: WtPeer, s: Http3Server, from: i6
     lp.step(n32(20));
   }
   const challenges: i32 = lp.client.challenges;
+  const before: string = toHex(s.addresses[0]).substring(0, 32);
   const old: i32 = lp.rebind(host);
   wtWireDrain(old);
   const rounds = new LbMeter(false);
@@ -133,9 +134,21 @@ const wtWireRebind = (t: Suite, lp: UdpLoop, p: WtPeer, s: Http3Server, from: i6
   t.eqI32(`webtransport: the client's NAT rebinds to a new ${what}, and eight rounds of a datagram and a bidirectional stream are echoed to it`, intact, n32(8));
   t.ok(`webtransport: the server validated the new ${what} with a PATH_CHALLENGE the client answered (RFC 9000 §9.3)`, lp.client.challenges > challenges);
   // The slot's whole 18-byte address, its sixteen address bytes and its port.
+  // Built from `host`, that alone would pass an "address" move that kept
+  // 127.0.0.1 as a second port rebind (#1250), so the sixteen address bytes
+  // must also have changed on an address move, to a constant 127.0.0.2's, and
+  // kept on a port move; the expected side names what went wrong if not.
   const moved: u8[] = new Array<u8>(18);
   netAddress(moved, host, netLocalPort(lp.client.fd));
-  t.eqStr(`webtransport: the slot's address follows the client to its new ${what}`, toHex(s.addresses[0]), toHex(moved));
+  const second: u8[] = new Array<u8>(18);
+  netAddress(second, "127.0.0.2", n32(0));
+  const after: string = toHex(s.addresses[0]).substring(0, 32);
+  const right: boolean = what === "address" ? after !== before && after === toHex(second).substring(0, 32) : after === before;
+  t.eqStr(
+    `webtransport: the slot's address follows the client to its new ${what}`,
+    toHex(s.addresses[0]),
+    right ? toHex(moved) : `sixteen address bytes ${before} then ${after}, on a move to a new ${what}`
+  );
   t.ok(`webtransport: and every server call kept ${rounds.kept} bytes over the rebinding`, rounds.kept === n64(0));
   t.eqI32(`webtransport: nothing after the rebinding went to the old ${what}`, wtWireDrain(old), n32(0));
   netClose(old);

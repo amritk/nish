@@ -77,6 +77,7 @@ import { runFfiStringChecks } from "./ffi-string.js"
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
+  selfCheckDeclarations,
   selfCheckHardening,
   selfCheckNotes,
   selfCheckRoots,
@@ -2931,6 +2932,28 @@ if (!only || "net_unix".includes(only)) {
       shown(loud)
     )
   }
+  // Every error path and round of the Unix calls gives back each descriptor it
+  // took, counted by the kernel's own list in `/proc/self/fd` rather than by
+  // probing numbers (`tests/cases/net_unix_fds` is the portable probe).
+  if (process.platform !== "linux") {
+    skip("net_unix: /proc/self/fd is Linux's; the descriptor count by /proc did not run")
+  } else {
+    const fdsDir = path.join(root, "tests/link/net_unix_proc_fds")
+    const outDir = path.join(buildDir, "net-unix-proc-fds")
+    fs.mkdirSync(outDir, { recursive: true })
+    const exe = path.join(outDir, "fds")
+    const built = spawnSync(NISH, [path.join(fdsDir, "fds.ts"), "-o", outDir + "/", "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+      ...NATIVE_RUN_LIMIT,
+    })
+    const ran = built.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8", ...NATIVE_RUN_LIMIT }) : built
+    check(
+      "net_unix: no Unix-socket error path or round leaves a descriptor in /proc/self/fd",
+      ran.status === 0 && ran.stdout === fs.readFileSync(path.join(fdsDir, "expected.out"), "utf8"),
+      shown(ran)
+    )
+  }
 }
 
 // `spawnWithFds` under the prelude, by its global spelling: it starts a child
@@ -3619,7 +3642,9 @@ if (!only || "net_tls_tcp".includes(only)) {
 // asking for the client's (s_server's `K`, typed only once the client's
 // data under its new key has arrived) and the end of the server's stream:
 // `-rev`'s close_notify, read as 0, and the default mode's `q`, which closes
-// TCP without one, read as the failure it is. openssl is on CI's runners, so
+// TCP without one, read as the failure it is. In `talk` mode it carries data
+// both ways and a close under each suite and group, and closes first once,
+// for s_server to report the client's close_notify. openssl is on CI's runners, so
 // a missing one is a failure here rather than a skip.
 if (!only || "net_tls_client_tcp".includes(only)) {
   const dir = path.join(buildDir, "net-tls-client")
@@ -3692,10 +3717,12 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     // (the intermediate, for a leaf under one) and `server`'s flags, and the
     // client against it: its mode, the port, then `args`. Each of `steps` is
     // a pattern and a line: once the server's output so far matches the
-    // pattern, the line goes to its stdin, in order. The answer is the
-    // client's exit status and output, and how many steps fired.
+    // pattern, the line goes to its stdin, in order. With `drain`, the server
+    // is given until its own exit (`-naccept 1` ends it after the connection)
+    // rather than killed once the client exits. The answer is the client's
+    // exit status and output, how many steps fired and the server's output.
     const issuers = { rsaleaf: "rsaca", p384leaf: "p384ca" }
-    const handshake = async (leaf, server, mode, args, steps = []) => {
+    const handshake = async (leaf, server, mode, args, steps = [], drain = false) => {
       const s = spawn(
         openssl,
         [
@@ -3741,10 +3768,12 @@ if (!only || "net_tls_client_tcp".includes(only)) {
               })
               c.on("close", (status) => resolve({ status, stdout, stderr }))
             })
-      s.kill("SIGKILL")
+      if (!drain) {
+        s.kill("SIGKILL")
+      }
       await ended
       clearTimeout(killer)
-      return { ...client, stepped: step }
+      return { ...client, stepped: step, server: out }
     }
     // 4865, 4866 and 4867 are TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384 and
     // TLS_CHACHA20_POLY1305_SHA256; 29 is X25519 and 23 secp256r1; 1027, 1283 and
@@ -3829,6 +3858,39 @@ if (!only || "net_tls_client_tcp".includes(only)) {
         `net_tls_client_tcp: openssl s_server, the blocking calls, ${what}`,
         got.status === 0 && got.stdout === `${want}\n` && got.stepped === steps.length,
         `exit ${got.status}, ${got.stepped} of ${steps.length} steps\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
+      )
+    }
+    // Data both ways and a close under each suite and each group the client
+    // offers. Against `-rev` the client writes "ping", reads "gnip" and
+    // writes CLOSE, and the server's close_notify ends its stream as 0.
+    // Against the default mode the server answers "ping" with "pong" and the
+    // client closes first: s_server is let run to its own exit, and its DONE
+    // is its read of the client's close_notify, where a TCP close with none
+    // is an unexpected EOF and an ERROR, which fails the check even beside a
+    // DONE. The X25519 case has the client offer X25519 alone.
+    const rev = (...flags) => ["-tls1_3", "-rev", ...flags]
+    const talks = [
+      ["TLS_AES_128_GCM_SHA256", rev("-ciphersuites", "TLS_AES_128_GCM_SHA256"), "-", "gnip", "CLOSE", [],
+        "open suite 4865 group 29 wrote 5 read gnip end 0"],
+      ["TLS_AES_256_GCM_SHA384", rev("-ciphersuites", "TLS_AES_256_GCM_SHA384"), "-", "gnip", "CLOSE", [],
+        "open suite 4866 group 29 wrote 5 read gnip end 0"],
+      ["TLS_CHACHA20_POLY1305_SHA256", rev("-ciphersuites", "TLS_CHACHA20_POLY1305_SHA256"), "-", "gnip", "CLOSE", [],
+        "open suite 4867 group 29 wrote 5 read gnip end 0"],
+      ["an X25519 share", rev("-groups", "X25519"), "x25519", "gnip", "CLOSE", [],
+        "open suite 4865 group 29 wrote 5 read gnip end 0"],
+      ["a P-256 share", rev("-groups", "P-256"), "p256", "gnip", "CLOSE", [],
+        "open suite 4865 group 23 wrote 5 read gnip end 0"],
+      ["the client's close_notify", ["-tls1_3"], "-", "pong", "-", [[/ping\n/, "pong\n"]],
+        "open suite 4865 group 29 wrote 5 read pong end -"],
+    ]
+    for (const [what, server, groups, reply, last, steps, want] of talks) {
+      const clientCloses = last === "-"
+      const got = await handshake("p256", server, "talk", [groups, reply, last], steps, clientCloses)
+      const done = !clientCloses || (/^DONE$/m.test(got.server) && !/^ERROR$/m.test(got.server))
+      check(
+        `net_tls_client_tcp: openssl s_server, data and a close, ${what}`,
+        got.status === 0 && got.stdout === `${want}\n` && got.stepped === steps.length && done,
+        `exit ${got.status}, ${got.stepped} of ${steps.length} steps\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}\nserver: ${got.server}`
       )
     }
   }
@@ -6081,6 +6143,15 @@ const MODULE_JOBS = Math.max(1, Math.floor(defaultJobs() / LINK_JOBS))
  * each with why. A program belongs here when other programs beside it change
  * what it measures (a wall-clock bound, a resident size), not when it shares a
  * file or a port: no program does (see `runLinkProgram`).
+ *
+ * Every other program stays in the pool, including the ones that look serial:
+ * fixed ports (the literal ports in tests/link are a server's argument or
+ * trace bytes; sockets bind port 0), timing (their bounds are not tighter than
+ * a loaded machine meets), panic-once programs (they write only under their
+ * own name) and the `thread_` and `par_` programs (each runs its own thread
+ * counts inside one program, `NISH_NUM_THREADS` handed to that spawn alone).
+ * A program that stops holding for one of these is added here with its
+ * reason, not made to retry.
  */
 const LINK_SERIAL = new Map([
   [
@@ -7098,6 +7169,14 @@ if (dealtHere("selfHosting")) {
     "nish-cmp: a declaration's words are found in CHANGELOG.md or the pending release notes, and nowhere else (stand-in inputs)",
     selfCheckNotes() === null,
     String(selfCheckNotes())
+  )
+  // And the list itself: an entry naming no program, file or undo matches
+  // every difference in every program, so with one in DECLARED nish-cmp
+  // passes whatever HEAD emits.
+  check(
+    "nish-cmp: every declaration names a program, a file or an undo, and TWO_STDS excuses only its one refusal (stand-in inputs and DECLARED itself)",
+    selfCheckDeclarations() === null,
+    String(selfCheckDeclarations())
   )
 
   // The fuzz run's declarations, by the same argument: an intended change to
@@ -27880,6 +27959,7 @@ if (!only || "std_json_tokenizer".includes(only)) {
     "3 7:1/1+1 -1@3",
     "3 7:18446744073709552000+18446744073709551615 7:18446744073709552000 7:10000000000000000000+10000000000000000000 7:10000000000000000000+9999999999999999999 7:0/0+0 4 0@-1",
     "isIntegral 1 1 0 0 1 1 1 0 0",
+    "isIntegral 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0",
     "",
   ].join("\n")
   const run = runUnderPrelude(entry, [])

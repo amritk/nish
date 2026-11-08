@@ -80,13 +80,13 @@ the record that found it. The notes below the table name each such finding.
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
-| DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
+| DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²² |
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver (`src/emit-async.ts`) | 0 / 0 / 2 / 1 | 0 / 0 / 1 / 2 |
-| **Total** ⁸ | | | **3 / 12 / 62 / 157** | **0 / 1 / 4 / 32** |
+| **Total** ⁸ | | | **3 / 12 / 62 / 159** | **0 / 1 / 4 / 32** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -340,7 +340,10 @@ the record that found it. The notes below the table name each such finding.
     its recursive server, as glibc's and musl's do, and DNS-4 is the second
     literal reader a module that compiles on `wasm32` needs. DNS-5 (Medium),
     a datagram flood holding the caller's loop inside `DnsClient.ready`, was
-    found and fixed by the resolver stage.
+    found and fixed by the resolver stage. DNS-6 (Low), a later search
+    candidate's NODATA masked by an earlier candidate's fallback error, and
+    DNS-7 (Low), `resolveHost` discarding an answered family at its timeout,
+    were found and fixed by the fallback-and-timeout stage.
 23. RSA-1, RSA-3 and RSA-4 (Low), the DigestInfo without its NULL refused,
     the key-size and exponent caps, and a message over 2^31 − 1 bytes
     panicking in the hash, are accepted, with the reason in their record, and
