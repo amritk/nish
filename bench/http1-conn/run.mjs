@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Http1Connection's per-request cost, an old std/net/ against the working tree's.
 //
-//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|direct|idle-dram|direct-dram|all]
+//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|direct|idle-dram|direct-dram|stages|all]
 //                                 [--rounds N] [--requests N] [--connections N]
 //                                 [--evict MiB] [--dram-requests N]
 //                                 [--base <rev>] [--compiler path] [--rss N]
@@ -104,10 +104,26 @@ fs.chmodSync(oldCompiler, 0o755)
 fs.writeFileSync(path.join(oldPackage, "BASE"), `${base}\n`)
 const compilers = { old: oldCompiler, new: compiler }
 const binaries = []
+// A base before `Http1Connection.sendBody` (0.34.1) answers the stages shape
+// with `write`, the copy its `Http1Server` made: the lines main.ts marks
+// `// sendBody only` go, and `VIA_SEND_BODY` turns false.
+const withSendBody = (std) =>
+  fs.readFileSync(path.join(std, "std", "net", "http1-server.ts"), "utf8").includes("  sendBody(")
+const source = fs.readFileSync(path.join(here, "main.ts"), "utf8")
+const sourceFor = (std) =>
+  withSendBody(std)
+    ? source
+    : source
+        .split("\n")
+        .filter((line) => !line.includes("// sendBody only"))
+        .join("\n")
+        .replace("const VIA_SEND_BODY: boolean = true", "const VIA_SEND_BODY: boolean = false")
+        .replaceAll(".sendBody(", ".write(")
+const trees = { old: oldPackage, new: root }
 for (const [label, nish] of Object.entries(compilers)) {
   const dir = path.join(out, label)
   fs.mkdirSync(dir, { recursive: true })
-  fs.copyFileSync(path.join(here, "main.ts"), path.join(dir, "main.ts"))
+  fs.writeFileSync(path.join(dir, "main.ts"), sourceFor(trees[label]))
   const exe = path.join(dir, "conn")
   run(nish, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
   binaries.push({ label, exe })
@@ -125,6 +141,7 @@ const shapes = [
   ["direct", "direct", [requests, connections, batches]],
   ["idle-dram", "idle", [dramRequests, connections, batches, evict]],
   ["direct-dram", "direct", [dramRequests, connections, batches, evict]],
+  ["stages", "stages", [requests, connections, batches]],
 ].filter(([s]) => shapeFlag === "all" || shapeFlag.split(",").includes(s))
 if (shapes.length === 0) {
   process.stderr.write(`bench/http1-conn: no shape called ${shapeFlag}\n`)
@@ -136,13 +153,50 @@ const bench = (exe, args) => (pin ? run("taskset", ["-c", "1", exe, ...args]) : 
 // label -> shape -> ns per request, one per round
 const times = new Map(binaries.map((b) => [b.label, new Map(shapes.map(([s]) => [s, []]))]))
 const sums = new Map()
+// The stages shape's spans less what calibration says the clock read each
+// holds (one, two for `dispatch`) and, for `sendBody`, less the bare
+// `netWrite2` span, which holds a clock read of its own: ns per request.
+const stageNames = ["recv", "parse", "dispatch", "respond", "sendBody", "park"]
+// label -> stage -> ns per request, one per round
+const stageTimes = new Map(binaries.map((b) => [b.label, new Map()]))
+const record = (label, count, spans) => {
+  const words = spans.split(" ")
+  const f = {}
+  for (let i = 0; i + 1 < words.length; i += 2) {
+    f[words[i]] = Number(words[i + 1])
+  }
+  const per = (x) => x / Number(count)
+  const less = {
+    recv: f.clock,
+    parse: f.clock,
+    dispatch: 2 * f.clock,
+    respond: f.clock,
+    sendBody: f.writev > 0 ? f.writev : f.clock,
+    park: f.clock,
+  }
+  const cells = Object.fromEntries(stageNames.map((s) => [s, per(f[s] - less[s])]))
+  cells.total = stageNames.reduce((a, s) => a + cells[s], 0)
+  cells["clock read"] = per(f.clock)
+  // A base without `sendBody` makes no system call there.
+  if (f.writev > 0) {
+    cells.sendmsg = per(f.writev - f.clock)
+  }
+  const m = stageTimes.get(label)
+  for (const [s, v] of Object.entries(cells)) {
+    m.set(s, [...(m.get(s) ?? []), v])
+  }
+}
 for (let r = 0; r < rounds; r++) {
   for (const [shape, mode, args] of shapes) {
     for (let k = 0; k < binaries.length; k++) {
       const { label, exe } = binaries[(r + k) % binaries.length]
-      const [, ns, count, sum, ...made] = bench(exe, [mode, ...args])
+      const [line, spans] = bench(exe, [mode, ...args])
         .trim()
-        .split(" ")
+        .split("\n")
+      const [, ns, count, sum, ...made] = line.split(" ")
+      if (mode === "stages") {
+        record(label, count, spans)
+      }
       // The lending pools are LIFO: one connection at a time borrows, so
       // each makes one buffer however many connections there are.
       if (mode !== "hot" && mode !== "cold" && made.join(" ") !== "1 1 1") {
@@ -197,10 +251,13 @@ console.log(
     `${pin ? " pinned to core 1" : " unpinned (no taskset)"}; cold and idle spread them over ${connections} connections` +
     `; the dram shapes run ${dramRequests} a batch with a ${evict} MiB eviction ring`
 )
-console.log("ns per request: median (min–max), ratio of medians to old\n")
-console.log(`| shape | ${binaries.map((b) => b.label).join(" | ")} |`)
-console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
-for (const [shape] of shapes) {
+const timed = shapes.filter(([, m]) => m !== "stages")
+if (timed.length > 0) {
+  console.log("ns per request: median (min–max), ratio of medians to old\n")
+  console.log(`| shape | ${binaries.map((b) => b.label).join(" | ")} |`)
+  console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
+}
+for (const [shape] of timed) {
   const first = median(times.get(binaries[0].label).get(shape))
   const cells = binaries.map((b) => {
     const xs = sorted(times.get(b.label).get(shape))
@@ -208,6 +265,27 @@ for (const [shape] of shapes) {
     return `${m.toFixed(1)} (${xs[0].toFixed(1)}–${xs[xs.length - 1].toFixed(1)}) ${(m / first).toFixed(3)}`
   })
   console.log(`| ${shape} | ${cells.join(" | ")} |`)
+}
+if (shapes.some(([, m]) => m === "stages")) {
+  console.log(
+    `\nstages: ns per request on ${connections} connections, the clock read and \`sendmsg\` taken out: median (min–max), ratio to old`
+  )
+  console.log(`| stage | ${binaries.map((b) => b.label).join(" | ")} |`)
+  console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
+  const rows = new Set(binaries.flatMap((b) => [...stageTimes.get(b.label).keys()]))
+  for (const s of rows) {
+    const first = median(stageTimes.get(binaries[0].label).get(s) ?? [Number.NaN])
+    const cells = binaries.map((b) => {
+      if (!stageTimes.get(b.label).has(s)) {
+        return "—"
+      }
+      const xs = sorted(stageTimes.get(b.label).get(s))
+      const m = median(xs)
+      const ratio = Number.isNaN(first) ? "" : ` ${(m / first).toFixed(3)}`
+      return `${m.toFixed(1)} (${xs[0].toFixed(1)}–${xs[xs.length - 1].toFixed(1)})${ratio}`
+    })
+    console.log(`| ${s} | ${cells.join(" | ")} |`)
+  }
 }
 if (rssRuns > 0) {
   console.log(
