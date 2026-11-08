@@ -742,19 +742,21 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
 }
 
 /**
- * Reads the ClientHello body `data[off .. off + len)` — the message without
- * its four-byte handshake header — into `hello`, which forgets the last one
- * first. Its `alert` is 0 when the body parsed; otherwise the first fault
- * decides it: `decode_error` for a length past its bytes, a vector out of its
- * bounds or bytes left over, and `illegal_parameter` for an extension sent
- * twice (§4.2), a `pre_shared_key` that is not the last extension (§4.2.11),
- * two shares for one group, or a bad `server_name`. A window outside `data`
- * is `decode_error` too, rather than a panic. A hello that parses but offers
- * `pre_shared_key` with a different number of identities and binders is
- * `illegal_parameter`, and one that offers it without
+ * Reads the ClientHello body `data[off .. off + len)` — the message without its
+ * four-byte handshake header — into `hello`, which forgets the last one first.
+ * Its `alert` is 0 when the body parsed; otherwise the first fault decides it:
+ * `decode_error` for a length past its bytes, a vector out of its bounds or
+ * bytes left over, and `illegal_parameter` for an extension sent twice (§4.2),
+ * a `pre_shared_key` that is not the last extension (§4.2.11), two shares for
+ * one group, or a bad `server_name`. A window outside `data` is `decode_error`
+ * too, rather than a panic.
+ *
+ * A hello that parses but offers `pre_shared_key` with a different number of
+ * identities and binders is `illegal_parameter`, and one that offers it without
  * `psk_key_exchange_modes` is `missing_extension` (§4.2.9): rows 10 to 13 of
- * the fallback table in `docs/security/tls.md`, "Resumption". Nothing is copied: the windows
- * point into `data`, which must outlive the use made of them.
+ * the fallback table in `docs/security/tls.md`, "Resumption". Nothing is
+ * copied: the windows point into `data`, which must outlive the use made of
+ * them.
  *
  * @param hello The view to read into, cleared first; its `alert` is the verdict.
  * @param data The buffer that holds the message, which the view's windows then point into.

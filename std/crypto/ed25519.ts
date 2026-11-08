@@ -37,20 +37,21 @@
  * is carried first, and so is every cached coordinate. The field functions
  * state their own bounds (`nish/crypto/x25519`).
  *
- * **Constant time, by construction.** Signing and the public key multiply
- * the base point by a secret scalar, and that multiplication branches on and
+ * **Constant time, by construction.** Signing and the public key multiply the
+ * base point by a secret scalar, and that multiplication branches on and
  * indexes by nothing the scalar reaches. The scalar is recoded into 64 signed
  * radix-16 digits in [-8, 8]; each step doubles four times and adds the table
- * entry for the digit, which is chosen by reading all eight entries and
- * keeping one under a mask, and negated with a masked swap and a masked
- * select. The digit arithmetic and the masks use `f25519Add64`, `f25519Sub64`
- * and `f25519Mul64`, because signed overflow is undefined and a checked
- * operation branches. The reductions mod L run a fixed 512 steps of a
- * shift and a masked conditional subtraction over 32-bit limbs in `u64`,
- * whose subtraction wraps. Every `if` and every loop bound is on a public
- * quantity: a digit position, a limb number, a bit position or a length.
- * This is discipline, checked by reading, not by a disassembly fixture as
- * `f25519Mul` and the X25519 ladder are (ECC-5, docs/security/crypto-ecc.md).
+ * entry for the digit, which is chosen by reading all eight entries and keeping
+ * one under a mask, and negated with a masked swap and a masked select.
+ *
+ *  The digit arithmetic and the masks use `f25519Add64`, `f25519Sub64` and
+ *  `f25519Mul64`, because signed overflow is undefined and a checked operation
+ *  branches. The reductions mod L run a fixed 512 steps of a shift and a masked
+ *  conditional subtraction over 32-bit limbs in `u64`, whose subtraction wraps.
+ *  Every `if` and every loop bound is on a public quantity: a digit position, a
+ *  limb number, a bit position or a length. This is discipline, checked by
+ *  reading, not by a disassembly fixture as `f25519Mul` and the X25519 ladder
+ *  are (ECC-5, docs/security/crypto-ecc.md).
  *
  * **Verification is variable time.** Every value `ed25519Verify` handles is
  * public — the key, the message and the signature — so it may branch on them:
@@ -62,10 +63,12 @@
  * below p or that is not on the curve, and an x of zero with the sign bit set
  * are all refused (§5.1.3). R is not decoded: [S]B - [k]A is encoded and
  * compared with R's bytes, and since the encoding is canonical, an R that is
- * not the canonical encoding of a point never matches. A public key of small
- * order is not refused, as RFC 8032 does not ask it to be: under such a key,
- * some signatures verify for messages its owner never signed, so a protocol
- * that needs a signature to bind one key checks the key itself.
+ * not the canonical encoding of a point never matches.
+ *
+ *  A public key of small order is not refused, as RFC 8032 does not ask it to
+ *  be: under such a key, some signatures verify for messages its owner never
+ *  signed, so a protocol that needs a signature to bind one key checks the key
+ *  itself.
  *
  * **The seed is a `Secret`** (`nish:secret`, docs/LANGUAGE.md "Secrets").
  * `ed25519PublicKey` and `ed25519Sign` take the 32-byte seed as a

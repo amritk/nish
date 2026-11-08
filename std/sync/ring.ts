@@ -48,22 +48,24 @@
  *       ring.tryPop(buf, 0)           // none, or one peek cannot lend
  *     }
  *
- * A window is a `SharedRegion.lend` window: the ring keeps one for its
- * producer and one for its consumer and re-points them on every call, so
- * neither path allocates or makes a system call. `commit`, `abandon` and
- * `release` give the window back, which empties it: a reference kept past
- * them indexes nothing (each index panics) until the next `reserve` or
- * `peek` re-points it, and then sees that call's record. A reserved record
- * is always contiguous: when the rest of the lap is too short, `commit`
- * writes a skip marker there (a length word of -1, "the rest of this lap is
- * padding") and the record starts at the next lap. Every pop steps over a
- * marker. A record `tryPush` wrapped across the end cannot be lent, so `peek`
- * answers an empty window for it and `tryPop` takes it, as it does for a
- * record of length 0. A reservation is at most `capacity / 2 - 4` bytes, so
- * a ring of 8 can never reserve (it panics) and one of 16 allows 4. The
- * reserved bytes are not zeroed: `commit` only what was written. A consumer
- * that polls `peek` on a doorbell ring has no wait call yet (`popWait` takes
- * records, not windows).
+ * A window is a `SharedRegion.lend` window: the ring keeps one for its producer
+ * and one for its consumer and re-points them on every call, so neither path
+ * allocates or makes a system call. `commit`, `abandon` and `release` give the
+ * window back, which empties it: a reference kept past them indexes nothing
+ * (each index panics) until the next `reserve` or `peek` re-points it, and then
+ * sees that call's record.
+ *
+ * A reserved record is always contiguous: when the rest of the lap is too
+ * short, `commit` writes a skip marker there (a length word of -1, "the rest of
+ * this lap is padding") and the record starts at the next lap. Every pop steps
+ * over a marker.
+ *
+ * A record `tryPush` wrapped across the end cannot be lent, so `peek` answers
+ * an empty window for it and `tryPop` takes it, as it does for a record of
+ * length 0. A reservation is at most `capacity / 2 - 4` bytes, so a ring of 8
+ * can never reserve (it panics) and one of 16 allows 4. The reserved bytes are
+ * not zeroed: `commit` only what was written. A consumer that polls `peek` on a
+ * doorbell ring has no wait call yet (`popWait` takes records, not windows).
  *
  * **The format keeps its magic.** A ring no producer `reserve`s into is
  * byte for byte what it was, and a consumer built before the marker that
@@ -84,11 +86,12 @@
  * the header and sleeps on Linux's futex, and a push rings it only when that
  * flag is set (one `SEQ_CST` store and load on each side, so neither can miss
  * the other). A busy ring makes no system calls; an idle one makes two per
- * record, the consumer's wait and the producer's wake. Without the doorbell a
- * push is a release store and `popWait` answers `SHM_UNSUPPORTED`, as it does
- * off Linux, where the consumer polls `tryPop`. `popWait` reads the monotonic
- * clock for its deadline, so a program that imports this module reaches the
- * `clock` capability as well as `ffi`.
+ * record, the consumer's wait and the producer's wake.
+ *
+ *  Without the doorbell a push is a release store and `popWait` answers
+ *  `SHM_UNSUPPORTED`, as it does off Linux, where the consumer polls `tryPop`.
+ *  `popWait` reads the monotonic clock for its deadline, so a program that
+ *  imports this module reaches the `clock` capability as well as `ffi`.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.

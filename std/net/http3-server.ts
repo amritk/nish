@@ -65,19 +65,19 @@
  * GSO where the platform has it and one datagram at a time where it does not.
  * Each flight goes with the ECN codepoint its connection marked it with
  * (`QuicFlight.ecn`, RFC 9000 §13.4), so the peer's ACK_ECN counts are
- * validated and a CE mark shrinks the window. Where the platform sends no
- * ECN (Darwin, whose `udpSendTo` answers -95 to a marked send), the first
- * marked send goes again unmarked and no slot marks after it. A -95 is also
- * what a platform without segmentation offload answers, so a refused GSO
- * send goes again one datagram at a time, still marked, and only a -95 to
- * one of those turns marking off.
- * The pacer counts the microseconds `clock` gives it, so on a path whose
- * round trip is under a millisecond it neither waits for the next
- * millisecond to earn credit nor holds a slot back for a whole one; without
- * `clock` it counts whole milliseconds.
- * A slot whose HTTP/3 side sent GOAWAY and whose requests have all finished,
- * every byte acknowledged, is closed with H3_NO_ERROR; a closed slot is freed
- * once its CONNECTION_CLOSE is out.
+ * validated and a CE mark shrinks the window. Where the platform sends no ECN
+ * (Darwin, whose `udpSendTo` answers -95 to a marked send), the first marked
+ * send goes again unmarked and no slot marks after it.
+ *
+ *  A -95 is also what a platform without segmentation offload answers, so a
+ *  refused GSO send goes again one datagram at a time, still marked, and only a
+ *  -95 to one of those turns marking off. The pacer counts the microseconds
+ *  `clock` gives it, so on a path whose round trip is under a millisecond it
+ *  neither waits for the next millisecond to earn credit nor holds a slot back
+ *  for a whole one; without `clock` it counts whole milliseconds. A slot whose
+ *  HTTP/3 side sent GOAWAY and whose requests have all finished, every byte
+ *  acknowledged, is closed with H3_NO_ERROR; a closed slot is freed once its
+ *  CONNECTION_CLOSE is out.
  *
  * **Timers** are a wheel of `H3_SERVER_WHEEL` one-millisecond buckets, a
  * slot in at most one: after every datagram and every flush the slot is filed
@@ -88,15 +88,16 @@
  *
  * **Caps, fixed at start-up**: the slots, and inside each the QUIC
  * configuration's streams and buffers and the `Http3Config`'s field section,
- * body chunk and DATA frame. A slot's connections and address are built on
- * the first Initial accepted into it and kept, so a pool sized for its peak
- * costs at start-up only its per-slot tables (the index, the wheel, the
- * queues), and holds at most `size` connections once the peak has come;
- * a datagram an established connection reads, and every datagram it sends,
- * allocates nothing; nor does a datagram no slot owns, which the listener
- * reads where it lies and answers into scratch made once, nor a handshake
- * into a slot built before, whose state is the slot's —
- * `docs/security/http3.md` (H3-1, H3-3).
+ * body chunk and DATA frame.
+ *
+ *  A slot's connections and address are built on the first Initial accepted into
+ *  it and kept, so a pool sized for its peak costs at start-up only its per-slot
+ *  tables (the index, the wheel, the queues), and holds at most `size`
+ *  connections once the peak has come; a datagram an established connection
+ *  reads, and every datagram it sends, allocates nothing; nor does a datagram no
+ *  slot owns, which the listener reads where it lies and answers into scratch
+ *  made once, nor a handshake into a slot built before, whose state is the
+ *  slot's — `docs/security/http3.md` (H3-1, H3-3).
  *
  * **The Date.** Every response carries one `date` field (RFC 9110 §6.6.1)
  * from the pool's `HttpDate`, which formats the IMF-fixdate at most once a
@@ -1223,19 +1224,19 @@ export class Http3Server {
 
   /**
    * Stops the server for good and wipes the keys it holds: every built slot's
-   * connection is released (`QuicConnection.release`, which sends nothing),
-   * as is one built after, by `connection` or `quic`; the listener is
-   * released; and the configuration's `statelessResetKey` and
-   * `retryTokenKey`, the index's salt, the connections' entropy scratch
-   * and the listener's last answer (a Retry's or a reset's token) are
-   * zeroed. From then on every datagram is dropped and no connection is
-   * accepted. The configuration's two keys are the server's once it is made
-   * with them: a program that keeps a copy of either, to start the next
-   * server with, wipes its own copy. The keys are zeroed in place, so give
-   * each server a `QuicServerConfig` of its own: any other listener,
-   * connection or server made with the same one would go on MACing Retry
-   * tokens and deriving stateless reset tokens under an all-zero key, which
-   * anyone can forge.
+   * connection is released (`QuicConnection.release`, which sends nothing), as
+   * is one built after, by `connection` or `quic`; the listener is released;
+   * and the configuration's `statelessResetKey` and `retryTokenKey`, the
+   * index's salt, the connections' entropy scratch and the listener's last
+   * answer (a Retry's or a reset's token) are zeroed. From then on every
+   * datagram is dropped and no connection is accepted.
+   *
+   * The configuration's two keys are the server's once it is made with them: a
+   * program that keeps a copy of either, to start the next server with, wipes
+   * its own copy. The keys are zeroed in place, so give each server a
+   * `QuicServerConfig` of its own: any other listener, connection or server
+   * made with the same one would go on MACing Retry tokens and deriving
+   * stateless reset tokens under an all-zero key, which anyone can forge.
    */
   stop(): void {
     this.stopped = true
