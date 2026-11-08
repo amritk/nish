@@ -876,28 +876,33 @@ const renderFunction = (f, ctx, fallback) => {
     if (desc && (i === 0 || desc !== firstDesc)) {
       out.push(desc)
     }
-    out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``)
-    if (sig.parameters?.length) {
-      for (const [j, p] of sig.parameters.entries()) {
-        const req = p.flags?.isOptional || p.defaultValue !== undefined ? "" : " required"
-        const pc = c.parameters?.[j]?.comment ?? p.comment
-        out.push(
-          tag(
-            "scalar-field",
-            `name="${attr(`${p.flags?.isRest ? "..." : ""}${p.name}`)}" type="${attr(typeText(p.type))}"${req}`,
-            summary(pc, ctx)
-          )
-        )
-      }
-    }
-    const ret = typeText(sig.type)
-    if (ret !== "void") {
-      out.push(
-        tag("scalar-field", `name="returns" type="${attr(ret)}"`, blockTag(c.comment, "@returns", ctx))
-      )
-    }
+    out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``, ...signatureFields(sig, c, ctx))
   }
   return out.join("\n\n")
+}
+
+/**
+ * One field per parameter of `sig`, then its return unless `void`, each
+ * described by the matching tag of `c`, the signature that carries the docs.
+ */
+const signatureFields = (sig, c, ctx) => {
+  const out = []
+  for (const [j, p] of (sig.parameters ?? []).entries()) {
+    const req = p.flags?.isOptional || p.defaultValue !== undefined ? "" : " required"
+    const pc = c.parameters?.[j]?.comment ?? p.comment
+    out.push(
+      tag(
+        "scalar-field",
+        `name="${attr(`${p.flags?.isRest ? "..." : ""}${p.name}`)}" type="${attr(typeText(p.type))}"${req}`,
+        summary(pc, ctx)
+      )
+    )
+  }
+  const ret = typeText(sig.type)
+  if (ret !== "void") {
+    out.push(tag("scalar-field", `name="returns" type="${attr(ret)}"`, blockTag(c.comment, "@returns", ctx)))
+  }
+  return out
 }
 
 const renderType = (t, ctx) => {
@@ -918,6 +923,14 @@ const renderClass = (c, ctx) => {
   }
   const word = c.kind === Kind.klass ? "class" : "interface"
   out.push(`\`\`\`ts\n${word} ${c.name}${typeParams(c.typeParameters)}\n\`\`\``)
+  // An interface's call signatures, each shown as a function's would be.
+  for (const sig of c.signatures ?? []) {
+    const sigDesc = summary(sig.comment, ctx)
+    if (sigDesc) {
+      out.push(sigDesc)
+    }
+    out.push(`\`\`\`ts\n${signatureText(c.name, sig)}\n\`\`\``, ...signatureFields(sig, sig, ctx))
+  }
   const rows = (c.children ?? []).flatMap((m) => memberRow(m, c.name, ctx))
   if (rows.length > 0) {
     out.push(["| Member | |", "| --- | --- |", ...rows].join("\n"))
@@ -1010,9 +1023,11 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
     out.push(usage)
   }
   const cardOf = (m, icon) => {
-    const doc = m.signatures
-      ? (m.signatures[0].comment ?? fallback?.get(m.name)?.signatures?.[0]?.comment)
-      : m.comment
+    // A function's card reads its first signature; an interface's, its own doc.
+    const doc =
+      m.signatures && m.kind === Kind.func
+        ? (m.signatures[0].comment ?? fallback?.get(m.name)?.signatures?.[0]?.comment)
+        : m.comment
     const first = firstSentence(summary(doc, ctx).split(/\n\s*\n/)[0] ?? "")
     // The anchor is filled in once the page's headings are known (see below).
     return tag("scalar-card", `title="${attr(cardTitle(m.name))}" icon="${icon}" href="#${CARD}"`, first)
@@ -1153,8 +1168,15 @@ const collectPages = (project) => {
         s.fileName === "runtime/nish.d.ts" &&
         (r.kind !== Kind.variable || /^\s*(?:declare\s+)?(?:var|const|let)\b/.test(dtsLines[s.line - 1]))
     )
+  // A global's own signatures likewise: lib's `parseInt(string, radix?)` goes,
+  // and so does a call signature only lib's interface declares.
+  const ownSignatures = (r) => {
+    const sigs = r.signatures?.filter(own)
+    return sigs?.length ? sigs : undefined
+  }
   const ownOnly = (r) => ({
     ...r,
+    signatures: ownSignatures(r),
     children: r.children
       ?.filter(own)
       .map((c) => (c.signatures ? { ...c, signatures: c.signatures.filter(own) } : c))

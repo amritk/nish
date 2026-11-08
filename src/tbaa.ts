@@ -17,12 +17,46 @@
  * `docs/ARCHITECTURE.md`, "Attribute soundness rules".
  */
 import { Emitter } from "./emit"
+import { StringMap } from "./map"
 import { FieldInfo, STRUCT_INTERFACE, StructInfo } from "./program"
+
+/**
+ * The nodes one module's emitter has already interned, so that a field access
+ * builds and hashes its class's path once rather than on every load and store
+ * (it was a fifth of a heavy compile). Each entry is the `!N` the uncached
+ * path would answer: metadata numbers never move once handed out, and only
+ * `src/debug.ts` fills a reserved number, with `!DI…` text that is never a
+ * TBAA node's. A hit therefore skips only lookups of nodes that already
+ * exist, and the interning order, which numbers the nodes, is unchanged.
+ */
+export class TbaaCache {
+  /** `!N` of the `omnipotent char` node, or `""` before the first tag. */
+  char: string
+  /** `!N` of each value type's scalar node, by `TypeTable` id; `""` where not yet interned. */
+  scalars: string[]
+  /** Class name -> index into `structs` and `structNodes`. */
+  structIndex: StringMap
+  structs: StructInfo[]
+  /** `!N` of each class's path node (`structNode`). */
+  structNodes: string[]
+
+  constructor() {
+    this.char = ""
+    this.scalars = []
+    this.structIndex = new StringMap()
+    this.structs = []
+    this.structNodes = []
+  }
+}
 
 /** The root and the `char` node every scalar hangs off, as clang spells them. */
 const charNode = (emitter: Emitter): string => {
-  const root = emitter.metadata(`!{!"nish TBAA"}`)
-  return emitter.metadata(`!{!"omnipotent char", ${root}, i64 0}`)
+  const cache = emitter.tbaa
+  if (cache.char.length === 0) {
+    const root = emitter.metadata(`!{!"nish TBAA"}`)
+    cache.char = emitter.metadata(`!{!"omnipotent char", ${root}, i64 0}`)
+  }
+  return cache.char
 }
 
 /**
@@ -38,11 +72,39 @@ const typeName = (emitter: Emitter, type: i32): string => {
  * The scalar node for a field type. Every pointer shares one node (`ptr`): the
  * struct path already keeps one class's fields away from another's.
  */
-const scalarNode = (emitter: Emitter, type: i32): string =>
-  emitter.metadata(`!{!"${typeName(emitter, type)}", ${charNode(emitter)}, i64 0}`)
+const scalarNode = (emitter: Emitter, type: i32): string => {
+  const scalars = emitter.tbaa.scalars
+  while (scalars.length <= type) {
+    scalars.push("")
+  }
+  if (scalars[type].length === 0) {
+    scalars[type] = emitter.metadata(`!{!"${typeName(emitter, type)}", ${charNode(emitter)}, i64 0}`)
+  }
+  return scalars[type]
+}
 
-/** `!{!"Body", <double>, i64 0, <double>, i64 8, ...}`: the whole layout, in offset order. */
+/**
+ * `!{!"Body", <double>, i64 0, <double>, i64 8, ...}`: the whole layout, in
+ * offset order. Remembered by name for the `StructInfo` it was built from:
+ * another layout under the same name is built afresh rather than trusted.
+ */
 const structNode = (emitter: Emitter, info: StructInfo): string => {
+  const cache = emitter.tbaa
+  const at = cache.structIndex.get(info.name, -1)
+  if (at >= 0 && cache.structs[at] === info) {
+    return cache.structNodes[at]
+  }
+  const node = buildStructNode(emitter, info)
+  if (at < 0) {
+    cache.structIndex.set(info.name, cache.structs.length)
+    cache.structs.push(info)
+    cache.structNodes.push(node)
+  }
+  return node
+}
+
+/** `structNode`'s text, interned. */
+const buildStructNode = (emitter: Emitter, info: StructInfo): string => {
   let members = ""
   let i = 0
   while (i < info.fields.length) {

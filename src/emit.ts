@@ -227,6 +227,7 @@ import {
   nodeName,
 } from "./nodes"
 import { Options } from "./options"
+import { TbaaCache } from "./tbaa"
 import { irEscapeInto, StringBuilder } from "./strings"
 
 import {
@@ -305,6 +306,8 @@ export class Emitter {
   runtime: RuntimeTable
   facts: FactsTable
   module: IRModule
+  /** The TBAA nodes `module` already holds (`src/tbaa.ts`). */
+  tbaa: TbaaCache
   /** The function being emitted. */
   fn: IRFunction
   /** Its facts: stack sites and the arena scope. */
@@ -419,6 +422,7 @@ export class Emitter {
     this.runtime = runtime
     this.facts = facts
     this.module = new IRModule(this.program.source.path)
+    this.tbaa = new TbaaCache()
     const noParams: IRParam[] = []
     const noNames: string[] = []
     this.fn = new IRFunction("", noParams, "void")
