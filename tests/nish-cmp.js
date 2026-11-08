@@ -131,7 +131,49 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
  * for one release: the reseed that ships a change makes its entries match
  * nothing, the full run says so, and they go.
  */
-const DECLARED = []
+const ASYNC_FETCH = "Async fetch speaks https and resolves names without blocking"
+const asyncFetch = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
+  )
+const DECLARED = [
+  // `HttpOptions` gains `dns` and `HttpClientConn` the TLS session, so every
+  // program that reaches std/net/fetch.ts lays both out again; dns.ts's
+  // `dnsLoadSystem` takes a nullable config and skips resolv.conf without one.
+  ...asyncFetch(
+    "async fetch speaks https and takes a DNS config, so HttpOptions and HttpClientConn grow fields and dnsLoadSystem may skip resolv.conf",
+    {
+      "examples/http-get-json.ts": ["dns.ll", "fetch.ll", "http-get-json.h", "http-get-json.ll"],
+      "tests/link/net_fetch_async/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_http_fetch/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_tls/main.ts": ["dns.ll", "fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_outbound/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
+      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "dns.ll", "fetch.ll", "main.h"],
+    }
+  ),
+  ...asyncFetch(
+    "dnsLoadSystem takes a nullable DnsConfig so async fetch can leave resolv.conf unread when HttpOptions.dns is given",
+    {
+      "tests/link/net_upstream/main.ts": ["dns.ll"],
+      "tests/link/net_upstream_release/main.ts": ["dns.ll"],
+      "tests/link/std_dns/main.ts": ["dns.ll"],
+      "tests/link/std_dns_caps/main.ts": ["dns.ll"],
+      "tests/link/std_dns_soak/main.ts": ["dns.ll"],
+    }
+  ),
+  ...asyncFetch(
+    "the program sets HttpOptions.dns, a field the reference's std/net/fetch.ts does not have, so only the candidate compiles it",
+    {
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["exit"],
+    }
+  ),
+]
 
 /**
  * The programs that reach one `std/` module by two routes: by a relative path
