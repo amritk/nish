@@ -1,6 +1,6 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stages 1, 2 and 3 built.** The owner accepted every
+**Status: accepted, 2026-11-06; stages 1 to 4 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
@@ -14,7 +14,10 @@ built: module storage (`src/module-storage.ts`) and its codes, `Layout` and
 `<out>.sites.json`, the loader's re-entry and dead-module guard, `nish/page`
 and `nish/host/ring`, and the storage's TypeScript reading
 (`src/emit-ts-storage.ts`, which departs from §5.4's sketch as it says); its
-security record is `docs/security/wasm-host.md`. Stage 4 is the next. The anchors below are at `39a87b3b`.
+security record is `docs/security/wasm-host.md`. Stage 4 is built: string
+parameters of host imports and string results of exports (§7), `nish/host/text`,
+a module-storage `u8[]` lent to a `u8[]` parameter, and `runtime/runtime-text.c`
+(`tests/run.js`, section `host-import-text`). Stage 5 is the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design; `npm test` compiles stage 2's (host modules and
 `HostHandle`) and none of the later stages' yet.
@@ -603,8 +606,26 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   IR names one of its symbols, as it does for `runtime-bytes.c`, and
   `--gc-sections` drops what is not called. A module with no string operation
   links byte-identical.
-- **Cost:** zero to a program with no strings. The size of the unit to one
-  that has strings is stage 4's figure, which it measures before it lands.
+- **Cost:** zero to a program with no strings: the `wasm-size` check holds
+  `add.ts`, `arrays.ts` and `results.ts` to the digests they had before
+  stage 4. Measured when stage 4 landed (clang 18, no wasm-opt):
+  `examples/label.ts`, a template with an `i32` and an `f64`, links to 13,046
+  bytes (gzip 11,786). 10,296 of them are the shortest-digits printer's
+  power-of-ten table, and the code is 2,502. The same template with only the
+  `i32` links to 1,111, because `--gc-sections` drops the printer. The
+  `wasm-size` check holds `label.ts` to those bytes
+  (`WASM_HOST_SIZE_BUDGETS`).
+- **Built (stage 4).** The adapter is `text(p, n)`, a `new Uint8Array` over the
+  memory decoded by the load's one `TextDecoder`, and an export's result is
+  `stringOut`, read inside `guarded` or `scoped`. An export that takes a
+  `string` is left out of the bridge, and its `.d.ts` line tells the page to
+  write module storage instead. `nish/host/text` is the module's half: `textRead`
+  is `String.fromBytes` behind a count check, and `textWrite`,
+  `textWriteInt` and `textWriteF64` chain into a storage `u8[]` and answer -1
+  when the text does not fit. A storage `u8[]` may be passed to a `u8[]`
+  parameter that only indexes it, so these take the storage itself. The
+  security record is `docs/security/wasm-host.md` ("A string crosses as bytes
+  inside memory") and `docs/security/runtime.md` (`runtime-text.c`).
 
 ## 8. W6. Loading with no fetch
 
@@ -861,7 +882,7 @@ answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 | 1 | **Link and load (W6, W8).** `--profile wasm-host`: explicit exports, `--memory`, a fixed stack, `wasm-opt` when present, `--inline`. Loader `load(source, imports)` and `loadSync`. The `nish/vite` plugin for exports (the page imports the module as TypeScript). The Vite-readiness test of the loader's text. The `wasm-size` guard with today's figures | Q5, Q10 | shrinks: −214 B on the hello world, −736 B on `arrays.ts` (raw) |
 | 2 | **Imports and handles (W1, W4).** Host modules (`--host`, `package.json`), reading their signatures and skipping bodies. Import attributes. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. The TS reading keeps the `import`. The refusals: a `string` result, an object, a function, a `Promise`, `declare function` in a wasm build, a host module in a native build. The plugin gains host modules | Q1, Q2, Q6 | about 20 B per imported function; nothing without one |
 | 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | nothing to a program with no module storage and no host module: its loader, `.d.ts` and `.wasm` are the bytes it had before (`WASM_PLAIN_DIGESTS`, §6). One with either pays the `nish.panic` import and its site arguments. **Built**; record `docs/security/wasm-host.md` |
-| 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | the unit's size, measured before it lands; nothing to a program with no strings |
+| 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | nothing to a program with no strings (`WASM_PLAIN_DIGESTS`); 1,111 B for an integer template, 13,046 B with an `f64` (10,296 B of it the printer's table). **Built** |
 | 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured |
 | 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |
 

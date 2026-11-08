@@ -511,6 +511,11 @@
                             "type": "page",
                             "title": "ring",
                             "filepath": "docs/reference/host/ring.md"
+                          },
+                          "/text": {
+                            "type": "page",
+                            "title": "text",
+                            "filepath": "docs/reference/host/text.md"
                           }
                         }
                       },

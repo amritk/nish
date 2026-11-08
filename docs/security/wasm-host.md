@@ -14,6 +14,13 @@ none of the cited lines.
 owns, and a page that calls back into a module mid-call or after a panic is
 refused before the module runs.
 
+Stage 4 (`docs/wp50-wasm-host.md` §7) adds strings to the boundary: a host
+import's string argument and an export's string result cross as UTF-8 bytes
+the loader decodes, and text the page writes reaches the module through a
+`u8[]` of module storage (`nish/host/text`). It adds no finding: the decode
+cannot read outside memory and the module's reader holds every count against
+its buffer (see "A string crosses as bytes inside memory" below).
+
 There are eight findings. Seven are fixed by the stage that found them, and
 WH-8 is recorded open:
 
@@ -44,6 +51,10 @@ WH-8 is recorded open:
 | `src/interop-wasm.ts` | `wasmTypedIn`, `wasmPayloadWriter` and `refused`: where the generated wrapper checks each argument |
 | `src/emit-strings.ts` | `emitHostWindow`: a window's bound in the module |
 | `src/attributes.ts` | `hostWindowProven`: when a window's bound is proven and the check is left out |
+| `src/interop-wasm.ts` | the generated loader's string decode: `text` (a host import's argument) and `stringOut` (an export's result) |
+| `src/emit-strings.ts` | `emitHostString`: a string argument as its data pointer and byte count |
+| `src/module-storage.ts` | lending a `u8[]` storage array to a function's `u8[]` parameter |
+| `std/host/text.ts` | `textRead`, `textWrite`, `textWriteInt`, `textWriteF64` |
 
 Out of scope:
 
@@ -128,6 +139,22 @@ nothing from `nish`. Pinned by "panic: the wasm-host link imports nish.panic bes
 `TypeError` before the module runs, and the next call works. Pinned by the
 `badarg` and `badshape` checks.
 
+**A string crosses as bytes inside memory.** The loader decodes a string the
+module passes, `(p, n)`, and one it returns, `{ i64 len, data }`, as
+`new Uint8Array(memory.buffer, p, n)`. The constructor refuses a view past the end of the
+buffer with a `RangeError`, so a pair the module got wrong can never read
+outside its memory. Inside an import or an export call, that error kills the
+module (WH-3). Bytes that are not UTF-8 decode as U+FFFD. This holds by
+construction and is not pinned by a test of a forged pair: only the module
+makes these pairs, and the compiler builds them from a string's header.
+`textRead` and `textWrite` hold every count and offset against the buffer's
+length before they touch it, so a count the page forged (negative, or past
+the storage) answers `null` or -1 and writes nothing. Pinned by
+"host-import-text: an echo that overflows its storage answers -1 and leaves
+the bytes untouched" and by the `readBack` line of "host-import-text: text
+the page writes with encodeInto, non-ASCII included, is read by the module
+and echoed back".
+
 **Hardening recorded, not fixed.** Each of these is the page's own mistake
 reaching a module it loaded, and none lets the page read or write outside the
 module's memory; they are left as they are and not counted:
@@ -173,6 +200,8 @@ Tests:
 - `panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive`
 - `panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive`
 - `panic: the wasm-host link imports nish.panic beside the host functions`
+- `host-import-text: text the page writes with encodeInto, non-ASCII included, is read by the module and echoed back`
+- `host-import-text: an echo that overflows its storage answers -1 and leaves the bytes untouched`
 
 All of them are in `tests/run.js`.
 

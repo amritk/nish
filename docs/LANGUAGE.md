@@ -1410,8 +1410,17 @@ booleans, in both positions, as the object JS already models —
 `{ ok: true, value }` or `{ ok: false, error }`. `--emit-dts` declares the
 same union for the wasm build, and the generated loader packs an argument and
 unpacks a result. A `Result` held by pointer still does not cross either JS
-boundary, for the reason a string does not: it is arena memory the next call
-may recycle.
+boundary: it is arena memory the next call may recycle.
+
+**A wasm export's `string` result is a JS string; a `string` parameter is
+not bridged** (`docs/wp50-wasm-host.md` §7). The loader decodes the result's
+UTF-8 bytes with `TextDecoder` straight out of the arena, before it releases
+the call's mark, so the page never holds module memory; an invalid sequence
+becomes U+FFFD. An export that takes a `string` is left out of the `.d.ts`
+and the loader with
+`` argument 1 (s) is `string`, which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`) ``:
+the page writes the text into a `u8[]` module storage and the module reads
+it back with `textRead` (`tests/run.js`, section `host-import-text`).
 
 A **ranged parameter** (`integer<Lo, Hi>`, [Types](#types)) crosses as the
 `i32` it is, and is checked where every call passes through
@@ -1859,19 +1868,23 @@ export const step = (): void => {
   `X[i]` and `X.length` are what remain.
 - **Its name is a place, not a value.** Binding, returning, storing or
   passing `X` itself is
-  `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
+  `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `u8[]`, `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
   (NL2677, `reject_storage_pass_whole`). The two exceptions are lendings:
   a **scalar** storage passed to a parameter spelled with a typed-array name
   (which has no `push`, `pop` or `length =`), as in
   `const total = (xs: Int32Array): i32 => …; total(SCORES)`
-  (`tests/cases/storage_lend`), and to a host function's buffer window
+  (`tests/cases/storage_lend`), or a byte storage passed to a `u8[]` or
+  `readonly u8[]` parameter, the spelling a byte buffer has
+  (`tests/cases/storage_lend_bytes`, which `nish/host/text` writes through),
+  and to a host function's buffer window
   ([Host modules](#host-modules-the-functions-a-page-supplies)). A record
   storage is never lent. A lending to a function of the same module holds
   only while that function keeps the parameter in place: it may index it,
-  read `.length`, loop over it with `for of`, call a method that reads it
-  (`at`, `indexOf`, `slice`, `map`, …), call `fill`, `sort`, `reverse` or
-  `copyWithin` as a statement, and lend it on to another such parameter or a
-  buffer window. Anything else (binding it under another name, returning it,
+  read `.length` (never assign it or `++` it), loop over it with `for of`,
+  call a method that reads it (`at`, `indexOf`, `slice`, `map`, …), call
+  `fill`, `sort`, `reverse` or `copyWithin` as a statement, copy it with
+  `String.fromBytes`, and lend it on to another such parameter or a buffer
+  window. Anything else (binding it under another name, returning it,
   passing it to an `i32[]` parameter, which could `push`) is
   `` Module storage `X` cannot be lent to `f`, which lets its parameter `a` go further than indexing: … ``
   (NL2684, `reject_storage_lend_respell_arg`, `_const`, `_return`). The
@@ -6205,13 +6218,40 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
   `` move that code into a module the host file imports `` (NL3049); other
   statements are skipped unread.
 - **What crosses.** The integer and float widths, `boolean`, a ranged integer,
-  an enum, a `HostHandle`, and `void` as a result. `i64` and `u64` are a
-  `bigint` on the page's side (`import type { i64 } from "nish"`). Refused,
-  each naming the explicit form: an object, a class, a function, `unknown` or
-  `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
-  `string` parameter (NL2665: strings cross in WP50 stage 4, so until then the
-  program writes the text into module storage and passes its length) and a
-  `string` result (NL2667). An array crosses only as a buffer window, below.
+  an enum, a `HostHandle`, a `string` parameter, and `void` as a result. `i64`
+  and `u64` are a `bigint` on the page's side
+  (`import type { i64 } from "nish"`). Refused, each naming the explicit form:
+  an object, a class, a function, `unknown` or `any` (NL2661), a generic
+  function (NL2662), a `Promise` (NL2663) and a `string` result (NL2667): the
+  page writes text into module storage instead (`nish/host/text`). An array
+  crosses only as a buffer window, below.
+- **A `string` argument is its UTF-8 bytes, lent for the call.** It lowers to
+  two wasm values, the address of the string's bytes and their count, read
+  from the string's own header, so nothing is copied on the module's side;
+  the loader's wrapper decodes them with `TextDecoder` into a JS string before
+  the page's function runs, and an invalid sequence becomes U+FFFD. The
+  string may be a literal, a concatenation or a template; one the module
+  built lives in the export's arena, which is released after the export
+  returns (`tests/cases/host_import_string`; `tests/run.js`, section
+  `host-import-text`;
+  [cookbook](IR_COOKBOOK.md#a-string-to-the-page-its-bytes-and-their-count)):
+
+  ```ts
+  // web/host.ts
+  export function say(s: string): void { console.log(s); }
+  // app.ts
+  say(`hello ${n}`);
+  ```
+
+  ```llvm
+  declare void @say(i8*, i32) #2
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8* %0)
+  %2 = bitcast i8* %1 to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = trunc i64 %3 to i32
+  %5 = getelementptr inbounds i8, i8* %1, i64 8
+  call void @say(i8* %5, i32 %4)
+  ```
 - **Each host function is a declaration with the wasm import attributes**:
   module `host`, its own name. It carries no other attribute, and its callers
   lose `readnone` and `willreturn` as for a C declaration. `wasm-ld` makes it

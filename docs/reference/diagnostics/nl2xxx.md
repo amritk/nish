@@ -12459,21 +12459,10 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
+` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
 ```
 
-[`nl2665_host_string_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2665_host_string_parameter.ts) (compiled with `--target wasm32 --host tests/wordings/host/text.ts`):
-
-```ts
-import { log } from "./host/text"
-export function f(): i32 {
-  return 0
-}
-```
-
-```text
-Parameter `s` of host function `log` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
-```
+**Retired**: a `string` parameter of a host function, refused until strings crossed (WP50 S4); it passes as its UTF-8 bytes' address and count, which the loader decodes
 
 ## NL2666
 

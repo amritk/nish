@@ -29810,6 +29810,137 @@ if (!only || "host-import-window".includes(only)) {
   }
 }
 
+// tests/host-text: WP50 stage 4's strings (docs/wp50-wasm-host.md §7). A host
+// import takes a string as its UTF-8 bytes, lent for the call; an export's string
+// result is decoded by the loader before the call's arena mark is released; and
+// `nish/host/text` reads and writes text in module storage. parity.ts is the
+// formatting corpus, built native and for wasm32 and compared line for line.
+// Named `host-import-text` so the `host-import` filter runs it.
+if (!only || "host-import-text".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`host-import-text: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "host-text")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "host-text"))) {
+      fs.copyFileSync(path.join(root, "tests", "host-text", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const runtimeWasm = "runtime/runtime-wasm.c"
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("out") + "/"],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("host-import-text: a program passing and answering strings compiles for wasm32 with --host", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const ir = fs.readFileSync(at("out/main.ll"), "utf8")
+      check(
+        "host-import-text: a string parameter of a host function is the data pointer then the byte count, each an i32",
+        ir.includes("declare void @say(i8*, i32) #") && ir.includes("declare i32 @measure(i8*, i32, i32) #"),
+        ir.split("\n").filter((line) => line.startsWith("declare")).join("\n")
+      )
+      const dts = fs.readFileSync(at("main.d.ts"), "utf8")
+      check(
+        "host-import-text: an export taking a string is left out, the .d.ts saying the page writes module storage instead",
+        dts.includes(
+          "// takes(s: string): number  -- not exported to JS: argument 1 (s) is `string`, which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`)"
+        ) && dts.includes("label(n: number): string;"),
+        dts
+      )
+      const linked = wasmHostLink([at("out/main.ll"), at("out/text.ll"), runtimeWasm], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      check("host-import-text: the module links with --profile wasm-host", linked.status === 0, shown(linked))
+      const loader = fs.readFileSync(at("main.mjs"), "utf8")
+      check(
+        "host-import-text: the loader decodes a string argument from the pointer and byte count before the page's function sees it",
+        loader.includes("say: (a0, a1) => host_say(text(a0, a1)),") && loader.includes("measure: (a0, a1, a2) => host_measure(text(a0, a1), a2),"),
+        loader.split("\n").filter((line) => line.includes("text(")).join("\n")
+      )
+      if (linked.status === 0) {
+        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+        const lines = run.stdout.split("\n")
+        check(
+          "host-import-text: ASCII, a concatenation, an i32 and f64 template, 4-byte UTF-8 and the empty string reach the page as its own strings",
+          run.status === 0 &&
+            [
+              'say "plain ascii"',
+              'say "hello, 42!"',
+              'say "n=42 x=0.30000000000000004"',
+              'say "clef \u{1D11E} é"',
+              'say ""',
+              'measure 42 "é\u{1D11E}"',
+              "speak 3",
+            ].every((line, i) => lines[i] === line),
+          shown(run)
+        )
+        check(
+          "host-import-text: an export's string result is a JS string, the empty one included",
+          lines[7] === 'label "#-7 é\u{1D11E}" fixed "constant" nothing "" takes undefined',
+          shown(run)
+        )
+        check(
+          "host-import-text: 10,000 calls of a string export leave the arena mark and the memory size where they were",
+          lines[8] === "label x10000 true mark true memory true",
+          shown(run)
+        )
+        check(
+          "host-import-text: the module's writers chain into storage the page decodes, and one that does not fit writes nothing",
+          lines[9] === 'compose 11 "n=-12 x=0.5"' && lines[10] === 'compose overflow -1 "n=7 x=" rest untouched true',
+          shown(run)
+        )
+        check(
+          "host-import-text: text the page writes with encodeInto, non-ASCII included, is read by the module and echoed back",
+          lines[11] === 'echo 11 11 "héllo \u{1D11E}"' && lines[12] === 'readBack "[héllo \u{1D11E}]" "refused" "refused" "[]"',
+          shown(run)
+        )
+        check(
+          "host-import-text: an echo that overflows its storage answers -1 and leaves the bytes untouched",
+          lines[13] === "echo overflow -1 untouched true",
+          shown(run)
+        )
+      }
+    }
+    // The parity corpus: one source, a native process and a wasm export.
+    const expected = fs.readFileSync(at("parity.out"), "utf8")
+    const native = spawnSync(NISH, [at("parity-main.ts"), "--link", at("parity-native")], { cwd: root, encoding: "utf8" })
+    const nativeOut = native.status === 0 ? spawnSync(at("parity-native"), [], { encoding: "utf8" }) : native
+    check(
+      "host-import-text: the parity corpus formats i32, i64, u64 and f64 natively as JS does",
+      nativeOut.status === 0 && nativeOut.stdout === expected,
+      shown(nativeOut)
+    )
+    const parityIr = spawnSync(
+      NISH,
+      [at("parity.ts"), "--target", "wasm32", "--emit-dts", at("parity.d.ts"), "-o", at("parity.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    const parityWasm =
+      parityIr.status === 0 ? wasmHostLink([at("parity.ll"), runtimeWasm], ["-o", at("parity.wasm"), "--profile", "wasm-host"]) : parityIr
+    const wasmOut =
+      parityWasm.status === 0
+        ? spawnSync(
+            process.execPath,
+            [
+              "--input-type=module",
+              "-e",
+              'import { readFileSync } from "node:fs"; import { loadSync } from "./parity.mjs"; process.stdout.write(loadSync(readFileSync("parity.wasm")).corpus() + "\\n")',
+            ],
+            { cwd: dir, encoding: "utf8" }
+          )
+        : parityWasm
+    check(
+      "host-import-text: the parity corpus formats every value in wasm byte for byte as it does natively",
+      wasmOut.status === 0 && wasmOut.stdout === expected,
+      shown(wasmOut)
+    )
+  }
+}
+
 // tests/host-import holds a host module with one function per kind of value that
 // crosses, a program that calls each, an entry for `--emit-ts`, and three pages
 // for tsc. Compiled with `--host`, each host function is a `declare` with the wasm

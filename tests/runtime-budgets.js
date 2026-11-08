@@ -883,6 +883,12 @@ export const RUNTIME_BUDGETS = [
  * linked with runtime-wasm.c, from 2,827 to 2,091 (gzip 1,479 to 1,092, brotli 1,302
  * to 970). A wasm-opt pass shrinks the `.wasm` and so the inline module and leaves
  * the loader as it is, so every ceiling holds with one too.
+ *
+ * label.ts is the string row (WP50 stage 4, measured 2026-11-08): a template with an
+ * `i32` and an `f64` links runtime-text.c beside runtime-wasm.c. Of its 13,046 bytes,
+ * 10,296 are the shortest-f64 printer's power-of-ten table (the data section) and the
+ * code is 2,502; the same template with only the `i32` links to 1,111 bytes, because
+ * `--gc-sections` drops the printer and its table.
  */
 export const WASM_HOST_SIZE_BUDGETS = [
   {
@@ -905,6 +911,13 @@ export const WASM_HOST_SIZE_BUDGETS = [
     wasm: [82, 99, 76],
     loader: [2508, 1082, 943],
     inline: [339, 234, 197],
+  },
+  {
+    src: "examples/label.ts",
+    runtime: true,
+    wasm: [13046, 11786, 11297],
+    loader: [3528, 1462, 1277],
+    inline: [44371, 15639, 13682],
   },
 ]
 
@@ -941,6 +954,14 @@ export const WASM_PLAIN_DIGESTS = [
     loader: "a5c2128be043ae6cf8ed54608ed205d904d7db5dbd238c7fd82fd0d0413630d3",
     wasm: "5040e616dfcf06673d5de62b5926e840734aaf550d2c0e1d8d7b1d1319c211a3",
     host: "4a93551c63373e264d34dd074f3f1e9da4a1ff10b8ed0225087bc7b24e9c0c22",
+  },
+  {
+    // WP50 stage 4: new with the string bridge, so its bytes have no earlier build to match.
+    src: "examples/label.ts",
+    dts: "f37f58b8777d3a756c94bc9c745d78457946f1bf5adce8d24f4a090ddb043cc1",
+    loader: "f4b30752f31bfaa6629f92a09f4f73c6a2623a64a2e2d015e5eb71ed5627d51a",
+    wasm: "b0154ccf6e275cc7beb7dac812784c47bcf5ee2d54aaa82d3fc9b3142e7c3578",
+    host: "ef8d59319dfcc282e9db6017e616dc07c6c65c913f388d00bdc9e0fe83a0b65f",
   },
 ]
 

@@ -99,8 +99,8 @@ console.log(stats.mean(new Float64Array([1, 2, 3, 4])));       // 2.5
 `load(source, imports)` takes the bytes or a compiled `WebAssembly.Module`, and
 an import object. It defaults to `{}`, unless the module imports a host module
 (below): then it is required, `{ host }`, and the `.d.ts` types it. The `wasm` profile
-is freestanding — no C library — so functions that take or return strings, or
-do I/O, are not callable from it; the generated `.d.ts` lists them as
+is freestanding — no C library — so functions that take a string, or do I/O,
+are not callable from it; the generated `.d.ts` lists them as
 comments. A whole program that does need them can be built for WASI instead,
 with `nish app.ts --link app.wasm --profile wasi` (which needs a WASI sysroot;
 see [INSTALL.md](../../INSTALL.md#wasi-optional-for---profile-wasi)), and run
@@ -217,10 +217,10 @@ of its kind or `0` ("none"), and supports nothing else. A field or parameter
 of a handle type may only default to `0` (NL2670).
 
 What cannot cross is refused with the explicit form: an object, a class, a
-function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
-`string` result (NL2667), and, for now, a `string` parameter (NL2665): write
-the text into [module storage](#sharing-memory-with-the-page) as bytes and
-pass its length. An array crosses only as a
+function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663)
+and a `string` result (NL2667). A `string` *argument* crosses: the page's
+function receives a JS string, decoded from the module's UTF-8 bytes. An array
+crosses only as a
 [buffer window](#lending-an-array-to-the-page). A host-module body the lexer cannot read, such as a regex
 literal or JSX, is refused with a message to move that code into a module the
 host file imports (NL3049).
@@ -363,6 +363,69 @@ export const tick = (): void => {
   `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
   past it is the rest of the module's memory
   ([security record](../../security/wasm-host.md)).
+
+### Strings and the page
+
+A string crosses out of the module two ways: as an export's result, and as an
+argument to a host function. Both arrive as an ordinary JS string, decoded
+from the module's UTF-8 bytes by the loader with `TextDecoder`, so `"😀é"`
+arrives as `"😀é"` and a byte sequence that is not UTF-8 arrives as U+FFFD.
+A template formats a number the way JavaScript does: `${0.1 + 0.2}` is
+`0.30000000000000004`, `${1e21}` is `1e+21`.
+
+```ts
+// app.ts
+import { say } from "./web/host.ts";
+
+export function label(n: i32): string {
+  return `item ${n}`;
+}
+export function greet(n: i32): void {
+  say(`hello ${n}`);
+}
+```
+
+```js
+const app = loadSync(bytes, { host });
+app.label(7); // "item 7"
+```
+
+A string the module builds during a call lives only until that call returns:
+the loader decodes the result first, so `label` can be called in a loop and
+the module's memory stays where it was.
+
+An export cannot *take* a string; the `.d.ts` lists it as a comment that says
+so. Text goes in through module storage instead: declare a `u8[]` storage, have
+the page write into it with `TextEncoder.encodeInto`, and pass the byte count.
+`nish/host/text` is the module's half of both directions:
+
+```ts
+// app.ts
+import { textRead, textWrite, textWriteInt } from "nish/host/text";
+
+export const INBOX = new Array<u8>(256);
+export const OUTBOX = new Array<u8>(256);
+
+export function echo(n: i32): i32 {
+  const text = textRead(INBOX, n);
+  if (text === null) return -1;
+  return textWriteInt(OUTBOX, textWrite(OUTBOX, 0, text), toI64(n));
+}
+```
+
+```js
+const app = loadSync(bytes);
+const n = new TextEncoder().encodeInto("héllo", app.views().storage.INBOX).written;
+const end = app.echo(n);
+new TextDecoder().decode(app.views().storage.OUTBOX.subarray(0, end)); // "héllo6"
+```
+
+`textRead(buf, n)` answers the first `n` bytes as a string, or `null` when
+`n` is negative or past the buffer. Each writer (`textWrite`, `textWriteInt`,
+`textWriteF64`) takes the offset to write at and answers the offset after
+what it wrote, so writes chain; text that does not fit writes nothing and
+answers -1, and every writer passes a -1 offset straight through. The storage
+is lent to these functions as a `u8[]` parameter, which they only index.
 
 ### When the module panics
 
