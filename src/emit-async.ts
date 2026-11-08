@@ -1787,7 +1787,7 @@ class AsyncLayout {
       if (mark.startsWith(KIDS_MARK)) {
         value = this.kids(leadingNumber(mark.substring(KIDS_MARK.length)))
       } else if (mark.startsWith(BYTES_MARK)) {
-        value = NODE_HEADER + 16 * this.units(leadingNumber(mark.substring(BYTES_MARK.length)))
+        value = 16 * this.units(leadingNumber(mark.substring(BYTES_MARK.length)))
       } else {
         const pair = mark.substring(OFF_MARK.length)
         const dot = pair.indexOf(".")

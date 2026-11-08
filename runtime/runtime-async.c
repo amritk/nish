@@ -78,6 +78,7 @@ typedef int nish_async_unused_in_wasm;
 #include <sys/epoll.h>
 #else
 #include <sys/event.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #endif
@@ -151,12 +152,13 @@ static int32_t nish_async_allocated;
 static int32_t nish_async_late;
 static int32_t nish_async_live; /* spawned tasks not yet done, each holding a region */
 
-enum { NISH_ASYNC_OOM, NISH_ASYNC_POLLER, NISH_ASYNC_TOO_MANY };
+enum { NISH_ASYNC_OOM, NISH_ASYNC_POLLER, NISH_ASYNC_TOO_MANY, NISH_ASYNC_WAIT };
 #define NISH_ASYNC_MSG(text) { sizeof text - 1, text }
 static const struct { uint64_t len; char data[64]; } nish_async_messages[] = {
   NISH_ASYNC_MSG("nish: out of memory"),
   NISH_ASYNC_MSG("nish: the async event loop could not be made"),
   NISH_ASYNC_MSG("nish: more than 4294967294 async tasks or waits"),
+  NISH_ASYNC_MSG("nish: the async event loop could not wait"),
 };
 
 static NISH_COLD void nish_async_die(int why) {
@@ -402,6 +404,16 @@ uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
   }
   int dup = fcntl(fd, F_DUPFD_CLOEXEC, 0);
   if (dup < 0) return nish_async_fired_now(slot, 0);
+#if !defined(__linux__)
+  /* kqueue accepts a regular file and reports it readable only while it has
+     bytes left, so one at its end would park the task for ever; epoll refuses
+     it below. A regular file never blocks: it is ready, on both kernels. */
+  struct stat st;
+  if (fstat(dup, &st) == 0 && S_ISREG(st.st_mode)) {
+    close(dup);
+    return nish_async_fired_now(slot, 1);
+  }
+#endif
   uint64_t token = nish_async_token(slot);
 #if defined(__linux__)
   struct epoll_event ev;
@@ -467,6 +479,9 @@ static void nish_async_block(void) {
       timeout = ms > 0x7fffffff ? 0x7fffffff : (int)ms;
     }
     int n = epoll_wait(nish_async_poller, evs, 64, timeout);
+    /* A signal ends the wait early and the caller waits again; any other
+       failure would recur on every call and spin, so it ends the program. */
+    if (n < 0 && errno != EINTR) nish_async_die(NISH_ASYNC_WAIT);
     for (int i = 0; i < n; i++) {
       int64_t slot = nish_async_slot_of(evs[i].data.u64);
       if (slot < 0) {
@@ -485,6 +500,7 @@ static void nish_async_block(void) {
       tp = &ts;
     }
     int n = kevent(nish_async_poller, NULL, 0, evs, 64, tp);
+    if (n < 0 && errno != EINTR) nish_async_die(NISH_ASYNC_WAIT);
     for (int i = 0; i < n; i++) {
       int64_t slot = nish_async_slot_of((uint64_t)(uintptr_t)evs[i].udata);
       if (slot < 0) {

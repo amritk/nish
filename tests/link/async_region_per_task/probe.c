@@ -32,12 +32,13 @@ int main(void) {
 
   void *prev = nish_async_enter(a);
   nish_str *sa = fill('a', sizeof big);
-  int own = nish_arena.buf != before.buf;
+  void *arena_a = nish_arena.buf;
+  int own = arena_a != before.buf;
   nish_async_leave(a, prev);
 
   prev = nish_async_enter(b);
   nish_str *sb = fill('b', sizeof big);
-  own = own && nish_arena.buf != before.buf;
+  own = own && nish_arena.buf != before.buf && nish_arena.buf != arena_a;
   nish_async_leave(b, prev);
   printf("each task allocates in an arena of its own: %s\n", own ? "yes" : "no");
 

@@ -3430,6 +3430,12 @@ async function tick(): Promise<void> {
   await sleep(10)
   console.log("tick")
 }
+
+export async function main(): Promise<i32> {
+  spawn(echo(0))
+  spawn(tick())
+  return 0
+}
 ```
 
 - **A wait is awaited where it is written.** `sleep(10)` as a statement, as
@@ -3438,7 +3444,7 @@ async function tick(): Promise<void> {
   (NL2671, `reject_async_sleep_bare`, `reject_async_sleep_spawned`), and so
   are `readable` and `writable`.
 - **It takes one `i32`**: `` `readable` takes one `i32` `` (NL2672,
-  `reject_async_sleep_argument`).
+  `reject_async_wait_argument`).
 - **A wait has no deadline of its own.** A descriptor that never becomes
   ready parks its task, and the program, until it does
   ([`docs/security/async.md`](security/async.md), ASYNC-6); cancellation is a

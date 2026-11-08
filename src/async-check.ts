@@ -316,13 +316,17 @@ export const checkAsyncBuiltin = (
       `\`spawn\` drops its task's answer, and \`${call.children[0].text}\` answers ${ctx.table.typeName(answer)}: a spawned task answers \`void\` or a \`Result\` it reports itself`
     )
   }
-  for (const param of callee.paramTypes) {
-    if (!isSpawnable(ctx, param)) {
-      return ctx.errorType(
-        call,
-        `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(param)}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region`
-      )
+  let refused = -1
+  for (let i = 0; i < callee.paramTypes.length && refused < 0; i++) {
+    if (!isSpawnable(ctx, callee.paramTypes[i])) {
+      refused = i
     }
+  }
+  if (refused >= 0) {
+    return ctx.errorType(
+      call,
+      `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(callee.paramTypes[refused])}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region`
+    )
   }
   return T_VOID
 }

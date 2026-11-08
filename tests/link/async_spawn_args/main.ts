@@ -2,8 +2,9 @@
 // that spawned it. Numbers and booleans are copied into the task's frame;
 // each `string` is copied into the task's own region when it is spawned.
 // `start` builds both strings in its own frame and returns before the task
-// wakes, and `main` allocates more on top of them; each task still prints
-// what it was given.
+// wakes, and `main` then allocates 2890 characters of noise over the memory
+// they were built in, more than either string; each task still prints what
+// it was given.
 import { spawn } from "nish:async"
 import { report } from "./lib"
 
@@ -21,7 +22,7 @@ export async function main(): Promise<i32> {
   await start(1, 4000000000, 0.5, 20)
   await start(2, 8000000000, 1, 10)
   let noise = ""
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 1000; i++) {
     noise = `${noise}${i}`
   }
   console.log(`main returns after ${noise.length} chars of noise`)
