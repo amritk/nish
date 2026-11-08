@@ -1,6 +1,6 @@
 // Two processes exchange bytes over a Unix-domain socket (#1129, criterion 1).
-// The parent listens on a socket file in its own build directory and starts
-// this program again as the child, naming the file. The child connects with
+// The parent listens on a socket file in `build/test/` and starts this program
+// again as the child, naming the file. The child connects with
 // `unixConnect`, writes "ping" and waits for the answer; the parent takes the
 // connection with `unixAccept`, reads the four bytes, answers "pong" and reaps
 // the child. The child prints nothing, since its buffered stdout would land
@@ -11,7 +11,11 @@ import { unlinkSync } from "nish:fs";
 import { platform, spawn, waitPid } from "nish:process";
 import { ping, pong, readAll, readable, same } from "./wire";
 
-const PATH: string = "build/test/link/net_unix_exchange/exchange.sock";
+// `build/test/` itself, not this program's build directory: `tests/run.js`
+// builds it under `build/test/link/net_unix_exchange/`, but `tests/nish/run.ts`
+// builds it elsewhere and creates only `build/test/`, so a deeper path has no
+// directory to bind in there.
+const PATH: string = "build/test/net_unix_exchange.sock";
 
 /** This program's path, for running it again. */
 const selfPath = (): string => {
