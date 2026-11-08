@@ -1,0 +1,19 @@
+PASS  an async https fetch from a server the roots trust answers
+PASS  an IP literal is matched against the certificate's IP name
+PASS  and once its body is read, the connection ends with a close_notify
+PASS  an https connection is not pooled: each fetch opens its own
+PASS  an expired certificate is HTTP_E_CERTIFICATE, as from fetchSync
+PASS  and the error says the certificate was refused
+PASS  a certificate for another name is HTTP_E_CERTIFICATE, as from fetchSync
+PASS  a chain to a root the client does not trust is HTTP_E_CERTIFICATE, as from fetchSync
+PASS  and so is a good server under roots that are not its own
+PASS  a server that does not speak TLS is HTTP_E_TLS, as from fetchSync
+PASS  a body cut off without a close_notify is HTTP_E_TLS, not a short body
+PASS  a body with no length ends at the server's close_notify
+PASS  a server that ends the connection with an alert is HTTP_E_TLS, naming the alert
+PASS  https through an http proxy is a CONNECT tunnel, then TLS to the origin
+PASS  and the proxy was asked for the origin's authority
+good: GET /beside HTTP/1.1
+silent: io
+PASS  the silent handshake fails only once its listener closes, and the good fetch beside it answered first
+fetch async https: 16 passed, 0 failed, 0 skipped

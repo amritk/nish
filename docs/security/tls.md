@@ -218,6 +218,13 @@ Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-reco
 
 Each property below is pinned by a test that fails if it stops holding.
 
+**The async fetch verifies as the blocking client does**
+(`link/net_fetch_async_https: exits with 0 and stdout matches expected.out`,
+and `link/net_fetch_async_https_flat` for its arena): each refusal of a bad
+chain, a wrong name or an expired certificate is compared with `fetchSync`'s
+on the same URL, code and sentence, and 200 https fetches leave
+`Arena.used()` where it was.
+
 **RFC 8448 §3, byte for byte** (`tests/link/net_tls_rfc8448`, and in `f64`
 mode `net_tls_rfc8448_f64`): every secret the trace prints — early, both
 "derived" salts, handshake, both handshake traffic secrets, master, both
@@ -1082,6 +1089,18 @@ Ed25519 (never offered) and when empty; a server whose CertificateVerify
 signs other bytes is refused with `decrypt_error`, which the server
 reads. An empty chain is `bad_certificate`, and so is a self-signed leaf
 with no extensions that the store does not hold.
+
+**The async `fetch` is a second carrier** (`std/net/fetch.ts`,
+`httpClientSecureAsync`; its record is `docs/security/fetch.md`, HF-12). It
+drives a `TlsRecordClient` over its own non-blocking socket from a task,
+flushing each flight with `writable` and reading each record with `readable`,
+and at `TLS_RECORD_AUTH` calls the same `tlsClientAuthenticate`, with the wall
+clock and the roots `fetchSync` loads, through one helper the blocking path
+calls too; no answer reaches the caller before it passes. It keeps no TLS
+state between fetches: an https connection is never pooled, and each sends
+its `close_notify` and is closed once its body is read. `net_fetch_async_https`
+checks that an expired certificate, one for another name and a chain to an
+untrusted root are refused with `fetchSync`'s code and sentence.
 
 **Against openssl s_server** (tests/run.js, "`nish/net/tls-tcp`'s client,
 against openssl s_server"; a CA and P-256, P-384 and RSA-2048 leaves made at
