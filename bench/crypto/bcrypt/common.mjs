@@ -105,7 +105,14 @@ export const buildNish = (compiler, dir, exe, source, flags = []) => {
     { cwd: root }
   )
   if (built.status !== 0) {
-    console.error(`the Nish program ${exe}.ts did not build:\n${built.stderr}`)
+    // A missing compiler leaves no stderr, only `error`; a stale one (the
+    // seed, or a build older than std/crypto/bcrypt.ts) fails on what it
+    // lacks. Either way the usual fix is a fresh build.
+    const why = built.error === undefined ? built.stderr : `${compiler}: ${built.error.message}`
+    console.error(
+      `the Nish program ${exe}.ts did not build:\n${why}\n` +
+        `if ${compiler} is missing or older than this checkout, run \`npm run build\` first, or pass --compiler <nish>`
+    )
     process.exit(1)
   }
   return path.join(dir, exe)
