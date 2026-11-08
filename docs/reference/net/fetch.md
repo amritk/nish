@@ -154,10 +154,13 @@ What an async `fetch` sends and how it behaves.
 **The async `fetch`** answers a `Result`: a `FetchResponse` whose body was
 read whole before it answered (up to `maxBodyBytes`, 256 MiB by default,
 else `HTTP_E_BODY_TOO_LARGE`), or a `FetchError` with the `HTTP_E_*` code.
-The connect, every write and every read wait on the executor; the name
-lookup still blocks, and only `http://` is driven (an `https://` URL answers
-`HTTP_E_TLS` naming `fetchSync`, never a silent block). A `FetchPool` handed
-in through `RequestInit.pool` keeps idle connections per route, capped.
+The name lookup, the connect, the TLS handshake, every write and every
+read wait on the executor, so a slow resolver or server stalls only its own
+task. An `https://` URL is checked as `fetchSync` checks it: the caller's
+roots or the system's, the host name and the wall clock, with no setting
+that skips it. A `FetchPool` handed in through `RequestInit.pool` keeps
+idle http connections per route, capped; an https one is closed after its
+fetch, never pooled.
 Policy, proxies, redirects and error codes are the shared code below, so
 both clients behave alike. It does not run under `--emit-ts`.
 
@@ -252,10 +255,11 @@ Written from RFC 9110 and RFC 9112, not ported from another implementation.
 Fetches `url` without blocking the process: the task waits on the
 executor while the connection is made, the request written and the
 response read, so other tasks run meanwhile and `awaitAll(fetch(a),
-fetch(b))` overlaps the two. The body is read whole, up to
-`maxBodyBytes`, before the answer comes. Only http is driven this way: an
-https URL answers `HTTP_E_TLS` (use `fetchSync`). The name lookup still
-blocks. Policy, proxy, redirect and error rules are `fetchSync`'s.
+fetch(b))` overlaps the two. The name lookup does not block either: it
+runs on non-blocking sockets within `connectTimeoutMs`. An https URL gets
+the TLS handshake and checks `fetchSync` gives it. The body is read whole,
+up to `maxBodyBytes`, before the answer comes. Policy, proxy, redirect and
+error rules are `fetchSync`'s.
 
 ```ts
 function fetch(
@@ -266,7 +270,7 @@ function fetch(
 
 <scalar-field name="url" type="string" required>
 
-The absolute `http://` URL to fetch.
+The absolute `http://` or `https://` URL to fetch.
 
 </scalar-field>
 
@@ -494,7 +498,8 @@ Connections an async `fetch` leaves open for the next one to the same
 place, held by the caller and handed in through `RequestInit.pool`. At
 most `maxIdlePerOrigin` wait per route and 64 in all; a kept connection
 the server closed, or sent a byte on unasked, is closed when it is next
-looked at. A fetch under an outbound policy never keeps or takes one.
+looked at. A fetch under an outbound policy never keeps or takes one, and
+nor does an https fetch: the pool holds sockets, not their TLS state.
 
 ```ts
 class FetchPool
@@ -584,6 +589,7 @@ class HttpOptions
 | `new HttpOptions()` |  |
 | `connectTimeoutMs: i32` | The budget for the lookup and the connect together; 0 or less for none but the total. |
 | `crossOriginRedirects: boolean` | Let a followed redirect go to another origin (see the module comment). |
+| `dns: DnsConfig \| null` | The resolver settings a name is looked up with, as `dnsParseResolvConf` fills them; null reads `/etc/resolv.conf`. `/etc/hosts` is consulted either way. Only read, so one config can serve many fetches. |
 | `followRedirects: boolean` | Follow a redirect rather than answer it; only to the same origin unless `crossOriginRedirects` is set. |
 | `maxBodyBytes: i64` | 256 MiB by default; a body past it fails with `HTTP_E_BODY_TOO_LARGE`. |
 | `maxHeaderBytes: i32` | The status line and the header section, each at most this. |

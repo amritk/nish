@@ -40,7 +40,7 @@ The fallback-and-timeout stage fixed two Low findings, DNS-6 and DNS-7.
 | --- | --- |
 | `std/net/dns-message.ts` | `dnsBuildQuery`, `dnsParseReply`; `DnsReply`; the helpers `dnsCheckLength`, `dnsLower`, `dnsReadName`, `dnsSameName`, `dnsCopyName`, `dnsKeepAddress` |
 | `std/net/dns-resolver.ts` | `DnsResolver` (`start`, `nextOutgoing`, `receive`, `receiveStream`, `fail`, `tick`, `nextDeadlineNanos`, `result`, `cancel`, `settle`, `active`); the helpers `dnsResolverCheckQuery`, `dnsResolverIsLocalhost`, `dnsResolverLoopback`, `dnsResolverLiteral`, `dnsResolverFinishNow`, `dnsResolverFinish`, `dnsResolverStop`, `dnsResolverGather`, `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverBegin`, `dnsResolverAsk`, `dnsResolverSend`, `dnsResolverServerFailed`, `dnsResolverAnswer`, `dnsResolverNameLength`, `dnsResolverSameName`, `dnsResolverDone` |
-| `std/net/dns.ts` | `DnsClient` (`tokens`, `owns`, `start`, `result`, `cancel`, `settle`, `ready`, `tick`, `timeoutMs`, `pump`, `nextOutgoing`), `resolveHost`, `dnsLookupWith`; the helpers `dnsClientClose`, `dnsClientFail`, `dnsClientIsV4`, `dnsClientSendUdp`, `dnsClientOpenTcp`, `dnsClientReadDatagrams`, `dnsClientWrite`, `dnsClientReadStream` |
+| `std/net/dns.ts` | `DnsClient` (`tokens`, `owns`, `start`, `result`, `cancel`, `settle`, `ready`, `tick`, `timeoutMs`, `pump`, `nextOutgoing`), `resolveHost`, `dnsLookupWith`, `dnsLoadSystem`; the helpers `dnsClientClose`, `dnsClientFail`, `dnsClientIsV4`, `dnsClientSendUdp`, `dnsClientOpenTcp`, `dnsClientReadDatagrams`, `dnsClientWrite`, `dnsClientReadStream` |
 | `std/net/dns-config.ts` | `dnsParseAddress`, `dnsParseResolvConf`, `dnsParseHosts`, `dnsHostsFind`; `DnsConfig`, `DnsHosts`; the helpers `dnsConfigCheckWindow`, `dnsIsBlank`, `dnsHexValue`, `dnsParseIpv4`, `dnsParseIpv6`, `dnsIsIpv4`, `dnsLineEnd`, `dnsCommentCut`, `dnsWordEnd`, `dnsWordIs`, `dnsOption`, `dnsAddSearch`, `dnsResolvLine`, `dnsAddHostName`, `dnsHostsLine`, `dnsHostNameIs` |
 
 Out of scope: `nish:net`'s sockets and readiness loop, which have their own
@@ -173,6 +173,11 @@ a name over 253 bytes is dropped and counted. A lookup compares without case
 and without a trailing dot, answers file order, stops at `max`, and answers A
 for an `::ffff:` address and AAAA for any other.
 
+**A slow lookup parks only its task** (`link/net_fetch_async_dns_slow: exits
+with 0 and stdout matches expected.out`). An async `fetch` whose name server
+answers late waits in its own task, and a sibling task's fetch by address
+completes meanwhile.
+
 ## The resolver
 
 `DnsResolver` is the core: it holds each lookup's queries, writes the packets
@@ -180,8 +185,18 @@ to send, reads the bytes that arrive and keeps the deadlines, but never opens a
 socket, never reads a clock, a file or the random source, and never blocks; the
 caller passes the time, the bytes and each query's ID. `DnsClient` drives it
 over `nish:net` on the caller's own loop; `resolveHost` and `dnsLookupWith`
-run a loop of their own, and `resolveHost` alone reads `/etc/resolv.conf` and
-`/etc/hosts`.
+run a loop of their own. `dnsLoadSystem` reads `/etc/resolv.conf` and
+`/etc/hosts` into a `DnsConfig` and a `DnsHosts`, with the same bounds and the
+same fallbacks as before; `resolveHost` calls it, and so does the async
+`fetch` (`docs/security/fetch.md`, HF-11), leaving `/etc/resolv.conf` unread
+when `HttpOptions.dns` gives a configuration, which drives a `DnsResolver` of
+one lookup through a `DnsClient` on a loop of its own, polling it without
+waiting and sleeping on the executor between polls, so its servers, tries,
+timeouts and hosts entries are `resolveHost`'s and it parks only its own task.
+What that path adds (the address literal parsed without a resolver, the
+outbound filter on the answers, the `connectTimeoutMs` bound) is the fetch
+record's; `link/net_fetch_async_dns_slow: exits with 0 and stdout matches
+expected.out` checks it against a Nish DNS server on loopback.
 
 **Threat model.** The attacker is anyone who can send to the client's
 sockets: an off-path spoofer who must guess the server's address, the source

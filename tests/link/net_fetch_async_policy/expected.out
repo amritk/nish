@@ -11,7 +11,7 @@ PASS  past maxRedirects it is HTTP_E_TOO_MANY_REDIRECTS
 PASS  a body past maxBodyBytes is HTTP_E_BODY_TOO_LARGE
 PASS  and under it is read whole
 PASS  a target that does not parse is HTTP_E_URL
-PASS  an https URL is HTTP_E_TLS, naming fetchSync, without a connection
+PASS  an https URL whose roots cannot be read is HTTP_E_CERTIFICATE, before any connection
 PASS  a loopback address the outbound policy refuses is HTTP_E_BLOCKED
 PASS  and its error text holds neither the password nor the query
 PASS  a kept-alive answer leaves its connection idle in the pool
