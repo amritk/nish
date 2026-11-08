@@ -197,7 +197,7 @@ export const main = (): i32 => {
   `pop` and `sort` included), nor may its `length` be assigned; keep a count
   beside it for the slots in use:
 
-```ts nish:err NL2673
+```ts nish:err NL2688
 const xs = new Int32Array(4);
 
 export const main = (): i32 => {

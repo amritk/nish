@@ -13333,14 +13333,6 @@ Parameter `c` is HostHandle<"canvas">, and a handle starts as `0`, the handle th
 The message of an error contains:
 
 ```text
-…: its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`
-```
-
-### NL2671
-
-The message of an error contains:
-
-```text
 ` is a wait on the executor, written only where it is awaited: `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`, inside an `async` function
 ```
 
@@ -13352,28 +13344,12 @@ The message of an error contains:
 ` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on
 ```
 
-### NL2672
-
-The message of an error contains:
-
-```text
-…; give the type a zero member, or store the number and convert it where it is read
-```
-
 ### NL2673
 
 The message of an error contains:
 
 ```text
 …, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
-```
-
-### NL2673
-
-The message of an error contains:
-
-```text
-` is not available: index it, and keep a count beside it for the slots in use
 ```
 
 ### NL2674
@@ -13509,6 +13485,30 @@ The message of an error contains:
 
 ```text
 …: a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record
+```
+
+### NL2686
+
+The message of an error contains:
+
+```text
+…: its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`
+```
+
+### NL2687
+
+The message of an error contains:
+
+```text
+…; give the type a zero member, or store the number and convert it where it is read
+```
+
+### NL2688
+
+The message of an error contains:
+
+```text
+` is not available: index it, and keep a count beside it for the slots in use
 ```
 
 ## NL3xxx: modules and the driver

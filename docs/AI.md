@@ -1556,7 +1556,7 @@ state a module keeps (there is no top-level `let`).
   a number, `boolean`, an enum or range whose zero is a member, a
   `HostHandle`, or an interface no class implements with fields of those.
 - **It never grows or moves**: no method call on it (`push`, `pop`, `sort`,
-  NL2673) and no `length =`. Keep a count beside it.
+  NL2688) and no `length =`. Keep a count beside it.
 - **Its name is a place, not a value**: index it and read `length`; never bind,
   store or return it. Lend it only to a parameter spelled with a typed-array
   name (`xs: Int32Array`) or to a host function's buffer window. A record

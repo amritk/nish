@@ -7,7 +7,8 @@ every export, the buffer windows a host import is lent, the ring the page and
 the program share in module storage, and the page-side handle table. It says
 what each side may hand the other, what is refused, and the test that pins
 each property. It is written against `924c5779` in PR #1273, and its lines are
-cited there.
+cited there; the later commits of that PR, the merge of `main` included, change
+none of the cited lines.
 
 **Result.** The module reads nothing the page names outside the memory it
 owns, and a page that calls back into a module mid-call or after a panic is

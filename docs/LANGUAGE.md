@@ -1839,7 +1839,7 @@ export const step = (): void => {
   `HostHandle`, or an interface no class implements whose fields are all of
   these. A string, an array, a class, a `Map` or a `| null` is
   `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
-  (NL2671, `reject_storage_string_element`, `_array_element`,
+  (NL2686, `reject_storage_string_element`, `_array_element`,
   `_class_element`, `_map_element`, `_nullable_element`,
   `_record_string_field`). An interface a class implements, generic classes
   included, is a class's shape and is refused the same way
@@ -1848,14 +1848,14 @@ export const step = (): void => {
   `` Module storage `X` cannot hold Out.p (In): a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record ``
   (NL2685, `reject_storage_nested_record`). An enum or range without a zero is
   `` Module storage `X` is zero-filled, and 0 is not a value of T; give the type a zero member, or store the number and convert it where it is read ``
-  (NL2672, `reject_storage_enum_no_zero`, `_range_no_zero`).
+  (NL2687, `reject_storage_enum_no_zero`, `_range_no_zero`).
 - **An annotation must say what the `new` makes**: `const xs: f64[] = new
   Int32Array(4)` is NL2679 (`reject_storage_annotation`). The annotation may
   be left off.
 - **It never moves and never resizes.** `push`, `pop`, `sort`, any other
   method and `X.length =` are
   `` Module storage `X` has a fixed length and a fixed place, so `X.m` is not available: index it, and keep a count beside it for the slots in use ``
-  (NL2673, `reject_storage_push`, `_pop`, `_sort`, `_length_assign`).
+  (NL2688, `reject_storage_push`, `_pop`, `_sort`, `_length_assign`).
   `X[i]` and `X.length` are what remain.
 - **Its name is a place, not a value.** Binding, returning, storing or
   passing `X` itself is
