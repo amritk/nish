@@ -1,0 +1,6 @@
+task 0: hits 1, 50 chars
+task 1: hits 2, 50 chars
+task 2: hits 3, 50 chars
+kept across start: true
+main's arena still while tasks ran: true
+hits 3, sum 306, noise 2890

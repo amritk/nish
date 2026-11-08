@@ -181,22 +181,73 @@ export const main = (): i32 => 0;
 ## What `spawn` may pass
 
 A spawned task can outlive the function that started it, so its arguments must
-outlive it too. A number, a `boolean`, an enum or a `string` may be passed: a
-string is copied for the task. An array, an object or anything else holding
-memory of the spawner's is refused; pass what the task needs as strings and
-numbers, or have the task build it.
+outlive it too. A number, a `boolean` or an enum is copied, and a `string` is
+copied for the task. An object, an array, a `Map` or a `Set` is shared: the
+task works on the spawner's own, and the spawner keeps it alive for as long
+as any task holds it.
 
-```ts nish:err NL2673
-import { spawn } from "nish:async";
+```ts nish:ok
+import { sleep, spawn } from "nish:async";
 
-async function total(xs: i32[]): Promise<void> {
-  console.log(xs.length);
+class Tally {
+  hits: i32 = 0;
+}
+
+async function count(tally: Tally, n: i32): Promise<void> {
+  await sleep(n);
+  tally.hits = tally.hits + n;
+  console.log(tally.hits);
+}
+
+async function start(): Promise<Tally> {
+  const tally = new Tally();
+  spawn(count(tally, 5));
+  spawn(count(tally, 10));
+  return tally;
 }
 
 export async function main(): Promise<void> {
-  spawn(total([1, 2, 3]));
+  const tally = await start();
+  await sleep(20);
+  console.log(tally.hits);
 }
 ```
+
+A task's own memory is given back when it ends, so it may store numbers into
+what it shares, but not an object or a string it made, and it may not grow a
+shared array, `Map` or `Set`:
+
+```ts nish:err NL2609
+import { spawn } from "nish:async";
+
+class Box {
+  label: string = "";
+}
+
+async function rename(box: Box, n: i32): Promise<void> {
+  box.label = `task ${n}`;
+}
+
+export async function main(): Promise<void> {
+  spawn(rename(new Box(), 1));
+}
+```
+
+```ts nish:err NL2615
+import { spawn } from "nish:async";
+
+async function add(xs: i32[], n: i32): Promise<void> {
+  xs.push(n);
+}
+
+export async function main(): Promise<void> {
+  spawn(add([1, 2, 3], 4));
+}
+```
+
+A function argument must capture nothing: a top-level function, or an arrow
+that reads only its own parameters. Any other argument, such as an
+`Item | null`, is refused (NL2673); pass the value itself.
 
 Each spawned task has memory of its own, which is given back when the task
 finishes, so a long-running program does not grow with every task it has run.
