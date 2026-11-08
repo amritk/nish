@@ -655,8 +655,10 @@ or a table every task reads.
   the task allocated into it (a string, an array, an object) is NL2609, and
   growing it (`push`, `Map.set`, `Set.add`, `spawnPiped` appending to its
   output arrays) is NL2615, directly or through a
-  callee, a getter, a method or an arrow, by the same facts a `region(...)`
-  body is judged by. Reading it, and writing numbers, `boolean`s and enums
+  callee, a method or an arrow, by the same facts a `region(...)`
+  body is judged by. A callee handed both a shared object it writes into
+  and a string or object of the task's is refused outright: a string has
+  no pointer facts to say it is not kept. Reading it, and writing numbers, `boolean`s and enums
   into it, is allowed: they are copied. Outer memory stored into the task's
   own objects is allowed (NL2610 does not apply): the shared object outlives
   the task.
@@ -668,13 +670,15 @@ or a table every task reads.
 
 | Shape | Answer |
 | --- | --- |
-| task stores through a getter, a method or a callee | walked through the callee's facts: NL2609 / NL2615 (the method and callee have tests; the getter, walked as a callee, has none of its own) |
+| task stores through a method or a callee | walked through the callee's facts: NL2609 / NL2615 |
+| task hands a callee or method both a shared object it writes into and a string or object of its own | refused (NL2609): a string has no pointer facts, so the callee's facts cannot say the one is not stored into the other |
+| a local bound by `for...of`, a helper's answer, a callback's parameter, narrowing or `const [a, b] = await awaitAll(...)` | carries its value's origin; a local the walk does not bind is unknown, so storing it is NL2609 |
 | an object reachable through a field of the shared object | outer, as the field read answers outer memory |
 | an array of objects | outer elements; storing a task object into one is NL2609 |
 | the shared parameter aliased into a local, then stored through | the local is outer by the walk's fixpoint |
 | nested spawn from a task | a shared argument is refused (NL2689) |
 | the spawner reassigns its local after the spawn | the task holds the object, not the local; the object stays |
-| `using` disposal of the argument | the spawner's `using arena()` around the spawn is refused (NL2421) |
+| `using` disposal of the argument | the spawner's `using arena()` around the spawn, or around a call to a function that spawns, is refused (NL2421) |
 | a `Region`, `Secret`, `using` handle or `nish/threads` value inside the argument | refused at the spawn (NL2691) |
 | `spawnPiped` writing into a shared array | NL2615, as `push` |
 

@@ -1,0 +1,3 @@
+runs as a spawned task, in a region of its own that is freed when it ends
+to `copyLabel`, which writes into `tally` and may keep it there
+region memory kept by memory outside the region points at freed memory once the task ends

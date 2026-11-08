@@ -541,7 +541,9 @@ class RegionWalk {
     const at = this.locals.indexOf(local)
     let out = at < 0 ? ORIGIN_NONE : this.localOrigins[at]
     if (local.storage !== STORAGE_PARAM) {
-      return out
+      // A task's local this walk never bound was bound some way it does not
+      // follow: its value may be the task's own memory, so it is unknown.
+      return at < 0 && this.task ? ORIGIN_UNKNOWN : out
     }
     let named = false
     const own = this.paramNames.indexOf(local.name)
@@ -636,7 +638,16 @@ class RegionWalk {
       const init = node.children[2]
       if (init.kind !== N_EMPTY) {
         this.visit(init)
-        this.bind(this.program.nodeLocals[node.id], this.origin(init))
+        const origin = this.origin(init)
+        const local = this.program.nodeLocals[node.id]
+        if (local !== null) {
+          this.bind(local, origin)
+        } else {
+          // `const [a, b] = await awaitAll(...)` declares each name on its own node.
+          for (const name of node.children[0].children) {
+            this.bind(this.program.nodeLocals[name.id], origin)
+          }
+        }
       }
       return
     }
@@ -851,6 +862,43 @@ class RegionWalk {
           )
         )
       }
+    }
+    if (this.task) {
+      this.judgeTaskCallee(node, f, handed, origins, offset, name)
+    }
+  }
+
+  /**
+   * A task's callee handed both a shared argument it writes into and memory
+   * that may be the task's own may store the one into the other: a string,
+   * which has no pointer facts, or a value read out of an object of the
+   * task's. Its facts cannot say which, so the pair is refused.
+   */
+  judgeTaskCallee(
+    node: Node,
+    f: FunctionFacts,
+    handed: Node[],
+    origins: i32[],
+    offset: i32,
+    name: string
+  ): void {
+    let written = -1
+    for (let i = 0; i < origins.length && written < 0; i++) {
+      const pp: PointerParamFacts | null = f.pointerParamAt(i + offset)
+      if (pp !== null && pp.writesReach && mayBeOuter(origins[i])) {
+        written = i
+      }
+    }
+    let kept = -1
+    for (let j = 0; j < origins.length && written >= 0 && kept < 0; j++) {
+      const o = origins[j]
+      if (j !== written && o !== ORIGIN_NONE && o !== ORIGIN_SCALAR && mayBeRegion(o)) {
+        kept = j
+      }
+    }
+    if (kept >= 0 && kept < handed.length && written < handed.length) {
+      const into = `which writes into \`${textOf(this.program, handed[written])}\` and may keep it there`
+      this.report(node, handsRegionMessage(this.who, this.freed, this.program, handed[kept], name, into))
     }
   }
 }

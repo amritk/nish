@@ -2084,7 +2084,13 @@ async function run(): Promise<void> {
   a method or a callee (`reject_async_spawn_store_region`, `reject_async_spawn_store_string`,
   `reject_async_spawn_store_alias`, `reject_async_spawn_store_method`,
   `reject_async_spawn_store_callee`, `reject_async_spawn_store_reachable`,
-  `reject_async_spawn_store_element`), and growing a shared array, `Map` or
+  `reject_async_spawn_store_element`, `reject_async_spawn_store_bound`,
+  `reject_async_spawn_await_all`). A call that hands a function or method
+  both a shared object it writes into and a `string` or object of the
+  task's is NL2609 as well, since nothing says the one is not kept in the
+  other (`reject_async_spawn_store_string_callee`,
+  `reject_async_spawn_store_string_method`,
+  `reject_async_spawn_store_copied`), and growing a shared array, `Map` or
   `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
   arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,

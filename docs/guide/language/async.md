@@ -215,7 +215,9 @@ export async function main(): Promise<void> {
 
 A task's own memory is given back when it ends, so it may store numbers into
 what it shares, but not an object or a string it made, and it may not grow a
-shared array, `Map` or `Set`:
+shared array, `Map` or `Set`. That holds through a call too: a function or
+method handed both a shared object it writes into and a string or object the
+task made is refused, as it may keep the one in the other:
 
 ```ts nish:err NL2609
 import { spawn } from "nish:async";
