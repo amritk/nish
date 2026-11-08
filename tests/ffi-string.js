@@ -213,6 +213,26 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
         resultDeny.stderr.includes("declare the result `string | null`"),
       shown(resultDeny)
     )
+    const strerrorOnly = write(
+      "strerror_only.ts",
+      [
+        "declare function strerror(errnum: i32): string;",
+        "",
+        "export const main = (): i32 => {",
+        "  console.log(strerror(2));",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const strerrorFfi = compileFfi(strerrorOnly, ["--deny", "ffi"])
+    check(
+      "ffi_string: --deny ffi refuses a program whose only foreign call returns a string",
+      strerrorFfi.status === 1 &&
+        strerrorFfi.stderr.includes("reaches `ffi`") &&
+        strerrorFfi.stderr.includes("calls strerror"),
+      shown(strerrorFfi)
+    )
     const nullable = write(
       "nullable.ts",
       [
