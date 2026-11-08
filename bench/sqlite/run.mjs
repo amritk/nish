@@ -12,11 +12,13 @@
 // main.ts is built with `--link` (the speed profile) and copied byte for byte;
 // twin.c is compiled against the same runtime/sqlite/sqlite3.c with the flags
 // scripts/build.sh compiles SQLite with for that link (the speed profile's
-// optimisation flags and the SQLite options, THREADSAFE=0 among them),
-// sqlite3.c as a native object of its own as the link has it, and linked with
-// the link's flags on Linux. NISH_SQLITE_CFLAGS, which changes how the build
-// compiles SQLite, is refused: the twin would not have it. Both open the
-// database with the same flags and PRAGMAs and prepare each statement once.
+// optimisation flags, its hardening as bench/compiler.mjs reads it, and the
+// SQLite options, THREADSAFE=0 among them), sqlite3.c as a native object of
+// its own as the link has it, and linked with the link's flags on Linux; the
+// twin must then pass scripts/check-hardening.mjs, as a Nish binary does.
+// NISH_SQLITE_CFLAGS, which changes how the build compiles SQLite, is refused:
+// the twin would not have it. Both open the database with the same flags and
+// PRAGMAs and prepare each statement once.
 //
 // The database is the challenge's schema.sql filled by `twin seed`: 50,000
 // users, 500,000 posts and 2,000,000 likes from one fixed generator, in WAL
@@ -37,7 +39,7 @@ import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compilerFrom, hardeningFlags, unhardened } from "../compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const here = path.join(root, "bench", "sqlite")
@@ -101,6 +103,10 @@ const SQLITE_DEFS = [
   "-DSQLITE_THREADSAFE=0",
 ]
 const cc = process.env.CC || "clang"
+// scripts/build.sh's hardening, as bench/compiler.mjs reads it, all of it:
+// sqlite3.c is C in the link too, so the stack protector and _FORTIFY_SOURCE
+// reach it there as they do here.
+const HARDEN = hardeningFlags(cc)
 if ((process.env.NISH_SQLITE_CFLAGS ?? "").trim() !== "") {
   fail("NISH_SQLITE_CFLAGS is set: the build would compile SQLite with it and the twin would not; unset it")
 }
@@ -153,10 +159,14 @@ const objects = []
 for (const unit of ["sqlite3.c", "twin.c"]) {
   const src = unit === "twin.c" ? path.join(here, unit) : path.join(sqliteDir, unit)
   const obj = path.join(outDir, unit.replace(/\.c$/, ".o"))
-  run(cc, [...CFLAGS, ...SQLITE_DEFS, "-I", sqliteDir, "-c", src, "-o", obj], `${cc} ${unit}`)
+  run(cc, [...CFLAGS, ...HARDEN, ...SQLITE_DEFS, "-I", sqliteDir, "-c", src, "-o", obj], `${cc} ${unit}`)
   objects.push(obj)
 }
-run(cc, [...CFLAGS, ...LDFLAGS, ...objects, "-lm", "-o", twin], `${cc} twin`)
+run(cc, [...CFLAGS, ...HARDEN, ...LDFLAGS, ...objects, "-lm", "-o", twin], `${cc} twin`)
+const lacks = unhardened(twin)
+if (lacks !== null) {
+  fail(`the C twin is not built as hardened as a Nish binary\n${lacks}`)
+}
 
 // The seed, made again when what makes it changes.
 const db = path.join(outDir, "feed.db")
@@ -166,7 +176,7 @@ const hash = createHash("sha256")
 for (const f of [schema, path.join(here, "twin.c"), path.join(sqliteDir, "sqlite3.c")]) {
   hash.update(fs.readFileSync(f))
 }
-hash.update([cc, ...CFLAGS, ...SQLITE_DEFS].join(" "))
+hash.update([cc, ...CFLAGS, ...HARDEN, ...SQLITE_DEFS].join(" "))
 const want = hash.digest("hex")
 if (!fs.existsSync(db) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8") !== want) {
   for (const f of [db, `${db}-wal`, `${db}-shm`, stamp]) {

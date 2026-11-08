@@ -1732,6 +1732,17 @@ bytes.
   - `sqlite3.c` as a native object of its own, as the link builds it;
   - on Linux, the link's flags: `--gc-sections`, `--as-needed`, `-O2`, no
     build id, stripped, and `lld` when there is one.
+  - the hardening `scripts/build.sh` gives every object of a native build,
+    read from that script's own block for the compiler in use (by
+    `bench/compiler.mjs`, as the PostgreSQL benchmark reads it), so it follows
+    the script rather than a copy: `-fcf-protection=full` on x86-64 or
+    `-mbranch-protection=standard` on arm64, `-fstack-protector-strong` and
+    `_FORTIFY_SOURCE=3`, and on ELF `-fstack-clash-protection` and
+    `-z relro -z now -z noexecstack`. All of it, because `sqlite3.c` is C in
+    the link too. Position independence is clang's default, for both.
+
+`run.mjs` then runs `scripts/check-hardening.mjs` on the twin and stops if it
+fails, so the C side is never timed with less hardening than the Nish side.
 
 `NISH_SQLITE_CFLAGS` changes how the build compiles SQLite and the twin would
 not have it, so `run.mjs` refuses to run while it is set. Both sides open the
@@ -1921,16 +1932,17 @@ The calls one query makes, on each side:
   `-O2`, no build id, stripped, and `lld` when there is one.
 - **Hardening, the same on both.** The twin takes the hardening
   `scripts/build.sh` gives every object of a native build. `run.mjs` reads it
-  from that script's own block, run for the compiler in use, so it follows the
-  script rather than a copy: `-fcf-protection=full` on x86-64 or
-  `-mbranch-protection=standard` on arm64, and on ELF `-fstack-clash-protection`
-  and `-z relro -z now -z noexecstack`. Position independence is clang's
-  default, for both. It leaves out `-fstack-protector-strong` and
-  `_FORTIFY_SOURCE`: `build.sh` gives those to its C runtime alone, since on
-  the module's IR neither has anything to act on, so the twin's code is built
-  as the module's is. `node scripts/check-hardening.mjs` passes on both
-  binaries: position independent, full RELRO, a non-executable stack, and the
-  x86 feature note naming IBT and SHSTK.
+  from that script's own block (through `bench/compiler.mjs`), run for the
+  compiler in use, so it follows the script rather than a copy:
+  `-fcf-protection=full` on x86-64 or `-mbranch-protection=standard` on arm64,
+  and on ELF `-fstack-clash-protection` and `-z relro -z now -z noexecstack`.
+  Position independence is clang's default, for both. It leaves out
+  `-fstack-protector-strong` and `_FORTIFY_SOURCE`: `build.sh` gives those to
+  its C runtime alone, since on the module's IR neither has anything to act
+  on, so the twin's code is built as the module's is.
+  `scripts/check-hardening.mjs` passes on both binaries, and `run.mjs` stops
+  when it does not pass on the twin: position independent, full RELRO, a
+  non-executable stack, and the x86 feature note naming IBT and SHSTK.
 - **libpq** is the system's, 17 or later, found through `pg_config`. Here it
   is the PostgreSQL project's Ubuntu package (18.6-1.pgdg24.04+2), as its
   packagers built it: its code carries that build's flags, not the speed
