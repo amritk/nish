@@ -352,7 +352,10 @@ export const tick = (): void => {
   reaches past the end of the array panics, naming your parameters:
   `` `scale`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs) ``.
   `at + n` is added in 64 bits, so huge values cannot wrap around the check.
-  Lending `0, toU32(xs.length)` is proven in bounds and costs no check.
+  Lending `0, toU32(xs.length)` of a local array `xs` is proven in bounds
+  and costs no check. A window of module storage, such as `DATA` here,
+  always keeps the check, even `0, toU32(DATA.length)`: the compiler proves
+  facts about locals, not about storage.
 - **The page is handed a view of all of memory and an index**, so its
   `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
   past it is the rest of the module's memory
@@ -402,8 +405,10 @@ try {
 - **A bad argument does not.** A number of the wrong type, a `Result` that is
   not `{ ok: true, value }` or `{ ok: false, error }` with a payload of the
   right type, or an array argument that is not the typed array it names (a
-  `Proxy`, a re-prototyped `DataView` and a detached buffer included) throws a
-  `TypeError` before the module runs, and the module stays alive. So does a
+  `Proxy` and a re-prototyped `DataView` included) throws a `TypeError`
+  before the module runs, and the module stays alive. A typed array whose
+  buffer is detached is not refused: it reads as length 0 and is passed as
+  an empty array. So does a
   getter on a `Result` argument that throws: its own error reaches the
   caller.
 - **One call at a time.** A host function that calls back into the module

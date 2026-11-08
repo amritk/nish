@@ -6190,7 +6190,10 @@ export const tick = (): void => { doubleF32(DATA, 16, 8) }
   `` `doubleF32`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs) ``,
   numbered and named from the host function's own parameters
   ([cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#a-host-buffer-window-checked-in-i64)). A call
-  that lends `0, toU32(xs.length)` is proven in bounds and emits no check.
+  that lends `0, toU32(xs.length)` of a local array `xs` is proven in bounds
+  and emits no check. A window of module storage always keeps the check,
+  even `0, toU32(DATA.length)`: the range pass proves facts about locals,
+  not about storage.
 - **What the page gets is a view of all of memory and an index.** The
   loader's adapter passes a whole-memory view of the element type, the
   array's first element plus `at` as the index, and `n`, so the host

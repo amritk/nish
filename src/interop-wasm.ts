@@ -340,33 +340,41 @@ const wasmResultUnpack = (table: TypeTable, call: string, t: i32): string => {
  * The inverse of `wasmPayloadReader`: how the loader puts one payload into the
  * high half of the word. A signed width is masked to 32 bits, `f32` goes
  * through the same bit view as on the way out, and `boolean` is one bit.
- * Each payload passes `payloadIn` first, so a payload of the wrong JavaScript
+ * Under the guard each payload passes `payloadIn` first, so a payload of the wrong JavaScript
  * type (`1.5` or `"x"` for an `i32`, a bigint for an `f32`) is refused before
  * the module runs instead of throwing out of `BigInt` inside `guarded`.
  */
-const wasmPayloadWriter = (table: TypeTable, t: i32): string => {
+const wasmPayloadWriter = (table: TypeTable, t: i32, guard: boolean): string => {
   switch (table.kindOf(t)) {
     case T_I32:
-      return '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+      return guard
+        ? '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+        : "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_U8:
-      return '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+      return guard
+        ? '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+        : "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_U16:
-      return '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+      return guard
+        ? '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+        : "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_U32:
-      return '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+      return guard
+        ? '(v) => BigInt.asUintN(32, BigInt(payloadIn(v, "integer")))'
+        : "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_F32:
-      return '(v) => f32Word(payloadIn(v, "number"))'
+      return guard ? '(v) => f32Word(payloadIn(v, "number"))' : "f32Word"
     case T_BOOL:
-      return '(v) => (payloadIn(v, "boolean") ? 1n : 0n)'
+      return guard ? '(v) => (payloadIn(v, "boolean") ? 1n : 0n)' : "(v) => (v ? 1n : 0n)"
     default:
       return ""
   }
 }
 
 /** `resultIn(<arg>, <ok writer or null>, <err writer>)` for a by-value `Result` argument. */
-const wasmResultPack = (table: TypeTable, arg: string, t: i32): string => {
-  const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadWriter(table, table.okOf(t))
-  return `resultIn(${arg}, ${ok}, ${wasmPayloadWriter(table, table.errOf(t))})`
+const wasmResultPack = (table: TypeTable, arg: string, t: i32, guard: boolean): string => {
+  const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadWriter(table, table.okOf(t), guard)
+  return `resultIn(${arg}, ${ok}, ${wasmPayloadWriter(table, table.errOf(t), guard)})`
 }
 
 /** True when some bridged signature carries an f32 payload, so the loader needs the bit view. */
@@ -455,7 +463,15 @@ export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored:
  */
 const wasmIsLoaderLocal = (name: string, guard: boolean): boolean =>
   (guard
-    ? name === "guarded" || name === "state" || name === "refuse" || name === "typedIn"
+    ? name === "guarded" ||
+      name === "state" ||
+      name === "refuse" ||
+      name === "typedIn" ||
+      name === "resultIn" ||
+      name === "resultOut" ||
+      name === "payloadIn" ||
+      name === "f32Word" ||
+      name === "f32Bits"
     : name === "scoped") ||
   name === "raw" ||
   name === "memory" ||
@@ -464,11 +480,6 @@ const wasmIsLoaderLocal = (name: string, guard: boolean): boolean =>
   name === "arrayOut" ||
   name === "copyBack" ||
   name === "rangeIn" ||
-  name === "resultIn" ||
-  name === "resultOut" ||
-  name === "payloadIn" ||
-  name === "f32Word" ||
-  name === "f32Bits" ||
   name === "result" ||
   name === "instance" ||
   name === "bytes"
@@ -534,7 +545,7 @@ const wasmOperand = (
 ): string => {
   const t = sig.paramTypes[i]
   if (table.resultByValue(t)) {
-    return wasmResultPack(table, params[i], t)
+    return wasmResultPack(table, params[i], t, guard)
   }
   const checked = wasmRangeIn(table, sig, params[i], i)
   if (checked.length > 0) {
@@ -725,20 +736,27 @@ const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[], guard:
   lines.push("    if ((word & 1n) === 0n) return { ok: false, error: readError(payload) };")
   lines.push("    return readValue === null ? { ok: true } : { ok: true, value: readValue(payload) };")
   lines.push("  };")
-  lines.push("  /** A payload of the JavaScript type its arm declares, so writing it cannot throw. */")
-  lines.push("  const payloadIn = (v, type) => {")
-  lines.push('    if (type === "integer" ? !Number.isInteger(v) : typeof v !== type)')
-  lines.push(
-    `      throw ${refused(guard, 'new TypeError("a Result payload must be " + (type === "integer" ? "an integer" : "a " + type))')};`
-  )
-  lines.push("    return v;")
-  lines.push("  };")
-  lines.push("  const resultIn = (r, writeValue, writeError) => {")
-  lines.push('    if (r === null || typeof r !== "object")')
-  lines.push(
-    `      throw ${refused(guard, 'new TypeError("expected { ok: true, value } or { ok: false, error }")')};`
-  )
-  if (guard) {
+  if (!guard) {
+    lines.push("  const resultIn = (r, writeValue, writeError) => {")
+    lines.push('    if (r === null || typeof r !== "object" || typeof r.ok !== "boolean")')
+    lines.push('      throw new TypeError("expected { ok: true, value } or { ok: false, error }");')
+    lines.push(
+      "    const payload = r.ok ? (writeValue === null ? 0n : writeValue(r.value)) : writeError(r.error);"
+    )
+    lines.push("    return (payload << 32n) | (r.ok ? 1n : 0n);")
+    lines.push("  };")
+  } else {
+    lines.push("  /** A payload of the JavaScript type its arm declares, so writing it cannot throw. */")
+    lines.push("  const payloadIn = (v, type) => {")
+    lines.push('    if (type === "integer" ? !Number.isInteger(v) : typeof v !== type)')
+    lines.push(
+      '      throw refuse(new TypeError("a Result payload must be " + (type === "integer" ? "an integer" : "a " + type)));'
+    )
+    lines.push("    return v;")
+    lines.push("  };")
+    lines.push("  const resultIn = (r, writeValue, writeError) => {")
+    lines.push('    if (r === null || typeof r !== "object")')
+    lines.push('      throw refuse(new TypeError("expected { ok: true, value } or { ok: false, error }"));')
     // A getter on the caller's object is caller code: what it throws is a
     // bad argument, not the module's failure.
     lines.push("    let ok, v;")
@@ -750,17 +768,12 @@ const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[], guard:
       '      throw refuse(e instanceof Object ? e : new TypeError("a Result argument threw " + String(e)));'
     )
     lines.push("    }")
-  } else {
-    lines.push("    const ok = r.ok;")
-    lines.push("    const v = ok === true ? r.value : r.error;")
+    lines.push('    if (typeof ok !== "boolean")')
+    lines.push('      throw refuse(new TypeError("expected { ok: true, value } or { ok: false, error }"));')
+    lines.push("    const payload = ok ? (writeValue === null ? 0n : writeValue(v)) : writeError(v);")
+    lines.push("    return (payload << 32n) | (ok ? 1n : 0n);")
+    lines.push("  };")
   }
-  lines.push('    if (typeof ok !== "boolean")')
-  lines.push(
-    `      throw ${refused(guard, 'new TypeError("expected { ok: true, value } or { ok: false, error }")')};`
-  )
-  lines.push("    const payload = ok ? (writeValue === null ? 0n : writeValue(v)) : writeError(v);")
-  lines.push("    return (payload << 32n) | (ok ? 1n : 0n);")
-  lines.push("  };")
   if (wasmNeedsF32(table, bridged)) {
     lines.push("  /** An f32 payload is the same 32 bits, not a converted number. */")
     lines.push("  const f32View = new Float32Array(1);")

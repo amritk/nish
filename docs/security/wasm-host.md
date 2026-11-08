@@ -13,7 +13,8 @@ cited there.
 owns, and a page that calls back into a module mid-call or after a panic is
 refused before the module runs.
 
-There are seven findings, all fixed by the stage that found them:
+There are eight findings. Seven are fixed by the stage that found them, and
+WH-8 is recorded open:
 
 - **WH-1 (High):** a window's `at + n`, added in 32 bits, wraps, so a host
   call is lent memory past the end of the array.
@@ -28,6 +29,8 @@ There are seven findings, all fixed by the stage that found them:
   `undefined`.
 - **WH-7 (Low):** an argument of the wrong shape threw from inside the
   guard, so a page's mistake killed the module.
+- **WH-8 (Low, open):** storage holds what the page wrote, so an enum,
+  ranged or `boolean` storage element can hold a value outside its type.
 
 ## Scope
 
@@ -36,7 +39,8 @@ There are seven findings, all fixed by the stage that found them:
 | `runtime/page.mjs`, `runtime/page.d.ts` | `HostTable` (`add`, `get`, `take`, `#check`), `ringOver`, `reportPanic` |
 | `std/host/ring.ts` | `ringCapacity`, `ringCount`, `ringSize`, `ringFree`, `ringPush`, `ringShift`, `ringClear` |
 | `runtime/runtime-wasm.c` | the `nish.panic` import (`nish_host_panic`, `NISH_DIE`) under `NISH_WASM_HOST` |
-| `src/interop-wasm.ts` | the generated loader: `panicText`, `panicOf`, `guardLoader` (`guarded`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`hostFn`, `win`), `pushHostEntry`, and `layoutLoader` (`layout`, `views()`) |
+| `src/interop-wasm.ts` | the generated loader: `panicText`, `panicOf`, `guardLoader` (`guarded`, `refuse`, `typedIn`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`hostFn`, `win`), `pushHostEntry`, and `layoutLoader` (`layout`, `views()`) |
+| `src/interop-wasm.ts` | `wasmTypedIn`, `wasmPayloadWriter` and `refused`: where the generated wrapper checks each argument |
 | `src/emit-strings.ts` | `emitHostWindow`: a window's bound in the module |
 | `src/attributes.ts` | `hostWindowProven`: when a window's bound is proven and the check is left out |
 
@@ -82,11 +86,12 @@ code, and the guide says to read only `[at, at + n)`.
 | --- | --- | --- | --- | --- |
 | WH-1 | High | `src/emit-strings.ts:632`–`:662` (`emitHostWindow`) | A window is `(array, at, n)`, both `u32`. Checked as a 32-bit `at + n <= len`, `at = 16, n = 0xFFFFFFF8` sums to 8 and passes against any array of 8 or more elements, and the page is told it may write about 4 billion elements from element 16: the rest of the module's memory, corrupted from attacker-chosen `n`. | **Fixed.** `at` and `n` are zero-extended and added in `i64`, then held against `len` with `icmp ule`; a failure panics as `ffi-length` before the import runs. A proven `0, len` lending skips the check ("host-import-window: `at + n` is added in i64 and held against the length, so a sum that wraps in 32 bits still panics", "host-import-window: a window past the end panics before the page runs, and one whose `at + n` wraps does too", "host-import-window: lending `0, toU32(xs.length)` is proven, so the call has no window check"). |
 | WH-2 | Medium | `std/host/ring.ts:44`–`:124`; `runtime/page.mjs:76`–`:137` (`ringOver`) | The head and tail live in module storage, which the page writes. A count of -7 or 2³¹-1 used as `count % capacity` indexes a negative or out-of-ring slot, and a size past the capacity lets `push` overwrite unread words. | **Fixed.** Both halves reduce every count into `[0, 2 * capacity)` before using it and cap a size at the capacity, so a full-looking ring refuses `push` and `shift` stays in the slots ("link/std_host_ring: exits with 0 and stdout matches expected.out", whose `forged:` lines write out-of-protocol counts; "WH-2: ringOver reads forged counts (-7, 2^31 - 1, a size past the capacity) without a word outside the ring", the page half's before/after: guard words on both sides of the ring keep their bytes and `size` stays in `[0, capacity]`; "page: ringOver reads and writes the module's rings both ways through memory and layout"). |
-| WH-3 | Medium | `src/interop-wasm.ts:891`–`:907` (`panicOf`), `:925`–`:972` (`guardLoader`) | A host import can call an export while the module's call is still on the stack, and the inner call runs on half-changed state. The `onPanic` reporter can too, and its call runs on the state the panic interrupted. | **Fixed.** Every export of a program with module storage or a host module runs in `guarded`, which refuses a busy module with `NishReentry` and a dead one with `NishPanic`, both before the module is touched (a program with neither has no import to call back through and keeps the unguarded loader, §6 of docs/wp50-wasm-host.md); `panicOf` marks the module dead before it calls the reporter, so a reporter that calls back in gets `NishPanic`; a trap, a re-entry or an exception escaping a call kills it, tagged `trap`, `reentry` or `exception` ("panic: an import that calls back into an export throws NishReentry, and the inner call never ran", "panic: panic(message) carries the program's words, and a reporter that calls back in gets NishPanic", "panic: a dead module answers every later call with NishPanic, before it runs", "panic: an exception escaping a host import kills the module"). |
+| WH-3 | Medium | `src/interop-wasm.ts:904`–`:920` (`panicOf`), `:938`–`:985` (`guardLoader`) | A host import can call an export while the module's call is still on the stack, and the inner call runs on half-changed state. The `onPanic` reporter can too, and its call runs on the state the panic interrupted. | **Fixed.** Every export of a program with module storage or a host module runs in `guarded`, which refuses a busy module with `NishReentry` and a dead one with `NishPanic`, both before the module is touched (a program with neither has no import to call back through and keeps the unguarded loader, §6 of docs/wp50-wasm-host.md); `panicOf` marks the module dead before it calls the reporter, so a reporter that calls back in gets `NishPanic`; a trap, a re-entry or an exception escaping a call kills it, tagged `trap`, `reentry` or `exception` ("panic: an import that calls back into an export throws NishReentry, and the inner call never ran", "panic: panic(message) carries the program's words, and a reporter that calls back in gets NishPanic", "panic: a dead module answers every later call with NishPanic, before it runs", "panic: an exception escaping a host import kills the module"). |
 | WH-4 | Medium | `runtime/page.mjs:20`–`:65` (`HostTable#check`) | The check refused a taken slot with `this.#free.includes(handle)`, O(free) per call: 200,000 gets beside 200,000 taken slots is 4·10¹⁰ comparisons, enough to stall a page that frees what an attacker had it allocate. | **Fixed.** A taken slot holds a private `EMPTY` symbol and the check reads the slot ("page: HostTable's check reads the slot, not the free list: 400,000 gets beside 200,000 taken slots take under a second"). |
-| WH-5 | Low | `src/interop-wasm.ts:865`–`:886` (`panicText`) | `panic(message)` hands the loader `(msg, len)`. Read as `new Uint8Array(buffer, msg, len)`, a pair outside memory throws a `RangeError` from inside the panic path, and one whose sum wraps is read from the wrong place. Only the module calls the import, so this is hardening. | **Fixed.** Both are read as `u32` and held against the buffer's size without adding them; a message outside memory reads as "panic (its message is outside memory)" ("panic: a panic message the module places past the end of memory, or wrapping it, is not read"). |
+| WH-5 | Low | `src/interop-wasm.ts:878`–`:899` (`panicText`) | `panic(message)` hands the loader `(msg, len)`. Read as `new Uint8Array(buffer, msg, len)`, a pair outside memory throws a `RangeError` from inside the panic path, and one whose sum wraps is read from the wrong place. Only the module calls the import, so this is hardening. | **Fixed.** Both are read as `u32` and held against the buffer's size without adding them; a message outside memory reads as "panic (its message is outside memory)" ("panic: a panic message the module places past the end of memory, or wrapping it, is not read"). |
 | WH-6 | Low | `runtime/page.mjs:20`–`:65` (`HostTable`) | A handle the program forged, 0, a fraction or a taken slot read as `undefined`, which a host function would pass on. | **Fixed.** `#check` throws a `RangeError` for each, which inside an import kills the module (WH-3), and slot 0 is never handed out ("page: HostTable hands out 1 and up, never 0, reuses a taken slot, and throws on a taken, zero, forged or fractional handle"). A stale handle kept after `take` names the newer object once its slot is reused: the program is trusted (threat model), so that is its bug, not a win, and the table carries no generation count. |
-| WH-7 | Low | `src/interop-wasm.ts:729`–`:735` (`payloadIn`), `:736`–`:763` (`resultIn`), `:1075`–`:1101` (`arrayIn`) | Only a number of the wrong type was refused before the module ran. A malformed `Result`, a payload of the wrong JavaScript type, or a Proxy, re-prototyped `DataView` or detached buffer passed as a typed array threw from inside `guarded`, which then marked the module dead: one bad call from the page ended it for good. | **Fixed.** Every argument is checked before the call: a `Result` must be an object whose `ok` is a boolean and whose payload has its arm's JavaScript type, read once through a `try` so a throwing getter is the caller's error; an array must pass the `%TypedArray%` brand getter and is measured with the `length` getter, neither of which runs caller code. Each refusal is a `TypeError` tagged so `guarded` lets it through and the module stays alive ("panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive", whose lines include a BigInt given to an `i32`; "panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive"). |
+| WH-7 | Low | `src/interop-wasm.ts:750`–`:756` (`payloadIn`), `:757`–`:775` (`resultIn`), `:1088`–`:1114` (`arrayIn`) | Only a number of the wrong type was refused before the module ran. A malformed `Result`, a payload of the wrong JavaScript type, or a Proxy or re-prototyped `DataView` passed as a typed array threw from inside `guarded`, which then marked the module dead: one bad call from the page ended it for good. | **Fixed.** Every argument is checked before the call: a `Result` must be an object whose `ok` is a boolean and whose payload has its arm's JavaScript type, read once through a `try` so a throwing getter is the caller's error; an array must pass the `%TypedArray%` brand getter and is measured with the `length` getter, neither of which runs caller code. A typed array over a detached buffer is not refused: `length` reads 0, so it is copied in as an empty array and the call runs (pinned: the check expects `ok 0`). Each refusal is a `TypeError` tagged so `guarded` lets it through and the module stays alive ("panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive", whose lines include a BigInt given to an `i32`; "panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive"). |
+| WH-8 | Low | module storage, as the module reads it | The page can write any bits into storage, so an enum, ranged or `boolean` storage element may hold a value outside its type, and the module reads it as written. | **Open.** The page is trusted (threat model), so a value it forged is its own bug; a program that reads storage the page writes checks the value where it matters, as `std/host/ring` does (WH-2). See "Storage holds what the module wrote" below. |
 
 ## Properties verified
 
@@ -122,7 +127,26 @@ nothing from `nish`. Pinned by "panic: the wasm-host link imports nish.panic bes
 `TypeError` before the module runs, and the next call works. Pinned by the
 `badarg` and `badshape` checks.
 
-**Storage holds what the module wrote, not what its type says.** The page
+**Hardening recorded, not fixed.** Each of these is the page's own mistake
+reaching a module it loaded, and none lets the page read or write outside the
+module's memory; they are left as they are and not counted:
+
+- `copyBack` (`src/interop-wasm.ts:1121`) reads the page's array's
+  `constructor` and `length` after the call, inside `guarded`, so a getter
+  the page put there that throws marks a healthy module dead.
+- `arrayIn` asks `nish_alloc_array` for the page's length; past 2³¹ - 1
+  elements, or past the arena, the runtime panics (`memory`) and the module is
+  dead, where a `TypeError` before the call would keep it alive.
+- A `u8` or `u16` `Result` payload is checked to be an integer and masked to
+  32 bits, not 8 or 16, so an out-of-range number is not refused.
+- `nish_reset_arena` and `nish_free_arena` (`:1143`) are the module's raw
+  exports, outside `guarded`: a host import that calls one mid-call releases
+  the arena the running call is using, and nothing refuses it.
+- `refused`, the set of errors `guarded` lets through, belongs to the loader
+  module, not to one load: a refusal from one instance that a host import
+  of another rethrows passes as a refusal there and does not kill it.
+
+**Storage holds what the module wrote, not what its type says.** (WH-8.) The page
 can write any bits into storage. An enum, ranged or `boolean` storage element
 may then hold a value outside its type, and the module reads it as written,
 the way it reads a forged ring count (WH-2). This is recorded open: the page

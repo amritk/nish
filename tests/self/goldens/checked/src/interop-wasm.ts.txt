@@ -175,16 +175,16 @@ function wasmResultUnpack(table: TypeTable, call: string, t: i32): string -> @wa
   callee +0:89 TypeTable.okOf -> @TypeTable.okOf
   callee +1:39 wasmPayloadReader -> @wasmPayloadReader
   callee +1:64 TypeTable.errOf -> @TypeTable.errOf
-function wasmPayloadWriter(table: TypeTable, t: i32): string -> @wasmPayloadWriter
+function wasmPayloadWriter(table: TypeTable, t: i32, guard: boolean): string -> @wasmPayloadWriter
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0
   stackSites=0 stackLocals=0
   callee +0:11 TypeTable.kindOf -> @TypeTable.kindOf
-function wasmResultPack(table: TypeTable, arg: string, t: i32): string -> @wasmResultPack
+function wasmResultPack(table: TypeTable, arg: string, t: i32, guard: boolean): string -> @wasmResultPack
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: t
+  escaping: guard t
   calls: TypeTable.errOf TypeTable.kindOf TypeTable.okOf nish_str_concat wasmPayloadWriter
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.okOf#0 wasmPayloadWriter#0 TypeTable.okOf#0 wasmPayloadWriter#0 TypeTable.errOf#0
   stackSites=0 stackLocals=0
@@ -297,7 +297,7 @@ function wasmTypedIn(table: TypeTable, sig: FunctionSig, param: string, i: i32):
   callee +9:19 jsExportName -> @jsExportName
 function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i32, guard: boolean): string -> @wasmOperand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
+  escaping: guard i
   calls: TypeTable.resultByValue nish_panic_index nish_str_concat wasmRangeIn wasmResultPack wasmTypedIn wasmUnsignedIn
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 wasmResultPack#0 wasmRangeIn#0 wasmTypedIn#0 wasmUnsignedIn#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=wasmRangeIn#1 wasmTypedIn#1
@@ -405,17 +405,13 @@ function wasmRangeHelper(table: TypeTable, bridged: ExternalFunction[], guard: b
   callee +17:20 refused -> @refused
 function wasmResultHelpers(table: TypeTable, bridged: ExternalFunction[], guard: boolean): string[] -> @wasmResultHelpers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: guard
-  calls: nish_array_grow nish_str_concat refused wasmHasPackedResult wasmNeedsF32
+  calls: nish_array_grow wasmHasPackedResult wasmNeedsF32
   pointer table: size=96 writesThrough=false captured=false passedTo=wasmHasPackedResult#0 wasmNeedsF32#0
   pointer bridged: size=0 writesThrough=false captured=false passedTo=wasmHasPackedResult#1 wasmNeedsF32#1
   stackSites=0 stackLocals=0
   local +0:9 lines: string[] (const)
   callee +1:8 wasmHasPackedResult -> @wasmHasPackedResult
-  callee +14:20 refused -> @refused
-  callee +21:20 refused -> @refused
-  callee +41:20 refused -> @refused
-  callee +46:7 wasmNeedsF32 -> @wasmNeedsF32
+  callee +48:7 wasmNeedsF32 -> @wasmNeedsF32
 function panicLoader(hosts: boolean): string[] -> @panicLoader
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
