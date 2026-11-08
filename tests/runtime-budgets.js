@@ -875,7 +875,7 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * `.d.ts` and loader, and of the `.wasm` linked by `--profile wasm` and by
  * `--profile wasm-host`, for each example. Only a program with module storage or a
  * host module gets the guarded loader and the `nish.panic` import; results.ts pins the
-plain `{ ok, value }` packing a `Result` parameter gets. Taken from the
+ * plain `{ ok, value }` packing a `Result` parameter gets. Taken from the
  * 0.36.0 compiler and main's scripts/build.sh and runtime-wasm.c, with clang 18
  * on linux-x64 and no wasm-opt; the `wasm-size` block of tests/run.js holds
  * every build to them. A change that moves one is a change to every plain program's

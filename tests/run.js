@@ -30737,7 +30737,9 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
       )
     }
     // HostTable's check reads the slot, never the free list: with 200,000
-    // slots taken, 200,000 gets would be 4e10 steps if it searched.
+    // slots taken, 200,000 gets would be 4e10 steps if it searched. Only
+    // 2,000 of the gets are refused: a thrown RangeError costs microseconds
+    // of its own, and 200,000 of them would time the throw, not the check.
     fs.writeFileSync(
       at("table-cost.mjs"),
       [
@@ -30750,15 +30752,15 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
         "let sum = 0",
         "for (let i = 1; i < 400000; i += 2) sum += t.get(hs[i])",
         "let refused = 0",
-        "for (let i = 0; i < 400000; i += 2) { try { t.get(hs[i]) } catch { refused++ } }",
+        "for (let i = 0; i < 400000; i += 200) { try { t.get(hs[i]) } catch { refused++ } }",
         "console.log(sum, refused, t.size, performance.now() - start < 1000)",
         "",
       ].join("\n")
     )
     const cost = spawnSync(process.execPath, [at("table-cost.mjs")], { cwd: dir, encoding: "utf8" })
     check(
-      "page: HostTable's check reads the slot, not the free list: 400,000 gets beside 200,000 taken slots take under a second",
-      cost.status === 0 && cost.stdout.trim() === "40000000000 200000 200000 true",
+      "page: HostTable's check reads the slot, not the free list: 202,000 gets beside 200,000 taken slots take under a second",
+      cost.status === 0 && cost.stdout.trim() === "40000000000 2000 200000 true",
       shown(cost)
     )
     // The same page against the TypeScript reading (§5.4): `--emit-ts` writes

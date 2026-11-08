@@ -792,10 +792,10 @@ case "$profile" in
     # compiled with NISH_WASM_HOST. Any other program links the bytes it always
     # did, with no import. IR with a tagged site links the runtime for the
     # import, or the panic would stay the silent trap of an undefined weak
-    # stub; linked for that alone, it exports none of its arena entry points:
-    # no loader calls them, and unexported they are left out of the module.
+    # stub; linked for that, it exports the arena entry points as any link of
+    # runtime-wasm.c does, since a guarded loader that moves an array marks
+    # and releases the arena around each call.
     host_panics=0
-    panic_only=0
     if [ "$profile" = wasm-host ]; then
       for i in ${inputs[@]+"${inputs[@]}"}; do
         case "$i" in
@@ -806,7 +806,7 @@ case "$profile" in
     if [ "$host_panics" = 1 ] && [ "$wasm_named" = 0 ] && [ "$round_wanted" = 0 ]; then
       for i in ${inputs[@]+"${inputs[@]}"}; do
         case "$i" in
-          *.ll) if grep -qE '^[[:space:]]+call void @nish_panic[A-Za-z0-9_]*\(.*, !nish\.site !\{i32 ' "$i"; then round_wanted=1; panic_only=1; fi ;;
+          *.ll) if grep -qE '^[[:space:]]+call void @nish_panic[A-Za-z0-9_]*\(.*, !nish\.site !\{i32 ' "$i"; then round_wanted=1; fi ;;
         esac
       done
     fi
@@ -832,11 +832,12 @@ case "$profile" in
       # NISH_WASM_HOST) hands it to the page's `nish.panic` import, and the
       # sites are written to `<out>.sites.json` for the loader. A program
       # without the `; nish.sites` line has no tag, no import and no sidecar,
-      # so one an earlier build left beside `<out>` is removed.
+      # and its build never touches `<out>.sites.json`; a guarded build
+      # removes the one an earlier build left before it writes its own.
       host_define=()
       host_inputs=("${inputs[@]}")
-      rm -f "$out.sites.json"
       if [ "$host_panics" = 1 ]; then
+        rm -f "$out.sites.json"
         host_define=(-DNISH_WASM_HOST)
         make_work
         sites_dir="$work/sites"
@@ -921,7 +922,7 @@ case "$profile" in
             done < <(sed -nE 's/^@"?([^" =]+\.data)"? = global .*/\1/p' "$i") ;;
         esac
       done
-      if [ "$runtime_linked" = 1 ] && [ "$panic_only" = 0 ]; then
+      if [ "$runtime_linked" = 1 ]; then
         for name in nish_arena_mark nish_arena_release nish_alloc_array nish_reset_arena nish_free_arena; do
           exports+=("-Wl,--export=$name")
         done

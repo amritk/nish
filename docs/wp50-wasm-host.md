@@ -510,7 +510,9 @@ nothing. The compiler marks such a program by ending its IR with a
 `; nish.sites <count>` line; that line, not the profile alone, is what
 `scripts/build.sh --profile wasm-host` reads to compile `runtime-wasm.c` with
 `NISH_WASM_HOST` and rewrite the sites. `tests/runtime-budgets.js`'s
-`WASM_PLAIN_DIGESTS` holds the two examples to their earlier bytes.
+`WASM_PLAIN_DIGESTS` holds three examples to their earlier bytes:
+`add.ts`, `arrays.ts` and `results.ts`, whose `Result` parameter pins the
+plain `{ ok, value }` packing.
 
 **A panic reaches the page.** In such a program under `--profile wasm-host`,
 `runtime-wasm.c`'s panic entry points call one import before they trap:
