@@ -100,7 +100,7 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { spawnSync } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
 
@@ -3772,6 +3772,44 @@ const compile = (compiler, args) =>
     maxBuffer: 64 * 1024 * 1024,
   })
 
+/** `compile` as a promise, answering the same `{ status, stdout, stderr }` shape `spawnSync` does. */
+const compileAsync = (compiler, args) =>
+  new Promise((resolve) => {
+    const child = spawn(compiler.cmd, [...compiler.prefix, ...args], { cwd: root })
+    const stdout = []
+    const stderr = []
+    child.stdout.on("data", (chunk) => stdout.push(chunk))
+    child.stderr.on("data", (chunk) => stderr.push(chunk))
+    // A compiler that cannot be started answers as `spawnSync` would: no
+    // status, and the reason where a diagnostic would be.
+    child.on("error", (error) => resolve({ status: null, stdout: "", stderr: String(error) }))
+    child.on("close", (status) =>
+      resolve({
+        status,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      })
+    )
+  })
+
+/**
+ * `task(item, slot)` over every item with at most `jobs` in flight, answers in
+ * the items' order. `slot` is the worker's index, below `jobs`, so a task can
+ * own a directory no other task in flight writes to.
+ */
+const pooled = async (items, jobs, task) => {
+  const results = new Array(items.length)
+  let next = 0
+  const worker = async (slot) => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await task(items[index], slot)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(jobs, items.length) }, (_, slot) => worker(slot)))
+  return results
+}
+
 /** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four WP8 sidecars. */
 const sidecarFlags = (dir, stem) => [
   "--emit-header",
@@ -3865,7 +3903,34 @@ const excerpt = (want, got, limit) => {
  * is not in the comparison at all.
  */
 const compare = (pair, work, file, options = {}) => {
-  const limit = options.lines ?? 3
+  const job = prepare(work, file, options)
+  if (job.dump !== undefined) {
+    return job
+  }
+  const reference = compile(pair.reference, job.argv(job.referenceDir))
+  const candidate = compile(pair.candidate, job.argv(job.candidateDir))
+  return judge(pair, job, reference, candidate, options.lines ?? 3)
+}
+
+/**
+ * `compare`, with each compiler run as a child the event loop waits on rather
+ * than one that blocks it, so `main` can keep several programs in flight. The
+ * two compilers still run one after the other within a program: the heaviest
+ * entries (`src/*.ts` reaches most of the compiler) peak at about 1.6 GiB each,
+ * and a pair at a time per slot is what keeps four slots inside a 16 GB runner.
+ */
+const compareAsync = async (pair, work, file, options = {}) => {
+  const job = prepare(work, file, options)
+  if (job.dump !== undefined) {
+    return job
+  }
+  const reference = await compileAsync(pair.reference, job.argv(job.referenceDir))
+  const candidate = await compileAsync(pair.candidate, job.argv(job.candidateDir))
+  return judge(pair, job, reference, candidate, options.lines ?? 3)
+}
+
+/** The output directories and the argv for one program, or `{ dump }` when it writes no artefact. */
+const prepare = (work, file, options) => {
   const flags = extraArgs(file)
   const dump = flags.find((flag) => DUMP_FLAGS.has(flag))
   if (dump !== undefined) {
@@ -3891,9 +3956,12 @@ const compare = (pair, work, file, options = {}) => {
     ...(options.extraFlags ?? []),
     ...(options.sidecars === false || sandboxed ? [] : sidecarFlags(dir, stem)),
   ]
+  return { referenceDir, candidateDir, argv }
+}
 
-  const reference = compile(pair.reference, argv(referenceDir))
-  const candidate = compile(pair.candidate, argv(candidateDir))
+/** What the two compilers' runs over one prepared program say: agreement, a refusal by both, or the differences. */
+const judge = (pair, job, reference, candidate, limit) => {
+  const { referenceDir, candidateDir } = job
   if (reference.status !== 0 && candidate.status !== 0) {
     return { refused: firstLine(reference.stderr) || `exit ${reference.status}` }
   }
@@ -4074,6 +4142,9 @@ usage: node tests/nish-cmp.js [options] [program.ts ...]
                               for the commits since the last v* tag
       --no-sidecars           compare only the IR, not the four WP8 sidecars
       --lines <n>             differing lines to print per file (default: 3)
+  -j, --jobs <n>              programs compiled at once (default: the number
+                              of cores; each compile uses one, and the largest
+                              peak at about 1.6 GiB per compiler)
       --verbose               name every program, not only the differences
   -h, --help                  this text
 
@@ -4085,8 +4156,9 @@ With no programs named, the whole corpus is compared (tests/self/corpus.js).
 exit codes: 0 agreed (or skipped for want of a seed), 1 undeclared difference,
 2 usage or a compiler that would not build`
 
-const main = (argv) => {
+const main = async (argv) => {
   const options = { lines: 3, sidecars: true }
+  let jobs = os.availableParallelism()
   let referenceSpec = seedFromEnvironment()
   let candidateSpec = null
   let changelog = "CHANGELOG.md"
@@ -4108,6 +4180,8 @@ const main = (argv) => {
       options.sidecars = false
     } else if (arg === "--lines") {
       options.lines = Number(argv[++i])
+    } else if (arg === "-j" || arg === "--jobs") {
+      jobs = Number(argv[++i])
     } else if (arg === "--verbose") {
       verbose = true
     } else if (arg.startsWith("-")) {
@@ -4117,7 +4191,13 @@ const main = (argv) => {
       named.push(arg)
     }
   }
-  if (referenceSpec === undefined || candidateSpec === undefined || Number.isNaN(options.lines)) {
+  if (
+    referenceSpec === undefined ||
+    candidateSpec === undefined ||
+    Number.isNaN(options.lines) ||
+    !Number.isInteger(jobs) ||
+    jobs < 1
+  ) {
     process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`)
     return 2
   }
@@ -4199,9 +4279,15 @@ const main = (argv) => {
   let lines = 0
   let rooted = 0
   let versioned = 0
-  for (const file of inputs) {
+  // Each compile is one process on one core, so the corpus runs `jobs` programs
+  // at a time, each in its own slot's directory. The results come back in the
+  // corpus's order, so the report reads the same at any `--jobs`.
+  const results = await pooled(inputs, jobs, (file, slot) =>
+    compareAsync(pair, path.join(work, String(slot)), file, options)
+  )
+  for (const [index, file] of inputs.entries()) {
     const program = path.relative(root, file)
-    const result = compare(pair, work, file, options)
+    const result = results[index]
     if (result.dump !== undefined) {
       dumps.push(`${program}: ${result.dump}`)
     } else if (result.refused !== undefined) {
@@ -4328,7 +4414,7 @@ const main = (argv) => {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  process.exit(main(process.argv.slice(2)))
+  process.exit(await main(process.argv.slice(2)))
 }
 export {
   buildCandidate,
