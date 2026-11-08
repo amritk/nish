@@ -128,20 +128,30 @@ adding a module never edits the workflow.
 
 ## The lockfile's copy of the platform pins
 
-`release-pr.yml` bumps the version in `package.json`, both copies in
-`package-lock.json`, `src/branding.ts`, and the `optionalDependencies` pins in
-both `package.json` and the lockfile's `packages[""]`. v0.4.0 shipped with the
-lockfile still pinning 0.3.0, because the bump and its test both read only the
-top-level field; both now walk both places, and a standing check compares the
-two files on every run. The platform packages' own lockfile entries (their
-`resolved` URL and `integrity`) cannot exist until they are published, so
-`release.yml`'s `lockfile` job opens a pull request with the regenerated
-lockfile after the publish and squash-merges it itself, and CI's `lint` job
-checks `npm ls --package-lock-only` everywhere except on the Release PR and on
-a tag. The job first waits for the registry to serve every package of the
-release, for up to half an hour, so a slow registry costs a wait rather than
-a re-run. Nobody merges a lockfile pull request by hand; one left open means the
-repository refused the job's merge, and its run says so in a warning.
+There is none any more, and that is the fix. The checked-in `package.json`
+pins no platform package, so neither does `package-lock.json`.
+`release.yml`'s Pack step runs `scripts/pin-platform-packages.mjs` on its
+checkout just before `npm pack`. That writes one `@amritk/nish-<asset>` per
+matrix row into `optionalDependencies`, each at the release's version. The
+step then reads the pins back out of the packed tarball and fails if they are
+not exactly those packages at that version. `release-pr.yml` bumps only the
+version: in `package.json`, in both places in `package-lock.json`, and in
+`src/branding.ts`. CI's `lint` job holds every commit to
+`npm ls --package-lock-only`, the Release PR and tags included.
+
+What this replaced, so it is not rebuilt. The pins used to be checked in, in
+two places that went stale separately: v0.4.0 shipped a lockfile root still
+pinning 0.3.0 because the bump read only the top-level field. Worse, the
+platform packages' own lockfile entries carry the `resolved` URL and
+`integrity` hash of a tarball that does not exist until the release publishes
+it. So every release commit landed one version behind, and from 0.11.0
+`npm ci` refused `main` the moment the publish went out. A `lockfile` job then
+waited up to half an hour for the registry, regenerated the lockfile, and
+opened and merged a pull request. CI's lockfile check had to skip the Release
+PR and tags, and `main` was red in between. Writing the pins at pack time
+removes the job, the wait, the skip and the red window together. The published
+package is the same: `tests/run.js` runs the pin script on a copy and checks
+one pin per seed target at the current version.
 
 ## Release procedure
 
@@ -201,7 +211,7 @@ Releases ride a train; nothing is published from a developer machine.
    by default. A failed publish is fixed by re-running the job, which skips
    versions already on the registry. A package for a newly added platform must
    be published by hand once before trust can be set on it; the job names the
-   two commands. `lockfile` then opens the lockfile pull request and merges it.
+   two commands.
    Beside `npm`, `interop` runs `interop.yml` with the compiler `release` just
    published as the server image's seed; a red `interop` after a good publish
    is re-run alone (or fixed in a patch release), not a reason to delete the
@@ -264,9 +274,8 @@ was handed over in October 2026, and 0.20.0 is the first release under it.
   no longer the main name plus a suffix: `PLATFORM_PACKAGE_PREFIX` in
   `bin/packaging.js` spells it once, and `platformPackageName` is what the
   launcher, `postinstall.mjs`, `platform-package.mjs`, `release.yml` and
-  `tests/run.js` call. `release-pr.yml` bumps every `optionalDependencies`
-  key rather than the ones that start with the main name, which since this
-  move is none of them.
+  `tests/run.js` call, and what `scripts/pin-platform-packages.mjs` calls to
+  write the pins at pack time.
 - `npm pack` names the main tarball `nish-<version>.tgz` and a platform one
   `amritk-nish-<asset>-<version>.tgz`, beside the release's
   `nish-<version>-<asset>.tar.gz`.

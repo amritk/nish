@@ -1617,24 +1617,13 @@ jobs:
         run: npm ci
 
       # package-lock.json agrees with package.json, read from the two files
-      # alone. `npm ci` above is not this check, and 0.11.0 is why: it asks
-      # the registry, and an optional dependency whose pinned version is not
-      # published yet is dropped rather than refused. The release commit pins
-      # the platform packages at a version release.yml publishes only after
-      # the tag is built, so `npm ci` passed on that commit, went red on main
-      # once the publish landed, and nothing re-ran to say so until the next
-      # pull request merged main. `npm ls --package-lock-only` never asks the
-      # registry, so the release commit is red here on its own push and stays
-      # red until release.yml's `lockfile` job's pull request merges.
-      #
-      # Skipped exactly where that disagreement is the release working: on
-      # the Release PR, which carries the bump but cannot carry the entries,
-      # and on a tag, where release.yml runs this workflow before publishing
-      # and a red here would stop the publish that fixes it. In the merge
-      # queue `head_ref` is empty, so the Release PR is known there by the
-      # subject of the commit the queue built for it.
+      # alone: `npm ls --package-lock-only` never asks the registry, where
+      # `npm ci` above does and quietly drops an optional dependency it cannot
+      # find. Every commit is held to it, the Release PR and tags included,
+      # because the lockfile no longer names anything a release publishes:
+      # the platform packages are written into the packed package.json by
+      # release.yml (scripts/pin-platform-packages.mjs), never into this one.
       - name: Lockfile agrees with package.json
-        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.head_ref != 'release/next' && !startsWith(github.event.merge_group.head_commit.message, 'chore(release):') }}
         run: npm ls --package-lock-only --all > /dev/null
 
       - name: Lint (only when package.json defines a lint script)

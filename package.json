@@ -51,6 +51,7 @@
     "!scripts/ddc-chain.sh",
     "!scripts/gen-reference.mjs",
     "!scripts/typedoc-nish-widths.mjs",
+    "!scripts/pin-platform-packages.mjs",
     "std",
     "README.md",
     "LICENSE",
@@ -104,12 +105,6 @@
     "webassembly",
     "nish"
   ],
-  "optionalDependencies": {
-    "@amritk/nish-x86_64-linux": "0.37.0",
-    "@amritk/nish-aarch64-linux": "0.37.0",
-    "@amritk/nish-aarch64-darwin": "0.37.0",
-    "@amritk/nish-x86_64-darwin": "0.37.0"
-  },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
     "@types/node": "^22.0.0",
