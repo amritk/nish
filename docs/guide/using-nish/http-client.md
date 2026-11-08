@@ -177,13 +177,12 @@ for takes it rather than dialling.
 
 A connection is kept only when its response was read to the end and nothing is
 left on it, at most `maxIdlePerOrigin` (4 unless given to the constructor) for
-one origin or proxy and 64 in all. A kept
-connection the server closed, or wrote to unasked, is closed when it is next
-looked at, and a GET whose kept connection drops before a byte of the answer
-is sent once more on a fresh one, as `fetchSync` does. A fetch under an
-outbound policy neither keeps nor takes one. `pool.idle()` counts the idle
-connections and `pool.close()` closes them; without a pool, each fetch closes
-its own.
+one origin or proxy and 64 in all. A kept connection the server closed, or wrote
+to unasked, is closed when it is next looked at, and a GET whose kept connection
+drops before a byte of the answer is sent once more on a fresh one, as
+`fetchSync` does. A fetch under an outbound policy neither keeps nor takes one.
+`pool.idle()` counts the idle connections and `pool.close()` closes them;
+without a pool, each fetch closes its own.
 
 `fetch` does not run under `--emit-ts`: it waits on its socket with
 `nish:async`'s `readable` and `writable`, which `nish --emit-ts` refuses

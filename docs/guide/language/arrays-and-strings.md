@@ -1,8 +1,8 @@
 # Arrays and strings
 
 An array holds values of one type and can grow; a string is immutable
-bytes, usually UTF-8 text. Both have a short, fixed list of methods — far fewer than in
-JavaScript — and both are bounds-checked. The normative rules are in the
+bytes, usually UTF-8 text. Both have a short, fixed list of methods — far
+fewer than in JavaScript — and both are bounds-checked. The normative rules are in the
 reference's [Array literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#array-literals),
 [Element access](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#element-access),
 [Arrays and strings as receivers](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-and-strings-as-receivers)
