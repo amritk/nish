@@ -199,8 +199,12 @@ const HTTP_CLIENT_WRITABLE: i32 = 2
 const HTTP_CLIENT_TLS_KEY_BYTES: i32 = 32
 /** The longest an async lookup sleeps between checks of its sockets, in milliseconds. */
 const HTTP_CLIENT_DNS_SLICE_MS: i32 = 16
-/** `-EIO`: the lookup's answer when its task's sleep fails. */
-const HTTP_CLIENT_EIO: i32 = -5
+/**
+ * The async lookup's answer when it cannot wait on its own sockets (its poll
+ * loop could not be made or polled, or its task's sleep failed): below every
+ * `DNS_*` code, so it never reads as one of the resolver's.
+ */
+const HTTP_CLIENT_LOOKUP_WAIT: i32 = -1000
 
 /**
  * A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout",
@@ -2128,6 +2132,10 @@ const httpClientAnswers = (
     )
     return -1
   }
+  if (count === HTTP_CLIENT_LOOKUP_WAIT) {
+    fault.fail(HTTP_E_DNS, `${host} could not be looked up (the lookup could not wait on its sockets)`)
+    return -1
+  }
   if (count <= 0) {
     fault.fail(
       HTTP_E_DNS,
@@ -2730,7 +2738,8 @@ const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<
  * and answers `DNS_RESOLVE_TIMEOUT`. `readable` on the loop is not used: it
  * has no deadline, and a lookup must stop at `until` even when nothing comes.
  *
- * @returns The resolver's answer, as `resolveHost`'s, into `addresses` and `ttls`.
+ * @returns The resolver's answer, as `resolveHost`'s, into `addresses` and
+ * `ttls`, or `HTTP_CLIENT_LOOKUP_WAIT` when the lookup could not wait.
  */
 const httpClientLookupAsync = async (
   host: string,
@@ -2754,7 +2763,7 @@ const httpClientLookupAsync = async (
   const config: DnsConfig = dns !== null ? dns : system
   const loop: i32 = pollCreate()
   if (loop < 0) {
-    return loop
+    return HTTP_CLIENT_LOOKUP_WAIT
   }
   const client: DnsClient = new DnsClient(new DnsResolver(config, hosts, 1), loop, 0)
   const lookup: i32 = client.start(host, port, monotonicNanos())
@@ -2784,7 +2793,7 @@ const httpClientLookupAsync = async (
       const slept = await sleep(wait)
       if (!slept) {
         client.cancel(lookup, monotonicNanos())
-        status = HTTP_CLIENT_EIO
+        status = HTTP_CLIENT_LOOKUP_WAIT
         break
       }
     }
@@ -2792,7 +2801,7 @@ const httpClientLookupAsync = async (
     const after: i64 = monotonicNanos()
     if (count < 0) {
       client.cancel(lookup, after)
-      status = count
+      status = HTTP_CLIENT_LOOKUP_WAIT
       break
     }
     for (let k: i32 = 0; k < count && 2 * k + 1 < toI32(ready.length); k += 1) {
