@@ -9,7 +9,7 @@ import { awaitAll } from "nish:async"
 import { realpathSync } from "nish:fs"
 import { netClose, netLocalPort, tcpListen } from "nish:net"
 import { platform, spawnWithFds, waitPid } from "nish:process"
-import { HTTP_E_BLOCKED, HTTP_E_BODY_TOO_LARGE, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_URL, FetchPool, FetchResponse, RequestInit, fetch, httpErrorName } from "nish/net/fetch"
+import { HTTP_E_BLOCKED, HTTP_E_BODY_TOO_LARGE, HTTP_E_CERTIFICATE, HTTP_E_REDIRECT_REFUSED, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_URL, FetchPool, FetchResponse, RequestInit, fetch, httpErrorName } from "nish/net/fetch"
 import { OutboundPolicy } from "nish/net/outbound"
 import { Control, serveScripted } from "./server"
 
@@ -118,8 +118,10 @@ async function checks(port: i32, control: Control): Promise<i32> {
   t.check(status(o6) === 200, "and under it is read whole")
   const o7: Outcome = await get("not a url", new RequestInit())
   t.check(o7.error === httpErrorName(HTTP_E_URL), "a target that does not parse is HTTP_E_URL")
-  const https: Outcome = await get(`https://127.0.0.1:${port}/`, new RequestInit())
-  t.check(https.error === httpErrorName(HTTP_E_TLS) && https.text.indexOf("fetchSync") >= 0, "an https URL is HTTP_E_TLS, naming fetchSync, without a connection")
+  const rootless: RequestInit = new RequestInit()
+  rootless.options.rootsPemPath = "/nonexistent/roots.pem"
+  const https: Outcome = await get(`https://127.0.0.1:${port}/`, rootless)
+  t.check(https.error === httpErrorName(HTTP_E_CERTIFICATE) && https.text.indexOf("/nonexistent/roots.pem") >= 0, "an https URL whose roots cannot be read is HTTP_E_CERTIFICATE, before any connection")
   const guarded: RequestInit = new RequestInit()
   guarded.options.outbound = new OutboundPolicy()
   const o8: Outcome = await get(`${base}/echo`, guarded)

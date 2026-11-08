@@ -554,18 +554,32 @@ const dnsClientReadStream = (c: DnsClient, q: i32, fd: i32, hungUp: boolean, now
  */
 export const resolveHost = (name: string, timeoutMs: i32, port: i32, out: u8[], ttls: i32[]): i32 => {
   const config: DnsConfig = new DnsConfig()
+  const hosts: DnsHosts = new DnsHosts()
+  dnsLoadSystem(config, hosts)
+  return dnsLookupWith(config, hosts, name, timeoutMs, port, out, ttls)
+}
+
+/**
+ * Reads the system's resolver settings the way `resolveHost` does:
+ * `/etc/resolv.conf` into `config` (a missing file means the defaults) and
+ * `/etc/hosts` into `hosts` (a missing file adds no entry). A driver of its
+ * own, such as the async `fetch`'s, starts from this so every lookup in a
+ * program honours the same files.
+ *
+ * @param config A fresh `DnsConfig` to fill.
+ * @param hosts A fresh `DnsHosts` to fill.
+ */
+export const dnsLoadSystem = (config: DnsConfig, hosts: DnsHosts): void => {
   const conf: u8[] | null = readFileBytesSync("/etc/resolv.conf")
   if (conf !== null) {
     dnsParseResolvConf(conf, 0, toI32(conf.length), config)
   } else {
     dnsParseResolvConf(new Array<u8>(0), 0, 0, config)
   }
-  const hosts: DnsHosts = new DnsHosts()
   const hostsFile: u8[] | null = readFileBytesSync("/etc/hosts")
   if (hostsFile !== null) {
     dnsParseHosts(hostsFile, 0, toI32(hostsFile.length), hosts)
   }
-  return dnsLookupWith(config, hosts, name, timeoutMs, port, out, ttls)
 }
 
 /**
