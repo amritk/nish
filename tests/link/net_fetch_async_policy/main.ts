@@ -97,6 +97,13 @@ async function checks(port: i32, control: Control): Promise<i32> {
   t.check(status(followed) === 200 && followedRes !== null && followedRes.url === `${base}/echo`, "followed, it ends at the Location, which `url` names")
   const o3: Outcome = await get(`${base}/to-other`, following())
   t.check(o3.error === httpErrorName(HTTP_E_REDIRECT_REFUSED), "a redirect to another origin is HTTP_E_REDIRECT_REFUSED")
+  const o13: Outcome = await get(`${base}/to-echo-short`, following())
+  t.check(status(o13) === 200 && o13.error.length === 0, "a redirect whose own body fails to read is still followed")
+  const crossing: RequestInit = following().header("Authorization", "Bearer s3cret").header("X-Kept", "yes")
+  crossing.options.crossOriginRedirects = true
+  const o14: Outcome = await get(`${base}/to-other`, crossing)
+  const crossed: string = body(o14)
+  t.check(crossed.startsWith(`GET http://localhost:${port}/echo HTTP/1.1\r\n`) && crossed.indexOf("Authorization") < 0 && crossed.indexOf("\r\nX-Kept: yes\r\n") >= 0, "a hop to another origin drops Authorization and keeps the caller's other fields")
   const looping: RequestInit = following()
   looping.options.maxRedirects = 2
   const o4: Outcome = await get(`${base}/loop`, looping)
@@ -117,6 +124,8 @@ async function checks(port: i32, control: Control): Promise<i32> {
   guarded.options.outbound = new OutboundPolicy()
   const o8: Outcome = await get(`${base}/echo`, guarded)
   t.check(o8.error === httpErrorName(HTTP_E_BLOCKED), "a loopback address the outbound policy refuses is HTTP_E_BLOCKED")
+  const o15: Outcome = await get(`http://u:pw-s3cret@127.0.0.1:${port}/echo?token=T0K`, guarded)
+  t.check(o15.error === httpErrorName(HTTP_E_BLOCKED) && o15.text.indexOf("pw-s3cret") < 0 && o15.text.indexOf("T0K") < 0 && o15.text.length > 0, "and its error text holds neither the password nor the query")
 
   // --- the connection pool
   const pool: FetchPool = new FetchPool()

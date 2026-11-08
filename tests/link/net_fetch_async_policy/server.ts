@@ -114,6 +114,11 @@ export async function answerScripted(fd: i32, id: i32, port: i32): Promise<void>
     } else if (target === "/to-other") {
       status = "302 Found"
       extra = `Location: http://localhost:${port}/echo\r\n`
+    } else if (target === "/to-echo-short") {
+      // A redirect whose body ends before its Content-Length: the drain
+      // fails, which costs the connection and not the fetch.
+      await writeText(fd, `${head("302 Found", "Location: /echo\r\n", 100, true)}short`)
+      break
     } else if (target === "/loop") {
       status = "302 Found"
       extra = "Location: /loop\r\n"

@@ -357,6 +357,14 @@ answers a `Result<FetchResponse, FetchError>` rather than null, so the
 `HTTP_E_*` code and its sentence come with the failure: there is no client
 object to read them from afterwards.
 
+**The pool is the fetch's own.** The async `fetch` keeps idle connections in
+a new `FetchPool`, which a caller opts into through `RequestInit.pool`;
+without one each fetch has a connection of its own. It is not §7's
+`Upstream` pool: that one belongs to an explicit loop and holds connections
+it drives itself, while a `FetchPool`'s connections are driven by whichever
+task takes one. The two share the parser, the request writer and the policy
+helpers, not their pools.
+
 The renames are a breaking change (`refactor!`). The project stays on 0.x,
 so this moves the minor version. 35 files under `std/`, `src/`, `examples/`,
 `docs/` and `tests/` name the two old module paths.
@@ -586,8 +594,11 @@ not hold up another task (`tests/link/net_fetch_async`).
   proxy), at most `maxIdlePerOrigin` each and 64 in all, and checks one is
   quiet before it is taken. A fetch under an outbound policy neither keeps
   nor takes one.
-- **Memory.** A fetch's allocations are its task's and go with it: 2,000
-  fetches leave `Arena.used()` where it was (`tests/link/net_fetch_async_flat`).
+- **Memory.** A fetch's allocations are its awaiting function's scope's and
+  go with it: 2,000 fetches, each awaited in a function of its own, leave
+  `Arena.used()` where it was (`tests/link/net_fetch_async_flat`). Awaited
+  straight in one function's loop, the responses stay until that function
+  returns.
 
 **What it does not do.** The name lookup blocks the process, within
 `connectTimeoutMs`. A wait has no deadline (ASYNC-6), so `readTimeoutMs`

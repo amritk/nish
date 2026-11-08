@@ -142,6 +142,14 @@ port 8080 (errno 111)`. It never answers null and never panics. A 404 or a
 `maxBodyBytes` (256 MiB unless you lower it; past it the fetch fails with
 `HTTP_E_BODY_TOO_LARGE`), so `text()` and `bytes()` are plain calls, not
 awaited. Set `maxBodyBytes` to what you expect from a server you do not run.
+A body is held in one array, so even a raised `maxBodyBytes` stops just under
+2 GiB.
+
+What a fetch allocates is freed when the `async` function that awaited it
+returns. A program that fetches in a long loop should await each fetch in a
+function of its own, as `title` above is, so each response goes when that
+function ends. A loop that awaits `fetch` directly in `main` keeps every
+response until `main` returns.
 `header(name)` reads a field in any case, `url` is the URL that answered.
 
 `RequestInit` holds the request: `method` (`GET` unless set), fields added

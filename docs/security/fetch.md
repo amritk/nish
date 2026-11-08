@@ -106,8 +106,13 @@ refused, redacted or followed holds for both by construction. What differs:
   `fetchSync`, before a name is looked up or a socket opened.
 - **The body is read whole before `fetch` answers**, capped by
   `maxBodyBytes` (and by the outbound policy's cap under one), so a body
-  without end costs at most that and fails with `HTTP_E_BODY_TOO_LARGE`. A
-  redirect's own body is read to `HTTP_CLIENT_DRAIN_BYTES` only.
+  without end costs at most that and fails with `HTTP_E_BODY_TOO_LARGE`. The
+  buffer grows in 64-bit arithmetic and stops at one array's reach
+  (`HTTP_CLIENT_ASYNC_BODY_MAX`, 2^31 - 1 bytes): a `maxBodyBytes` raised
+  past it fails there with `HTTP_E_BODY_TOO_LARGE` rather than wrapping. A
+  redirect's own body is read to `HTTP_CLIENT_DRAIN_BYTES` only, and, as
+  `drain` does, a failure to read it closes the connection without failing
+  the fetch.
 - **The pool keeps a connection only when it is clean.** `release` hands one
   back only when the response was read to its end, the parser holds no byte
   past it and it was kept alive; `FetchPool.take` reads one byte without
@@ -120,8 +125,12 @@ refused, redacted or followed holds for both by construction. What differs:
   only when a kept one was lost before any byte of the answer and the method is
   idempotent.
 - **Memory is the task's.** What a fetch allocates is released with its task's
-  scope; 2,000 fetches leave `Arena.used()` where it was
-  (`link/net_fetch_async_flat`), so HF-3 does not apply to it.
+  scope; 2,000 fetches, each awaited in an `async` function of its own,
+  leave `Arena.used()` where it was (`link/net_fetch_async_flat`), so HF-3
+  does not apply to it. A response awaited straight in a loop of one
+  function lives in that function's scope until it returns, so a loop in
+  `main` that keeps fetching keeps every response: put the fetch in a
+  function the loop awaits.
 
 `tests/link/net_fetch_async_policy` pins these against a scripted loopback
 server. It runs itself again under `/usr/bin/env` with `http_proxy` set to the
@@ -132,8 +141,20 @@ fields and `Content-Length` body; a 404 as an answer; a redirect answered
 unfollowed by default, followed within the origin, `HTTP_E_REDIRECT_REFUSED`
 across origins, and `HTTP_E_TOO_MANY_REDIRECTS` past `maxRedirects`;
 `HTTP_E_BODY_TOO_LARGE` past `maxBodyBytes`; `HTTP_E_URL`; https refused as
-`HTTP_E_TLS` without a connection; `HTTP_E_BLOCKED` under an outbound policy;
-and the pool's reuse, its absence and `close`. `link/net_fetch_async` checks
+`HTTP_E_TLS` without a connection; `HTTP_E_BLOCKED` under an outbound policy,
+with an error text that holds neither the URL's password nor its query (HF-8);
+a redirect followed even when its own body fails to read; a hop to another
+origin under `crossOriginRedirects` that drops `Authorization` and keeps the
+caller's other fields; and the pool's reuse, its absence and `close`.
+
+These are pinned only on the `fetchSync` side, in
+`link/net_http_fetch`, where the code is shared and the
+async path reaches it by the same call: the httpoxy rule (`HTTP_PROXY` ignored
+under CGI), `https_proxy`, a proxy's userinfo as `Proxy-Authorization`, the
+303 and 307/308 method rules, the outbound policy's body cap, and
+`HTTP_E_TOTAL_TIMEOUT`. The async pool's retry of a kept connection lost
+before its answer is the same rule as `fetchSync`'s, pinned there; the async
+side has no check of its own for it yet. `link/net_fetch_async` checks
 that a slow fetch does not hold up a second, and `link/net_fetch_async_overlap`
 that `awaitAll` has two requests at the server at once.
 
@@ -342,6 +363,13 @@ segment of its `200` belong to the tunnel, so an alert there ends the handshake
 at once (`an alert the proxy sends in the same segment as its 200 is read by
 TLS, not lost`).
 
+**The async fetch's checks** are `link/net_fetch_async`,
+`link/net_fetch_async_overlap`, `link/net_fetch_async_policy` and
+`link/net_fetch_async_flat`, each `exits with 0 and stdout matches
+expected.out`, with a line per property in its `expected.out`; what they
+cover, and what is pinned only on the `fetchSync` side, is listed under
+[The async fetch](#the-async-fetch).
+
 **What no check reaches.** A failure of the poll loop itself (`pollCreate` or
 `pollAdd` failing), a write that fails with an errno other than a reset, the
 wiping of a closed connection's TLS keys (`drop` calls `wipe`; nothing a test
@@ -356,7 +384,10 @@ mutant of the retry rule (a dropped `reused`, `lost` or `gotByte` term, POST
 made idempotent), of HF-7's `leftover` and `quiet` taken out together, of
 HF-8's redaction at each of its seven call sites and in each of its cuts, of
 `fill`'s `overdue`, of `maxHeaderBytes`, of the empty read, and of the TLS
-read of bytes that arrive with a proxy's `200` (T9) is killed.
+read of bytes that arrive with a proxy's `200` (T9) is killed. The sweep
+predates the async `fetch`, and no mutant has been run against the
+`link/net_fetch_async*` checks yet; the helpers the two clients share are
+swept through `fetchSync`.
 
 A response the server closes part way through counts as a lost connection, as
 one closed before any byte does, so the dropped `gotByte` term is killed on

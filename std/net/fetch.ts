@@ -177,6 +177,8 @@ const HTTP_CLIENT_PROXY_PORT: i32 = 1080
 const HTTP_CLIENT_MAX_WAIT_MS: i64 = 3600000
 /** Nanoseconds in a millisecond. */
 const HTTP_CLIENT_NS_PER_MS: i64 = 1000000
+/** The largest body the async fetch can hold in one array, whatever `maxBodyBytes` says. */
+const HTTP_CLIENT_ASYNC_BODY_MAX: i64 = 2147483647
 /** A deadline that never comes: 146 years of monotonic nanoseconds, far below the overflow of a sum with a timeout. */
 const HTTP_CLIENT_NEVER: i64 = 4611686018 * 1000000000
 /** netRead's and netWrite's answer when the socket has nothing ready. */
@@ -2541,15 +2543,27 @@ const httpClientBodyAsync = async (conn: HttpClientConn, res: FetchResponse, lim
     }
     if (event === HTTP1_BODY) {
       const take: i32 = conn.parser.bodyLen
-      if (toI64(len) + toI64(take) > limit) {
+      const need: i64 = toI64(len) + toI64(take)
+      if (need > limit) {
         return 0
       }
-      if (len + take > toI32(buf.length)) {
-        let room: i32 = toI32(buf.length) * 2
-        if (room < len + take) {
-          room = len + take
+      if (need > HTTP_CLIENT_ASYNC_BODY_MAX) {
+        // A raised maxBodyBytes cannot carry a body past one array's reach.
+        conn.fault.fail(
+          HTTP_E_BODY_TOO_LARGE,
+          `the body is larger than one array holds (${HTTP_CLIENT_ASYNC_BODY_MAX} bytes)`
+        )
+        return -1
+      }
+      if (need > toI64(buf.length)) {
+        let room: i64 = toI64(buf.length) * toI64(2)
+        if (room < need) {
+          room = need
         }
-        const grown: u8[] = new Array<u8>(room)
+        if (room > HTTP_CLIENT_ASYNC_BODY_MAX) {
+          room = HTTP_CLIENT_ASYNC_BODY_MAX
+        }
+        const grown: u8[] = new Array<u8>(toI32(room))
         copyBytes(grown, 0, buf, 0, len)
         buf = grown
       }
@@ -2606,9 +2620,13 @@ const httpClientExchangeAsync = async (
       const read: i32 = await httpClientBodyAsync(conn, res, limit)
       if (read < 0) {
         conn.close()
-        return null
-      }
-      if (read === 0) {
+        if (!hopping) {
+          return null
+        }
+        // As fetchSync's drain: a redirect's body that fails to read costs
+        // only its connection, never the fetch.
+        conn.fault.fail(HTTP_E_NONE, "")
+      } else if (read === 0) {
         conn.close()
       } else {
         conn.release(pool)

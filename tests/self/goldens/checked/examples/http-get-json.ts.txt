@@ -1112,6 +1112,7 @@ const HTTP_CLIENT_DRAIN_BYTES: i32 = 65536
 const HTTP_CLIENT_PROXY_PORT: i32 = 1080
 const HTTP_CLIENT_MAX_WAIT_MS: i64 = 3600000
 const HTTP_CLIENT_NS_PER_MS: i64 = 1000000
+const HTTP_CLIENT_ASYNC_BODY_MAX: i64 = 2147483647
 const HTTP_CLIENT_NEVER: i64 = 4611686018000000000
 const HTTP_CLIENT_WOULD_BLOCK: i32 = -11
 const HTTP_CLIENT_READABLE: i32 = 1
@@ -2435,16 +2436,18 @@ function httpClientSendAsync(conn: HttpClientConn, url: Url, hop: HttpClientHop)
 function httpClientBodyAsync(conn: HttpClientConn, res: FetchResponse, limit: i64): i32 -> @nish.httpClientBodyAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.copyBytes nish.httpClientPumpAsync nish_panic nish_panic_overflow
+  calls: nish.HttpClientFault.fail nish.copyBytes nish.httpClientPumpAsync nish_panic nish_panic_overflow nish_str_concat nish_str_from_i64
   pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientPumpAsync#0 nish.httpClientPumpAsync#0
   pointer res: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -27:7 buf: u8[] (let)
-  local -26:7 len: i32 (let)
-  local -25:7 event: i32 (let)
-  callee -25:26 httpClientPumpAsync -> @nish.httpClientPumpAsync
-  local -19:13 take: i32 (const)
-  local -14:13 room: i32 (let)
+  local -36:7 buf: u8[] (let)
+  local -35:7 len: i32 (let)
+  local -34:7 event: i32 (let)
+  callee -34:26 httpClientPumpAsync -> @nish.httpClientPumpAsync
+  local -28:13 take: i32 (const)
+  local -27:13 need: i64 (const)
+  callee -21:9 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local -17:13 room: i64 (let)
   local -10:15 grown: u8[] (const)
   callee -9:9 copyBytes -> @nish.copyBytes
   callee -6:7 copyBytes -> @nish.copyBytes
@@ -2454,7 +2457,7 @@ function httpClientBodyAsync(conn: HttpClientConn, res: FetchResponse, limit: i6
 function httpClientExchangeAsync(conn: HttpClientConn, url: Url, hop: HttpClientHop, pool: FetchPool | null, redirectable: boolean): FetchResponse | null -> @nish.httpClientExchangeAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.httpClientOpenAsync
-  calls: nish.FetchResponse.constructor nish.FetchResponse.header nish.HttpClientConn.close nish.HttpClientConn.release nish.httpClientBodyAsync nish.httpClientBodyCap nish.httpClientIdempotent nish.httpClientIsRedirect nish.httpClientOpenAsync nish.httpClientSendAsync nish.httpClientUrlText nish_alloc_struct nish_array_grow nish_panic_index
+  calls: nish.FetchResponse.constructor nish.FetchResponse.header nish.HttpClientConn.close nish.HttpClientConn.release nish.HttpClientFault.fail nish.httpClientBodyAsync nish.httpClientBodyCap nish.httpClientIdempotent nish.httpClientIsRedirect nish.httpClientOpenAsync nish.httpClientSendAsync nish.httpClientUrlText nish_alloc_struct nish_array_grow nish_panic_index
   pointer conn: size=80 writesThrough=true captured=false passedTo=nish.httpClientOpenAsync#0 nish.httpClientSendAsync#0 nish.httpClientBodyAsync#0 nish.HttpClientConn.close#0 nish.HttpClientConn.close#0 nish.HttpClientConn.release#0 nish.HttpClientConn.close#0
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientOpenAsync#1 nish.httpClientSendAsync#1 nish.httpClientUrlText#0
   pointer hop: size=40 writesThrough=false captured=false passedTo=nish.httpClientSendAsync#2
@@ -2477,11 +2480,12 @@ function httpClientExchangeAsync(conn: HttpClientConn, url: Url, hop: HttpClient
   local +23:13 read: i32 (const)
   callee +23:31 httpClientBodyAsync -> @nish.httpClientBodyAsync
   callee +25:9 HttpClientConn.close -> @nish.HttpClientConn.close
-  callee +29:9 HttpClientConn.close -> @nish.HttpClientConn.close
-  callee +31:9 HttpClientConn.release -> @nish.HttpClientConn.release
-  local +35:11 retry: boolean (const)
-  callee +35:73 httpClientIdempotent -> @nish.httpClientIdempotent
-  callee +36:5 HttpClientConn.close -> @nish.HttpClientConn.close
+  callee +31:9 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +33:9 HttpClientConn.close -> @nish.HttpClientConn.close
+  callee +35:9 HttpClientConn.release -> @nish.HttpClientConn.release
+  local +39:11 retry: boolean (const)
+  callee +39:73 httpClientIdempotent -> @nish.httpClientIdempotent
+  callee +40:5 HttpClientConn.close -> @nish.HttpClientConn.close
 function httpClientFetchAsync(text: string, init: RequestInit, fault: HttpClientFault): FetchResponse | null -> @nish.httpClientFetchAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpClientConn.constructor
