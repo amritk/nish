@@ -6,7 +6,7 @@ import { readable, sleep, spawn, writable } from "nish:async"
 import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
 
 /** Reads one request head from `fd`; its target, or "" when the peer left first. */
-async function readTarget(fd: i32): Promise<string> {
+export async function readTarget(fd: i32): Promise<string> {
   const buf: u8[] = new Array<u8>(4096)
   let len: i32 = 0
   while (len < 4096) {
@@ -33,7 +33,7 @@ async function readTarget(fd: i32): Promise<string> {
 }
 
 /** Writes all of `text` to `fd`, waiting while the socket is full. */
-async function writeText(fd: i32, text: string): Promise<void> {
+export async function writeText(fd: i32, text: string): Promise<void> {
   const bytes: u8[] = new Array<u8>(text.length)
   for (let i: i32 = 0; i < text.length; i += 1) {
     bytes[i] = toU8(text.charCodeAt(i))
@@ -57,9 +57,31 @@ export async function answer(fd: i32, delayMs: i32): Promise<void> {
   if (target.startsWith("/slow")) {
     await sleep(delayMs)
   }
-  const body: string = `hello from ${target}`
+  await reply(fd, `hello from ${target}`)
+}
+
+/** Writes a 200 answer carrying `body` to `fd`, then closes it. */
+export async function reply(fd: i32, body: string): Promise<void> {
   await writeText(fd, `HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}`)
   netClose(fd)
+}
+
+/**
+ * Accepts one connection on `listen`, polling every 5 ms for at most
+ * `waitMs`; the descriptor, or -1 when none came in time.
+ */
+export async function acceptWithin(listen: i32, waitMs: i32): Promise<i32> {
+  const peer: u8[] = new Array<u8>(32)
+  let waited: i32 = 0
+  while (waited <= waitMs) {
+    const fd: i32 = tcpAccept(listen, peer)
+    if (fd !== -11) {
+      return fd
+    }
+    await sleep(5)
+    waited += 5
+  }
+  return -1
 }
 
 /** Accepts `count` connections on `listen`, each answered by a task of its own, then closes it. */

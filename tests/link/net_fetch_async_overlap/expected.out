@@ -1,0 +1,3 @@
+server: both in (/a, /b)
+first: 200 hello from /a
+second: 200 hello from /b

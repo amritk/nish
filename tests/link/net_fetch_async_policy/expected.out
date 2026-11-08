@@ -1,0 +1,18 @@
+PASS  a host in no_proxy is fetched directly, the target origin-form
+PASS  through http_proxy the target is absolute-form, the Host the origin's
+PASS  a POST carries the caller's fields and its body, framed by Content-Length
+PASS  a 404 is an answer, not an error
+PASS  a redirect is answered as it is by default
+PASS  followed, it ends at the Location, which `url` names
+PASS  a redirect to another origin is HTTP_E_REDIRECT_REFUSED
+PASS  past maxRedirects it is HTTP_E_TOO_MANY_REDIRECTS
+PASS  a body past maxBodyBytes is HTTP_E_BODY_TOO_LARGE
+PASS  and under it is read whole
+PASS  a target that does not parse is HTTP_E_URL
+PASS  an https URL is HTTP_E_TLS, naming fetchSync, without a connection
+PASS  a loopback address the outbound policy refuses is HTTP_E_BLOCKED
+PASS  a kept-alive answer leaves its connection idle in the pool
+PASS  and the next fetch to that origin takes it
+PASS  without a pool each fetch has a connection of its own
+PASS  close() closes the idle connections
+async fetch policy: 17 passed, 0 failed
