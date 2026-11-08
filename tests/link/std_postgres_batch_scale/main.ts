@@ -322,6 +322,106 @@ const collisions = (t: Suite): void => {
   t.ok("and the next take answers a run", b.take(conn) >= 0);
 };
 
+/**
+ * A copy of the batcher's private `pgIntHash`, so the test can show that the
+ * keys `colliding` builds do share one table hash. If the copy drifts from
+ * the real hash, the keys-array check in `collidingRows` fails.
+ */
+const intHash = (key: i64): i32 => {
+  const lo: u32 = toU32(key & LOW32);
+  const hi: u32 = toU32((key >> toI64(32)) & LOW32);
+  let h: u32 = lo ^ (hi * 2654435769);
+  h = (h ^ (h >> 16)) * 2246822507;
+  h = (h ^ (h >> 13)) * 3266489909;
+  h = h ^ (h >> 16);
+  return toI32(h >> 1);
+};
+
+/**
+ * 2048 keys of one hash, each requested twice, in one execution: every
+ * request gets its own key's row and nothing else. The first 1024 keys are
+ * found when asked again; the 1024 past the probe bound are each bound a
+ * second time, and both copies route to their own requests.
+ */
+const collidingRows = (t: Suite): void => {
+  const same: i32 = intHash(colliding(0));
+  let shared: i32 = 0;
+  for (let j: i32 = 0; j < 2048; j++) {
+    if (intHash(colliding(j)) === same) {
+      shared += 1;
+    }
+  }
+  t.eqI32("the 2048 colliding keys share one hash", shared, 2048);
+  t.ok("a key of another high half does not", intHash(toI64(7)) !== same);
+
+  const b = new PgBatcher(ints(4096));
+  const conn = prepared(b, config());
+  for (let pass: i32 = 0; pass < 2; pass++) {
+    for (let j: i32 = 0; j < 2048; j++) {
+      b.addInt(colliding(j), pass * 2048 + j);
+    }
+  }
+  const r: i32 = b.take(conn);
+  t.eqI32("4096 requests of one hash, one execution", b.waiting(), 0);
+  const want: string[] = [];
+  for (let j: i32 = 0; j < 2048; j++) {
+    want.push(`${colliding(j)}`);
+  }
+  for (let j: i32 = 1024; j < 2048; j++) {
+    want.push(`${colliding(j)}`);
+  }
+  t.eqStr("each key once, then the 1024 past the probe bound again", keys(conn), `{${want.join(",")}}`);
+
+  // One row per ordinal, naming the key bound there.
+  const rows: u8[] = [];
+  for (let ord: i32 = 1; ord <= 3072; ord++) {
+    const j: i32 = ord <= 2048 ? ord - 1 : ord - 1025;
+    for (const x of row(`k${j}`, `${ord}`)) {
+      rows.push(x);
+    }
+  }
+  const got: string = route(b, r, conn, answer(rows));
+  // Each request's events: one row naming its own key, then its end.
+  const seen: i32[] = [];
+  const ended: i32[] = [];
+  for (let i: i32 = 0; i < 4096; i++) {
+    seen.push(0);
+    ended.push(0);
+  }
+  let wrong: i32 = 0;
+  let from: i32 = 0;
+  while (from < toI32(got.length)) {
+    let to: i32 = toI32(got.indexOf(",", from));
+    if (to < 0) {
+      to = toI32(got.length);
+    }
+    const e: string = got.slice(from, to);
+    const eq: i32 = toI32(e.indexOf("="));
+    if (eq > 0) {
+      const tag: i32 = toI32(Number(e.slice(0, eq)));
+      if (e.slice(eq + 1) === `k${tag % 2048}`) {
+        seen[tag] += 1;
+      } else {
+        wrong += 1;
+      }
+    } else if (e.endsWith(".")) {
+      ended[toI32(Number(e.slice(0, toI32(e.length) - 1)))] += 1;
+    } else {
+      wrong += 1;
+    }
+    from = to + 1;
+  }
+  let exact: i32 = 0;
+  for (let i: i32 = 0; i < 4096; i++) {
+    if (seen[i] === 1 && ended[i] === 1) {
+      exact += 1;
+    }
+  }
+  t.eqI32("no request gets another key's row, a miss or a failure", wrong, 0);
+  t.eqI32("each of the 4096 gets its own key's one row, then its end", exact, 4096);
+  t.eqI32("and the next take finds nothing waiting", b.take(conn), -1);
+};
+
 const growth = (t: Suite): void => {
   const c = ints(65536);
   c.runs = 1;
@@ -407,6 +507,7 @@ const dense = (t: Suite): void => {
 export const main = (): number => {
   const t = new Suite("postgres batch scale");
   collisions(t);
+  collidingRows(t);
   growth(t);
   dense(t);
   return t.done();
