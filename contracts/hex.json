@@ -4,7 +4,7 @@
   "source": {
     "title": "Spec 0001: nish/hex — hexadecimal encoding and decoding",
     "main": "hex",
-    "sha256": "f14a0eb1c39c5e4a2aca5019fa1f08a1ec7bf3329211b7ef53306a9e455e3c9c"
+    "sha256": "48465b1d9c4aadb40f13b875fd1e289ca8a31190f308a89f925e73266a25996f"
   },
   "sources": [
     {
@@ -66,8 +66,8 @@
   "exclusions": [
     {
       "section": "5",
-      "quote": "hexDecode MUST NOT index a table by the value of a digit, so that its running time depends only on the length of its input.",
-      "reason": "How hexDecode is written and how long it runs, not what it returns: no functional test observes a table lookup or a data-dependent running time. Checked by review of std/hex.ts; nish's ct-asm and ct-timing harnesses do not cover std/hex."
+      "quote": "hexEncode and hexDecode MUST NOT branch on, or index memory by, the value of a byte of their input, so that their running time depends only on its length.",
+      "reason": "How the code runs, not what it returns: no functional test observes a branch, an address or a running time. Checked in nish instead: tests/cases/ct_asm_hex.ts holds the per-byte code (the digit of a nibble, a digit's validity and value, one byte encoded, one pair decoded) to no branch, no call and no secret-addressed access after clang -O2 on x86-64 and aarch64, and tests/link/std_hex_ct_copies holds those copies to the module. The loops themselves branch on their counter, which that check refuses outright, so their -O3 listings were read by hand."
     }
   ],
   "functions": [
@@ -274,7 +274,7 @@
     {
       "kind": "vector",
       "id": "V9",
-      "title": "whitespace is null",
+      "title": "whitespace between the digits is null",
       "covers": [
         "R-DEC-REJECT"
       ],
@@ -285,7 +285,7 @@
       "call": "hexDecode",
       "args": [
         {
-          "str": "ab cd"
+          "str": "0a 0b 0c"
         }
       ],
       "expect": {
@@ -1047,6 +1047,166 @@
     },
     {
       "kind": "property",
+      "id": "P-CONTROL",
+      "title": "a control byte or DEL, anywhere in an even-length text, is null",
+      "covers": [
+        "R-DEC-REJECT"
+      ],
+      "forall": [
+        {
+          "name": "a",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "hexdigit",
+            "HEXDIGIT"
+          ]
+        },
+        {
+          "name": "i",
+          "type": "i32",
+          "min": 0,
+          "max": 127
+        },
+        {
+          "name": "z",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [
+            "hexdigit",
+            "HEXDIGIT"
+          ]
+        }
+      ],
+      "where": {
+        "op": "and",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "<",
+                "args": [
+                  {
+                    "var": "i"
+                  },
+                  {
+                    "int": 32
+                  }
+                ]
+              },
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "var": "i"
+                  },
+                  {
+                    "int": 127
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "%",
+                "args": [
+                  {
+                    "op": "+",
+                    "args": [
+                      {
+                        "op": "strLen",
+                        "args": [
+                          {
+                            "var": "a"
+                          }
+                        ]
+                      },
+                      {
+                        "op": "strLen",
+                        "args": [
+                          {
+                            "var": "z"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "int": 2
+                  }
+                ]
+              },
+              {
+                "int": 1
+              }
+            ]
+          }
+        ]
+      },
+      "assert": {
+        "op": "isNull",
+        "args": [
+          {
+            "call": "hexDecode",
+            "args": [
+              {
+                "op": "strConcat",
+                "args": [
+                  {
+                    "var": "a"
+                  },
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "op": "unwrap",
+                        "args": [
+                          {
+                            "op": "ascii",
+                            "args": [
+                              {
+                                "op": "slice",
+                                "args": [
+                                  {
+                                    "op": "le64",
+                                    "args": [
+                                      {
+                                        "var": "i"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "int": 0
+                                  },
+                                  {
+                                    "int": 1
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "z"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
       "id": "P-PREFIX",
       "title": "a \"0x\" prefix is null",
       "covers": [
@@ -1109,6 +1269,23 @@
           }
         ]
       }
+    }
+  ],
+  "allowSurvivors": [
+    {
+      "file": "std/hex.ts",
+      "line": 88,
+      "reason": "Equivalent: the guard is always true (k = 2i and k1 = 2i + 1 with i < n, and out is 2n long), so `k <= len`, `k1 <= len` and `||` do not change which stores run. It exists only so that the stores keep no bounds check."
+    },
+    {
+      "file": "std/hex.ts",
+      "line": 121,
+      "reason": "Equivalent: starting j at -1, or running it to out.length inclusive, adds an iteration whose k is 2^32 - 2 or 2 * out.length, which the always-true guard on line 126 skips, so no read, count or store changes."
+    },
+    {
+      "file": "std/hex.ts",
+      "line": 126,
+      "reason": "Equivalent: the guard is always true (k = 2j and k1 = 2j + 1 with j < out.length, and text is 2 * out.length long), so `k <= len`, `k1 <= len` and `||` do not change which reads run. It exists only so that the reads keep no bounds check."
     }
   ]
 }

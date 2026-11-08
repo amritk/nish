@@ -6,7 +6,7 @@
 // parentheses; every requirement's RFC text is quoted above its checks.
 // Property samples were chosen by Z3 (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 0da171b1ad7e4b21120d76a43de8068665b260c5f407c3550197119f16b0e199
+// vector-contract-sha256: dad49bbaf4da3b955f96329aa0d5ddc40cd3c8b3f33045adfbe2121629922548
 
 import { Suite } from "nish/testing";
 import { hexDecode, hexEncode } from "nish/hex";
@@ -69,6 +69,41 @@ const bytesEq = (a: u8[] | null, b: u8[] | null): boolean => {
 
 const isNullBytes = (b: u8[] | null): boolean => b === null;
 
+/** `b[from, to)`, both ends clamped into the array. */
+const sliceBytes = (b: u8[], from: i32, to: i32): u8[] => {
+  const n: i32 = toI32(b.length);
+  let lo: i32 = from;
+  if (lo < 0) {
+    lo = 0;
+  }
+  if (lo > n) {
+    lo = n;
+  }
+  let hi: i32 = to;
+  if (hi < lo) {
+    hi = lo;
+  }
+  if (hi > n) {
+    hi = n;
+  }
+  const out: u8[] = [];
+  for (let i: i32 = lo; i < hi; i += 1) {
+    out.push(b[i]);
+  }
+  return out;
+};
+
+/** `n` as 8 little-endian bytes. */
+const le64 = (n: i32): u8[] => {
+  const out: u8[] = [];
+  let v: i64 = toI64(n);
+  for (let i: i32 = 0; i < 8; i += 1) {
+    out.push(toU8(toI32(v & toI64(255))));
+    v = v >> toI64(8);
+  }
+  return out;
+};
+
 /** Equal characters, or both null. */
 const strEq = (a: string | null, b: string | null): boolean => {
   if (a === null || b === null) {
@@ -100,6 +135,16 @@ const shiftCase = (s: string, lo: i32, hi: i32, delta: i32): string => {
   return parts.join("");
 };
 
+/** `b` as a string, or null when any byte is not ASCII. */
+const asciiOrNull = (b: u8[]): string | null => {
+  for (const x of b) {
+    if (toI32(x) >= 128) {
+      return null;
+    }
+  }
+  return String.fromBytes(b, 0, toI32(b.length));
+};
+
 /**
  * `unwrap` without exceptions: a null is recorded and stands in as no bytes,
  * and the sample that saw it fails.
@@ -117,6 +162,14 @@ class Unwrap {
     }
     this.sawNull = true
     return []
+  }
+
+  str(s: string | null): string {
+    if (s !== null) {
+      return s
+    }
+    this.sawNull = true
+    return ""
   }
 }
 
@@ -194,13 +247,13 @@ const clause_V7 = (t: Suite): boolean => t.eqStr("[V7] an odd length is null (R-
 const clause_V8 = (t: Suite): boolean => t.eqStr("[V8] a \"0x\" prefix is null (R-DEC-REJECT)", hexOrNull(hexDecode("0x00")), "null");
 
 /**
- * whitespace is null
+ * whitespace between the digits is null
  *
  * R-DEC-REJECT — hex §4.2, MUST:
  *   hexDecode MUST return null when the text has an odd length or contains
  *   any other character, including whitespace and a "0x" prefix.
  */
-const clause_V9 = (t: Suite): boolean => t.eqStr("[V9] whitespace is null (R-DEC-REJECT)", hexOrNull(hexDecode("ab cd")), "null");
+const clause_V9 = (t: Suite): boolean => t.eqStr("[V9] whitespace between the digits is null (R-DEC-REJECT)", hexOrNull(hexDecode("0a 0b 0c")), "null");
 
 /**
  * every byte value encodes to its two lowercase digits
@@ -786,6 +839,112 @@ const clause_P_OTHER_EDGE = (t: Suite): boolean => {
 };
 
 /**
+ * a control byte or DEL, anywhere in an even-length text, is null
+ *
+ * R-DEC-REJECT — hex §4.2, MUST:
+ *   hexDecode MUST return null when the text has an odd length or contains
+ *   any other character, including whitespace and a "0x" prefix.
+ */
+const clause_P_CONTROL = (t: Suite): boolean => {
+  const table_a: string[] = [
+    "3",
+    "f3CB2",
+    "C",
+    "",
+    "0",
+    "f78C0bdc6E8e446",
+    "BAdA2aA9647fFb23",
+    "1a37Ba3D",
+    "4fecf2BfBFEfD0",
+    "D783F73aF1F3fE9",
+    "8BFCeCED3D8aC19",
+    "2f53e5b6b48aC37D",
+    "",
+    "45F894cb9EBfb48",
+    "859EB",
+    "D7Cfc44125869058",
+    "Ad96b209e",
+    "aD23Ab31aD2",
+    "8B18308C8D99e2",
+    "c28B966f0EF99",
+    "ace88d888",
+    "0eFFbe63",
+    "ddEAfE3B9a",
+    "3Ebe2f89f14Cd",
+    "1A27",
+    "",
+    "d13cE4baF00b",
+    "cD1CFA6D24F7",
+    "e3186",
+    "A1ea3B257d1A119",
+    "B24F83c7b494",
+    "cDDfb3f2F",
+    "869E6ffD8Ea3c87",
+    "f0C",
+    "C47cCF6Cb6",
+    "87bD19cBE5",
+    "d488CCc91c",
+    "ba42f7a1c72F5c8a",
+  ];
+  const table_i: i32[] = [31, 127, 127, 127, 127, 14, 127, 0, 1, 127, 127, 127, 0, 127, 9, 10, 9, 8, 15, 6, 16, 10, 127, 9, 127, 22, 18, 7, 5, 24, 127, 26, 14, 4, 2, 1, 27, 7];
+  const table_z: string[] = [
+    "",
+    "6cBd5CeeAcf70B",
+    "",
+    "3",
+    "",
+    "fd9B3edBbBDC17",
+    "8",
+    "15E4d2cbcE285Ee",
+    "B2BA09a",
+    "66Aa8EBfC18E",
+    "",
+    "9",
+    "2DAc0cb01cFFbe5",
+    "eb1E1b837Cd2cb4C",
+    "8BC8CBaaD3c7",
+    "fA8BBafAB6d",
+    "429ad0dC",
+    "b86BACd91B",
+    "aEF475ccF51",
+    "28",
+    "8Fe41c",
+    "820C8D7c8e6",
+    "b8F18dE41E004E2",
+    "",
+    "89C",
+    "b3c0629",
+    "776BdBf000AEA",
+    "e",
+    "A61dBfb208FDeEA1",
+    "9DC4Fe",
+    "4c1C2",
+    "b9",
+    "1877BF3e43Bd",
+    "f3a8D51D",
+    "B6cbdD193",
+    "A",
+    "f5cFD8eB6A0",
+    "bC205",
+  ];
+  for (let i: i32 = 0; i < 38; i += 1) {
+    const v_a: string = table_a[i];
+    const v_i: i32 = table_i[i];
+    const v_z: string = table_z[i];
+    const u: Unwrap = new Unwrap();
+    const holds: boolean = isNullBytes(hexDecode(`${v_a}${`${u.str(asciiOrNull(sliceBytes(le64(v_i), 0, 1)))}${v_z}`}`));
+    if (u.sawNull || !holds) {
+      let why: string = "the assertion is false";
+      if (u.sawNull) {
+        why = "unwrap met a null";
+      }
+      return t.fail("[P-CONTROL] a control byte or DEL, anywhere in an even-length text, is null (R-DEC-REJECT)", `sample ${i + 1} of 38 (len(a) = ${toI32(v_a.length)}, i = ${v_i}, len(z) = ${toI32(v_z.length)}): ${why}`);
+    }
+  }
+  return t.pass("[P-CONTROL] a control byte or DEL, anywhere in an even-length text, is null (R-DEC-REJECT) — 38 samples");
+};
+
+/**
  * a "0x" prefix is null
  *
  * R-DEC-REJECT — hex §4.2, MUST:
@@ -852,6 +1011,7 @@ export const main = (): i32 => {
   clause_P_ODD(t);
   clause_P_OTHER(t);
   clause_P_OTHER_EDGE(t);
+  clause_P_CONTROL(t);
   clause_P_PREFIX(t);
   return t.done();
 };
