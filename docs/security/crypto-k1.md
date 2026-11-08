@@ -48,16 +48,14 @@ process. The goals considered are:
   past it, in both number modes.
 - **Length counters.** A reference SHA-256/384/512 was written in JavaScript
   with BigInt, with an injectable byte counter: the prefix is counted in the
-  length field but never compressed. It takes its round constants and
-  initial values from the std sources. It agreed with `node:crypto` on every
-  message of 0 to 299 bytes for all three hashes.
-
-  It then produced the
-  expected digests for counters just below 2^29, 2^31, 2^32, 2^61 and 2^64
-  bytes, with tails that cross each boundary inside `update`, and tails long
-  enough to push the length field into a second block. Separately, a
-  real 2^29-byte message (512 × 1 MiB windows) was hashed natively with
-  `Sha256` and `Sha512` and matched `node:crypto` byte for byte.
+  length field but never compressed. It takes its round constants and initial
+  values from the std sources. It agreed with `node:crypto` on every message of
+  0 to 299 bytes for all three hashes. It then produced the expected digests
+  for counters just below 2^29, 2^31, 2^32, 2^61 and 2^64 bytes, with tails
+  that cross each boundary inside `update`, and tails long enough to push the
+  length field into a second block. Separately, a real 2^29-byte message (512 ×
+  1 MiB windows) was hashed natively with `Sha256` and `Sha512` and matched
+  `node:crypto` byte for byte.
 - **Oversized inputs.** Each whole-buffer entry point was run natively on
   arrays and strings of 2^31 bytes and more, in both number modes. This is
   where every finding below came from.

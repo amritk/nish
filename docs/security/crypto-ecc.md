@@ -338,20 +338,17 @@ entry point then (`p256Ecdh` came later, see "P-256 ECDH"); the ECDH below is th
 `ecdh_secp256r1_ecpoint` private keys multiplied through `p256ScalarMult` in
 `tests/link/crypto_p256_agree`.
 
-- **Agreement.**
-
-  The comb answers what `p256ScalarMult(G, k)` answers, byte
-  for byte, on RFC 6979 A.2.5's three scalars, 986 edge and per-digit scalars
-  (every one of the table's 240 entries is the only entry read at least
-  once), the `r` and `s` of all 1,104 64-byte signatures of Wycheproof's two
-  P1363 files taken as scalars, the 355 private keys of
-  `ecdh_secp256r1_ecpoint` (330 shared secrets as published, 25 keys
-  refused), and a seeded corpus of 10,000 scalars, 625 of them also signing
-  through both `p256SignSha256` and `p256SignSha256Into`: "p256 agree: the
-  fixed-base comb and the variable-base window give the same bytes for every
-  scalar of tests/link/crypto_p256_agree, natively", and under Node's WASI,
-  "p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints
-  the same expected.out under Node's WASI".
+- **Agreement.** The comb answers what `p256ScalarMult(G, k)` answers, byte for
+  byte, on RFC 6979 A.2.5's three scalars, 986 edge and per-digit scalars
+  (every one of the table's 240 entries is the only entry read at least once),
+  the `r` and `s` of all 1,104 64-byte signatures of Wycheproof's two P1363
+  files taken as scalars, the 355 private keys of `ecdh_secp256r1_ecpoint` (330
+  shared secrets as published, 25 keys refused), and a seeded corpus of 10,000
+  scalars, 625 of them also signing through both `p256SignSha256` and
+  `p256SignSha256Into`: "p256 agree: the fixed-base comb and the variable-base
+  window give the same bytes for every scalar of tests/link/crypto_p256_agree,
+  natively", and under Node's WASI, "p256 agree: the \`--profile wasi\` build
+  (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI".
 
   The table is what the generator
   writes: "p256: the comb table in std/crypto/p256.ts is what
@@ -362,28 +359,22 @@ entry point then (`p256Ecdh` came later, see "P-256 ECDH"); the ECDH below is th
   and Batina's Algorithm 5), the masked keep (`p256BaseKeep`, `:4643`) and one
   whole step of the comb (`p256BaseStep`, the body of `p256BaseMultWith`'s
   inner loop), and its `main` reproduces A.2.5's public key and both `r`s
-  through them.
-
-  Each passes on x86-64 and aarch64, following its calls into
-  the field functions:
-  `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}`, for `p256BaseDigit`, `p256BaseSelect`,
-  `p256PointAddMixed`, `p256BaseKeep` and `p256BaseStep` with the promise "no
-  branch, call, secret-indexed access or secret-dependent latency". The read
-  it replaces, one entry loaded at the digit's offset, is seeded to fail:
-  `ct_asm_refused`'s `leakyBaseRead`, "refused for a load or store at a secret
-  address" on both targets.
+  through them. Each passes on x86-64 and aarch64, following its calls into the
+  field functions: `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}`,
+  for `p256BaseDigit`, `p256BaseSelect`, `p256PointAddMixed`, `p256BaseKeep`
+  and `p256BaseStep` with the promise "no branch, call, secret-indexed access
+  or secret-dependent latency". The read it replaces, one entry loaded at the
+  digit's offset, is seeded to fail: `ct_asm_refused`'s `leakyBaseRead`,
+  "refused for a load or store at a secret address" on both targets.
 - **What remains discipline.** The copies compute their offsets with
   `wrappingAdd` / `wrappingMul` and read with `uncheckedGet`, so they hold no
-  branch at all; the module's own functions do not.
-
-  Its `p256BaseSelect`
+  branch at all; the module's own functions do not. Its `p256BaseSelect`
   computes `(c * 15 + j - 1) * 16` (`:4582`) with checked arithmetic, whose
-  overflow test branches on the public `c` and `j`; `p256BaseDigit` guards
-  its byte index (`:4565`) and `p256BaseKeep` its lengths, on public
-  positions and lengths; and the 4-row and 16-column loops of
-  `p256BaseMultWith`, with its `r < 3` before each doubling (`:4681`), branch
-  on loop counters. None of these is read by ct_asm; each was read here and
-  depends on no bit of the scalar.
+  overflow test branches on the public `c` and `j`; `p256BaseDigit` guards its
+  byte index (`:4565`) and `p256BaseKeep` its lengths, on public positions and
+  lengths; and the 4-row and 16-column loops of `p256BaseMultWith`, with its `r
+  < 3` before each doubling (`:4681`), branch on loop counters. None of these
+  is read by ct_asm; each was read here and depends on no bit of the scalar.
 - **The wipe.** `p256BaseMultWith` wipes the selected entry before it
   returns, and its callers wipe the scratch's sum and the accumulator, as for
   the window:

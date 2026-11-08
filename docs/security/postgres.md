@@ -662,20 +662,14 @@ int8 id over two takes, articles by text slug, and tags by article, several
 rows a key in name order), each with a duplicate key and a key with no row,
 answer every request its own rows and no other's through a pooled connection;
 and that the conduit article list decodes, escapes and truncates as its golden
-says. The carrier serves HTTP while a query sleeps.
-
-Its `refused` check points it at a port
-with nothing listening: the query fails at once, `failure 9, socket -111`
-(`PG_ERR_CLOSED`, ECONNREFUSED), rather than wait for the connect timeout's
--110.
-
-Its `reset` check points it at a server that resets the connection on
-the startup message: the query fails `failure 9, socket -104` (ECONNRESET),
-and the carrier ends the connection there rather than leave the readable
-socket to spin.
-
-Its `unix` scenario connects through a `postgres://` URL whose host is the
-percent-encoded socket directory: the server asks for no password (`peer` for a
-cluster `run.mjs` starts, `trust` in CI's service), so a password the server
-would refuse still logs in, and its copy is wiped; and a multi-row read comes
-back over the socket, where `inet_server_addr()` is NULL.
+says. The carrier serves HTTP while a query sleeps. Its `refused` check points
+it at a port with nothing listening: the query fails at once, `failure 9,
+socket -111` (`PG_ERR_CLOSED`, ECONNREFUSED), rather than wait for the connect
+timeout's -110. Its `reset` check points it at a server that resets the
+connection on the startup message: the query fails `failure 9, socket -104`
+(ECONNRESET), and the carrier ends the connection there rather than leave the
+readable socket to spin. Its `unix` scenario connects through a `postgres://`
+URL whose host is the percent-encoded socket directory: the server asks for no
+password (`peer` for a cluster `run.mjs` starts, `trust` in CI's service), so a
+password the server would refuse still logs in, and its copy is wiped; and a
+multi-row read comes back over the socket, where `inet_server_addr()` is NULL.

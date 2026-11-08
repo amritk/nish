@@ -1373,23 +1373,23 @@ interop server does not.
   clock, fails to open. The `ticket_lifetime` sent is 7200 seconds, under
   §4.6.1's 604,800 cap.
 
-Pinned (#680) by `net_tls_ticket` and `net_tls_ticket_f64` (round trip, a flipped bit in each region,
-expiry at each bound, retired and unknown key ids, the chain bound; a ticket
-sealed under a live key with a lifetime over 7200 s, or a chain start after
-its issue time, failing to open; a key past
-its issue window refused by `tlsTicketSeal` and past 14 hours by
-`tlsTicketOpen`; the seal cap, brought forward to 2 as `recordLimit` is for
-KeyUpdate; `tlsTicketKeyDue` at the window's end and at the cap; and the
-caller's rotation turn run three times, with a ticket under the previous key
-opening until the turn after and failing to open then) and by the wipe-count
-check `tls: the wipes survive opt -O2 (a session ticket's plaintext on seal and open, the PSK of a failed open, the rotation turn's keys)`
-in `tests/wipes/tls.js`.
-
-Its roots are `tlsTicketOpen`, with two `secureZero`s (of the
-plaintext, and of the state's PSK array on a failed parse); `tlsTicketSeal`,
-with one, of the plaintext, and a second #680 added (As built, below); and the
-test's rotation turn, `ticketRotationTurns`, pinned at its total, 55. Each wipe of open and seal is shown
-counted on its own by deleting it and watching its root's count drop.
+Pinned (#680) by `net_tls_ticket` and `net_tls_ticket_f64` (round trip, a
+flipped bit in each region, expiry at each bound, retired and unknown key ids,
+the chain bound; a ticket sealed under a live key with a lifetime over 7200 s,
+or a chain start after its issue time, failing to open; a key past its issue
+window refused by `tlsTicketSeal` and past 14 hours by `tlsTicketOpen`; the
+seal cap, brought forward to 2 as `recordLimit` is for KeyUpdate;
+`tlsTicketKeyDue` at the window's end and at the cap; and the caller's rotation
+turn run three times, with a ticket under the previous key opening until the
+turn after and failing to open then) and by the wipe-count check `tls: the
+wipes survive opt -O2 (a session ticket's plaintext on seal and open, the PSK
+of a failed open, the rotation turn's keys)` in `tests/wipes/tls.js`. Its roots
+are `tlsTicketOpen`, with two `secureZero`s (of the plaintext, and of the
+state's PSK array on a failed parse); `tlsTicketSeal`, with one, of the
+plaintext, and a second #680 added (As built, below); and the test's rotation
+turn, `ticketRotationTurns`, pinned at its total, 55. Each wipe of open and
+seal is shown counted on its own by deleting it and watching its root's count
+drop.
 
 The rotation turn's `wipe(previous)` needs no deletion step: the checker
 enforces it, since `previous` cannot be assigned again while the `Secret` it
@@ -1470,26 +1470,21 @@ verified: resumption). The program owns it and lends it to the
 call that opens tickets, as it lends the keys. The id is the ticket's seal nonce, which
 the AEAD authenticates, so an id comes only from a ticket this server sealed.
 
-- **The order.** Identities are read in the client's order, and the first
-  that opens, has not expired, is under the hash of the suite the server has
-  already chosen (§4.2.11, §4.6.1), names the server name of this ClientHello,
-  and is not in the register is selected; then its binder alone is verified
-  (§4.2.11: SHOULD NOT validate multiple binders), and only once it verifies
-  is its id recorded.
-
-  So the register holds only ids from ClientHellos whose
-  binder verified (as §8.2 requires of a recorded ClientHello's key): an
-  attacker who has seen a ticket cannot spend it with a ClientHello of its own
-  making, since it holds no PSK to bind one.
-
-  It can spend it with the
-  client's: a whole ClientHello carries the client's valid binder, so an
-  on-path attacker that delivers it first, or drops the client's copy and
-  replays it, gets the id recorded, and the client's own offer is passed over
-  (row 6). What it wins is denial of resumption for that ticket — the client
-  gets a full handshake — and no key, since finishing the handshake needs the
-  client's x25519 private key. A ticket already recorded is passed over like
-  one that does not open.
+- **The order.** Identities are read in the client's order, and the first that
+  opens, has not expired, is under the hash of the suite the server has already
+  chosen (§4.2.11, §4.6.1), names the server name of this ClientHello, and is
+  not in the register is selected; then its binder alone is verified (§4.2.11:
+  SHOULD NOT validate multiple binders), and only once it verifies is its id
+  recorded. So the register holds only ids from ClientHellos whose binder
+  verified (as §8.2 requires of a recorded ClientHello's key): an attacker who
+  has seen a ticket cannot spend it with a ClientHello of its own making, since
+  it holds no PSK to bind one. It can spend it with the client's: a whole
+  ClientHello carries the client's valid binder, so an on-path attacker that
+  delivers it first, or drops the client's copy and replays it, gets the id
+  recorded, and the client's own offer is passed over (row 6). What it wins is
+  denial of resumption for that ticket — the client gets a full handshake — and
+  no key, since finishing the handshake needs the client's x25519 private key.
+  A ticket already recorded is passed over like one that does not open.
 - **The entry's life is the server's.** A strike entry needs to outlive only
   the window in which its ticket could open again, and the server, not the
   ticket, bounds that window at one lifetime. So the sizing below, capacity
@@ -1747,26 +1742,23 @@ As TLS-1 records for the other secrets:
   into one method both paths call once the server Finished is sent, the
   master-secret step `TlsServer.masterSecretStep`.
 
-  Before its `using
-  arena()` block opens, it points `clientApplicationSecret`,
-  `serverApplicationSecret`, `exporterSecret` and `expectedClientFinished`
-  at the slot's arrays, as `sign` does today (`std/net/tls.ts:1303-1307` at
+  Before its `using arena()` block opens, it points `clientApplicationSecret`,
+  `serverApplicationSecret`, `exporterSecret` and `expectedClientFinished` at
+  the slot's arrays, as `sign` does today (`std/net/tls.ts:1303-1307` at
   394c439), so the derivations below write into the pool's `Secret` fields
-  `TlsServer.wipe` reaches, not into ones the block releases. Then, in order, as `sign` does
-  today, it derives the master secret from the handshake secret; the client
-  and server application traffic secrets ("c ap traffic", "s ap traffic") and
-  the exporter secret ("exp master") from the master; and the expected client
-  Finished from the client handshake secret.
-
-  It then absorbs that Finished
-  into the transcript, since the resumption master secret is taken over the
-  transcript through the client Finished (§7.1), and derives the resumption
-  master secret ("res master") from the master. Last, as in `sign`, it wipes
-  the master with `secureZero`, on every path, and then sets
+  `TlsServer.wipe` reaches, not into ones the block releases. Then, in order,
+  as `sign` does today, it derives the master secret from the handshake secret;
+  the client and server application traffic secrets ("c ap traffic", "s ap
+  traffic") and the exporter secret ("exp master") from the master; and the
+  expected client Finished from the client handshake secret. It then absorbs
+  that Finished into the transcript, since the resumption master secret is
+  taken over the transcript through the client Finished (§7.1), and derives the
+  resumption master secret ("res master") from the master. Last, as in `sign`,
+  it wipes the master with `secureZero`, on every path, and then sets
   `TLS_STATE_WAIT_FINISHED`, which the carrier's state-driven wipes of the
-  handshake secrets key on. The
-  handshake secret is wiped as today, by `handleFinished`, `TlsServer.wipe`
-  and `restart`, which a resumed connection reaches as a full one does.
+  handshake secrets key on. The handshake secret is wiped as today, by
+  `handleFinished`, `TlsServer.wipe` and `restart`, which a resumed connection
+  reaches as a full one does.
 - **Issuing.** The resumption PSK for a NewSessionTicket is derived, sealed
   and wiped with `secureZero` before the record carrying it is sent; once its
   ticket is sealed, or at once on a connection that is issued none, the

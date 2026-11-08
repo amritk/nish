@@ -101,22 +101,20 @@ the record that found it. The notes below the table name each such finding.
 3. CG-9 (Low) was fixed by the runtime stage as RT-7; the codegen record
    counts CG-9 and the runtime record counts RT-7. K1-6, which the codegen
    record also lists, is counted once, under K1.
-4. RT-9 added the ownership primitives CLI-7 and CLI-9 need; it is counted as
-   a fixed Low. RT-10, RT-11, RT-12 and RT-13 (Low) were left open by the
-   runtime stage and fixed by #405 (closes #387). The "CG-3 (rest)" row of
-   that record is CG-3 and is counted under codegen. RT-14 (Medium), a
-   `string` lent to C by a `declare function` (WP27 S3.1), was decided and
-   fixed by the stage that found it, and is counted as a fixed Medium; its
-   anchors are in `src/`, not in the runtime.
-
-   RT-15 (Medium), a `string` a `declare function` returns (WP27 S3.2), is
-   counted the same way. So is RT-16 (Medium), `readCString` and the literal
-   `null` a `CPtr | null` parameter takes (WP27 S3.3), and RT-18 (Medium), a
-   `u8[]` lent to C with its count checked (WP40 B1.2), and RT-20 (Medium), the
-   C resource a `using` owns (#861). RT-21 (Low), `nish_argv_init` testing
-   `malloc`'s answer for null only after computing from it, was found by #888's
-   harness stage while building the runtime under UBSan, fixed there, and is
-   counted as a fixed Low.
+4. RT-9 added the ownership primitives CLI-7 and CLI-9 need; it is counted as a
+   fixed Low. RT-10, RT-11, RT-12 and RT-13 (Low) were left open by the runtime
+   stage and fixed by #405 (closes #387). The "CG-3 (rest)" row of that record
+   is CG-3 and is counted under codegen. RT-14 (Medium), a `string` lent to C
+   by a `declare function` (WP27 S3.1), was decided and fixed by the stage that
+   found it, and is counted as a fixed Medium; its anchors are in `src/`, not
+   in the runtime. RT-15 (Medium), a `string` a `declare function` returns
+   (WP27 S3.2), is counted the same way. So is RT-16 (Medium), `readCString`
+   and the literal `null` a `CPtr | null` parameter takes (WP27 S3.3), and
+   RT-18 (Medium), a `u8[]` lent to C with its count checked (WP40 B1.2), and
+   RT-20 (Medium), the C resource a `using` owns (#861). RT-21 (Low),
+   `nish_argv_init` testing `malloc`'s answer for null only after computing
+   from it, was found by #888's harness stage while building the runtime under
+   UBSan, fixed there, and is counted as a fixed Low.
 
    RT-24 and RT-25 (Medium), the mode race and the link a secret's
    write could follow, and RT-26 (Low), the umask on `mkdirSyncMode`, were

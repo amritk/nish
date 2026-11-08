@@ -31,9 +31,9 @@ A batch job steps aside for interactive work with `setNice(n)` (the nice value,
 even as root) or, on Linux, `setIdlePriority()` (`SCHED_IDLE`: the CPU only when
 nothing else wants it).
 
-Each answers 0 or a negative errno and never throws;
-`setIdlePriority` is -95 on Darwin. An unprivileged process can never leave
-`SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
+`setNice` and `setIdlePriority` each answer 0 or a negative errno and never
+throw; `setIdlePriority` is -95 on Darwin. An unprivileged process can never
+leave `SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
 normal-priority fallback for work that must finish, and call either at the top
 of `main`, before any thread starts. See
 [Scheduling](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#scheduling-setnice-setidlepriority-setcpuaffinity).
@@ -118,13 +118,14 @@ write somewhere else. And to replace a secret in one step, write it at `0600`
 to a temporary beside the target and `renameSync` the temporary over it: a
 reader then sees the old secret or the new one, never half of either.
 
-`createFileExclusiveSync(path, data, mode)` is the same write that fails with
-`-17` when the name already exists, so of any number of processes racing for
-one path exactly one wins: a lock file, released with `unlinkSync`.
-`mkdirSyncMode(path, 0o700)` makes a directory only you can enter; the umask
-still applies to a directory, which only ever narrows it. A mode past `0o777`,
-the setuid, setgid and sticky bits included, is `-22` and nothing is made. The
-numbers are the platform's errno values (Linux's shown).
+`createFileExclusiveSync(path, data, mode)` is the same write as
+`writeFileSyncMode`, but it fails with `-17` when the name already exists, so
+of any number of processes racing for one path exactly one wins: a lock file,
+released with `unlinkSync`. `mkdirSyncMode(path, 0o700)` makes a directory only
+you can enter; the umask still applies to a directory, which only ever narrows
+it. A mode past `0o777`, the setuid, setgid and sticky bits included, is `-22`
+and nothing is made. The numbers are the platform's errno values (Linux's
+shown).
 
 | Module | What it gives you |
 | --- | --- |
@@ -320,14 +321,15 @@ letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
 one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`,
 nor `[a-z]`, `\p{Lu}` or `\p{Ll}`.
 
-That keeps an ASCII pattern under `i` ASCII: it folds `A`–`Z` to `a`–`z` with
-no table, and its search, its vectorised prefix scan included, never has to
-look for those two letters' three-byte and two-byte forms. Under `i` both still
-count as word characters to `\w`, `\W`, `\b` and `\B`, as they do in JavaScript
-with `iu`. Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in
-JavaScript: `\P{Lu}` is everything outside `\p{Lu}`, closed under folding, so
-it matches `A` through `a`, while `[^\p{Lu}]` negates the folded class
-`[\p{Lu}]`, which holds every cased letter, so it matches neither `A` nor `a`.
+Folding no letter outside ASCII into ASCII keeps an ASCII pattern under `i`
+ASCII: it folds `A`–`Z` to `a`–`z` with no table, and its search, its
+vectorised prefix scan included, never has to look for those two letters'
+three-byte and two-byte forms. Under `i` both still count as word characters to
+`\w`, `\W`, `\b` and `\B`, as they do in JavaScript with `iu`. Under `i`,
+`\P{Lu}` and `[^\p{Lu}]` differ, as they do in JavaScript: `\P{Lu}` is
+everything outside `\p{Lu}`, closed under folding, so it matches `A` through
+`a`, while `[^\p{Lu}]` negates the folded class `[\p{Lu}]`, which holds every
+cased letter, so it matches neither `A` nor `a`.
 
 Finding every match is one search per match, so `findAll`, `count`,
 `replaceAll` and `split` are quadratic when a long branch is preferred to a
@@ -894,11 +896,11 @@ answer: one member, at the place of the first, with the value of the last.
 and every handle from before it is gone: a handle kept from the last request
 reads as `JSON_VALUE_NONE` in this one, even when the two have the same shape.
 
-The check counts in a cycle of 511 steps — one for each `clear`, one for
-each parse, two for a parse that fails — so do not keep handles across
-parses; it is there to catch the mistake. The document keeps its memory, so a
-server that keeps one document and parses each request into it stops
-allocating once it has seen its largest request. `clear()` empties it for
+The check that catches a stale handle counts in a cycle of 511 steps — one for
+each `clear`, one for each parse, two for a parse that fails — so do not keep
+handles across parses; it is there to catch the mistake. The document keeps its
+memory, so a server that keeps one document and parses each request into it
+stops allocating once it has seen its largest request. `clear()` empties it for
 building from scratch.
 
 **Where a value came from.** `parseRanged(bytes, off, len)` and

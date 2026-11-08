@@ -430,27 +430,28 @@ clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
 number formatting, the panics — and `runtime-os.c` wraps the system calls:
 files, directories, subprocesses, `getenv`, the monotonic clock.
 
-`runtime-parallel.c` divides work across threads for `nish/threads` (a
-program built with `--threads`, as every importer of `nish/threads` is, also
-needs `-DNISH_THREADS=1 -pthread` on the line), `runtime-cross.c` copies
-the strings and arrays a task answers, a channel sends or a `Mutex` keeps out
-of the arena they were made in, `runtime-host.c` holds the wall clock,
-entropy, file times and signals, `runtime-net.c` the sockets of `nish:net`,
-`runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM,
-`runtime-sha256.c` the SHA-256 block kernel `nish/crypto/sha256` hands its
-blocks to on a CPU with the SHA instructions (`NISH_SHA256=soft` keeps the
-portable path), `runtime-chacha20.c` the ChaCha20 keystream `nish/crypto/chacha20poly1305`
-hands a message of 256 bytes or more to on a CPU with AVX2 or NEON (`NISH_CHACHA20=soft`
-keeps the portable path), `runtime-term.c` the stdin reads and terminal calls of `nish:term`,
-`runtime-bytes.c` the byte-class runs of `nish/bytes`, which `nish/json` steps
-over, `runtime-checksum.c` the CRC-32 kernels of `nish/compress/checksum`,
-`runtime-sandbox.c` the confinement a `--sandbox` build applies, and
-`runtime-shm.c` the shared-memory regions of `nish/sync/shm`.
-
-They are separate so that each carries its own measured size ceiling
-([docs/wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md)); nothing in the core calls into the
-others, so a line that names only `runtime.c` and `runtime-os.c` still links a
-program that uses none of the other nine.
+`runtime-parallel.c` divides work across threads for `nish/threads` (a program
+built with `--threads`, as every importer of `nish/threads` is, also needs
+`-DNISH_THREADS=1 -pthread` on the line), `runtime-cross.c` copies the strings
+and arrays a task answers, a channel sends or a `Mutex` keeps out of the arena
+they were made in, `runtime-host.c` holds the wall clock, entropy, file times
+and signals, `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` and
+`runtime-aes.c` the vector text search and AES-GCM, `runtime-sha256.c` the
+SHA-256 block kernel `nish/crypto/sha256` hands its blocks to on a CPU with the
+SHA instructions (`NISH_SHA256=soft` keeps the portable path),
+`runtime-chacha20.c` the ChaCha20 keystream `nish/crypto/chacha20poly1305`
+hands a message of 256 bytes or more to on a CPU with AVX2 or NEON
+(`NISH_CHACHA20=soft` keeps the portable path), `runtime-term.c` the stdin
+reads and terminal calls of `nish:term`, `runtime-bytes.c` the byte-class runs
+of `nish/bytes`, which `nish/json` steps over, `runtime-checksum.c` the CRC-32
+kernels of `nish/compress/checksum`, `runtime-sandbox.c` the confinement a
+`--sandbox` build applies, and `runtime-shm.c` the shared-memory regions of
+`nish/sync/shm`. They are separate so that each carries its own measured size
+ceiling
+([docs/wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md));
+nothing in the core calls into the others, so a line that names only
+`runtime.c` and `runtime-os.c` still links a program that uses none of the
+other nine.
 
 `scripts/build.sh` compiles the other
 nine beside any
@@ -481,15 +482,13 @@ The seed builds stage1, stage1 builds stage2, and stage2 is installed as
 own IR is only reported beside them, because a codegen change since the
 release is expected to move it. `--stages 1` stops one link sooner.
 
-`build/nish` is then the compiler you run: it takes the same `-o`, `--link`
-and `--profile` spellings as an installed `nish`, because it is the same
-program, and makes every directory in the way of the IR, a sidecar or the
-binary itself. It looks for `scripts/build.sh` and the `runtime/*.c` files
-one level up from wherever it was invoked (and one level up from the file a
-symbolic link to it names), so it wants a checkout or an installed package
-around it the way `nish` does.
-
-It falls back to the working directory only when the compiler itself lies
+`build/nish` is then the compiler you run: it takes the same `-o`, `--link` and
+`--profile` spellings as an installed `nish`, because it is the same program,
+and makes every directory in the way of the IR, a sidecar or the binary itself.
+It looks for `scripts/build.sh` and the `runtime/*.c` files one level up from
+wherever it was invoked (and one level up from the file a symbolic link to it
+names), so it wants a checkout or an installed package around it the way `nish`
+does. It falls back to the working directory only when the compiler itself lies
 inside that directory, so a checkout you merely `cd` into cannot hand it a
 `scripts/build.sh` to run. Keep `bin/nish` beside `scripts/`, `runtime/` and
 `std/`, as every install above does, and keep that directory's parent writable
@@ -547,27 +546,24 @@ nish run hello.ts
 `nish run [options] <file.ts> [args ...]` compiles the file, links it into
 `$XDG_CACHE_HOME/nish/run` (or `~/.cache/nish/run`) when that program has not
 been linked before, and starts it with the arguments after the file. The first
-run of a new edit pays for one link, and later runs start the cached binary.
-It needs clang only for that link.
-
-It needs `HOME` or `XDG_CACHE_HOME` set to an absolute path (a relative one is
-ignored, as if it were unset), and refuses the run without one rather than keep
-a binary in a shared directory. The first run that builds into the cache makes
-its root `0700`, so no other user can plant a binary in it
-([docs/security/cli.md](security/cli.md)).
+run of a new edit pays for one link, and later runs start the cached binary. It
+needs clang only for that link. It needs `HOME` or `XDG_CACHE_HOME` set to an
+absolute path (a relative one is ignored, as if it were unset), and refuses the
+run without one rather than keep a binary in a shared directory. The first run
+that builds into the cache makes its root `0700`, so no other user can plant a
+binary in it ([docs/security/cli.md](security/cli.md)).
 
 Every link with the debug, speed or size profile, `nish run`'s and `--link`'s
 alike, keeps the compiled C runtime in `$XDG_CACHE_HOME/nish/runtime` (or
 `~/.cache/nish/runtime`), one entry per profile, `-g`, `--threads`, `CC` and
-the version that compiler reports, made `0700` the same way.
-
-The first link compiles the runtime's six files at once into it, and every
-later link compiles only the program's modules, also at once, and links against
-the entry: a `hello.ts` debug link goes from about half a second to about a
-tenth. `--link` with no absolute `HOME` or `XDG_CACHE_HOME`, or with a root it
-cannot make private, compiles the runtime itself as it always did; the wasi
-profile and `scripts/build.sh` called directly never use the cache. Removing
-the directory is always safe.
+the version that compiler reports, made `0700` the same way. The first link
+compiles the runtime's six files at once into it, and every later link compiles
+only the program's modules, also at once, and links against the entry: a
+`hello.ts` debug link goes from about half a second to about a tenth. `--link`
+with no absolute `HOME` or `XDG_CACHE_HOME`, or with a root it cannot make
+private, compiles the runtime itself as it always did; the wasi profile and
+`scripts/build.sh` called directly never use the cache. Removing the directory
+is always safe.
 
 <a id="4-exit-codes" style="scroll-margin-top: 65px"></a>
 

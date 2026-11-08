@@ -59,19 +59,17 @@ strings cannot end a line.
 
 Fuzzed by `tests/fuzz/targets/http1-client.ts`, from its seed corpus in
 `tests/fuzz/corpus/http1-client/` (sixteen inputs: both framings, a body read
-until close, interim responses, pipelined keep-alives, HEAD, a CONNECT
-tunnel, the smuggling shapes, an obs-fold, a 101 and the small limits). The
-target's first byte picks small or usual limits, whether the response
-answers a HEAD or a CONNECT, whether each piece is fed as its own array and
-whether `finish()` follows the last piece; the next four bytes cut the rest
-into pieces.
-
-It reads the response whole and cut, and panics when the two
-digests of the events, statuses, fields, de-chunked body, tunnel and error
-code differ, on a status outside 100 to 999, on names and values of
-different lengths, on a body window outside its buffer, on more body than
-`maxBody`, on `HTTP1_UPGRADE` without a CONNECT, on an error code outside 1
-to 17 or an error that leaves bytes buffered, and on an unknown event.
+until close, interim responses, pipelined keep-alives, HEAD, a CONNECT tunnel,
+the smuggling shapes, an obs-fold, a 101 and the small limits). The target's
+first byte picks small or usual limits, whether the response answers a HEAD or
+a CONNECT, whether each piece is fed as its own array and whether `finish()`
+follows the last piece; the next four bytes cut the rest into pieces. It reads
+the response whole and cut, and panics when the two digests of the events,
+statuses, fields, de-chunked body, tunnel and error code differ, on a status
+outside 100 to 999, on names and values of different lengths, on a body window
+outside its buffer, on more body than `maxBody`, on `HTTP1_UPGRADE` without a
+CONNECT, on an error code outside 1 to 17 or an error that leaves bytes
+buffered, and on an unknown event.
 
 The sanitizer runtimes libFuzzer needs were not installed where this stage
 was written, so the target was built against `tests/fuzz/harness.c` with a

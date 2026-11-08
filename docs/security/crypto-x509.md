@@ -82,34 +82,30 @@ or a signature check that passes for bytes nobody signed.
   fixed xorshift32 seed: an octet set to a random or boundary value (`00 7f 80
   81 82 84 ff`), deleted or inserted.
 
-  **25,701 inputs**, about 4.7 s and 10 MB,
-  run by `npm test` (25,281 until X509-9 gave the golden certificate its 34
-  octets of extensions, which the corpus now cuts and flips too). Each input
-  must return without a panic and must not come back as something it should
-  not be (the program's header states the four properties). Against `main`'s
-  `x509.ts` before this change the same corpus also runs clean; the change
-  moves its counts only where the tighter `[3]` check refuses more (the CA
-  certificate, then the one fixture with extensions: 1,527 refused before, 1,547
-  after; the leaf-and-CA PEM: 1,917 before, 1,918 after).
-
-  X509-10 moves them
-  again, only toward refusal: an edit inside the golden and CA certificates'
-  basicConstraints and keyUsage, or the leaf's, that framed sound before now
-  decodes as a malformed extension. Golden 1,479 refused before, 1,813 after;
-  CA 1,547 and 1,947; leaf 1,368 and 1,488; the golden PEM 1,079 and 1,113; the
-  leaf-and-CA PEM 1,918 and 1,963. The input counts, the signature and key
-  lines, and every property, are unchanged.
-- **Mutation**, for X509-10 to X509-13: each guard the change adds that
-  answers `null`, `false` or `X509_SIG_UNKNOWN` was replaced by `false` in
-  turn, and `crypto_x509` and `_audit` rerun; 49 of 51 failed. One survives:
+  **25,701 inputs**, about 4.7 s and 10 MB, run by `npm test` (25,281 until
+  X509-9 gave the golden certificate its 34 octets of extensions, which the
+  corpus now cuts and flips too). Each input must return without a panic and
+  must not come back as something it should not be (the program's header states
+  the four properties). Against `main`'s `x509.ts` before this change the same
+  corpus also runs clean; the change moves its counts only where the tighter
+  `[3]` check refuses more (the CA certificate, then the one fixture with
+  extensions: 1,527 refused before, 1,547 after; the leaf-and-CA PEM: 1,917
+  before, 1,918 after). X509-10 moves them again, only toward refusal: an edit
+  inside the golden and CA certificates' basicConstraints and keyUsage, or the
+  leaf's, that framed sound before now decodes as a malformed extension. Golden
+  1,479 refused before, 1,813 after; CA 1,547 and 1,947; leaf 1,368 and 1,488;
+  the golden PEM 1,079 and 1,113; the leaf-and-CA PEM 1,918 and 1,963. The
+  input counts, the signature and key lines, and every property, are unchanged.
+- **Mutation**, for X509-10 to X509-13: each guard the change adds that answers
+  `null`, `false` or `X509_SIG_UNKNOWN` was replaced by `false` in turn, and
+  `crypto_x509` and `_audit` rerun; 49 of 51 failed. One survives:
   `x509DerIsAlgorithm`'s tag check, which predates the change and which the
-  P-256 key reader relies on.
-
-  The other survivor, keyUsage's length check, is
-  now `n > 2` alone and pinned: `n < 1` was dead (an empty BIT STRING's unused-bits count is
-  held to 0, so the lowest-bit check refuses it) and is removed, and `n > 2`
-  keeps `1 << bit` below 32, which "a keyUsage of five octets" (bit 32 alone,
-  which a wrapping shift reads as digitalSignature) now pins.
+  P-256 key reader relies on. The other survivor, keyUsage's length check, is
+  now `n > 2` alone and pinned: `n < 1` was dead (an empty BIT STRING's
+  unused-bits count is held to 0, so the lowest-bit check refuses it) and is
+  removed, and `n > 2` keeps `1 << bit` below 32, which "a keyUsage of five
+  octets" (bit 32 alone, which a wrapping shift reads as digitalSignature) now
+  pins.
 
   Ten clause mutations (duplicate, IA5 octets, NUL, a negative
   or five-octet path length, PSS's MGF hash and OID, the `unknownCritical`
@@ -125,38 +121,33 @@ or a signature check that passes for bytes nobody signed.
   isolating checks (17 listed here, and `at > limit - 2` below), 10 are
   equivalent (below), and keyUsage's `n < 1` was removed.
 
-  With the extnID arc test's three clauses, which the review found,
-  that is 23 new checks in `crypto_x509`: the three arc clauses (`551d1301`,
-  `551e13` and `2a1d13`, each holding a basicConstraints value with cA TRUE
-  and read as an unknown extension with nothing decoded), an otherName
-  type-id that is not an OID, an OID with an inner `0x80` octet (which must
-  read), PSS parameters under another OID and an element after them,
-  `x509NameIsPrefix` with bytes after the base, a directoryName with bytes
-  after its Name, an x400Address and an ediPartyName (each counted in
-  `sanOther`), trailing bytes after the subjectAltName, keyUsage,
-  extKeyUsage, nameConstraints, subjectKeyIdentifier and
-  authorityKeyIdentifier values, a two-octet BOOLEAN as the critical flag
-  and as cA, a five-octet keyUsage, and `[1]`, `[2]` or `[3]` in a version
-  that does not have them (one operand, three checks; the two BOOLEANs, the
-  two name forms and the six trailing-bytes values are one operand each, so
-  17 operands make 20 checks).
-
-  These are equivalent and stay unpinned: `x509DerIsTrue`'s tag test (both
-  callers peek for a BOOLEAN first) and `x509NameIsPrefix`'s soundness test of
-  the base (each base RDN must equal, byte for byte, an RDN of a name that is
-  itself checked).
+  With the extnID arc test's three clauses, which the review found, that is 23
+  new checks in `crypto_x509`: the three arc clauses (`551d1301`, `551e13` and
+  `2a1d13`, each holding a basicConstraints value with cA TRUE and read as an
+  unknown extension with nothing decoded), an otherName type-id that is not an
+  OID, an OID with an inner `0x80` octet (which must read), PSS parameters
+  under another OID and an element after them, `x509NameIsPrefix` with bytes
+  after the base, a directoryName with bytes after its Name, an x400Address and
+  an ediPartyName (each counted in `sanOther`), trailing bytes after the
+  subjectAltName, keyUsage, extKeyUsage, nameConstraints, subjectKeyIdentifier
+  and authorityKeyIdentifier values, a two-octet BOOLEAN as the critical flag
+  and as cA, a five-octet keyUsage, and `[1]`, `[2]` or `[3]` in a version that
+  does not have them (one operand, three checks; the two BOOLEANs, the two name
+  forms and the six trailing-bytes values are one operand each, so 17 operands
+  make 20 checks). These are equivalent and stay unpinned: `x509DerIsTrue`'s
+  tag test (both callers peek for a BOOLEAN first) and `x509NameIsPrefix`'s
+  soundness test of the base (each base RDN must equal, byte for byte, an RDN
+  of a name that is itself checked).
 
   The bounds tests that only keep a load in range (`k >= 0 && k < der.length`,
   six operands) and `x509DerReadInto`'s caller-contract guards `at < 0` and
   `limit > der.length` are equivalent too, since the length check that follows
-  refuses the same inputs.
-
-  Its third guard, `at > limit - 2`, is not:
-  without it an empty or one-byte input loads `der[at]` or `der[at + 1]` past
-  the end and panics instead of answering null, and "an empty certificate"
-  and "a one-byte certificate" now pin it. `x509ExtensionArc`'s `arc < 0x80`
-  is equivalent as well, and outside the sweep's count: `x509DerOidSound`
-  has already refused a final octet of `0x80` or more.
+  refuses the same inputs. Its third guard, `at > limit - 2`, is not: without
+  it an empty or one-byte input loads `der[at]` or `der[at + 1]` past the end
+  and panics instead of answering null, and "an empty certificate" and "a
+  one-byte certificate" now pin it. `x509ExtensionArc`'s `arc < 0x80` is
+  equivalent as well, and outside the sweep's count: `x509DerOidSound` has
+  already refused a final octet of `0x80` or more.
 - **wasm32 check.** Whether this module could draw randomness itself: a module
   that calls `crypto.getRandomValues` fails to compile for
   `--target wasm32-unknown-unknown` and `wasm32-wasi` (`` `crypto.getRandomValues`

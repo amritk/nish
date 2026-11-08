@@ -327,10 +327,9 @@ that outlives a record. The handshake keeps its state in the slot, which
 `accept` restarts, and a KeyUpdate installs its keys in place, so neither
 leaves anything in the arena (TLS-3); a connection still takes at most
 `TLS_RECORD_MAX_KEY_UPDATES` (64) KeyUpdates from its client. The carrier has
-no clock, so closing quiet slots is the program's (TLS-4).
-
-On this path the record layer wipes `TlsServer`'s traffic and handshake secrets
-and the ephemeral key once it has what it needs from them, which narrows TLS-1.
+no clock, so closing quiet slots is the program's (TLS-4). On this path the
+record layer wipes `TlsServer`'s traffic and handshake secrets and the
+ephemeral key once it has what it needs from them, which narrows TLS-1.
 `tests/link/net_tls_record_*` are its programs, and the `net_tls_tcp` block of
 `tests/run.js` drives the carrier with openssl and Node's `https`.
 
@@ -350,18 +349,16 @@ stateless reset would end that connection. Make the connection when it says so,
 with `QUIC_CONN_ENTROPY_SIZE` bytes from `crypto.getRandomValues`: the TLS
 server random and x25519 key, the server's first connection ID and the seed its
 later IDs are derived from all come out of them, so a test injects fixed bytes
-and a recorded exchange replays byte for byte.
-
-Neither has a clock: `now` is the caller's monotonic time in
-milliseconds, and `deadline()` says when to call `handleTimer(now)` next.
-Hand the connection every datagram the client sends;
+and a recorded exchange replays byte for byte. Neither has a clock: `now` is
+the caller's monotonic time in milliseconds, and `deadline()` says when to call
+`handleTimer(now)` next. Hand the connection every datagram the client sends;
 when `signatureInput()` answers bytes, sign them (`tlsSignEcdsaP256`) and hand
-the signature to `sign`; then send whatever `takeDatagram(now)` answers until it
-answers `null`, to the address the datagram came from. `ownsConnectionId`
-says whether a datagram's DCID is the connection's, which is how a server
-with many routes them. Stream data comes out of `readStream()` in order per
-stream, and `writeStream` queues a reply within the credit the client gave.
-`state` says where it is, and `error` why it closed.
+the signature to `sign`; then send whatever `takeDatagram(now)` answers until
+it answers `null`, to the address the datagram came from. `ownsConnectionId`
+says whether a datagram's DCID is the connection's, which is how a server with
+many routes them. Stream data comes out of `readStream()` in order per stream,
+and `writeStream` queues a reply within the credit the client gave. `state`
+says where it is, and `error` why it closed.
 
 The keys of each level are wiped when the level is discarded, each key
 generation when an update replaces it, and the rest by `release()` or the idle
@@ -452,19 +449,18 @@ that are *not* this package.
 
 - **Spell the widths — and then convert what the builtins hand you.** `i32`,
   `i64`, `f64`, never `number`, so the module means the same thing under
-  `--number-mode f64` as it does by default (`examples/arrays.ts` says that half
-  for the same reason). It is necessary and **not sufficient**: `s.length`,
-  `a.length` and `s.charCodeAt(i)` answer `number`, which *is* `f64` in that
-  mode, so a module that declares every width of its own and still writes
-  `let end: i32 = text.length` or `while (i < text.length)` does not compile
-  there at all.
-
-  Read each of those through `toI32` —
-  `const length: i32 = toI32(text.length)`, once per function rather than once
-  per iteration — and the module means one program in both modes. The default
-  mode pays nothing for it, because `toI32` on an `i32` is identity.
-  `tests/link/std_text_f64` is what keeps this from being prose;
-  [`docs/wp26-stdlib.md`](https://github.com/amritk/nish/blob/main/docs/wp26-stdlib.md) §4 is the reasoning.
+  `--number-mode f64` as it does by default (`examples/arrays.ts` says that
+  half for the same reason). It is necessary and **not sufficient**:
+  `s.length`, `a.length` and `s.charCodeAt(i)` answer `number`, which *is*
+  `f64` in that mode, so a module that declares every width of its own and
+  still writes `let end: i32 = text.length` or `while (i < text.length)` does
+  not compile there at all. Read each of those through `toI32` — `const length:
+  i32 = toI32(text.length)`, once per function rather than once per iteration —
+  and the module means one program in both modes. The default mode pays nothing
+  for it, because `toI32` on an `i32` is identity. `tests/link/std_text_f64` is
+  what keeps this from being prose;
+  [`docs/wp26-stdlib.md`](https://github.com/amritk/nish/blob/main/docs/wp26-stdlib.md)
+  §4 is the reasoning.
 - **Name the private helpers as though they were exported.** A `std/` module
   belongs to package `nish`, so its symbols no longer collide with the
   importing program's (`tests/link/std_package_scope`), but every `std/` module

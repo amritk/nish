@@ -340,13 +340,11 @@ once, did not repeat", and is named in the summary line; the run passes, and
 the report job comments on the open `ct-timing` issue, or opens one when none
 is open, so that a function that crosses once every week is seen.
 
-A re-measure seconds later on the same shared
-runner is not independent of the first, so the rule's own false-positive rate
-is not claimed beyond what the A/A runs above measured. A large leak is not hidden by it: every control and every
+A re-measure seconds later on the same shared runner is not independent of the
+first, so the rule's own false-positive rate is not claimed beyond what the A/A
+runs above measured. A large leak is not hidden by it: every control and every
 leak this record has timed read |t| in the hundreds or thousands, and crosses
-on any seed.
-
-That shows the rule's power for large effects only: a weak leak
+on any seed. That shows the rule's power for large effects only: a weak leak
 near the threshold, |t| about 4 to 6, can cross once and not again by chance,
 which is why a crossed-once row is put in front of a person rather than
 dropped. The controls are never re-measured: each must differ on its first

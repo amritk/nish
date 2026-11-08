@@ -177,9 +177,7 @@ Measured on 2026-10-20 on the machine of the data-parallelism table above (Intel
 | 3 chunks above the grain | par-heavy at 600,000 elements, 300 calls: three chunks of the grain | 1053 | 1036 | 1071 | 1174 |
 | 8 chunks above the grain | par-heavy at 2^21 elements, 80 calls: eight chunks | 843 | 781 | 815 | 787 |
 
-par-heavy at one thread is 2172 (2108–2315), within main's band.
-
-Over that one-thread loop, on the medians of the same rounds, par-heavy goes from about 2.6x on `main` (2172 / 846) to about 2.7x (2172 / 792), about 6% faster at four threads and outside the copy band (846 / 834 against 792 / 771); the data-parallelism table above, on minima, has 2.91x. par-alloc, whose body allocates, is the largest gain: 79–88 ms on `main`, 51–52 here, and the gain is the pieces' own: the same runtime with the arena reset between pieces taken out measures 53, the same. par-histogram is a scope of tasks, not a divided region, and its contended lock spreads each binary over 89–258 ms; its medians, 223–229 on `main` and 199–206 here over 15 rounds, are no difference. The others are unchanged.
+par-heavy at one thread is 2172 (2108–2315), within main's band. Over that one-thread loop, on the medians of the same rounds, par-heavy goes from about 2.6x on `main` (2172 / 846) to about 2.7x (2172 / 792), about 6% faster at four threads and outside the copy band (846 / 834 against 792 / 771); the data-parallelism table above, on minima, has 2.91x. par-alloc, whose body allocates, is the largest gain: 79–88 ms on `main`, 51–52 here, and the gain is the pieces' own: the same runtime with the arena reset between pieces taken out measures 53, the same. par-histogram is a scope of tasks, not a divided region, and its contended lock spreads each binary over 89–258 ms; its medians, 223–229 on `main` and 199–206 here over 15 rounds, are no difference. The others are unchanged.
 
 A single 2^25 map is not slower than at efbbd8c8 (212 / 211) or on `main`, and workers touching their own pages first (first-touch) measured within the band, so it is not shipped.
 
@@ -540,9 +538,7 @@ Noise band, Nish against its byte-identical copy: 1.4% on the minimums (14.1% on
 <!-- json-writer-bytes:begin -->
 ### JsonWriter's byte writers
 
-`JsonWriter.keyBytes` and `stringBytes` copy runs of plain bytes with the `skipJsonPlain` kernel (`nish/bytes`) from 16 bytes up. `jsonEncode` writes `string`s through `jsonWriterPutString`, which did not change, so the serialize table above does not measure this: in an A/B against the base, `804120e`, serialize on citm ran 0.988x at the minimum, 0.9 points past that run's 0.3% band (the branch against its byte-identical copy).
-
-Re-run against `3dca351` with the class kernels' loops restored to main's instructions, it ran 0.988x again, inside that run's 1.4% band. In the same run (12 rounds, minimums, each band the branch against its byte-identical copy), tokenize ran 1.025x on twitter (band 0.7%), 0.994x on citm (0.5%) and 1.048x on canada (0.3%), typed decode on citm 1.003x (0.9%) and typed-reuse 0.955x (4.2%), and `bench/json-tokenizer`'s 242-byte body ran 0.99x, inside its 0.6% band.
+`JsonWriter.keyBytes` and `stringBytes` copy runs of plain bytes with the `skipJsonPlain` kernel (`nish/bytes`) from 16 bytes up. `jsonEncode` writes `string`s through `jsonWriterPutString`, which did not change, so the serialize table above does not measure this: in an A/B against the base, `804120e`, serialize on citm ran 0.988x at the minimum, 0.9 points past that run's 0.3% band (the branch against its byte-identical copy). Re-run against `3dca351` with the class kernels' loops restored to main's instructions, it ran 0.988x again, inside that run's 1.4% band. In the same run (12 rounds, minimums, each band the branch against its byte-identical copy), tokenize ran 1.025x on twitter (band 0.7%), 0.994x on citm (0.5%) and 1.048x on canada (0.3%), typed decode on citm 1.003x (0.9%) and typed-reuse 0.955x (4.2%), and `bench/json-tokenizer`'s 242-byte body ran 0.99x, inside its 0.6% band.
 
 Two rows are past their bands: tokenize on citm by 0.1 points and typed-reuse by 0.3 points. Both run machine code identical to main's — the class paths' instructions are main's, and neither workload writes — and in typed-reuse the branch's byte-identical copy ran within 0.3% of the base, so the copy band is the evidence for reading both as noise; none of these gaps, faster or slower, is claimed.
 
@@ -712,9 +708,7 @@ A `list` query decodes 20 rows of two timestamps, an int and an array, so all of
 | `list` | 57.74 µs (7.37) | +1.35 | +2.33 | +1.21 | +0.59 | +1.42 |
 | `insert` | 32.84 µs (5.32) | +1.29 | +0.20 | −0.01 | −1.47 | −1.14 |
 
-On `list`, the only workload that decodes timestamps and arrays in bulk, every change measured slower than main, and none was faster by more than the band. The `pk` and `insert` cells outside their bands are noise: neither workload reads an array, yet the walker change moves both by the most.
-
-Its 18 ns a call is real, but at about 0.4 µs a `list` query it is about a quarter of the band, so no decoding change ships. Binary results were not tried: integer decoding (`PgText.int` and `PgConnection.int`) is about 1.4 % of `list` and under 0.7 % of the others, and the timestamp and `text[]` columns `list` reads would cost more to decode from binary than from text.
+On `list`, the only workload that decodes timestamps and arrays in bulk, every change measured slower than main, and none was faster by more than the band. The `pk` and `insert` cells outside their bands are noise: neither workload reads an array, yet the walker change moves both by the most. Its 18 ns a call is real, but at about 0.4 µs a `list` query it is about a quarter of the band, so no decoding change ships. Binary results were not tried: integer decoding (`PgText.int` and `PgConnection.int`) is about 1.4 % of `list` and under 0.7 % of the others, and the timestamp and `text[]` columns `list` reads would cost more to decode from binary than from text.
 
 **The input buffer.** `strace -c` shows the module's 8 KiB first input buffer taking a `list` answer in two reads, 5,717 `recvfrom` and as many `epoll_wait` for 3,000 queries against libpq's 3,028. A 16 KiB first size, libpq's own, brings it to 3,028; 32 and 64 KiB to about 3,015. Timed against main in 12 interleaved rounds (a fixed order within each round, no warm-up round):
 
@@ -864,9 +858,7 @@ Not measured by `bench/run.mjs`, which carries this section over unchanged. `nod
 
 ns per request, median (min–max) and ratio of medians to `old`. `idle` shows no wall-time gain outside noise. In `idle-dram` the median is 3.2% under `old` against `old′`'s 0.5%, but the ranges overlap.
 
-What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections.
-
-In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
+What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
 <!-- http-conn:end -->
 
 <!-- sha-block:begin -->

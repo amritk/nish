@@ -491,21 +491,19 @@ cycles per half-round, against the 11-cycle chain one half-round waits on
 widths take 94 (2), 71 (3), 57 (4), 50 (5) and 46 (6) cycles per block.
 
 **The four-lane kernel, read.** The loop of `bcryptBody4` after `opt -O3` and
-`llc`, from its `objdump`, is one round (two half-rounds) of all four lanes
-in 103 instructions: 40 loads (each lane's 4 S-box words and `P` word per
-half-round), no stores and no spills, and one compare and backward branch,
-the only branch; it runs 8 times per block, not unrolled further.
-
-It has
-been shortened twice, both in
-[Cascade Lake](#cascade-lake-the-ceiling-and-one-copy-for-two-bytes): the
-first form was 123 instructions, 45 loads and 5 stores; the rotated copy made
-it 112, 44 (4 of them reloads of spilled values) and 4; the paired bytes made
-it what it is now. Checked against the suspects: no
-bounds check (each S-box index is masked to 0–255 and the state's length is
-checked once, before the loop) and no overflow check (the arithmetic is
-`u32`, which wraps); no `Secret` or wipe work inside the loop, which calls
-nothing; the lanes interleave, each lane's loads issued between the others'.
+`llc`, from its `objdump`, is one round (two half-rounds) of all four lanes in
+103 instructions: 40 loads (each lane's 4 S-box words and `P` word per
+half-round), no stores and no spills, and one compare and backward branch, the
+only branch; it runs 8 times per block, not unrolled further. It has been
+shortened twice, both in
+[Cascade Lake](#cascade-lake-the-ceiling-and-one-copy-for-two-bytes): the first
+form was 123 instructions, 45 loads and 5 stores; the rotated copy made it 112,
+44 (4 of them reloads of spilled values) and 4; the paired bytes made it what
+it is now. Checked against the suspects: no bounds check (each S-box index is
+masked to 0–255 and the state's length is checked once, before the loop) and no
+overflow check (the arithmetic is `u32`, which wraps); no `Secret` or wipe work
+inside the loop, which calls nothing; the lanes interleave, each lane's loads
+issued between the others'.
 
 The state's slots are 1042 words, 4168 bytes, apart, not a multiple of 4096,
 so the lanes' S-box words at one index fall in different L1 sets, and the
@@ -596,17 +594,15 @@ the widths; a nominal 2.1 GHz), for comparison:
 | tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 72.3 (70.0–75.1) |
 | tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 26.2 (23.1–30.2) |
 
-The single path is level with gcc's builds and `crypt_r`, inside the noise,
-and 10% ahead of OpenBSD's clang build. No bounds check is left in the round:
-every S-box index is masked to 0–255 and the state's length is checked once.
-Each half-round closes with one XOR after its last S-box add, as gcc's do and
-clang's do not (below).
-
-Before that order was pinned, the single path
-trailed gcc. Two runs of the bench, interleaved with the branch's in one
-session, measured 73.1 (72.0–84.1) and 74.6 (72.1–76.9) ms on `main`
-(`be8e623`). The branch measured 67.8 (66.5–69.0) and 68.9 (66.6–71.0) ms,
-7.3% and 7.6% less, and gcc measured 68.5 to 69.6 ms across the four.
+The single path is level with gcc's builds and `crypt_r`, inside the noise, and
+10% ahead of OpenBSD's clang build. No bounds check is left in the round: every
+S-box index is masked to 0–255 and the state's length is checked once. Each
+half-round closes with one XOR after its last S-box add, as gcc's do and
+clang's do not (below). Before that order was pinned, the single path trailed
+gcc. Two runs of the bench, interleaved with the branch's in one session,
+measured 73.1 (72.0–84.1) and 74.6 (72.1–76.9) ms on `main` (`be8e623`). The
+branch measured 67.8 (66.5–69.0) and 68.9 (66.6–71.0) ms, 7.3% and 7.6% less,
+and gcc measured 68.5 to 69.6 ms across the four.
 
 Four lanes run in the time of 1.4 single hashes, 2.8 times the single path's
 throughput on one core. That is level with the four-lane C of the tigokraft
@@ -984,16 +980,14 @@ and a hand kernel 20% ahead of Nish's best width in two runs reopens the
 question.
 
 **The outside claims do not reproduce.** "7.3 ms per hash on five lanes" at
-cost 10 is 6.8 ns per block, about 21 cycles per block at 3.15 GHz, 1.3
-cycles per lane half-round. A half-round reads five words; with 3 load ports
-that is 1.7 cycles at the least, so a core like D's cannot do it at cost 10.
-
-At 5.5 GHz it is about 38 cycles per block, 2.4 per lane half-round, which
-a fast desktop core could approach. The figure is a higher clock, another
-cost, several cores, or a different count. "BMI2 halved
-it": taking the bytes is 4 of about 15 instructions a half-round, and on D
-`rorx` gained 9% at most over Nish. A halving needs a slow starting point,
-not BMI2.
+cost 10 is 6.8 ns per block, about 21 cycles per block at 3.15 GHz, 1.3 cycles
+per lane half-round. A half-round reads five words; with 3 load ports that is
+1.7 cycles at the least, so a core like D's cannot do it at cost 10. At 5.5 GHz
+it is about 38 cycles per block, 2.4 per lane half-round, which a fast desktop
+core could approach. The figure is a higher clock, another cost, several cores,
+or a different count. "BMI2 halved it": taking the bytes is 4 of about 15
+instructions a half-round, and on D `rorx` gained 9% at most over Nish. A
+halving needs a slow starting point, not BMI2.
 
 **What a server checks first.** `bcryptHashN` runs only the lanes it is given
 as one computation, so a batch of six with two passwords in it runs two
@@ -1106,15 +1100,14 @@ spill more, 98 stack references a block at five lanes.
 from one copy behind the barrier, each lane's half-round written whole. Three
 to five lanes rotate the copy. Six lanes shift it, because on the default
 target the rotated six-lane loop measured slower, 23.3 against 23.0 ms.
-`bcryptBody2` keeps its form: the copy measured 36.3 against 35.3 ms there.
-The barrier is an identity on a register.
-
-It adds no branch, no load and no store, so the round reads the same four S-box
-words (BCRYPT-6 unchanged), and the working values stay in registers and spill
-slots as before (BCRYPT-7 unchanged). Every lane's hash is unchanged: `bcrypt
-differential` with its batches of two to six, `link/crypto_bcrypt_width`'s
-widths one to six, and three further seeds of 240 cases and 61 batches each,
-all agreeing with `crypt_r`.
+`bcryptBody2` keeps its form: the copy measured 36.3 against 35.3 ms there. The
+barrier is an identity on a register. It adds no branch, no load and no store,
+so the round reads the same four S-box words (BCRYPT-6 unchanged), and the
+working values stay in registers and spill slots as before (BCRYPT-7
+unchanged). Every lane's hash is unchanged: `bcrypt differential` with its
+batches of two to six, `link/crypto_bcrypt_width`'s widths one to six, and
+three further seeds of 240 cases and 61 batches each, all agreeing with
+`crypt_r`.
 
 On G, the module before and after, 15 interleaved rounds, ms per hash:
 

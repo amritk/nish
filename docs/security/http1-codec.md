@@ -197,12 +197,11 @@ and the room each waits for.
 answers** (`net_http1_server_send_body`): `sendBody` gathers the queued output
 and a `Content-Length` body into one `netWrite2` and copies only what the
 socket did not take, through `write`, so the same back-pressure holds: under a
-4 KiB send buffer it answers short, a second call behind the held write
-answers `H1_AGAIN`, and `H1_WRITE` says when to go on.
-
-It keeps no reference to the caller's buffer once it returns, and only reads
-it: `sendBody` and `write` take a `readonly u8[]`, and a read-only body is sent
-whole and through the chunked fallback alike.
+4 KiB send buffer it answers short, a second call behind the held write answers
+`H1_AGAIN`, and `H1_WRITE` says when to go on. It keeps no reference to the
+caller's buffer once it returns, and only reads it: `sendBody` and `write` take
+a `readonly u8[]`, and a read-only body is sent whole and through the chunked
+fallback alike.
 
 Every exchange is run through `write` and through `sendBody`, and the client
 reads the same bytes: a 3,000-byte body, a 4 MiB one under the small send
