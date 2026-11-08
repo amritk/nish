@@ -631,11 +631,12 @@ export const emitForeignBuffers = (
  * fits a wasm32 address, so the count is the header's `i64` truncated.
  */
 const emitHostString = (emitter: Emitter, i: i32, operands: string[], values: string[]): void => {
+  if (i >= operands.length) {
+    return
+  }
   const str = values[i]
   const n = emitter.fn.emitValue(`trunc i64 ${loadStringLength(emitter, str)} to i32`)
-  if (i < operands.length) {
-    operands[i] = `i8* ${stringData(emitter, str)}, i32 ${n}`
-  }
+  operands[i] = `i8* ${stringData(emitter, str)}, i32 ${n}`
 }
 
 /**

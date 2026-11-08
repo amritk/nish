@@ -30,7 +30,7 @@
 
 import { parameterSpelling } from "./checker"
 import { CheckContext } from "./context"
-import { isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
+import { dottedName, isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
 import {
   N_BINARY,
   N_CALL,
@@ -751,15 +751,7 @@ const lengthWritten = (member: Node, grand: Node | null): boolean => {
 
 /** Whether `use` is the bytes argument, in `args`, of `call`, a `String.fromBytes`. */
 const copiesBytes = (call: Node, args: Node, use: Node): boolean => {
-  const callee = call.children[0]
-  return (
-    callee.kind === N_MEMBER &&
-    callee.text === "fromBytes" &&
-    callee.children[0].kind === N_IDENT &&
-    callee.children[0].text === "String" &&
-    args.children.length > 0 &&
-    args.children[0] === use
-  )
+  return dottedName(call.children[0]) === "String.fromBytes" && args.children.length > 0 && args.children[0] === use
 }
 
 /**
