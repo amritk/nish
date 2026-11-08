@@ -1,8 +1,27 @@
 /**
- * `nish/net/fetch` — a blocking HTTP/1.1 client for command-line
- * programs: `fetchSync(request, options)` dials, sends, and answers the
+ * `nish/net/fetch` — an HTTP/1.1 client. `fetchSync(request, options)` is the
+ * blocking one for command-line programs: it dials, sends, and answers the
  * response's head with a reader for its body, and a `FetchSyncClient` does the
- * same while keeping one connection alive between fetches.
+ * same while keeping one connection alive between fetches. `await fetch(url,
+ * init)` is the async one: it parks its task on `nish:async` instead of the
+ * thread, so `awaitAll(fetch(a), fetch(b))` overlaps the two.
+ *
+ *     import { fetch } from "nish/net/fetch";
+ *
+ *     const r = await fetch("http://127.0.0.1:8080/health");
+ *     if (r.isOk()) {
+ *       const body: string = r.value.text();
+ *     }
+ *
+ * **The async `fetch`** answers a `Result`: a `FetchResponse` whose body was
+ * read whole before it answered (up to `maxBodyBytes`, 256 MiB by default,
+ * else `HTTP_E_BODY_TOO_LARGE`), or a `FetchError` with the `HTTP_E_*` code.
+ * The connect, every write and every read wait on the executor; the name
+ * lookup still blocks, and only `http://` is driven (an `https://` URL answers
+ * `HTTP_E_TLS` naming `fetchSync`, never a silent block). A `FetchPool` handed
+ * in through `RequestInit.pool` keeps idle connections per route, capped.
+ * Policy, proxies, redirects and error codes are the shared code below, so
+ * both clients behave alike. It does not run under `--emit-ts`.
  *
  *     import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
  *

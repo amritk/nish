@@ -2,10 +2,13 @@
 
 # `nish/net/fetch`
 
-A blocking HTTP/1.1 client for command-line programs: `fetchSync(request, options)` dials, sends, and answers the response's head with a reader for its body, and a `FetchSyncClient` does the same while keeping one connection alive between fetches.
+An HTTP/1.1 client. `fetchSync(request, options)` is the blocking one for command-line programs: it dials, sends, and answers the response's head with a reader for its body, and a `FetchSyncClient` does the same while keeping one connection alive between fetches. `await fetch(url, init)` is the async one: it parks its task on `nish:async` instead of the thread, so `awaitAll(fetch(a), fetch(b))` overlaps the two.
 
 ```ts
 import {
+  FetchError,
+  FetchPool,
+  FetchResponse,
   FetchSyncClient,
   HTTP_E_BLOCKED,
   HTTP_E_BODY_TOO_LARGE,
@@ -29,6 +32,8 @@ import {
   HttpOptions,
   HttpRequest,
   HttpResponse,
+  RequestInit,
+  fetch,
   fetchSync,
   httpChooseProxy,
   httpErrorName,
@@ -38,17 +43,21 @@ import {
 ```
 
 ```ts
-import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
+import { fetch } from "nish/net/fetch";
 
-const req = new HttpRequest("GET", "http://example.com/");
-req.header("Accept", "application/json");
-const res: HttpResponse | null = fetchSync(req, new HttpOptions());
-if (res !== null) {
-  const body: u8[] | null = res.body.readAll(1048576);
+const r = await fetch("http://127.0.0.1:8080/health");
+if (r.isOk()) {
+  const body: string = r.value.text();
 }
 ```
 
 <scalar-grid cols="2">
+
+<scalar-card title="fetch" icon="phosphor/regular/function" href="#fetch">
+
+Fetches `url` without blocking the process: the task waits on the executor while the connection is made, the request written and the response read, so other tasks run meanwhile and `awaitAll(fetch(a), fetch(b))` overlaps the two.
+
+</scalar-card>
 
 <scalar-card title="fetchSync" icon="phosphor/regular/function" href="#fetchsync">
 
@@ -77,6 +86,24 @@ Whether `noProxy`, a comma-separated list, names `host` on `port`: an entry is `
 <scalar-card title="httpProxyFor" icon="phosphor/regular/function" href="#httpproxyfor">
 
 The proxy a request to `scheme://host:port` goes through, given the three settings: `httpsProxy` for https, `httpProxy` for http, and "" for none or when `noProxy` names the host.
+
+</scalar-card>
+
+<scalar-card title="FetchError" icon="phosphor/regular/cube" href="#fetcherror">
+
+Why an async `fetch` failed: an `HTTP_E_*` code and its sentence, the code's name first, as `FetchSyncClient.errorText` reads.
+
+</scalar-card>
+
+<scalar-card title="FetchPool" icon="phosphor/regular/cube" href="#fetchpool">
+
+Connections an async `fetch` leaves open for the next one to the same place, held by the caller and handed in through `RequestInit.pool`.
+
+</scalar-card>
+
+<scalar-card title="FetchResponse" icon="phosphor/regular/cube" href="#fetchresponse">
+
+A response `fetch` answered, its body already read whole: the body is read before `fetch` answers, up to `maxBodyBytes`, so `text()` and `bytes()` are plain calls.
 
 </scalar-card>
 
@@ -110,9 +137,42 @@ A response's head, as the server sent it, and a reader for its body.
 
 </scalar-card>
 
+<scalar-card title="RequestInit" icon="phosphor/regular/cube" href="#requestinit">
+
+What an async `fetch` sends and how it behaves.
+
+</scalar-card>
+
 </scalar-grid>
 
 <scalar-callout type="info">
+
+**The async `fetch`** answers a `Result`: a `FetchResponse` whose body was
+read whole before it answered (up to `maxBodyBytes`, 256 MiB by default,
+else `HTTP_E_BODY_TOO_LARGE`), or a `FetchError` with the `HTTP_E_*` code.
+The connect, every write and every read wait on the executor; the name
+lookup still blocks, and only `http://` is driven (an `https://` URL answers
+`HTTP_E_TLS` naming `fetchSync`, never a silent block). A `FetchPool` handed
+in through `RequestInit.pool` keeps idle connections per route, capped.
+Policy, proxies, redirects and error codes are the shared code below, so
+both clients behave alike. It does not run under `--emit-ts`.
+
+```ts
+import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
+```
+
+```ts
+const req = new HttpRequest("GET", "http://example.com/");
+req.header("Accept", "application/json");
+const res: HttpResponse | null = fetchSync(req, new HttpOptions());
+if (res !== null) {
+  const body: u8[] | null = res.body.readAll(1048576);
+}
+```
+
+</scalar-callout>
+
+<scalar-detail title="It blocks the thread">
 
 **It blocks the thread** at every step, the way a CLI wants it to: the
 lookup, the connect, each write and each read. A server, which must not
@@ -123,7 +183,7 @@ has), `readTimeoutMs` for each wait on the peer, and `totalTimeoutMs`, when
 set, for the whole fetch, redirects and body included, so a server that
 drips one byte a second cannot hold a fetch forever.
 
-</scalar-callout>
+</scalar-detail>
 
 <scalar-detail title="Framing is the parser's">
 
@@ -178,6 +238,45 @@ Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
 
 Written from RFC 9110 and RFC 9112, not ported from another implementation.
+
+## fetch
+
+Fetches `url` without blocking the process: the task waits on the
+executor while the connection is made, the request written and the
+response read, so other tasks run meanwhile and `awaitAll(fetch(a),
+fetch(b))` overlaps the two. The body is read whole, up to
+`maxBodyBytes`, before the answer comes. Only http is driven this way: an
+https URL answers `HTTP_E_TLS` (use `fetchSync`). The name lookup still
+blocks. Policy, proxy, redirect and error rules are `fetchSync`'s.
+
+```ts
+function fetch(
+  url: string,
+  init: RequestInit | null = null,
+): Promise<Result<FetchResponse, FetchError>>
+```
+
+#### Parameters
+
+<scalar-field name="url" type="string" required>
+
+The absolute `http://` URL to fetch.
+
+</scalar-field>
+
+<scalar-field name="init" type="RequestInit | null">
+
+The method, fields, body, options and pool; null for a plain `GET`.
+
+</scalar-field>
+
+#### Returns
+
+<scalar-field name="returns" type="Promise&lt;Result&lt;FetchResponse, FetchError&gt;&gt;">
+
+The response with its body, or the failure: never a panic.
+
+</scalar-field>
 
 ## fetchSync
 
@@ -387,6 +486,65 @@ The proxy URL the request goes through, or "" when it goes direct.
 
 </scalar-field>
 
+## FetchError
+
+Why an async `fetch` failed: an `HTTP_E_*` code and its sentence, the
+code's name first, as `FetchSyncClient.errorText` reads. The text never
+holds a URL's credentials or query.
+
+```ts
+class FetchError
+```
+
+| Member | |
+| --- | --- |
+| `new FetchError(code: i32, text: string)` | A failure with its code and text. |
+| `code: i32` | The `HTTP_E_*` code. |
+| `text: string` | The code's name, a colon and what went wrong, such as `dns: example.invalid could not be looked up`. |
+
+## FetchPool
+
+Connections an async `fetch` leaves open for the next one to the same
+place, held by the caller and handed in through `RequestInit.pool`. At
+most `maxIdlePerOrigin` wait per route and 64 in all; a kept connection
+the server closed, or sent a byte on unasked, is closed when it is next
+looked at. A fetch under an outbound policy never keeps or takes one.
+
+```ts
+class FetchPool
+```
+
+| Member | |
+| --- | --- |
+| `new FetchPool(maxIdlePerOrigin: i32 = 4)` | An empty pool. |
+| `maxIdlePerOrigin: i32` | The most idle connections kept for one route (origin, or proxy). |
+| `close(): void` | Closes every idle connection; the pool can still keep new ones. |
+| `idle(): i32` | How many idle connections the pool holds. |
+
+## FetchResponse
+
+A response `fetch` answered, its body already read whole: the body is
+read before `fetch` answers, up to `maxBodyBytes`, so `text()` and
+`bytes()` are plain calls. `names` are lower-cased and in the order they
+arrived, beside `values`; `url` is the URL that answered.
+
+```ts
+class FetchResponse
+```
+
+| Member | |
+| --- | --- |
+| `new FetchResponse()` | A response with no status, fields or body yet; `fetch` fills them in. |
+| `body: u8[]` | The body, de-chunked; empty for a `HEAD` or a status that has none. |
+| `names: string[]` | The header field names, lower-cased, in the order they arrived. |
+| `reason: string` | The reason phrase the server sent beside the status. |
+| `status: i32` | The status code, such as 200. |
+| `url: string` | The URL that answered, which differs from the request's after a redirect. |
+| `values: string[]` | The header field values, each beside its name in `names`. |
+| `bytes(): u8[]` | The body's bytes. |
+| `header(name: string): string \| null` | The first value of the field `name`, in any case. |
+| `text(): string` | The body as a string, its bytes unchanged: nothing checks that they are UTF-8. |
+
 ## FetchSyncClient
 
 A client: the options, the proxy settings, and at most one open
@@ -493,6 +651,30 @@ class HttpResponse
 | `url: string` | The URL that answered, which differs from the request's after a redirect. |
 | `values: string[]` | The header field values, each beside its name in `names`. |
 | `header(name: string): string \| null` | The first value of the field `name`, in any case. |
+
+## RequestInit
+
+What an async `fetch` sends and how it behaves. `options` are
+`HttpOptions` as `fetchSync` reads them, except that `readTimeoutMs`
+bounds no wait (a wait has no deadline yet), `connectTimeoutMs` bounds
+only the name lookup, and `totalTimeoutMs` is checked each time a wait
+ends. `pool` keeps connections for later fetches; null closes each one
+when its fetch is done.
+
+```ts
+class RequestInit
+```
+
+| Member | |
+| --- | --- |
+| `new RequestInit()` | A `GET` with no fields, no body, default options and no pool. |
+| `body: u8[] \| null` | Null for no body at all; an empty array sends `Content-Length: 0`. |
+| `method: string` | The request method, sent as given; `GET` by default. |
+| `names: string[]` | The header field names, in the order they are sent. |
+| `options: HttpOptions` | The limits, policy and redirect and proxy settings (see above for the timeouts). |
+| `pool: FetchPool \| null` | Where idle connections are kept between fetches; null for none. |
+| `values: string[]` | The header field values, each beside its name in `names`. |
+| `header(name: string, value: string): RequestInit` | Appends one header field; nothing is checked until the request is written. |
 
 ## Constants
 
