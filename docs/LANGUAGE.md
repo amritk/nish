@@ -3524,7 +3524,7 @@ async function run(): Promise<void> {
 - **A spawned task keeps its own memory out of what it shares.** The task's
   region is freed when the task ends, so the region rules hold it to a
   shared argument, and everything reachable from it, as memory outside its
-  region ([Regions](#regions)): storing an object or a `string` it made into
+  region ([Regions](#regions-nishregion)): storing an object or a `string` it made into
   a field or an element is NL2609, directly, through an alias, a method or a
   callee (`reject_async_spawn_store_region`, `reject_async_spawn_store_string`,
   `reject_async_spawn_store_alias`, `reject_async_spawn_store_method`,

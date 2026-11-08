@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 680 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 682 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -11888,7 +11888,7 @@ A rest parameter copies each `Cell` record it gathers, so a write through the co
 The message of an error contains:
 
 ```text
-…region memory kept by memory outside the region points at freed memory once `free` runs
+…region memory kept by memory outside the region points at freed memory once …
 ```
 
 ## NL2610
@@ -12665,7 +12665,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
+…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner
 ```
 
 ## NL2674
@@ -12825,4 +12825,81 @@ The message of an error contains:
 
 ```text
 ` is not available: index it, and keep a count beside it for the slots in use
+```
+
+## NL2689
+
+The message of an error contains:
+
+```text
+…what a task hands on may be memory of its own region, freed while the task it spawned still holds it
+```
+
+[`nl2689_task_nested_spawn.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2689_task_nested_spawn.ts):
+
+```ts
+// NL2689: a spawned task may not itself spawn a task with an object or an
+// array: what it hands on may be memory of its own region, which is freed when
+// it ends while the task it spawned still holds it.
+import { sleep, spawn } from "nish:async"
+
+class Box {
+  n: i32 = 0
+}
+
+async function inner(box: Box): Promise<void> {
+  await sleep(1)
+  console.log(`${box.n}`)
+}
+
+async function outer(n: i32): Promise<void> {
+  const box = new Box()
+  box.n = n
+  spawn(inner(box))
+}
+
+export async function main(): Promise<i32> {
+  spawn(outer(3))
+  return 0
+}
+```
+
+```text
+`outer` runs as a spawned task, in a region of its own that is freed when it ends, and spawns a task with an object or an array, itself or through a callee: what a task hands on may be memory of its own region, freed while the task it spawned still holds it
+```
+
+## NL2690
+
+The message of an error contains:
+
+```text
+…a spawned task takes a function argument only when it captures nothing…
+```
+
+[`nl2690_spawn_capture.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2690_spawn_capture.ts):
+
+```ts
+// NL2690: a spawned task takes a function argument only when it captures
+// nothing. The arrow reads `base` of `start`, a value that would ride in the
+// task's frame where neither the spawn's argument rule nor the task's region
+// rules see it.
+import { sleep, spawn } from "nish:async"
+
+async function later(f: (n: i32) => i32, n: i32): Promise<void> {
+  await sleep(1)
+  console.log(`${f(n)}`)
+}
+
+async function start(base: i32): Promise<void> {
+  spawn(later((n: i32): i32 => n + base, 2))
+}
+
+export async function main(): Promise<i32> {
+  await start(40)
+  return 0
+}
+```
+
+```text
+`spawn` hands `later<(n) => ...>` an arrow that reads `base` of the function it is written in: a spawned task takes a function argument only when it captures nothing, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
 ```

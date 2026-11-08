@@ -727,7 +727,10 @@ class RegionWalk {
       }
       if (mayBeOuter(o)) {
         if (pp.polluted) {
-          this.report(node, handsRegionMessage(this.who, this.freed, this.program, arg, name, "which stores into it"))
+          this.report(
+            node,
+            handsRegionMessage(this.who, this.freed, this.program, arg, name, "which stores into it")
+          )
         } else if (pp.writesReach && f.allocates) {
           this.report(node, handsGrowthMessage(this.who, this.program, arg, name))
         } else if (isNew && (pp.keptInThis || pp.captured) && !this.task) {
@@ -856,7 +859,16 @@ export const regionCallFindings = (
     seedNames.push(names[1])
     seedOrigins.push(ORIGIN_OUTER)
   }
-  for (const finding of walkFindings(programs, table, facts, fn, freshResults, seedNames, seedOrigins, false)) {
+  for (const finding of walkFindings(
+    programs,
+    table,
+    facts,
+    fn,
+    freshResults,
+    seedNames,
+    seedOrigins,
+    false
+  )) {
     out.push(finding)
   }
   return out
@@ -951,7 +963,9 @@ export const taskFindings = (
   const captures = capturesOf(task)
   if (captures.length > 0) {
     const first = captures[0]
-    out.push(new RegionFinding(program, site, captureSpawnMessage(task, first.arrow.captures[first.index].name)))
+    out.push(
+      new RegionFinding(program, site, captureSpawnMessage(task, first.arrow.captures[first.index].name))
+    )
   }
   const seedNames: string[] = []
   const seedOrigins: i32[] = []
@@ -967,7 +981,16 @@ export const taskFindings = (
   if (seedOrigins.indexOf(ORIGIN_OUTER) < 0) {
     return out
   }
-  for (const finding of walkFindings(programs, table, facts, task, freshResults, seedNames, seedOrigins, true)) {
+  for (const finding of walkFindings(
+    programs,
+    table,
+    facts,
+    task,
+    freshResults,
+    seedNames,
+    seedOrigins,
+    true
+  )) {
     out.push(finding)
   }
   return out

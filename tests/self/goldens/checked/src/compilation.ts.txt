@@ -142,6 +142,7 @@ import rejectAwaitCycles from "./async-check" -> function @rejectAwaitCycles
 import crossingMessage from "./region-rules" -> function @crossingMessage
 import holdsRegion from "./region-rules" -> function @holdsRegion
 import regionCallFindings from "./region-rules" -> function @regionCallFindings
+import taskFindings from "./region-rules" -> function @taskFindings
 import RuntimeTable from "./runtime" -> struct RuntimeTable
 import exposeMessages from "./secret" -> function @exposeMessages
 import FreshResults from "./secret" -> struct FreshResults
@@ -1270,9 +1271,9 @@ function Compilation.checkParallel(this: Compilation): void -> @Compilation.chec
 function Compilation.checkRegions(this: Compilation, facts: FactsTable): void -> @Compilation.checkRegions [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: DiagnosticSink.report FreshResults.constructor crossingMessage holdsRegion nish_array_grow nish_str_concat parallelBodyOf regionCallFindings scopeSymbol
+  calls: DiagnosticSink.report FreshResults.constructor crossingMessage holdsRegion nish_array_grow nish_str_concat parallelBodyOf regionCallFindings scopeSymbol taskFindings
   pointer this: size=208 writesThrough=false captured=false
-  pointer facts: size=24 writesThrough=true captured=true passedTo=FreshResults.constructor#3 regionCallFindings#2
+  pointer facts: size=24 writesThrough=true captured=true passedTo=FreshResults.constructor#3 regionCallFindings#2 taskFindings#2
   stackSites=3 stackLocals=3
   local -2:11 programs: CheckedProgram[] (const)
   local -1:16 unit: ModuleUnit (const)
@@ -1288,27 +1289,31 @@ function Compilation.checkRegions(this: Compilation, facts: FactsTable): void ->
   callee +8:26 regionCallFindings -> @regionCallFindings
   local +18:20 finding: RegionFinding (const)
   callee +19:11 DiagnosticSink.report -> @DiagnosticSink.report
-  local +22:13 crossings: ParallelCall[] (const)
-  local +23:18 call: ParallelCall (const)
-  local +26:18 call: ParallelCall (const)
-  local +29:18 call: ParallelCall (const)
-  local +30:15 fn: FunctionSig | null (const)
-  callee +30:20 parallelBodyOf -> @parallelBodyOf
-  local +31:15 instance: Instantiation | null (const)
-  local +35:15 types: i32[] (const)
-  local +36:20 type: i32 (const)
-  local +39:20 type: i32 (const)
-  local +43:20 type: i32 (const)
-  callee +44:15 holdsRegion -> @holdsRegion
-  local +45:19 what: string (const)
-  callee +46:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +50:15 crossingMessage -> @crossingMessage
-  local +56:18 call: ParallelCall (const)
-  local +57:20 type: i32 (const)
-  callee +58:15 holdsRegion -> @holdsRegion
-  local +59:19 what: string (const)
-  callee +60:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +64:15 crossingMessage -> @crossingMessage
+  local +22:18 call: ParallelCall (const)
+  local +23:20 finding: RegionFinding (const)
+  callee +23:31 taskFindings -> @taskFindings
+  callee +24:11 DiagnosticSink.report -> @DiagnosticSink.report
+  local +27:13 crossings: ParallelCall[] (const)
+  local +28:18 call: ParallelCall (const)
+  local +31:18 call: ParallelCall (const)
+  local +34:18 call: ParallelCall (const)
+  local +35:15 fn: FunctionSig | null (const)
+  callee +35:20 parallelBodyOf -> @parallelBodyOf
+  local +36:15 instance: Instantiation | null (const)
+  local +40:15 types: i32[] (const)
+  local +41:20 type: i32 (const)
+  local +44:20 type: i32 (const)
+  local +48:20 type: i32 (const)
+  callee +49:15 holdsRegion -> @holdsRegion
+  local +50:19 what: string (const)
+  callee +51:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +55:15 crossingMessage -> @crossingMessage
+  local +61:18 call: ParallelCall (const)
+  local +62:20 type: i32 (const)
+  callee +63:15 holdsRegion -> @holdsRegion
+  local +64:19 what: string (const)
+  callee +65:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +69:15 crossingMessage -> @crossingMessage
 function Compilation.checkSecrets(this: Compilation, facts: FactsTable): void -> @Compilation.checkSecrets [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1829,14 +1834,14 @@ function Compilation.outputStems(this: Compilation): string[] -> @Compilation.ou
 function importsCollection(program: CheckedProgram, name: string): boolean -> @importsCollection
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer program: size=688 writesThrough=false captured=false
+  pointer program: size=696 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 imp: ImportBinding (const)
 function declarationNameOf(program: CheckedProgram, name: string): Node | null -> @declarationNameOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownAlias CheckedProgram.ownEnum CheckedProgram.struct CheckedProgram.structTemplate nish_panic_index
-  pointer program: size=688 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.ownAlias#0 CheckedProgram.ownEnum#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.ownAlias#0 CheckedProgram.ownEnum#0
   stackSites=0 stackLocals=0
   local +0:9 struct: StructInfo | null (const)
   callee +0:18 CheckedProgram.struct -> @CheckedProgram.struct

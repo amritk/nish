@@ -10832,26 +10832,27 @@ through the pointer (`tests/cases/async_spawn_shared`,
 
 <!-- cookbook:begin async-spawn-shared -->
 ```ts
-import { sleep, spawn } from "nish:async";
+import { sleep, spawn } from "nish:async"
 
 class Tally {
-  hits: i32 = 0;
+  hits: i32 = 0
 }
 
-async function count(tally: Tally, n: i32): Promise<void> {
-  await sleep(n);
-  tally.hits = tally.hits + n;
+const count = async (tally: Tally, n: i32): Promise<void> => {
+  await sleep(n)
+  tally.hits = tally.hits + n
 }
 
-async function start(tally: Tally): Promise<void> {
-  spawn(count(tally, 5));
+const start = async (tally: Tally): Promise<void> => {
+  spawn(count(tally, 5))
+  await sleep(1)
 }
 
-export async function main(): Promise<i32> {
-  const tally = new Tally();
-  await start(tally);
-  await sleep(10);
-  return tally.hits;
+export const main = async (): Promise<i32> => {
+  const tally = new Tally()
+  await start(tally)
+  await sleep(10)
+  return tally.hits
 }
 ```
 
@@ -10859,8 +10860,10 @@ export async function main(): Promise<i32> {
 %struct.Tally = type { i32 }
 %frame.count = type { i32, %struct.Tally*, i32, %frame.count.rest }
 %frame.count.rest = type { [0 x <2 x i64>], i64 }
+%frame.start = type { i32, %struct.Tally*, %frame.start.rest }
+%frame.start.rest = type { [0 x <2 x i64>], i64 }
 %frame.nish_main = type { i32, i32, %frame.nish_main.rest }
-%frame.nish_main.rest = type { [0 x <2 x i64>], %struct.Tally*, i64 }
+%frame.nish_main.rest = type { [2 x <2 x i64>], %struct.Tally*, i64 }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @nish_arena = external global %struct.nish_arena, align 8
@@ -10965,7 +10968,18 @@ ovf.fail:
   unreachable
 }
 
-define internal void @start(%struct.Tally* noundef nonnull align 8 dereferenceable(4) %tally) #0 {
+define internal i1 @start.resume(i8* %async.raw) #0 {
+async.entry:
+  %async.frame = bitcast i8* %async.raw to %frame.start*
+  %async.state = getelementptr inbounds %frame.start, %frame.start* %async.frame, i32 0, i32 0
+  %tally.at = getelementptr inbounds %frame.start, %frame.start* %async.frame, i32 0, i32 1
+  %tally = load %struct.Tally*, %struct.Tally** %tally.at
+  %async.rest = getelementptr inbounds %frame.start, %frame.start* %async.frame, i32 0, i32 2
+  %async.kids = bitcast %frame.start.rest* %async.rest to i8*
+  %async.wait = getelementptr inbounds %frame.start.rest, %frame.start.rest* %async.rest, i32 0, i32 1
+  %async.at = load i32, i32* %async.state
+  switch i32 %async.at, label %async.bad [ i32 0, label %entry i32 -1, label %async.finished i32 1, label %wait.poll ]
+
 entry:
   %0 = call i8* @nish_async_spawn(i32 0, i64 48)
   %1 = call i8* @nish_async_enter(i8* %0)
@@ -10986,7 +11000,33 @@ spawn.done:
   br label %spawn.join
 
 spawn.join:
-  ret void
+  %8 = call i64 @nish_async_sleep(i32 1)
+  store i64 %8, i64* %async.wait
+  br label %wait.poll
+
+wait.poll:
+  %9 = load i64, i64* %async.wait
+  %10 = call i32 @nish_async_poll(i64 %9)
+  %11 = icmp slt i32 %10, 0
+  br i1 %11, label %wait.pending, label %wait.ready
+
+wait.pending:
+  store i32 1, i32* %async.state
+  br label %async.suspend
+
+wait.ready:
+  %12 = icmp ne i32 %10, 0
+  store i32 -1, i32* %async.state
+  ret i1 true
+
+async.bad:
+  unreachable
+
+async.finished:
+  ret i1 true
+
+async.suspend:
+  ret i1 false
 }
 
 define i1 @nish_main.resume(i8* %async.raw) #0 {
@@ -10999,7 +11039,7 @@ async.entry:
   %tally.addr = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 1
   %async.wait = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 2
   %async.at = load i32, i32* %async.state
-  switch i32 %async.at, label %async.bad [ i32 0, label %entry i32 -1, label %async.finished i32 1, label %wait.poll ]
+  switch i32 %async.at, label %async.bad [ i32 0, label %entry i32 -1, label %async.finished i32 1, label %await.poll i32 2, label %wait.poll ]
 
 entry:
   %0 = call i8* @nish_alloc_struct(i64 4)
@@ -11008,27 +11048,42 @@ entry:
   store i32 0, i32* %2, align 4, !tbaa !4
   store %struct.Tally* %1, %struct.Tally** %tally.addr, align 8
   %3 = load %struct.Tally*, %struct.Tally** %tally.addr, align 8
-  call void @start(%struct.Tally* %3)
-  %4 = call i64 @nish_async_sleep(i32 10)
-  store i64 %4, i64* %async.wait
-  br label %wait.poll
+  %4 = bitcast i8* %async.kids to { i32, %struct.Tally* }*
+  %5 = getelementptr inbounds { i32, %struct.Tally* }, { i32, %struct.Tally* }* %4, i32 0, i32 0
+  store i32 0, i32* %5
+  %6 = getelementptr inbounds { i32, %struct.Tally* }, { i32, %struct.Tally* }* %4, i32 0, i32 1
+  store %struct.Tally* %3, %struct.Tally** %6
+  br label %await.poll
 
-wait.poll:
-  %5 = load i64, i64* %async.wait
-  %6 = call i32 @nish_async_poll(i64 %5)
-  %7 = icmp slt i32 %6, 0
-  br i1 %7, label %wait.pending, label %wait.ready
+await.poll:
+  %7 = call i1 @start.resume(i8* %async.kids)
+  br i1 %7, label %await.ready, label %await.pending
 
-wait.pending:
+await.pending:
   store i32 1, i32* %async.state
   br label %async.suspend
 
+await.ready:
+  %8 = call i64 @nish_async_sleep(i32 10)
+  store i64 %8, i64* %async.wait
+  br label %wait.poll
+
+wait.poll:
+  %9 = load i64, i64* %async.wait
+  %10 = call i32 @nish_async_poll(i64 %9)
+  %11 = icmp slt i32 %10, 0
+  br i1 %11, label %wait.pending, label %wait.ready
+
+wait.pending:
+  store i32 2, i32* %async.state
+  br label %async.suspend
+
 wait.ready:
-  %8 = icmp ne i32 %6, 0
-  %9 = load %struct.Tally*, %struct.Tally** %tally.addr, align 8
-  %10 = getelementptr inbounds %struct.Tally, %struct.Tally* %9, i32 0, i32 0
-  %11 = load i32, i32* %10, align 4, !tbaa !4
-  store i32 %11, i32* %async.answer
+  %12 = icmp ne i32 %10, 0
+  %13 = load %struct.Tally*, %struct.Tally** %tally.addr, align 8
+  %14 = getelementptr inbounds %struct.Tally, %struct.Tally* %13, i32 0, i32 0
+  %15 = load i32, i32* %14, align 4, !tbaa !4
+  store i32 %15, i32* %async.answer
   store i32 -1, i32* %async.state
   ret i1 true
 

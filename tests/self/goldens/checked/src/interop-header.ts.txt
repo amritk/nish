@@ -52,7 +52,7 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf TypeTable.refOf cStructName cType inlineElementStruct nish_str_concat
-  pointer program: size=688 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 inlineElementStruct#1 cType#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.kindOf -> @TypeTable.kindOf

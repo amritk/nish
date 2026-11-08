@@ -1414,7 +1414,11 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
       // in place for as long as it runs, past the spawner's return, so the
       // spawner's region must too. A string is copied into the task's region.
       const at = index + (callee.owner !== null ? 1 : 0)
-      if (at < callee.paramTypes.length && table.sharedWithTask(callee.paramTypes[at]) && isSpawnedTask(unit, owner)) {
+      if (
+        at < callee.paramTypes.length &&
+        table.sharedWithTask(callee.paramTypes[at]) &&
+        isSpawnedTask(unit, owner)
+      ) {
         return use(USE_ESCAPE)
       }
       return argumentUse(callee, at)

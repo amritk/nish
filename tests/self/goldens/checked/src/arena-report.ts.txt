@@ -64,7 +64,7 @@ function ArenaWalk.constructor(this: ArenaWalk, program: CheckedProgram, facts: 
   escaping: f facts program sig
   calls: nish_panic nish_panic_index reclaimsReturnedString
   pointer this: size=96 writesThrough=true captured=false
-  pointer program: size=688 writesThrough=true captured=true
+  pointer program: size=696 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true passedTo=reclaimsReturnedString#1
   pointer sig: size=176 writesThrough=true captured=true passedTo=reclaimsReturnedString#0
   pointer f: size=408 writesThrough=true captured=true
@@ -97,7 +97,7 @@ function siteKind(node: Node): string -> @siteKind
 function builtinName(program: CheckedProgram, node: Node): string -> @builtinName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: builtinNameOf dottedName nish_panic_index
-  pointer program: size=688 writesThrough=false captured=false passedTo=builtinNameOf#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=builtinNameOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=builtinNameOf#1
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -144,7 +144,7 @@ function walkNode(walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
   escaping: growing scope
   calls: isArenaUsing isLoopNode loopScopeOf visitSite walkNode
   pointer walk: size=96 writesThrough=false captured=false passedTo=visitSite#0 walkNode#0 walkNode#0 walkNode#0
-  pointer program: size=688 writesThrough=false captured=false passedTo=isArenaUsing#0 walkNode#1 walkNode#1 walkNode#1
+  pointer program: size=696 writesThrough=false captured=false passedTo=isArenaUsing#0 walkNode#1 walkNode#1 walkNode#1
   pointer node: size=40 writesThrough=true captured=true passedTo=visitSite#1 isLoopNode#0 loopScopeOf#1
   stackSites=0 stackLocals=0
   callee +0:3 visitSite -> @visitSite

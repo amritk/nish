@@ -364,7 +364,6 @@ const isSpawnable = (ctx: CheckContext, type: i32): boolean =>
   ctx.table.isEnum(type) ||
   ctx.table.sharedWithTask(type)
 
-
 /**
  * `const [a, b] = await awaitAll(f(x), g(y))`, read off the tree: a
  * declarator whose names the parser kept (`parseNamePattern`) and whose
