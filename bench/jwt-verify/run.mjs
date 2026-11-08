@@ -9,7 +9,7 @@
 //     --validate         build, and check every column's one-iteration checksum
 //                        against the case's pinned one; no timing
 //     --rounds N         timed rounds a case runs at least (default 11); the
-//                        median is reported
+//                        median is reported with the min, max and spread
 //     --only TEXT        only the cases whose label holds TEXT
 //     --base REV         a column `base`: main.ts built by the same compiler
 //                        against REV's standard library, from a worktree of REV
@@ -31,7 +31,9 @@
 // every timed run of every column the same checksum: two builds whose answers
 // differ are not timing the same work.
 //
-// A column's ns/op is its `ns` line over the iterations; its change is its
+// A column's ns/op is its `ns` line over the iterations, reported as min,
+// median and max over the rounds, with the spread, max less min over the
+// median, so a build's own scatter shows beside the band; its change is its
 // median against `nish`'s (against `nish soft`'s for `v3 soft`), + slower, and
 // reads as a difference only outside the band.
 import { execFileSync, spawnSync } from "node:child_process"
@@ -266,9 +268,9 @@ const median = (xs) => {
 /** `to` against `from` as a percentage of `from`: + is slower. */
 const pct = (from, to) => `${to >= from ? "+" : ""}${((100 * (to - from)) / from).toFixed(1)}%`
 
-const WIDTHS = [20, 12, 12, 12, 9]
+const WIDTHS = [20, 12, 12, 12, 12, 8, 9]
 const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
-console.log(line(["case", "column", "min ns/op", "median ns/op", "vs nish"]))
+console.log(line(["case", "column", "min ns/op", "median ns/op", "max ns/op", "spread", "vs nish"]))
 
 for (const c of cases) {
   const cols = columnsOf(c)
@@ -292,7 +294,9 @@ for (const c of cases) {
     const m = median(ts)
     const against = col.id === "v3 soft" ? median(times.get("nish soft")) : base
     const vs = col.id === "nish" ? "" : `${pct(against, m)}${col.id === "v3 soft" ? "*" : ""}`
-    console.log(line([c.label, col.id, Math.min(...ts).toFixed(1), m.toFixed(1), vs]))
+    const [lo, hi] = [Math.min(...ts), Math.max(...ts)]
+    const spread = `${((100 * (hi - lo)) / m).toFixed(1)}%`
+    console.log(line([c.label, col.id, lo.toFixed(1), m.toFixed(1), hi.toFixed(1), spread, vs]))
   }
   console.log(
     `${"".padEnd(WIDTHS[0])} ${n} rounds of ${iterations} iterations, checksum ${checksum}; band ±${(
@@ -301,8 +305,9 @@ for (const c of cases) {
   )
 }
 console.log(
-  "\nns/op is a run's ns over its iterations; the band is nish-copy's median against nish's, the same" +
-    " bytes, and a change inside it is noise. * is against nish soft."
+  "\nns/op is a run's ns over its iterations; spread is a column's max less its min over its median;" +
+    " the band is nish-copy's median against nish's, the same bytes, and a change inside it is noise." +
+    " * is against nish soft."
 )
 
 if (instructions) {
