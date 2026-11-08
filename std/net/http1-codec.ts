@@ -1997,14 +1997,15 @@ const http1PutDecimal = (out: u8[], at: i32, n: i32): i32 => {
 }
 
 /**
- * `http1ResponseHead`'s status line and header section, written into `out`
- * at `at` with nothing allocated: field names and values are octets (as
- * `nish/net/http-fields` holds them), and `connection`, when not empty, is
- * sent as a `Connection` field after the caller's. `date`, when not empty, is
- * sent as a `Date` field between the caller's fields and the framing ones
- * (RFC 9110 §6.6.1), on a final status only, and not when the caller's fields
- * already hold a `date` in any case: the caller's wins, so a response carries
- * one. Answers where the head ends; `HTTP1_REFUSED` for everything
+ * `http1ResponseHead`'s status line and header section, written into `out` at
+ * `at` with nothing allocated: field names and values are octets (as
+ * `nish/net/http-fields` holds them), and `connection`, when not empty, is sent
+ * as a `Connection` field after the caller's. `date`, when not empty, is sent
+ * as a `Date` field between the caller's fields and the framing ones (RFC 9110
+ * §6.6.1), on a final status only, and not when the caller's fields already
+ * hold a `date` in any case: the caller's wins, so a response carries one.
+ *
+ * Answers where the head ends; `HTTP1_REFUSED` for everything
  * `http1ResponseHead` refuses, a `Connection` among the caller's fields when
  * `connection` is given, a `connection` that is not field text, and a `date`
  * that is not field text on a final status, the only one it is sent on;

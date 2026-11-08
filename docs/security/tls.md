@@ -1599,7 +1599,7 @@ As TLS-1 records for the other secrets:
   `tlsExchange` as words in `TlsExchangeWords` beside the ephemeral key, so
   the class stays numbers and the exchange keeps its own scope (TLS-3).
   `exchangeKeys` writes the salt's words, beside the key's
-  (`std/net/tls.ts:1155-1163` at 4bbb392), and on a resumed handshake then
+  (`std/net/tls.ts:1158-1166` at 4bbb392), and on a resumed handshake then
   wipes the derived salt's bytes with `secureZero`, before it calls
   `tlsExchange`; a full handshake's salt is the public constant, whose array
   is not wiped. The words
@@ -1622,18 +1622,18 @@ As TLS-1 records for the other secrets:
   on a resumed one, so `tlsExchange` always rebuilds the array, extracts
   under it and wipes it, and its one `secureZero` is unconditional. The
   constant moves out of `tlsHandshakeFromEcdhe256` and
-  `tlsHandshakeFromEcdhe384` (`std/net/tls.ts:399`, `:403` at 394c439),
+  `tlsHandshakeFromEcdhe384` (`std/net/tls.ts:401`, `:405` at 394c439),
   which take the salt instead; wiping a public constant's copy costs one
   store.
 - **The master secret.** A resumed handshake sends no Certificate or
   CertificateVerify, so it never runs `sign`, where a full handshake derives
   the master secret and wipes it (`tlsMasterSecretInto` to `secureZero(master)`,
-  `std/net/tls.ts:1338-1384` at 394c439). That step is split out of `sign`
+  `std/net/tls.ts:1341-1387` at 394c439). That step is split out of `sign`
   into one method both paths call once the server Finished is sent, the
   master-secret step `TlsServer.masterSecretStep`. Before its `using
   arena()` block opens, it points `clientApplicationSecret`,
   `serverApplicationSecret`, `exporterSecret` and `expectedClientFinished`
-  at the slot's arrays, as `sign` does today (`std/net/tls.ts:1303-1307` at
+  at the slot's arrays, as `sign` does today (`std/net/tls.ts:1306-1310` at
   394c439), so the derivations below write into the pool's `Secret` fields
   `TlsServer.wipe` reaches, not into ones the block releases. Then, in order, as `sign` does
   today, it derives the master secret from the handshake secret; the client

@@ -2,7 +2,83 @@
 
 # Library reference
 
-Every module a Nish program can import, one page each, generated from the doc comments of its source. The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish. The compiler itself has its own reference: its [command line](command-line.md) and its [diagnostics](diagnostics.md).
+Every module a Nish program can import, one page each, generated from the doc comments of its source. The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish and grouped here by area. The language specification and the compiler's own command line and diagnostics are references too.
+
+<scalar-grid cols="2">
+
+<scalar-card title="Language specification" icon="phosphor/regular/book-open" href="language.md">
+
+The normative rules: what the compiler accepts and what it means.
+
+</scalar-card>
+
+<scalar-card title="Builtins" icon="phosphor/regular/cube" href="builtins.md">
+
+The globals and the 10 `nish:` modules that come with the compiler.
+
+</scalar-card>
+
+<scalar-card title="Core" icon="phosphor/regular/atom" href="#core">
+
+Numbers, bytes, sorting, randomness and the test runner: 7 modules.
+
+</scalar-card>
+
+<scalar-card title="Collections" icon="phosphor/regular/stack" href="#collections">
+
+`Map`, `Set` and the operations JavaScript lacks on them: 2 modules.
+
+</scalar-card>
+
+<scalar-card title="Text" icon="phosphor/regular/text-aa" href="#text">
+
+Strings, regular expressions, JSON and YAML: 14 modules.
+
+</scalar-card>
+
+<scalar-card title="Terminal and CLI" icon="phosphor/regular/terminal-window" href="#terminal-and-cli">
+
+Terminal output and input, and command-line parsing: 8 modules.
+
+</scalar-card>
+
+<scalar-card title="Concurrency" icon="phosphor/regular/arrows-split" href="#concurrency">
+
+Threads, locks, shared memory and queues between processes or a wasm page: 4 modules.
+
+</scalar-card>
+
+<scalar-card title="Data" icon="phosphor/regular/database" href="#data">
+
+SQLite and compression: 5 modules.
+
+</scalar-card>
+
+<scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
+
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 49 modules.
+
+</scalar-card>
+
+<scalar-card title="Cryptography" icon="phosphor/regular/lock-key" href="#cryptography">
+
+Hashes, ciphers, signatures, certificates and passwords: 21 modules.
+
+</scalar-card>
+
+<scalar-card title="Command line" icon="phosphor/regular/terminal" href="command-line.md">
+
+Every command, flag and exit code of `nish`.
+
+</scalar-card>
+
+<scalar-card title="Diagnostics" icon="phosphor/regular/warning-circle" href="diagnostics.md">
+
+Every diagnostic code, what it means and a program that provokes it.
+
+</scalar-card>
+
+</scalar-grid>
 
 ## Builtins
 
@@ -22,40 +98,29 @@ Every module a Nish program can import, one page each, generated from the doc co
 
 ## Standard library
 
+### Core
+
 | Module | |
 | --- | --- |
 | [`nish/base64`](base64.md) | Standard base64 (RFC 4648 §4) with `=` padding, the encoding kitty graphics frames are sent in. |
 | [`nish/bytes`](bytes.md) | Fixed-width integers and doubles read from, and written into, a byte array at an offset, in either byte order. |
-| [`nish/cli-args`](cli-args.md) | A command tree for a large command-line tool: declared once with a builder, parsed in one walk over the arguments, and answered as the matched command's id and every value with where it came from. |
-| [`nish/cli-flags`](cli-flags.md) | A command line's flags, declared once as data and read back by name, with the same declaration writing the `--help` rows. |
-| [`nish/cli`](cli.md) | A command-line tool's help menu: whether a stream gets colour, the escapes that paint it, and the rows a `--help` is made of. |
+| [`nish/math`](math.md) | `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish rather than libm, so a program answers the same on every target, wasm included, and the optimiser sees the whole function. |
+| [`nish/pair`](pair.md) | Two values answered by one call. |
+| [`nish/random`](random.md) | A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node. |
+| [`nish/sort`](sort.md) | `xs.sort(cmp)` on an array, in Nish: a stable merge sort, compiled once per comparator. |
+| [`nish/testing`](testing.md) | A test runner for Nish programs, written in Nish. |
+
+### Collections
+
+| Module | |
+| --- | --- |
 | [`nish/collections`](collections.md) | The global `Map` and `Set` (docs/wp32-map.md). |
-| [`nish/compress/checksum`](compress/checksum.md) | The two checksums the compressed formats carry: CRC-32 (ISO 3309, the polynomial gzip's trailer uses, RFC 1952 §8) and Adler-32 (zlib's trailer, RFC 1950 §9). |
-| [`nish/compress/deflate`](compress/deflate.md) | DEFLATE (RFC 1951), both ways, in pure Nish: a compressor with levels and a decompressor that refuses malformed input with an error code. |
-| [`nish/compress/gzip`](compress/gzip.md) | The gzip file format (RFC 1952) around `nish/compress/deflate`: a ten-byte header, the DEFLATE stream, and a trailer of the CRC-32 and the length of the data mod 2^32. |
-| [`nish/compress/zlib`](compress/zlib.md) | The zlib format (RFC 1950) around `nish/compress/deflate`: a two-byte header, the DEFLATE stream and the Adler-32 of the data, big-endian. |
-| [`nish/crypto/aes`](crypto/aes.md) | AES-128 and AES-256 (FIPS 197), GCM on top of them (NIST SP 800-38D), and QUIC's AES header-protection mask (RFC 9001 §5.4.3). |
-| [`nish/crypto/base64url`](crypto/base64url.md) | RFC 4648 §5 base64url, unpadded, as JWS and the relay's grants spell a key or a tag inside a URL or a header. |
-| [`nish/crypto/bcrypt-batch`](crypto/bcrypt-batch.md) | A login batcher: it queues bcrypt verifies and hashes as they arrive, sends them as `bcryptVerifyN` / `bcryptHashN` batches, and runs the batches on `std/threads` tasks, one per core. |
-| [`nish/crypto/bcrypt`](crypto/bcrypt.md) | Bcrypt password hashing, `$2b$` out and `$2a$`, `$2b$`, `$2y$` in. |
-| [`nish/crypto/chacha20poly1305`](crypto/chacha20poly1305.md) | The ChaCha20 stream cipher, the Poly1305 one-time authenticator and the AEAD built from the two, as RFC 8439 defines them, plus the ChaCha20 header-protection mask of RFC 9001 §5.4.4. |
-| [`nish/crypto/ct`](crypto/ct.md) | Comparing secrets without telling the clock where they differ. |
-| [`nish/crypto/ed25519`](crypto/ed25519.md) | The Ed25519 signature scheme of RFC 8032 (§5.1). |
-| [`nish/crypto/hkdf`](crypto/hkdf.md) | HKDF as RFC 5869 defines it, over HMAC-SHA-256 and HMAC-SHA-384. |
-| [`nish/crypto/hmac`](crypto/hmac.md) | HMAC as RFC 2104 defines it, over SHA-256, SHA-384 and SHA-512. |
-| [`nish/crypto/jwt`](crypto/jwt.md) | JSON Web Tokens in the JWS compact serialization: verify one and check its claims, or sign one. |
-| [`nish/crypto/p256`](crypto/p256.md) | ECDSA over NIST P-256 (secp256r1), with the deterministic nonces of RFC 6979. |
-| [`nish/crypto/p384`](crypto/p384.md) | ECDSA signature verification over NIST P-384 (secp384r1). |
-| [`nish/crypto/pki-roots`](crypto/pki-roots.md) | The root certificates a program should trust, read from where OpenSSL and Go look for them: the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system's bundle. |
-| [`nish/crypto/pki`](crypto/pki.md) | Whether the certificate chain a TLS server sent leads to a root the program trusts and names the host it dialled: RFC 5280 §6 path validation and RFC 6125 §6 hostname matching, at the instant the caller gives. |
-| [`nish/crypto/rsa`](crypto/rsa.md) | RSA signature verification: RSASSA-PKCS1-v1_5 and RSASSA-PSS over SHA-256, SHA-384 and SHA-512, under a public key read from its DER. |
-| [`nish/crypto/sha1`](crypto/sha1.md) | SHA-1 as FIPS 180-4 §6.1 defines it, in pure Nish. |
-| [`nish/crypto/sha256`](crypto/sha256.md) | SHA-256 as FIPS 180-4 §6.2 defines it, in pure Nish. |
-| [`nish/crypto/sha512`](crypto/sha512.md) | SHA-512 and SHA-384, written from FIPS 180-4. |
-| [`nish/crypto/x25519`](crypto/x25519.md) | The X25519 Diffie-Hellman function of RFC 7748. |
-| [`nish/crypto/x509-random`](crypto/x509-random.md) | The private key and the serial number `nish/crypto/x509`'s `x509MintSelfSigned` needs, drawn from the operating system's CSPRNG, and the mint that draws its own serial. |
-| [`nish/crypto/x509`](crypto/x509.md) | DER, PEM and the X.509 certificates a WebTransport or TLS server holds: read a P-256 private key and a certificate chain out of PEM, and mint the short-lived self-signed ECDSA P-256 certificate a browser pins by its SHA-256. |
-| [`nish/host/ring`](host/ring.md) | A single-producer, single-consumer ring of `i32` words over module storage, shared by a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §11). |
+| [`nish/map`](map.md) | Two operations on the global `Map` that JavaScript's does not have, written so that a program using them still runs unmodified under Node (docs/wp32-map.md §9.2). |
+
+### Text
+
+| Module | |
+| --- | --- |
 | [`nish/json-equal`](json-equal.md) | Whether two JSON values are equal by JSON Schema's rule, a canonical text and a hash that agree with it, and the first repeated element of an array, which is what `const`, `enum` and `uniqueItems` ask. |
 | [`nish/json-format`](json-format.md) | The string formats of JSON Schema draft 2020-12 (§7.3 of the validation vocabulary), each a predicate, and one dispatcher that answers valid, invalid or unknown for a format named in a schema. |
 | [`nish/json-number`](json-number.md) | JSON number text compared and divided exactly, the arithmetic JSON Schema's `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `const` and `enum` ask for. |
@@ -64,8 +129,49 @@ Every module a Nish program can import, one page each, generated from the doc co
 | [`nish/json-typed`](json-typed.md) | Decode a JSON object into a class, and encode a class back, with code the compiler writes from the class's fields. |
 | [`nish/json-value`](json-value.md) | Any JSON document as a tree a program can read, build and write back, with every number kept as the text it was written in. |
 | [`nish/json`](json.md) | The value of a field, or of several, of one flat JSON object; and `JsonWriter`, which writes any JSON value into a byte buffer. |
-| [`nish/map`](map.md) | Two operations on the global `Map` that JavaScript's does not have, written so that a program using them still runs unmodified under Node (docs/wp32-map.md §9.2). |
-| [`nish/math`](math.md) | `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish rather than libm, so a program answers the same on every target, wasm included, and the optimiser sees the whole function. |
+| [`nish/regex`](regex.md) | Regular expressions whose search time is linear in the input, whatever the pattern. |
+| [`nish/text`](text.md) | The string operations a program has to write itself. |
+| [`nish/yaml-json`](yaml-json.md) | One YAML document loaded into a `JsonDocument`, with every value's and key's source range, so that one validator and one `YamlLineIndex` serve a JSON text and a YAML text alike: |
+| [`nish/yaml-lines`](yaml-lines.md) | Byte offsets turned into the `line:column` a person reads. |
+| [`nish/yaml-write`](yaml-write.md) | A JSON value written as YAML text that `parseYaml` reads back as the same tree. |
+| [`nish/yaml`](yaml.md) | A YAML 1.2 parser that keeps where everything came from. |
+
+### Terminal and CLI
+
+| Module | |
+| --- | --- |
+| [`nish/cli-args`](cli-args.md) | A command tree for a large command-line tool: declared once with a builder, parsed in one walk over the arguments, and answered as the matched command's id and every value with where it came from. |
+| [`nish/cli-flags`](cli-flags.md) | A command line's flags, declared once as data and read back by name, with the same declaration writing the `--help` rows. |
+| [`nish/cli`](cli.md) | A command-line tool's help menu: whether a stream gets colour, the escapes that paint it, and the rows a `--help` is made of. |
+| [`nish/term-io`](term-io.md) | Opening a terminal, drawing frames, reading events and leaving it as it was: the one entry point that uses the other term modules and does the I/O. |
+| [`nish/term-pixels`](term-pixels.md) | A framebuffer of pixels, and the encoders that draw it to a terminal with the best backend the terminal has: kitty graphics, Sixel, half-block cells or ASCII. |
+| [`nish/term-probe`](term-probe.md) | What the terminal a program runs in can do (its colours, keyboard protocol, graphics and size), asked of it once at start and read from its answer. |
+| [`nish/term-rate`](term-rate.md) | How fast the link to the terminal is, measured from frames sent and acknowledged, and the frame rate and drawing detail a program keeps to under it. |
+| [`nish/term`](term.md) | A terminal drawn as a grid of coloured cells, and the keys a terminal sends turned into events. |
+
+### Concurrency
+
+| Module | |
+| --- | --- |
+| [`nish/host/ring`](host/ring.md) | A single-producer, single-consumer ring of `i32` words over module storage, shared by a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §11). |
+| [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
+| [`nish/sync/shm`](sync/shm.md) | Memory that several processes map at once, and the atomics that order what they write to it. |
+| [`nish/threads`](threads.md) | Data parallelism, a scope for heterogeneous tasks, and a lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3). |
+
+### Data
+
+| Module | |
+| --- | --- |
+| [`nish/compress/checksum`](compress/checksum.md) | The two checksums the compressed formats carry: CRC-32 (ISO 3309, the polynomial gzip's trailer uses, RFC 1952 §8) and Adler-32 (zlib's trailer, RFC 1950 §9). |
+| [`nish/compress/deflate`](compress/deflate.md) | DEFLATE (RFC 1951), both ways, in pure Nish: a compressor with levels and a decompressor that refuses malformed input with an error code. |
+| [`nish/compress/gzip`](compress/gzip.md) | The gzip file format (RFC 1952) around `nish/compress/deflate`: a ten-byte header, the DEFLATE stream, and a trailer of the CRC-32 and the length of the data mod 2^32. |
+| [`nish/compress/zlib`](compress/zlib.md) | The zlib format (RFC 1950) around `nish/compress/deflate`: a two-byte header, the DEFLATE stream and the Adler-32 of the data, big-endian. |
+| [`nish/sqlite`](sqlite.md) | `nish/sqlite` (the file `std/sqlite.ts`) — SQLite, the database in a file, from a Nish program. |
+
+### Networking
+
+| Module | |
+| --- | --- |
 | [`nish/net/buffer-pool`](net/buffer-pool.md) | Fixed-size byte buffers a server's connections borrow and give back, so the memory a server holds follows the connections that are moving bytes, not the slots it was sized for. |
 | [`nish/net/dns-config`](net/dns-config.md) | `/etc/resolv.conf` and `/etc/hosts`, read from bytes the caller already has into fixed tables. |
 | [`nish/net/dns-message`](net/dns-message.md) | A DNS query for one A or AAAA question written into the caller's buffer, and the reply to it read back into addresses. |
@@ -115,22 +221,29 @@ Every module a Nish program can import, one page each, generated from the doc co
 | [`nish/net/url`](net/url.md) | The request target's path and query, split and percent-decoded in place, and its query string read as key/value pairs; and whole URLs, parsed into their parts and references resolved against them. |
 | [`nish/net/websocket`](net/websocket.md) | RFC 6455 WebSocket framing and both sides of the opening handshake, sans-IO: bytes in, events and bytes out. |
 | [`nish/net/webtransport`](net/webtransport.md) | WebTransport over HTTP/3, server side, as draft-ietf-webtrans-http3-02 has it and as Chrome and the `wtransport` 0.7 crate negotiate it: sessions made by an extended CONNECT (RFC 9220) with `:protocol` `webtransport`, HTTP datagrams (RFC 9297) carrying the session's quarter stream ID, the session's unidirectional and bidirectional streams, and CLOSE_WEBTRANSPORT_SESSION and DRAIN_WEBTRANSPORT_SESSION on the CONNECT stream's capsules. |
-| [`nish/pair`](pair.md) | Two values answered by one call. |
-| [`nish/random`](random.md) | A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node. |
-| [`nish/regex`](regex.md) | Regular expressions whose search time is linear in the input, whatever the pattern. |
-| [`nish/sort`](sort.md) | `xs.sort(cmp)` on an array, in Nish: a stable merge sort, compiled once per comparator. |
-| [`nish/sqlite`](sqlite.md) | `nish/sqlite` (the file `std/sqlite.ts`) — SQLite, the database in a file, from a Nish program. |
-| [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
-| [`nish/sync/shm`](sync/shm.md) | Memory that several processes map at once, and the atomics that order what they write to it. |
-| [`nish/term-io`](term-io.md) | Opening a terminal, drawing frames, reading events and leaving it as it was: the one entry point that uses the other term modules and does the I/O. |
-| [`nish/term-pixels`](term-pixels.md) | A framebuffer of pixels, and the encoders that draw it to a terminal with the best backend the terminal has: kitty graphics, Sixel, half-block cells or ASCII. |
-| [`nish/term-probe`](term-probe.md) | What the terminal a program runs in can do (its colours, keyboard protocol, graphics and size), asked of it once at start and read from its answer. |
-| [`nish/term-rate`](term-rate.md) | How fast the link to the terminal is, measured from frames sent and acknowledged, and the frame rate and drawing detail a program keeps to under it. |
-| [`nish/term`](term.md) | A terminal drawn as a grid of coloured cells, and the keys a terminal sends turned into events. |
-| [`nish/testing`](testing.md) | A test runner for Nish programs, written in Nish. |
-| [`nish/text`](text.md) | The string operations a program has to write itself. |
-| [`nish/threads`](threads.md) | Data parallelism, a scope for heterogeneous tasks, and a lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3). |
-| [`nish/yaml-json`](yaml-json.md) | One YAML document loaded into a `JsonDocument`, with every value's and key's source range, so that one validator and one `YamlLineIndex` serve a JSON text and a YAML text alike: |
-| [`nish/yaml-lines`](yaml-lines.md) | Byte offsets turned into the `line:column` a person reads. |
-| [`nish/yaml-write`](yaml-write.md) | A JSON value written as YAML text that `parseYaml` reads back as the same tree. |
-| [`nish/yaml`](yaml.md) | A YAML 1.2 parser that keeps where everything came from. |
+
+### Cryptography
+
+| Module | |
+| --- | --- |
+| [`nish/crypto/aes`](crypto/aes.md) | AES-128 and AES-256 (FIPS 197), GCM on top of them (NIST SP 800-38D), and QUIC's AES header-protection mask (RFC 9001 §5.4.3). |
+| [`nish/crypto/base64url`](crypto/base64url.md) | RFC 4648 §5 base64url, unpadded, as JWS and the relay's grants spell a key or a tag inside a URL or a header. |
+| [`nish/crypto/bcrypt-batch`](crypto/bcrypt-batch.md) | A login batcher: it queues bcrypt verifies and hashes as they arrive, sends them as `bcryptVerifyN` / `bcryptHashN` batches, and runs the batches on `std/threads` tasks, one per core. |
+| [`nish/crypto/bcrypt`](crypto/bcrypt.md) | Bcrypt password hashing, `$2b$` out and `$2a$`, `$2b$`, `$2y$` in. |
+| [`nish/crypto/chacha20poly1305`](crypto/chacha20poly1305.md) | The ChaCha20 stream cipher, the Poly1305 one-time authenticator and the AEAD built from the two, as RFC 8439 defines them, plus the ChaCha20 header-protection mask of RFC 9001 §5.4.4. |
+| [`nish/crypto/ct`](crypto/ct.md) | Comparing secrets without telling the clock where they differ. |
+| [`nish/crypto/ed25519`](crypto/ed25519.md) | The Ed25519 signature scheme of RFC 8032 (§5.1). |
+| [`nish/crypto/hkdf`](crypto/hkdf.md) | HKDF as RFC 5869 defines it, over HMAC-SHA-256 and HMAC-SHA-384. |
+| [`nish/crypto/hmac`](crypto/hmac.md) | HMAC as RFC 2104 defines it, over SHA-256, SHA-384 and SHA-512. |
+| [`nish/crypto/jwt`](crypto/jwt.md) | JSON Web Tokens in the JWS compact serialization: verify one and check its claims, or sign one. |
+| [`nish/crypto/p256`](crypto/p256.md) | ECDSA over NIST P-256 (secp256r1), with the deterministic nonces of RFC 6979. |
+| [`nish/crypto/p384`](crypto/p384.md) | ECDSA signature verification over NIST P-384 (secp384r1). |
+| [`nish/crypto/pki-roots`](crypto/pki-roots.md) | The root certificates a program should trust, read from where OpenSSL and Go look for them: the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system's bundle. |
+| [`nish/crypto/pki`](crypto/pki.md) | Whether the certificate chain a TLS server sent leads to a root the program trusts and names the host it dialled: RFC 5280 §6 path validation and RFC 6125 §6 hostname matching, at the instant the caller gives. |
+| [`nish/crypto/rsa`](crypto/rsa.md) | RSA signature verification: RSASSA-PKCS1-v1_5 and RSASSA-PSS over SHA-256, SHA-384 and SHA-512, under a public key read from its DER. |
+| [`nish/crypto/sha1`](crypto/sha1.md) | SHA-1 as FIPS 180-4 §6.1 defines it, in pure Nish. |
+| [`nish/crypto/sha256`](crypto/sha256.md) | SHA-256 as FIPS 180-4 §6.2 defines it, in pure Nish. |
+| [`nish/crypto/sha512`](crypto/sha512.md) | SHA-512 and SHA-384, written from FIPS 180-4. |
+| [`nish/crypto/x25519`](crypto/x25519.md) | The X25519 Diffie-Hellman function of RFC 7748. |
+| [`nish/crypto/x509-random`](crypto/x509-random.md) | The private key and the serial number `nish/crypto/x509`'s `x509MintSelfSigned` needs, drawn from the operating system's CSPRNG, and the mint that draws its own serial. |
+| [`nish/crypto/x509`](crypto/x509.md) | DER, PEM and the X.509 certificates a WebTransport or TLS server holds: read a P-256 private key and a certificate chain out of PEM, and mint the short-lived self-signed ECDSA P-256 certificate a browser pins by its SHA-256. |

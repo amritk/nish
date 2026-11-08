@@ -56,23 +56,25 @@
  * configuration offers `h2` (and may offer `http/1.1` beside it, for a
  * program that serves both and calls `alpn(slot)` itself).
  *
- * **Slots, a cap; buffers, borrowed.** The constructor makes the TLS pool
- * and slot 0's connection, but no other slot's and no frame buffer: a slot's
+ * **Slots, a cap; buffers, borrowed.** The constructor makes the TLS pool and
+ * slot 0's connection, but no other slot's and no frame buffer: a slot's
  * connection is made by the first `accept` into it and kept, so a pool sized
  * for its peak costs at start-up only what does not depend on the size, and
- * holds at most `size` connections once the peak has come. A connection
- * borrows its input, output and header-block buffers from the
- * server's `Http2Pools` when it first needs each, and gives each back once it
- * is empty and when the slot closes, so a free or idle slot holds none. A
- * slot whose handshake is not done holds one output buffer, its SETTINGS
- * written and waiting on TLS, until the handshake ends or the slot closes:
- * one client that stalls its handshake keeps one buffer, as it kept a whole
- * slot before (`docs/security/tls.md`, TLS-4). Each pool's ceiling is the
- * slot count, so a borrow never fails. `accept` resets
- * the slot's connection, and once the pools are warm nothing a connection
- * does allocates but a header block's HPACK decoding (`docs/security/http2.md`,
- * H2-1). The caps are the `Http2Config`'s, one for every slot, so a program
- * sets them once.
+ * holds at most `size` connections once the peak has come.
+ *
+ *  A connection borrows its input, output and header-block buffers from the
+ *  server's `Http2Pools` when it first needs each, and gives each back once it
+ *  is empty and when the slot closes, so a free or idle slot holds none. A slot
+ *  whose handshake is not done holds one output buffer, its SETTINGS written and
+ *  waiting on TLS, until the handshake ends or the slot closes: one client that
+ *  stalls its handshake keeps one buffer, as it kept a whole slot before
+ *  (`docs/security/tls.md`, TLS-4). Each pool's ceiling is the slot count, so a
+ *  borrow never fails.
+ *
+ *  `accept` resets the slot's connection, and once the pools are warm nothing a
+ *  connection does allocates but a header block's HPACK decoding
+ *  (`docs/security/http2.md`, H2-1). The caps are the `Http2Config`'s, one for
+ *  every slot, so a program sets them once.
  *
  * **The Date.** Every final response carries one `date` field (RFC 9110
  * §6.6.1) from the pool's `HttpDate`, which formats the IMF-fixdate at most

@@ -34,17 +34,18 @@
  *     };
  *
  * **What is written here is the meaning, not the implementation.** Each body
- * below is the sequential program, and it is what runs under Node, what
- * `npm run check` type-checks, and what the compiler checks the call against.
- * The compiler then recognises the exported templates by module and name
- * and lowers an instance of `parallelMapInto`, `parallelFrom` or
- * `parallelReduce` onto `nish_parallel_range` (runtime/runtime-parallel.c): it
- * replaces the one call that walks the whole range — `mapRange` for a map,
- * `fromRange` for a `parallelFrom`, `reduceBlocks` for a reduce — with a region
- * that hands each thread a contiguous piece of it, and emits the rest of the
- * body as written. `parallelMap` is `parallelMapInto` into an array it
- * allocates first. So the length check, its message and the order a reduce combines in
- * are this file's, whichever way the program is compiled.
+ * below is the sequential program, and it is what runs under Node, what `npm
+ * run check` type-checks, and what the compiler checks the call against.
+ *
+ *  The compiler then recognises the exported templates by module and name and
+ *  lowers an instance of `parallelMapInto`, `parallelFrom` or `parallelReduce`
+ *  onto `nish_parallel_range` (runtime/runtime-parallel.c): it replaces the one
+ *  call that walks the whole range — `mapRange` for a map, `fromRange` for a
+ *  `parallelFrom`, `reduceBlocks` for a reduce — with a region that hands each
+ *  thread a contiguous piece of it, and emits the rest of the body as written.
+ *  `parallelMap` is `parallelMapInto` into an array it allocates first. So the
+ *  length check, its message and the order a reduce combines in are this file's,
+ *  whichever way the program is compiled.
  *
  * **What makes the region safe is checked at the call, not trusted**
  * (docs/LANGUAGE.md, "Data parallelism"): the function passed as `f` may write
@@ -52,10 +53,13 @@
  * before it returns — they are given back after every element — `dst` may not
  * be reachable from an element of `src`, and the result type is a number, a
  * `boolean` or an enum — or, for a map, a `string` or an array of those
- * scalars, which the join copies out of the worker's arena. An arrow written at the call may read the `const` locals and
- * the parameters of the function it is written in: each one is handed to the
- * body as a parameter of its own, which no body may write through. Importing this module compiles the program with `--threads`,
- * because every worker needs an arena of its own.
+ * scalars, which the join copies out of the worker's arena.
+ *
+ *  An arrow written at the call may read the `const` locals and the parameters
+ *  of the function it is written in: each one is handed to the body as a
+ *  parameter of its own, which no body may write through. Importing this module
+ *  compiles the program with `--threads`, because every worker needs an arena of
+ *  its own.
  *
  * **A reduce is deterministic.** `src` is split into `min(64, ceil(n / BLOCK))`
  * blocks, each block is folded from `identity`, and the block results are

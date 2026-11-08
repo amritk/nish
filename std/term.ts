@@ -79,33 +79,40 @@
  * sends no releases, so while `releasesAreSynthetic` is set (until the first
  * real release) a key counts as let go when its repeats stop: `firstRepeatMs`
  * (700 ms) after a press that has not repeated and `releaseGapMs` (100 ms)
- * after its last repeat. Silence is measured in stream time when the caller has
- * one: term-io sends an in-order query after each frame and calls `delivered`
- * with the send time of each one answered, since by then everything the
- * terminal generated before it has arrived. Measured that way a stall, a burst
- * or jittery reads delay the watermark as much as the keys, so a held key never
- * flickers and a tap comes up 700 ms plus one round trip after its press. With
- * no watermark yet, silence is wall-clock time between `apply`s, which a link
- * that reads in bursts more than `releaseGapMs` apart can mistake for a key let
- * go. While acks stop, nothing is released: there is no wall-clock backstop,
- * and a caller that stops getting answers clears `watermarked` to fall back to
- * the wall clock. term-io does so once 1000 ms pass with no query answered,
- * frames sent or not, which no working link reaches while it draws.
- * Within one read the caller `apply`s its events before calling `delivered` for
- * the answer it carries: a `tick` between the two would judge keys against a
- * watermark that already covers repeats not yet applied, and report a release
- * and then a press. A non-finite time is ignored. Under X11 and Windows only
- * the last key pressed auto-repeats, so holding W and then pressing D lets W go
- * `releaseGapMs` after its last repeat. A real release of a key not down is
- * dropped, so one arriving after its key was made up as released is not
- * reported twice. Under kitty a real release that is lost leaves its key down
- * until focus is lost, and for good without focus reporting. A key the batch
- * `apply` takes names stays down. A made-up release carries the code and
- * modifiers the key last came with. Losing focus lets every key go, and Ctrl-C
- * becomes `EVENT_QUIT` while `quitOnCtrlC` is set. Under the kitty protocol a
- * non-Latin layout sends Ctrl-C as its own letter (`ESC [ 1089 ; 5 u` for
- * Russian С), which is not read as a quit: the base-layout key that flag 4
- * (report alternate keys) adds is not read yet.
+ * after its last repeat.
+ *
+ *  Silence is measured in stream time when the caller has one: term-io sends an
+ *  in-order query after each frame and calls `delivered` with the send time of
+ *  each one answered, since by then everything the terminal generated before it
+ *  has arrived. Measured that way a stall, a burst or jittery reads delay the
+ *  watermark as much as the keys, so a held key never flickers and a tap comes
+ *  up 700 ms plus one round trip after its press.
+ *
+ *  With no watermark yet, silence is wall-clock time between `apply`s, which a
+ *  link that reads in bursts more than `releaseGapMs` apart can mistake for a
+ *  key let go. While acks stop, nothing is released: there is no wall-clock
+ *  backstop, and a caller that stops getting answers clears `watermarked` to
+ *  fall back to the wall clock. term-io does so once 1000 ms pass with no query
+ *  answered, frames sent or not, which no working link reaches while it draws.
+ *
+ *  Within one read the caller `apply`s its events before calling `delivered` for
+ *  the answer it carries: a `tick` between the two would judge keys against a
+ *  watermark that already covers repeats not yet applied, and report a release
+ *  and then a press. A non-finite time is ignored. Under X11 and Windows only
+ *  the last key pressed auto-repeats, so holding W and then pressing D lets W go
+ *  `releaseGapMs` after its last repeat.
+ *
+ *  A real release of a key not down is dropped, so one arriving after its key
+ *  was made up as released is not reported twice. Under kitty a real release
+ *  that is lost leaves its key down until focus is lost, and for good without
+ *  focus reporting. A key the batch `apply` takes names stays down. A made-up
+ *  release carries the code and modifiers the key last came with. Losing focus
+ *  lets every key go, and Ctrl-C becomes `EVENT_QUIT` while `quitOnCtrlC` is
+ *  set.
+ *
+ *  Under the kitty protocol a non-Latin layout sends Ctrl-C as its own letter
+ *  (`ESC [ 1089 ; 5 u` for Russian С), which is not read as a quit: the
+ *  base-layout key that flag 4 (report alternate keys) adds is not read yet.
  *
  * **The same bytes under Node.** Natively a string is UTF-8 bytes, and `flush`
  * builds its answer as bytes and makes one string of them. Under Node a string
@@ -114,10 +121,11 @@
  * way, which `tests/run.js` checks ("nish/term prints the same bytes under
  * runtime/nish.mjs"). `text` reads a string's code points as UTF-8 natively and
  * as UTF-16 under Node, so a string literal draws the same cells both ways.
- * A `TermEvent`'s `text` is made from bytes the terminal sent: natively it
- * holds them as they came, and under Node they are decoded as UTF-8 without
- * checking, so malformed UTF-8 in a paste or reply can differ between the two.
- * Integer division is spelled `(a / b) | 0`, which truncates in both.
+ *
+ *  A `TermEvent`'s `text` is made from bytes the terminal sent: natively it
+ *  holds them as they came, and under Node they are decoded as UTF-8 without
+ *  checking, so malformed UTF-8 in a paste or reply can differ between the two.
+ *  Integer division is spelled `(a / b) | 0`, which truncates in both.
  */
 
 /** The terminal's own colour, foreground or background: SGR 39 and 49. */
@@ -902,11 +910,12 @@ export class Screen {
    * otherwise — and a gap of up to three unchanged ASCII cells in the current
    * style is rewritten instead, which is shorter than the move. A style is sent
    * only when it differs from the previous cell's, and only the parts that
-   * differ, from a reset when an attribute has to be turned off. A flush that
-   * leaves the terminal in a style other than the default ends with `ESC [ 0
-   * m`, so what the caller writes next starts plain. With `sync` set, a flush
-   * that changes anything is wrapped in `beginSync` and `endSync`, in the same
-   * string, so the terminal paints the frame whole.
+   * differ, from a reset when an attribute has to be turned off.
+   *
+   * A flush that leaves the terminal in a style other than the default ends
+   * with `ESC [ 0 m`, so what the caller writes next starts plain. With `sync`
+   * set, a flush that changes anything is wrapped in `beginSync` and `endSync`,
+   * in the same string, so the terminal paints the frame whole.
    *
    * @returns The escapes and glyphs, to `write`; `""` when nothing changed.
    */
@@ -1361,16 +1370,18 @@ export class TermEvent {
 }
 
 /**
- * Bytes from a terminal in raw mode, turned into key events. A read can end
- * in the middle of an escape sequence or a UTF-8 character; the decoder keeps
- * the start and finishes it with the next `feed`. An ESC on its own is both the
+ * Bytes from a terminal in raw mode, turned into key events. A read can end in
+ * the middle of an escape sequence or a UTF-8 character; the decoder keeps the
+ * start and finishes it with the next `feed`. An ESC on its own is both the
  * escape key and the start of every arrow, so it is held until either more
  * bytes complete a sequence or `escapeTimeoutMs` passes with none, and then it
- * is `KEY_ESCAPE`. Whatever is held past the timeout is given up the same way:
- * the ESC as `KEY_ESCAPE`, the bytes after it as keys of their own, and an
- * unfinished UTF-8 character as U+FFFD. The clock is the caller's: each call
- * takes the time now in milliseconds, from any origin, so long as it does not
- * go backwards.
+ * is `KEY_ESCAPE`.
+ *
+ * Whatever is held past the timeout is given up the same way: the ESC as
+ * `KEY_ESCAPE`, the bytes after it as keys of their own, and an unfinished
+ * UTF-8 character as U+FFFD. The clock is the caller's: each call takes the
+ * time now in milliseconds, from any origin, so long as it does not go
+ * backwards.
  *
  * `feedEvents` and `pollEvents` decode the same bytes into `TermEvent`s
  * instead: keys with their modifiers and press, repeat or release, the mouse,
@@ -1551,21 +1562,24 @@ export class KeyDecoder {
 /**
  * Which keys are down, from the events a `KeyDecoder` made — what a game asks
  * each frame. Under the kitty protocol with event types (flag 2) a terminal
- * sends real releases. Without it a terminal sends nothing when a key comes
- * up, only the press again as it auto-repeats, so a key is let go once its
- * repeats stop: `releaseGapMs` after its last repeat, and `firstRepeatMs` after
- * a press that has not repeated. The system waits before its first repeat —
- * 660 ms under X11 by default, 500 under Windows, shorter under macOS — and
- * repeats every 30–40 ms; a longer delay needs `firstRepeatMs` raised, and a
- * slower rate `releaseGapMs`. Input arrives late and in bursts (over SSH, reads
- * 150–250 ms apart are usual), so when the reads alone are known the silence
- * is not: a caller that sends in-order queries calls `delivered(sentAtMs)` as
- * each is answered, and silence is then measured against that watermark rather
- * than the clock. A key last seen in a read at `A` is let go once the watermark
- * reaches `A + gap`: had it still been down, the terminal would have generated
- * a repeat before then, and it would have arrived ahead of the answer. Until
- * the first `delivered`, and after the caller clears `watermarked`, the gap is
- * measured against `nowMs`. Pure, with the caller's clock, as `KeyDecoder` is.
+ * sends real releases. Without it a terminal sends nothing when a key comes up,
+ * only the press again as it auto-repeats, so a key is let go once its repeats
+ * stop: `releaseGapMs` after its last repeat, and `firstRepeatMs` after a press
+ * that has not repeated.
+ *
+ * The system waits before its first repeat — 660 ms under X11 by default, 500
+ * under Windows, shorter under macOS — and repeats every 30–40 ms; a longer
+ * delay needs `firstRepeatMs` raised, and a slower rate `releaseGapMs`. Input
+ * arrives late and in bursts (over SSH, reads 150–250 ms apart are usual), so
+ * when the reads alone are known the silence is not: a caller that sends
+ * in-order queries calls `delivered(sentAtMs)` as each is answered, and silence
+ * is then measured against that watermark rather than the clock.
+ *
+ * A key last seen in a read at `A` is let go once the watermark reaches `A +
+ * gap`: had it still been down, the terminal would have generated a repeat
+ * before then, and it would have arrived ahead of the answer. Until the first
+ * `delivered`, and after the caller clears `watermarked`, the gap is measured
+ * against `nowMs`. Pure, with the caller's clock, as `KeyDecoder` is.
  */
 export class KeyState {
   /** How long after its last repeat a key is let go, in milliseconds (100 by default). */

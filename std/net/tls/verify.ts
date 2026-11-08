@@ -12,13 +12,14 @@
  * SHA-256 on a P-256 key, ECDSA P-384 with SHA-384 on a P-384 key, RSA-PSS
  * (rsae, salt as long as the hash) on an RSA key of at least 2048 bits — and
  * the signature must verify over `TlsClient.verifyContent()` under that key
- * (RFC 8446 §4.4.3). Then the chain, from the leaf the server sent to a root
- * in `trust`, for the name the caller dialled. A server with no certificate
- * or a leaf that does not parse is `bad_certificate`, as is a leaf whose key
- * is of any other kind (Ed25519, a short RSA modulus); a signature that does
- * not verify, or a scheme that does not fit the key, is `decrypt_error`.
- * The signature goes first so a forged CertificateVerify reads as what it is
- * whatever the chain would have said.
+ * (RFC 8446 §4.4.3). Then the chain, from the leaf the server sent to a root in
+ * `trust`, for the name the caller dialled.
+ *
+ *  A server with no certificate or a leaf that does not parse is
+ *  `bad_certificate`, as is a leaf whose key is of any other kind (Ed25519, a
+ *  short RSA modulus); a signature that does not verify, or a scheme that does
+ *  not fit the key, is `decrypt_error`. The signature goes first so a forged
+ *  CertificateVerify reads as what it is whatever the chain would have said.
  *
  * **The chain is `nish/crypto/pki`'s.** `pkiVerifyServer` builds a path from
  * the leaf to a root of `trust`'s store and checks every certificate on it —

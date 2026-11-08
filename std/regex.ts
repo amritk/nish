@@ -17,51 +17,59 @@
  *     }
  *
  * **The syntax is JavaScript's**, with the `u` flag's strictness: literals,
- * `.`, classes `[a-z]` and `[^…]`, `\d \w \s` and their negations, `\b \B ^
- * $`, groups `(…)`, `(?:…)` and `(?<name>…)`, `|`, and the quantifiers `* + ?
- * {n} {n,} {n,m}` with their lazy `?` forms. Escapes are `\n \r \t \f \v \0`,
+ * `.`, classes `[a-z]` and `[^…]`, `\d \w \s` and their negations, `\b \B ^ $`,
+ * groups `(…)`, `(?:…)` and `(?<name>…)`, `|`, and the quantifiers `* + ? {n}
+ * {n,} {n,m}` with their lazy `?` forms. Escapes are `\n \r \t \f \v \0`,
  * `\cX`, `\xHH`, `\uHHHH`, `\u{H…}` and a backslash before any syntax
- * character; a `{`, `}` or `]` that does not belong to a quantifier or a
- * class is an error rather than a literal, so write `\{`. `\p{…}` and
- * `\P{…}` are Unicode 16.0's properties as JavaScript names them: a
- * General_Category value (`L`, `Lu`, `Letter`, `gc=Nd`), `Script=` or
- * `Script_Extensions=` a script (`sc=Grek`, `scx=Deva`), or a binary property
- * (`Alphabetic`, `Emoji`, `ASCII`, `Any`, `Assigned`). The flags are `i`, `m`
- * (`^` and `$` at line terminators), `s` (`.` matches them too) and `u`,
- * which changes nothing. `i` folds A-Z to a-z, and above ASCII follows
- * Unicode's simple case folding, so `σ` matches `Σ` and `ς` and `[α-ω]` the
- * capitals; unlike JavaScript nothing folds across ASCII, so the Kelvin sign
- * and `ſ` match no `k` or `s`, though under `i` both are word characters to
- * `\w`, `\W`, `\b` and `\B`, as with JavaScript's `iu`. **Backreferences and
- * lookaround are refused at compile time**: they are what makes a matcher
- * backtrack, and this one never does. A repeat count is at most 1,000, a
- * pattern at most 100,000 instructions once its repeats are written out,
- * 1,024 capturing groups and 10,000 ranges in one class, and its property
- * escapes and case folding add at most 100,000 ranges to its classes.
+ * character; a `{`, `}` or `]` that does not belong to a quantifier or a class
+ * is an error rather than a literal, so write `\{`.
  *
- * **Matching never backtracks.** A search runs a lazy DFA first: it builds
- * its states from the compiled program as the text needs them, so it reads a
- * byte per step and the leftmost-first match's end comes from a table lookup.
- * A reverse DFA, run back from that end, finds where the match starts, and a
- * Pike VM, the construction RE2, Go's `regexp` and Rust's `regex` use, runs
- * from that start only when a group's capture is wanted. A pattern with a
- * literal no match can avoid, such as `\w+@example`, is searched for by that
- * literal and the match grown both ways from it. Every engine follows every
- * alternative at once, so a match costs O(pattern × input) at worst and
- * `(a+)+$` against a thousand `a`s and a `b` is as quick as `a+$`. Finding
- * every match (`findAll`, `count`, `replaceAll`, `split`) is one search per
- * match, so it is quadratic when a preferred branch reads far ahead before a
- * short one wins: `<[^>]*>|<` over a text of `<`s rereads the rest of the text
- * for each, as it does in RE2 and Rust's `regex`. Which match
- * is found is the one JavaScript finds — the leftmost, and of those the one
- * the first alternative and the greediest quantifier prefer — and a group
- * inside a quantifier keeps only its last iteration's capture, as in
- * JavaScript. An iteration past a quantifier's minimum that matches empty is
- * rejected, as JavaScript rejects it. The VM keeps one thread per
- * instruction, position and set of iterations begun, so `(a*?)+?$` on "aa"
- * captures "a", as JavaScript does; past three such quantifiers nested in one
- * another the deeper ones share their threads, and a capture there can be a
- * different iteration's than JavaScript's.
+ *  `\p{…}` and `\P{…}` are Unicode 16.0's properties as JavaScript names them: a
+ *  General_Category value (`L`, `Lu`, `Letter`, `gc=Nd`), `Script=` or
+ *  `Script_Extensions=` a script (`sc=Grek`, `scx=Deva`), or a binary property
+ *  (`Alphabetic`, `Emoji`, `ASCII`, `Any`, `Assigned`). The flags are `i`, `m`
+ *  (`^` and `$` at line terminators), `s` (`.` matches them too) and `u`, which
+ *  changes nothing.
+ *
+ *  `i` folds A-Z to a-z, and above ASCII follows Unicode's simple case folding,
+ *  so `σ` matches `Σ` and `ς` and `[α-ω]` the capitals; unlike JavaScript
+ *  nothing folds across ASCII, so the Kelvin sign and `ſ` match no `k` or `s`,
+ *  though under `i` both are word characters to `\w`, `\W`, `\b` and `\B`, as
+ *  with JavaScript's `iu`. **Backreferences and lookaround are refused at
+ *  compile time**: they are what makes a matcher backtrack, and this one never
+ *  does.
+ *
+ *  A repeat count is at most 1,000, a pattern at most 100,000 instructions once
+ *  its repeats are written out, 1,024 capturing groups and 10,000 ranges in one
+ *  class, and its property escapes and case folding add at most 100,000 ranges
+ *  to its classes.
+ *
+ * **Matching never backtracks.** A search runs a lazy DFA first: it builds its
+ * states from the compiled program as the text needs them, so it reads a byte
+ * per step and the leftmost-first match's end comes from a table lookup. A
+ * reverse DFA, run back from that end, finds where the match starts, and a Pike
+ * VM, the construction RE2, Go's `regexp` and Rust's `regex` use, runs from
+ * that start only when a group's capture is wanted.
+ *
+ *  A pattern with a literal no match can avoid, such as `\w+@example`, is
+ *  searched for by that literal and the match grown both ways from it. Every
+ *  engine follows every alternative at once, so a match costs O(pattern × input)
+ *  at worst and `(a+)+$` against a thousand `a`s and a `b` is as quick as `a+$`.
+ *
+ *  Finding every match (`findAll`, `count`, `replaceAll`, `split`) is one search
+ *  per match, so it is quadratic when a preferred branch reads far ahead before
+ *  a short one wins: `<[^>]*>|<` over a text of `<`s rereads the rest of the
+ *  text for each, as it does in RE2 and Rust's `regex`. Which match is found is
+ *  the one JavaScript finds — the leftmost, and of those the one the first
+ *  alternative and the greediest quantifier prefer — and a group inside a
+ *  quantifier keeps only its last iteration's capture, as in JavaScript.
+ *
+ *  An iteration past a quantifier's minimum that matches empty is rejected, as
+ *  JavaScript rejects it. The VM keeps one thread per instruction, position and
+ *  set of iterations begun, so `(a*?)+?$` on "aa" captures "a", as JavaScript
+ *  does; past three such quantifiers nested in one another the deeper ones share
+ *  their threads, and a capture there can be a different iteration's than
+ *  JavaScript's.
  *
  * **Strings are UTF-8 and offsets are bytes**, like `s.length`. The VM steps
  * a code point at a time, so `.` and `[^a]` consume a whole character; a byte
@@ -70,24 +78,27 @@
  * JavaScript; `\s` is JavaScript's whitespace, U+FEFF and U+3000 included.
  * After an empty match `findAll`, `replaceAll` and `split` step one character.
  *
- * **What a call costs.** The VM's two thread lists, its capture tables and
- * its stack are allocated once by `regexCompile`. `test` tracks no captures,
+ * **What a call costs.** The VM's two thread lists, its capture tables and its
+ * stack are allocated once by `regexCompile`. `test` tracks no captures,
  * `findAll` and a `replace` whose template names no group track only the
  * match's bounds, and only `exec`, `find`, `split` and a template with `$1` or
- * `$<name>` pay for every group. A pattern that starts with a literal is searched for with
- * `s.indexOf`; one whose first few bytes are each one of a set rare enough to
- * be worth it, like `[A-Z][a-z]` or `cat|dog`, is searched for those bytes by
- * a runtime kernel that tests sixteen or thirty-two starts at a time; any
- * other whose first characters are known skips the bytes that cannot start a
- * match with a 128-entry table; and a pattern that is nothing but a literal
- * never starts an engine at all. The DFA's states are
- * built as searches need them and kept, so only a search that meets new
- * states allocates, and only up to a bound:
- * its table holds at most 2,048 states and 262,144 transitions (1 MiB), and
- * a search that fills it clears it and goes on; one that keeps clearing it
- * without reading at least 10 bytes per state hands the rest of the text to
- * the VM, which is slower but never needs more memory. Because the scratch
- * memory lives in the `Regex`, one `Regex` is used by one thread at a time.
+ * `$<name>` pay for every group.
+ *
+ *  A pattern that starts with a literal is searched for with `s.indexOf`; one
+ *  whose first few bytes are each one of a set rare enough to be worth it, like
+ *  `[A-Z][a-z]` or `cat|dog`, is searched for those bytes by a runtime kernel
+ *  that tests sixteen or thirty-two starts at a time; any other whose first
+ *  characters are known skips the bytes that cannot start a match with a
+ *  128-entry table; and a pattern that is nothing but a literal never starts an
+ *  engine at all.
+ *
+ *  The DFA's states are built as searches need them and kept, so only a search
+ *  that meets new states allocates, and only up to a bound: its table holds at
+ *  most 2,048 states and 262,144 transitions (1 MiB), and a search that fills it
+ *  clears it and goes on; one that keeps clearing it without reading at least 10
+ *  bytes per state hands the rest of the text to the VM, which is slower but
+ *  never needs more memory. Because the scratch memory lives in the `Regex`, one
+ *  `Regex` is used by one thread at a time.
  */
 
 import { uncheckedGet } from "nish:unsafe"
