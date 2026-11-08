@@ -2751,17 +2751,16 @@ const httpClientLookupAsync = async (
   addresses: u8[],
   ttls: i32[]
 ): Promise<i32> => {
+  let high: i32 = 0
   const name: u8[] = new Array<u8>(host.length)
-  let ascii: boolean = true
   for (let i: i32 = 0; i < toI32(host.length); i += 1) {
     const c: i32 = toI32(host.charCodeAt(i))
-    if (c > 127) {
-      ascii = false
-      break
+    high = high | c
+    if (i < toI32(name.length)) {
+      name[i] = toU8(c & 0x7f)
     }
-    name[i] = toU8(c)
   }
-  if (ascii && dnsParseAddress(name, 0, toI32(name.length), addresses, 0, port)) {
+  if (high <= 127 && dnsParseAddress(name, 0, toI32(name.length), addresses, 0, port)) {
     ttls[0] = 0
     return 1
   }
