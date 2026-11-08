@@ -57,7 +57,7 @@ The attacker cannot read the process's memory while it runs. A memory disclosure
 
 ## Method
 
-1. **Read the kernel against the RFC.** Read the kernel against RFC 8439 §2.1 to §2.4. Read the guard against `chacha20XorInto`'s own bounds and its i32 arithmetic (`std/crypto/chacha20poly1305.ts:256`). Read the counter's increment against the Nish function's u32 wrap (`docs/LANGUAGE.md`: u32 arithmetic wraps). Callers bound the counter with `chacha20CounterFits`, and the kernel adds to it with the same wrap.
+1. **Read the kernel against the RFC.** Read the kernel against RFC 8439 §2.1 to §2.4. Read the guard against `chacha20XorInto`'s own bounds and its i32 arithmetic (`std/crypto/chacha20poly1305.ts:258`). Read the counter's increment against the Nish function's u32 wrap (`docs/LANGUAGE.md`: u32 arithmetic wraps). Callers bound the counter with `chacha20CounterFits`, and the kernel adds to it with the same wrap.
 2. **Ran `tests/simd/chacha20.c`.** It includes the unit and holds the kernel to a portable RFC 8439 block. It covers:
    - seeded keys, nonces, counters (including counters near 2^32, where the increment wraps) and lengths, in place and out of place;
    - the RFC's §2.4.2 vector;
