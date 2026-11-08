@@ -2308,13 +2308,13 @@ class PassWalk {
       }
     } else if (node.kind === N_RETURN) {
       const value = node.children[0]
-      // A block hands back nothing through a `void` call, and a register
-      // `Result` is packed before it releases (`emitReturnValue`). So is the
-      // one a pass hands on from a call that answers it in a register: the
+      // A block hands back nothing through a `void` call. A function that
+      // answers a `Result` in a register packs every `return` value before
+      // the release (`emitReturnValue`), whatever its form: `f()`,
+      // `c ? f() : g()` or `a ?? f()` from a pass, as from a block. The
       // caller's box `isOld` counts as new is read out before the release.
       const handsNothing =
-        (this.block && (this.returnsByValue || program.nodeTypes[value.id] === T_VOID)) ||
-        (this.returnsByValue && this.answersInRegister(value))
+        this.returnsByValue || (this.block && program.nodeTypes[value.id] === T_VOID)
       if (value.kind !== N_EMPTY && !handsNothing && !this.isOld(value)) {
         this.scope.handsBack = true
         this.refuse(LOOP_RETURN, node, "")

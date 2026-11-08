@@ -1,0 +1,4 @@
+call true 50
+ternary true 4
+coalesce true 7
+none false -1
