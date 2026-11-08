@@ -1,6 +1,6 @@
 # Security record: `nish/net/dns` — the stub resolver, its wire codec and its files
 
-The record of the stub resolver (#986, #479), in two stages. The first is the DNS
+The record of the stub resolver (#986, #479), in three stages. The first is the DNS
 message codec (RFC 1035 §4, with RFC 2181 and RFC 4343's readings) that writes
 one A or AAAA question and reads the reply to it, and the readers of
 `/etc/resolv.conf` and `/etc/hosts` the resolver starts from.
@@ -9,7 +9,9 @@ It says what each module refuses and with what, what it caps and where, and the
 test that pins each property. It is written with the code, against `main` at
 `2cdef4f`, and cites functions rather than lines. The second stage, the
 resolver that sends the queries and the client that drives it over sockets, is
-[The resolver](#the-resolver), written against `20ce936`.
+[The resolver](#the-resolver), written against `20ce936`. The third, a
+later candidate's NODATA and the timeout that keeps an answered family (DNS-6,
+DNS-7), is recorded in the same section.
 
 **Result.** Nothing a peer or a file sends panics, loops or allocates: a
 compression loop, a pointer forwards or into the header, a seventeenth hop, a
@@ -30,14 +32,15 @@ is not 16 bits, a query `dnsBuildQuery` did not write — panic. Four properties
 are recorded as accepted (DNS-1 to DNS-4); none is counted. The panics are not
 yet pinned by a fixture of their own ([Not pinned](#not-pinned)). The resolver
 stage closes DNS-1's follow-up and fixed one Medium finding of its own, DNS-5.
+The fallback-and-timeout stage fixed two Low findings, DNS-6 and DNS-7.
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
 | `std/net/dns-message.ts` | `dnsBuildQuery`, `dnsParseReply`; `DnsReply`; the helpers `dnsCheckLength`, `dnsLower`, `dnsReadName`, `dnsSameName`, `dnsCopyName`, `dnsKeepAddress` |
-| `std/net/dns-resolver.ts` | `DnsResolver` (`start`, `nextOutgoing`, `receive`, `receiveStream`, `fail`, `tick`, `nextDeadlineNanos`, `result`, `cancel`, `active`); the helpers `dnsResolverCheckQuery`, `dnsResolverIsLocalhost`, `dnsResolverLoopback`, `dnsResolverLiteral`, `dnsResolverFinishNow`, `dnsResolverFinish`, `dnsResolverStop`, `dnsResolverGather`, `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverBegin`, `dnsResolverAsk`, `dnsResolverSend`, `dnsResolverServerFailed`, `dnsResolverAnswer`, `dnsResolverNameLength`, `dnsResolverSameName`, `dnsResolverDone` |
-| `std/net/dns.ts` | `DnsClient` (`tokens`, `owns`, `start`, `result`, `cancel`, `ready`, `tick`, `timeoutMs`, `pump`, `nextOutgoing`), `resolveHost`, `dnsLookupWith`, `dnsLoadSystem`; the helpers `dnsClientClose`, `dnsClientFail`, `dnsClientIsV4`, `dnsClientSendUdp`, `dnsClientOpenTcp`, `dnsClientReadDatagrams`, `dnsClientWrite`, `dnsClientReadStream` |
+| `std/net/dns-resolver.ts` | `DnsResolver` (`start`, `nextOutgoing`, `receive`, `receiveStream`, `fail`, `tick`, `nextDeadlineNanos`, `result`, `cancel`, `settle`, `active`); the helpers `dnsResolverCheckQuery`, `dnsResolverIsLocalhost`, `dnsResolverLoopback`, `dnsResolverLiteral`, `dnsResolverFinishNow`, `dnsResolverFinish`, `dnsResolverStop`, `dnsResolverGather`, `dnsResolverNextCandidate`, `dnsResolverCandidate`, `dnsResolverBegin`, `dnsResolverAsk`, `dnsResolverSend`, `dnsResolverServerFailed`, `dnsResolverAnswer`, `dnsResolverNameLength`, `dnsResolverSameName`, `dnsResolverDone` |
+| `std/net/dns.ts` | `DnsClient` (`tokens`, `owns`, `start`, `result`, `cancel`, `settle`, `ready`, `tick`, `timeoutMs`, `pump`, `nextOutgoing`), `resolveHost`, `dnsLookupWith`, `dnsLoadSystem`; the helpers `dnsClientClose`, `dnsClientFail`, `dnsClientIsV4`, `dnsClientSendUdp`, `dnsClientOpenTcp`, `dnsClientReadDatagrams`, `dnsClientWrite`, `dnsClientReadStream` |
 | `std/net/dns-config.ts` | `dnsParseAddress`, `dnsParseResolvConf`, `dnsParseHosts`, `dnsHostsFind`; `DnsConfig`, `DnsHosts`; the helpers `dnsConfigCheckWindow`, `dnsIsBlank`, `dnsHexValue`, `dnsParseIpv4`, `dnsParseIpv6`, `dnsIsIpv4`, `dnsLineEnd`, `dnsCommentCut`, `dnsWordEnd`, `dnsWordIs`, `dnsOption`, `dnsAddSearch`, `dnsResolvLine`, `dnsAddHostName`, `dnsHostsLine`, `dnsHostNameIs` |
 
 Out of scope: `nish:net`'s sockets and readiness loop, which have their own
@@ -69,6 +72,8 @@ is trusted; its mistakes panic.
 | DNS-3 | Low | `std/net/dns-message.ts` (`dnsParseReply`) | A CNAME whose owner is the chain's end moves the chain to any target, and an address for that target is kept, whatever zone it is in. A lying recursive server can answer anything. | **Accepted.** The recursive server is the stub's trust anchor, as it is glibc's and musl's; what the chain prevents is an address for a name off the chain, which is read past (`built CNAME off the chain: no address`). |
 | DNS-4 | Low | `std/net/dns-config.ts` (`dnsParseIpv4`, `dnsParseIpv6`) | The address literal is read by the module's own parser, not by `nish:net`'s `netAddress`, which a std module that must compile on `wasm32` may not import. Two readers of one literal could drift. | **Accepted.** Both are strict: four decimal parts without a leading zero, or RFC 4291 §2.2's text form with at most one `::` and an optional IPv4 tail, no zone and no brackets; every edge is pinned (`ipv4: *`, `ipv6: *`). |
 | DNS-5 | Medium | `std/net/dns.ts` (`dnsClientReadDatagrams`) | `DnsClient.ready` read datagrams from a query's socket until none was waiting, so a flood sent faster than the client parsed it held the caller's loop inside `ready` for as long as it lasted: every other descriptor on the loop starved. | **Fixed.** One `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32); the loop is level-triggered, so the rest wait for the next `pollWait`. Before: `flood: one ready reads DNS_CLIENT_MAX_DATAGRAMS` failed with 40 of 40 forged datagrams read in one call; after, 32, and the genuine reply behind the flood still answers (`flood: the genuine address stands`). |
+| DNS-6 | Low | `std/net/dns-resolver.ts` (`dnsResolverDone`) | A search candidate that left one family's error to fall back on (NXDOMAIN for A, SERVFAIL for AAAA) kept that error even when a later candidate answered NODATA, so a name that exists read as `DNS_RESOLVE_NO_ANSWER`, an outage, where its server had said it has no address. | **Fixed.** NODATA from any candidate ends the lookup `DNS_RESOLVE_NOT_FOUND`; the fallback stands only when no later candidate answers. Before: `fallback: a later candidate's NODATA is DNS_RESOLVE_NOT_FOUND` failed with -42; after, -41. |
+| DNS-7 | Low | `std/net/dns.ts` (`dnsLookupWith`, `resolveHost`) | At `timeoutMs` the lookup was cancelled whole, so a server that answered A and never AAAA (or dropped AAAA at a filter) made every `resolveHost` of the name `DNS_RESOLVE_TIMEOUT`, though the addresses were in hand. | **Fixed.** At the deadline `DnsClient.settle` ends a lookup whose one family answered with addresses, closing the other's socket, and that family is returned; a lookup with no address yet is still `DNS_RESOLVE_TIMEOUT`. Before: `timeout: dnsLookupWith keeps the A it has when AAAA never answers` failed with the timeout; after, the A is returned. |
 
 ## Properties verified
 
@@ -252,7 +257,14 @@ then no more`, `attempts: every try exhausted is DNS_RESOLVE_NO_ANSWER`,
 A TCP reply dripped slowly is held to the same deadline (`tc: a slow TCP reply
 is not ended before its deadline`, `tc: a slow TCP reply is ended by its
 deadline`). `dnsLookupWith` gives up at its own `timeoutMs` (`timeout:
-dnsLookupWith gives up`).
+dnsLookupWith gives up`), keeping a family that answered with addresses while
+the other still asks: `settle` ends that lookup and closes the other query
+(`timeout: dnsLookupWith keeps the A it has when AAAA never answers`,
+`settle: with A answered and AAAA asking, the lookup ends`, `settle: the AAAA
+query is owed a close`, `settle: AAAA answered with A asking ends it too`);
+NODATA or nothing yet is no address to keep (`settle: with neither family
+answered, the lookup runs on`, `settle: one family's NODATA is no address to
+keep`).
 
 **TC moves the query to TCP, once.** `reply.truncated` sends the same question
 over TCP with a new ID to the same server (`tc: reply.truncated sends the query
@@ -295,7 +307,10 @@ server reached for the other moves on too, keeping that error should no later
 candidate answer, so one unreachable family cannot end the search on the first
 candidate (`search: NXDOMAIN and no server for the other family move on`,
 `search: and the name under a later domain resolves`, `search: with no later
-answer, the unreachable family's error stands`).
+answer, the unreachable family's error stands`). A later candidate's NODATA
+still ends the search `DNS_RESOLVE_NOT_FOUND`, not that kept error, as the name
+exists (`fallback: host.corp moves the search on to host`, `fallback: a later
+candidate's NODATA is DNS_RESOLVE_NOT_FOUND`).
 
 The NXDOMAIN that moves it is the current name's own: each query clears it as
 it asks a new name, so an earlier candidate's, or an earlier lookup's in the

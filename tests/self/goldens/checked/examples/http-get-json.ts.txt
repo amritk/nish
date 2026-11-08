@@ -5248,6 +5248,7 @@ struct DnsClient (class) size=128 align=8 exported
   method start -> @nish.DnsClient.start
   method result -> @nish.DnsClient.result
   method cancel -> @nish.DnsClient.cancel
+  method settle -> @nish.DnsClient.settle
   method ready -> @nish.DnsClient.ready
   method tick -> @nish.DnsClient.tick
   method timeoutMs -> @nish.DnsClient.timeoutMs
@@ -5301,6 +5302,16 @@ function DnsClient.cancel(this: DnsClient, lookup: i32, nowNanos: i64): void -> 
   pointer this: size=128 writesThrough=true captured=false passedTo=nish.DnsClient.pump#0
   stackSites=0 stackLocals=0
   callee +0:5 DnsResolver.cancel -> @nish.DnsResolver.cancel
+  callee +1:5 DnsClient.pump -> @nish.DnsClient.pump
+function DnsClient.settle(this: DnsClient, lookup: i32, nowNanos: i64): boolean -> @nish.DnsClient.settle [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.DnsResolver.settle
+  escaping: lookup nowNanos
+  calls: nish.DnsClient.pump nish.DnsResolver.settle
+  pointer this: size=128 writesThrough=true captured=false passedTo=nish.DnsClient.pump#0
+  stackSites=0 stackLocals=0
+  local +0:11 done: boolean (const)
+  callee +0:27 DnsResolver.settle -> @nish.DnsResolver.settle
   callee +1:5 DnsClient.pump -> @nish.DnsClient.pump
 function DnsClient.ready(this: DnsClient, token: i32, events: i32, nowNanos: i64): void -> @nish.DnsClient.ready [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
@@ -5475,11 +5486,11 @@ function dnsLookupWith(config: DnsConfig, hosts: DnsHosts | null, name: string, 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_create
   escaping: name port
-  calls: nish.DnsClient.cancel nish.DnsClient.constructor nish.DnsClient.owns nish.DnsClient.ready nish.DnsClient.result nish.DnsClient.start nish.DnsClient.tick nish.DnsClient.timeoutMs nish.DnsResolver.constructor nish_alloc_struct nish_monotonic_nanos nish_net_close nish_panic nish_panic_index nish_panic_overflow nish_poll_create nish_poll_wait
+  calls: nish.DnsClient.cancel nish.DnsClient.constructor nish.DnsClient.owns nish.DnsClient.ready nish.DnsClient.result nish.DnsClient.settle nish.DnsClient.start nish.DnsClient.tick nish.DnsClient.timeoutMs nish.DnsResolver.constructor nish_alloc_struct nish_monotonic_nanos nish_net_close nish_panic nish_panic_index nish_panic_overflow nish_poll_create nish_poll_wait
   pointer config: size=72 writesThrough=true captured=true passedTo=nish.DnsResolver.constructor#1
   pointer hosts: size=72 writesThrough=true captured=true passedTo=nish.DnsResolver.constructor#2
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.DnsClient.result#2 nish.DnsClient.result#2
-  pointer ttls: size=0 writesThrough=true captured=false passedTo=nish.DnsClient.result#3 nish.DnsClient.result#3
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.DnsClient.result#2 nish.DnsClient.result#2 nish.DnsClient.result#2
+  pointer ttls: size=0 writesThrough=true captured=false passedTo=nish.DnsClient.result#3 nish.DnsClient.result#3 nish.DnsClient.result#3
   stackSites=2 stackLocals=2
   local +0:9 loop: i32 (const)
   local +4:9 client: DnsClient (const)
@@ -5493,17 +5504,19 @@ function dnsLookupWith(config: DnsConfig, hosts: DnsHosts | null, name: string, 
   local +13:7 status: i32 (let)
   callee +13:21 DnsClient.result -> @nish.DnsClient.result
   local +15:11 now: i64 (const)
-  callee +17:7 DnsClient.cancel -> @nish.DnsClient.cancel
-  local +21:11 own: i32 (const)
-  local +22:11 count: i32 (const)
-  callee +22:46 DnsClient.timeoutMs -> @nish.DnsClient.timeoutMs
-  callee +25:7 DnsClient.cancel -> @nish.DnsClient.cancel
-  local +29:11 after: i64 (const)
-  local +30:9 k: i32 (let)
-  callee +32:11 DnsClient.owns -> @nish.DnsClient.owns
-  callee +33:9 DnsClient.ready -> @nish.DnsClient.ready
-  callee +37:5 DnsClient.tick -> @nish.DnsClient.tick
-  callee +38:14 DnsClient.result -> @nish.DnsClient.result
+  callee +17:11 DnsClient.settle -> @nish.DnsClient.settle
+  callee +18:18 DnsClient.result -> @nish.DnsClient.result
+  callee +20:9 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +25:11 own: i32 (const)
+  local +26:11 count: i32 (const)
+  callee +26:46 DnsClient.timeoutMs -> @nish.DnsClient.timeoutMs
+  callee +29:7 DnsClient.cancel -> @nish.DnsClient.cancel
+  local +33:11 after: i64 (const)
+  local +34:9 k: i32 (let)
+  callee +36:11 DnsClient.owns -> @nish.DnsClient.owns
+  callee +37:9 DnsClient.ready -> @nish.DnsClient.ready
+  callee +41:5 DnsClient.tick -> @nish.DnsClient.tick
+  callee +42:14 DnsClient.result -> @nish.DnsClient.result
 module std/net/dns-message.ts [package nish]
 import getU16BE from "nish/bytes" -> function @nish.getU16BE
 import getU32BE from "nish/bytes" -> function @nish.getU32BE
@@ -6119,6 +6132,7 @@ struct DnsResolver (class) size=320 align=8 exported
   method nextDeadlineNanos -> @nish.DnsResolver.nextDeadlineNanos
   method result -> @nish.DnsResolver.result
   method cancel -> @nish.DnsResolver.cancel
+  method settle -> @nish.DnsResolver.settle
   method active -> @nish.DnsResolver.active
 function DnsResolver.constructor(this: DnsResolver, config: DnsConfig, hosts: DnsHosts | null, maxLookups: i32): void -> @nish.DnsResolver.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -6273,6 +6287,16 @@ function DnsResolver.cancel(this: DnsResolver, lookup: i32): void -> @nish.DnsRe
   stackSites=0 stackLocals=0
   callee -2:5 dnsResolverStop -> @nish.dnsResolverStop
   callee -1:5 dnsResolverStop -> @nish.dnsResolverStop
+function DnsResolver.settle(this: DnsResolver, lookup: i32): boolean -> @nish.DnsResolver.settle [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.dnsResolverDone
+  escaping: lookup
+  calls: nish.dnsResolverDone nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.dnsResolverDone#0
+  stackSites=0 stackLocals=0
+  local +0:11 a: i32 (const)
+  local +1:9 open: i32 (let)
+  callee +11:5 dnsResolverDone -> @nish.dnsResolverDone
 function DnsResolver.active(this: DnsResolver): i32 -> @nish.DnsResolver.active [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
@@ -6478,7 +6502,7 @@ function dnsResolverDone(r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): v
   sharedWrite: +0:5
   escaping: nowNanos outcome q
   calls: nish.dnsResolverFinish nish.dnsResolverGather nish.dnsResolverNextCandidate nish_panic_index nish_panic_overflow
-  pointer r: size=320 writesThrough=false captured=false passedTo=nish.dnsResolverGather#0 nish.dnsResolverFinish#0 nish.dnsResolverFinish#0 nish.dnsResolverNextCandidate#0 nish.dnsResolverFinish#0
+  pointer r: size=320 writesThrough=false captured=false passedTo=nish.dnsResolverGather#0 nish.dnsResolverFinish#0 nish.dnsResolverFinish#0 nish.dnsResolverFinish#0 nish.dnsResolverNextCandidate#0 nish.dnsResolverFinish#0
   stackSites=0 stackLocals=0
   local +4:9 l: i32 (const)
   local +5:9 a: i32 (const)
@@ -6491,8 +6515,9 @@ function dnsResolverDone(r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): v
   local +18:7 error: i32 (let)
   local +24:9 named: boolean (const)
   callee +26:5 dnsResolverFinish -> @nish.dnsResolverFinish
-  callee +34:9 dnsResolverNextCandidate -> @nish.dnsResolverNextCandidate
-  callee +38:3 dnsResolverFinish -> @nish.dnsResolverFinish
+  callee +31:5 dnsResolverFinish -> @nish.dnsResolverFinish
+  callee +38:7 dnsResolverNextCandidate -> @nish.dnsResolverNextCandidate
+  callee +41:3 dnsResolverFinish -> @nish.dnsResolverFinish
 module std/net/outbound.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 import DNS_ADDRESS_BYTES from "nish/net/dns-message" -> const DNS_ADDRESS_BYTES
