@@ -295,6 +295,28 @@ export const AWAIT_CALL_MESSAGE: string =
 const taskCallArgumentMessage = (name: string, shape: string): string =>
   `\`${name}\` from \`nish:async\` takes ${shape}`
 
+/** The argument types a cancellation call takes, built once so none is dropped. */
+const taskCallWants = (what: string): i32[] => {
+  if (what === "cancel") {
+    return [T_I64]
+  }
+  if (what === "cancelAfter") {
+    return [T_I64, T_I32]
+  }
+  return []
+}
+
+/** How a cancellation call's arguments are described when they are wrong. */
+const taskCallShape = (what: string): string => {
+  if (what === "cancel") {
+    return "one `i64`, a task's handle from `taskId()`"
+  }
+  if (what === "cancelAfter") {
+    return "an `i64`, a task's handle from `taskId()`, and the `i32` milliseconds until it is cancelled"
+  }
+  return "no arguments"
+}
+
 /**
  * `taskId()`, `cancel(task)`, `cancelled()`, `cancelAfter(task, ms)`: plain
  * calls on the executor, written anywhere. `taskId` answers the running
@@ -303,25 +325,22 @@ const taskCallArgumentMessage = (name: string, shape: string): string =>
  */
 const checkTaskCall = (ctx: CheckContext, expr: Node, scope: Scope, what: string): i32 => {
   const args = expr.children[1].children
-  let wants: i32[] = []
-  let shape = "no arguments"
-  if (what === "cancel") {
-    wants = [T_I64]
-    shape = "one `i64`, a task's handle from `taskId()`"
-  } else if (what === "cancelAfter") {
-    wants = [T_I64, T_I32]
-    shape = "an `i64`, a task's handle from `taskId()`, and the `i32` milliseconds until it is cancelled"
-  }
+  const wants = taskCallWants(what)
+  const shape = taskCallShape(what)
   if (args.length !== wants.length) {
     return ctx.errorType(expr, taskCallArgumentMessage(what, shape))
   }
   for (let i = 0; i < args.length; i++) {
-    const type = checkExpression(ctx, args[i], scope, wants[i])
-    if (type === T_ERROR) {
-      return T_ERROR
-    }
-    if (type !== wants[i]) {
-      return ctx.errorType(args[i], taskCallArgumentMessage(what, shape))
+    if (i >= 0 && i < wants.length && i < args.length) {
+      const want = wants[i]
+      const arg = args[i]
+      const type = checkExpression(ctx, arg, scope, want)
+      if (type === T_ERROR) {
+        return T_ERROR
+      }
+      if (type !== want) {
+        return ctx.errorType(arg, taskCallArgumentMessage(what, shape))
+      }
     }
   }
   return what === "taskId" ? T_I64 : T_BOOL
