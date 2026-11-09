@@ -592,6 +592,48 @@ const DECLARED = [
     why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
   },
   {
+    program: "tests/link/std_postgres_async/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_flat/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_caps_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_double_release_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_release_closed_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_release_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_size_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
     program: "docs/cookbook/async-spawn-shared.ts",
     file: "exit",
     changelog: "spawned task may reach the objects its spawner owns",
