@@ -322,6 +322,8 @@ class ServeLimits
 | `connections: i32` | The most connections open at once; a connection past it waits in the listen backlog. |
 | `deadline: i32` | Milliseconds a request may take, from its head to its answer. Held for the cancellation stage: it is not yet enforced, and a slow handler holds its slot until it answers. |
 | `headerBytes: i32` | The most bytes a request's header section may have; past it the request is answered 431 and its connection ends. |
+| `headTimeout: i32` | Milliseconds a connection may take to send a whole request head, from its first byte; past it the connection is closed. The bound on a client that trickles its head (slowloris): it holds a connection this long, no longer. |
+| `idleTimeout: i32` | Milliseconds a connection may go without a byte read or written, as a keep-alive connection does between requests; past it the connection is closed, freeing its slot. |
 | `inFlight: i32` | The most requests in flight — handed to a task and not yet answered — at once; past it a request is answered 503. |
 | `maxRequests: i32` | How many requests to answer before stopping: the server then stops accepting, finishes what it holds and returns. 0, the default, serves for good. |
 | `responseBytes: i32` | The most bytes a response body may have; a task that answers more is answered 500 instead. |

@@ -115,6 +115,8 @@ one before it is answered. Two clients never wait on each other.
 | `bodyBytes` | 1,048,576 | 413, and the connection ends |
 | `responseBytes` | 65,536 | 500 instead of the response |
 | `deadline` | 30,000 | Held, not yet enforced: a task runs until it answers |
+| `headTimeout` | 30,000 | Milliseconds for a whole request head; the connection is closed |
+| `idleTimeout` | 60,000 | Milliseconds with no byte read or written; the connection is closed |
 | `maxRequests` | 0 (none) | The server stops (see below) |
 
 Each request's task runs in a memory region of its own, and everything it

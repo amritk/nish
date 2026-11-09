@@ -12,7 +12,8 @@ bad type: 500 [application/problem+json] {"type":"about:blank","title":"Internal
 in flight: 503 [application/problem+json] {"type":"about:blank","title":"Service Unavailable","status":503}
 connections: closed
 held: 200 [text/plain; charset=utf-8] slept 100
+after a hang-up: 200 [text/plain; charset=utf-8] hello
 pipelined 1: 200 [text/plain; charset=utf-8] slept 60
 pipelined 2: 200 [text/plain; charset=utf-8] slept 1
 after drain: closed
-serve: 0, answered 13, busy 1, failed 3, slots 1
+serve: 0, answered 15, busy 1, failed 3, slots 1

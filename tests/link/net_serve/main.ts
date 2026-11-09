@@ -1,8 +1,9 @@
 // `nish/net/serve` end to end on loopback: routed GET and POST with
 // parameters, 404 and 405, two pipelined requests answered in order though
 // the first one's task sleeps longer, keep-alive, and the header and body
-// caps answered 431 and 413, and the answers a bad Response gets. `main`
-// awaits the server, then the client's done signal.
+// caps answered 431 and 413, the answers a bad Response gets, and a client
+// that hangs up while its task runs. `main` awaits the server, then the
+// client's done signal.
 import { readable, sleep, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 import { Router, RouterLimits } from "nish/net/router"
@@ -108,6 +109,22 @@ async function client(port: i32, doneFd: i32): Promise<void> {
   await show(c, "held")
   hangUp(c2)
   hangUp(c3)
+  // A client hangs up while its task runs (SERVE-10). The late answer goes
+  // nowhere, and the connection slot it held is free again: with `c` open and
+  // two connections allowed, `c5` is accepted only if it is, and it is answered
+  // its own "hello", never the dropped "slept 80".
+  await sleep(10)
+  const c4: Conn = new Conn(8192)
+  await dial(c4, port)
+  await sendText(c4, "GET /slow/80 HTTP/1.1\r\nhost: t\r\n\r\n")
+  await sleep(10)
+  hangUp(c4)
+  await sleep(150)
+  const c5: Conn = new Conn(8192)
+  await dial(c5, port)
+  await sendText(c5, "GET /hello HTTP/1.1\r\nhost: t\r\n\r\n")
+  await show(c5, "after a hang-up")
+  hangUp(c5)
   // Pipelined: the first task sleeps 60 ms, the second 1 ms; the answers still come in order.
   await sendText(c, "GET /slow/60 HTTP/1.1\r\nhost: t\r\n\r\nGET /slow/1 HTTP/1.1\r\nhost: t\r\n\r\n")
   await show(c, "pipelined 1")
@@ -132,7 +149,7 @@ export async function main(): Promise<i32> {
   limits.connections = 2
   limits.inFlight = 1
   limits.responseBytes = 256
-  limits.maxRequests = 13
+  limits.maxRequests = 15
   const listener: i32 = tcpListen("127.0.0.1", 0, 16)
   const port: i32 = netLocalPort(listener)
   const stats: ServeStats = new ServeStats()

@@ -67,8 +67,10 @@ echoed from a header, a body sized by the request) is treated as the peer's.
 Rows SERVE-1 to SERVE-4, SERVE-6, SERVE-7 and SERVE-10 are the shapes an
 attacker's traffic can take, each checked and found to hold; they are
 recorded so that the audit can see what was tried. SERVE-5 was fixed before
-merge and is counted as fixed in the index. SERVE-8 is open and counted;
-SERVE-9 is accepted.
+merge and is counted as fixed in the index. SERVE-8 and SERVE-14 are open and
+counted; SERVE-9 and SERVE-11 to SERVE-13 are accepted. SERVE-11 to SERVE-14
+are what one client's connections, rather than its requests, can hold: each is
+bounded by a `ServeLimits` field, and none by the peer.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -81,7 +83,11 @@ SERVE-9 is accepted.
 | SERVE-7 | Medium if it failed | `serveTask`, `serveOn` | The server's memory must not grow per request. | **Holds.** A task's allocations — the request copy, the `Request` and `Response`, `handle`'s own — live in its region and go when it ends; the loop allocates no per-request object once its slots and type cache are warm. `Arena.used()` in the server's loop is 48 bytes after 100 requests and 48 after 4000 (also 48/48 at 200, 1000 and 8000). Pinned by "arena flat: true". |
 | SERVE-8 | Low | `ServeLimits.deadline` | A task that never answers — a `handle` waiting on something that never comes — holds its slot, and with `inFlight` of them the server answers every new request 503. | **Open.** `deadline` is held for the cancellation stage, which cancels a task past it; until then the bound is `inFlight` and the program's `handle`. The carrier's timeouts still end an idle or slow peer's connection, and its late answer is dropped (SERVE-10). |
 | SERVE-9 | Low | `serveType` | The server keeps the bytes of at most 64 distinct content types; a 65th is answered 500. | **Accepted.** The cache is what keeps a warm server from allocating per answer. A program that echoes a peer's text into the type lets the peer fill it; a type is the program's choice, and 64 covers any fixed set. |
-| SERVE-10 | High if it failed | `serveAnswer` | An answer for a request whose connection closed while its task ran must not reach whoever holds the connection's slot now. | **Holds.** The loop answers through the handler, which drops an answer for a closed connection even after a new one took the slot (HANDLER-3); the server's slot is freed either way. |
+| SERVE-10 | High if it failed | `serveAnswer` | An answer for a request whose connection closed while its task ran must not reach whoever holds the connection's slot now. | **Holds.** The loop answers through the handler, which drops an answer for a closed connection even after a new one took the slot (HANDLER-3); the server's slot is freed either way. Pinned by "after a hang-up: 200 [text/plain; charset=utf-8] hello": a client hangs up while its task sleeps 80 ms, and with the next connection the late "slept 80" is not what it reads, and the slot is free again for it. |
+| SERVE-11 | Low | `ServeLimits.headTimeout`, `serveOn` (`hl.http`) | A client that trickles its request head (slowloris) holds a connection while it does, and with `connections` such clients every new connection is closed unanswered. | **Accepted.** `headTimeout` (30 s by default) is the carrier's deadline for a whole head, counted from its first byte however steadily the bytes come (H1-1 in `http1-codec.md`); past it the connection is closed. A body trickled after its head is bounded the same way by the handler's `bodyTimeout`, 30 s (HANDLER-5). A program facing such clients lowers `headTimeout`; what neither bounds is how many connections one peer opens, which is the network's to cap. |
+| SERVE-12 | Low | `ServeLimits.idleTimeout`, `serveOn` (`hl.http`) | A keep-alive connection that sends nothing more holds its connection slot until it is closed, so idle clients can take every slot. | **Accepted.** `idleTimeout` (60 s by default) is the carrier's: a connection with no byte read or written for that long is closed and its slot freed. A program that wants slots back sooner lowers it; keep-alive is what spares a client a new handshake per request. |
+| SERVE-13 | Low | `ServeLimits` | The server's worst-case memory must be known from its caps. | **Accepted, stated.** From the caps, not measured: each connection holds the carrier's input and head buffers (each about `headerBytes`), a 64 KiB output buffer while it writes, and the request the handler is assembling, up to `headerBytes` + `bodyBytes`; each in-flight request holds its copy in its task's region (the same size again) and its slot's `responseBytes` + 128 bytes, kept for reuse. So about `connections` × (`bodyBytes` + 3 × `headerBytes` + 64 KiB) + `inFlight` × (`bodyBytes` + `headerBytes` + `responseBytes` + 128) bytes: with the defaults about 256 × 1.11 MiB + 256 × 1.08 MiB, some 560 MiB, almost all of it two copies of a 1 MiB body per connection. A program sizes it by `bodyBytes`, `connections` and `inFlight`. |
+| SERVE-14 | Low | `serveOn`, `serveFreeSlot` | One client can take every in-flight slot: a connection holds at most one (HANDLER-4), but with `inFlight` connections, each sending a request its `handle` is slow to answer, every other client's request is answered 503 until those tasks end. | **Open.** The server has no per-peer share of `inFlight` or `connections`; the bound is `handle`'s own time, and, until the cancellation stage enforces it, not `deadline` (SERVE-8). A program behind a proxy that caps connections per address is not exposed. |
 
 ## Properties verified
 
@@ -97,8 +103,11 @@ task of the same program.
 "in flight: 503", "connections: closed".
 
 **Bad responses** (SERVE-4, SERVE-5): "response cap: 500", "bad status: 500",
-"bad type: 500", and "serve: 0, answered 13, busy 1, failed 3, slots 1" — the
+"bad type: 500", and "serve: 0, answered 15, busy 1, failed 3, slots 1" — the
 server answered every request and stopped cleanly.
+
+**A hang-up** (SERVE-10): "after a hang-up: 200 [text/plain; charset=utf-8]
+hello".
 
 **Order** (SERVE-6): "pipelined 1: 200 [text/plain; charset=utf-8] slept 60"
 then "pipelined 2: 200 [text/plain; charset=utf-8] slept 1"; "client: 4000

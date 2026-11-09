@@ -2919,7 +2919,7 @@ while others are answered. Add routes with `router.add(method, pattern)` and
 `new Response(status).text(s)`, `.json(s)` or `.bytes(type, buf, off, len)`,
 and `refuse(req)` for 404 and 405. `ServeLimits` caps connections, `inFlight`
 (503 past it), `headerBytes` (431), `bodyBytes` (413) and `responseBytes`
-(500); pipelined answers keep request order. `--emit-ts` refuses it (NL4017).
+(500), and `headTimeout` and `idleTimeout` close a slow or idle connection; pipelined answers keep request order. `--emit-ts` refuses it (NL4017).
 (No block, as for `nish/text`; `tests/link/net_serve` is its program, and the
 user guide's [async server page](guide/using-nish/async-server.md) its
 walk-through.)

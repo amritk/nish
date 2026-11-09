@@ -98,6 +98,19 @@ export class ServeLimits {
    */
   deadline: i32 = 30000
   /**
+   * Milliseconds a connection may take to send a whole request head, from
+   * its first byte; past it the connection is closed. The bound on a client
+   * that trickles its head (slowloris): it holds a connection this long, no
+   * longer.
+   */
+  headTimeout: i32 = 30000
+  /**
+   * Milliseconds a connection may go without a byte read or written, as a
+   * keep-alive connection does between requests; past it the connection is
+   * closed, freeing its slot.
+   */
+  idleTimeout: i32 = 60000
+  /**
    * How many requests to answer before stopping: the server then stops
    * accepting, finishes what it holds and returns. 0, the default, serves
    * for good.
@@ -558,6 +571,8 @@ export const serveOn = async (
   hl.slots = limits.connections
   hl.http.maxHeaderBytes = limits.headerBytes
   hl.http.maxBody = limits.bodyBytes
+  hl.http.headTimeout = limits.headTimeout
+  hl.http.idleTimeout = limits.idleTimeout
   const h: HttpHandler = new HttpHandler(hl, listener, router)
   const st: ServeState = new ServeState()
   const fds: i32[] = [0, 0]
