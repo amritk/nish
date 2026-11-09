@@ -111,9 +111,10 @@ body out of the server's slot into its own memory before `handle` runs,
 and when `handle` answers it writes the status, the content type and the
 body back into the slot's fixed buffers, element by element, and wakes the
 loop. The loop then sends the answer and frees the slot. Nothing the task
-allocated outlives it, and the server's own memory does not grow per
-request once its slots are warm: `tests/link/net_serve_pipelined_flat`
-pins `Arena.used()` flat over thousands of pipelined requests.
+allocated outlives it, and the loop's arena does not grow per request once
+its slots are warm: `tests/link/net_serve_pipelined_flat` pins
+`Arena.used()` flat over thousands of pipelined requests. What the runtime
+allocates outside the arena for a task and its region is not measured.
 
 </scalar-detail>
 
@@ -122,7 +123,8 @@ pins `Arena.used()` flat over thousands of pipelined requests.
 The handler reads a connection's next
 request only once the one before it is answered, so at most one request
 per connection is in flight, and pipelined requests are answered in the
-order they came however long each task takes.
+order they came: a later request's task starts only after the earlier one
+is answered, so it can never finish first.
 
 </scalar-detail>
 
@@ -279,9 +281,9 @@ class Request
 | `route: i32` | The index `Router.add` answered for the route, or a negative `ROUTER_*` code. |
 | `header(name: string): string` | The value of the first header field named `name`. |
 | `method(): string` | The method. |
-| `param(k: i32): string` | Route parameter `k`, percent-decoded. |
-| `paramMalformed(k: i32): boolean` | Whether route parameter `k` holds a malformed percent escape, which a program answers 400. |
-| `paramNumber(k: i32): i32` | Route parameter `k` read as a decimal number that is not negative and fits an `i32`. |
+| `param(k: i32): string` | Route parameter `k`, percent-decoded. Panics when the request's route has no parameter `k`. |
+| `paramMalformed(k: i32): boolean` | Whether route parameter `k` holds a malformed percent escape, which a program answers 400. Panics when the request's route has no parameter `k`. |
+| `paramNumber(k: i32): i32` | Route parameter `k` read as a decimal number that is not negative and fits an `i32`. Panics when the request's route has no parameter `k`. |
 | `path(): string` | The path: the target up to its `?`, still percent-encoded. |
 | `query(name: string): string` | The first query parameter named `name`, form-decoded (`+` as a space, `%XX` as its byte). |
 | `text(): string` | The body as text. |
@@ -302,7 +304,7 @@ class Response
 | `body: u8[]` | The body, `body[0 .. length)`. |
 | `length: i32` | How many bytes of `body` are the body. |
 | `status: i32` | The status, from 200 to 599; any other is answered 500. |
-| `type: string` | The `Content-Type` value; empty sends none. |
+| `type: string` | The `Content-Type` value; empty sends none, and the body goes without one. |
 | `bytes(type: string, buf: u8[], off: i32, len: i32): Response` | Sets a body of bytes with a content type. |
 | `json(s: string): Response` | Sets a JSON body the program wrote. |
 | `text(s: string): Response` | Sets a plain-text body. |
@@ -319,7 +321,7 @@ class ServeLimits
 | --- | --- |
 | `new ServeLimits()` |  |
 | `bodyBytes: i32` | The most bytes a request body may have; past it the request is answered 413 and its connection ends. |
-| `connections: i32` | The most connections open at once; a connection past it waits in the listen backlog. |
+| `connections: i32` | The most connections open at once; a connection past it is accepted and closed at once, and its client sees the connection reset. |
 | `deadline: i32` | Milliseconds a request may take, from its head to its answer. Held for the cancellation stage: it is not yet enforced, and a slow handler holds its slot until it answers. |
 | `headerBytes: i32` | The most bytes a request's header section may have; past it the request is answered 431 and its connection ends. |
 | `headTimeout: i32` | Milliseconds a connection may take to send a whole request head, from its first byte; past it the connection is closed. The bound on a client that trickles its head (slowloris): it holds a connection this long, no longer. |

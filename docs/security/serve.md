@@ -9,7 +9,7 @@ answers, what a task may reach of the server's memory, and the test that pins
 each property. It is written with the code rather than after an audit, so
 that the audit of the HTTP application layer starts from evidence.
 
-Anchors are function names in `std/net/serve.ts` at `4375d934`, the last
+Anchors are function names in `std/net/serve.ts` at `d6d806da`, the last
 commit to change it on the head that merges this record.
 
 **Result.** The server adds no parser: the request line, the fields, the
