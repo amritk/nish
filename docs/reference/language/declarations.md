@@ -2135,6 +2135,19 @@ async function run(): Promise<void> {
 - **Each spawned task has a region of its own**, entered whenever the task
   runs and freed when it finishes, so what a task allocates is given back
   when it ends, not when `main` does (`tests/link/async_region_per_task`).
+- **Each `awaitAll` call has a region of its own**, made before it first
+  runs and entered whenever it runs. When the call finishes, what it allocated joins the
+  caller's memory, so an answer that points into it (a `string`, an array, a
+  class) stays readable, and is given back when the caller's would be. So two
+  calls that each hold memory across an `await` never free or overwrite each
+  other's, whatever its size or whichever finishes first
+  (`async_await_all_lanes_large`, `tests/link/async_await_all_lanes`). What a
+  call allocates and does not answer is given back when it finishes, so its
+  temporaries never reach the caller's memory
+  (`tests/link/async_await_all_retain`). What the caller does keep is the
+  answer and about 1.3 KB more per call, the unused end of the region's
+  first block, until the caller's own memory is given back (ASYNC-17 in
+  `docs/security/async.md`).
 - **A `main` that never waits runs the loop too.** An `async` `main` that
   awaits nothing compiles to a plain call, as any such function does; one
   that spawns tasks returns first, then the executor runs every task it

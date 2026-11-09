@@ -180,11 +180,6 @@ is a `CONNECT` tunnel. An https connection is never kept in a `FetchPool`:
 each https fetch runs its own handshake and closes its connection once the
 body is read.
 
-Run fetches that hold large bodies side by side as tasks you `spawn`, not
-under `awaitAll`, for now: two `awaitAll` tasks that each hold a large
-allocation across an `await` can corrupt each other's memory, a fault in the
-async runtime that is being fixed.
-
 A **`FetchPool`** keeps connections open between fetches: hand the same pool
 to each `RequestInit`, and a fetch to a place the pool holds an idle connection
 for takes it rather than dialling.

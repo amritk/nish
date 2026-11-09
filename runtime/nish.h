@@ -149,12 +149,17 @@ uint64_t nish_arena_used(void);
  * already entered panics. `nish_region_leave` must name the region entered
  * last on this thread, puts back the arena its enter displaced and records
  * `root`. `nish_region_free` frees every chunk of a region that is not
- * entered and makes its handle stale. The wasm profile has none of these
- * (scripts/build.sh refuses IR that names them); wasi has. */
+ * entered and makes its handle stale. `nish_region_adopt` instead moves the
+ * chunks of a region that is not entered onto the thread's current arena, so
+ * they live on until that arena releases below them, and makes its handle
+ * stale: an `awaitAll` lane's region, once the lane has answered. The wasm
+ * profile has none of these (scripts/build.sh refuses IR that names them);
+ * wasi has. */
 uint64_t nish_region_new(void);
 void *nish_region_enter(uint64_t r);
 void nish_region_leave(uint64_t r, void *root);
 void nish_region_free(uint64_t r);
+void nish_region_adopt(uint64_t r);
 
 /* ---- The async executor (runtime-async.c) --------------------------------
  * Linked only into a program whose IR names `@nish_async_`

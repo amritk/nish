@@ -241,6 +241,7 @@ export class RuntimeTable {
     this.add(plain("nish_region_enter", "declare i8* @nish_region_enter(i64 noundef)", EFFECT_WRITE))
     this.add(plain("nish_region_leave", "declare void @nish_region_leave(i64 noundef, i8*)", EFFECT_WRITE))
     this.add(plain("nish_region_free", "declare void @nish_region_free(i64 noundef)", EFFECT_WRITE))
+    this.add(plain("nish_region_adopt", "declare void @nish_region_adopt(i64 noundef)", EFFECT_WRITE))
     // WP49 stage 5: the executor (runtime/runtime-async.c), linked only for IR
     // that declares one of these (scripts/build.sh's `async_wanted`). Every
     // one touches the executor's state, and `spawn` and the waits panic when

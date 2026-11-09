@@ -1592,6 +1592,7 @@ const INDEX_OF_ANY_REFUSALS = [
  * here, or it reads nothing in a sharded run.
  */
 const LINK_READ_LATER = [
+  "async_await_all_retain",
   "net_tls_resume_bench",
   "par_dst_short",
   "par_map_idle",
@@ -25640,6 +25641,39 @@ if (!only || "thread_scope_reclaim".includes(only)) {
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
     )
   }
+}
+
+// An `awaitAll` member runs in a region of its own from its first resume,
+// which the awaiting function's arena adopts when the member finishes.
+// Adopting carves what the caller's chunk has left into a chunk above the
+// region's and frees a chunk the lane released back to empty, so a loop with no
+// per-pass release keeps what the lanes answered and a small constant per round
+// (docs/security/async.md, ASYNC-15). `async_await_all_retain` joins, 2000
+// times in a loop of a function that calls `Arena.mark()`, a lane that answers
+// 100 elements and one that makes a 4 KB temporary and answers a number; both
+// sleep 1 ms, so each certainly suspends. It peaks at 3.2 to 3.3 MB over five
+// runs. With the lane's mark taken in the caller's arena, the temporary moved
+// into the caller each round: 11.1 to 11.2 MB. `Arena.used()` cannot see a
+// buried chunk, so the peak is what is checked, bounded at 6 MB.
+if (!only || "async_await_all_retain".includes(only)) {
+  const fixture = linkTests.includes("async_await_all_retain")
+  const dir = path.join(buildDir, "link", "async_await_all_retain")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  const run =
+    fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+      ? spawnSync(rssExe, [exe], { encoding: "utf8" })
+      : null
+  const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+  const missing = fixture ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}` : "no such fixture"
+  check(
+    "link/async_await_all_retain: 2000 awaitAll rounds of two waiting lanes in a loop with no release peak under 6 MB",
+    kb > 0 && kb < 6 * 1024,
+    run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+  )
 }
 
 // A worker that finds the queue empty for a second lowers glibc's trim

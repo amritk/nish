@@ -406,6 +406,8 @@ export class Emitter {
   asyncHeads: string[]
   asyncCounts: i32[]
   asyncPrivates: boolean[]
+  /** Under `ASYNC_ALL`, each member's lane slot: its region's handle while it waits, else 0. */
+  asyncLanes: string[]
   /** The poll block of each await of the function being emitted, in state order. */
   asyncPolls: string[]
 
@@ -436,6 +438,7 @@ export class Emitter {
     this.asyncHeads = []
     this.asyncCounts = []
     this.asyncPrivates = []
+    this.asyncLanes = []
     this.asyncPolls = []
     this.tailCallId = -1
     this.uncopied = -1
