@@ -333,21 +333,30 @@ export const emitAsyncCall = (
   if (mode === ASYNC_ALL) {
     const base = kidBase(emitter, emitter.asyncGroup, emitter.asyncMember)
     storeHead(emitter, base, head, operandTypes, operandValues)
-    // Each member starts here, in argument order as Node starts them, in the
-    // arena of the function awaiting it. One that finished needs nothing
-    // more: its lane slot holds 0 and the poll passes it by. One that waits
-    // gets a region, its lane, which the poll enters around each resume.
+    // Each member starts here, in argument order as Node starts them, already
+    // in a region of its own, its lane, as a spawned task starts in its node's:
+    // the marks its scopes take are the region's, so what it releases after an
+    // await is freed there. Started in the awaiting function's arena instead,
+    // its first mark named that arena, the release at its return found no
+    // chunk of the region and did nothing, and every temporary it made after
+    // its first await stayed until the caller released (ASYNC-15). One that
+    // finished at once has its region adopted here and its lane slot holds 0,
+    // so the poll passes it by; one that waits keeps the region, which the
+    // poll enters around each resume.
+    const region = fn.emitValue(`call i64 ${emitter.useRuntime("nish_region_new")}()`)
+    fn.emitValue(`call i8* ${emitter.useRuntime("nish_region_enter")}(i64 ${region})`)
     const finished = fn.emitValue(`call i1 @${sig.name}.resume(i8* ${base})`)
+    fn.emit(`call void ${emitter.useRuntime("nish_region_leave")}(i64 ${region}, i8* null)`)
     const lane = fn.emitAlloca("async.lane", "i64", 8)
     const waits = fn.newBlock("lane.new")
     const ran = fn.newBlock("lane.ran")
     const started = fn.newBlock("lane.started")
     fn.emit(`br i1 ${finished}, label %${ran.label}, label %${waits.label}`)
     fn.placeBlock(waits)
-    const region = fn.emitValue(`call i64 ${emitter.useRuntime("nish_region_new")}()`)
     fn.emit(`store i64 ${region}, i64* ${lane}`)
     fn.emit(`br label %${started.label}`)
     fn.placeBlock(ran)
+    fn.emit(`call void ${emitter.useRuntime("nish_region_adopt")}(i64 ${region})`)
     fn.emit(`store i64 0, i64* ${lane}`)
     fn.emit(`br label %${started.label}`)
     fn.placeBlock(started)

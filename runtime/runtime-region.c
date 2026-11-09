@@ -283,12 +283,24 @@ void nish_region_free(uint64_t r) {
    always sits above the chunk it was carved from, so whatever frees that one
    has dropped it first. Less than NISH_ADOPT_CARVE left is given up. The
    next-chunk size (`nish_region_chunk`) is not touched: it is the caller's,
-   which a region only swaps while entered. A region that never allocated
-   moves nothing. Like `free`, it panics on a region that is entered. */
+   which a region only swaps while entered. A newest chunk the lane released
+   back to empty is freed, not moved, so a lane's temporaries do not outlive
+   it. A region that never allocated moves nothing. Like `free`, it panics on
+   a region that is entered. */
 void nish_region_adopt(uint64_t r) {
   nish_region_slot *s = nish_region_slot_of(r);
   if (s->entered) nish_region_die(NISH_REGION_FREE_ENTERED);
   nish_chunk_link *head = s->arena.chunks;
+  if (head && s->arena.off == 0) {
+    /* The lane rewound its newest chunk to empty: a release to the mark it
+       took on entry, 0 in an empty region, keeps that chunk for reuse
+       (`nish_reset_arena`), but nothing will bump it again once adopted. */
+    nish_chunk_link *next = head->next;
+    if (!(head->cap & NISH_CHUNK_CARVED)) free(head);
+    head = next;
+    uint64_t cap = head ? head->cap & ~(uint64_t)NISH_CHUNK_CARVED : 0;
+    s->arena = head ? (struct nish_arena){ (char *)(head + 1), cap, cap, (void *)head } : (struct nish_arena){ 0 };
+  }
   if (head) {
     nish_chunk_link *last = head;
     while (last->next) last = last->next;

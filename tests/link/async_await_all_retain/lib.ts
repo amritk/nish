@@ -1,4 +1,4 @@
-// The lane main.ts's loop joins, and the check it reads the answers with: a
+// The lanes main.ts's loop joins, and the check it reads the answers with: a
 // module of their own, so each lane's resume is called across a module
 // boundary.
 import { sleep } from "nish:async"
@@ -36,4 +36,12 @@ export async function lane(seed: i32, ms: i32): Promise<i32[]> {
   const xs = fill(100, seed)
   await sleep(ms)
   return xs
+}
+
+/** A lane that answers a number: its 1000 elements are a temporary. */
+export async function count(seed: i32, ms: i32): Promise<i32> {
+  await sleep(ms)
+  const s = fill(1000, seed)
+  await sleep(ms)
+  return wrong(s, seed) === 1 ? 0 : 1
 }
