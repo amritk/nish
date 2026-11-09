@@ -512,7 +512,58 @@ const awaitAllLanes = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: AWAIT_ALL_LANES, why }))
   )
+const SERVE_CANCEL = "serve task when its client hangs up or the server drains"
+const serveCancel = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
+  )
 const DECLARED = [
+  // WP49 stage 5, part 7: `Http1Connection` gains `ended()` and
+  // `HttpHandler` `hungUp()`, so every program that reaches
+  // std/net/http1-server.ts or std/net/handler.ts lays both out again.
+  ...serveCancel(
+    "Http1Connection gains ended() and HttpHandler hungUp(), so serve can cancel a task whose client hung up; both modules' IR moves",
+    {
+      "examples/http-app/main.ts": ["app.ll", "handler.ll", "http1-server.ll", "main.ll"],
+      "examples/prefork-server.ts": ["http1-server.ll", "prefork-server.ll"],
+      "examples/relay/main.ts": ["http1-server.ll"],
+      "bench/http-app-carrier.ts": ["http-app-carrier.ll", "http1-server.ll"],
+      "bench/http1-request/main.ts": ["http1-server.ll", "main.ll"],
+      "bench/http1-server.ts": ["handler.ll", "http1-server.ll", "std_net_http1-server.ll"],
+      "bench/techempower/main.ts": ["http1-server.ll", "main.ll", "server.ll"],
+      "tests/link/net_handler/main.ts": ["handler.ll", "http1-server.ll", "main.ll"],
+    }
+  ),
+  {
+    program: "tests/link/net_fetch_async_deadline/main.ts",
+    file: "exit",
+    changelog: "every wait of the async fetch",
+    why: "the program imports cancelAfter from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
+  },
+  {
+    program: "tests/link/net_serve_deadline/main.ts",
+    file: "exit",
+    changelog: SERVE_CANCEL,
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
+  },
+  {
+    program: "tests/link/std_postgres_async_cancel/main.ts",
+    file: "exit",
+    changelog: "cancelled task gives up its Postgres claim and query",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
+  },
+  {
+    program: "tests/cases/async_cancel.ts",
+    file: "exit",
+    changelog: "an async task, and bound a descriptor wait",
+    why: "the case imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
+  },
+  {
+    program: "docs/cookbook/async-cancel.ts",
+    file: "exit",
+    changelog: "an async task, and bound a descriptor wait",
+    why: "the cookbook entry imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
+  },
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
   // program that reaches them. These come first: dns.ll also carries this
