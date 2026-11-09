@@ -555,7 +555,9 @@ The three debts stage 4 left are paid:
   temporaries are freed (`tests/link/async_await_all_lanes`,
   `async_await_all_lanes_large`, `tests/link/async_await_all_retain`). A
   call that finishes at once still pays for the region, about 179
-  instructions (ASYNC-16, open).
+  instructions or 25 to 29 ns (ASYNC-16, open), and a loop that takes no
+  release keeps about 1.3 KB per joined call beyond its answer, the unused
+  end of the region's first chunk (ASYNC-17, open).
 - **(b) Spawn arguments outlive the spawner.** A `string` argument is copied
   into the task's region before the task first runs (`nish_async_copy_str`);
   numbers, booleans and enums are copied by value; any other type is refused,

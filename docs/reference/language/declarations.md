@@ -2144,7 +2144,10 @@ async function run(): Promise<void> {
   (`async_await_all_lanes_large`, `tests/link/async_await_all_lanes`). What a
   call allocates and does not answer is given back when it finishes, so its
   temporaries never reach the caller's memory
-  (`tests/link/async_await_all_retain`).
+  (`tests/link/async_await_all_retain`). What the caller does keep is the
+  answer and about 1.3 KB more per call, the unused end of the region's
+  first block, until the caller's own memory is given back (ASYNC-17 in
+  `docs/security/async.md`).
 - **A `main` that never waits runs the loop too.** An `async` `main` that
   awaits nothing compiles to a plain call, as any such function does; one
   that spawns tasks returns first, then the executor runs every task it
