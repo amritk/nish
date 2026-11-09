@@ -387,11 +387,10 @@ function heapTypesIn(programs: CheckedProgram[], table: TypeTable, type: i32, ou
   escaping: type
   calls: CheckedProgram.struct TypeTable.errOf TypeTable.isArray TypeTable.isMaybe TypeTable.isNullable TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.stripNull TypeTable.variantsOf heapTypesIn isScalarArgument nish_array_grow
   pointer programs: size=0 writesThrough=false captured=false passedTo=heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isRegion#0 TypeTable.isNullable#0 heapTypesIn#1 TypeTable.stripNull#0 TypeTable.isMaybe#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isResult#0 heapTypesIn#1 TypeTable.okOf#0 heapTypesIn#1 TypeTable.errOf#0 TypeTable.isArray#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 heapTypesIn#1 TypeTable.isStruct#0 isScalarArgument#0 TypeTable.nameOf#0 heapTypesIn#1
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isNullable#0 heapTypesIn#1 TypeTable.stripNull#0 TypeTable.isMaybe#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isResult#0 heapTypesIn#1 TypeTable.okOf#0 heapTypesIn#1 TypeTable.errOf#0 TypeTable.isArray#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 heapTypesIn#1 TypeTable.isStruct#0 isScalarArgument#0 TypeTable.nameOf#0 heapTypesIn#1
   pointer out: size=0 writesThrough=true captured=false passedTo=heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3
   stackSites=0 stackLocals=0
   callee -19:19 TypeTable.isRegion -> @TypeTable.isRegion
-  callee -18:26 TypeTable.isRegion -> @TypeTable.isRegion
   callee -13:7 TypeTable.isNullable -> @TypeTable.isNullable
   callee -12:12 heapTypesIn -> @heapTypesIn
   callee -12:41 TypeTable.stripNull -> @TypeTable.stripNull
@@ -560,13 +559,13 @@ function RegionWalk.callOrigin(this: RegionWalk, call: Node): i32 -> @RegionWalk
   callee +5:74 RegionWalk.typeOf -> @RegionWalk.typeOf
   local +11:9 out: i32 (let)
   callee +11:34 RegionWalk.runsSpawnArrow -> @RegionWalk.runsSpawnArrow
-  local +14:11 narrow: boolean (const)
+  local +14:11 answer: i32 (const)
   callee +14:52 capturesOf -> @capturesOf
   local +15:16 arg: Node (const)
   callee +15:23 RegionWalk.handedTo -> @RegionWalk.handedTo
   local +16:13 a: Node (const)
   callee +16:17 unwrapParens -> @unwrapParens
-  callee +17:63 RegionWalk.reaches -> @RegionWalk.reaches
+  callee +17:49 RegionWalk.reaches -> @RegionWalk.reaches
   callee +21:13 joinOrigin -> @joinOrigin
   callee +21:50 RegionWalk.arrowResult -> @RegionWalk.arrowResult
   callee +21:72 RegionWalk.origin -> @RegionWalk.origin
@@ -706,8 +705,8 @@ function RegionWalk.visitNew(this: RegionWalk, node: Node): void -> @RegionWalk.
   stackSites=0 stackLocals=0
   local +0:11 ctor: FunctionSig | null (const)
   callee +5:5 RegionWalk.judgeCallee -> @RegionWalk.judgeCallee
-  callee +6:5 RegionWalk.noteSpawnArrows -> @RegionWalk.noteSpawnArrows
-  callee +6:32 RegionWalk.handedTo -> @RegionWalk.handedTo
+  callee +7:7 RegionWalk.noteSpawnArrows -> @RegionWalk.noteSpawnArrows
+  callee +7:34 RegionWalk.handedTo -> @RegionWalk.handedTo
 function RegionWalk.visitCall(this: RegionWalk, node: Node): void -> @RegionWalk.visitCall [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visitBuiltin
