@@ -1,0 +1,1 @@
+Module storage `S` cannot be lent to `bump`, which lets its parameter `buf` go further than indexing

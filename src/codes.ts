@@ -1053,6 +1053,7 @@ const diagnosticRules = (): string[] => [
   "NL2225",
   "The `for...of` variable cannot have an initializer",
   "NL2241",
+  // The NL4002 fragment matches nothing now: the --emit-header comment it came from names runtime-text.c since WP50 stage 4.
   " modules listed below. Link the .ll module(s) and",
   "NL4002",
   ", and a declared C function returns a scalar only",

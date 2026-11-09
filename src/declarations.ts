@@ -511,15 +511,18 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
  * §4): every parameter and the result a scalar, an enum, a ranged integer or a
  * `HostHandle`, which are the values a wasm import's signature carries as an
  * `i32`, `i64`, `f32` or `f64`, and from S3 a buffer window (`isHostWindow`),
- * whose `at: u32, n: u32` the sweep already held it to. What the page could not have meant — a string,
- * a buffer, a `Promise` — was refused in its own words before resolution
+ * whose `at: u32, n: u32` the sweep already held it to, and from S4 a `string` parameter. What the
+ * page could not have meant — a string result, a buffer, a `Promise` — was refused in its own words before resolution
  * (`hostSignatureProblems`), so what reaches this is a name that resolved to
  * something else, such as an enum member type.
  */
 const checkHostSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
   for (let i = 0; i < sig.paramTypes.length; i++) {
     const type = sig.paramTypes[i]
-    if (type === T_VOID || !(isHostType(ctx.table, type) || isHostWindow(ctx.table, type))) {
+    if (
+      type === T_VOID ||
+      !(isHostType(ctx.table, type) || isHostWindow(ctx.table, type) || type === T_STRING)
+    ) {
       refuseHostParameter(ctx, sig, decl, name, i)
     }
   }

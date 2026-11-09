@@ -535,6 +535,7 @@ cases/simd_values added after R6: no rewriter to freeze it with
 cases/simd_zero_fill added after R6: no rewriter to freeze it with
 cases/storage_attributes added after R6: no rewriter to freeze it with
 cases/storage_lend added after R6: no rewriter to freeze it with
+cases/storage_lend_bytes added after R6: no rewriter to freeze it with
 cases/storage_module added after R6: no rewriter to freeze it with
 cases/str_from_bytes added after R6: no rewriter to freeze it with
 cases/str_from_bytes_arrow added after R6: no rewriter to freeze it with

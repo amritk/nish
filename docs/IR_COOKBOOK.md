@@ -12417,6 +12417,86 @@ a local array the compiler can prove in range, such as `0, toU32(xs.length)`
 on a local `xs`, has no check at all (`tests/run.js`, section
 `host-import-window`).
 
+### A string to the page: its bytes and their count
+
+A host function may take a `string` (WP50 stage 4, `docs/wp50-wasm-host.md`
+§7). The import takes the string's UTF-8 bytes as two `i32`s: the data
+pointer, eight bytes past the header, and the byte count, read from the
+header's `i64` and truncated, which is exact because no string is longer than
+2^31 − 1 bytes (RT-2 in `docs/security/runtime.md`). The bytes are lent for
+the call, as WP27's borrow lends one to C: the arena scope that built
+`hello ${n}` is released only after `say` returns, and the loader's adapter,
+`text(p, n)`, decodes them into a JavaScript string before the page's function
+runs. A literal is constant data and is read the same way. An export's
+`string` result is the header pointer it is natively; the loader reads the
+length and bytes before it releases the call's arena.
+
+```ts
+// host.ts, the page's
+export function say(s: string): void { console.log(s) }
+export function measure(s: string, tag: i32): i32 { return s.length }
+```
+
+```ts
+// main.ts, compiled with `--target wasm32 --host host.ts`
+import { measure, say } from "./host.ts"
+
+export function greet(n: i32): i32 {
+  say(`hello ${n}`)
+  return measure("é", n)
+}
+export function label(n: i32): string {
+  return `#${n}`
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"hello \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"\C3\A9\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"#\00" }, align 8
+
+declare i32 @measure(i8*, i32, i32) #1
+declare void @say(i8*, i32) #2
+
+define noundef i32 @greet(i32 noundef %n) #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_from_i32(i32 %n)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8* %0)
+  %2 = bitcast i8* %1 to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = trunc i64 %3 to i32
+  %5 = getelementptr inbounds i8, i8* %1, i64 8
+  call void @say(i8* %5, i32 %4)
+  %6 = bitcast i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*) to i64*
+  %7 = load i64, i64* %6, align 8
+  %8 = trunc i64 %7 to i32
+  %9 = getelementptr inbounds i8, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*), i64 8
+  %10 = call i32 @measure(i8* %9, i32 %8, i32 %n)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %10
+}
+
+define noundef nonnull align 8 i8* @label(i32 noundef %n) #0 {
+entry:
+  %0 = call i8* @nish_str_from_i32(i32 %n)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %0)
+  ret i8* %1
+}
+
+attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="measure" }
+attributes #2 = { "wasm-import-module"="host" "wasm-import-name"="say" }
+```
+
+A string is not an export's *parameter*: the page writes text into a `u8[]`
+of module storage with `encodeInto` and passes the byte count, and
+`nish/host/text`'s `textRead` makes the string. The `.d.ts` leaves such an
+export out and says so. The string functions are `runtime/runtime-text.c`,
+which `scripts/build.sh` links into a wasm module only when its IR names
+one, so a module with no string operation links byte for byte as before
+(`tests/cases/host_import_string`; `tests/run.js`, sections
+`host-import-text` and `wasm-size`).
+
 ### Panic sites: a number per call, a table at the end
 
 Under `--target wasm32` each call of a runtime panic (`@nish_panic_index`,

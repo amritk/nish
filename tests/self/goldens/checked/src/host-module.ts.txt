@@ -340,21 +340,20 @@ function hostSignatureProblems(file: Node, parser: Parser): HostProblem[] -> @ho
   callee +38:20 unparen -> @unparen
   local +39:13 p: string (const)
   callee +43:11 isTypeNamed -> @isTypeNamed
-  callee +45:11 new HostProblem -> @HostProblem.constructor
-  callee +50:18 isBuffer -> @isBuffer
-  callee +51:13 windowElement -> @windowElement
-  callee +52:25 windowElementProblem -> @windowElementProblem
-  local +55:15 pair: HostProblem | null (const)
-  callee +55:22 windowPairProblem -> @windowPairProblem
-  callee +60:9 asWindow -> @asWindow
-  callee +62:19 crosses -> @crosses
-  callee +63:23 typeProblem -> @typeProblem
-  local +66:11 answer: Node (const)
-  callee +66:20 unparen -> @unparen
-  callee +70:9 isTypeNamed -> @isTypeNamed
-  callee +72:9 new HostProblem -> @HostProblem.constructor
-  callee +77:17 crosses -> @crosses
-  callee +78:21 typeProblem -> @typeProblem
+  callee +46:11 isBuffer -> @isBuffer
+  callee +47:13 windowElement -> @windowElement
+  callee +48:25 windowElementProblem -> @windowElementProblem
+  local +51:15 pair: HostProblem | null (const)
+  callee +51:22 windowPairProblem -> @windowPairProblem
+  callee +56:9 asWindow -> @asWindow
+  callee +58:19 crosses -> @crosses
+  callee +59:23 typeProblem -> @typeProblem
+  local +62:11 answer: Node (const)
+  callee +62:20 unparen -> @unparen
+  callee +66:9 isTypeNamed -> @isTypeNamed
+  callee +68:9 new HostProblem -> @HostProblem.constructor
+  callee +73:17 crosses -> @crosses
+  callee +74:21 typeProblem -> @typeProblem
 function windowElement(type: Node): string -> @windowElement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

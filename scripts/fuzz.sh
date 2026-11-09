@@ -45,6 +45,7 @@ CC="${CC:-clang}"
 # checks this list against. runtime-wasm.c is wasm32's alone.
 RUNTIME_C=(
   runtime/runtime.c
+  runtime/runtime-text.c
   runtime/runtime-os.c
   runtime/runtime-parallel.c
   runtime/runtime-cross.c

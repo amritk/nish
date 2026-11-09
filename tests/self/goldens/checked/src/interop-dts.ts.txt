@@ -20,6 +20,7 @@ import wasmSkipReason from "./interop-wasm" -> function @wasmSkipReason
 import wasmType from "./interop-wasm" -> function @wasmType
 import FunctionSig from "./program" -> struct FunctionSig
 import T_I64 from "./types" -> const T_I64
+import T_STRING from "./types" -> const T_STRING
 import T_U64 from "./types" -> const T_U64
 import TypeTable from "./types" -> struct TypeTable
 function rangeNote(table: TypeTable, fn: ExternalFunction): string -> @rangeNote
@@ -46,9 +47,9 @@ function generateDts(compilation: Compilation, fns: ExternalFunction[], dtsFile:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via wasmBridged
   escaping: dtsFile
-  calls: banner bridgesHandle docComment hostSpecifiers importsType jsExportName layoutTypes loaderGuarded nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat panicTypes pushAll storageLayouts structsHoldingVectors tsSignatureLine wasmBridged wasmSkipReason wasmType
+  calls: banner bridgesHandle docComment hostSpecifiers importsType jsExportName layoutTypes loaderGuarded namesString nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat panicTypes pushAll storageLayouts structsHoldingVectors tsSignatureLine wasmBridged wasmSkipReason wasmType
   pointer compilation: size=208 writesThrough=false captured=false passedTo=structsHoldingVectors#0 banner#0 loaderGuarded#0 storageLayouts#0 hostSpecifiers#0 importsType#0
-  pointer fns: size=0 writesThrough=false captured=false passedTo=wasmBridged#1
+  pointer fns: size=0 writesThrough=false captured=false passedTo=wasmBridged#1 namesString#0
   stackSites=2 stackLocals=2
   local +0:9 table: TypeTable (const)
   local +1:9 vectored: StringSet (const)
@@ -57,35 +58,42 @@ function generateDts(compilation: Compilation, fns: ExternalFunction[], dtsFile:
   callee +2:18 wasmBridged -> @wasmBridged
   local +3:9 lines: string[] (const)
   callee +4:14 banner -> @banner
-  callee +20:7 bridgesHandle -> @bridgesHandle
-  local +27:9 guard: boolean (const)
-  callee +27:17 loaderGuarded -> @loaderGuarded
-  callee +29:5 pushAll -> @pushAll
-  callee +29:20 panicTypes -> @panicTypes
-  local +32:9 layouts: StorageLayout[] (const)
-  callee +32:19 storageLayouts -> @storageLayouts
-  callee +34:5 pushAll -> @pushAll
-  callee +34:20 layoutTypes -> @layoutTypes
-  local +60:7 count: i32 (let)
-  local +61:14 fn: ExternalFunction (const)
-  local +62:11 skip: string (const)
-  callee +62:18 wasmSkipReason -> @wasmSkipReason
-  callee +64:18 tsSignatureLine -> @tsSignatureLine
-  local +67:11 params: string[] (const)
-  local +68:9 i: i32 (let)
-  callee +70:47 wasmType -> @wasmType
-  callee +74:16 docComment -> @docComment
-  callee +76:12 jsExportName -> @jsExportName
-  callee +76:59 wasmType -> @wasmType
-  local +84:9 specifiers: string[] (const)
-  callee +84:22 hostSpecifiers -> @hostSpecifiers
-  callee +86:5 pushAll -> @pushAll
-  callee +86:20 importsType -> @importsType
+  callee +17:7 namesString -> @namesString
+  callee +27:7 bridgesHandle -> @bridgesHandle
+  local +34:9 guard: boolean (const)
+  callee +34:17 loaderGuarded -> @loaderGuarded
+  callee +36:5 pushAll -> @pushAll
+  callee +36:20 panicTypes -> @panicTypes
+  local +39:9 layouts: StorageLayout[] (const)
+  callee +39:19 storageLayouts -> @storageLayouts
+  callee +41:5 pushAll -> @pushAll
+  callee +41:20 layoutTypes -> @layoutTypes
+  local +67:7 count: i32 (let)
+  local +68:14 fn: ExternalFunction (const)
+  local +69:11 skip: string (const)
+  callee +69:18 wasmSkipReason -> @wasmSkipReason
+  callee +71:18 tsSignatureLine -> @tsSignatureLine
+  local +74:11 params: string[] (const)
+  local +75:9 i: i32 (let)
+  callee +77:47 wasmType -> @wasmType
+  callee +81:16 docComment -> @docComment
+  callee +83:12 jsExportName -> @jsExportName
+  callee +83:59 wasmType -> @wasmType
+  local +91:9 specifiers: string[] (const)
+  callee +91:22 hostSpecifiers -> @hostSpecifiers
+  callee +93:5 pushAll -> @pushAll
+  callee +93:20 importsType -> @importsType
 function panicTypes(): string[] -> @panicTypes
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
   stackSites=0 stackLocals=0
   local +0:9 lines: string[] (const)
+function namesString(fns: ExternalFunction[]): boolean -> @namesString
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer fns: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 fn: ExternalFunction (const)
+  local +4:16 t: i32 (const)
 function bridgesHandle(table: TypeTable, bridged: ExternalFunction[]): boolean -> @bridgesHandle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isHostHandle
