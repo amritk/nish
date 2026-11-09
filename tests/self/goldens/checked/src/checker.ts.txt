@@ -112,6 +112,7 @@ import declarationName from "./script" -> function @declarationName
 import lateUses from "./script" -> function @lateUses
 import scriptMain from "./script" -> function @scriptMain
 import COLLECTIONS_SPECIFIER from "./std-modules" -> const COLLECTIONS_SPECIFIER
+import FLOAT_REM_LOCAL from "./std-modules" -> const FLOAT_REM_LOCAL
 import MATH_SPECIFIER from "./std-modules" -> const MATH_SPECIFIER
 import SORT_LOCAL from "./std-modules" -> const SORT_LOCAL
 import SORT_SPECIFIER from "./std-modules" -> const SORT_SPECIFIER
@@ -180,6 +181,7 @@ struct Checker (class) size=24 align=8 exported
   method importCollections -> @Checker.importCollections
   method importCollection -> @Checker.importCollection
   method importMath -> @Checker.importMath
+  method bindMath -> @Checker.bindMath
   method importSort -> @Checker.importSort
   method qualifySymbols -> @Checker.qualifySymbols
   method declareAlias -> @Checker.declareAlias
@@ -326,19 +328,28 @@ function Checker.importCollection(this: Checker, name: string, at: Node | null):
   callee +1:5 StringSet.add -> @StringSet.add
 function Checker.importMath(this: Checker): void -> @Checker.importMath [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
-  calls: CheckedProgram.isMathLibrary ImportBinding.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq scanMathCalls
+  sharedWrite: via scanMathCalls
+  calls: CheckedProgram.isMathLibrary Checker.bindMath nish_panic_index nish_str_concat scanMathCalls
+  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.bindMath#0 Checker.bindMath#0
+  stackSites=2 stackLocals=2
+  callee +0:9 CheckedProgram.isMathLibrary -> @CheckedProgram.isMathLibrary
+  local +3:11 calls: Node[] (const)
+  local +4:11 rems: Node[] (const)
+  callee +5:5 scanMathCalls -> @scanMathCalls
+  local +6:16 call: Node (const)
+  local +7:13 name: string (const)
+  callee +8:7 Checker.bindMath -> @Checker.bindMath
+  callee +11:7 Checker.bindMath -> @Checker.bindMath
+function Checker.bindMath(this: Checker, name: string, local: string, at: Node): void -> @Checker.bindMath [exported method]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: local name
+  calls: ImportBinding.constructor nish_alloc_struct nish_array_grow nish_str_eq
   pointer this: size=24 writesThrough=false captured=false
-  stackSites=1 stackLocals=1
-  callee -15:9 CheckedProgram.isMathLibrary -> @CheckedProgram.isMathLibrary
-  local -12:11 calls: Node[] (const)
-  callee -11:5 scanMathCalls -> @scanMathCalls
-  local -10:16 call: Node (const)
-  local -9:13 name: string (const)
-  local -8:13 local: string (const)
-  local -7:11 bound: boolean (let)
-  local -6:18 imp: ImportBinding (const)
-  callee +0:35 new ImportBinding -> @ImportBinding.constructor
+  pointer at: size=40 writesThrough=true captured=true passedTo=ImportBinding.constructor#4 ImportBinding.constructor#5
+  stackSites=0 stackLocals=0
+  local -5:16 imp: ImportBinding (const)
+  callee +0:31 new ImportBinding -> @ImportBinding.constructor
 function Checker.importSort(this: Checker): void -> @Checker.importSort [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -731,13 +742,15 @@ function Checker.recheckStorage(this: Checker): void -> @Checker.recheckStorage 
   callee +2:9 recheckStorage -> @recheckStorage
 function Checker.bindImports(this: Checker, targets: CheckedProgram[]): void -> @Checker.bindImports [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Checker.bindImport
-  calls: Checker.bindImport nish_panic_index
+  sharedWrite: +0:7
+  calls: Checker.bindImport StringMap.get nish_panic_index
   pointer this: size=24 writesThrough=false captured=false passedTo=Checker.bindImport#0
   pointer targets: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:9 i: i32 (let)
-  callee +2:7 Checker.bindImport -> @Checker.bindImport
+  local -8:9 i: i32 (let)
+  callee -6:7 Checker.bindImport -> @Checker.bindImport
+  local -2:11 rem: i32 (const)
+  callee -2:17 StringMap.get -> @StringMap.get
 function Checker.bindTypeImports(this: Checker, targets: CheckedProgram | null[]): void -> @Checker.bindTypeImports [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -810,7 +823,7 @@ function Checker.bindImport(this: Checker, index: i32, target: CheckedProgram): 
   escaping: index
   calls: CheckContext.error CheckedProgram.constant CheckedProgram.exported CheckedProgram.struct CheckedProgram.structTemplate CheckedProgram.template Checker.bindBuiltinImport Checker.bindConstantImport Checker.bindStructImport Checker.bindStructTemplateImport Checker.bindTemplateImport Checker.importedType StringMap.get StringMap.set StringSet.has isBuiltinSpecifier nish_array_grow nish_panic_index nish_str_concat nish_str_eq
   pointer this: size=24 writesThrough=false captured=false passedTo=Checker.importedType#0 Checker.bindBuiltinImport#0 Checker.bindConstantImport#0 Checker.bindStructImport#0 Checker.bindStructTemplateImport#0 Checker.bindTemplateImport#0
-  pointer target: size=696 writesThrough=false captured=false passedTo=CheckedProgram.constant#0 CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.template#0 CheckedProgram.exported#0
+  pointer target: size=704 writesThrough=false captured=false passedTo=CheckedProgram.constant#0 CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.template#0 CheckedProgram.exported#0
   stackSites=0 stackLocals=0
   local -81:11 imp: ImportBinding (const)
   local -77:11 typeImport: ImportBinding | null (const)
@@ -944,14 +957,14 @@ function declaredEnum(target: CheckedProgram | null, name: string): EnumInfo | n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownEnum
-  pointer target: size=696 writesThrough=false captured=false passedTo=CheckedProgram.ownEnum#0
+  pointer target: size=704 writesThrough=false captured=false passedTo=CheckedProgram.ownEnum#0
   stackSites=0 stackLocals=0
   callee +0:28 CheckedProgram.ownEnum -> @CheckedProgram.ownEnum
 function declaredAlias(target: CheckedProgram | null, name: string): AliasInfo | null -> @declaredAlias
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownAlias
-  pointer target: size=696 writesThrough=false captured=false passedTo=CheckedProgram.ownAlias#0
+  pointer target: size=704 writesThrough=false captured=false passedTo=CheckedProgram.ownAlias#0
   stackSites=0 stackLocals=0
   callee +0:28 CheckedProgram.ownAlias -> @CheckedProgram.ownAlias
 function parameterSpelling(ctx: CheckContext, sig: FunctionSig, name: string): string -> @parameterSpelling [exported]
@@ -1076,7 +1089,7 @@ function indexGuardAdvice(program: CheckedProgram, table: TypeTable, index: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via shadowsGuardName
   calls: TypeTable.isRanged TypeTable.typeName nish_panic_index nish_str_concat shadowsGuardName
-  pointer program: size=696 writesThrough=true captured=false passedTo=shadowsGuardName#0
+  pointer program: size=704 writesThrough=true captured=false passedTo=shadowsGuardName#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.typeName#0
   pointer index: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1102,7 +1115,7 @@ function offsetGuardAdvice(program: CheckedProgram, offset: Offset, sum: string,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via shadowsGuardName
   calls: nish_str_concat shadowsGuardName
-  pointer program: size=696 writesThrough=true captured=false passedTo=shadowsGuardName#0
+  pointer program: size=704 writesThrough=true captured=false passedTo=shadowsGuardName#0
   pointer offset: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 f64Mode: boolean (const)
@@ -1222,7 +1235,7 @@ function shadowsGuardName(program: CheckedProgram, name: string): boolean -> @sh
   sharedWrite: +0:5
   escaping: name
   calls: guardNameBit guardNamesDeclared
-  pointer program: size=696 writesThrough=true captured=false
+  pointer program: size=704 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:28 guardNamesDeclared -> @guardNamesDeclared
   callee +2:34 guardNameBit -> @guardNameBit
@@ -1718,18 +1731,19 @@ function hasSortCall(node: Node): boolean -> @hasSortCall
   stackSites=0 stackLocals=0
   local +0:14 child: Node (const)
   callee +1:9 hasSortCall -> @hasSortCall
-function scanMathCalls(node: Node, calls: Node[]): void -> @scanMathCalls
+function scanMathCalls(node: Node, calls: Node[], rems: Node[] | null): void -> @scanMathCalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:5
   escaping: node
   calls: nish_array_grow nish_panic_index nish_str_eq scanMathCalls
   pointer node: size=40 writesThrough=true captured=true
   pointer calls: size=0 writesThrough=true captured=false passedTo=scanMathCalls#1
+  pointer rems: size=0 writesThrough=true captured=false passedTo=scanMathCalls#2
   stackSites=0 stackLocals=0
-  local -7:11 callee: Node (const)
-  local -6:11 name: string (const)
-  local +3:14 child: Node (const)
-  callee +4:5 scanMathCalls -> @scanMathCalls
+  local +3:11 callee: Node (const)
+  local +4:11 name: string (const)
+  local +17:14 child: Node (const)
+  callee +18:5 scanMathCalls -> @scanMathCalls
 function scanCollectionNames(node: Node, names: CollectionNames, program: CheckedProgram, hideMap: boolean, hideSet: boolean): void -> @scanCollectionNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CollectionNames.note
@@ -1737,7 +1751,7 @@ function scanCollectionNames(node: Node, names: CollectionNames, program: Checke
   calls: CollectionNames.note boundTypeParameters nish_panic_index nish_str_eq noteAnnotatedNew scanCollectionNames
   pointer node: size=40 writesThrough=true captured=true passedTo=boundTypeParameters#0 noteAnnotatedNew#0
   pointer names: size=16 writesThrough=true captured=false passedTo=CollectionNames.note#0 scanCollectionNames#1
-  pointer program: size=696 writesThrough=false captured=false passedTo=noteAnnotatedNew#1 scanCollectionNames#2
+  pointer program: size=704 writesThrough=false captured=false passedTo=noteAnnotatedNew#1 scanCollectionNames#2
   stackSites=0 stackLocals=0
   local +0:9 bound: Node | null (const)
   callee +0:17 boundTypeParameters -> @boundTypeParameters
@@ -1761,7 +1775,7 @@ function noteAnnotatedNew(decl: Node, program: CheckedProgram, hideMap: boolean,
   sharedWrite: +0:3
   calls: StringMap.set nish_array_grow nish_panic_index nish_str_eq nish_str_from_i32
   pointer decl: size=40 writesThrough=false captured=false
-  pointer program: size=696 writesThrough=false captured=false
+  pointer program: size=704 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -11:9 annotation: Node (const)
   local -10:9 init: Node (const)

@@ -25,6 +25,7 @@ bash scripts/fuzz.sh --run regex       # fuzz until stopped or a crash
 bash scripts/fuzz.sh --run regex -- -max_total_time=1800 -jobs=4
 bash scripts/fuzz.sh --replay          # every corpus and regression once
 bash scripts/fuzz.sh --smoke           # what CI's fuzz-smoke job runs
+FUZZ_JOBS=1 bash scripts/fuzz.sh --smoke   # the same, one target at a time
 ```
 
 The compiler must be built from this checkout (`NISH`, default `build/nish`).
@@ -104,7 +105,11 @@ artifact. Then work it the way the security records require
 - **`fuzz-smoke`** (`.github/workflows/ci.yml`, every pull request): builds
   every target, replays its corpus and regressions, and fuzzes it for 30
   seconds from `-seed=1`. The seed is fixed, but the run is bounded by wall
-  clock, so how many inputs it reaches varies from run to run. It then runs `node tests/run.js runtime_sanitize`:
+  clock, so how many inputs it reaches varies from run to run. `--smoke`
+  runs `FUZZ_JOBS` targets at once, the runner's core count by default, and
+  prints each target's log whole, in name order, once all have finished; a
+  crash in one does not stop the others, and the last line names every
+  target that failed. It then runs `node tests/run.js runtime_sanitize`:
   the runtime unit test under ASan and UBSan, single-threaded and with
   threads.
 - **`Fuzz`** (`.github/workflows/fuzz.yml`, Saturdays and on dispatch): one

@@ -52,7 +52,7 @@ MIT or the Boost Software License 1.0, and this repository takes the Boost
 licence, as it does Zmij's, so as with Zmij a program built with `nish/json` needs
 no notice of its own.
 
-The sixth is `std/math.ts`, whose `Math.tan`, `Math.atan2` and `Math.hypot`
+The sixth is `std/math.ts`, whose `Math` functions and wasm `%`
 are ported from fdlibm, as FreeBSD's msun carries it. The package carries
 `std/LICENSE-fdlibm` beside it, for the same reason. fdlibm's licence grants
 use, copying and distribution "provided that this notice is preserved", which
@@ -323,11 +323,11 @@ Adapted from fast_float (https://github.com/fastfloat/fast_float), include/fast_
 
 [fdlibm](https://www.netlib.org/fdlibm/), Copyright (C) 1993 Sun Microsystems,
 Inc., under its own permissive notice. The port reads FreeBSD msun's
-`lib/msun/src` copies; the licence text is the notice those files carry,
-verbatim.
+`lib/msun/src` copies; the licence text is the two notices those files carry
+(1993, and 2004 for `e_exp.c` and `e_pow.c`), verbatim.
 
 ```notice
-Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries it, lib/msun/src/k_tan.c, s_tan.c, e_rem_pio2.c, k_rem_pio2.c, e_atan2.c, s_atan.c and e_hypot.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the fdlibm licence; see std/LICENSE-fdlibm.
+Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries it, lib/msun/src/k_tan.c, k_sin.c, k_cos.c, s_tan.c, s_sin.c, s_cos.c, e_rem_pio2.c, k_rem_pio2.c, e_atan2.c, s_atan.c, e_hypot.c, e_exp.c, e_log.c, e_pow.c and e_fmod.c. Copyright (C) 1993 and (C) 2004 by Sun Microsystems, Inc. Used under the fdlibm licence; see std/LICENSE-fdlibm.
 ```
 
 ### `tests/json-suite/LICENSE-jsontestsuite`
@@ -483,7 +483,7 @@ Derived from the Unicode Character Database 16.0.0 (https://www.unicode.org/Publ
 | `bench/simd-s3a/mat-vec-checked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-simd.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
-| `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `s_tan.c` `tan`, `e_rem_pio2.c`'s Cody-Waite reduction (its refinement thresholds widened to 2^-15 and 2^-48 of the argument), `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot` and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `tanLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
+| `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `k_sin.c` `__kernel_sin`, `k_cos.c` `__kernel_cos`, `s_tan.c` `tan`, `s_sin.c` `sin`, `s_cos.c` `cos`, `e_rem_pio2.c`'s Cody-Waite reduction (its refinement thresholds widened to 2^-15 and 2^-48 of the argument), `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot`, `e_exp.c` `__ieee754_exp`, `e_log.c` `__ieee754_log`, `e_pow.c` `__ieee754_pow` (with JavaScript's NaN cases), `e_fmod.c`'s shift-and-subtract and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `trigLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
 | `std/crypto/bcrypt.ts` | crypt_blowfish 1.3, `crypt_blowfish.c`: `BF_init_state` as `bcryptInitState`, `BF_ENCRYPT`/`BF_ROUND` as `bcryptEncrypt` and the rounds of `bcryptBody`, `BF_body` as `bcryptBody`, `BF_set_key` as `bcryptSetKey`, `BF_decode`/`BF_encode` as `bcryptDecodeSalt`/`bcryptEncode`, and `BF_crypt` as `bcryptParse` and `bcryptExposed` | public domain, fallback permissive | `std/crypto/LICENSE-crypt_blowfish` |

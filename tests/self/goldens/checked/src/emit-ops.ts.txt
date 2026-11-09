@@ -33,6 +33,7 @@ import isInteger from "./types" -> function @isInteger
 import isUnsigned from "./types" -> function @isUnsigned
 import T_BOOL from "./types" -> const T_BOOL
 import T_F32 from "./types" -> const T_F32
+import T_F64 from "./types" -> const T_F64
 import T_I32 from "./types" -> const T_I32
 import T_STRING from "./types" -> const T_STRING
 const OVERFLOW_ADD: i32 = 0
@@ -244,9 +245,9 @@ function emitRightOperand(emitter: Emitter, opcode: string, type: i32, right: No
 function emitBinary(emitter: Emitter, expr: Node): string -> @emitBinary [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitLogical
-  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue bitwiseOpcode emitBitwise emitCoalesce emitConcat emitIntBinary emitLogical emitStrictEquality emitUndefinedTest floatOpcode integerOpcode isInteger isUndefinedTest nish_panic_index nish_str_concat nish_str_eq
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=emitLogical#0 isUndefinedTest#0 emitUndefinedTest#0 emitStrictEquality#0 emitCoalesce#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitConcat#0 emitBitwise#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitIntBinary#0 Emitter.llvm#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitLogical#1 isUndefinedTest#1 emitUndefinedTest#1 emitStrictEquality#1 emitCoalesce#1 emitBitwise#1 emitIntBinary#5
+  calls: Emitter.emitExpression Emitter.typeOf bitwiseOpcode emitBitwise emitCoalesce emitConcat emitFloatArithmetic emitIntBinary emitLogical emitStrictEquality emitUndefinedTest integerOpcode isInteger isUndefinedTest nish_panic_index nish_str_eq
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=emitLogical#0 isUndefinedTest#0 emitUndefinedTest#0 emitStrictEquality#0 emitCoalesce#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitConcat#0 emitBitwise#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitIntBinary#0 emitFloatArithmetic#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitLogical#1 isUndefinedTest#1 emitUndefinedTest#1 emitStrictEquality#1 emitCoalesce#1 emitBitwise#1 emitIntBinary#5 emitFloatArithmetic#5
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
   callee +2:12 emitLogical -> @emitLogical
@@ -270,9 +271,28 @@ function emitBinary(emitter: Emitter, expr: Node): string -> @emitBinary [export
   callee +25:7 isInteger -> @isInteger
   callee +26:12 emitIntBinary -> @emitIntBinary
   callee +26:35 integerOpcode -> @integerOpcode
-  callee +28:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +28:34 floatOpcode -> @floatOpcode
-  callee +28:72 Emitter.llvm -> @Emitter.llvm
+  callee +28:10 emitFloatArithmetic -> @emitFloatArithmetic
+function emitFloatArithmetic(emitter: Emitter, op: string, type: i32, lhs: string, rhs: string, site: Node): string -> @emitFloatArithmetic [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  escaping: op type
+  calls: CheckedProgram.floatRemainderOf Emitter.llvm IRFunction.emitValue floatOpcode nish_str_concat
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  pointer site: size=40 writesThrough=false captured=false passedTo=CheckedProgram.floatRemainderOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 rem: FunctionSig | null (const)
+  callee +0:15 CheckedProgram.floatRemainderOf -> @CheckedProgram.floatRemainderOf
+  callee +2:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:36 floatOpcode -> @floatOpcode
+  callee +2:74 Emitter.llvm -> @Emitter.llvm
+  callee +5:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +7:9 wideL: string (const)
+  callee +7:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +8:9 wideR: string (const)
+  callee +8:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +9:9 wide: string (const)
+  callee +9:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitBitwise(emitter: Emitter, expr: Node, type: i32): string -> @emitBitwise
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -428,7 +448,7 @@ function emitBitwiseAssignment(emitter: Emitter, expr: Node): string -> @emitBit
   callee +2:17 emitBitwiseCombine -> @emitBitwiseCombine
   callee +3:3 emitRangedStore -> @emitRangedStore
   callee +4:3 storeLocal -> @storeLocal
-function withoutEquals(op: string): string -> @withoutEquals
+function withoutEquals(op: string): string -> @withoutEquals [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
   stackSites=0 stackLocals=0
@@ -440,11 +460,3 @@ function compoundIntegerOpcode(op: string, json: boolean): string -> @compoundIn
   stackSites=0 stackLocals=0
   callee +0:3 integerOpcode -> @integerOpcode
   callee +0:17 withoutEquals -> @withoutEquals
-function compoundFloatOpcode(op: string, json: boolean): string -> @compoundFloatOpcode [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via floatOpcode
-  escaping: json op
-  calls: floatOpcode withoutEquals
-  stackSites=0 stackLocals=0
-  callee +0:75 floatOpcode -> @floatOpcode
-  callee +0:87 withoutEquals -> @withoutEquals
