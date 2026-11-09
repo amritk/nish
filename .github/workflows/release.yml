@@ -584,7 +584,7 @@ jobs:
           file="$(npm pack --pack-destination build/release | tail -n 1)"
           echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
           tar -xzOf "build/release/$file" package/package.json > build/release/manifest.json
-          want="$(for a in "${assets[@]}"; do node --input-type=module -e "import { platformPackageName } from './bin/packaging.js'; console.log(platformPackageName(process.argv[1]))" "$a"; done | jq -R . | jq -sc --arg v "$version" 'sort | map({ (.): $v }) | add')"
+          want="$(node --input-type=module -e "import { platformPackageName } from './bin/packaging.js'; const [v, ...a] = process.argv.slice(1); console.log(JSON.stringify(Object.fromEntries(a.map(platformPackageName).sort().map((n) => [n, v]))))" "$version" "${assets[@]}")"
           got="$(jq -c '.optionalDependencies // {} | to_entries | sort_by(.key) | from_entries' build/release/manifest.json)"
           test "$got" = "$want" || { echo "::error::the packed package.json pins $got, not $want"; exit 1; }
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort | tee build/release/files.txt

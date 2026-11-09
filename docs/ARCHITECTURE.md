@@ -282,7 +282,7 @@ host is a contract that a test enforces:
 | Importer `declare` = exporter `define` attributes | `src/attributes.ts`, `src/emit.ts` | every `tests/link/*` positive test compares the attribute sets across modules |
 | Entry wrapper and exit codes | `src/emit.ts` (`emitEntryWrapper`), `src/compile.ts` | `entry_main*` goldens, `tests/link/*` expected exit codes, the WP12 exit-code block (ICE hook, missing toolchain, failing `build.sh`) |
 | C ABI of scalars (`int32_t`, `double`, `bool` zero-extended) | `src/interop-abi.ts` | `examples/main.c` driver in the size-profile check, `tests/driver.c` in every `.out` case |
-| Package contents (`bin/`, `runtime/`, `scripts/`, `std/`, `LICENSE`, `docs/INSTALL.md`); the compiler itself comes from the platform package `@amritk/nish-<asset>` | `package.json#files`, `optionalDependencies` | the WP12 package block: `npm pack`, install into a temp prefix, link a hello-world from another directory |
+| Package contents (`bin/`, `runtime/`, `scripts/`, `std/`, `LICENSE`, `docs/INSTALL.md`); the compiler itself comes from the platform package `@amritk/nish-<asset>` | `package.json#files`; the `optionalDependencies` pins are written only into the packed copy, by `scripts/pin-platform-packages.mjs` in `release.yml` | the WP12 package block: `npm pack`, install into a temp prefix, link a hello-world from another directory |
 
 The rule behind the table (MASTER_PLAN.md §2): any change to a struct layout
 touches `src/runtime.ts` and `runtime.c` in the same commit and adds or extends

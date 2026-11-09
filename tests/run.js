@@ -21938,7 +21938,39 @@ if (dealtHere("releaseChecks")) {
         check(`npm pack excludes ${f}`, !files.includes(f))
       }
 
-      const tarball = path.join(pkgDir, info.filename)
+      // What gets installed is the tarball as release.yml publishes it: the packed
+      // checkout, unpacked, pinned by the same script and packed again. The checkout
+      // pins no platform package, so installing its own tarball would never ask npm
+      // to resolve an `optionalDependencies` block, and a pin that does not resolve
+      // would pass every check below. `files` still decides what ships, because the
+      // second pack only ever sees what the first one let through.
+      const published = path.join(pkgDir, "published")
+      fs.mkdirSync(path.join(published, "out"), { recursive: true })
+      const untar = spawnSync("tar", ["-xzf", path.join(pkgDir, info.filename), "-C", published], {
+        encoding: "utf8",
+      })
+      const stamp =
+        untar.status === 0
+          ? spawnSync(process.execPath, [pinScript, path.join(published, "package", "package.json"), ...seedAssets], {
+              encoding: "utf8",
+            })
+          : untar
+      const repack =
+        stamp.status === 0
+          ? spawnSync(npm, ["pack", "--json", "--pack-destination", path.join(published, "out")], {
+              cwd: path.join(published, "package"),
+              encoding: "utf8",
+            })
+          : stamp
+      check(
+        "the packed tarball, pinned as release.yml pins it, packs again",
+        repack.status === 0,
+        `${untar.stderr ?? ""}${stamp.stderr ?? ""}${repack.stderr ?? ""}`
+      )
+      const tarball =
+        repack.status === 0
+          ? path.join(published, "out", JSON.parse(repack.stdout)[0].filename)
+          : path.join(pkgDir, info.filename)
       const prefix = path.join(pkgDir, "prefix")
       const install = spawnSync(
         npm,
@@ -21950,10 +21982,11 @@ if (dealtHere("releaseChecks")) {
           "--no-fund",
           "--prefer-offline",
           "--ignore-scripts",
-          // The platform packages are on the registry from 0.10.0, so without this
-          // npm fetches the published one for this machine and the refusal below
-          // never happens. Omitting them is also exactly the user this block is
-          // about: `npm install --omit=optional` gets this install and no other.
+          // The tarball pins the platform packages, and a released version is on the
+          // registry, so without this npm fetches the published one for this machine
+          // and the refusal below never happens. Omitting them is also exactly the
+          // user this block is about: `npm install --omit=optional` gets this install
+          // and no other.
           "--omit=optional",
           tarball,
         ],
