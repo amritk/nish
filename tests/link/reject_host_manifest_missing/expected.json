@@ -1,0 +1,1 @@
+{"file":"tests/link/reject_host_manifest_missing/package.json","line":5,"column":14,"endLine":5,"endColumn":27,"severity":"error","code":"NL2694","message":"there is no `src/hots.ts` in the directory `package.json` is in: a `nish.host` entry names a host module the package has"}

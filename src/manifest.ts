@@ -460,8 +460,10 @@ export class NishManifest {
   problemEnd: i32
   noPanicAt: i32
   capabilitiesAt: i32
-  /** WP50 stage 2: where the `host` list of host modules starts, or -1. */
+  /** WP50 stage 2: where the `host` value starts, or -1; it is an array only if `Compilation.hostModules` says so. */
   hostAt: i32
+  /** One past the end of the `host` value. */
+  hostEnd: i32
 
   constructor() {
     this.problem = ""
@@ -470,6 +472,7 @@ export class NishManifest {
     this.noPanicAt = -1
     this.capabilitiesAt = -1
     this.hostAt = -1
+    this.hostEnd = -1
   }
 }
 
@@ -550,10 +553,10 @@ export const manifestNish = (manifest: string, condition: string): NishManifest 
     } else if (key === "capabilities") {
       out.capabilitiesAt = valueAt
     } else if (key === "host") {
-      if (valueAt < 0 || valueAt >= manifest.length || manifest.charCodeAt(valueAt) !== OPEN_BRACKET) {
-        return manifestNishProblem("`host` is not an array", valueAt, fields.valueEnd[f])
-      }
+      // Its shape is judged where the list is read (`Compilation.hostModules`,
+      // NL2692), so that the refusal names the host list rather than the field.
       out.hostAt = valueAt
+      out.hostEnd = fields.valueEnd[f]
     } else {
       return manifestNishProblem(
         `\`${key}\` is no key of \`${condition}\``,
@@ -575,12 +578,85 @@ export const manifestNoPanic = (manifest: string, at: i32): ManifestList => {
   return out
 }
 
+/** What every NL2692 says: the shape `nish.host` has to be. */
+const HOST_SHAPE: string = ": `nish.host` is an array of strings, each the path of a host module relative to `package.json`"
+
+/** What every NL2693 says: the form one entry has to take. */
+const HOST_PATH: string = ": a `nish.host` entry is a host module's path relative to the directory `package.json` is in"
+
+/** Whether `path` is rooted, by a slash, a backslash or a drive letter, and so relative to nothing. */
+const manifestAbsolutePath = (path: string): boolean => {
+  if (path.length === 0) {
+    return false
+  }
+  const first = path.charCodeAt(0)
+  if (first === 47 || first === BACKSLASH) {
+    return true
+  }
+  const letter = (first >= 65 && first <= 90) || (first >= 97 && first <= 122)
+  return letter && path.length >= 2 && path.charCodeAt(1) === 58
+}
+
 /**
  * The root package's `"nish": { "host": [...] }` (WP50 stage 2): the host
  * modules a freestanding wasm build imports from, as written, relative to the
- * root package.
+ * root package, read from the value at `at` that ends at `end`. `list` holds
+ * the entries that are usable paths; `problems` the refusal of each that is
+ * not, beside its span: NL2692 for a value or entry of the wrong shape, NL2693
+ * for a string that is empty or absolute. Whether the file is there is the
+ * caller's question (NL2694).
  */
-export const manifestHost = (manifest: string, at: i32): ManifestList => manifestNoPanic(manifest, at)
+export class HostManifest {
+  list: ManifestList
+  problems: string[]
+  problemStarts: i32[]
+  problemEnds: i32[]
+
+  constructor() {
+    this.list = new ManifestList()
+    this.problems = []
+    this.problemStarts = []
+    this.problemEnds = []
+  }
+
+  refuse(message: string, start: i32, end: i32): void {
+    this.problems.push(message)
+    this.problemStarts.push(start)
+    this.problemEnds.push(manifestSpanEnd(start, end))
+  }
+}
+
+export const manifestHost = (manifest: string, at: i32, end: i32): HostManifest => {
+  const out = new HostManifest()
+  if (at < 0 || at >= manifest.length) {
+    return out
+  }
+  if (manifest.charCodeAt(at) !== OPEN_BRACKET) {
+    out.refuse(`\`host\` is not an array${HOST_SHAPE}`, at, end)
+    return out
+  }
+  const read = new ManifestList()
+  manifestReadList(manifest, at, read)
+  let i = 0
+  while (i < read.entries.length && i < read.offsets.length && i < read.ends.length) {
+    const entry = read.entries[i]
+    const start = read.offsets[i]
+    const stop = read.ends[i]
+    if (manifest.charCodeAt(start) !== QUOTE) {
+      out.refuse(`\`${entry}\` is not a string${HOST_SHAPE}`, start, stop)
+    } else if (entry.length === 0) {
+      out.refuse(`an empty path names no file${HOST_PATH}`, start, stop)
+    } else if (manifestAbsolutePath(entry)) {
+      out.refuse(`\`${entry}\` is an absolute path${HOST_PATH}`, start, stop)
+    } else {
+      out.list.entries.push(entry)
+      out.list.offsets.push(start)
+      out.list.ends.push(stop)
+    }
+    i = i + 1
+  }
+  return out
+}
 
 /**
  * The root package's `"nish": { "capabilities": { "allow": [...], "deny": [...] } }`

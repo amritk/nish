@@ -1,0 +1,1 @@
+package.json:5:14: error: there is no `src/hots.ts` in the directory `package.json` is in: a `nish.host` entry names a host module the package has

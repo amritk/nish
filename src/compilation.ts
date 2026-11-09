@@ -405,6 +405,8 @@ export class Compilation {
    * `hostModuleText` rather than as Nish.
    */
   hostIdentities: StringSet
+  /** Whether the root manifest's `nish.host` was refused (NL2692-NL2694), which ends the load at the entry. */
+  hostRefused: boolean
   /**
    * The whole-program attribute fixpoint, once it has been computed.
    * `analyze()` memoises it here for the reason stage0's `src/compilation.ts` memoises
@@ -486,6 +488,7 @@ export class Compilation {
     this.workingDir = cwd === null ? "" : cwd
     this.unreadableRoot = ""
     this.hostIdentities = new StringSet()
+    this.hostRefused = false
     this.facts = null
     this.analysisUnits = []
     this.rootPackageDir = ""
@@ -589,7 +592,10 @@ export class Compilation {
     const firstDiagnostic = this.sink.count()
     const filesBefore = this.sink.fileOrder.size()
     const discovered = this.discover(path, name, packageOverride)
-    if (this.modules.length === first) {
+    // A refused `nish.host` is reported against `package.json`, which no
+    // import edge reaches, so `settleLoad` would drop it; there is nothing past
+    // the entry to settle.
+    if (this.modules.length === first || this.hostRefused) {
       return discovered // already loaded, unreadable, or it did not parse
     }
     let i = first
@@ -817,6 +823,10 @@ export class Compilation {
     this.modules.push(unit)
     if (isEntry) {
       this.hostIdentities = this.hostModules()
+      if (this.hostRefused) {
+        unit.refused = true
+        return false
+      }
     }
 
     // Phase 0 before pass 1a, so what is forbidden by design is refused before
@@ -1461,7 +1471,11 @@ export class Compilation {
    * The identities of the host modules (WP50 §3): each `--host` path, relative
    * to the working directory, and each `"nish".host` entry, relative to the
    * root manifest. A manifest whose `"nish"` field is refused names none here;
-   * `check` reports it (NL3036).
+   * `check` reports it (NL3036). A `host` value that is not an array of
+   * strings (NL2692), an entry that is empty or absolute (NL2693) and one that
+   * names no file (NL2694) are each reported where `package.json` writes it,
+   * and `hostRefused` then stops the load: read as Nish, the page's module
+   * would only be refused for being TypeScript.
    */
   hostModules(): StringSet {
     const out = new StringSet()
@@ -1477,8 +1491,30 @@ export class Compilation {
       return out
     }
     const dir = dirname(source.path)
-    for (const entry of manifestHost(source.text, nish.hostAt).entries) {
-      out.add(this.identityOf(joinPath([dir, entry])))
+    const host = manifestHost(source.text, nish.hostAt, nish.hostEnd)
+    let p = 0
+    while (p < host.problems.length && p < host.problemStarts.length && p < host.problemEnds.length) {
+      this.sink.report(source, host.problemStarts[p], host.problemEnds[p], host.problems[p])
+      p = p + 1
+    }
+    let i = 0
+    while (i < host.list.entries.length && i < host.list.offsets.length && i < host.list.ends.length) {
+      const entry = host.list.entries[i]
+      const path = joinPath([dir, entry])
+      if (readFileSyncOrNull(path) === null) {
+        this.sink.report(
+          source,
+          host.list.offsets[i],
+          host.list.ends[i],
+          `there is no \`${entry}\` in the directory \`package.json\` is in: a \`nish.host\` entry names a host module the package has`
+        )
+        this.hostRefused = true
+      }
+      out.add(this.identityOf(path))
+      i = i + 1
+    }
+    if (host.problems.length > 0) {
+      this.hostRefused = true
     }
     return out
   }
