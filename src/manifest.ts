@@ -599,6 +599,51 @@ const manifestAbsolutePath = (path: string): boolean => {
   return letter && path.length >= 2 && path.charCodeAt(1) === 58
 }
 
+/**
+ * Whether `path`, read segment by segment, climbs out of the directory it is
+ * relative to: a `..` with no named directory before it to cancel.
+ */
+const manifestLeavesRoot = (path: string): boolean => {
+  let depth = 0
+  let start = 0
+  let i = 0
+  while (i <= path.length) {
+    const end = i === path.length || path.charCodeAt(i) === 47 || path.charCodeAt(i) === BACKSLASH
+    if (end) {
+      const segment = path.slice(start, i)
+      if (segment === "..") {
+        depth = depth - 1
+        if (depth < 0) {
+          return true
+        }
+      } else if (segment.length > 0 && segment !== ".") {
+        depth = depth + 1
+      }
+      start = i + 1
+    }
+    i = i + 1
+  }
+  return false
+}
+
+/** The JSON kind of the value whose text starts at `at`, for a refusal that should not quote it whole. */
+const manifestJsonKind = (manifest: string, at: i32): string => {
+  const first = manifest.charCodeAt(at)
+  if (first === OPEN_BRACE) {
+    return "an object"
+  }
+  if (first === OPEN_BRACKET) {
+    return "an array"
+  }
+  if (first === 116 || first === 102) {
+    return "a boolean"
+  }
+  if (first === 110) {
+    return "`null`"
+  }
+  return "a number"
+}
+
 /** One refused `nish.host` value or entry: its message and the span it points at. */
 export class ManifestProblem {
   message: string
@@ -633,7 +678,7 @@ export class HostManifest {
  * root package, read from the value at `at` that ends at `end`. `list` holds
  * the entries that are usable paths; `problems` the refusal of each that is
  * not, beside its span: NL2694 for a value or entry of the wrong shape, NL2695
- * for a string that is empty or absolute. Whether the file is there is the
+ * for a string that is empty, absolute or climbs out of the package's directory. Whether the file is there is the
  * caller's question (NL2696).
  */
 export const manifestHost = (manifest: string, at: i32, end: i32): HostManifest => {
@@ -653,11 +698,13 @@ export const manifestHost = (manifest: string, at: i32, end: i32): HostManifest 
     const start = read.offsets[i]
     const stop = read.ends[i]
     if (manifest.charCodeAt(start) !== QUOTE) {
-      out.refuse(`\`${entry}\` is not a string${HOST_SHAPE}`, start, stop)
+      out.refuse(`${manifestJsonKind(manifest, start)} is not a string${HOST_SHAPE}`, start, stop)
     } else if (entry.length === 0) {
       out.refuse(`an empty path names no file${HOST_PATH}`, start, stop)
     } else if (manifestAbsolutePath(entry)) {
       out.refuse(`\`${entry}\` is an absolute path${HOST_PATH}`, start, stop)
+    } else if (manifestLeavesRoot(entry)) {
+      out.refuse(`\`${entry}\` climbs out of the package's directory${HOST_PATH}`, start, stop)
     } else {
       out.list.entries.push(entry)
       out.list.offsets.push(start)

@@ -30818,6 +30818,11 @@ if (!only || "host-import".includes(only)) {
         const hosted = linkAs(`${stem}.wasm`, "wasm-host")
         got.wasm = plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain)
         got.host = hosted.status === 0 ? digest(`${stem}.wasm`) : shown(hosted)
+      } else {
+        skip(
+          `host-import: ${src}'s --profile wasm and wasm-host .wasm digests are held on linux-x64 only, ` +
+            `and this host is ${process.platform}-${process.arch}; its .d.ts and loader are still held`
+        )
       }
       const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
       check(

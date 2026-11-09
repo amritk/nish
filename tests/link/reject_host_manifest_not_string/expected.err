@@ -1,1 +1,1 @@
-package.json:5:25: error: `12` is not a string: `nish.host` is an array of strings, each the path of a host module relative to `package.json`
+package.json:5:25: error: a number is not a string: `nish.host` is an array of strings, each the path of a host module relative to `package.json`

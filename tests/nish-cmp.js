@@ -969,6 +969,12 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that is not a string is refused where package.json writes it (NL2694), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  {
+    program: "tests/link/reject_host_manifest_escape/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
 ]
 
 /**
