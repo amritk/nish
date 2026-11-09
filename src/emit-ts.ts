@@ -58,6 +58,7 @@ import {
 } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, joinPath, normalizePath, relativePath, resolvePath } from "./paths"
+import { isMathModule } from "./std-modules"
 import { StringBuilder } from "./strings"
 
 /** The specifier every emitted module imports the runtime by. */
@@ -270,6 +271,24 @@ const runtimeImport = (keyword: string, names: StringSet): string =>
   names.size() === 0 ? "" : `${keyword} ${braceList(names)} from "${RUNTIME}"\n`
 
 /**
+ * The import line of what `--deterministic` routed to `nish/math`, from where
+ * `out` is written to where the math library is (`outputPathOf`).
+ */
+const mathImport = (out: string, outputs: string[], modules: ModuleUnit[], names: StringSet): string => {
+  if (names.size() === 0) {
+    return ""
+  }
+  let k = 0
+  while (k < modules.length && k < outputs.length) {
+    if (isMathModule(modules[k].packageName, modules[k].name)) {
+      return `import ${braceList(names)} from "${relativeSpecifier(out, outputs[k])}"\n`
+    }
+    k = k + 1
+  }
+  return ""
+}
+
+/**
  * The launcher: install the Node host, run `main`, exit with its code. An
  * entry written as top-level code (`src/script.ts`) runs as it is imported,
  * so importing it is the whole run, and a run that ends exits 0, as the
@@ -360,6 +379,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
+    walk.deterministic = unit.checker.ctx.deterministic
     let slot = 0
     while (slot < layouts.length) {
       const s = layouts[slot]
@@ -455,10 +475,15 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     // A file with no import or export is a script to tsc, whose alias would be
     // global and meet the page's own `HostHandle`: `export {}` keeps it the file's.
-    const scriptFile = walk.helpers.size() === 0 && walk.widths.size() === 0 && !isModule(unit.file)
+    const scriptFile =
+      walk.helpers.size() === 0 &&
+      walk.widths.size() === 0 &&
+      walk.mathNames.size() === 0 &&
+      !isModule(unit.file)
     const header =
       runtimeImport("import", walk.helpers) +
       runtimeImport("import type", walk.widths) +
+      mathImport(out, outputs, modules, walk.mathNames) +
       (walk.hostHandle ? HOST_HANDLE_ALIAS : "") +
       (walk.hostHandle && scriptFile ? "export {}\n" : "") +
       (walk.usesStorage ? walk.storageImport : "")
