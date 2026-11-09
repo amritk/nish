@@ -542,6 +542,14 @@ The three debts stage 4 left are paid:
   region (`runtime/runtime-region.c`), entered around every resume and freed
   when the task finishes (`tests/link/async_region_per_task`). `main` keeps
   the arena.
+  An `awaitAll` call that pends gets one too (the `awaitall-regions`
+  stage, HF-13): it ran in its caller's arena before, so the first call to
+  finish and release freed what a sibling still held. Its region is made only
+  once the call's first resume pends, entered around each later resume, and
+  handed to the caller's arena when the call finishes
+  (`nish_region_adopt`), so its answer stays readable; a call that finishes
+  at once costs one store and, per poll, one load and compare
+  (`tests/link/async_await_all_lanes`, `async_await_all_lanes_large`).
 - **(b) Spawn arguments outlive the spawner.** A `string` argument is copied
   into the task's region before the task first runs (`nish_async_copy_str`);
   numbers, booleans and enums are copied by value; any other type is refused,

@@ -25,18 +25,21 @@ way to present a stale completion; the checks are defence in depth.
 What remains is liveness: a peer that never makes its socket ready parks its
 task for ever, and the loop with it (ASYNC-6, open), and readiness is a
 hint, not a reservation (ASYNC-9, open), and a task that never
-awaits holds the thread (ASYNC-5, decided). Nine findings (ASYNC-1 to
-ASYNC-9): three fixed, three open, three decided.
+awaits holds the thread (ASYNC-5, decided). Two calls joined by one
+`awaitAll` each run in a region of their own once they wait, so neither can
+free the other's memory (ASYNC-10). Ten findings (ASYNC-1 to ASYNC-10): four
+fixed, three open, three decided.
 
 ## Scope
 
 | File | What |
 | --- | --- |
 | `runtime/runtime-async.c` | the task slab and table (`nish_async_spawn`, `nish_async_done`, `nish_async_table_add`); the running task and its region (`nish_async_enter`, `nish_async_leave`); the waits and their tokens (`nish_async_wait_fd`, `nish_async_sleep`, `nish_async_poll`, `nish_async_slot_of`, `nish_async_fire`); the timer heap; the loop (`nish_async_block`, `nish_async_next`); `nish_async_copy_str` |
-| `src/emit-async.ts` | the emitted driver, `@nish.async.run`, `@nish.async.drain` and `@nish.async.resume`, and each task's spawn, argument copies and await polls |
+| `src/emit-async.ts` | the emitted driver, `@nish.async.run`, `@nish.async.drain` and `@nish.async.resume`, and each task's spawn, argument copies and await polls; each `awaitAll` call's lane: its start, its region and its poll (`emitAsyncCall`, `emitLanePoll`) |
+| `runtime/runtime-region.c` | `nish_region_adopt` only, which joins a finished `awaitAll` lane's region to the caller's arena (the rest of the file is `runtime.md`'s) |
 
 Out of scope: the region allocator a task's memory lives in
-(`runtime/runtime-region.c`, `runtime.md`'s RT-41 to RT-47), and the
+(`runtime/runtime-region.c` but `nish_region_adopt`, `runtime.md`'s RT-41 to RT-47), and the
 descriptors themselves, which the program opened through `nish:net` and which
 `runtime.md` covers.
 
@@ -70,6 +73,7 @@ later stage of WP49.
 | ASYNC-7 | Low | `src/emit-async.ts` (the spawn), `runtime/runtime-async.c` (`nish_async_copy_str`) | A spawned task outlives its spawner, so an argument that pointed into the spawner's arena would be read after that arena was released. | **Decided.** A `string` argument is copied into the task's own region before the task first runs; a number or `boolean` is copied by value; any other type is refused at compile time (NL2673, LANGUAGE.md). Pinned by `tests/link/async_spawn_args`, whose spawner builds 2890 characters of noise in the memory its arguments came from before the tasks read them. |
 | ASYNC-8 | Low | `runtime/runtime-async.c` (`nish_async_spawn`, `nish_async_enter`, `nish_async_leave`, `nish_async_done`) | A task's allocations land in whatever arena is current when it runs; with one arena for all tasks, a task that finished would leave its memory to be freed only when `main` returns, and a long-running server would grow by every request it ever served. | **Decided.** Each spawned task owns a region, entered around every resume and freed when the task finishes, and a node's region is made fresh for each task it holds. Pinned by `tests/link/async_region_per_task` and the slab's reuse by `tests/link/async_slab_flat` ("after a thousand rounds: 12 nodes, peak 10 live, 0 live now"). |
 | ASYNC-9 | Low | `runtime/runtime-async.c` (`nish_async_wait_fd`, `nish_async_fire`) | Readiness is a report, not a reservation. Two tasks waiting on one descriptor are both woken by one byte; the first to read takes it, and the second's read, on a blocking descriptor, blocks the thread and with it every task. | **Open.** One reader per descriptor is the program's to keep; a server gives each connection to one task. A non-blocking descriptor, which `nish:net` does not yet offer, would turn the loser's read into a short one. |
+| ASYNC-10 | Medium | `src/emit-async.ts` (`emitAsyncCall`, `emitAwaitAll`, `emitLanePoll`), `runtime/runtime-region.c` (`nish_region_adopt`) | Every call an `awaitAll` started ran in its caller's arena, so the calls' allocations interleaved in one stack. The first call to return a number released the arena to the mark it took at its start and freed the chunks above it, which a sibling that started later still held across its `await`: the sibling then read and wrote freed memory. With small allocations the release stayed inside one chunk and nothing was freed; from about 256 KB a chunk was. Reached through `fetch` as `fetch.md`'s HF-13 (a fetch beside a DNS lookup panicked, or died with SIGSEGV). | **Fixed** (the `awaitall-regions` stage of WP49). A call is first resumed in the caller's arena; one that pends gets a region of its own (`nish_region_new`), entered around each later resume, so no call's mark or release reaches another's memory: a mark taken in the caller's arena is not in the region and its release is a no-op. When the call finishes, `nish_region_adopt` puts the region's chunks on top of the caller's arena and retires the handle, so an answer that points into the region stays readable and is freed with the caller's memory; adopting an entered region panics, as freeing one does. A call that finishes without pending takes no region. Before: `tests/link/async_await_all_lanes` and `tests/cases/async_await_all_lanes_large` died with SIGSEGV (exit 139); after: both print their expected output, and the link program's `Arena.mark()` and `Arena.used()` stay flat over twenty rounds. |
 
 ## Failures that stop the program
 
@@ -108,5 +112,6 @@ than run on in a state it cannot keep (`nish_async_die`):
 - `tests/link/async_spawn_args`, `tests/cases/async_sleep_spawn_string`,
   `tests/cases/reject_async_spawn_*` (ASYNC-7)
 - `tests/link/async_region_per_task`, `tests/link/async_slab_flat` (ASYNC-8)
+- `tests/link/async_await_all_lanes`, `tests/cases/async_await_all_lanes_large` (ASYNC-10)
 - `tests/link/async_sync_main_loop` (the loop a synchronous `main` runs)
 - `tests/runtime-budgets.js` (`RUNTIME_ASYNC_TEXT_BUDGET`)

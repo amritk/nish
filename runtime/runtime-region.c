@@ -55,7 +55,13 @@
  *
  * Freeing a region frees its chunks through runtime.c's `nish_free_arena`,
  * with the region's arena swapped in for the call, so an `-DNISH_ASAN` build
- * forgets the freed blocks as it does for the thread's arena. */
+ * forgets the freed blocks as it does for the thread's arena.
+ *
+ * **Adopting** a region gives its chunks to the current arena instead of
+ * freeing them, then retires the handle as `free` does: `awaitAll` runs each
+ * call that waits in a region of its own, and adopts it when the call
+ * finishes, so the answer stays readable and is freed with the caller's
+ * memory (docs/security/async.md, ASYNC-10). */
 
 #include <stdint.h>
 #include <stdlib.h>
