@@ -543,6 +543,20 @@ const DECLARED = [
         "http1-server.ll",
         "main.ll",
       ],
+      "tests/link/net_http1_server_bad_config/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_f64/main.ts": [
+        "checks.ll",
+        "http1-server.ll",
+        "net_http1_server_harness.ll",
+      ],
+      "tests/link/net_http1_server_feed_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_send_body/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_write_window/main.ts": ["http1-server.ll", "main.ll"],
     }
   ),
   {
