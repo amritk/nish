@@ -31380,18 +31380,28 @@ if (!only || "wasm-size".includes(only)) {
       ...(pinned ? { NISH_WASM_OPT: "0" } : {}),
     })
     const stubCalls = () => (fs.existsSync(stubLog) ? fs.readFileSync(stubLog, "utf8").split("\n").filter(Boolean) : [])
-    // A directory of symlinks to everything in `from` but what `skip` names.
+    // A directory of symlinks to everything in `from` but what `skip` names; false
+    // when `from` cannot be listed (searchable but not readable), with no mirror made.
     const mirror = (from, to, skip) => {
+      const source = path.resolve(from)
+      let names
+      try {
+        names = fs.readdirSync(source)
+      } catch {
+        return false
+      }
       fs.rmSync(to, { recursive: true, force: true })
       fs.mkdirSync(to, { recursive: true })
-      for (const name of fs.readdirSync(from)) {
-        if (!skip.includes(name)) fs.symlinkSync(path.join(from, name), path.join(to, name))
+      for (const name of names) {
+        if (!skip.includes(name)) fs.symlinkSync(path.join(source, name), path.join(to, name))
       }
+      return true
     }
     // PATH with no wasm-opt on it, for the `--profile wasm` link, which has no switch.
     // A directory holding one is swapped for a mirror without it, never dropped: apt's
     // binaryen puts wasm-opt in /usr/bin beside bash and clang (#1257). clang still
-    // finds one beside its own binary, which `-###` shows.
+    // finds one beside its own binary, which `-###` shows. A directory that cannot be
+    // listed cannot be mirrored, and is dropped.
     let hidden = 0
     const withoutWasmOpt = (searchPath) =>
       String(searchPath)
@@ -31399,17 +31409,30 @@ if (!only || "wasm-size".includes(only)) {
         .map((d) => {
           if (!fs.existsSync(path.join(d, "wasm-opt"))) return d
           const to = path.join(dir, "no-wasm-opt", String(hidden++))
-          mirror(d, to, ["wasm-opt"])
-          return to
+          return mirror(d, to, ["wasm-opt"]) ? to : null
         })
+        .filter((d) => d !== null)
         .join(path.delimiter)
     const bare = { ...process.env, PATH: withoutWasmOpt(process.env.PATH) }
     delete bare.NISH_WASM_OPT
+    // The flags are scripts/build.sh's `wasm_compile` and `--no-entry`, so the probe
+    // asks the driver the link asks.
     const clangFindsWasmOpt = (ll) =>
       /wasm-opt"/.test(
         spawnSync(
           process.env.CC || "clang",
-          ["--target=wasm32-unknown-unknown", "-Oz", "-nostdlib", "-Wl,--no-entry", ll, "-o", "x.wasm", "-###"],
+          [
+            "-Wno-override-module",
+            "--target=wasm32-unknown-unknown",
+            "-Oz",
+            "-nostdlib",
+            "-mbulk-memory",
+            "-Wl,--no-entry",
+            ll,
+            "-o",
+            "x.wasm",
+            "-###",
+          ],
           { encoding: "utf8", env: bare }
         ).stderr
       )
@@ -31472,13 +31495,19 @@ if (!only || "wasm-size".includes(only)) {
             same && /, no wasm-opt\)/.test(none.stdout),
             shown(none)
           )
-          // The layout of #1257: wasm-opt in the directory that also holds bash. The
-          // hidden PATH keeps that directory's other tools, so the link still runs.
-          const bashDir = path.dirname(spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim())
-          const shared = path.join(dir, "shared-bin")
-          mirror(bashDir, shared, ["wasm-opt"])
-          fs.copyFileSync(path.join(stubBin, "wasm-opt"), path.join(shared, "wasm-opt"))
-          const sharedPath = [shared, ...String(process.env.PATH).split(path.delimiter).filter((d) => !fs.existsSync(path.join(d, "bash")))]
+          // The layout of #1257: wasm-opt in the directory that also holds bash. Each
+          // PATH directory with a bash (Homebrew adds a second) becomes a mirror with the
+          // stand-in beside it; the hidden PATH keeps their other tools, so the link runs.
+          let shares = 0
+          const sharedPath = String(process.env.PATH)
+            .split(path.delimiter)
+            .map((d) => {
+              if (!fs.existsSync(path.join(d, "bash"))) return d
+              const shared = path.join(dir, "shared-bin", String(shares++))
+              if (!mirror(d, shared, ["wasm-opt"])) return d
+              fs.copyFileSync(path.join(stubBin, "wasm-opt"), path.join(shared, "wasm-opt"))
+              return shared
+            })
           const hiddenEnv = { ...bare, PATH: withoutWasmOpt(sharedPath.join(path.delimiter)), WASM_OPT_STUB_LOG: stubLog }
           fs.rmSync(stubLog, { force: true })
           const beside = link(inputs, hostFlags(`${stem}.beside.wasm`), hiddenEnv)
@@ -31493,24 +31522,20 @@ if (!only || "wasm-size".includes(only)) {
       }
       // A program with no module storage and no host module gets main's bytes.
       const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === src)
-      const plain = link(inputs, ["-o", path.join(dir, `${stem}.plain.wasm`), "--profile", "wasm"], bare)
       const digest = (file) =>
         fs.existsSync(path.join(dir, file))
           ? crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, file))).digest("hex")
           : "missing"
-      const got = {
-        dts: digest(`${stem}.d.ts`),
-        loader: digest(`${stem}.mjs`),
-        wasm: plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain),
-        host: digest(`${stem}.wasm`),
-      }
-      if (!bareLinks) {
+      const got = { dts: digest(`${stem}.d.ts`), loader: digest(`${stem}.mjs`), host: digest(`${stem}.wasm`) }
+      if (bareLinks) {
+        const plain = link(inputs, ["-o", path.join(dir, `${stem}.plain.wasm`), "--profile", "wasm"], bare)
+        got.wasm = plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain)
+      } else {
         skip(`wasm-size: ${stem}.plain.wasm: clang finds a wasm-opt beside itself and --profile wasm has no switch`)
-        got.wasm = digests.wasm
       }
       const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
       check(
-        `wasm-size: ${src}'s .d.ts, loader, --profile wasm and --profile wasm-host .wasm are main's bytes`,
+        `wasm-size: ${src}'s .d.ts, loader${bareLinks ? ", --profile wasm" : ""} and --profile wasm-host .wasm are main's bytes`,
         moved.length === 0,
         `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
       )
@@ -31522,6 +31547,8 @@ if (!only || "wasm-size".includes(only)) {
         `imports: ${JSON.stringify(imported)}; sidecar: ${sidecar}`
       )
     }
+    // The mirrors are symlinks into system directories; none outlives the run.
+    for (const mirrors of ["no-wasm-opt", "shared-bin"]) fs.rmSync(path.join(dir, mirrors), { recursive: true, force: true })
   }
 }
 

@@ -166,9 +166,10 @@ export default { plugins: [nish({ entries: ["src/stats.ts"] })] };
 In a build, `import { add } from "./stats.ts"` gets the wasm build, compiled,
 linked with `--profile wasm-host --inline` and loaded with `loadSync`. Under
 `vite serve` the import stays the TypeScript itself. Entries are paths from
-the project root. An import may leave out the `.ts` (`"../stats"`) or name a
-directory whose `index.ts` is an entry. Vite's extension order still holds:
-with a `stats.js` beside `stats.ts`, `"../stats"` is the JavaScript file.
+the project root. An import of a file listed in `entries` may leave out the
+`.ts` (`"../stats"`) or name the directory whose `index.ts` it is; any other
+import is left to Vite. Vite's extension order still holds: with a `stats.js`
+beside `stats.ts`, `"../stats"` is the JavaScript file.
 
 The generated module calls the loader's `loadSync`, which a compiler older
 than WP50 stage 1 does not write. With one, the build stops with an error

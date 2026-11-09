@@ -141,18 +141,23 @@ export default function nish(options = {}) {
     enforce: "pre",
     configResolved: configure,
     async resolveId(source, importer) {
-      if (!building) return null;
+      if (!building || entries.size === 0) return null;
       // The seam for a `./client.nish` specifier (the page's client module of a
       // later stage) is here; stage 1 resolves only the entries.
       // A specifier may leave out the `.ts`, or name a directory for its
       // `index.ts`. It is resolved as Vite would, file then extensions in
       // order then the directory's index, so a sibling `add.js` keeps `./add`.
       const base = importer ? path.dirname(importer) : root;
-      const candidates = source.startsWith(".")
-        ? [path.resolve(base, source)]
-        : path.isAbsolute(source)
-          ? [source, path.join(root, source)]
-          : [];
+      // A candidate that no entry's path starts with resolves to no entry, so
+      // it is dropped before anything is read from the disk.
+      const candidates = (
+        source.startsWith(".")
+          ? [path.resolve(base, source)]
+          : path.isAbsolute(source)
+            ? [source, path.join(root, source)]
+            : []
+      ).filter((c) => [...entries].some((e) => e.startsWith(c)));
+      if (candidates.length === 0) return null;
       const withExtension = (stem) => extensions.map((e) => stem + e).find((f) => kind(f) === "file");
       const resolve = (c) => {
         if (entries.has(c) || kind(c) === "file") return c;
