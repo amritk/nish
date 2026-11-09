@@ -1453,10 +1453,10 @@ jobs:
 
   # Every fuzz target in tests/fuzz/targets/ built under
   # -fsanitize=fuzzer,address,undefined, replayed over its seed corpus and
-  # regressions, then fuzzed for 30 seconds from a fixed -seed. The run is
-  # bounded by wall clock, so how far it gets varies from push to push
-  # (tests/fuzz/README.md). Plus the runtime unit test
-  # under ASan and UBSan. Long campaigns are fuzz.yml's, weekly.
+  # regressions, then fuzzed for 30 seconds from a fixed -seed, one target per
+  # core. The run is bounded by wall clock, so how far it gets varies from
+  # push to push (tests/fuzz/README.md). Plus the runtime unit test under ASan
+  # and UBSan. Long campaigns are fuzz.yml's, weekly.
   fuzz-smoke:
     name: fuzz-smoke
     runs-on: ubuntu-latest
@@ -1498,8 +1498,11 @@ jobs:
         timeout-minutes: 10
         run: npm run build
 
-      # Five targets at 60 seconds each, under ten minutes with the builds.
-      # A crash leaves its input in build/fuzz/artifacts/<target>/, uploaded
+      # Every target at 30 seconds, as many at once as the runner has cores
+      # (FUZZ_JOBS, scripts/fuzz.sh). One at a time, 18 targets took 595 to
+      # 625 s and made this the run's last job; four at a time they take
+      # about a quarter of that, with as many inputs run per target. The
+      # timeout keeps room for targets still to come. A crash leaves its input in build/fuzz/artifacts/<target>/, uploaded
       # below; `bash scripts/fuzz.sh --replay <target>` after copying it into
       # tests/fuzz/regressions/<target>/ reproduces it.
       - name: Fuzz smoke
