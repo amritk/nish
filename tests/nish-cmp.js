@@ -754,6 +754,18 @@ const DECLARED = [
     changelog: SERVE_CANCEL,
     why: "the cookbook entry imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
+  {
+    program: "tests/cases/async_spawn_handler_reach.ts",
+    file: "exit",
+    changelog: "reaches its spawner's state and awaits the async Postgres pool",
+    why: "the 0.37.0 seed refuses a task call's argument the answer cannot reach; the candidate leaves it out, so only the candidate compiles the case (WP49 stage 5, part 8)",
+  },
+  {
+    program: "tests/link/net_serve_pg/main.ts",
+    file: "exit",
+    changelog: "reaches its spawner's state and awaits the async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 8)",
+  },
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
   // program that reaches them. These come first: dns.ll also carries this
