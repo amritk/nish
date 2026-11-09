@@ -13,7 +13,6 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
-import { quietBitsLocal } from "./std-modules"
 import { typedArrayElement } from "./annotations"
 import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
 import { CheckContext } from "./context"
@@ -35,6 +34,7 @@ import {
 } from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { checkSimdCall } from "./simd"
+import { quietBitsLocal } from "./std-modules"
 import { Scope } from "./symbols"
 import {
   isNumeric,
@@ -610,6 +610,23 @@ const checkImulOperand = (ctx: CheckContext, arg: Node, scope: Scope): void => {
 }
 
 /**
+ * Refuse a string's parse under `--deterministic`: `Number`, `parseFloat` and
+ * `parseInt` read the text with the runtime's grammar, which is `strtod`'s and
+ * `strtoll`'s natively and JavaScript's in the TypeScript reading, and the two
+ * disagree on spellings such as `0b101`, `0x1p3` and `0x10` (the float corpus
+ * pins them). The digits of an accepted decimal round the same on both, but
+ * the flag promises the same bits for every input, not most of them.
+ */
+const refuseDeterministicParse = (ctx: CheckContext, call: Node, name: string): void => {
+  if (ctx.deterministic) {
+    ctx.error(
+      call,
+      `\`${name}\` of a string reads it with each target's own number grammar, which \`--deterministic\` refuses: \`strtod\` natively and JavaScript's under Node disagree on spellings such as \`0b101\` and \`0x1p3\`; parse the digits with string methods instead`
+    )
+  }
+}
+
+/**
  * Under `--deterministic`, record `std/math.ts`'s `quietBitsF64` or
  * `quietBitsF32` as the callee of an `f64ToBits` or `f32ToBits` call, which
  * the checker's `importMath` imported under `quietBitsLocal`: the emitter and
@@ -912,6 +929,7 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       if (got !== T_ERROR && got !== T_STRING) {
         ctx.error(args.children[0], `\`${name}\` expects a string, got ${ctx.table.typeName(got)}`)
       }
+      refuseDeterministicParse(ctx, call, name)
     }
     return name === "parseInt" ? T_I32 : T_F64
   }
@@ -923,6 +941,9 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
           args.children[0],
           `\`Number\` expects a string, number, or boolean, got ${ctx.table.typeName(got)}`
         )
+      }
+      if (got === T_STRING) {
+        refuseDeterministicParse(ctx, call, name)
       }
     }
     return T_F64
