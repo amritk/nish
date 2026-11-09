@@ -434,18 +434,24 @@ function emitKernelWait(emitter: Emitter, expr: Node, builtin: string): string -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.emitExpression Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock asyncFail nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 suspends
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=asyncFail#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=asyncFail#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -26:9 fn: IRFunction (const)
-  local -25:9 owner: FunctionSig | null (const)
-  callee -24:8 suspends -> @suspends
-  callee -23:5 asyncFail -> @asyncFail
-  local -20:9 arg: string (const)
-  callee -20:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local -19:7 token: string (let)
-  callee -17:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee -17:38 Emitter.useRuntime -> @Emitter.useRuntime
+  local -33:9 fn: IRFunction (const)
+  local -32:9 owner: FunctionSig | null (const)
+  callee -31:8 suspends -> @suspends
+  callee -30:5 asyncFail -> @asyncFail
+  local -27:9 args: Node[] (const)
+  local -26:9 arg: string (const)
+  callee -26:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local -25:7 token: string (let)
+  callee -23:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -23:38 Emitter.useRuntime -> @Emitter.useRuntime
+  local -21:11 ms: string (const)
+  callee -21:16 Emitter.emitExpression -> @Emitter.emitExpression
+  local -20:11 dir: i32 (const)
+  callee -19:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -18:19 Emitter.useRuntime -> @Emitter.useRuntime
   local -15:11 dir: i32 (const)
   callee -14:13 IRFunction.emitValue -> @IRFunction.emitValue
   callee -14:38 Emitter.useRuntime -> @Emitter.useRuntime
@@ -473,6 +479,35 @@ function emitKernelWait(emitter: Emitter, expr: Node, builtin: string): string -
   callee +2:3 IRFunction.emit -> @IRFunction.emit
   callee +3:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee +4:10 IRFunction.emitValue -> @IRFunction.emitValue
+function isTaskCallName(builtin: string): boolean -> @isTaskCallName [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function emitTaskCall(emitter: Emitter, expr: Node, builtin: string): string -> @emitTaskCall [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: Emitter.emitExpression Emitter.useRuntime IRFunction.emitValue nish_panic_index nish_str_concat nish_str_eq
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0
+  pointer expr: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 args: Node[] (const)
+  callee +3:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +3:37 Emitter.useRuntime -> @Emitter.useRuntime
+  local +5:7 answer: string (let)
+  callee +7:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:39 Emitter.useRuntime -> @Emitter.useRuntime
+  local +9:11 task: string (const)
+  callee +9:18 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +10:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:39 Emitter.useRuntime -> @Emitter.useRuntime
+  local +12:11 task: string (const)
+  callee +12:18 Emitter.emitExpression -> @Emitter.emitExpression
+  local +13:11 ms: string (const)
+  callee +13:16 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +14:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +14:39 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +16:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitSpawn(emitter: Emitter, expr: Node): string -> @emitSpawn [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

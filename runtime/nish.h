@@ -174,7 +174,16 @@ void nish_region_adopt(uint64_t r);
  * resume, blocking in the kernel until one is ready, or null when nothing is
  * ready and nothing waits. `nish_async_stat` answers 0: nodes allocated, 1:
  * completions dropped because their task had finished, 2: spawned tasks not yet
- * finished. */
+ * finished.
+ *
+ * Cancellation is cooperative. A task's handle (`nish_async_task_id`) is its
+ * slot and generation, and `main`'s is 0. `nish_async_cancel` flags a task and
+ * fires the waits it is parked on, which then read 0, as does every later wait
+ * it makes; it answers 1 when it flagged a live task other than `main`.
+ * `nish_async_cancelled` answers 1 inside a flagged task, and
+ * `nish_async_cancel_after` arms a timer that cancels the task in `ms`.
+ * `nish_async_wait_fd_within` is `nish_async_wait_fd` that reads 0 when `ms`
+ * pass first. */
 void *nish_async_spawn(int32_t kind, uint64_t bytes);
 void *nish_async_enter(void *node);
 void nish_async_leave(void *node, void *prev);
@@ -185,6 +194,11 @@ int32_t nish_async_poll(uint64_t token);
 void *nish_async_next(void);
 void *nish_async_copy_str(const void *s);
 int32_t nish_async_stat(int32_t which);
+uint64_t nish_async_wait_fd_within(int32_t fd, int32_t dir, int32_t ms);
+int64_t nish_async_task_id(void);
+int32_t nish_async_cancel(int64_t handle);
+int32_t nish_async_cancelled(void);
+int32_t nish_async_cancel_after(int64_t handle, int32_t ms);
 
 /* ---- String operations ------------------------------------------------- */
 /* Copy `len` bytes into a new arena string (`bytes` need not be terminated). */

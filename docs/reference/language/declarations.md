@@ -2213,10 +2213,62 @@ export async function main(): Promise<i32> {
   are `readable` and `writable`.
 - **It takes one `i32`**: `` `readable` takes one `i32` `` (NL2672,
   `reject_async_wait_argument`).
-- **A wait has no deadline of its own.** A descriptor that never becomes
-  ready parks its task, and the program, until it does
-  ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-6); cancellation is a
-  later stage of WP49.
+- **`readable` and `writable` have no deadline of their own.** A descriptor
+  that never becomes ready parks its task until it does, or until the task
+  is cancelled; `readableWithin` and `writableWithin`, below, take one
+  ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-6).
+
+### Bounding a wait and cancelling a task
+
+`nish:async` bounds a descriptor wait, and cancels a task, with six more
+calls:
+
+| Call | Answers |
+| --- | --- |
+| `await readableWithin(fd, ms)`, `await writableWithin(fd, ms)` | `true` once `fd` is ready; `false` when `ms` milliseconds passed first, when the wait could not be made, or when the task is cancelled. A negative `ms` waits without a limit |
+| `taskId()` | the running task's handle, an `i64`; `main`'s is 0 |
+| `cancel(task)` | `true` when the task was still running, so it is now cancelled; `false` for a finished task or `main` |
+| `cancelled()` | whether the running task has been cancelled |
+| `cancelAfter(task, ms)` | as `cancel`, `ms` milliseconds from now unless the task finishes first; a later call replaces the deadline, a negative `ms` removes it |
+
+A cancel is cooperative: it never stops a task in the middle of its code.
+Every `sleep`, `readable`, `writable` or bounded wait the task has parked
+answers `false` at once, and every one it makes later answers `false`
+without parking, so the task runs on to its end, its `using` bindings
+dispose and its region is freed. A task that does not await is not reached
+until it does. A handle names its task and no later one: a handle kept past
+its task's end, once the executor reuses the task's slot, cancels nothing
+([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-18).
+
+```ts
+import { cancelAfter, cancelled, readableWithin, taskId } from "nish:async"
+
+async function serveOne(fd: i32): Promise<void> {
+  // The whole task gets two seconds; this one read gets half of one.
+  cancelAfter(taskId(), 2000)
+  const ready = await readableWithin(fd, 500)
+  if (!ready) {
+    console.log(cancelled() ? "cancelled" : "timed out")
+    return
+  }
+}
+```
+
+- **The bounded waits are waits.** Each is written only where it is
+  awaited (NL2671, `reject_async_within_bare`) and takes two `i32`s:
+  `` `readableWithin` takes two `i32`s: the descriptor it waits on, and the
+  milliseconds it waits at most before it answers false `` (NL2692,
+  `reject_async_within_argument`).
+- **The cancellation calls are plain calls**, written anywhere, the task's
+  handle an `i64`: `` `cancel` from `nish:async` takes one `i64`, a task's
+  handle from `taskId()` `` (NL2693, `reject_async_cancel_argument`).
+- **`spawn` runs its task to its first wait** before it returns, so a cancel
+  written after `spawn(f(x))` lands after `f` has run that far.
+- `std/net/serve` cancels a handler's task when its client hangs up, when
+  its `deadline` passes and when the server stops; the async `fetch` and the
+  async Postgres pool answer a cancelled wait as a failure of their own
+  (`tests/link/async_cancel`, `tests/link/net_serve_hangup`,
+  `tests/link/std_postgres_async_cancel`).
 
 **Where it is not Node.** The source is TypeScript and runs under Node, but
 the resume order is not Node's, and these are declared differences:
@@ -2248,7 +2300,10 @@ answers `true`, or `false` at once for a negative `ms`
 (`tests/emit-ts/async/sleep`); `readable` and `writable` have no Node
 counterpart a task can await, so a program that calls either is
 `--emit-ts cannot write readable or writable from nish:async` (NL4017,
-`tests/emit-ts/async/refused-readable`). A program whose spawned tasks print in an
+`tests/emit-ts/async/refused-readable`), and so is one that calls
+`readableWithin`, `writableWithin`, `taskId`, `cancel`, `cancelled` or
+`cancelAfter`, since a Node promise is not a task the executor can cancel
+(NL4018, `tests/emit-ts/async/refused-cancel`). A program whose spawned tasks print in an
 interleaving prints the same lines in another order (`async_spawn`, the
 `order` row of `tests/differential/emit-ts-known.txt`).
 

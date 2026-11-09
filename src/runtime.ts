@@ -272,6 +272,28 @@ export class RuntimeTable {
     this.add(
       mayNotReturn("nish_async_poll", "declare noundef i32 @nish_async_poll(i64 noundef)", EFFECT_WRITE)
     )
+    // Part 7: the bounded descriptor wait and the cancellation calls.
+    this.add(
+      mayNotReturn(
+        "nish_async_wait_fd_within",
+        "declare noundef i64 @nish_async_wait_fd_within(i32 noundef, i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(mayNotReturn("nish_async_task_id", "declare noundef i64 @nish_async_task_id()", EFFECT_WRITE))
+    this.add(
+      mayNotReturn("nish_async_cancel", "declare noundef i32 @nish_async_cancel(i64 noundef)", EFFECT_WRITE)
+    )
+    this.add(
+      mayNotReturn("nish_async_cancelled", "declare noundef i32 @nish_async_cancelled()", EFFECT_WRITE)
+    )
+    this.add(
+      mayNotReturn(
+        "nish_async_cancel_after",
+        "declare noundef i32 @nish_async_cancel_after(i64 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
     this.add(
       mayNotReturn(
         "nish_async_copy_str",

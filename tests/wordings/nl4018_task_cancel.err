@@ -1,0 +1,1 @@
+--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native

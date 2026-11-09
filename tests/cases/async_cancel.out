@@ -1,0 +1,4 @@
+main: 0, cancel main false, cancel parked true, again true
+parked: slept false, cancelled true
+quiet: ready false, open true, cancelled false
+nap: armed true, slept false, again false, cancelled true

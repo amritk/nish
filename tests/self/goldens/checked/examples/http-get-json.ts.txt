@@ -1075,9 +1075,12 @@ import pollModify from "nish:net" -> builtin pollModify
 import pollRemove from "nish:net" -> builtin pollRemove
 import pollWait from "nish:net" -> builtin pollWait
 import tcpConnect from "nish:net" -> builtin tcpConnect
+import cancelled from "nish:async" -> builtin async.cancelled
 import readable from "nish:async" -> builtin async.readable
+import readableWithin from "nish:async" -> builtin async.readableWithin
 import sleep from "nish:async" -> builtin async.sleep
 import writable from "nish:async" -> builtin async.writable
+import writableWithin from "nish:async" -> builtin async.writableWithin
 import getenv from "nish:process" -> builtin getenv
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
 import wallClockNanos from "nish:process" -> builtin wallClockNanos
@@ -1113,6 +1116,7 @@ const HTTP_E_REQUEST: i32 = 14 [exported]
 const HTTP_E_IO: i32 = 15 [exported]
 const HTTP_E_PROXY: i32 = 16 [exported]
 const HTTP_E_BLOCKED: i32 = 17 [exported]
+const HTTP_E_CANCELLED: i32 = 18 [exported]
 const HTTP_CLIENT_ZERO: i32 = 0
 const HTTP_CLIENT_DRAIN_CHUNK: i32 = 4096
 const HTTP_CLIENT_READ_BYTES: i32 = 16384
@@ -2294,17 +2298,18 @@ function httpClientAnswers(host: string, count: i32, options: HttpOptions, until
   calls: nish.HttpClientFault.fail nish.httpClientWaitText nish.outboundAddressText nish.outboundFilter nish_str_concat nish_str_from_i32
   pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientWaitText#1
   pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.outboundFilter#1 nish.outboundAddressText#0
-  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
+  pointer fault: size=16 writesThrough=true captured=false passedTo=nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0 nish.HttpClientFault.fail#0
   stackSites=0 stackLocals=0
   callee +0:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
   callee +2:7 httpClientWaitText -> @nish.httpClientWaitText
   callee +7:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
   callee +11:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  local +17:7 usable: i32 (let)
-  local +18:9 policy: OutboundPolicy | null (const)
-  callee +21:14 outboundFilter -> @nish.outboundFilter
-  callee +23:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee +25:32 outboundAddressText -> @nish.outboundAddressText
+  callee +15:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +21:7 usable: i32 (let)
+  local +22:9 policy: OutboundPolicy | null (const)
+  callee +25:14 outboundFilter -> @nish.outboundFilter
+  callee +27:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +29:32 outboundAddressText -> @nish.outboundAddressText
 function FetchError.constructor(this: FetchError, code: i32, text: string): void -> @nish.FetchError.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: code text
@@ -2390,6 +2395,24 @@ function RequestInit.header(this: RequestInit, name: string, value: string): Req
   calls: nish_array_grow
   pointer this: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+function httpClientWaitAsync(fd: i32, write: boolean, until: i64, code: i32): i32 -> @nish.httpClientWaitAsync
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  escaping: code
+  calls: nish_monotonic_nanos nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 ready: boolean (let)
+  local +1:9 bounded: boolean (let)
+  local +2:9 sliceEnd: i64 (let)
+  local +10:13 left: i64 (const)
+  local +14:11 ms: i64 (let)
+function httpClientAsyncWaitText(code: i32, options: HttpOptions, text: string): string -> @nish.httpClientAsyncWaitText
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: code text
+  calls: nish.httpClientWaitText
+  pointer options: size=56 writesThrough=false captured=false passedTo=nish.httpClientWaitText#1
+  stackSites=0 stackLocals=0
+  callee +0:10 httpClientWaitText -> @nish.httpClientWaitText
 function HttpClientConn.constructor(this: HttpClientConn, options: HttpOptions): void -> @nish.HttpClientConn.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.httpClientDeadline
@@ -2429,32 +2452,47 @@ function HttpClientConn.release(this: HttpClientConn, pool: FetchPool | null): v
   callee -3:7 Http1ResponseParser.buffered -> @nish.Http1ResponseParser.buffered
   callee -1:7 FetchPool.put -> @nish.FetchPool.put
   callee +3:5 HttpClientConn.close -> @nish.HttpClientConn.close
+function httpClientWaitPeerAsync(conn: HttpClientConn, write: boolean): boolean -> @nish.httpClientWaitPeerAsync
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  escaping: write
+  calls: nish.HttpClientFault.fail nish.httpClientAsyncWaitText nish.httpClientWaitAsync nish_monotonic_nanos nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer conn: size=104 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 ms: i32 (const)
+  local +1:7 until: i64 (let)
+  local +2:7 code: i32 (let)
+  local +7:9 waited: i32 (const)
+  callee +7:24 httpClientWaitAsync -> @nish.httpClientWaitAsync
+  local +11:9 what: string (const)
+  callee +12:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +14:5 httpClientAsyncWaitText -> @nish.httpClientAsyncWaitText
 function httpClientReadRawAsync(conn: HttpClientConn, want: i32): i32 -> @nish.httpClientReadRawAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:16
-  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish_net_read nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
-  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0 nish.HttpClientConn.overdue#0
+  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish.httpClientWaitPeerAsync nish_net_read nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0 nish.httpClientWaitPeerAsync#0 nish.HttpClientConn.overdue#0
   stackSites=0 stackLocals=0
   callee -3:7 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
   local +0:7 n: i32 (let)
   local +2:11 ready: boolean (const)
-  callee +4:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee +7:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
-  callee +14:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +2:25 httpClientWaitPeerAsync -> @nish.httpClientWaitPeerAsync
+  callee +6:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
+  callee +13:5 HttpClientFault.fail -> @nish.HttpClientFault.fail
 function httpClientWriteRawAsync(conn: HttpClientConn, bytes: u8[], off: i32, len: i32): boolean -> @nish.httpClientWriteRawAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: off
-  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish_net_write nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
-  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0
+  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish.httpClientWaitPeerAsync nish_net_write nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
+  pointer conn: size=104 writesThrough=true captured=false passedTo=nish.HttpClientConn.overdue#0 nish.httpClientWaitPeerAsync#0
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -16:7 at: i32 (let)
-  local -15:9 end: i32 (const)
-  callee -13:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
-  local -10:11 n: i32 (const)
-  local -6:13 ready: boolean (const)
-  callee -4:9 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local -15:7 at: i32 (let)
+  local -14:9 end: i32 (const)
+  callee -12:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
+  local -9:11 n: i32 (const)
+  local -5:13 ready: boolean (const)
+  callee -5:27 httpClientWaitPeerAsync -> @nish.httpClientWaitPeerAsync
   callee +1:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
 function httpClientReceiveTlsAsync(conn: HttpClientConn, tls: TlsRecordClient): boolean -> @nish.httpClientReceiveTlsAsync
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -2626,8 +2664,8 @@ function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   escaping: host port
-  calls: nish.HttpClientConn.overdue nish.HttpClientFault.fail nish.copyBytes nish.httpClientAnswers nish.httpClientLookupAsync nish.httpClientWaitText nish_connect_result nish_monotonic_nanos nish_net_close nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_tcp_connect
-  pointer conn: size=104 writesThrough=false captured=false passedTo=nish.HttpClientConn.overdue#0
+  calls: nish.HttpClientFault.fail nish.copyBytes nish.httpClientAnswers nish.httpClientAsyncWaitText nish.httpClientLookupAsync nish.httpClientWaitAsync nish.httpClientWaitText nish_connect_result nish_monotonic_nanos nish_net_close nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_tcp_connect
+  pointer conn: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 start: i64 (const)
   local +1:9 budget: i32 (const)
@@ -2646,10 +2684,12 @@ function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): i32
   local +21:12 i: i32 (let)
   callee +22:5 copyBytes -> @nish.copyBytes
   local +23:11 fd: i32 (const)
-  local +28:11 ready: boolean (const)
-  callee +29:9 HttpClientConn.overdue -> @nish.HttpClientConn.overdue
-  local +33:11 result: i32 (const)
-  callee +40:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +28:11 waited: i32 (const)
+  callee +28:26 httpClientWaitAsync -> @nish.httpClientWaitAsync
+  callee +31:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  callee +33:9 httpClientAsyncWaitText -> @nish.httpClientAsyncWaitText
+  local +41:11 result: i32 (const)
+  callee +48:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
 function httpClientOpenAsync(conn: HttpClientConn, url: Url, pool: FetchPool | null, fresh: boolean): boolean -> @nish.httpClientOpenAsync
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

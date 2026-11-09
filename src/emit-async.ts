@@ -460,10 +460,17 @@ export const emitKernelWait = (emitter: Emitter, expr: Node, builtin: string): s
     asyncFail(emitter, `\`${builtin}\` outside a suspending function`)
     return ""
   }
-  const arg = emitter.emitExpression(expr.children[1].children[0])
+  const args = expr.children[1].children
+  const arg = emitter.emitExpression(args[0])
   let token = ""
   if (builtin === "async.sleep") {
     token = fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_sleep")}(i32 ${arg})`)
+  } else if (builtin === "async.readableWithin" || builtin === "async.writableWithin") {
+    const ms = emitter.emitExpression(args[1])
+    const dir = builtin === "async.writableWithin" ? 1 : 0
+    token = fn.emitValue(
+      `call i64 ${emitter.useRuntime("nish_async_wait_fd_within")}(i32 ${arg}, i32 ${dir}, i32 ${ms})`
+    )
   } else {
     const dir = builtin === "async.writable" ? 1 : 0
     token = fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_wait_fd")}(i32 ${arg}, i32 ${dir})`)
@@ -484,6 +491,40 @@ export const emitKernelWait = (emitter: Emitter, expr: Node, builtin: string): s
   fn.emit(`store i32 ${emitter.asyncPolls.length}, i32* %async.state`)
   fn.emit("br label %async.suspend")
   fn.placeBlock(ready)
+  return fn.emitValue(`icmp ne i32 ${answer}, 0`)
+}
+
+/** Whether `builtin`, a canonical name, is one of `nish:async`'s cancellation calls. */
+export const isTaskCallName = (builtin: string): boolean =>
+  builtin === "async.taskId" ||
+  builtin === "async.cancel" ||
+  builtin === "async.cancelled" ||
+  builtin === "async.cancelAfter"
+
+/**
+ * `taskId()`, `cancel(task)`, `cancelled()`, `cancelAfter(task, ms)` from
+ * `nish:async` (WP49 stage 5, part 7): a call to the executor's entry point
+ * of the same meaning. Each answers at once and suspends nothing, so it is
+ * written in any function; the boolean ones answer an `i32` the call turns
+ * into an `i1`.
+ */
+export const emitTaskCall = (emitter: Emitter, expr: Node, builtin: string): string => {
+  const fn = emitter.fn
+  const args = expr.children[1].children
+  if (builtin === "async.taskId") {
+    return fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_task_id")}()`)
+  }
+  let answer = ""
+  if (builtin === "async.cancelled") {
+    answer = fn.emitValue(`call i32 ${emitter.useRuntime("nish_async_cancelled")}()`)
+  } else if (builtin === "async.cancel") {
+    const task = emitter.emitExpression(args[0])
+    answer = fn.emitValue(`call i32 ${emitter.useRuntime("nish_async_cancel")}(i64 ${task})`)
+  } else {
+    const task = emitter.emitExpression(args[0])
+    const ms = emitter.emitExpression(args[1])
+    answer = fn.emitValue(`call i32 ${emitter.useRuntime("nish_async_cancel_after")}(i64 ${task}, i32 ${ms})`)
+  }
   return fn.emitValue(`icmp ne i32 ${answer}, 0`)
 }
 
