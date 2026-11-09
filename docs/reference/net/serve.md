@@ -329,7 +329,7 @@ class ServeLimits
 | `inFlight: i32` | The most requests in flight — handed to a task and not yet answered — at once; past it a request is answered 503. |
 | `maxRequests: i32` | How many requests to answer before stopping: the server then stops accepting, finishes what it holds and returns. 0, the default, serves for good. |
 | `responseBytes: i32` | The most bytes a response body may have; a task that answers more is answered 500 instead. |
-| `server: string` | The `Server` field written into the head of every answer a task writes, as `server: <value>`; "", the default, writes none. The answers the server writes itself (400, 413, 431, 500, 503) carry none. Made into bytes once, when the server starts, so it costs no work per request. A control byte in it panics as the server starts. |
+| `server: string` | The `Server` field written into the head of every answer a task writes, as `server: <value>`; "", the default, writes none. The answers the server writes itself carry none: a `refuse` (404, or 405 with its `Allow`) and 400, 413, 431, 500 and 503. Made into bytes once, when the server starts, so it costs no work per request. A control byte in it panics as the server starts. |
 
 ### ServeStats
 

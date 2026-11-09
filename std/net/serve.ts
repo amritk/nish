@@ -122,9 +122,10 @@ export class ServeLimits {
   /**
    * The `Server` field written into the head of every answer a task writes,
    * as `server: <value>`; "", the default, writes none. The answers the
-   * server writes itself (400, 413, 431, 500, 503) carry none. Made into bytes once,
-   * when the server starts, so it costs no work per request. A control byte
-   * in it panics as the server starts.
+   * server writes itself carry none: a `refuse` (404, or 405 with its
+   * `Allow`) and 400, 413, 431, 500 and 503. Made into bytes once, when the
+   * server starts, so it costs no work per request. A control byte in it
+   * panics as the server starts.
    */
   server: string = ""
 }

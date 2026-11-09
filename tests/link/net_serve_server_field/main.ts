@@ -1,6 +1,7 @@
 // `ServeLimits.server` names the server in the head of every answer a task
 // writes, a typed one and one with no content type, as `server: <value>`;
-// left "", it writes no `server` field at all.
+// left "", it writes no `server` field at all. A `refuse` (404 here) is
+// written by the server, as a 400 is, and carries none either way.
 import { readable, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 import { Router, RouterLimits } from "nish/net/router"
@@ -34,17 +35,18 @@ async function ask(port: i32, label: string, path: string): Promise<void> {
 async function client(port: i32, label: string, doneFd: i32): Promise<void> {
   await ask(port, label, "/text")
   await ask(port, label, "/empty")
+  await ask(port, label, "/nope")
   const one: u8[] = [1]
   netWrite(doneFd, one, 0, 1)
 }
 
-/** Serves two answers with `server` as `ServeLimits.server`. */
+/** Serves three answers, the last a `refuse`, with `server` as `ServeLimits.server`. */
 async function round(label: string, server: string): Promise<void> {
   const router: Router = new Router(new RouterLimits())
   router.add("GET", "/text")
   router.add("GET", "/empty")
   const limits: ServeLimits = new ServeLimits()
-  limits.maxRequests = 2
+  limits.maxRequests = 3
   limits.server = server
   const listener: i32 = tcpListen("127.0.0.1", 0, 16)
   const port: i32 = netLocalPort(listener)
