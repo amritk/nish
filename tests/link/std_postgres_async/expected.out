@@ -1,0 +1,21 @@
+connected 2 of 2
+B: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+C: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+A: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=held
+a claim slept while both were held: true
+echo: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=héllo
+echo cells: 3 héllo -7 null=true false
+bad: ok=false failure=0 socket=0 rows=0 tag= reusable=true
+bad error: 42P01 relation "nope" does not exist
+many: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=r0
+begin: ok=true failure=0 socket=0 rows=0 tag=BEGIN reusable=false
+live after begin: 1
+set: ok=true failure=0 socket=0 rows=0 tag=SET reusable=false
+live after set: 0
+claim with none live: -1
+dropped 2
+connected 2 of 2
+D: ok=false failure=9 socket=0 rows=0 tag= reusable=false
+live after die: 1
+E: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+statements seen: 12
