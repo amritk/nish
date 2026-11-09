@@ -420,12 +420,12 @@ const pgAsyncSlot = (pool: PgAsyncPool, ticket: i32): i32 => {
  *   be a numeric address, and a target that failed panics.
  * @returns The number of slots connected after the call.
  */
-export async function pgAsyncConnect(
+export const pgAsyncConnect = async (
   pool: PgAsyncPool,
   config: PgConfig,
   password: Secret<u8[]>,
   target: PgTarget
-): Promise<i32> {
+): Promise<i32> => {
   if (target.failure !== PG_TARGET_OK) {
     panic("nish/net/postgres-async: pgAsyncConnect to a target that failed")
   }
@@ -458,7 +458,7 @@ export async function pgAsyncConnect(
 }
 
 /** Runs `conn`'s startup on `fd` until it is ready (true) or has failed (false). */
-async function pgAsyncStartup(conn: PgConnection, fd: i32): Promise<boolean> {
+const pgAsyncStartup = async (conn: PgConnection, fd: i32): Promise<boolean> => {
   const connected: boolean = await writable(fd)
   if (pgAsyncWaitFailure(connected) !== 0 || connectResult(fd) !== 0) {
     return false
@@ -518,7 +518,7 @@ async function pgAsyncStartup(conn: PgConnection, fd: i32): Promise<boolean> {
  *   `pgAsyncRelease`; `-1` (`PG_POOL_NONE`) when no slot is connected;
  *   `PG_CARRIER_FULL` (-2) when none came free in time.
  */
-export async function pgAsyncClaim(pool: PgAsyncPool): Promise<i32> {
+export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
   let slept: i32 = 0
   let nap: i32 = PG_ASYNC_FIRST_SLEEP_MS
   while (true) {
@@ -556,7 +556,7 @@ export async function pgAsyncClaim(pool: PgAsyncPool): Promise<i32> {
  * @param ticket The ticket `pgAsyncClaim` answered.
  * @param reusable The query's `reusable`; false closes the connection.
  */
-export function pgAsyncRelease(pool: PgAsyncPool, ticket: i32, reusable: boolean): void {
+export const pgAsyncRelease = (pool: PgAsyncPool, ticket: i32, reusable: boolean): void => {
   const slot: i32 = pgAsyncSlot(pool, ticket)
   if (!reusable) {
     netClose(pool.fds[slot])
@@ -581,12 +581,12 @@ export function pgAsyncRelease(pool: PgAsyncPool, ticket: i32, reusable: boolean
  *   a text one fails the query the same way.
  * @returns The answer; its `reusable` goes to `pgAsyncRelease`.
  */
-export async function pgAsyncQuery(
+export const pgAsyncQuery = async (
   pool: PgAsyncPool,
   ticket: i32,
   sql: string,
   params: PgAsyncParams
-): Promise<PgAsyncResult> {
+): Promise<PgAsyncResult> => {
   const fd: i32 = pool.fds[pgAsyncSlot(pool, ticket)]
   const result = new PgAsyncResult()
   const out: u8[] | null = pgAsyncEncode(sql, params)
@@ -718,12 +718,12 @@ const pgAsyncHasNul = (b: u8[]): boolean => {
  * handed in: the spawn rules read a callee that grows an array it was handed
  * across an `await` as one that may grow the caller's pool.
  */
-async function pgAsyncRead(
+const pgAsyncRead = async (
   fd: i32,
   maxMessage: i32,
   maxColumns: i32,
   maxRows: i32
-): Promise<PgAsyncResult> {
+): Promise<PgAsyncResult> => {
   const result = new PgAsyncResult()
   let buf: u8[] = new Array<u8>(PG_ASYNC_INPUT_SIZE)
   let start: i32 = 0
