@@ -364,6 +364,17 @@ callees count as both). The fixpoint is optimistic on cycles, which is sound
 because a parameter is only ever marked written when an actual store reaches
 it.
 
+The fixpoint (`propagate`) runs as a worklist over function indices. It
+visits only the functions whose callees' facts have moved, in the order
+whole round-robin passes over the table would. Debug builds and reviews can
+set `NISH_CHECK_PROPAGATE=1` (any non-empty value). The compiler then
+collects every facts table a second time and settles it by whole passes from
+the start. It stops with an internal error if any function's attributes,
+pointer-parameter facts, shared-write flags, `writeSite` or `writeVia`
+differ. `writeSite` is first-come, so a missing dependency can change it
+while every flag stays right; only a run from the start catches that.
+`tests/run.js propagate-guard` keeps the guard passing.
+
 | Attribute | Emitted when | Proof |
 | --- | --- | --- |
 | `nounwind` | always | No exceptions exist and there is no `throw`; a failure a caller should handle is a `Result<T, E>` (WP16). |

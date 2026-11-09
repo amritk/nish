@@ -4540,6 +4540,9 @@ export const analyzeFunctions = (
   // Round 1: plain facts and the capture fixpoint, which the escape analysis needs.
   const first = collectRound(units, table, opts, null, null)
   propagate(first, runtime)
+  if (checkingPropagate()) {
+    checkPropagate(first, collectRound(units, table, opts, null, null), runtime)
+  }
   const escapes = new EscapeSet()
   const owners: AnalysisUnit[] = []
   const sigs: FunctionSig[] = []
@@ -4574,6 +4577,9 @@ export const analyzeFunctions = (
   // then: it is syntax plus the call graph, and neither moves between rounds.
   const facts = collectRound(units, table, opts, escapes, first)
   propagate(facts, runtime)
+  if (checkingPropagate()) {
+    checkPropagate(facts, collectRound(units, table, opts, escapes, first), runtime)
+  }
   propagateCapabilities(facts)
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.feedsTasks
@@ -5112,6 +5118,8 @@ const buildFactGraph = (facts: FactsTable, runtime: RuntimeTable): FactGraph => 
  * visits that do change something are the whole passes' own, in their order.
  * That order is part of the answer: `writeSite` names the own-slot store that
  * first set `writesElsewhere`, and another order could reach a different one.
+ * `NISH_CHECK_PROPAGATE` compares the result with whole passes run from the
+ * start (`checkPropagate`).
  */
 const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
   clearRecursiveWillReturn(facts)
@@ -5145,32 +5153,131 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
       i = i + 1
     }
   }
-  checkPropagate(graph, list)
   nameWriteVia(graph, list)
 }
 
 /**
- * `NISH_CHECK_PROPAGATE`, set to anything: once the worklist settles, one whole
- * pass over `list` must change nothing, or a read is missing from
- * `FactGraph.callers` and the compile stops with an internal error. Unset, it
- * costs one `getenv` a table.
+ * The answer `propagate` reproduces, the slow way: whole passes over
+ * `facts.list` in order, every function visited on each, until a pass changes
+ * nothing. Only `checkPropagate` runs it.
  */
-const checkPropagate = (graph: FactGraph, list: FunctionFacts[]): void => {
-  const flag: string | null = getenv("NISH_CHECK_PROPAGATE")
-  if (flag === null || flag.length === 0) {
-    return
+const propagateWhole = (facts: FactsTable, runtime: RuntimeTable): void => {
+  clearRecursiveWillReturn(facts)
+  const graph = buildFactGraph(facts, runtime)
+  const list = facts.list
+  let again = true
+  while (again) {
+    again = false
+    let i = 0
+    for (const f of list) {
+      if (visitFacts(graph, i, f)) {
+        again = true
+      }
+      i = i + 1
+    }
+  }
+  nameWriteVia(graph, list)
+}
+
+/** Whether `a` and `b` name the same store, or both none (`checkPropagate`). */
+const sameSite = (a: Node | null, b: Node | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null
+  }
+  return a === b
+}
+
+/** Whether `f` and `g` say the same of every pointer parameter (`checkPropagate`). */
+const sameParams = (f: FunctionFacts, g: FunctionFacts): boolean => {
+  if (f.pointerParams.length !== g.pointerParams.length) {
+    return false
   }
   let i = 0
-  for (const f of list) {
-    if (visitFacts(graph, i, f)) {
+  while (i < f.pointerParams.length && i < g.pointerParams.length) {
+    const a = f.pointerParams[i]
+    const b = g.pointerParams[i]
+    if (
+      a.name !== b.name ||
+      a.writesThrough !== b.writesThrough ||
+      a.writesShared !== b.writesShared ||
+      a.captured !== b.captured ||
+      a.outlives !== b.outlives ||
+      a.writesReach !== b.writesReach ||
+      a.writesDeep !== b.writesDeep ||
+      a.keptInThis !== b.keptInThis ||
+      a.polluted !== b.polluted ||
+      a.elementsFree !== b.elementsFree
+    ) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+/** Whether `NISH_CHECK_PROPAGATE` is set to anything (`checkPropagate`). */
+const checkingPropagate = (): boolean => {
+  const flag: string | null = getenv("NISH_CHECK_PROPAGATE")
+  return flag !== null && flag.length > 0
+}
+
+/**
+ * `NISH_CHECK_PROPAGATE`, set to anything: `fresh`, the same table collected
+ * again, is settled by whole passes (`propagateWhole`), and every function of
+ * `facts`, which the worklist settled, must agree with it: its attributes,
+ * its pointer parameters, the shared-write flags, and the `writeSite` and
+ * `writeVia` it names. A difference means a read is missing from
+ * `FactGraph.callers`, or the worklist's visits left round-robin order.
+ * `writeSite` is first-come, so either can move it with every flag still
+ * right, and one more pass over the settled table would change nothing: only
+ * a run from the start sees it. The compile then stops with an internal error
+ * naming the function and what differs. Unset, nothing is collected twice.
+ */
+const checkPropagate = (facts: FactsTable, fresh: FactsTable, runtime: RuntimeTable): void => {
+  propagateWhole(fresh, runtime)
+  if (fresh.list.length !== facts.list.length) {
+    process.exit(internalError("propagate: the table collected again differs (NISH_CHECK_PROPAGATE)"))
+  }
+  let i = 0
+  while (i < facts.list.length && i < fresh.list.length) {
+    const f = facts.list[i]
+    const what = differsFrom(f, fresh.list[i])
+    if (what.length > 0) {
       process.exit(
         internalError(
-          `propagate: \`${f.sourceName}\` moved after the worklist settled (NISH_CHECK_PROPAGATE)`
+          `propagate: \`${f.sourceName}\`'s ${what} differs from whole passes' (NISH_CHECK_PROPAGATE)`
         )
       )
     }
     i = i + 1
   }
+}
+
+/** What `f`, settled by the worklist, says that `g`, settled by whole passes, does not; `""` when they agree (`checkPropagate`). */
+const differsFrom = (f: FunctionFacts, g: FunctionFacts): string => {
+  if (f.sourceName !== g.sourceName) {
+    return "name"
+  }
+  if (!sameSite(f.writeSite, g.writeSite)) {
+    return "writeSite"
+  }
+  if (f.writeVia !== g.writeVia) {
+    return "writeVia"
+  }
+  if (
+    f.sharedWrite !== g.sharedWrite ||
+    f.writesPastParams !== g.writesPastParams ||
+    f.writesElsewhere !== g.writesElsewhere
+  ) {
+    return "shared-write flags"
+  }
+  if (functionAttributes(f).join(" ") !== functionAttributes(g).join(" ")) {
+    return "attributes"
+  }
+  if (!sameParams(f, g)) {
+    return "pointer parameters"
+  }
+  return ""
 }
 
 /** One visit of `f`, the function at index `fi`, against what everything it reads now says; answers whether anything about `f` moved. */

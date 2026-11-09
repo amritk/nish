@@ -19586,6 +19586,38 @@ if (dealtHere("cliChecks")) {
     )
   }
 
+  // ---- propagate's guard ---------------------------------------------------------------
+  // `NISH_CHECK_PROPAGATE` settles every facts table a second time, from a fresh
+  // collection by whole round-robin passes, and stops with an internal error
+  // when a function's attributes, shared-write flags, `writeSite` or `writeVia`
+  // differ from the worklist's (`checkPropagate` in src/attributes.ts). Nothing
+  // else sets it, so these keep it passing: the shared-write dumps, a parallel
+  // refusal that names its write, and the compiler's own largest module.
+  if (!only || "propagate-guard".includes(only) || "attributes".includes(only)) {
+    const guarded = [
+      ["tests/cases/dump_shared_write_alloc.ts", "--emit-checked"],
+      ["tests/cases/dump_shared_write_callee.ts", "--emit-checked"],
+      ["tests/cases/dump_shared_write_field.ts", "--emit-checked"],
+      ["tests/cases/dump_shared_write_panic.ts", "--emit-checked"],
+      ["tests/cases/reject_caps_parallel_clock.ts", "--emit-checked"],
+      ["src/attributes.ts", "--emit-checked"],
+    ]
+    for (const [file, flag] of guarded) {
+      const r = spawnSync(NISH, [flag, file], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, NISH_CHECK_PROPAGATE: "1" },
+        maxBuffer: 256 * 1024 * 1024,
+      })
+      const said = `${r.stderr ?? ""}`
+      check(
+        `propagate-guard: ${path.basename(file)} settles as whole passes do`,
+        r.status !== 70 && !said.includes("NISH_CHECK_PROPAGATE"),
+        said.slice(0, 2000)
+      )
+    }
+  }
+
   // ---- WP12: exit codes --------------------------------------------------------------
   // The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
   // 70 internal compiler error. Each failure mode is driven from outside the compiler:
