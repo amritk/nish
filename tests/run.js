@@ -30045,6 +30045,10 @@ if (!only || "wasm-math".includes(only)) {
       int.status === 0 && intIr.includes("srem i32") && (intIr.match(/^define /gm) ?? []).length === 1,
       shown(int) || intIr
     )
+    // std/math.ts is checked under the program's number mode, where a bare
+    // literal is f64: every one in an integer expression must still be i32.
+    const f64Mode = compile(["--target", "wasm32", "--number-mode", "f64"], "f64mode.ll")
+    check("wasm-math: std/math.ts's copies compile under --number-mode f64", f64Mode.status === 0, shown(f64Mode))
   }
 }
 
