@@ -2146,7 +2146,8 @@ async function run(): Promise<void> {
   A capture of a handle, or of an object holding a `Secret`, is refused
   sooner, by the rule for any arrow argument (NL2588,
   `reject_async_spawn_handler_holds_handle`,
-  `reject_async_spawn_handler_holds_secret`). A captured object is shared with
+  `reject_async_spawn_handler_holds_secret`); the capture rule refuses them
+  as well, a check behind that one. A captured object is shared with
   the task as if handed to it: the spawner releases no arena scope over it,
   and the arrow's body is walked with the task's rules, the capture as memory
   the task does not own, so the arrow may update its numbers and call its

@@ -422,18 +422,20 @@ const fortunesPage = () => {
   );
 };
 
-/** `GET path` on `port`: its status, headers and body; status 0 when it fails or takes over 30 s. */
+/** `GET path` on `port`: its status, headers and body; status 0 when it fails or is not whole in 30 s. */
 const get = (port, path) =>
   new Promise((resolve) => {
+    const deadline = setTimeout(() => req.destroy(new Error("no whole answer in 30 s")), 30_000);
     const req = request({ host: "127.0.0.1", port, path }, (res) => {
       const chunks = [];
+      res.on("error", (e) => resolve({ status: 0, headers: {}, body: `error: ${e.message}` }));
       res.on("data", (d) => chunks.push(d));
       res.on("end", () =>
         resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }),
       );
     });
     req.on("error", (e) => resolve({ status: 0, headers: {}, body: `error: ${e.message}` }));
-    req.setTimeout(30_000, () => req.destroy(new Error("no answer in 30 s")));
+    req.on("close", () => clearTimeout(deadline));
     req.end();
   });
 
