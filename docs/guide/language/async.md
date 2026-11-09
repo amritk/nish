@@ -173,7 +173,10 @@ A task can also be cancelled. `taskId()` answers the running task's handle;
 `cancel(handle)` cancels it now and `cancelAfter(handle, ms)` later. A
 cancelled task is not stopped mid-line: every wait it is parked on, and every
 one it makes later, answers `false` at once, so it runs on to its end, and
-`cancelled()` tells it why. `main` is never cancelled.
+`cancelled()` tells it why. `main` is never cancelled. Because those waits
+answer at once, a loop that awaits must stop when one answers `false` or
+`cancelled()` is true: it would otherwise run without ever giving way to
+another task.
 
 ```ts nish:ok
 import { cancelAfter, cancelled, sleep, spawn, taskId } from "nish:async";

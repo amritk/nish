@@ -297,6 +297,22 @@ void nish_async_done(void *node) {
   nish_task *t = node;
   if (t->kind < 0) return;
   nish_async_disarm(t);
+  /* A task that cancelled itself while awaitAll ran its calls was queued by
+     its own failed waits and may finish still on the ready queue: take it
+     off, so the queue never holds a node on the free list. */
+  if (t->flags & NISH_TASK_QUEUED) {
+    nish_task **at = &nish_async_head;
+    nish_task *before = NULL;
+    while (*at && *at != t) {
+      before = *at;
+      at = &(*at)->next;
+    }
+    if (*at) {
+      *at = t->next;
+      if (nish_async_tail == t) nish_async_tail = before;
+    }
+    t->flags &= ~NISH_TASK_QUEUED;
+  }
   nish_region_free(t->region);
   t->region = 0;
   nish_async_live--;
@@ -499,9 +515,10 @@ static nish_task *nish_async_task_of(int64_t handle) {
   return nish_async_task_at(index, (uint32_t)((uint64_t)handle >> 32));
 }
 
-/* The running task's handle: its generation, then its index. */
+/* The running task's handle: its generation, then its index; 0 for `main`. */
 int64_t nish_async_task_id(void) {
   nish_task *t = nish_async_current;
+  if (t == &nish_async_main_task) return 0;
   return (int64_t)(((uint64_t)t->gen << 32) | t->index);
 }
 

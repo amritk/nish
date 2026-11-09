@@ -2401,6 +2401,7 @@ const httpClientWaitAsync = async (fd: i32, write: boolean, until: i64, code: i3
   while (true) {
     let ready: boolean = false
     let bounded: boolean = false
+    let sliceEnd: i64 = 0
     if (until >= HTTP_CLIENT_NEVER) {
       if (write) {
         ready = await writable(fd)
@@ -2417,6 +2418,7 @@ const httpClientWaitAsync = async (fd: i32, write: boolean, until: i64, code: i3
         ms = HTTP_CLIENT_MAX_WAIT_MS
       }
       bounded = true
+      sliceEnd = monotonicNanos() + ms * HTTP_CLIENT_NS_PER_MS
       if (write) {
         ready = await writableWithin(fd, toI32(ms))
       } else {
@@ -2429,7 +2431,9 @@ const httpClientWaitAsync = async (fd: i32, write: boolean, until: i64, code: i3
     if (cancelled()) {
       return HTTP_E_CANCELLED
     }
-    if (!bounded) {
+    if (!bounded || monotonicNanos() < sliceEnd) {
+      // The wait failed before its time was up (a descriptor the poller
+      // refused): waiting again would fail again at once, and spin.
       return HTTP_E_IO
     }
     // The timer fired: the deadline, or one slice of a far one.

@@ -4,7 +4,8 @@
    the task has pending and every one it makes later; a deadline armed with
    `cancel_after` cancels the task when it fires and is taken out when the task
    finishes first; a bounded descriptor wait fails when its time is up. A
-   handle of a finished task, a stale one and `main`'s are refused. */
+   handle of a finished task, a stale one and `main`'s (0) are refused, and a
+   task that finishes while still queued is taken off the queue. */
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -105,6 +106,20 @@ int main(void) {
   printf("an armed deadline is a timer: %d\n", nish_async_stat(3) - timers0);
   nish_async_done(t);
   printf("flat after done: %s, nothing left to run: %s\n", flat(), nish_async_next() ? "no" : "yes");
+
+  /* 6. A task that cancels itself with a wait pending is queued by that wait
+     and may finish still queued (an awaitAll call): finishing takes it off
+     the ready queue, which then holds no node on the free list. */
+  t = spawn(&h);
+  prev = nish_async_enter(t);
+  s1 = nish_async_sleep(60000);
+  int self = nish_async_cancel(h);
+  int answer = nish_async_poll(s1);
+  nish_async_leave(t, prev);
+  nish_async_done(t);
+  printf("a self-cancel: %d, answers %d, finished queued: flat %s, nothing left to run: %s\n", self, answer, flat(),
+         nish_async_next() ? "no" : "yes");
+  printf("main's handle: %lld\n", (long long)nish_async_task_id());
   close(fds[0]);
   close(fds[1]);
   return 0;

@@ -2403,8 +2403,9 @@ function httpClientWaitAsync(fd: i32, write: boolean, until: i64, code: i32): i3
   stackSites=0 stackLocals=0
   local +0:9 ready: boolean (let)
   local +1:9 bounded: boolean (let)
-  local +9:13 left: i64 (const)
-  local +13:11 ms: i64 (let)
+  local +2:9 sliceEnd: i64 (let)
+  local +10:13 left: i64 (const)
+  local +14:11 ms: i64 (let)
 function httpClientAsyncWaitText(code: i32, options: HttpOptions, text: string): string -> @nish.httpClientAsyncWaitText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: code text

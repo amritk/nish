@@ -14,3 +14,5 @@ cancel a waiting reader: 1, it answers 0
 flat after cancelling a reader: yes
 an armed deadline is a timer: 1
 flat after done: yes, nothing left to run: yes
+a self-cancel: 1, answers 0, finished queued: flat yes, nothing left to run: yes
+main's handle: 0
