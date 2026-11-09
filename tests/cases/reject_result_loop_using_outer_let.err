@@ -1,0 +1,2 @@
+`pick(5)` may be allocated inside the `using arena()` block
+is assigned to `r`, which is declared outside the block
