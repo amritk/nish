@@ -579,10 +579,12 @@ export const manifestNoPanic = (manifest: string, at: i32): ManifestList => {
 }
 
 /** What every NL2692 says: the shape `nish.host` has to be. */
-const HOST_SHAPE: string = ": `nish.host` is an array of strings, each the path of a host module relative to `package.json`"
+const HOST_SHAPE: string =
+  ": `nish.host` is an array of strings, each the path of a host module relative to `package.json`"
 
 /** What every NL2693 says: the form one entry has to take. */
-const HOST_PATH: string = ": a `nish.host` entry is a host module's path relative to the directory `package.json` is in"
+const HOST_PATH: string =
+  ": a `nish.host` entry is a host module's path relative to the directory `package.json` is in"
 
 /** Whether `path` is rooted, by a slash, a backslash or a drive letter, and so relative to nothing. */
 const manifestAbsolutePath = (path: string): boolean => {

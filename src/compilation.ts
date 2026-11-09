@@ -197,7 +197,14 @@ import { jsonQuote, splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { HostText, hostModuleText, hostSignatureProblems, markHostFunctions } from "./host-module"
+import {
+  HostRefusal,
+  HostText,
+  dropRefused,
+  hostModuleText,
+  hostSignatureProblems,
+  markHostFunctions,
+} from "./host-module"
 import {
   buildModeOf,
   buildsPageModule,
@@ -313,6 +320,11 @@ export class ModuleUnit {
    */
   importedIdentities: string[]
   importedNames: string[]
+  /**
+   * A host module's exports no wasm import can carry, dropped from `file`:
+   * `check` reports the ones a Nish module imports, and only those.
+   */
+  hostRefusals: HostRefusal[]
 
   constructor(
     path: string,
@@ -338,6 +350,7 @@ export class ModuleUnit {
     this.signaturesFailed = false
     this.importedIdentities = []
     this.importedNames = []
+    this.hostRefusals = []
   }
 }
 
@@ -776,15 +789,16 @@ export class Compilation {
     if (parser.diagnostics.length > 0) {
       return false
     }
-    if (host) {
+    const refusals: HostRefusal[] = []
+    if (read !== null) {
       source.host = true
-      const problems = hostSignatureProblems(file, parser)
-      for (const problem of problems) {
-        this.sink.report(source, problem.node.start, problem.node.end, problem.message)
+      for (const refusal of read.refusals) {
+        refusals.push(refusal)
       }
-      if (problems.length > 0) {
-        return false
+      for (const problem of hostSignatureProblems(file, parser)) {
+        refusals.push(new HostRefusal(problem.name, problem.message, problem.node.start, problem.node.end))
       }
+      dropRefused(file, refusals)
       markHostFunctions(file)
     }
     const isEntry = this.modules.length === 0
@@ -810,6 +824,7 @@ export class Compilation {
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
     checker.ctx.pageModule = buildsPageModule(this.opts)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
+    unit.hostRefusals = refusals
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of
     // its own. It is a soundness requirement rather than a default: the rules
@@ -1232,6 +1247,10 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false // pass 1 and module resolution ran during load
     }
+    this.reportHostRefusals()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     // Before anything records: a `noPanic` list turns the recording on.
     const manifest = this.rootManifest()
     const nish = this.readRootNish(manifest)
@@ -1464,6 +1483,31 @@ export class Compilation {
         )
       }
       k = k + 1
+    }
+  }
+
+  /**
+   * The refusals of the host exports a Nish module imports, each once (WP50
+   * §12): a host file may export what the page alone calls, in types no wasm
+   * import carries, and the build reads only the names it imports.
+   */
+  reportHostRefusals(): void {
+    const reported = new StringSet()
+    for (const unit of this.modules) {
+      for (const imp of unit.checker.program.imports) {
+        const index = isBuiltinSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
+        if (index < 0) {
+          continue
+        }
+        const host = this.modules[index]
+        for (const refusal of host.hostRefusals) {
+          const key = `${index}:${refusal.start}`
+          if (refusal.name === imp.importedName && !reported.has(key)) {
+            reported.add(key)
+            this.sink.report(host.source, refusal.start, refusal.end, refusal.message)
+          }
+        }
+      }
     }
   }
 

@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 683 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 686 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12899,4 +12899,28 @@ The message of an error contains:
 
 ```text
 …a task shares with its spawner only objects and arrays whose every part outlives the spawner's call; pass the task what it needs of it instead
+```
+
+## NL2692
+
+The message of an error contains:
+
+```text
+`nish.host` is an array of strings, each the path of a host module relative to `package.json`
+```
+
+## NL2693
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry is a host module's path relative to the directory `package.json` is in
+```
+
+## NL2694
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry names a host module the package has
 ```

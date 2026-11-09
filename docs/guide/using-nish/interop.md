@@ -197,8 +197,13 @@ import { load } from "./draw.mjs";
 const draw = await load(await (await fetch("draw.wasm")).arrayBuffer(), { host });
 ```
 
+Each `host` entry is a path relative to the `package.json`, naming a file
+that exists: a value that is not a list of strings (NL2692), an empty or
+absolute entry (NL2693) and one that names no file (NL2694) are refused where
+the `package.json` writes them.
+
 Nish reads only the host module's exported signatures, and skips each function
-body unread, so a body may use the DOM, closures and promises. Each function
+body unread, so a body may use the DOM, closures, classes and promises. Each function
 becomes a wasm import from module `host` under its own name. The `.d.ts` gains
 `Imports = { host: typeof import("./web/host") }`, so `tsc` refuses a page that
 passes a host object short of a function.
@@ -217,7 +222,10 @@ Nish and under `tsc` alike; a handle compares with `===` and `!==` against one
 of its kind or `0` ("none"), and supports nothing else. A field or parameter
 of a handle type may only default to `0` (NL2670).
 
-What cannot cross is refused with the explicit form: an object, a class, a
+Only the exports the Nish source imports are held to these rules, so a host
+module may export page-only functions beside them, such as create-vite's
+`setupCounter(element: HTMLElement)`: Nish leaves an export no module imports
+unread. What an import names and cannot cross is refused with the explicit form: an object, a class, a
 function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663)
 and a `string` result (NL2667). A `string` *argument* crosses: the page's
 function receives a JS string, decoded from the module's UTF-8 bytes. An array
