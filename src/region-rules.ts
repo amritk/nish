@@ -374,7 +374,7 @@ const mayShareMemory = (programs: CheckedProgram[], table: TypeTable, from: i32,
 /** Adds to `out` the heap types a value of `type` reaches; false when it may reach any. */
 const heapTypesIn = (programs: CheckedProgram[], table: TypeTable, type: i32, out: i32[]): boolean => {
   if (type < 0 || table.isRegion(type) || type === T_CPTR) {
-    return type >= 0 && !table.isRegion(type) && type !== T_CPTR
+    return false
   }
   if (out.indexOf(type) >= 0) {
     return true
@@ -687,10 +687,10 @@ class RegionWalk {
     let out = callee !== null && this.runsSpawnArrow(callee) ? ORIGIN_UNKNOWN : ORIGIN_REGION
     // An argument whose memory the answer's type cannot reach stays out
     // (`await pgAsyncQuery(pool, ...)` answers rows of the task's own).
-    const narrow = this.task && callee !== null && capturesOf(callee).length === 0
+    const answer = this.task && callee !== null && capturesOf(callee).length === 0 ? callee.returnType : -1
     for (const arg of this.handedTo(call, callee)) {
       const a = unwrapParens(arg)
-      if (narrow && callee !== null && a.kind !== N_ARROW && !this.reaches(a, callee.returnType)) {
+      if (answer >= 0 && a.kind !== N_ARROW && !this.reaches(a, answer)) {
         continue
       }
       // What a callback answers may be what the call answers (`map`, `pick(() => a.node)`).
@@ -720,6 +720,9 @@ class RegionWalk {
 
   /** Whether a call of `callee` may run an arrow of `spawnArrows`, itself or as an instance it was handed. */
   runsSpawnArrow(callee: FunctionSig): boolean {
+    if (this.spawnArrows.length === 0) {
+      return false
+    }
     for (const slot of capturesOf(callee)) {
       if (this.spawnArrows.indexOf(slot.arrow) >= 0) {
         return true
@@ -733,6 +736,9 @@ class RegionWalk {
    * origins of `handed` for a direct call of one, `indirect` for any other.
    */
   noteSpawnArrows(callee: FunctionSig, handed: Node[]): void {
+    if (this.spawnArrows.length === 0) {
+      return
+    }
     for (let a = 0; a < this.spawnArrows.length; a++) {
       const arrow = this.spawnArrows[a]
       if (callee === arrow) {
@@ -850,7 +856,9 @@ class RegionWalk {
       return
     }
     this.judgeCallee(node, ctor, true)
-    this.noteSpawnArrows(ctor, this.handedTo(node, ctor))
+    if (this.spawnArrows.length > 0) {
+      this.noteSpawnArrows(ctor, this.handedTo(node, ctor))
+    }
   }
 
   visitCall(node: Node): void {
