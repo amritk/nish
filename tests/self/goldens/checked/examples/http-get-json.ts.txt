@@ -2465,7 +2465,7 @@ function httpClientWaitPeerAsync(conn: HttpClientConn, write: boolean): boolean 
   callee +7:24 httpClientWaitAsync -> @nish.httpClientWaitAsync
   local +11:9 what: string (const)
   callee +12:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
-  callee +12:27 httpClientAsyncWaitText -> @nish.httpClientAsyncWaitText
+  callee +14:5 httpClientAsyncWaitText -> @nish.httpClientAsyncWaitText
 function httpClientReadRawAsync(conn: HttpClientConn, want: i32): i32 -> @nish.httpClientReadRawAsync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:16
@@ -2687,8 +2687,8 @@ function httpClientDialAsync(conn: HttpClientConn, host: string, port: i32): i32
   callee +28:26 httpClientWaitAsync -> @nish.httpClientWaitAsync
   callee +31:7 HttpClientFault.fail -> @nish.HttpClientFault.fail
   callee +33:9 httpClientAsyncWaitText -> @nish.httpClientAsyncWaitText
-  local +37:11 result: i32 (const)
-  callee +44:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
+  local +41:11 result: i32 (const)
+  callee +48:3 HttpClientFault.fail -> @nish.HttpClientFault.fail
 function httpClientOpenAsync(conn: HttpClientConn, url: Url, pool: FetchPool | null, fresh: boolean): boolean -> @nish.httpClientOpenAsync
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

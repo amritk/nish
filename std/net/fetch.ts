@@ -2544,7 +2544,10 @@ const httpClientWaitPeerAsync = async (conn: HttpClientConn, write: boolean): Pr
     return true
   }
   const what: string = write ? "took" : "sent"
-  conn.fault.fail(waited, httpClientAsyncWaitText(waited, conn.options, `the server ${what} nothing for ${ms} ms`))
+  conn.fault.fail(
+    waited,
+    httpClientAsyncWaitText(waited, conn.options, `the server ${what} nothing for ${ms} ms`)
+  )
   return false
 }
 
@@ -2953,7 +2956,11 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
       netClose(fd)
       conn.fault.fail(
         waited,
-        httpClientAsyncWaitText(waited, conn.options, `no address of ${host} answered on port ${port} within ${budget} ms`)
+        httpClientAsyncWaitText(
+          waited,
+          conn.options,
+          `no address of ${host} answered on port ${port} within ${budget} ms`
+        )
       )
       return -1
     }
