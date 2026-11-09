@@ -182,6 +182,7 @@ class HttpHandler
 | `empty(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say. |
 | `end(r: HttpRequest): i32` | Ends `r`'s response. `r` is the handler's again: it goes back once the carrier has taken every byte, and the connection's next request is read. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
 | `fired(id: i32): boolean` | Whether watched descriptor `id` was ready in the last `wait`. |
+| `hungUp(r: HttpRequest): boolean` | Whether the client of `r` has hung up: its connection is closed or reused, or the peer ended its stream while `r` is held. A half-close counts, as nginx counts it, so a hung task is cancelled rather than kept for a reader who may be gone. |
 | `json(): JsonWriter` | The JSON writer, reset onto the handler's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
 | `pooled(): i32` | How many requests the pool has made: the most ever in flight at once. |
 | `problem(r: HttpRequest, status: i32, title: string, detail: string): i32` | Answers `r` with an RFC 9457 problem: `application/problem+json` with `type` `about:blank`, `title` (the status's reason, for that type), `status` and, when not empty, `detail`, a sentence for a person about this occurrence. Nothing of the request is echoed, so a detail is the program's own words. |

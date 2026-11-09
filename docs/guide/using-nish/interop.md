@@ -198,8 +198,8 @@ const draw = await load(await (await fetch("draw.wasm")).arrayBuffer(), { host }
 ```
 
 Each `host` entry is a path relative to the `package.json`, naming a file
-that exists: a value that is not a list of strings (NL2692), an empty or
-absolute entry (NL2693) and one that names no file (NL2694) are refused where
+that exists: a value that is not a list of strings (NL2694), an empty or
+absolute entry (NL2695) and one that names no file (NL2696) are refused where
 the `package.json` writes them.
 
 Nish reads only the host module's exported signatures, and skips each function

@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 686 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 688 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12906,7 +12906,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-`nish.host` is an array of strings, each the path of a host module relative to `package.json`
+` takes two `i32`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false
 ```
 
 ## NL2693
@@ -12914,10 +12914,26 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…a `nish.host` entry is a host module's path relative to the directory `package.json` is in
+` from `nish:async` takes …
 ```
 
 ## NL2694
+
+The message of an error contains:
+
+```text
+`nish.host` is an array of strings, each the path of a host module relative to `package.json`
+```
+
+## NL2695
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry is a host module's path relative to the directory `package.json` is in
+```
+
+## NL2696
 
 The message of an error contains:
 

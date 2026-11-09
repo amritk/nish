@@ -1,0 +1,7 @@
+read: read timeout, within 2 s: true
+  read timeout: the server sent nothing for 100 ms
+total: total timeout, within 2 s: true
+  total timeout: the fetch ran past 150 ms
+cancelled: cancelled, within 2 s: true
+  cancelled: the fetch's task was cancelled
+main: still running, true

@@ -1,0 +1,1 @@
+`cancel` from `nish:async` takes one `i64`, a task's handle from `taskId()`

@@ -160,11 +160,13 @@ plain `GET`. The options mean what they mean to `fetchSync`, redirects,
 proxies and the [outbound policy](#fetching-a-url-someone-else-chose)
 included, except for the limits on the waits:
 
-- **A wait on the socket has no deadline of its own** until a task can be
-  cancelled: `readTimeoutMs` bounds nothing yet. Set `totalTimeoutMs` against
-  a server you do not run. It is checked each time a wait ends, so a server
-  that never sends another byte, or never answers the TLS handshake, holds
-  the fetch until the connection drops.
+- **Each wait on the socket is bounded** by `readTimeoutMs`, and by what is
+  left of `totalTimeoutMs`, whichever ends first: a server that never sends
+  another byte, or never answers the TLS handshake, fails the fetch with
+  `HTTP_E_READ_TIMEOUT` or `HTTP_E_TOTAL_TIMEOUT`.
+- **A cancelled task's fetch fails** with `HTTP_E_CANCELLED` at its next
+  wait, whether `cancel`, `cancelAfter` or the server running the task
+  (`std/net/serve`) cancelled it.
 - `connectTimeoutMs` bounds the name lookup, which parks only its own task:
   the query goes out on a non-blocking socket, with the servers, tries and
   timeouts of `/etc/resolv.conf` (or of `options.dns`), and the other tasks

@@ -124,7 +124,7 @@ import {
   pollWait,
   tcpConnect,
 } from "nish:net"
-import { readable, sleep, writable } from "nish:async"
+import { cancelled, readable, readableWithin, sleep, writable, writableWithin } from "nish:async"
 import { getenv, monotonicNanos, wallClockNanos } from "nish:process"
 import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
 import { TlsClient, TlsClientConfig, tlsClientIsIpLiteral } from "nish/net/tls/client"
@@ -168,6 +168,8 @@ export const HTTP_E_IO: i32 = 15
 export const HTTP_E_PROXY: i32 = 16
 /** The outbound policy refused the URL's host or every address it resolved to. */
 export const HTTP_E_BLOCKED: i32 = 17
+/** The async fetch's task was cancelled (`nish:async`'s `cancel`, or a deadline set with `cancelAfter`). */
+export const HTTP_E_CANCELLED: i32 = 18
 
 /** A typed zero: a bare literal is an `f64` under `--number-mode f64`. */
 const HTTP_CLIENT_ZERO: i32 = 0
@@ -234,6 +236,7 @@ export const httpErrorName = (code: i32): string => {
     "io",
     "proxy",
     "blocked",
+    "cancelled",
   ]
   return code >= 0 && code < toI32(names.length) ? names[code] : "unknown"
 }
@@ -2132,6 +2135,10 @@ const httpClientAnswers = (
     )
     return -1
   }
+  if (count === HTTP_CLIENT_LOOKUP_WAIT && cancelled()) {
+    fault.fail(HTTP_E_CANCELLED, `the lookup of ${host} was cancelled with its task`)
+    return -1
+  }
   if (count === HTTP_CLIENT_LOOKUP_WAIT) {
     fault.fail(HTTP_E_DNS, `${host} could not be looked up (the lookup could not wait on its sockets)`)
     return -1
@@ -2341,11 +2348,13 @@ export class FetchPool {
 
 /**
  * What an async `fetch` sends and how it behaves. `options` are
- * `HttpOptions` as `fetchSync` reads them, except that `readTimeoutMs`
- * bounds no wait (a wait has no deadline yet), `connectTimeoutMs` bounds
- * only the name lookup, and `totalTimeoutMs` is checked each time a wait
- * ends. `pool` keeps connections for later fetches; null closes each one
- * when its fetch is done.
+ * `HttpOptions` as `fetchSync` reads them, with the same deadlines:
+ * `connectTimeoutMs` bounds the lookup and the connect, `readTimeoutMs`
+ * each wait on the server, and `totalTimeoutMs` the whole fetch, each wait
+ * parked with `readableWithin` or `writableWithin` until the nearest of
+ * them. A fetch whose task is cancelled fails with `HTTP_E_CANCELLED`.
+ * `pool` keeps connections for later fetches; null closes each one when
+ * its fetch is done.
  */
 export class RequestInit {
   /** The request method, sent as given; `GET` by default. */
@@ -2379,6 +2388,67 @@ export class RequestInit {
     this.values.push(value)
     return this
   }
+}
+
+/**
+ * Parks the task until `fd` is ready to read (or, with `write`, to write) or
+ * `until` passes: `HTTP_E_NONE` when it is ready, `code` once `until` has
+ * passed, `HTTP_E_CANCELLED` when the task was cancelled, or `HTTP_E_IO`
+ * when the wait itself failed. A deadline past `HTTP_CLIENT_MAX_WAIT_MS` is
+ * waited for in slices of that, so the milliseconds fit an `i32`.
+ */
+const httpClientWaitAsync = async (fd: i32, write: boolean, until: i64, code: i32): Promise<i32> => {
+  while (true) {
+    let ready: boolean = false
+    let bounded: boolean = false
+    let sliceEnd: i64 = 0
+    if (until >= HTTP_CLIENT_NEVER) {
+      if (write) {
+        ready = await writable(fd)
+      } else {
+        ready = await readable(fd)
+      }
+    } else {
+      const left: i64 = until - monotonicNanos()
+      if (left <= 0) {
+        return code
+      }
+      let ms: i64 = (left + HTTP_CLIENT_NS_PER_MS - 1) / HTTP_CLIENT_NS_PER_MS
+      if (ms > HTTP_CLIENT_MAX_WAIT_MS) {
+        ms = HTTP_CLIENT_MAX_WAIT_MS
+      }
+      bounded = true
+      sliceEnd = monotonicNanos() + ms * HTTP_CLIENT_NS_PER_MS
+      if (write) {
+        ready = await writableWithin(fd, toI32(ms))
+      } else {
+        ready = await readableWithin(fd, toI32(ms))
+      }
+    }
+    if (ready) {
+      return HTTP_E_NONE
+    }
+    if (cancelled()) {
+      return HTTP_E_CANCELLED
+    }
+    if (!bounded || monotonicNanos() < sliceEnd) {
+      // The wait failed before its time was up (a descriptor the poller
+      // refused): waiting again would fail again at once, and spin.
+      return HTTP_E_IO
+    }
+    // The timer fired: the deadline, or one slice of a far one.
+  }
+}
+
+/** The sentence for an async wait that ended with `code`; `text` says what timed out. */
+const httpClientAsyncWaitText = (code: i32, options: HttpOptions, text: string): string => {
+  if (code === HTTP_E_CANCELLED) {
+    return "the fetch's task was cancelled"
+  }
+  if (code === HTTP_E_IO) {
+    return "the wait for the server failed"
+  }
+  return httpClientWaitText(code, options, text)
 }
 
 /** One connection an async fetch drives, and the state of the exchange on it. */
@@ -2461,6 +2531,31 @@ class HttpClientConn {
 }
 
 /**
+ * Parks the task until `conn`'s socket is ready to read (or, with `write`,
+ * to write), within `readTimeoutMs` and the fetch's deadline: false with the
+ * fault set when the wait timed out, was cancelled or failed.
+ */
+const httpClientWaitPeerAsync = async (conn: HttpClientConn, write: boolean): Promise<boolean> => {
+  const ms: i32 = conn.options.readTimeoutMs
+  let until: i64 = ms > 0 ? monotonicNanos() + toI64(ms) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+  let code: i32 = HTTP_E_READ_TIMEOUT
+  if (conn.deadline < until) {
+    until = conn.deadline
+    code = HTTP_E_TOTAL_TIMEOUT
+  }
+  const waited = await httpClientWaitAsync(conn.fd, write, until, code)
+  if (waited === HTTP_E_NONE) {
+    return true
+  }
+  const what: string = write ? "took" : "sent"
+  conn.fault.fail(
+    waited,
+    httpClientAsyncWaitText(waited, conn.options, `the server ${what} nothing for ${ms} ms`)
+  )
+  return false
+}
+
+/**
  * One read of up to `want` bytes from the socket into `rbuf`, parking the
  * task until it has some: the count, 0 at the end of the stream, or -1 with
  * the fault set.
@@ -2471,9 +2566,8 @@ const httpClientReadRawAsync = async (conn: HttpClientConn, want: i32): Promise<
   }
   let n: i32 = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, want)
   while (n === HTTP_CLIENT_WOULD_BLOCK) {
-    const ready = await readable(conn.fd)
+    const ready = await httpClientWaitPeerAsync(conn, false)
     if (!ready) {
-      conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
       return -1
     }
     if (conn.overdue()) {
@@ -2506,9 +2600,8 @@ const httpClientWriteRawAsync = async (
     if (n > 0) {
       at += n
     } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
-      const ready = await writable(conn.fd)
+      const ready = await httpClientWaitPeerAsync(conn, true)
       if (!ready) {
-        conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
         return false
       }
     } else {
@@ -2862,12 +2955,20 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
       last = fd
       continue
     }
-    const ready = await writable(fd)
-    if (conn.overdue()) {
+    const waited = await httpClientWaitAsync(fd, true, until, code)
+    if (waited !== HTTP_E_NONE) {
       netClose(fd)
+      conn.fault.fail(
+        waited,
+        httpClientAsyncWaitText(
+          waited,
+          conn.options,
+          `no address of ${host} answered on port ${port} within ${budget} ms`
+        )
+      )
       return -1
     }
-    const result: i32 = ready ? connectResult(fd) : -5
+    const result: i32 = connectResult(fd)
     if (result === 0) {
       return fd
     }

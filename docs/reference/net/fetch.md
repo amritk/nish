@@ -12,6 +12,7 @@ import {
   FetchSyncClient,
   HTTP_E_BLOCKED,
   HTTP_E_BODY_TOO_LARGE,
+  HTTP_E_CANCELLED,
   HTTP_E_CERTIFICATE,
   HTTP_E_CONNECT_TIMEOUT,
   HTTP_E_DNS,
@@ -647,11 +648,13 @@ class HttpResponse
 ### RequestInit
 
 What an async `fetch` sends and how it behaves. `options` are
-`HttpOptions` as `fetchSync` reads them, except that `readTimeoutMs`
-bounds no wait (a wait has no deadline yet), `connectTimeoutMs` bounds
-only the name lookup, and `totalTimeoutMs` is checked each time a wait
-ends. `pool` keeps connections for later fetches; null closes each one
-when its fetch is done.
+`HttpOptions` as `fetchSync` reads them, with the same deadlines:
+`connectTimeoutMs` bounds the lookup and the connect, `readTimeoutMs`
+each wait on the server, and `totalTimeoutMs` the whole fetch, each wait
+parked with `readableWithin` or `writableWithin` until the nearest of
+them. A fetch whose task is cancelled fails with `HTTP_E_CANCELLED`.
+`pool` keeps connections for later fetches; null closes each one when
+its fetch is done.
 
 ```ts
 class RequestInit
@@ -685,6 +688,14 @@ The outbound policy refused the URL's host or every address it resolved to.
 `HTTP_E_BODY_TOO_LARGE: i32`
 
 A body over `maxBodyBytes`, or over the limit given to `readAll`.
+
+</scalar-card>
+
+<scalar-card title="18" icon="phosphor/regular/hash">
+
+`HTTP_E_CANCELLED: i32`
+
+The async fetch's task was cancelled (`nish:async`'s `cancel`, or a deadline set with `cancelAfter`).
 
 </scalar-card>
 

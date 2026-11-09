@@ -1,1 +1,1 @@
-{"file":"tests/link/reject_host_manifest_empty/package.json","line":5,"column":14,"endLine":5,"endColumn":16,"severity":"error","code":"NL2693","message":"an empty path names no file: a `nish.host` entry is a host module's path relative to the directory `package.json` is in"}
+{"file":"tests/link/reject_host_manifest_empty/package.json","line":5,"column":14,"endLine":5,"endColumn":16,"severity":"error","code":"NL2695","message":"an empty path names no file: a `nish.host` entry is a host module's path relative to the directory `package.json` is in"}

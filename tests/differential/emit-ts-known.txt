@@ -13,6 +13,7 @@
 # listed one that agrees, on one whose row has moved, and on a listed name
 # the corpus no longer has. A build, emit or timeout failure is never listed.
 
+cases/async_cancel refused  # refused: NL4011 under --emit-ts
 cases/async_spawn order  # differ: stdout line 1 differs
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts

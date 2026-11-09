@@ -115,7 +115,7 @@ one at a time; two clients never wait on each other.
 | `headerBytes` | 16,384 | 431, and the connection ends |
 | `bodyBytes` | 1,048,576 | 413, and the connection ends |
 | `responseBytes` | 65,536 | 500 instead of the response |
-| `deadline` | 30,000 | Held, not yet enforced: a task runs until it answers |
+| `deadline` | 30,000 | Milliseconds a request's task may run; the task is cancelled (see below) |
 | `headTimeout` | 30,000 | Milliseconds for a whole request head; the connection is closed |
 | `idleTimeout` | 60,000 | Milliseconds with no byte read or written; the connection is closed |
 | `maxRequests` | 0 (none) | The server stops (see below) |
@@ -124,17 +124,54 @@ Each request's task runs in a memory region of its own, and everything it
 allocates goes when it answers, so the server's arena stays flat however many
 requests it answers.
 
+<a id="cancellation" style="scroll-margin-top: 65px"></a>
+
+## When a task is cancelled
+
+The server cancels a request's task when its client hangs up, when its
+`deadline` passes and when the server stops. A cancel never stops your
+handler mid-line: every `await` it is parked on answers `false` at once, and
+so does every one it makes later, so the handler runs on to its end, its
+`using` bindings are disposed and its region is freed. Check `cancelled()`
+from `nish:async` after an `await` that failed, and answer:
+
+```ts nish:ok
+import { cancelled, sleep } from "nish:async";
+import { Request, Response } from "nish/net/serve";
+
+async function slow(req: Request): Promise<Response> {
+  const slept = await sleep(5000);
+  if (!slept && cancelled()) {
+    return new Response(503).text("past the deadline");
+  }
+  return new Response(200).text("done");
+}
+
+export const main = (): i32 => 0;
+```
+
+- **A hang-up**: nobody reads the answer, so it is dropped.
+- **The deadline**: the answer is sent, and the connection goes on.
+- **A stop**: the answer is sent with `Connection: close`.
+
+The async `fetch` answers a cancelled wait with `HTTP_E_CANCELLED`, and the
+async Postgres pool fails a cancelled claim with -3, so a handler that awaits
+either ends as quickly. A handler that computes for a long time without an
+`await` is not reached until it awaits.
+
 <a id="stopping" style="scroll-margin-top: 65px"></a>
 
 ## Stopping
 
 With `maxRequests` above 0, the server stops taking requests once it has
 answered that many: each connection is answered what it already sent, told
-`Connection: close`, and closed, and `serve` returns 0 when none is left.
+`Connection: close`, and closed, every task still running is cancelled, and
+`serve` returns 0 when none is left.
 
 ## Running it
 
 A server is a native program: `readable` and `writable` in `nish:async`,
-which the server waits on, are refused by `nish --emit-ts` with NL4017
+which the server waits on, are refused by `nish --emit-ts` with NL4017, and
+the cancellation calls with NL4018
 ([Async functions](../language/async.md)), so a program that serves cannot be
 turned into TypeScript.

@@ -418,7 +418,7 @@ export class Compilation {
    * `hostModuleText` rather than as Nish.
    */
   hostIdentities: StringSet
-  /** Whether the root manifest's `nish.host` was refused (NL2692-NL2694), which ends the load at the entry. */
+  /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
   hostRefused: boolean
   /**
    * The whole-program attribute fixpoint, once it has been computed.
@@ -1512,8 +1512,8 @@ export class Compilation {
    * to the working directory, and each `"nish".host` entry, relative to the
    * root manifest. A manifest whose `"nish"` field is refused names none here;
    * `check` reports it (NL3036). A `host` value that is not an array of
-   * strings (NL2692), an entry that is empty or absolute (NL2693) and one that
-   * names no file (NL2694) are each reported where `package.json` writes it,
+   * strings (NL2694), an entry that is empty or absolute (NL2695) and one that
+   * names no file (NL2696) are each reported where `package.json` writes it,
    * and `hostRefused` then stops the load: read as Nish, the page's module
    * would only be refused for being TypeScript.
    */

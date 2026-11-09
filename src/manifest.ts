@@ -554,7 +554,7 @@ export const manifestNish = (manifest: string, condition: string): NishManifest 
       out.capabilitiesAt = valueAt
     } else if (key === "host") {
       // Its shape is judged where the list is read (`Compilation.hostModules`,
-      // NL2692), so that the refusal names the host list rather than the field.
+      // NL2694), so that the refusal names the host list rather than the field.
       out.hostAt = valueAt
       out.hostEnd = fields.valueEnd[f]
     } else {
@@ -578,11 +578,11 @@ export const manifestNoPanic = (manifest: string, at: i32): ManifestList => {
   return out
 }
 
-/** What every NL2692 says: the shape `nish.host` has to be. */
+/** What every NL2694 says: the shape `nish.host` has to be. */
 const HOST_SHAPE: string =
   ": `nish.host` is an array of strings, each the path of a host module relative to `package.json`"
 
-/** What every NL2693 says: the form one entry has to take. */
+/** What every NL2695 says: the form one entry has to take. */
 const HOST_PATH: string =
   ": a `nish.host` entry is a host module's path relative to the directory `package.json` is in"
 
@@ -632,9 +632,9 @@ export class HostManifest {
  * modules a freestanding wasm build imports from, as written, relative to the
  * root package, read from the value at `at` that ends at `end`. `list` holds
  * the entries that are usable paths; `problems` the refusal of each that is
- * not, beside its span: NL2692 for a value or entry of the wrong shape, NL2693
+ * not, beside its span: NL2694 for a value or entry of the wrong shape, NL2695
  * for a string that is empty or absolute. Whether the file is there is the
- * caller's question (NL2694).
+ * caller's question (NL2696).
  */
 export const manifestHost = (manifest: string, at: i32, end: i32): HostManifest => {
   const out = new HostManifest()
