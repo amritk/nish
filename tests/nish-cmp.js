@@ -142,6 +142,12 @@ const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
   )
+const RESULT_LOOP =
+  "Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind"
+const resultLoop = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: RESULT_LOOP, why }))
+  )
 const DECLARED = [
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
@@ -201,6 +207,16 @@ const DECLARED = [
     "the program sets HttpOptions.dns, a field the reference's std/net/fetch.ts does not have, so only the candidate compiles it",
     {
       "tests/link/net_fetch_async_dns_slow/main.ts": ["exit"],
+    }
+  ),
+  // #899: a loop pass now keeps its arena scope where a register `Result`
+  // leaves it, so these loops gain the pass's mark and rewind.
+  ...resultLoop(
+    "a loop pass keeps its rewind when the Result it builds is packed into a register or returned, so these loops gain a pass scope",
+    {
+      "tests/cases/result_loop_outer_let.ts": ["result_loop_outer_let.ll"],
+      "tests/cases/result_loop_payloads.ts": ["result_loop_payloads.ll"],
+      "tests/cases/result_loop_return_alloc.ts": ["result_loop_return_alloc.ll"],
     }
   ),
 ]
