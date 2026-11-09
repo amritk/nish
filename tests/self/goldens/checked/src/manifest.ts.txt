@@ -285,15 +285,22 @@ function manifestAbsolutePath(path: string): boolean -> @manifestAbsolutePath
   local +4:9 letter: boolean (const)
 function manifestLeavesRoot(path: string): boolean -> @manifestLeavesRoot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_panic_slice nish_str_eq nish_str_new
+  calls: manifestSegmentDepth nish_arena_mark nish_arena_release nish_panic_slice nish_str_new
   stackSites=0 stackLocals=0
   local +0:7 depth: i32 (let)
   local +1:7 start: i32 (let)
   local +2:7 i: i32 (let)
-  local +4:11 end: boolean (const)
-  local +6:13 segment: string (const)
+  local +4:11 code: i32 (const)
+  callee +6:15 manifestSegmentDepth -> @manifestSegmentDepth
+  callee +14:10 manifestSegmentDepth -> @manifestSegmentDepth
+function manifestSegmentDepth(segment: string, depth: i32): i32 -> @manifestSegmentDepth
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: depth
+  calls: nish_panic_overflow nish_str_eq
+  stackSites=0 stackLocals=0
 function manifestJsonKind(manifest: string, at: i32): string -> @manifestJsonKind
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
   stackSites=0 stackLocals=0
   local +0:9 first: i32 (const)
 function ManifestProblem.constructor(this: ManifestProblem, message: string, start: i32, end: i32): void -> @ManifestProblem.constructor [exported constructor]
@@ -319,7 +326,7 @@ function HostManifest.refuse(this: HostManifest, message: string, start: i32, en
 function manifestHost(manifest: string, at: i32, end: i32): HostManifest -> @manifestHost [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   escaping: at end manifest
-  calls: HostManifest.constructor HostManifest.refuse ManifestList.constructor manifestAbsolutePath manifestJsonKind manifestLeavesRoot manifestReadList nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  calls: HostManifest.constructor HostManifest.refuse ManifestList.constructor manifestAbsolutePath manifestJsonKind manifestLeavesRoot manifestReadList nish_alloc_struct nish_array_grow nish_str_concat
   stackSites=1 stackLocals=1
   local +0:9 out: HostManifest (const)
   callee +0:15 new HostManifest -> @HostManifest.constructor
