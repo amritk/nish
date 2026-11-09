@@ -56,7 +56,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 49 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 50 modules.
 
 </scalar-card>
 
@@ -208,6 +208,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/quic-stream`](net/quic-stream.md) | The streams of one QUIC version 1 connection (RFC 9000 §2-§4): stream IDs and their four types, the sending and receiving state machines, reassembly, flow control per stream and for the connection, and the stream limits. |
 | [`nish/net/quic`](net/quic.md) | The server side of a QUIC version 1 connection (RFC 9000, RFC 9001, RFC 9221): the TLS 1.3 handshake carried in CRYPTO frames at three encryption levels, transport parameters both ways, acknowledgements per packet number space, the connection-ID table, streams both ways (`nish/net/quic-stream`) and DATAGRAM frames once the handshake is done. |
 | [`nish/net/router`](net/router.md) | A method and path router for HTTP servers, independent of the carrier: the same table answers an HTTP/1 request line and an HTTP/2 or HTTP/3 `:path`. |
+| [`nish/net/serve`](net/serve.md) | An HTTP/1.1 server for an `async` program: one task and one region per request, answers in request order. |
 | [`nish/net/tls-tcp`](net/tls-tcp.md) | TLS 1.3 over TCP (WP34 T2): a pool of server connections on `nish:net`, each a `TlsRecordServer` driving a `TlsServer`, for a program that owns its readiness loop; and `TlsTcpClient`, one client connection that authenticates the server (`nish/net/tls/verify`) and is driven by the same kind of loop or, through `tlsConnect`, `readWait` and `writeAll`, by none (its own comment, below, says how). |
 | [`nish/net/tls`](net/tls.md) | The server side of a TLS 1.3 handshake (RFC 8446), from the client's first ClientHello to its Finished, carrier-agnostic and sans-IO. |
 | [`nish/net/tls/client`](net/tls/client.md) | The client side of a TLS 1.3 handshake (RFC 8446), from its ClientHello to its Finished, carrier-agnostic and sans-IO: the mirror of `nish/net/tls`'s `TlsServer`. |

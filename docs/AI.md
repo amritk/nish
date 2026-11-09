@@ -2908,6 +2908,22 @@ event waits for `end`. The batcher reads no clock: when to take is the loop's ch
 guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
 
+**Serve HTTP from an `async` program** — there is no `app.get(path, cb)`:
+`serve(port, router, limits, handle)` from `nish/net/serve` runs the loop and
+calls your one `async function handle(req: Request): Promise<Response>` in a
+task of its own per request, so `handle` may `await sleep(ms)` or a socket
+while others are answered. Add routes with `router.add(method, pattern)` and
+`switch (req.route)` on the numbers it answered (0, 1, 2 ...); read
+`req.param(k)` by index, `req.paramNumber(k)`, `req.query(name)`,
+`req.header(lowercaseName)`, `req.text()`; answer with
+`new Response(status).text(s)`, `.json(s)` or `.bytes(type, buf, off, len)`,
+and `refuse(req)` for 404 and 405. `ServeLimits` caps connections, `inFlight`
+(503 past it), `headerBytes` (431), `bodyBytes` (413) and `responseBytes`
+(500); pipelined answers keep request order. `--emit-ts` refuses it (NL4017).
+(No block, as for `nish/text`; `tests/link/net_serve` is its program, and the
+user guide's [async server page](guide/using-nish/async-server.md) its
+walk-through.)
+
 **Call another service from a route handler** — there is no `await fetch()`
 in a handler (an `async` task does not wait on a socket yet) and no event-loop
 callback: `nish/net/upstream`'s `Upstream(h,
