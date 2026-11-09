@@ -569,9 +569,7 @@ export class IRModule {
   addMetadata(text: string): string {
     let index = text.length === 0 ? this.metadata.indexOf(text) : this.metadataNumbers.get(text, -1)
     if (index < 0) {
-      index = this.metadata.length
-      this.metadata.push(text)
-      this.metadataRefs.push(`!${index}`)
+      index = this.pushMetadata(text)
       // The lookup that missed shows no number holds the text, so it is filed
       // without the second lookup `fileMetadata` would make.
       if (text.length > 0) {
@@ -579,6 +577,14 @@ export class IRModule {
       }
     }
     return this.metadataRefs[index]
+  }
+
+  /** Append `text` under the next number, with its `!N`, and answer the number. */
+  pushMetadata(text: string): i32 {
+    const index = this.metadata.length
+    this.metadata.push(text)
+    this.metadataRefs.push(`!${index}`)
+    return index
   }
 
   /** File `text`, now at `index`, in `metadataNumbers` unless a lower number already holds it. */
@@ -598,11 +604,7 @@ export class IRModule {
    * class itself — so its number is handed out before its text exists.
    */
   reserveMetadata(): string {
-    const index = this.metadata.length
-    this.metadata.push("")
-    const ref = `!${index}`
-    this.metadataRefs.push(ref)
-    return ref
+    return this.metadataRefs[this.pushMetadata("")]
   }
 
   setMetadata(ref: string, text: string): void {
