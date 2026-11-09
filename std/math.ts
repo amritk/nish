@@ -1189,3 +1189,24 @@ export const fmodF64 = (x: f64, y: f64): f64 => {
   }
   return bitsToF64(toI64(ux | sign))
 }
+
+/**
+ * `f64ToBits` under `--deterministic` (WP50 §9): the bits of `x`, except that
+ * every NaN answers the one quiet NaN, `0x7ff8000000000000`. A NaN's sign and
+ * payload are whatever the instruction that made it chose, which differs
+ * between x86-64, arm64, wasm and V8, so the flag makes them one value; a
+ * `bitsToF64` of any NaN pattern is left as it is.
+ *
+ * @param x The value to read.
+ * @returns The IEEE 754 bits of `x`, with every NaN as `0x7ff8000000000000`.
+ */
+export const quietBitsF64 = (x: f64): i64 => (x !== x ? toI64(0x7ff8) << toI64(48) : f64ToBits(x))
+
+/**
+ * `f32ToBits` under `--deterministic`: the bits of `x`, with every NaN as the
+ * one quiet NaN, `0x7fc00000`, for the reason `quietBitsF64` gives.
+ *
+ * @param x The value to read.
+ * @returns The IEEE 754 bits of `x`, with every NaN as `0x7fc00000`.
+ */
+export const quietBitsF32 = (x: f32): i32 => (x !== x ? 0x7fc00000 : f32ToBits(x))

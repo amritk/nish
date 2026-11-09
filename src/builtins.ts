@@ -13,6 +13,7 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
+import { quietBitsLocal } from "./std-modules"
 import { typedArrayElement } from "./annotations"
 import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
 import { CheckContext } from "./context"
@@ -608,6 +609,20 @@ const checkImulOperand = (ctx: CheckContext, arg: Node, scope: Scope): void => {
   }
 }
 
+/**
+ * Under `--deterministic`, record `std/math.ts`'s `quietBitsF64` or
+ * `quietBitsF32` as the callee of an `f64ToBits` or `f32ToBits` call, which
+ * the checker's `importMath` imported under `quietBitsLocal`: the emitter and
+ * the TypeScript reading then call it as any other function, and a NaN
+ * answers one set of bits on every target.
+ */
+const bindQuietBits = (ctx: CheckContext, call: Node, name: string): void => {
+  const at = ctx.sigs.get(quietBitsLocal(name), -1)
+  if (at >= 0) {
+    ctx.program.nodeCallees[call.id] = ctx.program.functions[at]
+  }
+}
+
 const checkMath = (
   ctx: CheckContext,
   call: Node,
@@ -624,8 +639,9 @@ const checkMath = (
       }
     }
     // `std/math.ts`'s, bound by the checker's `importMath` under this spelling:
-    // `atan2`, `tan` and `hypot` always, and on a page module `sin`, `cos`,
-    // `exp`, `log` and `pow` too. Everywhere else those five stay intrinsics.
+    // `atan2`, `tan` and `hypot` always, and on a page module or under
+    // `--deterministic` `sin`, `cos`, `exp`, `log` and `pow` too. Everywhere
+    // else those five stay intrinsics.
     const at = ctx.sigs.get(name, -1)
     if (at >= 0) {
       ctx.program.nodeCallees[call.id] = ctx.program.functions[at]
@@ -863,12 +879,16 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
       checkArgumentType(ctx, args.children[0], scope, name, from)
     }
+    if (name === "f64ToBits") {
+      bindQuietBits(ctx, call, name)
+    }
     return name === "f64ToBits" ? T_I64 : T_F64
   }
   if (name === "f32ToBits") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_F32)
     }
+    bindQuietBits(ctx, call, name)
     return T_I32
   }
   if (name === "ctSelect" || name === "ctEq") {

@@ -117,6 +117,7 @@ import {
   COLLECTIONS_SPECIFIER,
   FLOAT_REM_LOCAL,
   MATH_SPECIFIER,
+  quietBitsLocal,
   SORT_LOCAL,
   SORT_SPECIFIER,
 } from "./std-modules"
@@ -403,11 +404,14 @@ export class Checker {
    * module that calls none of the three loads nothing. The gate is the scan
    * itself, not the source text, so `Math\n  .tan(x)` is found too.
    *
-   * A page module (`--profile wasm`, `wasm-host`) links no libm, so there
-   * `Math.sin`, `cos`, `exp`, `log` and `pow` are `std/math.ts`'s too, and a
-   * `%` or `%=` imports `fmodF64` under `FLOAT_REM_LOCAL` for the emitter to
-   * call on a float remainder. The scan is syntax, so an integer `%` loads the
-   * library and copies nothing from it.
+   * A page module (`--profile wasm`, `wasm-host`) links no libm, and
+   * `--deterministic` wants libm's answers on no target, so there `Math.sin`,
+   * `cos`, `exp`, `log` and `pow` are `std/math.ts`'s too, and a `%` or `%=`
+   * imports `fmodF64` under `FLOAT_REM_LOCAL` for the emitter to call on a
+   * float remainder. The scan is syntax, so an integer `%` loads the library
+   * and copies nothing from it. Under `--deterministic` an `f64ToBits` or
+   * `f32ToBits` imports `quietBitsF64` or `quietBitsF32` under
+   * `quietBitsLocal`, so a NaN answers one set of bits everywhere.
    */
   importMath(): void {
     if (this.program.isMathLibrary()) {
@@ -415,13 +419,19 @@ export class Checker {
     }
     const calls: Node[] = []
     const rems: Node[] = []
-    scanMathCalls(this.program.file, calls, this.ctx.pageModule ? rems : null)
+    const bits: Node[] = []
+    const routed = this.ctx.pageModule || this.ctx.deterministic
+    scanMathCalls(this.program.file, calls, routed ? rems : null, this.ctx.deterministic ? bits : null)
     for (const call of calls) {
       const name = call.children[0].text
       this.bindMath(`${name}F64`, `Math.${name}`, call)
     }
     if (rems.length > 0) {
       this.bindMath("fmodF64", FLOAT_REM_LOCAL, rems[0])
+    }
+    for (const call of bits) {
+      const name = call.children[0].text
+      this.bindMath(name === "f64ToBits" ? "quietBitsF64" : "quietBitsF32", quietBitsLocal(name), call)
     }
   }
 
@@ -3291,13 +3301,23 @@ const hasSortCall = (node: Node): boolean => {
 
 /**
  * The `Math` calls under `node` that `std/math.ts` answers, in source order
- * (`importMath`): `atan2`, `tan` and `hypot`. On a page module, where `rems`
- * is not `null`, `sin`, `cos`, `exp`, `log` and `pow` too, and every `%` and
- * `%=` goes to `rems`.
+ * (`importMath`): `atan2`, `tan` and `hypot`. On a page module or under
+ * `--deterministic`, where `rems` is not `null`, `sin`, `cos`, `exp`, `log`
+ * and `pow` too, and every `%` and `%=` goes to `rems`. Under
+ * `--deterministic`, where `bits` is not `null`, every `f64ToBits` and
+ * `f32ToBits` call goes to `bits`.
  */
-const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null): void => {
+const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null, bits: Node[] | null): void => {
   if (rems !== null && node.kind === N_BINARY && (node.text === "%" || node.text === "%=")) {
     rems.push(node)
+  }
+  if (
+    bits !== null &&
+    node.kind === N_CALL &&
+    node.children[0].kind === N_IDENT &&
+    (node.children[0].text === "f64ToBits" || node.children[0].text === "f32ToBits")
+  ) {
+    bits.push(node)
   }
   if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
     const callee = node.children[0]
@@ -3315,7 +3335,7 @@ const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null): void => 
     }
   }
   for (const child of node.children) {
-    scanMathCalls(child, calls, rems)
+    scanMathCalls(child, calls, rems, bits)
   }
 }
 

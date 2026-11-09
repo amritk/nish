@@ -64,6 +64,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--capabilities", "", "print what the program can reach, on stderr")
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
+  menu.row("--deterministic", "", "the same float bits on every target, nothing nondeterministic")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
   menu.row("--emit-capabilities", "<file.json>", "write the capability report")
   menu.row("--update-capability-lock", "", "record what each dependency reaches")
