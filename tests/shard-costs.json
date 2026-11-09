@@ -523,6 +523,8 @@
     "net_router_negative_limits": 0,
     "net_router_negative_too_long": 0,
     "net_router_negative_too_many_params": 0,
+    "net_serve": 1,
+    "net_serve_pipelined_flat": 5,
     "net_tcp_nodelay_shared": 0,
     "net_tcp_reuseport_spread": 0,
     "net_tls_client_handshake": 0,

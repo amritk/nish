@@ -633,6 +633,18 @@ const DECLARED = [
     changelog: "spawned task may reach the objects its spawner owns",
     why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
   },
+  {
+    program: "tests/link/net_serve/main.ts",
+    file: "exit",
+    changelog: "one task and one region per request",
+    why: "`nish/net/serve` is new in this release, so the 0.37.0 seed's standard library has no such module (WP49 stage 5, part 4)",
+  },
+  {
+    program: "tests/link/net_serve_pipelined_flat/main.ts",
+    file: "exit",
+    changelog: "one task and one region per request",
+    why: "`nish/net/serve` is new in this release, so the 0.37.0 seed's standard library has no such module (WP49 stage 5, part 4)",
+  },
   // #899: a loop pass now keeps its arena scope where a register `Result`
   // leaves it, so these loops gain the pass's mark and rewind.
   ...resultLoop(
