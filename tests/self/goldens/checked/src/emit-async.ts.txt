@@ -328,25 +328,32 @@ function emitAsyncCall(emitter: Emitter, expr: Node, sig: FunctionSig, operandTy
   sharedWrite: +0:5
   escaping: calleePrivate
   calls: AsyncRegistry.addGroup AsyncRegistry.idOf Emitter.llvmAbi Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock asyncFail declareResume emitPoll emitSpawnedFrame frameHead kidBase loadAnswer nish_array_grow nish_str_concat storeHead suspends
-  pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 declareResume#0 kidBase#0 storeHead#0 Emitter.useRuntime#0 emitSpawnedFrame#0 asyncFail#0 storeHead#0 emitPoll#0 loadAnswer#0
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 declareResume#0 kidBase#0 storeHead#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 emitSpawnedFrame#0 asyncFail#0 storeHead#0 emitPoll#0 loadAnswer#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=loadAnswer#5
   pointer sig: size=176 writesThrough=false captured=false passedTo=declareResume#1 emitSpawnedFrame#1 loadAnswer#1
   pointer operandTypes: size=0 writesThrough=false captured=false passedTo=frameHead#0 storeHead#3 emitSpawnedFrame#4 storeHead#3
   pointer operandValues: size=0 writesThrough=false captured=false passedTo=storeHead#4 emitSpawnedFrame#5 storeHead#4
   stackSites=1 stackLocals=1
-  local -26:9 registry: AsyncRegistry (const)
-  local -25:9 fn: IRFunction (const)
-  local -24:9 id: i32 (const)
-  callee -24:14 AsyncRegistry.idOf -> @AsyncRegistry.idOf
-  local -23:9 head: string (const)
-  callee -23:16 frameHead -> @frameHead
-  callee -23:40 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee -22:3 declareResume -> @declareResume
-  local -20:11 base: string (const)
-  callee -20:18 kidBase -> @kidBase
-  callee -19:5 storeHead -> @storeHead
-  local -14:11 finished: string (const)
-  callee -14:22 IRFunction.emitValue -> @IRFunction.emitValue
+  local -35:9 registry: AsyncRegistry (const)
+  local -34:9 fn: IRFunction (const)
+  local -33:9 id: i32 (const)
+  callee -33:14 AsyncRegistry.idOf -> @AsyncRegistry.idOf
+  local -32:9 head: string (const)
+  callee -32:16 frameHead -> @frameHead
+  callee -32:40 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee -31:3 declareResume -> @declareResume
+  local -29:11 base: string (const)
+  callee -29:18 kidBase -> @kidBase
+  callee -28:5 storeHead -> @storeHead
+  local -17:11 region: string (const)
+  callee -17:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -17:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee -16:5 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -16:30 Emitter.useRuntime -> @Emitter.useRuntime
+  local -15:11 finished: string (const)
+  callee -15:22 IRFunction.emitValue -> @IRFunction.emitValue
+  callee -14:5 IRFunction.emit -> @IRFunction.emit
+  callee -14:26 Emitter.useRuntime -> @Emitter.useRuntime
   local -13:11 lane: string (const)
   callee -13:18 IRFunction.emitAlloca -> @IRFunction.emitAlloca
   local -12:11 waits: IRBlock (const)
@@ -357,12 +364,11 @@ function emitAsyncCall(emitter: Emitter, expr: Node, sig: FunctionSig, operandTy
   callee -10:21 IRFunction.newBlock -> @IRFunction.newBlock
   callee -9:5 IRFunction.emit -> @IRFunction.emit
   callee -8:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local -7:11 region: string (const)
-  callee -7:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee -7:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee -7:5 IRFunction.emit -> @IRFunction.emit
   callee -6:5 IRFunction.emit -> @IRFunction.emit
-  callee -5:5 IRFunction.emit -> @IRFunction.emit
-  callee -4:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee -5:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee -4:5 IRFunction.emit -> @IRFunction.emit
+  callee -4:26 Emitter.useRuntime -> @Emitter.useRuntime
   callee -3:5 IRFunction.emit -> @IRFunction.emit
   callee -2:5 IRFunction.emit -> @IRFunction.emit
   callee -1:5 IRFunction.placeBlock -> @IRFunction.placeBlock

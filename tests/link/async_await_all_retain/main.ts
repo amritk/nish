@@ -22,11 +22,11 @@ export async function main(): Promise<i32> {
     bad = bad + 1
   }
   let k = 0
-  while (k < 3000) {
+  while (k < 2000) {
     const [a, b] = await awaitAll(lane(k, 1), count(k + 1, 1))
     bad = bad + wrong(a, k) + b + wrong(fill(100, k + 2), k + 2)
     k = k + 1
   }
-  console.log(`3000 rounds: ${bad} wrong`)
+  console.log(`2000 rounds: ${bad} wrong`)
   return bad
 }

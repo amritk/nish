@@ -25643,17 +25643,18 @@ if (!only || "thread_scope_reclaim".includes(only)) {
   }
 }
 
-// An `awaitAll` member that waits runs in a region of its own, which the
-// awaiting function's arena adopts when the member finishes. Adopting carves
-// what the caller's chunk has left into a chunk above the region's, so a loop
-// with no per-pass release keeps what the lanes answered and a small constant
-// per round (docs/security/async.md, ASYNC-15). `async_await_all_retain`
-// joins two lanes that each answer 100 elements made after a wait, 30000
-// times in a loop of a function that calls `Arena.mark()`: it peaks at 43 MB,
-// the mark moving 512 bytes a round. Before the carve each adopt buried the
-// caller's chunk and the next allocation grew a fresh 64 KiB one: 163 MB,
-// 66528 bytes a round. `Arena.used()` cannot see a buried chunk, so the peak
-// is what is checked.
+// An `awaitAll` member runs in a region of its own from its first resume,
+// which the awaiting function's arena adopts when the member finishes.
+// Adopting carves what the caller's chunk has left into a chunk above the
+// region's and frees a chunk the lane released back to empty, so a loop with no
+// per-pass release keeps what the lanes answered and a small constant per round
+// (docs/security/async.md, ASYNC-15). `async_await_all_retain` joins, 2000
+// times in a loop of a function that calls `Arena.mark()`, a lane that answers
+// 100 elements and one that makes a 4 KB temporary and answers a number; both
+// sleep 1 ms, so each certainly suspends. It peaks at 3.2 to 3.3 MB over five
+// runs. With the lane's mark taken in the caller's arena, the temporary moved
+// into the caller each round: 11.1 to 11.2 MB. `Arena.used()` cannot see a
+// buried chunk, so the peak is what is checked, bounded at 6 MB.
 if (!only || "async_await_all_retain".includes(only)) {
   const fixture = linkTests.includes("async_await_all_retain")
   const dir = path.join(buildDir, "link", "async_await_all_retain")
@@ -25669,8 +25670,8 @@ if (!only || "async_await_all_retain".includes(only)) {
   const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
   const missing = fixture ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}` : "no such fixture"
   check(
-    "link/async_await_all_retain: 30000 awaitAll rounds of two region lanes in a loop with no release peak under 80 MB",
-    kb > 0 && kb < 80 * 1024,
+    "link/async_await_all_retain: 2000 awaitAll rounds of two waiting lanes in a loop with no release peak under 6 MB",
+    kb > 0 && kb < 6 * 1024,
     run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
   )
 }
