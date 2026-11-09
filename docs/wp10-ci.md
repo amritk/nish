@@ -160,7 +160,11 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 1's 62 s of steps after the suite, 218 s. The link costs and the
   groups' costs are read from that run's four logs. With 946 link programs
   now, the job is split eight ways: about 390 s of the table each, after
-  about 200 s of setup, stage1 and pre-link sections that every shard runs.
+  about 200 s of setup, stage1 and pre-link sections that every shard runs
+  (job start to its first link program in three shards of `main`'s runs at
+  `2d10118`, `ea8b601` and `2f4f8e3`: 152 to 223 s, of which 28 to 45 s
+  are the steps before Test; a shard dealt a slow pre-link section, as
+  shard 5 at `ea8b601` was, takes longer).
   A filtered run sends every `tail` group to shard 1, as it sent all of
   that, and counts none of them in its deal.
 
