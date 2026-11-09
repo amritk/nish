@@ -7,7 +7,8 @@ import Emitter from "./emit" -> struct Emitter
 import LoopTarget from "./emit" -> struct LoopTarget
 import emitScopeJoins from "./emit-parallel" -> function @emitScopeJoins
 import emitRangedStore from "./emit-builtins" -> function @emitRangedStore
-import emitCompoundFloat from "./emit-ops" -> function @emitCompoundFloat
+import emitFloatArithmetic from "./emit-ops" -> function @emitFloatArithmetic
+import withoutEquals from "./emit-ops" -> function @withoutEquals
 import compoundIntegerOpcode from "./emit-ops" -> function @compoundIntegerOpcode
 import emitIntBinary from "./emit-ops" -> function @emitIntBinary
 import loadLocal from "./emit-ops" -> function @loadLocal
@@ -388,9 +389,9 @@ function emitLogical(emitter: Emitter, expr: Node): string -> @emitLogical [expo
 function emitCompoundAssignment(emitter: Emitter, expr: Node): string -> @emitCompoundAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via targetLocal
-  calls: Emitter.emitExpression compoundIntegerOpcode emitCompoundFloat emitIntBinary emitRangedStore isFloat loadLocal nish_panic_index storeLocal targetLocal
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=targetLocal#0 loadLocal#0 Emitter.emitExpression#0 emitCompoundFloat#0 emitIntBinary#0 emitRangedStore#0 storeLocal#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitCompoundFloat#1 emitIntBinary#5 emitRangedStore#1
+  calls: Emitter.emitExpression compoundIntegerOpcode emitFloatArithmetic emitIntBinary emitRangedStore isFloat loadLocal nish_panic_index storeLocal targetLocal withoutEquals
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=targetLocal#0 loadLocal#0 Emitter.emitExpression#0 emitFloatArithmetic#0 emitIntBinary#0 emitRangedStore#0 storeLocal#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitFloatArithmetic#5 emitIntBinary#5 emitRangedStore#1
   stackSites=0 stackLocals=0
   local +0:9 local: Local (const)
   callee +0:17 targetLocal -> @targetLocal
@@ -400,7 +401,8 @@ function emitCompoundAssignment(emitter: Emitter, expr: Node): string -> @emitCo
   callee +2:15 Emitter.emitExpression -> @Emitter.emitExpression
   local +3:9 value: string (const)
   callee +3:17 isFloat -> @isFloat
-  callee +4:7 emitCompoundFloat -> @emitCompoundFloat
+  callee +4:7 emitFloatArithmetic -> @emitFloatArithmetic
+  callee +4:36 withoutEquals -> @withoutEquals
   callee +5:7 emitIntBinary -> @emitIntBinary
   callee +5:30 compoundIntegerOpcode -> @compoundIntegerOpcode
   callee +6:3 emitRangedStore -> @emitRangedStore

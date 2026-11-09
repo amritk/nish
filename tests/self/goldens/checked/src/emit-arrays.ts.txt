@@ -13,7 +13,8 @@ import Emitter from "./emit" -> struct Emitter
 import LoopTarget from "./emit" -> struct LoopTarget
 import emitPanicTail from "./emit-builtins" -> function @emitPanicTail
 import emitRangedStore from "./emit-builtins" -> function @emitRangedStore
-import emitCompoundFloat from "./emit-ops" -> function @emitCompoundFloat
+import emitFloatArithmetic from "./emit-ops" -> function @emitFloatArithmetic
+import withoutEquals from "./emit-ops" -> function @withoutEquals
 import compoundIntegerOpcode from "./emit-ops" -> function @compoundIntegerOpcode
 import emitBitwiseCombine from "./emit-ops" -> function @emitBitwiseCombine
 import emitIntBinary from "./emit-ops" -> function @emitIntBinary
@@ -1122,9 +1123,9 @@ function emitVectorAccess(emitter: Emitter, expr: Node, store: boolean): string 
 function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitElementAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
-  calls: Emitter.alignSuffix Emitter.declareType Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.stripNull baseLength compoundIntegerOpcode elementPointer emitArrayBase emitBitwiseCombine emitBoundsCheck emitCompoundFloat emitIndex emitIntBinary emitRangeCheck emitRangedStore guardKeep isBitwiseAssignment isFloat isGuardedAccess mayResize nish_panic_index nish_str_concat nish_str_eq storeElement valueSlotAccess
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.llvm#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 Emitter.emitExpression#0 emitBoundsCheck#0 elementPointer#0 Emitter.alignSuffix#0 storeElement#0 guardKeep#0 storeElement#0 emitBoundsCheck#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitCompoundFloat#0 emitIntBinary#0 emitRangedStore#0 mayResize#0 emitRangeCheck#0 baseLength#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitCompoundFloat#1 emitIntBinary#5 emitRangedStore#1
+  calls: Emitter.alignSuffix Emitter.declareType Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.stripNull baseLength compoundIntegerOpcode elementPointer emitArrayBase emitBitwiseCombine emitBoundsCheck emitFloatArithmetic emitIndex emitIntBinary emitRangeCheck emitRangedStore guardKeep isBitwiseAssignment isFloat isGuardedAccess mayResize nish_panic_index nish_str_concat nish_str_eq storeElement valueSlotAccess withoutEquals
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.llvm#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 Emitter.emitExpression#0 emitBoundsCheck#0 elementPointer#0 Emitter.alignSuffix#0 storeElement#0 guardKeep#0 storeElement#0 emitBoundsCheck#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitFloatArithmetic#0 emitIntBinary#0 emitRangedStore#0 mayResize#0 emitRangeCheck#0 baseLength#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitFloatArithmetic#5 emitIntBinary#5 emitRangedStore#1
   stackSites=0 stackLocals=0
   local +0:9 target: Node (const)
   local +1:9 elem: i32 (const)
@@ -1162,7 +1163,8 @@ function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitEle
   local +33:11 rhs: string (const)
   callee +33:17 Emitter.emitExpression -> @Emitter.emitExpression
   callee +34:13 isFloat -> @isFloat
-  callee +35:9 emitCompoundFloat -> @emitCompoundFloat
+  callee +35:9 emitFloatArithmetic -> @emitFloatArithmetic
+  callee +35:38 withoutEquals -> @withoutEquals
   callee +36:9 emitIntBinary -> @emitIntBinary
   callee +36:32 compoundIntegerOpcode -> @compoundIntegerOpcode
   callee +38:3 emitRangedStore -> @emitRangedStore

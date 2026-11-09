@@ -329,19 +329,17 @@ function Checker.importCollection(this: Checker, name: string, at: Node | null):
 function Checker.importMath(this: Checker): void -> @Checker.importMath [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via scanMathCalls
-  calls: CheckedProgram.isMathLibrary Checker.bindMath findRemainder nish_panic_index nish_str_concat scanMathCalls
+  calls: CheckedProgram.isMathLibrary Checker.bindMath nish_panic_index nish_str_concat scanMathCalls
   pointer this: size=24 writesThrough=false captured=false passedTo=Checker.bindMath#0 Checker.bindMath#0
-  stackSites=1 stackLocals=1
+  stackSites=2 stackLocals=2
   callee +0:9 CheckedProgram.isMathLibrary -> @CheckedProgram.isMathLibrary
-  local +3:11 page: boolean (const)
-  local +4:11 calls: Node[] (const)
+  local +3:11 calls: Node[] (const)
+  local +4:11 rems: Node[] (const)
   callee +5:5 scanMathCalls -> @scanMathCalls
   local +6:16 call: Node (const)
   local +7:13 name: string (const)
   callee +8:7 Checker.bindMath -> @Checker.bindMath
-  local +11:13 rem: Node | null (const)
-  callee +11:19 findRemainder -> @findRemainder
-  callee +13:9 Checker.bindMath -> @Checker.bindMath
+  callee +11:7 Checker.bindMath -> @Checker.bindMath
 function Checker.bindMath(this: Checker, name: string, local: string, at: Node): void -> @Checker.bindMath [exported method]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1703,27 +1701,19 @@ function hasSortCall(node: Node): boolean -> @hasSortCall
   stackSites=0 stackLocals=0
   local +0:14 child: Node (const)
   callee +1:9 hasSortCall -> @hasSortCall
-function scanMathCalls(node: Node, calls: Node[], page: boolean): void -> @scanMathCalls
+function scanMathCalls(node: Node, calls: Node[], rems: Node[] | null): void -> @scanMathCalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  escaping: node page
+  sharedWrite: +0:5
+  escaping: node
   calls: nish_array_grow nish_panic_index nish_str_eq scanMathCalls
   pointer node: size=40 writesThrough=true captured=true
   pointer calls: size=0 writesThrough=true captured=false passedTo=scanMathCalls#1
+  pointer rems: size=0 writesThrough=true captured=false passedTo=scanMathCalls#2
   stackSites=0 stackLocals=0
-  local -10:11 callee: Node (const)
-  local -9:11 name: string (const)
-  local +3:14 child: Node (const)
-  callee +4:5 scanMathCalls -> @scanMathCalls
-function findRemainder(node: Node): Node | null -> @findRemainder
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: node
-  calls: findRemainder nish_str_eq
-  pointer node: size=40 writesThrough=true captured=true
-  stackSites=0 stackLocals=0
-  local +0:14 child: Node (const)
-  local +1:11 found: Node | null (const)
-  callee +1:19 findRemainder -> @findRemainder
+  local +3:11 callee: Node (const)
+  local +4:11 name: string (const)
+  local +17:14 child: Node (const)
+  callee +18:5 scanMathCalls -> @scanMathCalls
 function scanCollectionNames(node: Node, names: CollectionNames, program: CheckedProgram, hideMap: boolean, hideSet: boolean): void -> @scanCollectionNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CollectionNames.note

@@ -293,16 +293,6 @@ function emitFloatArithmetic(emitter: Emitter, op: string, type: i32, lhs: strin
   local +9:9 wide: string (const)
   callee +9:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee +10:10 IRFunction.emitValue -> @IRFunction.emitValue
-function emitCompoundFloat(emitter: Emitter, expr: Node, type: i32, old: string, rhs: string): string -> @emitCompoundFloat [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via emitFloatArithmetic
-  escaping: old rhs type
-  calls: emitFloatArithmetic withoutEquals
-  pointer emitter: size=376 writesThrough=false captured=false passedTo=emitFloatArithmetic#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitFloatArithmetic#5
-  stackSites=0 stackLocals=0
-  callee +0:14 emitFloatArithmetic -> @emitFloatArithmetic
-  callee +0:43 withoutEquals -> @withoutEquals
 function emitBitwise(emitter: Emitter, expr: Node, type: i32): string -> @emitBitwise
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -458,7 +448,7 @@ function emitBitwiseAssignment(emitter: Emitter, expr: Node): string -> @emitBit
   callee +2:17 emitBitwiseCombine -> @emitBitwiseCombine
   callee +3:3 emitRangedStore -> @emitRangedStore
   callee +4:3 storeLocal -> @storeLocal
-function withoutEquals(op: string): string -> @withoutEquals
+function withoutEquals(op: string): string -> @withoutEquals [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
   stackSites=0 stackLocals=0
