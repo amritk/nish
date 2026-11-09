@@ -137,7 +137,7 @@ function kernelTan(x0: f64, y0: f64, odd: boolean): f64 -> @nish.kernelTan
   local +40:9 a: f64 (const)
   local +41:9 t: f64 (const)
   callee +41:18 clearLo -> @nish.clearLo
-function kernelSin(x: f64, y: f64): f64 -> @nish.kernelSin
+function kernelSin(x: f64, y: f64, tail: boolean): f64 -> @nish.kernelSin
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 z: f64 (const)

@@ -1355,7 +1355,7 @@ if.end.3:
   ret double %127
 }
 
-define internal noundef double @nish.kernelSin(double noundef %x, double noundef %y) #1 {
+define internal noundef double @nish.kernelSin(double noundef %x, double noundef %y, i1 noundef zeroext %tail) #1 {
 entry:
   %z.addr = alloca double, align 8
   %w.addr = alloca double, align 8
@@ -1385,20 +1385,35 @@ entry:
   %18 = load double, double* %z.addr, align 8
   %19 = fmul double %18, %x
   store double %19, double* %v.addr, align 8
-  %20 = load double, double* %z.addr, align 8
-  %21 = fmul double %y, 0x3FE0000000000000
-  %22 = load double, double* %v.addr, align 8
+  %20 = xor i1 %tail, true
+  br i1 %20, label %if.then, label %if.end
+
+if.then:
+  %21 = load double, double* %v.addr, align 8
+  %22 = load double, double* %z.addr, align 8
   %23 = load double, double* %r.addr, align 8
   %24 = fmul double %22, %23
-  %25 = fsub double %21, %24
-  %26 = fmul double %20, %25
-  %27 = fsub double %26, %y
-  %28 = load double, double* %v.addr, align 8
-  %29 = fneg double 0x3FC5555555555549
-  %30 = fmul double %28, %29
-  %31 = fsub double %27, %30
-  %32 = fsub double %x, %31
-  ret double %32
+  %25 = fneg double 0x3FC5555555555549
+  %26 = fadd double %24, %25
+  %27 = fmul double %21, %26
+  %28 = fadd double %x, %27
+  ret double %28
+
+if.end:
+  %29 = load double, double* %z.addr, align 8
+  %30 = fmul double %y, 0x3FE0000000000000
+  %31 = load double, double* %v.addr, align 8
+  %32 = load double, double* %r.addr, align 8
+  %33 = fmul double %31, %32
+  %34 = fsub double %30, %33
+  %35 = fmul double %29, %34
+  %36 = fsub double %35, %y
+  %37 = load double, double* %v.addr, align 8
+  %38 = fneg double 0x3FC5555555555549
+  %39 = fmul double %37, %38
+  %40 = fsub double %36, %39
+  %41 = fsub double %x, %40
+  ret double %41
 }
 
 define internal noundef double @nish.kernelCos(double noundef %x, double noundef %y) #1 {
@@ -1498,7 +1513,7 @@ cond.end:
   br i1 %13, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %14 = tail call double @nish.kernelSin(double %y0, double %y1)
+  %14 = tail call double @nish.kernelSin(double %y0, double %y1, i1 true)
   ret double %14
 
 if.end.1:
@@ -1516,7 +1531,7 @@ if.end.2:
   br i1 %19, label %if.then.3, label %if.end.3
 
 if.then.3:
-  %20 = call double @nish.kernelSin(double %y0, double %y1)
+  %20 = call double @nish.kernelSin(double %y0, double %y1, i1 true)
   %21 = fneg double %20
   ret double %21
 
@@ -1682,7 +1697,7 @@ if.then.1:
   ret double %x
 
 if.end.1:
-  %5 = tail call double @nish.kernelSin(double %x, double 0x0000000000000000)
+  %5 = tail call double @nish.kernelSin(double %x, double 0x0000000000000000, i1 false)
   ret double %5
 
 if.end:

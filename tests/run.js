@@ -29988,8 +29988,12 @@ if (!only || "wasm-math".includes(only)) {
             "  const b = new BigInt64Array(new Float64Array([x]).buffer)[0]",
             "  return b < 0n ? -(b & 0x7fffffffffffffffn) : b",
             "}",
-            "const ulps = (a, b) => (Object.is(a, b) || (Number.isNaN(a) && Number.isNaN(b)) ? 0 : Math.abs(Number(ordered(a) - ordered(b))))",
-            "const xs = [0, -0, 1, -1, 0.5, 2, 3, Math.PI, -Math.PI / 4, 1e-300, 1e300, 709.7, -745.2, 1e22, 1e-10, 100, NaN, Infinity, -Infinity, 1.5, -2.5, 7, 0.1]",
+            "// ordered() maps -0 and +0 to the same integer, so a zero of the wrong sign is a mismatch here.",
+            "const ulps = (a, b) =>",
+            "  Object.is(a, b) || (Number.isNaN(a) && Number.isNaN(b)) ? 0 : a === 0 && b === 0 ? 1e9 : Math.abs(Number(ordered(a) - ordered(b)))",
+            "// -4, -0.5, 5 and -0 give the -0 results (-4 % 2, -0 % 5, -0.5 % 0.5, sin(-0), pow(-0, 3)); 0.444596136099278",
+            "// is where fdlibm's sin without a tail rounds differently from its tail form.",
+            "const xs = [0, -0, 1, -1, 0.5, -0.5, 2, 3, -4, 5, Math.PI, -Math.PI / 4, 1e-300, 1e300, 709.7, -745.2, 1e22, 1e-10, 100, NaN, Infinity, -Infinity, 1.5, -2.5, 7, 0.1, 0.444596136099278]",
             "const worst = {}",
             "const one = (name, got, want) => { worst[name] = Math.max(worst[name] ?? 0, ulps(got, want)) }",
             "for (const m of [viaLoader, bare]) {",
@@ -30017,10 +30021,11 @@ if (!only || "wasm-math".includes(only)) {
           worst = null
         }
         check(
-          "wasm-math: through the loader and bare, sin, cos, exp, log and pow are within one ulp of V8, and both remainders are exact",
+          "wasm-math: through the loader and bare, sin is V8's bits, cos, exp, log and pow are within one ulp of V8, and both remainders are exact, zero signs included",
           run.status === 0 &&
             worst !== null &&
             ["sin", "cos", "exp", "log", "pow"].every((name) => worst[name] <= 1) &&
+            worst.sin === 0 &&
             worst.rem === 0 &&
             worst.remF32 === 0,
           shown(run)

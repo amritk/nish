@@ -104,13 +104,16 @@ are the platform's `Math`, so nothing here runs there.
 
 <scalar-detail title="Exactness">
 
-Each is within one ulp of the correctly rounded result, and
-exactly JavaScript's value for every NaN, signed zero and infinity — every
-`atan2` infinity pairing, and `hypot`'s Infinity when either operand is
-infinite, even beside a NaN. Measured against mpmath over 2.8
-million random and edge-case operands: `tan` 0.83 ulp, `atan2` 0.84 ulp,
-`hypot` 0.93 ulp (`tests/cases/math_std_edges` pins the special values).
-`fmodF64` is exact, as `%` is.
+Each is exactly JavaScript's value for every NaN, signed
+zero and infinity — every `atan2` infinity pairing, and `hypot`'s Infinity
+when either operand is infinite, even beside a NaN. `tan`, `atan2` and
+`hypot` are within one ulp of the correctly rounded result, measured
+against mpmath over 2.8 million random and edge-case operands: `tan` 0.83
+ulp, `atan2` 0.84 ulp, `hypot` 0.93 ulp (`tests/cases/math_std_edges` pins
+the special values). `sin`, `cos`, `exp`, `log` and `pow` are fdlibm's, as
+V8's `Math` is, and are within one ulp of V8 (`tests/run.js`'s `wasm-math`
+compares them on its operand grid); they are not measured against a
+correctly rounded reference. `fmodF64` is exact, as `%` is.
 
 </scalar-detail>
 

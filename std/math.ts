@@ -20,13 +20,16 @@
  * else they stay LLVM's intrinsics and `frem`. Under Node and `tsc` the calls
  * are the platform's `Math`, so nothing here runs there.
  *
- * **Exactness.** Each is within one ulp of the correctly rounded result, and
- * exactly JavaScript's value for every NaN, signed zero and infinity — every
- * `atan2` infinity pairing, and `hypot`'s Infinity when either operand is
- * infinite, even beside a NaN. Measured against mpmath over 2.8
- * million random and edge-case operands: `tan` 0.83 ulp, `atan2` 0.84 ulp,
- * `hypot` 0.93 ulp (`tests/cases/math_std_edges` pins the special values).
- * `fmodF64` is exact, as `%` is.
+ * **Exactness.** Each is exactly JavaScript's value for every NaN, signed
+ * zero and infinity — every `atan2` infinity pairing, and `hypot`'s Infinity
+ * when either operand is infinite, even beside a NaN. `tan`, `atan2` and
+ * `hypot` are within one ulp of the correctly rounded result, measured
+ * against mpmath over 2.8 million random and edge-case operands: `tan` 0.83
+ * ulp, `atan2` 0.84 ulp, `hypot` 0.93 ulp (`tests/cases/math_std_edges` pins
+ * the special values). `sin`, `cos`, `exp`, `log` and `pow` are fdlibm's, as
+ * V8's `Math` is, and are within one ulp of V8 (`tests/run.js`'s `wasm-math`
+ * compares them on its operand grid); they are not measured against a
+ * correctly rounded reference. `fmodF64` is exact, as `%` is.
  *
  * **`sin`, `cos` and `tan`** are fdlibm's kernels behind its Cody-Waite
  * reduction for |x| below 2^20·π/2, with the quadrant read from the rounding
@@ -371,7 +374,9 @@ const kernelTan = (x0: f64, y0: f64, odd: boolean): f64 => {
   return t + a * (t * zz + 1.0 + t * vv)
 }
 // fdlibm's __kernel_sin: sin(x + y) for |x + y| <= pi/4, y the tail of a reduced argument.
-const kernelSin = (x: f64, y: f64): f64 => {
+// `tail` is fdlibm's iy: with none, x + v * (S1 + z * r) rounds as V8's sin does, so it keeps
+// that form rather than the tail form at y = 0.
+const kernelSin = (x: f64, y: f64, tail: boolean): f64 => {
   const z: f64 = x * x
   const w: f64 = z * z
   const r: f64 =
@@ -379,6 +384,9 @@ const kernelSin = (x: f64, y: f64): f64 => {
     8.33333333332248946124e-3 +
     z * w * (z * 1.58969099521155010221e-10 - 2.50507602534068634195e-8)
   const v: f64 = z * x
+  if (!tail) {
+    return x + v * (z * r + -1.66666666666666324348e-1)
+  }
   return x - (z * (y * 0.5 - v * r) - y - v * -1.66666666666666324348e-1)
 }
 
@@ -405,13 +413,13 @@ const trigKernel = (y0: f64, y1: f64, n: i32, mode: i32): f64 => {
   // cos(x) is sin(x + pi/2): one quadrant on.
   const k: i32 = mode === 2 ? (q + 1) & 3 : q
   if (k === 0) {
-    return kernelSin(y0, y1)
+    return kernelSin(y0, y1, true)
   }
   if (k === 1) {
     return kernelCos(y0, y1)
   }
   if (k === 2) {
-    return -kernelSin(y0, y1)
+    return -kernelSin(y0, y1, true)
   }
   return -kernelCos(y0, y1)
 }
@@ -486,7 +494,7 @@ export const sinF64 = (x: f64): f64 => {
     if (ax < 1.4901161193847656e-8) {
       return x
     }
-    return kernelSin(x, 0.0)
+    return kernelSin(x, 0.0, false)
   }
   return trigReduced(x, ax, 1)
 }
