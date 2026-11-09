@@ -643,7 +643,9 @@ or a table every task reads.
   of its own, one task kind each, and nothing crosses at run time. It is
   capture-free by WP29's rule, so it is accepted. The refusal names any other
   argument's type as written, never the `void` a compile-time position holds
-  in `paramTypes`.
+  in `paramTypes`. (Superseded by part 8: an arrow at the call may capture
+  the spawner's numbers and the objects a shared argument may be, and is
+  walked with the task's rules.)
 - **A shared argument.** An object, array, `Map` or `Set` argument is
   accepted when the spawner's memory outlives every task holding it. A
   spawn retains its argument: the escape analysis reads the argument of a
@@ -664,7 +666,8 @@ or a table every task reads.
   region, which is freed when the task ends; a nested task could outlive it.
   So a shared argument there is refused (NL2689), and nested spawns keep
   taking numbers and strings. A function argument that captures a local is
-  refused as well (NL2690).
+  refused as well (NL2690), unless the local is a number, a `boolean`, an
+  enum or an object it may share (part 8, below).
 - **What a task may do with it.** The spawned function is walked by the
   region rules with each shared parameter as *outer* memory. Storing memory
   the task allocated into it (a string, an array, an object) is NL2609, and
@@ -725,7 +728,7 @@ one per program and each naming only that `exit` surface, cover
 ("a spawned task may reach the objects its spawner owns") and go at the
 reseed that ships it, when the seed compiles them and they match nothing.
 
-### Part 8: a serve handler reaches its spawner's state (#1324)
+### Part 3, extended by part 8: a serve handler reaches its spawner's state (#1324)
 
 `serveOn` spawns `serveTask(handle, ...)`, so a handler is a function
 argument of a spawned task, and until this part an arrow that captured

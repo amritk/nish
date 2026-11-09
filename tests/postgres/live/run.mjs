@@ -422,7 +422,7 @@ const fortunesPage = () => {
   );
 };
 
-/** `GET path` on `port`: its status, headers and body. */
+/** `GET path` on `port`: its status, headers and body; status 0 when it fails or takes over 30 s. */
 const get = (port, path) =>
   new Promise((resolve) => {
     const req = request({ host: "127.0.0.1", port, path }, (res) => {
@@ -433,6 +433,7 @@ const get = (port, path) =>
       );
     });
     req.on("error", (e) => resolve({ status: 0, headers: {}, body: `error: ${e.message}` }));
+    req.setTimeout(30_000, () => req.destroy(new Error("no answer in 30 s")));
     req.end();
   });
 

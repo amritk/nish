@@ -3602,10 +3602,17 @@ async function run(): Promise<void> {
   share.** A top-level function, or an arrow written at the call, is a
   compile-time argument: the call is an instance with the function in its
   body (`async_spawn_fn_arg`). The arrow may read locals of the function it
-  is written in when each is a number, a `boolean`, an enum, or an object or
-  array the spawn's argument rule above admits; any other capture (a
-  `string`, a nullable value, a host handle, an object holding a string) is
-  NL2690 (`reject_async_spawn_block_arg`). A captured object is shared with
+  is written in when each is a number, a `boolean` or an enum, copied into
+  the task's frame, or an object or array that holds, through any field or
+  element, no `Region`, no `Secret`, no handle class and no `nish/threads`
+  scope, lock, guard or channel. Its strings and nested objects are fine (a
+  `PgAsyncPool` holds both). Any other capture is NL2690: a `string`, a
+  nullable value or a union itself, or an object holding a `Region`
+  (`reject_async_spawn_block_arg`, `reject_async_spawn_handler_holds_region`).
+  A capture of a handle, or of an object holding a `Secret`, is refused
+  sooner, by the rule for any arrow argument (NL2588,
+  `reject_async_spawn_handler_holds_handle`,
+  `reject_async_spawn_handler_holds_secret`). A captured object is shared with
   the task as if handed to it: the spawner releases no arena scope over it,
   and the arrow's body is walked with the task's rules, the capture as memory
   the task does not own, so the arrow may update its numbers and call its

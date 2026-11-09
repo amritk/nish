@@ -305,7 +305,7 @@ of anything else, such as a `string`, is refused (NL2690): pass it to the task
 as an argument of its own. Any other argument, such as an `Item | null`, is
 refused (NL2673); pass the value itself.
 
-```ts
+```ts nish:ok
 import { sleep, spawn } from "nish:async";
 
 class Board {
@@ -324,6 +324,32 @@ export async function main(): Promise<i32> {
   }, 5));
   await sleep(20);
   console.log(`${board.hits}`); // 5
+  return 0;
+}
+```
+
+An arrow that reads a `string` of its spawner is refused, since the string is
+the spawner's and the task may run after it returns:
+
+```ts nish:err NL2690
+import { sleep, spawn } from "nish:async";
+
+class Board {
+  hits: i32 = 0;
+}
+
+async function later(handle: (n: i32) => void, n: i32): Promise<void> {
+  await sleep(n);
+  handle(n);
+}
+
+export async function main(): Promise<i32> {
+  const board = new Board();
+  const label = `run ${board.hits}`;
+  spawn(later((n: i32): void => {
+    board.hits = board.hits + label.length + n;
+  }, 5));
+  await sleep(20);
   return 0;
 }
 ```
