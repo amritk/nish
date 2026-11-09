@@ -25,6 +25,23 @@ big: ok=false failure=2 socket=0 rows=0 tag= reusable=false
 wide: ok=false failure=2 socket=0 rows=0 tag= reusable=false
 connected 2 of 2
 odd: ok=false failure=3 socket=0 rows=0 tag= reusable=false
-live after the hostile frames: 1, dropped 7
+trail: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=false first=t
+connected 2 of 2
+quick: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+cellpast: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+negative: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+slack: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+unended: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+noend: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+reshape: ok=false failure=1 socket=0 rows=1 tag= reusable=false first=a
+connected 2 of 2
+midframe: ok=false failure=9 socket=0 rows=0 tag= reusable=false
+large: ok=true failure=0 socket=0 rows=2 tag=SELECT 2 reusable=true first=s
+large cell: 20000 bytes
+split: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=p
+fat: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=300 bytes
+live after the hostile frames: 1, dropped 15
 a claim with every connection held: -2 after 6 sleeps
-statements seen: 20
+statements seen: 39

@@ -17,7 +17,16 @@
 //      `maxColumns` and a message no query expects each fail their query
 //      (PG_ERR_FRAME, PG_ERR_TOO_BIG, PG_ERR_UNEXPECTED) and close the
 //      connection, reconnecting as the pool empties.
-//   5. A bounded wait: with the one live connection held and `claimWaitMs`
+//   5. More hostile answers (docs/security/postgres.md, PG-28): bytes after a
+//      ReadyForQuery close the connection, and the next query is served on
+//      another; a cell past its frame, a length of -2, bytes after the last
+//      cell, an ErrorResponse field or field list that does not end, and a
+//      row whose column count changes fail PG_ERR_FRAME; a socket that closes
+//      mid-frame fails PG_ERR_CLOSED; a 20,000-byte row (the read buffer
+//      grows past 8192 and moves the rest of a message to its front) and a
+//      frame split across two reads are read whole; rows past
+//      `maxResultBytes` fail PG_ERR_TOO_BIG, the connection still reusable.
+//   6. A bounded wait: with the one live connection held and `claimWaitMs`
 //      at 40, a claim sleeps 1, 2, 4, 8, 16 and 16 ms and answers -2.
 import { sleep, spawn } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
@@ -36,7 +45,8 @@ import { Board, backend } from "./server"
 
 /** A line describing `r`. */
 const describe = (label: string, r: PgAsyncResult): string => {
-  const first: string = r.rows > 0 && r.columns > 0 ? ` first=${r.text(0, 0)}` : ""
+  const cell: string = r.rows > 0 && r.columns > 0 ? r.text(0, 0) : ""
+  const first: string = cell.length > 20 ? ` first=${cell.length} bytes` : cell.length > 0 ? ` first=${cell}` : ""
   return `${label}: ok=${r.ok()} failure=${r.failure} socket=${r.socketError} rows=${r.rows} tag=${r.tag} reusable=${r.reusable}${first}`
 }
 
@@ -51,6 +61,9 @@ async function client(pool: PgAsyncPool, board: Board, sql: string, label: strin
   const r = await pgAsyncQuery(pool, ticket, sql, new PgAsyncParams())
   pgAsyncRelease(pool, ticket, r.reusable)
   console.log(describe(label, r))
+  if (label === "large" && r.rows === 2) {
+    console.log(`large cell: ${r.text(1, 0).length} bytes`)
+  }
   board.done += 1
 }
 
@@ -153,12 +166,30 @@ export async function main(): Promise<i32> {
     await sleep(1)
   }
 
-  const hostile: string[] = ["short", "big", "wide", "odd"]
+  const hostile: string[] = [
+    "short",
+    "big",
+    "wide",
+    "odd",
+    "trail",
+    "quick",
+    "cellpast",
+    "negative",
+    "slack",
+    "unended",
+    "noend",
+    "reshape",
+    "midframe",
+    "large",
+    "split",
+    "fat",
+  ]
   for (let i: i32 = 0; i < toI32(hostile.length); i++) {
     if (pool.live() === 0) {
       live = await fill(pool, board, listen, port)
       console.log(`connected ${live} of 2`)
     }
+    pool.maxResultBytes = hostile[i] === "fat" ? 1024 : 16777216
     spawn(client(pool, board, hostile[i], hostile[i]))
     while (board.done < 7 + i) {
       await sleep(1)

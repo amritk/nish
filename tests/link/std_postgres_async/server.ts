@@ -16,6 +16,18 @@
 //   big    a DataRow whose length says 2,000,000 bytes, and none of them
 //   wide   a DataRow of 2000 columns, past `maxColumns`
 //   odd    a message of type `W`, which no extended query answers
+//   trail  a row and its ReadyForQuery, then part of a NotificationResponse
+//          in the same write
+//   cellpast  a DataRow cell whose length runs past the frame's end
+//   negative  a DataRow cell of length -2
+//   slack  a DataRow with bytes after its last cell
+//   unended   an ErrorResponse field with no NUL before the frame ends
+//   noend  an ErrorResponse whose fields end without the closing 0
+//   reshape   a row of one column, then a row of two
+//   midframe  part of a DataRow, then the connection closes
+//   large  a row `s`, then a row whose one cell is 20,000 bytes
+//   split  a row `p`, written 3 bytes first and the rest 5 ms later
+//   fat    five rows of one 300-byte cell
 //
 // The board is the one object the backends share with the test's tasks; a
 // backend's task body writes its `seen` count, and its helpers only read it.
@@ -197,9 +209,16 @@ async function nextMessage(fd: i32, w: Wire, typed: boolean): Promise<i32> {
 
 /** Writes `o`'s bytes to `fd` and empties it; false when the peer left. */
 async function flush(fd: i32, o: Out): Promise<boolean> {
-  let at: i32 = 0
-  while (at < o.n) {
-    const n: i32 = netWrite(fd, o.bytes, at, o.n - at)
+  const sent: boolean = await flushRange(fd, o, 0, o.n)
+  o.n = 0
+  return sent
+}
+
+/** Writes `o`'s bytes `[from, to)` to `fd`; false when the peer left. */
+async function flushRange(fd: i32, o: Out, from: i32, to: i32): Promise<boolean> {
+  let at: i32 = from
+  while (at < to) {
+    const n: i32 = netWrite(fd, o.bytes, at, to - at)
     if (n === -11) {
       const ok: boolean = await writable(fd)
       if (!ok) {
@@ -211,7 +230,6 @@ async function flush(fd: i32, o: Out): Promise<boolean> {
       at += n
     }
   }
-  o.n = 0
   return true
 }
 
@@ -343,6 +361,72 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
   } else if (sql === "odd") {
     o.begin(87)
     o.finish()
+  } else if (sql === "trail" || sql === "split") {
+    o.row(sql === "trail" ? "t" : "p")
+    o.complete("SELECT 1")
+  } else if (sql === "cellpast") {
+    o.begin(68)
+    o.int16(1)
+    o.int32(100)
+    o.text("ab")
+    o.finish()
+  } else if (sql === "negative") {
+    o.begin(68)
+    o.int16(1)
+    o.int32(-2)
+    o.finish()
+  } else if (sql === "slack") {
+    o.begin(68)
+    o.int16(1)
+    o.int32(1)
+    o.text("azz")
+    o.finish()
+  } else if (sql === "unended") {
+    o.begin(69)
+    o.byte(77)
+    o.text("abc")
+    o.finish()
+  } else if (sql === "noend") {
+    o.begin(69)
+    o.byte(67)
+    o.cstr("42P01")
+    o.finish()
+  } else if (sql === "reshape") {
+    o.row("a")
+    o.begin(68)
+    o.int16(2)
+    o.int32(1)
+    o.text("b")
+    o.int32(1)
+    o.text("c")
+    o.finish()
+  } else if (sql === "midframe") {
+    o.byte(68)
+    o.int32(100)
+    o.int16(1)
+    await flush(fd, o)
+    return 1
+  } else if (sql === "large") {
+    o.row("s")
+    o.begin(68)
+    o.int16(1)
+    o.int32(20000)
+    for (let i: i32 = 0; i < 20000; i++) {
+      o.byte(120)
+    }
+    o.finish()
+    o.complete("SELECT 2")
+  } else if (sql === "fat") {
+    for (let i: i32 = 0; i < 5; i++) {
+      o.begin(68)
+      o.int16(1)
+      o.int32(300)
+      for (let j: i32 = 0; j < 300; j++) {
+        o.byte(102)
+      }
+      o.finish()
+    }
+    o.complete("SELECT 5")
   } else if (sql === "begin") {
     o.complete("BEGIN")
     status = 84
@@ -357,6 +441,22 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
     o.complete("SELECT 1")
   }
   o.ready(status)
+  if (sql === "trail") {
+    // A NotificationResponse's type, its length and one byte of its 16.
+    o.byte(65)
+    o.int32(20)
+    o.byte(0)
+  }
+  if (sql === "split") {
+    const first: boolean = await flushRange(fd, o, 0, 3)
+    await sleep(5)
+    if (!first) {
+      return 1
+    }
+    const rest: boolean = await flushRange(fd, o, 3, o.n)
+    o.n = 0
+    return rest ? 0 : 1
+  }
   const sent: boolean = await flush(fd, o)
   return sent ? 0 : 1
 }

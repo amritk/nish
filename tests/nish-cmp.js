@@ -598,6 +598,24 @@ const DECLARED = [
     why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
   },
   {
+    program: "tests/link/std_postgres_async_caps_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_double_release_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_release_closed_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
     program: "tests/link/std_postgres_async_release_panic/main.ts",
     file: "exit",
     changelog: "async Postgres pool",

@@ -131,6 +131,18 @@ it when the query left it unfit to reuse.
 
 </scalar-detail>
 
+<scalar-detail title="Its own encoder and framer">
+
+A query is encoded and its answer framed
+here (`pgAsyncEncode`, `pgAsyncRead`), not by `PgConnection` or
+`PgCarrier`: those keep their buffers and rows in objects that outlive a
+query, which a task would have to grow inside the pool, and a
+`PgConnection` holds the password as a `Secret`, which a task may not be
+handed. The framer applies the same checks as `PgConnection`'s (PG-28 in
+`docs/security/postgres.md`).
+
+</scalar-detail>
+
 <scalar-detail title="Claiming">
 
 When every live connection is claimed, `pgAsyncClaim` sleeps
@@ -148,16 +160,18 @@ connection is given back once.
 A connection is given back only when its last query read to a
 ReadyForQuery that says "idle" and changed no session setting: a query that
 left a transaction open, a `SET` the server reported (a ParameterStatus),
-a socket error, a frame this module does not expect, or a reply past a cap
-closes it, so the next task never inherits another's session.
+a socket error, a frame this module does not expect, a reply past a cap,
+or bytes after the ReadyForQuery closes it, so the next task never inherits
+another's session or the rest of its answer.
 
 </scalar-detail>
 
 <scalar-callout type="warning">
 
 **Limits.** `PgAsyncPool`'s caps (`maxMessage`, `maxColumns`, `maxRows`,
-`claimWaitMs`) bound what one query keeps; rows past `maxRows` are read
-and dropped, and the query fails with `PG_ERR_TOO_BIG`. There is no
+`maxResultBytes`, `claimWaitMs`) bound what one query keeps; rows past
+`maxRows` or `maxResultBytes` are read and dropped, and the query fails
+with `PG_ERR_TOO_BIG`. There is no
 deadline on a wait: a server that accepts and never answers holds the task
 (and, in `pgAsyncConnect`, the caller) until it closes; bound a slow
 statement with the server's `statement_timeout`.
@@ -183,8 +197,8 @@ A query answers `PG_CARRIER_DONE`, or `PG_CARRIER_FAILED` with
 `nish/net/postgres-carrier` does: `PG_ERR_NONE` when the server refused the
 statement (`errorCode` and `errorMessage` say why, and the connection is
 reused), `PG_ERR_CLOSED` when the socket ended or a wait could not be made.
-Programming errors (a ticket that is not a current claim, a size out of
-range) panic.
+Programming errors (a ticket that is not a current claim, a size or a cap
+out of range) panic.
 
 </scalar-detail>
 
@@ -218,7 +232,7 @@ The pool.
 <scalar-field name="returns" type="Promise&lt;i32&gt;">
 
 A ticket (0 or more) for `pgAsyncQuery` and then exactly one
-  `pgAsyncRelease`; `-1` (`PG_POOL_NONE`) when no slot is connected;
+  `pgAsyncRelease`; `PG_POOL_NONE` (-1) when no slot is connected;
   `PG_CARRIER_FULL` (-2) when none came free in time.
 
 </scalar-field>
@@ -291,7 +305,7 @@ function pgAsyncQuery(
 
 <scalar-field name="pool" type="PgAsyncPool" required>
 
-The pool the ticket came from.
+The pool the ticket came from; a cap out of its range panics.
 
 </scalar-field>
 
@@ -397,9 +411,10 @@ class PgAsyncPool
 | `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` sleeps waiting for a free connection before it answers `PG_CARRIER_FULL`. |
 | `dropped: i32` | How many connections `pgAsyncRelease` closed rather than gave back. |
 | `readonly fds: i32[]` | Each slot's socket, or -1 while it is not connected. |
-| `maxColumns: i32` | The most columns a row may have; more fails the query with `PG_ERR_TOO_BIG` and closes the connection. |
-| `maxMessage: i32` | The largest message a query accepts, in bytes; a larger one fails it with `PG_ERR_TOO_BIG` and closes the connection. |
-| `maxRows: i32` | The most rows a query keeps; later rows are read and dropped, and the query fails with `PG_ERR_TOO_BIG`. |
+| `maxColumns: i32` | The most columns a row may have, 1 to 65535; more fails the query with `PG_ERR_TOO_BIG` and closes the connection. |
+| `maxMessage: i32` | The largest message a query accepts, in bytes, 1024 to 2^30 - 1; a larger one fails it with `PG_ERR_TOO_BIG` and closes the connection. |
+| `maxResultBytes: i32` | The most bytes of rows a query keeps, 1024 to 2^30 - 1: each row costs its DataRow's length and 16 bytes a cell. A row past it is dropped with every later one, read through to the ReadyForQuery, and the query fails with `PG_ERR_TOO_BIG`. |
+| `maxRows: i32` | The most rows a query keeps, 1 to 2^24; later rows are read and dropped, and the query fails with `PG_ERR_TOO_BIG`. |
 | `readonly size: i32` | The number of connection slots, fixed at construction. |
 | `waits: i32` | How many times `pgAsyncClaim` slept because every live connection was claimed. |
 | `close(): void` | Ends every connection: a Terminate is offered to each socket, which is then closed, claimed or not. Call it once the tasks that hold tickets are done; a ticket used afterwards panics. |

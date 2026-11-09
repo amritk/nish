@@ -57,6 +57,14 @@
  * to the ReadyForQuery; `pgAsyncRelease` gives the connection back, or closes
  * it when the query left it unfit to reuse.
  *
+ * **Its own encoder and framer.** A query is encoded and its answer framed
+ * here (`pgAsyncEncode`, `pgAsyncRead`), not by `PgConnection` or
+ * `PgCarrier`: those keep their buffers and rows in objects that outlive a
+ * query, which a task would have to grow inside the pool, and a
+ * `PgConnection` holds the password as a `Secret`, which a task may not be
+ * handed. The framer applies the same checks as `PgConnection`'s (PG-28 in
+ * `docs/security/postgres.md`).
+ *
  * **Claiming.** When every live connection is claimed, `pgAsyncClaim` sleeps
  * and looks again, 1 ms then doubling to 16 ms, until one is free or it has
  * slept `claimWaitMs` in all; a released connection is not announced, so a
@@ -68,12 +76,14 @@
  * **Reuse.** A connection is given back only when its last query read to a
  * ReadyForQuery that says "idle" and changed no session setting: a query that
  * left a transaction open, a `SET` the server reported (a ParameterStatus),
- * a socket error, a frame this module does not expect, or a reply past a cap
- * closes it, so the next task never inherits another's session.
+ * a socket error, a frame this module does not expect, a reply past a cap,
+ * or bytes after the ReadyForQuery closes it, so the next task never inherits
+ * another's session or the rest of its answer.
  *
  * **Limits.** `PgAsyncPool`'s caps (`maxMessage`, `maxColumns`, `maxRows`,
- * `claimWaitMs`) bound what one query keeps; rows past `maxRows` are read
- * and dropped, and the query fails with `PG_ERR_TOO_BIG`. There is no
+ * `maxResultBytes`, `claimWaitMs`) bound what one query keeps; rows past
+ * `maxRows` or `maxResultBytes` are read and dropped, and the query fails
+ * with `PG_ERR_TOO_BIG`. There is no
  * deadline on a wait: a server that accepts and never answers holds the task
  * (and, in `pgAsyncConnect`, the caller) until it closes; bound a slow
  * statement with the server's `statement_timeout`.
@@ -91,8 +101,8 @@
  * `nish/net/postgres-carrier` does: `PG_ERR_NONE` when the server refused the
  * statement (`errorCode` and `errorMessage` say why, and the connection is
  * reused), `PG_ERR_CLOSED` when the socket ended or a wait could not be made.
- * Programming errors (a ticket that is not a current claim, a size out of
- * range) panic.
+ * Programming errors (a ticket that is not a current claim, a size or a cap
+ * out of range) panic.
  *
  * `tests/link/std_postgres_async` runs one against a loopback backend;
  * `tests/link/std_postgres_async_flat` reads `Arena.used()` across thousands
@@ -116,11 +126,12 @@ import {
   PG_NEED_MORE,
   PG_READY,
   PG_TARGET_OK,
+  PG_POOL_NONE,
   PgConfig,
   PgConnection,
   PgTarget,
 } from "nish/net/postgres"
-import { PG_CARRIER_DONE, PG_CARRIER_FAILED } from "nish/net/postgres-carrier"
+import { PG_CARRIER_DONE, PG_CARRIER_FAILED, PG_CARRIER_FULL } from "nish/net/postgres-carrier"
 
 /** The most connections one `PgAsyncPool` holds. */
 export const PG_ASYNC_MAX_SIZE: i32 = 64
@@ -139,6 +150,12 @@ const PG_ASYNC_INPUT_SIZE: i32 = 8192
 // ReadyForQuery's transaction status for "idle", outside any transaction.
 const PG_ASYNC_IDLE: i32 = 73
 const PG_ASYNC_NONCE_BYTES: i32 = 18
+// The largest `maxMessage` and `maxResultBytes`, as `nish/net/postgres` caps `PgConfig.maxMessage`.
+const PG_ASYNC_MAX_CAP: i32 = 1073741823
+// The most rows `maxRows` may allow.
+const PG_ASYNC_MAX_ROWS: i32 = 16777216
+// What a kept cell costs `maxResultBytes` beyond its bytes: its string and its NULL flag.
+const PG_ASYNC_CELL_COST: i32 = 16
 
 /**
  * Authenticated PostgreSQL connections that spawned tasks share. Build one
@@ -157,12 +174,19 @@ export class PgAsyncPool {
   readonly claimed: u8[]
   /** Each slot's claim count, the high part of its current ticket. */
   readonly claims: i32[]
-  /** The largest message a query accepts, in bytes; a larger one fails it with `PG_ERR_TOO_BIG` and closes the connection. */
+  /** The largest message a query accepts, in bytes, 1024 to 2^30 - 1; a larger one fails it with `PG_ERR_TOO_BIG` and closes the connection. */
   maxMessage: i32 = 1048576
-  /** The most columns a row may have; more fails the query with `PG_ERR_TOO_BIG` and closes the connection. */
+  /** The most columns a row may have, 1 to 65535; more fails the query with `PG_ERR_TOO_BIG` and closes the connection. */
   maxColumns: i32 = 1664
-  /** The most rows a query keeps; later rows are read and dropped, and the query fails with `PG_ERR_TOO_BIG`. */
+  /** The most rows a query keeps, 1 to 2^24; later rows are read and dropped, and the query fails with `PG_ERR_TOO_BIG`. */
   maxRows: i32 = 100000
+  /**
+   * The most bytes of rows a query keeps, 1024 to 2^30 - 1: each row costs
+   * its DataRow's length and 16 bytes a cell. A row past it is dropped with
+   * every later one, read through to the ReadyForQuery, and the query fails
+   * with `PG_ERR_TOO_BIG`.
+   */
+  maxResultBytes: i32 = 16777216
   /** The most milliseconds `pgAsyncClaim` sleeps waiting for a free connection before it answers `PG_CARRIER_FULL`. */
   claimWaitMs: i32 = 5000
   /** How many times `pgAsyncClaim` slept because every live connection was claimed. */
@@ -515,7 +539,7 @@ const pgAsyncStartup = async (conn: PgConnection, fd: i32): Promise<boolean> => 
  * spawned task may call it.
  * @param pool The pool.
  * @returns A ticket (0 or more) for `pgAsyncQuery` and then exactly one
- *   `pgAsyncRelease`; `-1` (`PG_POOL_NONE`) when no slot is connected;
+ *   `pgAsyncRelease`; `PG_POOL_NONE` (-1) when no slot is connected;
  *   `PG_CARRIER_FULL` (-2) when none came free in time.
  */
 export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
@@ -535,10 +559,10 @@ export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
       }
     }
     if (!live) {
-      return -1
+      return PG_POOL_NONE
     }
     if (slept >= pool.claimWaitMs) {
-      return -2
+      return PG_CARRIER_FULL
     }
     pool.waits += 1
     await sleep(nap)
@@ -572,7 +596,7 @@ export const pgAsyncRelease = (pool: PgAsyncPool, ticket: i32, reusable: boolean
  * in text), Execute and Sync go out in one write, and the answer is read to
  * its ReadyForQuery, waiting on the socket while other tasks run. It only
  * reads the pool; its buffers and the answer are the calling task's.
- * @param pool The pool the ticket came from.
+ * @param pool The pool the ticket came from; a cap out of its range panics.
  * @param ticket A ticket `pgAsyncClaim` answered and no `pgAsyncRelease` has
  *   spent; any other panics.
  * @param sql One statement, `$1`, `$2`, ... naming the parameters; a NUL in
@@ -587,6 +611,7 @@ export const pgAsyncQuery = async (
   sql: string,
   params: PgAsyncParams
 ): Promise<PgAsyncResult> => {
+  pgAsyncCheckCaps(pool)
   const fd: i32 = pool.fds[pgAsyncSlot(pool, ticket)]
   const result = new PgAsyncResult()
   const out: u8[] | null = pgAsyncEncode(sql, params)
@@ -611,7 +636,27 @@ export const pgAsyncQuery = async (
       sent += n
     }
   }
-  return await pgAsyncRead(fd, pool.maxMessage, pool.maxColumns, pool.maxRows)
+  return await pgAsyncRead(fd, pool.maxMessage, pool.maxColumns, pool.maxRows, pool.maxResultBytes)
+}
+
+/**
+ * Panics on a cap that is a mistake in the program, as `PgConfig`'s are. The
+ * bounds keep `row * columns` in `PgAsyncResult` from overflowing: the cells
+ * kept are under `maxResultBytes / 16`, below 2^26.
+ */
+const pgAsyncCheckCaps = (pool: PgAsyncPool): void => {
+  if (
+    pool.maxMessage < 1024 ||
+    pool.maxMessage > PG_ASYNC_MAX_CAP ||
+    pool.maxColumns < 1 ||
+    pool.maxColumns > 65535 ||
+    pool.maxRows < 1 ||
+    pool.maxRows > PG_ASYNC_MAX_ROWS ||
+    pool.maxResultBytes < 1024 ||
+    pool.maxResultBytes > PG_ASYNC_MAX_CAP
+  ) {
+    panic("nish/net/postgres-async: a PgAsyncPool cap out of range")
+  }
 }
 
 /** `result` failed for `failure`, its socket error `socketError`, and its connection unfit to reuse. */
@@ -725,7 +770,8 @@ const pgAsyncRead = async (
   fd: i32,
   maxMessage: i32,
   maxColumns: i32,
-  maxRows: i32
+  maxRows: i32,
+  maxResultBytes: i32
 ): Promise<PgAsyncResult> => {
   const result = new PgAsyncResult()
   let buf: u8[] = new Array<u8>(PG_ASYNC_INPUT_SIZE)
@@ -735,6 +781,8 @@ const pgAsyncRead = async (
   let tooBig: boolean = false
   let changed: boolean = false
   let shaped: boolean = false
+  // The bytes of rows kept, under `maxResultBytes`.
+  let kept: i32 = 0
   while (true) {
     // Every whole message in [start, end).
     while (end - start >= 5) {
@@ -761,7 +809,9 @@ const pgAsyncRead = async (
         if (stop - body !== 1 || body < 0 || body >= toI32(buf.length)) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
-        result.reusable = toI32(buf[body]) === PG_ASYNC_IDLE && !changed
+        // Bytes after it answer no statement this query sent, so the
+        // connection is out of step and closed rather than given back.
+        result.reusable = toI32(buf[body]) === PG_ASYNC_IDLE && !changed && start === end
         if (refused || tooBig) {
           result.code = PG_CARRIER_FAILED
           result.failure = tooBig ? PG_ERR_TOO_BIG : PG_ERR_NONE
@@ -780,10 +830,13 @@ const pgAsyncRead = async (
         if (shaped && columns !== result.columns) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
-        if (result.rows >= maxRows) {
+        // The frame's length bounds its cells' bytes; each cell costs its string besides.
+        const cost: i32 = stop - body + columns * PG_ASYNC_CELL_COST
+        if (tooBig || result.rows >= maxRows || cost > maxResultBytes - kept) {
           tooBig = true
           continue
         }
+        kept += cost
         if (!pgAsyncRow(buf, body + 2, stop, columns, result)) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
