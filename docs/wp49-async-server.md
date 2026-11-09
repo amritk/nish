@@ -756,6 +756,19 @@ The rule, in `taskFindings` (`src/region-rules.ts`):
   spawns makes the task `feedsTasks`, refused as a nested spawn (NL2689).
 - Each arrow is its own instance (WP29), so the facts are per call site: one
   refused arrow is not hidden by another admitted at the same callee.
+- A handler builds its `Response` from what a pooled query answers, so in a
+  task `callOrigin` leaves an argument out of a call's answer when the
+  answer's type cannot reach it (`mayShareMemory`): the heap types each side
+  may hold share none, and neither holds a class that implements an
+  interface, since a class converts to an interface it implements. A
+  `PgAsyncResult` holds strings and arrays of numbers and strings and a
+  `PgAsyncPool` numbers and arrays of numbers, so the result is the task's
+  own (`reject_async_spawn_answer_reach` keeps the refusals that matter).
+- Building the live check showed `pgAsyncConnect` hanging against any server
+  that asks for SCRAM: `pgAsyncStartup` read before it wrote the
+  SASLInitialResponse it had queued. It now writes first; the stand-in
+  backend logs in by trust, so only `tests/postgres/live`'s `servepool`
+  check covers it.
 
 ## Stage 5, part 7: cancellation
 

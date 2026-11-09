@@ -3580,8 +3580,15 @@ async function run(): Promise<void> {
   what the helper was handed, so in a task a fresh helper's answer other
   than a string, awaited or not, carries its arguments' origins too, and a
   store through a holder a helper built from the shared object is NL2609
-  (`reject_async_spawn_keep_returned`). Read and update the shared object
-  in place instead. Three refusals are conservative, and known to refuse
+  (`reject_async_spawn_keep_returned`). An argument is left out of that
+  join only when the answer's type cannot reach it: no class, array or
+  string type the answer may hold (through fields, elements, a nullable or a
+  union) is one the argument may hold, and neither side holds a class that
+  implements an interface. So a `PgAsyncResult` awaited from a query on a
+  shared `PgAsyncPool` is the task's own, while a `Holder` of a shared
+  `Tally` or a `Badge` of an interface `Tally` implements is still the
+  shared object's (`reject_async_spawn_answer_reach`). Read and update the
+  shared object in place instead. Three refusals are conservative, and known to refuse
   sound programs: a call that hands a callee both a shared object it writes
   into and any string or object of the task's, even when the callee writes
   only numbers; a store into the shared object of what an `await` answers
