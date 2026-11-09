@@ -1,0 +1,16 @@
+pending: -1 -1, timers 2
+cancel a running task: 1, again: 1
+after the cancel: 0 0
+a later sleep: 0, cancelled: 1
+flat after a cancel: yes
+cancel a finished task: 0, its deadline: 0
+cancel main: 0, a stale handle: 0
+arm a deadline: 1
+the deadline resumes the task: yes, its sleep answers 0
+flat after a deadline: yes
+the bounded wait times out: yes, answers 0
+flat after a timeout: yes
+cancel a waiting reader: 1, it answers 0
+flat after cancelling a reader: yes
+an armed deadline is a timer: 1
+flat after done: yes, nothing left to run: yes

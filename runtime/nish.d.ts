@@ -4888,9 +4888,9 @@ declare module "nish:async" {
    * `--emit-ts` (NL4018).
    *
    * @param task A handle `taskId()` answered.
-   * @returns `true` when the task was still running and is now cancelled;
-   *   `false` for a task that has finished, was cancelled already, or is
-   *   `main`.
+   * @returns `true` while the task is still running, so it is now cancelled
+   *   (a second `cancel` of it answers `true` too); `false` for a task that
+   *   has finished, or for `main`.
    */
   export function cancel(task: i64): boolean;
   /**
