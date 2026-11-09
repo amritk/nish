@@ -96,6 +96,10 @@ function isMathModule(packageName: string, name: string): boolean -> @isMathModu
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   stackSites=0 stackLocals=0
   callee +0:35 stdModuleName -> @stdModuleName
+function quietBitsLocal(builtin: string): string -> @quietBitsLocal [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function isSortModule(packageName: string, name: string): boolean -> @isSortModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName

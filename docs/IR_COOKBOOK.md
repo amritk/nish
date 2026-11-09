@@ -25313,7 +25313,14 @@ there is `call double @nish.fmodF64(double %x, double %y)` in place of
 `fpext`ed to `double` first and the result `fptrunc`ed back, exact because a
 remainder of two floats is a float (`tests/cases/wasm_math_rem.ll`). An
 integer `%` keeps `srem` and copies nothing. A native build and
-`--profile wasi` keep the intrinsics and `frem`.
+`--profile wasi` keep the intrinsics and `frem`, except under
+`--deterministic`, which takes this route on every target and adds one more:
+`f64ToBits(x)` is `call i64 @nish.quietBitsF64(double %x)`, whose body is
+`fcmp une double %x, %x` and a `phi` of `0x7ff8 << 48` and the `bitcast`,
+and `f32ToBits` the same through `@nish.quietBitsF32` and `2143289344`
+(`0x7fc00000`) (`tests/cases/deterministic_bits.ll`). Every C
+unit and every link line is compiled with `-ffp-contract=off`, with or without
+the flag, so no `fmul` and `fadd` pair becomes an FMA on AArch64.
 
 <!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.

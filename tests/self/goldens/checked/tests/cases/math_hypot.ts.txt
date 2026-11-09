@@ -510,6 +510,12 @@ function fmodF64(x: f64, y: f64): f64 -> @nish.fmodF64 [exported]
   local +12:9 implicit: u64 (const)
   local +16:9 i: u64 (let)
   local +26:9 i: u64 (let)
+function quietBitsF64(x: f64): i64 -> @nish.quietBitsF64 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function quietBitsF32(x: f32): i32 -> @nish.quietBitsF32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 import Math.hypot from "nish/math" -> function @nish.hypotF64
 function hyp(a: f64, b: f64): f64 -> @hyp [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false

@@ -16,9 +16,11 @@
  * the compiler copies each function here that the call reaches into the
  * calling module as an `internal` function, so this file writes no `.ll` of
  * its own. On `--profile wasm` and `--profile wasm-host`, where no libm is
- * linked, a call to the other five and an `f64` `%` load it too; everywhere
- * else they stay LLVM's intrinsics and `frem`. Under Node and `tsc` the calls
- * are the platform's `Math`, so nothing here runs there.
+ * linked, and on every target under `--deterministic`, a call to the other
+ * five and an `f64` `%` load it too; elsewhere they stay LLVM's intrinsics and
+ * `frem`. Under Node and `tsc` the calls are the platform's `Math`, so nothing
+ * here runs there, except under `--deterministic`, whose `--emit-ts` reading
+ * imports these functions in place of `Math`.
  *
  * **Exactness.** Each is exactly JavaScript's value for every NaN, signed
  * zero and infinity — every `atan2` infinity pairing, and `hypot`'s Infinity

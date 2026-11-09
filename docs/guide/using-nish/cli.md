@@ -607,6 +607,22 @@ leaves the IR unchanged.
   `main` does not reach — C code it links included. It adds a few lines to the
   IR. With it, `--allow fs.read=<dir>` and `--allow fs.write=<dir>` grant a
   capability beneath one directory. See [The sandbox](sandbox.md).
+- **`--deterministic`** makes floats answer the same bits on every target:
+  natively on x86-64 and Arm, in a wasm build, and in the `--emit-ts`
+  reading under Node. `Math.sin`, `cos`, `exp`, `log`, `pow` and a float `%`
+  run the standard library's own versions instead of the platform's, and
+  `f64ToBits` gives one bit pattern for every NaN. A program that reads the
+  clock, a random number, the environment, a file, the network, another
+  process, the terminal or C code is refused, because those answer
+  differently on every run, and so is `Number(s)` or `parseFloat(s)` of a
+  string. Exit code 1, naming the call:
+
+  ```text
+  main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
+  ```
+
+  Use it for a simulation a server and a browser both run and must agree on
+  ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).

@@ -166,7 +166,11 @@ is listed with a reproducer in
 [wp13-differential.md](wp13-differential.md) and
 `tests/differential/known-failures.txt`: 1-ulp libm differences in
 `sin`/`cos`/`log`/`pow`, `Math.min`/`max` with NaN, `Math.round(-0.3)`,
-and the division panics above.
+and the division panics above. A program built with `--deterministic` has no
+libm differences: `sin`, `cos`, `exp`, `log`, `pow` and a float `%` are the
+standard library's own on every target, and its `--emit-ts` reading calls the
+same functions, so x86-64, AArch64, wasm32 and Node print the same bits
+([`--deterministic`](LANGUAGE.md#--deterministic)).
 
 ### How do I call Nish code from Node?
 

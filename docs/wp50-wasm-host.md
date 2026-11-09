@@ -20,8 +20,15 @@ a module-storage `u8[]` lent to a `u8[]` parameter, and `runtime/runtime-text.c`
 (`tests/run.js`, section `host-import-text`). Stage 5a is built: on a page
 module `Math.sin`, `cos`, `exp`, `log` and `pow` call `std/math.ts`'s fdlibm
 ports and a float `%` its `fmodF64`, so both page profiles link them with no
-import (`tests/run.js`, section `wasm-math`). Stage 5b, the rest of stage 5,
-is the next. The anchors below are at `39a87b3b`.
+import (`tests/run.js`, section `wasm-math`). Stage 5b is built:
+`--deterministic`, which lowers the five on every target to the same
+functions, sends the TypeScript reading to `nish/math`, makes `f64ToBits` and
+`f32ToBits` give the canonical quiet NaN, refuses the nondeterministic
+capabilities and `Number(s)` (NL2697–NL2699, NL3052–NL3054), compiles every
+runtime unit with `-ffp-contract=off`, and holds the float corpus
+(`tests/differential/corpus/float/`) to one `expected.txt` natively, on
+wasm32-wasi and under `--emit-ts` (`tests/run.js`, sections `deterministic`
+and `float-corpus`; CI's `simd-arm64` job runs it on AArch64). The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design; `npm test` compiles stage 2's (host modules and
 `HostHandle`) and none of the later stages' yet.
@@ -714,9 +721,10 @@ What already agrees, and why:
 
 - **`+ - * /` and `Math.sqrt` on `f64`** are IEEE-754 correctly rounded on
   every target. The emitter writes no `contract` or `fast` flag (`src/emit-ops.ts`).
-  Nothing passes `-ffp-contract`, `-ffast-math` or `-march=native` except
-  `--cpu x86-64-v3`, which passes `-ffp-contract=off` (`scripts/build.sh:382`).
-  So the IR's `fmul` and `fadd` are never fused into an FMA on aarch64.
+  Nothing passes `-ffast-math` or `-march=native`, and since stage 5b every
+  C unit and the program's IR are compiled with `-ffp-contract=off`
+  (`scripts/build.sh`). So the IR's `fmul` and `fadd` are never fused into an
+  FMA on aarch64.
 - **`f32`.** Native builds use single-precision instructions. The TS reading
   writes `Math.fround(a op b)` (`src/emit-ts-numbers.ts:392`). Rounding to
   double and then to single gives the same answer as rounding once for
@@ -736,19 +744,24 @@ What does not agree today, and what the flag does about it:
 | NaN bit patterns. x86-64 makes the default NaN with the sign set, aarch64 without it, and wasm leaves the sign and payload of an arithmetic NaN nondeterministic. They differ only where a program reads a float's bits | `f64ToBits` and `f32ToBits` return the canonical quiet NaN (`0x7ff8000000000000`, `0x7fc00000`) for any NaN: one compare and one select. A snapshot codec that writes floats through them sends the same bytes from server and client |
 | The runtime's C units are compiled with clang's default contraction, which may fuse inside C on aarch64 | every runtime unit is compiled with `-ffp-contract=off`. The float code in them today is exact or integer-only, so this is a guard, not a fix |
 | `Math.random`, `Date.now` and every other capability outside the deterministic set | refused: the flag is also the capability policy that denies `clock`, `entropy`, `env`, `ffi`, `fs.*`, `net`, `process.spawn` and `tty`, so the simulation module cannot call a host import either |
-| Parsing a float from text (`Number(s)`), if the corpus finds a target whose parser rounds differently | refused under the flag, with its own code, until it agrees |
+| Parsing a float from text (`Number(s)`). Stage 5b found native and Node disagree on the grammar, not the rounding: `Number("0b101")` is NaN natively and 5 under Node, `Number("0x1p3")` 8 natively and NaN under Node | refused under the flag (NL2697) until one parser serves both |
 
-- **The corpus.** `tests/differential/float-corpus/` runs every operation
+- **The corpus.** `tests/differential/corpus/float/float.ts` runs every operation
   and every `Math` builtin over a fixed set of operands: ±0, ±subnormals, the
   smallest and largest normals, ±Inf, NaN, integers around 2^53, multiples
   of π/4 near the argument-reduction boundaries, and arguments up to 1e300.
-  It prints each result's bits in hex. The test compares the four outputs
-  byte for byte: native x86-64, native aarch64 (Q8), wasm32 under Node, and
-  `--emit-ts` under Node. They are bits, not printed decimals, because
+  It prints each result's bits in hex. `tests/run.js`'s `float-corpus`
+  section holds each output byte for byte to one `expected.txt`: native
+  x86-64 and native aarch64 (Q8, CI's `simd-arm64` job), wasm32-wasi under
+  Node, and `--emit-ts` under Node. It is not a `main.ts`, so the
+  differential runners, which build without the flag, pass it by. They are bits, not printed decimals, because
   printing can hide a last-bit difference.
-- **The speed cost** falls only on programs that pass the flag. Stage 5
-  measures `std/math.ts` `sin` against glibc's on a loop, and reports the
-  ratio with its noise band.
+- **The speed cost** falls only on programs that pass the flag, and it is
+  not a cost: measured on x86-64 against glibc 2.39, 20M calls accumulated,
+  medians of 11 interleaved rounds, `std/math.ts` `sin` takes 0.27× glibc's
+  time over [0, 14620] (0.126 s against 0.472 s) and 0.70× over [0, 0.78)
+  (0.097 s against 0.139 s). The noise band, glibc against a byte-identical
+  copy of itself, is 1.005 and 1.007.
 - **Without the flag, nothing changes.** One exception is Q7: making
   `std/math.ts` the lowering of the five functions on freestanding wasm
   regardless of the flag. That fixes today's link failure, and it costs
@@ -896,7 +909,7 @@ answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 | 2 | **Imports and handles (W1, W4).** Host modules (`--host`, `package.json`), reading their signatures and skipping bodies. Import attributes. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. The TS reading keeps the `import`. The refusals: a `string` result, an object, a function, a `Promise`, `declare function` in a wasm build, a host module in a native build. The plugin gains host modules | Q1, Q2, Q6 | about 20 B per imported function; nothing without one |
 | 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | nothing to a program with no module storage and no host module: its loader, `.d.ts` and `.wasm` are the bytes it had before (`WASM_PLAIN_DIGESTS`, §6). One with either pays the `nish.panic` import and its site arguments. **Built**; record `docs/security/wasm-host.md` |
 | 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | nothing to a program with no strings (`WASM_PLAIN_DIGESTS`); 1,111 B for an integer template, 13,046 B with an `f64` (10,296 B of it the printer's table). **Built** |
-| 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured over an `x + 1.0` module, raw / gzip / brotli on `wasm-host` with no wasm-opt: `sin` 1,741 / 1,211 / 1,164 B, `cos` 1,755 / 1,219 / 1,176, `exp` 730 / 478 / 502, `log` 610 / 397 / 387, `pow` 2,250 / 1,292 / 1,243, `%` (`fmod`) 710 / 366 / 331, all six 6,250 / 3,490 / 3,352; `--profile wasm` adds the same raw bytes. Nothing to a module that calls none (`WASM_PLAIN_DIGESTS`). **5a built** |
+| 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured over an `x + 1.0` module, raw / gzip / brotli on `wasm-host` with no wasm-opt: `sin` 1,741 / 1,211 / 1,164 B, `cos` 1,755 / 1,219 / 1,176, `exp` 730 / 478 / 502, `log` 610 / 397 / 387, `pow` 2,250 / 1,292 / 1,243, `%` (`fmod`) 710 / 366 / 331, all six 6,250 / 3,490 / 3,352; `--profile wasm` adds the same raw bytes. Nothing to a module that calls none (`WASM_PLAIN_DIGESTS`). **5a and 5b built** |
 | 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |
 
 Every stage carries its own definition of done from `CLAUDE.md`. That means a
