@@ -188,7 +188,7 @@ const answer = async (c: Conn): Promise<Answer> => {
   return a
 }
 
-/** Whether nothing more arrives on `c` within a moment: the bytes it holds are all there are. */
+/** Whether no byte waits on `c` past the answers already read: a read that would block. */
 const quiet = (c: Conn): boolean => {
   if (c.end > c.start) {
     return false
@@ -219,7 +219,7 @@ const verify = (t: Suite, what: string, a: Answer, body: string, type: string): 
   t.ok(`${what}: Date is an IMF-fixdate`, imfFixdate(a.field("date")))
 }
 
-/** Counts the answers to `n` pipelined requests that are 200 with the body `want(k)`, in order. */
+/** How many of the answers to `burst(n, every, rare, common)` are 200 with the body asked for, read in order. */
 const inOrder = async (c: Conn, n: i32, every: i32, rare: string, common: string): Promise<i32> => {
   let good: i32 = 0
   for (let k: i32 = 0; k < n; k++) {

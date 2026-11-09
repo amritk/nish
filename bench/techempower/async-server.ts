@@ -59,6 +59,7 @@ export const tfbLimits = (size: i32): ServeLimits => {
 }
 
 /** TFB's answer to `req`: /plaintext, /json, or 404 for any other method or path. */
+// biome-ignore lint/suspicious/useAwait: `serveOn` takes an async handler, and these answers wait on nothing
 export const tfbHandle = async (req: Request): Promise<Response> => {
   switch (req.route) {
     case TFB_PLAINTEXT:
