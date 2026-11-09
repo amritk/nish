@@ -532,6 +532,12 @@ export class IRModule {
    * number's empty text is not filed: `addMetadata("")` scans, as before.
    */
   metadataNumbers: StringMap
+  /**
+   * `!N` for each number in `metadata`, formatted once when the number is
+   * handed out: a node is referenced far more often than it is made, and
+   * `toText` prints the same reference again.
+   */
+  metadataRefs: string[]
   /** Named metadata lines (`!llvm.dbg.cu = !{...}`), printed before the numbered nodes. */
   namedMetadata: string[]
   /** `!N` of each `!llvm.module.flags` entry, printed as that one named line after the others. */
@@ -553,6 +559,7 @@ export class IRModule {
     this.targetHeader = []
     this.metadata = []
     this.metadataNumbers = new StringMap()
+    this.metadataRefs = []
     this.namedMetadata = []
     this.moduleFlags = []
     this.definitionAttrs = ""
@@ -564,9 +571,14 @@ export class IRModule {
     if (index < 0) {
       index = this.metadata.length
       this.metadata.push(text)
-      this.fileMetadata(text, index)
+      this.metadataRefs.push(`!${index}`)
+      // The lookup that missed shows no number holds the text, so it is filed
+      // without the second lookup `fileMetadata` would make.
+      if (text.length > 0) {
+        this.metadataNumbers.set(text, index)
+      }
     }
-    return `!${index}`
+    return this.metadataRefs[index]
   }
 
   /** File `text`, now at `index`, in `metadataNumbers` unless a lower number already holds it. */
@@ -588,7 +600,9 @@ export class IRModule {
   reserveMetadata(): string {
     const index = this.metadata.length
     this.metadata.push("")
-    return `!${index}`
+    const ref = `!${index}`
+    this.metadataRefs.push(ref)
+    return ref
   }
 
   setMetadata(ref: string, text: string): void {
@@ -704,7 +718,7 @@ export class IRModule {
       }
       let m = 0
       while (m < this.metadata.length) {
-        nodes.push(`!${m} = ${this.metadata[m]}`)
+        nodes.push(`${this.metadataRefs[m]} = ${this.metadata[m]}`)
         m = m + 1
       }
       sections.push(nodes.join("\n"))

@@ -1590,6 +1590,14 @@ export class CheckedProgram {
   /** Whether `--number-mode f64` is in force, where a `.length` is an `f64`. */
   f64Mode: boolean
   /**
+   * Which of the names a bounds guard calls this module declares anywhere,
+   * as bits: 1 for `panic`, 2 for `toI32`, 4 for `toU32`. -1 until
+   * `shadowsGuardName` in `src/checker.ts` first asks, which walks the module
+   * once for all three, so a module with many NL9007 warnings is not walked
+   * again for each.
+   */
+  guardShadows: i32
+  /**
    * The `nish:unsafe` imports of this module, in source order, and every call
    * of one of its functions, in the order the checker met them (each once,
    * however many instantiations check the body it is in). Nothing in the
@@ -1858,6 +1866,7 @@ export class CheckedProgram {
     this.mathLibrary = isMathModule(packageName, source.path) || isSortModule(packageName, source.path)
     this.usesArgv = false
     this.f64Mode = false
+    this.guardShadows = -1
     this.unsafeImports = []
     this.unsafeCalls = []
     this.nodeTypes = new Array<i32>(nodeCount)
