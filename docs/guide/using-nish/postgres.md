@@ -939,6 +939,82 @@ open; and `next()` with one still open.
 [`tests/postgres/carrier.ts`](https://github.com/amritk/nish/blob/main/tests/postgres/carrier.ts) is a whole
 program that serves HTTP while a query sleeps on a live server.
 
+## Awaiting a query from a task
+
+`nish/net/postgres-async` is a pool for an [`async`](../language/async.md) program: a
+spawned task awaits its query, and while it waits on the socket the executor
+runs the program's other tasks. It is three calls, not one, because a spawned
+task may write only numbers into what it shares: `pgAsyncClaim` and
+`pgAsyncRelease` mark a connection taken and free, and `pgAsyncQuery` builds
+its result in the task's own memory.
+
+```ts
+import { spawn } from "nish:async"
+import { secret, wipe } from "nish:secret"
+import { PgConfig, pgTarget } from "nish/net/postgres"
+import {
+  PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
+} from "nish/net/postgres-async"
+
+async function title(pool: PgAsyncPool, id: i32): Promise<void> {
+  const ticket: i32 = await pgAsyncClaim(pool)
+  if (ticket < 0) {
+    return // -1: no live connection; -2: none came free within claimWaitMs
+  }
+  const params = new PgAsyncParams()
+  params.int(id)
+  const r = await pgAsyncQuery(pool, ticket, "select title from article where id = $1", params)
+  pgAsyncRelease(pool, ticket, r.reusable)
+  if (r.ok() && r.rows > 0) {
+    console.log(r.text(0, 0))
+  }
+}
+
+export async function main(): Promise<i32> {
+  const config = new PgConfig()
+  config.user = "app"
+  const pool = new PgAsyncPool(4)
+  const password = secret(passwordBytes())
+  const live: i32 = await pgAsyncConnect(pool, config, password, pgTarget("127.0.0.1", 5432))
+  wipe(password)
+  spawn(title(pool, 1))
+  spawn(title(pool, 2))
+  // ... wait for the tasks, then pool.close()
+  return live === pool.size ? 0 : 1
+}
+```
+
+- **Run each query in a spawned task.** The task's memory, and every buffer,
+  row and string its query built, is freed when the task ends, so a server
+  that runs thousands of queries stays the same size. A query awaited in
+  `main` keeps about 9 KB until `main` returns.
+- **Claim, query, release, once each.** A ticket names one connection and one
+  claim of it. Give it to `pgAsyncRelease` exactly once, with the result's
+  `reusable`: a second release, or a ticket from before `close()`, panics, so
+  two tasks never share a connection.
+- **Waiting for a connection.** When all are claimed, `pgAsyncClaim` sleeps
+  1 ms, then twice as long up to 16 ms, and answers -2 once it has slept
+  `claimWaitMs` (5000 by default). A connection given back is found on the
+  waiter's next look, so up to 16 ms later.
+- **A result.** `ok()` is true when the server ran the statement; `failure`
+  is the `PG_ERR_*` code (0 with `errorCode` and `errorMessage` for an error
+  the server sent, 8 for a NUL in the SQL or a text parameter, 9 for a lost
+  socket, with `socketError`). `rows` and `columns` count what came back;
+  read a cell with `text`, `int` or `isNull`, which panic outside the result.
+- **Reuse.** A connection goes back to the pool only when its query ended
+  idle and changed no setting. A transaction left open, a `SET`, a lost
+  socket, a frame no query expects or a reply past `maxMessage`,
+  `maxColumns` or `maxRows` closes it, so no task inherits another's
+  session. `pgAsyncConnect` fills the slots that have no connection; call it
+  again when `live()` falls.
+- **The target** is a Unix socket or a numeric address: the pool resolves no
+  names. Parameters go in text, never spliced into the SQL.
+
+There is no deadline on a wait: a server that accepts and never answers holds
+the task awaiting it. Bound a slow statement with the server's
+`statement_timeout`. The constructor panics on a size outside 1..64, and
+`pgAsyncConnect` on a target that failed or a host name.
+
 ## What it does not do
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query

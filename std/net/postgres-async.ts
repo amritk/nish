@@ -83,7 +83,8 @@
  * is freed when the task ends, so `Arena.used()` stays where it was across
  * thousands of queries. A query awaited outside a task, through a function
  * that is handed the pool, keeps what it built until an enclosing scope
- * ends (about 9 KB a query in `tests/link/std_postgres_async_flat`'s probe).
+ * ends (about 9 KB a query, measured while writing
+ * `tests/link/std_postgres_async_flat`).
  *
  * **Errors.** A query answers `PG_CARRIER_DONE`, or `PG_CARRIER_FAILED` with
  * `failure` a `PG_ERR_*` and `socketError` a negative errno, as

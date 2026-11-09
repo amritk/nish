@@ -11,7 +11,9 @@ from evidence.
 Anchors are function names in `std/net/postgres.ts` at the commit that adds
 connection targets (`pgTarget`, `pgTargetUrl`), the last to change it, and
 in `std/net/postgres-carrier.ts` at the commit that adds `PgCarrier`, which
-also adds `PgBatcher.shed`.
+also adds `PgBatcher.shed`; those in `std/net/postgres-async.ts` are at the
+commit that refuses a NUL in an async query's text parameter, the last to
+change it (PG-32).
 
 **Result.** Every message is framed once, by its length, and a length under 4
 or over `maxMessage` fails the connection before its body is read; every
@@ -102,10 +104,12 @@ URLs under "Properties verified").
 | File | Functions |
 | --- | --- |
 | `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, `paramInt4Array` and `paramInt8Array`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, the binary array builder `binaryArrayStart`, `binaryArrayInt` and `binaryArrayNull`, the parameter format codes written at `bindEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgPutDecimal`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue`; `PgBatcher.shed` |
+| `std/net/postgres-async.ts` | `PgAsyncPool` (the constructor, `live`, `close`); `PgAsyncParams`; `PgAsyncResult` (`ok`, `text`, `isNull`, `int`, `cell`); `pgAsyncConnect`, `pgAsyncStartup`, `pgAsyncClaim`, `pgAsyncRelease`, `pgAsyncQuery`, and the helpers they call: `pgAsyncSlot`, `pgAsyncWaitFailure`, `pgAsyncLost`, `pgAsyncEncode`, `pgAsyncBytes`, `pgAsyncHasNul`, `pgAsyncRead`, `pgAsyncRow`, `pgAsyncError`, `pgAsyncDecimal` |
 | `std/net/postgres-carrier.ts` | `PgCarrierLimits`; `PgCarrier` (the constructor, `attach`, `run`, `runInt`, `runText`, `request`, `connection`, `send`, `next`, `close`, and the private helpers they call: the poll pass, connect and its timeout, the read and write of each slot, the routing of pool events to queries and batched executions, the ticket map, the free stacks and the shedding of a lost execution's requests) |
 
-Out of scope: the `nish:net` calls themselves, which the carrier makes and
-the client never does, and `HttpHandler`, whose `watch` and `fired` the
+Out of scope: the `nish:net` calls themselves, which the carrier and the
+async pool make and the client never does, the executor behind `readable`,
+`writable` and `sleep` (`docs/security/async.md`), and `HttpHandler`, whose `watch` and `fired` the
 carrier uses ([handler.md](handler.md)); the HMAC,
 SHA-256, base64 and constant-time primitives the SCRAM exchange calls, which
 are [crypto-k1.md](crypto-k1.md)'s; and what a program does with a column's
@@ -153,6 +157,9 @@ PG-18 to PG-20 are the shapes a URL can take, checked as the parser was
 written; PG-21 and PG-22 are accepted. PG-23 to PG-27 are the carrier's
 (`std/net/postgres-carrier.ts`): PG-23 and PG-24 were found as it was written
 and fixed before it merged, PG-25 holds, and PG-26 and PG-27 are accepted.
+PG-28 to PG-34 are the async pool's (`std/net/postgres-async.ts`): PG-28 to
+PG-31 hold, PG-32 was found as it was written and fixed before it merged, and
+PG-33 and PG-34 are accepted.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -183,6 +190,13 @@ and fixed before it merged, PG-25 holds, and PG-26 and PG-27 are accepted.
 | PG-25 | Medium if it failed | `PgCarrier.next`, its read of a slot | A socket that reports an error or hang-up stays readable; a carrier that read nothing from it and went on would be woken by it on every turn, spinning a worker. | **Holds.** A read that answers an error, or 0 bytes, ends the connection there: the error is kept as `socketError`, the socket closed and removed from the poll set, and the queries on it fail. "a query whose connection ends is the program's 503", "with the connection closed behind it" (`link/std_postgres_carrier`); live, the `reset` check (ECONNRESET, -104). |
 | PG-26 | Low | `PgCarrier` | Once a connection is up there is no deadline on a query: a server that authenticates and then never answers a statement holds that query, and the ones behind it on its connection, until the connection ends. | **Accepted.** A statement's time is the server's to bound (`statement_timeout`); the carrier holds `request()` so the program can answer with its own deadline, and a backend ended by the server fails its queries as lost. |
 | PG-27 | Low | `PgCarrier.next`, its connect pass | While the server is down, each `next()` pass makes one connect attempt for each slot the pool wants, with no backoff, and each attempt makes a new `PgConnection` and its buffers, which the arena keeps. | **Accepted.** The attempts are bounded by the queries waiting, not by time: a slot is wanted only while more queries wait than the connections starting can take, and a connect that fails while no connection is ready fails the oldest waiting query with it (PG-23), so the attempts end when the queue is empty, and there is at most one for each slot in each pass, which the program's `wait` turns pace. The memory is a connection's for each query that failed for want of a server, which the Limits below record. A backoff would hold the clients of the queries waiting behind a server already down for longer; a program that would rather not pay it can answer 503 itself after failures instead of queueing more. "a refused connect fails the query", "without waiting for the timeout" (`link/std_postgres_carrier`). |
+| PG-28 | High if it failed | `pgAsyncRead`, `pgAsyncRow`, `pgAsyncError` | The async pool reads a server's answer with a framer of its own, not `PgConnection`'s, so PG-1 to PG-3 must hold for it too: a length under 4 or past `maxMessage`, a field past its message's end, a row past `maxColumns` or rows without end. | **Holds.** A length under 4, and a DataRow or ErrorResponse whose fields do not add up to its length, are `PG_ERR_FRAME`; a length past `maxMessage` is `PG_ERR_TOO_BIG` before its body is read, and the read buffer grows by doubling to `maxMessage + 1` at most; a row past `maxColumns` is `PG_ERR_TOO_BIG` before a cell is kept; rows past `maxRows` are read and dropped, and the query fails `PG_ERR_TOO_BIG` at its ReadyForQuery, its connection still in step. A message type no extended query answers (a `W`, COPY among them) is `PG_ERR_UNEXPECTED`. Each failure but the last closes the connection. "short: ok=false failure=1", "big: ok=false failure=2", "wide: ok=false failure=2", "odd: ok=false failure=3", "many: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true" (`link/std_postgres_async`). |
+| PG-29 | Medium if it failed | `pgAsyncRead`, `pgAsyncRelease` | A connection one task gives back must not carry its session to the next: an open transaction would put the next task's statements inside it, and a `SET` its settings (a `client_encoding` would change how rows decode, PG-8). | **Holds.** A query is `reusable` only when it read to a ReadyForQuery of `I` (idle) with no ParameterStatus on the way; a socket error, a frame failure or a cap closes it too. `pgAsyncRelease` closes a connection whose query is not, and counts it in `dropped`. "begin: ok=true failure=0 socket=0 rows=0 tag=BEGIN reusable=false", "live after begin: 1", "set: ok=true failure=0 socket=0 rows=0 tag=SET reusable=false", "live after set: 0" (`link/std_postgres_async`). |
+| PG-30 | High if it failed | `pgAsyncClaim`, `pgAsyncSlot`, `pgAsyncQuery`, `pgAsyncRelease` | Two tasks on one connection would interleave their messages and read each other's rows; a connection given back twice would be claimed by two tasks at once. | **Holds.** A claim marks its slot and answers a ticket of the slot and its claim count; `pgAsyncQuery` and `pgAsyncRelease` take only a ticket that is the slot's current claim, a release spends it, and `close()` spends every one, so a second release, or one after `close()`, panics rather than give back a connection another task holds. The count wraps after 2^24 claims of one slot. Three tasks on a pool of two each get their own row, the third after one is given back: "B: ... first=q", "C: ... first=q", "A: ... first=held" (`link/std_postgres_async`); `link/std_postgres_async_release_panic` (a ticket that is not a current claim). |
+| PG-31 | Medium if it failed | `pgAsyncClaim` | A task that waits for a connection must not spin the executor while every connection is held, nor wait without end. | **Holds.** It sleeps 1 ms, then twice as long each time up to 16 ms, and answers `PG_CARRIER_FULL` (-2) once it has slept `claimWaitMs` (5000 by default); with no slot connected it answers -1 (`PG_POOL_NONE`) at once. "a claim slept while both were held: true", "a claim with every connection held: -2 after 6 sleeps", "claim with none live: -1" (`link/std_postgres_async`). |
+| PG-32 | Low | `pgAsyncEncode` | A NUL in a text parameter was sent, though the SQL was checked for one and `pgAsyncQuery`'s documentation promised `PG_ERR_ENCODING` for both; the server refuses such a value, so it cost a round trip and a server error, not an injection. | **Fixed** as written: each text parameter is checked before anything is written, the query fails `PG_ERR_ENCODING` and the connection stays reusable. Before, "nul: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=a b" (the stand-in echoed it); after, "nul: ok=false failure=8 socket=0 rows=0 tag= reusable=true" (`link/std_postgres_async`). |
+| PG-33 | Low | `pgAsyncConnect`, `pgAsyncQuery` | No wait has a deadline: a server that accepts and never answers holds a query's task, and in `pgAsyncConnect` its caller, until the connection ends. | **Accepted.** As PG-26: a statement's time is the server's to bound (`statement_timeout`), and a task waiting on its socket costs the executor nothing. A later stage that cancels a wait answers its own code in `pgAsyncWaitFailure`, the one place a wait's outcome becomes a failure. |
+| PG-34 | Low | `pgAsyncQuery` | A query awaited outside a spawned task, through a function that is handed the pool, keeps the buffers, rows and strings it built until an enclosing scope ends: about 9 KB a query in `main`, so a loop of queries in `main` grows the arena without bound. | **Accepted.** The compiler gives such a function no scope of its own; a spawned task's region is freed when the task ends, so the module and the guide say to run each query in a task, which `link/std_postgres_async_flat` does: "Arena.used() flat over 2000 queries: true". |
 
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
@@ -252,6 +266,10 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `PgCarrier.connection` | before any event named a connection | `link/std_postgres_carrier_connection_panic` (a query run, no event yet) |
 | `PgCarrier.send` | no `PG_CARRIER_BUILD` open | `link/std_postgres_carrier_send_panic` (with no event read yet) |
 | `PgCarrier.next` | a `PG_CARRIER_BUILD` not yet ended by `send()` | `link/std_postgres_carrier_next_panic` (with a build open) |
+| `PgAsyncPool` constructor | a size outside 1..64 ("a PgAsyncPool size out of range"); a ticket packs its slot in 6 bits | `link/std_postgres_async_size_panic` (65, after 64 is taken) |
+| `PgAsyncResult.text`, `isNull`, `int`, through `cell` | a row or column outside the result ("a cell out of range") | — |
+| `pgAsyncQuery`, `pgAsyncRelease` | a ticket that is not a slot's current claim: never claimed, already released, or claimed before `close()` ("a ticket that is not a current claim") | `link/std_postgres_async_release_panic` (a release of ticket 0 on a pool that never connected, after its size is read) |
+| `pgAsyncConnect` | a target that failed, or a TCP host that is not a numeric address (the pool resolves no names) | — |
 
 Apart from the array misuse above, the builder calls do not panic: `param*`,
 `arrayStart` and `bindEnd` with no bind open answer false and write nothing
@@ -363,6 +381,22 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   fits maxOutput at the bound", "and a byte past it is refused". The guide
   states that bound; the batcher does not read the connection's caps when it is
   made, since one batcher serves every connection of a pool.
+
+- **The async pool's waits have no deadline (PG-33).** A server that
+  accepts a connection and never answers holds the task that awaits it; set
+  `statement_timeout` on the server, or the role, to bound a statement.
+- **A claim waits at most `claimWaitMs`, in sleeps (PG-31).** When every
+  connection is held, `pgAsyncClaim` sleeps 1 ms, then twice as long each
+  time up to 16 ms, and answers -2 once it has slept `claimWaitMs` (5000 by
+  default); a connection given back is not announced, so a waiting task
+  notices it up to 16 ms late.
+- **An async query keeps its memory until its scope ends (PG-34).** Run each
+  query in a spawned task, whose region is freed when it ends; one awaited in
+  `main` through a function handed the pool keeps about 9 KB until `main`'s
+  scope ends.
+- **The async pool reconnects only when told.** A connection it closed stays
+  closed; `pgAsyncConnect` fills the slots that have none, and a claim with
+  none live answers -1 at once.
 
 ## Properties verified
 
@@ -674,3 +708,26 @@ URL whose host is the percent-encoded socket directory: the server asks for no
 password (`peer` for a cluster `run.mjs` starts, `trust` in CI's service), so a
 password the server would refuse still logs in, and its copy is wiped; and a
 multi-row read comes back over the socket, where `inet_server_addr()` is NULL.
+
+**The async pool, over loopback.** `tests/link/std_postgres_async` runs the
+pool against a stand-in backend in the same process (`server.ts`), so it needs
+no server. Three tasks on a pool of two finish B, C, A, though A was sent
+first: A's answer waits until B and C are done, and C could start only on the
+connection B gave back, so the tasks overlapped and none waited on another's
+socket, with no clock read (PG-30). It then checks, in one task, parameters in
+text with a NULL, a server error that leaves the connection reusable, rows past
+`maxRows` (PG-28), a NUL in a parameter (PG-32), a transaction left open and a
+setting changed, each of which closes its connection (PG-29), and a claim with
+none live; a connection that ends under a query (`PG_ERR_CLOSED`); four hostile
+frames (PG-28); and a claim that gives up after `claimWaitMs` (PG-31).
+`tests/link/std_postgres_async_flat` runs 2000 queries, each in its own
+spawned task, and reads `Arena.used()` before and after: "Arena.used() flat
+over 2000 queries: true" (PG-34). The async pool is not yet run against a live
+server.
+
+## Tests
+
+- `tests/link/std_postgres_async` (PG-28 to PG-32)
+- `tests/link/std_postgres_async_flat` (PG-34)
+- `tests/link/std_postgres_async_release_panic`,
+  `tests/link/std_postgres_async_size_panic` (Panic sites)
