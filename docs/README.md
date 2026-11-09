@@ -131,6 +131,28 @@ who write programs in Nish. A page there follows these rules:
   `/security` with its sub-groups included, so a new record gets its route
   there by hand, beside its index row.
 
+## The site's look
+
+The site's styling and motion are three files, all served from
+[`docs/site/`](site/) (`assetsDir` in `scalar.config.json`):
+
+- [`theme.css`](site/theme.css) is the theme: the colours of both modes, the
+  gradient behind every page, and every animation — a page's entrance, blocks
+  that rise as they scroll into view, the cards' pointer highlight and the
+  landing page's hero. All of it stops under `prefers-reduced-motion`, and a
+  colour change re-measures the contrast figures in the file's head.
+- [`site.js`](site/site.js) builds the hero into the empty
+  `<div data-nish-hero></div>` at the top of [the guide's first
+  page](guide/index.md) and tracks the pointer for the cards. The host stays
+  empty in the Markdown so that GitHub shows nothing in its place; nothing a
+  reader needs may live only in the hero.
+- The icons beside the sidebar's groups and the header's links are the `icon`
+  keys in `scalar.config.json`.
+
+To see a change, run `npx @scalar/cli project preview scalar.config.json`
+(it needs Node 24) and look at the landing page, a page with tables and code,
+both colour modes and a phone-width window.
+
 ## The library reference
 
 `docs/reference/` is generated, never edited by hand: change the source's doc
