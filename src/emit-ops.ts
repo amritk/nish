@@ -458,15 +458,6 @@ export const emitFloatArithmetic = (
   return emitter.fn.emitValue(`fptrunc double ${wide} to float`)
 }
 
-/** `old op= rhs` on floats, at the compound assignment `expr`: `emitFloatArithmetic` on its operator. */
-export const emitCompoundFloat = (
-  emitter: Emitter,
-  expr: Node,
-  type: i32,
-  old: string,
-  rhs: string
-): string => emitFloatArithmetic(emitter, withoutEquals(expr.text), type, old, rhs, expr)
-
 /** `a & b` and friends: evaluate left then right (JS order), then one instruction. */
 const emitBitwise = (emitter: Emitter, expr: Node, type: i32): string => {
   const opcode = shiftOpcodeFor(bitwiseOpcode(expr.text), type)
@@ -617,7 +608,7 @@ const emitBitwiseAssignment = (emitter: Emitter, expr: Node): string => {
 }
 
 /** The arithmetic behind a compound assignment: `+=` is `+`. */
-const withoutEquals = (op: string): string => op.substring(0, op.length - 1)
+export const withoutEquals = (op: string): string => op.substring(0, op.length - 1)
 
 /** The integer opcode of a compound arithmetic assignment, in its signed spelling. */
 export const compoundIntegerOpcode = (op: string, json: boolean): string =>

@@ -413,18 +413,15 @@ export class Checker {
     if (this.program.isMathLibrary()) {
       return
     }
-    const page = this.ctx.pageModule
     const calls: Node[] = []
-    scanMathCalls(this.program.file, calls, page)
+    const rems: Node[] = []
+    scanMathCalls(this.program.file, calls, this.ctx.pageModule ? rems : null)
     for (const call of calls) {
       const name = call.children[0].text
       this.bindMath(`${name}F64`, `Math.${name}`, call)
     }
-    if (page) {
-      const rem = findRemainder(this.program.file)
-      if (rem !== null) {
-        this.bindMath("fmodF64", FLOAT_REM_LOCAL, rem)
-      }
+    if (rems.length > 0) {
+      this.bindMath("fmodF64", FLOAT_REM_LOCAL, rems[0])
     }
   }
 
@@ -3294,10 +3291,14 @@ const hasSortCall = (node: Node): boolean => {
 
 /**
  * The `Math` calls under `node` that `std/math.ts` answers, in source order
- * (`importMath`): `atan2`, `tan` and `hypot`, and with `page` set `sin`, `cos`,
- * `exp`, `log` and `pow` too.
+ * (`importMath`): `atan2`, `tan` and `hypot`. On a page module, where `rems`
+ * is not `null`, `sin`, `cos`, `exp`, `log` and `pow` too, and every `%` and
+ * `%=` goes to `rems`.
  */
-const scanMathCalls = (node: Node, calls: Node[], page: boolean): void => {
+const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null): void => {
+  if (rems !== null && node.kind === N_BINARY && (node.text === "%" || node.text === "%=")) {
+    rems.push(node)
+  }
   if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
     const callee = node.children[0]
     const name = callee.text
@@ -3307,28 +3308,15 @@ const scanMathCalls = (node: Node, calls: Node[], page: boolean): void => {
       (name === "atan2" ||
         name === "tan" ||
         name === "hypot" ||
-        (page && (name === "sin" || name === "cos" || name === "exp" || name === "log" || name === "pow")))
+        (rems !== null &&
+          (name === "sin" || name === "cos" || name === "exp" || name === "log" || name === "pow")))
     ) {
       calls.push(node)
     }
   }
   for (const child of node.children) {
-    scanMathCalls(child, calls, page)
+    scanMathCalls(child, calls, rems)
   }
-}
-
-/** The first `%` or `%=` under `node`, or `null` (`importMath`). */
-const findRemainder = (node: Node): Node | null => {
-  if (node.kind === N_BINARY && (node.text === "%" || node.text === "%=")) {
-    return node
-  }
-  for (const child of node.children) {
-    const found = findRemainder(child)
-    if (found !== null) {
-      return found
-    }
-  }
-  return null
 }
 
 /**
