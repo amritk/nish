@@ -324,7 +324,10 @@ the record that found it. The notes below the table name each such finding.
     scope ends, are accepted and not counted. PG-35 (Medium), a connection
     given back as reusable with bytes after its answer, and PG-36 (Medium),
     a result's memory bounded only by the product of its caps, were found by
-    the pool's first review and fixed before it merged.
+    the pool's first review and fixed before it merged. PG-37 (Low), a
+    cancelled query closing its connection without a CancelRequest, is
+    accepted and not counted; since cancellation, a program bounds PG-33's
+    wait with `cancelAfter`.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`

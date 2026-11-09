@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 683 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 685 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12899,4 +12899,20 @@ The message of an error contains:
 
 ```text
 …a task shares with its spawner only objects and arrays whose every part outlives the spawner's call; pass the task what it needs of it instead
+```
+
+## NL2692
+
+The message of an error contains:
+
+```text
+` takes two `i32`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false
+```
+
+## NL2693
+
+The message of an error contains:
+
+```text
+` from `nish:async` takes …
 ```

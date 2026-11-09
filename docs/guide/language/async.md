@@ -162,8 +162,31 @@ export async function main(): Promise<void> {
 ```
 
 It prints `first`, `second`, then `done`. The program exits once `main` has
-returned and no task is waiting. A wait has no deadline: a socket whose peer
-never sends and never closes keeps its task, and the program, waiting.
+returned and no task is waiting. `readable` and `writable` have no deadline:
+a socket whose peer never sends and never closes keeps its task, and the
+program, waiting. `readableWithin(fd, ms)` and `writableWithin(fd, ms)` give
+up after `ms` milliseconds and answer `false`.
+
+A task can also be cancelled. `taskId()` answers the running task's handle;
+`cancel(handle)` cancels it now and `cancelAfter(handle, ms)` later. A
+cancelled task is not stopped mid-line: every wait it is parked on, and every
+one it makes later, answers `false` at once, so it runs on to its end, and
+`cancelled()` tells it why. `main` is never cancelled.
+
+```ts nish:ok
+import { cancelAfter, cancelled, sleep, spawn, taskId } from "nish:async";
+
+async function nap(): Promise<void> {
+  cancelAfter(taskId(), 10);
+  const slept = await sleep(1000);
+  console.log(`slept ${slept}, cancelled ${cancelled()}`);
+}
+
+export async function main(): Promise<i32> {
+  spawn(nap());
+  return 0;
+}
+```
 
 `sleep`, `readable` and `writable` are not values: calling one without
 `await` is refused.

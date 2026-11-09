@@ -301,6 +301,7 @@ class Http1Connection
 | `closeWebSocket(code: i32): i32` | Starts the closing handshake (§5.5.1, §7.1.2) with `code`: a close frame, then the connection is done once it is sent. Answers 0, `H1_INVALID` for a code that may not be sent, or `H1_CLOSED` when the slot is not an open WebSocket. |
 | `consume(n: i32): void` | Marks the first `n` bytes of the output sent. |
 | `end(): i32` | Ends the response: the last chunk of a chunked body. Answers 0; `H1_INVALID` for a response with a length that still owes bytes; `H1_AGAIN` when the last chunk does not fit yet; `H1_CLOSED` with no response under way. |
+| `ended(): boolean` | Whether the peer's byte stream has ended (`endInput`): a request still held on the connection is one its client hung up on, or half-closed. |
 | `endInput(): void` | The peer's byte stream has ended: once what it sent is answered, the connection is done. |
 | `feed(buf: u8[], off: i32, len: i32): i32` | Takes as much of `buf[off .. off + len)` as `inputRoom` allows and answers how much; the rest is the caller's to feed again later. A window outside `buf` panics. |
 | `headArrived(now: i64): void` | Starts the head deadline at `now` (`monotonicNanos`) when bytes of a request head wait to be read and its clock has not started. The carriers call it after each `feed`; a program that feeds a connection itself calls it the same way. Bytes that wait while the previous exchange is still open start no clock: they count from when it is over (`nextRequest`). |

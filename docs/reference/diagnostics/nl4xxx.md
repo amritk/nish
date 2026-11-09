@@ -2,7 +2,7 @@
 
 # NL4xxx\: the interop sidecars
 
-The 17 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 18 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL4001
 
@@ -245,4 +245,12 @@ export async function main(): Promise<i32> {
 
 ```text
 --emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```
+
+## NL4018
+
+The message of an error contains:
+
+```text
+…--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native
 ```

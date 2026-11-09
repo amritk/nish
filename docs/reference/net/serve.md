@@ -322,7 +322,7 @@ class ServeLimits
 | `new ServeLimits()` |  |
 | `bodyBytes: i32` | The most bytes a request body may have; past it the request is answered 413 and its connection ends. |
 | `connections: i32` | The most connections open at once; a connection past it is accepted and closed at once, and its client sees the connection reset. |
-| `deadline: i32` | Milliseconds a request may take, from its head to its answer. Held for the cancellation stage: it is not yet enforced, and a slow handler holds its slot until it answers. |
+| `deadline: i32` | Milliseconds a request's task may run, from its start to its answer; past it the task is cancelled: each await it is parked on, and each it makes later, answers false at once, so it runs to its end and its slot is freed. 0 or less sets no limit. |
 | `headerBytes: i32` | The most bytes a request's header section may have; past it the request is answered 431 and its connection ends. |
 | `headTimeout: i32` | Milliseconds a connection may take to send a whole request head, from its first byte; past it the connection is closed. The bound on a client that trickles its head (slowloris): it holds a connection this long, no longer. |
 | `idleTimeout: i32` | Milliseconds a connection may go without a byte read or written, as a keep-alive connection does between requests; past it the connection is closed, freeing its slot. |
