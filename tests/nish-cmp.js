@@ -112,17 +112,21 @@ const SEED_HEADER_LINES = [
   " * runtime/runtime.c next to your C code; include runtime/nish.h's",
 ].join("\n")
 
-/** The four lines WP50 stage 4 writes in their place, naming `runtime-text.c` and `runtime-os.c`. */
+/**
+ * The five lines WP50 writes in their place: stage 4 names `runtime-text.c`
+ * and `runtime-os.c`, stage 5 the `-ffp-contract=off` every unit is compiled with.
+ */
 const STAGE4_HEADER_LINES = [
   " * C ABI of the Nish modules listed below. Link the .ll module(s),",
   " * runtime/runtime.c, runtime/runtime-text.c (strings and number formatting)",
-  " * and runtime/runtime-os.c next to your C code, or hand runtime/runtime.c to",
-  " * scripts/build.sh, which adds the rest; include runtime/nish.h's",
+  " * and runtime/runtime-os.c, compiled with -ffp-contract=off, next to your C",
+  " * code, or hand runtime/runtime.c to scripts/build.sh, which does both;",
+  " * include runtime/nish.h's",
 ].join("\n")
 
 /**
  * `text` with the stage 4 header comment put back as the seed wrote it. A
- * declaration's `undo`: it touches only those four lines, so any other change
+ * declaration's `undo`: it touches only those five lines, so any other change
  * to a `.h` still differs.
  */
 const withoutStage4Header = (text) => text.split(STAGE4_HEADER_LINES).join(SEED_HEADER_LINES)

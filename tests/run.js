@@ -31991,6 +31991,13 @@ if (!only || "cpu-level".includes(only)) {
         base.status === 0 && baseLines.length > 0 && !baseLines.some((l) => l.includes("-march")),
         base.stderr + baseLines.join("\n")
       )
+      // WP50 S5: clang contracts a C a*b+c into one rounding on any CPU with a
+      // fused multiply-add (every arm64), so every unit says it may not.
+      check(
+        "cpu level: the baseline link puts -ffp-contract=off on every clang line",
+        base.status === 0 && baseLines.length > 0 && baseLines.every((l) => l.includes("-ffp-contract=off")),
+        base.stderr + baseLines.join("\n")
+      )
       check(
         "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eighteen runtime units, the module and the link",
         level.status === 0 &&

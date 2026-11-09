@@ -393,7 +393,7 @@ recompile of the runtime. `-o`, `--link`, `--target`, the `--emit-*` sidecars an
 errors there, and performance warnings are not printed, because stderr belongs
 to the program.
 
-Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c -o app`
+Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c -ffp-contract=off -o app`
 (a program that uses threads, the host calls or `nish:net` also names
 `runtime/runtime-parallel.c`, `runtime-host.c` or `runtime-net.c`; the
 `overriding the module target triple` warning is harmless: the IR is
