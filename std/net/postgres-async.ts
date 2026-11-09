@@ -631,16 +631,22 @@ const pgAsyncEncode = (sql: string, params: PgAsyncParams): u8[] | null => {
     return null
   }
   const values: u8[][] = []
-  let bind: i32 = 4 + 1 + 1 + 2 + 2 + 2
+  // The length, "" portal, "" statement, no parameter formats, the count, no
+  // result formats: 4 + 1 + 1 + 2 + 2 + 2, held as an i32 in either number mode.
+  let bind: i32 = toI32(12)
   for (let i: i32 = 0; i < count; i++) {
     const v = pgAsyncBytes(params.values[i])
     if (v === null) {
       return null
     }
     values.push(v)
-    bind += 4 + (params.nulls[i] ? 0 : toI32(v.length))
+    bind += toI32(4)
+    if (!params.nulls[i]) {
+      bind += toI32(v.length)
+    }
   }
-  const parse: i32 = 4 + 1 + toI32(sqlBytes.length) + 1 + 2
+  // The length, "" statement, the SQL and its NUL, no parameter types.
+  const parse: i32 = toI32(sqlBytes.length) + toI32(8)
   // Parse, Bind, Execute ("" portal, no row limit: 4 + 1 + 4), Sync (4).
   const total: i32 = 1 + parse + 1 + bind + 1 + 9 + 1 + 4
   const out: u8[] = new Array<u8>(total)
@@ -666,7 +672,9 @@ const pgAsyncEncode = (sql: string, params: PgAsyncParams): u8[] | null => {
   out[at + 3] = 0
   setU16BE(out, at + 4, toU16(count))
   at += 6
-  for (let i: i32 = 0; i < count; i++) {
+  // Bounded by `values` rather than `count`, which it equals, so the prover reads the index.
+  const encoded: i32 = toI32(values.length)
+  for (let i: i32 = 0; i < encoded; i++) {
     if (params.nulls[i]) {
       setI32BE(out, at, -1)
       at += 4
@@ -695,7 +703,9 @@ const pgAsyncEncode = (sql: string, params: PgAsyncParams): u8[] | null => {
 const pgAsyncBytes = (s: string): u8[] | null => {
   const n: i32 = toI32(s.length)
   const b: u8[] = new Array<u8>(n)
-  for (let i: i32 = 0; i < n; i++) {
+  const room: i32 = toI32(b.length)
+  // Bounded by each length it indexes, which are equal, so the prover reads both.
+  for (let i: i32 = 0; i < n && i < room; i++) {
     const c: i32 = toI32(s.charCodeAt(i))
     if (c === 0) {
       return null
@@ -728,6 +738,10 @@ const pgAsyncRead = async (
   while (true) {
     // Every whole message in [start, end).
     while (end - start >= 5) {
+      // Always true, since `end` never passes the buffer; it proves the reads below.
+      if (start < 0 || start + 5 > toI32(buf.length)) {
+        return pgAsyncLost(result, PG_ERR_FRAME, 0)
+      }
       const type: i32 = toI32(buf[start])
       const length: i32 = getI32BE(buf, start + 1)
       if (length < 4) {
@@ -744,7 +758,7 @@ const pgAsyncRead = async (
       start = stop
       if (type === 90) {
         // 'Z': ReadyForQuery, the end of the answer.
-        if (stop - body !== 1) {
+        if (stop - body !== 1 || body < 0 || body >= toI32(buf.length)) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
         result.reusable = toI32(buf[body]) === PG_ASYNC_IDLE && !changed
@@ -837,7 +851,7 @@ const pgAsyncRead = async (
 const pgAsyncRow = (buf: u8[], at: i32, stop: i32, columns: i32, result: PgAsyncResult): boolean => {
   let p: i32 = at
   for (let c: i32 = 0; c < columns; c++) {
-    if (stop - p < 4) {
+    if (stop - p < 4 || p < 0 || p + 3 >= toI32(buf.length)) {
       return false
     }
     const n: i32 =
@@ -861,16 +875,17 @@ const pgAsyncRow = (buf: u8[], at: i32, stop: i32, columns: i32, result: PgAsync
 /** An ErrorResponse's SQLSTATE and message in `[at, stop)` into `result`; false for a frame that does not add up. */
 const pgAsyncError = (buf: u8[], at: i32, stop: i32, result: PgAsyncResult): boolean => {
   let p: i32 = at
-  while (p < stop) {
+  // `stop` never passes the buffer; each loop also tests `buf.length` so the prover reads the index.
+  while (p >= 0 && p < stop && p < toI32(buf.length)) {
     const field: i32 = toI32(buf[p])
     if (field === 0) {
       return p === stop - 1
     }
     let e: i32 = p + 1
-    while (e < stop && toI32(buf[e]) !== 0) {
+    while (e < stop && e < toI32(buf.length) && toI32(buf[e]) !== 0) {
       e += 1
     }
-    if (e >= stop) {
+    if (e >= stop || e >= toI32(buf.length)) {
       return false
     }
     if (field === 67) {
