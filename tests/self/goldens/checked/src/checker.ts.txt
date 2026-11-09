@@ -810,7 +810,7 @@ function Checker.bindImport(this: Checker, index: i32, target: CheckedProgram): 
   escaping: index
   calls: CheckContext.error CheckedProgram.constant CheckedProgram.exported CheckedProgram.struct CheckedProgram.structTemplate CheckedProgram.template Checker.bindBuiltinImport Checker.bindConstantImport Checker.bindStructImport Checker.bindStructTemplateImport Checker.bindTemplateImport Checker.importedType StringMap.get StringMap.set StringSet.has isBuiltinSpecifier nish_array_grow nish_panic_index nish_str_concat nish_str_eq
   pointer this: size=24 writesThrough=false captured=false passedTo=Checker.importedType#0 Checker.bindBuiltinImport#0 Checker.bindConstantImport#0 Checker.bindStructImport#0 Checker.bindStructTemplateImport#0 Checker.bindTemplateImport#0
-  pointer target: size=688 writesThrough=false captured=false passedTo=CheckedProgram.constant#0 CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.template#0 CheckedProgram.exported#0
+  pointer target: size=696 writesThrough=false captured=false passedTo=CheckedProgram.constant#0 CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.template#0 CheckedProgram.exported#0
   stackSites=0 stackLocals=0
   local -81:11 imp: ImportBinding (const)
   local -77:11 typeImport: ImportBinding | null (const)
@@ -944,14 +944,14 @@ function declaredEnum(target: CheckedProgram | null, name: string): EnumInfo | n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownEnum
-  pointer target: size=688 writesThrough=false captured=false passedTo=CheckedProgram.ownEnum#0
+  pointer target: size=696 writesThrough=false captured=false passedTo=CheckedProgram.ownEnum#0
   stackSites=0 stackLocals=0
   callee +0:28 CheckedProgram.ownEnum -> @CheckedProgram.ownEnum
 function declaredAlias(target: CheckedProgram | null, name: string): AliasInfo | null -> @declaredAlias
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownAlias
-  pointer target: size=688 writesThrough=false captured=false passedTo=CheckedProgram.ownAlias#0
+  pointer target: size=696 writesThrough=false captured=false passedTo=CheckedProgram.ownAlias#0
   stackSites=0 stackLocals=0
   callee +0:28 CheckedProgram.ownAlias -> @CheckedProgram.ownAlias
 function parameterSpelling(ctx: CheckContext, sig: FunctionSig, name: string): string -> @parameterSpelling [exported]
@@ -1075,7 +1075,7 @@ function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void -> @check
 function indexGuardAdvice(program: CheckedProgram, table: TypeTable, index: Node, name: string, holder: string): string -> @indexGuardAdvice [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged TypeTable.typeName declaresName nish_panic_index nish_str_concat
-  pointer program: size=688 writesThrough=false captured=false
+  pointer program: size=696 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.typeName#0
   pointer index: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1100,7 +1100,7 @@ function offsetSpelling(index: Node, offset: Offset): string -> @offsetSpelling
 function offsetGuardAdvice(program: CheckedProgram, offset: Offset, sum: string, holder: string): string -> @offsetGuardAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: declaresName nish_str_concat
-  pointer program: size=688 writesThrough=false captured=false
+  pointer program: size=696 writesThrough=false captured=false
   pointer offset: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 f64Mode: boolean (const)
@@ -1707,7 +1707,7 @@ function scanCollectionNames(node: Node, names: CollectionNames, program: Checke
   calls: CollectionNames.note boundTypeParameters nish_panic_index nish_str_eq noteAnnotatedNew scanCollectionNames
   pointer node: size=40 writesThrough=true captured=true passedTo=boundTypeParameters#0 noteAnnotatedNew#0
   pointer names: size=16 writesThrough=true captured=false passedTo=CollectionNames.note#0 scanCollectionNames#1
-  pointer program: size=688 writesThrough=false captured=false passedTo=noteAnnotatedNew#1 scanCollectionNames#2
+  pointer program: size=696 writesThrough=false captured=false passedTo=noteAnnotatedNew#1 scanCollectionNames#2
   stackSites=0 stackLocals=0
   local +0:9 bound: Node | null (const)
   callee +0:17 boundTypeParameters -> @boundTypeParameters
@@ -1731,7 +1731,7 @@ function noteAnnotatedNew(decl: Node, program: CheckedProgram, hideMap: boolean,
   sharedWrite: +0:3
   calls: StringMap.set nish_array_grow nish_panic_index nish_str_eq nish_str_from_i32
   pointer decl: size=40 writesThrough=false captured=false
-  pointer program: size=688 writesThrough=false captured=false
+  pointer program: size=696 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -11:9 annotation: Node (const)
   local -10:9 init: Node (const)

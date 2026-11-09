@@ -1,0 +1,12 @@
+runs as a spawned task, in a region of its own that is freed when it ends
+hands `tally` to `Holder.constructor`, which keeps it
+puts `tally` in a literal
+stores `tally` into `d.t`
+stores `tally` into `e[0]`
+stores `tally` into `f`
+hands `tally` to `Map<string, Tally>.set`, which may keep it in its receiver
+hands `tally` to `Set<Tally>.add`, which may keep it in its receiver
+hands `tally` to `Bag.put`, which may keep it in its receiver
+hands `j` to `fill`, which may store memory outside the region into it
+memory outside a region kept by the region's memory may be released while the region still points at it
+lets the task store its own memory into what it shares

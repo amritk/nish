@@ -116,6 +116,8 @@ cases/async_result added after R6: no rewriter to freeze it with
 cases/async_sleep added after R6: no rewriter to freeze it with
 cases/async_sleep_spawn_string added after R6: no rewriter to freeze it with
 cases/async_spawn added after R6: no rewriter to freeze it with
+cases/async_spawn_fn_arg added after R6: no rewriter to freeze it with
+cases/async_spawn_shared added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
 cases/bytes_fill added after R6: no rewriter to freeze it with
 cases/bytes_offset_float added after R6: no rewriter to freeze it with
@@ -534,6 +536,7 @@ cases/simd_values added after R6: no rewriter to freeze it with
 cases/simd_zero_fill added after R6: no rewriter to freeze it with
 cases/storage_attributes added after R6: no rewriter to freeze it with
 cases/storage_lend added after R6: no rewriter to freeze it with
+cases/storage_lend_bytes added after R6: no rewriter to freeze it with
 cases/storage_module added after R6: no rewriter to freeze it with
 cases/str_from_bytes added after R6: no rewriter to freeze it with
 cases/str_from_bytes_arrow added after R6: no rewriter to freeze it with

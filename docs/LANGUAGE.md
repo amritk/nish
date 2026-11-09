@@ -1410,8 +1410,23 @@ booleans, in both positions, as the object JS already models —
 `{ ok: true, value }` or `{ ok: false, error }`. `--emit-dts` declares the
 same union for the wasm build, and the generated loader packs an argument and
 unpacks a result. A `Result` held by pointer still does not cross either JS
-boundary, for the reason a string does not: it is arena memory the next call
-may recycle.
+boundary: it is arena memory the next call may recycle.
+
+**A wasm export's `string` result is a JS string; a `string` parameter is
+not bridged** (`docs/wp50-wasm-host.md` §7). The loader decodes the result's
+UTF-8 bytes with `TextDecoder` straight out of the arena, before it releases
+the call's mark, so the page never holds module memory; an invalid sequence
+becomes U+FFFD. An export that takes a `string` is left out of the `.d.ts`
+and the loader with
+`` argument 1 (s) is `string`, which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`) ``:
+the page writes the text into a `u8[]` module storage and the module reads
+it back with `textRead` (`tests/run.js`, section `host-import-text`).
+Going the other way, `textRead(buf, n)` answers `null` for an `n` that is
+negative or past the buffer, and each writer (`textWrite`, `textWriteInt`,
+`textWriteF64`) takes the offset to write at and answers the offset after
+what it wrote, so writes chain. **Text that does not fit writes nothing and
+answers -1, and a writer handed a -1 offset answers -1 without writing**, so
+a chain that overflowed once stays -1 to its end.
 
 A **ranged parameter** (`integer<Lo, Hi>`, [Types](#types)) crosses as the
 `i32` it is, and is checked where every call passes through
@@ -1859,19 +1874,23 @@ export const step = (): void => {
   `X[i]` and `X.length` are what remain.
 - **Its name is a place, not a value.** Binding, returning, storing or
   passing `X` itself is
-  `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
+  `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `u8[]`, `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
   (NL2677, `reject_storage_pass_whole`). The two exceptions are lendings:
   a **scalar** storage passed to a parameter spelled with a typed-array name
   (which has no `push`, `pop` or `length =`), as in
   `const total = (xs: Int32Array): i32 => …; total(SCORES)`
-  (`tests/cases/storage_lend`), and to a host function's buffer window
+  (`tests/cases/storage_lend`), or a byte storage passed to a `u8[]` or
+  `readonly u8[]` parameter, the spelling a byte buffer has
+  (`tests/cases/storage_lend_bytes`, which `nish/host/text` writes through),
+  and to a host function's buffer window
   ([Host modules](#host-modules-the-functions-a-page-supplies)). A record
   storage is never lent. A lending to a function of the same module holds
   only while that function keeps the parameter in place: it may index it,
-  read `.length`, loop over it with `for of`, call a method that reads it
-  (`at`, `indexOf`, `slice`, `map`, …), call `fill`, `sort`, `reverse` or
-  `copyWithin` as a statement, and lend it on to another such parameter or a
-  buffer window. Anything else (binding it under another name, returning it,
+  read `.length` (never assign it or `++` it), loop over it with `for of`,
+  call a method that reads it (`at`, `indexOf`, `slice`, `map`, …), call
+  `fill`, `sort`, `reverse` or `copyWithin` as a statement, copy it with
+  `String.fromBytes`, and lend it on to another such parameter or a buffer
+  window. Anything else (binding it under another name, returning it,
   passing it to an `i32[]` parameter, which could `push`) is
   `` Module storage `X` cannot be lent to `f`, which lets its parameter `a` go further than indexing: … ``
   (NL2684, `reject_storage_lend_respell_arg`, `_const`, `_return`). The
@@ -3508,16 +3527,77 @@ async function run(): Promise<void> {
   the cycle, direct or mutual (NL2648,
   `reject_async_await_self`, `reject_async_await_mutual`). Write it as a loop.
 - **A spawned task's arguments outlive the spawner.** `spawn(f(x))` may
-  return, and its caller with it, while `f` still waits, so `f` never reads
-  the spawner's memory: a number, a `boolean` or an enum is copied by value,
-  and a `string` is copied into the task's own region before the task first
-  runs (`async_sleep_spawn_string`, `tests/link/async_spawn_args`). An
-  argument of any other type — an array, a class, an interface, a `Map` —
-  would be read after it was freed, and is
+  return, and its caller with it, while `f` still waits. A number, a
+  `boolean` or an enum is copied by value, and a `string` is copied into the
+  task's own region before the task first runs (`async_sleep_spawn_string`,
+  `tests/link/async_spawn_args`). An object, an array, a `Map` or a `Set` is
+  shared: the task holds the spawner's own, and sees and updates its numbers
+  (`async_spawn_shared`). A function that feeds a task a shared argument,
+  itself or through a callee, releases no arena scope over what it allocated,
+  so the object outlives every task that holds it
+  (`tests/link/async_spawn_shared_outlives`). An argument of any other type —
+  `T | null`, a `Region`, a `Secret` — is
   `` `spawn` hands `f` an argument of type `T`, which lives in the spawner's
   region and is freed when the spawner returns `` (NL2673,
-  `reject_async_spawn_array_arg`). Copy what the task needs into a `string`
-  or numbers, or await the call instead of spawning it.
+  `reject_async_spawn_array_arg`). A shared object or array that holds, in
+  any field or element, a `Region`, a `Secret`, a handle class a `using`
+  block closes, or a scope, lock, guard or channel of `nish/threads` is
+  refused too, with what it holds named: its spawner may free, wipe or close
+  that part while the task still waits (NL2691,
+  `reject_async_spawn_region_field`, `reject_async_spawn_secret_field`,
+  `reject_async_spawn_handle`, `reject_async_spawn_threads_field`).
+- **A spawned task keeps its own memory out of what it shares.** The task's
+  region is freed when the task ends, so the region rules hold it to a
+  shared argument, and everything reachable from it, as memory outside its
+  region ([Regions](#regions-nishregion)): storing an object or a `string`
+  it made into a field or an element is NL2609, directly, through an alias,
+  a method or a callee (`reject_async_spawn_store_region`, `reject_async_spawn_store_string`,
+  `reject_async_spawn_store_alias`, `reject_async_spawn_store_method`,
+  `reject_async_spawn_store_callee`, `reject_async_spawn_store_reachable`,
+  `reject_async_spawn_store_element`, `reject_async_spawn_store_bound`,
+  `reject_async_spawn_await_all`). A call that hands a function or method
+  both a shared object it writes into and a `string` or object of the
+  task's is NL2609 as well, since nothing says the one is not kept in the
+  other (`reject_async_spawn_store_string_callee`,
+  `reject_async_spawn_store_string_method`,
+  `reject_async_spawn_store_copied`), and growing a shared array, `Map` or
+  `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
+  arrays, on the argument or on what a method answers out of it — is NL2615
+  (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
+  `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`), and so
+  is a builtin with no body of its own that does either, `reserve` on a
+  shared `Map` (`reject_async_spawn_grow_reserve`) or `jsonDecode` into a
+  shared object (`reject_async_spawn_store_json`). Copy
+  numbers into it instead. The task keeps none of what it shares in memory
+  of its own: a shared object, or anything reachable from it, put into a
+  constructor argument, an array or object literal, a field or element
+  store, `push`, a `Map`'s `set` or a `Set`'s `add`, a method that may keep
+  its argument in its receiver, or a callee that stores one argument into
+  another is NL2610, as in a `region(...)` body
+  (`reject_async_spawn_keep_holder`, `reject_async_spawn_keep_literal`), and
+  so is an element read out of a shared array (`for (const t of shared)`,
+  `reject_async_spawn_keep_element`). An object a helper makes may hold
+  what the helper was handed, so in a task a fresh helper's answer other
+  than a string, awaited or not, carries its arguments' origins too, and a
+  store through a holder a helper built from the shared object is NL2609
+  (`reject_async_spawn_keep_returned`). Read and update the shared object
+  in place instead. Three refusals are conservative, and known to refuse
+  sound programs: a call that hands a callee both a shared object it writes
+  into and any string or object of the task's, even when the callee writes
+  only numbers; a store into the shared object of what an `await` answers
+  (`const x = await helper(tally); tally.child = x`), since an awaited
+  answer is unknown to the walk; and a store of the task's memory into a
+  holder a helper answered from the shared object (`wrap(tally).note = s`),
+  which may be the task's alone. A task may not itself spawn a task with an
+  object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
+  `reject_async_spawn_nested`); a task with only copied arguments may.
+- **A spawned task takes a function argument that captures nothing.** A
+  top-level function, or an arrow written at the call that reads only its own
+  parameters, is a compile-time argument: the call is an instance with the
+  function in its body, and nothing of it is in the task's frame
+  (`async_spawn_fn_arg`). An arrow that reads a local of the function it is
+  written in is NL2690 (`reject_async_spawn_block_arg`): what it captures
+  would ride in the task's frame, past the rules above.
 - **Each spawned task has a region of its own**, entered whenever the task
   runs and freed when it finishes, so what a task allocates is given back
   when it ends, not when `main` does (`tests/link/async_region_per_task`).
@@ -3610,7 +3690,7 @@ the resume order is not Node's, and these are declared differences:
 | A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
 | `spawn(f(x))` runs `f` to its first `await`, and the rest of `f` after the current task yields | `spawn(f(x))` runs `f` at once until it first waits on the outside world, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
 | `setTimeout` and socket callbacks run on libuv's loop, which keeps the process alive while anything is registered | `sleep`, `readable` and `writable` park a task on the executor; the program exits once `main` has returned and no task waits, a synchronous `main` included |
-| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; any other non-number argument is refused (NL2673) |
+| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; an object, array, `Map` or `Set` is shared, and the task may store only numbers into it (NL2609, NL2615) and keep none of it in memory of its own (NL2610); one holding a `Region`, `Secret`, handle or `nish/threads` value is refused (NL2691), as is any other argument (NL2673) |
 | A task that never awaits holds the thread, as here | The same: the executor is cooperative and does not preempt a task |
 
 A program whose output does not depend on how its tasks interleave prints the
@@ -6214,13 +6294,40 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
   `` move that code into a module the host file imports `` (NL3049); other
   statements are skipped unread.
 - **What crosses.** The integer and float widths, `boolean`, a ranged integer,
-  an enum, a `HostHandle`, and `void` as a result. `i64` and `u64` are a
-  `bigint` on the page's side (`import type { i64 } from "nish"`). Refused,
-  each naming the explicit form: an object, a class, a function, `unknown` or
-  `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
-  `string` parameter (NL2665: strings cross in WP50 stage 4, so until then the
-  program writes the text into module storage and passes its length) and a
-  `string` result (NL2667). An array crosses only as a buffer window, below.
+  an enum, a `HostHandle`, a `string` parameter, and `void` as a result. `i64`
+  and `u64` are a `bigint` on the page's side
+  (`import type { i64 } from "nish"`). Refused, each naming the explicit form:
+  an object, a class, a function, `unknown` or `any` (NL2661), a generic
+  function (NL2662), a `Promise` (NL2663) and a `string` result (NL2667): the
+  page writes text into module storage instead (`nish/host/text`). An array
+  crosses only as a buffer window, below.
+- **A `string` argument is its UTF-8 bytes, lent for the call.** It lowers to
+  two wasm values, the address of the string's bytes and their count, read
+  from the string's own header, so nothing is copied on the module's side;
+  the loader's wrapper decodes them with `TextDecoder` into a JS string before
+  the page's function runs, and an invalid sequence becomes U+FFFD. The
+  string may be a literal, a concatenation or a template; one the module
+  built lives in the export's arena, which is released after the export
+  returns (`tests/cases/host_import_string`; `tests/run.js`, section
+  `host-import-text`;
+  [cookbook](IR_COOKBOOK.md#a-string-to-the-page-its-bytes-and-their-count)):
+
+  ```ts
+  // web/host.ts
+  export function say(s: string): void { console.log(s); }
+  // app.ts
+  say(`hello ${n}`);
+  ```
+
+  ```llvm
+  declare void @say(i8*, i32) #2
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8* %0)
+  %2 = bitcast i8* %1 to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = trunc i64 %3 to i32
+  %5 = getelementptr inbounds i8, i8* %1, i64 8
+  call void @say(i8* %5, i32 %4)
+  ```
 - **Each host function is a declaration with the wasm import attributes**:
   module `host`, its own name. It carries no other attribute, and its callers
   lose `readnone` and `willreturn` as for a C declaration. `wasm-ld` makes it
@@ -7868,8 +7975,11 @@ that caller. This builtin is the store that stays (#385).
 - **It is a global, and not in a `nish:` module.** It is backed by the C
   runtime, so by the rule [Builtin modules](#builtin-modules-nish) sets it may
   be imported, but no module exports it yet. It works under the wasi profile,
-  which links `runtime.c`; a freestanding wasm module linked with
-  `runtime-wasm.c` has no `nish_wipe`, as it has no strings.
+  which links `runtime.c`; a freestanding wasm module has no `nish_wipe`:
+  it links `runtime-wasm.c`, which supplies the arena, arrays, the panics and
+  `floor`/`ceil`/`trunc` but no wipe, and, when it uses
+  strings, `runtime-text.c`, which has the strings and the digits but not the
+  wipe.
 
 The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 **class A**: `runtime/nish.mjs` supplies it as a loop that sets every element
@@ -8295,13 +8405,13 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 
 | Refused | Code |
 | --- | --- |
-| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant or [module storage](#module-storage), whose elements are pointer-free, and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`) |
-| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
+| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant or [module storage](#module-storage), whose elements are pointer-free, and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`; a spawned task's region into what it shares, `reject_async_spawn_store_region`) |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, a spawned task's shared object kept by its own memory, `reject_async_spawn_keep_holder`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
 | `enter`'s or `enterWith`'s `f` answering anything but a number, a `boolean`, an `enum` or a `Region`: an array, an object or a string | **NL2611** (`reject_region_enter_result`, `reject_region_enter_string`) |
 | `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | **NL2612** (`reject_region_threads`) |
 | a value whose type holds a `Region` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, a value sent on a channel | **NL2613** (`reject_region_task_arg_field`, `reject_region_task_answer`, `reject_region_channel_map`, `reject_region_parallel_capture`) |
 | `region`'s or `regionWith`'s `f` answering anything but memory it allocated: `region(() => moduleValue)`, `regionWith(g, (a) => a)` | **NL2614** (`reject_region_root_module`, `reject_region_root_arg`) |
-| outer storage growing inside `f`, directly or through a callee: `push` on an outer array (arrays have no `unshift` or `splice`; the rule names them so it holds if they come), `Map.set` or `Set.add` on an outer `Map` or `Set` | **NL2615** (`reject_region_grow_push`, `reject_region_grow_map`, `reject_region_grow_set`, each with a `_callee` twin, `reject_region_arrow_grow`) |
+| outer storage growing inside `f`, directly or through a callee: `push` on an outer array (arrays have no `unshift` or `splice`; the rule names them so it holds if they come), `Map.set` or `Set.add` on an outer `Map` or `Set` | **NL2615** (`reject_region_grow_push`, `reject_region_grow_map`, `reject_region_grow_set`, each with a `_callee` twin, `reject_region_arrow_grow`; a spawned task growing what it shares, `reject_async_spawn_grow`) |
 | a call inside `f` the region rules have no facts for. No program reaches it today, since every function, instantiation, lifted arrow and `declare function` has whole-program facts; it stays so that such a callee is never let through unexamined (`tests/wordings/unreachable.txt`) | **NL2616** |
 | `Arena.mark` or `Arena.used` inside `f`, or a callee reaching one: inside a region they would read the region's own arena, not the thread's | **NL2617** (`reject_region_arena_mark` through `region`, `reject_region_arena_used_callee` through `enter` and a callee) |
 | `new Region<T>()` | **NL2618** (`reject_region_new`) |

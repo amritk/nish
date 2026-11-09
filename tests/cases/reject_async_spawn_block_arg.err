@@ -1,0 +1,2 @@
+an arrow that reads `step` of the function it is written in
+a spawned task takes a function argument only when it captures nothing

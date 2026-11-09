@@ -702,6 +702,12 @@ export class FunctionFacts {
    */
   wholeCallees: StringSet
   /**
+   * A `nish/map` instance lowered at every call (`markMapRoute`): its body
+   * is not what runs, so how far its routed callees write its receiver
+   * reaches it only along `passedToCallees` (`propagate`).
+   */
+  routed: boolean
+  /**
    * The arrays only this call reaches (`PrivateArray`). A store into one of
    * their own slots writes nothing a caller, a thread or a task can see.
    */
@@ -794,6 +800,14 @@ export class FunctionFacts {
    * (`arenaMessage`), and what a region's own `f` is not refused for.
    */
   usesRegion: boolean
+  /**
+   * WP49 stage 5, part 3: spawns a task with an object or array it shares,
+   * directly or through a callee (fixpoint). The task holds it past the call
+   * and past the spawner's return, in the executor's queue, which is a root
+   * no parameter names: so no scope of this function's may release what the
+   * call allocated, whatever `contained` reads off its roots.
+   */
+  feedsTasks: boolean
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
@@ -909,6 +923,7 @@ export class FunctionFacts {
     this.paramStores = []
     this.keepsUnknown = false
     this.wholeCallees = new StringSet()
+    this.routed = false
     this.privateArrays = []
     this.writesOutput = false
     this.writeSite = null
@@ -944,6 +959,7 @@ export class FunctionFacts {
     this.readsArenaState = false
     this.opensArena = false
     this.usesRegion = false
+    this.feedsTasks = false
     this.callSites = []
     this.escapingNodes = []
     this.carriedStores = []
@@ -1351,6 +1367,42 @@ const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node):
   return field !== null && field.inline()
 }
 
+/**
+ * Whether the `spawn(...)` at `node` hands its task an object or array it
+ * shares (`TypeTable.sharedWithTask`): a value the task holds in place.
+ */
+const spawnsShared = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
+  const args = node.children[1].children
+  if (args.length !== 1) {
+    return false
+  }
+  const callee = program.nodeCallees[unwrapParens(args[0]).id]
+  if (callee === null) {
+    return false
+  }
+  for (let i = 0; i < callee.paramTypes.length; i++) {
+    if (!callee.isCompileTime(i) && table.sharedWithTask(callee.paramTypes[i])) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `call` is the task of a `spawn(...)` from `nish:async`. */
+const isSpawnedTask = (unit: AnalysisUnit, call: Node): boolean => {
+  let node = call
+  let parent = unit.parents.parentOf(node)
+  while (parent !== null && parent.kind === N_PAREN) {
+    node = parent
+    parent = unit.parents.parentOf(node)
+  }
+  if (parent === null) {
+    return false
+  }
+  const spawn = unit.parents.parentOf(parent)
+  return spawn !== null && spawn.kind === N_CALL && unit.program.nodeBuiltins[spawn.id] === "async.spawn"
+}
+
 /** An argument of `f(...)` or `new C(...)`: the list is the parent, the call is above it. */
 const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, node: Node): ParamUse => {
   const program = unit.program
@@ -1365,7 +1417,18 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     }
     const callee = program.nodeCallees[owner.id]
     if (callee !== null) {
-      return argumentUse(callee, index + (callee.owner !== null ? 1 : 0))
+      // WP49 stage 5: a spawned task holds an object or array it is handed
+      // in place for as long as it runs, past the spawner's return, so the
+      // spawner's region must too. A string is copied into the task's region.
+      const at = index + (callee.owner !== null ? 1 : 0)
+      if (
+        at < callee.paramTypes.length &&
+        table.sharedWithTask(callee.paramTypes[at]) &&
+        isSpawnedTask(unit, owner)
+      ) {
+        return use(USE_ESCAPE)
+      }
+      return argumentUse(callee, at)
     }
     // `xs.push(p)` stores `p` into the array, `Ok(p)` / `Err(p)` store it into
     // the `Result` they build (WP16), `r.unwrapOr(p)` hands it back as the
@@ -3150,12 +3213,14 @@ class FactCollector {
       this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
     }
     // WP27 S3.1: a string that may hold a NUL is searched for one before C
-    // reads it, and a hit panics (`emitForeignString`).
+    // reads it, and a hit panics (`emitForeignString`). A host function reads
+    // the string as `(p, n)`, so it has no such check (WP50 S4).
     const args = call.children[1].children
+    const host = hostFunction(callee)
     let i = 0
     while (i < args.length && i < callee.paramTypes.length) {
       const arg = args[i]
-      if (this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
+      if (!host && this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
         const checks: string[] = []
         foreignStringCallees(checks)
         this.addCallees(checks)
@@ -3750,6 +3815,9 @@ class FactCollector {
     if (imported === "async.spawn") {
       this.facts.effect = EFFECT_WRITE
       this.facts.willReturn = false
+      if (spawnsShared(this.unit.program, this.table, node)) {
+        this.facts.feedsTasks = true
+      }
       return
     }
     if (imported === "async.awaitAll") {
@@ -4131,6 +4199,7 @@ const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolea
  */
 const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void => {
   const routed = routeCalleesOf(table, sig)
+  facts.routed = true
   const receiver: PointerParamFacts | null =
     sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null
   for (const callee of routed) {
@@ -4342,6 +4411,14 @@ const markJsonRoute = (
     facts.resizesArray = true
     facts.callees.add("nish_array_grow")
     markParallelEntry(facts, "nish_alloc_struct", false)
+    // What it makes is stored below `out`: a region or a task that hands it
+    // an object of another's is told so (`judgeCallee`), as for a body that
+    // stores a fresh allocation there.
+    for (const pp of facts.pointerParams) {
+      pp.writesReach = true
+      pp.writesDeep = true
+      pp.polluted = true
+    }
   }
 }
 
@@ -4482,10 +4559,10 @@ export const analyzeFunctions = (
   propagate(facts, runtime)
   propagateCapabilities(facts)
   for (const f of facts.list) {
-    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation
+    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.feedsTasks
     // What a function stores into a parameter it fills is its caller's, so
-    // no scope of its own may release it.
-    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0
+    // no scope of its own may release it; nor what a task it spawned holds.
+    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0 && !f.feedsTasks
   }
   scopeParallelBodies(units, facts)
   settleCalleeScopes(facts)
@@ -4890,6 +4967,8 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
           let shared = true
           let captures = true
           let outlives = true
+          let reach = true
+          let deep = true
           if (g !== null) {
             const target = g.pointerParamAt(pp.passedToIndices[i])
             if (target !== null) {
@@ -4897,7 +4976,23 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
               shared = target.writesShared
               captures = target.captured
               outlives = target.outlives
+              reach = target.writesReach
+              deep = target.writesDeep
             }
+          }
+          // A routed instance (`markMapRoute`) has no body whose argument
+          // edges carry how far its routed callees write: this is the only
+          // path that reaches it by. A body's own edges carry it already
+          // (`callWrites`), and more narrowly. `polluted` is not carried:
+          // the routed table code is type-erased, so it would call a map of
+          // numbers dirty.
+          if (f.routed && reach && !pp.writesReach) {
+            pp.writesReach = true
+            changed = true
+          }
+          if (f.routed && deep && !pp.writesDeep) {
+            pp.writesDeep = true
+            changed = true
           }
           if (writes && !pp.writesThrough) {
             pp.writesThrough = true
@@ -5001,6 +5096,10 @@ const propagateCallee = (
     }
     if (calleeFacts.usesRegion && !f.usesRegion) {
       f.usesRegion = true
+      changed = true
+    }
+    if (calleeFacts.feedsTasks && !f.feedsTasks) {
+      f.feedsTasks = true
       changed = true
     }
   }

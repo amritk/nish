@@ -1509,7 +1509,7 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
 }
 
 /** Whether `info` is a class `nish/threads` declares: a scope, a lock, its guard or a channel. */
-const isThreadsLayout = (info: StructInfo): boolean => {
+export const isThreadsLayout = (info: StructInfo): boolean => {
   const instance = info.instance
   if (instance !== null) {
     return isThreadsModule(instance.template.home.program)

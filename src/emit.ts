@@ -57,6 +57,7 @@ import {
   AnalysisUnit,
   FactsTable,
   FunctionFacts,
+  hostFunction,
 } from "./attributes"
 import { capabilityIndex } from "./capabilities"
 import { DebugInfo } from "./debug"
@@ -1119,8 +1120,15 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      // WP50 S3: a window passes the array's data pointer (`emitHostWindow`).
-      params.push(isHostWindow(this.table, sig.paramTypes[i]) ? "i8*" : this.hostAbi(sig.paramTypes[i]))
+      const type = sig.paramTypes[i]
+      if (type === T_STRING) {
+        // WP50 S4: a string passes its bytes and their count (`emitHostString`).
+        params.push("i8*")
+        params.push("i32")
+      } else {
+        // WP50 S3: a window passes the array's data pointer (`emitHostWindow`).
+        params.push(isHostWindow(this.table, type) ? "i8*" : this.hostAbi(type))
+      }
       i = i + 1
     }
     const group = this.module.attrGroupFor([
@@ -1848,8 +1856,10 @@ export class Emitter {
       let value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
         : this.emitArgument(args.children[i], sig, i)
-      // WP27 S3.1: C takes the bytes, not the header (`emitForeignString`).
-      if (sig.foreign() && this.table.stripNull(want) === T_STRING) {
+      // WP27 S3.1: C takes the bytes, not the header (`emitForeignString`). A
+      // host function takes the header too, and `emitHostString` splits it
+      // into the bytes and their count (WP50 S4).
+      if (sig.foreign() && !hostFunction(sig) && this.table.stripNull(want) === T_STRING) {
         value = emitForeignString(this, args.children[i], value, sig, i)
       }
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)

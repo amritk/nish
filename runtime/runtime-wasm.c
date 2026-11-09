@@ -10,9 +10,9 @@
  * pointers are 4 bytes, and the inlined fast path in every compiled function
  * bumps the 64-bit `off` field directly. Panics are `unreachable` (a JS
  * RuntimeError); there is no stderr to write a message to, so under
- * wasm-host the page is told first (NISH_DIE). Strings and I/O
- * need a WASI runtime and are not provided here, so `--emit-dts` lists
- * string functions as not exported. */
+ * wasm-host the page is told first (NISH_DIE). Strings are
+ * runtime-text.c's, which build.sh links beside this file when the IR builds
+ * one; I/O needs a WASI runtime and is not provided. */
 #include <stddef.h>
 #include <stdint.h>
 

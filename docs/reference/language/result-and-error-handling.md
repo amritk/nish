@@ -250,8 +250,23 @@ booleans, in both positions, as the object JS already models —
 `{ ok: true, value }` or `{ ok: false, error }`. `--emit-dts` declares the
 same union for the wasm build, and the generated loader packs an argument and
 unpacks a result. A `Result` held by pointer still does not cross either JS
-boundary, for the reason a string does not: it is arena memory the next call
-may recycle.
+boundary: it is arena memory the next call may recycle.
+
+**A wasm export's `string` result is a JS string; a `string` parameter is
+not bridged** (`docs/wp50-wasm-host.md` §7). The loader decodes the result's
+UTF-8 bytes with `TextDecoder` straight out of the arena, before it releases
+the call's mark, so the page never holds module memory; an invalid sequence
+becomes U+FFFD. An export that takes a `string` is left out of the `.d.ts`
+and the loader with
+`` argument 1 (s) is `string`, which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`) ``:
+the page writes the text into a `u8[]` module storage and the module reads
+it back with `textRead` (`tests/run.js`, section `host-import-text`).
+Going the other way, `textRead(buf, n)` answers `null` for an `n` that is
+negative or past the buffer, and each writer (`textWrite`, `textWriteInt`,
+`textWriteF64`) takes the offset to write at and answers the offset after
+what it wrote, so writes chain. **Text that does not fit writes nothing and
+answers -1, and a writer handed a -1 offset answers -1 without writing**, so
+a chain that overflowed once stays -1 to its end.
 
 A **ranged parameter** (`integer<Lo, Hi>`, [Types](types.md)) crosses as the
 `i32` it is, and is checked where every call passes through

@@ -1,0 +1,2 @@
+hands `seen` to `reserve<string, i32>`, which may grow it
+storage outside the region that grows inside it

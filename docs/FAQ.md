@@ -178,8 +178,10 @@ Two ways, both generated from the same signatures as the IR
   scalar function is callable directly (`examples/node-host.mjs`).
   `--emit-dts a.d.ts` writes the typings and `a.mjs`, a loader that passes
   `Int32Array` / `Float64Array` / `BigInt64Array` arguments by copying them
-  into the module's memory (link `runtime/runtime-wasm.c`). Strings are not
-  available in this profile because it has no WASI runtime.
+  into the module's memory (link `runtime/runtime-wasm.c`). An export that
+  returns a `string` hands the page a JS string, and a host import can take
+  one; an export that *takes* a string is not callable from the page (write
+  the text into module storage with `nish/host/text` instead).
 - **Native addon**: `--emit-napi a_napi.c` writes an N-API shim,
   `scripts/build.sh a.ll runtime/runtime.c a_napi.c -o a.node --profile napi`
   builds the addon, and `require("./a.node")` loads it

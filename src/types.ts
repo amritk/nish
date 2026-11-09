@@ -1047,6 +1047,16 @@ export class TypeTable {
   }
 
   /**
+   * WP49 stage 5, part 3: an object, array, `Map` or `Set` a spawned task
+   * reaches in place, its spawner's, rather than in a copy. A `Secret`, or
+   * anything that holds one, is not shared: its wipe is the holder's, and a
+   * region handle names memory a task may not enter.
+   */
+  sharedWithTask(type: i32): boolean {
+    return (this.isStruct(type) || this.isArray(type)) && !this.holdsSecret(type) && !this.isRegion(type)
+  }
+
+  /**
    * A union anywhere in `type`: itself, an element, a nullable's value or a
    * `Result` arm. What a type argument may not hold (docs/LANGUAGE.md,
    * Discriminated unions).

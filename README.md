@@ -393,7 +393,7 @@ recompile of the runtime. `-o`, `--link`, `--target`, the `--emit-*` sidecars an
 errors there, and performance warnings are not printed, because stderr belongs
 to the program.
 
-Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-os.c -o app`
+Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c -o app`
 (a program that uses threads, the host calls or `nish:net` also names
 `runtime/runtime-parallel.c`, `runtime-host.c` or `runtime-net.c`; the
 `overriding the module target triple` warning is harmless: the IR is
@@ -424,13 +424,14 @@ dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,712 bytes. The runtime is sixteen translation units
+`hello.ts` with `--link` is 4,712 bytes. The runtime is seventeen translation units
 with a measured ceiling each, so that the core does not grow every time the
 language reaches further into the operating system, and section GC drops
-whatever a program does not call: `runtime.c` is the 3,606 bytes every program
-touches (one chunked bump arena with O(1) reset and mark/release, strings,
-JavaScript-exact number formatting, string parsing, `Math.random`,
-`process.argv`, array growth, the panic paths), `runtime-os.c` the 1,530 bytes
+whatever a program does not call: `runtime.c` is the 1,723 bytes every program
+touches (one chunked bump arena with O(1) reset and mark/release, string
+parsing, `Math.random`, `process.argv`, array growth, the panic paths),
+`runtime-text.c` the 1,787 bytes of strings and JavaScript-exact number
+formatting, which a wasm module links too, `runtime-os.c` the 1,530 bytes
 that wrap a system call (exit, files, directories, subprocesses, the
 environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
 `runtime-host.c`, `runtime-net.c`, `runtime-simd.c`, `runtime-aes.c`,

@@ -129,7 +129,8 @@ process.env.XDG_CACHE_HOME = suiteCache
 
 /**
  * The C runtime's translation units, as a direct `clang` line has to spell
- * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
+ * them: `runtime.c` is the core every program touches, `runtime-text.c` builds
+ * strings and spells numbers, `runtime-os.c` wraps the
  * system calls, `runtime-parallel.c` divides work across threads,
  * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
@@ -145,7 +146,7 @@ process.env.XDG_CACHE_HOME = suiteCache
  * makes and frees one at a time and `runtime-async.c` the executor `spawn` parks tasks on, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same seventeen
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eighteen
  * (`runtime-async.c` among them, though a link takes its object only for async IR):
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
@@ -158,6 +159,7 @@ process.env.XDG_CACHE_HOME = suiteCache
  */
 const RUNTIME_C = [
   "runtime/runtime.c",
+  "runtime/runtime-text.c",
   "runtime/runtime-os.c",
   "runtime/runtime-parallel.c",
   "runtime/runtime-cross.c",
@@ -9335,7 +9337,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's seventeen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's eighteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9383,6 +9385,7 @@ if (dealtHere("runtimeCache")) {
     const runOut = (out, args = []) => spawnSync(path.join(rcDir, out), args, { encoding: "utf8" })
     const units = [
       "runtime.c",
+      "runtime-text.c",
       "runtime-os.c",
       "runtime-parallel.c",
       "runtime-cross.c",
@@ -9406,7 +9409,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the seventeen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eighteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9415,7 +9418,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the seventeen runtime units once",
+      "runtime cache: the miss compiled each of the eighteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -12679,7 +12682,7 @@ if (dealtHere("arrayChecks")) {
     const shrinkLl = path.join(buildDir, "arr_bounds_shrink_panic.ll")
     if (fs.existsSync(shrinkLl)) {
       const exe = path.join(buildDir, "arr_bounds_shrink_panic")
-      const cc = spawnSync("clang", ["-Wno-override-module", "-O2", shrinkLl, "runtime/runtime.c", "-o", exe], {
+      const cc = spawnSync("clang", ["-Wno-override-module", "-O2", shrinkLl, "runtime/runtime.c", "runtime/runtime-text.c", "-o", exe], {
         cwd: root,
       })
       const run = cc.status === 0 ? spawnSync(exe) : null
@@ -13239,7 +13242,7 @@ if (dealtHere("arrayChecks")) {
       const exe = path.join(buildDir, "str_slice_panic")
       const cc = spawnSync(
         "clang",
-        ["-Wno-override-module", "-O2", slicePanicLl, "runtime/runtime.c", "-o", exe],
+        ["-Wno-override-module", "-O2", slicePanicLl, "runtime/runtime.c", "runtime/runtime-text.c", "-o", exe],
         {
           cwd: root,
         }
@@ -14231,6 +14234,48 @@ if (dealtHere("arrayChecks")) {
 }
 
 if (dealtHere("runtimeChecks")) {
+  // ---- The executor is linked only into async programs (WP49 stage 5) ------------------
+  // docs/security/async.md, "Properties verified": scripts/build.sh links
+  // runtime-async.c only when the IR declares a `@nish_async_` function, so a
+  // program without `async` carries no `nish_async` symbol, while one that
+  // spawns a task carries the executor.
+  if (!only || "async".includes(only)) {
+    const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+    if (nm === undefined) {
+      skip("async: no llvm-nm on PATH, so the symbols of a linked binary are not read")
+    } else {
+      const asyncDir = path.join(buildDir, "async-symbols")
+      fs.mkdirSync(asyncDir, { recursive: true })
+      const asyncSymbols = (source) => {
+        const exe = path.join(asyncDir, path.basename(source, ".ts"))
+        // -g keeps the symbol table a plain link strips.
+        const r = spawnSync(NISH, ["-g", source, "-o", `${asyncDir}${path.sep}`, "--link", exe], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        if (r.status !== 0) return { ok: false, detail: r.stderr, names: [] }
+        const listed = spawnSync(nm, [exe], { encoding: "utf8" })
+        const lines = listed.stdout.split("\n")
+        const names = lines.filter((line) => line.includes("nish_async"))
+        // A binary with no symbols at all would pass the negative check vacuously.
+        const read = listed.status === 0 && lines.some((line) => line.endsWith(" main"))
+        return { ok: read, detail: listed.stderr + (read ? "" : listed.stdout), names }
+      }
+      const plain = asyncSymbols("examples/hello.ts")
+      check(
+        "async: a program without `async` links no `nish_async` symbol",
+        plain.ok && plain.names.length === 0,
+        plain.detail + plain.names.join("\n")
+      )
+      const spawned = asyncSymbols("tests/cases/async_spawn_shared.ts")
+      check(
+        "async: a program that spawns a task links the executor (`nish_async_spawn`)",
+        spawned.ok && spawned.names.some((line) => line.endsWith(" nish_async_spawn")),
+        spawned.detail + spawned.names.join("\n")
+      )
+    }
+  }
+
   // ---- Regions (WP46 stage 1): runtime-region.c from C ---------------------------------
   // tests/runtime/region-test.c, linked with the whole runtime in the default
   // build and with -DNISH_THREADS: with no argument it runs the positive checks
@@ -14337,7 +14382,7 @@ if (dealtHere("runtimeChecks")) {
     )
     const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
     check(
-      "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
+      "runtime.c, runtime-os.c, runtime-text.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
       rtRun !== null && rtRun.status === 0,
       String(rt.stderr) +
         (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -14396,22 +14441,22 @@ if (dealtHere("runtimeChecks")) {
       String(cc.stderr) + (run ? `exit ${run.status} ${run.signal ?? ""} ${run.stderr}\n${lines} lines\n${first}` : "")
     )
     // The power-of-ten table is derived, not transcribed: the generator's output
-    // must appear in runtime.c byte for byte.
+    // must appear in runtime-text.c byte for byte.
     const gen = spawnSync("python3", ["-I", "scripts/gen-pow10-table.py"], { cwd: root, encoding: "utf8" })
-    const runtimeC = fs.readFileSync(path.join(root, "runtime/runtime.c"), "utf8")
+    const runtimeC = fs.readFileSync(path.join(root, "runtime/runtime-text.c"), "utf8")
     check(
-      "runtime.c's NISH_POW10_SIG is what scripts/gen-pow10-table.py prints",
+      "runtime-text.c's NISH_POW10_SIG is what scripts/gen-pow10-table.py prints",
       gen.status === 0 && gen.stdout.length > 0 && runtimeC.includes(gen.stdout),
-      gen.status === 0 ? "the generated block is not in runtime/runtime.c; paste it over NISH_POW10_SIG" : `${gen.error ?? ""} ${gen.stderr}`
+      gen.status === 0 ? "the generated block is not in runtime/runtime-text.c; paste it over NISH_POW10_SIG" : `${gen.error ?? ""} ${gen.stderr}`
     )
     // NISH_F64_MAX is stated three times, in three files no one compile sees
     // together; they must agree.
-    const sizes = ["runtime/runtime.c", "runtime/nish.h", "tests/runtime-test.c"].map((f) => {
+    const sizes = ["runtime/runtime-text.c", "runtime/nish.h", "tests/runtime-test.c"].map((f) => {
       const m = /^#define NISH_F64_MAX (\d+)$/m.exec(fs.readFileSync(path.join(root, f), "utf8"))
       return `${f}: ${m ? m[1] : "missing"}`
     })
     check(
-      "runtime.c, nish.h and runtime-test.c state one NISH_F64_MAX",
+      "runtime-text.c, nish.h and runtime-test.c state one NISH_F64_MAX",
       new Set(sizes.map((s) => s.split(": ")[1])).size === 1 && !sizes[0].endsWith("missing"),
       sizes.join("\n")
     )
@@ -14545,6 +14590,7 @@ if (dealtHere("runtimeChecks")) {
         "-O2",
         tlsSmokeLl,
         "runtime/runtime.c",
+        "runtime/runtime-text.c",
         "tests/ir/alloc-smoke-main.c",
         "-lm",
         "-o",
@@ -17561,6 +17607,7 @@ if (dealtHere("cliChecks")) {
         sidecar("add", "ll"),
         sidecar("export_fn", "ll"),
         path.join(runtimeDir, "runtime.c"),
+        path.join(runtimeDir, "runtime-text.c"),
         driver,
         "-o",
         exe,
@@ -17834,6 +17881,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("interop_generic_fn", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           genDriver,
           "-o",
           genExe,
@@ -18018,6 +18066,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("gen_method_export", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           methodDriver,
           "-o",
           methodExe,
@@ -18096,6 +18145,7 @@ if (dealtHere("cliChecks")) {
           "-pedantic",
           sidecar("interop_generic_collision", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           clashDriver,
           "-o",
           clashExe,
@@ -18497,6 +18547,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("res_export", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           resDriver,
           "-o",
           resExe,
@@ -18809,6 +18860,8 @@ if (dealtHere("cliChecks")) {
     }
     // Both halves of the skip message. No corpus program has a function whose
     // arguments all cross and whose *result* does not, so that one is written here.
+    // A `string` result crosses since WP50 stage 4, so `spell` is declared and
+    // `names`, whose `string[]` result still needs the full runtime, is skipped.
     const skipSrc = path.join(interopDir, "skip_reasons.ts")
     fs.writeFileSync(
       skipSrc,
@@ -18816,6 +18869,10 @@ if (dealtHere("cliChecks")) {
         "export function spell(n: i32): string {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return `${n}`;",
+        "}",
+        "export function names(n: i32): string[] {",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+        "  return [`${n}`];",
         "}",
         // WP30's negative half. Adding the unsigned widths to the typed-view
         // table moved the line between an element type that crosses and one that
@@ -18846,7 +18903,9 @@ if (dealtHere("cliChecks")) {
       "a skipped function names the argument or the result, and the type, that stopped it",
       stringsDts.includes(
         "  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`,"
-      ) && skipDts.includes("  // spell(n: number): string  -- not exported to JS: the result is `string`,"),
+      ) &&
+        skipDts.includes("  // names(n: number): string[]  -- not exported to JS: the result is `string[]`,") &&
+        skipDts.includes("  spell(n: number): string;"),
       stringsDts + skipDts
     )
     check(
@@ -19016,6 +19075,7 @@ if (dealtHere("cliChecks")) {
           "-O2",
           sidecar("arrays", "ll"),
           path.join(runtimeDir, "runtime.c"),
+          path.join(runtimeDir, "runtime-text.c"),
           path.join(runtimeDir, "runtime-os.c"),
           arraysDriver,
           "-o",
@@ -21631,7 +21691,10 @@ if (dealtHere("releaseChecks")) {
         "bin/launcher.js",
         "bin/packaging.js",
         "runtime/runtime.c",
-        // Zmij's licence, which runtime.c's formatter is adapted under: the Boost
+        // The strings and the digits of numbers (WP50 S4): build.sh pairs it with
+        // runtime.c, and every program that builds or prints a string calls it.
+        "runtime/runtime-text.c",
+        // Zmij's licence, which runtime-text.c's formatter is adapted under: the Boost
         // licence asks for it in every source copy, and the tarball is one
         // (THIRD_PARTY_NOTICES.md).
         "runtime/LICENSE-zmij",
@@ -22206,6 +22269,7 @@ if (dealtHere("releaseChecks")) {
           const wantedInPlatform = [
             "bin/nish",
             "runtime/runtime.c",
+            "runtime/runtime-text.c",
             "runtime/runtime-os.c",
             "runtime/nish.h",
             "scripts/build.sh",
@@ -28345,7 +28409,7 @@ if (!only || "std_json_writer".includes(only)) {
 }
 
 // The f64 seam: a native `JsonWriter.f64` writes its digits through
-// `nish_json_put_f64` (runtime/runtime.c) straight into the writer's buffer,
+// `nish_json_put_f64` (runtime/runtime-text.c) straight into the writer's buffer,
 // where the Nish body, `jsonPutF64Walk` in std/json.ts, builds `${v}` first.
 // `tests/link/std_json_writer/seam.ts` prints -0, 1e21, 5e-324 and the longest
 // spelling in an array, a write one byte short of fitting and an exact fit;
@@ -29877,6 +29941,229 @@ if (!only || "host-import-window".includes(only)) {
   }
 }
 
+// tests/host-import/text: WP50 stage 4's strings (docs/wp50-wasm-host.md §7). A host
+// import takes a string as its UTF-8 bytes, lent for the call; an export's string
+// result is decoded by the loader before the call's arena mark is released; and
+// `nish/host/text` reads and writes text in module storage. parity.ts is the
+// formatting corpus, built native and for wasm32 and compared line for line.
+// Named `host-import-text` so the `host-import` filter runs it.
+if (!only || "host-import-text".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`host-import-text: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "host-text")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const name of fs.readdirSync(path.join(root, "tests", "host-import", "text"))) {
+      fs.copyFileSync(path.join(root, "tests", "host-import", "text", name), path.join(dir, name))
+    }
+    const at = (name) => path.join(dir, name)
+    const runtimeWasm = "runtime/runtime-wasm.c"
+    const compiled = spawnSync(
+      NISH,
+      [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("out") + "/"],
+      { cwd: root, encoding: "utf8" }
+    )
+    check("host-import-text: a program passing and answering strings compiles for wasm32 with --host", compiled.status === 0, shown(compiled))
+    if (compiled.status === 0) {
+      const ir = fs.readFileSync(at("out/main.ll"), "utf8")
+      check(
+        "host-import-text: a string parameter of a host function is the data pointer then the byte count, each an i32",
+        ir.includes("declare void @say(i8*, i32) #") && ir.includes("declare i32 @measure(i8*, i32, i32) #"),
+        ir.split("\n").filter((line) => line.startsWith("declare")).join("\n")
+      )
+      const dts = fs.readFileSync(at("main.d.ts"), "utf8")
+      check(
+        "host-import-text: an export taking a string is left out, the .d.ts saying the page writes module storage instead",
+        dts.includes(
+          "// takes(s: string): number  -- not exported to JS: argument 1 (s) is `string`, which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`)"
+        ) && dts.includes("label(n: number): string;"),
+        dts
+      )
+      const linked = wasmHostLink([at("out/main.ll"), at("out/text.ll"), runtimeWasm], ["-o", at("main.wasm"), "--profile", "wasm-host"])
+      check("host-import-text: the module links with --profile wasm-host", linked.status === 0, shown(linked))
+      const loader = fs.readFileSync(at("main.mjs"), "utf8")
+      check(
+        "host-import-text: the loader decodes a string argument from the pointer and byte count before the page's function sees it",
+        loader.includes("say: (a0, a1) => host_say(text(a0, a1)),") && loader.includes("measure: (a0, a1, a2) => host_measure(text(a0, a1), a2),"),
+        loader.split("\n").filter((line) => line.includes("text(")).join("\n")
+      )
+      if (linked.status === 0) {
+        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+        const lines = run.stdout.split("\n")
+        check(
+          "host-import-text: ASCII, a concatenation, an i32 and f64 template, 4-byte UTF-8 and the empty string reach the page as its own strings",
+          run.status === 0 &&
+            [
+              'say "plain ascii"',
+              'say "hello, 42!"',
+              'say "n=42 x=0.30000000000000004"',
+              'say "clef \u{1D11E} é"',
+              'say ""',
+              'measure 42 "é\u{1D11E}"',
+              "speak 3",
+            ].every((line, i) => lines[i] === line),
+          shown(run)
+        )
+        check(
+          "host-import-text: an export's string result is a JS string, the empty one included",
+          lines[7] === 'label "#-7 é\u{1D11E}" fixed "constant" nothing "" takes undefined',
+          shown(run)
+        )
+        check(
+          "host-import-text: 10,000 calls of a string export leave the arena mark and the memory size where they were",
+          lines[8] === "label x10000 true mark true memory true",
+          shown(run)
+        )
+        check(
+          "host-import-text: the module's writers chain into storage the page decodes, and one that does not fit writes nothing",
+          lines[9] === 'compose 11 "n=-12 x=0.5"' && lines[10] === 'compose overflow -1 "n=7 x=" rest untouched true',
+          shown(run)
+        )
+        check(
+          "host-import-text: text the page writes with encodeInto, non-ASCII included, is read by the module and echoed back",
+          lines[11] === 'echo 11 11 "héllo \u{1D11E}"' && lines[12] === 'readBack "[héllo \u{1D11E}]" "refused" "refused" "[]"',
+          shown(run)
+        )
+        check(
+          "host-import-text: an echo that overflows its storage answers -1 and leaves the bytes untouched",
+          lines[13] === "echo overflow -1 untouched true",
+          shown(run)
+        )
+        check(
+          "host-import-text: a leading U+FEFF reaches the page as text, through an import's argument and an export's result",
+          lines[14] === 'say "\u{FEFF}A"' && lines[15] === 'bom "\u{FEFF}A"',
+          shown(run)
+        )
+        check(
+          "host-import-text: a -1 offset passes through every writer, and the end of the buffer takes only the empty text",
+          lines[16] === "chained -1 -1 -1 16 -1 -1 untouched true",
+          shown(run)
+        )
+        // WH-9: only the module makes a string's (p, n) or its { i64 len }
+        // header, but a forged one is still read inside memory or not at all.
+        // The adapter is called with pairs past the end and wrapping it, and a
+        // string export is made to return a header whose count, or whose
+        // address, reaches past the end; three bytes that are not UTF-8 decode
+        // as U+FFFD.
+        fs.writeFileSync(
+          at("forged.mjs"),
+          [
+            'import { readFileSync } from "node:fs"',
+            'import { loadSync } from "./main.mjs"',
+            "const Real = WebAssembly.Instance",
+            "let linked = null",
+            "let forge = 0",
+            "WebAssembly.Instance = function (module, imports) {",
+            "  linked = imports",
+            "  const made = new Real(module, imports)",
+            "  return { exports: { ...made.exports, label: () => forge } }",
+            "}",
+            "const said = []",
+            "const host = { say: (s) => said.push(s), measure: () => 0 }",
+            "const load = () => loadSync(readFileSync(process.argv[2]), { host, onPanic: () => {} })",
+            "const caught = (f) => { try { return JSON.stringify(f()) } catch (e) { return e.constructor.name } }",
+            "let m = load()",
+            "const size = m.memory.buffer.byteLength",
+            "new Uint8Array(m.memory.buffer).set([0x68, 0xff, 0xc3], size - 3)",
+            "console.log(caught(() => linked.host.say(size - 4, 8)))",
+            "console.log(caught(() => linked.host.say(-16, 32)))",
+            "linked.host.say(size - 3, 3)",
+            "console.log(JSON.stringify(said))",
+            "const header = (len) => new DataView(m.memory.buffer).setBigUint64(size - 11, len, true)",
+            "forge = size - 11",
+            "header(3n)",
+            "console.log(caught(() => m.label(0)))",
+            "header(64n)",
+            "console.log(caught(() => m.label(0)))",
+            "console.log(caught(() => m.fixed()))",
+            "m = load()",
+            "forge = -8",
+            "console.log(caught(() => m.label(0)))",
+            "",
+          ].join("\n")
+        )
+        const forged = spawnSync(process.execPath, [at("forged.mjs"), at("main.wasm")], { cwd: dir, encoding: "utf8" })
+        check(
+          "host-import-text: WH-9: a forged string pair or header past the end of memory is a RangeError, and bytes that are not UTF-8 read as U+FFFD",
+          forged.status === 0 &&
+            forged.stdout ===
+              [
+                "RangeError",
+                "RangeError",
+                '["h\u{FFFD}\u{FFFD}"]',
+                '"h\u{FFFD}\u{FFFD}"',
+                "RangeError",
+                "NishPanic",
+                "RangeError",
+                "",
+              ].join("\n"),
+          shown(forged)
+        )
+      }
+    }
+    // The TypeScript reading calls host.ts's own `say` and `measure`, the
+    // functions the wasm page passes as `typeof import("./host")`: one signature,
+    // a JS string, in both readings.
+    const readingDir = at("emit-ts")
+    const reading = spawnSync(NISH, [at("reading.ts"), "--host", at("host.ts"), "--emit-ts", readingDir], { cwd: root, encoding: "utf8" })
+    const readingRan =
+      reading.status === 0
+        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(readingDir, "entry.ts")], {
+            cwd: readingDir,
+            encoding: "utf8",
+          })
+        : reading
+    const readingSource = reading.status === 0 ? fs.readFileSync(path.join(readingDir, "reading.ts"), "utf8") : ""
+    const pageDts = compiled.status === 0 ? fs.readFileSync(at("main.d.ts"), "utf8") : ""
+    check(
+      "host-import-text: the --emit-ts reading passes host.ts's say and measure a JS string, the signature the wasm page's import object takes",
+      readingRan.status === 0 &&
+        readingRan.stdout === 'say "clef \u{1D11E} é"\nmeasure 7 "é\u{1D11E}"\n3\n' &&
+        readingSource.includes('import { measure, say } from "../host.ts"') &&
+        pageDts.includes('export type Imports = LoadOptions & { host: typeof import("./host") };'),
+      shown(readingRan)
+    )
+    // The parity corpus: one source, a native process and a wasm export.
+    const expected = fs.readFileSync(at("parity.out"), "utf8")
+    const native = spawnSync(NISH, [at("parity-main.ts"), "--link", at("parity-native")], { cwd: root, encoding: "utf8" })
+    const nativeOut = native.status === 0 ? spawnSync(at("parity-native"), [], { encoding: "utf8" }) : native
+    check(
+      "host-import-text: the parity corpus formats i32, i64, u64 and f64 natively as JS does",
+      nativeOut.status === 0 && nativeOut.stdout === expected,
+      shown(nativeOut)
+    )
+    const parityIr = spawnSync(
+      NISH,
+      [at("parity.ts"), "--target", "wasm32", "--emit-dts", at("parity.d.ts"), "-o", at("parity.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    const parityWasm =
+      parityIr.status === 0 ? wasmHostLink([at("parity.ll"), runtimeWasm], ["-o", at("parity.wasm"), "--profile", "wasm-host"]) : parityIr
+    const wasmOut =
+      parityWasm.status === 0
+        ? spawnSync(
+            process.execPath,
+            [
+              "--input-type=module",
+              "-e",
+              'import { readFileSync } from "node:fs"; import { loadSync } from "./parity.mjs"; process.stdout.write(loadSync(readFileSync("parity.wasm")).corpus() + "\\n")',
+            ],
+            { cwd: dir, encoding: "utf8" }
+          )
+        : parityWasm
+    check(
+      "host-import-text: the parity corpus formats every value in wasm byte for byte as it does natively",
+      wasmOut.status === 0 && wasmOut.stdout === expected,
+      shown(wasmOut)
+    )
+  }
+}
+
 // tests/host-import holds a host module with one function per kind of value that
 // crosses, a program that calls each, an entry for `--emit-ts`, and three pages
 // for tsc. Compiled with `--host`, each host function is a `declare` with the wasm
@@ -29972,8 +30259,11 @@ if (!only || "host-import".includes(only)) {
     const dir = path.join(buildDir, "host-import")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    for (const name of fs.readdirSync(path.join(root, "tests", "host-import"))) {
-      fs.copyFileSync(path.join(root, "tests", "host-import", name), path.join(dir, name))
+    // text/ is WP50 stage 4's own fixture set, copied by the host-import-text section.
+    for (const entry of fs.readdirSync(path.join(root, "tests", "host-import"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        fs.copyFileSync(path.join(root, "tests", "host-import", entry.name), path.join(dir, entry.name))
+      }
     }
     const at = (name) => path.join(dir, name)
     const compiled = spawnSync(
@@ -31490,9 +31780,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all seventeen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eighteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 17 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 18 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -31617,7 +31907,7 @@ if (!only || "hardening".includes(only)) {
 
 // ---- Third-party code keeps its own licence -------------------------------------------
 // Some files are copied, ported or adapted from code written elsewhere: Zmij in
-// runtime/runtime.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
+// runtime/runtime-text.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
 // Yet ports and the tests that reproduce parts of them. Their licences ask for the
 // upstream notice in every copy, and a copy is easy to make without it, so
 // THIRD_PARTY_NOTICES.md lists each file with the notice it carries and the licence text

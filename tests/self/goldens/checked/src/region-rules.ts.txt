@@ -4,7 +4,9 @@ entry: src/region-rules.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import PointerParamFacts from "./attributes" -> struct PointerParamFacts
+import isResizeCall from "./attributes" -> function @isResizeCall
 import arrayMethodName from "./emit-util" -> function @arrayMethodName
+import builtinNameOf from "./emit-util" -> function @builtinNameOf
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import methodReceiver from "./emit-util" -> function @methodReceiver
 import unwrapParens from "./emit-util" -> function @unwrapParens
@@ -35,6 +37,8 @@ import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
 import N_UNARY from "./nodes" -> const N_UNARY
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
+import capturesOf from "./parallel" -> function @capturesOf
+import isThreadsLayout from "./parallel" -> function @isThreadsLayout
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
 import ParallelCall from "./program" -> struct ParallelCall
@@ -48,18 +52,20 @@ import regionRoleOf from "./region-check" -> function @regionRoleOf
 import Local from "./symbols" -> struct Local
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import sourceLocal from "./symbols" -> function @sourceLocal
+import T_STRING from "./types" -> const T_STRING
 import TypeTable from "./types" -> struct TypeTable
 const ORIGIN_NONE: i32 = -1
 const ORIGIN_SCALAR: i32 = 0
 const ORIGIN_REGION: i32 = 1
 const ORIGIN_OUTER: i32 = 2
 const ORIGIN_UNKNOWN: i32 = 3
+const SPAWN_PIPED_FIRST_GROWN: i32 = 2
 struct RegionFinding (class) size=24 align=8 exported
   field program: CheckedProgram index=0 offset=0
   field node: Node index=1 offset=8
   field message: string index=2 offset=16
   constructor -> @RegionFinding.constructor
-struct RegionWalk (class) size=104 align=8
+struct RegionWalk (class) size=120 align=8
   field program: CheckedProgram index=0 offset=0
   field table: TypeTable index=1 offset=8
   field facts: FactsTable index=2 offset=16
@@ -71,10 +77,14 @@ struct RegionWalk (class) size=104 align=8
   field arrowOrigins: i32[] index=8 offset=64
   field locals: Local[] index=9 offset=72
   field localOrigins: i32[] index=10 offset=80
-  field changed: boolean index=11 offset=88
-  field collect: boolean index=12 offset=89
-  field findings: RegionFinding[] index=13 offset=96
+  field findings: RegionFinding[] index=11 offset=88
+  field who: string index=12 offset=96
+  field freed: string index=13 offset=104
+  field changed: boolean index=14 offset=112
+  field collect: boolean index=15 offset=113
+  field task: boolean index=16 offset=114
   constructor -> @RegionWalk.constructor
+  method reportOuter -> @RegionWalk.reportOuter
   method report -> @RegionWalk.report
   method bind -> @RegionWalk.bind
   method bindArrowParam -> @RegionWalk.bindArrowParam
@@ -93,6 +103,8 @@ struct RegionWalk (class) size=104 align=8
   method visitArguments -> @RegionWalk.visitArguments
   method visitBuiltin -> @RegionWalk.visitBuiltin
   method judgeCallee -> @RegionWalk.judgeCallee
+  method receiverMayBeRegion -> @RegionWalk.receiverMayBeRegion
+  method judgeTaskCallee -> @RegionWalk.judgeTaskCallee
 function joinOrigin(a: i32, b: i32): i32 -> @joinOrigin
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
@@ -107,7 +119,7 @@ function RegionFinding.constructor(this: RegionFinding, program: CheckedProgram,
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: message node program
   pointer this: size=24 writesThrough=true captured=false
-  pointer program: size=688 writesThrough=true captured=true
+  pointer program: size=696 writesThrough=true captured=true
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function fnName(fn: FunctionSig): string -> @fnName
@@ -124,7 +136,7 @@ function regionCalleeName(sig: FunctionSig): string -> @regionCalleeName
 function textOf(program: CheckedProgram, node: Node): string -> @textOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer program: size=688 writesThrough=false captured=false
+  pointer program: size=696 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (const)
@@ -132,14 +144,14 @@ function textOf(program: CheckedProgram, node: Node): string -> @textOf
 function putsText(program: CheckedProgram, value: Node): string -> @putsText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat textOf
-  pointer program: size=688 writesThrough=false captured=false passedTo=textOf#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=textOf#0
   pointer value: size=40 writesThrough=false captured=false passedTo=textOf#1
   stackSites=0 stackLocals=0
   callee +0:13 textOf -> @textOf
 function storesText(program: CheckedProgram, value: Node, target: Node): string -> @storesText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat textOf
-  pointer program: size=688 writesThrough=false captured=false passedTo=textOf#0 textOf#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=textOf#0 textOf#0
   pointer value: size=40 writesThrough=false captured=false passedTo=textOf#1
   pointer target: size=40 writesThrough=false captured=false passedTo=textOf#1
   stackSites=0 stackLocals=0
@@ -148,61 +160,52 @@ function storesText(program: CheckedProgram, value: Node, target: Node): string 
 function handsText(program: CheckedProgram, arg: Node, callee: string, which: string): string -> @handsText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat textOf
-  pointer program: size=688 writesThrough=false captured=false passedTo=textOf#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=textOf#0
   pointer arg: size=40 writesThrough=false captured=false passedTo=textOf#1
   stackSites=0 stackLocals=0
   callee +0:14 textOf -> @textOf
-function regionToOuterMessage(fn: FunctionSig, what: string): string -> @regionToOuterMessage
+function insideRegion(fn: FunctionSig): string -> @insideRegion
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: fnName nish_str_concat
+  pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
+  stackSites=0 stackLocals=0
+  callee +0:54 fnName -> @fnName
+function insideTask(fn: FunctionSig): string -> @insideTask
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat
   pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
   stackSites=0 stackLocals=0
   callee +0:6 fnName -> @fnName
-function outerToRegionMessage(fn: FunctionSig, what: string): string -> @outerToRegionMessage
+function regionToOuterMessage(who: string, what: string, freed: string): string -> @regionToOuterMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fnName nish_str_concat
-  pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
+  calls: nish_str_concat
   stackSites=0 stackLocals=0
-  callee +0:6 fnName -> @fnName
-function literalMessage(fn: FunctionSig, program: CheckedProgram, value: Node): string -> @literalMessage
+function outerToRegionMessage(who: string, what: string): string -> @outerToRegionMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: outerToRegionMessage putsText
-  pointer fn: size=176 writesThrough=false captured=false passedTo=outerToRegionMessage#0
-  pointer program: size=688 writesThrough=false captured=false passedTo=putsText#0
-  pointer value: size=40 writesThrough=false captured=false passedTo=putsText#1
+  calls: nish_str_concat
   stackSites=0 stackLocals=0
-  callee +0:3 outerToRegionMessage -> @outerToRegionMessage
-  callee +0:28 putsText -> @putsText
-function handsOuterMessage(fn: FunctionSig, program: CheckedProgram, arg: Node, callee: string, which: string): string -> @handsOuterMessage
+function taskKeepsOuterMessage(who: string, what: string): string -> @taskKeepsOuterMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: callee which
-  calls: handsText outerToRegionMessage
-  pointer fn: size=176 writesThrough=false captured=false passedTo=outerToRegionMessage#0
-  pointer program: size=688 writesThrough=false captured=false passedTo=handsText#0
-  pointer arg: size=40 writesThrough=false captured=false passedTo=handsText#1
+  calls: nish_str_concat
   stackSites=0 stackLocals=0
-  callee +0:14 outerToRegionMessage -> @outerToRegionMessage
-  callee +0:39 handsText -> @handsText
-function handsRegionMessage(fn: FunctionSig, program: CheckedProgram, arg: Node, callee: string, which: string): string -> @handsRegionMessage
+function handsRegionMessage(who: string, freed: string, program: CheckedProgram, arg: Node, callee: string, which: string): string -> @handsRegionMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: callee which
+  escaping: callee freed which who
   calls: handsText regionToOuterMessage
-  pointer fn: size=176 writesThrough=false captured=false passedTo=regionToOuterMessage#0
-  pointer program: size=688 writesThrough=false captured=false passedTo=handsText#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=handsText#0
   pointer arg: size=40 writesThrough=false captured=false passedTo=handsText#1
   stackSites=0 stackLocals=0
   callee +0:14 regionToOuterMessage -> @regionToOuterMessage
-  callee +0:39 handsText -> @handsText
-function handsGrowthMessage(fn: FunctionSig, program: CheckedProgram, arg: Node, callee: string): string -> @handsGrowthMessage
+  callee +0:40 handsText -> @handsText
+function handsGrowthMessage(who: string, program: CheckedProgram, arg: Node, callee: string): string -> @handsGrowthMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: callee
+  escaping: callee who
   calls: growthMessage handsText
-  pointer fn: size=176 writesThrough=false captured=false passedTo=growthMessage#0
-  pointer program: size=688 writesThrough=false captured=false passedTo=handsText#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=handsText#0
   pointer arg: size=40 writesThrough=false captured=false passedTo=handsText#1
   stackSites=0 stackLocals=0
   callee +0:3 growthMessage -> @growthMessage
-  callee +0:21 handsText -> @handsText
+  callee +0:22 handsText -> @handsText
 function enterResultMessage(fn: FunctionSig, table: TypeTable): string -> @enterResultMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName fnName nish_str_concat
@@ -213,10 +216,10 @@ function enterResultMessage(fn: FunctionSig, table: TypeTable): string -> @enter
   callee +0:30 TypeTable.typeName -> @TypeTable.typeName
 function threadsMessage(fn: FunctionSig): string -> @threadsMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fnName nish_str_concat
-  pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
+  calls: insideRegion nish_str_concat
+  pointer fn: size=176 writesThrough=false captured=false passedTo=insideRegion#0
   stackSites=0 stackLocals=0
-  callee +0:6 fnName -> @fnName
+  callee +0:6 insideRegion -> @insideRegion
 function crossingMessage(table: TypeTable, what: string, type: i32): string -> @crossingMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -230,26 +233,40 @@ function notFreshMessage(fn: FunctionSig, ref: string): string -> @notFreshMessa
   pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
   stackSites=0 stackLocals=0
   callee +0:10 fnName -> @fnName
-function growthMessage(fn: FunctionSig, what: string): string -> @growthMessage
+function growthMessage(who: string, what: string): string -> @growthMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fnName nish_str_concat
-  pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
+  calls: nish_str_concat
   stackSites=0 stackLocals=0
-  callee +0:6 fnName -> @fnName
-function noFactsMessage(fn: FunctionSig, callee: FunctionSig): string -> @noFactsMessage
+function noFactsMessage(who: string, callee: FunctionSig): string -> @noFactsMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fnName nish_str_concat regionCalleeName
-  pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
+  calls: nish_str_concat regionCalleeName
   pointer callee: size=176 writesThrough=false captured=false passedTo=regionCalleeName#0
   stackSites=0 stackLocals=0
-  callee +0:6 fnName -> @fnName
-  callee +0:52 regionCalleeName -> @regionCalleeName
+  callee +0:24 regionCalleeName -> @regionCalleeName
 function arenaStateMessage(fn: FunctionSig): string -> @arenaStateMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fnName nish_str_concat
-  pointer fn: size=176 writesThrough=false captured=false passedTo=fnName#0
+  calls: insideRegion nish_str_concat
+  pointer fn: size=176 writesThrough=false captured=false passedTo=insideRegion#0
   stackSites=0 stackLocals=0
-  callee +0:6 fnName -> @fnName
+  callee +0:6 insideRegion -> @insideRegion
+function nestedSpawnMessage(task: FunctionSig): string -> @nestedSpawnMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: insideTask nish_str_concat
+  pointer task: size=176 writesThrough=false captured=false passedTo=insideTask#0
+  stackSites=0 stackLocals=0
+  callee +0:6 insideTask -> @insideTask
+function captureSpawnMessage(task: FunctionSig, local: string): string -> @captureSpawnMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: fnName nish_str_concat
+  pointer task: size=176 writesThrough=false captured=false passedTo=fnName#0
+  stackSites=0 stackLocals=0
+  callee +0:22 fnName -> @fnName
+function sharedResourceMessage(task: FunctionSig, param: string, type: string, why: string): string -> @sharedResourceMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: fnName nish_str_concat
+  pointer task: size=176 writesThrough=false captured=false passedTo=fnName#0
+  stackSites=0 stackLocals=0
+  callee +0:22 fnName -> @fnName
 function regionNewMessage(): string -> @regionNewMessage [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -303,6 +320,45 @@ function holdsRegionIn(programs: CheckedProgram[], table: TypeTable, type: i32, 
   callee +29:18 CheckedProgram.struct -> @CheckedProgram.struct
   local +31:18 field: FieldInfo (const)
   callee +32:13 holdsRegionIn -> @holdsRegionIn
+function taskShareObstacle(programs: CheckedProgram[], table: TypeTable, type: i32, seen: i32[]): string -> @taskShareObstacle
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: type
+  calls: CheckedProgram.struct TypeTable.errOf TypeTable.isArray TypeTable.isNullable TypeTable.isRegion TypeTable.isResult TypeTable.isSecret TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.stripNull TypeTable.typeName TypeTable.variantsOf isThreadsLayout nish_array_grow nish_str_concat taskShareObstacle
+  pointer programs: size=0 writesThrough=false captured=false passedTo=taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isSecret#0 TypeTable.isNullable#0 taskShareObstacle#1 TypeTable.stripNull#0 TypeTable.isArray#0 taskShareObstacle#1 TypeTable.refOf#0 TypeTable.isResult#0 taskShareObstacle#1 TypeTable.okOf#0 taskShareObstacle#1 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 taskShareObstacle#1 TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.typeName#0 taskShareObstacle#1
+  pointer seen: size=0 writesThrough=true captured=false passedTo=taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3
+  stackSites=0 stackLocals=0
+  callee +1:7 TypeTable.isRegion -> @TypeTable.isRegion
+  callee +4:7 TypeTable.isSecret -> @TypeTable.isSecret
+  callee +7:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +8:12 taskShareObstacle -> @taskShareObstacle
+  callee +8:47 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +10:7 TypeTable.isArray -> @TypeTable.isArray
+  callee +11:12 taskShareObstacle -> @taskShareObstacle
+  callee +11:47 TypeTable.refOf -> @TypeTable.refOf
+  callee +13:7 TypeTable.isResult -> @TypeTable.isResult
+  local +14:11 ok: string (const)
+  callee +14:16 taskShareObstacle -> @taskShareObstacle
+  callee +14:51 TypeTable.okOf -> @TypeTable.okOf
+  callee +15:33 taskShareObstacle -> @taskShareObstacle
+  callee +15:68 TypeTable.errOf -> @TypeTable.errOf
+  callee +17:7 TypeTable.isUnion -> @TypeTable.isUnion
+  local +18:16 variant: i32 (const)
+  callee +18:27 TypeTable.variantsOf -> @TypeTable.variantsOf
+  local +19:13 inner: string (const)
+  callee +19:21 taskShareObstacle -> @taskShareObstacle
+  callee +26:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local +29:9 name: string (const)
+  callee +29:16 TypeTable.nameOf -> @TypeTable.nameOf
+  local +30:14 program: CheckedProgram (const)
+  local +31:11 info: StructInfo | null (const)
+  callee +31:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +38:9 isThreadsLayout -> @isThreadsLayout
+  callee +39:30 TypeTable.typeName -> @TypeTable.typeName
+  local +41:16 field: FieldInfo (const)
+  local +42:13 inner: string (const)
+  callee +42:21 taskShareObstacle -> @taskShareObstacle
 function collectArrowReturns(node: Node, out: Node[]): void -> @collectArrowReturns
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -312,22 +368,38 @@ function collectArrowReturns(node: Node, out: Node[]): void -> @collectArrowRetu
   stackSites=0 stackLocals=0
   local +7:14 child: Node (const)
   callee +8:5 collectArrowReturns -> @collectArrowReturns
-function RegionWalk.constructor(this: RegionWalk, program: CheckedProgram, table: TypeTable, facts: FactsTable, fn: FunctionSig, fresh: StringSet): void -> @RegionWalk.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  escaping: facts fn fresh program table
-  pointer this: size=104 writesThrough=true captured=false
-  pointer program: size=688 writesThrough=true captured=true
+function RegionWalk.constructor(this: RegionWalk, program: CheckedProgram, table: TypeTable, facts: FactsTable, fn: FunctionSig, fresh: StringSet, paramNames: string[], paramOrigins: i32[], task: boolean): void -> @RegionWalk.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: facts fn fresh paramNames paramOrigins program table task
+  calls: insideRegion insideTask
+  pointer this: size=120 writesThrough=true captured=false
+  pointer program: size=696 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
-  pointer fn: size=176 writesThrough=true captured=true
+  pointer fn: size=176 writesThrough=true captured=true passedTo=insideTask#0 insideRegion#0
   pointer fresh: size=8 writesThrough=true captured=true
+  pointer paramNames: size=0 writesThrough=true captured=true
+  pointer paramOrigins: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+  callee +0:23 insideTask -> @insideTask
+  callee +0:40 insideRegion -> @insideRegion
+function RegionWalk.reportOuter(this: RegionWalk, node: Node, what: string): void -> @RegionWalk.reportOuter [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RegionWalk.report
+  escaping: what
+  calls: RegionWalk.report outerToRegionMessage taskKeepsOuterMessage
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.report#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1
+  stackSites=0 stackLocals=0
+  callee +0:5 RegionWalk.report -> @RegionWalk.report
+  callee +2:19 taskKeepsOuterMessage -> @taskKeepsOuterMessage
+  callee +2:59 outerToRegionMessage -> @outerToRegionMessage
 function RegionWalk.report(this: RegionWalk, node: Node, message: string): void -> @RegionWalk.report [method]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: message
   calls: RegionFinding.constructor nish_alloc_struct nish_array_grow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionFinding.constructor#2
   stackSites=0 stackLocals=0
   local -5:16 finding: RegionFinding (const)
@@ -337,7 +409,7 @@ function RegionWalk.bind(this: RegionWalk, local: Local | null, origin: i32): vo
   sharedWrite: +0:7
   escaping: local origin
   calls: joinOrigin nish_array_grow nish_panic_index
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   pointer local: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -2:11 at: i32 (const)
@@ -348,7 +420,7 @@ function RegionWalk.bindArrowParam(this: RegionWalk, name: string, origin: i32):
   sharedWrite: +0:7
   escaping: name origin
   calls: joinOrigin nish_array_grow nish_panic_index nish_str_eq
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 at: i32 (const)
   local +5:11 joined: i32 (const)
@@ -356,13 +428,13 @@ function RegionWalk.bindArrowParam(this: RegionWalk, name: string, origin: i32):
 function RegionWalk.typeOf(this: RegionWalk, node: Node): i32 -> @RegionWalk.typeOf [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function RegionWalk.origin(this: RegionWalk, expr: Node): i32 -> @RegionWalk.origin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: RegionWalk.callOrigin RegionWalk.identOrigin RegionWalk.origin RegionWalk.typeOf isAssignmentOperator isCopied joinOrigin nish_panic_index nish_str_eq unwrapParens
-  pointer this: size=104 writesThrough=false captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.identOrigin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.callOrigin#0
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.identOrigin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.callOrigin#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:11 e: Node (const)
@@ -390,22 +462,22 @@ function RegionWalk.origin(this: RegionWalk, expr: Node): i32 -> @RegionWalk.ori
 function RegionWalk.identOrigin(this: RegionWalk, e: Node): i32 -> @RegionWalk.identOrigin [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: joinOrigin nish_panic_index nish_str_eq sourceLocal
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   pointer e: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 local: Local | null (const)
   callee +0:19 sourceLocal -> @sourceLocal
   local +5:11 at: i32 (const)
   local +6:9 out: i32 (let)
-  local +10:9 named: boolean (let)
-  local +11:11 own: i32 (const)
-  callee +13:13 joinOrigin -> @joinOrigin
-  local +16:11 nested: i32 (const)
-  callee +18:13 joinOrigin -> @joinOrigin
+  local +12:9 named: boolean (let)
+  local +13:11 own: i32 (const)
+  callee +15:13 joinOrigin -> @joinOrigin
+  local +18:11 nested: i32 (const)
+  callee +20:13 joinOrigin -> @joinOrigin
 function RegionWalk.handedTo(this: RegionWalk, call: Node, callee: FunctionSig | null): Node[] -> @RegionWalk.handedTo [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: methodReceiver nish_array_grow nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false passedTo=methodReceiver#0
   pointer callee: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -416,25 +488,26 @@ function RegionWalk.handedTo(this: RegionWalk, call: Node, callee: FunctionSig |
   local +11:16 arg: Node (const)
 function RegionWalk.callOrigin(this: RegionWalk, call: Node): i32 -> @RegionWalk.callOrigin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: RegionWalk.arrowResult RegionWalk.handedTo RegionWalk.origin StringSet.has joinOrigin nish_panic_index regionRoleOf unwrapParens
-  pointer this: size=104 writesThrough=false captured=false passedTo=RegionWalk.handedTo#0 RegionWalk.arrowResult#0 RegionWalk.origin#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=RegionWalk.handedTo#1
+  calls: RegionWalk.arrowResult RegionWalk.handedTo RegionWalk.origin RegionWalk.typeOf StringSet.has joinOrigin nish_panic_index regionRoleOf unwrapParens
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.typeOf#0 RegionWalk.handedTo#0 RegionWalk.arrowResult#0 RegionWalk.origin#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=RegionWalk.typeOf#1 RegionWalk.handedTo#1
   stackSites=0 stackLocals=0
   local +0:11 callee: FunctionSig | null (const)
   callee +1:28 regionRoleOf -> @regionRoleOf
   callee +5:28 StringSet.has -> @StringSet.has
-  local +8:9 out: i32 (let)
-  local +9:16 arg: Node (const)
-  callee +9:23 RegionWalk.handedTo -> @RegionWalk.handedTo
-  local +10:13 a: Node (const)
-  callee +10:17 unwrapParens -> @unwrapParens
-  callee +12:13 joinOrigin -> @joinOrigin
-  callee +12:50 RegionWalk.arrowResult -> @RegionWalk.arrowResult
-  callee +12:72 RegionWalk.origin -> @RegionWalk.origin
+  callee +5:74 RegionWalk.typeOf -> @RegionWalk.typeOf
+  local +10:9 out: i32 (let)
+  local +11:16 arg: Node (const)
+  callee +11:23 RegionWalk.handedTo -> @RegionWalk.handedTo
+  local +12:13 a: Node (const)
+  callee +12:17 unwrapParens -> @unwrapParens
+  callee +14:13 joinOrigin -> @joinOrigin
+  callee +14:50 RegionWalk.arrowResult -> @RegionWalk.arrowResult
+  callee +14:72 RegionWalk.origin -> @RegionWalk.origin
 function RegionWalk.arrowResult(this: RegionWalk, arrow: Node): i32 -> @RegionWalk.arrowResult [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: RegionWalk.origin collectArrowReturns joinOrigin nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=RegionWalk.origin#0 RegionWalk.origin#0
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.origin#0 RegionWalk.origin#0
   pointer arrow: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 body: Node (const)
@@ -447,47 +520,50 @@ function RegionWalk.arrowResult(this: RegionWalk, arrow: Node): i32 -> @RegionWa
   callee +8:29 RegionWalk.origin -> @RegionWalk.origin
 function RegionWalk.store(this: RegionWalk, holder: i32, value: i32, at: Node, what: string): void -> @RegionWalk.store [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via RegionWalk.report
+  sharedWrite: via RegionWalk.reportOuter
   escaping: value what
-  calls: RegionWalk.report mayBeOuter mayBeRegion outerToRegionMessage regionToOuterMessage
-  pointer this: size=104 writesThrough=false captured=false passedTo=RegionWalk.report#0 RegionWalk.report#0 RegionWalk.report#0
-  pointer at: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1 RegionWalk.report#1 RegionWalk.report#1
+  calls: RegionWalk.report RegionWalk.reportOuter mayBeOuter mayBeRegion regionToOuterMessage
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.reportOuter#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.reportOuter#0
+  pointer at: size=40 writesThrough=true captured=true passedTo=RegionWalk.reportOuter#1 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.reportOuter#1
   stackSites=0 stackLocals=0
   callee +0:37 mayBeOuter -> @mayBeOuter
-  callee +1:7 RegionWalk.report -> @RegionWalk.report
-  callee +1:23 outerToRegionMessage -> @outerToRegionMessage
+  callee +1:7 RegionWalk.reportOuter -> @RegionWalk.reportOuter
   callee +2:43 mayBeRegion -> @mayBeRegion
   callee +3:7 RegionWalk.report -> @RegionWalk.report
   callee +3:23 regionToOuterMessage -> @regionToOuterMessage
-  callee +5:7 RegionWalk.report -> @RegionWalk.report
-  callee +7:34 outerToRegionMessage -> @outerToRegionMessage
-  callee +7:72 regionToOuterMessage -> @regionToOuterMessage
+  callee +6:9 RegionWalk.report -> @RegionWalk.report
+  callee +6:25 regionToOuterMessage -> @regionToOuterMessage
+  callee +8:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
 function RegionWalk.visit(this: RegionWalk, node: Node): void -> @RegionWalk.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit
   calls: RegionWalk.bind RegionWalk.origin RegionWalk.visit RegionWalk.visitAssignment RegionWalk.visitCall RegionWalk.visitLiteral RegionWalk.visitNew isAssignmentOperator nish_panic_index
-  pointer this: size=104 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.bind#0 RegionWalk.origin#0 RegionWalk.bind#0 RegionWalk.origin#0 RegionWalk.visitAssignment#0 RegionWalk.visitCall#0 RegionWalk.visitNew#0 RegionWalk.visitLiteral#0 RegionWalk.visit#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.origin#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.origin#0 RegionWalk.visitAssignment#0 RegionWalk.visitCall#0 RegionWalk.visitNew#0 RegionWalk.visitLiteral#0 RegionWalk.visit#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.visitAssignment#1 RegionWalk.visitCall#1 RegionWalk.visitNew#1 RegionWalk.visitLiteral#1
   stackSites=0 stackLocals=0
   local +0:11 kind: i32 (const)
   local +6:13 init: Node (const)
   callee +8:9 RegionWalk.visit -> @RegionWalk.visit
-  callee +9:9 RegionWalk.bind -> @RegionWalk.bind
-  callee +9:53 RegionWalk.origin -> @RegionWalk.origin
-  callee +14:7 RegionWalk.bind -> @RegionWalk.bind
-  callee +16:9 RegionWalk.origin -> @RegionWalk.origin
-  callee +18:37 isAssignmentOperator -> @isAssignmentOperator
-  callee +19:7 RegionWalk.visitAssignment -> @RegionWalk.visitAssignment
-  callee +22:7 RegionWalk.visitCall -> @RegionWalk.visitCall
-  callee +25:7 RegionWalk.visitNew -> @RegionWalk.visitNew
-  callee +27:7 RegionWalk.visitLiteral -> @RegionWalk.visitLiteral
-  local +29:16 child: Node (const)
-  callee +30:7 RegionWalk.visit -> @RegionWalk.visit
+  local +9:15 origin: i32 (const)
+  callee +9:24 RegionWalk.origin -> @RegionWalk.origin
+  local +10:15 local: Local | null (const)
+  callee +12:11 RegionWalk.bind -> @RegionWalk.bind
+  local +15:22 name: Node (const)
+  callee +16:13 RegionWalk.bind -> @RegionWalk.bind
+  callee +23:7 RegionWalk.bind -> @RegionWalk.bind
+  callee +25:9 RegionWalk.origin -> @RegionWalk.origin
+  callee +27:37 isAssignmentOperator -> @isAssignmentOperator
+  callee +28:7 RegionWalk.visitAssignment -> @RegionWalk.visitAssignment
+  callee +31:7 RegionWalk.visitCall -> @RegionWalk.visitCall
+  callee +34:7 RegionWalk.visitNew -> @RegionWalk.visitNew
+  callee +36:7 RegionWalk.visitLiteral -> @RegionWalk.visitLiteral
+  local +38:16 child: Node (const)
+  callee +39:7 RegionWalk.visit -> @RegionWalk.visit
 function RegionWalk.visitAssignment(this: RegionWalk, node: Node): void -> @RegionWalk.visitAssignment [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit
   calls: RegionWalk.bind RegionWalk.origin RegionWalk.store RegionWalk.typeOf RegionWalk.visit isCopied joinOrigin nish_panic_index nish_str_eq storesText unwrapParens
-  pointer this: size=104 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.visit#0 RegionWalk.typeOf#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.bind#0 RegionWalk.store#0 RegionWalk.origin#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.visit#0 RegionWalk.typeOf#0 RegionWalk.origin#0 RegionWalk.origin#0 RegionWalk.bind#0 RegionWalk.store#0 RegionWalk.origin#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.store#3
   stackSites=0 stackLocals=0
   local +0:11 target: Node (const)
@@ -508,9 +584,9 @@ function RegionWalk.visitAssignment(this: RegionWalk, node: Node): void -> @Regi
   callee +16:65 storesText -> @storesText
 function RegionWalk.visitLiteral(this: RegionWalk, node: Node): void -> @RegionWalk.visitLiteral [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via RegionWalk.report
-  calls: RegionWalk.origin RegionWalk.report literalMessage mayBeOuter nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=RegionWalk.origin#0 RegionWalk.report#0
+  sharedWrite: via RegionWalk.reportOuter
+  calls: RegionWalk.origin RegionWalk.reportOuter mayBeOuter nish_panic_index putsText
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.origin#0 RegionWalk.reportOuter#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 child: Node (const)
@@ -518,13 +594,13 @@ function RegionWalk.visitLiteral(this: RegionWalk, node: Node): void -> @RegionW
   local +2:13 o: i32 (const)
   callee +2:17 RegionWalk.origin -> @RegionWalk.origin
   callee +3:32 mayBeOuter -> @mayBeOuter
-  callee +4:9 RegionWalk.report -> @RegionWalk.report
-  callee +4:28 literalMessage -> @literalMessage
+  callee +4:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +4:33 putsText -> @putsText
 function RegionWalk.visitNew(this: RegionWalk, node: Node): void -> @RegionWalk.visitNew [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.judgeCallee
   calls: RegionWalk.judgeCallee nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=RegionWalk.judgeCallee#0
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.judgeCallee#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.judgeCallee#1
   stackSites=0 stackLocals=0
   local +0:11 ctor: FunctionSig | null (const)
@@ -533,7 +609,7 @@ function RegionWalk.visitCall(this: RegionWalk, node: Node): void -> @RegionWalk
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visitBuiltin
   calls: RegionWalk.handedTo RegionWalk.judgeCallee RegionWalk.visit RegionWalk.visitArguments RegionWalk.visitBuiltin nish_panic_index regionRoleOf
-  pointer this: size=104 writesThrough=true captured=false passedTo=RegionWalk.handedTo#0 RegionWalk.visitBuiltin#0 RegionWalk.visit#0 RegionWalk.visit#0 RegionWalk.visitArguments#0 RegionWalk.judgeCallee#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=RegionWalk.handedTo#0 RegionWalk.visitBuiltin#0 RegionWalk.visit#0 RegionWalk.visit#0 RegionWalk.visitArguments#0 RegionWalk.judgeCallee#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.handedTo#1 RegionWalk.visitBuiltin#1 RegionWalk.visitArguments#1 RegionWalk.judgeCallee#1
   stackSites=0 stackLocals=0
   local +0:11 callee: FunctionSig | null (const)
@@ -551,7 +627,7 @@ function RegionWalk.visitArguments(this: RegionWalk, node: Node, handed: Node[],
   sharedWrite: via RegionWalk.bindArrowParam
   escaping: seed
   calls: RegionWalk.arrowResult RegionWalk.bindArrowParam RegionWalk.origin RegionWalk.visit joinOrigin nish_panic_index unwrapParens
-  pointer this: size=104 writesThrough=true captured=false passedTo=RegionWalk.arrowResult#0 RegionWalk.origin#0 RegionWalk.bindArrowParam#0 RegionWalk.visit#0 RegionWalk.visit#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=RegionWalk.arrowResult#0 RegionWalk.origin#0 RegionWalk.bindArrowParam#0 RegionWalk.visit#0 RegionWalk.visit#0
   pointer node: size=40 writesThrough=false captured=false
   pointer handed: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -572,37 +648,49 @@ function RegionWalk.visitArguments(this: RegionWalk, node: Node, handed: Node[],
 function RegionWalk.visitBuiltin(this: RegionWalk, node: Node, handed: Node[]): void -> @RegionWalk.visitBuiltin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit
-  calls: RegionWalk.origin RegionWalk.report RegionWalk.store RegionWalk.typeOf RegionWalk.visit RegionWalk.visitArguments arrayMethodName growthMessage isCopied mayBeOuter methodReceiver nish_panic_index nish_str_concat nish_str_eq storesText textOf
-  pointer this: size=104 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.visitArguments#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.typeOf#0 RegionWalk.store#0 RegionWalk.origin#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.visitArguments#1 methodReceiver#0 arrayMethodName#2 RegionWalk.report#1 RegionWalk.store#3
+  calls: RegionWalk.origin RegionWalk.report RegionWalk.store RegionWalk.typeOf RegionWalk.visit RegionWalk.visitArguments arrayMethodName builtinNameOf growthMessage isCopied isResizeCall mayBeOuter methodReceiver nish_panic_index nish_str_concat nish_str_eq storesText textOf
+  pointer this: size=120 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.visitArguments#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.typeOf#0 RegionWalk.store#0 RegionWalk.origin#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.visitArguments#1 methodReceiver#0 isResizeCall#2 builtinNameOf#1 RegionWalk.report#1 arrayMethodName#2 RegionWalk.report#1 RegionWalk.store#3
   pointer handed: size=0 writesThrough=false captured=false passedTo=RegionWalk.visitArguments#2
   stackSites=0 stackLocals=0
   callee +0:5 RegionWalk.visit -> @RegionWalk.visit
   callee +1:5 RegionWalk.visitArguments -> @RegionWalk.visitArguments
   local +2:11 receiver: Node | null (const)
   callee +2:22 methodReceiver -> @methodReceiver
-  local +3:11 method: string (const)
-  callee +3:20 arrayMethodName -> @arrayMethodName
-  local +7:11 holder: i32 (const)
-  callee +7:20 RegionWalk.origin -> @RegionWalk.origin
-  callee +9:11 mayBeOuter -> @mayBeOuter
-  callee +10:9 RegionWalk.report -> @RegionWalk.report
-  callee +12:11 growthMessage -> @growthMessage
-  callee +12:45 textOf -> @textOf
-  local +18:18 arg: Node (const)
-  callee +19:14 isCopied -> @isCopied
-  callee +19:35 RegionWalk.typeOf -> @RegionWalk.typeOf
-  callee +20:11 RegionWalk.store -> @RegionWalk.store
-  callee +20:30 RegionWalk.origin -> @RegionWalk.origin
-  callee +20:54 storesText -> @storesText
+  callee +3:30 isResizeCall -> @isResizeCall
+  local +6:13 args: Node[] (const)
+  local +7:11 grown: i32 (let)
+  local +8:16 i: i32 (let)
+  callee +9:45 mayBeOuter -> @mayBeOuter
+  callee +9:56 RegionWalk.origin -> @RegionWalk.origin
+  local +14:15 name: string (const)
+  callee +14:22 builtinNameOf -> @builtinNameOf
+  local +15:15 text: string (const)
+  callee +15:22 textOf -> @textOf
+  callee +16:9 RegionWalk.report -> @RegionWalk.report
+  callee +16:27 growthMessage -> @growthMessage
+  local +20:11 method: string (const)
+  callee +20:20 arrayMethodName -> @arrayMethodName
+  local +24:11 holder: i32 (const)
+  callee +24:20 RegionWalk.origin -> @RegionWalk.origin
+  callee +26:11 mayBeOuter -> @mayBeOuter
+  callee +27:9 RegionWalk.report -> @RegionWalk.report
+  callee +29:11 growthMessage -> @growthMessage
+  callee +29:46 textOf -> @textOf
+  local +35:18 arg: Node (const)
+  callee +36:14 isCopied -> @isCopied
+  callee +36:35 RegionWalk.typeOf -> @RegionWalk.typeOf
+  callee +37:11 RegionWalk.store -> @RegionWalk.store
+  callee +37:30 RegionWalk.origin -> @RegionWalk.origin
+  callee +37:54 storesText -> @storesText
 function RegionWalk.judgeCallee(this: RegionWalk, node: Node, callee: FunctionSig, isNew: boolean): void -> @RegionWalk.judgeCallee [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.report
   escaping: node
-  calls: FactsTable.get FunctionFacts.pointerParamAt RegionWalk.arrowResult RegionWalk.handedTo RegionWalk.origin RegionWalk.report handsGrowthMessage handsOuterMessage handsRegionMessage mayBeOuter nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq noFactsMessage regionCalleeName unwrapParens
-  pointer this: size=104 writesThrough=false captured=false passedTo=RegionWalk.report#0 RegionWalk.handedTo#0 RegionWalk.arrowResult#0 RegionWalk.origin#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.report#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1 RegionWalk.handedTo#1 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.report#1
-  pointer callee: size=176 writesThrough=false captured=false passedTo=noFactsMessage#1 RegionWalk.handedTo#2 regionCalleeName#0
+  calls: FactsTable.get FunctionFacts.pointerParamAt RegionWalk.arrowResult RegionWalk.handedTo RegionWalk.judgeTaskCallee RegionWalk.origin RegionWalk.receiverMayBeRegion RegionWalk.report RegionWalk.reportOuter handsGrowthMessage handsRegionMessage handsText mayBeOuter nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq noFactsMessage regionCalleeName unwrapParens
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.report#0 RegionWalk.handedTo#0 RegionWalk.arrowResult#0 RegionWalk.origin#0 RegionWalk.reportOuter#0 RegionWalk.report#0 RegionWalk.report#0 RegionWalk.reportOuter#0 RegionWalk.receiverMayBeRegion#0 RegionWalk.reportOuter#0 RegionWalk.reportOuter#0 RegionWalk.judgeTaskCallee#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1 RegionWalk.handedTo#1 RegionWalk.reportOuter#1 RegionWalk.report#1 RegionWalk.report#1 RegionWalk.reportOuter#1 RegionWalk.receiverMayBeRegion#1 RegionWalk.reportOuter#1 RegionWalk.reportOuter#1 RegionWalk.judgeTaskCallee#1
+  pointer callee: size=176 writesThrough=false captured=false passedTo=noFactsMessage#1 RegionWalk.handedTo#2 regionCalleeName#0 RegionWalk.receiverMayBeRegion#2
   stackSites=1 stackLocals=1
   local +0:11 f: FunctionFacts | null (const)
   callee +0:37 FactsTable.get -> @FactsTable.get
@@ -628,17 +716,55 @@ function RegionWalk.judgeCallee(this: RegionWalk, node: Node, callee: FunctionSi
   local +19:13 o: i32 (const)
   local +23:13 arg: Node (const)
   callee +26:22 mayBeOuter -> @mayBeOuter
-  callee +27:11 RegionWalk.report -> @RegionWalk.report
-  callee +27:29 handsOuterMessage -> @handsOuterMessage
+  callee +27:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +27:34 handsText -> @handsText
   callee +31:11 mayBeOuter -> @mayBeOuter
-  callee +33:11 RegionWalk.report -> @RegionWalk.report
-  callee +33:29 handsRegionMessage -> @handsRegionMessage
   callee +35:11 RegionWalk.report -> @RegionWalk.report
   callee +35:29 handsGrowthMessage -> @handsGrowthMessage
   callee +37:11 RegionWalk.report -> @RegionWalk.report
-  callee +37:29 handsOuterMessage -> @handsOuterMessage
-  callee +40:9 RegionWalk.report -> @RegionWalk.report
-  callee +42:11 handsOuterMessage -> @handsOuterMessage
+  callee +39:13 handsRegionMessage -> @handsRegionMessage
+  callee +42:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +42:34 handsText -> @handsText
+  callee +43:57 RegionWalk.receiverMayBeRegion -> @RegionWalk.receiverMayBeRegion
+  callee +45:11 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +45:34 handsText -> @handsText
+  callee +48:9 RegionWalk.reportOuter -> @RegionWalk.reportOuter
+  callee +50:11 handsText -> @handsText
+  callee +55:7 RegionWalk.judgeTaskCallee -> @RegionWalk.judgeTaskCallee
+function RegionWalk.receiverMayBeRegion(this: RegionWalk, call: Node, callee: FunctionSig, origins: i32[]): boolean -> @RegionWalk.receiverMayBeRegion [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: mayBeRegion methodReceiver
+  pointer this: size=120 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false passedTo=methodReceiver#0
+  pointer callee: size=176 writesThrough=false captured=false
+  pointer origins: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:7 methodReceiver -> @methodReceiver
+  callee +2:7 mayBeRegion -> @mayBeRegion
+function RegionWalk.judgeTaskCallee(this: RegionWalk, node: Node, f: FunctionFacts, handed: Node[], origins: i32[], offset: i32, name: string): void -> @RegionWalk.judgeTaskCallee [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RegionWalk.report
+  escaping: name
+  calls: FunctionFacts.pointerParamAt RegionWalk.report handsRegionMessage mayBeOuter mayBeRegion nish_panic_index nish_panic_overflow nish_str_concat textOf
+  pointer this: size=120 writesThrough=false captured=false passedTo=RegionWalk.report#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1
+  pointer f: size=416 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
+  pointer handed: size=0 writesThrough=true captured=false
+  pointer origins: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 written: i32 (let)
+  local +1:14 i: i32 (let)
+  local +2:13 pp: PointerParamFacts | null (const)
+  callee +2:44 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
+  callee +3:44 mayBeOuter -> @mayBeOuter
+  local +7:9 kept: i32 (let)
+  local +8:14 j: i32 (let)
+  local +9:13 o: i32 (const)
+  callee +10:72 mayBeRegion -> @mayBeRegion
+  local +15:13 into: string (const)
+  callee +15:43 textOf -> @textOf
+  callee +16:7 RegionWalk.report -> @RegionWalk.report
+  callee +16:25 handsRegionMessage -> @handsRegionMessage
 function isThreadSymbol(name: string, scopeName: string): boolean -> @isThreadSymbol
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -671,7 +797,7 @@ function collectCallees(program: CheckedProgram, node: Node, out: FunctionSig[])
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: collectCallees nish_array_grow nish_panic_index
-  pointer program: size=688 writesThrough=false captured=false passedTo=collectCallees#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=collectCallees#0
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=collectCallees#2
   stackSites=0 stackLocals=0
@@ -679,63 +805,124 @@ function collectCallees(program: CheckedProgram, node: Node, out: FunctionSig[])
   local +3:14 child: Node (const)
   callee +4:5 collectCallees -> @collectCallees
 function regionCallFindings(programs: CheckedProgram[], table: TypeTable, facts: FactsTable, program: CheckedProgram, site: Node, sig: FunctionSig, scopeName: string, freshResults: FreshResults): RegionFinding[] -> @regionCallFindings [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: scopeName
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FreshResults.resultRef FunctionSig.body RegionFinding.constructor RegionWalk.constructor RegionWalk.visit StringSet.add StringSet.constructor arenaStateMessage collectCallees enterResultMessage isCopied nish_alloc_struct nish_array_grow nish_panic_index noFactsMessage notFreshMessage reachesThreads regionProgramOf regionRoleOf threadsMessage
-  pointer programs: size=0 writesThrough=false captured=false passedTo=regionProgramOf#0
-  pointer table: size=96 writesThrough=true captured=true passedTo=isCopied#0 enterResultMessage#1 RegionWalk.constructor#2
-  pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 reachesThreads#0 RegionWalk.constructor#3
-  pointer program: size=688 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1
+  calls: FactsTable.get FreshResults.resultRef RegionFinding.constructor StringSet.constructor arenaStateMessage enterResultMessage insideRegion isCopied nish_alloc_struct nish_array_grow nish_panic_index noFactsMessage notFreshMessage reachesThreads regionRoleOf threadsMessage walkFindings
+  pointer programs: size=0 writesThrough=false captured=false passedTo=walkFindings#1
+  pointer table: size=96 writesThrough=true captured=true passedTo=isCopied#0 enterResultMessage#1 walkFindings#2
+  pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 reachesThreads#0 walkFindings#3
+  pointer program: size=696 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1
   pointer site: size=40 writesThrough=true captured=true passedTo=RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2
   pointer sig: size=176 writesThrough=false captured=false passedTo=regionRoleOf#0
-  pointer freshResults: size=40 writesThrough=true captured=false passedTo=FreshResults.resultRef#0 FreshResults.resultRef#0
-  stackSites=3 stackLocals=2
-  local -55:9 out: RegionFinding[] (const)
-  local -54:9 role: i32 (const)
-  callee -54:16 regionRoleOf -> @regionRoleOf
-  local -53:9 instance: Instantiation | null (const)
-  local -49:9 fn: FunctionSig (const)
-  local -48:9 f: FunctionFacts | null (const)
-  callee -48:13 FactsTable.get -> @FactsTable.get
-  callee -46:14 new RegionFinding -> @RegionFinding.constructor
-  callee -46:47 noFactsMessage -> @noFactsMessage
-  callee -42:14 new RegionFinding -> @RegionFinding.constructor
-  callee -42:47 arenaStateMessage -> @arenaStateMessage
-  callee -40:7 reachesThreads -> @reachesThreads
-  callee -40:49 new StringSet -> @StringSet.constructor
-  callee -39:14 new RegionFinding -> @RegionFinding.constructor
-  callee -39:47 threadsMessage -> @threadsMessage
-  callee -37:65 isCopied -> @isCopied
-  callee -36:14 new RegionFinding -> @RegionFinding.constructor
-  callee -36:47 enterResultMessage -> @enterResultMessage
-  local -33:11 ref: string (const)
-  callee -33:17 FreshResults.resultRef -> @FreshResults.resultRef
-  callee -31:16 new RegionFinding -> @RegionFinding.constructor
-  callee -31:49 notFreshMessage -> @notFreshMessage
-  local -28:9 home: CheckedProgram | null (const)
-  callee -28:16 regionProgramOf -> @regionProgramOf
-  local -27:9 body: Node | null (const)
-  callee -27:16 FunctionSig.body -> @FunctionSig.body
-  local -21:9 fnInstance: Instantiation | null (const)
-  callee -19:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  local -17:9 callees: FunctionSig[] (const)
-  callee -16:3 collectCallees -> @collectCallees
-  callee -14:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local -12:9 fresh: StringSet (const)
-  callee -12:17 new StringSet -> @StringSet.constructor
-  local -11:14 callee: FunctionSig (const)
-  callee -10:9 regionRoleOf -> @regionRoleOf
-  callee -10:49 FreshResults.resultRef -> @FreshResults.resultRef
-  callee -9:7 StringSet.add -> @StringSet.add
-  callee -5:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  local -3:9 walk: RegionWalk (const)
-  callee -3:16 new RegionWalk -> @RegionWalk.constructor
-  local -2:9 names: string[] (const)
-  callee +17:5 RegionWalk.visit -> @RegionWalk.visit
-  callee +20:3 RegionWalk.visit -> @RegionWalk.visit
-  callee +22:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local +24:14 finding: RegionFinding (const)
+  pointer freshResults: size=40 writesThrough=true captured=false passedTo=FreshResults.resultRef#0 walkFindings#5
+  stackSites=1 stackLocals=0
+  local -31:9 out: RegionFinding[] (const)
+  local -30:9 role: i32 (const)
+  callee -30:16 regionRoleOf -> @regionRoleOf
+  local -29:9 instance: Instantiation | null (const)
+  local -25:9 fn: FunctionSig (const)
+  local -24:9 f: FunctionFacts | null (const)
+  callee -24:13 FactsTable.get -> @FactsTable.get
+  callee -22:14 new RegionFinding -> @RegionFinding.constructor
+  callee -22:47 noFactsMessage -> @noFactsMessage
+  callee -22:62 insideRegion -> @insideRegion
+  callee -18:14 new RegionFinding -> @RegionFinding.constructor
+  callee -18:47 arenaStateMessage -> @arenaStateMessage
+  callee -16:7 reachesThreads -> @reachesThreads
+  callee -16:49 new StringSet -> @StringSet.constructor
+  callee -15:14 new RegionFinding -> @RegionFinding.constructor
+  callee -15:47 threadsMessage -> @threadsMessage
+  callee -13:65 isCopied -> @isCopied
+  callee -12:14 new RegionFinding -> @RegionFinding.constructor
+  callee -12:47 enterResultMessage -> @enterResultMessage
+  local -9:11 ref: string (const)
+  callee -9:17 FreshResults.resultRef -> @FreshResults.resultRef
+  callee -7:16 new RegionFinding -> @RegionFinding.constructor
+  callee -7:49 notFreshMessage -> @notFreshMessage
+  local -4:9 names: string[] (const)
+  local -3:9 seedNames: string[] (const)
+  local -2:9 seedOrigins: i32[] (const)
+  callee +11:3 walkFindings -> @walkFindings
+function walkFindings(out: RegionFinding[], programs: CheckedProgram[], table: TypeTable, facts: FactsTable, fn: FunctionSig, freshResults: FreshResults, seedNames: string[], seedOrigins: i32[], task: boolean): void -> @walkFindings
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: task
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FreshResults.resultRef FunctionSig.body RegionWalk.constructor RegionWalk.visit StringSet.add StringSet.constructor collectCallees nish_alloc_struct nish_array_grow regionProgramOf regionRoleOf
+  pointer out: size=0 writesThrough=true captured=false
+  pointer programs: size=0 writesThrough=false captured=false passedTo=regionProgramOf#0
+  pointer table: size=96 writesThrough=true captured=true passedTo=RegionWalk.constructor#2
+  pointer facts: size=24 writesThrough=true captured=true passedTo=RegionWalk.constructor#3
+  pointer fn: size=176 writesThrough=true captured=true passedTo=regionProgramOf#1 FunctionSig.body#0 RegionWalk.constructor#4
+  pointer freshResults: size=40 writesThrough=true captured=false passedTo=FreshResults.resultRef#0
+  pointer seedNames: size=0 writesThrough=true captured=true passedTo=RegionWalk.constructor#6
+  pointer seedOrigins: size=0 writesThrough=true captured=true passedTo=RegionWalk.constructor#7
+  stackSites=2 stackLocals=2
+  local -40:9 home: CheckedProgram | null (const)
+  callee -40:16 regionProgramOf -> @regionProgramOf
+  local -39:9 body: Node | null (const)
+  callee -39:16 FunctionSig.body -> @FunctionSig.body
+  local -33:9 fnInstance: Instantiation | null (const)
+  callee -31:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local -29:9 callees: FunctionSig[] (const)
+  callee -28:3 collectCallees -> @collectCallees
+  callee -26:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local -24:9 fresh: StringSet (const)
+  callee -24:17 new StringSet -> @StringSet.constructor
+  local -23:14 callee: FunctionSig (const)
+  callee -22:9 regionRoleOf -> @regionRoleOf
+  callee -22:49 FreshResults.resultRef -> @FreshResults.resultRef
+  callee -21:7 StringSet.add -> @StringSet.add
+  callee -17:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local -15:9 walk: RegionWalk (const)
+  callee -15:16 new RegionWalk -> @RegionWalk.constructor
+  callee -8:5 RegionWalk.visit -> @RegionWalk.visit
+  callee -5:3 RegionWalk.visit -> @RegionWalk.visit
+  callee -3:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local -1:14 finding: RegionFinding (const)
+function taskFindings(programs: CheckedProgram[], table: TypeTable, facts: FactsTable, program: CheckedProgram, site: Node, task: FunctionSig, freshResults: FreshResults): RegionFinding[] -> @taskFindings [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: FactsTable.get FunctionSig.isCompileTime RegionFinding.constructor TypeTable.sharedWithTask TypeTable.typeName captureSpawnMessage capturesOf insideTask isCopied nestedSpawnMessage nish_alloc_struct nish_array_grow nish_panic_index noFactsMessage sharedResourceMessage taskShareObstacle walkFindings
+  pointer programs: size=0 writesThrough=false captured=false passedTo=taskShareObstacle#0 taskShareObstacle#0 walkFindings#1
+  pointer table: size=96 writesThrough=true captured=true passedTo=isCopied#0 taskShareObstacle#1 TypeTable.sharedWithTask#0 taskShareObstacle#1 TypeTable.typeName#0 walkFindings#2
+  pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 walkFindings#3
+  pointer program: size=696 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1
+  pointer site: size=40 writesThrough=true captured=true passedTo=RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2
+  pointer task: size=176 writesThrough=true captured=true passedTo=FunctionSig.isCompileTime#0 sharedResourceMessage#0 insideTask#0 noFactsMessage#1 nestedSpawnMessage#0 capturesOf#0 captureSpawnMessage#0 walkFindings#4
+  pointer freshResults: size=40 writesThrough=true captured=false passedTo=walkFindings#5
+  stackSites=2 stackLocals=0
+  local -17:9 out: RegionFinding[] (const)
+  local -16:9 seedNames: string[] (const)
+  local -15:9 seedOrigins: i32[] (const)
+  local -13:7 refused: i32 (let)
+  local -12:12 i: i32 (let)
+  local -11:11 type: i32 (const)
+  callee -10:9 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee -10:34 isCopied -> @isCopied
+  callee -7:9 taskShareObstacle -> @taskShareObstacle
+  callee +1:22 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
+  local +4:11 type: i32 (const)
+  local +5:11 why: string (const)
+  callee +5:17 taskShareObstacle -> @taskShareObstacle
+  local +6:11 name: string (const)
+  callee +7:14 new RegionFinding -> @RegionFinding.constructor
+  callee +7:47 sharedResourceMessage -> @sharedResourceMessage
+  callee +7:81 TypeTable.typeName -> @TypeTable.typeName
+  local +9:9 shares: boolean (const)
+  local +10:9 f: FunctionFacts | null (const)
+  callee +10:13 FactsTable.get -> @FactsTable.get
+  callee +14:16 new RegionFinding -> @RegionFinding.constructor
+  callee +14:49 noFactsMessage -> @noFactsMessage
+  callee +14:64 insideTask -> @insideTask
+  callee +19:14 new RegionFinding -> @RegionFinding.constructor
+  callee +19:47 nestedSpawnMessage -> @nestedSpawnMessage
+  local +21:9 captures: CaptureSlot[] (const)
+  callee +21:20 capturesOf -> @capturesOf
+  local +23:11 first: CaptureSlot (const)
+  callee +25:7 new RegionFinding -> @RegionFinding.constructor
+  callee +25:40 captureSpawnMessage -> @captureSpawnMessage
+  callee +29:5 walkFindings -> @walkFindings
 function recordRegionCall(calls: ParallelCall[], node: Node, sig: FunctionSig): void -> @recordRegionCall [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

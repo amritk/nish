@@ -61,7 +61,7 @@
  * freeing them, then retires the handle as `free` does: `awaitAll` runs each
  * call that waits in a region of its own, and adopts it when the call
  * finishes, so the answer stays readable and is freed with the caller's
- * memory (docs/security/async.md, ASYNC-10). */
+ * memory (docs/security/async.md, ASYNC-14). */
 
 #include <stdint.h>
 #include <stdlib.h>

@@ -18,8 +18,9 @@
 //      agree (N-API borrows the buffer, so writes land directly);
 //   5. `nish_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
 // `memory.buffer` is re-read after every module call because `memory.grow`
-// detaches the previous ArrayBuffer. String functions are omitted (no WASI
-// runtime).
+// detaches the previous ArrayBuffer. A string result is decoded out of the
+// arena (`stringOut`) before step 5; a string argument is refused, and the
+// page writes text into module storage instead (WP50 S4, `nish/host/text`).
 //
 // A scalar-only export is passed through untouched unless one of its types is
 // narrower or wider than the wasm value type carrying it. The wasm ABI has
@@ -62,6 +63,7 @@ import {
   T_F64,
   T_I32,
   T_I64,
+  T_STRING,
   T_U16,
   T_U32,
   T_U64,
@@ -144,6 +146,11 @@ export const wasmType = (table: TypeTable, t: i32, position: i32): string => {
     // and spelling one `void` would be a declaration the loader cannot honour.
     case T_VOID:
       return position === POS_RETURN ? "void" : ""
+    // WP50 S4: a result is decoded from the arena before the call's mark is
+    // released (`stringOut`). An argument is not: the page writes text into
+    // module storage with `encodeInto` and passes the count (`wasmMissing`).
+    case T_STRING:
+      return position === POS_RETURN ? "string" : ""
     case K_ARRAY: {
       const view = typedView(table, t)
       return view === null ? "" : view.ctor
@@ -198,6 +205,9 @@ const wasmMissing = (table: TypeTable, t: i32, vectored: StringSet): string => {
   }
   if (holdsVector(table, t, vectored)) {
     return `${shown}, which holds a \`nish:simd\` vector the wasm bridge does not carry yet`
+  }
+  if (t === T_STRING) {
+    return `${shown}, which the wasm bridge carries only as a result: have the page \`encodeInto\` module storage and pass the byte count (\`nish/host/text\`)`
   }
   return `${shown}, which needs the ${LANGUAGE} runtime the freestanding wasm profile does not include`
 }
@@ -425,6 +435,16 @@ const wasmTakesPacked = (table: TypeTable, sig: FunctionSig): boolean => {
   return false
 }
 
+/** Whether a bridged export returns a string, so the loader carries `stringOut`. */
+const returnsText = (bridged: ExternalFunction[]): boolean => {
+  for (const fn of bridged) {
+    if (fn.sig.returnType === T_STRING) {
+      return true
+    }
+  }
+  return false
+}
+
 export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored: StringSet): WasmBridge => {
   const bridged: ExternalFunction[] = []
   for (const fn of fns) {
@@ -442,7 +462,7 @@ export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored:
     }
   }
   for (const fn of bridged) {
-    if (typedView(table, fn.sig.returnType) !== null) {
+    if (typedView(table, fn.sig.returnType) !== null || fn.sig.returnType === T_STRING) {
       needsRuntime = true
     }
     let i = 0
@@ -562,6 +582,9 @@ const wasmReturned = (table: TypeTable, sig: FunctionSig, ret: TypedView | null,
   if (ret !== null) {
     return `arrayOut(${call}, ${ret.ctor})`
   }
+  if (sig.returnType === T_STRING) {
+    return `stringOut(${call})`
+  }
   if (table.resultByValue(sig.returnType)) {
     return wasmResultUnpack(table, call, sig.returnType)
   }
@@ -616,7 +639,8 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction, guard: boolean): st
     i = i + 1
   }
 
-  let anyView = ret !== null
+  // A string result is read out of the arena, so it runs where an array does.
+  let anyView = ret !== null || sig.returnType === T_STRING
   for (const view of views) {
     if (view !== null) {
       anyView = true
@@ -1117,6 +1141,17 @@ export const generateWasmLoader = (
     lines.push("    const { len, data } = header(hdr);")
     lines.push("    return new Ctor(memory.buffer, data, len).slice();")
     lines.push("  };")
+    if (returnsText(bridge.bridged)) {
+      // WP50 S4: `{ i64 len, data[] }`; read before `guarded` or `scoped`
+      // releases the mark the bytes were allocated under. `ignoreBOM` keeps a
+      // leading U+FEFF, which a default decoder strips as a byte-order mark.
+      lines.push('  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });')
+      lines.push("  /** Decode a string result out of the arena as a JS string. */")
+      lines.push("  const stringOut = (p) => {")
+      lines.push("    const n = Number(new DataView(memory.buffer).getBigUint64(p >>> 0, true));")
+      lines.push("    return decoder.decode(new Uint8Array(memory.buffer, (p >>> 0) + 8, n));")
+      lines.push("  };")
+    }
     lines.push("  /** After a call that writes through an array parameter: bring the arena bytes back. */")
     lines.push("  const copyBack = (hdr, value) => {")
     lines.push("    const { len, data } = header(hdr);")
@@ -1316,6 +1351,19 @@ const hostImportsOf = (table: TypeTable, hosts: FunctionSig[]): string[] => {
     lines.push("    return windows;")
     lines.push("  };")
   }
+  if (hostsTakeText(hosts)) {
+    // WP50 S4 (§7): one decoder for the load; a view past the end of memory
+    // is a RangeError, bytes that are not UTF-8 decode as U+FFFD, and a
+    // leading U+FEFF is the string's own (`ignoreBOM`).
+    lines.push("  /** A string the module passed: its bytes' address and count, as UTF-8. */")
+    lines.push('  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });')
+    lines.push("  const text = (p, n) => {")
+    lines.push(
+      '    if (state.memory === null) throw new Error("a host import was passed a string before the module finished loading");'
+    )
+    lines.push("    return decoder.decode(new Uint8Array(state.memory.buffer, p >>> 0, n >>> 0));")
+    lines.push("  };")
+  }
   const entries: string[] = []
   for (const sig of hosts) {
     pushHostEntry(table, sig, lines, entries)
@@ -1342,19 +1390,30 @@ const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entr
   const passed: string[] = []
   let i = 0
   while (i < sig.paramTypes.length) {
-    args.push(`a${i}`)
+    // The wasm values are counted apart from the parameters: a string is two.
+    const a = `a${args.length}`
+    args.push(a)
+    if (sig.paramTypes[i] === T_STRING) {
+      // WP50 S4 (§7): the address of the bytes and their count.
+      const n = `a${args.length}`
+      args.push(n)
+      passed.push(`text(${a}, ${n})`)
+      i = i + 1
+      continue
+    }
     const window = windowView(table, sig.paramTypes[i])
     if (window !== "" && i + 1 < sig.paramTypes.length) {
       // WP50 S3 (§5.3): the page indexes a view of all memory, so the data
       // pointer becomes an element index and `at` is counted from it.
-      args.push(`a${i + 1}`)
+      const at = `a${args.length}`
+      args.push(at)
       passed.push(`win().${window}`)
       // `at` is a `u32` (`checkHostSignature`), so `hostArgument` would read it as `>>> 0`.
-      passed.push(`(a${i} >>> ${windowShift(window)}) + (a${i + 1} >>> 0)`)
+      passed.push(`(${a} >>> ${windowShift(window)}) + (${at} >>> 0)`)
       i = i + 2
       continue
     }
-    passed.push(hostArgument(table, sig.paramTypes[i], `a${i}`))
+    passed.push(hostArgument(table, sig.paramTypes[i], a))
     i = i + 1
   }
   const call = `host_${sig.name}(${passed.join(", ")})`
@@ -1365,6 +1424,18 @@ const pushHostEntry = (table: TypeTable, sig: FunctionSig, lines: string[], entr
   }
   lines.push(`  const host_${sig.name} = hostFn("${sig.name}");`)
   entries.push(`      ${sig.name}: (${args.join(", ")}) => ${body},`)
+}
+
+/** Whether any host function takes a `string` (`text` is emitted only then). */
+const hostsTakeText = (hosts: FunctionSig[]): boolean => {
+  for (const sig of hosts) {
+    for (const t of sig.paramTypes) {
+      if (t === T_STRING) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 /** Whether any host function takes a buffer window (`win` is emitted only then). */

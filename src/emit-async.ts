@@ -406,15 +406,22 @@ const emitSpawnedFrame = (
   )
   const prev = fn.emitValue(`call i8* ${emitter.useRuntime("nish_async_enter")}(i8* ${node})`)
   const values: string[] = []
+  // Operand `k` is parameter `p`: a compile-time function argument has no
+  // operand (WP29), so the two part at the first one.
   let k = 0
+  let p = 0
   while (k < operandValues.length) {
+    while (p < sig.paramTypes.length && sig.isCompileTime(p)) {
+      p = p + 1
+    }
     // Read before the call, which ends the length facts.
     let value = operandValues[k]
-    if (k < sig.paramTypes.length && sig.paramTypes[k] === T_STRING) {
+    if (p < sig.paramTypes.length && sig.paramTypes[p] === T_STRING) {
       value = fn.emitValue(`call i8* ${emitter.useRuntime("nish_async_copy_str")}(i8* ${value})`)
     }
     values.push(value)
     k = k + 1
+    p = p + 1
   }
   const frame = fn.emitValue(`getelementptr inbounds i8, i8* ${node}, i64 ${NODE_HEADER}`)
   storeHead(emitter, frame, head, operandTypes, values)

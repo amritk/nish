@@ -106,6 +106,364 @@ import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
 
+/** The two `--emit-header` comment lines the 0.37.0 seed writes. */
+const SEED_HEADER_LINES = [
+  " * C ABI of the Nish modules listed below. Link the .ll module(s) and",
+  " * runtime/runtime.c next to your C code; include runtime/nish.h's",
+].join("\n")
+
+/** The four lines WP50 stage 4 writes in their place, naming `runtime-text.c` and `runtime-os.c`. */
+const STAGE4_HEADER_LINES = [
+  " * C ABI of the Nish modules listed below. Link the .ll module(s),",
+  " * runtime/runtime.c, runtime/runtime-text.c (strings and number formatting)",
+  " * and runtime/runtime-os.c next to your C code, or hand runtime/runtime.c to",
+  " * scripts/build.sh, which adds the rest; include runtime/nish.h's",
+].join("\n")
+
+/**
+ * `text` with the stage 4 header comment put back as the seed wrote it. A
+ * declaration's `undo`: it touches only those four lines, so any other change
+ * to a `.h` still differs.
+ */
+const withoutStage4Header = (text) => text.split(STAGE4_HEADER_LINES).join(SEED_HEADER_LINES)
+
+/** The `--emit-dts` preamble lines the 0.37.0 seed writes about string functions. */
+const SEED_DTS_PREAMBLE = [
+  "// String functions are not callable from the freestanding wasm profile and",
+  "// are listed below as comments.",
+].join("\n")
+
+/** The two lines WP50 stage 4 writes in their place. */
+const STAGE4_DTS_PREAMBLE = [
+  "// A string result is decoded into a JS string; a function that takes a",
+  "// string, or answers what needs the full runtime, is listed below as a comment.",
+].join("\n")
+
+/** The reason the 0.37.0 seed gives for leaving a string argument out of the wasm bridge. */
+const SEED_DTS_STRING_ARG = "which needs the Nish runtime the freestanding wasm profile does not include"
+
+/** The reason WP50 stage 4 gives for the same argument, naming the page's way in. */
+const STAGE4_DTS_STRING_ARG =
+  "which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`)"
+
+/**
+ * `text` with the stage 4 `--emit-dts` comments put back as the seed wrote
+ * them: the preamble and the reason a string argument is left out. A
+ * declaration's `undo`: a `.d.ts` that also gained an export, such as a string
+ * result the bridge now decodes, still differs and is named below.
+ */
+const withoutStage4Dts = (text) =>
+  text
+    .split(STAGE4_DTS_PREAMBLE)
+    .join(SEED_DTS_PREAMBLE)
+    .split(`\`string\`, ${STAGE4_DTS_STRING_ARG}`)
+    .join(`\`string\`, ${SEED_DTS_STRING_ARG}`)
+
+/**
+ * The programs with a function that returns a `string` and so, since WP50
+ * stage 4, export it to the page: the `--emit-dts` reading gains the function
+ * (and `nish_reset_arena` / `nish_free_arena`, since the module now links
+ * `runtime-wasm.c`), and the `.mjs` loader gains the decoder, the arena
+ * helpers and the build line naming `runtime-wasm.c`. Each is declared for
+ * those two files only, so its IR and header are still compared.
+ */
+const STAGE4_STRING_EXPORTS = [
+  "bench/http1-parse/main.ts",
+  "bench/lexer.ts",
+  "docs/cookbook/mem-join-parts.ts",
+  "docs/cookbook/mem-return-array.ts",
+  "examples/label.ts",
+  "examples/relay/main.ts",
+  "src/annotations.ts",
+  "src/arena-report.ts",
+  "src/arrays.ts",
+  "src/assignment.ts",
+  "src/ast-text.ts",
+  "src/async-check.ts",
+  "src/attributes.ts",
+  "src/bounds.ts",
+  "src/break-game.ts",
+  "src/break-intro.ts",
+  "src/break-levels.ts",
+  "src/break-menu.ts",
+  "src/break-sound.ts",
+  "src/break.ts",
+  "src/build-cache.ts",
+  "src/builtins.ts",
+  "src/capabilities.ts",
+  "src/capability-lock.ts",
+  "src/capability-report.ts",
+  "src/checker.ts",
+  "src/cli-style.ts",
+  "src/compilation.ts",
+  "src/compile.ts",
+  "src/constants.ts",
+  "src/context.ts",
+  "src/debug.ts",
+  "src/declarations.ts",
+  "src/diagnostics.ts",
+  "src/dump-ast.ts",
+  "src/dump-checked.ts",
+  "src/dump-tokens.ts",
+  "src/dump.ts",
+  "src/emit-arrays.ts",
+  "src/emit-async.ts",
+  "src/emit-builtins.ts",
+  "src/emit-classes.ts",
+  "src/emit-control.ts",
+  "src/emit-json.ts",
+  "src/emit-map.ts",
+  "src/emit-ops.ts",
+  "src/emit-parallel.ts",
+  "src/emit-region.ts",
+  "src/emit-result.ts",
+  "src/emit-secret.ts",
+  "src/emit-shm-window.ts",
+  "src/emit-strings.ts",
+  "src/emit-ts-control.ts",
+  "src/emit-ts-edits.ts",
+  "src/emit-ts-numbers.ts",
+  "src/emit-ts-records.ts",
+  "src/emit-ts-storage.ts",
+  "src/emit-ts-strings.ts",
+  "src/emit-ts.ts",
+  "src/emit-util.ts",
+  "src/emit.ts",
+  "src/escape.ts",
+  "src/expressions.ts",
+  "src/fix.ts",
+  "src/fusion.ts",
+  "src/generics.ts",
+  "src/handles.ts",
+  "src/host-module.ts",
+  "src/ice.ts",
+  "src/inline-arrays.ts",
+  "src/interop-abi.ts",
+  "src/interop-dts.ts",
+  "src/interop-header.ts",
+  "src/interop-napi.ts",
+  "src/interop-wasm.ts",
+  "src/ir.ts",
+  "src/json-typed.ts",
+  "src/kernels.ts",
+  "src/lexer.ts",
+  "src/loop-flow.ts",
+  "src/manifest.ts",
+  "src/members.ts",
+  "src/module-storage.ts",
+  "src/nish-modules.ts",
+  "src/nodes.ts",
+  "src/options.ts",
+  "src/packages.ts",
+  "src/panics.ts",
+  "src/parallel.ts",
+  "src/parents.ts",
+  "src/parser.ts",
+  "src/paths.ts",
+  "src/portability-numbers.ts",
+  "src/portability-records.ts",
+  "src/portability-strings.ts",
+  "src/portability.ts",
+  "src/program.ts",
+  "src/ranges.ts",
+  "src/region-check.ts",
+  "src/region-rules.ts",
+  "src/region.ts",
+  "src/result.ts",
+  "src/run-cache.ts",
+  "src/script.ts",
+  "src/secret.ts",
+  "src/shm-window.ts",
+  "src/simd.ts",
+  "src/statements.ts",
+  "src/std-modules.ts",
+  "src/strings.ts",
+  "src/structs.ts",
+  "src/symbols.ts",
+  "src/tbaa.ts",
+  "src/tokens.ts",
+  "src/types.ts",
+  "src/validator.ts",
+  "src/visibility.ts",
+  "src/watch.ts",
+  "tests/cases/ct_asm_refused.ts",
+  "tests/cases/diag_order.ts",
+  "tests/cases/diag_order_pass1.ts",
+  "tests/differential/corpus/const_modules/main.ts",
+  "tests/link/break_intro/main.ts",
+  "tests/link/break_menu/main.ts",
+  "tests/link/break_settings/main.ts",
+  "tests/link/break_sound/main.ts",
+  "tests/link/crypto_held_derive/main.ts",
+  "tests/link/crypto_hkdf_expand_label/main.ts",
+  "tests/link/crypto_hkdf_expand_label_f64/main.ts",
+  "tests/link/crypto_hkdf_expand_label_long_label/main.ts",
+  "tests/link/crypto_x509/main.ts",
+  "tests/link/crypto_x509_audit/main.ts",
+  "tests/link/crypto_x509_f64/main.ts",
+  "tests/link/crypto_x509_malformed/main.ts",
+  "tests/link/generic_method_import/main.ts",
+  "tests/link/generic_two_importers/main.ts",
+  "tests/link/module_stem_clash/main.ts",
+  "tests/link/net_fetch_async/main.ts",
+  "tests/link/net_fetch_async_flat/main.ts",
+  "tests/link/net_fetch_async_https/main.ts",
+  "tests/link/net_fetch_async_https_flat/main.ts",
+  "tests/link/net_fetch_async_overlap/main.ts",
+  "tests/link/net_fetch_async_policy/main.ts",
+  "tests/link/net_hpack/main.ts",
+  "tests/link/net_hpack_f64/main.ts",
+  "tests/link/net_http1_parse_diff/main.ts",
+  "tests/link/net_http1_server/main.ts",
+  "tests/link/net_http1_server_f64/main.ts",
+  "tests/link/net_http2/main.ts",
+  "tests/link/net_http2_bad_config_tls/main.ts",
+  "tests/link/net_http2_errors/main.ts",
+  "tests/link/net_http2_errors_f64/main.ts",
+  "tests/link/net_http2_f64/main.ts",
+  "tests/link/net_http2_frame/main.ts",
+  "tests/link/net_http2_frame_f64/main.ts",
+  "tests/link/net_http2_hpack_bomb/main.ts",
+  "tests/link/net_http2_hpack_bomb_f64/main.ts",
+  "tests/link/net_http2_hpack_table/main.ts",
+  "tests/link/net_http2_hpack_table_f64/main.ts",
+  "tests/link/net_http2_reset/main.ts",
+  "tests/link/net_http2_tls/main.ts",
+  "tests/link/net_http2_tls_f64/main.ts",
+  "tests/link/net_http3/main.ts",
+  "tests/link/net_http3_bad_body_chunk/main.ts",
+  "tests/link/net_http3_bad_config/main.ts",
+  "tests/link/net_http3_bad_credit/main.ts",
+  "tests/link/net_http3_bad_local_limit/main.ts",
+  "tests/link/net_http3_bad_uni_limit/main.ts",
+  "tests/link/net_http3_bad_write_chunk/main.ts",
+  "tests/link/net_http3_ecn/main.ts",
+  "tests/link/net_http3_ecn_f64/main.ts",
+  "tests/link/net_http3_errors/main.ts",
+  "tests/link/net_http3_errors_f64/main.ts",
+  "tests/link/net_http3_f64/main.ts",
+  "tests/link/net_http3_frame/main.ts",
+  "tests/link/net_http3_frame_f64/main.ts",
+  "tests/link/net_http3_server/main.ts",
+  "tests/link/net_http3_server_bad_config/main.ts",
+  "tests/link/net_http3_server_f64/main.ts",
+  "tests/link/net_http3_write_window/main.ts",
+  "tests/link/net_http_fetch_tls/main.ts",
+  "tests/link/net_interop_server/main.ts",
+  "tests/link/net_interop_server_f64/main.ts",
+  "tests/link/net_loopback/main.ts",
+  "tests/link/net_loopback_f64/main.ts",
+  "tests/link/net_qpack/main.ts",
+  "tests/link/net_qpack_f64/main.ts",
+  "tests/link/net_quic_conn/main.ts",
+  "tests/link/net_quic_conn_f64/main.ts",
+  "tests/link/net_quic_conn_parts/main.ts",
+  "tests/link/net_quic_conn_parts_f64/main.ts",
+  "tests/link/net_quic_conn_replay/main.ts",
+  "tests/link/net_quic_conn_replay_f64/main.ts",
+  "tests/link/net_quic_datagram/main.ts",
+  "tests/link/net_quic_datagram_f64/main.ts",
+  "tests/link/net_quic_ecn/main.ts",
+  "tests/link/net_quic_ecn_f64/main.ts",
+  "tests/link/net_quic_frame/main.ts",
+  "tests/link/net_quic_frame_f64/main.ts",
+  "tests/link/net_quic_lifecycle/main.ts",
+  "tests/link/net_quic_lifecycle_f64/main.ts",
+  "tests/link/net_quic_lifecycle_replay/main.ts",
+  "tests/link/net_quic_lifecycle_replay_f64/main.ts",
+  "tests/link/net_quic_listener/main.ts",
+  "tests/link/net_quic_listener_bad_window/main.ts",
+  "tests/link/net_quic_listener_f64/main.ts",
+  "tests/link/net_quic_memory/main.ts",
+  "tests/link/net_quic_memory_f64/main.ts",
+  "tests/link/net_quic_packet/main.ts",
+  "tests/link/net_quic_packet_f64/main.ts",
+  "tests/link/net_quic_path/main.ts",
+  "tests/link/net_quic_path_f64/main.ts",
+  "tests/link/net_quic_recovery/main.ts",
+  "tests/link/net_quic_recovery_f64/main.ts",
+  "tests/link/net_quic_server_wipes/main.ts",
+  "tests/link/net_quic_server_wipes_f64/main.ts",
+  "tests/link/net_quic_stream/main.ts",
+  "tests/link/net_quic_stream_f64/main.ts",
+  "tests/link/net_quic_wipes/main.ts",
+  "tests/link/net_quic_wipes_f64/main.ts",
+  "tests/link/net_relay/main.ts",
+  "tests/link/net_relay_bad_hello/main.ts",
+  "tests/link/net_relay_bad_idle/main.ts",
+  "tests/link/net_relay_bad_path/main.ts",
+  "tests/link/net_relay_bad_per_peer/main.ts",
+  "tests/link/net_relay_bad_pool/main.ts",
+  "tests/link/net_relay_bad_rate/main.ts",
+  "tests/link/net_relay_bad_sessions/main.ts",
+  "tests/link/net_relay_bad_spare/main.ts",
+  "tests/link/net_relay_bad_stats/main.ts",
+  "tests/link/net_relay_f64/main.ts",
+  "tests/link/net_relay_forged/main.ts",
+  "tests/link/net_relay_soak/main.ts",
+  "tests/link/net_tls_client_handshake/main.ts",
+  "tests/link/net_tls_client_record/main.ts",
+  "tests/link/net_tls_client_refusals/main.ts",
+  "tests/link/net_tls_client_tcp/main.ts",
+  "tests/link/net_tls_ecdsa/main.ts",
+  "tests/link/net_tls_ecdsa_f64/main.ts",
+  "tests/link/net_tls_ext_alpn/main.ts",
+  "tests/link/net_tls_ext_f64/main.ts",
+  "tests/link/net_tls_ext_hrr/main.ts",
+  "tests/link/net_tls_ext_quic/main.ts",
+  "tests/link/net_tls_ext_refusals/main.ts",
+  "tests/link/net_tls_ext_sni/main.ts",
+  "tests/link/net_tls_memory/main.ts",
+  "tests/link/net_tls_memory_f64/main.ts",
+  "tests/link/net_tls_psk_wire/main.ts",
+  "tests/link/net_tls_psk_wire_f64/main.ts",
+  "tests/link/net_tls_record_f64/main.ts",
+  "tests/link/net_tls_record_refusals/main.ts",
+  "tests/link/net_tls_record_rfc8448/main.ts",
+  "tests/link/net_tls_record_tcp/main.ts",
+  "tests/link/net_tls_record_tcp_f64/main.ts",
+  "tests/link/net_tls_resume/main.ts",
+  "tests/link/net_tls_resume_bench/main.ts",
+  "tests/link/net_tls_resume_f64/main.ts",
+  "tests/link/net_tls_rfc8448/main.ts",
+  "tests/link/net_tls_rfc8448_f64/main.ts",
+  "tests/link/net_tls_wipes/main.ts",
+  "tests/link/net_tls_wipes_f64/main.ts",
+  "tests/link/net_webtransport/main.ts",
+  "tests/link/net_webtransport_bad_datagrams/main.ts",
+  "tests/link/net_webtransport_bad_datagrams_off/main.ts",
+  "tests/link/net_webtransport_bad_layer/main.ts",
+  "tests/link/net_webtransport_bad_pending/main.ts",
+  "tests/link/net_webtransport_bad_pending_high/main.ts",
+  "tests/link/net_webtransport_bad_sessions/main.ts",
+  "tests/link/net_webtransport_bad_streams/main.ts",
+  "tests/link/net_webtransport_bad_streams_high/main.ts",
+  "tests/link/net_webtransport_close_window/main.ts",
+  "tests/link/net_webtransport_datagram_window/main.ts",
+  "tests/link/net_webtransport_f64/main.ts",
+  "tests/link/net_webtransport_stream_window/main.ts",
+  "tests/link/net_webtransport_whole_window/main.ts",
+  "tests/link/std_json_conformance/main.ts",
+  "tests/link/std_json_value/main.ts",
+  "tests/link/std_json_writer/main.ts",
+  "tests/link/std_regex_unicode/main.ts",
+  "tests/link/std_testing/main.ts",
+  "tests/link/std_yaml/main.ts",
+  "tests/link/tfb_entry/main.ts",
+]
+
+/** One declaration per program and sidecar `STAGE4_STRING_EXPORTS` names. */
+const declareStringExports = (moved, changelog, why) =>
+  moved.flatMap((program) => {
+    const stem = path.basename(program, ".ts")
+    return [`${stem}.d.ts`, `${stem}.mjs`].map((file) => ({
+      program,
+      file,
+      changelog,
+      why,
+    }))
+  })
+
 /**
  * Output differences that are decided rather than broken, each with the words
  * `CHANGELOG.md` must carry before this run can go green. Shape:
@@ -214,6 +572,30 @@ const DECLARED = [
       "tests/link/net_fetch_async_dns_slow/main.ts": ["exit"],
     }
   ),
+  {
+    program: "tests/cases/async_spawn_fn_arg.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
+  {
+    program: "tests/cases/async_spawn_shared.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
+  {
+    program: "tests/link/async_spawn_shared_outlives/main.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
+  {
+    program: "docs/cookbook/async-spawn-shared.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
   // #899: a loop pass now keeps its arena scope where a register `Result`
   // leaves it, so these loops gain the pass's mark and rewind.
   ...resultLoop(
@@ -237,6 +619,33 @@ const DECLARED = [
       "docs/cookbook/async-await-all.ts": ["async-await-all.ll"],
     }
   ),
+  {
+    changelog: "Strings cross between a wasm module and its page",
+    why: "the --emit-header comment names the three core runtime files a C caller links, since runtime.c alone no longer defines nish_str_new",
+    undo: (text) => withoutStage4Header(text),
+  },
+  {
+    changelog: "Strings cross between a wasm module and its page",
+    why: "the --emit-dts comments say a string result now crosses to the page and how a string argument is passed instead",
+    undo: (text) => withoutStage4Dts(text),
+  },
+  ...declareStringExports(
+    STAGE4_STRING_EXPORTS,
+    "Strings cross between a wasm module and its page",
+    "a string result is decoded into a JS string, so a function returning one is exported to the page instead of listed as a comment"
+  ),
+  {
+    program: "tests/cases/host_import_string.ts",
+    file: "exit",
+    changelog: "Strings cross between a wasm module and its page",
+    why: "a host function may now take a string parameter, which the seed refused until stage 4",
+  },
+  {
+    program: "tests/cases/storage_lend_bytes.ts",
+    file: "exit",
+    changelog: "Strings cross between a wasm module and its page",
+    why: "byte module storage may now be lent to a u8[] or readonly u8[] parameter, which the seed refused until stage 4",
+  },
 ]
 
 /**

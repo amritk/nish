@@ -1,0 +1,3 @@
+`spawn` hands `readLater` its parameter `f` of type File
+it is the handle class `File`
+a task shares with its spawner only objects and arrays whose every part outlives the spawner's call
