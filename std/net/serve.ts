@@ -101,9 +101,6 @@ export class ServeLimits {
    * for good.
    */
   maxRequests: i32 = 0
-
-  /** The defaults: 256 connections and requests in flight, a 16 KiB header section, a one MiB body and a 64 KiB response. */
-  constructor() {}
 }
 
 /** What a server did, for a log line or a test; `serveOn` fills it as it runs. */
@@ -122,9 +119,6 @@ export class ServeStats {
   usedWarm: i64 = 0
   /** `Arena.used()` in the server's loop once `maxRequests` were answered, before draining. */
   usedEnd: i64 = 0
-
-  /** Empty stats: nothing answered yet. */
-  constructor() {}
 }
 
 /**
@@ -297,37 +291,10 @@ export class Response {
 /**
  * The answer for a request the router refused: 405 with an `Allow` field
  * naming the methods the path has, and 404 for anything else.
- * @param req the request to refuse
+ * @param _req the request to refuse; the loop answers it from the request it holds
  * @returns a response the server answers as `HttpHandler.refuse` does
  */
-export function refuse(req: Request): Response {
-  return new Response(SERVE_REFUSE)
-}
-
-/**
- * Serves HTTP/1.1 on `port` on every address, handing each request to
- * `handle` in a task of its own, until `limits.maxRequests` are answered (for
- * good when it is 0).
- * @param port the TCP port to listen on
- * @param router the routes, added before the call; a request's `route` is the index `Router.add` answered
- * @param limits the caps; see `ServeLimits`
- * @param handle the program's answer to a request, run as its own task
- * @returns 0 once stopped, or the negative error `tcpListen` answered
- */
-export async function serve(
-  port: i32,
-  router: Router,
-  limits: ServeLimits,
-  handle: (req: Request) => Promise<Response>
-): Promise<i32> {
-  const listener: i32 = tcpListen("0.0.0.0", port, SERVE_BACKLOG)
-  if (listener < 0) {
-    return listener
-  }
-  const done: i32 = await serveOn(listener, router, limits, handle, new ServeStats())
-  netClose(listener)
-  return done
-}
+export const refuse = (_req: Request): Response => new Response(SERVE_REFUSE)
 
 /**
  * The shared state between the loop and its tasks: one slot per request in
@@ -373,102 +340,8 @@ class ServeState {
   }
 }
 
-/**
- * `serve` on a listening socket the program made — `tcpListen` on port 0 in
- * a test, or `tcpListenFlags` with SO_REUSEPORT for a worker — filling
- * `stats` as it runs.
- * @param listener the listening socket, still the program's to close
- * @param router the routes, added before the call
- * @param limits the caps; see `ServeLimits`
- * @param handle the program's answer to a request, run as its own task
- * @param stats where the server counts what it did, the caller's
- * @returns 0 once stopped
- */
-export async function serveOn(
-  listener: i32,
-  router: Router,
-  limits: ServeLimits,
-  handle: (req: Request) => Promise<Response>,
-  stats: ServeStats
-): Promise<i32> {
-  if (limits.connections < 1 || limits.inFlight < 1 || limits.responseBytes < 0) {
-    panic(
-      `serve: connections ${limits.connections} and inFlight ${limits.inFlight} need at least 1, responseBytes ${limits.responseBytes} at least 0`
-    )
-  }
-  const hl: HandlerLimits = new HandlerLimits()
-  hl.slots = limits.connections
-  hl.http.maxHeaderBytes = limits.headerBytes
-  hl.http.maxBody = limits.bodyBytes
-  const h: HttpHandler = new HttpHandler(hl, listener, router)
-  const st: ServeState = new ServeState()
-  const fds: i32[] = [0, 0]
-  const made: i32 = unixSocketPair(NET_UNIX_STREAM, fds)
-  if (made < 0) {
-    panic(`serve: the wake socket could not be made: ${made}`)
-  }
-  st.wakeFd = fds[1]
-  h.watch(fds[0], SERVE_WAKE)
-  const drained: u8[] = new Array<u8>(64)
-  const typeCache: u8[][] = []
-  spawn(serveTick(st))
-  let draining: boolean = false
-  while (true) {
-    h.wait(0)
-    if (h.fired(SERVE_WAKE)) {
-      st.signalled = false
-      while (netRead(fds[0], drained, 0, 64) > 0) {}
-    }
-    let moved: boolean = true
-    while (moved) {
-      moved = false
-      for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
-        if (st.busy[k] && st.done[k]) {
-          serveAnswer(h, st, k, typeCache, stats)
-          st.busy[k] = false
-          st.done[k] = false
-          stats.answered += 1
-          moved = true
-        }
-      }
-      while (h.ready()) {
-        const r: HttpRequest = h.take()
-        const k: i32 = serveFreeSlot(st, limits)
-        moved = true
-        if (k < 0) {
-          h.problem(r, 503, "Service Unavailable", "")
-          stats.busy += 1
-          stats.answered += 1
-          continue
-        }
-        st.reqs[k] = r
-        st.busy[k] = true
-        st.done[k] = false
-        spawn(serveTask(handle, st, k))
-      }
-    }
-    stats.slots = toI32(st.busy.length)
-    if (stats.warmAfter > 0 && stats.usedWarm === 0 && stats.answered >= stats.warmAfter) {
-      stats.usedWarm = Arena.used()
-    }
-    if (!draining && limits.maxRequests > 0 && stats.answered >= limits.maxRequests) {
-      draining = true
-      stats.usedEnd = Arena.used()
-      h.drain()
-    }
-    if (draining && h.connections() === 0 && !serveAnyBusy(st)) {
-      break
-    }
-    await readable(h.loop)
-  }
-  st.stopped = true
-  netClose(fds[0])
-  netClose(fds[1])
-  return 0
-}
-
 /** The lowest free slot, making one when every slot is busy and `inFlight` allows; -1 when none. */
-function serveFreeSlot(st: ServeState, limits: ServeLimits): i32 {
+const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
   const n: i32 = toI32(st.busy.length)
   for (let k: i32 = 0; k < n; k++) {
     if (!st.busy[k]) {
@@ -490,7 +363,7 @@ function serveFreeSlot(st: ServeState, limits: ServeLimits): i32 {
 }
 
 /** Whether any slot still holds a request. */
-function serveAnyBusy(st: ServeState): boolean {
+const serveAnyBusy = (st: ServeState): boolean => {
   for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
     if (st.busy[k]) {
       return true
@@ -500,7 +373,7 @@ function serveAnyBusy(st: ServeState): boolean {
 }
 
 /** Sends slot `k`'s answer, as its task wrote it. */
-function serveAnswer(h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], stats: ServeStats): void {
+const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], stats: ServeStats): void => {
   const r: HttpRequest = st.reqs[k]
   const status: i32 = st.status[k]
   if (status === SERVE_REFUSE) {
@@ -527,7 +400,7 @@ function serveAnswer(h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
 }
 
 /** The index in `cache` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
-function serveType(cache: u8[][], type: u8[], len: i32): i32 {
+const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
   for (let i: i32 = 0; i < toI32(cache.length); i++) {
     const c: u8[] = cache[i]
     if (toI32(c.length) === len) {
@@ -559,7 +432,7 @@ function serveType(cache: u8[][], type: u8[], len: i32): i32 {
 }
 
 /** A string's bytes: native strings are UTF-8, so its code units are its bytes. */
-function serveBytes(s: string): u8[] {
+const serveBytes = (s: string): u8[] => {
   const n: i32 = toI32(s.length)
   const out: u8[] = new Array<u8>(n)
   for (let i: i32 = 0; i < n; i++) {
@@ -569,7 +442,11 @@ function serveBytes(s: string): u8[] {
 }
 
 /** One request's task: copies it in, runs `handle`, writes the answer into slot `k` and wakes the loop. */
-async function serveTask(handle: (req: Request) => Promise<Response>, st: ServeState, k: i32): Promise<void> {
+const serveTask = async (
+  handle: (req: Request) => Promise<Response>,
+  st: ServeState,
+  k: i32
+): Promise<void> => {
   // The copy is written out here, not in a helper: a helper handed both the
   // shared request and the task's own would be refused, as it could store
   // one into the other.
@@ -639,7 +516,7 @@ async function serveTask(handle: (req: Request) => Promise<Response>, st: ServeS
 }
 
 /** Wakes the loop every `SERVE_TICK_MS`, so the handler's timeouts run while no socket is ready; ends once the loop stops. */
-async function serveTick(st: ServeState): Promise<void> {
+const serveTick = async (st: ServeState): Promise<void> => {
   while (!st.stopped) {
     await sleep(SERVE_TICK_MS)
     if (!st.stopped && !st.signalled) {
@@ -647,4 +524,125 @@ async function serveTick(st: ServeState): Promise<void> {
       netWrite(st.wakeFd, st.one, 0, 1)
     }
   }
+}
+
+/**
+ * `serve` on a listening socket the program made — `tcpListen` on port 0 in
+ * a test, or `tcpListenFlags` with SO_REUSEPORT for a worker — filling
+ * `stats` as it runs.
+ * @param listener the listening socket, still the program's to close
+ * @param router the routes, added before the call
+ * @param limits the caps; see `ServeLimits`
+ * @param handle the program's answer to a request, run as its own task
+ * @param stats where the server counts what it did, the caller's
+ * @returns 0 once stopped
+ */
+export const serveOn = async (
+  listener: i32,
+  router: Router,
+  limits: ServeLimits,
+  handle: (req: Request) => Promise<Response>,
+  stats: ServeStats
+): Promise<i32> => {
+  if (limits.connections < 1 || limits.inFlight < 1 || limits.responseBytes < 0) {
+    panic(
+      `serve: connections ${limits.connections} and inFlight ${limits.inFlight} need at least 1, responseBytes ${limits.responseBytes} at least 0`
+    )
+  }
+  const hl: HandlerLimits = new HandlerLimits()
+  hl.slots = limits.connections
+  hl.http.maxHeaderBytes = limits.headerBytes
+  hl.http.maxBody = limits.bodyBytes
+  const h: HttpHandler = new HttpHandler(hl, listener, router)
+  const st: ServeState = new ServeState()
+  const fds: i32[] = [0, 0]
+  const made: i32 = unixSocketPair(NET_UNIX_STREAM, fds)
+  if (made < 0) {
+    panic(`serve: the wake socket could not be made: ${made}`)
+  }
+  st.wakeFd = fds[1]
+  h.watch(fds[0], SERVE_WAKE)
+  const drained: u8[] = new Array<u8>(64)
+  const typeCache: u8[][] = []
+  spawn(serveTick(st))
+  let draining: boolean = false
+  while (true) {
+    h.wait(0)
+    if (h.fired(SERVE_WAKE)) {
+      st.signalled = false
+      while (netRead(fds[0], drained, 0, 64) > 0) {
+        // Each read takes up to 64 wake bytes; the loop empties the socket.
+      }
+    }
+    let moved: boolean = true
+    while (moved) {
+      moved = false
+      for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
+        if (st.busy[k] && st.done[k]) {
+          serveAnswer(h, st, k, typeCache, stats)
+          st.busy[k] = false
+          st.done[k] = false
+          stats.answered += 1
+          moved = true
+        }
+      }
+      while (h.ready()) {
+        const r: HttpRequest = h.take()
+        const k: i32 = serveFreeSlot(st, limits)
+        moved = true
+        if (k < 0) {
+          h.problem(r, 503, "Service Unavailable", "")
+          stats.busy += 1
+          stats.answered += 1
+          continue
+        }
+        st.reqs[k] = r
+        st.busy[k] = true
+        st.done[k] = false
+        spawn(serveTask(handle, st, k))
+      }
+    }
+    stats.slots = toI32(st.busy.length)
+    if (stats.warmAfter > 0 && stats.usedWarm === 0 && stats.answered >= stats.warmAfter) {
+      stats.usedWarm = Arena.used()
+    }
+    if (!draining && limits.maxRequests > 0 && stats.answered >= limits.maxRequests) {
+      draining = true
+      stats.usedEnd = Arena.used()
+      h.drain()
+    }
+    if (draining && h.connections() === 0 && !serveAnyBusy(st)) {
+      break
+    }
+    await readable(h.loop)
+  }
+  st.stopped = true
+  netClose(fds[0])
+  netClose(fds[1])
+  return 0
+}
+
+/**
+ * Serves HTTP/1.1 on `port` on every address, handing each request to
+ * `handle` in a task of its own, until `limits.maxRequests` are answered (for
+ * good when it is 0).
+ * @param port the TCP port to listen on
+ * @param router the routes, added before the call; a request's `route` is the index `Router.add` answered
+ * @param limits the caps; see `ServeLimits`
+ * @param handle the program's answer to a request, run as its own task
+ * @returns 0 once stopped, or the negative error `tcpListen` answered
+ */
+export const serve = async (
+  port: i32,
+  router: Router,
+  limits: ServeLimits,
+  handle: (req: Request) => Promise<Response>
+): Promise<i32> => {
+  const listener: i32 = tcpListen("0.0.0.0", port, SERVE_BACKLOG)
+  if (listener < 0) {
+    return listener
+  }
+  const done: i32 = await serveOn(listener, router, limits, handle, new ServeStats())
+  netClose(listener)
+  return done
 }

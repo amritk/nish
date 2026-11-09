@@ -149,12 +149,12 @@ The answer for a request the router refused: 405 with an `Allow` field
 naming the methods the path has, and 404 for anything else.
 
 ```ts
-function refuse(req: Request): Response
+function refuse(_req: Request): Response
 ```
 
-<scalar-field name="req" type="Request" required>
+<scalar-field name="_req" type="Request" required>
 
-the request to refuse
+the request to refuse; the loop answers it from the request it holds
 
 </scalar-field>
 
@@ -317,7 +317,7 @@ class ServeLimits
 
 | Member | |
 | --- | --- |
-| `new ServeLimits()` | The defaults: 256 connections and requests in flight, a 16 KiB header section, a one MiB body and a 64 KiB response. |
+| `new ServeLimits()` |  |
 | `bodyBytes: i32` | The most bytes a request body may have; past it the request is answered 413 and its connection ends. |
 | `connections: i32` | The most connections open at once; a connection past it waits in the listen backlog. |
 | `deadline: i32` | Milliseconds a request may take, from its head to its answer. Held for the cancellation stage: it is not yet enforced, and a slow handler holds its slot until it answers. |
@@ -336,7 +336,7 @@ class ServeStats
 
 | Member | |
 | --- | --- |
-| `new ServeStats()` | Empty stats: nothing answered yet. |
+| `new ServeStats()` |  |
 | `answered: i32` | Requests answered, by a task or by the server itself. |
 | `busy: i32` | Requests answered 503 because `inFlight` tasks were already running. |
 | `failed: i32` | Answers a task wrote that broke a cap or a rule, answered 500 instead. |
