@@ -290,6 +290,7 @@ const STAGE4_STRING_EXPORTS = [
   "tests/cases/diag_order.ts",
   "tests/cases/diag_order_pass1.ts",
   "tests/differential/corpus/const_modules/main.ts",
+  "tests/link/async_await_all_lanes/main.ts",
   "tests/link/break_intro/main.ts",
   "tests/link/break_menu/main.ts",
   "tests/link/break_settings/main.ts",
@@ -617,6 +618,7 @@ const DECLARED = [
       "tests/link/async_await_all_lanes/main.ts": ["lib.ll", "main.ll"],
       "tests/link/async_across_modules/main.ts": ["main.ll"],
       "docs/cookbook/async-await-all.ts": ["async-await-all.ll"],
+      "docs/cookbook/runtime-prelude.ts": ["runtime-prelude.ll"],
     }
   ),
   {
