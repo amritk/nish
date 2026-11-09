@@ -39,14 +39,16 @@
  * and when `handle` answers it writes the status, the content type and the
  * body back into the slot's fixed buffers, element by element, and wakes the
  * loop. The loop then sends the answer and frees the slot. Nothing the task
- * allocated outlives it, and the server's own memory does not grow per
- * request once its slots are warm: `tests/link/net_serve_pipelined_flat`
- * pins `Arena.used()` flat over thousands of pipelined requests.
+ * allocated outlives it, and the loop's arena does not grow per request once
+ * its slots are warm: `tests/link/net_serve_pipelined_flat` pins
+ * `Arena.used()` flat over thousands of pipelined requests. What the runtime
+ * allocates outside the arena for a task and its region is not measured.
  *
  * **Answers keep request order.** The handler reads a connection's next
  * request only once the one before it is answered, so at most one request
  * per connection is in flight, and pipelined requests are answered in the
- * order they came however long each task takes.
+ * order they came: a later request's task starts only after the earlier one
+ * is answered, so it can never finish first.
  *
  * **Every cap answers.** `ServeLimits` bounds the connections, the requests
  * in flight (503 past it), a request's header section (431) and body (413),
@@ -81,7 +83,7 @@ const SERVE_FAILED: i32 = 500
 
 /** The caps a server holds every request and connection to; each field is read once, by `serve`. */
 export class ServeLimits {
-  /** The most connections open at once; a connection past it waits in the listen backlog. */
+  /** The most connections open at once; a connection past it is accepted and closed at once, and its client sees the connection reset. */
   connections: i32 = 256
   /** The most requests in flight — handed to a task and not yet answered — at once; past it a request is answered 503. */
   inFlight: i32 = 256
@@ -172,7 +174,7 @@ export class Request {
   }
 
   /**
-   * Route parameter `k`, percent-decoded.
+   * Route parameter `k`, percent-decoded. Panics when the request's route has no parameter `k`.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the decoded value, or an empty string when it holds a malformed escape
    */
@@ -183,7 +185,7 @@ export class Request {
   }
 
   /**
-   * Route parameter `k` read as a decimal number that is not negative and fits an `i32`.
+   * Route parameter `k` read as a decimal number that is not negative and fits an `i32`. Panics when the request's route has no parameter `k`.
    * @param k the parameter's position in the route pattern, from 0
    * @returns the number, or -1 when it is empty, holds a non-digit or overflows
    */
@@ -192,7 +194,7 @@ export class Request {
   }
 
   /**
-   * Whether route parameter `k` holds a malformed percent escape, which a program answers 400.
+   * Whether route parameter `k` holds a malformed percent escape, which a program answers 400. Panics when the request's route has no parameter `k`.
    * @param k the parameter's position in the route pattern, from 0
    * @returns true when decoding the parameter fails
    */
@@ -240,7 +242,7 @@ export class Request {
  * `refuse`.
  */
 export class Response {
-  /** The `Content-Type` value; empty sends none. */
+  /** The `Content-Type` value; empty sends none, and the body goes without one. */
   type: string = ""
   /** The body, `body[0 .. length)`. */
   body: u8[]
@@ -335,6 +337,8 @@ class ServeState {
   typeLengths: i32[]
   /** One byte, written to the wake socket. */
   one: u8[]
+  /** No fields: the names and values of an answer with a body and no content type. */
+  none: u8[][]
   /** The wake socket's end the tasks write to. */
   wakeFd: i32 = 0
   /** Whether a byte is waiting in the wake socket. */
@@ -352,6 +356,7 @@ class ServeState {
     this.types = []
     this.typeLengths = []
     this.one = [toU8(1)]
+    this.none = []
   }
 }
 
@@ -402,7 +407,11 @@ const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
     return
   }
   if (st.typeLengths[k] === 0) {
-    h.empty(r, status)
+    if (length === 0) {
+      h.empty(r, status)
+    } else {
+      h.sendFields(r, status, st.none, st.none, st.bodies[k], toI32(0), length)
+    }
     return
   }
   const type: i32 = serveType(typeCache, st.types[k], st.typeLengths[k])
@@ -639,6 +648,7 @@ export const serveOn = async (
   st.stopped = true
   netClose(fds[0])
   netClose(fds[1])
+  netClose(h.loop)
   return 0
 }
 

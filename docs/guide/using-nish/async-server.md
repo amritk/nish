@@ -69,7 +69,7 @@ another request's memory.
 | `route` | The number `Router.add` answered for the route that matched, or a negative `ROUTER_*` code when none did |
 | `method()` | The method, as sent: `"GET"`, `"POST"`, ... |
 | `path()` | The path, without the query |
-| `param(k)` | Route parameter `k` (0 is the first `:name`), percent-decoded; `""` when malformed |
+| `param(k)` | Route parameter `k` (0 is the first `:name`), percent-decoded; `""` when malformed. A `k` the route does not have panics, as it does for the two below |
 | `paramNumber(k)` | Parameter `k` as a decimal number, or -1 when it is not one |
 | `paramMalformed(k)` | Whether parameter `k` held a bad `%` escape |
 | `query(name)` | The first query value named `name`, form-decoded; `""` when there is none |
@@ -84,7 +84,7 @@ Make a `Response` with its status and give it one body:
 | --- | --- |
 | `new Response(s).text(str)` | `text/plain; charset=utf-8` |
 | `new Response(s).json(str)` | `application/json` |
-| `new Response(s).bytes(type, buf, off, len)` | `type`, with `len` bytes of `buf` from `off` |
+| `new Response(s).bytes(type, buf, off, len)` | `type`, with `len` bytes of `buf` from `off`; an empty `type` sends the body with no `Content-Type` |
 | `new Response(204)` | none, and no body |
 
 `refuse(req)` answers a request no route took the way the router says: 404,
@@ -99,9 +99,10 @@ is answered 500 instead. A 204 or 304 goes without its body.
 ## Order and pipelining
 
 A client that sends several requests on one connection without waiting gets
-the answers in the order it sent them, even when a later request's task
-finishes first: the server reads a connection's next request only once the
-one before it is answered. Two clients never wait on each other.
+the answers in the order it sent them: the server reads a connection's next
+request only once the one before it is answered, so a later request's task
+starts only after the earlier answer is sent. Requests on one connection run
+one at a time; two clients never wait on each other.
 
 ## Limits
 
@@ -120,7 +121,7 @@ one before it is answered. Two clients never wait on each other.
 | `maxRequests` | 0 (none) | The server stops (see below) |
 
 Each request's task runs in a memory region of its own, and everything it
-allocates goes when it answers, so a server's memory stays flat however many
+allocates goes when it answers, so the server's arena stays flat however many
 requests it answers.
 
 <a id="stopping" style="scroll-margin-top: 65px"></a>

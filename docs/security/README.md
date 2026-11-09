@@ -465,7 +465,7 @@ only.
 | PKI-31 | Low | `std/crypto/pki.ts` | A dNSName subtree with a leading period is read as the names below it, not refused; an excluded one leaves the apex allowed | — |
 | PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
 | SHM-3 | Low | `runtime/runtime-shm.c` (`adopt`) | A same-user peer that shrinks a region with `ftruncate` makes a later access past the new end a `SIGBUS`, not a checked panic | — |
-| SERVE-8 | Low | `std/net/serve.ts` (`ServeLimits.deadline`) | The per-request deadline is held, not enforced: a task that never answers holds its slot, and with `inFlight` of them every new request is answered 503 | #1278 |
+| SERVE-8 | Low | `std/net/serve.ts` (`ServeLimits.deadline`) | The per-request deadline is held, not enforced: a task that never answers holds its slot, and with `inFlight` of them every new request is answered 503; nor does `serve` return after `maxRequests` while one is hung, since the drain waits for every slot | #1278 |
 | SERVE-14 | Low | `std/net/serve.ts` (`serveOn`, `serveFreeSlot`) | No per-peer share of `inFlight`: one client with `inFlight` connections, each holding a slow request, has every other request answered 503 | #1278 |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by

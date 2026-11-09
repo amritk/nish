@@ -1,8 +1,9 @@
 // `nish/net/serve` end to end on loopback: routed GET and POST with
-// parameters, 404 and 405, two pipelined requests answered in order though
-// the first one's task sleeps longer, keep-alive, and the header and body
-// caps answered 431 and 413, the answers a bad Response gets, and a client
-// that hangs up while its task runs. `main` awaits the server, then the
+// parameters, 404 and 405, two pipelined requests answered in order (the
+// second read only once the first, whose task sleeps longer, is answered),
+// keep-alive, the header and body caps answered 431 and 413, the answers a
+// bad Response gets, a body with no content type, and a client that hangs up
+// while its task runs. `main` awaits the server, then the
 // client's done signal.
 import { readable, sleep, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
@@ -40,6 +41,11 @@ async function handle(req: Request): Promise<Response> {
       if (k === "type") {
         const none: u8[] = []
         return new Response(200).bytes("text/plain\r\nx-evil: 1", none, 0, 0)
+      }
+      if (k === "untyped") {
+        const raw: u8[] = new Array<u8>(3)
+        raw.fill(120)
+        return new Response(200).bytes("", raw, 0, 3)
       }
       if (k === "empty") {
         return new Response(204).text("a body a 204 cannot carry")
@@ -95,6 +101,8 @@ async function client(port: i32, doneFd: i32): Promise<void> {
   await show(c, "bad type")
   await sendText(c, "GET /bad?k=empty HTTP/1.1\r\nhost: t\r\n\r\n")
   await show(c, "204 with a body")
+  await sendText(c, "GET /bad?k=untyped HTTP/1.1\r\nhost: t\r\n\r\n")
+  await show(c, "no content type")
   // With one request in flight, another connection's request is answered 503;
   // with two connections open, a third is closed as it is accepted.
   await sendText(c, "GET /slow/100 HTTP/1.1\r\nhost: t\r\n\r\n")
@@ -149,7 +157,7 @@ export async function main(): Promise<i32> {
   limits.connections = 2
   limits.inFlight = 1
   limits.responseBytes = 256
-  limits.maxRequests = 15
+  limits.maxRequests = 16
   const listener: i32 = tcpListen("127.0.0.1", 0, 16)
   const port: i32 = netLocalPort(listener)
   const stats: ServeStats = new ServeStats()
