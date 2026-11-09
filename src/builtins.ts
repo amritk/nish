@@ -623,7 +623,9 @@ const checkMath = (
         requireF64(ctx, name, arg, scope)
       }
     }
-    // `std/math.ts`'s, bound by the checker's `importMath` under this spelling.
+    // `std/math.ts`'s, bound by the checker's `importMath` under this spelling:
+    // `atan2`, `tan` and `hypot` always, and on a page module `sin`, `cos`,
+    // `exp`, `log` and `pow` too. Everywhere else those five stay intrinsics.
     const at = ctx.sigs.get(name, -1)
     if (at >= 0) {
       ctx.program.nodeCallees[call.id] = ctx.program.functions[at]

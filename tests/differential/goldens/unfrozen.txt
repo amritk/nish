@@ -109,6 +109,7 @@ cases/async_await_all added after R6: no rewriter to freeze it with
 cases/async_await_all_lanes_large added after R6: no rewriter to freeze it with
 cases/async_await_chain added after R6: no rewriter to freeze it with
 cases/async_await_single added after R6: no rewriter to freeze it with
+cases/async_cancel added after R6: no rewriter to freeze it with
 cases/async_lowered added after R6: no rewriter to freeze it with
 cases/async_main added after R6: no rewriter to freeze it with
 cases/async_mark_text added after R6: no rewriter to freeze it with
@@ -574,6 +575,7 @@ cases/union_types added after R6: no rewriter to freeze it with
 cases/unsafe_get_set added after R6: no rewriter to freeze it with
 cases/unsafe_wrapping added after R6: no rewriter to freeze it with
 cases/wall_clock added after R6: no rewriter to freeze it with
+cases/wasm_math_std added after R6: no rewriter to freeze it with
 cases/wipe_bytes added after R6: no rewriter to freeze it with
 corpus/bit_fnv1a stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bit_fnv1a.args` now says `(none)`
 corpus/bool_logic stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bool_logic.args` now says `(none)`

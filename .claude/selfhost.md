@@ -243,7 +243,8 @@ predates #423's capabilities audit, so its `CAP_NONE` row came later.
   entry, one `program` (and one `file` where only one moves: a new runtime
   function adds a `declare` to `docs/cookbook/runtime-prelude.ll`, as #417's
   did), never an every-program declaration. Its
-  `changelog` is the pull request's subject as the generator renders it.
+  `changelog` is the pull request's subject as the generator renders it. The
+  rule: [`CLAUDE.md`](../CLAUDE.md#definition-of-done).
 - The construct's usual set besides: a golden case with its `.ll` and `.out`,
   a `reject_*` case for each refusal, its `docs/LANGUAGE.md` rule, its
   `docs/IR_COOKBOOK.md` entry and `docs/cookbook/` program, and a line in

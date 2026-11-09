@@ -18,7 +18,7 @@ import { BuiltinExport } from "./nish-modules"
 import { AwaitEdge, FunctionSig } from "./program"
 import { recordRegionCall } from "./region-rules"
 import { Scope } from "./symbols"
-import { T_BOOL, T_ERROR, T_I32, T_STRING, T_VOID, isNumeric } from "./types"
+import { T_BOOL, T_ERROR, T_I32, T_I64, T_STRING, T_VOID, isNumeric } from "./types"
 import {
   N_BINARY,
   N_BINDING_PATTERN,
@@ -158,8 +158,24 @@ const waitSiteMessage = (name: string): string =>
 const waitArgumentMessage = (name: string): string =>
   `\`${name}\` takes one \`i32\`: the milliseconds \`sleep\` waits, or the descriptor \`readable\` and \`writable\` wait on`
 
+/** A bounded wait on the executor given other than two `i32`s. */
+const boundedWaitArgumentMessage = (name: string): string =>
+  `\`${name}\` takes two \`i32\`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false`
+
 /** Whether `name` is a `nish:async` wait on the executor. */
-const isKernelWait = (name: string): boolean => name === "sleep" || name === "readable" || name === "writable"
+const isKernelWait = (name: string): boolean =>
+  name === "sleep" ||
+  name === "readable" ||
+  name === "writable" ||
+  name === "readableWithin" ||
+  name === "writableWithin"
+
+/** Whether `name` is a `nish:async` wait that also takes a deadline. */
+const isBoundedWait = (name: string): boolean => name === "readableWithin" || name === "writableWithin"
+
+/** Whether `name` is one of `nish:async`'s cancellation calls, plain calls written anywhere. */
+const isTaskCall = (name: string): boolean =>
+  name === "taskId" || name === "cancel" || name === "cancelled" || name === "cancelAfter"
 
 /**
  * The `nish:async` wait on the executor `call` makes, or null: its callee
@@ -183,15 +199,19 @@ const kernelWaitOf = (ctx: CheckContext, call: Node, scope: Scope): BuiltinExpor
 const checkKernelWait = (ctx: CheckContext, call: Node, scope: Scope, imported: BuiltinExport): i32 => {
   ctx.program.nodeBuiltins[call.id] = imported.canonical
   const args = call.children[1].children
-  if (args.length !== 1) {
-    return ctx.errorType(call, waitArgumentMessage(imported.member))
+  const bounded = isBoundedWait(imported.member)
+  const message = bounded ? boundedWaitArgumentMessage(imported.member) : waitArgumentMessage(imported.member)
+  if (args.length !== (bounded ? 2 : 1)) {
+    return ctx.errorType(call, message)
   }
-  const type = checkExpression(ctx, args[0], scope, T_I32)
-  if (type === T_ERROR) {
-    return T_ERROR
-  }
-  if (type !== T_I32) {
-    return ctx.errorType(args[0], waitArgumentMessage(imported.member))
+  for (const arg of args) {
+    const type = checkExpression(ctx, arg, scope, T_I32)
+    if (type === T_ERROR) {
+      return T_ERROR
+    }
+    if (type !== T_I32) {
+      return ctx.errorType(arg, message)
+    }
   }
   const current = ctx.current
   if (current !== null) {
@@ -271,6 +291,61 @@ export const promiseMethodMessage = (ctx: CheckContext, callee: Node, scope: Sco
 export const AWAIT_CALL_MESSAGE: string =
   "`await(...)` outside an `async` function is a call to a function named `await`, and there is none: `await` is written inside an `async` function, before its call, `await f(x)`"
 
+/** A cancellation call given other arguments than it takes. */
+const taskCallArgumentMessage = (name: string, shape: string): string =>
+  `\`${name}\` from \`nish:async\` takes ${shape}`
+
+/** The argument types a cancellation call takes, built once so none is dropped. */
+const taskCallWants = (what: string): i32[] => {
+  if (what === "cancel") {
+    return [T_I64]
+  }
+  if (what === "cancelAfter") {
+    return [T_I64, T_I32]
+  }
+  return []
+}
+
+/** How a cancellation call's arguments are described when they are wrong. */
+const taskCallShape = (what: string): string => {
+  if (what === "cancel") {
+    return "one `i64`, a task's handle from `taskId()`"
+  }
+  if (what === "cancelAfter") {
+    return "an `i64`, a task's handle from `taskId()`, and the `i32` milliseconds until it is cancelled"
+  }
+  return "no arguments"
+}
+
+/**
+ * `taskId()`, `cancel(task)`, `cancelled()`, `cancelAfter(task, ms)`: plain
+ * calls on the executor, written anywhere. `taskId` answers the running
+ * task's handle, an `i64`; `cancel` and `cancelAfter` take one and answer
+ * whether the task was still running; `cancelled` whether the running task is.
+ */
+const checkTaskCall = (ctx: CheckContext, expr: Node, scope: Scope, what: string): i32 => {
+  const args = expr.children[1].children
+  const wants = taskCallWants(what)
+  const shape = taskCallShape(what)
+  if (args.length !== wants.length) {
+    return ctx.errorType(expr, taskCallArgumentMessage(what, shape))
+  }
+  for (let i = 0; i < args.length; i++) {
+    if (i >= 0 && i < wants.length && i < args.length) {
+      const want = wants[i]
+      const arg = args[i]
+      const type = checkExpression(ctx, arg, scope, want)
+      if (type === T_ERROR) {
+        return T_ERROR
+      }
+      if (type !== want) {
+        return ctx.errorType(arg, taskCallArgumentMessage(what, shape))
+      }
+    }
+  }
+  return what === "taskId" ? T_I64 : T_BOOL
+}
+
 /** The `nish:async` builtin a call is to: `spawn`, `awaitAll`, or "" for another. */
 export const asyncBuiltinOf = (imported: BuiltinExport): string =>
   imported.namespace === "async" ? imported.member : ""
@@ -289,6 +364,9 @@ export const checkAsyncBuiltin = (
 ): i32 => {
   ctx.program.nodeBuiltins[expr.id] = imported.canonical
   const what = imported.member
+  if (isTaskCall(what)) {
+    return checkTaskCall(ctx, expr, scope, what)
+  }
   if (what === "awaitAll") {
     return ctx.errorType(expr, AWAIT_ALL_FORM)
   }

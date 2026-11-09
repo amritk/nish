@@ -51,6 +51,7 @@ import {
   panicTailCallees,
 } from "./emit-builtins"
 import { isBuiltinFunction } from "./builtins"
+import { isExecutorCall } from "./nish-modules"
 import { numericLiteralValue } from "./constants"
 import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
@@ -3075,6 +3076,11 @@ class FactCollector {
         this.noteWholeReach(reads.name, methodReceiver(node))
       }
     }
+    // WP50 S5: a page module's float `%` calls `fmodF64` (`floatRemainderOf`).
+    const rem = program.floatRemainderOf(node)
+    if (rem !== null) {
+      this.addUserCallee(rem.name, node)
+    }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
     // (`emitWalk`); the loop records the reader, and the rest are its owner's.
     if (node.kind === N_FOR_OF) {
@@ -3824,8 +3830,9 @@ class FactCollector {
       return
     }
     // WP49 stage 5: `await sleep(ms)` and the descriptor waits make a wait on
-    // the executor and may suspend the function at it.
-    if (imported === "async.sleep" || imported === "async.readable" || imported === "async.writable") {
+    // the executor and may suspend the function at it; the cancellation calls
+    // (part 7) write the executor's state.
+    if (isExecutorCall(imported)) {
       this.facts.effect = EFFECT_WRITE
       this.facts.willReturn = false
       return

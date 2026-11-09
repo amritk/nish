@@ -6,6 +6,7 @@
 
 ```ts
 import {
+  PG_ASYNC_CANCELLED,
   PG_ASYNC_MAX_SIZE,
   PgAsyncParams,
   PgAsyncPool,
@@ -171,12 +172,27 @@ another's session or the rest of its answer.
 **Limits.** `PgAsyncPool`'s caps (`maxMessage`, `maxColumns`, `maxRows`,
 `maxResultBytes`, `claimWaitMs`) bound what one query keeps; rows past
 `maxRows` or `maxResultBytes` are read and dropped, and the query fails
-with `PG_ERR_TOO_BIG`. There is no
-deadline on a wait: a server that accepts and never answers holds the task
-(and, in `pgAsyncConnect`, the caller) until it closes; bound a slow
-statement with the server's `statement_timeout`.
+with `PG_ERR_TOO_BIG`. A wait has no deadline of its own: a server that
+accepts and never answers holds the task until it closes, the task is
+cancelled, or (in `pgAsyncConnect`) the caller gives up; bound a slow
+statement with the server's `statement_timeout` too.
 
 </scalar-callout>
+
+<scalar-detail title="Cancellation">
+
+A task that is cancelled (`nish:async`'s `cancel`, a
+`cancelAfter` deadline, or `nish/net/serve` when the client hangs up, the
+request's deadline passes or the server drains) stops waiting at once.
+`pgAsyncClaim` answers `PG_ASYNC_CANCELLED` and claims nothing; a query
+not yet sent fails with nothing written and its connection reusable; a
+query cut off mid-answer fails with `PG_ERR_CLOSED`, `socketError`
+`PG_ASYNC_CANCELLED` and `reusable` false, so the task's
+`pgAsyncRelease` closes the connection, whose unread answer would put the
+next task out of step. No CancelRequest is sent: the server runs the
+statement on until it sees the socket closed.
+
+</scalar-detail>
 
 <scalar-detail title="Memory">
 
@@ -196,7 +212,8 @@ A query answers `PG_CARRIER_DONE`, or `PG_CARRIER_FAILED` with
 `failure` a `PG_ERR_*` and `socketError` a negative errno, as
 `nish/net/postgres-carrier` does: `PG_ERR_NONE` when the server refused the
 statement (`errorCode` and `errorMessage` say why, and the connection is
-reused), `PG_ERR_CLOSED` when the socket ended or a wait could not be made.
+reused), `PG_ERR_CLOSED` when the socket ended, a wait could not be made or
+the task was cancelled (`socketError` `PG_ASYNC_CANCELLED`).
 Programming errors (a ticket that is not a current claim, a size or a cap
 out of range) panic.
 
@@ -214,8 +231,9 @@ Written for this module; not ported from another implementation.
 
 Claims a free connection for the calling task, sleeping while every live
 one is claimed: 1 ms, then twice as long each time up to 16 ms, for at most
-`pool.claimWaitMs` in all. It writes only numbers into the pool, so a
-spawned task may call it.
+`pool.claimWaitMs` in all. A cancelled task claims nothing, so a
+connection is never taken by a task that would close it at its first wait.
+It writes only numbers into the pool, so a spawned task may call it.
 
 ```ts
 function pgAsyncClaim(
@@ -233,7 +251,9 @@ The pool.
 
 A ticket (0 or more) for `pgAsyncQuery` and then exactly one
   `pgAsyncRelease`; `PG_POOL_NONE` (-1) when no slot is connected;
-  `PG_CARRIER_FULL` (-2) when none came free in time.
+  `PG_CARRIER_FULL` (-2) when none came free in time;
+  `PG_ASYNC_CANCELLED` (-3) when the calling task is cancelled, before or
+  while it waits.
 
 </scalar-field>
 
@@ -440,7 +460,7 @@ class PgAsyncResult
 | `readonly nulls: boolean[]` | Whether each kept cell is NULL, as `values`. |
 | `reusable: boolean` | Whether the connection may serve another query: hand it to `pgAsyncRelease`. |
 | `rows: i32` | The number of rows kept. |
-| `socketError: i32` | When the socket failed: its negative errno, 0 when the server closed cleanly. |
+| `socketError: i32` | When the socket failed: its negative errno, 0 when the server closed cleanly, `PG_ASYNC_CANCELLED` when the task was cancelled. |
 | `tag: string` | The command tag, e.g. `SELECT 2` or `UPDATE 1`; `""` for an empty query. |
 | `readonly values: string[]` | Every kept cell's text, row by row; `""` for a NULL. |
 | `int(row: i32, column: i32, fallback: i32): i32` | A cell read as a decimal `i32`, or `fallback` when it is NULL or not one. |
@@ -455,5 +475,18 @@ class PgAsyncResult
 `PG_ASYNC_MAX_SIZE: i32`
 
 The most connections one `PgAsyncPool` holds.
+
+</scalar-card>
+
+## Constants
+
+<scalar-card title="-3" icon="phosphor/regular/hash">
+
+`PG_ASYNC_CANCELLED: i32`
+
+The calling task was cancelled (`nish:async`'s `cancel`, or a deadline set
+with `cancelAfter`): `pgAsyncClaim` answers it in place of a ticket, and a
+query cut off by it fails with `PG_ERR_CLOSED` and this as its
+`socketError`, which no socket read or write answers.
 
 </scalar-card>

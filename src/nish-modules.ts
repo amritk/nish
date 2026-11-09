@@ -195,12 +195,34 @@ export const simdSuffix = (name: string, prefix: string): string => {
  * (`src/async-check.ts`). They are dotted under `async` so that `spawn` is
  * not `nish:process`'s, which the global name already is. Stage 5 adds the
  * waits on the executor, `sleep`, `readable` and `writable`, each written
- * only as `await sleep(ms)`.
+ * only as `await sleep(ms)`; part 7 the bounded waits `readableWithin` and
+ * `writableWithin`, and the cancellation calls `taskId`, `cancel`,
+ * `cancelled` and `cancelAfter`, which are plain calls.
  */
 const ASYNC_SPECIFIER: string = "nish:async"
 
 const isAsyncExport = (name: string): boolean =>
-  name === "spawn" || name === "awaitAll" || name === "sleep" || name === "readable" || name === "writable"
+  name === "spawn" ||
+  name === "awaitAll" ||
+  name === "sleep" ||
+  name === "readable" ||
+  name === "writable" ||
+  name === "readableWithin" ||
+  name === "writableWithin" ||
+  name === "taskId" ||
+  name === "cancel" ||
+  name === "cancelled" ||
+  name === "cancelAfter"
+
+/**
+ * Whether `canonical`, a builtin's canonical name, is a `nish:async` call on
+ * the executor's state: a wait (`async.sleep`, `async.readable`, ...) or a
+ * cancellation call (`async.cancel`, ...). Each writes the executor, and a
+ * wait may suspend its function, so the attribute walk gives them the same
+ * facts.
+ */
+export const isExecutorCall = (canonical: string): boolean =>
+  canonical.startsWith("async.") && canonical !== "async.spawn" && canonical !== "async.awaitAll"
 
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
@@ -267,7 +289,7 @@ export const nishModuleExports = (specifier: string): string => {
     return `${SIMD_TYPE_NAMES}, splatU8x16, splatU16x8, splatI32x4, splatU32x4, splatF32x4, splatF64x2, loadU8x16, loadU16x8, loadI32x4, loadU32x4, loadF32x4, loadF64x2, store, extract, replace, ${SIMD_MASK_NAMES}, ${SIMD_OP_NAMES}`
   }
   if (specifier === ASYNC_SPECIFIER) {
-    return "spawn, awaitAll, sleep, readable, writable"
+    return "spawn, awaitAll, sleep, readable, writable, readableWithin, writableWithin, taskId, cancel, cancelled, cancelAfter"
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"

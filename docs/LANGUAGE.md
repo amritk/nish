@@ -3679,10 +3679,62 @@ export async function main(): Promise<i32> {
   are `readable` and `writable`.
 - **It takes one `i32`**: `` `readable` takes one `i32` `` (NL2672,
   `reject_async_wait_argument`).
-- **A wait has no deadline of its own.** A descriptor that never becomes
-  ready parks its task, and the program, until it does
-  ([`docs/security/async.md`](security/async.md), ASYNC-6); cancellation is a
-  later stage of WP49.
+- **`readable` and `writable` have no deadline of their own.** A descriptor
+  that never becomes ready parks its task until it does, or until the task
+  is cancelled; `readableWithin` and `writableWithin`, below, take one
+  ([`docs/security/async.md`](security/async.md), ASYNC-6).
+
+#### Bounding a wait and cancelling a task
+
+`nish:async` bounds a descriptor wait, and cancels a task, with six more
+calls:
+
+| Call | Answers |
+| --- | --- |
+| `await readableWithin(fd, ms)`, `await writableWithin(fd, ms)` | `true` once `fd` is ready; `false` when `ms` milliseconds passed first, when the wait could not be made, or when the task is cancelled. A negative `ms` waits without a limit |
+| `taskId()` | the running task's handle, an `i64`; `main`'s is 0 |
+| `cancel(task)` | `true` when the task was still running, so it is now cancelled; `false` for a finished task or `main` |
+| `cancelled()` | whether the running task has been cancelled |
+| `cancelAfter(task, ms)` | as `cancel`, `ms` milliseconds from now unless the task finishes first; a later call replaces the deadline, a negative `ms` removes it |
+
+A cancel is cooperative: it never stops a task in the middle of its code.
+Every `sleep`, `readable`, `writable` or bounded wait the task has parked
+answers `false` at once, and every one it makes later answers `false`
+without parking, so the task runs on to its end, its `using` bindings
+dispose and its region is freed. A task that does not await is not reached
+until it does. A handle names its task and no later one: a handle kept past
+its task's end, once the executor reuses the task's slot, cancels nothing
+([`docs/security/async.md`](security/async.md), ASYNC-18).
+
+```ts
+import { cancelAfter, cancelled, readableWithin, taskId } from "nish:async"
+
+async function serveOne(fd: i32): Promise<void> {
+  // The whole task gets two seconds; this one read gets half of one.
+  cancelAfter(taskId(), 2000)
+  const ready = await readableWithin(fd, 500)
+  if (!ready) {
+    console.log(cancelled() ? "cancelled" : "timed out")
+    return
+  }
+}
+```
+
+- **The bounded waits are waits.** Each is written only where it is
+  awaited (NL2671, `reject_async_within_bare`) and takes two `i32`s:
+  `` `readableWithin` takes two `i32`s: the descriptor it waits on, and the
+  milliseconds it waits at most before it answers false `` (NL2692,
+  `reject_async_within_argument`).
+- **The cancellation calls are plain calls**, written anywhere, the task's
+  handle an `i64`: `` `cancel` from `nish:async` takes one `i64`, a task's
+  handle from `taskId()` `` (NL2693, `reject_async_cancel_argument`).
+- **`spawn` runs its task to its first wait** before it returns, so a cancel
+  written after `spawn(f(x))` lands after `f` has run that far.
+- `std/net/serve` cancels a handler's task when its client hangs up, when
+  its `deadline` passes and when the server stops; the async `fetch` and the
+  async Postgres pool answer a cancelled wait as a failure of their own
+  (`tests/link/async_cancel`, `tests/link/net_serve_hangup`,
+  `tests/link/std_postgres_async_cancel`).
 
 **Where it is not Node.** The source is TypeScript and runs under Node, but
 the resume order is not Node's, and these are declared differences:
@@ -3714,7 +3766,10 @@ answers `true`, or `false` at once for a negative `ms`
 (`tests/emit-ts/async/sleep`); `readable` and `writable` have no Node
 counterpart a task can await, so a program that calls either is
 `--emit-ts cannot write readable or writable from nish:async` (NL4017,
-`tests/emit-ts/async/refused-readable`). A program whose spawned tasks print in an
+`tests/emit-ts/async/refused-readable`), and so is one that calls
+`readableWithin`, `writableWithin`, `taskId`, `cancel`, `cancelled` or
+`cancelAfter`, since a Node promise is not a task the executor can cancel
+(NL4018, `tests/emit-ts/async/refused-cancel`). A program whose spawned tasks print in an
 interleaving prints the same lines in another order (`async_spawn`, the
 `order` row of `tests/differential/emit-ts-known.txt`).
 
@@ -6784,7 +6839,7 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) a float `%` or `%=` is a call to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that link lacks, an `f32` widened to `f64` and the exact result narrowed back; on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`, `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
 | `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
@@ -7453,7 +7508,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | [`nish:net`](reference/nish-net.md) | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netWrite2`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | [`nish:term`](reference/nish-term.md) | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | [`nish:unsafe`](reference/nish-unsafe.md) | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
-| [`nish:async`](reference/nish-async.md) | `spawn`, `awaitAll` — **reached only through the import** ([Async functions](#async-functions-async-and-await)) |
+| [`nish:async`](reference/nish-async.md) | `spawn`, `awaitAll`, `sleep`, `readable`, `writable`, `readableWithin`, `writableWithin`, `taskId`, `cancel`, `cancelled`, `cancelAfter` — **reached only through the import** ([Async functions](#async-functions-async-and-await)) |
 | [`nish:simd`](reference/nish-simd.md) | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace`; the masks `mask8x16` … `mask64x2`; the lane operations `add` … `asF64x2`, among them `shl`, `shr`, `rotl` and `rotr` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors), [lane operations](#nishsimd-lane-operations-and-masks)) |
 
 ```ts
@@ -7520,10 +7575,10 @@ The reference for each member of `Math`, with its parameters, its answer and its
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path | none | `math_intrinsics`, `math_rounding`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path. On a page module (a wasm build with no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead, fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi` keeps the intrinsics | none | `math_intrinsics`, `math_rounding`, `wasm_math_exp`, `wasm_math_std`; `reject_wasm_math_f32` (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
 | `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
 | `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
-| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
+| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C. On a page module it is a call to `std/math.ts`'s `powF64`, copied in like `tan`, which answers ECMAScript's cases itself, within one ulp of V8 | none | `math_intrinsics`, `wasm_math_std`; `tests/differential/corpus/f64_pow_spec`; `reject_wasm_math_arity` (`` `Math.pow` expects exactly 2 arguments, got 1 ``) |
 | `Math.round(x: f64): f64` | JavaScript's round-half-up (`Math.floor`'s `floor` + compare + `select`), then `llvm.copysign.f64` puts `x`'s sign back: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` -> `NaN` | none | `math_intrinsics`, `math_round_negzero`, `math_rounding` |
 | `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
 | `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: JavaScript's answer, a NaN operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`). A native build branches as clang compiles the C a programmer writes for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`, and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear (`max`), the three joined by a `phi`; x86 has no instruction for `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A wasm build keeps `llvm.minimum/maximum.<f32\|f64>`, which are wasm's `f64.min`/`f64.max`, so no libm is linked for them | none | `math_i32`, `math_intrinsics`, `math_minmax_float`, `math_minmax_nan`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |

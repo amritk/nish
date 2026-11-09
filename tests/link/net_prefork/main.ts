@@ -485,17 +485,23 @@ const stubborn = (): void => {
   pause(200);
   console.log(signal(foreign, 15));
 
+  // The supervisor says "d" once `preforkWith` returns. A runner that stalls
+  // can hold that past any fixed silence, so the wait follows the supervisor
+  // itself: it ends on "d", or once the supervisor has exited (reaped here,
+  // and a "d" it sent before exiting still read), or after a minute.
   let done = false;
-  while (!done && !quiet) {
-    const got = message(fd, loop, 5000);
-    quiet = got === "";
-    done = got === "d";
+  let exited: i32[] = [0, 0];
+  while (!done && exited[0] !== sup && monotonicNanos() - from < 60000000000) {
+    exited = waitPid(sup, 1);
+    done = message(fd, loop, exited[0] === sup ? 0 : 1000) === "d";
   }
   // `preforkWith` returned only after the grace period: SIGKILL ended them.
   const tookMs: i64 = (monotonicNanos() - from) / 1000000;
   console.log(done && tookMs >= toI64(STUBBORN_GRACE_MS));
-  // The supervisor is still alive, so a child it left unreaped is a zombie
-  // and answers `kill(pid, 0)`; each one has been reaped.
+  // On "d" the supervisor is alive (it holds "d" for a second before exiting),
+  // so a child it left unreaped is a zombie that answers `kill(pid, 0)`; each
+  // one has been reaped. Once the wait has reaped the supervisor instead, its
+  // orphans went to init, and this check cannot fail.
   let reaped = !signal(foreign, 0);
   for (const pid of pids) {
     if (signal(pid, 0)) {
@@ -504,7 +510,7 @@ const stubborn = (): void => {
     }
   }
   console.log(reaped);
-  console.log(exitsZero(sup, 10000));
+  console.log(exited[0] === sup ? exited[1] === 0 : exitsZero(sup, 10000));
   netClose(loop);
   netClose(fd);
 };

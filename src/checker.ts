@@ -113,7 +113,13 @@ import {
 import { StringSet } from "./map"
 import { checkStorageUses, isStorageNew, recheckStorage, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
-import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER, SORT_LOCAL, SORT_SPECIFIER } from "./std-modules"
+import {
+  COLLECTIONS_SPECIFIER,
+  FLOAT_REM_LOCAL,
+  MATH_SPECIFIER,
+  SORT_LOCAL,
+  SORT_SPECIFIER,
+} from "./std-modules"
 import {
   AliasInfo,
   CheckedProgram,
@@ -396,26 +402,37 @@ export class Checker {
    * is an ordinary call into a library copied like `nish/collections`. A
    * module that calls none of the three loads nothing. The gate is the scan
    * itself, not the source text, so `Math\n  .tan(x)` is found too.
+   *
+   * A page module (`--profile wasm`, `wasm-host`) links no libm, so there
+   * `Math.sin`, `cos`, `exp`, `log` and `pow` are `std/math.ts`'s too, and a
+   * `%` or `%=` imports `fmodF64` under `FLOAT_REM_LOCAL` for the emitter to
+   * call on a float remainder. The scan is syntax, so an integer `%` loads the
+   * library and copies nothing from it.
    */
   importMath(): void {
     if (this.program.isMathLibrary()) {
       return
     }
     const calls: Node[] = []
-    scanMathCalls(this.program.file, calls)
+    const rems: Node[] = []
+    scanMathCalls(this.program.file, calls, this.ctx.pageModule ? rems : null)
     for (const call of calls) {
       const name = call.children[0].text
-      const local = `Math.${name}`
-      let bound = false
-      for (const imp of this.program.imports) {
-        if (imp.localName === local) {
-          bound = true
-        }
-      }
-      if (!bound) {
-        this.program.imports.push(new ImportBinding(MATH_SPECIFIER, `${name}F64`, local, call, call))
+      this.bindMath(`${name}F64`, `Math.${name}`, call)
+    }
+    if (rems.length > 0) {
+      this.bindMath("fmodF64", FLOAT_REM_LOCAL, rems[0])
+    }
+  }
+
+  /** Import `name` from `nish/math` as `local`, once per module. */
+  bindMath(name: string, local: string, at: Node): void {
+    for (const imp of this.program.imports) {
+      if (imp.localName === local) {
+        return
       }
     }
+    this.program.imports.push(new ImportBinding(MATH_SPECIFIER, name, local, at, at))
   }
 
   /**
@@ -1171,6 +1188,11 @@ export class Checker {
     while (i < this.program.imports.length) {
       this.bindImport(i, targets[i])
       i = i + 1
+    }
+    // A page module's float `%` calls `fmodF64` (`importMath`).
+    const rem = this.ctx.sigs.get(FLOAT_REM_LOCAL, -1)
+    if (rem >= 0) {
+      this.program.floatRemainder = this.program.functions[rem]
     }
   }
 
@@ -3267,21 +3289,33 @@ const hasSortCall = (node: Node): boolean => {
   return false
 }
 
-/** The `Math.atan2`, `Math.tan` and `Math.hypot` calls under `node`, in source order (`importMath`). */
-const scanMathCalls = (node: Node, calls: Node[]): void => {
+/**
+ * The `Math` calls under `node` that `std/math.ts` answers, in source order
+ * (`importMath`): `atan2`, `tan` and `hypot`. On a page module, where `rems`
+ * is not `null`, `sin`, `cos`, `exp`, `log` and `pow` too, and every `%` and
+ * `%=` goes to `rems`.
+ */
+const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null): void => {
+  if (rems !== null && node.kind === N_BINARY && (node.text === "%" || node.text === "%=")) {
+    rems.push(node)
+  }
   if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
     const callee = node.children[0]
     const name = callee.text
     if (
       callee.children[0].kind === N_IDENT &&
       callee.children[0].text === "Math" &&
-      (name === "atan2" || name === "tan" || name === "hypot")
+      (name === "atan2" ||
+        name === "tan" ||
+        name === "hypot" ||
+        (rems !== null &&
+          (name === "sin" || name === "cos" || name === "exp" || name === "log" || name === "pow")))
     ) {
       calls.push(node)
     }
   }
   for (const child of node.children) {
-    scanMathCalls(child, calls)
+    scanMathCalls(child, calls, rems)
   }
 }
 

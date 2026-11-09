@@ -1017,15 +1017,19 @@ export async function main(): Promise<i32> {
 - **The target** is a Unix socket or a numeric address: the pool resolves no
   names. Parameters go in text, never spliced into the SQL.
 
-There is no deadline on a wait: a server that accepts and never answers holds
-the task awaiting it. Bound a slow statement with the server's
-`statement_timeout`. The constructor panics on a size outside 1..64, and
+A wait has no deadline of its own: a server that accepts and never answers
+holds the task awaiting it until the task is cancelled, by `cancelAfter` in
+`nish:async` or by a server's `deadline`. A cancelled claim answers -3 and
+holds nothing; a cancelled query fails with `socketError` -3 and its
+connection is closed, since its answer would reach nobody, and the pool
+dials another. The server is sent no CancelRequest, so bound a slow statement
+with its `statement_timeout` as well. The constructor panics on a size outside 1..64, and
 `pgAsyncConnect` on a target that failed or a host name.
 
 ## What it does not do
 
-TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
-cancellation, binary-format parameters other than `int4[]` and `int8[]`,
+TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), a CancelRequest
+for a cancelled query, binary-format parameters other than `int4[]` and `int8[]`,
 binary results for a type other
 than an integer, `bool`, `float8`, time, text or a one-dimensional `int2[]`,
 `int4[]` or `int8[]`, so a `text[]`, a `numeric` and an array of more than

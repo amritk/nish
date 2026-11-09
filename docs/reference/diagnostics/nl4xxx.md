@@ -2,7 +2,7 @@
 
 # NL4xxx\: the interop sidecars
 
-The 17 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 18 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL4001
 
@@ -245,4 +245,29 @@ export async function main(): Promise<i32> {
 
 ```text
 --emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native
+```
+
+## NL4018
+
+The message of an error contains:
+
+```text
+--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native
+```
+
+[`nl4018_task_cancel.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4018_task_cancel.ts) (compiled with `--emit-ts build/test/wordings/nl4018_task_cancel`):
+
+```ts
+// NL4018: a Node promise is not a task anything can cancel, so `--emit-ts`
+// refuses the cancellation calls and the bounded waits of `nish:async`.
+import { cancelAfter, taskId } from "nish:async"
+
+export async function main(): Promise<i32> {
+  cancelAfter(taskId(), 10)
+  return 0
+}
+```
+
+```text
+--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native
 ```

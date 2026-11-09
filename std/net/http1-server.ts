@@ -887,6 +887,16 @@ export class Http1Connection {
     this.inputEnded = true
   }
 
+  /**
+   * Whether the peer's byte stream has ended (`endInput`): a request still
+   * held on the connection is one its client hung up on, or half-closed.
+   *
+   * @returns true once the carrier read the end of the peer's stream
+   */
+  ended(): boolean {
+    return this.inputEnded
+  }
+
   /** The socket failed: nothing more is sent or read, and the connection is done. */
   abort(): void {
     this.state = H1_S_FAILED
