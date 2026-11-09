@@ -183,13 +183,15 @@ export async function main(): Promise<i32> {
     "large",
     "split",
     "fat",
+    "manyc",
+    "manye",
   ]
   for (let i: i32 = 0; i < toI32(hostile.length); i++) {
     if (pool.live() === 0) {
       live = await fill(pool, board, listen, port)
       console.log(`connected ${live} of 2`)
     }
-    pool.maxResultBytes = hostile[i] === "fat" ? 1024 : 16777216
+    pool.maxResultBytes = hostile[i] === "fat" || hostile[i] === "manyc" || hostile[i] === "manye" ? 1024 : 16777216
     spawn(client(pool, board, hostile[i], hostile[i]))
     while (board.done < 7 + i) {
       await sleep(1)

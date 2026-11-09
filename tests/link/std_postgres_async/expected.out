@@ -42,6 +42,8 @@ large: ok=true failure=0 socket=0 rows=2 tag=SELECT 2 reusable=true first=s
 large cell: 20000 bytes
 split: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=p
 fat: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=300 bytes
+manyc: ok=false failure=2 socket=0 rows=0 tag=UPDATE 1 reusable=true
+manye: ok=false failure=2 socket=0 rows=0 tag= reusable=true
 live after the hostile frames: 1, dropped 15
 a claim with every connection held: -2 after 6 sleeps
-statements seen: 39
+statements seen: 41

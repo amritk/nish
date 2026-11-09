@@ -781,7 +781,7 @@ const pgAsyncRead = async (
   let tooBig: boolean = false
   let changed: boolean = false
   let shaped: boolean = false
-  // The bytes of rows kept, under `maxResultBytes`.
+  // The bytes of rows, tags and error fields kept, under `maxResultBytes`.
   let kept: i32 = 0
   while (true) {
     // Every whole message in [start, end).
@@ -850,15 +850,27 @@ const pgAsyncRead = async (
         if (stop - body < 1 || toI32(buf[stop - 1]) !== 0) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
+        // A tag is kept, so it costs the budget too; past it, the answer fails.
+        if (stop - body > maxResultBytes - kept) {
+          tooBig = true
+          continue
+        }
+        kept += stop - body
         result.tag = String.fromBytes(buf, body, stop - 1)
         continue
       }
       if (type === 69) {
         // 'E': ErrorResponse, fields of a code byte and a NUL-ended value.
+        // Its kept fields cost the budget, bounded by the frame; past it, none is kept.
+        refused = true
+        if (stop - body > maxResultBytes - kept) {
+          tooBig = true
+          continue
+        }
+        kept += stop - body
         if (!pgAsyncError(buf, body, stop, result)) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
-        refused = true
         continue
       }
       if (type === 83) {

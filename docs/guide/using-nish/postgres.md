@@ -1003,17 +1003,17 @@ export async function main(): Promise<i32> {
   read a cell with `text`, `int` or `isNull`, which panic outside the result.
 - **Caps.** `maxMessage` (1 MiB) bounds one message, `maxColumns`
   (1664) a row, `maxRows` (100000) and `maxResultBytes` (16 MiB: each row's
-  bytes and 16 a cell) a result. Rows past `maxRows` or `maxResultBytes` are
-  read and dropped, and the query fails 2 (`PG_ERR_TOO_BIG`) with the rows
-  that fit. `maxMessage` and `maxResultBytes` take 1024 to 2^30-1,
+  bytes and 16 a cell, each command tag's and error's bytes) a result. Rows,
+  tags and errors past `maxRows` or `maxResultBytes` are read and dropped,
+  and the query fails 2 (`PG_ERR_TOO_BIG`) with the rows that fit. `maxMessage` and `maxResultBytes` take 1024 to 2^30-1,
   `maxColumns` 1 to 65535 and `maxRows` 1 to 2^24; `pgAsyncQuery` panics on
   a cap outside its range.
 - **Reuse.** A connection goes back to the pool only when its query ended
   idle, changed no setting and left no bytes after its answer. A
   transaction left open, a `SET`, a lost socket, a frame no query expects,
   a message past `maxMessage` or a row past `maxColumns` closes it, so no
-  task inherits another's session. `pgAsyncConnect` fills the slots that have no connection; call it
-  again when `live()` falls.
+  task inherits another's session. `pgAsyncConnect` fills the slots that
+  have no connection; call it again when `live()` falls.
 - **The target** is a Unix socket or a numeric address: the pool resolves no
   names. Parameters go in text, never spliced into the SQL.
 

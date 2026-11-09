@@ -28,6 +28,8 @@
 //   large  a row `s`, then a row whose one cell is 20,000 bytes
 //   split  a row `p`, written 3 bytes first and the rest 5 ms later
 //   fat    five rows of one 300-byte cell
+//   manyc  150 CommandCompletes `UPDATE 1` and no row
+//   manye  100 ErrorResponses of a code and a message
 //
 // The board is the one object the backends share with the test's tasks; a
 // backend's task body writes its `seen` count, and its helpers only read it.
@@ -427,6 +429,20 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
       o.finish()
     }
     o.complete("SELECT 5")
+  } else if (sql === "manyc") {
+    for (let i: i32 = 0; i < 150; i++) {
+      o.complete("UPDATE 1")
+    }
+  } else if (sql === "manye") {
+    for (let i: i32 = 0; i < 100; i++) {
+      o.begin(69)
+      o.byte(67)
+      o.cstr("42000")
+      o.byte(77)
+      o.cstr("boom")
+      o.byte(0)
+      o.finish()
+    }
   } else if (sql === "begin") {
     o.complete("BEGIN")
     status = 84
