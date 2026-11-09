@@ -204,6 +204,11 @@
                 "title": "An API server",
                 "filepath": "docs/guide/using-nish/api-server.md"
               },
+              "/async-server": {
+                "type": "page",
+                "title": "An async server",
+                "filepath": "docs/guide/using-nish/async-server.md"
+              },
               "/websocket": {
                 "type": "page",
                 "title": "WebSocket",
@@ -742,6 +747,11 @@
                         "title": "router",
                         "filepath": "docs/reference/net/router.md"
                       },
+                      "/serve": {
+                        "type": "page",
+                        "title": "serve",
+                        "filepath": "docs/reference/net/serve.md"
+                      },
                       "/tls": {
                         "type": "group",
                         "title": "tls",
@@ -1151,6 +1161,11 @@
                     "type": "page",
                     "title": "HTTP request handler",
                     "filepath": "docs/security/handler.md"
+                  },
+                  "/serve": {
+                    "type": "page",
+                    "title": "Async server",
+                    "filepath": "docs/security/serve.md"
                   },
                   "/router": {
                     "type": "page",
