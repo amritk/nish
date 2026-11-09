@@ -56,7 +56,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 50 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 51 modules.
 
 </scalar-card>
 
@@ -193,6 +193,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/http3-server`](net/http3-server.md) | HTTP/3 over QUIC on one UDP socket: a pool of slots, each a reusable `QuicConnection` with an `Http3Connection` beside it, a `QuicListener` in front for the datagrams no slot owns, for a program that owns its readiness loop. |
 | [`nish/net/http3`](net/http3.md) | The server side of an HTTP/3 connection (RFC 9114) on the streams of a `QuicConnection` (`nish/net/quic`): the control stream and SETTINGS both ways, the QPACK encoder and decoder streams (opened, at dynamic table capacity 0), requests and responses on bidirectional streams with their bodies streamed both ways, GOAWAY, and RFC 9114's error codes. |
 | [`nish/net/outbound`](net/outbound.md) | The policy for a program that fetches URLs it did not choose: a webhook sender, a link previewer, an importer that takes a URL from a form. |
+| [`nish/net/postgres-async`](net/postgres-async.md) | `PgAsyncPool`, PostgreSQL connections an `async` task awaits a query on, so a task's query waits on its socket while the executor runs the others. |
 | [`nish/net/postgres-carrier`](net/postgres-carrier.md) | `PgCarrier`, a `PgPool`'s queries on an `HttpHandler`'s loop, so a route handler queries PostgreSQL without blocking its worker. |
 | [`nish/net/postgres`](net/postgres.md) | The client side of PostgreSQL's frontend/backend protocol, version 3.0: a sans-IO connection that writes the frontend's messages into an output buffer and reads the backend's from an input buffer, for a program that owns its socket (`nish:net`) and its loop. |
 | [`nish/net/prefork`](net/prefork.md) | Run a server on every core: a supervisor process that starts one worker process per core, restarts one that dies, and stops them all on SIGTERM or SIGINT (`docs/wp42-multicore-server.md` §2.3). |

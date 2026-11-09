@@ -568,6 +568,7 @@ struct Http1Connection (class) size=192 align=8 exported
   method inputRoom -> @nish.Http1Connection.inputRoom
   method feed -> @nish.Http1Connection.feed
   method endInput -> @nish.Http1Connection.endInput
+  method ended -> @nish.Http1Connection.ended
   method abort -> @nish.Http1Connection.abort
   method acquire -> @nish.Http1Connection.acquire
   method release -> @nish.Http1Connection.release
@@ -871,6 +872,10 @@ function Http1Connection.endInput(this: Http1Connection): void -> @nish.Http1Con
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer this: size=192 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Http1Connection.ended(this: Http1Connection): boolean -> @nish.Http1Connection.ended [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.abort(this: Http1Connection): void -> @nish.Http1Connection.abort [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true

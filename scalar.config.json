@@ -681,6 +681,11 @@
                         "title": "postgres",
                         "filepath": "docs/reference/net/postgres.md"
                       },
+                      "/postgres-async": {
+                        "type": "page",
+                        "title": "postgres-async",
+                        "filepath": "docs/reference/net/postgres-async.md"
+                      },
                       "/postgres-carrier": {
                         "type": "page",
                         "title": "postgres-carrier",

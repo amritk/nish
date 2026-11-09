@@ -1,0 +1,49 @@
+connected 2 of 2
+B: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+C: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+A: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=held
+a claim slept while both were held: true
+echo: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=héllo
+echo cells: 3 héllo -7 null=true false
+bad: ok=false failure=0 socket=0 rows=0 tag= reusable=true
+bad error: 42P01 relation "nope" does not exist
+nul: ok=false failure=8 socket=0 rows=0 tag= reusable=true
+many: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=r0
+begin: ok=true failure=0 socket=0 rows=0 tag=BEGIN reusable=false
+live after begin: 1
+set: ok=true failure=0 socket=0 rows=0 tag=SET reusable=false
+live after set: 0
+claim with none live: -1
+dropped 2
+connected 2 of 2
+D: ok=false failure=9 socket=0 rows=0 tag= reusable=false
+live after die: 1
+E: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+short: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+big: ok=false failure=2 socket=0 rows=0 tag= reusable=false
+wide: ok=false failure=2 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+odd: ok=false failure=3 socket=0 rows=0 tag= reusable=false
+trail: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=false first=t
+connected 2 of 2
+quick: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
+cellpast: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+negative: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+slack: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+unended: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+noend: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+reshape: ok=false failure=1 socket=0 rows=1 tag= reusable=false first=a
+connected 2 of 2
+midframe: ok=false failure=9 socket=0 rows=0 tag= reusable=false
+large: ok=true failure=0 socket=0 rows=2 tag=SELECT 2 reusable=true first=s
+large cell: 20000 bytes
+split: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=p
+fat: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=300 bytes
+manyc: ok=false failure=2 socket=0 rows=0 tag=UPDATE 1 reusable=true
+manye: ok=false failure=2 socket=0 rows=0 tag= reusable=true
+live after the hostile frames: 1, dropped 15
+a claim with every connection held: -2 after 6 sleeps
+statements seen: 41
