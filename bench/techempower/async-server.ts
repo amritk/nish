@@ -8,7 +8,8 @@
 //   GET /plaintext  Hello, World!, text/plain
 //   anything else   404, `not found`, text/plain
 //
-// `serve` adds `Date` and `Content-Length`, answers a request the parser
+// `serve` adds `Date` and `Content-Length`, writes `Server: nish` from
+// `ServeLimits.server` into every answer the handler gives, answers a request the parser
 // refuses 400 with `Connection: close`, and answers pipelined requests in
 // order. Each request runs in a task of its own, and the task's buffers live
 // in its region, so the body it answers is made per request.
@@ -48,6 +49,7 @@ export const tfbRouter = (): Router => {
  * request per connection is in flight, so `inFlight` matches the pool and no
  * request the explicit entry answers is answered 503. No task carries a
  * deadline: the explicit entry has none, and one is a timer per request.
+ * `server` names the server as TFB asks, made into bytes once at start.
  */
 export const tfbLimits = (size: i32): ServeLimits => {
   const limits: ServeLimits = new ServeLimits()
@@ -55,6 +57,7 @@ export const tfbLimits = (size: i32): ServeLimits => {
   limits.inFlight = limits.connections
   limits.responseBytes = TFB_BODY_ROOM
   limits.deadline = 0
+  limits.server = "nish"
   return limits
 }
 

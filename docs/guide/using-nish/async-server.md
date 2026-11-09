@@ -120,6 +120,12 @@ one at a time; two clients never wait on each other.
 | `idleTimeout` | 60,000 | Milliseconds with no byte read or written; the connection is closed |
 | `maxRequests` | 0 (none) | The server stops (see below) |
 
+One field is not a cap: `server`, "" by default, names the server. Set, every
+answer your handler gives carries it as a `server` field in its head
+(`limits.server = "nish"` writes `server: nish`); the answers the server writes
+itself (400, 413, 431, 500, 503) carry none. The server makes it into bytes once, as it
+starts, and panics there if it holds a control byte such as CR or LF.
+
 Each request's task runs in a memory region of its own, and everything it
 allocates goes when it answers, so the server's arena stays flat however many
 requests it answers.

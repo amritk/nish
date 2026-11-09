@@ -43,7 +43,7 @@ still running when it stops. One is accepted: the server keeps at most
 
 | File | Functions |
 | --- | --- |
-| `std/net/serve.ts` | `ServeLimits`; `ServeStats`; `Request` (`method`, `path`, `param`, `paramNumber`, `paramMalformed`, `query`, `header`, `text`); `Response` (`text`, `json`, `bytes`); `refuse`; `serve`; `serveOn`; the private `ServeState`, `serveFreeSlot`, `serveAnyBusy`, `serveAnswer`, `serveType`, `serveBytes`, `serveTask`, `serveTick` |
+| `std/net/serve.ts` | `ServeLimits`; `ServeStats`; `Request` (`method`, `path`, `param`, `paramNumber`, `paramMalformed`, `query`, `header`, `text`); `Response` (`text`, `json`, `bytes`); `refuse`; `serve`; `serveOn`; the private `ServeState`, `serveFreeSlot`, `serveAnyBusy`, `serveAnswer`, `serveFields`, `serveType`, `serveBytes`, `serveTask`, `serveTick` |
 
 Out of scope: the handler, the carrier and the router, each with its record;
 the executor and the spawn rule (`docs/security/async.md`); and what a
@@ -72,7 +72,8 @@ recorded so that the audit can see what was tried. SERVE-5 was fixed before
 merge and SERVE-8 by the cancellation stage; both are counted as fixed in the
 index. SERVE-14 is open and counted; SERVE-9 and SERVE-11 to SERVE-13 are accepted. SERVE-11 to SERVE-14
 are what one client's connections, rather than its requests, can hold: each is
-bounded by a `ServeLimits` field, and none by the peer.
+bounded by a `ServeLimits` field, and none by the peer. SERVE-15 holds and is
+not counted: the field it guards is the program's, not the peer's.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -90,6 +91,7 @@ bounded by a `ServeLimits` field, and none by the peer.
 | SERVE-12 | Low | `ServeLimits.idleTimeout`, `serveOn` (`hl.http`) | A keep-alive connection that sends nothing more holds its connection slot until it is closed, so idle clients can take every slot. | **Accepted.** `idleTimeout` (60 s by default) is the carrier's: a connection with no byte read or written for that long is closed and its slot freed. A program that wants slots back sooner lowers it; keep-alive is what spares a client a new handshake per request. |
 | SERVE-13 | Low | `ServeLimits` | The server's worst-case memory must be known from its caps. | **Accepted, stated.** From the caps, not measured: each connection holds the carrier's input and head buffers (each about `headerBytes`), a 64 KiB output buffer while it writes, and the request the handler is assembling, up to `headerBytes` + `bodyBytes`; each in-flight request holds its copy in its task's region (the same size again) and its slot's `responseBytes` + 128 bytes, kept for reuse. So about `connections` × (`bodyBytes` + 3 × `headerBytes` + 64 KiB) + `inFlight` × (`bodyBytes` + `headerBytes` + `responseBytes` + 128) bytes: with the defaults about 256 × 1.11 MiB + 256 × 1.08 MiB, some 560 MiB, almost all of it two copies of a 1 MiB body per connection. A program sizes it by `bodyBytes`, `connections` and `inFlight`. |
 | SERVE-14 | Low | `serveOn`, `serveFreeSlot` | One client can take every in-flight slot: a connection holds at most one (HANDLER-4), but with `inFlight` connections, each sending a request its `handle` is slow to answer, every other client's request is answered 503 until those tasks end. | **Open.** The server has no per-peer share of `inFlight` or `connections`; the bound is `deadline` (SERVE-8), 30 s by default, and a client's hang-up ends its own task at once. A program behind a proxy that caps connections per address is not exposed. |
+| SERVE-15 | Low | `ServeLimits.server`, `serveFields`, `serveAnswer` | The `server` field the server writes into every answer's head must not let its value add a field or end the head, and must not cost work per request. | **Holds.** The value is the program's, never the peer's. `serveFields` makes its bytes once, as `serveOn` starts, and panics there on a byte under 32 or 127, so CR and LF never reach the carrier and a bad value stops the program before it listens; `serveAnswer` passes the same arrays to every answer, setting only the content type in place. The answers the server and the carrier write themselves (`refuse`, `problem`: 400, 413, 431, 500, 503) carry no `server` field. Pinned by `tests/link/net_serve_server_field`: "named /text: … server=nish", "named /empty: 204 [] \| server=nish" and the "unnamed" lines' "server=(none)". |
 
 ## Properties verified
 
@@ -133,3 +135,4 @@ true", "serve: 0, answered 2, returned within 2 s: true".
 - `tests/link/net_serve_pipelined_flat`
 - `tests/link/net_serve_hangup`, `tests/link/net_serve_deadline`,
   `tests/link/net_serve_shutdown` (SERVE-8)
+- `tests/link/net_serve_server_field` (SERVE-15)

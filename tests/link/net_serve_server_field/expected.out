@@ -1,0 +1,6 @@
+named /text: 200 [text/plain; charset=utf-8] hello | server=nish
+named /empty: 204 [] | server=nish
+named: serve 0, answered 2
+unnamed /text: 200 [text/plain; charset=utf-8] hello | server=(none)
+unnamed /empty: 204 [] | server=(none)
+unnamed: serve 0, answered 2

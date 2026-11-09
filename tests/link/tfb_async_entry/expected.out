@@ -6,14 +6,14 @@ PASS  /json: the body, byte for byte
 PASS  /json: Content-Type
 PASS  /json: Content-Length is the body's length
 PASS  /json: one Content-Length
-PASS  /json: Server is present
+PASS  /json: Server is nish, as main.ts sends it
 PASS  /json: Date is an IMF-fixdate
 PASS  /plaintext: status 200
 PASS  /plaintext: the body, byte for byte
 PASS  /plaintext: Content-Type
 PASS  /plaintext: Content-Length is the body's length
 PASS  /plaintext: one Content-Length
-PASS  /plaintext: Server is present
+PASS  /plaintext: Server is nish, as main.ts sends it
 PASS  /plaintext: Date is an IMF-fixdate
 PASS  16 pipelined requests in one write are answered by 16 whole responses
 PASS  and nothing more follows them
@@ -21,8 +21,8 @@ PASS  a pipelined mix of /json and /plaintext is answered in the order asked
 PASS  1000 pipelined requests, past what the output holds, are answered whole and in order
 PASS  and nothing more follows the 1000
 PASS  another path answers 404
-PASS  with the explicit entry's body
-PASS  with Server and an IMF-fixdate Date
+PASS  with the body `not found`, the 404 body main.ts sends
+PASS  with Server nish and an IMF-fixdate Date
 PASS  and a Content-Length equal to its body
 PASS  a header line with no colon answers 400
 PASS  and the server closes that connection
@@ -32,7 +32,7 @@ PASS  a new connection after the 400: the body, byte for byte
 PASS  a new connection after the 400: Content-Type
 PASS  a new connection after the 400: Content-Length is the body's length
 PASS  a new connection after the 400: one Content-Length
-PASS  a new connection after the 400: Server is present
+PASS  a new connection after the 400: Server is nish, as main.ts sends it
 PASS  a new connection after the 400: Date is an IMF-fixdate
 PASS  serveOn stops once the client's requests are answered
 PASS  a warmed connection answers 200 requests
@@ -50,7 +50,7 @@ PASS  a pool asked for 0 slots: the body, byte for byte
 PASS  a pool asked for 0 slots: Content-Type
 PASS  a pool asked for 0 slots: Content-Length is the body's length
 PASS  a pool asked for 0 slots: one Content-Length
-PASS  a pool asked for 0 slots: Server is present
+PASS  a pool asked for 0 slots: Server is nish, as main.ts sends it
 PASS  a pool asked for 0 slots: Date is an IMF-fixdate
 tfb async entry: 0-slot client: 8 passed, 0 failed, 0 skipped
 PASS  every 0-slot client check passed

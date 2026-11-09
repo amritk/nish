@@ -215,7 +215,7 @@ const verify = (t: Suite, what: string, a: Answer, body: string, type: string): 
   t.eqStr(`${what}: Content-Type`, a.field("content-type"), type)
   t.eqI32(`${what}: Content-Length is the body's length`, a.length, toI32(body.length))
   t.eqI32(`${what}: one Content-Length`, a.count("content-length"), toI32(1))
-  t.ok(`${what}: Server is present`, a.field("server") !== "")
+  t.eqStr(`${what}: Server is nish, as main.ts sends it`, a.field("server"), "nish")
   t.ok(`${what}: Date is an IMF-fixdate`, imfFixdate(a.field("date")))
 }
 
@@ -270,8 +270,8 @@ const client = async (port: i32, doneFd: i32): Promise<void> => {
   await sendText(c, get("/nothing"))
   const missing: Answer = await answer(c)
   t.eqI32("another path answers 404", missing.status, toI32(404))
-  t.eqStr("with the explicit entry's body", missing.body, "not found")
-  t.ok("with Server and an IMF-fixdate Date", missing.field("server") !== "" && imfFixdate(missing.field("date")))
+  t.eqStr("with the body `not found`, the 404 body main.ts sends", missing.body, "not found")
+  t.ok("with Server nish and an IMF-fixdate Date", missing.field("server") === "nish" && imfFixdate(missing.field("date")))
   t.eqI32("and a Content-Length equal to its body", missing.length, toI32(missing.body.length))
   await sendText(c, "GET /json HTTP/1.1\r\nHost tfb\r\n\r\n")
   const malformed: Answer = await answer(c)
