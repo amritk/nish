@@ -332,34 +332,29 @@ static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
   }
 }
 
-/* A reset whose newest chunk is carved: keep the newest chunk malloc made,
-   since a carved one above it lives in a chunk this frees. The walk starts
-   from the head the caller loaded, not from `nish_arena.chunks`: written as
-   a walk from the global, LLVM folds its first load into the loop through a
-   phi of `&nish_arena.chunks`, which takes the arena's address, and with it
-   taken LTO's GlobalsAA can no longer tell an array store from an arena
-   field in any program -- bench/sieve.ts reloaded both in its hot loops,
-   +60% instructions. Out of line and cold: no program that never adopts a
-   region reaches it. */
-__attribute__((noinline, cold)) static void nish_reset_carved(nish_chunk *keep) {
-  do keep = keep->next; while (keep && (keep->cap & NISH_CHUNK_CARVED));
-  if (!keep) { nish_arena = (struct nish_arena){ 0 }; return; }
-  nish_free_until(keep->next, 0);
-  keep->next = 0;
-  nish_arena = (struct nish_arena){ (char *)(keep + 1), 0, keep->cap, keep };
-}
 void nish_reset_arena(void) {
 #ifdef NISH_ASAN
   /* Free everything, so a value read after the reset is a use after free. */
   nish_free_arena();
   return;
 #endif
+  /* Keep the newest chunk malloc made: a carved one above it lives in a
+     chunk this frees, and always lies above the chunk it was carved from,
+     so the walk meets that chunk before the list ends. The walk is a
+     do-while from the head already loaded, not a while from
+     `nish_arena.chunks`: written that way, LLVM folds the first load into
+     the loop through a phi of `&nish_arena.chunks`, which takes the arena's
+     address, and with it taken LTO's GlobalsAA can no longer tell an array
+     store from an arena field in any program -- bench/sieve.ts reloaded
+     both in its hot loops, +60% instructions. */
   nish_chunk *keep = nish_arena.chunks;
   if (!keep) return;
-  if (keep->cap & NISH_CHUNK_CARVED) { nish_reset_carved(keep); return; }
+  if (keep->cap & NISH_CHUNK_CARVED) {
+    do keep = keep->next; while (keep->cap & NISH_CHUNK_CARVED);
+  }
   nish_free_until(keep->next, 0);
   keep->next = 0;
-  nish_arena.off = 0;
+  nish_arena = (struct nish_arena){ (char *)(keep + 1), 0, keep->cap, keep };
 }
 
 void nish_free_arena(void) {
