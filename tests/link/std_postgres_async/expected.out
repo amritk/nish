@@ -19,4 +19,11 @@ connected 2 of 2
 D: ok=false failure=9 socket=0 rows=0 tag= reusable=false
 live after die: 1
 E: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=q
-statements seen: 12
+short: ok=false failure=1 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+big: ok=false failure=2 socket=0 rows=0 tag= reusable=false
+wide: ok=false failure=2 socket=0 rows=0 tag= reusable=false
+connected 2 of 2
+odd: ok=false failure=3 socket=0 rows=0 tag= reusable=false
+live after the hostile frames: 1, dropped 7
+statements seen: 20

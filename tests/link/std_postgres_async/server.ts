@@ -12,6 +12,10 @@
 //   begin  BEGIN, then a ReadyForQuery inside a transaction
 //   set    a ParameterStatus, as a `SET` makes the server send
 //   die    the connection closes with no answer
+//   short  a DataRow whose length, 3, is under its own 4 bytes
+//   big    a DataRow whose length says 2,000,000 bytes, and none of them
+//   wide   a DataRow of 2000 columns, past `maxColumns`
+//   odd    a message of type `W`, which no extended query answers
 //
 // The board is the one object the backends share with the test's tasks; a
 // backend's task body writes its `seen` count, and its helpers only read it.
@@ -325,6 +329,19 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
     o.byte(77)
     o.cstr("relation \"nope\" does not exist")
     o.byte(0)
+    o.finish()
+  } else if (sql === "short") {
+    o.byte(68)
+    o.int32(3)
+  } else if (sql === "big") {
+    o.byte(68)
+    o.int32(2000000)
+  } else if (sql === "wide") {
+    o.begin(68)
+    o.int16(2000)
+    o.finish()
+  } else if (sql === "odd") {
+    o.begin(87)
     o.finish()
   } else if (sql === "begin") {
     o.complete("BEGIN")

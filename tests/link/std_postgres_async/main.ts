@@ -13,6 +13,10 @@
 //      a claim answers PG_POOL_NONE.
 //   3. Loss: after a reconnect, a connection that ends under a query fails
 //      it with PG_ERR_CLOSED and is closed; the other is still served.
+//   4. Hostile frames: a length under 4, one past `maxMessage`, a row past
+//      `maxColumns` and a message no query expects each fail their query
+//      (PG_ERR_FRAME, PG_ERR_TOO_BIG, PG_ERR_UNEXPECTED) and close the
+//      connection, reconnecting as the pool empties.
 import { sleep, spawn } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
@@ -146,6 +150,19 @@ export async function main(): Promise<i32> {
   while (board.done < 6) {
     await sleep(1)
   }
+
+  const hostile: string[] = ["short", "big", "wide", "odd"]
+  for (let i: i32 = 0; i < toI32(hostile.length); i++) {
+    if (pool.live() === 0) {
+      live = await fill(pool, board, listen, port)
+      console.log(`connected ${live} of 2`)
+    }
+    spawn(client(pool, board, hostile[i], hostile[i]))
+    while (board.done < 7 + i) {
+      await sleep(1)
+    }
+  }
+  console.log(`live after the hostile frames: ${pool.live()}, dropped ${pool.dropped}`)
   console.log(`statements seen: ${board.seen}`)
   pool.close()
   return 0
