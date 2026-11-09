@@ -1061,6 +1061,18 @@ export class HttpHandler {
     return r
   }
 
+  /**
+   * Whether the client of `r` has hung up: its connection is closed or
+   * reused, or the peer ended its stream while `r` is held. A half-close
+   * counts, as nginx counts it, so a hung task is cancelled rather than
+   * kept for a reader who may be gone.
+   * @param r a request `take` handed over
+   * @returns true once `r`'s connection is closed or reused, or its peer's stream has ended
+   */
+  hungUp(r: HttpRequest): boolean {
+    return !this.live(r) || this.server.connection(r.slot).ended()
+  }
+
   /** Whether `r`'s connection is the one it was read on, still open. */
   private live(r: HttpRequest): boolean {
     return this.server.holds(r.slot) && this.slotGen[r.slot] === r.gen
