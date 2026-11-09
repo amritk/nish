@@ -512,7 +512,7 @@ const awaitAllLanes = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: AWAIT_ALL_LANES, why }))
   )
-const SERVE_CANCEL = "serve task when its client hangs up or the server drains"
+const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
