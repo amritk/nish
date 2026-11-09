@@ -556,8 +556,11 @@ that caller. This builtin is the store that stays (#385).
 - **It is a global, and not in a `nish:` module.** It is backed by the C
   runtime, so by the rule [Builtin modules](#builtin-modules-nish) sets it may
   be imported, but no module exports it yet. It works under the wasi profile,
-  which links `runtime.c`; a freestanding wasm module linked with
-  `runtime-wasm.c` has no `nish_wipe`, as it has no strings.
+  which links `runtime.c`; a freestanding wasm module has no `nish_wipe`:
+  it links `runtime-wasm.c`, which supplies the arena, arrays, the panics and
+  `floor`/`ceil`/`trunc` but no wipe, and, when it uses
+  strings, `runtime-text.c`, which has the strings and the digits but not the
+  wipe.
 
 The TypeScript reading ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2) is
 **class A**: `runtime/nish.mjs` supplies it as a loop that sets every element

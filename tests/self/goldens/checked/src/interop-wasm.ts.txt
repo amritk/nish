@@ -34,6 +34,7 @@ import T_F32 from "./types" -> const T_F32
 import T_F64 from "./types" -> const T_F64
 import T_I32 from "./types" -> const T_I32
 import T_I64 from "./types" -> const T_I64
+import T_STRING from "./types" -> const T_STRING
 import T_U16 from "./types" -> const T_U16
 import T_U32 from "./types" -> const T_U32
 import T_U64 from "./types" -> const T_U64
@@ -84,10 +85,10 @@ function wasmType(table: TypeTable, t: i32, position: i32): string -> @wasmType 
   callee +5:7 TypeTable.isHostHandle -> @TypeTable.isHostHandle
   callee +6:12 TypeTable.typeName -> @TypeTable.typeName
   callee +8:11 TypeTable.kindOf -> @TypeTable.kindOf
-  local +34:13 view: TypedView | null (const)
-  callee +34:20 typedView -> @typedView
-  callee +40:14 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +40:39 wasmResultType -> @wasmResultType
+  local +39:13 view: TypedView | null (const)
+  callee +39:20 typedView -> @typedView
+  callee +45:14 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +45:39 wasmResultType -> @wasmResultType
 function wasmCrosses(table: TypeTable, t: i32, position: i32): boolean -> @wasmCrosses
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: position t
@@ -233,6 +234,11 @@ function wasmTakesPacked(table: TypeTable, sig: FunctionSig): boolean -> @wasmTa
   callee +0:7 TypeTable.resultByValue -> @TypeTable.resultByValue
   local +3:7 i: i32 (let)
   callee +5:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+function returnsText(bridged: ExternalFunction[]): boolean -> @returnsText
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer bridged: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 fn: ExternalFunction (const)
 function wasmBridged(table: TypeTable, fns: ExternalFunction[], vectored: StringSet): WasmBridge -> @wasmBridged [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: +0:7
@@ -368,28 +374,28 @@ function wasmWrapper(table: TypeTable, fn: ExternalFunction, guard: boolean): st
   local +10:9 lines: string[] (const)
   local +11:9 params: string[] (const)
   callee +14:17 wasmJsParam -> @wasmJsParam
-  local +18:7 anyView: boolean (let)
-  local +19:14 view: TypedView | null (const)
-  callee +30:20 wasmConverts -> @wasmConverts
-  local +34:11 operands: string[] (const)
-  callee +37:21 wasmOperand -> @wasmOperand
-  local +40:11 call: string (const)
-  local +41:11 value: string (const)
-  callee +41:19 wasmReturned -> @wasmReturned
-  local +46:9 body: string[] (const)
-  local +47:9 args: string[] (const)
-  local +50:11 view: TypedView | null (const)
-  callee +52:17 wasmOperand -> @wasmOperand
-  local +54:13 param: string (const)
-  local +62:9 call: string (const)
-  local +63:9 isVoid: boolean (const)
-  callee +63:18 TypeTable.kindOf -> @TypeTable.kindOf
-  local +64:9 value: string (const)
-  callee +64:17 wasmReturned -> @wasmReturned
-  local +65:9 copyBacks: string[] (const)
-  callee +68:30 StringSet.has -> @StringSet.has
-  callee +77:5 pushAll -> @pushAll
-  local +83:14 line: string (const)
+  local +19:7 anyView: boolean (let)
+  local +20:14 view: TypedView | null (const)
+  callee +31:20 wasmConverts -> @wasmConverts
+  local +35:11 operands: string[] (const)
+  callee +38:21 wasmOperand -> @wasmOperand
+  local +41:11 call: string (const)
+  local +42:11 value: string (const)
+  callee +42:19 wasmReturned -> @wasmReturned
+  local +47:9 body: string[] (const)
+  local +48:9 args: string[] (const)
+  local +51:11 view: TypedView | null (const)
+  callee +53:17 wasmOperand -> @wasmOperand
+  local +55:13 param: string (const)
+  local +63:9 call: string (const)
+  local +64:9 isVoid: boolean (const)
+  callee +64:18 TypeTable.kindOf -> @TypeTable.kindOf
+  local +65:9 value: string (const)
+  callee +65:17 wasmReturned -> @wasmReturned
+  local +66:9 copyBacks: string[] (const)
+  callee +69:30 StringSet.has -> @StringSet.has
+  callee +78:5 pushAll -> @pushAll
+  local +84:14 line: string (const)
 function wasmRangeHelper(table: TypeTable, bridged: ExternalFunction[], guard: boolean): string[] -> @wasmRangeHelper
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: guard
@@ -432,7 +438,7 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via wasmBridged
   escaping: dtsFile
-  calls: banner basename guardLoader hostFunctions hostImportsOf layoutLoader loaderGuarded nish_alloc_struct nish_array_grow nish_str_concat panicLoader pushAll refused storageLayouts structsHoldingVectors tsSignatureLine wasmBridged wasmRangeHelper wasmResultHelpers wasmWrapper
+  calls: banner basename guardLoader hostFunctions hostImportsOf layoutLoader loaderGuarded nish_alloc_struct nish_array_grow nish_str_concat panicLoader pushAll refused returnsText storageLayouts structsHoldingVectors tsSignatureLine wasmBridged wasmRangeHelper wasmResultHelpers wasmWrapper
   pointer compilation: size=208 writesThrough=false captured=false passedTo=structsHoldingVectors#0 storageLayouts#0 banner#0 hostFunctions#0 loaderGuarded#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=wasmBridged#1
   stackSites=1 stackLocals=1
@@ -459,22 +465,23 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   callee +68:5 pushAll -> @pushAll
   callee +68:20 guardLoader -> @guardLoader
   callee +98:62 refused -> @refused
-  callee +135:5 pushAll -> @pushAll
-  callee +135:20 wasmResultHelpers -> @wasmResultHelpers
-  callee +136:5 pushAll -> @pushAll
-  callee +136:20 wasmRangeHelper -> @wasmRangeHelper
-  callee +138:7 pushAll -> @pushAll
-  callee +138:22 layoutLoader -> @layoutLoader
-  callee +145:5 pushAll -> @pushAll
-  callee +145:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +119:9 returnsText -> @returnsText
   callee +146:5 pushAll -> @pushAll
-  callee +146:20 wasmRangeHelper -> @wasmRangeHelper
-  callee +148:7 pushAll -> @pushAll
-  callee +148:22 layoutLoader -> @layoutLoader
-  local +157:14 fn: ExternalFunction (const)
-  callee +158:16 tsSignatureLine -> @tsSignatureLine
-  local +159:16 line: string (const)
-  callee +159:24 wasmWrapper -> @wasmWrapper
+  callee +146:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +147:5 pushAll -> @pushAll
+  callee +147:20 wasmRangeHelper -> @wasmRangeHelper
+  callee +149:7 pushAll -> @pushAll
+  callee +149:22 layoutLoader -> @layoutLoader
+  callee +156:5 pushAll -> @pushAll
+  callee +156:20 wasmResultHelpers -> @wasmResultHelpers
+  callee +157:5 pushAll -> @pushAll
+  callee +157:20 wasmRangeHelper -> @wasmRangeHelper
+  callee +159:7 pushAll -> @pushAll
+  callee +159:22 layoutLoader -> @layoutLoader
+  local +168:14 fn: ExternalFunction (const)
+  callee +169:16 tsSignatureLine -> @tsSignatureLine
+  local +170:16 line: string (const)
+  callee +170:24 wasmWrapper -> @wasmWrapper
 function hostFunctions(compilation: Compilation): FunctionSig[] -> @hostFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn nish_array_grow
@@ -526,19 +533,20 @@ function hostResult(table: TypeTable, sig: FunctionSig, call: string): string ->
   callee +9:25 wasmUnsignedIn -> @wasmUnsignedIn
 function hostImportsOf(table: TypeTable, hosts: FunctionSig[]): string[] -> @hostImportsOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isRanged hostsLendWindows nish_array_grow pushAll pushHostEntry
+  calls: TypeTable.isRanged hostsLendWindows hostsTakeText nish_array_grow pushAll pushHostEntry
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 hostsLendWindows#0 pushHostEntry#0
-  pointer hosts: size=0 writesThrough=false captured=false passedTo=hostsLendWindows#1
+  pointer hosts: size=0 writesThrough=false captured=false passedTo=hostsLendWindows#1 hostsTakeText#0
   stackSites=1 stackLocals=1
   local +0:9 lines: string[] (const)
   local +18:7 ranged: boolean (let)
   local +19:14 sig: FunctionSig (const)
   callee +20:9 TypeTable.isRanged -> @TypeTable.isRanged
   callee +32:7 hostsLendWindows -> @hostsLendWindows
-  local +55:9 entries: string[] (const)
-  local +56:14 sig: FunctionSig (const)
-  callee +57:5 pushHostEntry -> @pushHostEntry
-  callee +63:3 pushAll -> @pushAll
+  callee +55:7 hostsTakeText -> @hostsTakeText
+  local +68:9 entries: string[] (const)
+  local +69:14 sig: FunctionSig (const)
+  callee +70:5 pushHostEntry -> @pushHostEntry
+  callee +76:3 pushAll -> @pushAll
 function pushHostEntry(table: TypeTable, sig: FunctionSig, lines: string[], entries: string[]): void -> @pushHostEntry
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -548,16 +556,25 @@ function pushHostEntry(table: TypeTable, sig: FunctionSig, lines: string[], entr
   pointer lines: size=0 writesThrough=true captured=false
   pointer entries: size=0 writesThrough=true captured=false
   stackSites=2 stackLocals=2
-  local -22:9 args: string[] (const)
-  local -21:9 passed: string[] (const)
-  local -20:7 i: i32 (let)
-  local -17:11 window: string (const)
-  callee -17:20 windowView -> @windowView
-  callee -10:33 windowShift -> @windowShift
+  local -33:9 args: string[] (const)
+  local -32:9 passed: string[] (const)
+  local -31:7 i: i32 (let)
+  local -28:11 a: string (const)
+  local -24:13 n: string (const)
+  local -18:11 window: string (const)
+  callee -18:20 windowView -> @windowView
+  local -14:13 at: string (const)
+  callee -10:32 windowShift -> @windowShift
   callee -6:17 hostArgument -> @hostArgument
   local -3:9 call: string (const)
   local -2:9 body: string (const)
   callee -2:16 hostResult -> @hostResult
+function hostsTakeText(hosts: FunctionSig[]): boolean -> @hostsTakeText
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer hosts: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 sig: FunctionSig (const)
+  local +1:16 t: i32 (const)
 function hostsLendWindows(table: TypeTable, hosts: FunctionSig[]): boolean -> @hostsLendWindows
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isHostWindow

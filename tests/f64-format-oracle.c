@@ -22,7 +22,7 @@
 
 #include "nish.h"
 
-_Static_assert(NISH_F64_MAX == 32, "nish.h and runtime.c state one formatter buffer size");
+_Static_assert(NISH_F64_MAX == 32, "nish.h and runtime-text.c state one formatter buffer size");
 
 static void emit_bits(uint64_t bits) {
   char out[NISH_F64_MAX + 1];

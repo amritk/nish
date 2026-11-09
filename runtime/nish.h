@@ -4,7 +4,8 @@
  * runtime next to compiled Nish modules. Everything here is a contract shared
  * with `src/runtime.ts` (the IR side) and the implementation, which is
  * several translation units: `runtime/runtime.c` holds the core every program
- * touches — the arena, strings, arrays, number formatting, the panics —
+ * touches — the arena, arrays, the panics — `runtime/runtime-text.c` holds
+ * strings and number formatting (freestanding, so a wasm module links it too),
  * `runtime/runtime-os.c` holds everything that wraps a system call: the file
  * functions, the directory and subprocess calls, `nish_getenv`, the monotonic
  * clock, `nish_platform` / `nish_arch` — and runtime-parallel.c, runtime-host.c,
@@ -51,7 +52,8 @@ extern "C" {
  * ELF refuses to link that against a non-TLS definition. `scripts/build.sh
  * --threads` passes the macro to every input, which is how `nish --threads
  * --link` keeps the two halves in step. The same definition is in
- * runtime/runtime.c and runtime/runtime-wasm.c. */
+ * runtime/runtime.c and runtime/runtime-wasm.c, and runtime/runtime-text.c
+ * repeats it for its inlined allocation fast path. */
 #ifdef NISH_THREADS
 #define NISH_TLS _Thread_local
 #else
@@ -94,7 +96,8 @@ static inline __attribute__((unused)) const char *nish_cpath(const nish_str *s) 
  * `off` and `cap` are `uint64_t` and not `size_t` because that `i64` is what
  * the inlined fast path bumps and compares on every target: under wasm32 a
  * `size_t` pair would put them at bytes 4 and 8 while compiled code reads 8
- * and 16. runtime.c and runtime-wasm.c static-assert these offsets. */
+ * and 16. runtime.c and runtime-wasm.c static-assert these offsets, and
+ * runtime-text.c, which keeps its own copy of the struct, asserts all four. */
 struct nish_arena {
   char *buf;
   uint64_t off;
@@ -248,7 +251,7 @@ nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);
 /* The bytes `nish_str_from_f64` would hold, written into `out` with no NUL;
    returns the length. 32 bytes is room to spare: the longest spelling,
-   -0.0000012345678901234567, is 25 (runtime.c says why, and runtime-test.c
+   -0.0000012345678901234567, is 25 (runtime-text.c says why, and runtime-test.c
    pins it). For a caller that writes numbers into its own buffer. */
 #define NISH_F64_MAX 32
 int nish_f64_format(double v, char out[NISH_F64_MAX]);

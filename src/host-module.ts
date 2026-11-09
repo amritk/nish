@@ -540,7 +540,9 @@ export class HostProblem {
  * resolved (WP50 §12): what the checker would otherwise refuse in words about
  * Nish code the page never wrote as Nish. A generic function is not one
  * import (NL2662), a `Promise` cannot be waited for (NL2663) and a `string`
- * parameter is stage 4's (NL2665); every other non-scalar is NL2661. A buffer
+ * result cannot be received (NL2667); every other non-scalar is NL2661. A
+ * `string` parameter crosses from stage 4 as its bytes' address and count,
+ * which the loader decodes; NL2665, which refused it until then, is retired. A buffer
  * is a window (§5.3, stage 3): one of six elements (NL2681), followed by
  * `at: u32, n: u32` (NL2682), never a wider index (NL2683); a typed array is
  * rewritten here as the array the checker resolves. NL2664, which refused
@@ -592,13 +594,9 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
         continue // the checker's own refusal: a parameter needs a type
       }
       if (isTypeNamed(type, "string")) {
-        problems.push(
-          new HostProblem(
-            `Parameter \`${p}\` of host function \`${name}\` is a \`string\`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length`,
-            type
-          )
-        )
-      } else if (isBuffer(type, typed, scalars)) {
+        continue // WP50 S4: the bytes' address and count, decoded by the loader
+      }
+      if (isBuffer(type, typed, scalars)) {
         if (windowElement(type) === "") {
           problems.push(windowElementProblem(p, name, type))
           continue
