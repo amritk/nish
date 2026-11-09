@@ -53,13 +53,14 @@ import { pathToFileURL } from "node:url"
 const root = path.resolve(import.meta.dirname, "..")
 
 const swap = async () => {
-  // A checkout, not an install. The repository is its own package, so `npm ci`
-  // here installs this package's own optionalDependencies -- and without this
-  // guard, the first `npm ci` after they are published would overwrite the
-  // tracked `bin/nish` with a binary and leave the working tree dirty. The
-  // landmark is `src/compile.ts`, which is the check `scripts/bootstrap.sh`
-  // makes and is not in `files`; it used to be stage0's `src/launcher.ts`, which stopped
-  // being a landmark when the launcher moved into `bin/` and ships.
+  // A checkout, not an install. The checked-in package.json pins no platform
+  // package (release.yml adds them at pack time), but a `node_modules` left from
+  // before it stopped can still hold one, and without this guard `npm ci` would
+  // overwrite the tracked `bin/nish` with that binary and leave the working
+  // tree dirty. The landmark is `src/compile.ts`, which is the check
+  // `scripts/bootstrap.sh` makes and is not in `files`; it used to be stage0's
+  // `src/launcher.ts`, which stopped being a landmark when the launcher moved
+  // into `bin/` and ships.
   if (fs.existsSync(path.join(root, "src", "compile.ts"))) {
     return "a checkout, so the shim stays"
   }
