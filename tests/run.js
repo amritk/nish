@@ -580,7 +580,8 @@ if (RETIRED.length > 0) {
 // shard builds the compiler and runs everything before the link programs but
 // the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts), about
 // 200 s from the job's start with its setup steps (measured in docs/wp10-ci.md,
-// "Shards and time limits"). Shard 1 then runs every section after them that is not dealt, and
+// "Shards and time limits"). Shard 1 then runs every section after them that
+// is not dealt, and
 // the link programs a later section reads the output of (`LINK_READ_LATER`);
 // a `pinned` group (`DEALT_SECTIONS`) runs in the shard it names. The dealt
 // sections, among them most of what follows the link programs in groups

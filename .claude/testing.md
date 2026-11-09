@@ -87,7 +87,8 @@ test is **data, not code**: a source file next to the output it must produce.
   nothing, which the reseed after the release retires. A nish-cmp entry names a
   program, a file or an `undo`: one naming none excuses every difference, and
   the tool refuses it before compiling. The PR that moves the IR declares it
-  ([`CLAUDE.md`](../CLAUDE.md#definition-of-done)). Declare only what the comparison reaches. The example is #427:
+  ([`CLAUDE.md`](../CLAUDE.md#definition-of-done)). Declare only what the
+  comparison reaches. The example is #427:
   CG-8 took `willreturn` from `nish_str_concat`, nish-cmp's list named the
   programs it moved, the fuzzer had no list, and every seeded `npm test` failed
   until #438 gave it one. CI's `nish-cmp` job runs both against the seed, since

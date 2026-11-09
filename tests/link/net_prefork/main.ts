@@ -498,9 +498,10 @@ const stubborn = (): void => {
   // `preforkWith` returned only after the grace period: SIGKILL ended them.
   const tookMs: i64 = (monotonicNanos() - from) / 1000000;
   console.log(done && tookMs >= toI64(STUBBORN_GRACE_MS));
-  // The supervisor holds "d" for a second before it exits, so it is normally
-  // still alive here and a child it left unreaped is a zombie that answers
-  // `kill(pid, 0)`; each one has been reaped.
+  // On "d" the supervisor is alive (it holds "d" for a second before exiting),
+  // so a child it left unreaped is a zombie that answers `kill(pid, 0)`; each
+  // one has been reaped. Once the wait has reaped the supervisor instead, its
+  // orphans went to init, and this check cannot fail.
   let reaped = !signal(foreign, 0);
   for (const pid of pids) {
     if (signal(pid, 0)) {
