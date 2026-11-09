@@ -252,5 +252,22 @@ export async function main(): Promise<i32> {
 The message of an error contains:
 
 ```text
-…--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native
+--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native
+```
+
+[`nl4018_task_cancel.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4018_task_cancel.ts) (compiled with `--emit-ts build/test/wordings/nl4018_task_cancel`):
+
+```ts
+// NL4018: a Node promise is not a task anything can cancel, so `--emit-ts`
+// refuses the cancellation calls and the bounded waits of `nish:async`.
+import { cancelAfter, taskId } from "nish:async"
+
+export async function main(): Promise<i32> {
+  cancelAfter(taskId(), 10)
+  return 0
+}
+```
+
+```text
+--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native
 ```
