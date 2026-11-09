@@ -743,7 +743,10 @@ class RegionWalk {
       const arrow = this.spawnArrows[a]
       if (callee === arrow) {
         const seen = this.arrowArgs[a]
-        for (let i = 0; i < handed.length && i < seen.length; i++) {
+        for (let i = 0; i < seen.length; i++) {
+          if (i >= handed.length) {
+            break
+          }
           seen[i] = joinOrigin(seen[i], this.origin(handed[i]))
         }
       } else if (!this.indirect[a]) {
@@ -1314,6 +1317,11 @@ export const taskFindings = (
   // arguments, which the task reaches as it does those.
   const arrows: FunctionSig[] = []
   const outer: Local[] = []
+  // The refused capture, or arrow without facts, is found in the loop and its
+  // message built after it, so no pass of the loop keeps a message's memory.
+  let refused = false
+  let refusedName = ""
+  let refusedType = 0
   for (const slot of capturesOf(task)) {
     const type = slot.type()
     const local = slot.arrow.captures[slot.index]
@@ -1321,8 +1329,10 @@ export const taskFindings = (
       !isFrameValue(table, type) &&
       !(table.sharedWithTask(type) && taskShareObstacle(programs, table, type, []).length === 0)
     ) {
-      out.push(new RegionFinding(program, site, captureSpawnMessage(task, local.name, table.typeName(type))))
-      return out
+      refused = true
+      refusedName = local.name
+      refusedType = type
+      break
     }
     if (arrows.indexOf(slot.arrow) < 0) {
       arrows.push(slot.arrow)
@@ -1331,15 +1341,31 @@ export const taskFindings = (
       outer.push(local)
     }
   }
+  if (refused) {
+    out.push(new RegionFinding(program, site, captureSpawnMessage(task, refusedName, table.typeName(refusedType))))
+    return out
+  }
+  let factless: FunctionSig | null = null
+  let nested = false
   for (const arrow of arrows) {
     const own = facts.get(arrow.name)
     if (own === null) {
-      out.push(new RegionFinding(program, site, noFactsMessage(insideTask(task), arrow)))
-      return out
+      factless = arrow
+      break
     }
     if (own.feedsTasks && !f.feedsTasks) {
+      nested = true
+    }
+  }
+  if (factless !== null) {
+    if (nested) {
       out.push(new RegionFinding(program, site, nestedSpawnMessage(task)))
     }
+    out.push(new RegionFinding(program, site, noFactsMessage(insideTask(task), factless)))
+    return out
+  }
+  if (nested) {
+    out.push(new RegionFinding(program, site, nestedSpawnMessage(task)))
   }
   if (!shares && outer.length === 0) {
     return out
