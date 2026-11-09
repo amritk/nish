@@ -172,7 +172,9 @@ const builtinConversionTarget = (name: string): i32 => {
 
 /**
  * The `llvm.<f>.f64` behind a one-argument `Math.*`, or the empty string.
- * `Math.tan` is not here: it is a call into `std/math.ts` (`importMath`).
+ * `Math.tan` is not here: it is a call into `std/math.ts` (`importMath`). On a
+ * page module `sin`, `cos`, `exp` and `log` are too, since a freestanding link
+ * has no libm for the intrinsic to become; their calls never reach here.
  */
 const f64UnaryIntrinsic = (name: string): string => {
   if (

@@ -1,7 +1,8 @@
 /**
- * `std/math` — `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish
- * rather than libm, so a program answers the same on every target, wasm
- * included, and the optimiser sees the whole function.
+ * `std/math` — `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, and on a
+ * freestanding wasm build `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`,
+ * `Math.pow` and the `%` of two `f64`s, in Nish rather than libm, so a program
+ * answers the same on every target and the optimiser sees the whole function.
  *
  *     export const main = (): i32 => {
  *       const slope: f64 = Math.tan(0.5);
@@ -10,42 +11,61 @@
  *       return side === 5.0 ? 0 : 1;
  *     };
  *
- * **A program does not import this module.** A call to one of the three is what
- * loads it (the checker's `importMath`), and the compiler copies each function
- * here that the call reaches into the calling module as an `internal`
- * function, so this file writes no `.ll` of its own. Under Node and `tsc` the
- * calls are the platform's `Math`, so nothing here runs there.
+ * **A program does not import this module.** A call to `Math.atan2`,
+ * `Math.tan` or `Math.hypot` is what loads it (the checker's `importMath`), and
+ * the compiler copies each function here that the call reaches into the
+ * calling module as an `internal` function, so this file writes no `.ll` of
+ * its own. On `--profile wasm` and `--profile wasm-host`, where no libm is
+ * linked, a call to the other five and an `f64` `%` load it too; everywhere
+ * else they stay LLVM's intrinsics and `frem`. Under Node and `tsc` the calls
+ * are the platform's `Math`, so nothing here runs there.
  *
- * **Exactness.** Each is within one ulp of the correctly rounded result, and
- * exactly JavaScript's value for every NaN, signed zero and infinity — every
- * `atan2` infinity pairing, and `hypot`'s Infinity when either operand is
- * infinite, even beside a NaN. Measured against mpmath over 2.8
- * million random and edge-case operands: `tan` 0.83 ulp, `atan2` 0.84 ulp,
- * `hypot` 0.93 ulp (`tests/cases/math_std_edges` pins the special values).
+ * **Exactness.** Each is exactly JavaScript's value for every NaN, signed
+ * zero and infinity — every `atan2` infinity pairing, and `hypot`'s Infinity
+ * when either operand is infinite, even beside a NaN. `tan`, `atan2` and
+ * `hypot` are within one ulp of the correctly rounded result, measured
+ * against mpmath over 2.8 million random and edge-case operands: `tan` 0.83
+ * ulp, `atan2` 0.84 ulp, `hypot` 0.93 ulp (`tests/cases/math_std_edges` pins
+ * the special values). `sin`, `cos`, `exp`, `log` and `pow` are fdlibm's, as
+ * V8's `Math` is, and are within one ulp of V8 (`tests/run.js`'s `wasm-math`
+ * compares them on its operand grid); they are not measured against a
+ * correctly rounded reference. `fmodF64` is exact, as `%` is.
  *
- * **`tan`** is fdlibm's `__kernel_tan` behind its Cody-Waite reduction for
- * |x| below 2^20·π/2, with the quadrant's parity read from the rounding
+ * **`sin`, `cos` and `tan`** are fdlibm's kernels behind its Cody-Waite
+ * reduction for |x| below 2^20·π/2, with the quadrant read from the rounding
  * constant. Larger arguments reduce by an integer Payne-Hanek: 192 bits of
  * 2/π against the 53-bit mantissa, which is exact near every multiple of π/2
  * a double can name. **`atan2`** is fdlibm's, with the quotient `y/x`
  * carried as a double-double, so the argument reduction loses nothing, and
  * π − atan taken in double-double. **`hypot`** is fdlibm's core on operands
  * in [1e-150, 1e150], where neither square can overflow, and a power-of-two
- * rescale into that range otherwise.
+ * rescale into that range otherwise. **`exp`**, **`log`** and **`pow`** are
+ * fdlibm's, `pow` with JavaScript's answers where C's differ (`x ** NaN` and
+ * `(±1) ** ±Infinity` are NaN). **`fmod`** is e_fmod.c's shift-and-subtract
+ * on one 64-bit integer rather than two 32-bit words.
  */
 
 /*
  * Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries
- * it, lib/msun/src/k_tan.c, s_tan.c, e_rem_pio2.c, k_rem_pio2.c, e_atan2.c,
- * s_atan.c and e_hypot.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the
- * fdlibm licence; see std/LICENSE-fdlibm.
+ * it, lib/msun/src/k_tan.c, k_sin.c, k_cos.c, s_tan.c, s_sin.c, s_cos.c,
+ * e_rem_pio2.c, k_rem_pio2.c, e_atan2.c, s_atan.c, e_hypot.c, e_exp.c, e_log.c,
+ * e_pow.c and e_fmod.c. Copyright (C) 1993 and (C) 2004 by Sun Microsystems,
+ * Inc. Used under the fdlibm licence; see std/LICENSE-fdlibm.
  *
- * fdlibm's notice, as those files carry it:
+ * fdlibm's notices, as those files carry them:
  *
  * ====================================================
  * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ *
+ * ====================================================
+ * Copyright (C) 2004 by Sun Microsystems, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and distribute this
  * software is freely granted, provided that this notice
  * is preserved.
@@ -234,8 +254,9 @@ const clz64 = (v: u64): i32 => {
   const h: u32 = toU32(v >> toU64(32))
   return h !== toU32(0) ? Math.clz32(h) : Math.clz32(toU32(v)) + 32
 }
-// tan(x) for |x| >= 2^20 * pi/2 (finite): x * 2/pi mod 4 from a 192-bit window.
-const tanLarge = (x: f64, ix: i32, hx: i32): f64 => {
+// The trigonometric function `mode` names (0 tan, 1 sin, 2 cos) of x,
+// for |x| >= 2^20 * pi/2 (finite): x * 2/pi mod 4 from a 192-bit window.
+const trigLarge = (x: f64, ix: i32, hx: i32, mode: i32): f64 => {
   const e: i32 = (ix >> 20) - 1023
   const m: u64 = (toU64(f64ToBits(x)) & ((toU64(1) << toU64(52)) - toU64(1))) | (toU64(1) << toU64(52))
   const p: i32 = e - 53
@@ -302,7 +323,8 @@ const tanLarge = (x: f64, ix: i32, hx: i32): f64 => {
     y0 = -y0
     y1 = -y1
   }
-  return kernelTan(y0, y1, (n & 1) !== 0)
+  // x * 2/pi is -(n + f) for a negative x, so its quadrant is -n.
+  return trigKernel(y0, y1, hx < 0 ? -n : n, mode)
 }
 
 // fdlibm's __kernel_tan: tan(x0 + y0) for |x0 + y0| <= pi/4, or -1/tan when `odd`.
@@ -351,28 +373,67 @@ const kernelTan = (x0: f64, y0: f64, odd: boolean): f64 => {
   const t: f64 = clearLo(a)
   return t + a * (t * zz + 1.0 + t * vv)
 }
-/**
- * `Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past
- * 2^20 * pi/2.
- *
- * @param x The angle, in radians.
- * @returns The tangent of `x`; NaN for a NaN or an infinite `x`, and `x`
- *   itself when `|x| < 2^-27`, a zero's sign kept.
- */
-export const tanF64 = (x: f64): f64 => {
-  const ax: f64 = Math.abs(x)
-  if (ax < 0.7853984832763672) {
-    if (ax < 7.450580596923828e-9) {
-      return x
-    }
-    return kernelTan(x, 0.0, false)
+// fdlibm's __kernel_sin: sin(x + y) for |x + y| <= pi/4, y the tail of a reduced argument.
+// `tail` is fdlibm's iy: with none, x + v * (S1 + z * r) rounds as V8's sin does, so it keeps
+// that form rather than the tail form at y = 0.
+const kernelSin = (x: f64, y: f64, tail: boolean): f64 => {
+  const z: f64 = x * x
+  const w: f64 = z * z
+  const r: f64 =
+    z * (z * 2.75573137070700676789e-6 - 1.98412698298579493134e-4) +
+    8.33333333332248946124e-3 +
+    z * w * (z * 1.58969099521155010221e-10 - 2.50507602534068634195e-8)
+  const v: f64 = z * x
+  if (!tail) {
+    return x + v * (z * r + -1.66666666666666324348e-1)
   }
+  return x - (z * (y * 0.5 - v * r) - y - v * -1.66666666666666324348e-1)
+}
+
+// fdlibm's __kernel_cos, as FreeBSD's k_cos.c has it: cos(x + y) for |x + y| <= pi/4.
+const kernelCos = (x: f64, y: f64): f64 => {
+  const z: f64 = x * x
+  const w: f64 = z * z
+  const r: f64 =
+    z * (z * (z * 2.48015872894767294178e-5 - 1.38888888888741095749e-3) + 4.16666666666666019037e-2) +
+    w * w * (z * (z * -1.13596475577881948265e-11 + 2.0875723212981748279e-9) - 2.75573143513906633035e-7)
+  const hz: f64 = z * 0.5
+  const one: f64 = 1.0
+  const v: f64 = one - hz
+  return v + (one - v - hz + (z * r - x * y))
+}
+
+// The function `mode` names of an argument reduced to quadrant n and y0 + y1 in [-pi/4, pi/4],
+// as s_tan.c, s_sin.c and s_cos.c switch on n & 3.
+const trigKernel = (y0: f64, y1: f64, n: i32, mode: i32): f64 => {
+  const q: i32 = n & 3
+  if (mode === 0) {
+    return kernelTan(y0, y1, (q & 1) !== 0)
+  }
+  // cos(x) is sin(x + pi/2): one quadrant on.
+  const k: i32 = mode === 2 ? (q + 1) & 3 : q
+  if (k === 0) {
+    return kernelSin(y0, y1, true)
+  }
+  if (k === 1) {
+    return kernelCos(y0, y1)
+  }
+  if (k === 2) {
+    return -kernelSin(y0, y1, true)
+  }
+  return -kernelCos(y0, y1)
+}
+
+// The function `mode` names of x, for pi/4 < |x| (`ax`), x finite or not: e_rem_pio2.c's
+// Cody-Waite reduction below 2^20 * pi/2, with the quadrant read from the rounding constant,
+// and `trigLarge` above it.
+const trigReduced = (x: f64, ax: f64, mode: i32): f64 => {
   if (!(ax < 1647099.0)) {
     if (isNan(ax) || ax > 1.7976931348623157e308) {
       return x - x
     }
     const hx: i32 = hiWord(x)
-    return tanLarge(x, hx & 0x7fffffff, hx)
+    return trigLarge(x, hx & 0x7fffffff, hx, mode)
   }
   const rounded: f64 = x * 6.36619772367581382433e-1 + 6755399441055744.0
   const fn: f64 = rounded - 6755399441055744.0
@@ -397,7 +458,63 @@ export const tanF64 = (x: f64): f64 => {
     }
   }
   const y1: f64 = r - y0 - w
-  return kernelTan(y0, y1, (f64ToBits(rounded) & toI64(1)) !== toI64(0))
+  // The rounded quotient is an integer in the low bits of `rounded`, two's complement.
+  return trigKernel(y0, y1, toI32(f64ToBits(rounded) & toI64(3)), mode)
+}
+
+/**
+ * `Math.tan(x)`: fdlibm's reduction and kernel, with `trigLarge` past
+ * 2^20 * pi/2.
+ *
+ * @param x The angle, in radians.
+ * @returns The tangent of `x`; NaN for a NaN or an infinite `x`, and `x`
+ *   itself when `|x| < 2^-27`, a zero's sign kept.
+ */
+export const tanF64 = (x: f64): f64 => {
+  const ax: f64 = Math.abs(x)
+  if (ax < 0.7853984832763672) {
+    if (ax < 7.450580596923828e-9) {
+      return x
+    }
+    return kernelTan(x, 0.0, false)
+  }
+  return trigReduced(x, ax, 0)
+}
+
+/**
+ * `Math.sin(x)`: fdlibm's `sin`, its reduction shared with `tan`.
+ *
+ * @param x The angle, in radians.
+ * @returns The sine of `x`; NaN for a NaN or an infinite `x`, and `x`
+ *   itself when `|x| < 2^-26`, a zero's sign kept.
+ */
+export const sinF64 = (x: f64): f64 => {
+  const ax: f64 = Math.abs(x)
+  if (ax < 0.7853984832763672) {
+    if (ax < 1.4901161193847656e-8) {
+      return x
+    }
+    return kernelSin(x, 0.0, false)
+  }
+  return trigReduced(x, ax, 1)
+}
+
+/**
+ * `Math.cos(x)`: fdlibm's `cos`, its reduction shared with `tan`.
+ *
+ * @param x The angle, in radians.
+ * @returns The cosine of `x`; NaN for a NaN or an infinite `x`, and 1
+ *   when `|x| < 2^-27`.
+ */
+export const cosF64 = (x: f64): f64 => {
+  const ax: f64 = Math.abs(x)
+  if (ax < 0.7853984832763672) {
+    if (ax < 7.450580596923828e-9) {
+      return 1.0
+    }
+    return kernelCos(x, 0.0)
+  }
+  return trigReduced(x, ax, 2)
 }
 
 // fdlibm (FreeBSD msun) s_atan.c / e_atan2.c, ported.
@@ -637,4 +754,438 @@ export const hypotF64 = (x: f64, y: f64): f64 => {
     return b === 0.0 ? a : hypotCoreF(a, b)
   }
   return hypotRest(ax, ay, a, b)
+}
+
+// fdlibm's SET_HIGH_WORD and SET_LOW_WORD.
+const withHi = (x: f64, hi: i32): f64 =>
+  bitsToF64((toI64(hi) << toI64(32)) | (f64ToBits(x) & ((toI64(1) << toI64(32)) - toI64(1))))
+const withLo = (x: f64, lo: u32): f64 => bitsToF64((f64ToBits(x) & (toI64(-1) << toI64(32))) | toI64(lo))
+
+// The rational approximation e_exp.c and e_pow.c share: P1 + t * (P2 + ... + t * P5).
+const expPoly = (t: f64): f64 =>
+  t *
+    (t * (t * (t * 4.13813679705723846039e-8 - 1.6533902205465251539e-6) + 6.61375632143793436117e-5) -
+      2.77777777770155933842e-3) +
+  1.66666666666666019037e-1
+
+// fdlibm's huge * huge and tiny * tiny, an overflow and an underflow with the sign of `s`.
+const overflow = (s: f64): f64 => s * 1.0e300 * 1.0e300
+const underflow = (s: f64): f64 => s * 1.0e-300 * 1.0e-300
+
+/**
+ * `Math.exp(x)`: fdlibm's `__ieee754_exp`, a reduction by ln 2 and a
+ * rational approximation on [-ln2/2, ln2/2].
+ *
+ * @param x The exponent.
+ * @returns e raised to `x`; Infinity past 709.78, +0 below -745.13, NaN for
+ *   a NaN, and 0 for -Infinity.
+ */
+export const expF64 = (x: f64): f64 => {
+  const hxs: i32 = hiWord(x)
+  const negative: boolean = hxs < 0
+  const hx: i32 = hxs & 0x7fffffff
+  if (hx >= 0x40862e42) {
+    if (hx >= 0x7ff00000) {
+      if (isNan(x)) {
+        return x + x
+      }
+      return negative ? 0.0 : x
+    }
+    if (x > 7.09782712893383973096e2) {
+      return overflow(1.0)
+    }
+    if (x < -7.4513321910194110842e2) {
+      return 0.0
+    }
+  }
+  let k: i32 = 0
+  let hi: f64 = 0.0
+  let lo: f64 = 0.0
+  let r: f64 = x
+  if (hx > 0x3fd62e42) {
+    if (hx < 0x3ff0a2b2) {
+      hi = negative ? x + 6.9314718036912381649e-1 : x - 6.9314718036912381649e-1
+      lo = negative ? -1.90821492927058770002e-10 : 1.90821492927058770002e-10
+      k = negative ? -1 : 1
+    } else {
+      const half: f64 = negative ? -0.5 : 0.5
+      k = toI32(x * 1.442695040888963387 + half)
+      const t: f64 = toF64(k)
+      hi = x - t * 6.9314718036912381649e-1
+      lo = t * 1.90821492927058770002e-10
+    }
+    r = hi - lo
+  } else if (hx < 0x3e300000) {
+    return x + 1.0
+  }
+  const t: f64 = r * r
+  const c: f64 = r - t * expPoly(t)
+  const one: f64 = 1.0
+  if (k === 0) {
+    return one - ((r * c) / (c - 2.0) - r)
+  }
+  const y: f64 = one - (lo - (r * c) / (2.0 - c) - hi)
+  if (k >= -1021) {
+    if (k === 1024) {
+      return y * 2.0 * 8.98846567431158e307
+    }
+    return y * pow2(k)
+  }
+  return y * pow2(k + 1000) * 9.332636185032189e-302
+}
+
+/**
+ * `Math.log(x)`: fdlibm's `__ieee754_log`, `x` split as 2^k * (1 + f) and
+ * log(1 + f) taken from a polynomial in f / (2 + f).
+ *
+ * @param x The operand.
+ * @returns The natural logarithm of `x`; -Infinity for a zero of either
+ *   sign, NaN below zero or for a NaN, and Infinity for Infinity.
+ */
+export const logF64 = (x: f64): f64 => {
+  let v: f64 = x
+  let hx: i32 = hiWord(v)
+  let k: i32 = 0
+  if (hx < 0x00100000) {
+    if (((hx & 0x7fffffff) | toI32(loWord(v))) === 0) {
+      return -overflow(1.0)
+    }
+    if (hx < 0) {
+      return (v - v) / (v - v)
+    }
+    k = -54
+    v = v * 1.8014398509481984e16
+    hx = hiWord(v)
+  }
+  if (hx >= 0x7ff00000) {
+    return v + v
+  }
+  k += (hx >> 20) - 1023
+  hx = hx & 0x000fffff
+  const i: i32 = (hx + 0x95f64) & 0x100000
+  v = withHi(v, hx | (i ^ 0x3ff00000))
+  k += i >> 20
+  const f: f64 = v - 1.0
+  const dk: f64 = toF64(k)
+  if (((hx + 2) & 0x000fffff) < 3) {
+    if (f === 0.0) {
+      return dk * 6.9314718036912381649e-1 + dk * 1.90821492927058770002e-10
+    }
+    const rr: f64 = f * f * (f * -0.33333333333333333 + 0.5)
+    if (k === 0) {
+      return f - rr
+    }
+    return dk * 6.9314718036912381649e-1 - (rr - dk * 1.90821492927058770002e-10 - f)
+  }
+  const s: f64 = f / (2.0 + f)
+  const z: f64 = s * s
+  const w: f64 = z * z
+  const t1: f64 = w * (w * (w * 1.531383769920937332e-1 + 2.222219843214978396e-1) + 3.999999999940941908e-1)
+  const t2: f64 =
+    z *
+    (w * (w * (w * 1.479819860511658591e-1 + 1.818357216161805012e-1) + 2.857142874366239149e-1) +
+      6.66666666666673513e-1)
+  const r: f64 = t2 + t1
+  if (((hx - 0x6147a) | (0x6b851 - hx)) > 0) {
+    const hfsq: f64 = f * f * 0.5
+    if (k === 0) {
+      return f - (hfsq - s * (hfsq + r))
+    }
+    return dk * 6.9314718036912381649e-1 - (hfsq - (s * (hfsq + r) + dk * 1.90821492927058770002e-10) - f)
+  }
+  if (k === 0) {
+    return f - s * (f - r)
+  }
+  return dk * 6.9314718036912381649e-1 - (s * (f - r) - dk * 1.90821492927058770002e-10 - f)
+}
+
+// 2^n * z for a z near 1 whose product is subnormal, as fdlibm's scalbn, rounded once.
+const scaleDown = (z: f64, n: i32): f64 => z * pow2(-1000) * pow2(n + 1000)
+
+// pow's |y| > 2^31 case when x is not within 2^-20 of 1: an overflow or an underflow.
+const powHugeY = (ix: i32, hy: i32, iy: i32, s: f64): f64 => {
+  if (iy > 0x43f00000) {
+    if (ix <= 0x3fefffff) {
+      return hy < 0 ? overflow(1.0) : 0.0
+    }
+    return hy > 0 ? overflow(1.0) : 0.0
+  }
+  if (ix < 0x3fefffff) {
+    return hy < 0 ? overflow(s) : underflow(s)
+  }
+  return hy > 0 ? overflow(s) : underflow(s)
+}
+
+// 2^(ph + pl) * s, the tail of e_pow.c once log2(x) * y is split as ph + pl.
+const powExp2 = (ph0: f64, pl: f64, s: f64): f64 => {
+  let ph: f64 = ph0
+  const z0: f64 = pl + ph
+  const j: i32 = hiWord(z0)
+  const i: i32 = toI32(loWord(z0))
+  if (j >= 0x40900000) {
+    if (((j - 0x40900000) | i) !== 0 || pl + 8.0085662595372944372e-17 > z0 - ph) {
+      return overflow(s)
+    }
+  } else if ((j & 0x7fffffff) >= 0x4090cc00) {
+    // 0xc090cc00, the high word of -1075, as an i32.
+    if (j !== -1064252416 || i !== 0 || pl <= z0 - ph) {
+      return underflow(s)
+    }
+  }
+  const ij: i32 = j & 0x7fffffff
+  let k: i32 = (ij >> 20) - 0x3ff
+  let n: i32 = 0
+  if (ij > 0x3fe00000) {
+    const unit: i32 = 0x00100000
+    n = j + (unit >> (k + 1))
+    k = ((n & 0x7fffffff) >> 20) - 0x3ff
+    const t: f64 = withHi(0.0, n & ~(0x000fffff >> k))
+    n = ((n & 0x000fffff) | 0x00100000) >> (20 - k)
+    if (j < 0) {
+      n = -n
+    }
+    ph = ph - t
+  }
+  const t: f64 = withLo(pl + ph, toU32(0))
+  const u: f64 = t * 6.93147182464599609375e-1
+  const v: f64 = (pl - (t - ph)) * 6.93147180559945286227e-1 + t * -1.90465429995776804525e-9
+  let z: f64 = u + v
+  const w: f64 = v - (z - u)
+  const t1: f64 = z - z * z * expPoly(z * z)
+  const r: f64 = (z * t1) / (t1 - 2.0) - (w + z * w)
+  const one: f64 = 1.0
+  z = one - (r - z)
+  const hz: i32 = hiWord(z) + (n << 20)
+  if (hz >> 20 <= 0) {
+    return s * scaleDown(z, n)
+  }
+  return s * withHi(z, hz)
+}
+
+/**
+ * `Math.pow(x, y)`: fdlibm's `__ieee754_pow`, log2(x) in extra precision times
+ * `y`, then 2 raised to that, with JavaScript's answers where fdlibm's differ.
+ *
+ * @param x The base.
+ * @param y The exponent.
+ * @returns `x` raised to `y`; 1 when `y` is a zero, NaN when `y` is NaN or
+ *   when `x` is ±1 and `y` infinite (where C's pow gives 1), and NaN for a
+ *   negative finite `x` and a non-integer `y`.
+ */
+export const powF64 = (x: f64, y: f64): f64 => {
+  const hx: i32 = hiWord(x)
+  const lx: u32 = loWord(x)
+  const hy: i32 = hiWord(y)
+  const ly: u32 = loWord(y)
+  const ix: i32 = hx & 0x7fffffff
+  const iy: i32 = hy & 0x7fffffff
+  if ((iy | toI32(ly)) === 0) {
+    return 1.0
+  }
+  if (isNan(x) || isNan(y)) {
+    return x + y
+  }
+  // JavaScript: (±1) ** ±Infinity is NaN.
+  if (iy === 0x7ff00000 && ly === toU32(0) && ix === 0x3ff00000 && lx === toU32(0)) {
+    return y - y
+  }
+  if (hx === 0x3ff00000 && lx === toU32(0)) {
+    return 1.0
+  }
+  // Whether y is an integer, for a negative x: 0 no, 1 odd, 2 even.
+  let yisint: i32 = 0
+  if (hx < 0) {
+    if (iy >= 0x43400000) {
+      yisint = 2
+    } else if (iy >= 0x3ff00000) {
+      const k: i32 = (iy >> 20) - 0x3ff
+      if (k > 20) {
+        const j: u32 = ly >> toU32(52 - k)
+        if (j << toU32(52 - k) === ly) {
+          yisint = 2 - toI32(j & toU32(1))
+        }
+      } else if (ly === toU32(0)) {
+        const j: i32 = iy >> (20 - k)
+        if (j << (20 - k) === iy) {
+          const odd: i32 = j & 1
+          yisint = 2 - odd
+        }
+      }
+    }
+  }
+  if (ly === toU32(0)) {
+    if (iy === 0x7ff00000) {
+      if (ix >= 0x3ff00000) {
+        return hy >= 0 ? y : 0.0
+      }
+      return hy < 0 ? -y : 0.0
+    }
+    if (iy === 0x3ff00000) {
+      return hy < 0 ? 1.0 / x : x
+    }
+    if (hy === 0x40000000) {
+      return x * x
+    }
+    if (hy === 0x3fe00000 && hx >= 0) {
+      return Math.sqrt(x)
+    }
+  }
+  let ax: f64 = Math.abs(x)
+  if (lx === toU32(0) && (ix === 0x7ff00000 || ix === 0 || ix === 0x3ff00000)) {
+    let z: f64 = hy < 0 ? 1.0 / ax : ax
+    if (hx < 0) {
+      if (((ix - 0x3ff00000) | yisint) === 0) {
+        z = (z - z) / (z - z)
+      } else if (yisint === 1) {
+        z = -z
+      }
+    }
+    return z
+  }
+  if (hx < 0 && yisint === 0) {
+    return (x - x) / (x - x)
+  }
+  const s: f64 = hx < 0 && yisint === 1 ? -1.0 : 1.0
+  let t1: f64 = 0.0
+  let t2: f64 = 0.0
+  if (iy > 0x41e00000) {
+    if (iy > 0x43f00000 || ix < 0x3fefffff || ix > 0x3ff00000) {
+      return powHugeY(ix, hy, iy, s)
+    }
+    const t: f64 = ax - 1.0
+    const w: f64 = t * t * (t * (t * 0.25 - 0.3333333333333333333333) + 0.5)
+    const u: f64 = t * 1.44269502162933349609
+    const v: f64 = t * 1.92596299112661746887e-8 - w * 1.442695040888963387
+    t1 = withLo(u + v, toU32(0))
+    t2 = v - (t1 - u)
+  } else {
+    let n: i32 = 0
+    let jx: i32 = ix
+    if (jx < 0x00100000) {
+      ax = ax * 9007199254740992.0
+      n = -53
+      jx = hiWord(ax)
+    }
+    n += (jx >> 20) - 0x3ff
+    const j: i32 = jx & 0x000fffff
+    jx = j | 0x3ff00000
+    let k: i32 = 0
+    if (j <= 0x3988e) {
+      k = 0
+    } else if (j < 0xbb67a) {
+      k = 1
+    } else {
+      n += 1
+      jx -= 0x00100000
+    }
+    ax = withHi(ax, jx)
+    const bp: f64 = k === 0 ? 1.0 : 1.5
+    const dph: f64 = k === 0 ? 0.0 : 5.84962487220764160156e-1
+    const dpl: f64 = k === 0 ? 0.0 : 1.35003920212974897128e-8
+    const u: f64 = ax - bp
+    const one: f64 = 1.0
+    const v: f64 = one / (ax + bp)
+    const ss: f64 = u * v
+    const sh: f64 = withLo(ss, toU32(0))
+    let th: f64 = withHi(0.0, ((jx >> 1) | 0x20000000) + 0x00080000 + (k << 18))
+    let tl: f64 = ax - (th - bp)
+    const sl: f64 = v * (u - sh * th - sh * tl)
+    let s2: f64 = ss * ss
+    const l3: f64 =
+      s2 * (s2 * (s2 * 2.06975017800338417784e-1 + 2.30660745775561754067e-1) + 2.72728123808534006489e-1)
+    let r: f64 =
+      s2 *
+      s2 *
+      (s2 * (s2 * (l3 + 3.33333329818377432918e-1) + 4.28571428578550184252e-1) + 5.99999999999994648725e-1)
+    r += sl * (sh + ss)
+    s2 = sh * sh
+    th = withLo(s2 + 3.0 + r, toU32(0))
+    tl = r - (th - 3.0 - s2)
+    const pu: f64 = sh * th
+    const pv: f64 = sl * th + tl * ss
+    const ph: f64 = withLo(pu + pv, toU32(0))
+    const pl: f64 = pv - (ph - pu)
+    const zh: f64 = ph * 9.61796700954437255859e-1
+    const zl: f64 = ph * -7.02846165095275826516e-9 + pl * 9.61796693925975554329e-1 + dpl
+    const t: f64 = toF64(n)
+    t1 = withLo(zh + zl + dph + t, toU32(0))
+    t2 = zl - (t1 - t - dph - zh)
+  }
+  const y1: f64 = withLo(y, toU32(0))
+  return powExp2(y1 * t1, (y - y1) * t1 + y * t2, s)
+}
+
+/**
+ * The remainder `x % y` on `f64`, as JavaScript and C's `fmod` define it:
+ * e_fmod.c's shift-and-subtract, exact, over one 64-bit word rather than two
+ * 32-bit ones.
+ *
+ * @param x The dividend.
+ * @param y The divisor.
+ * @returns `x - n * y` for the integer n that truncates `x / y`, exactly,
+ *   with `x`'s sign; NaN when `x` is infinite, `y` is a zero or either is
+ *   NaN, and `x` itself when `y` is infinite and `x` finite.
+ */
+export const fmodF64 = (x: f64, y: f64): f64 => {
+  let ux: u64 = toU64(f64ToBits(x))
+  let uy: u64 = toU64(f64ToBits(y))
+  let ex: i32 = toI32((ux >> toU64(52)) & toU64(0x7ff))
+  let ey: i32 = toI32((uy >> toU64(52)) & toU64(0x7ff))
+  const sign: u64 = ux & (toU64(1) << toU64(63))
+  if (uy << toU64(1) === toU64(0) || isNan(y) || ex === 0x7ff) {
+    return (x * y) / (x * y)
+  }
+  if (ux << toU64(1) <= uy << toU64(1)) {
+    return ux << toU64(1) === uy << toU64(1) ? 0.0 * x : x
+  }
+  const mant: u64 = (toU64(1) << toU64(52)) - toU64(1)
+  const implicit: u64 = toU64(1) << toU64(52)
+  // Each significand to an integer with its leading one at bit 52, the exponent lowered
+  // past zero for a subnormal.
+  if (ex === 0) {
+    let i: u64 = ux << toU64(12)
+    while (i >> toU64(63) === toU64(0)) {
+      ex -= 1
+      i = i << toU64(1)
+    }
+    ux = ux << toU64(1 - ex)
+  } else {
+    ux = (ux & mant) | implicit
+  }
+  if (ey === 0) {
+    let i: u64 = uy << toU64(12)
+    while (i >> toU64(63) === toU64(0)) {
+      ey -= 1
+      i = i << toU64(1)
+    }
+    uy = uy << toU64(1 - ey)
+  } else {
+    uy = (uy & mant) | implicit
+  }
+  while (ex > ey) {
+    if (ux >= uy) {
+      if (ux === uy) {
+        return 0.0 * x
+      }
+      ux = ux - uy
+    }
+    ux = ux << toU64(1)
+    ex -= 1
+  }
+  if (ux >= uy) {
+    if (ux === uy) {
+      return 0.0 * x
+    }
+    ux = ux - uy
+  }
+  while (ux >> toU64(52) === toU64(0)) {
+    ux = ux << toU64(1)
+    ex -= 1
+  }
+  if (ex > 0) {
+    ux = (ux - implicit) | (toU64(ex) << toU64(52))
+  } else {
+    ux = ux >> toU64(1 - ex)
+  }
+  return bitsToF64(toI64(ux | sign))
 }

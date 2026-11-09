@@ -99,7 +99,11 @@ console.log(stats.mean(new Float64Array([1, 2, 3, 4])));       // 2.5
 `load(source, imports)` takes the bytes or a compiled `WebAssembly.Module`, and
 an import object. It defaults to `{}`, unless the module imports a host module
 (below): then it is required, `{ host }`, and the `.d.ts` types it. The `wasm` profile
-is freestanding — no C library. An export may return a `string`, which the
+is freestanding — no C library — yet `Math.sin`, `cos`, `exp`, `log`, `pow`
+and a float `%` still work: the compiler copies Nish's own versions into the
+module, about 0.6 to 2.3 KB each (raw; 0.4 to 1.3 KB gzipped), and only into a
+module that calls them. Their answers match a browser's `Math` or differ from it in
+the last bit only, and `%` is exact. An export may return a `string`, which the
 loader decodes into a JS string, and a host import may take one (see
 [Strings and the page](#strings-and-the-page) below). Functions that *take* a string, or do I/O, are not
 callable from it; the generated `.d.ts` lists them as comments. A whole program that does need them can be built for WASI instead,

@@ -114,7 +114,7 @@ function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: Check
   calls: DebugInfo.fileOf IRModule.addModuleFlag IRModule.addNamedMetadata IRModule.reserveMetadata IRModule.setMetadata StringMap.constructor nish_alloc_struct nish_str_concat quote
   pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.fileOf#0
   pointer module: size=104 writesThrough=true captured=true passedTo=IRModule.reserveMetadata#0 IRModule.setMetadata#0 IRModule.addNamedMetadata#0 IRModule.addModuleFlag#0 IRModule.addModuleFlag#0
-  pointer program: size=696 writesThrough=true captured=true
+  pointer program: size=704 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:21 new StringMap -> @StringMap.constructor

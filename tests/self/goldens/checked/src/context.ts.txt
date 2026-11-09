@@ -149,7 +149,7 @@ function CheckContext.constructor(this: CheckContext, table: TypeTable, program:
   calls: FunctionBindings.constructor Local.constructor StringMap.constructor StringSet.constructor nish_alloc_struct
   pointer this: size=304 writesThrough=true captured=false
   pointer table: size=96 writesThrough=true captured=true
-  pointer program: size=696 writesThrough=true captured=true
+  pointer program: size=704 writesThrough=true captured=true
   pointer sink: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:17 new StringMap -> @StringMap.constructor
