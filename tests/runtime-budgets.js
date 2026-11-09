@@ -896,13 +896,19 @@ export const RUNTIME_BUDGETS = [
  * brotli (Node's zlib at its defaults), as `[raw, gzip, brotli]`. The `wasm-size`
  * block of tests/run.js builds each and holds it to every ceiling.
  *
- * Measured 2026-11-07 with clang 18 on linux-x64 and no wasm-opt, which CI does not
- * install; each ceiling is the measurement, so any growth is a decision recorded here
- * with its own figures. Against `--profile wasm`, the explicit export list takes
- * add.wasm from 316 to 102 bytes (gzip 233 to 111, brotli 211 to 87) and arrays.wasm,
- * linked with runtime-wasm.c, from 2,827 to 2,091 (gzip 1,479 to 1,092, brotli 1,302
- * to 970). A wasm-opt pass shrinks the `.wasm` and so the inline module and leaves
- * the loader as it is, so every ceiling holds with one too.
+ * Measured 2026-11-07 with clang 18 on linux-x64 and no wasm-opt; each ceiling is the
+ * measurement, so any growth is a decision recorded here with its own figures. Against
+ * `--profile wasm`, the explicit export list takes add.wasm from 316 to 102 bytes (gzip
+ * 233 to 111, brotli 211 to 87) and arrays.wasm, linked with runtime-wasm.c, from 2,827
+ * to 2,091 (gzip 1,479 to 1,092, brotli 1,302 to 970).
+ *
+ * The ceilings are of that build, whatever is installed: the block links with
+ * NISH_WASM_OPT=0 and a stand-in wasm-opt first on PATH, and fails if it ran. A wasm-opt
+ * does not always shrink the module (#1257): clang 18 runs one itself after the link
+ * and keeps the `target_features` section for it, which took add.wasm to 150 bytes.
+ * build.sh's own pass drops that section again; with binaryen 132 it gives add.wasm
+ * 74 / 93 / 68, arrays.wasm 1,713 / 970 / 876, results.wasm 72 / 90 / 69 and label.wasm
+ * 12,464 / 11,710 / 11,207, which these ceilings do not pin.
  *
  * label.ts is the string row (WP50 stage 4, measured 2026-11-08): a template with an
  * `i32` and an `f64` links runtime-text.c beside runtime-wasm.c. Of its 13,046 bytes,

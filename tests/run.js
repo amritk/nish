@@ -31263,30 +31263,81 @@ if (!only || "wasm-size".includes(only)) {
     skip(why)
   } else {
     const dir = path.join(buildDir, "wasm-size")
+    fs.mkdirSync(dir, { recursive: true })
     const sizes = (file) => {
       const bytes = fs.readFileSync(file)
       return [bytes.length, zlib.gzipSync(bytes, { level: 9 }).length, zlib.brotliCompressSync(bytes).length]
     }
+    const link = (inputs, flags, env) =>
+      spawnSync("bash", ["scripts/build.sh", ...inputs, ...flags], { cwd: root, encoding: "utf8", env })
+    // binaryen's wasm-opt changes the bytes, and clang 18 runs it itself after an optimising
+    // link wherever it finds one (#1257). The ceilings and digests are of the module a
+    // machine without it links, which NISH_WASM_OPT=0 pins. A stand-in wasm-opt first on
+    // PATH logs each call and appends a custom section, so a pinned build it reached shows.
+    const stubBin = path.join(dir, "stub-bin")
+    const stubLog = path.join(dir, "wasm-opt.log")
+    fs.mkdirSync(stubBin, { recursive: true })
+    fs.writeFileSync(
+      path.join(stubBin, "wasm-opt"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'%s\\n\' "$*" >> "$WASM_OPT_STUB_LOG"',
+        "in= out=",
+        'while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2 ;; -*) shift ;; *) in=$1; shift ;; esac; done',
+        '[ "$in" = "$out" ] || cp "$in" "$out"',
+        // A custom section named "stub": id 0, 5 bytes, a 4-byte name.
+        "printf '\\0\\5\\4stub' >> \"$out\"",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    )
+    const stubbed = (pinned) => ({
+      ...process.env,
+      PATH: `${stubBin}${path.delimiter}${process.env.PATH}`,
+      WASM_OPT_STUB_LOG: stubLog,
+      ...(pinned ? { NISH_WASM_OPT: "0" } : {}),
+    })
+    const stubCalls = () => (fs.existsSync(stubLog) ? fs.readFileSync(stubLog, "utf8").split("\n").filter(Boolean) : [])
+    // PATH without the directories that hold a wasm-opt: the `--profile wasm` link has no
+    // switch, and clang still finds one beside itself, which `-###` shows.
+    const bare = {
+      ...process.env,
+      PATH: String(process.env.PATH)
+        .split(path.delimiter)
+        .filter((d) => !fs.existsSync(path.join(d, "wasm-opt")))
+        .join(path.delimiter),
+    }
+    delete bare.NISH_WASM_OPT
+    const clangFindsWasmOpt = (ll) =>
+      /wasm-opt"/.test(
+        spawnSync(
+          process.env.CC || "clang",
+          ["--target=wasm32-unknown-unknown", "-Oz", "-nostdlib", "-Wl,--no-entry", ll, "-o", "x.wasm", "-###"],
+          { encoding: "utf8", env: bare }
+        ).stderr
+      )
+    let checkedSwitch = false
     for (const { src, runtime, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
       const stem = path.basename(src, ".ts")
       // The directory outlives a run: a sidecar an older build left must not pass for this one's.
       fs.rmSync(path.join(dir, `${stem}.wasm.sites.json`), { force: true })
+      fs.rmSync(stubLog, { force: true })
       const ll = wasmHostCompile(dir, stem)
-      const link =
+      const inputs = ll === null ? [] : runtime ? [ll, "runtime/runtime-wasm.c"] : [ll]
+      const hostFlags = (name) => ["-o", path.join(dir, name), "--profile", "wasm-host"]
+      const built =
         ll === null
           ? null
-          : wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], [
-              "-o",
-              path.join(dir, `${stem}.wasm`),
-              "--profile",
-              "wasm-host",
-              "--inline",
-              path.join(dir, `${stem}.bytes.mjs`),
-            ])
-      if (link?.status !== 0) {
-        check(`wasm-size: ${src} builds under --profile wasm-host`, false, link === null ? "compile failed" : shown(link))
+          : link(inputs, [...hostFlags(`${stem}.wasm`), "--inline", path.join(dir, `${stem}.bytes.mjs`)], stubbed(true))
+      if (built?.status !== 0) {
+        check(`wasm-size: ${src} builds under --profile wasm-host`, false, built === null ? "compile failed" : shown(built))
         continue
       }
+      check(
+        `wasm-size: ${src} under NISH_WASM_OPT=0 runs no wasm-opt, though one is on PATH`,
+        stubCalls().length === 0 && /no wasm-opt, NISH_WASM_OPT=0/.test(built.stdout),
+        `wasm-opt calls:\n${stubCalls().join("\n")}\n${shown(built)}`
+      )
       for (const [part, file] of [
         ["wasm", `${stem}.wasm`],
         ["loader", `${stem}.mjs`],
@@ -31295,20 +31346,42 @@ if (!only || "wasm-size".includes(only)) {
         const measured = sizes(path.join(dir, file))
         const ceiling = ceilings[part]
         check(
-          `wasm-size: ${file} is at most ${ceiling.join(" / ")} bytes raw / gzip -9 / brotli`,
+          `wasm-size: ${file} is ${measured.join(" / ")}, at most ${ceiling.join(" / ")} bytes raw / gzip -9 / brotli`,
           measured.every((n, i) => n <= ceiling[i]),
-          `measured ${measured.join(" / ")}; shrink it, or raise WASM_HOST_SIZE_BUDGETS in ` +
-            "tests/runtime-budgets.js with the measurement and why"
+          "shrink it, or raise WASM_HOST_SIZE_BUDGETS in tests/runtime-budgets.js with the measurement and why"
         )
+      }
+      const bareLinks = !clangFindsWasmOpt(ll)
+      if (!checkedSwitch) {
+        // The switch's two sides, on the first row: unset, the stand-in runs and is asked
+        // to drop target_features; with no wasm-opt at all, the bytes are the pinned ones.
+        checkedSwitch = true
+        fs.rmSync(stubLog, { force: true })
+        const opt = link(inputs, hostFlags(`${stem}.stub.wasm`), stubbed(false))
+        check(
+          `wasm-size: ${src} without NISH_WASM_OPT runs the wasm-opt on PATH with --strip-target-features`,
+          opt.status === 0 &&
+            stubCalls().some((call) => /^-Oz .*--strip-target-features /.test(call)) &&
+            /, wasm-opt -Oz\)/.test(opt.stdout),
+          `wasm-opt calls:\n${stubCalls().join("\n")}\n${shown(opt)}`
+        )
+        if (bareLinks) {
+          const none = link(inputs, hostFlags(`${stem}.none.wasm`), bare)
+          const same =
+            none.status === 0 &&
+            Buffer.compare(fs.readFileSync(path.join(dir, `${stem}.none.wasm`)), fs.readFileSync(path.join(dir, `${stem}.wasm`))) === 0
+          check(
+            `wasm-size: ${src} with no wasm-opt installed links the NISH_WASM_OPT=0 bytes`,
+            same && /, no wasm-opt\)/.test(none.stdout),
+            shown(none)
+          )
+        } else {
+          skip(`wasm-size: clang finds a wasm-opt beside itself, so no build here links without one`)
+        }
       }
       // A program with no module storage and no host module gets main's bytes.
       const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === src)
-      const plain = wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], [
-        "-o",
-        path.join(dir, `${stem}.plain.wasm`),
-        "--profile",
-        "wasm",
-      ])
+      const plain = link(inputs, ["-o", path.join(dir, `${stem}.plain.wasm`), "--profile", "wasm"], bare)
       const digest = (file) =>
         fs.existsSync(path.join(dir, file))
           ? crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, file))).digest("hex")
@@ -31318,6 +31391,10 @@ if (!only || "wasm-size".includes(only)) {
         loader: digest(`${stem}.mjs`),
         wasm: plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain),
         host: digest(`${stem}.wasm`),
+      }
+      if (!bareLinks) {
+        skip(`wasm-size: ${stem}.plain.wasm: clang finds a wasm-opt beside itself and --profile wasm has no switch`)
+        got.wasm = digests.wasm
       }
       const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
       check(

@@ -42,9 +42,12 @@
 #          when runtime-wasm.c is linked, the arena entry points the
 #          `--emit-dts` loader calls (nish_arena_mark, nish_arena_release,
 #          nish_alloc_array, nish_reset_arena, nish_free_arena). The stack is
-#          a fixed 64 KiB (-z stack-size=65536). Runs `wasm-opt -Oz` on the
-#          module when wasm-opt (binaryen) is on PATH; the build line says
-#          whether it ran. Two flags take this profile alone, and any other
+#          a fixed 64 KiB (-z stack-size=65536). Runs `wasm-opt -Oz
+#          --strip-target-features` on the module when wasm-opt (binaryen)
+#          is on PATH; the build line says whether it ran. NISH_WASM_OPT=0
+#          links without it even when it is installed (clang's own wasm-opt
+#          call too): the module a machine without binaryen builds, which
+#          the size guard measures. Two flags take this profile alone, and any other
 #          refuses them with exit 2:
 #            --memory <MiB>       memory fixed at <MiB> MiB (1 to 4096), the
 #                                 initial size and the maximum both, so it
@@ -984,17 +987,47 @@ case "$profile" in
         bytes=$((memory_mib * 1048576))
         memory+=("-Wl,--initial-memory=$bytes" "-Wl,--max-memory=$bytes")
       fi
-      "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
-        ${tls[@]+"${tls[@]}"} \
-        -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
-        "${host_inputs[@]}" -o "$out"
       # binaryen's size pass is optional: the module is complete without it.
-      if command -v wasm-opt >/dev/null 2>&1; then
-        wasm-opt -Oz --enable-bulk-memory "$out" -o "$out"
-        wasm_opt="wasm-opt -Oz"
-      else
-        wasm_opt="no wasm-opt"
-      fi
+      # It runs twice when wasm-opt is installed. clang 18 runs it itself after
+      # any link with an -O flag, finding it on PATH, and has wasm-ld keep the
+      # `target_features` section for it: 48 bytes or more that nothing at
+      # run time reads, which put add.wasm at 150 bytes against 102 without
+      # wasm-opt (#1257). The pass below drops that section again.
+      # NISH_WASM_OPT=0 runs neither: each source is compiled alone and the
+      # objects linked with no -O flag, so clang starts no wasm-opt and the
+      # module is byte for byte the one a machine without binaryen links.
+      # That is the build the size guard pins.
+      case "${NISH_WASM_OPT:-1}" in
+        0)
+          make_work
+          host_objects=()
+          for i in "${host_inputs[@]}"; do
+            case "$i" in
+              *.ll|*.c)
+                object="$work/host-${#host_objects[@]}.o"
+                "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
+                  ${tls[@]+"${tls[@]}"} -c "$i" -o "$object"
+                host_objects+=("$object") ;;
+              *) host_objects+=("$i") ;;
+            esac
+          done
+          "$CC" --target=wasm32-unknown-unknown -nostdlib \
+            -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
+            "${host_objects[@]}" -o "$out"
+          wasm_opt="no wasm-opt, NISH_WASM_OPT=0" ;;
+        1)
+          "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
+            ${tls[@]+"${tls[@]}"} \
+            -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
+            "${host_inputs[@]}" -o "$out"
+          if command -v wasm-opt >/dev/null 2>&1; then
+            wasm-opt -Oz --enable-bulk-memory --strip-target-features "$out" -o "$out"
+            wasm_opt="wasm-opt -Oz"
+          else
+            wasm_opt="no wasm-opt"
+          fi ;;
+        *) echo "error: NISH_WASM_OPT must be 0 or 1, not '$NISH_WASM_OPT'" >&2; exit 2 ;;
+      esac
       if [ -n "$inline_to" ]; then
         # Decimal, one array literal: of the inline forms the smallest after
         # compression (docs/wp50-wasm-host.md, Q10). od prints each byte as an
