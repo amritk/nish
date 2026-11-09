@@ -96,6 +96,75 @@ A response whose status is outside 200 to 599, whose body is larger than
 line break or another control character is not sent as written: the client
 is answered 500 instead. A 204 or 304 goes without its body.
 
+## Reaching the program's state
+
+A handler written as an arrow inside `main` may use what `main` made: a
+counter object, a cache, the async Postgres pool. Every request's task
+shares those objects with `main`, in place, so a handler reads and updates
+their numbers and awaits a pooled query, and builds its answer in its own
+memory:
+
+```ts nish:ok
+import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve";
+import { Router, RouterLimits } from "nish/net/router";
+import { secret, wipe } from "nish:secret";
+import { PgConfig, pgTarget } from "nish/net/postgres";
+import {
+  PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
+} from "nish/net/postgres-async";
+
+const bytesOf = (text: string): u8[] => {
+  const out: u8[] = [];
+  const n: i32 = toI32(text.length);
+  for (let i: i32 = 0; i < n; i++) {
+    out.push(toU8(text.charCodeAt(i)));
+  }
+  return out;
+};
+
+class Stats {
+  served: i32 = 0;
+}
+
+export async function main(): Promise<i32> {
+  const config = new PgConfig();
+  config.user = "app";
+  const pool = new PgAsyncPool(4);
+  const password = secret(bytesOf("app password"));
+  await pgAsyncConnect(pool, config, password, pgTarget("127.0.0.1", 5432));
+  wipe(password);
+  const stats = new Stats();
+  const router = new Router(new RouterLimits());
+  router.add("GET", "/articles/:id");
+  return await serve(8080, router, new ServeLimits(), async (req: Request): Promise<Response> => {
+    if (req.route !== 0 || req.paramMalformed(0)) {
+      return refuse(req);
+    }
+    stats.served = stats.served + 1;
+    const ticket: i32 = await pgAsyncClaim(pool);
+    if (ticket < 0) {
+      return new Response(503).text("no connection\n");
+    }
+    const params = new PgAsyncParams();
+    params.int(req.paramNumber(0));
+    const r = await pgAsyncQuery(pool, ticket, "select title from article where id = $1", params);
+    pgAsyncRelease(pool, ticket, r.reusable);
+    if (!r.ok() || r.rows === 0) {
+      return new Response(404).text("no such article\n");
+    }
+    return new Response(200).text(r.text(0, 0));
+  });
+}
+```
+
+What the arrow captures is checked as a spawned task's function argument
+([Async functions](../language/async.md)): numbers, booleans, enums, and
+objects or arrays a task may share. A handler that stores its own memory
+into a shared object (`stats.last = req`), grows a shared array, or hands
+one to a further `spawn` is refused, because the task's memory is freed
+when the request is answered. Keep what must outlive a request in numbers,
+or in the database.
+
 ## Order and pipelining
 
 A client that sends several requests on one connection without waiting gets

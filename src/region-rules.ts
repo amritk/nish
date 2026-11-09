@@ -64,7 +64,7 @@ import {
   regionRoleOf,
 } from "./region-check"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { T_BOOL, T_STRING, TypeTable, isNumeric } from "./types"
+import { T_BOOL, T_CPTR, T_STRING, TypeTable, isNumeric } from "./types"
 
 /** Not yet known: the walk has not reached a binding's value. Joins as nothing. */
 const ORIGIN_NONE: i32 = -1
@@ -350,6 +350,86 @@ const taskShareObstacle = (programs: CheckedProgram[], table: TypeTable, type: i
   return ""
 }
 
+/**
+ * WP49 stage 5, part 8: whether a value of type `from` and one of type `into`
+ * may reach the same memory: a string, array, object or union both hold at
+ * some depth. Types are nominal but for `implements`, so an interface a class
+ * implements, a struct no program defines, a foreign pointer and a region may
+ * reach anything.
+ */
+const mayShareMemory = (programs: CheckedProgram[], table: TypeTable, from: i32, into: i32): boolean => {
+  const fromTypes: i32[] = []
+  const intoTypes: i32[] = []
+  if (!heapTypesIn(programs, table, from, fromTypes) || !heapTypesIn(programs, table, into, intoTypes)) {
+    return true
+  }
+  for (const type of fromTypes) {
+    if (intoTypes.indexOf(type) >= 0) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Adds to `out` the heap types a value of `type` reaches; false when it may reach any. */
+const heapTypesIn = (programs: CheckedProgram[], table: TypeTable, type: i32, out: i32[]): boolean => {
+  if (type < 0 || table.isRegion(type) || type === T_CPTR) {
+    return type >= 0 && !table.isRegion(type) && type !== T_CPTR
+  }
+  if (out.indexOf(type) >= 0) {
+    return true
+  }
+  if (table.isNullable(type)) {
+    return heapTypesIn(programs, table, table.stripNull(type), out)
+  }
+  if (table.isMaybe(type)) {
+    return heapTypesIn(programs, table, table.refOf(type), out)
+  }
+  if (table.isResult(type)) {
+    return (
+      heapTypesIn(programs, table, table.okOf(type), out) &&
+      heapTypesIn(programs, table, table.errOf(type), out)
+    )
+  }
+  if (type === T_STRING) {
+    out.push(type)
+    return true
+  }
+  if (table.isArray(type)) {
+    out.push(type)
+    return heapTypesIn(programs, table, table.refOf(type), out)
+  }
+  if (table.isUnion(type)) {
+    out.push(type)
+    for (const variant of table.variantsOf(type)) {
+      if (!heapTypesIn(programs, table, variant, out)) {
+        return false
+      }
+    }
+    return true
+  }
+  if (!table.isStruct(type)) {
+    return isScalarArgument(table, type)
+  }
+  out.push(type)
+  const name = table.nameOf(type)
+  for (const program of programs) {
+    const info = program.struct(name)
+    if (info !== null) {
+      if (info.implemented || info.implementsNames.length > 0) {
+        return false
+      }
+      for (const field of info.fields) {
+        if (!heapTypesIn(programs, table, field.type, out)) {
+          return false
+        }
+      }
+      return true
+    }
+  }
+  return false
+}
+
 /** The `N_RETURN` values of an arrow's block, not those of arrows nested in it. */
 const collectArrowReturns = (node: Node, out: Node[]): void => {
   if (node.kind === N_RETURN) {
@@ -409,6 +489,8 @@ class RegionWalk {
   spawnArrows: FunctionSig[]
   arrowArgs: i32[][]
   indirect: boolean[]
+  /** Every module, for the types a call's answer may reach (`mayShareMemory`). */
+  programs: CheckedProgram[]
 
   constructor(
     program: CheckedProgram,
@@ -438,6 +520,7 @@ class RegionWalk {
     this.spawnArrows = []
     this.arrowArgs = []
     this.indirect = []
+    this.programs = []
     this.who = task ? insideTask(fn) : insideRegion(fn)
     this.freed = task ? "the task ends" : "`free` runs"
   }
@@ -602,12 +685,23 @@ class RegionWalk {
     // answers a new holder of the shared object), so its arguments join in,
     // and so do the spawner's objects an arrow it runs captures.
     let out = callee !== null && this.runsSpawnArrow(callee) ? ORIGIN_UNKNOWN : ORIGIN_REGION
+    // An argument whose memory the answer's type cannot reach stays out
+    // (`await pgAsyncQuery(pool, ...)` answers rows of the task's own).
+    const narrow = this.task && callee !== null && capturesOf(callee).length === 0
     for (const arg of this.handedTo(call, callee)) {
       const a = unwrapParens(arg)
+      if (narrow && callee !== null && a.kind !== N_ARROW && !this.reaches(a, callee.returnType)) {
+        continue
+      }
       // What a callback answers may be what the call answers (`map`, `pick(() => a.node)`).
       out = joinOrigin(out, a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a))
     }
     return out
+  }
+
+  /** Whether what `arg` points at may be reached from a value of type `answer`. */
+  reaches(arg: Node, answer: i32): boolean {
+    return mayShareMemory(this.programs, this.table, this.typeOf(arg), answer)
   }
 
   arrowResult(arrow: Node): i32 {
@@ -1119,6 +1213,7 @@ const walkFindings = (
     home.enterInstance(fnInstance)
   }
   const walk = new RegionWalk(home, table, facts, fn, fresh, seedNames, seedOrigins, task)
+  walk.programs = programs
   for (const local of outer) {
     walk.bind(local, ORIGIN_OUTER)
   }
@@ -1214,7 +1309,10 @@ export const taskFindings = (
   for (const slot of capturesOf(task)) {
     const type = slot.type()
     const local = slot.arrow.captures[slot.index]
-    if (!isFrameValue(table, type) && !(table.sharedWithTask(type) && taskShareObstacle(programs, table, type, []).length === 0)) {
+    if (
+      !isFrameValue(table, type) &&
+      !(table.sharedWithTask(type) && taskShareObstacle(programs, table, type, []).length === 0)
+    ) {
       out.push(new RegionFinding(program, site, captureSpawnMessage(task, local.name, table.typeName(type))))
       return out
     }
@@ -1238,7 +1336,19 @@ export const taskFindings = (
   if (!shares && outer.length === 0) {
     return out
   }
-  const walk = walkFindings(out, programs, table, facts, task, freshResults, seedNames, seedOrigins, true, [], arrows)
+  const walk = walkFindings(
+    out,
+    programs,
+    table,
+    facts,
+    task,
+    freshResults,
+    seedNames,
+    seedOrigins,
+    true,
+    [],
+    arrows
+  )
   // Each arrow is a body of the task's own: its captures are the spawner's,
   // and its parameters what the task hands it, or anything when a callee
   // the walk judges by its facts runs it.
