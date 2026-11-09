@@ -166,14 +166,14 @@ const PG_ASYNC_CELL_COST: i32 = 16
  * page; a program writes none of them.
  */
 export class PgAsyncPool {
-  /** The number of connection slots, fixed at construction. */
-  readonly size: i32
   /** Each slot's socket, or -1 while it is not connected. */
   readonly fds: i32[]
   /** Each slot's state: 0 free, 1 claimed by a ticket. */
   readonly claimed: u8[]
   /** Each slot's claim count, the high part of its current ticket. */
   readonly claims: i32[]
+  /** The number of connection slots, fixed at construction. */
+  readonly size: i32
   /** The largest message a query accepts, in bytes, 1024 to 2^30 - 1; a larger one fails it with `PG_ERR_TOO_BIG` and closes the connection. */
   maxMessage: i32 = 1048576
   /** The most columns a row may have, 1 to 65535; more fails the query with `PG_ERR_TOO_BIG` and closes the connection. */
