@@ -1073,9 +1073,10 @@ function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void -> @check
   callee +34:5 CheckContext.performanceFix -> @CheckContext.performanceFix
   callee +36:5 CheckContext.performance -> @CheckContext.performance
 function indexGuardAdvice(program: CheckedProgram, table: TypeTable, index: Node, name: string, holder: string): string -> @indexGuardAdvice [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isRanged TypeTable.typeName declaresName nish_panic_index nish_str_concat
-  pointer program: size=696 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via shadowsGuardName
+  calls: TypeTable.isRanged TypeTable.typeName nish_panic_index nish_str_concat shadowsGuardName
+  pointer program: size=696 writesThrough=true captured=false passedTo=shadowsGuardName#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.typeName#0
   pointer index: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1086,7 +1087,7 @@ function indexGuardAdvice(program: CheckedProgram, table: TypeTable, index: Node
   local +4:11 what: string (const)
   callee +4:52 TypeTable.typeName -> @TypeTable.typeName
   local +10:9 convert: string (const)
-  callee +11:32 declaresName -> @declaresName
+  callee +11:32 shadowsGuardName -> @shadowsGuardName
   local +17:9 lead: string (const)
   local +21:9 length: string (const)
 function offsetSpelling(index: Node, offset: Offset): string -> @offsetSpelling
@@ -1098,19 +1099,20 @@ function offsetSpelling(index: Node, offset: Offset): string -> @offsetSpelling
   callee +0:3 unwrapPerfParens -> @unwrapPerfParens
   callee +0:20 unwrapPerfParens -> @unwrapPerfParens
 function offsetGuardAdvice(program: CheckedProgram, offset: Offset, sum: string, holder: string): string -> @offsetGuardAdvice
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: declaresName nish_str_concat
-  pointer program: size=696 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via shadowsGuardName
+  calls: nish_str_concat shadowsGuardName
+  pointer program: size=696 writesThrough=true captured=false passedTo=shadowsGuardName#0
   pointer offset: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 f64Mode: boolean (const)
-  callee +1:18 declaresName -> @declaresName
+  callee +1:18 shadowsGuardName -> @shadowsGuardName
   local +7:9 length: string (const)
 function boundsGuardEdits(walk: PerfWalk, access: Node, index: Node, name: string, holder: string): Edit[] -> @boundsGuardEdits
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via guardStatement
+  sharedWrite: via shadowsGuardName
   escaping: holder name
-  calls: CheckContext.edit TypeTable.isRanged declaresName guardStatement nish_panic_index nish_panic_overflow nish_str_concat nish_str_new
+  calls: CheckContext.edit TypeTable.isRanged declaresName guardStatement nish_panic_index nish_panic_overflow nish_str_concat nish_str_new shadowsGuardName
   pointer walk: size=80 writesThrough=false captured=false
   pointer access: size=40 writesThrough=false captured=false passedTo=guardStatement#1
   pointer index: size=40 writesThrough=false captured=false
@@ -1121,8 +1123,8 @@ function boundsGuardEdits(walk: PerfWalk, access: Node, index: Node, name: strin
   local +3:9 unsigned: boolean (const)
   callee +4:26 TypeTable.isRanged -> @TypeTable.isRanged
   local +7:9 convert: string (const)
-  callee +8:7 declaresName -> @declaresName
-  callee +8:50 declaresName -> @declaresName
+  callee +8:7 shadowsGuardName -> @shadowsGuardName
+  callee +8:49 shadowsGuardName -> @shadowsGuardName
   local +13:9 stmt: Node | null (const)
   callee +13:16 guardStatement -> @guardStatement
   callee +14:24 declaresName -> @declaresName
@@ -1185,17 +1187,45 @@ function hasEffectOffPath(node: Node, path: Node[]): boolean -> @hasEffectOffPat
   callee +13:35 isAssignmentOperator -> @isAssignmentOperator
   local +17:14 child: Node (const)
   callee +18:9 hasEffectOffPath -> @hasEffectOffPath
-function declaresName(node: Node, name: string): boolean -> @declaresName
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: name
-  calls: declaresName nish_str_eq
+function isNameDeclaration(node: Node): boolean -> @isNameDeclaration
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 k: i32 (const)
-  local +1:9 declares: boolean (const)
-  local +11:16 child: Node (const)
-  local +17:14 child: Node (const)
-  callee +18:9 declaresName -> @declaresName
+function declaresName(node: Node, name: string): boolean -> @declaresName
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: declaresName isNameDeclaration nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false passedTo=isNameDeclaration#0
+  stackSites=0 stackLocals=0
+  callee +0:7 isNameDeclaration -> @isNameDeclaration
+  local +1:16 child: Node (const)
+  local +7:14 child: Node (const)
+  callee +8:9 declaresName -> @declaresName
+function guardNameBit(name: string): i32 -> @guardNameBit
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function guardNamesDeclared(node: Node): i32 -> @guardNamesDeclared
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: guardNameBit guardNamesDeclared isNameDeclaration
+  pointer node: size=40 writesThrough=false captured=false passedTo=isNameDeclaration#0
+  stackSites=0 stackLocals=0
+  local +0:7 bits: i32 (let)
+  callee +1:7 isNameDeclaration -> @isNameDeclaration
+  local +2:16 child: Node (const)
+  callee +4:23 guardNameBit -> @guardNameBit
+  local +8:14 child: Node (const)
+  callee +9:19 guardNamesDeclared -> @guardNamesDeclared
+function shadowsGuardName(program: CheckedProgram, name: string): boolean -> @shadowsGuardName
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: name
+  calls: guardNameBit guardNamesDeclared
+  pointer program: size=696 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:28 guardNamesDeclared -> @guardNamesDeclared
+  callee +2:34 guardNameBit -> @guardNameBit
 function rangeGuard(name: string, lo: i32, hi: i32): string -> @rangeGuard
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
