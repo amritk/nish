@@ -115,6 +115,12 @@ refuse a program that reaches these
 
 </scalar-field>
 
+<scalar-field name="--deterministic">
+
+the same float bits on every target, nothing nondeterministic
+
+</scalar-field>
+
 <scalar-field name="--sandbox[=best-effort]">
 
 confine a Linux binary to what main reaches

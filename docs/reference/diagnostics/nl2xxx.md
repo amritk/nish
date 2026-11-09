@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 685 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 688 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12915,4 +12915,28 @@ The message of an error contains:
 
 ```text
 ` from `nish:async` takes …
+```
+
+## NL2697
+
+The message of an error contains:
+
+```text
+` of a string reads it with each target's own number grammar, which `--deterministic` refuses
+```
+
+## NL2698
+
+The message of an error contains:
+
+```text
+…the clock and the random source answer differently on every run
+```
+
+## NL2699
+
+The message of an error contains:
+
+```text
+…the environment and the terminal answer differently on every host
 ```

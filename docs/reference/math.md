@@ -13,6 +13,8 @@ import {
   hypotF64,
   logF64,
   powF64,
+  quietBitsF32,
+  quietBitsF64,
   sinF64,
   tanF64,
 } from "nish/math";
@@ -75,6 +77,18 @@ The remainder `x % y` on `f64`, as JavaScript and C's `fmod` define it: e_fmod.c
 
 </scalar-card>
 
+<scalar-card title="quiet​Bits​F32" icon="phosphor/regular/function" href="#quietbitsf32">
+
+`f32ToBits` under `--deterministic`: the bits of `x`, with every NaN as the one quiet NaN, `0x7fc00000`, for the reason `quietBitsF64` gives.
+
+</scalar-card>
+
+<scalar-card title="quiet​Bits​F64" icon="phosphor/regular/function" href="#quietbitsf64">
+
+`f64ToBits` under `--deterministic` (WP50 §9): the bits of `x`, except that every NaN answers the one quiet NaN, `0x7ff8000000000000`.
+
+</scalar-card>
+
 <scalar-card title="sin​F64" icon="phosphor/regular/function" href="#sinf64">
 
 `Math.sin(x)`: fdlibm's `sin`, its reduction shared with `tan`.
@@ -96,9 +110,11 @@ A call to `Math.atan2`,
 the compiler copies each function here that the call reaches into the
 calling module as an `internal` function, so this file writes no `.ll` of
 its own. On `--profile wasm` and `--profile wasm-host`, where no libm is
-linked, a call to the other five and an `f64` `%` load it too; everywhere
-else they stay LLVM's intrinsics and `frem`. Under Node and `tsc` the calls
-are the platform's `Math`, so nothing here runs there.
+linked, and on every target under `--deterministic`, a call to the other
+five and an `f64` `%` load it too; elsewhere they stay LLVM's intrinsics and
+`frem`. Under Node and `tsc` the calls are the platform's `Math`, so nothing
+here runs there, except under `--deterministic`, whose `--emit-ts` reading
+imports these functions in place of `Math`.
 
 </scalar-detail>
 
@@ -315,6 +331,51 @@ The exponent.
 `x` raised to `y`; 1 when `y` is a zero, NaN when `y` is NaN or
   when `x` is ±1 and `y` infinite (where C's pow gives 1), and NaN for a
   negative finite `x` and a non-integer `y`.
+
+</scalar-field>
+
+### quietBitsF32
+
+`f32ToBits` under `--deterministic`: the bits of `x`, with every NaN as the
+one quiet NaN, `0x7fc00000`, for the reason `quietBitsF64` gives.
+
+```ts
+function quietBitsF32(x: f32): i32
+```
+
+<scalar-field name="x" type="f32" required>
+
+The value to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The IEEE 754 bits of `x`, with every NaN as `0x7fc00000`.
+
+</scalar-field>
+
+### quietBitsF64
+
+`f64ToBits` under `--deterministic` (WP50 §9): the bits of `x`, except that
+every NaN answers the one quiet NaN, `0x7ff8000000000000`. A NaN's sign and
+payload are whatever the instruction that made it chose, which differs
+between x86-64, arm64, wasm and V8, so the flag makes them one value; a
+`bitsToF64` of any NaN pattern is left as it is.
+
+```ts
+function quietBitsF64(x: f64): i64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The value to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i64">
+
+The IEEE 754 bits of `x`, with every NaN as `0x7ff8000000000000`.
 
 </scalar-field>
 
