@@ -5657,6 +5657,7 @@ if (dealtHere("emitTs")) {
     ["NL4014", "refused/uncalled-field-zero", 7],
     ["NL4014", "refused/uncalled-wide-zero", 5],
     ["NL4017", "async/refused-readable", 8],
+    ["NL4018", "async/refused-cancel", 7],
   ]) {
     // A `refused/` or `async/` name is a program under tests/emit-ts, which
     // has no `.out` and so is no fixture.

@@ -3,9 +3,10 @@
 **Status: D1 accepted; stages 1 to 4 built, stage 5 in part (§10), stage 6
 open.** The language half — `async`, `await`, `Promise<T>`, `spawn`,
 `awaitAll` and the frame lowering — compiles, and runs on the executor that
-waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2)
-and tasks that share their spawner's objects (part 3); `serve`, the async
-Postgres pool and cancellation are not built. The anchors below
+waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
+tasks that share their spawner's objects (part 3), `serve` (part 4), the
+async Postgres pool (part 5), async `fetch` over TLS (part 6) and
+cancellation (part 7). The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
 note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
@@ -398,7 +399,7 @@ page for anything a user sees.
 | 2 | `nish/net/upstream` (§7) and the Postgres pool and carrier (WP39 E6), explicit style, each on the handler's loop | — | yes |
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
-| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | in part: the executor (part 1, #1283), async `fetch` (part 2, #1293) and a task reaching its spawner's objects (part 3); `serve`, the async Postgres pool and cancellation are open |
+| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314) and cancellation (part 7) |
 | 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
@@ -582,9 +583,11 @@ to `RUNTIME_ASYNC_TEXT_BUDGET`.
 
 **What it does not do.** A wait has no deadline: a descriptor that never
 becomes ready parks its task, and the program, until the peer sends or
-closes (ASYNC-6, open until cancellation). The executor is cooperative and
+closes (ASYNC-6, fixed in part 7 by `readableWithin`, `writableWithin` and
+cancellation). The executor is cooperative and
 runs on `main`'s thread (ASYNC-5). `--emit-ts` writes `sleep` as a
-`setTimeout` and refuses `readable`/`writable` (NL4017). `async` stays
+`setTimeout` and refuses `readable`/`writable` (NL4017) and the bounded
+waits and task calls of part 7 (NL4018). `async` stays
 refused under the wasm profiles (NL2652).
 
 ## Stage 5, part 2: async `fetch`
@@ -721,6 +724,41 @@ one per program and each naming only that `exit` surface, cover
 `docs/cookbook/async-spawn-shared.ts`. They name this release's note
 ("a spawned task may reach the objects its spawner owns") and go at the
 reseed that ships it, when the seed compiles them and they match nothing.
+
+## Stage 5, part 7: cancellation
+
+A task can be told to stop, and a wait can be bounded. `nish:async` adds two
+awaited waits, `readableWithin(fd, ms)` and `writableWithin(fd, ms)`, which
+answer false when the time runs out, and four plain calls: `taskId()`,
+`cancel(task)`, `cancelled()` and `cancelAfter(task, ms)`. A cancel is
+cooperative. It sets the task's flag and fails the wait the task is parked
+on; every later wait of that task fails at once, so its code runs on to its
+end and its `using` scopes release. `main` is never cancelled. The rules are
+[LANGUAGE.md](LANGUAGE.md#bounding-a-wait-and-cancelling-a-task)'s.
+
+- **`serve`** cancels a request's task when its client hangs up (the answer
+  is dropped), at `ServeLimits`' handler deadline (the handler's answer is
+  sent and the connection goes on) and on stop (the answer is sent with
+  `Connection: close`). This fixes SERVE-8.
+- **`fetch`** bounds each wait by `readTimeoutMs` and by what is left of
+  `totalTimeoutMs`, and a cancelled fetch answers `HTTP_E_CANCELLED`. This
+  fixes HF-10.
+- **The async Postgres pool** answers -3 to a cancelled claim, and fails a
+  cancelled query with `PG_ERR_CLOSED`, closing its connection. No
+  CancelRequest is sent (PG-37, accepted).
+- **The executor** fixes ASYNC-6. A stale or finished task's handle answers
+  false (ASYNC-18).
+
+`--emit-ts` refuses the new calls (NL4018). A program that does not use
+them compiles to the same IR as before.
+
+Not in this part: a context `serve` hands each handler, such as an async
+Postgres pool. Inside a spawned task, a call through a function-typed
+parameter is judged by facts that assume the worst for every pointer
+argument, so `serve`'s task may not hand its handler anything it shares: the
+region rules refuse `await handle(new Request(r), ctx)` with "may store
+memory outside the region into it" and "may grow it", whatever the handler's
+body. Lifting that needs facts per function value, in `src/region-rules.ts`.
 
 ## Not in this work package
 

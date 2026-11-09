@@ -63,7 +63,7 @@
  */
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { ROUTER_BAD_ESCAPE, Router } from "nish/net/router"
-import { readable, sleep, spawn } from "nish:async"
+import { cancel, cancelAfter, readable, sleep, spawn, taskId } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 
 /** The listen backlog `serve` asks for. */
@@ -94,9 +94,10 @@ export class ServeLimits {
   /** The most bytes a response body may have; a task that answers more is answered 500 instead. */
   responseBytes: i32 = 65536
   /**
-   * Milliseconds a request may take, from its head to its answer. Held for
-   * the cancellation stage: it is not yet enforced, and a slow handler holds
-   * its slot until it answers.
+   * Milliseconds a request's task may run, from its start to its answer;
+   * past it the task is cancelled: each await it is parked on, and each it
+   * makes later, answers false at once, so it runs to its end and its slot
+   * is freed. 0 or less sets no limit.
    */
   deadline: i32 = 30000
   /**
@@ -325,6 +326,14 @@ class ServeState {
   busy: boolean[]
   /** Whether a slot's task has written its answer. */
   done: boolean[]
+  /** Each slot's task, as `taskId()` answered it; 0 until the task starts. */
+  tasks: i64[]
+  /** Whether a slot's task was cancelled, so it is cancelled once. */
+  cancelled: boolean[]
+  /** `ServeLimits.deadline`, which each task arms on itself as it starts. */
+  deadline: i32 = 0
+  /** Set when the server begins to stop: each task still running, and each that starts later, is cancelled. */
+  stopping: boolean = false
   /** The status each task answered, or `SERVE_REFUSE`. */
   status: i32[]
   /** The bytes each task wrote into `bodies`, or -1 when its body broke `responseBytes`. */
@@ -350,6 +359,8 @@ class ServeState {
     this.reqs = []
     this.busy = []
     this.done = []
+    this.tasks = []
+    this.cancelled = []
     this.status = []
     this.lengths = []
     this.bodies = []
@@ -374,12 +385,25 @@ const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
   st.reqs.push(new HttpRequest(-1))
   st.busy.push(false)
   st.done.push(false)
+  st.tasks.push(toI64(0))
+  st.cancelled.push(false)
   st.status.push(toI32(0))
   st.lengths.push(toI32(0))
   st.bodies.push(new Array<u8>(limits.responseBytes))
   st.types.push(new Array<u8>(SERVE_TYPE_BYTES))
   st.typeLengths.push(toI32(0))
   return n
+}
+
+/**
+ * Cancels slot `k`'s task, once: its awaits answer false from now on, so it
+ * runs to its end and writes an answer nobody may read.
+ */
+const serveCancel = (st: ServeState, k: i32): void => {
+  if (!st.cancelled[k] && st.tasks[k] !== 0) {
+    st.cancelled[k] = true
+    cancel(st.tasks[k])
+  }
 }
 
 /** Whether any slot still holds a request. */
@@ -474,6 +498,13 @@ const serveTask = async (
   st: ServeState,
   k: i32
 ): Promise<void> => {
+  const self: i64 = taskId()
+  st.tasks[k] = self
+  if (st.stopping) {
+    cancel(self)
+  } else if (st.deadline > 0) {
+    cancelAfter(self, st.deadline)
+  }
   // The copy is written out here, not in a helper: a helper handed both the
   // shared request and the task's own would be refused, as it could store
   // one into the other.
@@ -584,6 +615,7 @@ export const serveOn = async (
   hl.http.idleTimeout = limits.idleTimeout
   const h: HttpHandler = new HttpHandler(hl, listener, router)
   const st: ServeState = new ServeState()
+  st.deadline = limits.deadline
   const fds: i32[] = [0, 0]
   const made: i32 = unixSocketPair(NET_UNIX_STREAM, fds)
   if (made < 0) {
@@ -611,8 +643,14 @@ export const serveOn = async (
           serveAnswer(h, st, k, typeCache, stats)
           st.busy[k] = false
           st.done[k] = false
+          st.cancelled[k] = false
+          st.tasks[k] = 0
           stats.answered += 1
           moved = true
+        } else if (st.busy[k] && (st.stopping || h.hungUp(st.reqs[k]))) {
+          // Its client hung up, or the server is stopping: nobody waits for
+          // this answer, so the task is told to stop waiting too.
+          serveCancel(st, k)
         }
       }
       while (h.ready()) {
@@ -628,6 +666,8 @@ export const serveOn = async (
         st.reqs[k] = r
         st.busy[k] = true
         st.done[k] = false
+        st.cancelled[k] = false
+        st.tasks[k] = 0
         spawn(serveTask(handle, st, k))
       }
     }
@@ -639,6 +679,12 @@ export const serveOn = async (
       draining = true
       stats.usedEnd = Arena.used()
       h.drain()
+      st.stopping = true
+      for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
+        if (st.busy[k] && !st.done[k]) {
+          serveCancel(st, k)
+        }
+      }
     }
     if (draining && h.connections() === 0 && !serveAnyBusy(st)) {
       break

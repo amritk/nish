@@ -164,6 +164,7 @@ struct HttpHandler (class) size=232 align=8 exported
   method sweep -> @nish.HttpHandler.sweep
   method ready -> @nish.HttpHandler.ready
   method take -> @nish.HttpHandler.take
+  method hungUp -> @nish.HttpHandler.hungUp
   method live -> @nish.HttpHandler.live
   method pooled -> @nish.HttpHandler.pooled
   method connections -> @nish.HttpHandler.connections
@@ -603,6 +604,16 @@ function HttpHandler.take(this: HttpHandler): HttpRequest -> @nish.HttpHandler.t
   stackSites=0 stackLocals=0
   callee -4:10 HttpHandler.ready -> @nish.HttpHandler.ready
   local -1:11 r: HttpRequest (const)
+function HttpHandler.hungUp(this: HttpHandler, r: HttpRequest): boolean -> @nish.HttpHandler.hungUp [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Http1Server.connection
+  calls: nish.Http1Connection.ended nish.Http1Server.connection nish.HttpHandler.live
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.HttpHandler.live#0
+  pointer r: size=120 writesThrough=false captured=false passedTo=nish.HttpHandler.live#1
+  stackSites=0 stackLocals=0
+  callee +0:13 HttpHandler.live -> @nish.HttpHandler.live
+  callee +0:29 Http1Connection.ended -> @nish.Http1Connection.ended
+  callee +0:29 Http1Server.connection -> @nish.Http1Server.connection
 function HttpHandler.live(this: HttpHandler, r: HttpRequest): boolean -> @nish.HttpHandler.live [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Server.holds nish_panic_index
@@ -3226,6 +3237,7 @@ struct Http1Connection (class) size=192 align=8 exported
   method inputRoom -> @nish.Http1Connection.inputRoom
   method feed -> @nish.Http1Connection.feed
   method endInput -> @nish.Http1Connection.endInput
+  method ended -> @nish.Http1Connection.ended
   method abort -> @nish.Http1Connection.abort
   method acquire -> @nish.Http1Connection.acquire
   method release -> @nish.Http1Connection.release
@@ -3529,6 +3541,10 @@ function Http1Connection.endInput(this: Http1Connection): void -> @nish.Http1Con
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer this: size=192 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Http1Connection.ended(this: Http1Connection): boolean -> @nish.Http1Connection.ended [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.abort(this: Http1Connection): void -> @nish.Http1Connection.abort [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true

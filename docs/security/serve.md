@@ -33,8 +33,10 @@ failed before the fix (SERVE-5): a content type holding CR or LF reached the
 carrier, which refused the head, and the handler panicked, ending the server
 for every client.
 
-One property is open: `deadline` is held, not enforced, so a task that never
-answers holds its slot (SERVE-8). One is accepted: the server keeps at most
+A task that never answered held its slot, and kept the server's drain from
+finishing, until the cancellation stage of WP49 (SERVE-8): the server now
+cancels a task whose client hung up, a task past `deadline`, and every task
+still running when it stops. One is accepted: the server keeps at most
 64 distinct content types (SERVE-9).
 
 ## Scope
@@ -67,8 +69,8 @@ echoed from a header, a body sized by the request) is treated as the peer's.
 Rows SERVE-1 to SERVE-4, SERVE-6, SERVE-7 and SERVE-10 are the shapes an
 attacker's traffic can take, each checked and found to hold; they are
 recorded so that the audit can see what was tried. SERVE-5 was fixed before
-merge and is counted as fixed in the index. SERVE-8 and SERVE-14 are open and
-counted; SERVE-9 and SERVE-11 to SERVE-13 are accepted. SERVE-11 to SERVE-14
+merge and SERVE-8 by the cancellation stage; both are counted as fixed in the
+index. SERVE-14 is open and counted; SERVE-9 and SERVE-11 to SERVE-13 are accepted. SERVE-11 to SERVE-14
 are what one client's connections, rather than its requests, can hold: each is
 bounded by a `ServeLimits` field, and none by the peer.
 
@@ -81,13 +83,13 @@ bounded by a `ServeLimits` field, and none by the peer.
 | SERVE-5 | Medium | `serveType` | A content type holding CR, LF or another control byte made the carrier refuse the head, and `HttpHandler.start` panicked on the refusal, so a peer whose input reached the type stopped the server. | **Fixed.** `serveType` refuses a type with a byte under 32 other than tab, or 127 — the carrier's field-text rule — so the request is answered 500. Before: `link/net_serve` panicked with "the carrier refused the head (-22)" and exited 1 after "bad status"; after: "bad type: 500". |
 | SERVE-6 | High if it failed | `serveOn`, `serveTask` | Pipelined answers must go out in request order, and one task must never read or write another request's memory. | **Holds.** The handler reads a connection's next request only once the one before it is answered (HANDLER-4), so one connection has at most one slot. A task reads only its slot `k`'s request, copied into its own region before `handle` runs, and writes only slot `k`'s buffers; a slot is reused only after the loop sent its answer. Pinned by "pipelined 1: ... slept 60" before "pipelined 2: ... slept 1" — the second request is read only once the first, slower one is answered, so this pins serial order on a connection, not a reordering of tasks that finish out of order — and by 4000 pipelined answers checked in order. |
 | SERVE-7 | Medium if it failed | `serveTask`, `serveOn` | The server's memory must not grow per request. | **Holds.** A task's allocations — the request copy, the `Request` and `Response`, `handle`'s own — live in its region and go when it ends; the loop allocates no per-request object in the arena once its slots and type cache are warm. What the runtime allocates outside the arena for a task's frame and region is not measured here. `Arena.used()` in the server's loop is 48 bytes after 100 requests and 48 after 4000 (also 48/48 at 200, 1000 and 8000). Pinned by "arena flat: true". |
-| SERVE-8 | Low | `ServeLimits.deadline` | A task that never answers — a `handle` waiting on something that never comes — holds its slot, and with `inFlight` of them the server answers every new request 503. | **Open.** `deadline` is held for the cancellation stage, which cancels a task past it; until then the bound is `inFlight` and the program's `handle`. The carrier's timeouts still end an idle or slow peer's connection, and its late answer is dropped (SERVE-10). A hung task also keeps the drain from finishing: the loop stops only once no slot is busy, so a server past `maxRequests` with a task that never answers never returns from `serve`. |
+| SERVE-8 | Low | `ServeLimits.deadline` | A task that never answers — a `handle` waiting on something that never comes — holds its slot, and with `inFlight` of them the server answers every new request 503. | **Fixed** by the cancellation stage of WP49. Each task arms `cancelAfter(taskId(), deadline)` as it starts; the server's loop cancels a busy slot's task once the handler reports its connection hung up (`HttpHandler.hungUp`, from the carrier's `Http1Connection.ended()`); and when the server stops it cancels every task still running, and each that starts later. A cancelled task's awaits answer false at once (`nish:async`'s `cancel`, ASYNC-6 in `async.md`), so `handle` runs on to its end, its slot is freed and the drain finishes; its answer, if its connection is gone, is dropped (SERVE-10). Before: a task parked on `sleep(10000)` held its slot for the 10 s, and `serve` with `maxRequests` reached returned only after it: "serve: 0, answered 2, returned within 2 s: false" (`link/net_serve_shutdown` with the stop's cancel taken out, 10.0 s). After: "returned within 2 s: true", and the task logs "slow: the sleep answered false, cancelled true"; `link/net_serve_hangup` ("after the await: it answered false, cancelled true") and `link/net_serve_deadline` ("slow: 503 ... past the deadline", "slow answered within 2 s: true"). What stays open is a `handle` that does not await: a loop that never yields cannot be cancelled, and holds the executor itself (ASYNC-5 in `async.md`). |
 | SERVE-9 | Low | `serveType` | The server keeps the bytes of at most 64 distinct content types; a 65th is answered 500. | **Accepted.** The cache is what keeps a warm server from allocating per answer. A program that echoes a peer's text into the type lets the peer fill it; a type is the program's choice, and 64 covers any fixed set. |
 | SERVE-10 | High if it failed | `serveAnswer` | An answer for a request whose connection closed while its task ran must not reach whoever holds the connection's slot now. | **Holds.** The loop answers through the handler, which drops an answer for a closed connection even after a new one took the slot (HANDLER-3); the server's slot is freed either way. Pinned by "after a hang-up: 200 [text/plain; charset=utf-8] hello": a client hangs up while its task sleeps 80 ms, and with the next connection the late "slept 80" is not what it reads, and the slot is free again for it. |
 | SERVE-11 | Low | `ServeLimits.headTimeout`, `serveOn` (`hl.http`) | A client that trickles its request head (slowloris) holds a connection while it does, and with `connections` such clients every new connection is closed unanswered. | **Accepted.** `headTimeout` (30 s by default) is the carrier's deadline for a whole head, counted from its first byte however steadily the bytes come (H1-1 in `http1-codec.md`); past it the connection is closed. A body trickled after its head is bounded the same way by the handler's `bodyTimeout`, 30 s (HANDLER-5). A program facing such clients lowers `headTimeout`; what neither bounds is how many connections one peer opens, which is the network's to cap. |
 | SERVE-12 | Low | `ServeLimits.idleTimeout`, `serveOn` (`hl.http`) | A keep-alive connection that sends nothing more holds its connection slot until it is closed, so idle clients can take every slot. | **Accepted.** `idleTimeout` (60 s by default) is the carrier's: a connection with no byte read or written for that long is closed and its slot freed. A program that wants slots back sooner lowers it; keep-alive is what spares a client a new handshake per request. |
 | SERVE-13 | Low | `ServeLimits` | The server's worst-case memory must be known from its caps. | **Accepted, stated.** From the caps, not measured: each connection holds the carrier's input and head buffers (each about `headerBytes`), a 64 KiB output buffer while it writes, and the request the handler is assembling, up to `headerBytes` + `bodyBytes`; each in-flight request holds its copy in its task's region (the same size again) and its slot's `responseBytes` + 128 bytes, kept for reuse. So about `connections` × (`bodyBytes` + 3 × `headerBytes` + 64 KiB) + `inFlight` × (`bodyBytes` + `headerBytes` + `responseBytes` + 128) bytes: with the defaults about 256 × 1.11 MiB + 256 × 1.08 MiB, some 560 MiB, almost all of it two copies of a 1 MiB body per connection. A program sizes it by `bodyBytes`, `connections` and `inFlight`. |
-| SERVE-14 | Low | `serveOn`, `serveFreeSlot` | One client can take every in-flight slot: a connection holds at most one (HANDLER-4), but with `inFlight` connections, each sending a request its `handle` is slow to answer, every other client's request is answered 503 until those tasks end. | **Open.** The server has no per-peer share of `inFlight` or `connections`; the bound is `handle`'s own time, and, until the cancellation stage enforces it, not `deadline` (SERVE-8). A program behind a proxy that caps connections per address is not exposed. |
+| SERVE-14 | Low | `serveOn`, `serveFreeSlot` | One client can take every in-flight slot: a connection holds at most one (HANDLER-4), but with `inFlight` connections, each sending a request its `handle` is slow to answer, every other client's request is answered 503 until those tasks end. | **Open.** The server has no per-peer share of `inFlight` or `connections`; the bound is `deadline` (SERVE-8), 30 s by default, and a client's hang-up ends its own task at once. A program behind a proxy that caps connections per address is not exposed. |
 
 ## Properties verified
 
@@ -116,7 +118,18 @@ answered in order, 0 not".
 **Flat memory** (SERVE-7): "arena flat: true", with "serve: 0, answered 4000,
 failed 0, slots 1".
 
+**Cancellation** (SERVE-8), each in its own program: a hang-up,
+`tests/link/net_serve_hangup` — "after the await: it answered false, cancelled
+true", "a later await: it answered false; the task ends", "arena flat: true";
+the deadline, `tests/link/net_serve_deadline` — "slow: 503
+[text/plain; charset=utf-8] past the deadline", "slow answered within 2 s:
+true", and the connection serves the next request; and the stop,
+`tests/link/net_serve_shutdown` — "slow: the sleep answered false, cancelled
+true", "serve: 0, answered 2, returned within 2 s: true".
+
 ## Tests
 
 - `tests/link/net_serve`
 - `tests/link/net_serve_pipelined_flat`
+- `tests/link/net_serve_hangup`, `tests/link/net_serve_deadline`,
+  `tests/link/net_serve_shutdown` (SERVE-8)

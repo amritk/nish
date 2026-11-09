@@ -705,8 +705,14 @@ const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1280
  * program whose IR declares a `nish_async_*` function (scripts/build.sh), so a program
  * that never awaits a wait or spawns carries none of it. The budget is the next 256-byte
  * boundary above the measurement.
+ *
+ * Raised to 3,840 by cancellation (stage 5, part 7): a task's cancel flag and the list of
+ * its pending waits, a bounded descriptor wait's deadline timer, `cancelAfter`'s timer,
+ * and taking a task off the ready queue when it finishes queued (ASYNC-18). Measured
+ * **3,797 bytes** against 2,627 on 2026-11-09 with clang 18.1.3 on linux-x64; the next
+ * 256-byte boundary.
  */
-const RUNTIME_ASYNC_TEXT_BUDGET = 2816
+const RUNTIME_ASYNC_TEXT_BUDGET = 3840
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`

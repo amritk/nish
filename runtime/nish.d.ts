@@ -4847,6 +4847,71 @@ declare module "nish:async" {
    *   made (an `fd` that is not open). A regular file is always ready.
    */
   export function writable(fd: i32): Promise<boolean>;
+  /**
+   * Suspend the task until `fd` has bytes to read, or its peer has hung up,
+   * or `ms` milliseconds pass, whichever comes first. Written only as
+   * `await readableWithin(fd, ms)` inside an `async` function (NL2671).
+   * Refused under `--emit-ts` (NL4018).
+   *
+   * @param fd An open descriptor: a socket, a pipe or a terminal.
+   * @param ms The most milliseconds to wait; a negative `ms` waits without a
+   *   limit, as `readable` does.
+   * @returns `true` once `fd` is ready; `false` when `ms` passed first, when
+   *   the wait could not be made, or when the task is cancelled.
+   */
+  export function readableWithin(fd: i32, ms: i32): Promise<boolean>;
+  /**
+   * Suspend the task until `fd` takes bytes without blocking, or `ms`
+   * milliseconds pass, whichever comes first. Written only as
+   * `await writableWithin(fd, ms)` inside an `async` function (NL2671).
+   * Refused under `--emit-ts` (NL4018).
+   *
+   * @param fd An open descriptor: a socket, a pipe or a terminal.
+   * @param ms The most milliseconds to wait; a negative `ms` waits without a
+   *   limit, as `writable` does.
+   * @returns `true` once `fd` is ready; `false` when `ms` passed first, when
+   *   the wait could not be made, or when the task is cancelled.
+   */
+  export function writableWithin(fd: i32, ms: i32): Promise<boolean>;
+  /**
+   * The running task's handle, to hand to `cancel` or `cancelAfter`. `main`'s
+   * handle is 0, which no call cancels. Refused under `--emit-ts` (NL4018).
+   *
+   * @returns The handle, an `i64` that names this task and no later one.
+   */
+  export function taskId(): i64;
+  /**
+   * Cancel a task: every `sleep`, `readable` or `writable` it is waiting on
+   * answers `false` at once, and so does every one it makes later, so it runs
+   * on to its end, its `using` bindings dispose and its region is freed. A
+   * task is never stopped in the middle of its code. Refused under
+   * `--emit-ts` (NL4018).
+   *
+   * @param task A handle `taskId()` answered.
+   * @returns `true` while the task is still running, so it is now cancelled
+   *   (a second `cancel` of it answers `true` too); `false` for a task that
+   *   has finished, or for `main`.
+   */
+  export function cancel(task: i64): boolean;
+  /**
+   * Whether the running task has been cancelled. Refused under `--emit-ts`
+   * (NL4018).
+   *
+   * @returns `true` once `cancel` was called on it, or its `cancelAfter`
+   *   deadline passed.
+   */
+  export function cancelled(): boolean;
+  /**
+   * Cancel a task `ms` milliseconds from now, unless it finishes first. A
+   * later call replaces the deadline; a negative `ms` removes it. Refused
+   * under `--emit-ts` (NL4018).
+   *
+   * @param task A handle `taskId()` answered.
+   * @param ms The milliseconds until the task is cancelled.
+   * @returns `true` when the task is still running and the deadline is set
+   *   (or removed); `false` for a task that has finished or is `main`.
+   */
+  export function cancelAfter(task: i64, ms: i32): boolean;
 }
 
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
