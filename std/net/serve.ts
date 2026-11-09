@@ -120,7 +120,7 @@ export class ServeStats {
   warmAfter: i32 = 0
   /** `Arena.used()` in the server's loop once `warmAfter` requests were answered. */
   usedWarm: i64 = 0
-  /** `Arena.used()` in the server's loop when it stopped. */
+  /** `Arena.used()` in the server's loop once `maxRequests` were answered, before draining. */
   usedEnd: i64 = 0
 
   /** Empty stats: nothing answered yet. */
@@ -453,6 +453,7 @@ export async function serveOn(
     }
     if (!draining && limits.maxRequests > 0 && stats.answered >= limits.maxRequests) {
       draining = true
+      stats.usedEnd = Arena.used()
       h.drain()
     }
     if (draining && h.connections() === 0 && !serveAnyBusy(st)) {
@@ -460,7 +461,6 @@ export async function serveOn(
     }
     await readable(h.loop)
   }
-  stats.usedEnd = Arena.used()
   st.stopped = true
   netClose(fds[0])
   netClose(fds[1])
