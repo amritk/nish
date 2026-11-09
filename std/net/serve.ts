@@ -76,6 +76,8 @@ const SERVE_TICK_MS: i32 = 1000
 const SERVE_WAKE: i32 = 0
 /** `refused` marks a response the loop answers with `HttpHandler.refuse`. */
 const SERVE_REFUSE: i32 = -1
+/** The status a program's malformed answer is sent as. */
+const SERVE_FAILED: i32 = 500
 
 /** The caps a server holds every request and connection to; each field is read once, by `serve`. */
 export class ServeLimits {
@@ -225,12 +227,12 @@ export class Request {
  * `refuse`.
  */
 export class Response {
-  /** The status, from 200 to 599; any other is answered 500. */
-  status: i32 = 200
   /** The `Content-Type` value; empty sends none. */
   type: string = ""
   /** The body, `body[0 .. length)`. */
   body: u8[]
+  /** The status, from 200 to 599; any other is answered 500. */
+  status: i32 = 200
   /** How many bytes of `body` are the body. */
   length: i32 = 0
 
@@ -249,7 +251,7 @@ export class Response {
    * @returns this response, for a chain
    */
   text(s: string): Response {
-    return this.bytes("text/plain; charset=utf-8", serveBytes(s), 0, toI32(s.length))
+    return this.bytes("text/plain; charset=utf-8", serveBytes(s), toI32(0), toI32(s.length))
   }
 
   /**
@@ -258,7 +260,7 @@ export class Response {
    * @returns this response, for a chain
    */
   json(s: string): Response {
-    return this.bytes("application/json", serveBytes(s), 0, toI32(s.length))
+    return this.bytes("application/json", serveBytes(s), toI32(0), toI32(s.length))
   }
 
   /**
@@ -278,7 +280,7 @@ export class Response {
       this.body = buf
     } else {
       const copy: u8[] = new Array<u8>(len)
-      for (let i: i32 = 0; i < len; i++) {
+      for (let i: i32 = 0; i < toI32(copy.length); i++) {
         copy[i] = buf[off + i]
       }
       this.body = copy
@@ -354,11 +356,11 @@ const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
   st.reqs.push(new HttpRequest(-1))
   st.busy.push(false)
   st.done.push(false)
-  st.status.push(0)
-  st.lengths.push(0)
+  st.status.push(toI32(0))
+  st.lengths.push(toI32(0))
   st.bodies.push(new Array<u8>(limits.responseBytes))
   st.types.push(new Array<u8>(SERVE_TYPE_BYTES))
-  st.typeLengths.push(0)
+  st.typeLengths.push(toI32(0))
   return n
 }
 
@@ -383,7 +385,7 @@ const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
   const length: i32 = st.lengths[k]
   if (status < 200 || status > 599 || length < 0 || st.typeLengths[k] < 0) {
     stats.failed += 1
-    h.problem(r, 500, "Internal Server Error", "")
+    h.problem(r, SERVE_FAILED, "Internal Server Error", "")
     return
   }
   if (st.typeLengths[k] === 0) {
@@ -393,19 +395,22 @@ const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
   const type: i32 = serveType(typeCache, st.types[k], st.typeLengths[k])
   if (type < 0) {
     stats.failed += 1
-    h.problem(r, 500, "Internal Server Error", "")
+    h.problem(r, SERVE_FAILED, "Internal Server Error", "")
     return
   }
-  h.send(r, status, typeCache[type], st.bodies[k], 0, length)
+  h.send(r, status, typeCache[type], st.bodies[k], toI32(0), length)
 }
 
 /** The index in `cache` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
 const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
+  if (len < 0 || len > toI32(type.length)) {
+    return -1
+  }
   for (let i: i32 = 0; i < toI32(cache.length); i++) {
     const c: u8[] = cache[i]
     if (toI32(c.length) === len) {
       let same: boolean = true
-      for (let j: i32 = 0; j < len && same; j++) {
+      for (let j: i32 = 0; j < toI32(c.length) && j < toI32(type.length) && same; j++) {
         same = c[j] === type[j]
       }
       if (same) {
@@ -418,13 +423,13 @@ const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
   }
   // A control byte other than a tab would make the carrier refuse the head,
   // which the handler treats as a program's mistake and panics on.
-  for (let j: i32 = 0; j < len; j++) {
+  for (let j: i32 = 0; j < len && j < toI32(type.length); j++) {
     if ((type[j] < 32 && type[j] !== 9) || type[j] === 127) {
       return -1
     }
   }
   const copy: u8[] = new Array<u8>(len)
-  for (let j: i32 = 0; j < len; j++) {
+  for (let j: i32 = 0; j < toI32(copy.length) && j < toI32(type.length); j++) {
     copy[j] = type[j]
   }
   cache.push(copy)
@@ -435,7 +440,7 @@ const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
 const serveBytes = (s: string): u8[] => {
   const n: i32 = toI32(s.length)
   const out: u8[] = new Array<u8>(n)
-  for (let i: i32 = 0; i < n; i++) {
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(s.length); i++) {
     out[i] = toU8(s.charCodeAt(i))
   }
   return out
