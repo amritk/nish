@@ -5136,7 +5136,9 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
     while (i < list.length && i < marked.length) {
       if (marked[i]) {
         marked[i] = false
-        if (visitFacts(graph, i, list[i])) {
+        // The visit is a call, which ends what the loop bound proved about
+        // `i`, so the write after it tests the bound again.
+        if (visitFacts(graph, i, list[i]) && i < marked.length) {
           marked[i] = true
           again = true
           let r = i + 1 < graph.callerStart.length ? graph.callerStart[i] : 0
