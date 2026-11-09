@@ -45,11 +45,14 @@ import {
   emitAwaitAll,
   emitKernelWait,
   emitSpawn,
+  emitTaskCall,
+  isTaskCallName,
   isAwaitAllDeclaration,
   suspends,
   transformAsync,
 } from "./emit-async"
 import { jsonRouteOf } from "./json-typed"
+import { isExecutorCall } from "./nish-modules"
 import {
   functionAttributes,
   paramAttributes,
@@ -1808,8 +1811,11 @@ export class Emitter {
     if (imported === "async.spawn") {
       return emitSpawn(this, expr)
     }
-    if (imported === "async.sleep" || imported === "async.readable" || imported === "async.writable") {
-      return emitKernelWait(this, expr, imported) // WP49 stage 5: a wait on the executor
+    if (isExecutorCall(imported)) {
+      // WP49 stage 5: a wait on the executor, or (part 7) a cancellation call
+      return isTaskCallName(imported)
+        ? emitTaskCall(this, expr, imported)
+        : emitKernelWait(this, expr, imported)
     }
     if (imported.length > 0) {
       // A dotted canonical name (`process.exit`) belongs to the emitter for

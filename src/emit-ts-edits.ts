@@ -61,7 +61,7 @@ import { numbersRow } from "./emit-ts-numbers"
 import { recordsRow } from "./emit-ts-records"
 import { stringsRow } from "./emit-ts-strings"
 import { StringSet } from "./map"
-import { isBuiltinSpecifier, isNetExport, nishExport } from "./nish-modules"
+import { isBuiltinSpecifier, isExecutorCall, isNetExport, nishExport } from "./nish-modules"
 import {
   FLAG_FOREIGN,
   FLAG_OPTIONAL,
@@ -159,6 +159,13 @@ export const SIGNAL_REFUSAL: string =
  */
 const WAIT_REFUSAL: string =
   "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native"
+
+/**
+ * The message the bounded waits and the cancellation calls of `nish:async`
+ * carry: Node's timers and promises have no task a cancel could reach.
+ */
+const CANCEL_REFUSAL: string =
+  "--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native"
 
 /**
  * The message NL4015 carries. A region is an allocator swap, and the runtime
@@ -619,6 +626,10 @@ const observe = (walk: Walk, node: Node): string => {
   }
   if (name === "async.readable" || name === "async.writable") {
     walk.refuse(node, WAIT_REFUSAL)
+    return ""
+  }
+  if (isExecutorCall(name) && name !== "async.sleep") {
+    walk.refuse(node, CANCEL_REFUSAL)
     return ""
   }
   const ambient = ambientCallee(walk, node)

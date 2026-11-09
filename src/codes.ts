@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 843
+export const RULE_COUNT: i32 = 846
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -193,6 +193,8 @@ const diagnosticRules = (): string[] => [
   "NL2362",
   " and is stored into memory — handed to a callee that keeps it, or held by an object or an array — where this analysis stops following it, so nothing proves it is gone when the block releases",
   "NL2421",
+  "--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native",
+  "NL4018",
   ", and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)",
   "NL2422",
   "` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code",
@@ -525,6 +527,8 @@ const diagnosticRules = (): string[] => [
   "NL2639",
   "` is a mask type and has no constructor: a mask is what a lane-wise compare (`eq`, `lt` and the rest) answers",
   "NL2621",
+  "` takes two `i32`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false",
+  "NL2692",
   "` is only written inside an `async` function: make the function that holds it `async`, and `await` its calls",
   "NL2641",
   "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
@@ -1494,6 +1498,8 @@ const diagnosticRules = (): string[] => [
   "NL4003",
   "` expects a value of type ",
   "NL2269",
+  "` from `nish:async` takes ",
+  "NL2693",
   "` is not generic, so `new ",
   "NL2318",
   "` is outside the range of ",

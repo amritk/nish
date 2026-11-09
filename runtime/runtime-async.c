@@ -53,6 +53,18 @@
  * allocates is given back when it ends. The driver enters and leaves around
  * each resume (`nish_async_enter`, `nish_async_leave`).
  *
+ * **Cancellation.** `nish_async_cancel` marks a task cancelled
+ * (`NISH_TASK_CANCELLED`, a bit beside the queued bit) and fails each wait it
+ * has pending, so every parked await answers false and the task is queued; a
+ * wait the task makes afterwards is made already failed. Nothing is unwound:
+ * the task runs on from each failed await to its end, its `using` bindings
+ * dispose as they do on any return, and `nish_async_done` frees its region.
+ * `nish_async_cancel_after` arms a deadline that cancels a task when it
+ * passes, a timer in the heap that `done` takes out, and
+ * `nish_async_wait_fd_within` a descriptor wait that fails when its own
+ * deadline passes first. A timer leaves the heap the moment its wait is
+ * answered either way (`heap_at`), so the heap holds only live timers.
+ *
  * The executor runs on the thread that runs `main`; its state is not shared
  * with the threads of `nish/threads`. */
 
@@ -96,8 +108,13 @@ typedef struct nish_task {
   uint32_t gen;           /* moves on each time the node is reused */
   uint64_t region;        /* the task's region; 0 for `main` and a free node */
   uint32_t index;         /* the node's place in the task table, for ever */
-  uint32_t queued;        /* on the ready queue, so it is queued once */
+  uint32_t flags;         /* NISH_TASK_QUEUED, NISH_TASK_CANCELLED */
 } nish_task;
+
+/* On the ready queue, so it is queued once. */
+#define NISH_TASK_QUEUED 1u
+/* Cancelled: each wait it has, or makes, answers false at once. */
+#define NISH_TASK_CANCELLED 2u
 
 _Static_assert(sizeof(nish_task) <= NISH_ASYNC_HEADER, "a node's header holds a task");
 _Static_assert(offsetof(nish_task, kind) == 8, "the driver reads the kind at byte 8");
@@ -119,6 +136,8 @@ typedef struct nish_wait {
   int32_t fd;        /* the registered duplicate, or -1 for a timer */
   int64_t deadline;  /* a timer's, in CLOCK_MONOTONIC nanoseconds */
   uint64_t seq;      /* a timer's place among equal deadlines */
+  int32_t heap_at;   /* its place in the timer heap, or -1 */
+  int32_t cancels;   /* a task's deadline: firing cancels the task, waking nothing */
 } nish_wait;
 
 static nish_task nish_async_main_task = {NULL, -1, 1, 0, 0, 0};
@@ -144,6 +163,10 @@ static uint32_t *nish_async_heap;
 static uint32_t nish_async_heap_len;
 static uint32_t nish_async_heap_cap;
 static uint64_t nish_async_seq;
+
+/* Per task index, the slot + 1 of its armed deadline, or 0. */
+static uint32_t *nish_async_deadlines;
+static uint32_t nish_async_deadline_cap;
 
 static int nish_async_poller = -1;
 static uint32_t nish_async_fd_waits;
@@ -183,6 +206,11 @@ static void nish_async_table_add(nish_task *t) {
   }
   if (nish_async_task_count == nish_async_task_cap)
     nish_async_tasks = nish_async_grow(nish_async_tasks, &nish_async_task_cap, sizeof *nish_async_tasks);
+  while (nish_async_task_count >= nish_async_deadline_cap) {
+    uint32_t had = nish_async_deadline_cap;
+    nish_async_deadlines = nish_async_grow(nish_async_deadlines, &nish_async_deadline_cap, sizeof *nish_async_deadlines);
+    memset(nish_async_deadlines + had, 0, (size_t)(nish_async_deadline_cap - had) * sizeof *nish_async_deadlines);
+  }
   t->index = nish_async_task_count;
   nish_async_tasks[nish_async_task_count++] = t;
 }
@@ -194,8 +222,8 @@ static int64_t nish_async_now(void) {
 }
 
 static void nish_async_enqueue(nish_task *t) {
-  if (t->queued) return;
-  t->queued = 1;
+  if (t->flags & NISH_TASK_QUEUED) return;
+  t->flags |= NISH_TASK_QUEUED;
   t->next = NULL;
   if (nish_async_tail) nish_async_tail->next = t;
   else nish_async_head = t;
@@ -228,7 +256,7 @@ void *nish_async_spawn(int32_t kind, uint64_t bytes) {
       nish_task *t = (nish_task *)(chunk + i * slab->stride);
       t->gen = 1;
       t->region = 0;
-      t->queued = 0;
+      t->flags = 0;
       nish_async_table_add(t);
       t->next = slab->free;
       slab->free = t;
@@ -239,7 +267,7 @@ void *nish_async_spawn(int32_t kind, uint64_t bytes) {
   slab->free = t->next;
   t->next = NULL;
   t->kind = kind;
-  t->queued = 0;
+  t->flags = 0;
   t->region = nish_region_new();
   nish_async_live++;
   return t;
@@ -261,10 +289,14 @@ void nish_async_leave(void *node, void *prev) {
   nish_async_current = prev;
 }
 
-/* A task finished: free its region and put its node back, a generation on. */
+static void nish_async_disarm(nish_task *t);
+
+/* A task finished: take out its deadline, free its region and put its node
+   back, a generation on. */
 void nish_async_done(void *node) {
   nish_task *t = node;
   if (t->kind < 0) return;
+  nish_async_disarm(t);
   nish_region_free(t->region);
   t->region = 0;
   nish_async_live--;
@@ -311,6 +343,8 @@ static uint32_t nish_async_wait_new(void) {
   w->fd = -1;
   w->deadline = 0;
   w->seq = 0;
+  w->heap_at = -1;
+  w->cancels = 0;
   return slot;
 }
 
@@ -328,11 +362,80 @@ static uint64_t nish_async_fired_now(uint32_t slot, int32_t answer) {
   return nish_async_token(slot);
 }
 
+/* ---- The timer heap ---------------------------------------------------- */
+
+static int nish_async_timer_before(uint32_t a, uint32_t b) {
+  nish_wait *x = &nish_async_waits[a];
+  nish_wait *y = &nish_async_waits[b];
+  return x->deadline < y->deadline || (x->deadline == y->deadline && x->seq < y->seq);
+}
+
+static void nish_async_heap_set(uint32_t at, uint32_t slot) {
+  nish_async_heap[at] = slot;
+  nish_async_waits[slot].heap_at = (int32_t)at;
+}
+
+static void nish_async_heap_up(uint32_t at) {
+  uint32_t slot = nish_async_heap[at];
+  while (at > 0) {
+    uint32_t up = (at - 1) / 2;
+    if (!nish_async_timer_before(slot, nish_async_heap[up])) break;
+    nish_async_heap_set(at, nish_async_heap[up]);
+    at = up;
+  }
+  nish_async_heap_set(at, slot);
+}
+
+static void nish_async_heap_down(uint32_t at) {
+  uint32_t slot = nish_async_heap[at];
+  for (;;) {
+    uint32_t kid = at * 2 + 1;
+    if (kid >= nish_async_heap_len) break;
+    if (kid + 1 < nish_async_heap_len && nish_async_timer_before(nish_async_heap[kid + 1], nish_async_heap[kid]))
+      kid++;
+    if (!nish_async_timer_before(nish_async_heap[kid], slot)) break;
+    nish_async_heap_set(at, nish_async_heap[kid]);
+    at = kid;
+  }
+  nish_async_heap_set(at, slot);
+}
+
+static void nish_async_heap_push(uint32_t slot) {
+  if (nish_async_heap_len == nish_async_heap_cap)
+    nish_async_heap = nish_async_grow(nish_async_heap, &nish_async_heap_cap, sizeof *nish_async_heap);
+  nish_async_heap_set(nish_async_heap_len++, slot);
+  nish_async_heap_up(nish_async_heap_len - 1);
+}
+
+/* Take the timer of `slot` out of the heap, wherever it is. */
+static void nish_async_heap_remove(uint32_t slot) {
+  int32_t at = nish_async_waits[slot].heap_at;
+  if (at < 0) return;
+  nish_async_waits[slot].heap_at = -1;
+  uint32_t last = nish_async_heap[--nish_async_heap_len];
+  if ((uint32_t)at == nish_async_heap_len) return;
+  nish_async_heap_set((uint32_t)at, last);
+  nish_async_heap_up((uint32_t)at);
+  nish_async_heap_down((uint32_t)nish_async_waits[last].heap_at);
+}
+
+/* ---- Answering a wait ---------------------------------------------------- */
+
+static nish_task *nish_async_task_at(uint32_t index, uint32_t gen) {
+  nish_task *t = index == 0 ? &nish_async_main_task
+               : index < nish_async_task_count ? nish_async_tasks[index] : NULL;
+  return t && t->gen == gen ? t : NULL;
+}
+
+static void nish_async_cancel_task(nish_task *t);
+
 /* The wait in `slot` completed with `answer`: queue its task, or drop it when
-   the task it was made for has finished. */
+   the task it was made for has finished. A task's deadline cancels the task
+   instead. */
 static void nish_async_fire(uint32_t slot, int32_t answer) {
   nish_wait *w = &nish_async_waits[slot];
   if (w->state != NISH_WAIT_PENDING) return;
+  nish_async_heap_remove(slot);
   if (w->fd >= 0) {
 #if defined(__linux__)
     epoll_ctl(nish_async_poller, EPOLL_CTL_DEL, w->fd, NULL);
@@ -343,9 +446,14 @@ static void nish_async_fire(uint32_t slot, int32_t answer) {
   }
   w->state = NISH_WAIT_FIRED;
   w->answer = answer;
-  nish_task *t = w->task == 0 ? &nish_async_main_task
-                : w->task < nish_async_task_count ? nish_async_tasks[w->task] : NULL;
-  if (!t || t->gen != w->task_gen) {
+  nish_task *t = nish_async_task_at(w->task, w->task_gen);
+  if (w->cancels) {
+    if (nish_async_deadlines[w->task] == slot + 1) nish_async_deadlines[w->task] = 0;
+    nish_async_wait_free_slot(slot);
+    if (t) nish_async_cancel_task(t);
+    return;
+  }
+  if (!t) {
     nish_async_late++;
     nish_async_wait_free_slot(slot);
     return;
@@ -353,46 +461,89 @@ static void nish_async_fire(uint32_t slot, int32_t answer) {
   nish_async_enqueue(t);
 }
 
-static int nish_async_timer_before(uint32_t a, uint32_t b) {
-  nish_wait *x = &nish_async_waits[a];
-  nish_wait *y = &nish_async_waits[b];
-  return x->deadline < y->deadline || (x->deadline == y->deadline && x->seq < y->seq);
+/* A timer came due: a sleep is over (true), a descriptor wait's deadline
+   passed first (false), a task's deadline cancels it. */
+static void nish_async_expire(uint32_t slot) {
+  nish_async_fire(slot, nish_async_waits[slot].fd >= 0 ? 0 : 1);
 }
 
-static void nish_async_heap_push(uint32_t slot) {
-  if (nish_async_heap_len == nish_async_heap_cap)
-    nish_async_heap = nish_async_grow(nish_async_heap, &nish_async_heap_cap, sizeof *nish_async_heap);
-  uint32_t at = nish_async_heap_len++;
-  while (at > 0) {
-    uint32_t up = (at - 1) / 2;
-    if (!nish_async_timer_before(slot, nish_async_heap[up])) break;
-    nish_async_heap[at] = nish_async_heap[up];
-    at = up;
+/* ---- Cancellation -------------------------------------------------------- */
+
+/* Mark `t` cancelled and fail each wait it has pending. */
+static void nish_async_cancel_task(nish_task *t) {
+  if (t->flags & NISH_TASK_CANCELLED) return;
+  t->flags |= NISH_TASK_CANCELLED;
+  nish_async_disarm(t);
+  for (uint32_t slot = 0; slot < nish_async_wait_count; slot++) {
+    nish_wait *w = &nish_async_waits[slot];
+    if (w->state == NISH_WAIT_PENDING && !w->cancels && w->task == t->index && w->task_gen == t->gen)
+      nish_async_fire(slot, 0);
   }
-  nish_async_heap[at] = slot;
 }
 
-static uint32_t nish_async_heap_pop(void) {
-  uint32_t top = nish_async_heap[0];
-  uint32_t last = nish_async_heap[--nish_async_heap_len];
-  uint32_t at = 0;
-  for (;;) {
-    uint32_t kid = at * 2 + 1;
-    if (kid >= nish_async_heap_len) break;
-    if (kid + 1 < nish_async_heap_len && nish_async_timer_before(nish_async_heap[kid + 1], nish_async_heap[kid]))
-      kid++;
-    if (!nish_async_timer_before(nish_async_heap[kid], last)) break;
-    nish_async_heap[at] = nish_async_heap[kid];
-    at = kid;
-  }
-  if (nish_async_heap_len) nish_async_heap[at] = last;
-  return top;
+/* Take out `t`'s armed deadline, if it has one. */
+static void nish_async_disarm(nish_task *t) {
+  if (!nish_async_deadlines || t->index >= nish_async_deadline_cap) return;
+  uint32_t armed = nish_async_deadlines[t->index];
+  if (!armed) return;
+  nish_async_deadlines[t->index] = 0;
+  nish_async_heap_remove(armed - 1);
+  nish_async_wait_free_slot(armed - 1);
+}
+
+/* The task `handle` names (`nish_async_task_id`), or null for one that has
+   finished, `main`, or no task. */
+static nish_task *nish_async_task_of(int64_t handle) {
+  uint32_t index = (uint32_t)((uint64_t)handle & 0xffffffffu);
+  if (index == 0) return NULL;
+  return nish_async_task_at(index, (uint32_t)((uint64_t)handle >> 32));
+}
+
+/* The running task's handle: its generation, then its index. */
+int64_t nish_async_task_id(void) {
+  nish_task *t = nish_async_current;
+  return (int64_t)(((uint64_t)t->gen << 32) | t->index);
+}
+
+/* Cancel the task `handle` names: true when it is still running (a second
+   cancel too), false for one that has finished, or `main`. */
+int32_t nish_async_cancel(int64_t handle) {
+  nish_task *t = nish_async_task_of(handle);
+  if (!t) return 0;
+  nish_async_cancel_task(t);
+  return 1;
+}
+
+/* Whether the running task is cancelled. */
+int32_t nish_async_cancelled(void) {
+  return (nish_async_current->flags & NISH_TASK_CANCELLED) != 0;
+}
+
+/* Cancel the task `handle` names `ms` milliseconds from now, in place of any
+   deadline it had; a negative `ms` only takes the old one out. False for a
+   task that has finished, or `main`. */
+int32_t nish_async_cancel_after(int64_t handle, int32_t ms) {
+  nish_task *t = nish_async_task_of(handle);
+  if (!t) return 0;
+  nish_async_disarm(t);
+  if (ms < 0 || (t->flags & NISH_TASK_CANCELLED)) return 1;
+  nish_task *running = nish_async_current;
+  nish_async_current = t;
+  uint32_t slot = nish_async_wait_new();
+  nish_async_current = running;
+  nish_wait *w = &nish_async_waits[slot];
+  w->cancels = 1;
+  w->deadline = nish_async_now() + (int64_t)ms * 1000000;
+  w->seq = nish_async_seq++;
+  nish_async_heap_push(slot);
+  nish_async_deadlines[t->index] = slot + 1;
+  return 1;
 }
 
 /* A wait for `fd` to be readable (`dir` 0) or writable (`dir` 1). */
 uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
   uint32_t slot = nish_async_wait_new();
-  if (fd < 0) return nish_async_fired_now(slot, 0);
+  if (fd < 0 || (nish_async_current->flags & NISH_TASK_CANCELLED)) return nish_async_fired_now(slot, 0);
   if (nish_async_poller < 0) {
 #if defined(__linux__)
     nish_async_poller = epoll_create1(EPOLL_CLOEXEC);
@@ -438,10 +589,23 @@ uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
   return token;
 }
 
-/* A wait for `ms` milliseconds; a negative `ms` answers false at once. */
+/* A descriptor wait that fails (answers false) when `ms` milliseconds pass
+   before `fd` is ready; a negative `ms` waits as long as it takes. */
+uint64_t nish_async_wait_fd_within(int32_t fd, int32_t dir, int32_t ms) {
+  uint64_t token = nish_async_wait_fd(fd, dir);
+  uint32_t slot = (uint32_t)(token & 0xffffffffu) - 1;
+  nish_wait *w = &nish_async_waits[slot];
+  if (ms < 0 || w->state != NISH_WAIT_PENDING) return token;
+  w->deadline = nish_async_now() + (int64_t)ms * 1000000;
+  w->seq = nish_async_seq++;
+  nish_async_heap_push(slot);
+  return token;
+}
+
+/* A wait for `ms` milliseconds; a negative `ms`, or a cancelled task, answers false at once. */
 uint64_t nish_async_sleep(int32_t ms) {
   uint32_t slot = nish_async_wait_new();
-  if (ms < 0) return nish_async_fired_now(slot, 0);
+  if (ms < 0 || (nish_async_current->flags & NISH_TASK_CANCELLED)) return nish_async_fired_now(slot, 0);
   nish_async_waits[slot].deadline = nish_async_now() + (int64_t)ms * 1000000;
   nish_async_waits[slot].seq = nish_async_seq++;
   nish_async_heap_push(slot);
@@ -519,7 +683,7 @@ static void nish_async_block(void) {
   }
   int64_t now = nish_async_now();
   while (nish_async_heap_len && nish_async_waits[nish_async_heap[0]].deadline <= now)
-    nish_async_fire(nish_async_heap_pop(), 1);
+    nish_async_expire(nish_async_heap[0]);
 }
 
 /* The next task to resume, waiting on the kernel for one when none is ready;
@@ -533,7 +697,7 @@ void *nish_async_next(void) {
   nish_async_head = t->next;
   if (!nish_async_head) nish_async_tail = NULL;
   t->next = NULL;
-  t->queued = 0;
+  t->flags &= ~NISH_TASK_QUEUED;
   return t;
 }
 
@@ -546,11 +710,13 @@ void *nish_async_copy_str(const void *s) {
 }
 
 /* 0: nodes the slabs ever allocated; 1: completions dropped because their task
-   had finished; 2: spawned tasks not yet finished, each of which holds a region. */
+   had finished; 2: spawned tasks not yet finished, each of which holds a region;
+   3: timers in the heap (sleeps, bounded waits and armed deadlines). */
 int32_t nish_async_stat(int32_t which) {
   if (which == 0) return nish_async_allocated;
   if (which == 1) return nish_async_late;
   if (which == 2) return nish_async_live;
+  if (which == 3) return (int32_t)nish_async_heap_len;
   return -1;
 }
 
