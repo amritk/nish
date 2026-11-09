@@ -28970,6 +28970,11 @@ declare i8* @nish_async_next() #3
 declare noundef i64 @nish_async_sleep(i32 noundef) #3
 declare noundef i64 @nish_async_wait_fd(i32 noundef, i32 noundef) #3
 declare noundef i32 @nish_async_poll(i64 noundef) #3
+declare noundef i64 @nish_async_wait_fd_within(i32 noundef, i32 noundef, i32 noundef) #3
+declare noundef i64 @nish_async_task_id() #3
+declare noundef i32 @nish_async_cancel(i64 noundef) #3
+declare noundef i32 @nish_async_cancelled() #3
+declare noundef i32 @nish_async_cancel_after(i64 noundef, i32 noundef) #3
 declare nonnull i8* @nish_async_copy_str(i8* nonnull) #3
 declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*) #3
 declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull) #3
