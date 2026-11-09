@@ -174,7 +174,7 @@ const isKernelWait = (name: string): boolean =>
 const isBoundedWait = (name: string): boolean => name === "readableWithin" || name === "writableWithin"
 
 /** Whether `name` is one of `nish:async`'s cancellation calls, plain calls written anywhere. */
-export const isTaskCall = (name: string): boolean =>
+const isTaskCall = (name: string): boolean =>
   name === "taskId" || name === "cancel" || name === "cancelled" || name === "cancelAfter"
 
 /**
