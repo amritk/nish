@@ -73,6 +73,10 @@ extern NISH_TLS uint64_t nish_region_chunk;
 #define NISH_REGION_GEN_END ((uint64_t)1 << 40)
 #define NISH_REGION_PAGE 1024
 
+/* runtime.c's `nish_chunk`, which `nish_region_adopt` links through: runtime.c
+   static-asserts the layout runtime-cross.c's copy of it relies on too. */
+typedef struct nish_chunk_link { struct nish_chunk_link *next; uint64_t cap; } nish_chunk_link;
+
 typedef struct nish_region_slot {
   struct nish_arena arena; /* the region's arena, or, while entered, the one it displaced */
   uint64_t gen;            /* the live handle's generation; NISH_REGION_GEN_END once retired */
@@ -223,12 +227,10 @@ void nish_region_leave(uint64_t r, void *root) {
   s->root = root;
 }
 
-void nish_region_free(uint64_t r) {
-  nish_region_slot *s = nish_region_slot_of(r);
-  if (s->entered) nish_region_die(NISH_REGION_FREE_ENTERED);
-  nish_region_swap(s);
-  nish_free_arena();
-  nish_region_swap(s);
+/* Give the slot back: its generation moves on, so every copy of `r` is
+   stale, and the slot joins the free list unless that generation is the last.
+   The slot's arena is already empty. */
+static void nish_region_retire(nish_region_slot *s, uint64_t r) {
   s->root = 0;
   uint64_t index = r & (NISH_REGION_SLOTS - 1);
   nish_region_lock();
@@ -240,4 +242,36 @@ void nish_region_free(uint64_t r) {
     nish_region_free_list = index + 1;
   }
   nish_region_unlock();
+}
+
+void nish_region_free(uint64_t r) {
+  nish_region_slot *s = nish_region_slot_of(r);
+  if (s->entered) nish_region_die(NISH_REGION_FREE_ENTERED);
+  nish_region_swap(s);
+  nish_free_arena();
+  nish_region_swap(s);
+  nish_region_retire(s, r);
+}
+
+/* An `awaitAll` lane's region, once the lane has finished: its chunks go on
+   top of the arena in `nish_arena`, newest first as there, so what the lane
+   answered lives on in the arena that awaited it and is given back when that
+   arena next releases below them. The region's head chunk becomes the
+   arena's, its `buf`, `off` and `cap` with it, so the head-is-`buf` rule
+   `nish_arena_release` relies on still holds; what was left of the old head
+   chunk is not bumped again until a release rewinds into it. The chunk size
+   stays the arena's own. A region that never allocated moves nothing. Like
+   `free`, it panics on a region that is entered. */
+void nish_region_adopt(uint64_t r) {
+  nish_region_slot *s = nish_region_slot_of(r);
+  if (s->entered) nish_region_die(NISH_REGION_FREE_ENTERED);
+  nish_chunk_link *head = s->arena.chunks;
+  if (head) {
+    nish_chunk_link *last = head;
+    while (last->next) last = last->next;
+    last->next = nish_arena.chunks;
+    nish_arena = s->arena;
+  }
+  s->arena = (struct nish_arena){ 0 };
+  nish_region_retire(s, r);
 }
