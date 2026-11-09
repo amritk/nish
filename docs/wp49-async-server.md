@@ -547,6 +547,18 @@ The three debts stage 4 left are paid:
   region (`runtime/runtime-region.c`), entered around every resume and freed
   when the task finishes (`tests/link/async_region_per_task`). `main` keeps
   the arena.
+  An `awaitAll` call gets one too (the `awaitall-regions` stage, HF-13): it
+  ran in its caller's arena before, so the first call to finish and release
+  freed what a sibling still held. Its region is made before its first
+  resume, entered around every resume, and handed to the caller's arena when
+  the call finishes (`nish_region_adopt`, which frees the empty chunk a
+  release at return leaves), so its answer stays readable and its
+  temporaries are freed (`tests/link/async_await_all_lanes`,
+  `async_await_all_lanes_large`, `tests/link/async_await_all_retain`). A
+  call that finishes at once still pays for the region, about 179
+  instructions or 25 to 29 ns (ASYNC-16, open), and a loop that takes no
+  release keeps about 1.3 KB per joined call beyond its answer, the unused
+  end of the region's first chunk (ASYNC-17, open).
 - **(b) Spawn arguments outlive the spawner.** A `string` argument is copied
   into the task's region before the task first runs (`nish_async_copy_str`);
   numbers, booleans and enums are copied by value; any other type is refused,
@@ -735,7 +747,7 @@ end and its `using` scopes release. `main` is never cancelled. The rules are
   cancelled query with `PG_ERR_CLOSED`, closing its connection. No
   CancelRequest is sent (PG-37, accepted).
 - **The executor** fixes ASYNC-6. A stale or finished task's handle answers
-  false (ASYNC-14).
+  false (ASYNC-18).
 
 `--emit-ts` refuses the new calls (NL4018). A program that does not use
 them compiles to the same IR as before.

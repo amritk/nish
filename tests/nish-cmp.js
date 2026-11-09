@@ -290,6 +290,7 @@ const STAGE4_STRING_EXPORTS = [
   "tests/cases/diag_order.ts",
   "tests/cases/diag_order_pass1.ts",
   "tests/differential/corpus/const_modules/main.ts",
+  "tests/link/async_await_all_lanes/main.ts",
   "tests/link/break_intro/main.ts",
   "tests/link/break_menu/main.ts",
   "tests/link/break_settings/main.ts",
@@ -506,6 +507,11 @@ const resultLoop = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: RESULT_LOOP, why }))
   )
+const AWAIT_ALL_LANES = "Give each awaitAll lane its own region"
+const awaitAllLanes = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: AWAIT_ALL_LANES, why }))
+  )
 const DECLARED = [
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
@@ -653,6 +659,22 @@ const DECLARED = [
       "tests/cases/result_loop_outer_let.ts": ["result_loop_outer_let.ll"],
       "tests/cases/result_loop_payloads.ts": ["result_loop_payloads.ll"],
       "tests/cases/result_loop_return_alloc.ts": ["result_loop_return_alloc.ll"],
+    }
+  ),
+  // WP49 stage 5: an awaitAll member that waits runs in a region of its own,
+  // so every function holding an awaitAll of a suspending call gains a lane
+  // slot per member, the region calls and the lane poll.
+  ...awaitAllLanes(
+    "an awaitAll member that waits gets a region its poll enters and adopts, so each awaiting function gains lane slots and region calls",
+    {
+      "tests/cases/async_await_all.ts": ["async_await_all.ll"],
+      "tests/cases/async_await_all_lanes_large.ts": ["async_await_all_lanes_large.ll"],
+      "tests/link/async_await_all_lanes/main.ts": ["lib.ll", "main.ll"],
+      "tests/link/async_await_all_retain/main.ts": ["main.ll"],
+      "tests/link/async_await_all_small/main.ts": ["main.ll"],
+      "tests/link/async_across_modules/main.ts": ["main.ll"],
+      "docs/cookbook/async-await-all.ts": ["async-await-all.ll"],
+      "docs/cookbook/runtime-prelude.ts": ["runtime-prelude.ll"],
     }
   ),
   {

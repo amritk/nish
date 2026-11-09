@@ -108,6 +108,8 @@ available only through the import:
 - `awaitAll(f(x), g(y))` runs two to eight calls together and waits for all of
   them. Its answers are bound one name per call:
   `const [a, b] = await awaitAll(f(x), g(y));`.
+  Each call that waits keeps its memory apart from the others', so calls that
+  hold large arrays or strings across an `await` cannot disturb each other.
 - `spawn(f(x))` starts `f` as a task of its own and does not wait for it.
   Nothing reads its answer, so `f` answers `void`, or a `Result` it reports
   itself.

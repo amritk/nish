@@ -106,6 +106,7 @@ cases/asi_continuation added after R6: no rewriter to freeze it with
 cases/asi_statements added after R6: no rewriter to freeze it with
 cases/async_attributes added after R6: no rewriter to freeze it with
 cases/async_await_all added after R6: no rewriter to freeze it with
+cases/async_await_all_lanes_large added after R6: no rewriter to freeze it with
 cases/async_await_chain added after R6: no rewriter to freeze it with
 cases/async_await_single added after R6: no rewriter to freeze it with
 cases/async_lowered added after R6: no rewriter to freeze it with
