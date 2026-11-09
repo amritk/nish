@@ -33,7 +33,7 @@ import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { Emitter, LoopTarget } from "./emit"
 import { emitPanicTail, emitRangedStore } from "./emit-builtins"
 import {
-  compoundFloatOpcode,
+  emitCompoundFloat,
   compoundIntegerOpcode,
   emitBitwiseCombine,
   emitIntBinary,
@@ -1464,7 +1464,7 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   } else {
     const rhs = emitter.emitExpression(expr.children[1])
     value = isFloat(elem)
-      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
+      ? emitCompoundFloat(emitter, expr, elem, old, rhs)
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs, expr)
   }
   emitRangedStore(emitter, expr, value)

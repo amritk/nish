@@ -32,7 +32,7 @@ import { N_INDEX, N_MEMBER, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
 import { ConstInfo } from "./program"
 import { f32Hex, f64Hex } from "./strings"
 import { Local } from "./symbols"
-import { intBits, isFloat, isInteger, isUnsigned, T_BOOL, T_F32, T_I32, T_STRING } from "./types"
+import { intBits, isFloat, isInteger, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_STRING } from "./types"
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -426,8 +426,46 @@ export const emitBinary = (emitter: Emitter, expr: Node): string => {
   if (isInteger(type)) {
     return emitIntBinary(emitter, integerOpcode(op, emitter.opts.json), type, lhs, rhs, expr)
   }
-  return emitter.fn.emitValue(`${floatOpcode(op, emitter.opts.json)} ${emitter.llvm(type)} ${lhs}, ${rhs}`)
+  return emitFloatArithmetic(emitter, op, type, lhs, rhs, expr)
 }
+
+/**
+ * `lhs op rhs` on floats, for `site`, the binary or compound assignment that
+ * asked: one instruction, except a page module's `%`, which calls
+ * `floatRemainderOf(site)` (`std/math.ts`'s `fmodF64`) because a freestanding
+ * link has no `fmod` for `frem` to become. An `f32` remainder widens both
+ * operands and narrows the result, which is exact: the remainder of two
+ * floats is a float.
+ */
+export const emitFloatArithmetic = (
+  emitter: Emitter,
+  op: string,
+  type: i32,
+  lhs: string,
+  rhs: string,
+  site: Node
+): string => {
+  const rem = emitter.program.floatRemainderOf(site)
+  if (rem === null) {
+    return emitter.fn.emitValue(`${floatOpcode(op, emitter.opts.json)} ${emitter.llvm(type)} ${lhs}, ${rhs}`)
+  }
+  if (type === T_F64) {
+    return emitter.fn.emitValue(`call double @${rem.name}(double ${lhs}, double ${rhs})`)
+  }
+  const wideL = emitter.fn.emitValue(`fpext float ${lhs} to double`)
+  const wideR = emitter.fn.emitValue(`fpext float ${rhs} to double`)
+  const wide = emitter.fn.emitValue(`call double @${rem.name}(double ${wideL}, double ${wideR})`)
+  return emitter.fn.emitValue(`fptrunc double ${wide} to float`)
+}
+
+/** `old op= rhs` on floats, at the compound assignment `expr`: `emitFloatArithmetic` on its operator. */
+export const emitCompoundFloat = (
+  emitter: Emitter,
+  expr: Node,
+  type: i32,
+  old: string,
+  rhs: string
+): string => emitFloatArithmetic(emitter, withoutEquals(expr.text), type, old, rhs, expr)
 
 /** `a & b` and friends: evaluate left then right (JS order), then one instruction. */
 const emitBitwise = (emitter: Emitter, expr: Node, type: i32): string => {
@@ -584,6 +622,3 @@ const withoutEquals = (op: string): string => op.substring(0, op.length - 1)
 /** The integer opcode of a compound arithmetic assignment, in its signed spelling. */
 export const compoundIntegerOpcode = (op: string, json: boolean): string =>
   integerOpcode(withoutEquals(op), json)
-
-/** The floating-point opcode of the same. */
-export const compoundFloatOpcode = (op: string, json: boolean): string => floatOpcode(withoutEquals(op), json)

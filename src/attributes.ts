@@ -3075,6 +3075,11 @@ class FactCollector {
         this.noteWholeReach(reads.name, methodReceiver(node))
       }
     }
+    // WP50 S5: a page module's float `%` calls `fmodF64` (`floatRemainderOf`).
+    const rem = program.floatRemainderOf(node)
+    if (rem !== null) {
+      this.addUserCallee(rem.name, node)
+    }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
     // (`emitWalk`); the loop records the reader, and the rest are its owner's.
     if (node.kind === N_FOR_OF) {
