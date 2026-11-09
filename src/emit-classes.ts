@@ -33,7 +33,8 @@ import {
   SLICE_TYPE,
 } from "./emit-arrays"
 import {
-  compoundFloatOpcode,
+  emitFloatArithmetic,
+  withoutEquals,
   compoundIntegerOpcode,
   emitBitwiseCombine,
   emitIntBinary,
@@ -416,7 +417,7 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   } else {
     const rhs = emitter.emitExpression(expr.children[1])
     value = isFloat(field.type)
-      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
+      ? emitFloatArithmetic(emitter, withoutEquals(expr.text), field.type, old, rhs, expr)
       : emitIntBinary(
           emitter,
           compoundIntegerOpcode(expr.text, emitter.opts.json),

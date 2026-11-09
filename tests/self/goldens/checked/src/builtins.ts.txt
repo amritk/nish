@@ -350,13 +350,13 @@ function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, memb
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=requireF64#3 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkImulOperand#2 checkImulOperand#2
   stackSites=0 stackLocals=0
-  callee -10:7 isF64Unary -> @isF64Unary
-  callee -10:29 isF64Binary -> @isF64Binary
-  local -9:11 arity: i32 (const)
-  callee -9:19 isF64Binary -> @isF64Binary
-  callee -8:9 checkBuiltinArity -> @checkBuiltinArity
-  local -7:18 arg: Node (const)
-  callee -6:9 requireF64 -> @requireF64
+  callee -12:7 isF64Unary -> @isF64Unary
+  callee -12:29 isF64Binary -> @isF64Binary
+  local -11:11 arity: i32 (const)
+  callee -11:19 isF64Binary -> @isF64Binary
+  callee -10:9 checkBuiltinArity -> @checkBuiltinArity
+  local -9:18 arg: Node (const)
+  callee -8:9 requireF64 -> @requireF64
   local -2:11 at: i32 (const)
   callee -2:16 StringMap.get -> @StringMap.get
   callee +5:9 internalErrorFor -> @internalErrorFor

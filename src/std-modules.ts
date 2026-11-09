@@ -205,8 +205,9 @@ export const isRegexModule = (packageName: string, name: string): boolean =>
 
 /**
  * `nish/math`: `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish
- * rather than libm. Like `nish/collections` a program never imports it: a call
- * to one of the three is what loads it, and the functions it reaches are
+ * rather than libm, and on a page module `sin`, `cos`, `exp`, `log`, `pow`
+ * and the float `%` as well. Like `nish/collections` a program never imports
+ * it: a call to one of them is what loads it, and the functions it reaches are
  * copied into the calling module, so it writes no `.ll` of its own. Each is
  * exported as `<name>F64`: `tan`, `atan2` and `hypot` are the C library's names.
  */
@@ -226,6 +227,13 @@ export const SORT_SPECIFIER: string = "nish/sort"
 
 /** The local name `sortWith` is imported under: dotted, so no declaration can take it. */
 export const SORT_LOCAL: string = "Array.prototype.sort"
+
+/**
+ * The local name a page module imports `nish/math`'s `fmodF64` under, for the
+ * float `%` it lowers to (`importMath`, `CheckedProgram.floatRemainderOf`):
+ * an operator, which no declaration can take.
+ */
+export const FLOAT_REM_LOCAL: string = "%"
 
 /** Whether `name` in `packageName` is `std/sort.ts`, which is copied into its user like `std/math.ts`. */
 export const isSortModule = (packageName: string, name: string): boolean =>

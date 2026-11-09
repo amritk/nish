@@ -29918,6 +29918,148 @@ if (!only || "vite".includes(only)) {
   }
 }
 
+// ---- WP50 stage 5: Math and float `%` on a page module ---------------------------
+//
+// A page module links no libm (docs/wp50-wasm-host.md §14 row 5), so `Math.sin`,
+// `cos`, `exp`, `log`, `pow` and a float `%` there call `std/math.ts`'s
+// fdlibm-derived functions, copied into the module. Both page profiles link the
+// program with no import, and every export agrees with V8's `Math` and `%` to
+// one ulp, the remainders exactly. A native build and `--profile wasi` keep the
+// intrinsics and `frem`, and an integer `%` copies nothing.
+if (!only || "wasm-math".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`wasm-math: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "wasm-math")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const at = (name) => path.join(dir, name)
+    fs.writeFileSync(
+      at("main.ts"),
+      [
+        "export const sinOf = (x: f64): f64 => Math.sin(x)",
+        "export const cosOf = (x: f64): f64 => Math.cos(x)",
+        "export const expOf = (x: f64): f64 => Math.exp(x)",
+        "export const logOf = (x: f64): f64 => Math.log(x)",
+        "export const powOf = (x: f64, y: f64): f64 => Math.pow(x, y)",
+        "export const remOf = (x: f64, y: f64): f64 => x % y",
+        "export function remF32(x: f32, y: f32): f32 {",
+        "  let r = x",
+        "  r %= y",
+        "  return r",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const compile = (flags, out) =>
+      spawnSync(NISH, [at("main.ts"), ...flags, "-o", at(out)], { cwd: root, encoding: "utf8" })
+    const wasm = compile(["--target", "wasm32", "--emit-dts", at("main.d.ts")], "main.ll")
+    check("wasm-math: a program using every Math transcendental and `%` compiles for wasm32", wasm.status === 0, shown(wasm))
+    if (wasm.status === 0) {
+      const ir = fs.readFileSync(at("main.ll"), "utf8")
+      const names = ["sinF64", "cosF64", "expF64", "logF64", "powF64", "fmodF64"]
+      check(
+        "wasm-math: on a page module each call is to its copied `@nish.<name>F64`, with no intrinsic and no `frem`",
+        names.every((name) => new RegExp(`^define internal noundef double @nish\\.${name}\\(`, "m").test(ir)) &&
+          !/@llvm\.(?:sin|cos|exp|log|pow)\.f64|\bfrem\b|^declare double @fmod/m.test(ir) &&
+          /fpext float [^\n]+\n[^\n]*fpext float [^\n]+\n[^\n]*call double @nish\.fmodF64\([^\n]+\n[^\n]*fptrunc double/.test(ir),
+        ir.split("\n").filter((line) => /call double|frem|^declare/.test(line)).join("\n")
+      )
+      const host = wasmHostLink([at("main.ll")], ["-o", at("host.wasm"), "--profile", "wasm-host"])
+      const plain = wasmHostLink([at("main.ll")], ["-o", at("plain.wasm"), "--profile", "wasm"])
+      check("wasm-math: the module links with --profile wasm-host and with --profile wasm", host.status === 0 && plain.status === 0, `${shown(host)}\n${shown(plain)}`)
+      if (host.status === 0 && plain.status === 0) {
+        const importsOf = (file) =>
+          WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(file))).map((i) => `${i.module}.${i.name}`)
+        const imported = [...importsOf(at("host.wasm")), ...importsOf(at("plain.wasm"))]
+        check("wasm-math: neither module imports anything: no `sin`, `exp`, `fmod` or `fmodf` is left for the page", imported.length === 0, imported.join(", "))
+        fs.writeFileSync(
+          at("agree.mjs"),
+          [
+            "// Driven by tests/run.js's wasm-math section: each export, through the loader",
+            "// (wasm-host) and as a bare instance (wasm), against V8's Math and `%`, in ulps.",
+            'import { readFileSync } from "node:fs"',
+            'import { loadSync } from "./main.mjs"',
+            "",
+            'const viaLoader = loadSync(readFileSync(new URL("./host.wasm", import.meta.url)))',
+            'const bare = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(new URL("./plain.wasm", import.meta.url))), {}).exports',
+            "const ordered = (x) => {",
+            "  const b = new BigInt64Array(new Float64Array([x]).buffer)[0]",
+            "  return b < 0n ? -(b & 0x7fffffffffffffffn) : b",
+            "}",
+            "// ordered() maps -0 and +0 to the same integer, so a zero of the wrong sign is a mismatch here.",
+            "const ulps = (a, b) =>",
+            "  Object.is(a, b) || (Number.isNaN(a) && Number.isNaN(b)) ? 0 : a === 0 && b === 0 ? 1e9 : Math.abs(Number(ordered(a) - ordered(b)))",
+            "// -4, -0.5, 5 and -0 give the -0 results (-4 % 2, -0 % 5, -0.5 % 0.5, sin(-0), pow(-0, 3)); 0.444596136099278",
+            "// is where fdlibm's sin without a tail rounds differently from its tail form.",
+            "const xs = [0, -0, 1, -1, 0.5, -0.5, 2, 3, -4, 5, Math.PI, -Math.PI / 4, 1e-300, 1e300, 709.7, -745.2, 1e22, 1e-10, 100, NaN, Infinity, -Infinity, 1.5, -2.5, 7, 0.1, 0.444596136099278]",
+            "const worst = {}",
+            "const one = (name, got, want) => { worst[name] = Math.max(worst[name] ?? 0, ulps(got, want)) }",
+            "for (const m of [viaLoader, bare]) {",
+            "  for (const x of xs) {",
+            '    one("sin", m.sinOf(x), Math.sin(x))',
+            '    one("cos", m.cosOf(x), Math.cos(x))',
+            '    one("exp", m.expOf(x), Math.exp(x))',
+            '    one("log", m.logOf(x), Math.log(x))',
+            "    for (const y of xs) {",
+            '      one("pow", m.powOf(x, y), Math.pow(x, y))',
+            '      one("rem", m.remOf(x, y), x % y)',
+            '      one("remF32", m.remF32(Math.fround(x), Math.fround(y)), Math.fround(Math.fround(x) % Math.fround(y)))',
+            "    }",
+            "  }",
+            "}",
+            "console.log(JSON.stringify(worst))",
+            "",
+          ].join("\n")
+        )
+        const run = spawnSync(process.execPath, [at("agree.mjs")], { cwd: dir, encoding: "utf8" })
+        let worst = null
+        try {
+          worst = JSON.parse(run.stdout)
+        } catch {
+          worst = null
+        }
+        check(
+          "wasm-math: through the loader and bare, sin is V8's bits, cos, exp, log and pow are within one ulp of V8, and both remainders are exact, zero signs included",
+          run.status === 0 &&
+            worst !== null &&
+            ["sin", "cos", "exp", "log", "pow"].every((name) => worst[name] <= 1) &&
+            worst.sin === 0 &&
+            worst.rem === 0 &&
+            worst.remF32 === 0,
+          shown(run)
+        )
+      }
+    }
+    const intrinsicsKept = (ir) =>
+      ["sin", "cos", "exp", "log", "pow"].every((name) => ir.includes(`call double @llvm.${name}.f64(`)) &&
+      /= frem double /.test(ir) &&
+      /= frem float /.test(ir) &&
+      !ir.includes("@nish.")
+    for (const [label, flags, out] of [
+      ["a native build", [], "native.ll"],
+      ["--profile wasi", ["--profile", "wasi"], "wasi.ll"],
+    ]) {
+      const r = compile(flags, out)
+      const ir = r.status === 0 ? fs.readFileSync(at(out), "utf8") : ""
+      check(`wasm-math: ${label} keeps the intrinsics and \`frem\`, and copies nothing from std/math.ts`, r.status === 0 && intrinsicsKept(ir), shown(r) || ir)
+    }
+    fs.writeFileSync(at("int.ts"), "export const remI32 = (x: i32, y: i32): i32 => x % y\n")
+    const int = spawnSync(NISH, [at("int.ts"), "--target", "wasm32", "-o", at("int.ll")], { cwd: root, encoding: "utf8" })
+    const intIr = int.status === 0 ? fs.readFileSync(at("int.ll"), "utf8") : ""
+    check(
+      "wasm-math: an integer `%` on a page module is `srem` and copies nothing from std/math.ts",
+      int.status === 0 && intIr.includes("srem i32") && (intIr.match(/^define /gm) ?? []).length === 1,
+      shown(int) || intIr
+    )
+    // std/math.ts is checked under the program's number mode, where a bare
+    // literal is f64: every one in an integer expression must still be i32.
+    const f64Mode = compile(["--target", "wasm32", "--number-mode", "f64"], "f64mode.ll")
+    check("wasm-math: std/math.ts's copies compile under --number-mode f64", f64Mode.status === 0, shown(f64Mode))
+  }
+}
+
 // ---- WP50 stage 2: a wasm module imports the page's host functions --------------
 //
 // tests/host-window: WP50 stage 3's buffer windows (docs/wp50-wasm-host.md
