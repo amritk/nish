@@ -26,4 +26,5 @@ wide: ok=false failure=2 socket=0 rows=0 tag= reusable=false
 connected 2 of 2
 odd: ok=false failure=3 socket=0 rows=0 tag= reusable=false
 live after the hostile frames: 1, dropped 7
+a claim with every connection held: -2 after 6 sleeps
 statements seen: 20

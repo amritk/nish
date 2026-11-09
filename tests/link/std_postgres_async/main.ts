@@ -17,6 +17,8 @@
 //      `maxColumns` and a message no query expects each fail their query
 //      (PG_ERR_FRAME, PG_ERR_TOO_BIG, PG_ERR_UNEXPECTED) and close the
 //      connection, reconnecting as the pool empties.
+//   5. A bounded wait: with the one live connection held and `claimWaitMs`
+//      at 40, a claim sleeps 1, 2, 4, 8, 16 and 16 ms and answers -2.
 import { sleep, spawn } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
@@ -163,6 +165,13 @@ export async function main(): Promise<i32> {
     }
   }
   console.log(`live after the hostile frames: ${pool.live()}, dropped ${pool.dropped}`)
+
+  pool.claimWaitMs = 40
+  const held: i32 = await pgAsyncClaim(pool)
+  const before: i32 = pool.waits
+  const late: i32 = await pgAsyncClaim(pool)
+  console.log(`a claim with every connection held: ${late} after ${pool.waits - before} sleeps`)
+  pgAsyncRelease(pool, held, true)
   console.log(`statements seen: ${board.seen}`)
   pool.close()
   return 0
