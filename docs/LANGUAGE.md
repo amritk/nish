@@ -3591,13 +3591,24 @@ async function run(): Promise<void> {
   which may be the task's alone. A task may not itself spawn a task with an
   object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
-- **A spawned task takes a function argument that captures nothing.** A
-  top-level function, or an arrow written at the call that reads only its own
-  parameters, is a compile-time argument: the call is an instance with the
-  function in its body, and nothing of it is in the task's frame
-  (`async_spawn_fn_arg`). An arrow that reads a local of the function it is
-  written in is NL2690 (`reject_async_spawn_block_arg`): what it captures
-  would ride in the task's frame, past the rules above.
+- **A spawned task's function argument captures only what the task may
+  share.** A top-level function, or an arrow written at the call, is a
+  compile-time argument: the call is an instance with the function in its
+  body (`async_spawn_fn_arg`). The arrow may read locals of the function it
+  is written in when each is a number, a `boolean`, an enum, or an object or
+  array the spawn's argument rule above admits; any other capture (a
+  `string`, a nullable value, a host handle, an object holding a string) is
+  NL2690 (`reject_async_spawn_block_arg`). A captured object is shared with
+  the task as if handed to it: the spawner releases no arena scope over it,
+  and the arrow's body is walked with the task's rules, the capture as memory
+  the task does not own, so the arrow may update its numbers and call its
+  methods (a serve handler awaiting a query on a captured `PgAsyncPool`) but
+  may not store the task's memory into it or grow it (NL2609, NL2615,
+  `async_spawn_handler_reach`, `reject_async_spawn_handler_*`). The arrow's
+  parameters carry what the task passes at each direct call; one it reaches
+  through a further function parameter is unknown, so storing it into a
+  capture is refused. Each arrow is an instance of its own, so a refused
+  arrow at one call site is not hidden by an admitted one at another.
 - **Each spawned task has a region of its own**, entered whenever the task
   runs and freed when it finishes, so what a task allocates is given back
   when it ends, not when `main` does (`tests/link/async_region_per_task`).

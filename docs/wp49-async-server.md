@@ -725,6 +725,38 @@ one per program and each naming only that `exit` surface, cover
 ("a spawned task may reach the objects its spawner owns") and go at the
 reseed that ships it, when the seed compiles them and they match nothing.
 
+### Part 8: a serve handler reaches its spawner's state (#1324)
+
+`serveOn` spawns `serveTask(handle, ...)`, so a handler is a function
+argument of a spawned task, and until this part an arrow that captured
+anything was refused (NL2690): a handler could not reach a `PgAsyncPool` its
+spawner made. Two routes were open: relax the capture rule, or give
+`serveOn`/`serve` a context parameter handed to each handler. **The relaxed
+capture rule was built**, because it leaves `std/` untouched (no new
+`serve` signature to document, audit and keep beside the old one) and covers
+any spawned task, not only `serve`.
+
+The rule, in `taskFindings` (`src/region-rules.ts`):
+
+- At the spawn, each capture of the arrows the task is handed (through every
+  level of function argument, `capturesOf`) is a number, `boolean` or enum,
+  or an object or array `sharedWithTask` admits with no `taskShareObstacle`;
+  anything else is NL2690.
+- Captured objects are outer memory. The task's body is walked first; it
+  records, per arrow, the join of what each direct call passes for each
+  written parameter. Each arrow body is then walked with the task's rules,
+  its captures bound outer and its parameters seeded from those joins. An
+  arrow the task hands on to a further function parameter is called where
+  the walk cannot see, so its parameters are unknown: storing one into a
+  capture is NL2609.
+- A call that may run a handed arrow answers unknown memory, since the arrow
+  may answer a capture.
+- `spawnsShared` (`src/attributes.ts`) counts a captured shareable object,
+  so the spawner releases no arena scope over it; an arrow that itself
+  spawns makes the task `feedsTasks`, refused as a nested spawn (NL2689).
+- Each arrow is its own instance (WP29), so the facts are per call site: one
+  refused arrow is not hidden by another admitted at the same callee.
+
 ## Stage 5, part 7: cancellation
 
 A task can be told to stop, and a wait can be bounded. `nish:async` adds two

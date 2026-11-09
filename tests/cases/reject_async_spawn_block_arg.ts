@@ -1,6 +1,6 @@
-// WP49 stage 5, part 3: a task takes a function argument only when it
-// captures nothing; this block-bodied arrow reads the spawner's `step`,
-// which would ride in the task's frame unseen by the region rules (NL2690).
+// WP49 stage 5, part 8: a task's function argument captures only numbers,
+// booleans, enums and objects it may share; this block-bodied arrow reads the
+// spawner's string `step`, which the task may not share (NL2690).
 import { sleep, spawn } from "nish:async"
 
 class Item {
@@ -31,9 +31,9 @@ async function each(f: (t: Tally) => void, tally: Tally, ms: i32): Promise<void>
 }
 
 async function work(tally: Tally, ms: i32): Promise<void> {
-  const step = ms * 2
+  const step = `s${ms}`
   spawn(each((t: Tally): void => {
-    t.hits = t.hits + step
+    t.hits = t.hits + step.length
   }, tally, ms))
 }
 export async function main(): Promise<i32> {

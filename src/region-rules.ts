@@ -64,7 +64,7 @@ import {
   regionRoleOf,
 } from "./region-check"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { T_STRING, TypeTable } from "./types"
+import { T_BOOL, T_STRING, TypeTable, isNumeric } from "./types"
 
 /** Not yet known: the walk has not reached a binding's value. Joins as nothing. */
 const ORIGIN_NONE: i32 = -1
@@ -215,13 +215,15 @@ const nestedSpawnMessage = (task: FunctionSig): string =>
   "what a task hands on may be memory of its own region, freed while the task it spawned still holds it"
 
 /**
- * A spawned task handed an arrow that captures (WP29): the captures ride in
- * the task's frame as hidden arguments that neither the spawn's argument rule
- * nor the task's region walk sees, so a task takes capture-free functions only.
+ * A spawned task handed an arrow that captures (WP29) what the task could not
+ * share: the captures ride in the task's frame as hidden arguments, so one is
+ * a number, a `boolean`, an enum, or an object or array a task may share
+ * (`taskFindings`), never a `string` or anything else of the spawner's region.
  */
-const captureSpawnMessage = (task: FunctionSig, local: string): string =>
-  `\`spawn\` hands ${fnName(task)} an arrow that reads \`${local}\` of the function it is written in: ` +
-  "a spawned task takes a function argument only when it captures nothing, because the task may run after that function returns; " +
+const captureSpawnMessage = (task: FunctionSig, local: string, type: string): string =>
+  `\`spawn\` hands ${fnName(task)} an arrow that reads \`${local}\` of type ${type} of the function it is written in: ` +
+  "a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share, " +
+  "because the task may run after that function returns; " +
   "pass the value to the task as an argument of its own, or hand it a top-level function"
 
 /** A spawn argument that holds what the spawner's own rules end, at any depth (`taskShareObstacle`). */
@@ -396,6 +398,17 @@ class RegionWalk {
    * so only memory of its own region kept from outside is refused, and growth.
    */
   task: boolean
+  /**
+   * WP49 stage 5, part 8: the arrows the spawn handed the task that capture
+   * its spawner's objects (`taskFindings`). A call that runs one may answer
+   * what it captures, and the origins of the arguments the task hands one
+   * directly, joined per parameter, seed the walk of its body; `indirect`
+   * marks one some other callee of the task runs, whose arguments the walk
+   * never sees.
+   */
+  spawnArrows: FunctionSig[]
+  arrowArgs: i32[][]
+  indirect: boolean[]
 
   constructor(
     program: CheckedProgram,
@@ -422,6 +435,9 @@ class RegionWalk {
     this.collect = true
     this.findings = []
     this.task = task
+    this.spawnArrows = []
+    this.arrowArgs = []
+    this.indirect = []
     this.who = task ? insideTask(fn) : insideRegion(fn)
     this.freed = task ? "the task ends" : "`free` runs"
   }
@@ -583,8 +599,9 @@ class RegionWalk {
       return ORIGIN_REGION
     }
     // In a task, a fresh object may hold what it was handed (`wrap(shared)`
-    // answers a new holder of the shared object), so its arguments join in.
-    let out = ORIGIN_REGION
+    // answers a new holder of the shared object), so its arguments join in,
+    // and so do the spawner's objects an arrow it runs captures.
+    let out = callee !== null && this.runsSpawnArrow(callee) ? ORIGIN_UNKNOWN : ORIGIN_REGION
     for (const arg of this.handedTo(call, callee)) {
       const a = unwrapParens(arg)
       // What a callback answers may be what the call answers (`map`, `pick(() => a.node)`).
@@ -605,6 +622,38 @@ class RegionWalk {
       out = joinOrigin(out, this.origin(value))
     }
     return out
+  }
+
+  /** Whether a call of `callee` may run an arrow of `spawnArrows`, itself or as an instance it was handed. */
+  runsSpawnArrow(callee: FunctionSig): boolean {
+    for (const slot of capturesOf(callee)) {
+      if (this.spawnArrows.indexOf(slot.arrow) >= 0) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * Notes a call of `callee` for the arrows of `spawnArrows` it may run: the
+   * origins of `handed` for a direct call of one, `indirect` for any other.
+   */
+  noteSpawnArrows(callee: FunctionSig, handed: Node[]): void {
+    for (let a = 0; a < this.spawnArrows.length; a++) {
+      const arrow = this.spawnArrows[a]
+      if (callee === arrow) {
+        const seen = this.arrowArgs[a]
+        for (let i = 0; i < handed.length && i < seen.length; i++) {
+          seen[i] = joinOrigin(seen[i], this.origin(handed[i]))
+        }
+      } else if (!this.indirect[a]) {
+        for (const slot of capturesOf(callee)) {
+          if (slot.arrow === arrow) {
+            this.indirect[a] = true
+          }
+        }
+      }
+    }
   }
 
   /** A store of `value`'s memory into `holder`'s, at `at`, which `what` describes. */
@@ -707,6 +756,7 @@ class RegionWalk {
       return
     }
     this.judgeCallee(node, ctor, true)
+    this.noteSpawnArrows(ctor, this.handedTo(node, ctor))
   }
 
   visitCall(node: Node): void {
@@ -727,6 +777,7 @@ class RegionWalk {
     }
     this.visitArguments(node, handed, ORIGIN_REGION)
     this.judgeCallee(node, callee, false)
+    this.noteSpawnArrows(callee, handed)
   }
 
   /**
@@ -1017,13 +1068,17 @@ export const regionCallFindings = (
     seedNames.push(names[1])
     seedOrigins.push(ORIGIN_OUTER)
   }
-  walkFindings(out, programs, table, facts, fn, freshResults, seedNames, seedOrigins, false)
+  walkFindings(out, programs, table, facts, fn, freshResults, seedNames, seedOrigins, false, [], [])
   return out
 }
 
 /**
  * Adds to `out` the walk's refusals in `fn`'s body, its parameters `seedNames`
  * bound to `seedOrigins`: a region's function, or a spawned task (`task`).
+ * In a task, `outer` are locals its body reads that hold its spawner's
+ * objects (an arrow's captures), and `spawnArrows` the arrows the spawn
+ * handed it (`RegionWalk.spawnArrows`). Answers the walk, or null when `fn`
+ * has no body to walk.
  */
 const walkFindings = (
   out: RegionFinding[],
@@ -1034,12 +1089,14 @@ const walkFindings = (
   freshResults: FreshResults,
   seedNames: string[],
   seedOrigins: i32[],
-  task: boolean
-): void => {
+  task: boolean,
+  outer: Local[],
+  spawnArrows: FunctionSig[]
+): RegionWalk | null => {
   const home = regionProgramOf(programs, fn)
   const body = fn.body()
   if (home === null || body === null) {
-    return
+    return null
   }
   // Only one instantiation's tables are installed at a time, and
   // `resultRef` installs its own, so the callees are judged before the walk enters `fn`'s.
@@ -1062,6 +1119,18 @@ const walkFindings = (
     home.enterInstance(fnInstance)
   }
   const walk = new RegionWalk(home, table, facts, fn, fresh, seedNames, seedOrigins, task)
+  for (const local of outer) {
+    walk.bind(local, ORIGIN_OUTER)
+  }
+  for (const arrow of spawnArrows) {
+    walk.spawnArrows.push(arrow)
+    const none: i32[] = []
+    for (let i = 0; i < arrow.writtenArity(); i++) {
+      none.push(ORIGIN_NONE)
+    }
+    walk.arrowArgs.push(none)
+    walk.indirect.push(false)
+  }
   // A run that changes anything adds a binding or raises one a step up
   // none, scalar, region or outer, unknown, and bindings are finite, so this
   // reaches the fixpoint; a cap would report from origins not yet settled.
@@ -1078,6 +1147,7 @@ const walkFindings = (
   for (const finding of walk.findings) {
     out.push(finding)
   }
+  return walk
 }
 
 /**
@@ -1136,18 +1206,59 @@ export const taskFindings = (
   if (f.feedsTasks) {
     out.push(new RegionFinding(program, site, nestedSpawnMessage(task)))
   }
-  const captures = capturesOf(task)
-  if (captures.length > 0) {
-    const first = captures[0]
-    out.push(
-      new RegionFinding(program, site, captureSpawnMessage(task, first.arrow.captures[first.index].name))
-    )
+  // WP49 stage 5, part 8: an arrow the spawn hands the task may capture its
+  // spawner's numbers, copied into the frame, and objects it could share as
+  // arguments, which the task reaches as it does those.
+  const arrows: FunctionSig[] = []
+  const outer: Local[] = []
+  for (const slot of capturesOf(task)) {
+    const type = slot.type()
+    const local = slot.arrow.captures[slot.index]
+    if (!isFrameValue(table, type) && !(table.sharedWithTask(type) && taskShareObstacle(programs, table, type, []).length === 0)) {
+      out.push(new RegionFinding(program, site, captureSpawnMessage(task, local.name, table.typeName(type))))
+      return out
+    }
+    if (arrows.indexOf(slot.arrow) < 0) {
+      arrows.push(slot.arrow)
+    }
+    if (!isFrameValue(table, type)) {
+      outer.push(local)
+    }
   }
-  if (shares) {
-    walkFindings(out, programs, table, facts, task, freshResults, seedNames, seedOrigins, true)
+  for (const arrow of arrows) {
+    const own = facts.get(arrow.name)
+    if (own === null) {
+      out.push(new RegionFinding(program, site, noFactsMessage(insideTask(task), arrow)))
+      return out
+    }
+    if (own.feedsTasks && !f.feedsTasks) {
+      out.push(new RegionFinding(program, site, nestedSpawnMessage(task)))
+    }
+  }
+  if (!shares && outer.length === 0) {
+    return out
+  }
+  const walk = walkFindings(out, programs, table, facts, task, freshResults, seedNames, seedOrigins, true, [], arrows)
+  // Each arrow is a body of the task's own: its captures are the spawner's,
+  // and its parameters what the task hands it, or anything when a callee
+  // the walk judges by its facts runs it.
+  for (let a = 0; a < arrows.length; a++) {
+    const arrow = arrows[a]
+    const names: string[] = []
+    const origins: i32[] = []
+    for (let i = 0; i < arrow.writtenArity(); i++) {
+      names.push(arrow.paramNames[i])
+      const seen = walk === null || walk.indirect[a] ? ORIGIN_UNKNOWN : walk.arrowArgs[a][i]
+      origins.push(seen === ORIGIN_NONE ? ORIGIN_UNKNOWN : seen)
+    }
+    walkFindings(out, programs, table, facts, arrow, freshResults, names, origins, true, outer, [])
   }
   return out
 }
+
+/** A value a task's frame holds as it is, which a capture may be: a number, a `boolean` or an enum. */
+const isFrameValue = (table: TypeTable, type: i32): boolean =>
+  isNumeric(type) || type === T_BOOL || table.enumBase(type) >= 0
 
 /**
  * Remember a call for `Compilation.checkRegions`, once: a generic caller's
