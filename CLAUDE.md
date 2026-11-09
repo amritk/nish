@@ -31,6 +31,10 @@ the whole `npm test` locally only when the change is to the suite itself
 (`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
 and say so in the PR body.
 
+A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
+narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
+release-note words) in the same PR; run nish-cmp before pushing.
+
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:
 `node scripts/gen-reference.mjs --check` fails on any gap
