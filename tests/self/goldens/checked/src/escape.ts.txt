@@ -219,6 +219,7 @@ struct PassWalk (class) size=80 align=8
   method declaredInPass -> @PassWalk.declaredInPass
   method refuseCarriedStores -> @PassWalk.refuseCarriedStores
   method isOld -> @PassWalk.isOld
+  method answersInRegister -> @PassWalk.answersInRegister
   method visitCallee -> @PassWalk.visitCallee
   method visitPush -> @PassWalk.visitPush
   method freshArray -> @PassWalk.freshArray
@@ -1139,8 +1140,8 @@ function PassWalk.refuseCarriedStores(this: PassWalk, f: FunctionFacts, start: i
   callee +4:9 PassWalk.refuse -> @PassWalk.refuse
 function PassWalk.isOld(this: PassWalk, expr: Node): boolean -> @PassWalk.isOld [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get PassWalk.declaredInPass PassWalk.isOld PassWalk.isPassListing coalescesMaybe isScalarArgument nish_panic_index nish_str_eq storesInlineElements unwrapParens
-  pointer this: size=80 writesThrough=false captured=false passedTo=PassWalk.declaredInPass#0 PassWalk.isOld#0 PassWalk.isPassListing#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0
+  calls: FactsTable.get PassWalk.answersInRegister PassWalk.declaredInPass PassWalk.isOld PassWalk.isPassListing coalescesMaybe isScalarArgument nish_panic_index nish_str_eq storesInlineElements unwrapParens
+  pointer this: size=80 writesThrough=false captured=false passedTo=PassWalk.declaredInPass#0 PassWalk.isOld#0 PassWalk.isPassListing#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.answersInRegister#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:11 program: CheckedProgram (const)
@@ -1164,9 +1165,20 @@ function PassWalk.isOld(this: PassWalk, expr: Node): boolean -> @PassWalk.isOld 
   callee +43:16 PassWalk.isOld -> @PassWalk.isOld
   callee +43:45 PassWalk.isOld -> @PassWalk.isOld
   callee +45:14 PassWalk.isOld -> @PassWalk.isOld
-  local +48:13 callee: FunctionSig | null (const)
-  local +49:13 g: FunctionFacts | null (const)
-  callee +49:64 FactsTable.get -> @FactsTable.get
+  callee +49:31 PassWalk.answersInRegister -> @PassWalk.answersInRegister
+  local +50:13 callee: FunctionSig | null (const)
+  local +51:13 g: FunctionFacts | null (const)
+  callee +51:64 FactsTable.get -> @FactsTable.get
+function PassWalk.answersInRegister(this: PassWalk, expr: Node): boolean -> @PassWalk.answersInRegister [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.resultByValue nish_panic_index unwrapParens
+  pointer this: size=80 writesThrough=false captured=false
+  pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  stackSites=0 stackLocals=0
+  local +0:11 e: Node (const)
+  callee +0:15 unwrapParens -> @unwrapParens
+  local +1:11 callee: FunctionSig | null (const)
+  callee +2:31 TypeTable.resultByValue -> @TypeTable.resultByValue
 function PassWalk.visitCallee(this: PassWalk, callee: FunctionSig, node: Node): void -> @PassWalk.visitCallee [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1263,11 +1275,11 @@ function PassWalk.visit(this: PassWalk, node: Node): void -> @PassWalk.visit [me
   callee +52:34 PassWalk.isOld -> @PassWalk.isOld
   callee +54:11 PassWalk.refuse -> @PassWalk.refuse
   local +58:13 value: Node (const)
-  local +61:13 handsNothing: boolean (const)
-  callee +62:55 PassWalk.isOld -> @PassWalk.isOld
-  callee +64:9 PassWalk.refuse -> @PassWalk.refuse
-  local +67:16 child: Node (const)
-  callee +68:7 PassWalk.visit -> @PassWalk.visit
+  local +64:13 handsNothing: boolean (const)
+  callee +65:55 PassWalk.isOld -> @PassWalk.isOld
+  callee +67:9 PassWalk.refuse -> @PassWalk.refuse
+  local +70:16 child: Node (const)
+  callee +71:7 PassWalk.visit -> @PassWalk.visit
 function loopBody(loop: Node): Node -> @loopBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
@@ -1281,9 +1293,9 @@ function within(outer: Node, node: Node): boolean -> @within
 function decideLoopScopes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, f: FunctionFacts, facts: FactsTable): void -> @decideLoopScopes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectLoopScopes
-  calls: FunctionSig.body collectLoopScopes
+  calls: FunctionSig.body TypeTable.resultByValue collectLoopScopes
   pointer unit: size=16 writesThrough=true captured=true passedTo=collectLoopScopes#0
-  pointer table: size=96 writesThrough=true captured=true passedTo=collectLoopScopes#1
+  pointer table: size=96 writesThrough=true captured=true passedTo=collectLoopScopes#1 TypeTable.resultByValue#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=FunctionSig.body#0
   pointer f: size=416 writesThrough=false captured=false passedTo=collectLoopScopes#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=collectLoopScopes#3
@@ -1291,9 +1303,11 @@ function decideLoopScopes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig
   local +0:9 body: Node | null (const)
   callee +0:16 FunctionSig.body -> @FunctionSig.body
   callee +4:5 collectLoopScopes -> @collectLoopScopes
-function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, node: Node): void -> @collectLoopScopes
+  callee +4:46 TypeTable.resultByValue -> @TypeTable.resultByValue
+function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, returnsByValue: boolean, node: Node): void -> @collectLoopScopes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
+  escaping: returnsByValue
   calls: LoopScope.constructor collectLoopScopes decidePass loopBody nish_alloc_struct nish_array_grow nish_panic_index
   pointer unit: size=16 writesThrough=true captured=true passedTo=decidePass#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0
   pointer table: size=96 writesThrough=true captured=true passedTo=decidePass#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1
@@ -1311,9 +1325,10 @@ function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFact
   callee +11:7 collectLoopScopes -> @collectLoopScopes
   callee +14:5 collectLoopScopes -> @collectLoopScopes
   callee +15:5 collectLoopScopes -> @collectLoopScopes
-function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, scope: LoopScope): void -> @decidePass
+function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, returnsByValue: boolean, scope: LoopScope): void -> @decidePass
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
+  escaping: returnsByValue
   calls: PassWalk.constructor PassWalk.refuse PassWalk.refuseCarriedStores PassWalk.visit within
   pointer unit: size=16 writesThrough=true captured=true passedTo=PassWalk.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=PassWalk.constructor#2
@@ -1321,8 +1336,8 @@ function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, fact
   pointer facts: size=24 writesThrough=true captured=true passedTo=PassWalk.constructor#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=PassWalk.constructor#4
   stackSites=1 stackLocals=1
-  local -18:9 walk: PassWalk (const)
-  callee -18:16 new PassWalk -> @PassWalk.constructor
+  local -19:9 walk: PassWalk (const)
+  callee -19:16 new PassWalk -> @PassWalk.constructor
   callee -16:5 PassWalk.refuse -> @PassWalk.refuse
   local -13:9 body: Node (const)
   local -12:14 node: Node (const)

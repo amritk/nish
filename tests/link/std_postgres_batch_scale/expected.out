@@ -8,6 +8,13 @@ PASS  each copy routes by its own ordinal, to its own request
 PASS  nothing refused
 PASS  a failed run of 1100 keys answers each request PG_BATCH_FAILED
 PASS  and the next take answers a run
+PASS  the 2048 colliding keys share one hash
+PASS  a key of another high half does not
+PASS  4096 requests of one hash, one execution
+PASS  each key once, then the 1024 past the probe bound again
+PASS  no request gets another key's row, a miss or a failure
+PASS  each of the 4096 gets its own key's one row, then its end
+PASS  and the next take finds nothing waiting
 PASS  a batch of one
 PASS  routes
 PASS  forty requests, the one run under its next handle
@@ -22,4 +29,4 @@ PASS  and routes
 PASS  two dense ranges 131072 apart: each key bound once
 PASS  and nothing waits
 PASS  eight pairs at seeded offsets: each key bound once in every one
-postgres batch scale: 24 passed, 0 failed, 0 skipped
+postgres batch scale: 31 passed, 0 failed, 0 skipped

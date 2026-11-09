@@ -3770,10 +3770,13 @@ const PG_LOW32: i64 = 4294967295
  * The batcher's table hash of an int8 key, 31 bits: the high half times an
  * odd constant xored into the low half, then MurmurHash3's 32-bit finalizer,
  * whose unsigned multiplies wrap by definition. Every step is a bijection on
- * 32 bits, so keys of one high half never collide, and the finalizer spreads
- * a dense run of ids over the whole table: runs that would land on one
- * another's slots under a near-identity hash do not merge into one cluster
- * longer than `PG_BATCH_PROBES`.
+ * 32 bits, so keys of one high half get distinct 32-bit hashes; the last
+ * `>> 1` drops their lowest bit, so at most two such keys share a 31-bit hash.
+ * The finalizer spreads a dense run of ids over the whole table: runs that
+ * would land on one another's slots under a near-identity hash do not merge
+ * into one cluster longer than `PG_BATCH_PROBES`. Keys of different high
+ * halves can be built to share one hash; each costs up to
+ * `PG_BATCH_PROBES` probes.
  */
 const pgIntHash = (key: i64): i32 => {
   const lo: u32 = toU32(key & PG_LOW32)

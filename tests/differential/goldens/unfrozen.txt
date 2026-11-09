@@ -489,6 +489,9 @@ cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
 cases/reserved_label_names added after R6: no rewriter to freeze it with
 cases/reserved_label_names_dbg added after R6: no rewriter to freeze it with
+cases/result_loop_outer_let added after R6: no rewriter to freeze it with
+cases/result_loop_payloads added after R6: no rewriter to freeze it with
+cases/result_loop_return_alloc added after R6: no rewriter to freeze it with
 cases/rng_bitwise added after R6: no rewriter to freeze it with
 cases/rng_entries added after R6: no rewriter to freeze it with
 cases/rng_entry_bitwise_panic added after R6: no rewriter to freeze it with
