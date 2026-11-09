@@ -29870,6 +29870,70 @@ if (!only || "vite".includes(only)) {
     }
     check("vite: load leaves every other id to Vite", (await plugin.load(path.join(app, "src", "main.ts"))) === null)
 
+    // An entry imported as TypeScript writes it: without the `.ts`, or by its directory
+    // for an `index.ts`, from a module outside the entry's own directory.
+    fs.mkdirSync(path.join(app, "ent", "sum"), { recursive: true })
+    fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "add.ts"))
+    fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "sum", "index.ts"))
+    const spelled = nish({ compiler: NISH, entries: ["ent/add.ts", "ent/sum/index.ts"] })
+    spelled.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
+    const forms = {}
+    for (const source of ["../ent/add", "../ent/add.ts", "/ent/add", "../ent/sum", "../ent/sum/index.ts", "../ent/ad"]) {
+      forms[source] = await spelled.resolveId(source, main)
+    }
+    const addId = `\0nish-entry:${path.join(app, "ent", "add.ts")}`
+    const sumId = `\0nish-entry:${path.join(app, "ent", "sum", "index.ts")}`
+    check(
+      "vite: an entry resolves with or without its `.ts`, and a directory to its `index.ts`",
+      forms["../ent/add"] === addId &&
+        forms["../ent/add.ts"] === addId &&
+        forms["/ent/add"] === addId &&
+        forms["../ent/sum"] === sumId &&
+        forms["../ent/sum/index.ts"] === sumId &&
+        forms["../ent/ad"] === null,
+      JSON.stringify(forms)
+    )
+    let added = null
+    try {
+      const generated = path.join(app, "generated-add.mjs")
+      fs.writeFileSync(generated, await spelled.load(forms["../ent/add"]))
+      added = (await import(pathToFileURL(generated).href)).add(2, 3)
+    } catch (e) {
+      added = String(e.stderr ?? e)
+    }
+    check('vite: `import { add } from "../ent/add"` gets the wasm build of ent/add.ts', added === 5, String(added))
+
+    // A compiler older than `loadSync` writes a loader without it. The plugin says so,
+    // naming the compiler and its version, rather than leaving Rollup to report a
+    // missing export of a file in its cache. The stand-in compiler is this one with
+    // the loader's `loadSync` made private and an old version.
+    const oldCompiler = path.join(app, "old-nish")
+    fs.writeFileSync(
+      oldCompiler,
+      [
+        "#!/usr/bin/env bash",
+        'if [ "$1" = --version ]; then echo "nish 0.34.1"; exit 0; fi',
+        `${JSON.stringify(NISH)} "$@" || exit`,
+        'dts=; prev=; for a in "$@"; do [ "$prev" = --emit-dts ] && dts=$a; prev=$a; done',
+        'sed -i "s/^export function loadSync(/function loadSync(/" "${dts%.d.ts}.mjs"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    )
+    const old = nish({ compiler: oldCompiler, entries: ["ent/add.ts"] })
+    old.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache-old") })
+    let oldError = ""
+    try {
+      await old.load(await old.resolveId("../ent/add", main))
+    } catch (e) {
+      oldError = String(e.message ?? e)
+    }
+    check(
+      "vite: a compiler whose loader has no `loadSync` fails the build naming the compiler, its version and the cause",
+      oldError.includes(oldCompiler) && oldError.includes("nish 0.34.1") && oldError.includes("predates `loadSync`"),
+      oldError || "load did not fail"
+    )
+
     // WP50 stage 2: an entry importing a host module is instantiated with it. The
     // generated module imports the host file whole and passes it as `host`, so the
     // page passes nothing, and Node's type stripping runs the host file as it is.

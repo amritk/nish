@@ -96,13 +96,26 @@ export default function nish(options = {}) {
     const host = (options.host ?? []).flatMap((h) => ["--host", path.resolve(root, h)]);
     await run(compiler, [entry, "--target", "wasm32", ...host, "--emit-dts", dts, "-o", ll], { cwd: root });
     const loader = path.join(dir, `${stem}.mjs`);
+    const loaderText = readFileSync(loader, "utf8");
+    // The generated module imports `loadSync`. A compiler older than it writes
+    // a loader without one, which Rollup would report only as a missing
+    // export of a file in the cache, naming neither the compiler nor the fix.
+    if (!/^export function loadSync\(/m.test(loaderText)) {
+      const version = await run(compiler, ["--version"], { cwd: root }).then(
+        (r) => r.stdout.trim(),
+        () => "an unknown version",
+      );
+      throw new Error(
+        `nish/vite: the compiler ${compiler} (${version}) wrote a loader with no \`loadSync\` export: ` +
+          "it predates `loadSync` (WP50 stage 1), which the generated module calls. " +
+          "Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.",
+      );
+    }
     const ir = readFileSync(ll, "utf8");
     // runtime-wasm.c is linked when the IR needs a runtime function (a weak
     // `extern_weak` one, a panic stub wasm-ld writes itself, does not count)
     // or the loader calls the arena.
-    const needsRuntime =
-      /^declare (?!extern_weak)[^"\n]*@nish_/m.test(ir) ||
-      readFileSync(loader, "utf8").includes("raw.nish_arena_mark(");
+    const needsRuntime = /^declare (?!extern_weak)[^"\n]*@nish_/m.test(ir) || loaderText.includes("raw.nish_arena_mark(");
     const inline = path.join(dir, `${stem}.bytes.mjs`);
     const inputs = needsRuntime ? [ll, runtimeWasm] : [ll];
     await run("bash", [buildScript, ...inputs, "-o", path.join(dir, `${stem}.wasm`), "--profile", "wasm-host", "--inline", inline], {
@@ -120,13 +133,15 @@ export default function nish(options = {}) {
       if (!building) return null;
       // The seam for a `./client.nish` specifier (the page's client module of a
       // later stage) is here; stage 1 resolves only the entries.
+      // A specifier may leave out the `.ts`, or name a directory for its
+      // `index.ts`, as TypeScript resolves it: each is tried against the entries.
       const base = importer ? path.dirname(importer) : root;
       const candidates = source.startsWith(".")
         ? [path.resolve(base, source)]
         : path.isAbsolute(source)
           ? [source, path.join(root, source)]
           : [];
-      const hit = candidates.find((c) => entries.has(c));
+      const hit = candidates.flatMap((c) => [c, `${c}.ts`, path.join(c, "index.ts")]).find((c) => entries.has(c));
       return hit === undefined ? null : PREFIX + hit;
     },
     async load(id) {
