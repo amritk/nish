@@ -29875,22 +29875,40 @@ if (!only || "vite".includes(only)) {
     fs.mkdirSync(path.join(app, "ent", "sum"), { recursive: true })
     fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "add.ts"))
     fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "sum", "index.ts"))
-    const spelled = nish({ compiler: NISH, entries: ["ent/add.ts", "ent/sum/index.ts"] })
+    // Vite tries `.js` before `.ts`: `../ent/both` is the sibling `both.js`, not the entry.
+    fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "both.ts"))
+    fs.writeFileSync(path.join(app, "ent", "both.js"), "export const add = (a, b) => a + b\n")
+    const spelled = nish({ compiler: NISH, entries: ["ent/add.ts", "ent/sum/index.ts", "ent/both.ts"] })
     spelled.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
     const forms = {}
-    for (const source of ["../ent/add", "../ent/add.ts", "/ent/add", "../ent/sum", "../ent/sum/index.ts", "../ent/ad"]) {
+    const spellings = [
+      "../ent/add",
+      "../ent/add.ts",
+      "/ent/add",
+      "../ent/sum",
+      "../ent/sum/index.ts",
+      "../ent/ad",
+      "../ent/add?raw",
+      "../ent/both",
+      "../ent/both.ts",
+    ]
+    for (const source of spellings) {
       forms[source] = await spelled.resolveId(source, main)
     }
     const addId = `\0nish-entry:${path.join(app, "ent", "add.ts")}`
     const sumId = `\0nish-entry:${path.join(app, "ent", "sum", "index.ts")}`
+    const bothId = `\0nish-entry:${path.join(app, "ent", "both.ts")}`
     check(
-      "vite: an entry resolves with or without its `.ts`, and a directory to its `index.ts`",
+      "vite: an entry resolves with or without its `.ts`, and a directory to its `index.ts`, as Vite orders them",
       forms["../ent/add"] === addId &&
         forms["../ent/add.ts"] === addId &&
         forms["/ent/add"] === addId &&
         forms["../ent/sum"] === sumId &&
         forms["../ent/sum/index.ts"] === sumId &&
-        forms["../ent/ad"] === null,
+        forms["../ent/ad"] === null &&
+        forms["../ent/add?raw"] === null &&
+        forms["../ent/both"] === null &&
+        forms["../ent/both.ts"] === bothId,
       JSON.stringify(forms)
     )
     let added = null
@@ -29915,7 +29933,7 @@ if (!only || "vite".includes(only)) {
         'if [ "$1" = --version ]; then echo "nish 0.34.1"; exit 0; fi',
         `${JSON.stringify(NISH)} "$@" || exit`,
         'dts=; prev=; for a in "$@"; do [ "$prev" = --emit-dts ] && dts=$a; prev=$a; done',
-        'sed -i "s/^export function loadSync(/function loadSync(/" "${dts%.d.ts}.mjs"',
+        `${JSON.stringify(process.execPath)} -e 'const fs = require("fs"); const f = process.argv[1]; fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(/^export function loadSync\\(/m, "function loadSync("))' "\${dts%.d.ts}.mjs"`,
         "",
       ].join("\n"),
       { mode: 0o755 }
@@ -31362,15 +31380,30 @@ if (!only || "wasm-size".includes(only)) {
       ...(pinned ? { NISH_WASM_OPT: "0" } : {}),
     })
     const stubCalls = () => (fs.existsSync(stubLog) ? fs.readFileSync(stubLog, "utf8").split("\n").filter(Boolean) : [])
-    // PATH without the directories that hold a wasm-opt: the `--profile wasm` link has no
-    // switch, and clang still finds one beside itself, which `-###` shows.
-    const bare = {
-      ...process.env,
-      PATH: String(process.env.PATH)
-        .split(path.delimiter)
-        .filter((d) => !fs.existsSync(path.join(d, "wasm-opt")))
-        .join(path.delimiter),
+    // A directory of symlinks to everything in `from` but what `skip` names.
+    const mirror = (from, to, skip) => {
+      fs.rmSync(to, { recursive: true, force: true })
+      fs.mkdirSync(to, { recursive: true })
+      for (const name of fs.readdirSync(from)) {
+        if (!skip.includes(name)) fs.symlinkSync(path.join(from, name), path.join(to, name))
+      }
     }
+    // PATH with no wasm-opt on it, for the `--profile wasm` link, which has no switch.
+    // A directory holding one is swapped for a mirror without it, never dropped: apt's
+    // binaryen puts wasm-opt in /usr/bin beside bash and clang (#1257). clang still
+    // finds one beside its own binary, which `-###` shows.
+    let hidden = 0
+    const withoutWasmOpt = (searchPath) =>
+      String(searchPath)
+        .split(path.delimiter)
+        .map((d) => {
+          if (!fs.existsSync(path.join(d, "wasm-opt"))) return d
+          const to = path.join(dir, "no-wasm-opt", String(hidden++))
+          mirror(d, to, ["wasm-opt"])
+          return to
+        })
+        .join(path.delimiter)
+    const bare = { ...process.env, PATH: withoutWasmOpt(process.env.PATH) }
     delete bare.NISH_WASM_OPT
     const clangFindsWasmOpt = (ll) =>
       /wasm-opt"/.test(
@@ -31438,6 +31471,21 @@ if (!only || "wasm-size".includes(only)) {
             `wasm-size: ${src} with no wasm-opt installed links the NISH_WASM_OPT=0 bytes`,
             same && /, no wasm-opt\)/.test(none.stdout),
             shown(none)
+          )
+          // The layout of #1257: wasm-opt in the directory that also holds bash. The
+          // hidden PATH keeps that directory's other tools, so the link still runs.
+          const bashDir = path.dirname(spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim())
+          const shared = path.join(dir, "shared-bin")
+          mirror(bashDir, shared, ["wasm-opt"])
+          fs.copyFileSync(path.join(stubBin, "wasm-opt"), path.join(shared, "wasm-opt"))
+          const sharedPath = [shared, ...String(process.env.PATH).split(path.delimiter).filter((d) => !fs.existsSync(path.join(d, "bash")))]
+          const hiddenEnv = { ...bare, PATH: withoutWasmOpt(sharedPath.join(path.delimiter)), WASM_OPT_STUB_LOG: stubLog }
+          fs.rmSync(stubLog, { force: true })
+          const beside = link(inputs, hostFlags(`${stem}.beside.wasm`), hiddenEnv)
+          check(
+            `wasm-size: a wasm-opt hidden from the directory it shares with bash leaves that directory's tools on PATH`,
+            beside.status === 0 && stubCalls().length === 0 && /, no wasm-opt\)/.test(beside.stdout),
+            `wasm-opt calls:\n${stubCalls().join("\n")}\n${shown(beside)}`
           )
         } else {
           skip(`wasm-size: clang finds a wasm-opt beside itself, so no build here links without one`)

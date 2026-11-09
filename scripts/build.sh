@@ -47,8 +47,8 @@
 #          is on PATH; the build line says whether it ran. NISH_WASM_OPT=0
 #          links without it even when it is installed (clang's own wasm-opt
 #          call too): the module a machine without binaryen builds, which
-#          the size guard measures. Two flags take this profile alone, and any other
-#          refuses them with exit 2:
+#          the size guard measures. Two flags take this profile alone, and
+#          any other refuses them with exit 2:
 #            --memory <MiB>       memory fixed at <MiB> MiB (1 to 4096), the
 #                                 initial size and the maximum both, so it
 #                                 never grows and `memory.buffer` is one
@@ -1002,13 +1002,15 @@ case "$profile" in
           make_work
           host_objects=()
           for i in "${host_inputs[@]}"; do
+            # What clang compiles in a one-step link is compiled here (.ll, .c,
+            # .bc, .s, ...); what it hands straight to wasm-ld passes through.
             case "$i" in
-              *.ll|*.c)
+              *.o|*.a) host_objects+=("$i") ;;
+              *)
                 object="$work/host-${#host_objects[@]}.o"
                 "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
                   ${tls[@]+"${tls[@]}"} -c "$i" -o "$object"
                 host_objects+=("$object") ;;
-              *) host_objects+=("$i") ;;
             esac
           done
           "$CC" --target=wasm32-unknown-unknown -nostdlib \

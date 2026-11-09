@@ -23,7 +23,7 @@
  * `resolveId`, `load`), so `tests/run.js` calls them directly, with no Vite.
  */
 import { execFile } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -68,6 +68,15 @@ function exportNames(dts) {
   return names;
 }
 
+/** Vite's default `resolve.extensions`, in the order it tries them. */
+const VITE_EXTENSIONS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"];
+
+/** Whether `p` is a file (`"file"`), a directory (`"dir"`) or neither. */
+const kind = (p) => {
+  const st = statSync(p, { throwIfNoEntry: false });
+  return st?.isFile() ? "file" : st?.isDirectory() ? "dir" : undefined;
+};
+
 /** The plugin. `compiler` and `buildScript` default to the ones in this package. */
 export default function nish(options = {}) {
   const compiler = options.compiler ?? path.join(packageDir, "bin", "nish");
@@ -77,9 +86,11 @@ export default function nish(options = {}) {
   let building = false;
   let cacheDir = path.join(root, "node_modules", ".vite");
   let entries = new Set();
+  let extensions = VITE_EXTENSIONS;
 
   const configure = (config) => {
     root = config.root ?? root;
+    extensions = config.resolve?.extensions ?? VITE_EXTENSIONS;
     building = config.command === "build";
     cacheDir = config.cacheDir ?? path.join(root, "node_modules", ".vite");
     entries = new Set((options.entries ?? []).map((e) => path.resolve(root, e)));
@@ -134,14 +145,20 @@ export default function nish(options = {}) {
       // The seam for a `./client.nish` specifier (the page's client module of a
       // later stage) is here; stage 1 resolves only the entries.
       // A specifier may leave out the `.ts`, or name a directory for its
-      // `index.ts`, as TypeScript resolves it: each is tried against the entries.
+      // `index.ts`. It is resolved as Vite would, file then extensions in
+      // order then the directory's index, so a sibling `add.js` keeps `./add`.
       const base = importer ? path.dirname(importer) : root;
       const candidates = source.startsWith(".")
         ? [path.resolve(base, source)]
         : path.isAbsolute(source)
           ? [source, path.join(root, source)]
           : [];
-      const hit = candidates.flatMap((c) => [c, `${c}.ts`, path.join(c, "index.ts")]).find((c) => entries.has(c));
+      const withExtension = (stem) => extensions.map((e) => stem + e).find((f) => kind(f) === "file");
+      const resolve = (c) => {
+        if (entries.has(c) || kind(c) === "file") return c;
+        return withExtension(c) ?? (kind(c) === "dir" ? withExtension(path.join(c, "index")) : undefined);
+      };
+      const hit = candidates.map(resolve).find((c) => c !== undefined && entries.has(c));
       return hit === undefined ? null : PREFIX + hit;
     },
     async load(id) {
