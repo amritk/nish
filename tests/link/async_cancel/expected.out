@@ -15,4 +15,9 @@ flat after cancelling a reader: yes
 an armed deadline is a timer: 1
 flat after done: yes, nothing left to run: yes
 a self-cancel: 1, answers 0, finished queued: flat yes, nothing left to run: yes
+cancel a pipe reader: 1, it answers 0
+the duplicate: held 1, closed after the cancel 1; a later write wakes a task: no; flat yes
+the node reused: yes, a new generation: yes
+cancel with the stale handle: 0, the new task cancelled: 1
+flat after a stale cancel: yes
 main's handle: 0

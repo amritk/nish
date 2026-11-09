@@ -5,7 +5,11 @@
    `cancel_after` cancels the task when it fires and is taken out when the task
    finishes first; a bounded descriptor wait fails when its time is up. A
    handle of a finished task, a stale one and `main`'s (0) are refused, and a
-   task that finishes while still queued is taken off the queue. */
+   task that finishes while still queued is taken off the queue. A cancel
+   closes the descriptor a wait duplicated, and a handle whose node was
+   reused is refused without touching the new task. */
+#include <errno.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -119,6 +123,38 @@ int main(void) {
   nish_async_done(t);
   printf("a self-cancel: %d, answers %d, finished queued: flat %s, nothing left to run: %s\n", self, answer, flat(),
          nish_async_next() ? "no" : "yes");
+  /* 7. A cancel closes the duplicate a descriptor wait registered, and a
+     write that comes after it wakes no task. The duplicate takes the lowest
+     free descriptor, so that number is free again once the wait is gone. */
+  int lowest = dup(fds[0]);
+  close(lowest);
+  t = spawn(&h);
+  prev = nish_async_enter(t);
+  w = nish_async_wait_fd_within(fds[0], 0, -1);
+  nish_async_leave(t, prev);
+  int held = fcntl(lowest, F_GETFD) != -1;
+  printf("cancel a pipe reader: %d, it answers %d\n", nish_async_cancel(h), nish_async_poll(w));
+  int closed = fcntl(lowest, F_GETFD) == -1 && errno == EBADF;
+  drain();
+  nish_async_done(t);
+  if (write(fds[1], "x", 1) != 1) return 3;
+  printf("the duplicate: held %d, closed after the cancel %d; a later write wakes a task: %s; flat %s\n", held,
+         closed, nish_async_next() ? "yes" : "no", flat());
+
+  /* 8. A handle whose task finished and whose node was reused for a new task
+     is stale: it names the same node with an older generation, and a cancel
+     with it leaves the new task alone. */
+  int64_t old;
+  t = spawn(&old);
+  nish_async_done(t);
+  t = spawn(&h);
+  printf("the node reused: %s, a new generation: %s\n", (uint32_t)old == (uint32_t)h ? "yes" : "no",
+         old != h ? "yes" : "no");
+  printf("cancel with the stale handle: %d, the new task cancelled: %d\n", nish_async_cancel(old),
+         nish_async_cancel(h));
+  drain();
+  nish_async_done(t);
+  printf("flat after a stale cancel: %s\n", flat());
   printf("main's handle: %lld\n", (long long)nish_async_task_id());
   close(fds[0]);
   close(fds[1]);
