@@ -204,6 +204,11 @@
                 "title": "An API server",
                 "filepath": "docs/guide/using-nish/api-server.md"
               },
+              "/async-server": {
+                "type": "page",
+                "title": "An async server",
+                "filepath": "docs/guide/using-nish/async-server.md"
+              },
               "/websocket": {
                 "type": "page",
                 "title": "WebSocket",

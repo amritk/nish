@@ -1,7 +1,8 @@
 // `nish/net/serve` end to end on loopback: routed GET and POST with
 // parameters, 404 and 405, two pipelined requests answered in order though
 // the first one's task sleeps longer, keep-alive, and the header and body
-// caps answered 431 and 413. `main` awaits the server and the client together.
+// caps answered 431 and 413, and the answers a bad Response gets. `main`
+// awaits the server, then the client's done signal.
 import { readable, sleep, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 import { Router, RouterLimits } from "nish/net/router"
@@ -12,6 +13,8 @@ const HELLO: i32 = 0
 const USER: i32 = 1
 const ECHO: i32 = 2
 const SLOW: i32 = 3
+const BIG: i32 = 4
+const BAD: i32 = 5
 
 async function handle(req: Request): Promise<Response> {
   switch (req.route) {
@@ -25,6 +28,22 @@ async function handle(req: Request): Promise<Response> {
       const ms: i32 = req.paramNumber(0)
       await sleep(ms)
       return new Response(200).text(`slept ${ms}`)
+    }
+    case BIG: {
+      const big: u8[] = new Array<u8>(300)
+      big.fill(120)
+      return new Response(200).bytes("text/plain", big, 0, 300)
+    }
+    case BAD: {
+      const k: string = req.query("k")
+      if (k === "type") {
+        const none: u8[] = []
+        return new Response(200).bytes("text/plain\r\nx-evil: 1", none, 0, 0)
+      }
+      if (k === "empty") {
+        return new Response(204).text("a body a 204 cannot carry")
+      }
+      return new Response(99).text("no such status")
     }
     default:
       return refuse(req)
@@ -67,6 +86,28 @@ async function client(port: i32, doneFd: i32): Promise<void> {
   await show(c, "404")
   await sendText(c, "DELETE /hello HTTP/1.1\r\nhost: t\r\n\r\n")
   await show(c, "405")
+  await sendText(c, "GET /big HTTP/1.1\r\nhost: t\r\n\r\n")
+  await show(c, "response cap")
+  await sendText(c, "GET /bad HTTP/1.1\r\nhost: t\r\n\r\n")
+  await show(c, "bad status")
+  await sendText(c, "GET /bad?k=type HTTP/1.1\r\nhost: t\r\n\r\n")
+  await show(c, "bad type")
+  await sendText(c, "GET /bad?k=empty HTTP/1.1\r\nhost: t\r\n\r\n")
+  await show(c, "204 with a body")
+  // With one request in flight, another connection's request is answered 503;
+  // with two connections open, a third is closed as it is accepted.
+  await sendText(c, "GET /slow/100 HTTP/1.1\r\nhost: t\r\n\r\n")
+  await sleep(20)
+  const c2: Conn = new Conn(8192)
+  await dial(c2, port)
+  await sendText(c2, "GET /hello HTTP/1.1\r\nhost: t\r\n\r\n")
+  await show(c2, "in flight")
+  const c3: Conn = new Conn(8192)
+  await dial(c3, port)
+  await show(c3, "connections")
+  await show(c, "held")
+  hangUp(c2)
+  hangUp(c3)
   // Pipelined: the first task sleeps 60 ms, the second 1 ms; the answers still come in order.
   await sendText(c, "GET /slow/60 HTTP/1.1\r\nhost: t\r\n\r\nGET /slow/1 HTTP/1.1\r\nhost: t\r\n\r\n")
   await show(c, "pipelined 1")
@@ -83,10 +124,15 @@ export async function main(): Promise<i32> {
   router.add("GET", "/users/:id/:name")
   router.add("POST", "/echo")
   router.add("GET", "/slow/:ms")
+  router.add("GET", "/big")
+  router.add("GET", "/bad")
   const limits: ServeLimits = new ServeLimits()
   limits.headerBytes = 1024
   limits.bodyBytes = 64
-  limits.maxRequests = 7
+  limits.connections = 2
+  limits.inFlight = 1
+  limits.responseBytes = 256
+  limits.maxRequests = 13
   const listener: i32 = tcpListen("127.0.0.1", 0, 16)
   const port: i32 = netLocalPort(listener)
   const stats: ServeStats = new ServeStats()

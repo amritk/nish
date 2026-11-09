@@ -8,11 +8,11 @@ hands your program the request once it is whole. Your program reads it and
 answers it. Keep-alive, pipelining, chunked bodies, `HEAD`, timeouts and the
 body cap are taken care of.
 
-Nish has no function values, so you do not register a callback per route.
-Your program *pulls*: `wait` runs one turn of the loop, `ready` and `take`
+You do not register a callback per route. Your program *pulls*: `wait` runs one turn of the loop, `ready` and `take`
 give out the requests it made whole, and you dispatch on `req.route` — the
 number `Router.add` answered, or a negative `ROUTER_*` code — with a
-`switch`.
+`switch`. An `async` program that would rather hand each request to a function
+of its own, in a task that may await, uses [an async server](async-server.md).
 
 ## A first server
 

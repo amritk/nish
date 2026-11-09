@@ -526,7 +526,7 @@ function serveAnswer(h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
   h.send(r, status, typeCache[type], st.bodies[k], 0, length)
 }
 
-/** The index in `cache` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full. */
+/** The index in `cache` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
 function serveType(cache: u8[][], type: u8[], len: i32): i32 {
   for (let i: i32 = 0; i < toI32(cache.length); i++) {
     const c: u8[] = cache[i]
@@ -542,6 +542,13 @@ function serveType(cache: u8[][], type: u8[], len: i32): i32 {
   }
   if (toI32(cache.length) >= SERVE_MAX_TYPES) {
     return -1
+  }
+  // A control byte other than a tab would make the carrier refuse the head,
+  // which the handler treats as a program's mistake and panics on.
+  for (let j: i32 = 0; j < len; j++) {
+    if ((type[j] < 32 && type[j] !== 9) || type[j] === 127) {
+      return -1
+    }
   }
   const copy: u8[] = new Array<u8>(len)
   for (let j: i32 = 0; j < len; j++) {
