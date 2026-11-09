@@ -743,11 +743,13 @@ class RegionWalk {
       const arrow = this.spawnArrows[a]
       if (callee === arrow) {
         const seen = this.arrowArgs[a]
-        for (let i = 0; i < seen.length; i++) {
-          if (i >= handed.length) {
-            break
+        for (let i = 0; i < handed.length; i++) {
+          // The origin is read before the bound is tested: a call between
+          // the test and the store would leave the store unproven.
+          const handedOrigin = this.origin(handed[i])
+          if (i < seen.length) {
+            seen[i] = joinOrigin(seen[i], handedOrigin)
           }
-          seen[i] = joinOrigin(seen[i], this.origin(handed[i]))
         }
       } else if (!this.indirect[a]) {
         for (const slot of capturesOf(callee)) {
@@ -1319,7 +1321,7 @@ export const taskFindings = (
   const outer: Local[] = []
   // The refused capture, or arrow without facts, is found in the loop and its
   // message built after it, so no pass of the loop keeps a message's memory.
-  let refused = false
+  let captureRefused = false
   let refusedName = ""
   let refusedType = 0
   for (const slot of capturesOf(task)) {
@@ -1329,7 +1331,7 @@ export const taskFindings = (
       !isFrameValue(table, type) &&
       !(table.sharedWithTask(type) && taskShareObstacle(programs, table, type, []).length === 0)
     ) {
-      refused = true
+      captureRefused = true
       refusedName = local.name
       refusedType = type
       break
@@ -1341,8 +1343,10 @@ export const taskFindings = (
       outer.push(local)
     }
   }
-  if (refused) {
-    out.push(new RegionFinding(program, site, captureSpawnMessage(task, refusedName, table.typeName(refusedType))))
+  if (captureRefused) {
+    out.push(
+      new RegionFinding(program, site, captureSpawnMessage(task, refusedName, table.typeName(refusedType)))
+    )
     return out
   }
   let factless: FunctionSig | null = null
