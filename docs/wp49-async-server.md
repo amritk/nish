@@ -752,6 +752,14 @@ end and its `using` scopes release. `main` is never cancelled. The rules are
 `--emit-ts` refuses the new calls (NL4018). A program that does not use
 them compiles to the same IR as before.
 
+Not in this part: a context `serve` hands each handler, such as an async
+Postgres pool. Inside a spawned task, a call through a function-typed
+parameter is judged by facts that assume the worst for every pointer
+argument, so `serve`'s task may not hand its handler anything it shares: the
+region rules refuse `await handle(new Request(r), ctx)` with "may store
+memory outside the region into it" and "may grow it", whatever the handler's
+body. Lifting that needs facts per function value, in `src/region-rules.ts`.
+
 ## Not in this work package
 
 - Promises as values: arrays of them, `Promise.all` over an array, `.then`.
