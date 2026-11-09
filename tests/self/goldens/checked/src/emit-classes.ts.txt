@@ -16,7 +16,7 @@ import emitNewArray from "./emit-arrays" -> function @emitNewArray
 import initInlineArrays from "./emit-arrays" -> function @initInlineArrays
 import inlineHeaderPointer from "./emit-arrays" -> function @inlineHeaderPointer
 import SLICE_TYPE from "./emit-arrays" -> const SLICE_TYPE
-import compoundFloatOpcode from "./emit-ops" -> function @compoundFloatOpcode
+import emitCompoundFloat from "./emit-ops" -> function @emitCompoundFloat
 import compoundIntegerOpcode from "./emit-ops" -> function @compoundIntegerOpcode
 import emitBitwiseCombine from "./emit-ops" -> function @emitBitwiseCombine
 import emitIntBinary from "./emit-ops" -> function @emitIntBinary
@@ -336,9 +336,9 @@ function emitMethodCall(emitter: Emitter, expr: Node): string -> @emitMethodCall
 function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitFieldAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structInfoOf
-  calls: Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.typeOf FieldInfo.inline IRFunction.emit IRFunction.emitValue StructInfo.field TypeTable.stripNull compoundFloatOpcode compoundIntegerOpcode emitBitwiseCombine emitBoxedArrayAssignment emitInlineArrayAssignment emitIntBinary emitRangedStore guardKeep internalErrorFor isBitwiseAssignment isFloat isGuardedAccess loadField nish_exit nish_panic_index nish_str_concat nish_str_eq storeField structFieldPointer structInfoOf
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 emitInlineArrayAssignment#0 emitBoxedArrayAssignment#0 Emitter.emitExpression#0 Emitter.emitExpression#0 loadField#0 storeField#0 guardKeep#0 storeField#0 structFieldPointer#0 Emitter.llvm#0 Emitter.alignSuffix#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitIntBinary#0 emitRangedStore#0 Emitter.alignSuffix#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitInlineArrayAssignment#1 emitBoxedArrayAssignment#1 emitIntBinary#5 emitRangedStore#1
+  calls: Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.typeOf FieldInfo.inline IRFunction.emit IRFunction.emitValue StructInfo.field TypeTable.stripNull compoundIntegerOpcode emitBitwiseCombine emitBoxedArrayAssignment emitCompoundFloat emitInlineArrayAssignment emitIntBinary emitRangedStore guardKeep internalErrorFor isBitwiseAssignment isFloat isGuardedAccess loadField nish_exit nish_panic_index nish_str_concat nish_str_eq storeField structFieldPointer structInfoOf
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 emitInlineArrayAssignment#0 emitBoxedArrayAssignment#0 Emitter.emitExpression#0 Emitter.emitExpression#0 loadField#0 storeField#0 guardKeep#0 storeField#0 structFieldPointer#0 Emitter.llvm#0 Emitter.alignSuffix#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitCompoundFloat#0 emitIntBinary#0 emitRangedStore#0 Emitter.alignSuffix#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitInlineArrayAssignment#1 emitBoxedArrayAssignment#1 emitCompoundFloat#1 emitIntBinary#5 emitRangedStore#1
   stackSites=0 stackLocals=0
   local +0:9 target: Node (const)
   local +1:9 info: StructInfo (const)
@@ -374,8 +374,7 @@ function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitField
   local +37:11 rhs: string (const)
   callee +37:17 Emitter.emitExpression -> @Emitter.emitExpression
   callee +38:13 isFloat -> @isFloat
-  callee +39:9 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +39:33 compoundFloatOpcode -> @compoundFloatOpcode
+  callee +39:9 emitCompoundFloat -> @emitCompoundFloat
   callee +40:9 emitIntBinary -> @emitIntBinary
   callee +42:11 compoundIntegerOpcode -> @compoundIntegerOpcode
   callee +49:3 emitRangedStore -> @emitRangedStore

@@ -597,7 +597,7 @@ function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, opts: Op
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via absIntrinsic
   calls: TypeTable.baseOf absIntrinsic copysignIntrinsic f64UnaryIntrinsic isFloat minMaxIntrinsic nish_array_grow nish_panic_index nish_str_at nish_str_eq nish_str_new roundingCallee stringifyCallee
-  pointer program: size=696 writesThrough=false captured=false
+  pointer program: size=704 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=absIntrinsic#0 TypeTable.baseOf#0 minMaxIntrinsic#0 minMaxIntrinsic#0
   pointer opts: size=200 writesThrough=false captured=false passedTo=roundingCallee#0 roundingCallee#0
   pointer call: size=40 writesThrough=false captured=false
@@ -622,7 +622,7 @@ function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, opts: Op
 function isIdentifierBuiltinCall(program: CheckedProgram, call: Node): boolean -> @isIdentifierBuiltinCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBuiltinFunction nish_panic_index
-  pointer program: size=696 writesThrough=false captured=false
+  pointer program: size=704 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:10 isBuiltinFunction -> @isBuiltinFunction
@@ -876,7 +876,7 @@ function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: string): 
 function isSpawnCall(program: CheckedProgram, call: Node): boolean -> @isSpawnCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: builtinNameOf nish_panic_index nish_str_eq
-  pointer program: size=696 writesThrough=false captured=false passedTo=builtinNameOf#0
+  pointer program: size=704 writesThrough=false captured=false passedTo=builtinNameOf#0
   pointer call: size=40 writesThrough=false captured=false passedTo=builtinNameOf#1
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -886,7 +886,7 @@ function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, cal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via identifierBuiltinCalleesNamed
   calls: identifierBuiltinCalleesNamed nish_panic_index
-  pointer program: size=696 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#0
+  pointer program: size=704 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#0
   pointer table: size=96 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#1
   pointer call: size=40 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#2
   stackSites=0 stackLocals=0
@@ -896,7 +896,7 @@ function identifierBuiltinCalleesNamed(program: CheckedProgram, table: TypeTable
   sharedWrite: via conversionIntrinsic
   escaping: name
   calls: builtinConversionTarget conversionIntrinsic isBuiltinFunction isNetExport isSimdAccess isSimdExport netRangeBuffer netSymbol nish_array_grow nish_panic_index nish_str_eq panicTailCallees
-  pointer program: size=696 writesThrough=false captured=false
+  pointer program: size=704 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=conversionIntrinsic#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0

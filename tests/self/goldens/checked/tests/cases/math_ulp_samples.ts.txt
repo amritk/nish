@@ -56,9 +56,10 @@ function clz64(v: u64): i32 -> @nish.clz64
   calls: llvm.ctlz.i32
   stackSites=0 stackLocals=0
   local +0:9 h: u32 (const)
-function tanLarge(x: f64, ix: i32, hx: i32): f64 -> @nish.tanLarge
+function trigLarge(x: f64, ix: i32, hx: i32, mode: i32): f64 -> @nish.trigLarge
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.clz64 nish.kernelTan nish.mulHi nish.pio2Word nish.pow2 nish_panic_overflow
+  escaping: mode
+  calls: nish.clz64 nish.mulHi nish.pio2Word nish.pow2 nish.trigKernel nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 e: i32 (const)
   local +1:9 m: u64 (const)
@@ -107,7 +108,7 @@ function tanLarge(x: f64, ix: i32, hx: i32): f64 -> @nish.tanLarge
   local +59:9 tail: f64 (const)
   local +60:7 y0: f64 (let)
   local +61:7 y1: f64 (let)
-  callee +66:10 kernelTan -> @nish.kernelTan
+  callee +67:10 trigKernel -> @nish.trigKernel
 function kernelTan(x0: f64, y0: f64, odd: boolean): f64 -> @nish.kernelTan
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x0 y0
@@ -133,25 +134,75 @@ function kernelTan(x0: f64, y0: f64, odd: boolean): f64 -> @nish.kernelTan
   local +40:9 a: f64 (const)
   local +41:9 t: f64 (const)
   callee +41:18 clearLo -> @nish.clearLo
+function kernelSin(x: f64, y: f64): f64 -> @nish.kernelSin
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 z: f64 (const)
+  local +1:9 w: f64 (const)
+  local +2:9 r: f64 (const)
+  local +6:9 v: f64 (const)
+function kernelCos(x: f64, y: f64): f64 -> @nish.kernelCos
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 z: f64 (const)
+  local +1:9 w: f64 (const)
+  local +2:9 r: f64 (const)
+  local +5:9 hz: f64 (const)
+  local +6:9 one: f64 (const)
+  local +7:9 v: f64 (const)
+function trigKernel(y0: f64, y1: f64, n: i32, mode: i32): f64 -> @nish.trigKernel
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: y0 y1
+  calls: nish.kernelCos nish.kernelSin nish.kernelTan
+  stackSites=0 stackLocals=0
+  local +0:9 q: i32 (const)
+  callee +2:12 kernelTan -> @nish.kernelTan
+  local +5:9 k: i32 (const)
+  callee +7:12 kernelSin -> @nish.kernelSin
+  callee +10:12 kernelCos -> @nish.kernelCos
+  callee +13:13 kernelSin -> @nish.kernelSin
+  callee +15:11 kernelCos -> @nish.kernelCos
+function trigReduced(x: f64, ax: f64, mode: i32): f64 -> @nish.trigReduced
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: ax mode x
+  calls: llvm.fabs.f64 nish.hiWord nish.isNan nish.trigKernel nish.trigLarge
+  stackSites=0 stackLocals=0
+  callee +0:9 isNan -> @nish.isNan
+  local +3:11 hx: i32 (const)
+  callee +3:21 hiWord -> @nish.hiWord
+  callee +4:12 trigLarge -> @nish.trigLarge
+  local +6:9 rounded: f64 (const)
+  local +7:9 fn: f64 (const)
+  local +8:7 r: f64 (let)
+  local +9:7 w: f64 (let)
+  local +10:7 y0: f64 (let)
+  local +15:9 t: f64 (let)
+  local +28:9 y1: f64 (const)
+  callee +30:10 trigKernel -> @nish.trigKernel
 function tanF64(x: f64): f64 -> @nish.tanF64 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
-  calls: llvm.fabs.f64 nish.hiWord nish.isNan nish.kernelTan nish.tanLarge
+  calls: llvm.fabs.f64 nish.kernelTan nish.trigReduced
   stackSites=0 stackLocals=0
   local +0:9 ax: f64 (const)
   callee +5:12 kernelTan -> @nish.kernelTan
-  callee +8:9 isNan -> @nish.isNan
-  local +11:11 hx: i32 (const)
-  callee +11:21 hiWord -> @nish.hiWord
-  callee +12:12 tanLarge -> @nish.tanLarge
-  local +14:9 rounded: f64 (const)
-  local +15:9 fn: f64 (const)
-  local +16:7 r: f64 (let)
-  local +17:7 w: f64 (let)
-  local +18:7 y0: f64 (let)
-  local +23:9 t: f64 (let)
-  local +36:9 y1: f64 (const)
-  callee +37:10 kernelTan -> @nish.kernelTan
+  callee +7:10 trigReduced -> @nish.trigReduced
+function sinF64(x: f64): f64 -> @nish.sinF64 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: llvm.fabs.f64 nish.kernelSin nish.trigReduced
+  stackSites=0 stackLocals=0
+  local +0:9 ax: f64 (const)
+  callee +5:12 kernelSin -> @nish.kernelSin
+  callee +7:10 trigReduced -> @nish.trigReduced
+function cosF64(x: f64): f64 -> @nish.cosF64 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: llvm.fabs.f64 nish.kernelCos nish.trigReduced
+  stackSites=0 stackLocals=0
+  local +0:9 ax: f64 (const)
+  callee +5:12 kernelCos -> @nish.kernelCos
+  callee +7:10 trigReduced -> @nish.trigReduced
 function atanhi(id: i32): f64 -> @nish.atanhi
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
@@ -262,6 +313,201 @@ function hypotF64(x: f64, y: f64): f64 -> @nish.hypotF64 [exported]
   local +3:9 b: f64 (const)
   callee +8:28 hypotCoreF -> @nish.hypotCoreF
   callee +10:10 hypotRest -> @nish.hypotRest
+function withHi(x: f64, hi: i32): f64 -> @nish.withHi
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function withLo(x: f64, lo: u32): f64 -> @nish.withLo
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function expPoly(t: f64): f64 -> @nish.expPoly
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function overflow(s: f64): f64 -> @nish.overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function underflow(s: f64): f64 -> @nish.underflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function expF64(x: f64): f64 -> @nish.expF64 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: llvm.fptosi.sat.i32.f64 nish.expPoly nish.hiWord nish.isNan nish.overflow nish.pow2 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 hxs: i32 (const)
+  callee +0:20 hiWord -> @nish.hiWord
+  local +1:9 negative: boolean (const)
+  local +2:9 hx: i32 (const)
+  callee +5:11 isNan -> @nish.isNan
+  callee +11:14 overflow -> @nish.overflow
+  local +17:7 k: i32 (let)
+  local +18:7 hi: f64 (let)
+  local +19:7 lo: f64 (let)
+  local +20:7 r: f64 (let)
+  local +27:13 half: f64 (const)
+  local +29:13 t: f64 (const)
+  local +37:9 t: f64 (const)
+  local +38:9 c: f64 (const)
+  callee +38:26 expPoly -> @nish.expPoly
+  local +39:9 one: f64 (const)
+  local +43:9 y: f64 (const)
+  callee +48:16 pow2 -> @nish.pow2
+  callee +50:14 pow2 -> @nish.pow2
+function logF64(x: f64): f64 -> @nish.logF64 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish.hiWord nish.loWord nish.overflow nish.withHi nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 v: f64 (let)
+  local +1:7 hx: i32 (let)
+  callee +1:17 hiWord -> @nish.hiWord
+  local +2:7 k: i32 (let)
+  callee +4:36 loWord -> @nish.loWord
+  callee +5:15 overflow -> @nish.overflow
+  callee +12:10 hiWord -> @nish.hiWord
+  local +19:9 i: i32 (const)
+  callee +20:7 withHi -> @nish.withHi
+  local +22:9 f: f64 (const)
+  local +23:9 dk: f64 (const)
+  local +28:11 rr: f64 (const)
+  local +34:9 s: f64 (const)
+  local +35:9 z: f64 (const)
+  local +36:9 w: f64 (const)
+  local +37:9 t1: f64 (const)
+  local +38:9 t2: f64 (const)
+  local +40:9 r: f64 (const)
+  local +42:11 hfsq: f64 (const)
+function scaleDown(z: f64, n: i32): f64 -> @nish.scaleDown
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.pow2 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee +0:48 pow2 -> @nish.pow2
+  callee +0:62 pow2 -> @nish.pow2
+function powHugeY(ix: i32, hy: i32, iy: i32, s: f64): f64 -> @nish.powHugeY
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  calls: nish.overflow nish.underflow
+  stackSites=0 stackLocals=0
+  callee +0:23 overflow -> @nish.overflow
+  callee +2:21 overflow -> @nish.overflow
+  callee +5:21 overflow -> @nish.overflow
+  callee +5:35 underflow -> @nish.underflow
+  callee +7:19 overflow -> @nish.overflow
+  callee +7:33 underflow -> @nish.underflow
+function powExp2(ph0: f64, pl: f64, s: f64): f64 -> @nish.powExp2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: ph0 s
+  calls: nish.expPoly nish.hiWord nish.loWord nish.overflow nish.scaleDown nish.underflow nish.withHi nish.withLo nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 ph: f64 (let)
+  local +1:9 z0: f64 (const)
+  local +2:9 j: i32 (const)
+  callee +2:18 hiWord -> @nish.hiWord
+  local +3:9 i: i32 (const)
+  callee +3:24 loWord -> @nish.loWord
+  callee +6:14 overflow -> @nish.overflow
+  callee +11:14 underflow -> @nish.underflow
+  local +14:9 ij: i32 (const)
+  local +15:7 k: i32 (let)
+  local +16:7 n: i32 (let)
+  local +20:11 t: f64 (const)
+  callee +20:20 withHi -> @nish.withHi
+  local +27:9 t: f64 (const)
+  callee +27:18 withLo -> @nish.withLo
+  local +28:9 u: f64 (const)
+  local +29:9 v: f64 (const)
+  local +30:7 z: f64 (let)
+  local +31:9 w: f64 (const)
+  local +32:9 t1: f64 (const)
+  callee +32:31 expPoly -> @nish.expPoly
+  local +33:9 r: f64 (const)
+  local +34:9 one: f64 (const)
+  local +36:9 hz: i32 (const)
+  callee +36:19 hiWord -> @nish.hiWord
+  callee +38:16 scaleDown -> @nish.scaleDown
+  callee +40:14 withHi -> @nish.withHi
+function powF64(x: f64, y: f64): f64 -> @nish.powF64 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x y
+  calls: llvm.fabs.f64 llvm.sqrt.f64 nish.hiWord nish.isNan nish.loWord nish.powExp2 nish.powHugeY nish.withHi nish.withLo nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 hx: i32 (const)
+  callee +0:19 hiWord -> @nish.hiWord
+  local +1:9 lx: u32 (const)
+  callee +1:19 loWord -> @nish.loWord
+  local +2:9 hy: i32 (const)
+  callee +2:19 hiWord -> @nish.hiWord
+  local +3:9 ly: u32 (const)
+  callee +3:19 loWord -> @nish.loWord
+  local +4:9 ix: i32 (const)
+  local +5:9 iy: i32 (const)
+  callee +9:7 isNan -> @nish.isNan
+  callee +9:19 isNan -> @nish.isNan
+  local +20:7 yisint: i32 (let)
+  local +25:13 k: i32 (const)
+  local +27:15 j: u32 (const)
+  local +32:15 j: i32 (const)
+  local +56:7 ax: f64 (let)
+  local +58:9 z: f64 (let)
+  local +71:9 s: f64 (const)
+  local +72:7 t1: f64 (let)
+  local +73:7 t2: f64 (let)
+  callee +76:14 powHugeY -> @nish.powHugeY
+  local +78:11 t: f64 (const)
+  local +79:11 w: f64 (const)
+  local +80:11 u: f64 (const)
+  local +81:11 v: f64 (const)
+  callee +82:10 withLo -> @nish.withLo
+  local +85:9 n: i32 (let)
+  local +86:9 jx: i32 (let)
+  callee +90:12 hiWord -> @nish.hiWord
+  local +93:11 j: i32 (const)
+  local +95:9 k: i32 (let)
+  callee +104:10 withHi -> @nish.withHi
+  local +105:11 bp: f64 (const)
+  local +106:11 dph: f64 (const)
+  local +107:11 dpl: f64 (const)
+  local +108:11 u: f64 (const)
+  local +109:11 one: f64 (const)
+  local +110:11 v: f64 (const)
+  local +111:11 ss: f64 (const)
+  local +112:11 sh: f64 (const)
+  callee +112:21 withLo -> @nish.withLo
+  local +113:9 th: f64 (let)
+  callee +113:19 withHi -> @nish.withHi
+  local +114:9 tl: f64 (let)
+  local +115:11 sl: f64 (const)
+  local +116:9 s2: f64 (let)
+  local +117:11 l3: f64 (const)
+  local +118:9 r: f64 (let)
+  callee +121:10 withLo -> @nish.withLo
+  local +123:11 pu: f64 (const)
+  local +124:11 pv: f64 (const)
+  local +125:11 ph: f64 (const)
+  callee +125:21 withLo -> @nish.withLo
+  local +126:11 pl: f64 (const)
+  local +127:11 zh: f64 (const)
+  local +128:11 zl: f64 (const)
+  local +129:11 t: f64 (const)
+  callee +130:10 withLo -> @nish.withLo
+  local +133:9 y1: f64 (const)
+  callee +133:19 withLo -> @nish.withLo
+  callee +134:10 powExp2 -> @nish.powExp2
+function fmodF64(x: f64, y: f64): f64 -> @nish.fmodF64 [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x y
+  calls: nish.isNan nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 ux: u64 (let)
+  local +1:7 uy: u64 (let)
+  local +2:7 ex: i32 (let)
+  local +3:7 ey: i32 (let)
+  local +4:9 sign: u64 (const)
+  callee +5:38 isNan -> @nish.isNan
+  local +11:9 mant: u64 (const)
+  local +12:9 implicit: u64 (const)
+  local +16:9 i: u64 (let)
+  local +26:9 i: u64 (let)
 import Math.tan from "nish/math" -> function @nish.tanF64
 import Math.atan2 from "nish/math" -> function @nish.atan2F64
 import Math.hypot from "nish/math" -> function @nish.hypotF64
