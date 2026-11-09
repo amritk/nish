@@ -532,6 +532,17 @@ const DECLARED = [
       "bench/http1-server.ts": ["handler.ll", "http1-server.ll", "std_net_http1-server.ll"],
       "bench/techempower/main.ts": ["http1-server.ll", "main.ll", "server.ll"],
       "tests/link/net_handler/main.ts": ["handler.ll", "http1-server.ll", "main.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["handler.ll", "http1-server.ll", "main.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_handler_short/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http1_server/main.ts": [
+        "checks.ll",
+        "conn.ll",
+        "harness.ll",
+        "http1-server.ll",
+        "main.ll",
+      ],
     }
   ),
   {
