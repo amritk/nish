@@ -105,6 +105,7 @@ Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385
   [the TLS client](using-nish/tls-client.md),
   [HTTP routing](using-nish/http-router.md),
   [an API server](using-nish/api-server.md),
+  [an async server](using-nish/async-server.md),
   [WebSocket](using-nish/websocket.md),
   [the HTTP client](using-nish/http-client.md),
   [calling other services](using-nish/calling-services.md),

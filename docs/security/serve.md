@@ -1,0 +1,122 @@
+# Security record: the async server
+
+The record of WP49 stage 5's serve part: `nish/net/serve`, which runs
+`nish/net/handler`'s readiness loop as an `async` function and answers each
+request in a task of its own
+([wp49-async-server.md](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md)).
+It says what the server holds per connection and per request, what each cap
+answers, what a task may reach of the server's memory, and the test that pins
+each property. It is written with the code rather than after an audit, so
+that the audit of the HTTP application layer starts from evidence.
+
+Anchors are function names in `std/net/serve.ts` at `d6d806da`, the last
+commit to change it on the head that merges this record.
+
+**Result.** The server adds no parser: the request line, the fields, the
+body framing, the head and body caps and the timeouts are the carrier's
+(`docs/security/http1-codec.md`), the queueing, ordering and late-answer
+rules are the handler's (`docs/security/handler.md`), and routing is the
+router's (`docs/security/router.md`). What it adds is a fixed set of request
+slots, a copy of each request into its task's region, and a copy of each
+answer back into its slot's preallocated buffers. Every one of those is
+bounded by a `ServeLimits` field the program set: the slots by `inFlight`,
+an answer's body by `responseBytes`, its content type by 128 bytes.
+
+A task never writes past its slot's buffers and never stores its own memory
+into the server's: the spawn rule (`docs/LANGUAGE.md`, NL2609, NL2610,
+NL2615) refuses the program that would, and the task copies element by
+element. A response the program got wrong — a status outside 200 to 599, a
+body larger than `responseBytes`, a content type too long or holding a
+control byte — is answered 500, never sent as written, and never stops the
+server. Review before merge found one fault and fixed it with a test that
+failed before the fix (SERVE-5): a content type holding CR or LF reached the
+carrier, which refused the head, and the handler panicked, ending the server
+for every client.
+
+One property is open: `deadline` is held, not enforced, so a task that never
+answers holds its slot (SERVE-8). One is accepted: the server keeps at most
+64 distinct content types (SERVE-9).
+
+## Scope
+
+| File | Functions |
+| --- | --- |
+| `std/net/serve.ts` | `ServeLimits`; `ServeStats`; `Request` (`method`, `path`, `param`, `paramNumber`, `paramMalformed`, `query`, `header`, `text`); `Response` (`text`, `json`, `bytes`); `refuse`; `serve`; `serveOn`; the private `ServeState`, `serveFreeSlot`, `serveAnyBusy`, `serveAnswer`, `serveType`, `serveBytes`, `serveTask`, `serveTick` |
+
+Out of scope: the handler, the carrier and the router, each with its record;
+the executor and the spawn rule (`docs/security/async.md`); and what a
+program's `handle` does with a request.
+
+## Threat model
+
+The attacker is the client: every byte of every request is theirs, they may
+open as many connections as the listener accepts, pipeline, send slowly or
+not at all, and leave at any moment, including while a task holds their
+request.
+
+A win is a panic or a stopped server, memory or time a request can make the
+server spend beyond the limits the program set, one peer receiving an answer
+meant for another, an answer sent out of request order on one connection, or
+a task reading or writing another request's memory. The program, its
+`ServeLimits` and its `handle` are trusted; but `handle` builds its response
+from the request, so a response field the peer can shape (a content type
+echoed from a header, a body sized by the request) is treated as the peer's.
+
+## Findings
+
+Rows SERVE-1 to SERVE-4, SERVE-6, SERVE-7 and SERVE-10 are the shapes an
+attacker's traffic can take, each checked and found to hold; they are
+recorded so that the audit can see what was tried. SERVE-5 was fixed before
+merge and is counted as fixed in the index. SERVE-8 and SERVE-14 are open and
+counted; SERVE-9 and SERVE-11 to SERVE-13 are accepted. SERVE-11 to SERVE-14
+are what one client's connections, rather than its requests, can hold: each is
+bounded by a `ServeLimits` field, and none by the peer.
+
+| Id | Severity | Where | Description | Disposition |
+| --- | --- | --- | --- | --- |
+| SERVE-1 | Medium if it failed | `serveOn`, `serveFreeSlot` | Requests must not make the server spawn tasks or allocate slots without bound. | **Holds.** A slot is made only while fewer than `inFlight` exist; with every slot busy, a whole request is answered 503 (`stats.busy` counts it) and no task is spawned. Slots are reused, never freed, so the server holds at most `inFlight` request copies' worth of response and type buffers. Pinned by "in flight: 503". |
+| SERVE-2 | Medium if it failed | `serveOn` (`hl.slots`) | Connections must be bounded. | **Holds.** `connections` is the handler's `slots`; past it the carrier's accept closes the new connection unanswered (`H1_POOL_FULL`). Pinned by "connections: closed". |
+| SERVE-3 | Medium if it failed | `serveOn` (`hl.http`) | A header section or body must not grow past its cap. | **Holds.** `headerBytes` and `bodyBytes` are the carrier's `maxHeaderBytes` and `maxBody`; it answers 431 or 413 and ends the connection before the server sees the request (HANDLER-1). Pinned by "header cap: 431" and "body cap: 413". |
+| SERVE-4 | Medium if it failed | `serveTask`, `serveAnswer` | A response must not write past its slot's buffers, nor reach the carrier as something it refuses. | **Holds.** The task writes a body only when it fits `responseBytes` and a type only when it fits 128 bytes, else it marks the slot -1; `serveAnswer` answers 500 for a marked slot and for a status outside 200 to 599, and counts `stats.failed`. Pinned by "response cap: 500" and "bad status: 500". |
+| SERVE-5 | Medium | `serveType` | A content type holding CR, LF or another control byte made the carrier refuse the head, and `HttpHandler.start` panicked on the refusal, so a peer whose input reached the type stopped the server. | **Fixed.** `serveType` refuses a type with a byte under 32 other than tab, or 127 — the carrier's field-text rule — so the request is answered 500. Before: `link/net_serve` panicked with "the carrier refused the head (-22)" and exited 1 after "bad status"; after: "bad type: 500". |
+| SERVE-6 | High if it failed | `serveOn`, `serveTask` | Pipelined answers must go out in request order, and one task must never read or write another request's memory. | **Holds.** The handler reads a connection's next request only once the one before it is answered (HANDLER-4), so one connection has at most one slot. A task reads only its slot `k`'s request, copied into its own region before `handle` runs, and writes only slot `k`'s buffers; a slot is reused only after the loop sent its answer. Pinned by "pipelined 1: ... slept 60" before "pipelined 2: ... slept 1" — the second request is read only once the first, slower one is answered, so this pins serial order on a connection, not a reordering of tasks that finish out of order — and by 4000 pipelined answers checked in order. |
+| SERVE-7 | Medium if it failed | `serveTask`, `serveOn` | The server's memory must not grow per request. | **Holds.** A task's allocations — the request copy, the `Request` and `Response`, `handle`'s own — live in its region and go when it ends; the loop allocates no per-request object in the arena once its slots and type cache are warm. What the runtime allocates outside the arena for a task's frame and region is not measured here. `Arena.used()` in the server's loop is 48 bytes after 100 requests and 48 after 4000 (also 48/48 at 200, 1000 and 8000). Pinned by "arena flat: true". |
+| SERVE-8 | Low | `ServeLimits.deadline` | A task that never answers — a `handle` waiting on something that never comes — holds its slot, and with `inFlight` of them the server answers every new request 503. | **Open.** `deadline` is held for the cancellation stage, which cancels a task past it; until then the bound is `inFlight` and the program's `handle`. The carrier's timeouts still end an idle or slow peer's connection, and its late answer is dropped (SERVE-10). A hung task also keeps the drain from finishing: the loop stops only once no slot is busy, so a server past `maxRequests` with a task that never answers never returns from `serve`. |
+| SERVE-9 | Low | `serveType` | The server keeps the bytes of at most 64 distinct content types; a 65th is answered 500. | **Accepted.** The cache is what keeps a warm server from allocating per answer. A program that echoes a peer's text into the type lets the peer fill it; a type is the program's choice, and 64 covers any fixed set. |
+| SERVE-10 | High if it failed | `serveAnswer` | An answer for a request whose connection closed while its task ran must not reach whoever holds the connection's slot now. | **Holds.** The loop answers through the handler, which drops an answer for a closed connection even after a new one took the slot (HANDLER-3); the server's slot is freed either way. Pinned by "after a hang-up: 200 [text/plain; charset=utf-8] hello": a client hangs up while its task sleeps 80 ms, and with the next connection the late "slept 80" is not what it reads, and the slot is free again for it. |
+| SERVE-11 | Low | `ServeLimits.headTimeout`, `serveOn` (`hl.http`) | A client that trickles its request head (slowloris) holds a connection while it does, and with `connections` such clients every new connection is closed unanswered. | **Accepted.** `headTimeout` (30 s by default) is the carrier's deadline for a whole head, counted from its first byte however steadily the bytes come (H1-1 in `http1-codec.md`); past it the connection is closed. A body trickled after its head is bounded the same way by the handler's `bodyTimeout`, 30 s (HANDLER-5). A program facing such clients lowers `headTimeout`; what neither bounds is how many connections one peer opens, which is the network's to cap. |
+| SERVE-12 | Low | `ServeLimits.idleTimeout`, `serveOn` (`hl.http`) | A keep-alive connection that sends nothing more holds its connection slot until it is closed, so idle clients can take every slot. | **Accepted.** `idleTimeout` (60 s by default) is the carrier's: a connection with no byte read or written for that long is closed and its slot freed. A program that wants slots back sooner lowers it; keep-alive is what spares a client a new handshake per request. |
+| SERVE-13 | Low | `ServeLimits` | The server's worst-case memory must be known from its caps. | **Accepted, stated.** From the caps, not measured: each connection holds the carrier's input and head buffers (each about `headerBytes`), a 64 KiB output buffer while it writes, and the request the handler is assembling, up to `headerBytes` + `bodyBytes`; each in-flight request holds its copy in its task's region (the same size again) and its slot's `responseBytes` + 128 bytes, kept for reuse. So about `connections` × (`bodyBytes` + 3 × `headerBytes` + 64 KiB) + `inFlight` × (`bodyBytes` + `headerBytes` + `responseBytes` + 128) bytes: with the defaults about 256 × 1.11 MiB + 256 × 1.08 MiB, some 560 MiB, almost all of it two copies of a 1 MiB body per connection. A program sizes it by `bodyBytes`, `connections` and `inFlight`. |
+| SERVE-14 | Low | `serveOn`, `serveFreeSlot` | One client can take every in-flight slot: a connection holds at most one (HANDLER-4), but with `inFlight` connections, each sending a request its `handle` is slow to answer, every other client's request is answered 503 until those tasks end. | **Open.** The server has no per-peer share of `inFlight` or `connections`; the bound is `handle`'s own time, and, until the cancellation stage enforces it, not `deadline` (SERVE-8). A program behind a proxy that caps connections per address is not exposed. |
+
+## Properties verified
+
+Each property below is pinned by a line of
+`tests/link/net_serve/expected.out` or
+`tests/link/net_serve_pipelined_flat/expected.out`, which
+`link/net_serve: exits with 0 and stdout matches expected.out` and
+`link/net_serve_pipelined_flat: exits with 0 and stdout matches expected.out`
+compare byte for byte. Both programs serve over loopback, with the client a
+task of the same program.
+
+**The caps** (SERVE-1 to SERVE-3): "header cap: 431 []", "body cap: 413 []",
+"in flight: 503", "connections: closed".
+
+**Bad responses** (SERVE-4, SERVE-5): "response cap: 500", "bad status: 500",
+"bad type: 500", "no content type: 200 [] xxx" (a body with an empty type goes out with no `Content-Type`), and "serve: 0, answered 16, busy 1, failed 3, slots 1" — the
+server answered every request and stopped cleanly.
+
+**A hang-up** (SERVE-10): "after a hang-up: 200 [text/plain; charset=utf-8]
+hello".
+
+**Order** (SERVE-6): "pipelined 1: 200 [text/plain; charset=utf-8] slept 60"
+then "pipelined 2: 200 [text/plain; charset=utf-8] slept 1"; "client: 4000
+answered in order, 0 not".
+
+**Flat memory** (SERVE-7): "arena flat: true", with "serve: 0, answered 4000,
+failed 0, slots 1".
+
+## Tests
+
+- `tests/link/net_serve`
+- `tests/link/net_serve_pipelined_flat`
