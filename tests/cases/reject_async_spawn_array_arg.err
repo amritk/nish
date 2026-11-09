@@ -1,1 +1,2 @@
-which lives in the spawner's region and is freed when the spawner returns
+an argument of type i32[] | null
+a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner

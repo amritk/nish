@@ -1,0 +1,3 @@
+runs as a spawned task, in a region of its own that is freed when it ends
+spawns a task with an object or an array, itself or through a callee
+what a task hands on may be memory of its own region, freed while the task it spawned still holds it

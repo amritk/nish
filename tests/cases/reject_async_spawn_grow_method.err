@@ -1,0 +1,3 @@
+runs as a spawned task, in a region of its own that is freed when it ends
+grows `tally.list()` with `push`
+storage outside the region that grows inside it would move into the region and be freed with it

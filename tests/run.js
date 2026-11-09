@@ -14234,6 +14234,48 @@ if (dealtHere("arrayChecks")) {
 }
 
 if (dealtHere("runtimeChecks")) {
+  // ---- The executor is linked only into async programs (WP49 stage 5) ------------------
+  // docs/security/async.md, "Properties verified": scripts/build.sh links
+  // runtime-async.c only when the IR declares a `@nish_async_` function, so a
+  // program without `async` carries no `nish_async` symbol, while one that
+  // spawns a task carries the executor.
+  if (!only || "async".includes(only)) {
+    const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+    if (nm === undefined) {
+      skip("async: no llvm-nm on PATH, so the symbols of a linked binary are not read")
+    } else {
+      const asyncDir = path.join(buildDir, "async-symbols")
+      fs.mkdirSync(asyncDir, { recursive: true })
+      const asyncSymbols = (source) => {
+        const exe = path.join(asyncDir, path.basename(source, ".ts"))
+        // -g keeps the symbol table a plain link strips.
+        const r = spawnSync(NISH, ["-g", source, "-o", `${asyncDir}${path.sep}`, "--link", exe], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        if (r.status !== 0) return { ok: false, detail: r.stderr, names: [] }
+        const listed = spawnSync(nm, [exe], { encoding: "utf8" })
+        const lines = listed.stdout.split("\n")
+        const names = lines.filter((line) => line.includes("nish_async"))
+        // A binary with no symbols at all would pass the negative check vacuously.
+        const read = listed.status === 0 && lines.some((line) => line.endsWith(" main"))
+        return { ok: read, detail: listed.stderr + (read ? "" : listed.stdout), names }
+      }
+      const plain = asyncSymbols("examples/hello.ts")
+      check(
+        "async: a program without `async` links no `nish_async` symbol",
+        plain.ok && plain.names.length === 0,
+        plain.detail + plain.names.join("\n")
+      )
+      const spawned = asyncSymbols("tests/cases/async_spawn_shared.ts")
+      check(
+        "async: a program that spawns a task links the executor (`nish_async_spawn`)",
+        spawned.ok && spawned.names.some((line) => line.endsWith(" nish_async_spawn")),
+        spawned.detail + spawned.names.join("\n")
+      )
+    }
+  }
+
   // ---- Regions (WP46 stage 1): runtime-region.c from C ---------------------------------
   // tests/runtime/region-test.c, linked with the whole runtime in the default
   // build and with -DNISH_THREADS: with no argument it runs the positive checks

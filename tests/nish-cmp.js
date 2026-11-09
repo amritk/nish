@@ -567,6 +567,30 @@ const DECLARED = [
       "tests/link/net_fetch_async_dns_slow/main.ts": ["exit"],
     }
   ),
+  {
+    program: "tests/cases/async_spawn_fn_arg.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
+  {
+    program: "tests/cases/async_spawn_shared.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
+  {
+    program: "tests/link/async_spawn_shared_outlives/main.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
+  {
+    program: "docs/cookbook/async-spawn-shared.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
   // #899: a loop pass now keeps its arena scope where a register `Result`
   // leaves it, so these loops gain the pass's mark and rewind.
   ...resultLoop(

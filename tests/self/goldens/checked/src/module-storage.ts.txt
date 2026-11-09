@@ -145,7 +145,7 @@ function storageRecord(program: CheckedProgram, table: TypeTable, elem: i32): St
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: inlineElementStruct
-  pointer program: size=688 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer program: size=696 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=inlineElementStruct#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)

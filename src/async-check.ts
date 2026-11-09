@@ -16,6 +16,7 @@ import { checkExpression } from "./expressions"
 import { unwrapParens } from "./emit-util"
 import { BuiltinExport } from "./nish-modules"
 import { AwaitEdge, FunctionSig } from "./program"
+import { recordRegionCall } from "./region-rules"
 import { Scope } from "./symbols"
 import { T_BOOL, T_ERROR, T_I32, T_STRING, T_VOID, isNumeric } from "./types"
 import {
@@ -318,27 +319,39 @@ export const checkAsyncBuiltin = (
   }
   let refused = -1
   for (let i = 0; i < callee.paramTypes.length && refused < 0; i++) {
-    if (!isSpawnable(ctx, callee.paramTypes[i])) {
+    // A compile-time function argument is not in the frame: the call is an
+    // instantiation with the function in its body (WP29).
+    if (!callee.isCompileTime(i) && !isSpawnable(ctx, callee.paramTypes[i])) {
       refused = i
     }
   }
   if (refused >= 0) {
     return ctx.errorType(
       call,
-      `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(callee.paramTypes[refused])}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region`
+      `\`spawn\` hands \`${call.children[0].text}\` an argument of type ${ctx.table.typeName(callee.paramTypes[refused])}, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, \`boolean\`s, enums and \`string\`s, which are copied into its own region, and objects and arrays, which it shares with the spawner`
     )
   }
+  // Once: a generic caller's body is checked once per instantiation.
+  recordRegionCall(ctx.program.asyncSpawns, expr, callee)
   return T_VOID
 }
 
 /**
- * WP49 stage 5, debt (b): whether a spawned task may take a `type` argument.
- * The task outlives its spawner, whose region is freed when it returns, so
- * an argument is a value the frame holds (a number, a `boolean`, an enum) or
- * a `string` the task copies into its own region when it starts.
+ * WP49 stage 5: whether a spawned task may take a `type` argument. The task
+ * outlives its spawner's call, so an argument is a value the frame holds (a
+ * number, a `boolean`, an enum), a `string` the task copies into its own
+ * region when it starts, or an object or array the task shares with its
+ * spawner (`TypeTable.sharedWithTask`): the spawner keeps no arena scope that
+ * could release it (`FunctionFacts.feedsTasks`), and the region rules hold the
+ * task to them as memory outside its region (`taskFindings`).
  */
 const isSpawnable = (ctx: CheckContext, type: i32): boolean =>
-  type === T_ERROR || isNumeric(type) || type === T_BOOL || type === T_STRING || ctx.table.isEnum(type)
+  type === T_ERROR ||
+  isNumeric(type) ||
+  type === T_BOOL ||
+  type === T_STRING ||
+  ctx.table.isEnum(type) ||
+  ctx.table.sharedWithTask(type)
 
 /**
  * `const [a, b] = await awaitAll(f(x), g(y))`, read off the tree: a

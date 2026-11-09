@@ -7,6 +7,7 @@ import unwrapParens from "./emit-util" -> function @unwrapParens
 import BuiltinExport from "./nish-modules" -> struct BuiltinExport
 import AwaitEdge from "./program" -> struct AwaitEdge
 import FunctionSig from "./program" -> struct FunctionSig
+import recordRegionCall from "./region-rules" -> function @recordRegionCall
 import Scope from "./symbols" -> struct Scope
 import T_BOOL from "./types" -> const T_BOOL
 import T_ERROR from "./types" -> const T_ERROR
@@ -201,9 +202,9 @@ function asyncBuiltinOf(imported: BuiltinExport): string -> @asyncBuiltinOf [exp
 function checkAsyncBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 -> @checkAsyncBuiltin [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.errorType TypeTable.isResult TypeTable.typeName checkTakenCall directCall directCallMessage insideAsync isKernelWait isSpawnable nish_panic_index nish_str_concat nish_str_eq outsideAsyncMessage waitSiteMessage
+  calls: CheckContext.errorType FunctionSig.isCompileTime TypeTable.isResult TypeTable.typeName checkTakenCall directCall directCallMessage insideAsync isKernelWait isSpawnable nish_panic_index nish_str_concat nish_str_eq outsideAsyncMessage recordRegionCall waitSiteMessage
   pointer ctx: size=304 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.errorType#0 insideAsync#0 CheckContext.errorType#0 CheckContext.errorType#0 checkTakenCall#0 CheckContext.errorType#0 isSpawnable#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
+  pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 recordRegionCall#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkTakenCall#2
   pointer imported: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -228,17 +229,20 @@ function checkAsyncBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported
   callee +27:86 TypeTable.typeName -> @TypeTable.typeName
   local +30:7 refused: i32 (let)
   local +31:12 i: i32 (let)
-  callee +32:10 isSpawnable -> @isSpawnable
-  callee +37:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +39:75 TypeTable.typeName -> @TypeTable.typeName
+  callee +34:10 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +34:38 isSpawnable -> @isSpawnable
+  callee +39:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +41:75 TypeTable.typeName -> @TypeTable.typeName
+  callee +45:3 recordRegionCall -> @recordRegionCall
 function isSpawnable(ctx: CheckContext, type: i32): boolean -> @isSpawnable
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.isEnum isNumeric
+  calls: TypeTable.isEnum TypeTable.sharedWithTask isNumeric
   pointer ctx: size=304 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:23 isNumeric -> @isNumeric
-  callee +0:82 TypeTable.isEnum -> @TypeTable.isEnum
+  callee +0:3 isNumeric -> @isNumeric
+  callee +3:3 TypeTable.isEnum -> @TypeTable.isEnum
+  callee +4:3 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
 function isAwaitAllShape(decl: Node): boolean -> @isAwaitAllShape [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: directCall nish_panic_index nish_str_eq unwrapParens
