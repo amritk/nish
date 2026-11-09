@@ -1162,6 +1162,16 @@ jobs:
           grep -E '^PASS  simd: chacha20 native arm64: [0-9]+ cases agree across neon;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: crc32 native arm64: [0-9]+ cases agree across armv8-crc32' "$RUNNER_TEMP/simd.log"
 
+      # WP50 S5's float corpus on AArch64: the `--deterministic` build's bits
+      # held to the expected.txt the x86-64 rows hold theirs to. FMA is where
+      # this target could part ways, so the gate is the native line, not the
+      # section's exit status: a skip cannot pass.
+      - name: The float corpus, natively on AArch64
+        run: |
+          set -o pipefail
+          node tests/run.js float-corpus | tee "$RUNNER_TEMP/float-corpus.log"
+          grep -E '^PASS  float-corpus: native arm64: [0-9]+ lines of bits agree with expected\.txt' "$RUNNER_TEMP/float-corpus.log"
+
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
       # PMULL kernels, run end to end against the bitsliced walker, the 8- and
       # 60-byte IV cases (whose GHASH state the walker finishes) among them.

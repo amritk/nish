@@ -30060,6 +30060,131 @@ if (!only || "wasm-math".includes(only)) {
   }
 }
 
+// ---- WP50 stage 5: --deterministic, the same float bits on every target ---------
+//
+// docs/wp50-wasm-host.md §9. Under the flag every target -- native, wasm32 and
+// the --emit-ts reading -- calls std/math.ts for the transcendentals, `pow` and a
+// float `%`, and quiets a NaN's payload before f64ToBits and f32ToBits read it;
+// without it a native build keeps the LLVM intrinsics and `frem`. The refusals
+// the flag adds are tests/cases/reject_deterministic_*.
+if (!only || "deterministic".includes(only)) {
+  const dir = path.join(buildDir, "deterministic")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const at = (name) => path.join(dir, name)
+  fs.writeFileSync(
+    at("main.ts"),
+    [
+      "export const main = (): i32 => {",
+      "  const x: f64 = 0.5",
+      "  const y: f32 = 1.5",
+      "  console.log(Math.sin(x) + Math.cos(x) + Math.exp(x) + Math.log(x) + Math.pow(x, 3.0))",
+      "  console.log(x % 0.3)",
+      "  console.log(y % toF32(0.7))",
+      "  console.log(f64ToBits(x))",
+      "  console.log(f32ToBits(y))",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const compile = (flags, out) =>
+    spawnSync(NISH, [at("main.ts"), ...flags, "-o", at(out)], { cwd: root, encoding: "utf8" })
+  const routed = ["sinF64", "cosF64", "expF64", "logF64", "powF64", "fmodF64", "quietBitsF64", "quietBitsF32"]
+  const on = compile(["--deterministic"], "on.ll")
+  const onIr = on.status === 0 ? fs.readFileSync(at("on.ll"), "utf8") : ""
+  check(
+    "deterministic: a native build calls std/math.ts's copies for sin, cos, exp, log, pow, `%` and the bit reads, with no libm intrinsic and no `frem`",
+    on.status === 0 &&
+      routed.every((name) => onIr.includes(`@nish.${name}(`)) &&
+      !/@llvm\.(?:sin|cos|exp|log|pow)\.f64|\bfrem\b/.test(onIr),
+    shown(on) || onIr.split("\n").filter((line) => /call (?:double|i64|i32) @|frem/.test(line)).join("\n")
+  )
+  const off = compile([], "off.ll")
+  const offIr = off.status === 0 ? fs.readFileSync(at("off.ll"), "utf8") : ""
+  check(
+    "deterministic: without the flag the same program keeps the intrinsics and `frem`, and copies nothing from std/math.ts",
+    off.status === 0 && ["sin", "cos", "exp", "log", "pow"].every((name) => offIr.includes(`@llvm.${name}.f64(`)) && /\bfrem\b/.test(offIr) && !offIr.includes("@nish."),
+    shown(off)
+  )
+  const out = at("ts")
+  const ts = spawnSync(NISH, [at("main.ts"), "--deterministic", "--emit-ts", out], { cwd: root, encoding: "utf8" })
+  const entry = ts.status === 0 ? fs.readFileSync(path.join(out, "main.ts"), "utf8") : ""
+  check(
+    "deterministic: the --emit-ts reading imports the routed calls from its own nish/math.ts and calls them for Math's",
+    ts.status === 0 &&
+      /^import \{ [^}]*\bsinF64\b[^}]* \} from "\.\/nish\/math\.ts"$/m.test(entry) &&
+      ["sinF64(", "powF64(", "quietBitsF64(", "quietBitsF32("].every((call) => entry.includes(call)) &&
+      !entry.includes("Math.sin("),
+    shown(ts) || entry
+  )
+  const tsOff = spawnSync(NISH, [at("main.ts"), "--emit-ts", at("ts-off")], { cwd: root, encoding: "utf8" })
+  const entryOff = tsOff.status === 0 ? fs.readFileSync(path.join(at("ts-off"), "main.ts"), "utf8") : ""
+  check(
+    "deterministic: without the flag the reading calls the platform's Math and imports no nish/math.ts",
+    tsOff.status === 0 && entryOff.includes("Math.sin(") && !entryOff.includes("nish/math"),
+    shown(tsOff) || entryOff
+  )
+}
+
+// The float corpus (tests/differential/corpus/float/float.ts): every operator and
+// float Math builtin over the operands where targets part ways, printed as bits,
+// built with --deterministic and held byte for byte to the committed
+// expected.txt natively (x86-64 here, aarch64 on CI's simd-arm64 row), as
+// wasm32-wasi under Node's WASI and as the --emit-ts reading under Node.
+if (!only || "float-corpus".includes(only)) {
+  const corpus = path.join(root, "tests", "differential", "corpus", "float")
+  const source = path.join(corpus, "float.ts")
+  const expected = fs.readFileSync(path.join(corpus, "expected.txt"), "utf8")
+  const dir = path.join(buildDir, "float-corpus")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const at = (name) => path.join(dir, name)
+  // The first line that differs, with its number, which names the operation.
+  const firstDiff = (got) => {
+    const want = expected.split("\n")
+    const lines = got.split("\n")
+    const i = lines.findIndex((line, k) => line !== want[k])
+    return i < 0 ? `${lines.length} lines against ${want.length}` : `line ${i + 1}\n  got:  ${lines[i]}\n  want: ${want[i]}`
+  }
+  const agree = (label, r) =>
+    check(
+      `float-corpus: ${label}: ${expected.split("\n").length - 1} lines of bits agree with expected.txt`,
+      r.status === 0 && r.stdout === expected,
+      r.status === 0 ? firstDiff(r.stdout) : shown(r)
+    )
+  const native = spawnSync(NISH, [source, "--deterministic", "-o", dir + path.sep, "--link", at("float")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  agree(
+    `native ${process.arch}`,
+    native.status === 0 ? spawnSync(at("float"), [], { cwd: root, encoding: "utf8" }) : native
+  )
+  const ts = spawnSync(NISH, [source, "--deterministic", "--emit-ts", at("ts")], { cwd: root, encoding: "utf8" })
+  agree(
+    "the --emit-ts reading under Node",
+    ts.status === 0 ? spawnSync("node", [...emitTsNodeFlags, path.join(at("ts"), "entry.ts")], { cwd: root, encoding: "utf8" }) : ts
+  )
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasm = at("float.wasm")
+    const built = spawnSync(NISH, [source, "--deterministic", "-o", at("wasi") + path.sep, "--link", wasm, "--profile", "wasi"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    agree(
+      `wasm32-wasi under Node's WASI (sysroot ${WASI_SYSROOT})`,
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    )
+  } else {
+    skip(
+      `skipped: float-corpus: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasm32 build is not run`
+    )
+  }
+}
+
 // ---- WP50 stage 2: a wasm module imports the page's host functions --------------
 //
 // tests/host-window: WP50 stage 3's buffer windows (docs/wp50-wasm-host.md
