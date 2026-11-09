@@ -119,6 +119,15 @@ export class ServeLimits {
    * for good.
    */
   maxRequests: i32 = 0
+  /**
+   * The `Server` field written into the head of every answer a task writes,
+   * as `server: <value>`; "", the default, writes none. The answers the
+   * server writes itself carry none: a `refuse` (404, or 405 with its
+   * `Allow`) and 400, 413, 431, 500 and 503. Made into bytes once, when the
+   * server starts, so it costs no work per request. A control byte in it
+   * panics as the server starts.
+   */
+  server: string = ""
 }
 
 /** What a server did, for a log line or a test; `serveOn` fills it as it runs. */
@@ -346,8 +355,12 @@ class ServeState {
   typeLengths: i32[]
   /** One byte, written to the wake socket. */
   one: u8[]
-  /** No fields: the names and values of an answer with a body and no content type. */
-  none: u8[][]
+  /** The fields of an answer with no content type: `ServeLimits.server`'s, or none. */
+  plainNames: u8[][]
+  plainValues: u8[][]
+  /** The fields of an answer with a content type: `ServeLimits.server`'s, then `content-type`, whose value is set per answer. */
+  typedNames: u8[][]
+  typedValues: u8[][]
   /** The wake socket's end the tasks write to. */
   wakeFd: i32 = 0
   /** Whether a byte is waiting in the wake socket. */
@@ -367,8 +380,31 @@ class ServeState {
     this.types = []
     this.typeLengths = []
     this.one = [toU8(1)]
-    this.none = []
+    this.plainNames = []
+    this.plainValues = []
+    this.typedNames = []
+    this.typedValues = []
   }
+}
+
+/** Makes `st`'s answer fields, with a `server` field of `server` unless it is "". */
+const serveFields = (st: ServeState, server: string): void => {
+  const type: u8[] = serveBytes("content-type")
+  if (server !== "") {
+    const value: u8[] = serveBytes(server)
+    for (let i: i32 = 0; i < toI32(value.length); i++) {
+      if (value[i] < 32 || value[i] === 127) {
+        panic(`serve: ServeLimits.server holds the control byte ${value[i]} at ${i}`)
+      }
+    }
+    const name: u8[] = serveBytes("server")
+    st.plainNames.push(name)
+    st.plainValues.push(value)
+    st.typedNames.push(name)
+    st.typedValues.push(value)
+  }
+  st.typedNames.push(type)
+  st.typedValues.push(type)
 }
 
 /** The lowest free slot, making one when every slot is busy and `inFlight` allows; -1 when none. */
@@ -431,10 +467,10 @@ const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
     return
   }
   if (st.typeLengths[k] === 0) {
-    if (length === 0) {
+    if (length === 0 && st.plainNames.length === 0) {
       h.empty(r, status)
     } else {
-      h.sendFields(r, status, st.none, st.none, st.bodies[k], toI32(0), length)
+      h.sendFields(r, status, st.plainNames, st.plainValues, st.bodies[k], toI32(0), length)
     }
     return
   }
@@ -444,7 +480,9 @@ const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
     h.problem(r, SERVE_FAILED, "Internal Server Error", "")
     return
   }
-  h.send(r, status, typeCache[type], st.bodies[k], toI32(0), length)
+  const last: i32 = toI32(st.typedValues.length) - 1
+  st.typedValues[last] = typeCache[type]
+  h.sendFields(r, status, st.typedNames, st.typedValues, st.bodies[k], toI32(0), length)
 }
 
 /** The index in `cache` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
@@ -616,6 +654,7 @@ export const serveOn = async (
   const h: HttpHandler = new HttpHandler(hl, listener, router)
   const st: ServeState = new ServeState()
   st.deadline = limits.deadline
+  serveFields(st, limits.server)
   const fds: i32[] = [0, 0]
   const made: i32 = unixSocketPair(NET_UNIX_STREAM, fds)
   if (made < 0) {
