@@ -852,7 +852,7 @@ const DECLARED = [
   {
     program: "tests/link/net_fetch_async_deadline/main.ts",
     file: "exit",
-    changelog: "every wait of the async fetch",
+    changelog: SERVE_CANCEL,
     why: "the program imports cancelAfter from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
   {
@@ -876,19 +876,19 @@ const DECLARED = [
   {
     program: "tests/link/std_postgres_async_cancel/main.ts",
     file: "exit",
-    changelog: "cancelled task gives up its Postgres claim and query",
+    changelog: SERVE_CANCEL,
     why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
   },
   {
     program: "tests/cases/async_cancel.ts",
     file: "exit",
-    changelog: "an async task, and bound a descriptor wait",
+    changelog: SERVE_CANCEL,
     why: "the case imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
   {
     program: "docs/cookbook/async-cancel.ts",
     file: "exit",
-    changelog: "an async task, and bound a descriptor wait",
+    changelog: SERVE_CANCEL,
     why: "the cookbook entry imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
