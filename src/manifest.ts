@@ -599,6 +599,34 @@ const manifestAbsolutePath = (path: string): boolean => {
   return letter && path.length >= 2 && path.charCodeAt(1) === 58
 }
 
+/** One refused `nish.host` value or entry: its message and the span it points at. */
+export class ManifestProblem {
+  message: string
+  start: i32
+  end: i32
+
+  constructor(message: string, start: i32, end: i32) {
+    this.message = message
+    this.start = start
+    this.end = end
+  }
+}
+
+/** What `manifestHost` read: the usable entries and the refusal of each other one. */
+export class HostManifest {
+  list: ManifestList
+  problems: ManifestProblem[]
+
+  constructor() {
+    this.list = new ManifestList()
+    this.problems = []
+  }
+
+  refuse(message: string, start: i32, end: i32): void {
+    this.problems.push(new ManifestProblem(message, start, manifestSpanEnd(start, end)))
+  }
+}
+
 /**
  * The root package's `"nish": { "host": [...] }` (WP50 stage 2): the host
  * modules a freestanding wasm build imports from, as written, relative to the
@@ -608,26 +636,6 @@ const manifestAbsolutePath = (path: string): boolean => {
  * for a string that is empty or absolute. Whether the file is there is the
  * caller's question (NL2694).
  */
-export class HostManifest {
-  list: ManifestList
-  problems: string[]
-  problemStarts: i32[]
-  problemEnds: i32[]
-
-  constructor() {
-    this.list = new ManifestList()
-    this.problems = []
-    this.problemStarts = []
-    this.problemEnds = []
-  }
-
-  refuse(message: string, start: i32, end: i32): void {
-    this.problems.push(message)
-    this.problemStarts.push(start)
-    this.problemEnds.push(manifestSpanEnd(start, end))
-  }
-}
-
 export const manifestHost = (manifest: string, at: i32, end: i32): HostManifest => {
   const out = new HostManifest()
   if (at < 0 || at >= manifest.length) {

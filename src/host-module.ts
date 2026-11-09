@@ -96,12 +96,15 @@ export class HostRefusal {
   message: string
   start: i32
   end: i32
+  /** Set once an import has reported it, so a second import does not. */
+  reported: boolean
 
   constructor(name: string, message: string, start: i32, end: i32) {
     this.name = name
     this.message = message
     this.start = start
     this.end = end
+    this.reported = false
   }
 }
 
@@ -574,18 +577,9 @@ const SCALAR_NAMES = (): StringSet => {
   return names
 }
 
-/** One refusal the sweep found: the function, its message and the node it points at. */
-export class HostProblem {
-  name: string
-  message: string
-  node: Node
-
-  constructor(name: string, message: string, node: Node) {
-    this.name = name
-    this.message = message
-    this.node = node
-  }
-}
+/** The refusal of host function `name`, pointing at `node`. */
+const refusalAt = (name: string, message: string, node: Node): HostRefusal =>
+  new HostRefusal(name, message, node.start, node.end)
 
 /**
  * The refusals a host module's exported signatures earn before any type is
@@ -601,8 +595,8 @@ export class HostProblem {
  * every buffer until stage 3, is retired. A name the module declares — an enum or a
  * `HostHandle` alias — is left for the checker.
  */
-export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[] => {
-  const problems: HostProblem[] = []
+export const hostSignatureProblems = (file: Node, parser: Parser): HostRefusal[] => {
+  const problems: HostRefusal[] = []
   const local = new StringSet()
   for (const stmt of file.children) {
     if (stmt.kind === N_ENUM || stmt.kind === N_TYPE_ALIAS) {
@@ -618,7 +612,7 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
     const name = stmt.children[0].text
     if (stmt.children.length > 4 && stmt.children[4].children.length > 0) {
       problems.push(
-        new HostProblem(
+        refusalAt(
           name,
           `Host function \`${name}\` is generic, and a wasm import is one function with one signature: write it once per type it takes`,
           stmt.children[4]
@@ -629,7 +623,7 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
     const result = stmt.children[2]
     if ((stmt.flags & FLAG_ASYNC) !== 0 || isTypeNamed(result, "Promise")) {
       problems.push(
-        new HostProblem(
+        refusalAt(
           name,
           `Host function \`${name}\` returns a \`Promise\`, which wasm cannot wait for: await it in the page and call an export with the result`,
           result.kind === N_EMPTY ? stmt.children[0] : result
@@ -672,7 +666,7 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
     }
     if (isTypeNamed(answer, "string")) {
       problems.push(
-        new HostProblem(
+        refusalAt(
           name,
           `Host function \`${name}\` returns a \`string\`, which wasm cannot receive: return the text by writing it into a module-storage u8[] the module names, and return its length`,
           answer
@@ -733,7 +727,7 @@ const typedElement = (name: string): string => {
  * its own words: the page's index is a wasm32 address's width, and a wider one
  * would be one more conversion that can lose bits on every call.
  */
-const windowPairProblem = (params: Node[], next: i32, p: string, name: string): HostProblem | null => {
+const windowPairProblem = (params: Node[], next: i32, p: string, name: string): HostRefusal | null => {
   let i = next
   while (i < next + 2) {
     if (i >= params.length) {
@@ -742,7 +736,7 @@ const windowPairProblem = (params: Node[], next: i32, p: string, name: string): 
     const type = unparen(params[i].children[1])
     if (isTypeNamed(type, "u64") || isTypeNamed(type, "i64")) {
       const role = i === next ? "first element" : "element count"
-      return new HostProblem(
+      return refusalAt(
         name,
         `Parameter \`${params[i].children[0].text}\` of host function \`${name}\` is \`${type.text}\`, the ${role} of the window \`${p}\`: a window's index and count are \`u32\`, the width of a wasm32 address`,
         type
@@ -756,8 +750,8 @@ const windowPairProblem = (params: Node[], next: i32, p: string, name: string): 
   return null
 }
 
-const windowMissing = (p: string, name: string, param: Node): HostProblem =>
-  new HostProblem(
+const windowMissing = (p: string, name: string, param: Node): HostRefusal =>
+  refusalAt(
     name,
     `Parameter \`${p}\` of host function \`${name}\` is a buffer window with no \`at: u32, n: u32\` after it: a window is the buffer followed by the first element the page may touch and how many`,
     param
@@ -783,16 +777,16 @@ const asWindow = (type: Node, parser: Parser): void => {
 }
 
 /** A buffer parameter whose element no window lends. */
-const windowElementProblem = (p: string, name: string, type: Node): HostProblem =>
-  new HostProblem(
+const windowElementProblem = (p: string, name: string, type: Node): HostRefusal =>
+  refusalAt(
     name,
     `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, and a buffer window lends only \`u8[]\`, \`u16[]\`, \`u32[]\`, \`i32[]\`, \`f32[]\` or \`f64[]\` (or the typed array of each): copy the values into one of those`,
     type
   )
 
 /** A parameter or result whose type is none a wasm import carries. */
-const typeProblem = (where: string, name: string, type: Node): HostProblem =>
-  new HostProblem(name, hostTypeProblem(where, name, spell(type)), type)
+const typeProblem = (where: string, name: string, type: Node): HostRefusal =>
+  refusalAt(name, hostTypeProblem(where, name, spell(type)), type)
 
 const unparen = (type: Node): Node => (type.kind === N_TYPE_PAREN ? unparen(type.children[0]) : type)
 

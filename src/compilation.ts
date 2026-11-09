@@ -789,14 +789,12 @@ export class Compilation {
     if (parser.diagnostics.length > 0) {
       return false
     }
-    const refusals: HostRefusal[] = []
+    let refusals: HostRefusal[] = []
     if (read !== null) {
       source.host = true
-      for (const refusal of read.refusals) {
+      refusals = read.refusals
+      for (const refusal of hostSignatureProblems(file, parser)) {
         refusals.push(refusal)
-      }
-      for (const problem of hostSignatureProblems(file, parser)) {
-        refusals.push(new HostRefusal(problem.name, problem.message, problem.node.start, problem.node.end))
       }
       dropRefused(file, refusals)
       markHostFunctions(file)
@@ -1492,7 +1490,6 @@ export class Compilation {
    * import carries, and the build reads only the names it imports.
    */
   reportHostRefusals(): void {
-    const reported = new StringSet()
     for (const unit of this.modules) {
       for (const imp of unit.checker.program.imports) {
         const index = isBuiltinSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
@@ -1501,9 +1498,8 @@ export class Compilation {
         }
         const host = this.modules[index]
         for (const refusal of host.hostRefusals) {
-          const key = `${index}:${refusal.start}`
-          if (refusal.name === imp.importedName && !reported.has(key)) {
-            reported.add(key)
+          if (refusal.name === imp.importedName && !refusal.reported) {
+            refusal.reported = true
             this.sink.report(host.source, refusal.start, refusal.end, refusal.message)
           }
         }
@@ -1536,10 +1532,9 @@ export class Compilation {
     }
     const dir = dirname(source.path)
     const host = manifestHost(source.text, nish.hostAt, nish.hostEnd)
-    let p = 0
-    while (p < host.problems.length && p < host.problemStarts.length && p < host.problemEnds.length) {
-      this.sink.report(source, host.problemStarts[p], host.problemEnds[p], host.problems[p])
-      p = p + 1
+    for (const problem of host.problems) {
+      this.sink.report(source, problem.start, problem.end, problem.message)
+      this.hostRefused = true
     }
     let i = 0
     while (i < host.list.entries.length && i < host.list.offsets.length && i < host.list.ends.length) {
@@ -1556,9 +1551,6 @@ export class Compilation {
       }
       out.add(this.identityOf(path))
       i = i + 1
-    }
-    if (host.problems.length > 0) {
-      this.hostRefused = true
     }
     return out
   }

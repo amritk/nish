@@ -448,7 +448,7 @@ function Compilation.discover(this: Compilation, path: string, name: string, pac
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: name packageOverride path
-  calls: CheckContext.errorAtSpecifier Checker.constructor Checker.declareNames Compilation.discover Compilation.hostModules Compilation.identityOf Compilation.packageOf Compilation.resolveSpecifier DiagnosticSink.add DiagnosticSink.count DiagnosticSink.report DiagnosticSink.reportFix HostRefusal.constructor ModuleUnit.constructor Parser.constructor Parser.parseSourceFile SourceFile.constructor StringMap.get StringMap.has StringMap.set StringSet.has buildsPageModule dirname dropRefused fsSpecifierFix hostModuleText hostSignatureProblems isBuiltinSpecifier isFreestandingWasmBuild isWasmBuild liftScript markHostFunctions nish_alloc_struct nish_array_grow nish_panic_overflow nish_read_file_or_null nish_str_at nish_str_concat nish_str_eq packageDirOf stdModuleNames threadsModuleName validate
+  calls: CheckContext.errorAtSpecifier Checker.constructor Checker.declareNames Compilation.discover Compilation.hostModules Compilation.identityOf Compilation.packageOf Compilation.resolveSpecifier DiagnosticSink.add DiagnosticSink.count DiagnosticSink.report DiagnosticSink.reportFix ModuleUnit.constructor Parser.constructor Parser.parseSourceFile SourceFile.constructor StringMap.get StringMap.has StringMap.set StringSet.has buildsPageModule dirname dropRefused fsSpecifierFix hostModuleText hostSignatureProblems isBuiltinSpecifier isFreestandingWasmBuild isWasmBuild liftScript markHostFunctions nish_alloc_struct nish_array_grow nish_panic_overflow nish_read_file_or_null nish_str_at nish_str_concat nish_str_eq packageDirOf stdModuleNames threadsModuleName validate
   pointer this: size=216 writesThrough=true captured=false passedTo=Compilation.identityOf#0 Compilation.packageOf#0 Compilation.hostModules#0 Compilation.resolveSpecifier#0 Compilation.identityOf#0 Compilation.identityOf#0 Compilation.discover#0
   stackSites=1 stackLocals=1
   local -11:11 identity: string (const)
@@ -469,64 +469,62 @@ function Compilation.discover(this: Compilation, path: string, name: string, pac
   callee +11:18 Parser.parseSourceFile -> @Parser.parseSourceFile
   local +24:16 diagnostic: Diagnostic (const)
   callee +25:7 DiagnosticSink.add -> @DiagnosticSink.add
-  local +30:11 refusals: HostRefusal[] (const)
-  local +33:18 refusal: HostRefusal (const)
-  local +36:18 problem: HostProblem (const)
-  callee +36:29 hostSignatureProblems -> @hostSignatureProblems
-  callee +37:23 new HostRefusal -> @HostRefusal.constructor
-  callee +39:7 dropRefused -> @dropRefused
-  callee +40:7 markHostFunctions -> @markHostFunctions
-  local +42:11 isEntry: boolean (const)
-  callee +44:29 packageDirOf -> @packageDirOf
-  callee +47:7 liftScript -> @liftScript
-  local +49:11 packageName: string (const)
-  callee +49:72 Compilation.packageOf -> @Compilation.packageOf
-  local +50:11 checker: Checker (const)
-  callee +50:21 new Checker -> @Checker.constructor
-  callee +61:24 isWasmBuild -> @isWasmBuild
-  callee +62:36 isFreestandingWasmBuild -> @isFreestandingWasmBuild
-  callee +63:30 buildsPageModule -> @buildsPageModule
-  local +64:11 unit: ModuleUnit (const)
-  callee +64:18 new ModuleUnit -> @ModuleUnit.constructor
-  callee +72:41 threadsModuleName -> @threadsModuleName
-  callee +75:5 StringMap.set -> @StringMap.set
-  callee +78:29 Compilation.hostModules -> @Compilation.hostModules
-  local +91:11 beforeValidation: i32 (const)
+  local +30:9 refusals: HostRefusal[] (let)
+  local +34:18 refusal: HostRefusal (const)
+  callee +34:29 hostSignatureProblems -> @hostSignatureProblems
+  callee +37:7 dropRefused -> @dropRefused
+  callee +38:7 markHostFunctions -> @markHostFunctions
+  local +40:11 isEntry: boolean (const)
+  callee +42:29 packageDirOf -> @packageDirOf
+  callee +45:7 liftScript -> @liftScript
+  local +47:11 packageName: string (const)
+  callee +47:72 Compilation.packageOf -> @Compilation.packageOf
+  local +48:11 checker: Checker (const)
+  callee +48:21 new Checker -> @Checker.constructor
+  callee +59:24 isWasmBuild -> @isWasmBuild
+  callee +60:36 isFreestandingWasmBuild -> @isFreestandingWasmBuild
+  callee +61:30 buildsPageModule -> @buildsPageModule
+  local +62:11 unit: ModuleUnit (const)
+  callee +62:18 new ModuleUnit -> @ModuleUnit.constructor
+  callee +70:41 threadsModuleName -> @threadsModuleName
+  callee +73:5 StringMap.set -> @StringMap.set
+  callee +76:29 Compilation.hostModules -> @Compilation.hostModules
+  local +89:11 beforeValidation: i32 (const)
+  callee +89:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +90:5 validate -> @validate
+  local +91:11 failedValidation: boolean (const)
   callee +91:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +92:5 validate -> @validate
-  local +93:11 failedValidation: boolean (const)
-  callee +93:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +94:54 DiagnosticSink.count -> @DiagnosticSink.count
-  local +104:11 beforeNames: i32 (const)
-  callee +104:25 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +105:5 Checker.declareNames -> @Checker.declareNames
-  callee +117:29 DiagnosticSink.count -> @DiagnosticSink.count
-  local +118:11 signaturesFailed: boolean (const)
-  local +119:11 dir: string (const)
-  callee +119:17 dirname -> @dirname
-  local +120:9 ok: boolean (let)
-  local +126:9 failedDecl: Node | null (let)
-  local +127:16 imp: ImportBinding (const)
-  callee +129:11 isBuiltinSpecifier -> @isBuiltinSpecifier
-  callee +132:11 StringMap.has -> @StringMap.has
-  local +139:13 found: ResolvedModule (const)
-  callee +139:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
-  local +143:15 fix: Edit[] (const)
-  callee +145:13 fsSpecifierFix -> @fsSpecifierFix
-  callee +148:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
-  callee +150:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +156:13 target: string (const)
-  callee +158:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  callee +161:91 stdModuleNames -> @stdModuleNames
-  callee +169:10 buildsPageModule -> @buildsPageModule
-  callee +171:9 StringSet.has -> @StringSet.has
-  callee +171:33 Compilation.identityOf -> @Compilation.identityOf
-  callee +173:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +186:13 targetIdentity: string (const)
-  callee +186:30 Compilation.identityOf -> @Compilation.identityOf
-  callee +189:12 Compilation.discover -> @Compilation.discover
-  callee +194:9 StringMap.set -> @StringMap.set
-  callee +194:42 StringMap.get -> @StringMap.get
+  callee +92:54 DiagnosticSink.count -> @DiagnosticSink.count
+  local +102:11 beforeNames: i32 (const)
+  callee +102:25 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +103:5 Checker.declareNames -> @Checker.declareNames
+  callee +115:29 DiagnosticSink.count -> @DiagnosticSink.count
+  local +116:11 signaturesFailed: boolean (const)
+  local +117:11 dir: string (const)
+  callee +117:17 dirname -> @dirname
+  local +118:9 ok: boolean (let)
+  local +124:9 failedDecl: Node | null (let)
+  local +125:16 imp: ImportBinding (const)
+  callee +127:11 isBuiltinSpecifier -> @isBuiltinSpecifier
+  callee +130:11 StringMap.has -> @StringMap.has
+  local +137:13 found: ResolvedModule (const)
+  callee +137:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
+  local +141:15 fix: Edit[] (const)
+  callee +143:13 fsSpecifierFix -> @fsSpecifierFix
+  callee +146:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
+  callee +148:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +154:13 target: string (const)
+  callee +156:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  callee +159:91 stdModuleNames -> @stdModuleNames
+  callee +167:10 buildsPageModule -> @buildsPageModule
+  callee +169:9 StringSet.has -> @StringSet.has
+  callee +169:33 Compilation.identityOf -> @Compilation.identityOf
+  callee +171:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +184:13 targetIdentity: string (const)
+  callee +184:30 Compilation.identityOf -> @Compilation.identityOf
+  callee +187:12 Compilation.discover -> @Compilation.discover
+  callee +192:9 StringMap.set -> @StringMap.set
+  callee +192:42 StringMap.get -> @StringMap.get
 function Compilation.resolveSpecifier(this: Compilation, dir: string, specifier: string): ResolvedModule -> @Compilation.resolveSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via Compilation.resolveBareSpecifier
@@ -744,51 +742,46 @@ function Compilation.readNoPanic(this: Compilation, source: SourceFile | null, n
   callee +17:9 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.reportHostRefusals(this: Compilation): void -> @Compilation.reportHostRefusals [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via DiagnosticSink.report
-  calls: DiagnosticSink.report StringMap.get StringSet.add StringSet.constructor StringSet.has isBuiltinSpecifier nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
+  sharedWrite: +0:13
+  calls: DiagnosticSink.report StringMap.get isBuiltinSpecifier nish_panic_index nish_str_eq
   pointer this: size=216 writesThrough=false captured=false
-  stackSites=1 stackLocals=1
-  local +0:11 reported: StringSet (const)
-  callee +0:22 new StringSet -> @StringSet.constructor
-  local +1:16 unit: ModuleUnit (const)
-  local +2:18 imp: ImportBinding (const)
-  local +3:15 index: i32 (const)
-  callee +3:23 isBuiltinSpecifier -> @isBuiltinSpecifier
-  callee +3:64 StringMap.get -> @StringMap.get
-  local +7:15 host: ModuleUnit (const)
-  local +8:20 refusal: HostRefusal (const)
-  local +9:17 key: string (const)
-  callee +10:53 StringSet.has -> @StringSet.has
-  callee +11:13 StringSet.add -> @StringSet.add
-  callee +12:13 DiagnosticSink.report -> @DiagnosticSink.report
+  stackSites=0 stackLocals=0
+  local -9:16 unit: ModuleUnit (const)
+  local -8:18 imp: ImportBinding (const)
+  local -7:15 index: i32 (const)
+  callee -7:23 isBuiltinSpecifier -> @isBuiltinSpecifier
+  callee -7:64 StringMap.get -> @StringMap.get
+  local -3:15 host: ModuleUnit (const)
+  local -2:20 refusal: HostRefusal (const)
+  callee +1:13 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.hostModules(this: Compilation): StringSet -> @Compilation.hostModules [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
-  sharedWrite: +0:9
+  sharedWrite: +0:7
   calls: Compilation.identityOf Compilation.rootManifest DiagnosticSink.report StringSet.add StringSet.constructor dirname joinPath manifestHost manifestNish nish_alloc_struct nish_panic_index nish_read_file_or_null nish_str_concat
   pointer this: size=216 writesThrough=true captured=false passedTo=Compilation.identityOf#0 Compilation.rootManifest#0 Compilation.identityOf#0
   stackSites=1 stackLocals=0
-  local -30:11 out: StringSet (const)
-  callee -30:17 new StringSet -> @StringSet.constructor
-  local -29:16 path: string (const)
-  callee -28:7 StringSet.add -> @StringSet.add
-  callee -28:15 Compilation.identityOf -> @Compilation.identityOf
-  local -26:11 source: SourceFile | null (const)
-  callee -26:20 Compilation.rootManifest -> @Compilation.rootManifest
-  local -22:11 nish: NishManifest (const)
-  callee -22:18 manifestNish -> @manifestNish
-  local -18:11 dir: string (const)
-  callee -18:17 dirname -> @dirname
-  local -17:11 host: HostManifest (const)
-  callee -17:18 manifestHost -> @manifestHost
-  local -16:9 p: i32 (let)
-  callee -14:7 DiagnosticSink.report -> @DiagnosticSink.report
-  local -11:9 i: i32 (let)
-  local -9:13 entry: string (const)
-  local -8:13 path: string (const)
-  callee -8:20 joinPath -> @joinPath
-  callee -6:9 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +2:7 StringSet.add -> @StringSet.add
-  callee +2:15 Compilation.identityOf -> @Compilation.identityOf
+  local -16:11 out: StringSet (const)
+  callee -16:17 new StringSet -> @StringSet.constructor
+  local -15:16 path: string (const)
+  callee -14:7 StringSet.add -> @StringSet.add
+  callee -14:15 Compilation.identityOf -> @Compilation.identityOf
+  local -12:11 source: SourceFile | null (const)
+  callee -12:20 Compilation.rootManifest -> @Compilation.rootManifest
+  local -8:11 nish: NishManifest (const)
+  callee -8:18 manifestNish -> @manifestNish
+  local -4:11 dir: string (const)
+  callee -4:17 dirname -> @dirname
+  local -3:11 host: HostManifest (const)
+  callee -3:18 manifestHost -> @manifestHost
+  local -2:16 problem: ManifestProblem (const)
+  callee -1:7 DiagnosticSink.report -> @DiagnosticSink.report
+  local +2:9 i: i32 (let)
+  local +4:13 entry: string (const)
+  local +5:13 path: string (const)
+  callee +5:20 joinPath -> @joinPath
+  callee +7:9 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +15:7 StringSet.add -> @StringSet.add
+  callee +15:15 Compilation.identityOf -> @Compilation.identityOf
 function Compilation.rootManifest(this: Compilation): SourceFile | null -> @Compilation.rootManifest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.manifestDirAbove
