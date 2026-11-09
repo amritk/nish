@@ -607,23 +607,29 @@ const manifestLeavesRoot = (path: string): boolean => {
   let depth = 0
   let start = 0
   let i = 0
-  while (i <= path.length) {
-    const end = i === path.length || path.charCodeAt(i) === 47 || path.charCodeAt(i) === BACKSLASH
-    if (end) {
-      const segment = path.slice(start, i)
-      if (segment === "..") {
-        depth = depth - 1
-        if (depth < 0) {
-          return true
-        }
-      } else if (segment.length > 0 && segment !== ".") {
-        depth = depth + 1
+  while (i < path.length) {
+    const code = path.charCodeAt(i)
+    if (code === 47 || code === BACKSLASH) {
+      depth = manifestSegmentDepth(path.slice(start, i), depth)
+      if (depth < 0) {
+        return true
       }
       start = i + 1
     }
     i = i + 1
   }
-  return false
+  return manifestSegmentDepth(path.slice(start, path.length), depth) < 0
+}
+
+/** `depth` after one path segment: one up for `..`, one down for a name, none for `.` or an empty one. */
+const manifestSegmentDepth = (segment: string, depth: i32): i32 => {
+  if (segment === "..") {
+    return depth - 1
+  }
+  if (segment.length > 0 && segment !== ".") {
+    return depth + 1
+  }
+  return depth
 }
 
 /** The JSON kind of the value whose text starts at `at`, for a refusal that should not quote it whole. */
@@ -697,7 +703,7 @@ export const manifestHost = (manifest: string, at: i32, end: i32): HostManifest 
     const entry = read.entries[i]
     const start = read.offsets[i]
     const stop = read.ends[i]
-    if (manifest.charCodeAt(start) !== QUOTE) {
+    if (start < 0 || start >= manifest.length || manifest.charCodeAt(start) !== QUOTE) {
       out.refuse(`${manifestJsonKind(manifest, start)} is not a string${HOST_SHAPE}`, start, stop)
     } else if (entry.length === 0) {
       out.refuse(`an empty path names no file${HOST_PATH}`, start, stop)

@@ -418,8 +418,6 @@ export class Compilation {
    * `hostModuleText` rather than as Nish.
    */
   hostIdentities: StringSet
-  /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
-  hostRefused: boolean
   /**
    * The whole-program attribute fixpoint, once it has been computed.
    * `analyze()` memoises it here for the reason stage0's `src/compilation.ts` memoises
@@ -436,6 +434,8 @@ export class Compilation {
    * validator throws, and a program it refuses prints no tree on either side.
    */
   dumpOnly: boolean
+  /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
+  hostRefused: boolean
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
