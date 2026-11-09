@@ -98,6 +98,12 @@ _Static_assert(sizeof(nish_chunk) == 16, "runtime-cross.c's nish_xchunk: { next,
 _Static_assert(offsetof(nish_chunk, next) == 0, "runtime-cross.c's nish_xchunk: next first");
 _Static_assert(offsetof(nish_chunk, cap) == 8, "runtime-cross.c's nish_xchunk: cap second");
 struct nish_arena { char *buf; uint64_t off; uint64_t cap; nish_chunk *chunks; };
+/* A chunk's usable bytes. Bit 0 of `cap` marks a *carved* chunk, one
+   `nish_region_adopt` (runtime-region.c) made in what an older chunk of the
+   same arena had left: no malloc of its own, so `nish_free_until` passes it
+   by. A malloc'd chunk's cap is a multiple of 8, so the bit is free. */
+#define NISH_CHUNK_CARVED 1
+#define NISH_CHUNK_CAP(c) ((c)->cap & ~(uint64_t)NISH_CHUNK_CARVED)
 /* One per thread under -DNISH_THREADS, one per process otherwise; the layout is
    the same either way, which is why nothing else in this file has to know. */
 NISH_TLS struct nish_arena nish_arena;
@@ -307,9 +313,7 @@ static void nish_grown_put(char *data, const void *owner, uint64_t native) {
   nish_grown_live++;
 }
 #endif
-#ifdef NISH_ASAN
 void nish_free_arena(void);
-#endif
 static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
 #ifdef NISH_ASAN
   /* A freed block's address comes back from malloc: forget the grown ones. */
@@ -319,7 +323,13 @@ static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
     nish_grown_leave();
   }
 #endif
-  while (c != end) { nish_chunk *n = c->next; free(c); c = n; }
+  /* A carved chunk lies inside an older one, which a list is never cut
+     between: what frees the older chunk frees the memory under it. */
+  while (c != end) {
+    nish_chunk *n = c->next;
+    if (!(c->cap & NISH_CHUNK_CARVED)) free(c);
+    c = n;
+  }
 }
 
 /* O(1) recycle: keep the newest chunk, free the rest. */
@@ -329,11 +339,15 @@ void nish_reset_arena(void) {
   nish_free_arena();
   return;
 #endif
+  /* The newest chunk malloc made: a carved one above it lives in a chunk
+     this frees. */
   nish_chunk *keep = nish_arena.chunks;
-  if (!keep) return;
+  while (keep && (keep->cap & NISH_CHUNK_CARVED)) keep = keep->next;
+  if (!keep) { nish_free_arena(); return; }
+  nish_free_until(nish_arena.chunks, keep);
   nish_free_until(keep->next, 0);
   keep->next = 0;
-  nish_arena.off = 0;
+  nish_arena = (struct nish_arena){ (char *)(keep + 1), 0, keep->cap, keep };
 }
 
 void nish_free_arena(void) {
@@ -352,11 +366,11 @@ void nish_arena_release(uint64_t mark) {
   if (!mark) { nish_reset_arena(); return; }
   for (; c; c = c->next) {
     uintptr_t base = (uintptr_t)(c + 1);
-    if (mark >= base && mark <= base + c->cap) break;
+    if (mark >= base && mark <= base + NISH_CHUNK_CAP(c)) break;
   }
   if (!c) return;
   nish_free_until(nish_arena.chunks, c);
-  nish_arena = (struct nish_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), c->cap, c };
+  nish_arena = (struct nish_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), NISH_CHUNK_CAP(c), c };
 }
 
 /* Release back to `mark` while keeping the newest allocation; returns where it
@@ -379,17 +393,20 @@ void *nish_arena_keep(uint64_t mark, void *p) {
   nish_chunk *pc = nish_arena.chunks, *c = pc; /* pc holds `p`: it is the current chunk */
   for (; c; c = c->next) {
     uintptr_t cb = (uintptr_t)(c + 1);
-    if (mark >= cb && mark <= cb + c->cap) break;
+    if (mark >= cb && mark <= cb + NISH_CHUNK_CAP(c)) break;
   }
   if (!c || (c == pc && mark > q)) return p;
   /* mark <= q inside one chunk implies mark + size <= q + size <= its end, so
      the second arm is only ever reached with `c` older than `pc`. */
-  if (mark + size <= (uintptr_t)(c + 1) + c->cap) {
+  if (mark + size <= (uintptr_t)(c + 1) + NISH_CHUNK_CAP(c)) {
     memmove((void *)mark, p, size);
     nish_free_until(pc, c);
-    nish_arena = (struct nish_arena){ (char *)(c + 1), mark + size - (uintptr_t)(c + 1), c->cap, c };
+    nish_arena = (struct nish_arena){ (char *)(c + 1), mark + size - (uintptr_t)(c + 1), NISH_CHUNK_CAP(c), c };
     return (void *)mark;
   }
+  /* Keeping a carved `pc` while the chunks under it go could free the one it
+     was carved from. */
+  if (pc->cap & NISH_CHUNK_CARVED) return p;
   nish_free_until(pc->next, c);
   pc->next = c;
   return p;

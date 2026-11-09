@@ -63,6 +63,7 @@
  * finishes, so the answer stays readable and is freed with the caller's
  * memory (docs/security/async.md, ASYNC-14). */
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -79,9 +80,19 @@ extern NISH_TLS uint64_t nish_region_chunk;
 #define NISH_REGION_GEN_END ((uint64_t)1 << 40)
 #define NISH_REGION_PAGE 1024
 
-/* runtime.c's `nish_chunk`, which `nish_region_adopt` links through: runtime.c
-   static-asserts the layout runtime-cross.c's copy of it relies on too. */
+/* runtime.c's `nish_chunk`, which `nish_region_adopt` links through and
+   carves: the same three facts runtime.c asserts of it. Bit 0 of `cap` marks a
+   carved chunk, as runtime.c's NISH_CHUNK_CARVED. */
 typedef struct nish_chunk_link { struct nish_chunk_link *next; uint64_t cap; } nish_chunk_link;
+_Static_assert(sizeof(nish_chunk_link) == 16, "runtime.c's nish_chunk: { next, cap }, the bytes after it");
+_Static_assert(offsetof(nish_chunk_link, next) == 0, "runtime.c's nish_chunk: next first");
+_Static_assert(offsetof(nish_chunk_link, cap) == 8, "runtime.c's nish_chunk: cap second");
+#define NISH_CHUNK_CARVED 1
+
+/* The least a caller's chunk must have left for `nish_region_adopt` to carve
+   it into a chunk of its own: below it the bytes are given up, so an adopt
+   leaves at most this much behind. */
+#define NISH_ADOPT_CARVE 256
 
 typedef struct nish_region_slot {
   struct nish_arena arena; /* the region's arena, or, while entered, the one it displaced */
@@ -262,12 +273,18 @@ void nish_region_free(uint64_t r) {
 /* An `awaitAll` lane's region, once the lane has finished: its chunks go on
    top of the arena in `nish_arena`, newest first as there, so what the lane
    answered lives on in the arena that awaited it and is given back when that
-   arena next releases below them. The region's head chunk becomes the
-   arena's, its `buf`, `off` and `cap` with it, so the head-is-`buf` rule
-   `nish_arena_release` relies on still holds; what was left of the old head
-   chunk is not bumped again until a release rewinds into it. The chunk size
-   stays the arena's own. A region that never allocated moves nothing. Like
-   `free`, it panics on a region that is entered. */
+   arena next releases below them. What the caller's current chunk had left is
+   then carved into a chunk of its own, on top of the region's, and bumping
+   goes on there: the caller's chunk is not buried under the region's, which
+   would leave its rest unused and make the caller's next allocation grow a
+   fresh 64 KiB chunk -- a chunk per adopt in a loop that never releases
+   (docs/security/async.md, ASYNC-15). The carved chunk has no malloc of its
+   own, and bit 0 of its `cap` says so, so `nish_free_until` passes it by; it
+   always sits above the chunk it was carved from, so whatever frees that one
+   has dropped it first. Less than NISH_ADOPT_CARVE left is given up. The
+   next-chunk size (`nish_region_chunk`) is not touched: it is the caller's,
+   which a region only swaps while entered. A region that never allocated
+   moves nothing. Like `free`, it panics on a region that is entered. */
 void nish_region_adopt(uint64_t r) {
   nish_region_slot *s = nish_region_slot_of(r);
   if (s->entered) nish_region_die(NISH_REGION_FREE_ENTERED);
@@ -275,8 +292,17 @@ void nish_region_adopt(uint64_t r) {
   if (head) {
     nish_chunk_link *last = head;
     while (last->next) last = last->next;
-    last->next = nish_arena.chunks;
+    struct nish_arena caller = nish_arena;
+    uint64_t left = caller.buf ? caller.cap - caller.off : 0;
+    last->next = caller.chunks;
     nish_arena = s->arena;
+    if (left >= NISH_ADOPT_CARVE) {
+      nish_chunk_link *c = (nish_chunk_link *)(caller.buf + caller.off);
+      uint64_t cap = left - sizeof *c;
+      c->next = nish_arena.chunks;
+      c->cap = cap | NISH_CHUNK_CARVED;
+      nish_arena = (struct nish_arena){ (char *)(c + 1), 0, cap, (void *)c };
+    }
   }
   s->arena = (struct nish_arena){ 0 };
   nish_region_retire(s, r);

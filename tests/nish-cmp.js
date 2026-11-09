@@ -616,6 +616,8 @@ const DECLARED = [
       "tests/cases/async_await_all.ts": ["async_await_all.ll"],
       "tests/cases/async_await_all_lanes_large.ts": ["async_await_all_lanes_large.ll"],
       "tests/link/async_await_all_lanes/main.ts": ["lib.ll", "main.ll"],
+      "tests/link/async_await_all_retain/main.ts": ["main.ll"],
+      "tests/link/async_await_all_small/main.ts": ["main.ll"],
       "tests/link/async_across_modules/main.ts": ["main.ll"],
       "docs/cookbook/async-await-all.ts": ["async-await-all.ll"],
       "docs/cookbook/runtime-prelude.ts": ["runtime-prelude.ll"],

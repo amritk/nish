@@ -67,9 +67,17 @@
  * own below. Measured 1,723 against 3,495 before the move on 2026-11-08 with clang 18.1.3
  * on linux-x64; the two halves sum to 3,510, 15 more than the one file, which is the
  * calls the compiler could inline across one file and now makes across two.
+ *
+ * Raised by 96, to 1,819, by ASYNC-15 (docs/security/async.md): an `awaitAll` lane's
+ * adopt carves what the caller's chunk had left into a chunk of its own, marked by bit 0
+ * of its cap, so every walker of the chunk list reads the cap through a mask, the frees
+ * pass a carved chunk by, `nish_reset_arena` keeps the first chunk that is not carved,
+ * and `nish_arena_keep` leaves a carved head alone. Measured 1,819 against 1,723 on
+ * 2026-11-09 with clang 18.1.3 on linux-x64. It is not a unit of its own because those
+ * walkers are the core's.
  */
 // TEXT here is the .text section of the core runtime.c, not runtime-text.c (next).
-const RUNTIME_TEXT_BUDGET = 1723
+const RUNTIME_TEXT_BUDGET = 1819
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-text.c`:
  * strings (`nish_str_*`) and the number formatting (`nish_f64_format`, the Zmij tables'
@@ -197,8 +205,11 @@ const RUNTIME_OS_TEXT_BUDGET = 4864
  * Lowered by 1,961, to 1,938, by WP50 stage 4's move of strings and number formatting to
  * `runtime-text.c` (as above): measured 1,938 against 3,710 before it on 2026-11-08 with
  * clang 18.1.3 on linux-x64.
+ *
+ * Raised by 87, to 2,025, by ASYNC-15's carved chunk (as above), measured 2,025 against
+ * 1,938 on 2026-11-09 with clang 18.1.3 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 1938
+const RUNTIME_THREADS_TEXT_BUDGET = 2025
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -664,15 +675,22 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * Measured **664 bytes** on 2026-11-01 with clang 18.1.3 on linux-x64. A fifteenth
  * translation unit, so a program that makes no region links none of it. The budget is
  * the next 256-byte boundary above the measurement.
+ *
+ * Raised to 1,024 by ASYNC-15 (docs/security/async.md): `nish_region_adopt` carves what
+ * the caller's chunk had left into a chunk above the region's, so a loop that never
+ * releases keeps its lanes' bytes rather than a chunk per lane. Measured **850 bytes**
+ * against 766 on 2026-11-09 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
  */
-const RUNTIME_REGION_TEXT_BUDGET = 768
+const RUNTIME_REGION_TEXT_BUDGET = 1024
 /**
  * The same file with `-DNISH_THREADS=1`: the table's spin lock, the thread number taken
  * from a process-wide counter, and the innermost entered handle, which is thread-local.
  * Measured **852 bytes** on 2026-11-01 with clang 18.1.3 on linux-x64; a row of its own,
  * as `runtime.c`'s threads build has, so neither number covers the other's room.
+ * Raised to 1,280 by ASYNC-15's carve (as above): measured **1,099 bytes** against 994 on
+ * 2026-11-09 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
  */
-const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1024
+const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1280
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-async.c`
