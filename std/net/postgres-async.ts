@@ -78,6 +78,13 @@
  * (and, in `pgAsyncConnect`, the caller) until it closes; bound a slow
  * statement with the server's `statement_timeout`.
  *
+ * **Memory.** Run each query in a spawned task, as `title` does above: the
+ * task's region, and every buffer, row and string the query built in it,
+ * is freed when the task ends, so `Arena.used()` stays where it was across
+ * thousands of queries. A query awaited outside a task, through a function
+ * that is handed the pool, keeps what it built until an enclosing scope
+ * ends (about 9 KB a query in `tests/link/std_postgres_async_flat`'s probe).
+ *
  * **Errors.** A query answers `PG_CARRIER_DONE`, or `PG_CARRIER_FAILED` with
  * `failure` a `PG_ERR_*` and `socketError` a negative errno, as
  * `nish/net/postgres-carrier` does: `PG_ERR_NONE` when the server refused the
@@ -569,7 +576,8 @@ export function pgAsyncRelease(pool: PgAsyncPool, ticket: i32, reusable: boolean
  *   spent; any other panics.
  * @param sql One statement, `$1`, `$2`, ... naming the parameters; a NUL in
  *   it fails the query with `PG_ERR_ENCODING` without sending anything.
- * @param params The parameters, as many as the statement names.
+ * @param params The parameters, as many as the statement names; a NUL in
+ *   a text one fails the query the same way.
  * @returns The answer; its `reusable` goes to `pgAsyncRelease`.
  */
 export async function pgAsyncQuery(
@@ -625,6 +633,9 @@ const pgAsyncEncode = (sql: string, params: PgAsyncParams): u8[] | null => {
   let bind: i32 = 4 + 1 + 1 + 2 + 2 + 2
   for (let i: i32 = 0; i < count; i++) {
     const v: u8[] = pgAsyncBytes(params.values[i])
+    if (pgAsyncHasNul(v)) {
+      return null
+    }
     values.push(v)
     bind += 4 + (params.nulls[i] ? 0 : toI32(v.length))
   }

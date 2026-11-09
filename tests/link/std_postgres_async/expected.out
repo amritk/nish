@@ -7,6 +7,7 @@ echo: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=héllo
 echo cells: 3 héllo -7 null=true false
 bad: ok=false failure=0 socket=0 rows=0 tag= reusable=true
 bad error: 42P01 relation "nope" does not exist
+nul: ok=false failure=8 socket=0 rows=0 tag= reusable=true
 many: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=r0
 begin: ok=true failure=0 socket=0 rows=0 tag=BEGIN reusable=false
 live after begin: 1

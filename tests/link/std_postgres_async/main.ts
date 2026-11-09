@@ -7,8 +7,9 @@
 //      tasks overlapped, with no clock read.
 //   2. One task, in sequence: parameters in text with a NULL, a statement the
 //      server refuses (the connection is reused), rows past `maxRows`, then
-//      a transaction left open and a session setting changed, each of which
-//      closes its connection, so no later task inherits it; with none left,
+//      a NUL in a parameter (refused before anything is sent, so the
+//      connection is reused), a transaction left open and a session setting
+//      changed, each of which closes its connection, so no later task inherits it; with none left,
 //      a claim answers PG_POOL_NONE.
 //   3. Loss: after a reconnect, a connection that ends under a query fails
 //      it with PG_ERR_CLOSED and is closed; the other is still served.
@@ -64,6 +65,13 @@ async function checks(pool: PgAsyncPool, board: Board): Promise<void> {
   pgAsyncRelease(pool, ticket, r.reusable)
   console.log(describe("bad", r))
   console.log(`bad error: ${r.errorCode} ${r.errorMessage}`)
+
+  ticket = await pgAsyncClaim(pool)
+  const nul = new PgAsyncParams()
+  nul.text("a\u0000b")
+  r = await pgAsyncQuery(pool, ticket, "echo", nul)
+  pgAsyncRelease(pool, ticket, r.reusable)
+  console.log(describe("nul", r))
 
   pool.maxRows = 3
   ticket = await pgAsyncClaim(pool)
