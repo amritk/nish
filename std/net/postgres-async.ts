@@ -104,7 +104,7 @@
 import { readable, sleep, writable } from "nish:async"
 import { connectResult, netAddress, netClose, netRead, netWrite, tcpConnect, unixConnect } from "nish:net"
 import { Secret } from "nish:secret"
-import { copyBytes, setI32BE } from "nish/bytes"
+import { copyBytes, getI32BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
 import {
   PG_ERR_CLOSED,
   PG_ERR_ENCODING,
@@ -625,16 +625,16 @@ const pgAsyncLost = (result: PgAsyncResult, failure: i32, socketError: i32): PgA
 
 /** Parse, Bind, Execute and Sync for `sql` and `params`, or null for a NUL in the SQL or a parameter. */
 const pgAsyncEncode = (sql: string, params: PgAsyncParams): u8[] | null => {
-  const sqlBytes: u8[] = pgAsyncBytes(sql)
+  const sqlBytes = pgAsyncBytes(sql)
   const count: i32 = toI32(params.values.length)
-  if (count > 65535 || pgAsyncHasNul(sqlBytes)) {
+  if (sqlBytes === null || count > 65535) {
     return null
   }
   const values: u8[][] = []
   let bind: i32 = 4 + 1 + 1 + 2 + 2 + 2
   for (let i: i32 = 0; i < count; i++) {
-    const v: u8[] = pgAsyncBytes(params.values[i])
-    if (pgAsyncHasNul(v)) {
+    const v = pgAsyncBytes(params.values[i])
+    if (v === null) {
       return null
     }
     values.push(v)
@@ -664,8 +664,7 @@ const pgAsyncEncode = (sql: string, params: PgAsyncParams): u8[] | null => {
   out[at + 1] = 0
   out[at + 2] = 0
   out[at + 3] = 0
-  out[at + 4] = toU8(count >> 8)
-  out[at + 5] = toU8(count & 255)
+  setU16BE(out, at + 4, toU16(count))
   at += 6
   for (let i: i32 = 0; i < count; i++) {
     if (params.nulls[i]) {
@@ -692,24 +691,18 @@ const pgAsyncEncode = (sql: string, params: PgAsyncParams): u8[] | null => {
   return out
 }
 
-/** `s`'s UTF-8 bytes. */
-const pgAsyncBytes = (s: string): u8[] => {
+/** `s`'s UTF-8 bytes, or null when one is zero, which a C string in the protocol cannot hold. */
+const pgAsyncBytes = (s: string): u8[] | null => {
   const n: i32 = toI32(s.length)
   const b: u8[] = new Array<u8>(n)
   for (let i: i32 = 0; i < n; i++) {
-    b[i] = toU8(s.charCodeAt(i))
+    const c: i32 = toI32(s.charCodeAt(i))
+    if (c === 0) {
+      return null
+    }
+    b[i] = toU8(c)
   }
   return b
-}
-
-/** Whether `b` holds a zero byte, which a C string in the protocol cannot. */
-const pgAsyncHasNul = (b: u8[]): boolean => {
-  for (let i: i32 = 0; i < toI32(b.length); i++) {
-    if (toI32(b[i]) === 0) {
-      return true
-    }
-  }
-  return false
 }
 
 /**
@@ -736,11 +729,7 @@ const pgAsyncRead = async (
     // Every whole message in [start, end).
     while (end - start >= 5) {
       const type: i32 = toI32(buf[start])
-      const length: i32 =
-        (toI32(buf[start + 1]) << 24) |
-        (toI32(buf[start + 2]) << 16) |
-        (toI32(buf[start + 3]) << 8) |
-        toI32(buf[start + 4])
+      const length: i32 = getI32BE(buf, start + 1)
       if (length < 4) {
         return pgAsyncLost(result, PG_ERR_FRAME, 0)
       }
@@ -770,7 +759,7 @@ const pgAsyncRead = async (
         if (stop - body < 2) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
-        const columns: i32 = (toI32(buf[body]) << 8) | toI32(buf[body + 1])
+        const columns: i32 = toI32(getU16BE(buf, body))
         if (columns > maxColumns) {
           return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
         }
