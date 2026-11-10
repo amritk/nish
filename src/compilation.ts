@@ -2501,12 +2501,16 @@ export class Compilation {
     // A `child` call is judged after every `enter` walk has said where it is made.
     const sites = new ChildSites()
     for (const unit of this.modules) {
-      sites.scan(unit.checker.program, unit.checker.program.file)
       for (const call of unit.checker.program.regionCalls) {
         if (isChildMaker(regionRoleOf(call.sig))) {
           sites.childTypes.push(call.sig.returnType)
         }
       }
+    }
+    // Which handles are plain matters only to a program that makes a child.
+    for (let i = 0; i < this.modules.length && sites.childTypes.length > 0; i++) {
+      const program = this.modules[i].checker.program
+      sites.scan(program, program.file)
     }
     for (const unit of this.modules) {
       const program = unit.checker.program

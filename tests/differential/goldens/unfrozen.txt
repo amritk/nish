@@ -488,7 +488,9 @@ cases/port_utf8_offset_index added after R6: no rewriter to freeze it with
 cases/port_utf8_offset_loop_bound added after R6: no rewriter to freeze it with
 cases/region_cache added after R6: no rewriter to freeze it with
 cases/region_child_chain added after R6: no rewriter to freeze it with
+cases/region_child_fresh_list added after R6: no rewriter to freeze it with
 cases/region_child_keep added after R6: no rewriter to freeze it with
+cases/region_child_local_map added after R6: no rewriter to freeze it with
 cases/region_child_map added after R6: no rewriter to freeze it with
 cases/region_child_plain added after R6: no rewriter to freeze it with
 cases/region_copied_churn added after R6: no rewriter to freeze it with

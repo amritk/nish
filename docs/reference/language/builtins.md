@@ -1037,12 +1037,16 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   A plain `region()` made inside `enter` stays independent of the region
   entered, and keeps the rules above.
 - **What the root reaches counts as older than this `enter` only while `f`
-  stores nothing into region memory.** Once `f` stores into memory that may
-  be the region's — a field, `push`, or a callee that writes into what it is
-  handed, such as `Map.set` — anywhere in its body, a value read off the root
-  may be one it allocated, so `childWith` handing it is NL2610
-  (`reject_region_child_root_readback`, `reject_region_child_root_push`). The
-  check is not ordered: a store after the `childWith` counts too.
+  stores nothing into memory the root may reach.** Once `f` stores into
+  memory that may be older than this `enter` — a field, `push`, or a callee
+  that writes into what it is handed, such as `Map.set` — anywhere in its
+  body, a value read off the root may be one it allocated, so `childWith`
+  handing it is NL2610 (`reject_region_child_root_readback`,
+  `reject_region_child_root_push`). A store into memory `f` made counts only
+  when `f` also puts the root's reach (other than a string) into memory it
+  made, as `[root]` or `new Holder(root)` does
+  (`tests/cases/region_child_fresh_list`, `tests/cases/region_child_local_map`).
+  The check is not ordered: a store after the `childWith` counts too.
 - **In an `enter` of a handle that may be a child's, the root's reach may be
   its ancestors' memory as well as the child's own.** A child made there may
   keep it, but it may not grow (NL2615), keep memory other than an ancestor's

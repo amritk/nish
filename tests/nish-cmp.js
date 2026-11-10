@@ -1161,7 +1161,9 @@ const DECLARED = [
   // childWith, so only the candidate compiles these programs.
   ...[
     "tests/cases/region_child_chain.ts",
+    "tests/cases/region_child_fresh_list.ts",
     "tests/cases/region_child_keep.ts",
+    "tests/cases/region_child_local_map.ts",
     "tests/cases/region_child_map.ts",
     "tests/cases/region_child_plain.ts",
     "docs/cookbook/mem-region-child.ts",

@@ -175,9 +175,9 @@ function childWith<A, T>(
 
 <scalar-field name="arg" type="A" required>
 
-handed to `f`: a number, `boolean`, `enum` or string literal, or
-  memory the parent's root reaches, which `f` may store into the child.
-  Memory the entered function allocated is refused (NL2610).
+handed to `f`: a number, `boolean` or `enum`, or memory the
+  parent's root reaches, which `f` may store into the child. A string `f`
+  stores, and memory the entered function allocated, are refused (NL2610).
 
 </scalar-field>
 
@@ -320,8 +320,8 @@ function regionWith<A, T>(
 <scalar-field name="arg" type="A" required>
 
 handed to `f`. It lives outside the region, so unless it is a
-  number, `boolean`, `enum` or string literal `f` may not store it into
-  region memory (NL2610).
+  number, `boolean` or `enum` `f` may not store it into region memory
+  (NL2610), a string included.
 
 </scalar-field>
 

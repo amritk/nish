@@ -223,9 +223,11 @@ in the `f` an `enter` runs, never in a function something else also calls
 rules above.
 
 The child may keep the parent's root only while that root holds nothing
-the parent's `f` stored into it: once any code stores into the root (a
-field, an array push, a `Map.set`, or a call that keeps its argument),
-the child may not keep it. Entering a handle that may be a child's gives
+the parent's `f` stored into it: once any code stores into memory the
+root may reach (a field, an array push, a `Map.set`, or a call that keeps
+its argument), the child may not keep it. Filling an array or `Map` the
+`f` made itself is fine, unless the root, or memory it reaches, was put
+into memory the `f` made. Entering a handle that may be a child's gives
 an `f` whose root is the child's memory, so that root may neither take
 memory from outside nor be stored outside. A handle made by `region()`
 or `regionWith()` and never reassigned is not a child's and keeps the

@@ -100,8 +100,8 @@ export const region = <T>(f: () => T): Region<T> => {
  * nothing.
  *
  * @param arg handed to `f`. It lives outside the region, so unless it is a
- *   number, `boolean`, `enum` or string literal `f` may not store it into
- *   region memory (NL2610).
+ *   number, `boolean` or `enum` `f` may not store it into region memory
+ *   (NL2610), a string included.
  * @param f builds the root from `arg`, under the same rules as `region`'s.
  * @returns the handle to the new region, which holds its memory until `free`.
  */
@@ -166,9 +166,9 @@ export const child = <T>(f: () => T): Region<T> => {
  * `child` with one argument for `f`: the way the parent's memory reaches the
  * child, because the arrow `child` runs captures nothing.
  *
- * @param arg handed to `f`: a number, `boolean`, `enum` or string literal, or
- *   memory the parent's root reaches, which `f` may store into the child.
- *   Memory the entered function allocated is refused (NL2610).
+ * @param arg handed to `f`: a number, `boolean` or `enum`, or memory the
+ *   parent's root reaches, which `f` may store into the child. A string `f`
+ *   stores, and memory the entered function allocated, are refused (NL2610).
  * @param f builds the child's root from `arg`, under the same rules as
  *   `child`'s.
  * @returns the handle to the child, which holds its memory until `free` of it

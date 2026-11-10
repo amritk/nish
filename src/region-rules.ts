@@ -142,6 +142,13 @@ const mayBeRegion = (o: i32): boolean =>
   o === ORIGIN_MIXED ||
   o === ORIGIN_CHILD_ROOT
 
+/**
+ * Whether a holder or value of origin `o` may be memory the root reaches,
+ * as it was before this `enter`: any region origin but `ORIGIN_REGION`,
+ * memory `f` allocated, which the root reaches only once stored into it.
+ */
+const mayReachRoot = (o: i32): boolean => o !== ORIGIN_REGION && mayBeRegion(o)
+
 /** Whether a value of origin `o` is memory a child region made here may keep: what the root reaches. */
 const outlivesChild = (o: i32): boolean => o === ORIGIN_ROOT || o === ORIGIN_PARENT || o === ORIGIN_CHILD_ROOT
 
@@ -530,22 +537,8 @@ class RegionWalk {
   who: string
   /** When `fn`'s region is freed, for a message. */
   freed: string
-  changed: boolean
-  collect: boolean
-  /**
-   * WP49 stage 5, part 3: `fn` is a spawned task, not a region's function.
-   * Its outside memory is what it shares with its spawner, which outlives it,
-   * so only memory of its own region kept from outside is refused, and growth.
-   */
-  task: boolean
   /** An `enter` walk's record of the child regions `fn` makes, or `null`. */
   sites: ChildSites | null
-  /**
-   * `fn` stores into, or hands a callee that writes into, memory that may be
-   * the region's, so what it reads off the root may be memory it allocated.
-   * Flow-insensitive: the passes before the last one set it.
-   */
-  rootWritten: boolean
   /**
    * WP49 stage 5, part 8: the arrows the spawn handed the task that capture
    * its spawner's objects (`taskFindings`). A call that runs one may answer
@@ -559,6 +552,31 @@ class RegionWalk {
   indirect: boolean[]
   /** Every module, for the types a call's answer may reach (`mayShareMemory`). */
   programs: CheckedProgram[]
+  changed: boolean
+  collect: boolean
+  /**
+   * WP49 stage 5, part 3: `fn` is a spawned task, not a region's function.
+   * Its outside memory is what it shares with its spawner, which outlives it,
+   * so only memory of its own region kept from outside is refused, and growth.
+   */
+  task: boolean
+  /**
+   * `fn` stores into, or hands a callee that writes into, memory the root
+   * may reach, so what it reads off the root may be memory it allocated.
+   * Flow-insensitive: the passes before the last one set it.
+   */
+  rootWritten: boolean
+  /**
+   * `fn` stores into, or hands a writing callee, memory it allocated, which
+   * counts as `rootWritten` once `rootAliased` holds too.
+   */
+  freshWritten: boolean
+  /**
+   * `fn` puts memory the root reaches into memory it allocated (a store, a
+   * literal, or a callee that keeps it), so a write to the latter may be a
+   * write to what the root reaches.
+   */
+  rootAliased: boolean
 
   constructor(
     program: CheckedProgram,
@@ -588,6 +606,8 @@ class RegionWalk {
     this.task = task
     this.sites = sites
     this.rootWritten = false
+    this.freshWritten = false
+    this.rootAliased = false
     this.spawnArrows = []
     this.arrowArgs = []
     this.indirect = []
@@ -627,7 +647,7 @@ class RegionWalk {
       this.changed = this.changed || origin !== ORIGIN_NONE
       return
     }
-    const joined = joinOrigin(this.localOrigins[at], origin)
+    const joined = this.join(this.localOrigins[at], origin)
     if (joined !== this.localOrigins[at]) {
       this.localOrigins[at] = joined
       this.changed = true
@@ -642,7 +662,7 @@ class RegionWalk {
       this.changed = true
       return
     }
-    const joined = joinOrigin(this.arrowOrigins[at], origin)
+    const joined = this.join(this.arrowOrigins[at], origin)
     if (joined !== this.arrowOrigins[at]) {
       this.arrowOrigins[at] = joined
       this.changed = true
@@ -680,14 +700,16 @@ class RegionWalk {
       return out
     }
     if (kind === N_CONDITIONAL) {
-      return joinOrigin(this.origin(e.children[1]), this.origin(e.children[2]))
+      return this.join(this.origin(e.children[1]), this.origin(e.children[2]))
     }
     if (kind === N_BINARY) {
       if (isAssignmentOperator(e.text)) {
         return this.origin(e.children[1])
       }
       // `??`, `||` and `&&` answer an operand; `+` on strings a new string, or an operand.
-      const either = joinOrigin(this.origin(e.children[0]), this.origin(e.children[1]))
+      const left = this.origin(e.children[0])
+      const right = this.origin(e.children[1])
+      const either = e.text === "+" ? joinOrigin(left, right) : this.join(left, right)
       return e.text === "+" ? joinOrigin(ORIGIN_REGION, either) : either
     }
     if (kind === N_CALL) {
@@ -713,12 +735,12 @@ class RegionWalk {
     let named = false
     const own = this.paramNames.indexOf(local.name)
     if (own >= 0) {
-      out = joinOrigin(out, this.paramOrigins[own])
+      out = this.join(out, this.paramOrigins[own])
       named = true
     }
     const nested = this.arrowNames.indexOf(local.name)
     if (nested >= 0) {
-      out = joinOrigin(out, this.arrowOrigins[nested])
+      out = this.join(out, this.arrowOrigins[nested])
       named = true
     }
     return named || out !== ORIGIN_NONE ? out : ORIGIN_UNKNOWN
@@ -765,7 +787,7 @@ class RegionWalk {
         continue
       }
       // What a callback answers may be what the call answers (`map`, `pick(() => a.node)`).
-      out = joinOrigin(out, a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a))
+      out = this.joinHanded(out, a)
     }
     return out
   }
@@ -784,7 +806,7 @@ class RegionWalk {
     collectArrowReturns(body, values)
     let out = ORIGIN_SCALAR
     for (const value of values) {
-      out = joinOrigin(out, this.origin(value))
+      out = this.join(out, this.origin(value))
     }
     return out
   }
@@ -819,7 +841,7 @@ class RegionWalk {
           // the test and the store would leave the store unproven.
           const handedOrigin = this.origin(handed[i])
           if (i < seen.length) {
-            seen[i] = joinOrigin(seen[i], handedOrigin)
+            seen[i] = this.join(seen[i], handedOrigin)
           }
         }
       } else if (!this.indirect[a]) {
@@ -832,15 +854,63 @@ class RegionWalk {
     }
   }
 
+  /**
+   * A write into `holder`'s memory: memory the root reaches read back after
+   * it is not known to have existed before `enter`.
+   */
+  noteWrite(holder: i32): void {
+    if (mayReachRoot(holder)) {
+      this.rootWritten = true
+    } else if (holder === ORIGIN_REGION) {
+      this.freshWritten = true
+    }
+  }
+
+  /**
+   * `value`, of origin `o`, is put where `fn`'s own memory may keep it. A
+   * string has no slot to write through, so keeping one aliases nothing.
+   */
+  noteAlias(value: Node, o: i32): void {
+    if (mayReachRoot(o) && this.typeOf(value) !== T_STRING) {
+      this.rootAliased = true
+    }
+  }
+
+  /**
+   * `joinOrigin`, noting when memory the root may reach is folded into memory
+   * new in this `enter`: a value that may be either is an alias of the root.
+   */
+  join(a: i32, b: i32): i32 {
+    const out = joinOrigin(a, b)
+    if (out === ORIGIN_REGION && (mayReachRoot(a) || mayReachRoot(b))) {
+      this.rootAliased = true
+    }
+    return out
+  }
+
+  /**
+   * `join` with what the argument `a` hands: an arrow's result, or its own
+   * origin. A string cannot be written through, so handing one aliases nothing.
+   */
+  joinHanded(out: i32, a: Node): i32 {
+    if (a.kind === N_ARROW) {
+      return this.join(out, this.arrowResult(a))
+    }
+    const o = this.origin(a)
+    return this.typeOf(a) === T_STRING ? joinOrigin(out, o) : this.join(out, o)
+  }
+
+  /** Whether what `fn` reads off the root may be memory it allocated (`noteWrite`). */
+  rootMayBeNew(): boolean {
+    return this.rootWritten || (this.freshWritten && this.rootAliased)
+  }
+
   /** A store of `value`'s memory into `holder`'s, at `at`, which `what` describes. */
   store(holder: i32, value: i32, at: Node, what: string): void {
     if (value === ORIGIN_NONE || value === ORIGIN_SCALAR) {
       return
     }
-    if (mayBeRegion(holder)) {
-      // Memory the root reaches read back after this is not known to have existed before `enter`.
-      this.rootWritten = true
-    }
+    this.noteWrite(holder)
     if ((holder === ORIGIN_REGION || holder === ORIGIN_ROOT) && mayBeReleased(value)) {
       this.reportOuter(at, what)
     } else if (holder === ORIGIN_PARENT && mayBeReleased(value)) {
@@ -918,6 +988,7 @@ class RegionWalk {
       return
     }
     if (target.kind === N_MEMBER || target.kind === N_INDEX) {
+      this.noteAlias(value, stored)
       this.store(this.origin(target.children[0]), stored, node, storesText(this.program, value, target))
     }
   }
@@ -926,6 +997,7 @@ class RegionWalk {
     for (const child of node.children) {
       const value = child.kind === N_PROPERTY ? child.children[child.children.length - 1] : child
       const o = this.origin(value)
+      this.noteAlias(value, o)
       if (o !== ORIGIN_NONE && mayBeReleased(o)) {
         this.reportOuter(child, putsText(this.program, value))
       }
@@ -967,7 +1039,7 @@ class RegionWalk {
         sites.record(
           node,
           role === REGION_CHILD ||
-            (!this.rootWritten && args.length > 0 && outlivesChild(this.origin(args[0]))),
+            (!this.rootMayBeNew() && args.length > 0 && outlivesChild(this.origin(args[0]))),
           this.fn
         )
       }
@@ -991,7 +1063,7 @@ class RegionWalk {
     let around = seed
     for (const arg of handed) {
       const a = unwrapParens(arg)
-      around = joinOrigin(around, a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a))
+      around = this.joinHanded(around, a)
     }
     for (const arg of node.children[1].children) {
       const a = unwrapParens(arg)
@@ -1046,6 +1118,7 @@ class RegionWalk {
     if (method === "push" || method === "unshift" || method === "splice" || method === "fill") {
       for (const arg of node.children[1].children) {
         if (!isCopied(this.table, this.typeOf(arg))) {
+          this.noteAlias(arg, this.origin(arg))
           this.store(holder, this.origin(arg), node, storesText(this.program, arg, receiver))
         }
       }
@@ -1078,8 +1151,13 @@ class RegionWalk {
         continue
       }
       const arg = i < handed.length ? handed[i] : node
-      if (pp !== null && (pp.writesReach || pp.polluted) && mayBeRegion(o)) {
-        this.rootWritten = true
+      // A string is never written through, whatever the callee does with it.
+      if (pp !== null && (pp.writesReach || pp.polluted) && this.typeOf(arg) !== T_STRING) {
+        this.noteWrite(o)
+      }
+      if (pp === null || pp.captured || pp.keptInThis || pp.polluted) {
+        // A callee that keeps it may keep it in memory `fn` allocated.
+        this.noteAlias(arg, o)
       }
       if (pp === null) {
         // A `string` has no pointer facts, so a constructor is taken to keep it.
