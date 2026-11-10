@@ -14042,6 +14042,46 @@ if (dealtHere("arrayChecks")) {
     }
   }
 
+  // ---- The array methods: one instantiation, and slice's range ---------------------
+  // `xs.map(double)` is checked as a call of `std/array`'s `map` template, so it
+  // and `map(xs, double)` written by hand are one instantiation, defined once,
+  // whose loop calls `double` directly: there is no call through a pointer. An
+  // array `slice` outside `0 <= start <= end <= length` panics with string
+  // `slice`'s words where JavaScript would clamp, after the line before it.
+  if (!only || "arr_map_template".includes(only)) {
+    const ll = path.join(buildDir, "arr_map_template.ll")
+    if (fs.existsSync(ll)) {
+      const ir = fs.readFileSync(ll, "utf8")
+      const instance = "@nish.map$i32$i32$fn.6.double"
+      const defines = ir.split("\n").filter((l) => l.startsWith("define ") && l.includes(`${instance}(`))
+      const calls = ir.split(`call %struct.nish_array* ${instance}(`).length - 1
+      const indirect = /call [^@\n]*%[\w.$]+\(/.test(ir)
+      check(
+        "arr_map_template: `xs.map(double)` and `map(xs, double)` call one instance, which calls `double` directly",
+        defines.length === 1 && calls === 2 && !indirect && ir.includes("call i32 @double$("),
+        `defines ${defines.length}, calls ${calls}, indirect ${indirect}`
+      )
+    }
+  }
+  if (!only || "arr_slice_bounds".includes(only)) {
+    const name = "arr_slice_bounds"
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (fs.existsSync(ll)) {
+      const exe = path.join(buildDir, name)
+      const cc = linkNative(exe, ll, { libm: true })
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      const needle = "slice out of range: [2, 5) of length 3"
+      check(
+        `${name}: an in-range slice prints, then \`xs.slice(2, 5)\` of 3 exits 1 with "${needle}"`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(needle) &&
+          String(run.stdout).trim() === "1,2",
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
+
   // ---- Checked signed arithmetic ---------------------------------------------------
   // A signed `+ - *`, negation or step that leaves its type panics (exit 1) with Rust's
   // words instead of wrapping or being undefined. ovf_matrix pushes one operation over

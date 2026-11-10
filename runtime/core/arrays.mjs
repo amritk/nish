@@ -67,6 +67,28 @@ export function copyIn(v) {
 }
 
 /**
+ * `xs.slice(start, end)` as `nish --emit-ts` writes it: the native rule, where
+ * the range must satisfy `0 <= start <= end <= xs.length` and anything else
+ * panics, not JavaScript's, which counts a negative bound from the end and
+ * clamps the rest.
+ */
+export function sliceArray(a, start, end) {
+  const from = start === undefined ? 0 : toIndex(start);
+  const to = end === undefined ? a.length : toIndex(end);
+  if (!(from >= 0 && from <= to && to <= a.length)) panicSlice(from, to, a.length);
+  return a.slice(from, to);
+}
+
+/**
+ * The array `xs.map`, `xs.filter` or `xs.slice` answers, as the native one
+ * holds it: each record a fresh copy, as an array holds a record inline.
+ */
+export function copyRecords(a) {
+  for (let i = 0; i < a.length; i++) a[i] = copyIn(a[i]);
+  return a;
+}
+
+/**
  * `a[i] = v` from a generic body: as `setIdx`, but a record is written field
  * by field into the record already in the slot, as an inline element is.
  */

@@ -70,12 +70,13 @@ import {
   PAR_MAP_NEW,
   PAR_SPAWN,
 } from "./program"
-import { isSortModule, SORT_LOCAL } from "./std-modules"
+import { arrayMethodLocal, arrayMethodTemplates, isSortModule, SORT_LOCAL } from "./std-modules"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The method set, in the order the "supported:" message lists them. */
-const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill, sort"
+const ARRAY_METHODS: string =
+  "push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice"
 
 /**
  * `[a, b]`. An empty literal takes its type from context, since there is
@@ -510,20 +511,97 @@ const checkSort = (ctx: CheckContext, call: Node, access: Node, args: Node, scop
     )
     return T_ERROR
   }
-  const template = ctx.template(SORT_LOCAL)
+  return checkAsTemplateCall(ctx, call, access, args, SORT_LOCAL, scope)
+}
+
+/**
+ * `xs.m(args)` rewritten in place into the call `template(xs, args)` of the
+ * template imported under `local`, and checked as one: `sort` and the `std/array` methods all take this path.
+ */
+const checkAsTemplateCall = (
+  ctx: CheckContext,
+  call: Node,
+  access: Node,
+  args: Node,
+  local: string,
+  scope: Scope
+): i32 => {
+  const template = ctx.template(local)
   if (template === null) {
-    return ctx.errorType(call, "internal: `nish/sort` was not loaded for this `sort` call")
+    return ctx.errorType(call, `internal: the template \`${local}\` was not loaded for this \`${access.text}\` call`)
   }
   const name = new Node(N_IDENT, access.start, access.end)
   name.id = access.id
-  name.text = SORT_LOCAL
+  name.text = local
   const moved: Node[] = [access.children[0]]
   for (const arg of args.children) {
     moved.push(arg)
   }
   args.children = moved
+  // The arguments now begin with the receiver, so their span does too:
+  // `--emit-ts` writes a call back by splicing each changed child into its
+  // parent's span, and a receiver outside that span could not be placed.
+  args.start = access.children[0].start
   call.children[0] = name
   return checkGenericCall(ctx, call, template, scope)
+}
+
+/**
+ * How many parameters the callback `arg` is written with: an arrow's own, or
+ * the named top-level function's. `-1` when it is neither, which leaves the
+ * template's own refusal to say what is wrong with it.
+ */
+const callbackArity = (ctx: CheckContext, arg: Node, scope: Scope): i32 => {
+  const written = unwrapParens(arg)
+  if (written.kind === N_ARROW) {
+    return written.children[1].children.length
+  }
+  if (written.kind !== N_IDENT || scope.lookup(written.text) !== null) {
+    return -1
+  }
+  const bound = ctx.functionBindings.get(written.text)
+  const fn = bound !== null ? bound : ctx.signature(written.text)
+  return fn === null ? -1 : fn.writtenArity()
+}
+
+/**
+ * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)` and
+ * `xs.findIndex(f)`: a call of `std/array.ts`'s template of that name, or of
+ * its `<name>Indexed` twin when `f` takes the index too, so each callback is
+ * an instantiation that calls it directly. JavaScript passes a third
+ * argument, the array; Nish passes none, and a callback that asks for it is
+ * refused, since the receiver is already in hand. `thisArg` is refused as a
+ * second argument.
+ */
+const checkCallbackMethod = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {
+  const name = access.text
+  if (!checkBuiltinArity(ctx, call, name, args, 1)) {
+    return T_ERROR
+  }
+  const arity = callbackArity(ctx, args.children[0], scope)
+  if (arity > 2) {
+    ctx.error(
+      args.children[0],
+      `The callback of \`${name}\` takes ${arity} parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead`
+    )
+    return T_ERROR
+  }
+  const pick: i32 = arity === 2 ? 1 : 0
+  return checkAsTemplateCall(ctx, call, access, args, arrayMethodLocal(arrayMethodTemplates(name)[pick]), scope)
+}
+
+/**
+ * `xs.slice()`, `xs.slice(start)` and `xs.slice(start, end)`: a copy, by
+ * `std/array.ts`'s template for that many arguments, with string `slice`'s
+ * rule: a range outside `0 <= start <= end <= xs.length` panics.
+ */
+const checkArraySlice = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {
+  const count = args.children.length
+  if (count > 2) {
+    ctx.error(call, `\`slice\` on an array expects 0 to 2 arguments, got ${count}`)
+    return T_ERROR
+  }
+  return checkAsTemplateCall(ctx, call, access, args, arrayMethodLocal(arrayMethodTemplates("slice")[count]), scope)
 }
 
 /** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`, `a.set(b, at)`, `a.fill(v, from, to)`. */
@@ -547,6 +625,19 @@ export const checkArrayMethod = (
   }
   if (name === "sort") {
     return checkSort(ctx, call, access, args, scope)
+  }
+  if (name === "slice") {
+    return checkArraySlice(ctx, call, access, args, scope)
+  }
+  if (arrayMethodTemplates(name).length > 0) {
+    return checkCallbackMethod(ctx, call, access, args, scope)
+  }
+  if (name === "find") {
+    ctx.errorAtProperty(
+      access,
+      "`find` is not supported: TypeScript types its answer `T | undefined`, and Nish has no `undefined`, so a test of it would pass `tsc` and mean something else under Node; use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`"
+    )
+    return T_ERROR
   }
   if (name === "push" || name === "pop") {
     const alias = typedArraySpelling(ctx, access.children[0], scope)

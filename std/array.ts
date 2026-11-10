@@ -17,9 +17,11 @@
  * and `mapIndexed(xs, f)` when it takes two. `f` is a compile-time function
  * parameter, so each callback is an instantiation of its own whose body calls
  * it directly — there is no function pointer, and importing a template here
- * by name and calling it gives the same code as the method. Under Node and
- * `tsc` the methods are the platform's own `Array.prototype` methods, and
- * `slice` is the prelude's checked copy, so nothing here runs there.
+ * by name and calling it gives the same code as the method. Under Node,
+ * `--emit-ts` leaves `map`, `filter`, `some`, `every` and `findIndex` as the
+ * platform's own `Array.prototype` methods, writes `slice` as the runtime's
+ * checked `sliceArray`, and copies an answer that holds records inline with
+ * `copyRecords`, so nothing here runs there.
  *
  * **Same answers as Node.** Each walks the array from index 0 upward and
  * calls the callback once per element, in order, until the length it had when

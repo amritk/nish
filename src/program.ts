@@ -30,6 +30,7 @@ import {
   isJsonTypedModule,
   isMapExtrasModule,
   isMathModule,
+  isArrayModule,
   isSortModule,
   isSecretModule,
 } from "./std-modules"
@@ -1866,9 +1867,13 @@ export class CheckedProgram {
     this.jsonTypedLibrary = isJsonTypedModule(packageName, source.path)
     this.secretLibrary = isSecretModule(packageName, source.path)
     this.regionLibrary = isRegionModule(packageName, source.path)
-    // `std/sort.ts` is copied the same way: its only code is `sortWith`'s
-    // instantiations, one per comparator, which belong in the module that sorts.
-    this.mathLibrary = isMathModule(packageName, source.path) || isSortModule(packageName, source.path)
+    // `std/sort.ts` and `std/array.ts` are copied the same way: their only code
+    // is their templates' instantiations, one per callback, which belong in the
+    // module that calls them.
+    this.mathLibrary =
+      isMathModule(packageName, source.path) ||
+      isSortModule(packageName, source.path) ||
+      isArrayModule(packageName, source.path)
     this.usesArgv = false
     this.f64Mode = false
     this.guardShadows = -1

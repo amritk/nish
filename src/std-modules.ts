@@ -239,6 +239,57 @@ export const FLOAT_REM_LOCAL: string = "%"
 export const isSortModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(SORT_SPECIFIER)
 
+/**
+ * `nish/array`: the loops `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`,
+ * `xs.every(f)`, `xs.findIndex(f)` and `xs.slice(a, b)` compile to. Like
+ * `nish/sort` a call of one of those methods is what loads it (the checker's
+ * `importArrayMethods`), and the call is checked as one to its template,
+ * instantiated per callback; a program may import the templates by name too.
+ */
+export const ARRAY_SPECIFIER: string = "nish/array"
+
+/**
+ * The templates of `nish/array` a method `name` may become: a callback method
+ * has one for a callback of one parameter and one, `<name>Indexed`, for two;
+ * `slice` has one per argument count. Empty for any other name.
+ */
+export const arrayMethodTemplates = (name: string): string[] => {
+  if (name === "map" || name === "filter" || name === "some" || name === "every" || name === "findIndex") {
+    return [name, `${name}Indexed`]
+  }
+  if (name === "slice") {
+    return ["sliceAll", "sliceFrom", "slice"]
+  }
+  return []
+}
+
+/** The prefix of the local name a `nish/array` template is imported under. */
+const ARRAY_LOCAL_PREFIX: string = "Array.prototype."
+
+/** The local name a `nish/array` template is imported under: dotted, so no declaration can take it. */
+export const arrayMethodLocal = (template: string): string => `${ARRAY_LOCAL_PREFIX}${template}`
+
+/**
+ * The array method a call of the template imported under `local` was written
+ * as (`map` for `Array.prototype.mapIndexed`), or `""` when `local` names no
+ * `nish/array` template.
+ */
+export const arrayMethodOfLocal = (local: string): string => {
+  if (!local.startsWith(ARRAY_LOCAL_PREFIX)) {
+    return ""
+  }
+  const template = local.slice(ARRAY_LOCAL_PREFIX.length)
+  if (template.startsWith("slice")) {
+    return "slice"
+  }
+  const name = template.endsWith("Indexed") ? template.slice(0, template.length - "Indexed".length) : template
+  return arrayMethodTemplates(name).length > 0 ? name : ""
+}
+
+/** Whether `name` in `packageName` is `std/array.ts`, which is copied into its user like `std/sort.ts`. */
+export const isArrayModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(ARRAY_SPECIFIER)
+
 /** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isSecretModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(SECRET_STD_SPECIFIER)

@@ -114,6 +114,9 @@ import { StringSet } from "./map"
 import { checkStorageUses, isStorageNew, recheckStorage, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
 import {
+  ARRAY_SPECIFIER,
+  arrayMethodLocal,
+  arrayMethodTemplates,
   COLLECTIONS_SPECIFIER,
   FLOAT_REM_LOCAL,
   MATH_SPECIFIER,
@@ -255,6 +258,7 @@ export class Checker {
     this.importCollections()
     this.importMath()
     this.importSort()
+    this.importArrayMethods()
     this.ctx.errored = false
   }
 
@@ -454,6 +458,30 @@ export class Checker {
     this.program.imports.push(
       new ImportBinding(SORT_SPECIFIER, "sortWith", SORT_LOCAL, this.program.file, this.program.file)
     )
+  }
+
+  /**
+   * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
+   * and `xs.slice(...)` are `std/array.ts`'s templates: a module that calls a
+   * method of one of those names is given an import of each template the call
+   * may become, under `arrayMethodLocal`'s dotted name, and `checkArrayMethod`
+   * checks the call as one to the template that fits. The scan is syntax, so a
+   * string's `slice` loads the module too; it costs nothing, because a template
+   * nothing instantiates emits nothing.
+   */
+  importArrayMethods(): void {
+    if (this.program.isMathLibrary()) {
+      return
+    }
+    const names = new StringSet()
+    scanArrayMethodCalls(this.program.file, names)
+    for (let i: i32 = 0; i < names.size(); i++) {
+      for (const template of arrayMethodTemplates(names.at(i))) {
+        this.program.imports.push(
+          new ImportBinding(ARRAY_SPECIFIER, template, arrayMethodLocal(template), this.program.file, this.program.file)
+        )
+      }
+    }
   }
 
   /**
@@ -3333,6 +3361,19 @@ const hasSortCall = (node: Node): boolean => {
     }
   }
   return false
+}
+
+/** The names of the `.map(...)`-like calls under `node` that `std/array.ts` answers (`importArrayMethods`). */
+const scanArrayMethodCalls = (node: Node, names: StringSet): void => {
+  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
+    const name = node.children[0].text
+    if (arrayMethodTemplates(name).length > 0) {
+      names.add(name)
+    }
+  }
+  for (const child of node.children) {
+    scanArrayMethodCalls(child, names)
+  }
 }
 
 /**

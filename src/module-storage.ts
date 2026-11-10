@@ -55,7 +55,7 @@ import {
   elementStride,
   inlineElementStruct,
 } from "./program"
-import { SORT_LOCAL } from "./std-modules"
+import { arrayMethodOfLocal, SORT_LOCAL } from "./std-modules"
 import { T_BOOL, T_U8, TypeTable, isHostWindow, isNumeric } from "./types"
 
 /** The most elements one storage may hold. */
@@ -482,15 +482,24 @@ const refuseMethod = (ctx: CheckContext, info: ConstInfo, node: Node, method: st
   )
 }
 
+/**
+ * The array method a call of the std template imported under `local` was
+ * written as (`xs.sort(cmp)` for `SORT_LOCAL`, `xs.map(f)` for
+ * `Array.prototype.mapIndexed`), or `""` when `local` is no such name.
+ */
+const rewrittenMethod = (local: string): string => (local === SORT_LOCAL ? "sort" : arrayMethodOfLocal(local))
+
 const checkStorageCall = (ctx: CheckContext, call: Node): void => {
   const callee = call.children[0]
   const args = call.children[1]
   let pushesCopy = false
-  if (callee.kind === N_IDENT && callee.text === SORT_LOCAL && args.children.length > 0) {
-    // `xs.sort(cmp)` was rewritten to the std sort over `xs` (`arrays.ts`).
+  const method = callee.kind === N_IDENT && args.children.length > 0 ? rewrittenMethod(callee.text) : ""
+  if (method !== "") {
+    // `xs.sort(cmp)`, `xs.map(f)` and the rest were rewritten to a std
+    // template called on `xs` (`arrays.ts`).
     const sorted = storageNamed(ctx, args.children[0])
     if (sorted !== null) {
-      refuseMethod(ctx, sorted, callee, "sort")
+      refuseMethod(ctx, sorted, callee, method)
       return
     }
   }
