@@ -5,9 +5,9 @@
    `cancel_after` cancels the task when it fires and is taken out when the task
    finishes first; a bounded descriptor wait fails when its time is up. A
    handle of a finished task, a stale one and `main`'s (0) are refused, and a
-   task that finishes while still queued is taken off the queue. A cancel
-   closes the descriptor a wait duplicated, and a handle whose node was
-   reused is refused without touching the new task. */
+   task that finishes while still queued is taken off the queue. A cancelled
+   descriptor wait leaves no registration that wakes a task, and a handle
+   whose node was reused is refused without touching the new task. */
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -123,23 +123,34 @@ int main(void) {
   nish_async_done(t);
   printf("a self-cancel: %d, answers %d, finished queued: flat %s, nothing left to run: %s\n", self, answer, flat(),
          nish_async_next() ? "no" : "yes");
-  /* 7. A cancel closes the duplicate a descriptor wait registered, and a
-     write that comes after it wakes no task. The duplicate takes the lowest
-     free descriptor, so that number is free again once the wait is gone. */
+  /* 7. A descriptor wait opens no descriptor, so a cancel has none to close,
+     and the registration it leaves armed wakes no task: not the cancelled
+     one, and not the task that reuses its node. The lowest free number stays
+     free while the wait is parked. */
   int lowest = dup(fds[0]);
   close(lowest);
   t = spawn(&h);
   prev = nish_async_enter(t);
   w = nish_async_wait_fd_within(fds[0], 0, -1);
   nish_async_leave(t, prev);
-  int held = fcntl(lowest, F_GETFD) != -1;
+  int opened = fcntl(lowest, F_GETFD) != -1 || errno != EBADF;
   printf("cancel a pipe reader: %d, it answers %d\n", nish_async_cancel(h), nish_async_poll(w));
-  int closed = fcntl(lowest, F_GETFD) == -1 && errno == EBADF;
   drain();
   nish_async_done(t);
+  int late = nish_async_stat(1);
+  void *again = spawn(&h);
+  prev = nish_async_enter(again);
+  uint64_t nap = nish_async_sleep(30);
+  nish_async_leave(again, prev);
   if (write(fds[1], "x", 1) != 1) return 3;
-  printf("the duplicate: held %d, closed after the cancel %d; a later write wakes a task: %s; flat %s\n", held,
-         closed, nish_async_next() ? "yes" : "no", flat());
+  void *woke = nish_async_next();
+  prev = nish_async_enter(woke);
+  int slept = nish_async_poll(nap);
+  nish_async_leave(woke, prev);
+  nish_async_done(woke);
+  printf("a wait opens a descriptor: %s; after a later write the node's new task is woken by its own timer: %s, "
+         "dropped: %d; flat %s\n",
+         opened ? "yes" : "no", woke == again && slept == 1 ? "yes" : "no", nish_async_stat(1) - late, flat());
 
   /* 8. A handle whose task finished and whose node was reused for a new task
      is stale: it names the same node with an older generation, and a cancel

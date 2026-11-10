@@ -42,11 +42,24 @@
  * they were made). It answers null when nothing is ready and nothing waits,
  * which ends the loop.
  *
- * **A descriptor wait owns a duplicate.** The descriptor is duplicated
- * (`F_DUPFD_CLOEXEC`) and the duplicate registered one-shot, so two tasks can
- * wait on one descriptor, and a program that closes the descriptor while a
- * task waits on it cannot have the registration answer for whatever the
- * number is reused for. The duplicate is closed when the wait fires.
+ * **A descriptor stays registered.** The executor registers the program's
+ * own descriptor with the kernel the first time a task waits on it and keeps
+ * that registration: a later wait re-arms it, one `epoll_ctl(EPOLL_CTL_MOD)`
+ * of a one-shot registration on Linux, one `kevent(EV_ADD | EV_ONESHOT)` and
+ * the `fstat` that finds a regular file on Darwin, and nothing is taken down
+ * when a wait fires, times out or is cancelled. The registration names the
+ * descriptor's number and the generation of its watch, not a wait, so a
+ * leftover one wakes no wait slot and no task node: an event that finds no
+ * wait parked on the descriptor is dropped. Each descriptor has a watch, the
+ * list of waits parked on it, so two tasks can wait on one descriptor and one
+ * event wakes every wait it answers. A program that closes a descriptor and
+ * reuses its number is found out by the next wait on that number: Linux's
+ * `EPOLL_CTL_MOD` answers `ENOENT` for a number that names another file, and
+ * on Darwin the device and inode `fstat` reads differ. The waits still parked
+ * on the old file then fail, and the watch moves a generation on, so an event
+ * the old file's registration still delivers is dropped and counted
+ * (`nish_async_stat(1)`). `nish_async_stat(4)` counts the kernel calls the
+ * waits made.
  *
  * **Regions.** Each spawned task owns a region (runtime-region.c), entered
  * whenever the task runs and freed when it finishes, so whatever a task
@@ -72,7 +85,7 @@
 typedef int nish_async_unused_in_wasm;
 #else
 #if defined(__linux__)
-/* glibc declares `clock_gettime`, `nanosleep` and `F_DUPFD_CLOEXEC` under a feature macro. */
+/* glibc declares `clock_gettime` and `nanosleep` under a feature macro. */
 #define _GNU_SOURCE
 #else
 #define _DARWIN_C_SOURCE
@@ -133,7 +146,9 @@ typedef struct nish_wait {
   uint32_t task_gen; /* ... and its generation when it waited */
   int32_t state;
   int32_t answer;
-  int32_t fd;        /* the registered duplicate, or -1 for a timer */
+  int32_t fd;        /* the descriptor it is parked on, or -1 */
+  int32_t dir;       /* a descriptor wait's direction: 0 readable, 1 writable */
+  uint32_t next_fd;  /* the slot + 1 of the next wait parked on `fd`, or 0 */
   int64_t deadline;  /* a timer's, in CLOCK_MONOTONIC nanoseconds */
   uint64_t seq;      /* a timer's place among equal deadlines */
   int32_t heap_at;   /* its place in the timer heap, or -1 */
@@ -168,8 +183,23 @@ static uint64_t nish_async_seq;
 static uint32_t *nish_async_deadlines;
 static uint32_t nish_async_deadline_cap;
 
+/* A descriptor's watch, indexed by its number. */
+typedef struct nish_watch {
+  uint32_t gen;     /* moves on each time the number is found naming another file */
+  uint32_t waiters; /* the slot + 1 of the first wait parked on it, or 0 */
+#if defined(__linux__)
+  uint32_t added;   /* the kernel holds a registration for it */
+#else
+  uint64_t dev;     /* the file the parked waits wait on */
+  uint64_t ino;
+#endif
+} nish_watch;
+
 static int nish_async_poller = -1;
-static uint32_t nish_async_fd_waits;
+static uint32_t nish_async_fd_waits; /* waits parked on a descriptor */
+static nish_watch *nish_async_watches;
+static uint32_t nish_async_watch_cap;
+static int32_t nish_async_calls; /* kernel calls made to register or re-arm */
 
 static int32_t nish_async_allocated;
 static int32_t nish_async_late;
@@ -357,6 +387,8 @@ static uint32_t nish_async_wait_new(void) {
   w->state = NISH_WAIT_PENDING;
   w->answer = 0;
   w->fd = -1;
+  w->dir = 0;
+  w->next_fd = 0;
   w->deadline = 0;
   w->seq = 0;
   w->heap_at = -1;
@@ -445,6 +477,18 @@ static nish_task *nish_async_task_at(uint32_t index, uint32_t gen) {
 
 static void nish_async_cancel_task(nish_task *t);
 
+/* Take the wait in `slot` off its descriptor's list. Its registration stays:
+   an event it still delivers finds no wait and is dropped. */
+static void nish_async_unpark(uint32_t slot) {
+  nish_wait *w = &nish_async_waits[slot];
+  uint32_t *at = &nish_async_watches[w->fd].waiters;
+  while (*at && *at != slot + 1) at = &nish_async_waits[*at - 1].next_fd;
+  if (*at) *at = w->next_fd;
+  w->fd = -1;
+  w->next_fd = 0;
+  nish_async_fd_waits--;
+}
+
 /* The wait in `slot` completed with `answer`: queue its task, or drop it when
    the task it was made for has finished. A task's deadline cancels the task
    instead. */
@@ -452,14 +496,7 @@ static void nish_async_fire(uint32_t slot, int32_t answer) {
   nish_wait *w = &nish_async_waits[slot];
   if (w->state != NISH_WAIT_PENDING) return;
   nish_async_heap_remove(slot);
-  if (w->fd >= 0) {
-#if defined(__linux__)
-    epoll_ctl(nish_async_poller, EPOLL_CTL_DEL, w->fd, NULL);
-#endif
-    close(w->fd);
-    w->fd = -1;
-    nish_async_fd_waits--;
-  }
+  if (w->fd >= 0) nish_async_unpark(slot);
   w->state = NISH_WAIT_FIRED;
   w->answer = answer;
   nish_task *t = nish_async_task_at(w->task, w->task_gen);
@@ -557,53 +594,138 @@ int32_t nish_async_cancel_after(int64_t handle, int32_t ms) {
   return 1;
 }
 
+/* ---- Descriptor watches ------------------------------------------------- */
+
+static void nish_async_poller_open(void) {
+  if (nish_async_poller >= 0) return;
+#if defined(__linux__)
+  nish_async_poller = epoll_create1(EPOLL_CLOEXEC);
+#else
+  nish_async_poller = kqueue();
+  if (nish_async_poller >= 0) fcntl(nish_async_poller, F_SETFD, FD_CLOEXEC);
+#endif
+  if (nish_async_poller < 0) nish_async_die(NISH_ASYNC_POLLER);
+}
+
+/* The watch of `fd`, the table grown to hold it. */
+static nish_watch *nish_async_watch(int32_t fd) {
+  while ((uint32_t)fd >= nish_async_watch_cap) {
+    uint32_t had = nish_async_watch_cap;
+    nish_async_watches = nish_async_grow(nish_async_watches, &nish_async_watch_cap, sizeof *nish_async_watches);
+    memset(nish_async_watches + had, 0, (size_t)(nish_async_watch_cap - had) * sizeof *nish_async_watches);
+  }
+  return &nish_async_watches[fd];
+}
+
+/* The directions the waits parked on `fd` want: bit 0 readable, bit 1 writable. */
+static uint32_t nish_async_wants(int32_t fd) {
+  uint32_t want = 0;
+  for (uint32_t s = nish_async_watches[fd].waiters; s; s = nish_async_waits[s - 1].next_fd)
+    want |= 1u << nish_async_waits[s - 1].dir;
+  return want;
+}
+
+/* The number `fd` no longer names the file its parked waits wait on: fail
+   them, and move the watch a generation on so its old registration's events
+   are dropped. */
+static void nish_async_watch_lost(int32_t fd) {
+  nish_watch *x = &nish_async_watches[fd];
+  while (x->waiters) nish_async_fire(x->waiters - 1, 0);
+  x->gen++;
+#if defined(__linux__)
+  x->added = 0;
+#endif
+}
+
+/* Arm `fd`'s registration for `want` (bit 0 readable, bit 1 writable), one
+   event, under its watch's generation: 0, or the errno the kernel answered. */
+static int nish_async_arm(int32_t fd, uint32_t want) {
+  nish_watch *x = &nish_async_watches[fd];
+  uint64_t data = ((uint64_t)x->gen << 32) | (uint32_t)fd;
+#if defined(__linux__)
+  struct epoll_event ev;
+  memset(&ev, 0, sizeof ev);
+  ev.events = (want & 1 ? EPOLLIN : 0) | (want & 2 ? EPOLLOUT : 0) | EPOLLONESHOT;
+  ev.data.u64 = data;
+  nish_async_calls++;
+  if (epoll_ctl(nish_async_poller, x->added ? EPOLL_CTL_MOD : EPOLL_CTL_ADD, fd, &ev) == 0) {
+    x->added = 1;
+    return 0;
+  }
+  /* Added under a generation the watch has moved past: re-arm that one. */
+  if (!x->added && errno == EEXIST) {
+    x->added = 1;
+    return nish_async_arm(fd, want);
+  }
+  return errno;
+#else
+  /* A filter per direction: re-adding one armed already re-arms it. */
+  struct kevent ev;
+  EV_SET(&ev, (uintptr_t)fd, want & 2 ? EVFILT_WRITE : EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0,
+         (void *)(uintptr_t)data);
+  nish_async_calls++;
+  return kevent(nish_async_poller, &ev, 1, NULL, 0, NULL) == 0 ? 0 : errno;
+#endif
+}
+
+/* The kernel says `fd` is ready in the directions `got` (registered under
+   `gen`): wake each wait parked on it that those answer. */
+static void nish_async_ready(uint64_t data, uint32_t got) {
+  int32_t fd = (int32_t)(data & 0x7fffffffu);
+  if ((uint32_t)fd >= nish_async_watch_cap || nish_async_watches[fd].gen != (uint32_t)(data >> 32)) {
+    nish_async_late++;
+    return;
+  }
+  uint32_t next;
+  for (uint32_t s = nish_async_watches[fd].waiters; s; s = next) {
+    next = nish_async_waits[s - 1].next_fd;
+    if (got & (1u << nish_async_waits[s - 1].dir)) nish_async_fire(s - 1, 1);
+  }
+#if defined(__linux__)
+  /* The event disarmed the one registration: re-arm it for the waits left. */
+  if (nish_async_watches[fd].waiters && nish_async_arm(fd, nish_async_wants(fd)))
+    nish_async_watch_lost(fd);
+#endif
+}
+
 /* A wait for `fd` to be readable (`dir` 0) or writable (`dir` 1). */
 uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
   uint32_t slot = nish_async_wait_new();
   if (fd < 0 || (nish_async_current->flags & NISH_TASK_CANCELLED)) return nish_async_fired_now(slot, 0);
-  if (nish_async_poller < 0) {
+  nish_async_poller_open();
+  nish_watch *x = nish_async_watch(fd);
+  uint32_t want = 1u << (dir ? 1 : 0);
 #if defined(__linux__)
-    nish_async_poller = epoll_create1(EPOLL_CLOEXEC);
-#else
-    nish_async_poller = kqueue();
-    if (nish_async_poller >= 0) fcntl(nish_async_poller, F_SETFD, FD_CLOEXEC);
-#endif
-    if (nish_async_poller < 0) nish_async_die(NISH_ASYNC_POLLER);
+  int err = nish_async_arm(fd, nish_async_wants(fd) | want);
+  if (err == ENOENT) {
+    /* The number names another file than the one registered: closed and reused. */
+    nish_async_watch_lost(fd);
+    err = nish_async_arm(fd, want);
   }
-  int dup = fcntl(fd, F_DUPFD_CLOEXEC, 0);
-  if (dup < 0) return nish_async_fired_now(slot, 0);
-#if !defined(__linux__)
+  /* epoll refuses a regular file (EPERM), which never blocks: it is ready. */
+  if (err) return nish_async_fired_now(slot, err == EPERM);
+#else
   /* kqueue accepts a regular file and reports it readable only while it has
-     bytes left, so one at its end would park the task for ever; epoll refuses
-     it below. A regular file never blocks: it is ready, on both kernels. */
+     bytes left, so one at its end would park the task for ever. A regular
+     file never blocks: it is ready, on both kernels. */
   struct stat st;
-  if (fstat(dup, &st) == 0 && S_ISREG(st.st_mode)) {
-    close(dup);
-    return nish_async_fired_now(slot, 1);
-  }
+  nish_async_calls++;
+  if (fstat(fd, &st) != 0) return nish_async_fired_now(slot, 0);
+  if (S_ISREG(st.st_mode)) return nish_async_fired_now(slot, 1);
+  if (x->waiters && (x->dev != (uint64_t)st.st_dev || x->ino != (uint64_t)st.st_ino)) nish_async_watch_lost(fd);
+  x->dev = (uint64_t)st.st_dev;
+  x->ino = (uint64_t)st.st_ino;
+  if (nish_async_arm(fd, want)) return nish_async_fired_now(slot, 0);
 #endif
-  uint64_t token = nish_async_token(slot);
-#if defined(__linux__)
-  struct epoll_event ev;
-  memset(&ev, 0, sizeof ev);
-  ev.events = (dir ? EPOLLOUT : EPOLLIN) | EPOLLONESHOT;
-  ev.data.u64 = token;
-  int rc = epoll_ctl(nish_async_poller, EPOLL_CTL_ADD, dup, &ev);
-#else
-  struct kevent ev;
-  EV_SET(&ev, (uintptr_t)dup, dir ? EVFILT_WRITE : EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0,
-         (void *)(uintptr_t)token);
-  int rc = kevent(nish_async_poller, &ev, 1, NULL, 0, NULL);
-#endif
-  if (rc < 0) {
-    /* epoll refuses a regular file (EPERM), which never blocks: it is ready. */
-    int ready = errno == EPERM;
-    close(dup);
-    return nish_async_fired_now(slot, ready);
-  }
-  nish_async_waits[slot].fd = dup;
+  nish_wait *w = &nish_async_waits[slot];
+  w->fd = fd;
+  w->dir = dir ? 1 : 0;
+  /* At the list's end, so the waits on a descriptor wake in the order made. */
+  uint32_t *at = &x->waiters;
+  while (*at) at = &nish_async_waits[*at - 1].next_fd;
+  *at = slot + 1;
   nish_async_fd_waits++;
-  return token;
+  return nish_async_token(slot);
 }
 
 /* A descriptor wait that fails (answers false) when `ms` milliseconds pass
@@ -664,12 +786,9 @@ static void nish_async_block(void) {
        failure would recur on every call and spin, so it ends the program. */
     if (n < 0 && errno != EINTR) nish_async_die(NISH_ASYNC_WAIT);
     for (int i = 0; i < n; i++) {
-      int64_t slot = nish_async_slot_of(evs[i].data.u64);
-      if (slot < 0) {
-        nish_async_late++;
-        continue;
-      }
-      nish_async_fire((uint32_t)slot, 1);
+      uint32_t got = evs[i].events;
+      uint32_t err = got & (EPOLLERR | EPOLLHUP) ? 3u : 0u;
+      nish_async_ready(evs[i].data.u64, (got & EPOLLIN ? 1u : 0u) | (got & EPOLLOUT ? 2u : 0u) | err);
     }
 #else
     struct kevent evs[64];
@@ -682,14 +801,8 @@ static void nish_async_block(void) {
     }
     int n = kevent(nish_async_poller, NULL, 0, evs, 64, tp);
     if (n < 0 && errno != EINTR) nish_async_die(NISH_ASYNC_WAIT);
-    for (int i = 0; i < n; i++) {
-      int64_t slot = nish_async_slot_of((uint64_t)(uintptr_t)evs[i].udata);
-      if (slot < 0) {
-        nish_async_late++;
-        continue;
-      }
-      nish_async_fire((uint32_t)slot, 1);
-    }
+    for (int i = 0; i < n; i++)
+      nish_async_ready((uint64_t)(uintptr_t)evs[i].udata, evs[i].filter == EVFILT_WRITE ? 2u : 1u);
 #endif
   } else if (wait_ns > 0) {
     struct timespec ts;
@@ -727,13 +840,17 @@ void *nish_async_copy_str(const void *s) {
 }
 
 /* 0: nodes the slabs ever allocated; 1: completions dropped because their task
-   had finished; 2: spawned tasks not yet finished, each of which holds a region;
-   3: timers in the heap (sleeps, bounded waits and armed deadlines). */
+   had finished, or because the descriptor's number had since been found naming
+   another file; 2: spawned tasks not yet finished, each of which holds a region;
+   3: timers in the heap (sleeps, bounded waits and armed deadlines); 4: kernel
+   calls the descriptor waits made to register or re-arm (and, on Darwin, to
+   `fstat`). */
 int32_t nish_async_stat(int32_t which) {
   if (which == 0) return nish_async_allocated;
   if (which == 1) return nish_async_late;
   if (which == 2) return nish_async_live;
   if (which == 3) return (int32_t)nish_async_heap_len;
+  if (which == 4) return nish_async_calls;
   return -1;
 }
 

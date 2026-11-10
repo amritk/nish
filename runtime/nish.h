@@ -172,9 +172,13 @@ void nish_region_adopt(uint64_t r);
  * writable) and `nish_async_sleep` answer a token `nish_async_poll` reads: -1
  * pending, 1 ready, 0 failed. `nish_async_next` answers the next task to
  * resume, blocking in the kernel until one is ready, or null when nothing is
- * ready and nothing waits. `nish_async_stat` answers 0: nodes allocated, 1:
- * completions dropped because their task had finished, 2: spawned tasks not yet
- * finished.
+ * ready and nothing waits. A waited descriptor stays registered with the
+ * executor: a later wait on it re-arms the registration, and the next wait on a
+ * number closed and reused fails the waits still parked on the old file.
+ * `nish_async_stat` answers 0: nodes allocated, 1: completions dropped because
+ * their task had finished or their descriptor's number was reused, 2: spawned
+ * tasks not yet finished, 3: timers pending, 4: kernel calls the descriptor
+ * waits made.
  *
  * Cancellation is cooperative. A task's handle (`nish_async_task_id`) is its
  * slot and generation, and `main`'s is 0. `nish_async_cancel` flags a task and

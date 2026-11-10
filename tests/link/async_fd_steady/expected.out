@@ -1,0 +1,13 @@
+woken: 1000 of 1000
+kernel calls per wait: as budgeted (1)
+waits that held a descriptor open: 0
+two readers woken by one write: yes
+the writer woken first: yes, the reader still parked: -1
+the reader woken by the write: yes
+the bounded read times out: 0
+bytes while nothing waits: woken by the timer, dropped 0
+the next wait sees them: 1
+the bounded write on a full socket times out: 0
+after the peer reads, writable: 1
+an orphan wait: dropped 1, the reused node woken by its own timer: yes
+then nothing waits: yes

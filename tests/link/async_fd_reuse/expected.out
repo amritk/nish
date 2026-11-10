@@ -1,5 +1,11 @@
 the number is reused: yes
 woken by: the timer
 the wait: -1
-after a write to the pair: 1
+a new wait on the number fails the old one: 0
+queued by the failed wait: yes
+the new wait sees the pipe: 1
+then nothing waits: yes
+the old wait failed: yes
+bytes for the old file: woken by the timer, the new wait -1, dropped 1
+bytes for the pipe: 1
 then nothing waits: yes
