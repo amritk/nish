@@ -1037,14 +1037,14 @@ function regionCallFindings(programs: CheckedProgram[], table: TypeTable, facts:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: scopeName
-  calls: ChildSites.enter ChildSites.indexOf ChildSites.misplaced ChildSites.plainHandle FactsTable.get FreshResults.resultRef RegionFinding.constructor StringSet.constructor arenaStateMessage childPlacementMessage enterResultMessage insideRegion isChildMaker isCopied isRegionMaker nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat noFactsMessage notFreshMessage reachesThreads regionRoleOf threadsMessage walkFindings
+  calls: ChildSites.enter ChildSites.indexOf ChildSites.misplaced ChildSites.plainHandle FactsTable.get FreshResults.builderRef RegionFinding.constructor StringSet.constructor arenaStateMessage childPlacementMessage enterResultMessage insideRegion isChildMaker isCopied isRegionMaker nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat noFactsMessage notFreshMessage reachesThreads regionRoleOf threadsMessage walkFindings
   pointer programs: size=0 writesThrough=true captured=true passedTo=walkFindings#1
   pointer table: size=96 writesThrough=true captured=true passedTo=isCopied#0 enterResultMessage#1 walkFindings#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=ChildSites.misplaced#1 FactsTable.get#0 reachesThreads#0 walkFindings#3
   pointer program: size=704 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 ChildSites.plainHandle#1
   pointer site: size=40 writesThrough=true captured=true passedTo=ChildSites.indexOf#1 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 ChildSites.plainHandle#2
   pointer sig: size=176 writesThrough=false captured=false passedTo=regionRoleOf#0
-  pointer freshResults: size=40 writesThrough=true captured=false passedTo=FreshResults.resultRef#0 walkFindings#5
+  pointer freshResults: size=40 writesThrough=true captured=false passedTo=FreshResults.builderRef#0 walkFindings#5
   pointer sites: size=64 writesThrough=true captured=true passedTo=ChildSites.indexOf#0 ChildSites.misplaced#0 ChildSites.plainHandle#0 ChildSites.enter#0 walkFindings#11
   stackSites=3 stackLocals=0
   local -43:9 out: RegionFinding[] (const)
@@ -1078,7 +1078,7 @@ function regionCallFindings(programs: CheckedProgram[], table: TypeTable, facts:
   callee -13:47 enterResultMessage -> @enterResultMessage
   callee -11:7 isRegionMaker -> @isRegionMaker
   local -10:11 ref: string (const)
-  callee -10:17 FreshResults.resultRef -> @FreshResults.resultRef
+  callee -10:17 FreshResults.builderRef -> @FreshResults.builderRef
   callee -8:16 new RegionFinding -> @RegionFinding.constructor
   callee -8:49 notFreshMessage -> @notFreshMessage
   local -5:9 names: string[] (const)

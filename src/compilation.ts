@@ -2496,7 +2496,6 @@ export class Compilation {
       programs.push(unit.checker.program)
     }
     const fresh = new FreshResults(programs, this.table, facts)
-    fresh.fieldUses = true
     const scopeName = scopeSymbol(programs)
     const table = this.table
     // A `child` call is judged after every `enter` walk has said where it is made.

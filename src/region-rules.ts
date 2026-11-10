@@ -1339,7 +1339,7 @@ export const regionCallFindings = (
     out.push(new RegionFinding(program, site, enterResultMessage(fn, table)))
   }
   if (isRegionMaker(role)) {
-    const ref = freshResults.resultRef(fn)
+    const ref = freshResults.builderRef(fn)
     if (ref.length > 0) {
       out.push(new RegionFinding(program, site, notFreshMessage(fn, ref, child)))
     }

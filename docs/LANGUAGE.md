@@ -8541,7 +8541,11 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   and `reject_region_child_root_listed`, where it is read back out of a list
   the child's `f` made). The child's `f` may keep the parent's memory in the
   root it allocated, by a field or element store or a `push` onto that
-  root's own array (`tests/cases/region_child_builder_list`).
+  root's own array (`tests/cases/region_child_builder_list`). Only `f`'s
+  own body may: a function it calls that keeps what it is handed in the
+  memory it answers makes that answer NL2614, under `regionWith` as under
+  `childWith` (`reject_region_helper_keeps_arg`,
+  `reject_region_child_helper_keeps_arg`).
   A plain `region()` made inside `enter` stays independent of the region
   entered, and keeps the rules above.
 - **What the root reaches counts as older than this `enter` only while `f`

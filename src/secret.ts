@@ -2167,7 +2167,6 @@ class FreshJudge {
   program: CheckedProgram
   table: TypeTable
   body: Node
-  mode: i32
   /** The function whose result is judged, for the quotes; "" at a `secret(...)`. */
   owner: string
   /** The `secret(...)` argument the needs are reported at, and the copy its diagnostic suggests. */
@@ -2180,6 +2179,7 @@ class FreshJudge {
   needs: SecretNeed[]
   judged: Local[]
   verdicts: boolean[]
+  mode: i32
   /**
    * Whether a use of a field of the local that holds a reference, `h.seen`
    * in `h.seen.push(r)`, is judged by the rules for a use of the local,
@@ -2427,12 +2427,6 @@ export class FreshResults {
   summaries: FreshSummary[]
   /** How many of `summaries` the fixpoint has settled. */
   settled: i32
-  /**
-   * Whether a field of the judged local that holds a reference is judged as
-   * the local is (`FreshJudge.fieldUses`). The region rules ask this, never
-   * `secret(v)`.
-   */
-  fieldUses: boolean
 
   constructor(programs: CheckedProgram[], table: TypeTable, facts: FactsTable) {
     this.programs = programs
@@ -2440,7 +2434,6 @@ export class FreshResults {
     this.facts = facts
     this.summaries = []
     this.settled = 0
-    this.fieldUses = false
   }
 
   /** "" when `need` holds, or the second reference it found. */
@@ -2488,6 +2481,27 @@ export class FreshResults {
     return start.ref
   }
 
+  /**
+   * `resultRef` for the function a region call runs: its own body is judged
+   * with `FreshJudge.fieldUses`, so it may keep what it is handed in the root
+   * it allocates, where the region walk checks what it stores. A callee is
+   * judged as `resultRef` judges it, since the walk trusts a fresh callee's
+   * answer and never sees what the callee stored into it.
+   */
+  builderRef(sig: FunctionSig): string {
+    const own = this.summarise(sig, true)
+    if (own.ref.length > 0) {
+      return own.ref
+    }
+    for (const callee of own.calls) {
+      const ref = this.resultRef(callee)
+      if (ref.length > 0) {
+        return ref
+      }
+    }
+    return ""
+  }
+
   /** `sig`'s summary, judging its body the first time it is asked for. */
   summaryOf(sig: FunctionSig): FreshSummary {
     for (const summary of this.summaries) {
@@ -2495,12 +2509,13 @@ export class FreshResults {
         return summary
       }
     }
-    const summary = this.summarise(sig)
+    const summary = this.summarise(sig, false)
     this.summaries.push(summary)
     return summary
   }
 
-  summarise(sig: FunctionSig): FreshSummary {
+  /** `sig`'s own body judged, `fieldUses` as `FreshJudge.fieldUses`. */
+  summarise(sig: FunctionSig, fieldUses: boolean): FreshSummary {
     const out = new FreshSummary(sig.name)
     const role = secretRoleOf(sig)
     const instance = sig.instance
@@ -2532,7 +2547,7 @@ export class FreshResults {
       program.enterInstance(instance)
     }
     const judge = new FreshJudge(program, this.table, body, FRESH_RETURN, sig.sourceName, body)
-    judge.fieldUses = this.fieldUses
+    judge.fieldUses = fieldUses
     let fresh = true
     if (body.kind === N_BLOCK) {
       const values: Node[] = []

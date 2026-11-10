@@ -1,0 +1,1 @@
+answers the region's root, which must be memory it allocated, and `(g) => ...` may not: `w.items.push(g)` (line 20, in `mk`)
