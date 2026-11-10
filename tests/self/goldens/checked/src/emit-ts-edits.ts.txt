@@ -326,16 +326,17 @@ function observe(walk: Walk, node: Node): string -> @observe
 function mathCallee(walk: Walk, node: Node): string -> @mathCallee
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.missType
-  calls: Walk.mathName Walk.missType listedWord nish_panic_index nish_str_eq
+  calls: Walk.mathName Walk.missType listedWord nish_panic_index nish_str_concat nish_str_eq
   pointer walk: size=240 writesThrough=true captured=false passedTo=Walk.missType#0 Walk.mathName#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 head: Node (const)
   local +1:9 spelled: boolean (const)
-  local +10:9 sig: FunctionSig | null (const)
-  callee +14:7 Walk.missType -> @Walk.missType
-  callee +18:10 listedWord -> @listedWord
-  callee +18:52 Walk.mathName -> @Walk.mathName
+  callee +6:7 listedWord -> @listedWord
+  local +11:9 sig: FunctionSig | null (const)
+  callee +15:7 Walk.missType -> @Walk.missType
+  callee +19:10 listedWord -> @listedWord
+  callee +19:52 Walk.mathName -> @Walk.mathName
 function isLazyCall(call: Node): boolean -> @isLazyCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
