@@ -147,8 +147,15 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   landing page's hero. All of it stops under `prefers-reduced-motion`, and a
   colour change re-measures the contrast figures in the file's head.
 - [`site.js`](site/site.js) builds the hero into the empty
-  `<div data-nish-hero></div>` at the top of [the guide's first
-  page](guide/index.md) and tracks the pointer for the cards. The host stays
+  `<div data-nish-hero></div>` at the top of [the landing
+  page](guide/index.md) and tracks the pointer for the cards.
+- The landing page is the site's home, not a page of the guide: its route,
+  first under `/` in `scalar.config.json` and out of the sidebar, sets a
+  `layout` that drops the sidebar, the outline, the page actions and the
+  previous/next links and takes the full width, and `theme.css` lays out
+  what is left — a centred column, a lead paragraph and centred section
+  headings, with the hero and the card grids wider. Keep it a home page:
+  what it says in detail belongs on a guide page it links. The host stays
   empty in the Markdown so that GitHub shows nothing in its place; nothing a
   reader needs may live only in the hero.
 - The icons beside the sidebar's groups and the header's links are the `icon`
