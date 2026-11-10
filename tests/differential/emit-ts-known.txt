@@ -71,6 +71,9 @@ cases/os_spawn host  # differ: exit 0 vs 1: throw new Error( [spawn]
 cases/os_wait host  # differ: exit 0 vs 1: throw new Error( [spawn]
 cases/perf_rng_counter range  # differ: exit 1 vs 0
 cases/region_cache refused  # refused: NL4015 under --emit-ts
+cases/region_child_chain refused  # refused: NL4015 under --emit-ts
+cases/region_child_keep refused  # refused: NL4015 under --emit-ts
+cases/region_child_map refused  # refused: NL4015 under --emit-ts
 cases/region_copied_churn refused  # refused: NL4015 under --emit-ts
 cases/rng_entry_bitwise_panic range  # differ: exit 1 vs 0
 cases/rng_entry_panic range  # differ: exit 1 vs 0

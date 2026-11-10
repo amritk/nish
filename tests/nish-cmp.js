@@ -1141,7 +1141,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "exit",
-    changelog: "add parent/child regions",
+    changelog: "Add parent/child regions",
     why: "the program imports child or childWith from nish:region, which the 0.37.0 seed does not have, so only the candidate compiles it",
   })),
 ]
