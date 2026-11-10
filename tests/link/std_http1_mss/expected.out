@@ -2,11 +2,14 @@ PASS  accept: slot 0
 PASS  accept: loopback reports an MSS that holds a 3000-byte response and its head
 PASS  accept: socketMss is netMss of the slot's descriptor
 PASS  accept: the program's mss is left at 0
-PASS  order: an enc.mss left at HTTP_DEFAULT_MSS takes the socket's
+PASS  compressor: enc.mss starts at 0, unset
+PASS  order: an unset enc.mss takes the socket's
+PASS  order: a negative enc.mss counts as unset and takes the socket's
 PASS  socket: the request
 PASS  socket: respondEncoded
 PASS  socket: one segment at the socket's MSS, so not gzipped
 PASS  order: a set enc.mss wins over the socket's
+PASS  order: an enc.mss set to HTTP_DEFAULT_MSS still wins over the socket's
 PASS  order: a set conn.mss wins over enc.mss
 PASS  order: and over the socket's
 PASS  kept alive: the next request
@@ -21,4 +24,4 @@ PASS  restart: the program's mss back to 0
 PASS  restart: segmentMss falls to the default
 PASS  bare: socketMss 0
 PASS  bare: HTTP_DEFAULT_MSS
-std_http1_mss: 23 passed, 0 failed, 0 skipped
+std_http1_mss: 26 passed, 0 failed, 0 skipped

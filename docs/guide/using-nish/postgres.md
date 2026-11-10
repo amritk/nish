@@ -1026,6 +1026,25 @@ dials another. The server is sent no CancelRequest, so bound a slow statement
 with its `statement_timeout` as well. The constructor panics on a size outside 1..64, and
 `pgAsyncConnect` on a target that failed or a host name.
 
+A handler of [`nish/net/serve`](async-server.md#reaching-the-programs-state)
+reaches the pool the same way: written as an arrow in `main`, it captures
+`pool`, and each request's task claims, queries and releases, then answers
+with a cell of the result, which is the task's own memory:
+
+```ts
+return await serve(8080, router, new ServeLimits(), async (req: Request): Promise<Response> => {
+  const ticket: i32 = await pgAsyncClaim(pool)
+  if (ticket < 0) {
+    return new Response(503).text("no connection\n")
+  }
+  const params = new PgAsyncParams()
+  params.int(req.paramNumber(0))
+  const r = await pgAsyncQuery(pool, ticket, "select title from article where id = $1", params)
+  pgAsyncRelease(pool, ticket, r.reusable)
+  return r.ok() && r.rows > 0 ? new Response(200).text(r.text(0, 0)) : new Response(404)
+})
+```
+
 ## What it does not do
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), a CancelRequest

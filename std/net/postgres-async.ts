@@ -539,7 +539,9 @@ const pgAsyncStartup = async (conn: PgConnection, fd: i32): Promise<boolean> => 
     if (event === PG_FAILED) {
       return false
     }
-    if (event === PG_NEED_MORE) {
+    // A step that queued an answer (the SCRAM messages) writes it before it
+    // reads: the server says nothing more until it has that answer.
+    if (event === PG_NEED_MORE && conn.outputEnd() === conn.outputStart()) {
       const room: i32 = conn.inputRoom()
       const got: i32 = room > 0 ? netRead(fd, conn.inputBuffer(), conn.inputEnd(), room) : 0
       if (got === PG_ASYNC_AGAIN) {
