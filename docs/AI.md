@@ -2246,7 +2246,10 @@ answers `a` — the same order Node gives; the comparator is required (`a.sort()
 is refused, since JavaScript would compare strings), a readonly array and
 `process.argv` are refused, `a - b` panics on `i32` values a full range apart
 (compare with `a > b ? 1 : a < b ? -1 : 0` there), and the comparator may read the caller's `const` locals and parameters but not
-a `let`, as any arrow argument may. That is every array method there is. A
+a `let`, as any arrow argument may. `a.map(f)`, `a.filter(f)`, `a.some(f)`,
+`a.every(f)`, `a.findIndex(f)` and `a.slice(start, end)` answer as in JavaScript
+(a callback takes the element, and the index if it names two parameters). That is
+every array method there is. A
 window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),

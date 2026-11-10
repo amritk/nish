@@ -301,6 +301,13 @@ const ARRAY_LOCAL_PREFIX: string = "Array.prototype."
 /** The local name a `nish/array` template is imported under: dotted, so no declaration can take it. */
 export const arrayMethodLocal = (template: string): string => `${ARRAY_LOCAL_PREFIX}${template}`
 
+/**
+ * Whether an import under `local` is one the checker gave a module for an
+ * array-method call (`importArrayMethods`), not one the program wrote: no
+ * declaration can take a dotted name.
+ */
+export const isArrayMethodLocal = (local: string): boolean => local.startsWith(ARRAY_LOCAL_PREFIX)
+
 /** The suffix of a template for a callback of two parameters (`mapIndexed`). */
 const INDEXED_SUFFIX: string = "Indexed"
 
@@ -310,7 +317,7 @@ const INDEXED_SUFFIX: string = "Indexed"
  * `nish/array` template.
  */
 export const arrayMethodOfLocal = (local: string): string => {
-  if (!local.startsWith(ARRAY_LOCAL_PREFIX)) {
+  if (!isArrayMethodLocal(local)) {
     return ""
   }
   const template = local.substring(ARRAY_LOCAL_PREFIX.length)

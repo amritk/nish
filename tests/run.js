@@ -14087,6 +14087,23 @@ if (dealtHere("arrayChecks")) {
       )
     }
   }
+  if (!only || "arr_slice_saturate".includes(only)) {
+    const name = "arr_slice_saturate"
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (!fs.existsSync(ll)) {
+      check(`${name}: compiled to build/${name}.ll`, false, `missing ${ll}`)
+    } else {
+      const exe = path.join(buildDir, name)
+      const cc = linkNative(exe, ll, { libm: true })
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      const needle = "slice out of range: [-9223372036854775808, 9223372036854775807) of length 3"
+      check(
+        `${name}: \`xs.slice(-Infinity, 2^63)\` saturates both bounds and exits 1 with "${needle}"`,
+        run !== null && run.status === 1 && String(run.stderr).includes(needle) && String(run.stdout) === "",
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
 
   // ---- Checked signed arithmetic ---------------------------------------------------
   // A signed `+ - *`, negation or step that leaves its type panics (exit 1) with Rust's

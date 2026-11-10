@@ -27,7 +27,7 @@ import { Compilation, ModuleUnit } from "./compilation"
 import { SourceFile } from "./diagnostics"
 import { EFFECT_READ, EFFECT_WRITE } from "./runtime"
 import { StringSet } from "./map"
-import { ARRAY_SPECIFIER } from "./std-modules"
+import { ARRAY_SPECIFIER, isArrayMethodLocal } from "./std-modules"
 import { compareStrings, jsonQuote } from "./strings"
 import { N_CALL, N_CONSTRUCTOR, N_EMPTY, N_NEW, N_VAR_DECL, Node } from "./nodes"
 import {
@@ -327,7 +327,7 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   const pkg = program.packageName.length === 0 ? "" : ` [package ${program.packageName}]`
   out.push(`module ${unit.name}${unit.isEntry ? " (entry)" : ""}${pkg}`)
   for (const imp of program.imports) {
-    if (isUnusedArrayMethod(imp.specifier, imp.template)) {
+    if (isUnusedArrayMethod(imp.specifier, imp.localName, imp.template)) {
       continue
     }
     const struct = imp.struct
@@ -427,11 +427,12 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
 
 /**
  * Whether an import is one of the `nish/array` templates the checker gives a
- * module for each array-method name it calls (`importArrayMethods`) that no
- * call instantiated: it emits nothing, so the dump does not list it.
+ * module for each array-method name it calls (`importArrayMethods`, under a
+ * dotted local) that no call instantiated: it emits nothing, so the dump does
+ * not list it. An import the program wrote is listed, used or not.
  */
-const isUnusedArrayMethod = (specifier: string, template: TemplateInfo | null): boolean =>
-  specifier === ARRAY_SPECIFIER && template !== null && template.count === 0
+const isUnusedArrayMethod = (specifier: string, local: string, template: TemplateInfo | null): boolean =>
+  specifier === ARRAY_SPECIFIER && isArrayMethodLocal(local) && template !== null && template.count === 0
 
 /**
  * The `--emit-checked` dump of a whole checked program: every module in load

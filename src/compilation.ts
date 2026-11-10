@@ -162,6 +162,7 @@ import {
 import {
   ARRAY_SPECIFIER,
   COLLECTIONS_SPECIFIER,
+  isArrayMethodLocal,
   isArrayModule,
   isStdModuleName,
   SECRET_STD_SPECIFIER,
@@ -3297,17 +3298,14 @@ export class Compilation {
   }
 
   /**
-   * The whole-program attribute fixpoint, computed once per compilation.
-   * `emit()` reads it, and so does `--emit-checked`, whose dump prints the
-   * facts of every function the way stage0's `src/dump.ts` prints them; running it
-   * twice would be the most expensive thing this class does twice.
-   */
-  /**
-   * Whether `unit` is `std/array.ts` and no call instantiated any of its
-   * templates. The checker imports them for every call of a method named
-   * `map`, `slice`, ... (`importArrayMethods`) before any type is known, so a
-   * string's `slice` loads the module too; then it emits nothing, and the
-   * `--emit-checked` dump and the `--emit-ts` output leave it out.
+   * Whether `unit` is `std/array.ts` and nothing needs it: every `nish/array`
+   * import is one the checker gave a module for a call of a method named
+   * `map`, `slice`, ... (`importArrayMethods`, under a dotted local), and no
+   * call instantiated it. The checker adds those before any type is known, so
+   * a string's `slice` loads the module too; then it emits nothing, and the
+   * `--emit-checked` dump and the `--emit-ts` output leave it out. An import
+   * the program wrote keeps the module, instantiated or not, because the
+   * emitted TypeScript still names it.
    */
   isUnusedArrayModule(unit: ModuleUnit): boolean {
     if (!isArrayModule(unit.packageName, unit.name)) {
@@ -3316,7 +3314,10 @@ export class Compilation {
     for (const other of this.modules) {
       for (const imp of other.checker.program.imports) {
         const template = imp.template
-        if (imp.specifier === ARRAY_SPECIFIER && template !== null && template.count > 0) {
+        if (
+          imp.specifier === ARRAY_SPECIFIER &&
+          (!isArrayMethodLocal(imp.localName) || (template !== null && template.count > 0))
+        ) {
           return false
         }
       }
@@ -3324,6 +3325,12 @@ export class Compilation {
     return true
   }
 
+  /**
+   * The whole-program attribute fixpoint, computed once per compilation.
+   * `emit()` reads it, and so does `--emit-checked`, whose dump prints the
+   * facts of every function the way stage0's `src/dump.ts` prints them; running it
+   * twice would be the most expensive thing this class does twice.
+   */
   analyze(): FactsTable {
     const done = this.facts
     if (done !== null) {
