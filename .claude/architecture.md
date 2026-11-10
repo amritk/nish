@@ -124,7 +124,7 @@ Compilation                                                            src/compi
 | Which ABI guarantees do the tests pin? | `docs/ARCHITECTURE.md` → "ABI contracts and the tests that guard them" |
 | Why is attribute Y sound? | `docs/ARCHITECTURE.md` → "Attribute soundness rules", and the comment beside the code |
 | Why is the semantics different from JavaScript here? | `docs/FAQ.md`, `docs/wp13-differential.md` |
-| What is the plan and who owns what? | `docs/MASTER_PLAN.md` (§7 conventions, §8 agent brief) |
+| What is the plan and who owns what? | `docs/MASTER_PLAN.md` (§7 conventions, §8 agent brief); each package's state and next stage on `docs/roadmap/` |
 | How does the harness work? | `.claude/testing.md`, then `docs/ARCHITECTURE.md` → "Test harness" |
 
 ## Repository layout

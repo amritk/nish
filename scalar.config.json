@@ -8,6 +8,7 @@
   "navigation": {
     "header": [
       { "type": "link", "title": "GitHub", "icon": "phosphor/regular/github-logo", "to": "https://github.com/amritk/nish", "newTab": true },
+      { "type": "link", "title": "Roadmap", "icon": "phosphor/regular/map-trifold", "to": "/roadmap" },
       { "type": "link", "title": "Language reference", "icon": "phosphor/regular/book-open", "to": "/reference/language" },
       { "type": "link", "title": "Changelog", "icon": "phosphor/regular/clock-counter-clockwise", "to": "/reference/changelog" }
     ],
@@ -1251,6 +1252,78 @@
                     "title": "SQLite amalgamation",
                     "filepath": "docs/security/sqlite.md"
                   }
+                }
+              }
+            }
+          },
+          "/roadmap": {
+            "type": "group",
+            "title": "Roadmap",
+            "icon": "phosphor/regular/map-trifold",
+            "children": {
+              "/": { "type": "page", "title": "Overview", "filepath": "docs/roadmap/index.md" },
+              "/open/..": {
+                "type": "group",
+                "title": "In progress and proposed",
+                "children": {
+                  "/wp21-packages": { "type": "page", "title": "WP21: Packages", "filepath": "docs/roadmap/wp21-packages.md" },
+                  "/wp22-arrow-functions": { "type": "page", "title": "WP22: Arrow functions as the declaration form", "filepath": "docs/roadmap/wp22-arrow-functions.md" },
+                  "/wp27-ffi": { "type": "page", "title": "WP27: Calling C", "filepath": "docs/roadmap/wp27-ffi.md" },
+                  "/wp32-map": { "type": "page", "title": "WP32: Map and Set", "filepath": "docs/roadmap/wp32-map.md" },
+                  "/wp33-round-trip": { "type": "page", "title": "WP33: The round trip to TypeScript", "filepath": "docs/roadmap/wp33-round-trip.md" },
+                  "/wp34-hosting-cs": { "type": "page", "title": "WP34: Hosting cs: the network stack", "filepath": "docs/roadmap/wp34-hosting-cs.md" },
+                  "/wp37-os-sandbox": { "type": "page", "title": "WP37: The OS sandbox", "filepath": "docs/roadmap/wp37-os-sandbox.md" },
+                  "/wp38-simd": { "type": "page", "title": "WP38: SIMD", "filepath": "docs/roadmap/wp38-simd.md" },
+                  "/wp39-http-server": { "type": "page", "title": "WP39: The HTTP server: a TechEmpower entry, then a general-purpose server", "filepath": "docs/roadmap/wp39-http-server.md" },
+                  "/wp43-http-app-layer": { "type": "page", "title": "WP43: The HTTP application layer", "filepath": "docs/roadmap/wp43-http-app-layer.md" },
+                  "/wp46-long-running-memory": { "type": "page", "title": "WP46: Memory for programs that do not exit: regions", "filepath": "docs/roadmap/wp46-long-running-memory.md" },
+                  "/wp49-async-server": { "type": "page", "title": "WP49: async/await on the server, and the TechEmpower top", "filepath": "docs/roadmap/wp49-async-server.md" },
+                  "/wp50-wasm-host": { "type": "page", "title": "WP50: A WebAssembly module a TypeScript page drives", "filepath": "docs/roadmap/wp50-wasm-host.md" },
+                  "/wp28-compatibility-mode": { "type": "page", "title": "WP28: Compatibility mode", "filepath": "docs/roadmap/wp28-compatibility-mode.md" },
+                  "/wp44-streaming-files": { "type": "page", "title": "WP44: Streaming file reads", "filepath": "docs/roadmap/wp44-streaming-files.md" },
+                  "/wp48-compressed-references": { "type": "page", "title": "WP48: Compressed 32-bit references", "filepath": "docs/roadmap/wp48-compressed-references.md" }
+                }
+              },
+              "/done/..": {
+                "type": "group",
+                "title": "Landed",
+                "children": {
+                  "/wp0-validator": { "type": "page", "title": "WP0: The Phase 0 validator", "filepath": "docs/roadmap/wp0-validator.md" },
+                  "/wp1-control-flow": { "type": "page", "title": "WP1: Control flow", "filepath": "docs/roadmap/wp1-control-flow.md" },
+                  "/wp2-classes": { "type": "page", "title": "WP2: Classes, interfaces, structs", "filepath": "docs/roadmap/wp2-classes.md" },
+                  "/wp3-strings": { "type": "page", "title": "WP3: Strings", "filepath": "docs/roadmap/wp3-strings.md" },
+                  "/wp4-arrays": { "type": "page", "title": "WP4: Arrays", "filepath": "docs/roadmap/wp4-arrays.md" },
+                  "/wp5-modules": { "type": "page", "title": "WP5: Modules, entry point, linkage", "filepath": "docs/roadmap/wp5-modules.md" },
+                  "/wp6-memory": { "type": "page", "title": "WP6: Memory: escape-analysed stack, arena scopes, T | null", "filepath": "docs/roadmap/wp6-memory.md" },
+                  "/wp7-runtime": { "type": "page", "title": "WP7: Runtime and intrinsics", "filepath": "docs/roadmap/wp7-runtime.md" },
+                  "/wp8-interop": { "type": "page", "title": "WP8: Interop: wasm, N-API, headers", "filepath": "docs/roadmap/wp8-interop.md" },
+                  "/wp9-optimisation": { "type": "page", "title": "WP9: Optimisation and benchmarks", "filepath": "docs/roadmap/wp9-optimisation.md" },
+                  "/wp10-ci": { "type": "page", "title": "WP10: CI, diagnostics, the code registry", "filepath": "docs/roadmap/wp10-ci.md" },
+                  "/wp12-release": { "type": "page", "title": "WP12: Release engineering", "filepath": "docs/roadmap/wp12-release.md" },
+                  "/wp13-differential": { "type": "page", "title": "WP13: Differential testing against Node", "filepath": "docs/roadmap/wp13-differential.md" },
+                  "/wp14-selfhost": { "type": "page", "title": "WP14: Self-hosting", "filepath": "docs/roadmap/wp14-selfhost.md" },
+                  "/wp15-performance": { "type": "page", "title": "WP15: Performance first", "filepath": "docs/roadmap/wp15-performance.md" },
+                  "/wp16-results": { "type": "page", "title": "WP16: Result<T, E> and the end of throw", "filepath": "docs/roadmap/wp16-results.md" },
+                  "/wp17-result-abi": { "type": "page", "title": "WP17: Result across the ABI", "filepath": "docs/roadmap/wp17-result-abi.md" },
+                  "/wp18-generics": { "type": "page", "title": "WP18: Generics by monomorphisation", "filepath": "docs/roadmap/wp18-generics.md" },
+                  "/wp19-stage0-retirement": { "type": "page", "title": "WP19: Stage0 retirement", "filepath": "docs/roadmap/wp19-stage0-retirement.md" },
+                  "/wp20-threads": { "type": "page", "title": "WP20: Threads: the runtime half", "filepath": "docs/roadmap/wp20-threads.md" },
+                  "/wp23-language-surface": { "type": "page", "title": "WP23: The language surface a corpus review asked for", "filepath": "docs/roadmap/wp23-language-surface.md" },
+                  "/wp25-inheritance": { "type": "page", "title": "WP25: Remove inheritance, widen implements", "filepath": "docs/roadmap/wp25-inheritance.md" },
+                  "/wp26-stdlib": { "type": "page", "title": "WP26: The standard library", "filepath": "docs/roadmap/wp26-stdlib.md" },
+                  "/wp29-thread-surface": { "type": "page", "title": "WP29: The thread surface", "filepath": "docs/roadmap/wp29-thread-surface.md" },
+                  "/wp30-bytes-interop": { "type": "page", "title": "WP30: Bytes across the interop boundary", "filepath": "docs/roadmap/wp30-bytes-interop.md" },
+                  "/wp31-ranged-integers": { "type": "page", "title": "WP31: Ranged integers", "filepath": "docs/roadmap/wp31-ranged-integers.md" },
+                  "/wp35-capabilities": { "type": "page", "title": "WP35: The capability report", "filepath": "docs/roadmap/wp35-capabilities.md" },
+                  "/wp36-capability-policy": { "type": "page", "title": "WP36: The capability policy", "filepath": "docs/roadmap/wp36-capability-policy.md" },
+                  "/wp40-dependency-capabilities": { "type": "page", "title": "WP40: Dependency capabilities", "filepath": "docs/roadmap/wp40-dependency-capabilities.md" },
+                  "/wp40-ffi-buffers-handles": { "type": "page", "title": "WP40: Buffers and handles across declare function", "filepath": "docs/roadmap/wp40-ffi-buffers-handles.md" },
+                  "/wp42-multicore-server": { "type": "page", "title": "WP42: A multi-core server from pre-forked processes", "filepath": "docs/roadmap/wp42-multicore-server.md" },
+                  "/wp45-name-resolution": { "type": "page", "title": "WP45: Name resolution: a DNS stub resolver", "filepath": "docs/roadmap/wp45-name-resolution.md" },
+                  "/wp47-shared-memory": { "type": "page", "title": "WP47: Shared work across cores: regions, atomics and rings", "filepath": "docs/roadmap/wp47-shared-memory.md" },
+                  "/wp48-run-rebuilds": { "type": "page", "title": "WP48: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp48-run-rebuilds.md" },
+                  "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" },
+                  "/wp41-mul-wide": { "type": "page", "title": "WP41: A wide multiply", "filepath": "docs/roadmap/wp41-mul-wide.md" }
                 }
               }
             }
